@@ -11,7 +11,7 @@
 import ts from "typescript";
 import { CheckedProgram } from "../../checker";
 import { CompilerOptions, StaticType } from "../../types";
-import { EmitContext, EmitterTable, ExpressionEmitter } from "./context";
+import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
 
 export type PropertyEmitter = (ctx: EmitContext, expr: ts.PropertyAccessExpression, receiver: StaticType) => string;
 export type MethodCallEmitter = (ctx: EmitContext, expr: ts.CallExpression, receiver: StaticType) => string;
@@ -30,6 +30,8 @@ export const methodCallEmitters: Partial<Record<StaticType["kind"], MethodCallEm
 export const newEmitters: Record<string, NewEmitter> = {};
 export const namespacePropertyEmitters: Record<string, NamespacePropertyEmitter> = {};
 export const factCollectors: FactCollector[] = [];
+/** Mirrors `assignmentTargetCheckers`: `=` / `op=` lowering keyed by the target expression's kind. */
+export const assignmentTargetEmitters: EmitterTable<BinaryEmitter> = {};
 
 export function isValueReceiver(program: CheckedProgram, receiver: ts.Expression): boolean {
   return program.types.has(receiver);

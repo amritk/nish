@@ -7,6 +7,44 @@ export interface Param {
   type: StaticType;
 }
 
+/** A field of a class or interface (WP2), with its computed layout slot. */
+export interface FieldInfo {
+  name: string;
+  type: StaticType;
+  /** Position in the LLVM struct body (`getelementptr ... i32 0, i32 <index>`). */
+  index: number;
+  /** Byte offset, computed exactly as clang lays out the equivalent C struct. */
+  offset: number;
+  /** `readonly` fields may only be assigned through `this` in their class's constructor. */
+  readonly: boolean;
+  /** Literal initializer (`x: number = 0`); stored before the constructor body runs. */
+  initializer?: ts.Expression;
+  decl: ts.PropertyDeclaration | ts.PropertySignature;
+}
+
+/** A class or interface (WP2): one `%struct.<name>` LLVM type with fixed fields. */
+export interface StructInfo {
+  name: string;
+  kind: "class" | "interface";
+  /** The shared StaticType for this struct; identity is by `name`. */
+  type: StaticType;
+  fields: FieldInfo[];
+  /** Name -> field, for O(1) member lookup. */
+  fieldsByName: Map<string, FieldInfo>;
+  /** `sizeof` in bytes, including trailing padding to `align`. */
+  size: number;
+  /** Maximum field alignment (1 when there are no fields). */
+  align: number;
+  /** Methods keyed by source name; each is also in `CheckedProgram.functions`. */
+  methods: Map<string, FunctionSig>;
+  /** The explicit constructor, if any. Without one, `new` stores the field initializers inline. */
+  ctor?: FunctionSig;
+  /** Interfaces named in the `implements` clause, checked to have the identical layout. */
+  implements: string[];
+  decl: ts.ClassDeclaration | ts.InterfaceDeclaration;
+  exported: boolean;
+}
+
 export interface FunctionSig {
   /**
    * The LLVM symbol (`@name`). Equal to the declared identifier except for the
@@ -16,11 +54,15 @@ export interface FunctionSig {
   name: string;
   /** The identifier as written in the source. */
   sourceName: string;
+  /** For methods and constructors the first entry is `this` (WP2). */
   params: Param[];
   returnType: StaticType;
-  decl: ts.FunctionDeclaration;
+  decl: ts.FunctionDeclaration | ts.MethodDeclaration | ts.ConstructorDeclaration;
   /** Declared with the `export` modifier: callable from other modules, never `internal`. */
   exported: boolean;
+  /** Owning class when this is a method or constructor; `params[0]` is then `this`. */
+  struct?: StructInfo;
+  role?: "method" | "constructor";
 }
 
 export interface LocalVar {
@@ -45,6 +87,8 @@ export interface ImportBinding {
   element: ts.ImportSpecifier;
   /** Resolved after all modules collected their signatures (pass 1b). */
   sig?: FunctionSig;
+  /** Set instead of `sig` when the imported name is an exported class or interface (WP2). */
+  struct?: StructInfo;
 }
 
 export interface CheckedProgram {
@@ -66,6 +110,14 @@ export interface CheckedProgram {
   bindings: WeakMap<ts.Identifier, LocalVar>;
   /** VariableDeclaration node -> the local it introduces. */
   locals: WeakMap<ts.VariableDeclaration, LocalVar>;
-  /** CallExpression node -> callee signature. */
+  /** CallExpression node -> callee signature (free functions and methods alike). */
   callees: WeakMap<ts.CallExpression, FunctionSig>;
+  /** Classes and interfaces visible in this module (declared or imported), keyed by name (WP2). */
+  structs: Map<string, StructInfo>;
+  /**
+   * Expressions whose class-typed value is used where an interface it
+   * implements is expected (WP2). `types` records the interface; the emitter
+   * inserts one `bitcast` from `from` to `to`.
+   */
+  coercions: WeakMap<ts.Expression, { from: StaticType; to: StaticType }>;
 }

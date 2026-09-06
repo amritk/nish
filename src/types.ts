@@ -50,7 +50,9 @@ export type StaticType =
   | { kind: "string" }
   | { kind: "void" }
   /** `T[]` / `Array<T>`: pointer to an arena header `{ i64 len, i64 cap, i8* data }` (WP4). */
-  | { kind: "array"; elem: StaticType };
+  | { kind: "array"; elem: StaticType }
+  /** A class or interface (WP2): a pointer to `%struct.<name>`, always arena-allocated and 8-aligned. */
+  | { kind: "struct"; name: string };
 
 export const I32: StaticType = { kind: "i32" };
 /** 64-bit integer (WP7). Never the lowering of `number`; always spelled `i64`. */
@@ -84,6 +86,8 @@ export function llvmType(t: StaticType): string {
       return "void";
     case "array":
       return `${ARRAY_STRUCT}*`;
+    case "struct":
+      return `%struct.${t.name}*`;
   }
 }
 
@@ -104,17 +108,22 @@ export function alignOf(t: StaticType): number {
       return 1;
     case "array":
       return 8;
+    case "struct":
+      return 8; // a pointer
   }
 }
 
 export function typeToString(t: StaticType): string {
   if (t.kind === "array") return `${typeToString(t.elem)}[]`;
+  if (t.kind === "struct") return t.name;
   return t.kind === "bool" ? "boolean" : t.kind;
 }
 
 export function sameType(a: StaticType, b: StaticType): boolean {
-  if (a.kind === "array") return b.kind === "array" && sameType(a.elem, b.elem);
-  return a.kind === b.kind;
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "struct") return a.name === (b as { name: string }).name;
+  if (a.kind === "array") return sameType(a.elem, (b as { elem: StaticType }).elem);
+  return true;
 }
 
 export function isNumeric(t: StaticType): boolean {
@@ -124,6 +133,21 @@ export function isNumeric(t: StaticType): boolean {
 /** Integer types: wrapping two's-complement arithmetic, `icmp`, `sext`/`trunc` between them. */
 export function isInteger(t: StaticType): boolean {
   return t.kind === "i32" || t.kind === "i64";
+}
+
+/**
+ * Named types (classes and interfaces, WP2) are declared per module. The
+ * checker registers a resolver for its source file before it resolves any
+ * annotation, and `resolveTypeNode` consults it for a bare `TypeReference`.
+ * Keying the registry by `SourceFile` keeps the signature of `resolveTypeNode`
+ * unchanged for every caller, including recursive ones (element types of
+ * arrays, for instance) that would otherwise have to thread a lookup through.
+ */
+export type NamedTypeResolver = (name: string) => StaticType | undefined;
+const namedTypeResolvers = new WeakMap<ts.SourceFile, NamedTypeResolver>();
+
+export function registerNamedTypes(sourceFile: ts.SourceFile, resolver: NamedTypeResolver): void {
+  namedTypeResolvers.set(sourceFile, resolver);
 }
 
 /**
@@ -168,9 +192,11 @@ export function resolveTypeNode(
           case "f64":
             return F64;
         }
+        const named = namedTypeResolvers.get(sourceFile)?.(ref.typeName.text);
+        if (named) return named;
       }
       throw new CompileError(
-        `Unsupported type reference \`${ref.getText(sourceFile)}\` (Phase 1 supports number, i32, i64, f64, boolean, string, void)`,
+        `Unsupported type reference \`${ref.getText(sourceFile)}\` (supported: number, i32, i64, f64, boolean, string, void, T[], and declared classes/interfaces)`,
         node,
         sourceFile
       );

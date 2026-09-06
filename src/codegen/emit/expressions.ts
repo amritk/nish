@@ -6,11 +6,13 @@
 import ts from "typescript";
 import { StaticType, isInteger, llvmType } from "../../types";
 import { arrayExpressionEmitters, installArrayAssignmentEmitters } from "./arrays";
-import { emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members";
 import { CheckedProgram } from "../../checker";
 import { BuiltinCall, f64Constant } from "./builtins";
 import { ioFunctionEmitters } from "./io";
 import { conversionEmitters } from "./math";
+import { isAssignmentOperator } from "../../checker/classes";
+import { classExpressionEmitters } from "./classes";
+import { assignmentTargetEmitters, emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members";
 import { emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from "./strings";
 import { BinaryEmitter, EmitterTable, ExpressionEmitter, UnaryEmitter } from "./context";
 import {
@@ -121,7 +123,8 @@ installArrayAssignmentEmitters(binaryEmitters); // `a[i] = v`, `a[i] op= v`; oth
 
 const emitBinary: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.BinaryExpression;
-  const handler = binaryEmitters[expr.operatorToken.kind];
+  const op = expr.operatorToken.kind;
+  const handler = (isAssignmentOperator(op) && assignmentTargetEmitters[expr.left.kind]) || binaryEmitters[op];
   if (!handler) throw new Error(`emitter: unexpected binary operator ${ts.SyntaxKind[expr.operatorToken.kind]}`);
   return handler(ctx, expr);
 };
@@ -184,4 +187,5 @@ export const expressionEmitters: EmitterTable<ExpressionEmitter> = {
   ...memberExpressionEmitters, // property access, method calls, `new` (dispatch by receiver type)
   ...controlFlowExpressionEmitters,
   ...arrayExpressionEmitters, // `[a, b]`, `a[i]`
+  ...classExpressionEmitters, // `this`, object literals (WP2)
 };

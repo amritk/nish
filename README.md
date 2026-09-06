@@ -359,6 +359,8 @@ Type mapping:
 | `boolean` | `i1` |
 | `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }`, 8-aligned, immutable; literals are module constants, `.length` is the UTF-8 byte length |
 | `T[]`, `Array<T>` | `%struct.sts_array*` to `{ i64 len, i64 cap, i8* data }`, arena-allocated, 8-aligned; `data` holds `cap` elements of `T`; `a[i]` is bounds-checked (see [docs/wp4-arrays.md](docs/wp4-arrays.md)) |
+| `class C` | `%struct.C*` to `%struct.C = type { fields in declaration order }`, arena-allocated, natural alignment and padding exactly as clang lays out the same C struct. See [docs/wp2-classes.md](docs/wp2-classes.md). |
+| `interface I` | `%struct.I*`, same layout rules; built from object literals, no methods |
 | `void` | `void` |
 
 Supported today:
@@ -391,6 +393,11 @@ Supported today:
 - `process.exit(code)` (a `noreturn` call plus `unreachable`; counts as a terminator), `readFileSync(path)`, `writeFileSync(path, data)`, `appendFileSync(path, data)`.
 - Arrays `T[]` / `Array<T>` of any element type (numbers, booleans, strings, nested arrays): literals `[a, b]` (one element type; `[]` needs an annotation), `new Array<T>(n)` zero-filled, `a[i]` reads and writes (`=`, `op=`), `.length`, `push(v)`, and `for (const x of a)` with `break` / `continue`.
 - Bounds checking on every `a[i]`: an out-of-range index prints `index out of range: <i> >= <len>` and exits 1; `--unchecked-indexing` removes the check.
+- `class` declarations with typed fields (literal initializers allowed), a constructor, and methods; `new C(args)` allocates in the arena and calls `@C.constructor`; methods are `@C.method` with `%this` first.
+- Field reads `p.x` (`getelementptr inbounds` + `load`), writes `p.x = v` and `p.x op= v` (`store`), `this.x` inside methods; `readonly` fields assignable only in the constructor.
+- Definite assignment: every field is initialised (inline literal or constructor) before it can be read; `this` cannot leak from a constructor early.
+- `interface` declarations as struct types built from object literals (`const p: P = { x: 1, y: 2 }`, all fields required); `class C implements I` requires the identical field list, and a `C` converts to `I` by `bitcast`.
+- `export class` / `export interface` and importing them by name (no renaming); methods of an imported class are `declare`d with the exporter's attributes.
 
 Rejected with a diagnostic (`file:line:col: error: ...`):
 
@@ -398,8 +405,12 @@ Rejected with a diagnostic (`file:line:col: error: ...`):
   parameters, destructuring, `async`, generators.
 - Assignment to parameters or `const`s, mixing types in an operator, missing
   return on a non-`void` path, unreachable code after `return`.
-- Anything else outside the Phase 1 subset (control flow, objects, classes,
-  strings), which later phases add.
+- Class inheritance, `static`, getters/setters, optional fields, index
+  signatures, parameter properties, `new` on an interface, object literals
+  without a contextual type, `<` on struct values, reading a field before the
+  constructor assigns it (see [docs/wp2-classes.md](docs/wp2-classes.md)).
+- Anything else outside the Phase 1 subset (arrays, `null`), which later
+  phases add.
 
 ## Lowering rules
 

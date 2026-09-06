@@ -29,12 +29,12 @@
  * Comparing unsigned makes a negative index fail too. `--unchecked-indexing`
  * removes the check; an out-of-range index is then undefined behaviour.
  *
- * `collectArrayFacts` / `collectArrayParamFacts` feed attributes.ts: what
- * each construct does to memory, and which array parameters are written
- * through or captured (see docs/wp4-arrays.md, "Attributes").
+ * `collectArrayFacts` feeds attributes.ts with what each construct does to
+ * memory; which array parameters are written through or captured is decided
+ * there by `classifyUse` (see docs/wp4-arrays.md, "Attributes").
  */
 import ts from "typescript";
-import { CheckedProgram, FunctionSig } from "../../checker";
+import { CheckedProgram } from "../../checker";
 import { ARRAY_STRUCT, StaticType, alignOf, llvmType } from "../../types";
 import { ARRAY_TYPE } from "../runtime";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, StatementEmitter } from "./context";
@@ -362,91 +362,6 @@ const collectArrayFacts: FactCollector = (program, node, facts, opts) => {
   }
 };
 factCollectors.push(collectArrayFacts);
-
-/** A parameter passed straight through as argument `index` of a user function. */
-export interface ParamPass {
-  param: string;
-  callee: string;
-  index: number;
-}
-
-export interface ArrayParamFacts {
-  /** Array params the body stores through (element write or `push` on the param or anything indexed from it). */
-  writtenParams: Set<string>;
-  /** Array params that escape: any use other than indexing, `.length`, `for...of`, `===`, or a direct call argument. */
-  capturedParams: Set<string>;
-  paramPasses: ParamPass[];
-}
-
-/**
- * Direct facts about array parameters; attributes.ts closes them over the
- * call graph (a param passed to a callee inherits that callee's param facts).
- * A use that is not on the allow list (`let b = a`, `xs.push(a)`, `[a]`,
- * `return a`, `c ? a : b`, ...) counts as captured *and* written, because
- * an alias could be written through and LLVM may fold the alias back into
- * the parameter itself.
- */
-export function collectArrayParamFacts(program: CheckedProgram, sig: FunctionSig, facts: ArrayParamFacts): void {
-  const arrayParams = new Set(sig.params.filter((p) => p.type.kind === "array").map((p) => p.name));
-  if (arrayParams.size === 0) return;
-
-  const paramOf = (expr: ts.Expression): string | undefined => {
-    const e = unwrapParens(expr);
-    if (!ts.isIdentifier(e)) return undefined;
-    const v = program.bindings.get(e);
-    return v?.storage === "param" && arrayParams.has(v.name) ? v.name : undefined;
-  };
-  /** The identifier at the root of `a`, `a[i]`, `a[i][j]`. */
-  const rootParam = (expr: ts.Expression): string | undefined => {
-    let e = unwrapParens(expr);
-    while (ts.isElementAccessExpression(e)) e = unwrapParens(e.expression);
-    return paramOf(e);
-  };
-  const isBenignUse = (id: ts.Identifier): boolean => {
-    let node: ts.Node = id;
-    while (ts.isParenthesizedExpression(node.parent)) node = node.parent;
-    const parent = node.parent;
-    if (ts.isElementAccessExpression(parent)) return parent.expression === node;
-    if (ts.isPropertyAccessExpression(parent)) {
-      if (parent.expression !== node) return false;
-      if (parent.name.text === "length") return true;
-      return parent.name.text === "push" && ts.isCallExpression(parent.parent) && parent.parent.expression === parent;
-    }
-    if (ts.isForOfStatement(parent)) return parent.expression === node;
-    if (ts.isCallExpression(parent)) return program.callees.has(parent) && parent.expression !== node;
-    if (ts.isBinaryExpression(parent)) {
-      const op = parent.operatorToken.kind;
-      return op === ts.SyntaxKind.EqualsEqualsEqualsToken || op === ts.SyntaxKind.ExclamationEqualsEqualsToken;
-    }
-    return false;
-  };
-
-  const visit = (node: ts.Node): void => {
-    if (ts.isIdentifier(node)) {
-      const name = paramOf(node);
-      if (name !== undefined && !isBenignUse(node)) {
-        facts.capturedParams.add(name);
-        facts.writtenParams.add(name);
-      }
-    } else if (isElementAssignment(node)) {
-      const root = rootParam((unwrapParens(node.left) as ts.ElementAccessExpression).expression);
-      if (root !== undefined) facts.writtenParams.add(root);
-    } else if (isPushCall(program, node)) {
-      const root = rootParam((node.expression as ts.PropertyAccessExpression).expression);
-      if (root !== undefined) facts.writtenParams.add(root);
-    } else if (ts.isCallExpression(node)) {
-      const callee = program.callees.get(node);
-      if (callee) {
-        node.arguments.forEach((arg, index) => {
-          const name = paramOf(arg);
-          if (name !== undefined) facts.paramPasses.push({ param: name, callee: callee.name, index });
-        });
-      }
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(sig.decl.body!);
-}
 
 // ---- Registration ----------------------------------------------------------------------------
 

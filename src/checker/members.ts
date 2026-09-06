@@ -14,7 +14,7 @@
  */
 import ts from "typescript";
 import { StaticType, typeToString } from "../types";
-import { CheckContext, CheckerTable, ExpressionChecker } from "./context";
+import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context";
 import { Scope } from "./scope";
 
 export type PropertyChecker = (
@@ -38,6 +38,13 @@ export const methodCallCheckers: Partial<Record<StaticType["kind"], MethodCallCh
 export const newCheckers: Record<string, NewChecker> = {};
 /** Keyed by dotted name (`Math.PI`). */
 export const namespaceProperties: Record<string, NamespacePropertyChecker> = {};
+/**
+ * Assignment (`=` and `op=`) handlers keyed by the kind of the *target*
+ * expression: `PropertyAccessExpression` for `p.x = v` (classes), later
+ * `ElementAccessExpression` for `a[i] = v` (arrays). `checkBinary` consults
+ * this table before the operator table, so plain `x = v` is unaffected.
+ */
+export const assignmentTargetCheckers: CheckerTable<BinaryChecker> = {};
 
 export function isValueReceiver(receiver: ts.Expression, scope: Scope): boolean {
   return !ts.isIdentifier(receiver) || scope.lookup(receiver.text) !== undefined;

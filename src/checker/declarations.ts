@@ -115,7 +115,7 @@ export function rejectNonFunctionExport(stmt: ts.Statement, sf: ts.SourceFile): 
   }
   if (hasExportModifier(stmt)) {
     throw new CompileError(
-      `Only functions can be exported for now (found \`export\` on ${ts.SyntaxKind[stmt.kind]})`,
+      `Only functions can be exported for now, plus classes and interfaces (found \`export\` on ${ts.SyntaxKind[stmt.kind]})`,
       stmt,
       sf
     );

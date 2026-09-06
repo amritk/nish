@@ -32,6 +32,7 @@ import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
 import { CompilerOptions, StaticType, alignOf, llvmType } from "../types";
 import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, returnAttributes } from "./attributes";
+import { emitFieldInitializers, importedStructFunctions, structTypeDeclarations } from "./emit/classes";
 import { EmitContext, LoopTarget } from "./emit/context";
 import { expressionEmitters } from "./emit/expressions";
 import { emitVariableDeclarationList, statementEmitters } from "./emit/statements";
@@ -65,6 +66,8 @@ export class Emitter implements EmitContext {
   }
 
   emitModule(): string {
+    // `%struct.X = type { ... }` for every class/interface the module can see (WP2).
+    for (const decl of structTypeDeclarations(this.program)) this.module.addTypeDecl(decl);
     for (const sig of this.program.functions) {
       this.module.addFunction(this.emitFunction(sig));
     }
@@ -106,11 +109,13 @@ export class Emitter implements EmitContext {
     // ABI). Others are external too unless --strict-exports hides them.
     if (this.opts.strictExports && !sig.exported) this.fn.linkage = "internal";
     if (optimize) {
-      this.fn.returnAttrs = returnAttributes(sig.returnType);
+      this.fn.returnAttrs = returnAttributes(sig.returnType, facts.returnDeref);
       this.fn.attrGroup = this.module.attrGroup(functionAttributes(facts));
     }
     this.slots = new WeakMap();
 
+    // A constructor stores the field initializers before its body runs (WP2).
+    if (sig.role === "constructor") emitFieldInitializers(this, sig.struct!, "%this");
     this.emitBlock(sig.decl.body!);
 
     // Void functions may fall off the end; give them an explicit terminator.
@@ -150,15 +155,21 @@ export class Emitter implements EmitContext {
 
   // ---- Imports ------------------------------------------------------------
 
-  /** One `declare` per distinct imported symbol, with the exporter's attributes. */
+  /**
+   * One `declare` per distinct imported symbol, with the exporter's
+   * attributes. An imported class (WP2) contributes its constructor and
+   * every method; an imported interface contributes nothing but its type.
+   */
   private emitImportDeclarations(): void {
     const seen = new Set<string>();
     for (const imp of this.program.imports) {
-      const sig = imp.sig;
-      if (!sig) throw new Error(`emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``);
-      if (seen.has(sig.name)) continue;
-      seen.add(sig.name);
-      this.module.addDeclaration(this.declarationFor(sig));
+      const sigs = imp.struct ? importedStructFunctions(imp) : imp.sig ? [imp.sig] : undefined;
+      if (!sigs) throw new Error(`emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``);
+      for (const sig of sigs) {
+        if (seen.has(sig.name)) continue;
+        seen.add(sig.name);
+        this.module.addDeclaration(this.declarationFor(sig));
+      }
     }
   }
 
@@ -174,7 +185,7 @@ export class Emitter implements EmitContext {
     const params = sig.params
       .map((p) => [llvmType(p.type), ...(optimize ? paramAttributes(p, facts) : [])].join(" "))
       .join(", ");
-    const ret = [...(optimize ? returnAttributes(sig.returnType) : []), llvmType(sig.returnType)].join(" ");
+    const ret = [...(optimize ? returnAttributes(sig.returnType, facts.returnDeref) : []), llvmType(sig.returnType)].join(" ");
     const group = optimize ? ` ${this.module.attrGroup(functionAttributes(facts))}` : "";
     return `declare ${ret} @${sig.name}(${params})${group}`;
   }
@@ -239,7 +250,12 @@ export class Emitter implements EmitContext {
   emitExpression(expr: ts.Expression): string {
     const handler = expressionEmitters[expr.kind];
     if (!handler) throw new Error(`emitter: unexpected expression ${ts.SyntaxKind[expr.kind]}`);
-    return handler(this, expr);
+    const value = handler(this, expr);
+    // A class value used as an interface it implements (WP2): same layout, so
+    // the conversion the checker recorded is a pointer bitcast.
+    const coercion = this.program.coercions.get(expr);
+    if (!coercion) return value;
+    return this.fn.emitValue(`bitcast ${llvmType(coercion.from)} ${value} to ${llvmType(coercion.to)}`);
   }
 
   emitVariableDeclarations(list: ts.VariableDeclarationList): void {
