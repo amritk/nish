@@ -1,0 +1,1 @@
+Only the entry module may declare `export function main`
