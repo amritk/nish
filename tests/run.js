@@ -864,6 +864,33 @@ if (!only) {
   check(`validator runs in under 50 ms on ${lines.length} lines (${ms.toFixed(2)} ms)`, ms < 50, `${ms.toFixed(2)} ms`);
 }
 
+// ---- WP14: self-hosting ---------------------------------------------------------------
+// `self/` is the compiler being written in StaticTS (docs/wp14-selfhost.md). It is
+// checked here rather than in tests/cases because it is a program, not a construct:
+// the property is that stage0 compiles every module of it cleanly, which is the
+// floor the staged bootstrap stands on. As phases land this section grows into the
+// stage comparisons of the plan; until then it is a compile gate that fails the
+// moment `self/` uses something the language does not have.
+if (!only || "selfhost".includes(only) || only.includes("self")) {
+  const selfDir = path.join(root, "self");
+  const modules = fs.existsSync(selfDir) ? fs.readdirSync(selfDir).filter((f) => f.endsWith(".ts")).sort() : [];
+  check("self/ has at least one module", modules.length > 0, `${modules.length} modules`);
+  for (const m of modules) {
+    const out = path.join(buildDir, "self");
+    fs.mkdirSync(out, { recursive: true });
+    const r = spawnSync("node", [cli, path.join(selfDir, m), "-o", `${out}/`], { cwd: root, encoding: "utf8" });
+    check(`self/${m} compiles`, r.status === 0, r.stderr);
+  }
+  // Module constants are the reason `self/` can name its token kinds at all: if
+  // one ever became a global, every kind would cost a load on the lexer's hot path.
+  const tokensLl = path.join(buildDir, "self", "tokens.ll");
+  if (fs.existsSync(tokensLl)) {
+    const ir = fs.readFileSync(tokensLl, "utf8");
+    check("self/tokens.ts emits no global for its token kinds",
+      !/^@(?!\.str\.)/m.test(ir), ir.split("\n").filter((l) => l.startsWith("@")).join(" | "));
+  }
+}
+
 // ---- WP9: bench --------------------------------------------------------------------
 // The benchmark programs in bench/ must keep printing identical checksums across
 // StaticTS, C and (when rustc is installed) Rust. `bench/run.mjs --validate` builds

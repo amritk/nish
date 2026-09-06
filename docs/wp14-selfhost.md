@@ -54,11 +54,13 @@ enable per-file as the port lands, not a milestone.
 
 ### The test
 
-`tests/selfhost/` runs the stages and compares. It is skipped, not failed,
-without LLVM, the same as every other toolchain-dependent check
-(`.claude/testing.md`). Until stage1 exists, the harness runs the stages that
-do exist, so the file is green from the first lexer commit and grows one
-comparison at a time.
+The WP14 section of `tests/run.js` runs the stages and compares. It is
+skipped, not failed, without LLVM, the same as every other toolchain-dependent
+check (`.claude/testing.md`). Until stage1 exists it is a compile gate — stage0
+must compile every module of `self/` cleanly — so it is green from the first
+commit and grows one stage comparison at a time. That gate is not a formality:
+it fails the moment `self/` reaches for something the language does not have,
+which is rule 1 of §5 enforced by the suite rather than by good intentions.
 
 ---
 
