@@ -37,7 +37,7 @@ for src in "${programs[@]}"; do
   want=${want:-0}
 
   if ! node dist/index.js "$src" --link "$exe" --profile size >"$out/$name.log" 2>&1; then
-    status="BUILD FAIL ($?)"
+    status="BUILD FAIL"
     failed=1
     sed 's/^/    /' "$out/$name.log" >&2
     rows+=("$(printf '%-24s %10s  %s' "$src" "-" "$status")")
