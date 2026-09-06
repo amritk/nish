@@ -12,7 +12,7 @@ import { BuiltinCall, f64Constant } from "./builtins";
 import { ioFunctionEmitters } from "./io";
 import { conversionEmitters } from "./math";
 import { isAssignmentOperator } from "../../checker/classes";
-import { classExpressionEmitters } from "./classes";
+import { classExpressionEmitters, emitSuperCall } from "./classes";
 import { assignmentTargetEmitters, emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members";
 import { emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from "./strings";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, UnaryEmitter, intOpcode } from "./context";
@@ -160,6 +160,7 @@ export function collectBuiltinFacts(program: CheckedProgram, node: ts.Node, fact
 
 const emitCall: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.CallExpression;
+  if (expr.expression.kind === ts.SyntaxKind.SuperKeyword) return emitSuperCall(ctx, expr); // WP2b
   if (ts.isPropertyAccessExpression(expr.expression)) {
     return isValueReceiver(ctx.program, expr.expression.expression)
       ? emitMethodCall(ctx, expr)

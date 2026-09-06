@@ -16,6 +16,10 @@ corpus/int_div_zero        # x / 0, x % 0: "attempt to divide by zero"; JS gives
 cases/div_zero_panic       # 10 / 0 panics (exit 1); JS gives 0 after | 0
 cases/div_overflow_panic   # INT_MIN % -1 panics (exit 1); JS gives 0
 
+# By design (documented in docs/LANGUAGE.md, Classes): methods dispatch on the receiver's
+# declared type, not its runtime class, so an overriding method is not reached through a base-typed value
+cases/cls_extends_override # areaOf(sq: Shape) calls Shape.area natively, Square.area under Node
+
 # Native-only introspection: these print raw Arena.used() byte counts, which the Node shim reports as 0
 cases/mem_arena_builtins   # prints arena byte usage
 cases/mem_scope_dynamic_array  # prints the arena delta across scoped calls

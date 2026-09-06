@@ -236,3 +236,75 @@ function J_e(p: J): boolean {
 function J_f(p: J): string {
   return p.f;
 }
+
+// Derived classes (WP2b): the base's fields come first, then the class's own,
+// so the C twin lists the flattened fields (not a nested struct: L's own field
+// reuses C's tail padding, which `struct L { struct C c; int32_t c2; }` would not).
+class K extends B {
+  c: boolean;
+  constructor(a: number, b: f64, c: boolean) {
+    super(a, b);
+    this.c = c;
+  }
+}
+
+class L extends C {
+  c: number;
+  constructor(a: f64, b: number, c: number) {
+    super(a, b);
+    this.c = c;
+  }
+}
+
+class M extends K {
+  d: string;
+  constructor(a: number, b: f64, c: boolean, d: string) {
+    super(a, b, c);
+    this.d = d;
+  }
+}
+
+function makeK(d: f64): K {
+  return new K(1, d, true);
+}
+function makeL(d: f64): L {
+  return new L(d, 2, 3);
+}
+function makeM(s: string, d: f64): M {
+  return new M(1, d, true, s);
+}
+
+function K_a(p: K): number {
+  return p.a;
+}
+function K_b(p: K): f64 {
+  return p.b;
+}
+function K_c(p: K): boolean {
+  return p.c;
+}
+function L_a(p: L): f64 {
+  return p.a;
+}
+function L_b(p: L): number {
+  return p.b;
+}
+function L_c(p: L): number {
+  return p.c;
+}
+function M_a(p: M): number {
+  return p.a;
+}
+function M_b(p: M): f64 {
+  return p.b;
+}
+function M_c(p: M): boolean {
+  return p.c;
+}
+function M_d(p: M): string {
+  return p.d;
+}
+// A derived object read through its base's getter: the prefix layout in action.
+function M_as_B_b(p: M): f64 {
+  return B_b(p);
+}

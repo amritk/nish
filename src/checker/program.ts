@@ -41,6 +41,15 @@ export interface StructInfo {
   ctor?: FunctionSig;
   /** Interfaces named in the `implements` clause, checked to have the identical layout. */
   implements: string[];
+  /**
+   * The class named in `extends` (WP2b). Its fields are the prefix of
+   * `fields` (same indices and offsets), so a `%struct.<name>*` may be
+   * `bitcast` to `%struct.<base>*`. `methods` holds only the methods this
+   * class declares; inherited ones are found by walking `base`.
+   */
+  base?: StructInfo;
+  /** Pass 1b progress, so a derived class can pull its base in first and a cycle is caught. */
+  collected?: "collecting" | "done";
   decl: ts.ClassDeclaration | ts.InterfaceDeclaration;
   exported: boolean;
 }

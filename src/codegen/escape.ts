@@ -54,7 +54,7 @@
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
 import { dottedName } from "../checker/builtins";
-import { isAssignmentOperator } from "../checker/classes";
+import { effectiveConstructor, intrinsicType, isAssignmentOperator } from "../checker/classes";
 import { CompilerOptions, StaticType, alignOf, isNumeric, stripNull } from "../types";
 import { FunctionFacts, classifyUse } from "./attributes";
 import { isPushCall } from "./emit/arrays";
@@ -281,7 +281,15 @@ export function analyzeEscapes(
   // ---- Decisions -----------------------------------------------------------------
 
   for (const site of sites) {
-    const { flow, stable } = valueOutcome(site.node, new Set());
+    let { flow, stable } = valueOutcome(site.node, new Set());
+    // A `new` object is also handed to its constructor as `this` (the own or
+    // the inherited one, WP2b); a constructor that captures it (`r.last =
+    // this`) makes the object escape however the local is used afterwards.
+    if (ts.isNewExpression(site.node)) {
+      const t = intrinsicType(program, site.node);
+      const ctor = t?.kind === "struct" ? effectiveConstructor(program.structs.get(t.name)!) : undefined;
+      if (ctor && calleeCaptures(ctor, 0)) flow = "leaks";
+    }
     if (site.callee !== undefined) {
       result.callSites.push({ callee: site.callee, flow });
       continue;

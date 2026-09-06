@@ -1844,6 +1844,124 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end cls_interface -->
 
+### Inheritance: `extends`, `super`, static dispatch
+
+`%struct.Square` starts with `%struct.Shape`'s fields, so a `Square` becomes a
+`Shape` with one `bitcast` (the argument of `areaOf`, the `this` of
+`Shape.constructor` and `Shape.area`). Every call is resolved by the
+receiver's declared type: `sq.area()` is `Square.area`, `s.area()` inside
+`areaOf` is `Shape.area` even when the object is a `Square`, and
+`super.area()` names the base implementation.
+
+<!-- cookbook:begin cls_inheritance -->
+```ts
+class Shape {
+  x: number;
+
+  constructor(x: number) {
+    this.x = x;
+  }
+
+  area(): number {
+    return 0;
+  }
+}
+
+class Square extends Shape {
+  side: number;
+
+  constructor(x: number, side: number) {
+    super(x);
+    this.side = side;
+  }
+
+  area(): number {
+    return this.side * this.side;
+  }
+
+  baseArea(): number {
+    return super.area();
+  }
+}
+
+// Static dispatch: `s` is declared a Shape, so this is always Shape.area.
+function areaOf(s: Shape): number {
+  return s.area() + s.x;
+}
+
+function squareArea(sq: Square): number {
+  return sq.area() + areaOf(sq) + sq.baseArea();
+}
+```
+
+```llvm
+%struct.Shape = type { i32 }
+%struct.Square = type { i32, i32 }
+
+define void @Shape.constructor(%struct.Shape* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %x) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Shape, %struct.Shape* %this, i32 0, i32 0
+  store i32 %x, i32* %0, align 4
+  ret void
+}
+
+define noundef i32 @Shape.area(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #1 {
+entry:
+  ret i32 0
+}
+
+define void @Square.constructor(%struct.Square* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %side) #0 {
+entry:
+  %0 = bitcast %struct.Square* %this to %struct.Shape*
+  call void @Shape.constructor(%struct.Shape* %0, i32 %x)
+  %1 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 1
+  store i32 %side, i32* %1, align 4
+  ret void
+}
+
+define noundef i32 @Square.area(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 1
+  %1 = load i32, i32* %0, align 4
+  %2 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 1
+  %3 = load i32, i32* %2, align 4
+  %4 = mul i32 %1, %3
+  ret i32 %4
+}
+
+define noundef i32 @Square.baseArea(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
+entry:
+  %0 = bitcast %struct.Square* %this to %struct.Shape*
+  %1 = call i32 @Shape.area(%struct.Shape* %0)
+  ret i32 %1
+}
+
+define noundef i32 @areaOf(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %s) #2 {
+entry:
+  %0 = call i32 @Shape.area(%struct.Shape* %s)
+  %1 = getelementptr inbounds %struct.Shape, %struct.Shape* %s, i32 0, i32 0
+  %2 = load i32, i32* %1, align 4
+  %3 = add i32 %0, %2
+  ret i32 %3
+}
+
+define noundef i32 @squareArea(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %sq) #2 {
+entry:
+  %0 = call i32 @Square.area(%struct.Square* %sq)
+  %1 = bitcast %struct.Square* %sq to %struct.Shape*
+  %2 = call i32 @areaOf(%struct.Shape* %1)
+  %3 = add i32 %0, %2
+  %4 = call i32 @Square.baseArea(%struct.Square* %sq)
+  %5 = add i32 %3, %4
+  ret i32 %5
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readnone }
+attributes #2 = { nounwind willreturn readonly }
+```
+<!-- cookbook:end cls_inheritance -->
+
 ## Memory
 
 ### A stack-allocated object

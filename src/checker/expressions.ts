@@ -12,7 +12,7 @@ import { arrayExpressionCheckers, installArrayAssignmentCheckers } from "./array
 import { BuiltinCallChecker } from "./builtins";
 import { ioBuiltinFunctions } from "./io";
 import { contextualLiteralType, conversionBuiltins } from "./math";
-import { classExpressionCheckers, isAssignmentOperator } from "./classes";
+import { checkSuperCall, classExpressionCheckers, isAssignmentOperator } from "./classes";
 import { assignmentTargetCheckers, checkMethodCall, isValueReceiver, memberExpressionCheckers } from "./members";
 import { nullableExpressionCheckers } from "./nullable";
 import { checkBuiltinCall, stringBinaryCheckers, stringExpressionCheckers } from "./strings";
@@ -178,6 +178,7 @@ export const builtinFunctions: Record<string, BuiltinCallChecker> = {
 
 const checkCall: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.CallExpression;
+  if (expr.expression.kind === ts.SyntaxKind.SuperKeyword) return checkSuperCall(ctx, expr, scope); // WP2b
   if (ts.isPropertyAccessExpression(expr.expression)) {
     // `value.method(...)` dispatches on the receiver type; `console.log(...)` is a dotted builtin.
     return isValueReceiver(expr.expression.expression, scope)

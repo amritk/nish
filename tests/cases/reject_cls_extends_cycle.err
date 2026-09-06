@@ -1,0 +1,1 @@
+Inheritance cycle: class `Pong` extends `Ping`, which already extends `Pong`

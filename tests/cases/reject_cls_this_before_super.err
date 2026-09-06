@@ -1,0 +1,1 @@
+`this` cannot be used before `super(...)` in the constructor of `Derived`

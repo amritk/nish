@@ -63,9 +63,26 @@ export function cType(t: StaticType, position: "param" | "return"): string | und
       return position === "param" ? "const sts_str *" : "sts_str *";
     case "void":
       return "void";
+    case "struct":
+      // A class or interface value is a pointer to its `struct` (declared in the
+      // header with the flattened fields, WP2/WP2b); a `T | null` is the same
+      // pointer, possibly NULL.
+      return `struct ${(t as { name: string }).name} *`;
+    case "nullable":
+      return cType((t as { inner: StaticType }).inner, position);
     default:
       return undefined;
   }
+}
+
+/**
+ * C spelling of a struct field. Everything a field can hold has one: the
+ * scalars, `sts_str *`, a pointer to another struct, and `sts_array *` for
+ * `T[]` (the header type from statictsc.h; the element type is a comment).
+ */
+export function cFieldType(t: StaticType): string {
+  if (kindOf(t) === "array") return "sts_array *";
+  return cType(t, "return") ?? "void *";
 }
 
 /** True for the types the scalar-only bridges (N-API shim, wasm typings) can pass without marshalling. */
@@ -88,6 +105,12 @@ export function tsKeyword(t: StaticType): string {
       return "number";
     case "bool":
       return "boolean";
+    case "struct":
+      return (t as { name: string }).name;
+    case "array":
+      return `${tsKeyword((t as { elem: StaticType }).elem)}[]`;
+    case "nullable":
+      return `${tsKeyword((t as { inner: StaticType }).inner)} | null`;
     default:
       return kindOf(t);
   }
@@ -118,8 +141,12 @@ export function cParamName(name: string): string {
  * `int`, ...) is a perfectly good LLVM symbol but cannot be spelled in C, so
  * it is declared as `name_` bound to the real symbol with an asm label
  * (`STS_SYMBOL`, from statictsc.h; it adds the `_` prefix Mach-O needs).
+ * Methods and constructors (`Point.shifted`, `Point.constructor`, WP2) are
+ * declared the same way as `Point_shifted` / `Point_constructor`, taking the
+ * object pointer first: a C host may call them on objects it holds.
  */
 export function cFunctionName(symbol: string): { ident: string; label: string } {
+  if (symbol.includes(".")) return { ident: symbol.replace(/\./g, "_"), label: ` STS_SYMBOL("${symbol}")` };
   if (!C_RESERVED.has(symbol)) return { ident: symbol, label: "" };
   return { ident: `${symbol}_`, label: ` STS_SYMBOL("${symbol}")` };
 }
