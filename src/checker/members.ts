@@ -16,6 +16,7 @@ import ts from "typescript";
 import { StaticType, typeToString } from "../types";
 import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context";
 import { Scope } from "./scope";
+import { lookup } from "../lookup";
 
 export type PropertyChecker = (
   ctx: CheckContext,
@@ -61,7 +62,7 @@ const checkPropertyAccess: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.PropertyAccessExpression;
   if (!isValueReceiver(ctx, expr.expression, scope)) {
     const dotted = `${(expr.expression as ts.Identifier).text}.${expr.name.text}`;
-    const handler = namespaceProperties[dotted];
+    const handler = lookup(namespaceProperties, dotted);
     if (!handler) throw ctx.error(`Unknown identifier \`${(expr.expression as ts.Identifier).text}\``, expr.expression);
     return handler(ctx, expr);
   }
@@ -83,7 +84,7 @@ export function checkMethodCall(ctx: CheckContext, expr: ts.CallExpression, scop
 const checkNew: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.NewExpression;
   const name = ts.isIdentifier(expr.expression) ? expr.expression.text : undefined;
-  const handler = (name !== undefined && newCheckers[name]) || newCheckers["*"];
+  const handler = (name !== undefined && lookup(newCheckers, name)) || newCheckers["*"];
   if (!handler) throw ctx.error(`Unsupported \`new ${expr.expression.getText(ctx.sf)}\``, expr);
   return handler(ctx, expr, scope);
 };

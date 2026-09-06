@@ -190,6 +190,21 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Fixed
 
+- **Dispatch tables no longer see `Object.prototype`.** The validator, checker
+  and emitter are each a table keyed by identifier, read with a key taken from
+  the program being compiled. A plain object literal inherits from
+  `Object.prototype`, so a program declaring `function valueOf`, `class
+  toString`, `const hasOwnProperty` or calling `new constructor()` found a
+  native function sitting in the table and used it as a handler — reporting
+  `error: function valueOf() { [native code] }`. All ten such lookups now go
+  through `src/lookup.ts`, whose one line of `Object.hasOwn` is the fix
+  (`tests/cases/decl_prototype_names`).
+- **Contextual typing of non-integer literals** reaches two more positions: an
+  array-literal element and a field assignment, so `const xs: f64[] = [0.5]`
+  and `this.ratio = 0.25` compile in the default i32 number mode rather than
+  being rejected as non-integer literals (`tests/cases/conv_f64_context`). An
+  empty array literal likewise takes its element type from a field target, so
+  `this.children = []` works in a constructor (`docs/wp14-selfhost.md` B4).
 - **Fuzzer validity.** `tests/differential/fuzz.js` parses each generated
   program and re-rolls the seed while it has a syntax error, so a run no
   longer reports a compile error for a program TypeScript itself rejects

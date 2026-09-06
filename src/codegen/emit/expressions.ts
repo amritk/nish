@@ -23,6 +23,7 @@ import {
   controlFlowExpressionEmitters,
   controlFlowUnaryEmitters,
 } from "./control-flow";
+import { lookup } from "../../lookup";
 
 // ---- Constants --------------------------------------------------------------------
 
@@ -164,7 +165,7 @@ export const builtinFunctionEmitters: Record<string, BuiltinCall> = {
 /** The identifier builtin a call resolves to, or undefined for calls to user functions. */
 function builtinFunctionOf(program: CheckedProgram, expr: ts.CallExpression): BuiltinCall | undefined {
   if (!ts.isIdentifier(expr.expression) || program.callees.has(expr)) return undefined;
-  return builtinFunctionEmitters[expr.expression.text];
+  return lookup(builtinFunctionEmitters, expr.expression.text);
 }
 
 /**

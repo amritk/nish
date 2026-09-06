@@ -187,11 +187,25 @@ function conversion(to: StaticType): BuiltinCall {
   };
 }
 
+/**
+ * `f64ToBits` / `bitsToF64`: one `bitcast`, which LLVM resolves in the register
+ * allocator rather than emitting an instruction. No call, no memory, no runtime
+ * symbol, so a function that only reinterprets bits stays `readnone`.
+ */
+function bitcast(from: string, to: string): BuiltinCall {
+  return {
+    emit: (ctx, expr) => ctx.fn.emitValue(`bitcast ${from} ${ctx.emitExpression(expr.arguments[0])} to ${to}`),
+    callees: () => [],
+  };
+}
+
 /** Identifier callees, spread into `builtinFunctionEmitters`; mirrors `conversionBuiltins`. */
 export const conversionEmitters: Record<string, BuiltinCall> = {
   toI32: conversion({ kind: "i32" }),
   toI64: conversion({ kind: "i64" }),
   toF64: conversion({ kind: "f64" }),
+  f64ToBits: bitcast("double", "i64"),
+  bitsToF64: bitcast("i64", "double"),
 };
 
 // ---- String to number (WP7) ---------------------------------------------------------

@@ -28,6 +28,7 @@
  */
 import ts from "typescript";
 import { CompileError, DiagnosticSink } from "./diagnostics";
+import { lookup } from "./lookup";
 
 type Validator = (node: ts.Node, sf: ts.SourceFile) => void;
 
@@ -270,7 +271,7 @@ const rejectLabeled: Validator = (node, sf) =>
 
 const checkIdentifier: Validator = (node, sf) => {
   const id = node as ts.Identifier;
-  const msg = FORBIDDEN_VALUE_IDENTIFIERS[id.text];
+  const msg = lookup(FORBIDDEN_VALUE_IDENTIFIERS, id.text);
   if (msg && isValueReference(id)) fail(msg, id, sf);
 };
 

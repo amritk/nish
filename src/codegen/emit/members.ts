@@ -12,6 +12,7 @@ import ts from "typescript";
 import { CheckedProgram, LocalVar } from "../../checker";
 import { CompilerOptions, StaticType } from "../../types";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
+import { lookup } from "../../lookup";
 
 export type PropertyEmitter = (ctx: EmitContext, expr: ts.PropertyAccessExpression, receiver: StaticType) => string;
 export type MethodCallEmitter = (ctx: EmitContext, expr: ts.CallExpression, receiver: StaticType) => string;
@@ -55,7 +56,7 @@ const emitPropertyAccess: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.PropertyAccessExpression;
   if (!isValueReceiver(ctx.program, expr.expression)) {
     const dotted = `${(expr.expression as ts.Identifier).text}.${expr.name.text}`;
-    return namespacePropertyEmitters[dotted](ctx, expr);
+    return lookup(namespacePropertyEmitters, dotted)!(ctx, expr);
   }
   const receiver = ctx.typeOf(expr.expression);
   return propertyEmitters[receiver.kind]!(ctx, expr, receiver);
@@ -70,7 +71,7 @@ export function emitMethodCall(ctx: EmitContext, expr: ts.CallExpression): strin
 const emitNew: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.NewExpression;
   const name = ts.isIdentifier(expr.expression) ? expr.expression.text : undefined;
-  const handler = (name !== undefined && newEmitters[name]) || newEmitters["*"];
+  const handler = (name !== undefined && lookup(newEmitters, name)) || newEmitters["*"];
   return handler(ctx, expr);
 };
 

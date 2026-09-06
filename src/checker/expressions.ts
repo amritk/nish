@@ -28,6 +28,7 @@ import {
   controlFlowExpressionCheckers,
   controlFlowUnaryCheckers,
 } from "./control-flow";
+import { lookup } from "../lookup";
 
 // ---- Leaves -----------------------------------------------------------------
 
@@ -219,7 +220,7 @@ const checkCall: ExpressionChecker = (ctx, node, scope) => {
   }
   const callee = ctx.sigs.get(expr.expression.text);
   if (!callee) {
-    const builtin = builtinFunctions[expr.expression.text];
+    const builtin = lookup(builtinFunctions, expr.expression.text);
     if (builtin) return builtin(ctx, expr, scope); // no `callees` entry: the emitter knows it by name
     throw ctx.error(`Unknown function \`${expr.expression.text}\``, expr.expression);
   }

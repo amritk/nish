@@ -123,6 +123,8 @@ const IDENTIFIER_BUILTINS = new Map([
   ["toI32", "toI32"],
   ["toI64", "toI64"],
   ["toF64", "toF64"],
+  ["f64ToBits", "f64ToBits"],
+  ["bitsToF64", "bitsToF64"],
   ["parseInt", "parseInt"],
   ["parseFloat", "parseFloat"],
   ["Number", "number"],

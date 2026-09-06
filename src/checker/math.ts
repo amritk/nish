@@ -41,6 +41,8 @@ import { F64, I32, I64, StaticType, isNumeric, resolveTypeNode, sameType, typeTo
 import { BuiltinCallChecker, calleeName, checkArity } from "./builtins";
 import { CheckContext } from "./context";
 import { Scope } from "./scope";
+import { lookup } from "../lookup";
+import { structOf } from "./classes";
 
 // ---- Math.* -------------------------------------------------------------------
 
@@ -125,9 +127,35 @@ function conversionBuiltin(name: string, target: StaticType): BuiltinCallChecker
 
 const CONVERSION_TARGETS: Record<string, StaticType> = { toI32: I32, toI64: I64, toF64: F64 };
 
-export const conversionBuiltins: Record<string, BuiltinCallChecker> = Object.fromEntries(
-  Object.entries(CONVERSION_TARGETS).map(([name, target]) => [name, conversionBuiltin(name, target)])
-);
+/**
+ * `f64ToBits(x: f64): i64` and `bitsToF64(b: i64): f64` (WP14): reinterpret the
+ * 64 bits, never convert the value. `toI64(1.5)` is `1`; `f64ToBits(1.5)` is
+ * `0x3FF8000000000000`.
+ *
+ * They exist because a compiler emitting LLVM IR has no other way to write a
+ * float constant: LLVM accepts only decimal float literals that round-trip
+ * exactly, so every other double must be emitted as its bit pattern. Both lower
+ * to one `bitcast`, which the register allocator resolves into no instruction
+ * at all.
+ */
+function bitcastBuiltin(name: string, from: StaticType, to: StaticType): BuiltinCallChecker {
+  return (ctx, expr, scope) => {
+    checkArity(ctx, expr, name, 1);
+    const t = ctx.checkExpression(expr.arguments[0], scope);
+    if (!sameType(t, from)) {
+      throw ctx.error(`\`${name}\` expects ${typeToString(from)}, got ${typeToString(t)}`, expr.arguments[0]);
+    }
+    return to;
+  };
+}
+
+export const conversionBuiltins: Record<string, BuiltinCallChecker> = {
+  ...Object.fromEntries(
+    Object.entries(CONVERSION_TARGETS).map(([name, target]) => [name, conversionBuiltin(name, target)])
+  ),
+  f64ToBits: bitcastBuiltin("f64ToBits", F64, I64),
+  bitsToF64: bitcastBuiltin("bitsToF64", I64, F64),
+};
 
 // ---- String to number (WP7) ---------------------------------------------------------
 
@@ -170,6 +198,8 @@ const LITERAL_CONTEXT_CALLS: Record<string, "other" | StaticType> = {
   "Arena.release": I64, // WP6: `Arena.release(0)` reads naturally
   toF64: F64, // so `toF64(2.75)` is legal in i32 mode; toI32/toI64 leave integer literals alone
   Number: F64, // `Number(2.5)` likewise
+  f64ToBits: F64, // `f64ToBits(0.5)` reinterprets a double, so the literal is one
+  bitsToF64: I64, // and its inverse takes the 64 bits
 };
 
 /** Return types of the identifier builtins, for `peekType`. */
@@ -190,13 +220,19 @@ function peekType(ctx: CheckContext, expr: ts.Expression, scope: Scope): StaticT
   if (ts.isIdentifier(expr)) return scope.lookup(expr.text)?.type;
   if (ts.isCallExpression(expr) && ts.isIdentifier(expr.expression)) {
     const name = expr.expression.text;
-    return ctx.sigs.get(name)?.returnType ?? BUILTIN_RETURNS[name];
+    return ctx.sigs.get(name)?.returnType ?? lookup(BUILTIN_RETURNS, name);
   }
   return undefined;
 }
 
-/** The numeric type the surrounding context demands for `literal`, if any. */
-function contextType(ctx: CheckContext, literal: ts.NumericLiteral, scope: Scope): StaticType | undefined {
+/**
+ * The numeric type the surrounding context demands for `expr`, if any.
+ *
+ * `expr` is a numeric literal at the top-level call; the array-literal case
+ * recurses with the enclosing literal, so `const xs: f64[] = [0.5]` reaches the
+ * element type the same way `const x: f64 = 0.5` reaches the annotation.
+ */
+function contextType(ctx: CheckContext, literal: ts.Expression, scope: Scope): StaticType | undefined {
   let expr: ts.Expression = literal;
   let parent = expr.parent;
   while (
@@ -212,7 +248,25 @@ function contextType(ctx: CheckContext, literal: ts.NumericLiteral, scope: Scope
     return parent.initializer === expr && parent.type ? resolveTypeNode(parent.type, ctx.sf, ctx.opts) : undefined;
   }
   if (ts.isReturnStatement(parent)) return ctx.current.returnType;
+  if (ts.isArrayLiteralExpression(parent)) {
+    const outer = contextType(ctx, parent, scope);
+    return outer?.kind === "array" ? outer.elem : undefined;
+  }
+  if (ts.isPropertyDeclaration(parent)) {
+    return parent.initializer === expr && parent.type ? resolveTypeNode(parent.type, ctx.sf, ctx.opts) : undefined;
+  }
   if (ts.isBinaryExpression(parent)) {
+    // `this.ratio = 0.5`: a field is an annotated target like a variable is.
+    if (parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && parent.right === expr) {
+      const target = parent.left;
+      if (ts.isPropertyAccessExpression(target)) {
+        const receiver = ctx.program.types.get(target.expression);
+        if (receiver?.kind === "struct") {
+          const field = structOf(ctx, receiver).fieldsByName.get(target.name.text);
+          if (field) return field.type;
+        }
+      }
+    }
     return peekType(ctx, parent.left === expr ? parent.right : parent.left, scope);
   }
   if (ts.isCallExpression(parent)) {
@@ -221,7 +275,7 @@ function contextType(ctx: CheckContext, literal: ts.NumericLiteral, scope: Scope
     if (index < 0 || name === undefined) return undefined;
     const userParam = ctx.sigs.get(name)?.params[index]?.type;
     if (userParam) return userParam;
-    const rule = LITERAL_CONTEXT_CALLS[name];
+    const rule = lookup(LITERAL_CONTEXT_CALLS, name);
     if (rule === undefined) return undefined;
     return rule === "other" ? peekType(ctx, parent.arguments[1 - index], scope) : rule;
   }

@@ -54,6 +54,24 @@ export function toF64(x) {
   return typeof x === "bigint" ? Number(x) : x;
 }
 
+/**
+ * `f64ToBits` / `bitsToF64`: reinterpret the 64 bits, never convert the value.
+ * The compiler lowers each to one `bitcast`; here it is a one-element
+ * DataView, which is the only way JavaScript lets you see a double's bits.
+ * The result is signed, matching the i64 the compiler produces.
+ */
+const BITS = new DataView(new ArrayBuffer(8));
+
+export function f64ToBits(x) {
+  BITS.setFloat64(0, x);
+  return BigInt.asIntN(64, BITS.getBigUint64(0));
+}
+
+export function bitsToF64(b) {
+  BITS.setBigInt64(0, BigInt.asIntN(64, b));
+  return BITS.getFloat64(0);
+}
+
 /** Wrap a BigInt to the i64 range: every i64 `+ - * /` and unary minus goes through here. */
 export function wrapI64(x) {
   return BigInt.asIntN(64, x);

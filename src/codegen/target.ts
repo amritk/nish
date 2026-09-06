@@ -14,6 +14,8 @@
  * a hard error at build time, never silent miscompilation.
  */
 
+import { lookup } from "../lookup";
+
 export interface Target {
   /** The triple written to `target triple`; aliases are normalised to this. */
   triple: string;
@@ -69,7 +71,7 @@ export function hostTriple(platform: string = process.platform, arch: string = p
 export function resolveTarget(spec: string): Target | undefined {
   const name = spec === "host" ? hostTriple() : spec;
   if (name === undefined) return undefined;
-  return TARGETS[name] ?? TARGETS[ALIASES[name] ?? ""];
+  return lookup(TARGETS, name) ?? lookup(TARGETS, lookup(ALIASES, name) ?? "");
 }
 
 /** The module-header lines that pin a module to `target`. */
