@@ -316,6 +316,8 @@ Type mapping:
 | `number` (f64 mode), `f64` | `double` |
 | `boolean` | `i1` |
 | `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }`, 8-aligned, immutable; literals are module constants, `.length` is the UTF-8 byte length |
+| `class C` | `%struct.C*` to `%struct.C = type { fields in declaration order }`, arena-allocated, natural alignment and padding exactly as clang lays out the same C struct. See [docs/wp2-classes.md](docs/wp2-classes.md). |
+| `interface I` | `%struct.I*`, same layout rules; built from object literals, no methods |
 | `void` | `void` |
 
 Supported today:
@@ -342,6 +344,11 @@ Supported today:
 - Short-circuit `&&` / `||` on booleans (the right operand runs only when needed).
 - Compound assignment `+= -= *= /= %=` on mutable numeric locals.
 - Prefix and postfix `++` / `--` on mutable numeric locals (postfix yields the old value).
+- `class` declarations with typed fields (literal initializers allowed), a constructor, and methods; `new C(args)` allocates in the arena and calls `@C.constructor`; methods are `@C.method` with `%this` first.
+- Field reads `p.x` (`getelementptr inbounds` + `load`), writes `p.x = v` and `p.x op= v` (`store`), `this.x` inside methods; `readonly` fields assignable only in the constructor.
+- Definite assignment: every field is initialised (inline literal or constructor) before it can be read; `this` cannot leak from a constructor early.
+- `interface` declarations as struct types built from object literals (`const p: P = { x: 1, y: 2 }`, all fields required); `class C implements I` requires the identical field list, and a `C` converts to `I` by `bitcast`.
+- `export class` / `export interface` and importing them by name (no renaming); methods of an imported class are `declare`d with the exporter's attributes.
 
 Rejected with a diagnostic (`file:line:col: error: ...`):
 
@@ -349,8 +356,12 @@ Rejected with a diagnostic (`file:line:col: error: ...`):
   parameters, destructuring, `async`, generators.
 - Assignment to parameters or `const`s, mixing types in an operator, missing
   return on a non-`void` path, unreachable code after `return`.
-- Anything else outside the Phase 1 subset (control flow, objects, classes,
-  strings), which later phases add.
+- Class inheritance, `static`, getters/setters, optional fields, index
+  signatures, parameter properties, `new` on an interface, object literals
+  without a contextual type, `<` on struct values, reading a field before the
+  constructor assigns it (see [docs/wp2-classes.md](docs/wp2-classes.md)).
+- Anything else outside the Phase 1 subset (arrays, `null`), which later
+  phases add.
 
 ## Lowering rules
 
