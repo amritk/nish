@@ -1,0 +1,107 @@
+/**
+ * StaticTS type model.
+ *
+ * Every StaticTS type maps 1:1 onto an LLVM first-class type. There is no
+ * boxing, no runtime type tags, and no structural subtyping: two values are
+ * compatible only if their StaticType kinds are identical.
+ */
+import ts from "typescript";
+import { CompileError } from "./diagnostics";
+
+export type NumberMode = "i32" | "f64";
+
+export interface CompilerOptions {
+  /** How the TypeScript `number` keyword is lowered. Default: "i32". */
+  numberMode: NumberMode;
+}
+
+export const DEFAULT_OPTIONS: CompilerOptions = { numberMode: "i32" };
+
+export type StaticType =
+  | { kind: "i32" }
+  | { kind: "f64" }
+  | { kind: "bool" }
+  | { kind: "string" }
+  | { kind: "void" };
+
+export const I32: StaticType = { kind: "i32" };
+export const F64: StaticType = { kind: "f64" };
+export const BOOL: StaticType = { kind: "bool" };
+export const STRING: StaticType = { kind: "string" };
+export const VOID: StaticType = { kind: "void" };
+
+/** LLVM textual type for a StaticType. */
+export function llvmType(t: StaticType): string {
+  switch (t.kind) {
+    case "i32":
+      return "i32";
+    case "f64":
+      return "double";
+    case "bool":
+      return "i1";
+    case "string":
+      return "i8*";
+    case "void":
+      return "void";
+  }
+}
+
+export function typeToString(t: StaticType): string {
+  return t.kind === "bool" ? "boolean" : t.kind;
+}
+
+export function sameType(a: StaticType, b: StaticType): boolean {
+  return a.kind === b.kind;
+}
+
+export function isNumeric(t: StaticType): boolean {
+  return t.kind === "i32" || t.kind === "f64";
+}
+
+/**
+ * Resolve a TypeScript type annotation node into a StaticType.
+ * Anything outside the rigid primitive set is a hard error: StaticTS refuses
+ * `any`, `unknown`, unions, generics, object literals, etc.
+ */
+export function resolveTypeNode(
+  node: ts.TypeNode,
+  sourceFile: ts.SourceFile,
+  opts: CompilerOptions
+): StaticType {
+  switch (node.kind) {
+    case ts.SyntaxKind.NumberKeyword:
+      return opts.numberMode === "i32" ? I32 : F64;
+    case ts.SyntaxKind.BooleanKeyword:
+      return BOOL;
+    case ts.SyntaxKind.StringKeyword:
+      return STRING;
+    case ts.SyntaxKind.VoidKeyword:
+      return VOID;
+    case ts.SyntaxKind.AnyKeyword:
+      throw new CompileError("`any` is forbidden in StaticTS", node, sourceFile);
+    case ts.SyntaxKind.UnknownKeyword:
+      throw new CompileError("`unknown` is forbidden in StaticTS", node, sourceFile);
+    case ts.SyntaxKind.TypeReference: {
+      const ref = node as ts.TypeReferenceNode;
+      if (ts.isIdentifier(ref.typeName) && !ref.typeArguments) {
+        switch (ref.typeName.text) {
+          case "i32":
+            return I32;
+          case "f64":
+            return F64;
+        }
+      }
+      throw new CompileError(
+        `Unsupported type reference \`${ref.getText(sourceFile)}\` (Phase 1 supports number, i32, f64, boolean, string, void)`,
+        node,
+        sourceFile
+      );
+    }
+    default:
+      throw new CompileError(
+        `Unsupported type \`${node.getText(sourceFile)}\` (Phase 1 supports number, i32, f64, boolean, string, void)`,
+        node,
+        sourceFile
+      );
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "statictsc",
+  "version": "0.1.0",
+  "description": "StaticTS: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "bin": {
+    "statictsc": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "compile": "node dist/index.js",
+    "example": "npm run build && node dist/index.js examples/add.ts -o build/add.ll && cat build/add.ll",
+    "test": "npm run build && node tests/run.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "typescript": "^5.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}
