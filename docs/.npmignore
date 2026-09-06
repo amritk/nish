@@ -1,0 +1,3 @@
+# docs/README.md is the documentation index, not part of the npm package
+# (npm always packs README files it finds, even under a `files` whitelist).
+README.md
