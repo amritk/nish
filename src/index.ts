@@ -21,7 +21,7 @@ import { NumberMode } from "./types";
 import { SUPPORTED_TARGETS, resolveTarget } from "./codegen/target";
 import { PKG_ROOT, packageVersion } from "./version";
 
-const PROFILES = ["speed", "size", "debug"] as const;
+const PROFILES = ["speed", "size", "debug", "wasi"] as const;
 type Profile = (typeof PROFILES)[number];
 
 /**
@@ -88,7 +88,8 @@ function usage(): never {
       "  -o, --output <dir>/        output directory: one <dir>/<module>.ll per module",
       "  --link <exe>               build a native binary from every module + runtime/runtime.c",
       "                             (entry module must declare `export function main`)",
-      "  --profile speed|size|debug build profile for --link (default: speed)",
+      "  --profile speed|size|debug|wasi",
+      "                             build profile for --link (default: speed); wasi needs a WASI sysroot",
       "  --strict-exports           non-exported functions get `internal` linkage",
       "  --number-mode i32|f64      lowering of `number` (default: i32)",
       "  --plain                    no performance attributes or alignment hints",

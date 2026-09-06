@@ -2789,6 +2789,7 @@ function identity(s: string): string {
 %struct.sts_array = type { i64, i64, i8* }
 
 @sts_arena = external global %struct.sts_arena, align 8
+@sts_argv = external global %struct.sts_array*, align 8
 
 declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #1
 declare void @sts_reset_arena() #2
@@ -2809,6 +2810,8 @@ declare void @sts_exit(i32 noundef) #4
 declare noalias noundef nonnull align 8 i8* @sts_read_file(i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @sts_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @sts_append_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare void @sts_argv_init(i32 noundef, i8** noundef nocapture readonly) #2
+declare noundef double @sts_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2
 declare void @sts_array_grow(%struct.sts_array* noundef nonnull align 8 nocapture, i64 noundef) #2
 declare noalias noundef nonnull align 8 %struct.sts_array* @sts_alloc_array(i64 noundef, i64 noundef) #2
 declare void @sts_panic_index(i64 noundef, i64 noundef) #5

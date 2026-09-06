@@ -11,9 +11,14 @@ import { BOOL, F64, I32, assignable, isNumeric, sameType, typeToString } from ".
 import { arrayExpressionCheckers, installArrayAssignmentCheckers } from "./arrays";
 import { BuiltinCallChecker } from "./builtins";
 import { ioBuiltinFunctions } from "./io";
-import { contextualLiteralType, conversionBuiltins } from "./math";
+import { contextualLiteralType, conversionBuiltins, parseBuiltins } from "./math";
 import { checkSuperCall, classExpressionCheckers, isAssignmentOperator } from "./classes";
-import { assignmentTargetCheckers, checkMethodCall, isValueReceiver, memberExpressionCheckers } from "./members";
+import {
+  assignmentTargetCheckers,
+  checkMethodCall,
+  isValueReceiver,
+  memberExpressionCheckers,
+} from "./members";
 import { nullableExpressionCheckers } from "./nullable";
 import { checkBuiltinCall, stringBinaryCheckers, stringExpressionCheckers } from "./strings";
 import { BinaryChecker, CheckerTable, ExpressionChecker, UnaryChecker } from "./context";
@@ -38,8 +43,10 @@ const checkNumericLiteral: ExpressionChecker = (ctx, node, scope) => {
     throw ctx.error(`Non-integer literal \`${expr.text}\` in i32 number mode (use --number-mode f64)`, expr);
   }
   // `-2147483648` parses as minus applied to 2147483648; allow exactly that form.
-  const negated = ts.isPrefixUnaryExpression(expr.parent) && expr.parent.operator === ts.SyntaxKind.MinusToken;
-  if (n > 0x7fffffff + (negated ? 1 : 0)) throw ctx.error(`Literal \`${expr.text}\` does not fit in i32`, expr);
+  const negated =
+    ts.isPrefixUnaryExpression(expr.parent) && expr.parent.operator === ts.SyntaxKind.MinusToken;
+  if (n > 0x7fffffff + (negated ? 1 : 0))
+    throw ctx.error(`Literal \`${expr.text}\` does not fit in i32`, expr);
   return I32;
 };
 
@@ -57,13 +64,15 @@ const checkIdentifier: ExpressionChecker = (ctx, node, scope) => {
 
 const checkNegate: UnaryChecker = (ctx, expr, scope) => {
   const operand = ctx.checkExpression(expr.operand, scope);
-  if (!isNumeric(operand)) throw ctx.error(`Unsupported unary operator \`-\` on ${typeToString(operand)}`, expr);
+  if (!isNumeric(operand))
+    throw ctx.error(`Unsupported unary operator \`-\` on ${typeToString(operand)}`, expr);
   return operand;
 };
 
 const checkNot: UnaryChecker = (ctx, expr, scope) => {
   const operand = ctx.checkExpression(expr.operand, scope);
-  if (operand.kind !== "bool") throw ctx.error(`Unsupported unary operator \`!\` on ${typeToString(operand)}`, expr);
+  if (operand.kind !== "bool")
+    throw ctx.error(`Unsupported unary operator \`!\` on ${typeToString(operand)}`, expr);
   return BOOL;
 };
 
@@ -123,7 +132,8 @@ const checkComparison: BinaryChecker = (ctx, expr, scope) => {
   // Ordering (`<`, `<=`, `>`, `>=`) is numeric only: an `i1` compare would have to
   // pick signed or unsigned, and JS's `true > false` has no use worth that trap.
   const op = expr.operatorToken.kind;
-  const equality = op === ts.SyntaxKind.EqualsEqualsEqualsToken || op === ts.SyntaxKind.ExclamationEqualsEqualsToken;
+  const equality =
+    op === ts.SyntaxKind.EqualsEqualsEqualsToken || op === ts.SyntaxKind.ExclamationEqualsEqualsToken;
   if (!sameType(lhs, rhs) || !(isNumeric(lhs) || (equality && lhs.kind === "bool"))) {
     throw ctx.error(
       `Operator \`${ts.tokenToString(op)}\` requires two ${equality ? "operands of the same primitive type" : "numeric operands"}, got ${typeToString(lhs)} and ${typeToString(rhs)}`,
@@ -161,7 +171,8 @@ const checkBinary: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.BinaryExpression;
   const op = expr.operatorToken.kind;
   // `p.x = v` and friends dispatch on the target's kind (WP2 fields, later WP4 elements).
-  const handler = (isAssignmentOperator(op) && assignmentTargetCheckers[expr.left.kind]) || binaryCheckers[op];
+  const handler =
+    (isAssignmentOperator(op) && assignmentTargetCheckers[expr.left.kind]) || binaryCheckers[op];
   if (!handler) {
     throw ctx.error(`Unsupported binary operator \`${ts.tokenToString(expr.operatorToken.kind)}\``, expr);
   }
@@ -173,6 +184,7 @@ const checkBinary: ExpressionChecker = (ctx, node, scope) => {
 /** Builtins called by plain identifier; a user function of the same name shadows them. */
 export const builtinFunctions: Record<string, BuiltinCallChecker> = {
   ...conversionBuiltins, // WP7: toI32, toI64, toF64
+  ...parseBuiltins, // WP7: parseInt, parseFloat, Number
   ...ioBuiltinFunctions, // WP7: readFileSync, writeFileSync, appendFileSync
 };
 
@@ -195,7 +207,10 @@ const checkCall: ExpressionChecker = (ctx, node, scope) => {
     throw ctx.error(`Unknown function \`${expr.expression.text}\``, expr.expression);
   }
   if (expr.arguments.length !== callee.params.length) {
-    throw ctx.error(`\`${callee.name}\` expects ${callee.params.length} argument(s), got ${expr.arguments.length}`, expr);
+    throw ctx.error(
+      `\`${callee.name}\` expects ${callee.params.length} argument(s), got ${expr.arguments.length}`,
+      expr
+    );
   }
   expr.arguments.forEach((arg, i) => {
     const t = ctx.checkExpression(arg, scope);

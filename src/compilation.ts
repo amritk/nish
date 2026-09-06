@@ -93,7 +93,12 @@ export class Compilation {
     return this.load(path.resolve(fileName), fileName, sourceText, this.modules.length === 0);
   }
 
-  private load(absPath: string, fileName: string, sourceText: string | undefined, isEntry: boolean): ModuleUnit {
+  private load(
+    absPath: string,
+    fileName: string,
+    sourceText: string | undefined,
+    isEntry: boolean
+  ): ModuleUnit {
     const existing = this.byPath.get(absPath);
     if (existing) return existing;
 
@@ -144,6 +149,10 @@ export class Compilation {
     }
     this.rejectSymbolClashes();
     this.sink.throwIfErrors();
+    // `process.argv` (WP7) is legal anywhere in a program that has an entry point, so every
+    // module needs to know whether the entry declares `main` before its bodies are checked.
+    const hasMain = this.entry.checker.program.entryMain !== undefined;
+    for (const unit of this.modules) unit.checker.entryHasMain = hasMain;
     for (const unit of this.modules) unit.checker.checkBodies();
     this.sink.throwIfErrors();
     this.checked = true;
@@ -186,6 +195,8 @@ export class Compilation {
     this.check();
     if (!this.facts) {
       const programs: CheckedProgram[] = this.modules.map((m) => m.checker.program);
+      // The entry wrapper initialises `process.argv` when any module of the program reads it (WP7).
+      if (programs.some((p) => p.usesArgv)) this.entry.checker.program.usesArgv = true;
       this.facts = analyzeFunctions(programs, this.opts);
     }
     return this.facts;
@@ -217,7 +228,13 @@ export class Compilation {
         continue;
       }
       const rel = path.relative(root, m.path).replace(/\.ts$/, "");
-      stems.set(m, rel.split(/[\\/]/).filter((seg) => seg !== "." && seg !== "..").join("_"));
+      stems.set(
+        m,
+        rel
+          .split(/[\\/]/)
+          .filter((seg) => seg !== "." && seg !== "..")
+          .join("_")
+      );
     }
     return stems;
   }

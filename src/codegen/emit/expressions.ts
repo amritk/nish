@@ -10,7 +10,7 @@ import { arrayExpressionEmitters, installArrayAssignmentEmitters } from "./array
 import { CheckedProgram } from "../../checker";
 import { BuiltinCall, f64Constant } from "./builtins";
 import { ioFunctionEmitters } from "./io";
-import { conversionEmitters } from "./math";
+import { conversionEmitters, parseEmitters } from "./math";
 import { isAssignmentOperator } from "../../checker/classes";
 import { classExpressionEmitters, emitSuperCall } from "./classes";
 import { assignmentTargetEmitters, emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members";
@@ -139,6 +139,7 @@ const emitBinary: ExpressionEmitter = (ctx, node) => {
 /** Builtins called by plain identifier; mirrors `builtinFunctions` in the checker. */
 export const builtinFunctionEmitters: Record<string, BuiltinCall> = {
   ...conversionEmitters, // WP7: toI32, toI64, toF64
+  ...parseEmitters, // WP7: parseInt, parseFloat, Number
   ...ioFunctionEmitters, // WP7: readFileSync, writeFileSync, appendFileSync
 };
 

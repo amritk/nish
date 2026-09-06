@@ -17,6 +17,10 @@
  *     synchronously so `process.exit` cannot lose output.
  *   - `throw` traps (`llvm.trap` -> SIGILL) instead of unwinding.
  *   - file I/O errors print `statictsc: cannot read <path>` and exit 1.
+ *   - `process.argv[0]` is the program (the script here, the executable
+ *     natively); `parseInt` is base 10 only and saturates into i32 (0 for no
+ *     digits); `parseFloat`/`Number` accept ASCII whitespace, decimal forms,
+ *     `Infinity`, and a `0x` hex prefix (parseFloat too, unlike JS).
  *
  * The rewrite rules that call these helpers are listed in docs/wp13-differential.md.
  */
@@ -156,6 +160,45 @@ export function appendFileSync(path, data) {
   } catch {
     ioFail("write", path);
   }
+}
+
+/** `process.argv`: index 0 is the program (the script here, the executable natively), then the arguments. */
+export function argv() {
+  return process.argv.slice(1);
+}
+
+const SPACES = "[ \\t\\n\\v\\f\\r]*";
+/** What `sts_parse_number` recognises: strtod's decimal and hex-integer forms, or an exact `Infinity`. */
+const LITERAL = new RegExp(`^${SPACES}([+-]?)(Infinity|0[xX][0-9a-fA-F]+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?)`);
+const BLANK = new RegExp(`^${SPACES}$`);
+const WHOLE = new RegExp(`${LITERAL.source}${SPACES}$`);
+
+/** The value of a `LITERAL` match: hex goes through parseInt(16), and `-` applies afterwards as in strtod. */
+function literalValue(m) {
+  const magnitude = /^0[xX]/.test(m[2]) ? Number.parseInt(m[2], 16) : Number(m[2]);
+  return m[1] === "-" ? -magnitude : magnitude;
+}
+
+/** `parseInt(s)`: strtoll base 10 (ASCII whitespace, sign, digits; 0 without digits) saturated into i32. */
+export function parseInt(s) {
+  const m = new RegExp(`^${SPACES}([+-]?\\d+)`).exec(s);
+  return m ? toI32(Number(m[1])) : 0;
+}
+
+/** `parseFloat(s)`: the longest literal after ASCII whitespace, else NaN (`0x1A` is 26, as strtod reads it). */
+export function parseFloat(s) {
+  const m = LITERAL.exec(s);
+  return m ? literalValue(m) : NaN;
+}
+
+/** `Number(x)`: a string must be one literal bar surrounding ASCII whitespace (blank is 0); others convert numerically. */
+export function number(x) {
+  if (typeof x === "bigint") return Number(x);
+  if (typeof x === "boolean") return x ? 1 : 0;
+  if (typeof x !== "string") return x;
+  const m = WHOLE.exec(x);
+  if (m) return literalValue(m);
+  return BLANK.test(x) ? 0 : NaN;
 }
 
 // Arena introspection has no JS counterpart: the stubs keep programs that only

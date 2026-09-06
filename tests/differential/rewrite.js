@@ -33,7 +33,11 @@ const f = ts.factory;
 const SHIM_NS = "__sts";
 
 const shimCall = (name, args) =>
-  f.createCallExpression(f.createPropertyAccessExpression(f.createIdentifier(SHIM_NS), name), undefined, args);
+  f.createCallExpression(
+    f.createPropertyAccessExpression(f.createIdentifier(SHIM_NS), name),
+    undefined,
+    args
+  );
 const paren = (e) => f.createParenthesizedExpression(e);
 const bin = (l, op, r) => f.createBinaryExpression(l, op, r);
 const num = (n) => f.createNumericLiteral(String(n));
@@ -50,10 +54,11 @@ function wrap(kind, expr) {
 function arith(kind, op, a, b) {
   if (kind === "i32" && op === ts.SyntaxKind.AsteriskToken) {
     // (a * b) | 0 is wrong once the double product exceeds 2^53; imul is the exact `mul i32`.
-    return f.createCallExpression(f.createPropertyAccessExpression(f.createIdentifier("Math"), "imul"), undefined, [
-      a,
-      b,
-    ]);
+    return f.createCallExpression(
+      f.createPropertyAccessExpression(f.createIdentifier("Math"), "imul"),
+      undefined,
+      [a, b]
+    );
   }
   const plain = bin(a, op, b);
   if (kind === "i32" || kind === "i64") return wrap(kind, paren(plain));
@@ -74,7 +79,18 @@ const ARITHMETIC = new Set([
   ts.SyntaxKind.SlashToken,
   ts.SyntaxKind.PercentToken,
 ]);
-const IDENTIFIER_BUILTINS = new Set(["toI32", "toI64", "toF64", "readFileSync", "writeFileSync", "appendFileSync"]);
+/** Identifier builtins and the shim function each becomes (`Number` cannot be a shim export name). */
+const IDENTIFIER_BUILTINS = new Map([
+  ["toI32", "toI32"],
+  ["toI64", "toI64"],
+  ["toF64", "toF64"],
+  ["parseInt", "parseInt"],
+  ["parseFloat", "parseFloat"],
+  ["Number", "number"],
+  ["readFileSync", "readFileSync"],
+  ["writeFileSync", "writeFileSync"],
+  ["appendFileSync", "appendFileSync"],
+]);
 
 function zeroOf(elem) {
   if (elem.kind === "i64") return big(0);
@@ -116,7 +132,9 @@ function makeTransformer(unit, stems) {
       // constructor takes parameters and calls it before the body; JavaScript
       // throws on the first `this` instead, so the call is made explicit.
       if (ts.isConstructorDeclaration(node) && node.body && ts.isClassDeclaration(node.parent)) {
-        const derived = (node.parent.heritageClauses ?? []).some((c) => c.token === ts.SyntaxKind.ExtendsKeyword);
+        const derived = (node.parent.heritageClauses ?? []).some(
+          (c) => c.token === ts.SyntaxKind.ExtendsKeyword
+        );
         const first = node.body.statements[0];
         const explicitSuper =
           first &&
@@ -125,8 +143,15 @@ function makeTransformer(unit, stems) {
           first.expression.expression.kind === ts.SyntaxKind.SuperKeyword;
         if (derived && !explicitSuper) {
           const body = ts.visitNode(node.body, visit);
-          const superCall = f.createExpressionStatement(f.createCallExpression(f.createSuper(), undefined, []));
-          return f.updateConstructorDeclaration(node, node.modifiers, node.parameters, f.updateBlock(body, [superCall, ...body.statements]));
+          const superCall = f.createExpressionStatement(
+            f.createCallExpression(f.createSuper(), undefined, [])
+          );
+          return f.updateConstructorDeclaration(
+            node,
+            node.modifiers,
+            node.parameters,
+            f.updateBlock(body, [superCall, ...body.statements])
+          );
         }
         return ts.visitEachChild(node, visit, context);
       }
@@ -149,9 +174,15 @@ function makeTransformer(unit, stems) {
           const inner = ts.visitNode(node.operand, visit);
           return wrap(kind, paren(f.createPrefixUnaryExpression(ts.SyntaxKind.MinusToken, inner)));
         }
-        if (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) {
+        if (
+          node.operator === ts.SyntaxKind.PlusPlusToken ||
+          node.operator === ts.SyntaxKind.MinusMinusToken
+        ) {
           if (kind !== "i32" && kind !== "i64") return node; // f64: JS semantics are the fadd/fsub
-          const op = node.operator === ts.SyntaxKind.PlusPlusToken ? ts.SyntaxKind.PlusToken : ts.SyntaxKind.MinusToken;
+          const op =
+            node.operator === ts.SyntaxKind.PlusPlusToken
+              ? ts.SyntaxKind.PlusToken
+              : ts.SyntaxKind.MinusToken;
           const one = kind === "i64" ? big(1) : num(1);
           // ++x  ->  (x = wrap(x + 1))
           return paren(f.createAssignment(node.operand, arith(kind, op, node.operand, one)));
@@ -165,7 +196,10 @@ function makeTransformer(unit, stems) {
         const one = kind === "i64" ? big(1) : num(1);
         // x++  ->  wrap((x = wrap(x + 1)) - 1): the old value, recovered with wrapping arithmetic.
         const assign = paren(
-          f.createAssignment(node.operand, arith(kind, inc ? ts.SyntaxKind.PlusToken : ts.SyntaxKind.MinusToken, node.operand, one))
+          f.createAssignment(
+            node.operand,
+            arith(kind, inc ? ts.SyntaxKind.PlusToken : ts.SyntaxKind.MinusToken, node.operand, one)
+          )
         );
         return arith(kind, inc ? ts.SyntaxKind.MinusToken : ts.SyntaxKind.PlusToken, assign, one);
       }
@@ -217,12 +251,25 @@ function makeTransformer(unit, stems) {
       }
 
       // ---- s.length on strings -> byte length ----
-      if (ts.isPropertyAccessExpression(node) && node.name.text === "length" && kindOf(node.expression) === "string") {
+      if (
+        ts.isPropertyAccessExpression(node) &&
+        node.name.text === "length" &&
+        kindOf(node.expression) === "string"
+      ) {
         return shimCall("strLen", [ts.visitNode(node.expression, visit)]);
       }
 
+      // ---- process.argv -> the script and its arguments (argv[0] is the program, as natively) ----
+      if (dottedName(node) === "process.argv" && !bindings.has(node.expression)) {
+        return shimCall("argv", []);
+      }
+
       // ---- new Array<T>(n) (and the Int32Array/Float64Array/BigInt64Array aliases) -> zero-filled ----
-      if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && /^(Array|Int32Array|Float64Array|BigInt64Array)$/.test(node.expression.text)) {
+      if (
+        ts.isNewExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        /^(Array|Int32Array|Float64Array|BigInt64Array)$/.test(node.expression.text)
+      ) {
         const t = typeOf(node);
         const n = ts.visitNode(node.arguments[0], visit);
         return shimCall("newArray", [n, zeroOf(t.elem)]);
@@ -252,7 +299,7 @@ function makeTransformer(unit, stems) {
           !callees.has(node) && // a user function of the same name shadows the builtin
           !bindings.has(node.expression)
         ) {
-          return shimCall(node.expression.text, args);
+          return shimCall(IDENTIFIER_BUILTINS.get(node.expression.text), args);
         }
         return f.updateCallExpression(node, ts.visitNode(node.expression, visit), undefined, args);
       }

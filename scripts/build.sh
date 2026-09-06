@@ -12,6 +12,13 @@
 #          load it from Node. Add runtime/runtime_wasm.c to the inputs when a
 #          function uses arrays (the arena and the array cold paths, no libc);
 #          strings and I/O still need a WASI runtime and are not available.
+#   wasm   wasm32 freestanding module exporting every non-internal function
+#          (for modules that do not use the C runtime); load it from Node.
+#   wasi   wasm32-wasi command module: runtime.c linked against wasi-libc, so
+#          string programs run under any WASI host (`_start` runs `main`;
+#          `node examples/wasi-host.mjs app.wasm args...`). Needs a WASI
+#          sysroot: WASI_SYSROOT=<dir>, or /usr/lib/wasi-sysroot,
+#          /opt/wasi-sdk/share/wasi-sysroot, /usr/share/wasi-sysroot.
 #   napi   Node addon (<out>.node): the speed flags plus -shared -fPIC, built
 #          against the Node headers next to `node` (override: NODE_INCLUDE=<dir
 #          containing node_api.h>). Inputs: <modules.ll> runtime/runtime.c and
@@ -109,6 +116,44 @@ case "$profile" in
     "$CC" -Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib -mbulk-memory \
       -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections \
       "${inputs[@]}" -o "$out" ;;
+  wasi)
+    sysroot=${WASI_SYSROOT:-}
+    for d in /usr/lib/wasi-sysroot /opt/wasi-sdk/share/wasi-sysroot /usr/share/wasi-sysroot; do
+      [ -n "$sysroot" ] || { [ -d "$d" ] && sysroot=$d; }
+    done
+    if [ -z "$sysroot" ] || [ ! -d "$sysroot/lib" ]; then
+      echo "error: the wasi profile needs a WASI sysroot (wasi-libc headers and libc.a) and none was found." >&2
+      echo "       Install wasi-sdk's sysroot (https://github.com/WebAssembly/wasi-sdk/releases: wasi-sysroot-<ver>.tar.gz," >&2
+      echo "       or apt install wasi-libc) and set WASI_SYSROOT=<dir> if it is not in one of the default locations" >&2
+      echo "       (/usr/lib/wasi-sysroot, /opt/wasi-sdk/share/wasi-sysroot, /usr/share/wasi-sysroot). See docs/INSTALL.md." >&2
+      exit 2
+    fi
+    wasm_ld=$("$CC" -print-prog-name=wasm-ld)
+    if [ ! -x "$wasm_ld" ]; then
+      echo "error: the wasi profile needs wasm-ld (install lld; on macOS: brew install llvm@18)" >&2
+      exit 2
+    fi
+    # clang links compiler-rt's wasm32 builtins from its resource dir (wasi-sdk and Debian's
+    # libclang-rt-<ver>-dev-wasm32 put it there); wasi-libc's strtoll needs its __multi3.
+    # Otherwise look for wasi-sdk's separate libclang_rt.builtins-wasm32-wasi-<ver>.tar.gz
+    # unpacked next to the sysroot, or WASI_BUILTINS=<file>, and name libc explicitly
+    # (wasi-libc's libc.a includes libm) so clang stops looking for the archive itself.
+    libs=()
+    if [ ! -f "$("$CC" -print-resource-dir)/lib/wasi/libclang_rt.builtins-wasm32.a" ]; then
+      for f in "${WASI_BUILTINS:-}" "$sysroot/lib/wasm32-wasi/libclang_rt.builtins-wasm32.a" \
+               "$sysroot/lib/libclang_rt.builtins-wasm32.a" "$sysroot"/../libclang_rt.builtins-wasm32*/libclang_rt.builtins-wasm32.a; do
+        if [ -n "$f" ] && [ -f "$f" ]; then libs=(-nodefaultlibs -lc "$f"); break; fi
+      done
+      if [ ${#libs[@]} -eq 0 ]; then
+        echo "error: the wasi profile needs compiler-rt's wasm32 builtins (libclang_rt.builtins-wasm32.a) and clang has none." >&2
+        echo "       Install libclang-rt-<ver>-dev-wasm32, or unpack wasi-sdk's libclang_rt.builtins-wasm32-wasi-<ver>.tar.gz" >&2
+        echo "       into $sysroot/lib/wasm32-wasi/ or point WASI_BUILTINS at the .a file. See docs/INSTALL.md." >&2
+        exit 2
+      fi
+    fi
+    "$CC" -Wno-override-module --target=wasm32-wasi --sysroot="$sysroot" -Oz -DNDEBUG \
+      -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,--strip-all \
+      "${inputs[@]}" "${libs[@]}" -o "$out" ;;
   napi)
     # Node ships its C headers next to the binary: <prefix>/bin/node and
     # <prefix>/include/node/node_api.h (official tarballs, nvm, fnm, volta).

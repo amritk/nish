@@ -136,6 +136,7 @@ takes that type (`src/checker/math.ts`, `contextualLiteralType`;
 | `Math.min` / `Math.max` | `Math.max(x, 0)` | the other operand's type |
 | f64-only `Math.*`, `toF64` | `Math.sqrt(2)`, `toF64(3)` | `f64` |
 | `process.exit` | `process.exit(1)` in f64 mode | `i32` |
+| `Number` | `Number(2.5)` in i32 mode | `f64` |
 
 `-5` and `(5)` count as the literal. "Known type" means an already-checked
 left operand, a variable, or a call to a user function or to
@@ -297,16 +298,19 @@ export function main(): number {   // or `: void`; `: i32` in f64 mode
   `export function main` (`Only the entry module may declare`,
   `tests/link/main_in_import`); `--link` requires it (`tests/link/no_main`).
 - It takes no parameters (`` `main` cannot take parameters ``,
-  `tests/cases/reject_main_params`; `process.argv` does not exist yet) and
+  `tests/cases/reject_main_params`; the command line is
+  [`process.argv`](#process)) and
   returns `void` (exit code 0, `tests/cases/entry_main_void`) or an
   `i32`-lowered `number` (`tests/cases/entry_main`, `tests/link/two_file`).
   In f64 mode declare `main(): i32`; `main(): number` is rejected with
   `` `main` must return void or an i32 number ... under --number-mode f64 declare `main(): i32` ``
   *(CLI only)*.
 - The user's function is emitted as `@sts_main`; the compiler adds a C
-  `@main(i32 %argc, i8** %argv)` wrapper that calls it, frees the arena, and
-  returns the code. A non-exported `function main` is an ordinary function
-  named `@main` (for C drivers such as `tests/driver.c`).
+  `@main(i32 %argc, i8** %argv)` wrapper that builds `process.argv` when the
+  program reads it (`call void @sts_argv_init(i32 %argc, i8** %argv)`,
+  `tests/cases/argv_echo`, `tests/link/argv_import`), calls it, frees the
+  arena, and returns the code. A non-exported `function main` is an ordinary
+  function named `@main` (for C drivers such as `tests/driver.c`).
 
 ### Classes
 
@@ -641,7 +645,7 @@ check away at `-O1`). Floating-point division is never checked: `x / 0` on
 
 - `f(args)` calls a top-level function or an imported one; the callee must
   be a plain identifier (`Only direct calls to named functions are supported`),
-  known (`` Unknown function `Number` `` *(CLI only)*), and called with
+  known (`` Unknown function `String` `` *(CLI only)*), and called with
   matching arity and types (see [Functions](#functions)).
 - `obj.method(args)` calls a class method with `obj` as `this`
   (`tests/cases/cls_this_method_call`); `this.method(args)` inside a method
@@ -650,9 +654,10 @@ check away at `-O1`). Floating-point division is never checked: `x / 0` on
   `` Unknown method `pop` on i32[] (supported: push) ``); strings have no
   methods (`` Unknown method `toUpperCase` on string `` *(CLI only)*).
 - Builtins are called by dotted name (`console.log`, `Math.sqrt`,
-  `process.exit`) or bare name (`toI32`, `readFileSync`); a user function
-  with the same bare name shadows the builtin. Unknown dotted builtins are
-  `` Unknown builtin `Math.foo` `` (`tests/cases/reject_unknown_builtin`).
+  `process.exit`) or bare name (`toI32`, `parseInt`, `Number`,
+  `readFileSync`); a user function with the same bare name shadows the
+  builtin. Unknown dotted builtins are `` Unknown builtin `Math.foo` ``
+  (`tests/cases/reject_unknown_builtin`).
 
 ### `new`
 
@@ -680,9 +685,9 @@ check away at `-O1`). Floating-point division is never checked: `x / 0` on
 - `a.length` on an array: read-only (`tests/cases/arr_length`;
   `` Cannot assign to `length` of i32[] ``, `reject_arr_length_assign`).
 - `p.f` on a class or interface value (`tests/cases/cls_point`).
-- `Math.PI`, `Math.E` (`tests/cases/math_i32`); `Arena.*` (see [`Arena`](#arena)).
-  Any other bare identifier before a dot is `` Unknown identifier `process` ``
-  *(CLI only)*.
+- `Math.PI`, `Math.E` (`tests/cases/math_i32`); `process.argv` (see
+  [`process`](#process)); `Arena.*` (see [`Arena`](#arena)). Any other bare
+  identifier before a dot is `` Unknown identifier `os` `` *(CLI only)*.
 - Member access on a `T | null` value requires narrowing first
   ([Nullable types](#nullable-types)); `?.` is forbidden
   (`tests/cases/reject_optional_chain`).
@@ -763,14 +768,42 @@ argument is typed `f64` by context (`Math.sqrt(2)` works in both modes).
 | `toI32(x: i32 \| i64 \| f64): i32` | `i64`: truncate (wraps); `f64`: saturating `llvm.fptosi.sat` (NaN -> 0, out of range clamps); `i32`: identity | `conversions`; `reject_toi32_string` |
 | `toI64(x): i64` | `i32`: sign-extend; `f64`: saturating; `i64`: identity | `conversions` |
 | `toF64(x): f64` | integers: `sitofp`; `f64`: identity | `conversions` |
+| `Number(x: string \| i32 \| i64 \| f64 \| boolean): f64` | a string is parsed with JavaScript's `Number(s)` rules (below); `i32`/`i64`: `sitofp`; `boolean`: `uitofp` (`true` is `1`); `f64`: identity. A numeric literal argument is typed `f64` (`Number(2.5)` works in i32 mode) | `parse_numbers`; `reject_number_array` (`` `Number` expects a string, number, or boolean, got i32[] ``) |
+| `parseInt(s: string): i32` | base 10 only: ASCII whitespace, an optional sign, then digits (`strtoll`); stops at the first other character. **Deviations from JavaScript:** no `NaN` in an `i32`, so no digits give `0` (`parseInt("abc")`, `parseInt("")`); values beyond the `i32` range saturate exactly like `toI32` (`parseInt("99999999999")` is `2147483647`); a `0x` prefix is not hexadecimal (`parseInt("0x10")` is `0`). Always `i32`, also under `--number-mode f64` (use `Number` there) | `parse_numbers`; `reject_parseint_number` (`` `parseInt` expects a string, got i32 ``) |
+| `parseFloat(s: string): f64` | ASCII whitespace, then the longest decimal literal (`[sign] digits [. digits] [e [sign] digits]`, `. digits`, or `[sign] Infinity`), correctly rounded by `strtod`; `NaN` when there is none (`parseFloat("abc")`, `""`, `"."`); `parseFloat("3.14xyz")` is `3.14`, `"1e"` is `1`. **Deviation:** a `0x` prefix is read as hexadecimal like `strtod` (`parseFloat("0x1A")` is `26`; JavaScript stops at the `x` and gives `0`) | `parse_numbers` |
+
+The string parsers accept only ASCII whitespace (` \t\n\v\f\r`), not the
+Unicode spaces JavaScript also trims. `Number(s)` trims it on both sides and
+then requires the whole string to be one literal: `Number("")` and
+`Number("   ")` are `0`, `Number("  7.5  ")` is `7.5`, `Number("12px")`,
+`Number("1e")`, `Number("Infinityx")`, `Number("nan")` and `Number("inf")`
+are `NaN`, `Number("0x1A")` is `26` (as in JavaScript; hex floats such as
+`0x1p3` are also accepted by `strtod`, which JavaScript rejects), and the
+`0b`/`0o` prefixes are `NaN` (JavaScript reads them). All three lower to
+`sts_parse_number(s, mode)` in the runtime (mode 0 `parseFloat`, 1 `Number`,
+2 `parseInt`, the last followed by `llvm.fptosi.sat.i32.f64`); their effect
+is write (`strtod`/`strtoll` may set `errno`), so a function that parses is
+never `readonly` ([wp7-runtime.md](wp7-runtime.md#string-to-number)).
 
 ### `process`
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `process.exit(code: i32): void` | `sts_exit` -> libc `exit(code)` (stdio buffers of linked C code are flushed; the arena is abandoned); statement position; a terminator | write, `noreturn` | `process_exit`, `reject_exit_unreachable` |
+| `process.argv: string[]` | the command line: `process.argv[0]` is the program path (C's `argv[0]`, one index earlier than Node, whose `argv[0]` is the `node` binary and `argv[1]` the script) and the rest are the arguments as UTF-8 byte strings; read-only | read | `argv_echo` (run with `argv_echo.argv`), `link/argv_import`; `reject_argv_assign`, `reject_argv_push` (`` `process.argv` is read-only ``) |
 
-`process.argv` does not exist (`` Unknown identifier `process` `` *(CLI only)*).
+`process.argv` is an ordinary `string[]` value (`length`, `a[i]`, `for...of`,
+passing it to functions, aliasing it with `const args = process.argv`) that
+the `@main` wrapper builds once with `sts_argv_init(argc, argv)` before the
+program runs; every module of the program may read it, and each read is one
+`load` of the runtime global `@sts_argv` (a memory read: the function is at
+most `readonly`). The array lives outside the arena, so `Arena.reset()`
+never invalidates it. Storing into it (`process.argv[i] = s`, `op=`,
+`++`/`--`, `push`) is rejected. A program without `export function main`, as
+for a wasm or N-API library, has nothing to build it from and rejects every
+use with `` `process.argv` requires a `main` entry point `` (`reject_argv_no_main`,
+`tests/link/argv_no_main`). Under the `wasi` build profile the WASI host
+supplies the arguments (`examples/wasi-host.mjs`).
 
 ### File I/O
 
@@ -792,8 +825,10 @@ Paths are relative to the working directory. These are globals, not
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 
 There are no other array or string methods (`pop`, `slice`, `indexOf`,
-`map`, `toUpperCase`, `charAt`, ...), no `Number(s)` / `parseInt(s)`
-(`` Unknown function `parseInt` `` *(CLI only)*), and no `toString`.
+`map`, `toUpperCase`, `charAt`, ...) and no `toString` (template literals
+and `console.log` convert numbers); string-to-number parsing is the bare
+`Number(s)` / `parseInt(s)` / `parseFloat(s)` under
+[Numeric conversions](#numeric-conversions).
 
 ### `Arena`
 

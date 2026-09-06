@@ -16,6 +16,11 @@
  * Conversions (plain identifier calls, any numeric argument):
  *   `toI32(x)`, `toI64(x)`, `toF64(x)`. Same-type calls are identities.
  *
+ * String to number (plain identifier calls, lowered to the runtime):
+ *   `parseInt(s: string): i32`, `parseFloat(s: string): f64`, and
+ *   `Number(x: string | i32 | i64 | f64 | boolean): f64`, which parses a
+ *   string and converts anything else numerically (`true` is 1).
+ *
  * Numeric literals are typed by context. A literal is the mode's default
  * (`i32`, or `f64` under `--number-mode f64`) unless its immediate context
  * demands another numeric type, in which case it takes that type:
@@ -124,6 +129,36 @@ export const conversionBuiltins: Record<string, BuiltinCallChecker> = Object.fro
   Object.entries(CONVERSION_TARGETS).map(([name, target]) => [name, conversionBuiltin(name, target)])
 );
 
+// ---- String to number (WP7) ---------------------------------------------------------
+
+/** `parseInt(s: string): i32`, `parseFloat(s: string): f64`: one string argument. */
+function stringParser(name: string, result: StaticType): BuiltinCallChecker {
+  return (ctx, expr, scope) => {
+    checkArity(ctx, expr, name, 1);
+    const t = ctx.checkExpression(expr.arguments[0], scope);
+    if (t.kind !== "string") throw ctx.error(`\`${name}\` expects a string, got ${typeToString(t)}`, expr.arguments[0]);
+    return result;
+  };
+}
+
+/** `Number(x): f64`: parses a string; converts i32/i64/f64/boolean numerically. */
+const checkNumber: BuiltinCallChecker = (ctx, expr, scope) => {
+  checkArity(ctx, expr, "Number", 1);
+  const t = ctx.checkExpression(expr.arguments[0], scope);
+  if (t.kind !== "string" && t.kind !== "bool" && !isNumeric(t)) {
+    throw ctx.error(`\`Number\` expects a string, number, or boolean, got ${typeToString(t)}`, expr.arguments[0]);
+  }
+  return F64;
+};
+
+const PARSE_RETURNS: Record<string, StaticType> = { parseInt: I32, parseFloat: F64, Number: F64 };
+
+export const parseBuiltins: Record<string, BuiltinCallChecker> = {
+  parseInt: stringParser("parseInt", I32),
+  parseFloat: stringParser("parseFloat", F64),
+  Number: checkNumber,
+};
+
 // ---- Contextual typing of numeric literals -----------------------------------------
 
 /** Builtin calls whose arguments give literals a type: the other operand's, or a fixed one. */
@@ -134,7 +169,11 @@ const LITERAL_CONTEXT_CALLS: Record<string, "other" | StaticType> = {
   "process.exit": I32,
   "Arena.release": I64, // WP6: `Arena.release(0)` reads naturally
   toF64: F64, // so `toF64(2.75)` is legal in i32 mode; toI32/toI64 leave integer literals alone
+  Number: F64, // `Number(2.5)` likewise
 };
+
+/** Return types of the identifier builtins, for `peekType`. */
+const BUILTIN_RETURNS: Record<string, StaticType> = { ...CONVERSION_TARGETS, ...PARSE_RETURNS };
 
 /**
  * Type of `expr` without checking it, when it is cheap to see: an
@@ -151,7 +190,7 @@ function peekType(ctx: CheckContext, expr: ts.Expression, scope: Scope): StaticT
   if (ts.isIdentifier(expr)) return scope.lookup(expr.text)?.type;
   if (ts.isCallExpression(expr) && ts.isIdentifier(expr.expression)) {
     const name = expr.expression.text;
-    return ctx.sigs.get(name)?.returnType ?? CONVERSION_TARGETS[name];
+    return ctx.sigs.get(name)?.returnType ?? BUILTIN_RETURNS[name];
   }
   return undefined;
 }

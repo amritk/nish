@@ -65,6 +65,16 @@ export class Checker implements CheckContext {
   private readonly isEntry: boolean;
   readonly sink: DiagnosticSink;
   /**
+   * Whether the program's entry module declares `export function main` (WP7,
+   * `process.argv`). The Compilation sets it on every module before bodies
+   * are checked; a single-module check falls back to this module's own entry.
+   */
+  entryHasMain?: boolean;
+
+  get hasEntryMain(): boolean {
+    return this.entryHasMain ?? this.program.entryMain !== undefined;
+  }
+  /**
    * Import names used as types before pass 1b could tell whether they name a
    * class (WP2). Resolved provisionally as `%struct.<name>`; `bindImports`
    * rejects the ones that turn out to be functions.

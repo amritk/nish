@@ -121,6 +121,12 @@ export interface CheckedProgram {
    * emitter then adds the `define i32 @main(i32, i8**)` wrapper around it.
    */
   entryMain?: FunctionSig;
+  /**
+   * Some function reads `process.argv` (WP7). On the entry module the
+   * Compilation also sets it when any imported module does, so the `@main`
+   * wrapper calls `sts_argv_init` before the program runs.
+   */
+  usesArgv?: boolean;
   /** Expression node -> resolved StaticType. */
   types: WeakMap<ts.Node, StaticType>;
   /** Identifier node -> the variable it refers to. */

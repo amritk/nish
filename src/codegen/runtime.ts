@@ -16,6 +16,11 @@ export const ARENA_TYPE = "%struct.sts_arena = type { i8*, i64, i64, i8* }";
 export const ARRAY_TYPE = "%struct.sts_array = type { i64, i64, i8* }";
 
 export const ARENA_GLOBAL = "@sts_arena = external global %struct.sts_arena, align 8";
+/**
+ * `process.argv` (WP7): the `string[]` the entry wrapper builds once with
+ * `sts_argv_init(argc, argv)`; every module that reads it loads this global.
+ */
+export const ARGV_GLOBAL = "@sts_argv = external global %struct.sts_array*, align 8";
 
 export type MemoryEffect = "none" | "read" | "write";
 
@@ -176,6 +181,23 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
   {
     name: "sts_append_file",
     signature: `declare void @sts_append_file(${STR_NOCAP}, ${STR_NOCAP})`,
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  // ---- WP7: process.argv and string-to-number parsing -------------------------
+  {
+    // Called once by the entry wrapper: mallocs the array and copies every argument.
+    name: "sts_argv_init",
+    signature: "declare void @sts_argv_init(i32 noundef, i8** noundef nocapture readonly)",
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
+    // mode 0 parseFloat, 1 Number, 2 parseInt (as a double; the caller saturates it).
+    // The string is only read and never retained (`readonly nocapture`), but the
+    // function itself is not `readonly`: strtod/strtoll may store errno on overflow.
+    name: "sts_parse_number",
+    signature: `declare noundef double @sts_parse_number(${STR_NOCAP}, i32 noundef)`,
     attrs: ["nounwind", "willreturn"],
     effect: "write",
   },

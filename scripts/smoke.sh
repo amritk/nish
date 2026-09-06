@@ -6,9 +6,11 @@
 #   npm run smoke                        (builds dist/ first)
 #
 # A program is any examples/**/*.ts that declares `export function main`. It
-# is expected to exit 0 unless it carries a `// smoke: exit <n>` comment. The
-# script exits non-zero if any program fails to compile, link, or run with the
-# expected status. Binaries and IR go to build/smoke/. Needs clang on PATH.
+# is expected to exit 0 unless it carries a `// smoke: exit <n>` comment; a
+# `// smoke: argv <args>` comment passes those arguments on its command line
+# (process.argv). The script exits non-zero if any program fails to compile,
+# link, or run with the expected status. Binaries and IR go to build/smoke/.
+# Needs clang on PATH.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -47,7 +49,10 @@ for src in "${programs[@]}"; do
   fi
   bytes=$(wc -c < "$exe" | tr -d ' ')   # macOS wc pads with spaces
 
-  "$exe" >"$out/$name.out" 2>"$out/$name.err"
+  # `// smoke: argv <args>` is the program's command line (WP7 process.argv).
+  argv=$(sed -n 's#^// smoke: argv \(.*\)#\1#p' "$src" | head -n 1)
+  # shellcheck disable=SC2086
+  "$exe" $argv >"$out/$name.out" 2>"$out/$name.err"
   got=$?
   if [ "$got" -eq "$want" ]; then
     status="ok (exit $got)"

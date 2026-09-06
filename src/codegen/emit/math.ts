@@ -14,6 +14,16 @@
  *   Math.random()    call double @sts_random()   (write effect: RNG state)
  *   Math.PI, Math.E  f64 constants
  *   toI32/toI64/toF64(x)   sext / trunc / sitofp / @llvm.fptosi.sat.<T>.f64
+ *   parseFloat(s)          call double @sts_parse_number(i8* s, i32 0)
+ *   Number(s)              call double @sts_parse_number(i8* s, i32 1)   (string)
+ *   Number(x)              sitofp / `uitofp i1` / nothing                (i32, i64, boolean, f64)
+ *   parseInt(s)            @sts_parse_number(s, i32 2) then @llvm.fptosi.sat.i32.f64
+ *
+ * The parsing runtime call takes a mode instead of being three symbols to
+ * keep runtime.c within its size budget. parseInt comes back as the exact
+ * integer value in a double (or 0 without digits, since NaN has no i32) and
+ * the saturating conversion clamps it into the i32 range, so
+ * `parseInt("99999999999")` is 2147483647, exactly what `toI32` would do.
  *
  * Math.round: JavaScript rounds half toward +infinity (`Math.round(-2.5)` is
  * -2), which is neither `llvm.round` (half away from zero: -3) nor
@@ -182,4 +192,47 @@ export const conversionEmitters: Record<string, BuiltinCall> = {
   toI32: conversion({ kind: "i32" }),
   toI64: conversion({ kind: "i64" }),
   toF64: conversion({ kind: "f64" }),
+};
+
+// ---- String to number (WP7) ---------------------------------------------------------
+
+const PARSE_RUNTIME = "sts_parse_number";
+const SAT_I32 = "llvm.fptosi.sat.i32.f64";
+
+/** `call double @sts_parse_number(i8* s, i32 mode)`: 0 parseFloat, 1 Number, 2 parseInt. */
+function parseCall(ctx: EmitContext, s: string, mode: 0 | 1 | 2): string {
+  return ctx.fn.emitValue(`call double ${ctx.useRuntime(PARSE_RUNTIME)}(i8* ${s}, i32 ${mode})`);
+}
+
+const parseIntCall: BuiltinCall = {
+  emit: (ctx, expr) => {
+    const value = parseCall(ctx, ctx.emitExpression(expr.arguments[0]), 2);
+    return callIntrinsic(ctx, SAT_I32, "i32", `double ${value}`);
+  },
+  callees: () => [PARSE_RUNTIME, SAT_I32],
+};
+
+const parseFloatCall: BuiltinCall = {
+  emit: (ctx, expr) => parseCall(ctx, ctx.emitExpression(expr.arguments[0]), 0),
+  callees: () => [PARSE_RUNTIME],
+};
+
+/** `Number(x)`: a string is parsed by the runtime; `boolean` is `uitofp`; numbers convert as `toF64`. */
+const numberOf: BuiltinCall = {
+  emit: (ctx, expr) => {
+    const arg = expr.arguments[0];
+    const from = ctx.typeOf(arg);
+    const value = ctx.emitExpression(arg);
+    if (from.kind === "string") return parseCall(ctx, value, 1);
+    if (from.kind === "bool") return ctx.fn.emitValue(`uitofp i1 ${value} to double`);
+    return emitConversion(ctx, value, from, { kind: "f64" });
+  },
+  callees: (program, expr) => (program.types.get(expr.arguments[0])!.kind === "string" ? [PARSE_RUNTIME] : []),
+};
+
+/** Identifier callees, spread into `builtinFunctionEmitters`; mirrors `parseBuiltins`. */
+export const parseEmitters: Record<string, BuiltinCall> = {
+  parseInt: parseIntCall,
+  parseFloat: parseFloatCall,
+  Number: numberOf,
 };

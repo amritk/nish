@@ -51,6 +51,8 @@ export interface EmitContext {
   declare(text: string): void;
   /** Add a module-level named type (`%struct.x = type {...}`); duplicates are ignored. */
   declareType(text: string): void;
+  /** Add a module-level global (`@sts_argv = external global ...`); duplicates are ignored. */
+  declareGlobal(text: string): void;
 
   /**
    * WP6: the allocation expression (`new`, object literal, array literal,

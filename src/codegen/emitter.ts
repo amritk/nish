@@ -48,7 +48,15 @@ import { expressionEmitters } from "./emit/expressions";
 import { emitVariableDeclarationList, statementEmitters } from "./emit/statements";
 import { addStringConstant } from "./emit/strings";
 import { IRFunction, IRModule } from "./ir";
-import { ARENA_GLOBAL, ARENA_TYPE, ARRAY_TYPE, INLINE_ALLOCATOR_ATTRS, RUNTIME_FUNCTIONS, inlineAllocator } from "./runtime";
+import {
+  ARENA_GLOBAL,
+  ARENA_TYPE,
+  ARGV_GLOBAL,
+  ARRAY_TYPE,
+  INLINE_ALLOCATOR_ATTRS,
+  RUNTIME_FUNCTIONS,
+  inlineAllocator,
+} from "./runtime";
 import { resolveTarget, targetHeader } from "./target";
 
 export class Emitter implements EmitContext {
@@ -165,10 +173,12 @@ export class Emitter implements EmitContext {
   }
 
   /**
-   * The C-ABI process entry. `argc`/`argv` are accepted (and ignored until
-   * WP7) so the signature is the one every libc start-up code expects.
-   * Attributes are deliberately minimal: the wrapper calls the runtime, so
-   * it is neither pure nor provably returning.
+   * The C-ABI process entry, with the signature every libc start-up code
+   * expects. When the program reads `process.argv` (WP7, `usesArgv` is set
+   * program-wide by the Compilation), `sts_argv_init(argc, argv)` builds the
+   * string array before the user's `main` runs; otherwise the arguments are
+   * ignored. Attributes are deliberately minimal: the wrapper calls the
+   * runtime, so it is neither pure nor provably returning.
    */
   private emitEntryWrapper(userMain: FunctionSig): IRFunction {
     const optimize = this.opts.optimizeAttributes;
@@ -188,6 +198,7 @@ export class Emitter implements EmitContext {
     // `-g`: an artificial subprogram at the user's `main`, so `break main` lands somewhere sensible.
     this.debug?.beginFunction(fn, userMain, { artificial: true, name: "main" });
     const freeArena = this.useRuntime("sts_free_arena");
+    if (this.program.usesArgv) fn.emit(`call void ${this.useRuntime("sts_argv_init")}(i32 %argc, i8** %argv)`);
     let code = "0";
     if (userMain.returnType.kind === "void") fn.emit(`call void @${userMain.name}()`);
     else code = fn.emitValue(`call i32 @${userMain.name}()`);
@@ -257,6 +268,10 @@ export class Emitter implements EmitContext {
     this.module.addTypeDecl(text);
   }
 
+  declareGlobal(text: string): void {
+    this.module.addGlobal(text);
+  }
+
   private emitRuntimePrelude(): void {
     const all = this.opts.runtimeDecls;
     const wantsAlloc = all || this.usedRuntime.has("sts_alloc_struct");
@@ -267,6 +282,8 @@ export class Emitter implements EmitContext {
     }
     // The array header type is referenced by `sts_array_grow`'s declaration (WP4).
     if (all || this.usedRuntime.has("sts_array_grow")) this.module.addTypeDecl(ARRAY_TYPE);
+    // `@sts_argv` is part of the C ABI too (WP7); modules that read `process.argv` declared it already.
+    if (all) this.module.addGlobal(ARGV_GLOBAL);
     for (const rt of RUNTIME_FUNCTIONS) {
       // Intrinsics are not part of the C ABI prelude: declared only when used.
       if (!this.usedRuntime.has(rt.name) && (!all || rt.intrinsic)) continue;

@@ -48,7 +48,38 @@ export PATH="$(brew --prefix llvm@18)/bin:$PATH"   # add to your shell profile
 ```
 
 Xcode's `clang` (`xcode-select --install`) also works for native binaries;
-the Homebrew LLVM is needed for the `wasm` profile (`wasm-ld`).
+the Homebrew LLVM is needed for the `wasm` and `wasi` profiles (`wasm-ld`).
+
+### WASI (optional, for `--profile wasi`)
+
+The `wasi` profile links the runtime against wasi-libc so that whole programs
+(strings, `console.log`, files, `process.argv`) run under any WASI host. It
+needs a WASI sysroot and compiler-rt's wasm32 builtins next to your clang:
+
+```bash
+# Ubuntu / Debian: the packaged sysroot lands in /usr/lib/wasi-sysroot
+sudo apt-get install -y wasi-libc libclang-rt-18-dev-wasm32
+
+# Any platform: wasi-sdk's sysroot and builtins tarballs (versions that match your clang)
+curl -L -o - https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sysroot-24.0.tar.gz | tar -xz -C /opt
+curl -L -o - https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/libclang_rt.builtins-wasm32-wasi-24.0.tar.gz | tar -xz -C /opt
+export WASI_SYSROOT=/opt/wasi-sysroot-24.0    # add to your shell profile
+```
+
+`scripts/build.sh` looks for the sysroot in `WASI_SYSROOT`,
+`/usr/lib/wasi-sysroot`, `/opt/wasi-sdk/share/wasi-sysroot` and
+`/usr/share/wasi-sysroot`, and for `libclang_rt.builtins-wasm32.a` in clang's
+resource directory, next to the sysroot (as the tarball above unpacks it),
+in `<sysroot>/lib/wasm32-wasi/`, or at `WASI_BUILTINS=<file>`. Then:
+
+```bash
+statictsc examples/argv.ts --link build/argv.wasm --profile wasi
+node examples/wasi-host.mjs build/argv.wasm 3 4 five     # or: wasmtime build/argv.wasm 3 4 five
+```
+
+Node's built-in `node:wasi` runs the module (argv, stdout, exit code and the
+working directory behave as natively); `npm test` prints
+`skipped: no WASI sysroot` and moves on when none is installed.
 
 ### Windows
 
@@ -139,3 +170,6 @@ see the [README](../README.md) for the language subset.
   IR is target-neutral and clang fills in the host triple.
 - `the wasm profile needs wasm-ld` -- install `lld` (`lld-18` on Debian,
   bundled with Homebrew `llvm@18`).
+- `the wasi profile needs a WASI sysroot` / `needs compiler-rt's wasm32
+  builtins` -- install them as in the WASI section above, or point
+  `WASI_SYSROOT` (a directory) and `WASI_BUILTINS` (the `.a` file) at them.

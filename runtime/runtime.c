@@ -8,6 +8,21 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef __wasi__
+/* WASI has no process ids; the monotonic clock's nanoseconds salt the RNG seed instead. */
+static int sts_wasi_salt(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (int)ts.tv_nsec;
+}
+#define getpid sts_wasi_salt
+/* wasi-libc's `_start` calls `__main_argc_argv`, the name clang gives a C
+ * `main(argc, argv)`; the IR wrapper is plainly `main`, so bridge the two.
+ * Weak, so a reactor build without an entry still links. */
+__attribute__((weak)) int sts_c_main(int, char **) __asm__("main");
+int __main_argc_argv(int argc, char **argv) { return sts_c_main(argc, argv); }
+#endif
+
 /* ---- Arena: %struct.sts_arena = type { i8*, i64, i64, i8* } */
 typedef struct sts_chunk { struct sts_chunk *next; size_t cap; } sts_chunk;
 struct sts_arena { char *buf; size_t off; size_t cap; sts_chunk *chunks; };
@@ -213,6 +228,54 @@ sts_array *sts_alloc_array(uint64_t elem_size, uint64_t len) {
   a->len = a->cap = len;
   a->data = (char *)sts_alloc_struct(len * elem_size);
   return a;
+}
+
+/* process.argv: malloc, not the arena, so Arena.reset() cannot free it. Built once by @main. */
+sts_array *sts_argv;
+
+void sts_argv_init(int32_t argc, char **argv) {
+  sts_array *a = (sts_array *)malloc(sizeof *a + (size_t)argc * sizeof(sts_str *));
+  sts_str **d = (sts_str **)(a + 1);
+  if (!a) sts_die("statictsc: out of memory\n");
+  a->len = a->cap = (uint64_t)argc;
+  a->data = (char *)d;
+  sts_argv = a;
+  while (argc-- > 0) {
+    size_t len = strlen(*argv);
+    sts_str *s = (sts_str *)malloc(sizeof(uint64_t) + len + 1);
+    if (!s) sts_die("statictsc: out of memory\n");
+    s->len = len;
+    strcpy(s->data, *argv++);
+    *d++ = s;
+  }
+}
+
+/* ---- String to number: parseFloat, Number, parseInt (ASCII whitespace only) */
+#define STS_SPACES " \t\n\v\f\r"
+
+/* mode 0, parseFloat: skip whitespace, take the longest JS StrDecimalLiteral ([sign] digits
+ * [. digits] [e [sign] digits], [sign] . digits [exponent], or [sign] Infinity), NaN when there is
+ * none. mode 1, Number: the same literal must be the whole string bar surrounding whitespace, and
+ * a blank string is 0. mode 2, parseInt: base-10 [whitespace] [sign] digits via strtoll, 0 when
+ * there are none; the compiler saturates the double into an i32 (llvm.fptosi.sat, as toI32).
+ * strtod accepts a superset of the JS grammar and rounds correctly, so it does the work once the
+ * spellings JS rejects (inf/infinity/nan in any case) are ruled out; the one superset left is
+ * `0x...`, read as hex, which is what Number does in JS and parseFloat does not (documented).
+ * One symbol with a mode rather than three: every function costs an unwind-table entry. */
+double sts_parse_number(const sts_str *s, int32_t mode) {
+  const char *p, *q, *stop;
+  char *end;
+  double v;
+  if (mode == 2) return (double)strtoll(s->data, 0, 10);
+  p = s->data + strspn(s->data, STS_SPACES);
+  q = p + (*p == '+' || *p == '-');
+  stop = s->data + s->len;
+  if (!((*q >= '0' && *q <= '9') || *q == '.' || strncmp(q, "Infinity", 8) == 0)) {
+    return mode && p == stop ? 0 : __builtin_nan("");
+  }
+  v = strtod(p, &end);
+  if (end == p) return __builtin_nan(""); /* "." alone */
+  return mode && end + strspn(end, STS_SPACES) != stop ? __builtin_nan("") : v;
 }
 
 /* push() when len == cap: double the capacity (4 from empty). */
