@@ -8,20 +8,51 @@
   "bin": {
     "statictsc": "dist/index.js"
   },
+  "files": [
+    "dist",
+    "runtime",
+    "scripts",
+    "README.md",
+    "LICENSE",
+    "docs/INSTALL.md"
+  ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "compile": "node dist/index.js",
     "example": "npm run build && node dist/index.js examples/add.ts -o build/add.ll && cat build/add.ll",
     "test": "npm run build && node tests/run.js",
     "size-report": "npm run build && node dist/index.js examples/add.ts -o build/add.ll && bash scripts/size-report.sh build/add.ll examples/main.c",
+    "smoke": "npm run build && bash scripts/smoke.sh",
     "check": "tsc -p tsconfig.json --noEmit",
     "test:update": "npm run build && UPDATE_GOLDENS=1 node tests/run.js",
     "lint": "biome check --formatter-enabled=false .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "prepublishOnly": "npm run check && npm run build && npm test"
   },
   "engines": {
     "node": ">=18"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amritk/compiler.git"
+  },
+  "bugs": {
+    "url": "https://github.com/amritk/compiler/issues"
+  },
+  "homepage": "https://github.com/amritk/compiler#readme",
+  "keywords": [
+    "typescript",
+    "compiler",
+    "llvm",
+    "llvm-ir",
+    "ahead-of-time",
+    "aot",
+    "native",
+    "wasm",
+    "webassembly",
+    "statictsc",
+    "statics"
+  ],
   "dependencies": {
     "typescript": "^5.6.0"
   },

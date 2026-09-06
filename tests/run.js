@@ -560,5 +560,114 @@ if (!only) {
   check(`validator runs in under 50 ms on ${lines.length} lines (${ms.toFixed(2)} ms)`, ms < 50, `${ms.toFixed(2)} ms`);
 }
 
+// ---- WP12: exit codes --------------------------------------------------------------
+// The CLI's contract (docs/wp12-release.md): 0 ok, 1 compile error, 2 usage, 3 toolchain,
+// 70 internal compiler error. Each failure mode is driven from outside the compiler:
+// STATICTSC_SIMULATE_ICE=1 is the test hook for the ICE path, an empty PATH stands in
+// for a machine without clang, and CC=<stub> makes scripts/build.sh fail after the IR
+// was written.
+if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
+  const pkgVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
+  const wp12Dir = path.join(buildDir, "wp12");
+  fs.rmSync(wp12Dir, { recursive: true, force: true });
+  fs.mkdirSync(wp12Dir, { recursive: true });
+  const run = (args, env = {}) =>
+    spawnSync("node", [cli, ...args], { cwd: root, encoding: "utf8", env: { ...process.env, ...env } });
+  const entry = path.join(root, "examples", "multi", "main.ts");
+
+  const v = run(["--version"]);
+  check(`--version prints "statictsc ${pkgVersion}" and exits 0`, v.status === 0 && v.stdout.trim() === `statictsc ${pkgVersion}`, v.stdout + v.stderr);
+
+  const noInputs = run([]);
+  check("no inputs: usage on stderr, exit 2", noInputs.status === 2 && noInputs.stderr.includes("usage: statictsc"), noInputs.stderr);
+  const badFlag = run(["--bogus", entry]);
+  check("unknown flag: names it, exit 2", badFlag.status === 2 && badFlag.stderr.includes("unknown option: --bogus"), badFlag.stderr);
+  const noValue = run([entry, "-o"]);
+  check("-o without a value: exit 2", noValue.status === 2, noValue.stderr);
+
+  const missing = run(["does-not-exist.ts"]);
+  check("missing input file: one-line ENOENT message, exit 1", missing.status === 1 && missing.stderr.includes("ENOENT") && !missing.stderr.includes("internal compiler error"), missing.stderr);
+
+  const ice = run([entry, "-o", path.join(wp12Dir, "ice.ll")], { STATICTSC_SIMULATE_ICE: "1" });
+  check("internal error: exit 70, names the file, asks for a bug report, no stack trace",
+    ice.status === 70 && ice.stderr.includes("internal compiler error while compiling " + entry) &&
+      ice.stderr.includes("TypeError: simulated internal compiler error") && ice.stderr.includes("github.com/amritk/compiler/issues") &&
+      ice.stderr.includes("STATICTSC_DEBUG=1") && !/^\s+at /m.test(ice.stderr),
+    ice.stderr);
+  const iceDebug = run([entry, "-o", path.join(wp12Dir, "ice.ll")], { STATICTSC_SIMULATE_ICE: "1", STATICTSC_DEBUG: "1" });
+  check("internal error with STATICTSC_DEBUG=1: exit 70 and the stack trace is printed",
+    iceDebug.status === 70 && /^\s+at /m.test(iceDebug.stderr), iceDebug.stderr);
+
+  // Machine without clang: PATH holds only an empty dir plus node's own dir (spawnSync needs `node`).
+  const emptyBin = path.join(wp12Dir, "empty-bin");
+  fs.mkdirSync(emptyBin, { recursive: true });
+  const noClang = run([entry, "--link", path.join(wp12Dir, "noclang")], { PATH: `${emptyBin}${path.delimiter}${path.dirname(process.execPath)}`, CC: "" });
+  check("--link without clang: install hint per platform, exit 3, no IR written",
+    noClang.status === 3 && noClang.stderr.includes("no usable C compiler") && noClang.stderr.includes("apt-get install") &&
+      noClang.stderr.includes("brew install") && noClang.stderr.includes("WSL") && !fs.existsSync(path.join(wp12Dir, "noclang.modules")),
+    noClang.stderr);
+
+  // build.sh failure: a stub compiler that passes the --version probe but cannot link.
+  const stub = path.join(wp12Dir, "stub-cc");
+  fs.writeFileSync(stub, '#!/bin/sh\ncase "$1" in --version) exit 0 ;; esac\necho "stub-cc: refusing to link" >&2\nexit 1\n', { mode: 0o755 });
+  const badBuild = run([entry, "--link", path.join(wp12Dir, "badbuild")], { CC: stub });
+  check("--link when build.sh fails: its stderr is shown, the .ll paths are named, exit 3",
+    badBuild.status === 3 && badBuild.stderr.includes("stub-cc: refusing to link") && badBuild.stderr.includes("build.sh failed (exit 1)") &&
+      badBuild.stderr.includes("main.ll") && fs.existsSync(path.join(wp12Dir, "badbuild.modules", "main.ll")),
+    badBuild.stderr);
+}
+
+// ---- WP12: package ------------------------------------------------------------------
+// The npm tarball must be self-contained: `npm pack`, install it into a temporary prefix,
+// and drive the installed `statictsc` from an unrelated directory. That proves the `files`
+// whitelist ships runtime/runtime.c, runtime/statictsc.h and scripts/build.sh, and that the
+// CLI resolves them from its own package root rather than from the cwd.
+if (!only || "package".includes(only) || "wp12".includes(only)) {
+  const pkgDir = path.join(buildDir, "wp12-package");
+  fs.rmSync(pkgDir, { recursive: true, force: true });
+  fs.mkdirSync(pkgDir, { recursive: true });
+  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+  const pack = spawnSync(npm, ["pack", "--json", "--pack-destination", pkgDir], { cwd: root, encoding: "utf8" });
+  check("npm pack succeeds", pack.status === 0, pack.stderr);
+  if (pack.status === 0) {
+    const info = JSON.parse(pack.stdout)[0];
+    const files = info.files.map((f) => f.path).sort();
+    const allowed = [/^dist\//, /^runtime\//, /^scripts\//, /^README\.md$/, /^LICENSE$/, /^docs\/INSTALL\.md$/, /^package\.json$/, /^CHANGELOG\.md$/];
+    const stray = files.filter((f) => !allowed.some((re) => re.test(f)));
+    check(`npm pack ships only the whitelisted paths (${files.length} files)`, stray.length === 0, stray.join("\n"));
+    const required = ["dist/index.js", "dist/version.js", "runtime/runtime.c", "runtime/statictsc.h", "scripts/build.sh", "LICENSE", "docs/INSTALL.md"];
+    const absent = required.filter((f) => !files.includes(f));
+    check("npm pack includes everything --link needs (runtime.c, statictsc.h, build.sh) plus LICENSE/INSTALL.md", absent.length === 0, absent.join("\n"));
+    for (const f of ["src/index.ts", "tests/run.js", "examples/add.ts", ".github/workflows/ci.yml", "docs/MASTER_PLAN.md"]) {
+      check(`npm pack excludes ${f}`, !files.includes(f));
+    }
+
+    if (!HAS_CLANG) {
+      console.log("SKIP  package install + --link from another cwd (clang not found)");
+    } else {
+      const tarball = path.join(pkgDir, info.filename);
+      const prefix = path.join(pkgDir, "prefix");
+      const install = spawnSync(npm, ["install", "--prefix", prefix, "--no-audit", "--no-fund", "--prefer-offline", "--ignore-scripts", tarball], { cwd: pkgDir, encoding: "utf8" });
+      check("npm install <tarball> --prefix <tmp> succeeds", install.status === 0, install.stdout + install.stderr);
+      if (install.status === 0) {
+        const bin = path.join(prefix, "node_modules", ".bin", "statictsc");
+        const work = path.join(pkgDir, "elsewhere");
+        fs.mkdirSync(work, { recursive: true });
+        fs.writeFileSync(path.join(work, "hello.ts"), 'export function main(): number {\n  console.log("hello from a global install");\n  return 0;\n}\n');
+        const ver = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" });
+        check("installed statictsc --version works from an unrelated cwd", ver.status === 0 && ver.stdout.trim() === `statictsc ${info.version}`, ver.stdout + ver.stderr);
+        const link = spawnSync(bin, ["hello.ts", "--link", "hello"], { cwd: work, encoding: "utf8" });
+        check("installed statictsc hello.ts --link works from an unrelated cwd", link.status === 0 && fs.existsSync(path.join(work, "hello")), link.stderr);
+        if (link.status === 0) {
+          const hello = spawnSync(path.join(work, "hello"), [], { cwd: work, encoding: "utf8" });
+          check("the binary linked by the installed package runs", hello.status === 0 && hello.stdout.trim() === "hello from a global install", hello.stdout + hello.stderr);
+        }
+        const ir = spawnSync(bin, [path.join(root, "examples", "add.ts"), "-o", path.join(work, "add.ll")], { cwd: work, encoding: "utf8" });
+        check("installed statictsc compiles examples/add.ts to IR from an unrelated cwd", ir.status === 0 && fs.existsSync(path.join(work, "add.ll")), ir.stderr);
+      }
+    }
+  }
+}
+
 console.log(`\n${passes} passed, ${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);

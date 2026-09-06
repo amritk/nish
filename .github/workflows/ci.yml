@@ -5,12 +5,14 @@
 #       table in the job summary.
 # lint: `npm run lint` when package.json defines it (no-op otherwise).
 #
+# Also reusable via `workflow_call`: release.yml runs it before packing a tag.
 # To run the same steps locally see docs/wp10-ci.md.
 name: CI
 
 on:
   push:
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -79,6 +81,9 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Smoke (build + run every example with a main, size profile)
+        run: bash scripts/smoke.sh
 
       - name: Size report
         run: |

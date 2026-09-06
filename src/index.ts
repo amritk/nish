@@ -12,20 +12,76 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { Compilation, EmittedModule } from "./compiler";
+import { CompileError } from "./diagnostics";
 import { generateDts, generateHeader, generateNapiShim } from "./interop";
 import { NumberMode } from "./types";
+import { PKG_ROOT, packageVersion } from "./version";
 
 const PROFILES = ["speed", "size", "debug"] as const;
 type Profile = (typeof PROFILES)[number];
 
-/** Package root (dist/index.js -> ..), for scripts/build.sh and runtime/runtime.c. */
-const PKG_ROOT = path.resolve(__dirname, "..");
+/**
+ * Process exit codes (see docs/wp12-release.md):
+ *   0  success
+ *   1  the program was rejected (compile error, missing input, bad -o layout)
+ *   2  usage error (unknown flag, missing argument, no inputs)
+ *   3  toolchain error: `--link` could not find clang, or scripts/build.sh failed
+ *   70 internal compiler error (EX_SOFTWARE): an unexpected exception; please report it
+ */
+const EXIT_OK = 0;
+const EXIT_COMPILE_ERROR = 1;
+const EXIT_USAGE = 2;
+const EXIT_TOOLCHAIN = 3;
+const EXIT_INTERNAL = 70;
+
+/** A user-facing error raised by the driver itself (exit 1, message only). */
+class CliError extends Error {}
+
+/** Node system errors (ENOENT on an input file, EACCES on the output dir, ...). */
+function isSystemError(err: unknown): err is NodeJS.ErrnoException {
+  return err instanceof Error && typeof (err as NodeJS.ErrnoException).code === "string";
+}
+
+/** `scripts/build.sh` and `runtime/runtime.c`, resolved from the package root so a global install works from any cwd. */
+const BUILD_SH = path.join(PKG_ROOT, "scripts", "build.sh");
+const RUNTIME_C = path.join(PKG_ROOT, "runtime", "runtime.c");
+
+/** Per-platform install hints for a missing C compiler; the current platform's line is marked with `>`. */
+function toolchainInstallHint(): string {
+  const lines = [
+    ["linux", "Ubuntu / Debian:  sudo apt-get install -y clang-18 lld-18 llvm-18"],
+    ["linux", "Fedora:           sudo dnf install clang lld llvm"],
+    ["darwin", "macOS:            brew install llvm@18   (or: xcode-select --install)"],
+    ["win32", "Windows:          use WSL (Ubuntu) and follow the Ubuntu line"],
+  ];
+  return lines.map(([platform, text]) => `${platform === os.platform() ? ">" : " "} ${text}`).join("\n");
+}
+
+/**
+ * Check that the C compiler `scripts/build.sh` will use exists before we spawn
+ * it, so a missing toolchain is one clear message instead of a bash trace.
+ * Honours `CC` the same way build.sh does. Returns null when usable.
+ */
+function missingToolchain(): string | null {
+  const cc = process.env.CC || "clang";
+  const probe = spawnSync(cc, ["--version"], { stdio: "ignore" });
+  if (probe.error === undefined && probe.status === 0) return null;
+  const why = probe.error ? `${cc}: ${probe.error.message}` : `\`${cc} --version\` exited with ${probe.status}`;
+  return [
+    `--link: no usable C compiler found (${why}).`,
+    "statictsc needs clang (LLVM 18 recommended) on PATH, or CC=<compiler>, to build a binary. Install it with:",
+    toolchainInstallHint(),
+    "See docs/INSTALL.md. Without --link, statictsc still writes the LLVM IR (.ll) for you to build yourself.",
+  ].join("\n");
+}
 
 function usage(): never {
   console.error(
     [
       "usage: statictsc <entry.ts> [more.ts ...] [options]",
+      "       statictsc --version | --help",
       "  -o, --output <file.ll>     output path for a single module (default: <input>.ll)",
       "  -o, --output <dir>/        output directory: one <dir>/<module>.ll per module",
       "  --link <exe>               build a native binary from every module + runtime/runtime.c",
@@ -39,9 +95,11 @@ function usage(): never {
       "  --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports",
       "  --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)",
       "  --unchecked-indexing       drop array bounds checks (unsafe; for benchmarks)",
+      "  -v, --version              print the statictsc version and exit",
+      "exit codes: 0 ok, 1 compile error, 2 usage, 3 toolchain (clang / build.sh), 70 internal error",
     ].join("\n")
   );
-  process.exit(2);
+  process.exit(EXIT_USAGE);
 }
 
 function isDirectoryOutput(out: string): boolean {
@@ -67,7 +125,7 @@ function planOutputs(
     if (isDirectoryOutput(output)) return perModule(output);
     if (modules.length === 1) return [output];
     const names = modules.map((m) => m.unit.fileName).join(", ");
-    throw new Error(
+    throw new CliError(
       `${modules.length} modules would be written (${names}); pass \`-o <dir>/\` to write one .ll per module`
     );
   }
@@ -128,6 +186,9 @@ function main(argv: string[]): number {
       uncheckedIndexing = true;
     } else if (arg === "-h" || arg === "--help") {
       usage();
+    } else if (arg === "-v" || arg === "--version") {
+      console.log(`statictsc ${packageVersion()}`);
+      return EXIT_OK;
     } else if (arg.startsWith("-")) {
       console.error(`unknown option: ${arg}`);
       usage();
@@ -139,23 +200,41 @@ function main(argv: string[]): number {
 
   let modules: EmittedModule[];
   let outputs: string[];
+  // Fail fast on a missing toolchain: no point compiling if we cannot link.
+  if (link !== undefined) {
+    const problem = missingToolchain();
+    if (problem !== null) {
+      console.error(problem);
+      return EXIT_TOOLCHAIN;
+    }
+  }
+
   const compilation = new Compilation({ numberMode, optimizeAttributes, runtimeDecls, strictExports, uncheckedIndexing });
   try {
+    // Test hook for the internal-error path (tests/run.js, WP12 block); not a user feature.
+    if (process.env.STATICTSC_SIMULATE_ICE) throw new TypeError("simulated internal compiler error");
     for (const input of inputs) compilation.addRoot(input);
     compilation.check();
     if (link !== undefined && !compilation.entry.checker.program.entryMain) {
-      throw new Error(
+      throw new CliError(
         `--link: the entry module ${compilation.entry.fileName} must declare \`export function main(): number\` (or \`: void\`)`
       );
     }
     modules = compilation.emit();
     outputs = planOutputs(compilation, modules, output, link);
   } catch (err) {
-    if (err instanceof Error) {
+    // Expected failures: the program is wrong (CompileError), the driver refused
+    // the request (CliError), or an input/output path is unusable (ENOENT, ...).
+    if (err instanceof CompileError || err instanceof CliError) {
       console.error(err.message);
-      return 1;
+      return EXIT_COMPILE_ERROR;
     }
-    throw err;
+    if (isSystemError(err)) {
+      const where = err.path ? ` ${err.path}` : "";
+      console.error(`error: cannot ${err.syscall ?? "access"}${where}: ${err.code}`);
+      return EXIT_COMPILE_ERROR;
+    }
+    throw err; // anything else is an internal compiler error, reported at top level
   }
 
   modules.forEach((m, i) => {
@@ -179,27 +258,50 @@ function main(argv: string[]): number {
 
   if (link !== undefined) {
     fs.mkdirSync(path.dirname(path.resolve(link)), { recursive: true });
-    const build = spawnSync(
-      "bash",
-      [
-        path.join(PKG_ROOT, "scripts", "build.sh"),
-        ...outputs,
-        path.join(PKG_ROOT, "runtime", "runtime.c"),
-        "-o",
-        link,
-        "--profile",
-        profile,
-      ],
-      { stdio: ["ignore", "pipe", "inherit"] }
-    );
-    if (build.status !== 0) {
-      console.error(`--link: scripts/build.sh failed (exit ${build.status})`);
-      return 1;
+    const build = spawnSync("bash", [BUILD_SH, ...outputs, RUNTIME_C, "-o", link, "--profile", profile], {
+      stdio: ["ignore", "pipe", "pipe"],
+      encoding: "utf8",
+    });
+    if (build.error !== undefined || build.status !== 0) {
+      // Surface the compiler/linker output verbatim, then say what failed.
+      if (build.stderr) process.stderr.write(build.stderr.endsWith("\n") ? build.stderr : `${build.stderr}\n`);
+      const why = build.error ? `could not run bash: ${build.error.message}` : `exit ${build.status}`;
+      console.error(`--link: ${BUILD_SH} failed (${why}); the IR is in ${outputs.join(", ")}`);
+      return EXIT_TOOLCHAIN;
     }
     // build.sh reports `<exe>: <bytes> bytes (<profile>)`.
-    process.stderr.write(`linked ${String(build.stdout)}`);
+    process.stderr.write(`linked ${build.stdout}`);
   }
-  return 0;
+  return EXIT_OK;
 }
 
-process.exit(main(process.argv.slice(2)));
+/**
+ * Anything that escapes `main` is a bug in statictsc, not in the user's
+ * program: report it as such (EX_SOFTWARE, 70) naming the input files, and
+ * show the stack only on request so users are not buried in frames.
+ */
+function reportInternalError(err: unknown, argv: string[]): number {
+  const takesValue = /^(-o|--output|--link|--profile|--number-mode|--emit-header|--emit-dts|--emit-napi)$/;
+  const inputs = argv.filter((a, i) => !a.startsWith("-") && !takesValue.test(argv[i - 1] ?? ""));
+  const where = inputs.length > 0 ? ` while compiling ${inputs.join(", ")}` : "";
+  const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  console.error(`statictsc ${packageVersion()}: internal compiler error${where}`);
+  console.error(`  ${message}`);
+  if (process.env.STATICTSC_DEBUG && err instanceof Error && err.stack) {
+    console.error(err.stack);
+  } else {
+    console.error("  (re-run with STATICTSC_DEBUG=1 for the stack trace)");
+  }
+  console.error("This is a bug in statictsc, not in your program. Please report it with the input file and");
+  console.error("the command line at https://github.com/amritk/compiler/issues");
+  return EXIT_INTERNAL;
+}
+
+const argv = process.argv.slice(2);
+let code: number;
+try {
+  code = main(argv);
+} catch (err) {
+  code = reportInternalError(err, argv);
+}
+process.exit(code);
