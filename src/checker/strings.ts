@@ -19,6 +19,7 @@
 import ts from "typescript";
 import { BOOL, F64, I32, STRING, StaticType, VOID, isNumeric, sameType, typeToString } from "../types";
 import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context";
+import { propertyCheckers } from "./members";
 import { Scope } from "./scope";
 
 /** Types that can be turned into text: template holes and `console.log` arguments. */
@@ -49,12 +50,10 @@ const checkTemplateExpression: ExpressionChecker = (ctx, node, scope) => {
 
 // ---- Properties -------------------------------------------------------------------
 
-/** `s.length` is the only property in the language today. */
-const checkPropertyAccess: ExpressionChecker = (ctx, node, scope) => {
-  const expr = node as ts.PropertyAccessExpression;
-  const target = ctx.checkExpression(expr.expression, scope);
+/** `s.length` is the only string property today; registered in the member dispatch. */
+propertyCheckers.string = (ctx, expr, target) => {
   const name = expr.name.text;
-  if (target.kind === "string" && name === "length") return ctx.opts.numberMode === "f64" ? F64 : I32;
+  if (name === "length") return ctx.opts.numberMode === "f64" ? F64 : I32;
   throw ctx.error(`Unknown property \`${name}\` on ${typeToString(target)}`, expr.name);
 };
 
@@ -128,7 +127,6 @@ export const stringExpressionCheckers: CheckerTable<ExpressionChecker> = {
   [ts.SyntaxKind.StringLiteral]: checkStringLiteral,
   [ts.SyntaxKind.NoSubstitutionTemplateLiteral]: checkStringLiteral,
   [ts.SyntaxKind.TemplateExpression]: checkTemplateExpression,
-  [ts.SyntaxKind.PropertyAccessExpression]: checkPropertyAccess,
 };
 
 /** Overrides the numeric-only `+`, `===`, `!==` entries (spread after them). */

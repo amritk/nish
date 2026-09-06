@@ -5,6 +5,7 @@
  */
 import ts from "typescript";
 import { StaticType, llvmType } from "../../types";
+import { emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members";
 import { emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from "./strings";
 import { BinaryEmitter, EmitterTable, ExpressionEmitter, UnaryEmitter } from "./context";
 import {
@@ -124,7 +125,11 @@ const emitBinary: ExpressionEmitter = (ctx, node) => {
 
 const emitCall: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.CallExpression;
-  if (ts.isPropertyAccessExpression(expr.expression)) return emitBuiltinCall(ctx, expr);
+  if (ts.isPropertyAccessExpression(expr.expression)) {
+    return isValueReceiver(ctx.program, expr.expression.expression)
+      ? emitMethodCall(ctx, expr)
+      : emitBuiltinCall(ctx, expr);
+  }
   const callee = ctx.program.callees.get(expr)!;
   const args = expr.arguments
     .map((arg, i) => `${llvmType(callee.params[i].type)} ${ctx.emitExpression(arg)}`)
@@ -147,5 +152,6 @@ export const expressionEmitters: EmitterTable<ExpressionEmitter> = {
   [ts.SyntaxKind.BinaryExpression]: emitBinary,
   [ts.SyntaxKind.CallExpression]: emitCall,
   ...stringExpressionEmitters,
+  ...memberExpressionEmitters, // property access, method calls, `new` (dispatch by receiver type)
   ...controlFlowExpressionEmitters,
 };

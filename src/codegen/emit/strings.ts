@@ -27,6 +27,7 @@ import { dottedName } from "../../checker/strings";
 import { STRING, StaticType, llvmType } from "../../types";
 import { IRModule } from "../ir";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
+import { isValueReceiver, propertyEmitters } from "./members";
 
 // ---- Constants --------------------------------------------------------------------
 
@@ -131,8 +132,7 @@ export function unwrapStringPassthrough(program: CheckedProgram, expr: ts.Expres
 
 // ---- `.length` --------------------------------------------------------------------------
 
-const emitPropertyAccess: ExpressionEmitter = (ctx, node) => {
-  const expr = node as ts.PropertyAccessExpression;
+propertyEmitters.string = (ctx, expr) => {
   const type = ctx.typeOf(expr);
   const str = ctx.emitExpression(expr.expression);
   const header = ctx.fn.emitValue(`bitcast i8* ${str} to i64*`);
@@ -209,7 +209,7 @@ export function collectStringFacts(
   node: ts.Node,
   facts: { readsMemory: boolean; callees: Set<string> }
 ): void {
-  if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+  if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && !isValueReceiver(program, node.expression.expression)) {
     for (const c of builtinCallEmitters[dottedName(node.expression)!].callees(program, node)) facts.callees.add(c);
   } else if (ts.isBinaryExpression(node) && program.types.get(node.left)?.kind === "string") {
     const op = node.operatorToken.kind;
@@ -234,7 +234,6 @@ export const stringExpressionEmitters: EmitterTable<ExpressionEmitter> = {
   [ts.SyntaxKind.StringLiteral]: emitStringLiteral,
   [ts.SyntaxKind.NoSubstitutionTemplateLiteral]: emitStringLiteral,
   [ts.SyntaxKind.TemplateExpression]: emitTemplateExpression,
-  [ts.SyntaxKind.PropertyAccessExpression]: emitPropertyAccess,
 };
 
 /** Overrides the numeric-only `+`, `===`, `!==` entries (spread after them). */

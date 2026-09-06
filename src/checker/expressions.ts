@@ -8,6 +8,7 @@
  */
 import ts from "typescript";
 import { BOOL, F64, I32, isNumeric, sameType, typeToString } from "../types";
+import { checkMethodCall, isValueReceiver, memberExpressionCheckers } from "./members";
 import { checkBuiltinCall, stringBinaryCheckers, stringExpressionCheckers } from "./strings";
 import { BinaryChecker, CheckerTable, ExpressionChecker, UnaryChecker } from "./context";
 import {
@@ -151,7 +152,12 @@ const checkBinary: ExpressionChecker = (ctx, node, scope) => {
 
 const checkCall: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.CallExpression;
-  if (ts.isPropertyAccessExpression(expr.expression)) return checkBuiltinCall(ctx, expr, scope);
+  if (ts.isPropertyAccessExpression(expr.expression)) {
+    // `value.method(...)` dispatches on the receiver type; `console.log(...)` is a dotted builtin.
+    return isValueReceiver(expr.expression.expression, scope)
+      ? checkMethodCall(ctx, expr, scope)
+      : checkBuiltinCall(ctx, expr, scope);
+  }
   if (!ts.isIdentifier(expr.expression)) {
     throw ctx.error("Only direct calls to named functions are supported", expr);
   }
@@ -183,5 +189,6 @@ export const expressionCheckers: CheckerTable<ExpressionChecker> = {
   [ts.SyntaxKind.BinaryExpression]: checkBinary,
   [ts.SyntaxKind.CallExpression]: checkCall,
   ...stringExpressionCheckers,
+  ...memberExpressionCheckers, // property access, method calls, `new` (dispatch by receiver type)
   ...controlFlowExpressionCheckers,
 };

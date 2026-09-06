@@ -48,6 +48,7 @@ import ts from "typescript";
 import { CheckedProgram, FunctionSig, Param } from "../checker";
 import { unwrapParens } from "../checker/control-flow";
 import { StaticType } from "../types";
+import { factCollectors } from "./emit/members";
 import { collectStringFacts, unwrapStringPassthrough } from "./emit/strings";
 import { MemoryEffect, RUNTIME_BY_NAME } from "./runtime";
 
@@ -148,6 +149,7 @@ function collectFacts(program: CheckedProgram, sig: FunctionSig): FunctionFacts 
       }
     }
     collectStringFacts(program, node, facts);
+    for (const collect of factCollectors) collect(program, node, facts);
     ts.forEachChild(node, visit);
   };
   visit(sig.decl.body!);
