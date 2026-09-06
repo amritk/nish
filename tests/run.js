@@ -98,6 +98,26 @@ for (const name of cases) {
   }
 }
 
+// ---- WP10: diagnostics ------------------------------------------------------------
+// Every CompileError prints `file:line:col: error: <msg>` and then a source excerpt:
+// the offending line and a caret line (`^` at the start column, `~` to the node end).
+if (!only || "diagnostics".includes(only)) {
+  const mm = spawnSync("node", [cli, path.join(casesDir, "reject_type_mismatch.ts"), "-o", path.join(buildDir, "diag_mismatch.ll")], { cwd: root });
+  const mmLines = String(mm.stderr).split("\n");
+  // `a + true` (8 chars) starts at column 40 of line 1, so the caret sits after 39 spaces.
+  check("diagnostics: excerpt shows the offending source line",
+    mmLines[1] === "  1 | function f(a: number): number { return a + true; }", mm.stderr);
+  check("diagnostics: caret line marks `a + true` under column 40",
+    mmLines[2] === "    | " + " ".repeat(39) + "^~~~~~~~", mm.stderr);
+
+  const synSrc = path.join(buildDir, "diag_syntax.ts");
+  fs.writeFileSync(synSrc, "function f( {\n  return 1;\n}\n");
+  const syn = spawnSync("node", [cli, synSrc, "-o", path.join(buildDir, "diag_syntax.ll")], { cwd: root });
+  const synErr = String(syn.stderr);
+  check("diagnostics: syntax errors keep the `syntax error:` prefix and add the excerpt",
+    syn.status === 1 && synErr.includes(": syntax error: ") && synErr.includes("  2 |   return 1;\n    |          ^"), synErr);
+}
+
 // ---- B. Pipeline checks -----------------------------------------------------------
 if (!only && HAS_CLANG) {
   const rt = spawnSync("clang", ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "runtime/runtime.c", "tests/runtime_test.c", "-o", path.join(buildDir, "runtime_test")], { cwd: root });

@@ -1,0 +1,110 @@
+# StaticTS continuous integration.
+#
+# test: typecheck + the full golden/native test suite on Linux and macOS with
+#       LLVM 18 (clang, llc, llvm-as, opt, ld.lld, wasm-ld), then a binary size
+#       table in the job summary.
+# lint: `npm run lint` when package.json defines it (no-op otherwise).
+#
+# To run the same steps locally see docs/wp10-ci.md.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install LLVM 18 + lld (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          # Debian ships versioned binaries (clang-18, llc-18, ...). Expose the
+          # plain names through a private bin dir placed ahead of /usr/bin so the
+          # scripts and tests/run.js find `clang`, `llc`, `llvm-as`, `opt`,
+          # `ld.lld` and `wasm-ld` regardless of what the runner image ships.
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install LLVM 18 + lld (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@18
+          prefix="$(brew --prefix llvm@18)"
+          # Homebrew's llvm@18 bundles lld (ld.lld, wasm-ld). If a build ever
+          # drops it, fall back to the standalone formula.
+          if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
+          echo "$prefix/bin" >> "$GITHUB_PATH"
+
+      - name: Toolchain versions
+        run: |
+          for tool in clang llc llvm-as opt ld.lld wasm-ld; do
+            printf '%-8s ' "$tool"; command -v "$tool"
+          done
+          clang --version | head -n 1
+          llc --version | sed -n '2p'
+          node --version
+          npm --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Test
+        run: npm test
+
+      - name: Size report
+        run: |
+          node dist/index.js examples/add.ts -o build/add.ll
+          bash scripts/size-report.sh --markdown build/add.ll examples/main.c | tee build/size-report.md
+          {
+            echo "### Binary size (${{ matrix.os }}, LLVM 18)"
+            echo
+            echo '`examples/add.ts` + `examples/main.c` + `runtime/runtime.c`'
+            echo
+            cat build/size-report.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (only when package.json defines a lint script)
+        run: npm run lint --if-present

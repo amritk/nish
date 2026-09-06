@@ -7,6 +7,7 @@
  */
 import ts from "typescript";
 import fs from "node:fs";
+import { StaticSyntaxError } from "./diagnostics";
 
 export function parseSource(fileName: string, sourceText: string): ts.SourceFile {
   const sourceFile = ts.createSourceFile(
@@ -21,10 +22,10 @@ export function parseSource(fileName: string, sourceText: string): ts.SourceFile
   const diagnostics = (sourceFile as unknown as { parseDiagnostics?: ts.DiagnosticWithLocation[] })
     .parseDiagnostics;
   if (diagnostics && diagnostics.length > 0) {
+    // Same shape as a CompileError (summary line + source excerpt), prefixed `syntax error:`.
     const d = diagnostics[0];
-    const { line, character } = sourceFile.getLineAndCharacterOfPosition(d.start);
     const msg = ts.flattenDiagnosticMessageText(d.messageText, "\n");
-    throw new Error(`${fileName}:${line + 1}:${character + 1}: syntax error: ${msg}`);
+    throw new StaticSyntaxError(msg, { start: d.start, end: d.start + d.length }, sourceFile);
   }
   return sourceFile;
 }
