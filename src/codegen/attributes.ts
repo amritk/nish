@@ -23,6 +23,14 @@
  *               noalias guarantee only concerns *modified* memory.
  *     nocapture Only when the param never escapes: it is not returned and
  *               not passed to any call (there are no stores of pointers yet).
+ *
+ * Cross-module facts (WP5): the analysis runs over *every* module of a
+ * program at once, keyed by LLVM symbol, so a caller in `main.ts` sees the
+ * same purity facts for an imported `square` as `math.ts` proved for its
+ * definition. The importer's `declare` therefore carries exactly the
+ * attributes of the exporter's `define`, which is what lets the optimiser
+ * treat cross-module calls like local ones. Symbols are unique across the
+ * program (the Compilation rejects clashes), so one map suffices.
  */
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, Param } from "../checker";
@@ -34,7 +42,7 @@ export interface FunctionFacts {
   effect: MemoryEffect;
   /** Parameter names that escape (returned or passed to a call). */
   escaping: Set<string>;
-  /** User functions called directly. */
+  /** User functions called directly (by LLVM symbol). */
   callees: Set<string>;
 }
 
@@ -43,10 +51,17 @@ function maxEffect(a: MemoryEffect, b: MemoryEffect): MemoryEffect {
   return EFFECT_RANK[a] >= EFFECT_RANK[b] ? a : b;
 }
 
-/** Gather per-function facts, then propagate memory effects over the call graph to a fixpoint. */
-export function analyzeFunctions(program: CheckedProgram): Map<string, FunctionFacts> {
+/**
+ * Gather per-function facts for one module or a whole program, then
+ * propagate memory effects over the (cross-module) call graph to a fixpoint.
+ * The result is keyed by LLVM symbol (`FunctionSig.name`).
+ */
+export function analyzeFunctions(programs: CheckedProgram | readonly CheckedProgram[]): Map<string, FunctionFacts> {
+  const list = Array.isArray(programs) ? (programs as readonly CheckedProgram[]) : [programs as CheckedProgram];
   const facts = new Map<string, FunctionFacts>();
-  for (const sig of program.functions) facts.set(sig.name, collectFacts(program, sig));
+  for (const program of list) {
+    for (const sig of program.functions) facts.set(sig.name, collectFacts(program, sig));
+  }
 
   // Optimistic fixpoint: a function is as impure as the most impure thing it calls.
   let changed = true;

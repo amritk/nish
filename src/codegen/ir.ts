@@ -43,6 +43,8 @@ export class IRFunction {
   /** Function attribute group reference, e.g. "#0". Empty when none. */
   attrGroup = "";
   returnAttrs: string[] = [];
+  /** Linkage keyword (`internal`, ...). Empty means LLVM's default, external. */
+  linkage = "";
 
   constructor(
     readonly name: string,
@@ -91,7 +93,8 @@ export class IRFunction {
       .join(", ");
     const ret = [...this.returnAttrs, this.returnType].join(" ");
     const attrs = this.attrGroup ? ` ${this.attrGroup}` : "";
-    const header = `define ${ret} @${this.name}(${params})${attrs} {`;
+    const linkage = this.linkage ? `${this.linkage} ` : "";
+    const header = `define ${linkage}${ret} @${this.name}(${params})${attrs} {`;
     const body = this.blocks
       .map((b, i) => {
         if (i === 0 && this.entryPrelude.length > 0) {

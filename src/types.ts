@@ -21,12 +21,19 @@ export interface CompilerOptions {
   optimizeAttributes: boolean;
   /** Always emit the runtime ABI prelude, even when nothing in the module uses it. */
   runtimeDecls: boolean;
+  /**
+   * Give non-`export`ed functions `internal` linkage so LLVM may inline,
+   * specialise, or drop them. Off keeps every function external (C ABI).
+   * Default: false.
+   */
+  strictExports: boolean;
 }
 
 export const DEFAULT_OPTIONS: CompilerOptions = {
   numberMode: "i32",
   optimizeAttributes: true,
   runtimeDecls: false,
+  strictExports: false,
 };
 
 export type StaticType =

@@ -72,14 +72,25 @@ npm run build          # compiles src/ -> dist/ with tsc
 ## Usage
 
 ```bash
-node dist/index.js <input.ts> [options]
-  -o, --output <file.ll>     output path (default: <input>.ll)
+node dist/index.js <entry.ts> [more.ts ...] [options]
+  -o, --output <file.ll>     output path for a single module (default: <input>.ll)
+  -o, --output <dir>/        output directory: one <dir>/<module>.ll per module
+  --link <exe>               build a native binary from every module + runtime/runtime.c
+                             (entry module must declare `export function main`)
+  --profile speed|size|debug build profile for --link (default: speed)
+  --strict-exports           non-exported functions get `internal` linkage
   --number-mode i32|f64      lowering of `number` (default: i32)
   --plain                    no performance attributes or alignment hints
   --runtime-decls            always emit the runtime ABI prelude (arena + strings)
 
 # Example
 node dist/index.js examples/add.ts -o build/add.ll
+
+# Multi-file program: main.ts imports square from ./math and returns it as
+# the exit code. `import`/`export`, the C `main` wrapper, and linkage are
+# described in docs/wp5-modules.md.
+node dist/index.js examples/multi/main.ts --link build/multi && ./build/multi; echo $?
+# 49
 ```
 
 `--number-mode` selects how the `number` keyword is lowered: `i32` (default,

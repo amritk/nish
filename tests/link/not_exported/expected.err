@@ -1,0 +1,1 @@
+`secret` is declared in `./math` but not exported
