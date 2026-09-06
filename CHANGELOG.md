@@ -63,6 +63,13 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   Rust. `Math.pow` follows ECMAScript for `pow(x, NaN)` and `pow(±1, ±Infinity)`.
   Ordering comparisons are numeric only; `?.` and `??` are rejected by the
   validator; the literal `-2147483648` is accepted.
+- **Optimisation flags and benchmarks.** `--target <triple>|host` emits
+  `target datalayout` / `target triple`; `--nsw` makes signed overflow
+  undefined for extra optimisation; array parameters carry
+  `dereferenceable(24)`; `scripts/build.sh --pgo-generate` / `--pgo-use`.
+  `bench/` holds fib, nbody, spectral-norm, sieve, string building and a
+  struct-heavy loop in StaticTS, C and Rust with a checksum-validated runner
+  (`node bench/run.mjs`) that writes `docs/BENCHMARKS.md`.
 - **CI and diagnostics.** GitHub Actions matrix (Ubuntu + macOS, LLVM 18) with
   a size table in the job summary; every error is
   `<file>:<line>:<col>: error: <message>` followed by a caret excerpt.

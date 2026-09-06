@@ -355,7 +355,7 @@ if (results.some((r) => r.variants.some((v) => v.rss !== null))) {
     };
     lines.push(`| ${r.bench.name} | ${columns.map(([id]) => cell(id)).join(" | ")} |`);
   }
-  lines.push("", "Peak RSS of one run (`ru_maxrss` from `wait4`, see `bench/rss.c`). The arena never frees, so string building holds every intermediate string until exit; see the analysis for the WP6 fix.", "");
+  lines.push("", "Peak RSS of one run (`ru_maxrss` from `wait4`, see `bench/rss.c`). String building holds every intermediate string until exit: each `join` returns its result, so it escapes and the automatic arena scopes (WP6) cannot reclaim it; per-call-site reclamation of a returned temporary is the open item in `docs/wp9-optimisation.md`.", "");
 }
 
 lines.push("## Checksums", "");

@@ -1,8 +1,6 @@
-/* StaticTS runtime: arena allocator + length-prefixed UTF-8 strings. No GC,
- * no stdio on hot paths. Layouts are ABI: see src/codegen/runtime.ts. */
+/* StaticTS runtime: arena + strings + cold paths. Layouts are ABI (runtime.ts). */
 #define _POSIX_C_SOURCE 200809L
 #include <fcntl.h>
-#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,7 +35,7 @@ void *sts_arena_grow(size_t size) {
   return sts_arena.buf;
 }
 
-/* Bump allocation, 8-byte aligned, uninitialised (inlined by the compiler). */
+/* Bump allocation, 8-aligned, uninitialised (the compiler inlines this). */
 void *sts_alloc_struct(size_t size) {
   size = STS_ALIGN(size);
   if (sts_arena.off + size <= sts_arena.cap) {
@@ -64,8 +62,7 @@ void sts_free_arena(void) {
   memset(&sts_arena, 0, sizeof sts_arena);
 }
 
-/* ---- Scopes (WP6): a mark is buf + off (0 while empty); release rewinds
- * to it, freeing chunks pushed since (0: reset); a stale mark is ignored */
+/* ---- Scopes: mark = buf + off (0 while empty); release rewinds, freeing newer chunks */
 uint64_t sts_arena_mark(void) {
   return sts_arena.buf ? (uint64_t)(uintptr_t)(sts_arena.buf + sts_arena.off) : 0;
 }
@@ -133,7 +130,7 @@ sts_str *sts_str_from_i64(int64_t v) {
 
 sts_str *sts_str_from_i32(int32_t v) { return sts_str_from_i64(v); }
 
-/* JS Number#toString: shortest round-trip digits, e-form outside (-6, 21]. */
+/* JS Number#toString: shortest round-trip digits, e-form outside (-6, 21] */
 sts_str *sts_str_from_f64(double v) {
   char buf[32], out[32], dig[18], *o = out;
   int prec, k, n, i;
@@ -207,7 +204,7 @@ static void sts_put_file(const sts_str *path, const sts_str *data, int flags) {
 void sts_write_file(const sts_str *path, const sts_str *data) { sts_put_file(path, data, O_TRUNC); }
 void sts_append_file(const sts_str *path, const sts_str *data) { sts_put_file(path, data, O_APPEND); }
 
-/* ---- Arrays (WP4): %struct.sts_array = type { i64, i64, i8* }, cold paths */
+/* ---- Arrays: %struct.sts_array = type { i64, i64, i8* }, cold paths */
 typedef struct sts_array { uint64_t len; uint64_t cap; char *data; } sts_array;
 
 /* push() when len == cap: double the capacity (4 from empty). */
@@ -232,9 +229,7 @@ void sts_panic_index(uint64_t idx, uint64_t len) {
   _exit(1);
 }
 
-/* ---- Checked integer division ------------------------------------------ */
-/* `a / b`, `a % b` on integers panic like Rust instead of hitting sdiv/srem
- * poison: by_zero selects the message. */
+/* ---- Checked integer division: Rust-style panic instead of sdiv/srem poison */
 void sts_panic_div(_Bool by_zero) {
   const char *m = by_zero ? "attempt to divide by zero\n" : "attempt to divide with overflow\n";
   (void)!write(2, m, strlen(m));

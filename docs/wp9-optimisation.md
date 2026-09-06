@@ -7,6 +7,13 @@ benchmark that misses the target. The numbers quoted here are from
 programs and the measurement rules are described in
 [bench/README.md](../bench/README.md).
 
+> **After WP6 (re-run on the merged tree, `docs/BENCHMARKS.md`):** stack allocation of
+> non-escaping objects closed the vec3 gap (2.02x -> 0.95x) and most of nbody's
+> (1.24x -> 1.11x); fib 0.98x, spectral 1.02x, sieve 0.85x. String building stays at
+> 1.9x: `join` returns every intermediate string, so it escapes and no arena scope can
+> reclaim it. Reclaiming a returned temporary at the call site (the caller knows the
+> value is consumed immediately by another concat) is the remaining item.
+
 ## Summary
 
 | Benchmark | StaticTS / Rust `-O3` | StaticTS / C `-O3` | Target (1.10x) |
