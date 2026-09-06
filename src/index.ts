@@ -38,6 +38,7 @@ function usage(): never {
       "  --emit-header <file.h>     also write a C header for the callable functions",
       "  --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports",
       "  --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)",
+      "  --unchecked-indexing       drop array bounds checks (unsafe; for benchmarks)",
     ].join("\n")
   );
   process.exit(2);
@@ -90,6 +91,7 @@ function main(argv: string[]): number {
   let emitHeader: string | undefined;
   let emitDts: string | undefined;
   let emitNapi: string | undefined;
+  let uncheckedIndexing = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -122,6 +124,8 @@ function main(argv: string[]): number {
       optimizeAttributes = false;
     } else if (arg === "--runtime-decls") {
       runtimeDecls = true;
+    } else if (arg === "--unchecked-indexing") {
+      uncheckedIndexing = true;
     } else if (arg === "-h" || arg === "--help") {
       usage();
     } else if (arg.startsWith("-")) {
@@ -135,7 +139,7 @@ function main(argv: string[]): number {
 
   let modules: EmittedModule[];
   let outputs: string[];
-  const compilation = new Compilation({ numberMode, optimizeAttributes, runtimeDecls, strictExports });
+  const compilation = new Compilation({ numberMode, optimizeAttributes, runtimeDecls, strictExports, uncheckedIndexing });
   try {
     for (const input of inputs) compilation.addRoot(input);
     compilation.check();

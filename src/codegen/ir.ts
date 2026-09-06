@@ -42,6 +42,8 @@ export class IRFunction {
   private readonly entryPrelude: string[] = [];
   /** How many times each block base name has been handed out (`if.then`, `if.then.1`, ...). */
   private readonly labelCounts = new Map<string, number>();
+  /** Same for alloca names (`x.addr`, `x.addr.1`, ...). */
+  private readonly allocaCounts = new Map<string, number>();
   /** Function attribute group reference, e.g. "#0". Empty when none. */
   attrGroup = "";
   returnAttrs: string[] = [];
@@ -77,9 +79,13 @@ export class IRFunction {
   /**
    * Emit an alloca in the entry block. Keeping every alloca at the top of
    * `entry` is what lets LLVM's mem2reg pass promote them to registers.
+   * A name handed out before (two `let i` in sibling blocks, two `for (const
+   * x of ...)` loops) gets a `.N` suffix, as block labels do.
    */
   emitAlloca(name: string, type: string, align?: number): string {
-    const slot = `%${name}`;
+    const n = this.allocaCounts.get(name) ?? 0;
+    this.allocaCounts.set(name, n + 1);
+    const slot = n === 0 ? `%${name}` : `%${name}.${n}`;
     const suffix = align ? `, align ${align}` : "";
     this.entryPrelude.push(`${slot} = alloca ${type}${suffix}`);
     return slot;

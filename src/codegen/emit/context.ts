@@ -42,6 +42,8 @@ export interface EmitContext {
   stringConstant(text: string): string;
   /** Add a module-level `declare` line (e.g. an LLVM intrinsic); duplicates are ignored. */
   declare(text: string): void;
+  /** Add a module-level named type (`%struct.x = type {...}`); duplicates are ignored. */
+  declareType(text: string): void;
 
   emitStatement(stmt: ts.Statement): void;
   emitBlock(block: ts.Block): void;

@@ -191,3 +191,34 @@ static void sts_put_file(const sts_str *path, const sts_str *data, int flags) {
 
 void sts_write_file(const sts_str *path, const sts_str *data) { sts_put_file(path, data, O_TRUNC); }
 void sts_append_file(const sts_str *path, const sts_str *data) { sts_put_file(path, data, O_APPEND); }
+
+/* ---- Arrays (WP4) ------------------------------------------------------ */
+/* Must match %struct.sts_array = type { i64, i64, i8* } in the IR. `data`
+ * holds `cap` elements of one fixed size, arena-allocated, 8-byte aligned.
+ * Headers and element storage are bump-allocated by the compiler's inline
+ * allocator, so the runtime only owns the two cold paths below. */
+typedef struct sts_array { uint64_t len; uint64_t cap; char *data; } sts_array;
+
+/* push() slow path when len == cap: double the capacity (4 from empty) and
+ * move the elements. The old storage stays in the arena until the next reset. */
+void sts_array_grow(sts_array *a, uint64_t elem_size) {
+  uint64_t cap = a->cap ? a->cap * 2 : 4;
+  char *data = (char *)sts_alloc_struct(cap * elem_size);
+  if (a->len) memcpy(data, a->data, a->len * elem_size);
+  a->data = data;
+  a->cap = cap;
+}
+
+/* Failed bounds check: "index out of range: <idx> >= <len>", exit 1. Indices
+ * are compared unsigned, so a negative index shows up as a huge number. */
+void sts_panic_index(uint64_t idx, uint64_t len) {
+  char tmp[72];
+  char *p = tmp + sizeof tmp;
+  *--p = '\n';
+  do { *--p = (char)('0' + len % 10); len /= 10; } while (len);
+  *--p = ' '; *--p = '='; *--p = '>'; *--p = ' ';
+  do { *--p = (char)('0' + idx % 10); idx /= 10; } while (idx);
+  (void)!write(2, "index out of range: ", 20);
+  (void)!write(2, p, (size_t)(tmp + sizeof tmp - p));
+  _exit(1);
+}

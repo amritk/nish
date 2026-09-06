@@ -2,9 +2,9 @@
 @.str.1 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"hello\0A\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"world\0A\00" }, align 8
 
-declare void @sts_free_arena() #1
-declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #1
-declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #1
+declare void @sts_free_arena() #0
+declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
 declare noalias noundef nonnull align 8 i8* @sts_read_file(i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @sts_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @sts_append_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
@@ -32,12 +32,12 @@ entry:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
   %0 = call i32 @sts_main()
   call void @sts_free_arena()
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }

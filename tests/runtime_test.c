@@ -33,6 +33,9 @@ static void expect_str(const sts_str *s, const char *want, const char *what) {
 }
 
 static void expect_f64(double v, const char *want) { expect_str(sts_str_from_f64(v), want, want); }
+/* WP4 */
+typedef struct sts_array { uint64_t len; uint64_t cap; char *data; } sts_array;
+void sts_array_grow(sts_array *, uint64_t);
 
 int main(void) {
   /* Bump allocation: consecutive, 8-byte rounded, 8-byte aligned. */
@@ -119,6 +122,17 @@ int main(void) {
   sts_write_file(path, sts_str_new("", 0));
   expect_str(sts_read_file(path), "", "empty file");
   unlink(path->data);
+
+  /* WP4 arrays: grow doubles cap (4 from empty), keeps len and the elements, 8-aligned. */
+  sts_array arr = { 0, 0, 0 };
+  sts_array_grow(&arr, sizeof(int32_t));
+  assert(arr.cap == 4 && arr.len == 0 && arr.data != NULL && ((uintptr_t)arr.data & 7) == 0);
+  for (int i = 0; i < 4; i++) ((int32_t *)arr.data)[i] = i * 10;
+  arr.len = 4;
+  char *old = arr.data;
+  sts_array_grow(&arr, sizeof(int32_t));
+  assert(arr.cap == 8 && arr.len == 4 && arr.data != old);
+  for (int i = 0; i < 4; i++) assert(((int32_t *)arr.data)[i] == i * 10);
 
   sts_free_arena();
   assert(sts_arena.chunks == NULL && sts_arena.cap == 0);

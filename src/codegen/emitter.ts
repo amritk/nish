@@ -37,7 +37,7 @@ import { expressionEmitters } from "./emit/expressions";
 import { emitVariableDeclarationList, statementEmitters } from "./emit/statements";
 import { addStringConstant } from "./emit/strings";
 import { IRFunction, IRModule } from "./ir";
-import { ARENA_GLOBAL, ARENA_TYPE, INLINE_ALLOCATOR_ATTRS, RUNTIME_FUNCTIONS, inlineAllocator } from "./runtime";
+import { ARENA_GLOBAL, ARENA_TYPE, ARRAY_TYPE, INLINE_ALLOCATOR_ATTRS, RUNTIME_FUNCTIONS, inlineAllocator } from "./runtime";
 
 export class Emitter implements EmitContext {
   private readonly module: IRModule;
@@ -61,7 +61,7 @@ export class Emitter implements EmitContext {
     facts?: Map<string, FunctionFacts>
   ) {
     this.module = new IRModule(program.sourceFile.fileName);
-    this.facts = facts ?? analyzeFunctions(program);
+    this.facts = facts ?? analyzeFunctions(program, opts);
   }
 
   emitModule(): string {
@@ -82,8 +82,16 @@ export class Emitter implements EmitContext {
     return facts;
   }
 
+  /** Named types a signature mentions must be declared in the module (the array header, WP4). */
+  private declareSignatureTypes(sig: FunctionSig): void {
+    for (const t of [sig.returnType, ...sig.params.map((p) => p.type)]) {
+      if (t.kind === "array") this.module.addTypeDecl(ARRAY_TYPE);
+    }
+  }
+
   private emitFunction(sig: FunctionSig): IRFunction {
     const facts = this.factsFor(sig);
+    this.declareSignatureTypes(sig);
     const optimize = this.opts.optimizeAttributes;
     this.fn = new IRFunction(
       sig.name,
@@ -161,6 +169,7 @@ export class Emitter implements EmitContext {
    */
   private declarationFor(sig: FunctionSig): string {
     const facts = this.factsFor(sig);
+    this.declareSignatureTypes(sig);
     const optimize = this.opts.optimizeAttributes;
     const params = sig.params
       .map((p) => [llvmType(p.type), ...(optimize ? paramAttributes(p, facts) : [])].join(" "))
@@ -190,6 +199,10 @@ export class Emitter implements EmitContext {
     this.module.addDeclaration(text);
   }
 
+  declareType(text: string): void {
+    this.module.addTypeDecl(text);
+  }
+
   private emitRuntimePrelude(): void {
     const all = this.opts.runtimeDecls;
     const wantsAlloc = all || this.usedRuntime.has("sts_alloc_struct");
@@ -198,6 +211,8 @@ export class Emitter implements EmitContext {
       this.module.addTypeDecl(ARENA_TYPE);
       this.module.addGlobal(ARENA_GLOBAL);
     }
+    // The array header type is referenced by `sts_array_grow`'s declaration (WP4).
+    if (all || this.usedRuntime.has("sts_array_grow")) this.module.addTypeDecl(ARRAY_TYPE);
     for (const rt of RUNTIME_FUNCTIONS) {
       // Intrinsics are not part of the C ABI prelude: declared only when used.
       if (!this.usedRuntime.has(rt.name) && (!all || rt.intrinsic)) continue;

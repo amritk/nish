@@ -82,6 +82,7 @@ node dist/index.js <entry.ts> [more.ts ...] [options]
   --number-mode i32|f64      lowering of `number` (default: i32)
   --plain                    no performance attributes or alignment hints
   --runtime-decls            always emit the runtime ABI prelude (arena + strings)
+  --unchecked-indexing       drop array bounds checks (unsafe: out-of-range is UB; benchmarks only)
 
 # Example
 node dist/index.js examples/add.ts -o build/add.ll
@@ -357,6 +358,7 @@ Type mapping:
 | `i64` | `i64`, align 8; wrapping arithmetic, never the lowering of `number`; literals take the type from context (`let x: i64 = 5`, `x * 2`); convert with `toI64` / `toI32` / `toF64` |
 | `boolean` | `i1` |
 | `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }`, 8-aligned, immutable; literals are module constants, `.length` is the UTF-8 byte length |
+| `T[]`, `Array<T>` | `%struct.sts_array*` to `{ i64 len, i64 cap, i8* data }`, arena-allocated, 8-aligned; `data` holds `cap` elements of `T`; `a[i]` is bounds-checked (see [docs/wp4-arrays.md](docs/wp4-arrays.md)) |
 | `void` | `void` |
 
 Supported today:
@@ -387,6 +389,8 @@ Supported today:
 - `Math.sqrt/floor/ceil/trunc/round/sin/cos/exp/log/pow` (f64), `Math.abs/min/max` (any numeric type), `Math.PI`, `Math.E` as LLVM intrinsics and constants (`readnone`); `Math.random()` via `sts_random`. See [docs/wp7-runtime.md](docs/wp7-runtime.md).
 - `i64` values, arithmetic, comparisons, parameters, returns, and the conversions `toI32(x)`, `toI64(x)`, `toF64(x)` (`sext`/`trunc`/`sitofp`/`llvm.fptosi.sat`).
 - `process.exit(code)` (a `noreturn` call plus `unreachable`; counts as a terminator), `readFileSync(path)`, `writeFileSync(path, data)`, `appendFileSync(path, data)`.
+- Arrays `T[]` / `Array<T>` of any element type (numbers, booleans, strings, nested arrays): literals `[a, b]` (one element type; `[]` needs an annotation), `new Array<T>(n)` zero-filled, `a[i]` reads and writes (`=`, `op=`), `.length`, `push(v)`, and `for (const x of a)` with `break` / `continue`.
+- Bounds checking on every `a[i]`: an out-of-range index prints `index out of range: <i> >= <len>` and exits 1; `--unchecked-indexing` removes the check.
 
 Rejected with a diagnostic (`file:line:col: error: ...`):
 

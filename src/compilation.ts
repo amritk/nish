@@ -162,7 +162,7 @@ export class Compilation {
   emit(): EmittedModule[] {
     this.check();
     const programs: CheckedProgram[] = this.modules.map((m) => m.checker.program);
-    const facts = analyzeFunctions(programs);
+    const facts = analyzeFunctions(programs, this.opts);
     return this.modules.map((unit) => ({ unit, ir: emitProgram(unit.checker.program, this.opts, facts) }));
   }
 

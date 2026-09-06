@@ -1,12 +1,12 @@
 @.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 
-declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #1
-declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #1
-declare noalias noundef nonnull align 8 i8* @sts_str_from_f64(double noundef) #1
+declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
+declare noalias noundef nonnull align 8 i8* @sts_str_from_f64(double noundef) #0
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i64(i64 noundef) #0
-declare i32 @llvm.fptosi.sat.i32.f64(double) #2
-declare i64 @llvm.fptosi.sat.i64.f64(double) #2
+declare i32 @llvm.fptosi.sat.i32.f64(double) #1
+declare i64 @llvm.fptosi.sat.i64.f64(double) #1
 
 define noundef i32 @test() #0 {
 entry:
@@ -62,6 +62,5 @@ entry:
   ret i32 %33
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readnone }

@@ -1,0 +1,197 @@
+%struct.sts_array = type { i64, i64, i8* }
+%struct.sts_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"hello\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c", \00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"world\00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"!\00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
+@.str.7 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"goodbye\00" }, align 8
+@sts_arena = external global %struct.sts_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #2
+declare void @sts_free_arena() #0
+declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare zeroext i1 @sts_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
+declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @sts_array_grow(%struct.sts_array* noundef nonnull align 8 nocapture, i64 noundef) #0
+declare void @sts_panic_index(i64 noundef, i64 noundef) #4
+
+define internal noalias noundef nonnull align 8 i8* @sts_alloc_struct(i64 noundef %size) #5 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @sts_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define noundef nonnull align 8 i8* @join(%struct.sts_array* noundef nonnull align 8 readonly nocapture %words) #0 {
+entry:
+  %out.addr = alloca i8*, align 8
+  %w.addr = alloca i8*, align 8
+  %forof.idx = alloca i64, align 8
+  store i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*), i8** %out.addr, align 8
+  store i64 0, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.cond:
+  %0 = load i64, i64* %forof.idx, align 8
+  %1 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %words, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %forof.body, label %forof.end
+
+forof.body:
+  %4 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %words, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8
+  %6 = bitcast i8* %5 to i8**
+  %7 = getelementptr inbounds i8*, i8** %6, i64 %0
+  %8 = load i8*, i8** %7, align 8
+  store i8* %8, i8** %w.addr, align 8
+  %9 = load i8*, i8** %out.addr, align 8
+  %10 = load i8*, i8** %w.addr, align 8
+  %11 = call i8* @sts_str_concat(i8* %9, i8* %10)
+  store i8* %11, i8** %out.addr, align 8
+  br label %forof.inc
+
+forof.inc:
+  %12 = load i64, i64* %forof.idx, align 8
+  %13 = add i64 %12, 1
+  store i64 %13, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.end:
+  %14 = load i8*, i8** %out.addr, align 8
+  ret i8* %14
+}
+
+define noundef i32 @sts_main() #1 {
+entry:
+  %words.addr = alloca %struct.sts_array*, align 8
+  %0 = call i8* @sts_alloc_struct(i64 24)
+  %1 = bitcast i8* %0 to %struct.sts_array*
+  %2 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %1, i64 0, i32 0
+  store i64 3, i64* %2, align 8
+  %3 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %1, i64 0, i32 1
+  store i64 3, i64* %3, align 8
+  %4 = call i8* @sts_alloc_struct(i64 24)
+  %5 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %1, i64 0, i32 2
+  store i8* %4, i8** %5, align 8
+  %6 = bitcast i8* %4 to i8**
+  %7 = getelementptr inbounds i8*, i8** %6, i64 0
+  store i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8** %7, align 8
+  %8 = getelementptr inbounds i8*, i8** %6, i64 1
+  store i8* bitcast ({ i64, [3 x i8] }* @.str.2 to i8*), i8** %8, align 8
+  %9 = getelementptr inbounds i8*, i8** %6, i64 2
+  store i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*), i8** %9, align 8
+  store %struct.sts_array* %1, %struct.sts_array** %words.addr, align 8
+  %10 = load %struct.sts_array*, %struct.sts_array** %words.addr, align 8
+  %11 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %10, i64 0, i32 0
+  %12 = load i64, i64* %11, align 8
+  %13 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %10, i64 0, i32 1
+  %14 = load i64, i64* %13, align 8
+  %15 = icmp eq i64 %12, %14
+  br i1 %15, label %push.grow, label %push.store
+
+push.grow:
+  call void @sts_array_grow(%struct.sts_array* %10, i64 8)
+  br label %push.store
+
+push.store:
+  %16 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %10, i64 0, i32 2
+  %17 = load i8*, i8** %16, align 8
+  %18 = bitcast i8* %17 to i8**
+  %19 = getelementptr inbounds i8*, i8** %18, i64 %12
+  store i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*), i8** %19, align 8
+  %20 = add i64 %12, 1
+  store i64 %20, i64* %11, align 8
+  %21 = trunc i64 %20 to i32
+  %22 = load %struct.sts_array*, %struct.sts_array** %words.addr, align 8
+  %23 = call i8* @join(%struct.sts_array* %22)
+  call void @sts_print(i8* %23)
+  %24 = load %struct.sts_array*, %struct.sts_array** %words.addr, align 8
+  %25 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %24, i64 0, i32 0
+  %26 = load i64, i64* %25, align 8
+  %27 = icmp ult i64 3, %26
+  br i1 %27, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @sts_panic_index(i64 3, i64 %26)
+  unreachable
+
+bounds.ok:
+  %28 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %24, i64 0, i32 2
+  %29 = load i8*, i8** %28, align 8
+  %30 = bitcast i8* %29 to i8**
+  %31 = getelementptr inbounds i8*, i8** %30, i64 3
+  %32 = load i8*, i8** %31, align 8
+  %33 = call zeroext i1 @sts_str_eq(i8* %32, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %34 = select i1 %33, i8* bitcast ({ i64, [5 x i8] }* @.str.5 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.6 to i8*)
+  call void @sts_print(i8* %34)
+  %35 = load %struct.sts_array*, %struct.sts_array** %words.addr, align 8
+  %36 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %35, i64 0, i32 0
+  %37 = load i64, i64* %36, align 8
+  %38 = icmp ult i64 0, %37
+  br i1 %38, label %bounds.ok.1, label %bounds.fail.1
+
+bounds.fail.1:
+  call void @sts_panic_index(i64 0, i64 %37)
+  unreachable
+
+bounds.ok.1:
+  %39 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %35, i64 0, i32 2
+  %40 = load i8*, i8** %39, align 8
+  %41 = bitcast i8* %40 to i8**
+  %42 = getelementptr inbounds i8*, i8** %41, i64 0
+  store i8* bitcast ({ i64, [8 x i8] }* @.str.7 to i8*), i8** %42, align 8
+  %43 = load %struct.sts_array*, %struct.sts_array** %words.addr, align 8
+  %44 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %43, i64 0, i32 0
+  %45 = load i64, i64* %44, align 8
+  %46 = icmp ult i64 0, %45
+  br i1 %46, label %bounds.ok.2, label %bounds.fail.2
+
+bounds.fail.2:
+  call void @sts_panic_index(i64 0, i64 %45)
+  unreachable
+
+bounds.ok.2:
+  %47 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %43, i64 0, i32 2
+  %48 = load i8*, i8** %47, align 8
+  %49 = bitcast i8* %48 to i8**
+  %50 = getelementptr inbounds i8*, i8** %49, i64 0
+  %51 = load i8*, i8** %50, align 8
+  call void @sts_print(i8* %51)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @sts_main()
+  call void @sts_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind willreturn memory(argmem: read) }
+attributes #4 = { nounwind noreturn cold }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }

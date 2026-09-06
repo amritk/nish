@@ -90,6 +90,12 @@ sts_str *sts_read_file(const sts_str *path);
 void sts_write_file(const sts_str *path, const sts_str *data);
 void sts_append_file(const sts_str *path, const sts_str *data);
 
+/* Arrays (WP4): `T[]` is an `sts_array *`; `data` holds `cap` elements of one
+ * fixed size in the arena. Only the two cold paths live in the runtime. */
+typedef struct sts_array { uint64_t len; uint64_t cap; char *data; } sts_array;
+void sts_array_grow(sts_array *a, uint64_t elem_size);
+void sts_panic_index(uint64_t idx, uint64_t len);
+
 #ifdef __cplusplus
 }
 #endif
