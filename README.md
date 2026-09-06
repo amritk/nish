@@ -348,6 +348,10 @@ is not installed.
 
 ## Roadmap
 
+The full plan, cut into parallelisable work packages with acceptance
+criteria and agent briefs, is in [docs/MASTER_PLAN.md](docs/MASTER_PLAN.md).
+Summary:
+
 - Phase 2: `if` / `while` / `for` control flow with `br` and `phi`.
 - Phase 3: classes and interfaces as `%struct.*` types, `getelementptr` field access.
 - Phase 4: string literals and operations lowered onto `runtime.c` (`sts_str_*`).
