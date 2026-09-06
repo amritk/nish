@@ -210,9 +210,9 @@ export function contextualLiteralType(
   if (want.kind === "i32" && n > 0x7fffffff + (negated ? 1 : 0)) {
     throw ctx.error(`Literal \`${literal.text}\` does not fit in i32`, literal);
   }
-  if (want.kind === "i64" && !Number.isSafeInteger(n)) {
+  if (want.kind === "i64" && Math.abs(n) > 2 ** 53) {
     throw ctx.error(
-      `Literal \`${literal.text}\` exceeds 2^53 and cannot be written exactly; compute the i64 value instead`,
+      `Literal \`${literal.text}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead`,
       literal
     );
   }

@@ -84,7 +84,7 @@ export function collectFunctionSignature(
 export function markEntryMain(sig: FunctionSig, sf: ts.SourceFile): FunctionSig {
   if (sig.params.length > 0) {
     throw new CompileError(
-      "`main` cannot take parameters yet (process.argv arrives in WP7)",
+      "`main` cannot take parameters (command-line arguments are not supported yet)",
       sig.decl.parameters[0],
       sf
     );

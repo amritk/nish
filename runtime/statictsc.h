@@ -88,7 +88,7 @@ bool sts_str_eq(const sts_str *a, const sts_str *b);
 uint64_t sts_str_len(const sts_str *s);
 /* `console.log(s)`: one write(2) of the bytes plus a newline to stdout. */
 void sts_print(const sts_str *s);
-/* Number to string, as `${n}` does: decimal for i32, `%.17g` for f64. */
+/* Number to string, as `${n}` does: decimal for integers, shortest round-trip (JS Number#toString) for f64. */
 sts_str *sts_str_from_i32(int32_t v);
 sts_str *sts_str_from_f64(double v);
 sts_str *sts_str_from_i64(int64_t v);

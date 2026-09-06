@@ -40,14 +40,18 @@ Compilation                                                            src/compi
 | Types | `src/types.ts` | The `StaticType` model, `llvmType`, `alignOf`, `sameType`, `resolveTypeNode` (annotation to `StaticType`), the per-file named-type resolver for classes. |
 | Checker | `src/checker/index.ts` + `checker/*.ts` | Pass 1 collects signatures and struct layouts; pass 1b binds imports; pass 2 checks bodies. Every statement and expression is dispatched through a table keyed by `ts.SyntaxKind` (see below) and its type is recorded in a side table. |
 | Diagnostics | `src/diagnostics.ts` | `CompileError` with the `file:line:col: error: message` summary and the caret excerpt. |
-| Attributes | `src/codegen/attributes.ts` | Per-function facts (loops, memory effect, escapes, pointer-parameter facts) and the call-graph fixpoint that turns them into LLVM attributes. Runs over the whole program at once. |
+| Attributes | `src/codegen/attributes.ts` | Per-function facts (loops, memory effect, escapes, pointer-parameter facts, allocation facts) and the call-graph fixpoint that turns them into LLVM attributes, arena scopes, and stack slots. Runs over the whole program at once. |
+| Escape analysis | `src/codegen/escape.ts` | Per allocation site (`new`, object literal, array literal, `new Array<T>(<literal>)`): does the value stay `local`, is it `returned`, or does it `leak`? Decides stack allocation and feeds the arena-scope facts (WP6). |
+| Target | `src/codegen/target.ts` | The `--target` table: canonical triples, their aliases, `host` resolution from `process.platform`/`arch`, and the clang 18 data-layout string written into the module header (WP9). |
 | Emitter | `src/codegen/emitter.ts` + `codegen/emit/*.ts` | Lowers the checked program to IR text: module assembly, function setup, `declare`s for imports, the `@main` wrapper, the runtime prelude, and dispatch to per-construct emitters. Contains no user-facing error handling. |
 | IR builder | `src/codegen/ir.ts` | `IRModule`, `IRFunction`, `IRBlock`: named blocks, hoisted allocas, SSA temp numbering (`%0` is always the first temp because every block and parameter is named), attribute-group interning. |
 | Runtime ABI | `src/codegen/runtime.ts` | The `declare` lines, attributes, and memory effects of every runtime symbol and intrinsic; the IR text of the inline arena allocator; the `%struct.sts_arena` / `%struct.sts_array` layouts. |
-| Runtime | `runtime/runtime.c`, `runtime/statictsc.h` | The C implementation: chunked bump arena, strings, number formatting, `Math.random`, exit, files, array growth, bounds-check panic. The header is the public C ABI. |
+| Runtime | `runtime/runtime.c`, `runtime/statictsc.h` | The C implementation: chunked bump arena with marks (`sts_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, exit, files, array growth, the bounds-check and division panics. The header is the public C ABI. `runtime/shim.mjs` is the Node-side twin used by the differential tests. |
 | Interop | `src/interop/{abi,header,dts,napi}.ts` | C header, wasm `.d.ts`, and N-API shim generators, all derived from the same checked signatures the IR was emitted from. |
 | Build | `scripts/build.sh`, `size-report.sh`, `smoke.sh` | The clang/LTO profiles, the size table, the example smoke test. |
-| Tests | `tests/run.js` + `tests/{cases,link,ir,layout}`, `tests/runtime_test.c`, `tests/driver.c` | Goldens, native round trips, link tests, ABI guards, interop, exit codes, packaging. |
+| Tests | `tests/run.js` + `tests/{cases,link,ir,layout}`, `tests/runtime_test.c`, `tests/driver.c` | Goldens, native round trips, link tests, ABI guards, memory checks, interop, exit codes, packaging, benchmark checksums. |
+| Differential tests | `tests/differential/{run,lib,rewrite,fuzz}.js`, `tests/differential/corpus/`, `runtime/shim.mjs` | Every whole program compiled natively and rewritten to JavaScript from the checker's own types, run under Node, and compared byte for byte; a seeded random-program fuzzer (WP13). |
+| Bench | `bench/run.mjs`, `bench/*.{ts,c,rs}`, `bench/rss.c`, `bench/ffi.mjs` | The StaticTS / C / Rust suite that writes `docs/BENCHMARKS.md` (WP9), and the interop batching benchmark (WP8). |
 
 ## Side tables: the checker records, the emitter reads
 
@@ -96,8 +100,11 @@ into the core tables at load time:
 | `builtinFunctions` (bare: `toI32`, `readFileSync`; `expressions.ts`) | `builtinFunctionEmitters` (`emit/expressions.ts`) | identifier, consulted only when no user function has that name |
 
 Family modules: `control-flow.ts`, `strings.ts`, `math.ts`, `io.ts`,
-`arrays.ts`, `classes.ts` on both sides (`checker/` and `codegen/emit/`),
-plus `builtins.ts` for the shared plumbing. The array module *wraps* the
+`arrays.ts`, `classes.ts`, `arena.ts` (the `Arena.*` builtins) on both sides
+(`checker/` and `codegen/emit/`), `checker/nullable.ts` (the `null` literal,
+`T | null` assignability, narrowing) and `emit/arithmetic.ts` (integer
+operators with the checked `sdiv`/`srem`, shared by binary operators and
+every `op=` form) on one side, plus `builtins.ts` for the shared plumbing. The array module *wraps* the
 existing `=`/`op=` handlers (`installArrayAssignmentCheckers`) instead of
 replacing them, so element targets and property targets compose in either
 registration order.
@@ -172,9 +179,10 @@ a layout smoke test.
 
 ### Runtime symbols
 
-`runtime/runtime.c` (8.8 KB of source, about 3 KB of `.text` at `-Oz`;
-budget in MASTER_PLAN.md §2: 8 KB / 4 KB, so the source budget is currently
-exceeded) provides, in the order of `RUNTIME_FUNCTIONS`:
+`runtime/runtime.c` (about 8 KB of source and 3.5 KB of `.text` at `-Oz`,
+against the MASTER_PLAN.md §2 budget of 8 KB / 4 KB; measure with
+`clang -Oz -c runtime/runtime.c && size runtime.o`) provides, in the order
+of `RUNTIME_FUNCTIONS`:
 
 | Symbol | Purpose |
 | --- | --- |
@@ -182,12 +190,16 @@ exceeded) provides, in the order of `RUNTIME_FUNCTIONS`:
 | `sts_arena_grow(size)` | Slow path (`cold noinline`): push a new chunk (at least 64 KB) and bump from it; out of memory prints `statictsc: out of memory` and exits. |
 | `sts_reset_arena()` | Recycle everything in O(1): keeps the newest chunk, frees the rest, so a steady-state program stops calling `malloc` at all. |
 | `sts_free_arena()` | Release all chunks; the entry wrapper calls it when `main` returns. The arena is lazy, so it can be used again afterwards. |
+| `sts_arena_mark()` | The current bump address `buf + off` as one `i64` (`0` while the arena is empty), which identifies both the chunk and the offset. Emitted at the top of every function with an automatic arena scope; `Arena.mark()` (WP6). |
+| `sts_arena_release(mark)` | Rewind to a mark: `mark == 0` acts like `sts_reset_arena`; a mark in the current chunk resets `off`; a mark in an older chunk frees every newer chunk first; a mark in no live chunk (stale, undefined behaviour by the language rule) is ignored. Emitted before every `ret` of a scoped function; `Arena.release(m)`. |
+| `sts_arena_used()` | Bytes bumped in the current chunk; `Arena.used()`, the number the `mem_*` tests watch. |
 | `sts_str_new(bytes, len)`, `sts_str_concat`, `sts_str_eq`, `sts_str_len`, `sts_print`, `sts_str_from_i32 / i64 / f64` | Length-prefixed, NUL-terminated, immutable UTF-8 strings in the arena; `from_f64` prints exactly what JavaScript's `String(x)` prints (shortest round-trip digits). `sts_str_len` exists for C hosts; compiled code loads the header directly. |
 | `sts_random()` | `Math.random`: xorshift64\*, seeded lazily from time and pid, 53 random bits in `[0, 1)`. |
 | `sts_exit(code)` | `process.exit`, via libc `exit`. |
 | `sts_read_file / sts_write_file / sts_append_file` | `readFileSync` / `writeFileSync` / `appendFileSync`: `open`/`pread`/`write` syscalls, the whole file in one arena string; a failure prints `statictsc: cannot read <path>` (or `cannot write`) and exits 1. |
 | `sts_array_grow(hdr, elemSize)` | `push` when `len == cap`: doubles `cap` (4 from 0) and moves the elements to fresh arena storage. |
 | `sts_panic_index(idx, len)` | Failed bounds check: `index out of range: <idx> >= <len>` on stderr, `_exit(1)`. |
+| `sts_panic_div(by_zero)` | Failed integer-division check (`cold noreturn`): `attempt to divide by zero` or `attempt to divide with overflow` on stderr, `_exit(1)`. |
 
 `Math.sqrt`, `Math.floor`, `Math.abs`, `Math.min`, ... are not runtime calls
 at all: they lower to LLVM intrinsics (`llvm.sqrt.f64`, `llvm.smin.i32`,
@@ -231,13 +243,13 @@ it.
 | Attribute | Emitted when | Proof |
 | --- | --- | --- |
 | `nounwind` | always | No exceptions exist; `throw` is `llvm.trap`. |
-| `willreturn` | `loopsBounded && !hasTrap && !callsNoReturn` and every callee `willreturn` | Counted loops only (`isCountedLoop`: `for (let i = init; i CMP bound; STEP)` over `i32`, bound an identifier or non-negative literal, step toward the bound, no wrap possible, body assigns neither `i` nor `bound` and has no `throw`; `for...of` whose body cannot extend the array); `throw`, `process.exit`, and a checked `a[i]` (`sts_panic_index` is `noreturn`) clear it. Unbounded recursion is allowed by LangRef. `mustprogress` is never emitted. |
+| `willreturn` | `loopsBounded && !hasTrap && !callsNoReturn` and every callee `willreturn` | Counted loops only (`isCountedLoop`: `for (let i = init; i CMP bound; STEP)` over `i32`, bound an identifier or non-negative literal, step toward the bound, no wrap possible, body assigns neither `i` nor `bound` and has no `throw`; `for...of` whose body cannot extend the array); `throw`, `process.exit`, a checked `a[i]` (`sts_panic_index` is `noreturn`), and an integer `/` or `%` (`sts_panic_div`) clear it. Unbounded recursion is allowed by LangRef. `mustprogress` is never emitted. |
 | `readnone` | effect `none` | The body touches no memory but its own allocas and calls only `readnone` callees (LLVM's own FunctionAttrs would infer it). |
-| `readonly` (function) | effect `read` | The body reads memory it does not own (`.length`, field/element reads, `sts_str_eq`) and nothing writes; `throw` forces `write`. |
+| `readonly` (function) | effect `read` | The body reads memory it does not own (`.length`, field/element reads, `sts_str_eq`) and nothing writes; `throw`, a checked `a[i]`, and an integer division force `write` (their panic callees are `write`). Field access through a local that only ever holds a stack object (`stackLocals`) is the function's own memory and counts as neither (WP6). |
 | `noundef` (params, returns) | always | Every StaticTS value is initialised. |
 | `zeroext` | `boolean` | C ABI for `bool`. |
-| `nonnull align 8` | strings, arrays, structs | No null; literals and arena objects are 8-aligned. |
-| `dereferenceable(sizeof)` | struct params/returns (non-empty) | Every object comes from the arena with at least `sizeof` bytes. |
+| `nonnull align 8` | non-nullable strings, arrays, structs | No null value in those types; literals, arena objects, and stack objects are 8-aligned. A `T \| null` parameter or return keeps `align 8` (null is aligned) and loses `nonnull` and `dereferenceable` (WP6). |
+| `dereferenceable(sizeof)` / `dereferenceable(24)` | non-nullable struct params/returns (non-empty) / non-nullable array params and returns | Every object comes from the arena or a stack slot with at least `sizeof` bytes; every array value comes from a literal, `new Array`, or a function that returned one, all of which write the full 24-byte header (WP9). |
 | `readonly` (string param) | always | Strings are immutable. |
 | `noalias` (string param) | always | Nothing writes through a string pointer, and `noalias` only concerns modified memory. |
 | `noalias` (`%this`) | constructors only | `new` hands the constructor a fresh allocation; never on other struct params (two may alias). |
@@ -249,9 +261,83 @@ it.
 `--plain` turns all of this off (and the alignment hints) and produces the
 bare Phase 1 IR, which is useful when comparing against hand-written IR.
 
-<!-- TODO(WP9): document `--nsw` (overflow becomes UB, enables more transformations), `--target` (datalayout + triple emission), and the aliasing rule for `noalias` on struct params once WP9 lands. -->
+### Escape analysis, stack allocation, and arena scopes
 
-<!-- TODO(WP6): document escape-analysed `alloca` for non-escaping `new`, arena scopes (`sts_arena_mark` / `sts_arena_release`), and `T | null` narrowing once WP6 lands. -->
+`src/codegen/escape.ts` runs inside the attribute fixpoint (it needs the
+`nocapture` facts of callees, and the scope facts it produces flow back up
+the call graph). For every *allocation site* in a function (`new C(...)`,
+an object literal, an array literal, `new Array<T>(<literal>)`) it follows
+the value through parentheses, ternary arms, and the `const`-like locals it
+is stored in, classifying each use with the same `classifyUse` that decides
+`nocapture`:
+
+| Flow | Meaning | Consequence |
+| --- | --- | --- |
+| `local` | every use consumes the value on the spot (operator operand, condition, field/element access, `.length`, `for...of` source, argument to a non-capturing parameter or a runtime builtin), and no holding local is ever reassigned | stackable sites become an entry-block `alloca` (`%Point.obj`, `%arr.hdr` + `%arr.data`), one slot per site even inside loops; non-stackable ones (dynamic `new Array<T>(n)`, strings, callee results) make the function a candidate for an arena scope |
+| `returned` | returned, directly or through an alias | arena; the caller owns it and classifies it as its own site |
+| `leaks` | stored into a field, element, literal, or `push`; assigned to another variable (`let q = p` included); passed to a capturing parameter; anything not modelled | arena, and the function (and every caller, transitively) gets no scope |
+
+Soundness of the stack slot: every reference to a `local` object lives in
+a local declared at or below the site's block, so nothing can name it once
+the function returns, and the initializer or constructor re-runs on every
+loop pass, so a reused slot never holds a stale object that is still
+observable. Stack arrays are capped at `STACK_ARRAY_BYTES` (4096) of data;
+`push` on one moves the elements to the arena through `sts_array_grow` and
+the stack header stays valid. Every stack object is `align 8`, so the
+pointer attributes above remain true for it.
+
+A function gets an **automatic arena scope** (`%arena.mark = call i64
+@sts_arena_mark()` after the allocas, `call void @sts_arena_release(i64
+%arena.mark)` before every `ret`) when it has a direct arena allocation
+with `local` flow, none of its sites is `returned` or `leaks`, no callee
+leaks an allocation (`allocLeaks` in `FunctionFacts`), and neither it nor a
+callee uses `Arena.reset` / `Arena.release` (`usesArenaControl`). Paths
+that end in `unreachable` need no release. Scopes nest LIFO with the call
+stack, so a mark is always released by the function that took it.
+`--no-stack-alloc` disables the stack slots but keeps the scopes; the WP6
+block of `tests/run.js` checks both modes on `mem_stack_struct` and watches
+`Arena.used()` stay flat across 100000 scoped calls. Design and measurements:
+[wp6-memory.md](wp6-memory.md).
+
+### `T | null`
+
+`checker/nullable.ts` owns the `null` literal (typed by its contextual
+`T | null`), the one-way assignability `T -> T | null` (`assignable` in
+`types.ts`, used by initializers, returns, arguments, stores, literals,
+`push`, and ternaries), and narrowing: a per-variable set of "known
+non-null" bindings that a guard (`!== null` / `=== null` in `if`, `while`,
+`for`, `&&`, `||`, `?:`, composed through `!` and parentheses) opens for the
+region it dominates, that an early-terminating branch extends past the `if`,
+and that any assignment to the variable, or a loop that assigns it, closes.
+Only locals and parameters narrow, never property paths. The emitter sees
+no difference between `T` and `T | null` except in the attributes
+(`nonnull` and `dereferenceable` are dropped, [rules above](#attribute-soundness-rules))
+and in `icmp eq ... null` for the comparisons.
+
+### `--nsw` and `--target`
+
+- **`--nsw`** (WP9): `intOpcode` in `emit/context.ts` is the single place
+  that decides the flag; every user-level integer `add`/`sub`/`mul`
+  (including unary minus, `op=` on locals, fields, and elements, and
+  `++`/`--`) becomes `add nsw` etc., so signed overflow is undefined and
+  LLVM may widen `i32` induction variables to 64 bits and fold
+  `(a + 1) - 1`. Division and remainder have no `nsw` form, and the
+  compiler's own `i64` index, length, and allocator arithmetic is never
+  flagged (`opt_nsw.ll` is checked for both facts). The default stays
+  wrapping, which is the documented language semantics.
+- **`--target`** (WP9): `targetHeader` writes `target datalayout` and
+  `target triple` after `source_filename`, from the table in
+  `codegen/target.ts` (strings copied from `clang --target=<triple> -S
+  -emit-llvm`); a mismatch with the layout clang applies at link time is a
+  hard error, never a silent miscompilation. Without the flag the module is
+  target-neutral and `opt`/`llc` assume a generic layout with no vector
+  registers, which is why the WP1 vectorisation test needs `-mtriple` and
+  the WP9 one (`opt_target_triple`) does not.
+- **`noalias` on struct parameters** under an aliasing rule was considered
+  for WP9 and left out: the parameters that would gain it point at objects
+  LLVM already cannot tell apart, and the escape analysis above (distinct
+  `alloca`s) is what recovered the benchmarks that needed provenance
+  ([wp9-optimisation.md](wp9-optimisation.md)).
 
 ## Build profiles
 
@@ -276,13 +362,22 @@ as one unit, so `sts_str_len` inlines into a load and unreferenced runtime
 functions vanish. `CC` overrides the compiler; `NODE_INCLUDE` overrides the
 Node header directory for `napi`.
 
+Profile-guided optimisation (WP9): `--pgo-generate` adds
+`-fprofile-generate` to the `speed`, `size`, and `napi` profiles and
+`--pgo-use <file.profdata>` adds `-fprofile-use=<file>` (a missing file is
+refused with a hint). The recipe (instrumented link, training runs with
+`LLVM_PROFILE_FILE`, `llvm-profdata merge`, final link) and what it bought
+on the suite are in [wp9-optimisation.md](wp9-optimisation.md); the
+instrumented link needs the compiler-rt profile runtime
+(`libclang-rt-18-dev` on Ubuntu).
+
 `scripts/size-report.sh [--markdown] [module.ll] [driver.c]` prints one row
 per profile; CI attaches it to every run.
 
 ## Test harness
 
 `npm test` builds `dist/` and runs `tests/run.js`, which prints one
-`PASS`/`FAIL` line per check (466 at the time of writing) and skips the
+`PASS`/`FAIL` line per check (several hundred) and skips the
 toolchain-dependent steps when LLVM is not installed:
 
 - **Golden cases** (`tests/cases/<name>.ts`): compile with the flags in
@@ -304,18 +399,47 @@ toolchain-dependent steps when LLVM is not installed:
   size profile, wasm profile), **interop** (WP8), **validator** timing
   (under 50 ms on a synthetic 1,000-line file), **exit codes** and
   **packaging** (WP12).
-
-<!-- TODO(WP13): describe the differential-testing harness (StaticTS vs Node on generated programs) once WP13 lands. -->
+- **Memory** (WP6): every `mem_*` module passes `opt -passes=verify`;
+  `mem_stack_struct.ll` contains five `alloca %struct.*` objects and no
+  `sts_alloc_struct` or arena prelude; the same source with
+  `--no-stack-alloc` is back in the arena and prints the same output;
+  `mem_scope_dynamic_array` prints identical `Arena.used()` values before
+  and after 100000 scoped calls.
+- **Optimisation flags** (WP9): `opt -O2` vectorises `opt_target_triple.ll`
+  *without* `-mtriple`; `--target host` resolves to this machine's triple and
+  an unknown triple is a usage error listing the supported ones; every
+  user-level `i32` `add`/`sub`/`mul` in `opt_nsw.ll` carries `nsw` and no
+  internal `i64` arithmetic does, while a default build contains no `nsw`
+  at all; `bench/run.mjs --validate` builds `fib` and `sieve` at small sizes
+  in every variant (speed, `--nsw`, size, C, Rust) and requires identical
+  checksums (Rust is skipped without `rustc`).
+- **Differential** (WP13, needs clang): `tests/differential/run.js --quick`
+  compiles every whole program in `tests/cases` (those with
+  `export function main` and no `.err`) and the 50-program corpus with
+  `--link`, runs the binary, rewrites the same program to JavaScript with
+  `tests/differential/rewrite.js` (the checker's recorded types choose the
+  rewrite: `(a + b) | 0` and `Math.imul` for `i32`, `BigInt.asIntN(64, ...)`
+  for `i64`, `__sts.idx` for bounds checks, byte lengths, saturating
+  conversions), runs it under Node with `runtime/shim.mjs`, and compares
+  stdout, exit status, and signal byte for byte. Programs listed in
+  `tests/differential/known-failures.txt` (libm 1-ulp differences,
+  `minnum`/`maxnum` with NaN, `Math.round(-0)`, the division panics, raw
+  `Arena.used()` prints) are reported but do not fail. A second check runs
+  `tests/differential/fuzz.js` on 10 random integer/boolean programs with a
+  fixed seed; the seed is printed so a failure reproduces with
+  `--seed <s> --count 1`. `npm run test:diff` runs the full set and
+  `node tests/differential/fuzz.js --count 200` a larger batch
+  ([wp13-differential.md](wp13-differential.md)).
 
 ## Repository layout
 
 | Path | Contents |
 | --- | --- |
 | `src/` | the compiler (see the pipeline table) |
-| `runtime/` | `runtime.c`, `statictsc.h` |
+| `runtime/` | `runtime.c`, `statictsc.h`, `shim.mjs` (the Node-side runtime for the differential tests) |
 | `scripts/` | `build.sh`, `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
-| `tests/` | `run.js`, `cases/`, `link/`, `ir/`, `layout/`, `runtime_test.c`, `driver.c` |
-| `examples/` | `add.ts`, `hello.ts`, `math.ts`, `strings.ts`, `multi/`, `main.c`, `node-host.mjs`, `node-addon.mjs` |
-| `bench/` | `fib.ts`/`fib.c`, `sum.ts`, `ffi.mjs` |
+| `tests/` | `run.js`, `cases/`, `link/`, `ir/`, `layout/`, `differential/` (`run.js`, `lib.js`, `rewrite.js`, `fuzz.js`, `corpus/`, `known-failures.txt`), `runtime_test.c`, `driver.c` |
+| `examples/` | `add.ts`, `hello.ts`, `math.ts`, `strings.ts`, `nbody.ts`, `multi/`, `main.c`, `node-host.mjs`, `node-addon.mjs` |
+| `bench/` | `run.mjs`, `README.md`, `{fib,nbody,spectral,sieve,strbuild,vec3}.{ts,c,rs}`, `strbuild_naive.c`, `rss.c`; `sum.ts` and `ffi.mjs` (the WP8 FFI benchmark) |
 | `docs/` | this documentation; `docs/README.md` is the index |
 | `.github/workflows/` | `ci.yml` (Ubuntu + macOS, LLVM 18), `release.yml` (tag-driven tarball) |

@@ -85,8 +85,15 @@ const checkStrictEquality: BinaryChecker = (ctx, expr, scope) => {
   const lhs = ctx.checkExpression(expr.left, scope);
   const rhs = ctx.checkExpression(expr.right, scope);
   if (!sameType(lhs, rhs) || lhs.kind === "void") {
+    const op = ts.tokenToString(expr.operatorToken.kind);
+    if (lhs.kind === "nullable" || rhs.kind === "nullable") {
+      throw ctx.error(
+        `Cannot compare ${typeToString(lhs)} with ${typeToString(rhs)} using \`${op}\`; check the nullable side against \`null\` first, then compare the narrowed values`,
+        expr
+      );
+    }
     throw ctx.error(
-      `Operator \`${ts.tokenToString(expr.operatorToken.kind)}\` requires two operands of the same primitive type, got ${typeToString(lhs)} and ${typeToString(rhs)}`,
+      `Operator \`${op}\` requires two operands of the same type, got ${typeToString(lhs)} and ${typeToString(rhs)}`,
       expr
     );
   }

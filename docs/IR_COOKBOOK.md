@@ -32,20 +32,20 @@ sentence each:
 | Attribute | Meaning |
 | --- | --- |
 | `nounwind` | The function never unwinds: StaticTS has no exceptions, and `throw` traps instead. |
-| `willreturn` | The function always returns to its caller: every loop is a counted loop, there is no `throw`, nothing reachable calls `process.exit` or a checked `a[i]`, and every callee is `willreturn` too. |
+| `willreturn` | The function always returns to its caller: every loop is a counted loop, there is no `throw`, nothing reachable calls `process.exit`, a checked `a[i]`, or an integer `/` / `%` (whose divisor check can panic), and every callee is `willreturn` too. |
 | `readnone` | The function touches no memory except its own stack slots and calls only `readnone` callees (LLVM 16+ reads it as `memory(none)`). |
 | `readonly` (function) | As `readnone`, except the body reads memory it does not own: a string or array header, a field, an element, or a reading callee such as `sts_str_eq`. |
 | `memory(argmem: read)` | On a runtime `declare`: the callee reads only through its pointer arguments. |
-| `noreturn` | The callee never returns (`sts_exit`, `sts_panic_index`); the call is followed by `unreachable`. |
+| `noreturn` | The callee never returns (`sts_exit`, `sts_panic_index`, `sts_panic_div`); the call is followed by `unreachable`. |
 | `cold` | The callee runs rarely (arena growth, a bounds-check failure); LLVM moves the call path out of the hot code. |
 | `noinline` | Never inline the callee (`sts_arena_grow`), so the slow path stays out of the caller. |
 | `alwaysinline` | Always inline the callee: the arena fast path `@sts_alloc_struct` becomes a few instructions in every caller. |
 | `allocsize(0)` | The first argument is the size in bytes of the allocation the function returns, so LLVM can reason about the object's extent. |
 | `noundef` | The value is never `undef` or `poison`: every StaticTS value is initialised. |
 | `zeroext` | An `i1` (`boolean`) is zero-extended in a register, matching the C ABI for `bool`. |
-| `nonnull` | The pointer is never null: StaticTS has no null value. |
+| `nonnull` | The pointer is never null: only a `T \| null` parameter or return can be, and those do not carry it. |
 | `align 8` (param/return) | The pointee is 8-byte aligned: string literals, arena strings, array headers and objects all are. |
-| `dereferenceable(N)` | At least `N` bytes can be read through the pointer: `sizeof` of the struct the parameter points at. |
+| `dereferenceable(N)` | At least `N` bytes can be read through the pointer: `sizeof` of the struct the parameter points at, or `24` (the header) for an array. Never on a `T \| null`. |
 | `readonly` (param) | The function never writes through this pointer: strings are immutable; a struct or array parameter that is never stored through, never escapes, and is only passed on to `readonly` parameters. |
 | `noalias` (param) | No other pointer the function can see modifies the same memory: always true for immutable strings, and for the fresh `%this` of a constructor. |
 | `noalias` (return) | The returned pointer aliases nothing the caller already holds: a fresh arena allocation. |
@@ -55,6 +55,7 @@ sentence each:
 | `align 4` / `align 8` on `alloca`, `load`, `store` | The natural alignment of the type, as clang and rustc emit. |
 | `inbounds` on `getelementptr` | The computed address stays inside the object (field or element access on a valid pointer). |
 | `immarg` | The operand must be a constant (the `isvolatile` flag of `llvm.memset`). |
+| `nsw` (flag on `add`/`sub`/`mul`) | Only with `--nsw`: signed overflow is undefined, so LLVM may assume it never happens. Never on the compiler's own index and length arithmetic. |
 
 `--plain` drops every attribute and alignment hint and produces the bare
 form shown under [Functions](#functions).
@@ -1072,6 +1073,49 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end expr_compound -->
 
+### Checked integer division
+
+`/` and `%` on `i32` / `i64` test the divisor before dividing: a zero
+divisor or `MIN / -1` branches to the cold `div.fail` block, which calls the
+`noreturn` `sts_panic_div` (`attempt to divide by zero` when its `i1`
+argument is true, `attempt to divide with overflow` otherwise) and exits 1;
+`div.ok` holds the plain `sdiv`. Because the panic path exists the function
+is neither `willreturn` nor `readnone`. LLVM folds the check away for a
+constant divisor at `-O1`. `f64` division is a bare `fdiv`.
+
+<!-- cookbook:begin expr_div_checked -->
+```ts
+function div(a: number, b: number): number {
+  return a / b;
+}
+```
+
+```llvm
+declare void @sts_panic_div(i1 noundef zeroext) #1
+
+define noundef i32 @div(i32 noundef %a, i32 noundef %b) #0 {
+entry:
+  %0 = icmp eq i32 %b, 0
+  %1 = icmp eq i32 %a, -2147483648
+  %2 = icmp eq i32 %b, -1
+  %3 = and i1 %1, %2
+  %4 = or i1 %0, %3
+  br i1 %4, label %div.fail, label %div.ok
+
+div.fail:
+  call void @sts_panic_div(i1 zeroext %0)
+  unreachable
+
+div.ok:
+  %5 = sdiv i32 %a, %b
+  ret i32 %5
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }
+```
+<!-- cookbook:end expr_div_checked -->
+
 ## Strings
 
 ### Literals
@@ -1800,6 +1844,513 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end cls_interface -->
 
+## Memory
+
+### A stack-allocated object
+
+An object (or object literal, or array literal) whose value provably never
+outlives its function is an entry-block `alloca` instead of an arena bump
+([LANGUAGE.md: Memory model](LANGUAGE.md#memory-model)). `swapped` only
+reads and writes its own `%Pair.obj`, so it is `readnone`; `nearest` runs
+the constructor on `%Point.obj` and inherits its `write` effect. Nothing in
+the module touches the arena, so there is no arena prelude at all.
+
+<!-- cookbook:begin mem_stack_object -->
+```ts
+interface Pair {
+  first: number;
+  second: number;
+}
+
+class Point {
+  x: number;
+  y: number;
+
+  constructor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+  }
+
+  manhattan(): number {
+    return this.x + this.y;
+  }
+}
+
+// An object literal that is only read: the function's own memory, so `readnone`.
+function swapped(a: number, b: number): number {
+  const p: Pair = { first: b, second: a };
+  return p.first * 10 + p.second;
+}
+
+// A constructed object that never escapes: an alloca, the constructor writes through it.
+function nearest(x: number): number {
+  const p = new Point(x, 4);
+  return p.manhattan();
+}
+```
+
+```llvm
+%struct.Pair = type { i32, i32 }
+%struct.Point = type { i32, i32 }
+
+define void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
+  store i32 %x, i32* %0, align 4
+  %1 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
+  store i32 %y, i32* %1, align 4
+  ret void
+}
+
+define noundef i32 @Point.manhattan(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4
+  %2 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
+  %3 = load i32, i32* %2, align 4
+  %4 = add i32 %1, %3
+  ret i32 %4
+}
+
+define noundef i32 @swapped(i32 noundef %a, i32 noundef %b) #2 {
+entry:
+  %p.addr = alloca %struct.Pair*, align 8
+  %Pair.obj = alloca %struct.Pair, align 8
+  %0 = getelementptr inbounds %struct.Pair, %struct.Pair* %Pair.obj, i32 0, i32 0
+  store i32 %b, i32* %0, align 4
+  %1 = getelementptr inbounds %struct.Pair, %struct.Pair* %Pair.obj, i32 0, i32 1
+  store i32 %a, i32* %1, align 4
+  store %struct.Pair* %Pair.obj, %struct.Pair** %p.addr, align 8
+  %2 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
+  %3 = getelementptr inbounds %struct.Pair, %struct.Pair* %2, i32 0, i32 0
+  %4 = load i32, i32* %3, align 4
+  %5 = mul i32 %4, 10
+  %6 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
+  %7 = getelementptr inbounds %struct.Pair, %struct.Pair* %6, i32 0, i32 1
+  %8 = load i32, i32* %7, align 4
+  %9 = add i32 %5, %8
+  ret i32 %9
+}
+
+define noundef i32 @nearest(i32 noundef %x) #0 {
+entry:
+  %p.addr = alloca %struct.Point*, align 8
+  %Point.obj = alloca %struct.Point, align 8
+  call void @Point.constructor(%struct.Point* %Point.obj, i32 %x, i32 4)
+  store %struct.Point* %Point.obj, %struct.Point** %p.addr, align 8
+  %0 = load %struct.Point*, %struct.Point** %p.addr, align 8
+  %1 = call i32 @Point.manhattan(%struct.Point* %0)
+  ret i32 %1
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readonly }
+attributes #2 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end mem_stack_object -->
+
+### The same module with `--no-stack-alloc`
+
+Every object is bumped from the arena by the inlined allocator, and because
+each one still dies with its function, both functions get an automatic
+arena scope: `sts_arena_mark` after the allocas, `sts_arena_release` before
+the `ret`. This is the IR every `new` produced before WP6.
+
+<!-- cookbook:begin mem_stack_object_arena -->
+Compiled with `--no-stack-alloc`.
+
+```ts
+interface Pair {
+  first: number;
+  second: number;
+}
+
+class Point {
+  x: number;
+  y: number;
+
+  constructor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+  }
+
+  manhattan(): number {
+    return this.x + this.y;
+  }
+}
+
+// An object literal that is only read: the function's own memory, so `readnone`.
+function swapped(a: number, b: number): number {
+  const p: Pair = { first: b, second: a };
+  return p.first * 10 + p.second;
+}
+
+// A constructed object that never escapes: an alloca, the constructor writes through it.
+function nearest(x: number): number {
+  const p = new Point(x, 4);
+  return p.manhattan();
+}
+```
+
+```llvm
+%struct.Pair = type { i32, i32 }
+%struct.Point = type { i32, i32 }
+%struct.sts_arena = type { i8*, i64, i64, i8* }
+
+@sts_arena = external global %struct.sts_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #2
+declare noundef i64 @sts_arena_mark() #0
+declare void @sts_arena_release(i64 noundef) #0
+
+define internal noalias noundef nonnull align 8 i8* @sts_alloc_struct(i64 noundef %size) #3 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @sts_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
+  store i32 %x, i32* %0, align 4
+  %1 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
+  store i32 %y, i32* %1, align 4
+  ret void
+}
+
+define noundef i32 @Point.manhattan(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4
+  %2 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
+  %3 = load i32, i32* %2, align 4
+  %4 = add i32 %1, %3
+  ret i32 %4
+}
+
+define noundef i32 @swapped(i32 noundef %a, i32 noundef %b) #0 {
+entry:
+  %p.addr = alloca %struct.Pair*, align 8
+  %arena.mark = call i64 @sts_arena_mark()
+  %0 = call i8* @sts_alloc_struct(i64 8)
+  %1 = bitcast i8* %0 to %struct.Pair*
+  %2 = getelementptr inbounds %struct.Pair, %struct.Pair* %1, i32 0, i32 0
+  store i32 %b, i32* %2, align 4
+  %3 = getelementptr inbounds %struct.Pair, %struct.Pair* %1, i32 0, i32 1
+  store i32 %a, i32* %3, align 4
+  store %struct.Pair* %1, %struct.Pair** %p.addr, align 8
+  %4 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
+  %5 = getelementptr inbounds %struct.Pair, %struct.Pair* %4, i32 0, i32 0
+  %6 = load i32, i32* %5, align 4
+  %7 = mul i32 %6, 10
+  %8 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
+  %9 = getelementptr inbounds %struct.Pair, %struct.Pair* %8, i32 0, i32 1
+  %10 = load i32, i32* %9, align 4
+  %11 = add i32 %7, %10
+  call void @sts_arena_release(i64 %arena.mark)
+  ret i32 %11
+}
+
+define noundef i32 @nearest(i32 noundef %x) #0 {
+entry:
+  %p.addr = alloca %struct.Point*, align 8
+  %arena.mark = call i64 @sts_arena_mark()
+  %0 = call i8* @sts_alloc_struct(i64 8)
+  %1 = bitcast i8* %0 to %struct.Point*
+  call void @Point.constructor(%struct.Point* %1, i32 %x, i32 4)
+  store %struct.Point* %1, %struct.Point** %p.addr, align 8
+  %2 = load %struct.Point*, %struct.Point** %p.addr, align 8
+  %3 = call i32 @Point.manhattan(%struct.Point* %2)
+  call void @sts_arena_release(i64 %arena.mark)
+  ret i32 %3
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readonly }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+```
+<!-- cookbook:end mem_stack_object_arena -->
+
+### An arena-scoped function
+
+A string built by `+` is an arena temporary that cannot go on the stack. In
+`greet` it dies with the call (it is only printed), so the function marks
+the arena on entry and releases it before returning: called a million
+times, `Arena.used()` stays flat. `label` returns its template, so the
+caller owns that memory and `label` gets no scope.
+
+<!-- cookbook:begin mem_arena_scope -->
+```ts
+// The concatenation is an arena temporary that dies with the call, so the
+// function marks the arena on entry and releases it before returning.
+function greet(name: string): void {
+  console.log("hello, " + name + "!");
+}
+
+// The template is returned, so the caller owns it: no scope here.
+function label(name: string): string {
+  return `<${name}>`;
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"hello, \00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"!\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"<\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c">\00" }, align 8
+
+declare noundef i64 @sts_arena_mark() #0
+declare void @sts_arena_release(i64 noundef) #0
+declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define void @greet(i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
+entry:
+  %arena.mark = call i64 @sts_arena_mark()
+  %0 = call i8* @sts_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.0 to i8*), i8* %name)
+  %1 = call i8* @sts_str_concat(i8* %0, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  call void @sts_print(i8* %1)
+  call void @sts_arena_release(i64 %arena.mark)
+  ret void
+}
+
+define noundef nonnull align 8 i8* @label(i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
+entry:
+  %0 = call i8* @sts_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), i8* %name)
+  %1 = call i8* @sts_str_concat(i8* %0, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
+  ret i8* %1
+}
+
+attributes #0 = { nounwind willreturn }
+```
+<!-- cookbook:end mem_arena_scope -->
+
+### `Arena.mark` / `release` / `used` / `reset`
+
+The explicit builtins lower to one runtime call each. `measure` calls
+`Arena.release` itself, so the compiler never wraps it in an automatic
+scope (its own mark would be invalidated by the user's release); the
+8000-byte `new Array<number>(2000)` is over the 4096-byte stack cap, so it
+is an arena allocation that the release reclaims.
+
+<!-- cookbook:begin mem_arena_builtins -->
+```ts
+function measure(): i64 {
+  const m = Arena.mark();
+  const xs = new Array<number>(2000); // 8000 bytes: over the 4096-byte stack cap, so arena
+  const used = Arena.used();
+  Arena.release(m);
+  return used + toI64(xs.length);
+}
+
+function recycle(): void {
+  Arena.reset();
+}
+```
+
+```llvm
+%struct.sts_array = type { i64, i64, i8* }
+%struct.sts_arena = type { i8*, i64, i64, i8* }
+
+@sts_arena = external global %struct.sts_arena, align 8
+
+declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #1
+declare void @sts_reset_arena() #0
+declare noundef i64 @sts_arena_mark() #0
+declare void @sts_arena_release(i64 noundef) #0
+declare noundef i64 @sts_arena_used() #0
+
+define internal noalias noundef nonnull align 8 i8* @sts_alloc_struct(i64 noundef %size) #2 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @sts_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define noundef i64 @measure() #0 {
+entry:
+  %m.addr = alloca i64, align 8
+  %xs.addr = alloca %struct.sts_array*, align 8
+  %used.addr = alloca i64, align 8
+  %0 = call i64 @sts_arena_mark()
+  store i64 %0, i64* %m.addr, align 8
+  %1 = call i8* @sts_alloc_struct(i64 24)
+  %2 = bitcast i8* %1 to %struct.sts_array*
+  %3 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %2, i64 0, i32 0
+  store i64 2000, i64* %3, align 8
+  %4 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %2, i64 0, i32 1
+  store i64 2000, i64* %4, align 8
+  %5 = mul i64 2000, 4
+  %6 = call i8* @sts_alloc_struct(i64 %5)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %6, i8 0, i64 %5, i1 false)
+  %7 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %2, i64 0, i32 2
+  store i8* %6, i8** %7, align 8
+  store %struct.sts_array* %2, %struct.sts_array** %xs.addr, align 8
+  %8 = call i64 @sts_arena_used()
+  store i64 %8, i64* %used.addr, align 8
+  %9 = load i64, i64* %m.addr, align 8
+  call void @sts_arena_release(i64 %9)
+  %10 = load i64, i64* %used.addr, align 8
+  %11 = load %struct.sts_array*, %struct.sts_array** %xs.addr, align 8
+  %12 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %11, i64 0, i32 0
+  %13 = load i64, i64* %12, align 8
+  %14 = trunc i64 %13 to i32
+  %15 = sext i32 %14 to i64
+  %16 = add i64 %10, %15
+  ret i64 %16
+}
+
+define void @recycle() #0 {
+entry:
+  call void @sts_reset_arena()
+  ret void
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
+```
+<!-- cookbook:end mem_arena_builtins -->
+
+### `T | null` and narrowing
+
+A nullable value is the same pointer type as `T`; `null` is the constant
+`null` and the tests are `icmp eq` / `icmp ne` against it. Narrowing costs
+nothing at run time: inside the guarded region the checker simply reads the
+variable as `T`. Nullable parameters and returns lose `nonnull` and
+`dereferenceable` but keep `align 8`, `readonly`, and `nocapture` where the
+usual rules allow them.
+
+<!-- cookbook:begin mem_nullable -->
+```ts
+class Node {
+  value: number;
+  next: Node | null = null;
+
+  constructor(value: number) {
+    this.value = value;
+  }
+}
+
+function valueOr(n: Node | null, fallback: number): number {
+  return n !== null ? n.value : fallback;
+}
+
+function sum(head: Node | null): number {
+  let total = 0;
+  let cur: Node | null = head;
+  while (cur !== null) {
+    total += cur.value;
+    cur = cur.next;
+  }
+  return total;
+}
+```
+
+```llvm
+%struct.Node = type { i32, %struct.Node* }
+
+define void @Node.constructor(%struct.Node* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %value) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Node, %struct.Node* %this, i32 0, i32 1
+  store %struct.Node* null, %struct.Node** %0, align 8
+  %1 = getelementptr inbounds %struct.Node, %struct.Node* %this, i32 0, i32 0
+  store i32 %value, i32* %1, align 4
+  ret void
+}
+
+define noundef i32 @valueOr(%struct.Node* noundef readonly align 8 nocapture %n, i32 noundef %fallback) #1 {
+entry:
+  %0 = icmp ne %struct.Node* %n, null
+  br i1 %0, label %cond.true, label %cond.false
+
+cond.true:
+  %1 = getelementptr inbounds %struct.Node, %struct.Node* %n, i32 0, i32 0
+  %2 = load i32, i32* %1, align 4
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %3 = phi i32 [ %2, %cond.true ], [ %fallback, %cond.false ]
+  ret i32 %3
+}
+
+define noundef i32 @sum(%struct.Node* noundef align 8 %head) #2 {
+entry:
+  %total.addr = alloca i32, align 4
+  %cur.addr = alloca %struct.Node*, align 8
+  store i32 0, i32* %total.addr, align 4
+  store %struct.Node* %head, %struct.Node** %cur.addr, align 8
+  br label %while.cond
+
+while.cond:
+  %0 = load %struct.Node*, %struct.Node** %cur.addr, align 8
+  %1 = icmp ne %struct.Node* %0, null
+  br i1 %1, label %while.body, label %while.end
+
+while.body:
+  %2 = load i32, i32* %total.addr, align 4
+  %3 = load %struct.Node*, %struct.Node** %cur.addr, align 8
+  %4 = getelementptr inbounds %struct.Node, %struct.Node* %3, i32 0, i32 0
+  %5 = load i32, i32* %4, align 4
+  %6 = add i32 %2, %5
+  store i32 %6, i32* %total.addr, align 4
+  %7 = load %struct.Node*, %struct.Node** %cur.addr, align 8
+  %8 = getelementptr inbounds %struct.Node, %struct.Node* %7, i32 0, i32 1
+  %9 = load %struct.Node*, %struct.Node** %8, align 8
+  store %struct.Node* %9, %struct.Node** %cur.addr, align 8
+  br label %while.cond
+
+while.end:
+  %10 = load i32, i32* %total.addr, align 4
+  ret i32 %10
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readonly }
+attributes #2 = { nounwind readonly }
+```
+<!-- cookbook:end mem_nullable -->
+
 ## Builtins
 
 ### `Math.*` on `f64`
@@ -2032,6 +2583,72 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 ```
 <!-- cookbook:end builtin_files -->
+
+## Optimisation flags
+
+### `--nsw`
+
+Every user-level integer `add`, `sub`, and `mul` (binary operators, unary
+minus, `op=`, `++`/`--`) carries `nsw`: signed overflow becomes undefined
+behaviour, as in C, and LLVM may widen induction variables and fold
+`(a + 1) - 1`. Division and remainder have no `nsw` form and the compiler's
+own index and length arithmetic is never flagged. The default emits no
+`nsw` at all (wrapping, as in Rust release builds).
+
+<!-- cookbook:begin opt_nsw -->
+Compiled with `--nsw`.
+
+```ts
+function poly(x: number, y: number): number {
+  return x * x - 3 * y + -x;
+}
+```
+
+```llvm
+define noundef i32 @poly(i32 noundef %x, i32 noundef %y) #0 {
+entry:
+  %0 = mul nsw i32 %x, %x
+  %1 = mul nsw i32 3, %y
+  %2 = sub nsw i32 %0, %1
+  %3 = sub nsw i32 0, %x
+  %4 = add nsw i32 %2, %3
+  ret i32 %4
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end opt_nsw -->
+
+### `--target`
+
+The module carries `target datalayout` and `target triple` (the strings
+clang 18 emits for that triple), so `opt -O2 -S` and `llc` see the real
+pointer size, alignments, and vector width without `-mtriple`. Without the
+flag the module is target-neutral and clang fills both in at link time.
+`--target host` picks the running machine's triple.
+
+<!-- cookbook:begin opt_target -->
+Compiled with `--target x86_64-unknown-linux-gnu`.
+
+```ts
+function add(a: number, b: number): number {
+  return a + b;
+}
+```
+
+```llvm
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-unknown-linux-gnu"
+
+define noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
+entry:
+  %0 = add i32 %a, %b
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end opt_target -->
 
 ## The runtime prelude
 

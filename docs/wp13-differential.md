@@ -123,8 +123,9 @@ These are language decisions, documented elsewhere, that the shim reproduces
 so they do not show up as mismatches (or, for the last three, that stay
 visible as known failures):
 
-- **`number` is a wrapping 32-bit integer** in the default mode (README,
-  "Lowering rules"). `2147483647 + 1` is `-2147483648`, `46341 * 46341` wraps,
+- **`number` is a wrapping 32-bit integer** in the default mode
+  ([LANGUAGE.md, Semantics decisions](LANGUAGE.md#semantics-decisions)).
+  `2147483647 + 1` is `-2147483648`, `46341 * 46341` wraps,
   `7 / 2` is `3`, `-7 / 2` is `-3`, `-7 % 3` is `-1`.
 - **`i64` wraps at 64 bits**; literals are typed by context (docs/wp7-runtime.md).
 - **`s.length` is the UTF-8 byte length** (docs/wp3-strings.md): `"héllo".length`
@@ -167,6 +168,14 @@ semantic gaps between "what JavaScript does" and "what the compiled code
 does" that the documentation did not cover. None was fixed here (WP13 does
 not touch compiler sources); each is a known failure with a corpus
 reproducer.
+
+*Since this note was written:* (1) is fixed, `Math.pow` now follows
+ECMAScript and `f64_pow_spec` agrees with Node; (2) and (3) are resolved by
+checked integer division, which panics (`attempt to divide with overflow`
+/ `attempt to divide by zero`, exit 1) instead of executing undefined
+`sdiv`/`srem`. The two division programs stay in `known-failures.txt` as
+by-design differences from JavaScript's `0`
+([LANGUAGE.md: Checked integer division](LANGUAGE.md#checked-integer-division)).
 
 ### 1. `Math.pow(±1, ±Infinity)` and `Math.pow(1, NaN)` return 1, not NaN
 
@@ -328,6 +337,8 @@ completed with 0 mismatches and 0 compile errors (52 s on 4 cores). The
 - **stderr comparison.** The panic and I/O messages match today, but stderr
   is not part of the language, so it is not compared.
 - **A rewrite of `a[k++]`.** Not needed: the validator rejects it.
-- **Fixing the three discrepancies.** They are in `src/codegen/emit/math.ts`
+- **Fixing the three discrepancies.** They were in `src/codegen/emit/math.ts`
   (`pow`) and `src/codegen/emit/expressions.ts` (`sdiv`/`srem`), owned by
-  other packages; the known-failure entries keep them visible until then.
+  other packages; all three were addressed afterwards (see the note under
+  "Discrepancies found"), with `emit/arithmetic.ts` now holding the checked
+  division.

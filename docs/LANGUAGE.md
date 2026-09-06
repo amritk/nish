@@ -20,9 +20,10 @@ Conventions:
 - The exact IR for each construct is in [IR_COOKBOOK.md](IR_COOKBOOK.md).
 
 Contents: [Lexical rules](#lexical-rules) · [Types](#types) ·
-[Declarations](#declarations) · [Statements](#statements) ·
-[Expressions](#expressions) · [Builtins](#builtins) ·
-[Semantics decisions](#semantics-decisions) ·
+[Nullable types](#nullable-types) · [Declarations](#declarations) ·
+[Statements](#statements) · [Expressions](#expressions) ·
+[Builtins](#builtins) · [Semantics decisions](#semantics-decisions) ·
+[Memory model](#memory-model) ·
 [Forbidden constructs](#forbidden-constructs-phase-0-validator) ·
 [Rejected by the checker](#rejected-by-the-checker) ·
 [Known inconsistencies](#known-inconsistencies)
@@ -43,20 +44,20 @@ in TypeScript. Syntax errors are reported as `syntax error:` in the same
   mode a literal must have an integral value: `1.5` is rejected with
   `Non-integer literal` (`tests/cases/reject_float_in_i32`); `1.0`, `1e3`
   are integral and accepted *(CLI only)*. A literal above `2147483647` is
-  rejected with ``Literal `...` does not fit in i32`` *(CLI only)*; note
-  that `-2147483648` is also rejected because the check runs on the
-  unsigned literal before negation (see
-  [Known inconsistencies](#known-inconsistencies)).
+  rejected with ``Literal `...` does not fit in i32`` *(CLI only)*; the
+  directly negated literal `-2147483648` is accepted and is `INT_MIN`
+  (`tests/cases/int_min_literal`).
 - **String literals.** `"..."`, `'...'`, and `` `...` `` without holes are
   all plain string literals; `` `...${x}...` `` is a template literal
   (`tests/cases/str_literal`, `str_template`). TypeScript escapes (`\n`,
   `\"`, `\\`, `\u...`) are decoded by the parser and re-encoded as UTF-8
   (`tests/cases/str_escape`).
 - **Boolean literals** `true`, `false` (`tests/cases/cf_logical`).
-- **`null` and `undefined`** are not values today: `null` is rejected as
-  `Unsupported expression in Phase 1: NullKeyword` *(CLI only)* and
-  `undefined` with `` `undefined` is forbidden `` (`tests/cases/reject_undefined_value`).
-  `T | null` is reserved for WP6.
+- **`null`** is a value only where a `T | null` type is expected (see
+  [Nullable types](#nullable-types)); with no contextual type it is
+  `` `null` needs a contextual `T | null` type `` *(CLI only)*.
+  **`undefined`** is forbidden (`` `undefined` is forbidden in StaticTS; use `null` with a `T | null` type ``,
+  `tests/cases/reject_undefined_value`).
 - **Bigint** literals (`10n`) and regex literals are forbidden
   (`tests/cases/reject_bigint_literal`, `reject_regex`).
 - **Reserved prefix.** Function, class, and interface names starting with
@@ -81,7 +82,8 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 | `boolean` | `i1` | 1 / 1 | `bool` | `zeroext` at the ABI boundary. |
 | `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }` | 8 / 8 (pointer) | `const sts_str *` in, `sts_str *` out | Immutable, 8-aligned, NUL-terminated (so `data` is a C string; sharing a pointer is always safe, nothing is ever copied); literals are module constants, everything else lives in the arena; `len` is the UTF-8 byte length. |
 | `T[]`, `Array<T>` | `%struct.sts_array*` to `{ i64 len, i64 cap, i8* data }` | 8 / 8 (pointer); header 24 bytes | (not representable) | One element type; `data` holds `cap` elements of `sizeof(T)`; bounds-checked. |
-| `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena-allocated, no header, no vtable. |
+| `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
+| `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, and narrowing: [Nullable types](#nullable-types). |
 | `void` | `void` | – | `void` | Return type only. |
 
 Sources: `src/types.ts` (`llvmType`, `alignOf`), `src/interop/abi.ts`
@@ -97,8 +99,10 @@ Type rules:
   interface declared or imported in the module. Anything else is
   `` Unsupported type `...` `` / `` Unsupported type reference `...` ``
   (`src/types.ts`; `tests/cases/reject_union_type`, `reject_function_type`).
-  `T | null` is accepted by the validator but not yet by the checker
-  (WP6).
+  `T | null` (or `null | T`) is accepted when `T` is a class, interface,
+  array, or string; a scalar is
+  `` `i32 | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value) ``
+  (`tests/cases/reject_nullable_scalar`).
 - **No implicit conversion.** `const y: f64 = x` with `x: number` in i32
   mode is `Cannot initialize f64 variable ... with i32` *(CLI only)*;
   `x + n` with `x: i64`, `n: number` is rejected
@@ -129,12 +133,64 @@ takes that type (`src/checker/math.ts`, `contextualLiteralType`;
 
 `-5` and `(5)` count as the literal. "Known type" means an already-checked
 left operand, a variable, or a call to a user function or to
-`toI32/toI64/toF64`. A literal in an integer context must be integral
+`toI32/toI64/toF64`. Only the literal's *immediate* context counts: in i32
+mode `const f: f64 = 0.1 + 0.2` is rejected because `0.1` is an operand of
+`+` whose other operand has no known type yet; write `const a: f64 = 0.1;
+const f = a + 0.2` *(CLI only)*. A literal in an integer context must be integral
 (`` Non-integer literal `1.5` where i64 is expected ``,
 `tests/cases/reject_i64_literal_float`); in an `i64` context it must also be
 at most 2^53 in magnitude (`` exceeds 2^53 and cannot be written exactly ``
 *(CLI only)*) because TypeScript's parser has already rounded larger
 literals to a double.
+
+### Nullable types
+
+`T | null` is available for `T` a class, interface, array, or string
+(`tests/cases/mem_nullable`; [wp6-memory.md](wp6-memory.md#4-t-null)). It
+is the same LLVM pointer type as `T` with the constant `null` as one more
+value, so nothing is boxed; `null` takes its type from context.
+
+- **Where `null` may appear**: an annotated initializer
+  (`let p: Node | null = null`), a field initializer (`next: Node | null = null`),
+  `return` in a function returning `T | null`, an argument, a field or
+  element store, an object literal property, `push`, and a ternary arm
+  (`c ? p : null` is `T | null`). A `T` is accepted wherever `T | null` is
+  expected; the reverse is `` `null` is not a Node; declare the type as `Node | null` ``
+  (`tests/cases/reject_null_to_nonnull`).
+- **`new Array<T | null>(n)`** is allowed: the zero fill *is* `null`
+  (`tests/cases/mem_nullable`).
+- **Comparison**: `p === null`, `p !== null`, `null === p` are pointer
+  compares (`icmp eq ... null`). Two nullable values cannot be compared with
+  each other (`` Cannot compare two `string | null` values; compare each with `null` ``,
+  `tests/cases/reject_null_compare_two`), and neither can a nullable and a
+  plain `T` *(CLI only)*: narrow first.
+- **Narrowing** (`src/checker/nullable.ts`): inside the region a condition
+  guards, a nullable *variable* (a local or parameter, never a property
+  path) reads as `T`:
+
+  | Form | Where `p` is `T` |
+  | --- | --- |
+  | `if (p !== null) A else B` | in `A`; and after the `if` when `B` cannot fall through |
+  | `if (p === null) A else B` | in `B`; and after the `if` when `A` cannot fall through (`return`, `throw`, `break`, `continue`, `process.exit`) |
+  | `while (p !== null) A`, `for (...; p !== null; ...) A` | in `A`, on every iteration |
+  | `p !== null && e`, `p === null \|\| e` | in `e` |
+  | `p !== null ? a : b` | in `a` (and in `b` for `=== null`) |
+  | `!cond`, `(cond)`, `a && b`, `a \|\| b` | composed as expected |
+
+  A narrowing ends at any assignment to the variable (`cur = cur.next` reads
+  the narrowed `cur` on the right and then drops it) and before a loop whose
+  body, condition, or update assigns the variable, because the second
+  iteration sees the assigned value (`tests/cases/reject_null_narrowing_assigned`;
+  `reject_null_narrowing_leaks` for a use after the guarded block).
+  Constants and parameters keep their narrowing for the whole region.
+  Property paths are not narrowed: `if (n.next !== null) n.next.v` is
+  rejected; copy into a local first *(CLI only)*.
+- **Access** to a field, method, element, or `.length` on an un-narrowed
+  nullable is `` Cannot read property `value` of `Node | null`; check for null first ``
+  (`tests/cases/reject_null_field_access`).
+- **Attributes**: a nullable parameter or return loses `nonnull` and
+  `dereferenceable`; `align 8`, `readonly` and `nocapture` follow the usual
+  rules ([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
 
 ## Declarations
 
@@ -482,12 +538,12 @@ under [Semantics decisions](#semantics-decisions).
 
 | Operator | Operand types | Result | Lowering | Test |
 | --- | --- | --- | --- | --- |
-| `+ - * / %` | two `i32`, two `i64`, or two `f64` (same type) | that type | `add sub mul sdiv srem` / `fadd fsub fmul fdiv frem`, no `nsw` | `add`, `locals`, `i64_basic`, `f64_mode`; `reject_type_mismatch` |
+| `+ - * / %` | two `i32`, two `i64`, or two `f64` (same type) | that type | `add sub mul` / `fadd fsub fmul fdiv frem`; no `nsw` unless `--nsw`; integer `sdiv` / `srem` are preceded by a divisor check that branches to `sts_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`; `reject_type_mismatch` |
 | `+` | two `string` | `string` | `sts_str_concat` | `str_concat`; `reject_str_plus_number` (`no implicit string conversion`) |
 | unary `-` | `i32`, `i64`, `f64` | same | `sub i32 0, x` / `sub i64 0, x` / `fneg double x` | `cf_if` (`-x`), `i64_basic`; `f64` *(CLI only)* |
 | unary `!` | `boolean` | `boolean` | `xor i1 x, true` | `cf_logical`; `!s` on a string is `` Unsupported unary operator `!` on string `` *(CLI only)* |
-| `< <= > >=` | two numbers of one type, or two booleans | `boolean` | `icmp slt ...` / `fcmp olt ...` | `cf_if`, `f64_mode`; strings rejected (`reject_str_lt`, `reject_str_lt_str`); structs rejected (`reject_cls_ordering`); see [Known inconsistencies](#known-inconsistencies) for booleans |
-| `=== !==` | any two values of the same type except `void` | `boolean` | integers and booleans: `icmp eq` / `icmp ne`; `f64`: `fcmp oeq` / `fcmp une` (so `x !== x` is true for NaN); strings: `sts_str_eq` (content); arrays and objects: `icmp eq` on the pointer (identity) | `str_eq`, `cls_this_method_call`, `conversions`; arrays *(CLI only)* |
+| `< <= > >=` | two numbers of one type (`i32`, `i64`, or `f64`); nothing else | `boolean` | `icmp slt ...` / `fcmp olt ...` | `cf_if`, `f64_mode`; booleans (`reject_bool_ordering`), strings (`reject_str_lt`, `reject_str_lt_str`), and structs (`reject_cls_ordering`) are `` Operator `<` requires two numeric operands, got boolean and boolean `` |
+| `=== !==` | any two values of the same type except `void`; a `T \| null` only against the literal `null` | `boolean` | integers and booleans: `icmp eq` / `icmp ne`; `f64`: `fcmp oeq` / `fcmp une` (so `x !== x` is true for NaN); strings: `sts_str_eq` (content); arrays and objects: `icmp eq` on the pointer (identity); `p === null`: `icmp eq` against `null` | `str_eq`, `cls_this_method_call`, `conversions`, `mem_nullable`; arrays *(CLI only)*; `reject_null_compare_two` |
 | `== !=` | – | – | forbidden | `reject_loose_equality`, `reject_loose_inequality` |
 | `&& \|\|` | two `boolean` | `boolean` | short-circuit: `br` + `phi` | `cf_logical`; `reject_cf_logical_numbers` (`requires boolean operands`) |
 | `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch` |
@@ -495,7 +551,26 @@ under [Semantics decisions](#semantics-decisions).
 | `x op= e` (`+= -= *= /= %=`) | numeric mutable local, numeric field, or numeric element; same type | the target's type | load, op, store | `cf_compound_assign`, `cls_compound_field`, `arr_index_read_write`; `reject_cf_compound_const` |
 | `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param` |
 | `,` | – | – | forbidden | `reject_comma_expression` |
-| `** & \| ^ << >> >>> ~ +x ?? in instanceof typeof delete void` | – | – | not supported / forbidden | `Unsupported binary operator` / `Unsupported unary operator` *(CLI only)*; `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression` |
+| `?? ?. in instanceof typeof delete void` | – | – | forbidden by the validator | `reject_nullish`, `reject_optional_chain`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression` |
+| `** & \| ^ << >> >>> ~ +x` | – | – | not supported | `Unsupported binary operator` / `Unsupported unary operator` *(CLI only)* |
+
+### Checked integer division
+
+`a / b` and `a % b` on `i32` or `i64` follow Rust, not C: the divisor is
+checked first, and a zero divisor or `MIN / -1` (`-2147483648 / -1`,
+`-9223372036854775808 / -1`, and the same for `%`) prints
+`attempt to divide by zero` or `attempt to divide with overflow` to stderr
+and exits with status 1 (`tests/cases/div_checked`, `div_zero_panic`,
+`div_overflow_panic`; `tests/differential/corpus/int_div_zero`,
+`int_div_overflow`). Otherwise the result is the truncating `sdiv` / `srem`:
+`-7 / 2` is `-3`, `-7 % 3` is `-1`, `-2147483648 / 1` is `-2147483648`. The
+check is two compares and a branch to a cold `div.fail` block that calls the
+`noreturn` `sts_panic_div`; because that path exists, a function containing
+an integer division is neither `willreturn` nor `readnone`, exactly like one
+containing a checked `a[i]`. The rule applies to `/`, `%`, `/=`, and `%=` on
+locals, fields, and elements, with constant divisors too (LLVM folds the
+check away at `-O1`). Floating-point division is never checked: `x / 0` on
+`f64` is `Infinity` and `0 / 0` is `NaN`.
 
 ### Calls
 
@@ -516,10 +591,13 @@ under [Semantics decisions](#semantics-decisions).
 
 ### `new`
 
-- `new C(args)` for a class: allocates `sizeof(C)` bytes in the arena and
-  runs the constructor (or the inline initializers) (`tests/cases/cls_point`).
-- `new Array<T>(n)`: `n` zero-filled elements, scalar `T` only, type
-  argument and length required (`tests/cases/arr_new_zeroed`;
+- `new C(args)` for a class: allocates `sizeof(C)` bytes in the arena, or
+  on the stack when the object provably does not escape
+  ([Memory model](#memory-model)), and runs the constructor (or the inline
+  initializers) (`tests/cases/cls_point`, `mem_stack_struct`).
+- `new Array<T>(n)`: `n` zero-filled elements; `T` must be a scalar or a
+  `U | null` (whose zero fill is `null`); type argument and length required
+  (`tests/cases/arr_new_zeroed`, `mem_nullable`;
   `reject_arr_new_string`: `` would zero-fill with null string values ``).
 - Anything else is `` Unsupported `new X` `` / `` Unknown class `X` ``;
   `new Function` and `new Proxy` are forbidden (`reject_new_function`,
@@ -532,10 +610,12 @@ under [Semantics decisions](#semantics-decisions).
 - `a.length` on an array: read-only (`tests/cases/arr_length`;
   `` Cannot assign to `length` of i32[] ``, `reject_arr_length_assign`).
 - `p.f` on a class or interface value (`tests/cases/cls_point`).
-- `Math.PI`, `Math.E` (`tests/cases/math_i32`). Any other bare identifier
-  before a dot is `` Unknown identifier `process` `` *(CLI only)*.
-- Optional chaining `?.` is currently accepted and treated as `.` (see
-  [Known inconsistencies](#known-inconsistencies)).
+- `Math.PI`, `Math.E` (`tests/cases/math_i32`); `Arena.*` (see [`Arena`](#arena)).
+  Any other bare identifier before a dot is `` Unknown identifier `process` ``
+  *(CLI only)*.
+- Member access on a `T | null` value requires narrowing first
+  ([Nullable types](#nullable-types)); `?.` is forbidden
+  (`tests/cases/reject_optional_chain`).
 
 ### Element access
 
@@ -546,7 +626,10 @@ The index is sign-extended from `i32` (or truncated toward zero from
 `double` in f64 mode) to `i64` and checked against `len` with an unsigned
 compare, so negative indices fail too (`tests/cases/arr_bounds_panic`,
 `arr_index_read_write`, `arr_f64`). String-keyed access is forbidden by the
-validator (`reject_string_key_access`, `reject_non_numeric_index`).
+validator (`reject_string_key_access`, `reject_non_numeric_index`), and so
+is an index outside the "numeric-shaped" forms listed under
+[Forbidden constructs](#forbidden-constructs-phase-0-validator): `a[k++]`
+and `a[--k]` are `Element access requires a numeric index` *(CLI only)*.
 
 ### Array literals
 
@@ -592,7 +675,7 @@ shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...) | none | `math_intrinsics`; `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
-| `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` | none | `math_intrinsics` |
+| `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` plus a `select` for the cases where ECMAScript and C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`); `pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case agrees with C | none | `math_intrinsics`; `tests/differential/corpus/f64_pow_spec` |
 | `Math.round(x: f64): f64` | JavaScript's round-half-up (`floor` + compare + `select`): `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0` | none | `math_intrinsics` |
 | `Math.abs(x: T): T` for `T` in `i32`, `i64`, `f64` | `llvm.abs.*` (wrapping for `INT_MIN`) / `llvm.fabs.f64` | none | `math_i32`, `math_intrinsics`; `i64` *(CLI only)* |
 | `Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T` | exactly two operands of one numeric type; integers: `llvm.smin/smax`; `f64`: `llvm.minnum/maxnum` | none | `math_i32`, `math_intrinsics`; `reject_math_min_arity` (`` `Math.min` expects exactly 2 arguments, got 1 ``) |
@@ -644,22 +727,47 @@ There are no other array or string methods (`pop`, `slice`, `indexOf`,
 
 ### `Arena`
 
-<!-- TODO(WP6): document the arena-scope API (`Arena.*` / `sts_arena_mark` / `sts_arena_release`), stack allocation of non-escaping objects, and `T | null` once WP6 lands. -->
+Explicit control of the arena the runtime allocates from
+(`tests/cases/mem_arena_builtins`; [wp6-memory.md](wp6-memory.md#3-explicit-control)).
+The automatic placement described under [Memory model](#memory-model) makes
+these unnecessary for most programs; they exist for code that manages
+batches itself. All four are available in both number modes.
 
-Not available yet. Today every object, array, and runtime string lives in
-one global arena that is released when `main` returns; a C or Node host may
-call `sts_reset_arena()` between batches ([wp8-interop.md](wp8-interop.md)).
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `Arena.mark(): i64` | the current bump address (`sts_arena_mark`; `0` while the arena is empty) | write | `mem_arena_builtins` |
+| `Arena.release(m: i64): void` | free everything allocated since `m` (`sts_arena_release`); statement position; an integer literal argument is typed `i64` by context; `m == 0` behaves like `Arena.reset()`; a stale mark is ignored | write | `mem_arena_builtins`; `reject_arena_release_type` (`` `Arena.release` expects i64, got i32 ``) |
+| `Arena.reset(): void` | recycle everything in O(1), keeping the newest chunk (`sts_reset_arena`); statement position | write | `mem_arena_builtins`; `` `Arena.reset` returns void and can only be used as a statement `` *(CLI only)* |
+| `Arena.used(): i64` | bytes bumped in the current chunk (`sts_arena_used`); the number the memory tests watch | write | `mem_arena_builtins`, `mem_scope_dynamic_array` |
+
+`mark` and `used` only read the arena, but they are recorded as writes so
+that a caller is never hoisted across an allocation. **Safety rule**:
+releasing or resetting while any object, array, or string allocated after
+the mark is still referenced is undefined behaviour (the memory is reused by
+the next allocation). A function that calls `Arena.release` or `Arena.reset`
+itself, or through a callee, never gets an automatic arena scope, so the
+compiler's own marks are never invalidated by user resets.
 
 ## Semantics decisions
 
 - **Integers wrap.** `i32` and `i64` arithmetic is two's-complement wrapping
   (no `nsw`), like Rust release builds: `2147483647 + 1` is `-2147483648`
-  (`tests/cases/i64_basic` shows the `i64` wrap; `wp1-control-flow.md`).
-  `Math.abs(-2147483648)` wraps to itself.
-- **Integer division** is `sdiv`/`srem` truncating toward zero: `-7 / 2` is
-  `-3`, `-7 % 2` is `-1` (`tests/cases/cf_collatz`, `cf_do_while`).
-  Division by zero, and `INT_MIN / -1`, are undefined behaviour in LLVM
-  (in practice a hardware trap on x86-64); the compiler emits no check.
+  (`tests/cases/i64_basic`, `int_min_literal`; `wp1-control-flow.md`).
+  `Math.abs(-2147483648)` wraps to itself. With `--nsw`, every user-level
+  integer `add`/`sub`/`mul` (binary operators, unary minus, `op=` on locals,
+  fields, and elements, `++`/`--`) carries the `nsw` flag and signed overflow
+  becomes undefined behaviour, as in C; division, remainder, and the
+  compiler's own index, length, and allocator arithmetic are never flagged
+  (`tests/cases/opt_nsw`; [wp9-optimisation.md](wp9-optimisation.md#--nsw)).
+- **Integer division is checked**: `sdiv`/`srem` truncating toward zero
+  (`-7 / 2` is `-3`, `-7 % 2` is `-1`; `tests/cases/cf_collatz`,
+  `cf_do_while`), preceded by a divisor check that exits with status 1 on a
+  zero divisor (`attempt to divide by zero`) or `MIN / -1`
+  (`attempt to divide with overflow`), like Rust and unlike JavaScript's
+  `0` (`tests/cases/div_checked`, `div_zero_panic`, `div_overflow_panic`;
+  [Checked integer division](#checked-integer-division)).
+- **`Math.pow`** follows ECMAScript where C99 `pow` differs
+  (`pow(x, NaN)`, `pow(±1, ±Infinity)` are `NaN`; see the `Math` table).
 - **`f64`** follows IEEE-754: `x / 0` is `Infinity`, `x !== x` detects NaN
   (`fcmp une`), `%` is `frem` (`tests/cases/f64_mode`, `conversions`).
 - **Strings** are immutable UTF-8 byte sequences; `.length` is the byte
@@ -678,9 +786,11 @@ call `sts_reset_arena()` between batches ([wp8-interop.md](wp8-interop.md)).
   `ToInt32`. Integer-to-integer conversions wrap (`toI32(5000000000)` ->
   `705032704`) (`tests/cases/conversions`).
 - **No exceptions.** Functions are `nounwind`; `throw` traps
-  (`tests/cases/cf_throw`); runtime failures (bounds check, file errors,
-  out of memory) print a message to stderr and exit with status 1
-  (`tests/cases/arr_bounds_panic`: `index out of range: <i> >= <len>`).
+  (`tests/cases/cf_throw`); runtime failures (bounds check, integer
+  division, file errors, out of memory) print a message to stderr and exit
+  with status 1 (`tests/cases/arr_bounds_panic`:
+  `index out of range: <i> >= <len>`; `div_zero_panic`:
+  `attempt to divide by zero`).
 - **Bounds checks** on every `a[i]` read and write, unsigned, so `-1` fails
   (`tests/cases/arr_bounds_panic`); `--unchecked-indexing` removes them
   (`tests/cases/arr_unchecked`), after which out-of-range is undefined
@@ -698,14 +808,70 @@ call `sts_reset_arena()` between batches ([wp8-interop.md](wp8-interop.md)).
   length is read (`tests/cases/arr_push`).
 - **Arrays and objects are references**: `===` is identity; `const b = a;
   b.push(2)` is visible through `a` *(CLI only)*; assignment never copies.
-- **Memory** is one global bump arena; nothing is ever freed individually;
-  `main`'s wrapper releases everything on exit. Objects and arrays are never
-  null. A C host may `sts_reset_arena()`.
+- **Memory** is one global bump arena plus the stack, decided at compile
+  time (see [Memory model](#memory-model)); nothing is freed individually;
+  `main`'s wrapper releases everything on exit. Objects, arrays, and strings
+  are never null unless typed `T | null`.
 - **Parameters are immutable** and used as SSA values; locals use
   `alloca`/`load`/`store` and are promoted by `mem2reg`.
 - **Every function is an external C symbol** unless `--strict-exports`.
 
-<!-- TODO(WP9): document `--target` (datalayout/triple emission), `--nsw` overflow mode, and the benchmark numbers once WP9 lands. -->
+### Memory model
+
+There is no garbage collector. Every object, array, and runtime string is
+placed by one of three mechanisms, all decided at compile time
+([wp6-memory.md](wp6-memory.md)); none changes what a program computes, only
+where its memory lives and when it is reused.
+
+1. **Stack allocation.** A `new C(...)`, object literal, array literal, or
+   `new Array<T>(<non-negative integer literal>)` whose value provably does
+   not outlive its function becomes an `alloca` in the entry block
+   (`tests/cases/mem_stack_struct`, `mem_stack_array_literal`). "Provably"
+   means the value only ever flows into uses that consume it on the spot
+   (operands, conditions, field and element access, `.length`, `for...of`,
+   arguments to callees that do not capture the parameter, runtime
+   builtins) or into `const`-like locals that are never reassigned; it
+   stays in the arena when it is returned, stored into a field or element,
+   pushed, assigned to another variable (`let q = p` included), held by a
+   reassigned `let`, or passed to a callee that captures it
+   (`tests/cases/mem_stack_escape`). A site inside a loop gets one slot,
+   reused every iteration (`tests/cases/mem_stack_loop`). Stack arrays are
+   capped at 4096 bytes of data; a later `push` moves the elements to the
+   arena and the header stays valid. `--no-stack-alloc` turns this off.
+2. **Automatic arena scopes.** A function whose arena temporaries all die
+   with it (a dynamic `new Array<T>(n)`, `push` growth on its own array, a
+   string concatenation or template, a number printed by `console.log`, a
+   callee's returned allocation), that neither returns nor leaks an
+   allocation, has no callee that leaks one, and never calls `Arena.reset` /
+   `Arena.release`, calls `sts_arena_mark` on entry and `sts_arena_release`
+   before every `ret` (`tests/cases/mem_scope_dynamic_array`,
+   `mem_scope_string_temp`: 100000 calls leave `Arena.used()` unchanged).
+   Scopes are per function, not per loop iteration.
+3. **Explicit control** with the [`Arena`](#arena) builtins, and
+   `sts_reset_arena()` / `sts_arena_mark()` / `sts_arena_release()` for a C
+   or Node host ([wp8-interop.md](wp8-interop.md)).
+
+Everything else is bumped from the arena by the inlined fast path, and the
+arena is released when `main` returns. Objects stored into fields or arrays
+never move to the stack, and a returned object is always arena memory owned
+by the caller.
+
+### Target and overflow flags
+
+- **`--target <triple>`** / **`--target host`** writes `target datalayout`
+  and `target triple` (the strings clang 18 emits for that triple) into every
+  module: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
+  `x86_64-apple-darwin`, `aarch64-apple-darwin`, `wasm32-unknown-unknown`,
+  `wasm32-wasi`, plus common aliases (`x86_64-linux`, `arm64-apple-darwin`,
+  `wasm32`, ...); anything else, and `host` on an unsupported machine, is a
+  usage error (exit 2) listing the supported triples
+  (`tests/cases/opt_target_triple`). The default emits neither line, so
+  clang supplies them at link time; the flag matters when running `opt` or
+  `llc` by hand, which otherwise assume a generic layout and never vectorise
+  ([wp9-optimisation.md](wp9-optimisation.md#--target-triple-and---target-host)).
+- **`--nsw`**: see *Integers wrap* above (`tests/cases/opt_nsw`).
+- **`--unchecked-indexing`**: see *Bounds checks* above.
+- **`--no-stack-alloc`**: see *Memory model* above.
 
 ## Forbidden constructs (Phase 0 validator)
 
@@ -770,6 +936,8 @@ fragment `tests/run.js` matches and the case that proves it.
 | `void expr` | `` `void` expressions are forbidden in StaticTS (no `undefined` value) `` | `reject_void_expression` |
 | `==`, `!=` | `Loose equality is forbidden; use === / !==` | `reject_loose_equality`, `reject_loose_inequality` |
 | `in` | `` `in` operator is forbidden in StaticTS (no dynamic property lookup) `` | `reject_in_operator` |
+| `a?.b`, `a?.[i]`, `f?.()` | `` Optional chaining `?.` is forbidden in StaticTS (narrow with `!== null` instead) `` | `reject_optional_chain` |
+| `a ?? b` | `` Nullish coalescing `??` is forbidden in StaticTS (narrow with `!== null` instead) `` | `reject_nullish` |
 | `instanceof` | `` `instanceof` is forbidden in StaticTS (no prototype chain) `` | `reject_instanceof` |
 | comma expressions | `Comma expressions are forbidden in StaticTS (write separate statements)` | `reject_comma_expression` |
 | `typeof x` | `` `typeof` is forbidden in StaticTS (no runtime type tags) `` | `reject_typeof_operator` |
@@ -805,7 +973,9 @@ messages are exact for the cases cited; other rows quote
 | wrong arity | `` `f` expects 1 argument(s), got 2 `` | `reject_arity` |
 | mixed operand types | `` Operator `+` requires two operands of the same numeric type, got i32 and boolean `` | `reject_type_mismatch`, `reject_i64_mixed` |
 | string `+` number | `` ... got string and i32 (no implicit string conversion; use a template literal) `` | `reject_str_plus_number` |
-| ordering on strings / structs | `` Operator `<` requires two operands of the same primitive type, got string and i32 `` | `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |
+| ordering on booleans / strings / structs | `` Operator `<` requires two numeric operands, got string and i32 `` | `reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |
+| `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned` |
+| `Arena.release` with a non-`i64` argument | `` `Arena.release` expects i64, got i32 `` | `reject_arena_release_type` |
 | non-integer literal in i32 mode | `` Non-integer literal `1.5` in i32 number mode (use --number-mode f64) `` | `reject_float_in_i32` |
 | non-boolean condition | `Condition must be boolean, got i32 (StaticTS has no truthiness)` | `reject_cf_nonbool_cond` |
 | `&&`/`\|\|` on numbers | `` Operator `&&` requires boolean operands, got i32 and i32 `` | `reject_cf_logical_numbers` |
@@ -827,23 +997,15 @@ messages are exact for the cases cited; other rows quote
 ## Known inconsistencies
 
 Behaviour observed with the current compiler that disagrees with the design
-notes or with JavaScript. Listed here so the reference stays truthful; each
-is a candidate fix, not a feature.
+notes, the runtime header, or JavaScript beyond the documented semantics
+decisions. Listed here so the reference stays truthful; each is a candidate
+fix, not a feature. (Found by the first audit and fixed since, so no longer
+listed: inverted boolean ordering, silently accepted `?.`, the rejected
+`-2147483648` literal, undefined `x / 0` and `INT_MIN / -1`, and
+`Math.pow(1, NaN)`.)
 
-1. **Ordering comparisons on booleans are inverted.** `a < b` with boolean
-   operands is accepted and lowers to `icmp slt i1`, a *signed* compare on
-   `i1`, where `true` is `-1`: `lt(false, true)` prints `false` and
-   `lt(true, false)` prints `true` natively, the reverse of JavaScript.
-   *(CLI + native run, no test case.)* Until fixed, do not order booleans.
-2. **Optional chaining is silently accepted.** `a?.length` and `s?.length`
-   compile exactly like `a.length` (the `?.` token is ignored by both the
-   validator and the checker), although `docs/MASTER_PLAN.md` §3.2 lists
-   `?.` on non-nullable types as forbidden. *(CLI only.)*
-3. **`-2147483648` is rejected** with `` Literal `2147483648` does not fit in i32 ``
-   because the range check runs on the unnegated literal; write
-   `-2147483647 - 1`. *(CLI only.)*
-4. **The `main` parameter message points at WP7** (`` `main` cannot take parameters yet (process.argv arrives in WP7) ``,
-   `tests/cases/reject_main_params`), but WP7 shipped without
-   `process.argv`; there is no `process.argv` today.
-5. **`runtime/statictsc.h` still says `sts_str_from_f64` prints `%.17g`**;
-   since WP7 it prints the shortest round-trip form (`tests/runtime_test.c`).
+All four discrepancies found by the documentation audit (the `main`
+parameter message, the `%.17g` comment in `statictsc.h`, the exclusive
+`i64` literal bound, and the generic message for comparing `T | null` with
+`T`) are fixed; `2^53` is accepted as an `i64` literal and the nullable
+comparison names the nullable side.
