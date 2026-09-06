@@ -5,14 +5,17 @@ import { arrayStatementEmitters } from "./arrays";
 import { EmitContext, EmitterTable, StatementEmitter } from "./context";
 import { controlFlowStatementEmitters } from "./control-flow";
 
+/** `return e`: the value first (it may allocate), then the arena scope release (WP6), then `ret`. */
 const emitReturn: StatementEmitter = (ctx, node) => {
   const stmt = node as ts.ReturnStatement;
   if (!stmt.expression) {
+    ctx.emitScopeExit();
     ctx.fn.emit("ret void");
     return;
   }
   const type = ctx.typeOf(stmt.expression);
   const value = ctx.emitExpression(stmt.expression);
+  ctx.emitScopeExit();
   ctx.fn.emit(`ret ${llvmType(type)} ${value}`);
 };
 

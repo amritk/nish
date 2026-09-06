@@ -57,6 +57,12 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `tests/differential/known-failures.txt`.
 - **Examples.** `examples/nbody.ts` (classes, arrays, `Math` in f64 mode)
   prints the reference energies and is covered by `npm run smoke`.
+- **Checked integer division.** `/` and `%` on `i32` / `i64` panic with
+  "attempt to divide by zero" / "attempt to divide with overflow" (exit 1)
+  instead of executing an `sdiv` / `srem` whose result is poison, matching
+  Rust. `Math.pow` follows ECMAScript for `pow(x, NaN)` and `pow(±1, ±Infinity)`.
+  Ordering comparisons are numeric only; `?.` and `??` are rejected by the
+  validator; the literal `-2147483648` is accepted.
 - **CI and diagnostics.** GitHub Actions matrix (Ubuntu + macOS, LLVM 18) with
   a size table in the job summary; every error is
   `<file>:<line>:<col>: error: <message>` followed by a caret excerpt.
@@ -76,3 +82,13 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   README restructured into a short tour.
 
 [Unreleased]: https://github.com/amritk/compiler/compare/v0.1.0...HEAD
+- **Memory strategy (WP6).** Escape-analysed stack allocation: a `new`,
+  object literal, array literal or `new Array<T>(<literal>)` that provably
+  does not outlive its function becomes an entry-block `alloca`
+  (`--no-stack-alloc` disables it). Automatic arena scopes: a function whose
+  arena temporaries all die with it brackets its body with the new
+  `sts_arena_mark` / `sts_arena_release` runtime calls, so hot loops keep the
+  arena flat. `Arena.reset` / `mark` / `release` / `used` builtins, and
+  `T | null` for class, interface, array and string types with checker-
+  enforced narrowing (`if (p !== null)`, early return, `while`, `&&`, `?:`).
+  See [docs/wp6-memory.md](docs/wp6-memory.md).

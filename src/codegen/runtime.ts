@@ -78,6 +78,26 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     attrs: ["nounwind", "willreturn"],
     effect: "write",
   },
+  // ---- WP6: arena scopes. A mark is the absolute bump address (`buf + off`), 0 while the arena is empty.
+  {
+    name: "sts_arena_mark",
+    signature: "declare noundef i64 @sts_arena_mark()",
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
+    // Rewinds to a mark: same chunk -> reset the offset; an older chunk -> free the newer ones first.
+    name: "sts_arena_release",
+    signature: "declare void @sts_arena_release(i64 noundef)",
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
+    name: "sts_arena_used",
+    signature: "declare noundef i64 @sts_arena_used()",
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
   {
     name: "sts_str_new",
     signature: `declare noalias noundef nonnull align 8 i8* @sts_str_new(i8* noundef readonly nocapture, i64 noundef)`,

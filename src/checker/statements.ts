@@ -5,7 +5,7 @@
  * `statementCheckers`. Return true when the statement definitely terminates.
  */
 import ts from "typescript";
-import { resolveTypeNode, sameType, typeToString } from "../types";
+import { assignable, resolveTypeNode, typeToString } from "../types";
 import { arrayStatementCheckers } from "./arrays";
 import { CheckContext, CheckerTable, StatementChecker } from "./context";
 import { controlFlowStatementCheckers } from "./control-flow";
@@ -21,7 +21,7 @@ const checkReturn: StatementChecker = (ctx, node, scope) => {
     return true;
   }
   const got = ctx.checkExpression(stmt.expression, scope);
-  if (!sameType(got, want)) {
+  if (!assignable(got, want)) {
     throw ctx.error(
       `Return type mismatch: function returns ${typeToString(want)} but expression is ${typeToString(got)}`,
       stmt.expression
@@ -52,7 +52,7 @@ export function checkVariableDeclarationList(
     let type = initType;
     if (decl.type) {
       type = resolveTypeNode(decl.type, ctx.sf, ctx.opts);
-      if (!sameType(type, initType)) {
+      if (!assignable(initType, type)) {
         throw ctx.error(
           `Cannot initialize ${typeToString(type)} variable \`${decl.name.text}\` with ${typeToString(initType)}`,
           decl.initializer

@@ -14,6 +14,13 @@
  *   [a, b]           two `sts_alloc_struct` calls (24-byte header, n*sizeof(T)
  *                    data), `len = cap = n`, one store per element.
  *   new Array<T>(n)  header + data as above, data cleared with `llvm.memset`.
+ *                    When escape.ts proved the array does not outlive the
+ *                    function (WP6) and its size is a literal, both become
+ *                    entry-block allocas: `%arr.hdr = alloca %struct.sts_array`
+ *                    and `%arr.data = alloca [n x T]`, 8-aligned like arena
+ *                    memory. A later `push` moves the data into the arena
+ *                    (`sts_array_grow` only touches the header), which is
+ *                    still correct: the header keeps pointing at live memory.
  *   a[i]             index widened to i64 (`sext` from i32, `fptosi` from
  *                    double), bounds check, `getelementptr` + `load`.
  *   a[i] = v         same address computation, then `store`; `op=` loads,
@@ -111,14 +118,36 @@ function emitBoundsCheck(ctx: EmitContext, arr: string, idx: string): void {
   fn.placeBlock(okBlock);
 }
 
-/** Allocate a header with `len = cap = n`; `data` is stored by `storeData`. Returns the `%struct.sts_array*`. */
-function emitHeader(ctx: EmitContext, n: string): string {
+/**
+ * Allocate a header with `len = cap = n`; `data` is stored by `storeData`.
+ * Returns the `%struct.sts_array*`: an alloca when `site` is on the stack (WP6).
+ */
+function emitHeader(ctx: EmitContext, n: string, site: ts.Node): string {
   ctx.declareType(ARRAY_TYPE);
-  const raw = ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_alloc_struct")}(i64 ${HEADER_BYTES})`);
-  const arr = ctx.fn.emitValue(`bitcast i8* ${raw} to ${HEADER_PTR}`);
+  let arr: string;
+  if (ctx.isStackSite(site)) {
+    arr = ctx.fn.emitAlloca("arr.hdr", HEADER, 8);
+  } else {
+    const raw = ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_alloc_struct")}(i64 ${HEADER_BYTES})`);
+    arr = ctx.fn.emitValue(`bitcast i8* ${raw} to ${HEADER_PTR}`);
+  }
   ctx.fn.emit(`store i64 ${n}, i64* ${fieldPointer(ctx, arr, 0)}${align8(ctx)}`);
   ctx.fn.emit(`store i64 ${n}, i64* ${fieldPointer(ctx, arr, 1)}${align8(ctx)}`);
   return arr;
+}
+
+/**
+ * Element storage as an `i8*`: `[count x T]` on the stack when `site` is a
+ * stack allocation (the count is then a literal, see escape.ts), else
+ * `bytes` from the arena.
+ */
+function emitData(ctx: EmitContext, site: ts.Node, elem: StaticType, count: number | undefined, bytes: string): string {
+  if (count !== undefined && ctx.isStackSite(site)) {
+    const ty = `[${count} x ${llvmType(elem)}]`;
+    const slot = ctx.fn.emitAlloca("arr.data", ty, 8);
+    return ctx.fn.emitValue(`bitcast ${ty}* ${slot} to i8*`);
+  }
+  return ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_alloc_struct")}(i64 ${bytes})`);
 }
 
 function storeData(ctx: EmitContext, arr: string, data: string): void {
@@ -134,8 +163,8 @@ const emitArrayLiteral: ExpressionEmitter = (ctx, node) => {
   const ty = llvmType(elem);
   const values = expr.elements.map((e) => ctx.emitExpression(e));
   const n = values.length;
-  const arr = emitHeader(ctx, String(n));
-  const data = n === 0 ? "null" : ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_alloc_struct")}(i64 ${n * elementSize(elem)})`);
+  const arr = emitHeader(ctx, String(n), expr);
+  const data = n === 0 ? "null" : emitData(ctx, expr, elem, n, String(n * elementSize(elem)));
   storeData(ctx, arr, data);
   if (n > 0) {
     const typed = ctx.fn.emitValue(`bitcast i8* ${data} to ${ty}*`);
@@ -152,9 +181,10 @@ newEmitters.Array = (ctx, expr) => {
   const { elem } = ctx.typeOf(expr) as ArrayType;
   const size = elementSize(elem);
   const n = emitIndex(ctx, expr.arguments![0]);
-  const arr = emitHeader(ctx, n);
+  const arr = emitHeader(ctx, n, expr);
   const bytes = size === 1 ? n : ctx.fn.emitValue(`mul i64 ${n}, ${size}`);
-  const data = ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_alloc_struct")}(i64 ${bytes})`);
+  const count = ctx.isStackSite(expr) ? Number(n) : undefined; // a stack site always has a literal length
+  const data = emitData(ctx, expr, elem, count, bytes);
   ctx.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`);
   const dataArg = ctx.opts.optimizeAttributes ? `i8* align 8 ${data}` : `i8* ${data}`;
   ctx.fn.emit(`call void @${MEMSET}(${dataArg}, i8 0, i64 ${bytes}, i1 false)`);
@@ -344,7 +374,10 @@ function isElementAssignment(node: ts.Node): node is ts.BinaryExpression {
  *     function loses `willreturn` unless `--unchecked-indexing`;
  *   - literals, `new Array`, element writes and `push` store into the arena
  *     (the inline allocator itself is willreturn, so it is folded into the
- *     effect rather than listed as a callee); `push` may call `sts_array_grow`.
+ *     effect rather than listed as a callee); `push` may call `sts_array_grow`;
+ *   - a literal or `new Array` on the stack (WP6) stores into its own allocas
+ *     and is no effect at all. Element accesses are still counted even
+ *     through a stack local: a `push` may have moved the data into the arena.
  */
 const collectArrayFacts: FactCollector = (program, node, facts, opts) => {
   if (ts.isElementAccessExpression(node) && isArray(program, node.expression)) {
@@ -355,7 +388,7 @@ const collectArrayFacts: FactCollector = (program, node, facts, opts) => {
   } else if (ts.isForOfStatement(node)) {
     facts.readsMemory = true;
   } else if (ts.isArrayLiteralExpression(node) || (ts.isNewExpression(node) && isArray(program, node))) {
-    facts.effect = "write";
+    if (!facts.stackSites.has(node)) facts.effect = "write";
   } else if (isPushCall(program, node)) {
     facts.effect = "write";
     facts.callees.add("sts_array_grow");

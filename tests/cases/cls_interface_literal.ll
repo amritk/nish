@@ -81,6 +81,7 @@ entry:
   %q.addr = alloca %struct.Pair*, align 8
   %second.addr = alloca i32, align 4
   %t.addr = alloca %struct.Tagged*, align 8
+  %Tagged.obj = alloca %struct.Tagged, align 8
   %0 = call i8* @sts_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Pair*
   %2 = getelementptr inbounds %struct.Pair, %struct.Pair* %1, i32 0, i32 0
@@ -97,40 +98,38 @@ entry:
   %9 = call i8* @sts_str_from_i32(i32 %8)
   call void @sts_print(i8* %9)
   store i32 9, i32* %second.addr, align 4
-  %10 = call i8* @sts_alloc_struct(i64 24)
-  %11 = bitcast i8* %10 to %struct.Tagged*
-  %12 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %11, i32 0, i32 0
-  store i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8** %12, align 8
-  %13 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %11, i32 0, i32 1
-  store i1 true, i1* %13, align 1
-  %14 = call i8* @sts_alloc_struct(i64 8)
-  %15 = bitcast i8* %14 to %struct.Pair*
-  %16 = getelementptr inbounds %struct.Pair, %struct.Pair* %15, i32 0, i32 0
-  store i32 4, i32* %16, align 4
-  %17 = load i32, i32* %second.addr, align 4
-  %18 = getelementptr inbounds %struct.Pair, %struct.Pair* %15, i32 0, i32 1
-  store i32 %17, i32* %18, align 4
-  %19 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %11, i32 0, i32 2
-  store %struct.Pair* %15, %struct.Pair** %19, align 8
-  store %struct.Tagged* %11, %struct.Tagged** %t.addr, align 8
-  %20 = load %struct.Tagged*, %struct.Tagged** %t.addr, align 8
-  %21 = call i32 @describe(%struct.Tagged* %20)
-  %22 = call i8* @sts_str_from_i32(i32 %21)
-  call void @sts_print(i8* %22)
-  %23 = load %struct.Tagged*, %struct.Tagged** %t.addr, align 8
-  %24 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
-  %25 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %23, i32 0, i32 2
-  store %struct.Pair* %24, %struct.Pair** %25, align 8
-  %26 = load %struct.Tagged*, %struct.Tagged** %t.addr, align 8
-  %27 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %26, i32 0, i32 2
-  %28 = load %struct.Pair*, %struct.Pair** %27, align 8
+  %10 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %Tagged.obj, i32 0, i32 0
+  store i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8** %10, align 8
+  %11 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %Tagged.obj, i32 0, i32 1
+  store i1 true, i1* %11, align 1
+  %12 = call i8* @sts_alloc_struct(i64 8)
+  %13 = bitcast i8* %12 to %struct.Pair*
+  %14 = getelementptr inbounds %struct.Pair, %struct.Pair* %13, i32 0, i32 0
+  store i32 4, i32* %14, align 4
+  %15 = load i32, i32* %second.addr, align 4
+  %16 = getelementptr inbounds %struct.Pair, %struct.Pair* %13, i32 0, i32 1
+  store i32 %15, i32* %16, align 4
+  %17 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %Tagged.obj, i32 0, i32 2
+  store %struct.Pair* %13, %struct.Pair** %17, align 8
+  store %struct.Tagged* %Tagged.obj, %struct.Tagged** %t.addr, align 8
+  %18 = load %struct.Tagged*, %struct.Tagged** %t.addr, align 8
+  %19 = call i32 @describe(%struct.Tagged* %18)
+  %20 = call i8* @sts_str_from_i32(i32 %19)
+  call void @sts_print(i8* %20)
+  %21 = load %struct.Tagged*, %struct.Tagged** %t.addr, align 8
+  %22 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
+  %23 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %21, i32 0, i32 2
+  store %struct.Pair* %22, %struct.Pair** %23, align 8
+  %24 = load %struct.Tagged*, %struct.Tagged** %t.addr, align 8
+  %25 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %24, i32 0, i32 2
+  %26 = load %struct.Pair*, %struct.Pair** %25, align 8
+  %27 = getelementptr inbounds %struct.Pair, %struct.Pair* %26, i32 0, i32 0
+  store i32 7, i32* %27, align 4
+  %28 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
   %29 = getelementptr inbounds %struct.Pair, %struct.Pair* %28, i32 0, i32 0
-  store i32 7, i32* %29, align 4
-  %30 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
-  %31 = getelementptr inbounds %struct.Pair, %struct.Pair* %30, i32 0, i32 0
-  %32 = load i32, i32* %31, align 4
-  %33 = call i8* @sts_str_from_i32(i32 %32)
-  call void @sts_print(i8* %33)
+  %30 = load i32, i32* %29, align 4
+  %31 = call i8* @sts_str_from_i32(i32 %30)
+  call void @sts_print(i8* %31)
   ret i32 0
 }
 

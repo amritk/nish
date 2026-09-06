@@ -2,6 +2,8 @@
 @.str.1 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c"abc\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"hello\00" }, align 8
 
+declare noundef i64 @sts_arena_mark() #1
+declare void @sts_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @sts_str_from_f64(double noundef) #1
@@ -16,6 +18,7 @@ entry:
 
 define noundef double @test() #1 {
 entry:
+  %arena.mark = call i64 @sts_arena_mark()
   %0 = call i8* @sts_str_from_f64(double 0x3FF8000000000000)
   %1 = call i8* @sts_str_concat(i8* %0, i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*))
   %2 = call double @len(i8* bitcast ({ i64, [4 x i8] }* @.str.1 to i8*))
@@ -25,6 +28,7 @@ entry:
   %5 = call i8* @sts_str_from_f64(double 0x3FD0000000000000)
   call void @sts_print(i8* %5)
   %6 = call double @len(i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*))
+  call void @sts_arena_release(i64 %arena.mark)
   ret double %6
 }
 

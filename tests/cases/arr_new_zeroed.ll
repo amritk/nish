@@ -8,6 +8,8 @@
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #1
 declare void @sts_free_arena() #2
+declare noundef i64 @sts_arena_mark() #2
+declare void @sts_arena_release(i64 noundef) #2
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #2
 declare void @sts_panic_index(i64 noundef, i64 noundef) #3
@@ -42,6 +44,9 @@ entry:
   %xs.addr = alloca %struct.sts_array*, align 8
   %i.addr = alloca i32, align 4
   %flags.addr = alloca %struct.sts_array*, align 8
+  %arr.hdr = alloca %struct.sts_array, align 8
+  %arr.data = alloca [2 x i1], align 8
+  %arena.mark = call i64 @sts_arena_mark()
   store i32 4, i32* %n.addr, align 4
   %0 = load i32, i32* %n.addr, align 4
   %1 = sext i32 %0 to i64
@@ -105,35 +110,34 @@ for.inc:
   br label %for.cond
 
 for.end:
-  %34 = call i8* @sts_alloc_struct(i64 24)
-  %35 = bitcast i8* %34 to %struct.sts_array*
-  %36 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %35, i64 0, i32 0
-  store i64 2, i64* %36, align 8
-  %37 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %35, i64 0, i32 1
-  store i64 2, i64* %37, align 8
-  %38 = call i8* @sts_alloc_struct(i64 2)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %38, i8 0, i64 2, i1 false)
-  %39 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %35, i64 0, i32 2
-  store i8* %38, i8** %39, align 8
-  store %struct.sts_array* %35, %struct.sts_array** %flags.addr, align 8
-  %40 = load %struct.sts_array*, %struct.sts_array** %flags.addr, align 8
-  %41 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %40, i64 0, i32 0
-  %42 = load i64, i64* %41, align 8
-  %43 = icmp ult i64 0, %42
-  br i1 %43, label %bounds.ok.1, label %bounds.fail.1
+  %34 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %arr.hdr, i64 0, i32 0
+  store i64 2, i64* %34, align 8
+  %35 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %arr.hdr, i64 0, i32 1
+  store i64 2, i64* %35, align 8
+  %36 = bitcast [2 x i1]* %arr.data to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %36, i8 0, i64 2, i1 false)
+  %37 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %arr.hdr, i64 0, i32 2
+  store i8* %36, i8** %37, align 8
+  store %struct.sts_array* %arr.hdr, %struct.sts_array** %flags.addr, align 8
+  %38 = load %struct.sts_array*, %struct.sts_array** %flags.addr, align 8
+  %39 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %38, i64 0, i32 0
+  %40 = load i64, i64* %39, align 8
+  %41 = icmp ult i64 0, %40
+  br i1 %41, label %bounds.ok.1, label %bounds.fail.1
 
 bounds.fail.1:
-  call void @sts_panic_index(i64 0, i64 %42)
+  call void @sts_panic_index(i64 0, i64 %40)
   unreachable
 
 bounds.ok.1:
-  %44 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %40, i64 0, i32 2
-  %45 = load i8*, i8** %44, align 8
-  %46 = bitcast i8* %45 to i1*
-  %47 = getelementptr inbounds i1, i1* %46, i64 0
-  %48 = load i1, i1* %47, align 1
-  %49 = select i1 %48, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
-  call void @sts_print(i8* %49)
+  %42 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %38, i64 0, i32 2
+  %43 = load i8*, i8** %42, align 8
+  %44 = bitcast i8* %43 to i1*
+  %45 = getelementptr inbounds i1, i1* %44, i64 0
+  %46 = load i1, i1* %45, align 1
+  %47 = select i1 %46, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  call void @sts_print(i8* %47)
+  call void @sts_arena_release(i64 %arena.mark)
   ret i32 0
 }
 

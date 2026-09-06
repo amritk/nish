@@ -22,6 +22,13 @@ export interface CompilerOptions {
   /** Always emit the runtime ABI prelude, even when nothing in the module uses it. */
   runtimeDecls: boolean;
   /**
+   * Lower allocations that provably do not outlive their function to entry-block
+   * `alloca`s instead of arena bumps (WP6, `src/codegen/escape.ts`). Off keeps
+   * every `new`, object literal and array literal in the arena (`--no-stack-alloc`,
+   * for debugging). Default: true.
+   */
+  stackAlloc: boolean;
+  /**
    * Give non-`export`ed functions `internal` linkage so LLVM may inline,
    * specialise, or drop them. Off keeps every function external (C ABI).
    * Default: false.
@@ -55,6 +62,7 @@ export const DEFAULT_OPTIONS: CompilerOptions = {
   uncheckedIndexing: false,
   target: undefined,
   nsw: false,
+  stackAlloc: true,
 };
 
 export type StaticType =
@@ -67,7 +75,14 @@ export type StaticType =
   /** `T[]` / `Array<T>`: pointer to an arena header `{ i64 len, i64 cap, i8* data }` (WP4). */
   | { kind: "array"; elem: StaticType }
   /** A class or interface (WP2): a pointer to `%struct.<name>`, always arena-allocated and 8-aligned. */
-  | { kind: "struct"; name: string };
+  | { kind: "struct"; name: string }
+  /**
+   * `T | null` (WP6) for a pointer type `T` (struct, array, string): the same
+   * LLVM pointer type, with `null` as an extra value. The only operations are
+   * `=== null` / `!== null`, assignment, passing, and narrowing to `T` inside
+   * `if (p !== null)`; everything else is a checker error.
+   */
+  | { kind: "nullable"; inner: StaticType };
 
 export const I32: StaticType = { kind: "i32" };
 /** 64-bit integer (WP7). Never the lowering of `number`; always spelled `i64`. */
@@ -82,6 +97,20 @@ export const ARRAY_STRUCT = "%struct.sts_array";
 
 export function arrayOf(elem: StaticType): StaticType {
   return { kind: "array", elem };
+}
+
+/** True for the types that may be nullable: every StaticTS value that is an LLVM pointer. */
+export function isPointerType(t: StaticType): boolean {
+  return t.kind === "struct" || t.kind === "array" || t.kind === "string";
+}
+
+export function nullableOf(inner: StaticType): StaticType {
+  return inner.kind === "nullable" ? inner : { kind: "nullable", inner };
+}
+
+/** `T` for `T | null`; any other type unchanged. */
+export function stripNull(t: StaticType): StaticType {
+  return t.kind === "nullable" ? t.inner : t;
 }
 
 /** LLVM textual type for a StaticType. */
@@ -103,6 +132,8 @@ export function llvmType(t: StaticType): string {
       return `${ARRAY_STRUCT}*`;
     case "struct":
       return `%struct.${t.name}*`;
+    case "nullable":
+      return llvmType(t.inner);
   }
 }
 
@@ -125,12 +156,15 @@ export function alignOf(t: StaticType): number {
       return 8;
     case "struct":
       return 8; // a pointer
+    case "nullable":
+      return 8; // a pointer
   }
 }
 
 export function typeToString(t: StaticType): string {
   if (t.kind === "array") return `${typeToString(t.elem)}[]`;
   if (t.kind === "struct") return t.name;
+  if (t.kind === "nullable") return `${typeToString(t.inner)} | null`;
   return t.kind === "bool" ? "boolean" : t.kind;
 }
 
@@ -138,7 +172,18 @@ export function sameType(a: StaticType, b: StaticType): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "struct") return a.name === (b as { name: string }).name;
   if (a.kind === "array") return sameType(a.elem, (b as { elem: StaticType }).elem);
+  if (a.kind === "nullable") return sameType(a.inner, (b as { inner: StaticType }).inner);
   return true;
+}
+
+/**
+ * `from` may be stored where `to` is expected: identical types, or a `T`
+ * where `T | null` is expected (the pointer is the same LLVM value). Used by
+ * every value sink: initializers, assignments, returns, arguments, fields,
+ * pushes, elements.
+ */
+export function assignable(from: StaticType, to: StaticType): boolean {
+  return sameType(from, to) || (to.kind === "nullable" && sameType(from, to.inner));
 }
 
 export function isNumeric(t: StaticType): boolean {
@@ -190,6 +235,10 @@ export function resolveTypeNode(
       throw new CompileError("`unknown` is forbidden in StaticTS", node, sourceFile);
     case ts.SyntaxKind.ArrayType:
       return arrayOf(resolveTypeNode((node as ts.ArrayTypeNode).elementType, sourceFile, opts));
+    case ts.SyntaxKind.ParenthesizedType:
+      return resolveTypeNode((node as ts.ParenthesizedTypeNode).type, sourceFile, opts);
+    case ts.SyntaxKind.UnionType:
+      return resolveNullableUnion(node as ts.UnionTypeNode, sourceFile, opts);
     case ts.SyntaxKind.TypeReference: {
       const ref = node as ts.TypeReferenceNode;
       if (ts.isIdentifier(ref.typeName) && ref.typeName.text === "Array") {
@@ -223,4 +272,28 @@ export function resolveTypeNode(
         sourceFile
       );
   }
+}
+
+function isNullTypeNode(t: ts.TypeNode): boolean {
+  return ts.isLiteralTypeNode(t) && t.literal.kind === ts.SyntaxKind.NullKeyword;
+}
+
+/**
+ * `T | null` (WP6): the validator already rejects every other union, so this
+ * only has to find the non-null member and require it to be a pointer type.
+ */
+function resolveNullableUnion(node: ts.UnionTypeNode, sourceFile: ts.SourceFile, opts: CompilerOptions): StaticType {
+  const members = node.types.filter((t) => !isNullTypeNode(t));
+  if (members.length !== 1 || node.types.length !== 2) {
+    throw new CompileError("Union types other than `T | null` are forbidden in StaticTS", node, sourceFile);
+  }
+  const inner = resolveTypeNode(members[0], sourceFile, opts);
+  if (!isPointerType(inner)) {
+    throw new CompileError(
+      `\`${typeToString(inner)} | null\` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)`,
+      node,
+      sourceFile
+    );
+  }
+  return nullableOf(inner);
 }

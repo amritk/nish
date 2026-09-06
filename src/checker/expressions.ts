@@ -7,13 +7,14 @@
  * `binaryCheckers`.
  */
 import ts from "typescript";
-import { BOOL, F64, I32, isNumeric, sameType, typeToString } from "../types";
+import { BOOL, F64, I32, assignable, isNumeric, sameType, typeToString } from "../types";
 import { arrayExpressionCheckers, installArrayAssignmentCheckers } from "./arrays";
 import { BuiltinCallChecker } from "./builtins";
 import { ioBuiltinFunctions } from "./io";
 import { contextualLiteralType, conversionBuiltins } from "./math";
 import { classExpressionCheckers, isAssignmentOperator } from "./classes";
 import { assignmentTargetCheckers, checkMethodCall, isValueReceiver, memberExpressionCheckers } from "./members";
+import { nullableExpressionCheckers } from "./nullable";
 import { checkBuiltinCall, stringBinaryCheckers, stringExpressionCheckers } from "./strings";
 import { BinaryChecker, CheckerTable, ExpressionChecker, UnaryChecker } from "./context";
 import {
@@ -49,7 +50,7 @@ const checkIdentifier: ExpressionChecker = (ctx, node, scope) => {
   const v = scope.lookup(expr.text);
   if (!v) throw ctx.error(`Unknown identifier \`${expr.text}\``, expr);
   ctx.program.bindings.set(expr, v);
-  return v.type;
+  return scope.typeOf(v); // the declared type, or the narrowed one inside `if (p !== null)` (WP6)
 };
 
 // ---- Operators ------------------------------------------------------------------
@@ -91,8 +92,9 @@ const checkAssignment: BinaryChecker = (ctx, expr, scope) => {
     );
   }
   ctx.program.bindings.set(expr.left, target);
-  const rhs = ctx.checkExpression(expr.right, scope);
-  if (!sameType(rhs, target.type)) {
+  const rhs = ctx.checkExpression(expr.right, scope); // sees the old value: `cur = cur.next` reads a narrowed `cur`
+  scope.clearNarrowing(target); // `p = ...` ends any `p !== null` narrowing (WP6)
+  if (!assignable(rhs, target.type)) {
     throw ctx.error(
       `Cannot assign ${typeToString(rhs)} to ${typeToString(target.type)} variable \`${target.name}\``,
       expr.right
@@ -196,7 +198,7 @@ const checkCall: ExpressionChecker = (ctx, node, scope) => {
   }
   expr.arguments.forEach((arg, i) => {
     const t = ctx.checkExpression(arg, scope);
-    if (!sameType(t, callee.params[i].type)) {
+    if (!assignable(t, callee.params[i].type)) {
       throw ctx.error(
         `Argument ${i + 1} of \`${callee.name}\`: expected ${typeToString(callee.params[i].type)}, got ${typeToString(t)}`,
         arg
@@ -221,4 +223,5 @@ export const expressionCheckers: CheckerTable<ExpressionChecker> = {
   ...controlFlowExpressionCheckers,
   ...arrayExpressionCheckers, // `[a, b]`, `a[i]`
   ...classExpressionCheckers, // `this`, object literals (WP2)
+  ...nullableExpressionCheckers, // `null` (WP6)
 };

@@ -157,3 +157,11 @@ export function appendFileSync(path, data) {
     ioFail("write", path);
   }
 }
+
+// Arena introspection has no JS counterpart: the stubs keep programs that only
+// compare `Arena.used()` before/after (a "stayed flat" check) in agreement, while
+// programs that print raw byte counts are listed as known differences.
+export function arenaUsed() { return 0; }
+export function arenaMark() { return 0; }
+export function arenaRelease() {}
+export function arenaReset() {}

@@ -13,6 +13,9 @@ extern struct sts_arena { char *buf; size_t off; size_t cap; void *chunks; } sts
 void *sts_alloc_struct(size_t);
 void sts_reset_arena(void);
 void sts_free_arena(void);
+uint64_t sts_arena_mark(void);
+void sts_arena_release(uint64_t);
+uint64_t sts_arena_used(void);
 sts_str *sts_str_new(const char *, uint64_t);
 sts_str *sts_str_concat(const sts_str *, const sts_str *);
 _Bool sts_str_eq(const sts_str *, const sts_str *);
@@ -58,6 +61,31 @@ int main(void) {
   memset(big, 0xAB, 1 << 20);
   sts_reset_arena();
   assert(sts_arena.cap >= (1 << 20) && sts_arena.chunks != NULL);
+
+  /* WP6 scopes: mark/release rewinds within a chunk, pops chunks pushed since
+   * an older mark, and a mark of 0 (empty arena) behaves like a reset. */
+  sts_free_arena();
+  assert(sts_arena_mark() == 0 && sts_arena_used() == 0);
+  char *base = sts_alloc_struct(16);
+  uint64_t m = sts_arena_mark();
+  assert(m == (uint64_t)(uintptr_t)(base + 16) && sts_arena_used() == 16);
+  sts_alloc_struct(64);
+  assert(sts_arena_used() == 80);
+  sts_arena_release(m);
+  assert(sts_arena_used() == 16 && (char *)sts_alloc_struct(8) == base + 16);
+  void *before = sts_arena.chunks;
+  char *huge = sts_alloc_struct(1 << 20); /* a second chunk */
+  assert(sts_arena.chunks != before && huge != base);
+  sts_arena_release(m);                    /* pops it, back to the first chunk */
+  assert(sts_arena.chunks == before && sts_arena.buf == base && sts_arena_used() == 16);
+  sts_arena_release(0);                    /* like a reset: keeps a chunk, offset 0 */
+  assert(sts_arena_used() == 0 && sts_arena.chunks == before);
+  for (int i = 0; i < 100000; i++) {       /* a scoped hot loop never grows the arena */
+    uint64_t mk = sts_arena_mark();
+    sts_alloc_struct(1000);
+    sts_arena_release(mk);
+  }
+  assert(sts_arena_used() == 0 && sts_arena.chunks == before);
 
   /* Strings. */
   sts_str *hello = sts_str_new("hello", 5);

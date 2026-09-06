@@ -1,38 +1,13 @@
 %struct.Account = type { i32, i32 }
-%struct.sts_arena = type { i8*, i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
-@sts_arena = external global %struct.sts_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #3
 declare void @sts_free_arena() #0
+declare noundef i64 @sts_arena_mark() #0
+declare void @sts_arena_release(i64 noundef) #0
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
-
-define internal noalias noundef nonnull align 8 i8* @sts_alloc_struct(i64 noundef %size) #4 {
-entry:
-  %size.p7 = add i64 %size, 7
-  %size.aligned = and i64 %size.p7, -8
-  %off.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 1
-  %off = load i64, i64* %off.ptr, align 8
-  %new.off = add i64 %off, %size.aligned
-  %cap.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 2
-  %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
-  br i1 %fits, label %fast, label %slow
-
-fast:
-  store i64 %new.off, i64* %off.ptr, align 8
-  %buf.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 0
-  %buf = load i8*, i8** %buf.ptr, align 8
-  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
-  ret i8* %obj
-
-slow:
-  %grown = call i8* @sts_arena_grow(i64 %size.aligned)
-  ret i8* %grown
-}
 
 define void @Account.constructor(%struct.Account* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %balance, i32 noundef %fee) #0 {
 entry:
@@ -98,35 +73,35 @@ entry:
 define noundef i32 @sts_main() #0 {
 entry:
   %a.addr = alloca %struct.Account*, align 8
-  %0 = call i8* @sts_alloc_struct(i64 8)
-  %1 = bitcast i8* %0 to %struct.Account*
-  call void @Account.constructor(%struct.Account* %1, i32 100, i32 1)
-  store %struct.Account* %1, %struct.Account** %a.addr, align 8
-  %2 = load %struct.Account*, %struct.Account** %a.addr, align 8
-  %3 = call i1 @Account.withdraw(%struct.Account* %2, i32 30)
-  %4 = select i1 %3, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
-  call void @sts_print(i8* %4)
-  %5 = load %struct.Account*, %struct.Account** %a.addr, align 8
-  %6 = getelementptr inbounds %struct.Account, %struct.Account* %5, i32 0, i32 0
-  %7 = load i32, i32* %6, align 4
-  %8 = call i8* @sts_str_from_i32(i32 %7)
-  call void @sts_print(i8* %8)
-  %9 = load %struct.Account*, %struct.Account** %a.addr, align 8
-  %10 = call i32 @Account.drain(%struct.Account* %9, i32 20)
-  %11 = call i8* @sts_str_from_i32(i32 %10)
-  call void @sts_print(i8* %11)
-  %12 = load %struct.Account*, %struct.Account** %a.addr, align 8
-  %13 = load %struct.Account*, %struct.Account** %a.addr, align 8
-  %14 = call i1 @Account.same(%struct.Account* %12, %struct.Account* %13)
-  %15 = select i1 %14, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
-  call void @sts_print(i8* %15)
-  %16 = load %struct.Account*, %struct.Account** %a.addr, align 8
-  %17 = call i8* @sts_alloc_struct(i64 8)
-  %18 = bitcast i8* %17 to %struct.Account*
-  call void @Account.constructor(%struct.Account* %18, i32 1, i32 1)
-  %19 = call i1 @Account.same(%struct.Account* %16, %struct.Account* %18)
-  %20 = select i1 %19, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
-  call void @sts_print(i8* %20)
+  %Account.obj = alloca %struct.Account, align 8
+  %Account.obj.1 = alloca %struct.Account, align 8
+  %arena.mark = call i64 @sts_arena_mark()
+  call void @Account.constructor(%struct.Account* %Account.obj, i32 100, i32 1)
+  store %struct.Account* %Account.obj, %struct.Account** %a.addr, align 8
+  %0 = load %struct.Account*, %struct.Account** %a.addr, align 8
+  %1 = call i1 @Account.withdraw(%struct.Account* %0, i32 30)
+  %2 = select i1 %1, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  call void @sts_print(i8* %2)
+  %3 = load %struct.Account*, %struct.Account** %a.addr, align 8
+  %4 = getelementptr inbounds %struct.Account, %struct.Account* %3, i32 0, i32 0
+  %5 = load i32, i32* %4, align 4
+  %6 = call i8* @sts_str_from_i32(i32 %5)
+  call void @sts_print(i8* %6)
+  %7 = load %struct.Account*, %struct.Account** %a.addr, align 8
+  %8 = call i32 @Account.drain(%struct.Account* %7, i32 20)
+  %9 = call i8* @sts_str_from_i32(i32 %8)
+  call void @sts_print(i8* %9)
+  %10 = load %struct.Account*, %struct.Account** %a.addr, align 8
+  %11 = load %struct.Account*, %struct.Account** %a.addr, align 8
+  %12 = call i1 @Account.same(%struct.Account* %10, %struct.Account* %11)
+  %13 = select i1 %12, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  call void @sts_print(i8* %13)
+  %14 = load %struct.Account*, %struct.Account** %a.addr, align 8
+  call void @Account.constructor(%struct.Account* %Account.obj.1, i32 1, i32 1)
+  %15 = call i1 @Account.same(%struct.Account* %14, %struct.Account* %Account.obj.1)
+  %16 = select i1 %15, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  call void @sts_print(i8* %16)
+  call void @sts_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
@@ -140,5 +115,3 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }

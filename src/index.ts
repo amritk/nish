@@ -99,6 +99,7 @@ function usage(): never {
       "  --target <triple>|host     emit `target datalayout`/`target triple` for that machine",
       `                             (${SUPPORTED_TARGETS.join(", ")}); default: target-neutral IR`,
       "  --nsw                      integer add/sub/mul carry `nsw`: signed overflow is undefined (like C)",
+      "  --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)",
       "  -v, --version              print the statictsc version and exit",
       "exit codes: 0 ok, 1 compile error, 2 usage, 3 toolchain (clang / build.sh), 70 internal error",
     ].join("\n")
@@ -156,6 +157,7 @@ function main(argv: string[]): number {
   let uncheckedIndexing = false;
   let target: string | undefined; // WP9: canonical triple, validated below
   let nsw = false;
+  let stackAlloc = true;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -202,6 +204,8 @@ function main(argv: string[]): number {
       target = resolved.triple;
     } else if (arg === "--nsw") {
       nsw = true;
+    } else if (arg === "--no-stack-alloc") {
+      stackAlloc = false;
     } else if (arg === "-h" || arg === "--help") {
       usage();
     } else if (arg === "-v" || arg === "--version") {
@@ -235,6 +239,7 @@ function main(argv: string[]): number {
     uncheckedIndexing,
     target,
     nsw,
+    stackAlloc,
   });
   try {
     // Test hook for the internal-error path (tests/run.js, WP12 block); not a user feature.

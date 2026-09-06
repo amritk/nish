@@ -1,6 +1,8 @@
 @.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 
+declare noundef i64 @sts_arena_mark() #0
+declare void @sts_arena_release(i64 noundef) #0
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
 declare noalias noundef nonnull align 8 i8* @sts_str_from_f64(double noundef) #0
@@ -13,6 +15,7 @@ entry:
   %f.addr = alloca double, align 8
   %big.addr = alloca i64, align 8
   %zero.addr = alloca double, align 8
+  %arena.mark = call i64 @sts_arena_mark()
   store double 0x4006000000000000, double* %f.addr, align 8
   store i64 5000000000, i64* %big.addr, align 8
   %0 = load double, double* %f.addr, align 8
@@ -59,6 +62,7 @@ entry:
   %31 = load double, double* %f.addr, align 8
   %32 = fmul double %31, 0x4010000000000000
   %33 = call i32 @llvm.fptosi.sat.i32.f64(double %32)
+  call void @sts_arena_release(i64 %arena.mark)
   ret i32 %33
 }
 

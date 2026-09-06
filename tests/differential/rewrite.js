@@ -79,6 +79,7 @@ const IDENTIFIER_BUILTINS = new Set(["toI32", "toI64", "toF64", "readFileSync", 
 function zeroOf(elem) {
   if (elem.kind === "i64") return big(0);
   if (elem.kind === "bool") return f.createFalse();
+  if (elem.kind === "nullable") return f.createNull(); // zero-filled pointers are `null`
   return num(0);
 }
 
@@ -213,6 +214,10 @@ function makeTransformer(unit, stems) {
         const dotted = dottedName(node.expression);
         if (dotted === "console.log") return shimCall("log", args);
         if (dotted === "process.exit") return shimCall("exit", args);
+        if (dotted === "Arena.used") return shimCall("arenaUsed", args);
+        if (dotted === "Arena.mark") return shimCall("arenaMark", args);
+        if (dotted === "Arena.release") return shimCall("arenaRelease", args);
+        if (dotted === "Arena.reset") return shimCall("arenaReset", args);
         if (dotted === "Math.abs") {
           const k = kindOf(node.arguments[0]);
           if (k === "i64") return shimCall("absI64", args);

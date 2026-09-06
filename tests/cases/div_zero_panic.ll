@@ -1,6 +1,8 @@
 @.str.0 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"before\00" }, align 8
 
 declare void @sts_free_arena() #1
+declare noundef i64 @sts_arena_mark() #1
+declare void @sts_arena_release(i64 noundef) #1
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #1
 declare void @sts_panic_div(i1 noundef zeroext) #2
@@ -8,6 +10,7 @@ declare void @sts_panic_div(i1 noundef zeroext) #2
 define noundef i32 @sts_main() #0 {
 entry:
   %n.addr = alloca i32, align 4
+  %arena.mark = call i64 @sts_arena_mark()
   store i32 0, i32* %n.addr, align 4
   call void @sts_print(i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*))
   %0 = load i32, i32* %n.addr, align 4
@@ -26,6 +29,7 @@ div.ok:
   %6 = sdiv i32 10, %0
   %7 = call i8* @sts_str_from_i32(i32 %6)
   call void @sts_print(i8* %7)
+  call void @sts_arena_release(i64 %arena.mark)
   ret i32 0
 }
 

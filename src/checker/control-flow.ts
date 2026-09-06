@@ -12,9 +12,14 @@
  *     terminate when their body contains no `break` aimed at them.
  *   - Any other loop may run zero times, so it never terminates.
  *   - `break`, `continue` and `throw` terminate the list they appear in.
+ *
+ * Nullable narrowing (WP6, see `nullable.ts`): a condition of the form
+ * `p !== null` / `p === null` (possibly under `!`, `&&`, `||`) narrows `p`
+ * in the branch, loop body, right operand or ternary arm it guards, and after
+ * an `if` whose other branch cannot fall through.
  */
 import ts from "typescript";
-import { BOOL, isNumeric, sameType, typeToString } from "../types";
+import { BOOL, assignable, isNumeric, sameType, typeToString } from "../types";
 import {
   BinaryChecker,
   CheckContext,
@@ -24,6 +29,7 @@ import {
   StatementChecker,
   UnaryChecker,
 } from "./context";
+import { Narrowing, applyNarrowings, conditionNarrowings, invalidateNarrowings, narrowedScope } from "./nullable";
 import { LocalVar } from "./program";
 import { Scope } from "./scope";
 
@@ -50,16 +56,21 @@ function checkCondition(ctx: CheckContext, expr: ts.Expression, scope: Scope): v
   }
 }
 
-/** A branch or loop body: a block opens its own scope; a lone statement gets one too. */
-function checkBody(ctx: CheckContext, stmt: ts.Statement, scope: Scope): boolean {
-  return ts.isBlock(stmt) ? ctx.checkBlock(stmt, scope) : ctx.checkStatement(stmt, scope.child());
+/**
+ * A branch or loop body: a block opens its own scope; a lone statement gets
+ * one too. `narrowings` hold throughout the body (a scope of their own, so a
+ * `let` declared in the body cannot collide with them).
+ */
+function checkBody(ctx: CheckContext, stmt: ts.Statement, scope: Scope, narrowings: Narrowing[] = []): boolean {
+  const inner = narrowings.length > 0 ? narrowedScope(scope, narrowings) : scope;
+  return ts.isBlock(stmt) ? ctx.checkBlock(stmt, inner) : ctx.checkStatement(stmt, inner.child());
 }
 
 /** Check a loop body with the loop on the stack; returns true if it contains a `break` for this loop. */
-function checkLoopBody(ctx: CheckContext, body: ts.Statement, scope: Scope): boolean {
+function checkLoopBody(ctx: CheckContext, body: ts.Statement, scope: Scope, narrowings: Narrowing[] = []): boolean {
   const loop: LoopInfo = { hasBreak: false };
   ctx.loops.push(loop);
-  checkBody(ctx, body, scope);
+  checkBody(ctx, body, scope, narrowings);
   ctx.loops.pop();
   return loop.hasBreak;
 }
@@ -69,21 +80,26 @@ function checkLoopBody(ctx: CheckContext, body: ts.Statement, scope: Scope): boo
 const checkIf: StatementChecker = (ctx, node, scope) => {
   const stmt = node as ts.IfStatement;
   checkCondition(ctx, stmt.expression, scope);
-  const thenTerminates = checkBody(ctx, stmt.thenStatement, scope);
-  if (!stmt.elseStatement) return false;
-  const elseTerminates = checkBody(ctx, stmt.elseStatement, scope);
+  const { whenTrue, whenFalse } = conditionNarrowings(stmt.expression, scope);
+  const thenTerminates = checkBody(ctx, stmt.thenStatement, scope, whenTrue);
+  const elseTerminates = stmt.elseStatement ? checkBody(ctx, stmt.elseStatement, scope, whenFalse) : false;
+  // Early exit: `if (p === null) { return; }` leaves `p` non-null for the rest of the block.
+  if (thenTerminates && !elseTerminates) applyNarrowings(scope, whenFalse);
+  if (elseTerminates && !thenTerminates) applyNarrowings(scope, whenTrue);
   return thenTerminates && elseTerminates;
 };
 
 const checkWhile: StatementChecker = (ctx, node, scope) => {
   const stmt = node as ts.WhileStatement;
+  invalidateNarrowings(scope, stmt);
   checkCondition(ctx, stmt.expression, scope);
-  const hasBreak = checkLoopBody(ctx, stmt.statement, scope);
+  const hasBreak = checkLoopBody(ctx, stmt.statement, scope, conditionNarrowings(stmt.expression, scope).whenTrue);
   return isAlwaysTrue(stmt.expression) && !hasBreak;
 };
 
 const checkDo: StatementChecker = (ctx, node, scope) => {
   const stmt = node as ts.DoStatement;
+  invalidateNarrowings(scope, stmt);
   const hasBreak = checkLoopBody(ctx, stmt.statement, scope);
   checkCondition(ctx, stmt.expression, scope);
   return isAlwaysTrue(stmt.expression) && !hasBreak;
@@ -91,6 +107,7 @@ const checkDo: StatementChecker = (ctx, node, scope) => {
 
 const checkFor: StatementChecker = (ctx, node, scope) => {
   const stmt = node as ts.ForStatement;
+  invalidateNarrowings(scope, stmt);
   // `let` in the initializer belongs to the loop, not the enclosing block.
   const loopScope = scope.child();
   if (stmt.initializer) {
@@ -99,7 +116,8 @@ const checkFor: StatementChecker = (ctx, node, scope) => {
   }
   if (stmt.condition) checkCondition(ctx, stmt.condition, loopScope);
   if (stmt.incrementor) ctx.checkExpression(stmt.incrementor, loopScope);
-  const hasBreak = checkLoopBody(ctx, stmt.statement, loopScope);
+  const narrowings = stmt.condition ? conditionNarrowings(stmt.condition, loopScope).whenTrue : [];
+  const hasBreak = checkLoopBody(ctx, stmt.statement, loopScope, narrowings);
   return isAlwaysTrue(stmt.condition) && !hasBreak;
 };
 
@@ -139,25 +157,34 @@ export const controlFlowStatementCheckers: CheckerTable<StatementChecker> = {
 
 // ---- Expressions --------------------------------------------------------------
 
+/** `c ? a : b`: both arms of one type, or a `T` arm and a `T | null` arm (the result is `T | null`, WP6). */
 const checkConditional: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.ConditionalExpression;
   checkCondition(ctx, expr.condition, scope);
-  const whenTrue = ctx.checkExpression(expr.whenTrue, scope);
-  const whenFalse = ctx.checkExpression(expr.whenFalse, scope);
-  if (!sameType(whenTrue, whenFalse)) {
+  const narrowings = conditionNarrowings(expr.condition, scope);
+  const whenTrue = ctx.checkExpression(expr.whenTrue, narrowedScope(scope, narrowings.whenTrue));
+  const whenFalse = ctx.checkExpression(expr.whenFalse, narrowedScope(scope, narrowings.whenFalse));
+  const result = assignable(whenTrue, whenFalse) ? whenFalse : assignable(whenFalse, whenTrue) ? whenTrue : undefined;
+  if (!result) {
     throw ctx.error(
       `Ternary branches must have the same type, got ${typeToString(whenTrue)} and ${typeToString(whenFalse)}`,
       expr
     );
   }
-  if (whenTrue.kind === "void") throw ctx.error("Ternary branches cannot be void", expr);
-  return whenTrue;
+  if (result.kind === "void") throw ctx.error("Ternary branches cannot be void", expr);
+  return result;
 };
 
-/** `&&` / `||`: boolean operands, boolean result (no JS "last operand" semantics). */
+/**
+ * `&&` / `||`: boolean operands, boolean result (no JS "last operand"
+ * semantics). The right operand runs only when the left decided nothing, so
+ * `p !== null && p.x > 0` sees `p` narrowed (and `p === null || p.x > 0` too).
+ */
 const checkLogical: BinaryChecker = (ctx, expr, scope) => {
   const lhs = ctx.checkExpression(expr.left, scope);
-  const rhs = ctx.checkExpression(expr.right, scope);
+  const isAnd = expr.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken;
+  const left = conditionNarrowings(expr.left, scope);
+  const rhs = ctx.checkExpression(expr.right, narrowedScope(scope, isAnd ? left.whenTrue : left.whenFalse));
   if (lhs.kind !== "bool" || rhs.kind !== "bool") {
     throw ctx.error(
       `Operator \`${ts.tokenToString(expr.operatorToken.kind)}\` requires boolean operands, got ${typeToString(lhs)} and ${typeToString(rhs)}`,

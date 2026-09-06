@@ -41,6 +41,8 @@ const emitNumericLiteral: ExpressionEmitter = (ctx, expr) =>
 
 const emitTrue: ExpressionEmitter = () => "true";
 const emitFalse: ExpressionEmitter = () => "false";
+/** `null` of a `T | null` type: the pointer constant (WP6). */
+const emitNull: ExpressionEmitter = () => "null";
 
 /** Parameters are SSA values; locals are loaded from their alloca slot. */
 const emitIdentifier: ExpressionEmitter = (ctx, expr) => {
@@ -182,6 +184,7 @@ export const expressionEmitters: EmitterTable<ExpressionEmitter> = {
   [ts.SyntaxKind.NumericLiteral]: emitNumericLiteral,
   [ts.SyntaxKind.TrueKeyword]: emitTrue,
   [ts.SyntaxKind.FalseKeyword]: emitFalse,
+  [ts.SyntaxKind.NullKeyword]: emitNull,
   [ts.SyntaxKind.Identifier]: emitIdentifier,
   [ts.SyntaxKind.PrefixUnaryExpression]: emitPrefixUnary,
   [ts.SyntaxKind.BinaryExpression]: emitBinary,

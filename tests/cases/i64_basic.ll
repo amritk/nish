@@ -2,6 +2,8 @@
 @.str.1 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 
+declare noundef i64 @sts_arena_mark() #2
+declare void @sts_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i64(i64 noundef) #2
@@ -18,6 +20,7 @@ entry:
   %big.addr = alloca i64, align 8
   %sq.addr = alloca i64, align 8
   %n.addr = alloca i32, align 4
+  %arena.mark = call i64 @sts_arena_mark()
   store i64 3000000000, i64* %big.addr, align 8
   %0 = load i64, i64* %big.addr, align 8
   %1 = call i64 @square(i64 %0)
@@ -66,6 +69,7 @@ div.fail:
 div.ok:
   %30 = srem i64 %24, 1000
   %31 = trunc i64 %30 to i32
+  call void @sts_arena_release(i64 %arena.mark)
   ret i32 %31
 }
 

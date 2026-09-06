@@ -1,6 +1,8 @@
 @.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 
+declare noundef i64 @sts_arena_mark() #0
+declare void @sts_arena_release(i64 noundef) #0
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
 declare noundef double @sts_random() #0
@@ -89,6 +91,7 @@ entry:
 
 define noundef i32 @test() #0 {
 entry:
+  %arena.mark = call i64 @sts_arena_mark()
   %0 = call i32 @bad1000()
   %1 = call i8* @sts_str_from_i32(i32 %0)
   call void @sts_print(i8* %1)
@@ -97,6 +100,7 @@ entry:
   %4 = fcmp une double %2, %3
   %5 = select i1 %4, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
   call void @sts_print(i8* %5)
+  call void @sts_arena_release(i64 %arena.mark)
   ret i32 0
 }
 

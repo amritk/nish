@@ -15,3 +15,7 @@ corpus/int_div_overflow    # INT_MIN / -1: "attempt to divide with overflow"; JS
 corpus/int_div_zero        # x / 0, x % 0: "attempt to divide by zero"; JS gives 0 after | 0
 cases/div_zero_panic       # 10 / 0 panics (exit 1); JS gives 0 after | 0
 cases/div_overflow_panic   # INT_MIN % -1 panics (exit 1); JS gives 0
+
+# Native-only introspection: these print raw Arena.used() byte counts, which the Node shim reports as 0
+cases/mem_arena_builtins   # prints arena byte usage
+cases/mem_scope_dynamic_array  # prints the arena delta across scoped calls
