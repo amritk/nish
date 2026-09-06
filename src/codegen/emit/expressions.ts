@@ -6,6 +6,7 @@
 import ts from "typescript";
 import { StaticType, llvmType } from "../../types";
 import { BinaryEmitter, EmitterTable, ExpressionEmitter } from "./context";
+import { emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from "./strings";
 
 // ---- Constants --------------------------------------------------------------------
 
@@ -94,6 +95,7 @@ const emitAssignment: BinaryEmitter = (ctx, expr) => {
 export const binaryEmitters: EmitterTable<BinaryEmitter> = {
   [ts.SyntaxKind.EqualsToken]: emitAssignment,
   ...Object.fromEntries(Object.keys(ARITHMETIC_OPCODES).map((k) => [k, emitArithmetic])),
+  ...stringBinaryEmitters, // string-aware `+`, `===`, `!==` (numeric lowering unchanged)
 };
 
 const emitBinary: ExpressionEmitter = (ctx, node) => {
@@ -107,6 +109,7 @@ const emitBinary: ExpressionEmitter = (ctx, node) => {
 
 const emitCall: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.CallExpression;
+  if (ts.isPropertyAccessExpression(expr.expression)) return emitBuiltinCall(ctx, expr);
   const callee = ctx.program.callees.get(expr)!;
   const args = expr.arguments
     .map((arg, i) => `${llvmType(callee.params[i].type)} ${ctx.emitExpression(arg)}`)
@@ -128,4 +131,5 @@ export const expressionEmitters: EmitterTable<ExpressionEmitter> = {
   [ts.SyntaxKind.PrefixUnaryExpression]: emitPrefixUnary,
   [ts.SyntaxKind.BinaryExpression]: emitBinary,
   [ts.SyntaxKind.CallExpression]: emitCall,
+  ...stringExpressionEmitters,
 };

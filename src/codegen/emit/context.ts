@@ -28,6 +28,8 @@ export interface EmitContext {
   alignSuffix(t: StaticType): string;
   /** Reference a runtime symbol (`@sts_...`), ensuring its declaration is emitted. */
   useRuntime(name: string): string;
+  /** `i8*` constant expression for a string literal; identical texts share one `@.str.N`. */
+  stringConstant(text: string): string;
 
   emitStatement(stmt: ts.Statement): void;
   emitBlock(block: ts.Block): void;
