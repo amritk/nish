@@ -156,6 +156,13 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `docs/FAQ.md`, the `docs/README.md` index, `docs/check-links.mjs`, and a
   README restructured into a short tour.
 
+### Fixed
+
+- **Fuzzer validity.** `tests/differential/fuzz.js` parses each generated
+  program and re-rolls the seed while it has a syntax error, so a run no
+  longer reports a compile error for a program TypeScript itself rejects
+  (the `a < b > (c)` type-argument ambiguity; roughly one seed in 200).
+
 ### Changed
 
 - **Runtime budget (WP9b).** `runtime/runtime.c` is back inside the

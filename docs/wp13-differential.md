@@ -288,6 +288,14 @@ when reading a `COMPILE-ERROR` row:
   which rules out division by zero and `INT_MIN / -1` (see discrepancies 2
   and 3). `Math.abs(INT_MIN)` and every other wrap is fair game.
 
+A generated program is parsed with the TypeScript parser before it is used,
+and the seed is re-rolled while the text has a syntax error. Only one shape
+triggers this: the `a < b > (c)` ambiguity, where TypeScript reads the `<`
+of a comparison as the start of a type-argument list. `tsc` rejects such a
+program at exactly the positions `statictsc` reports, so it compares nothing
+(seed 4277 produced one before the re-roll existed). Re-rolling is
+deterministic per seed, so a saved failure still reproduces.
+
 Program `i` of a run uses seed `S + i`; the seed is printed at the start and
 end of every run, and a mismatching or non-compiling program is saved as
 `build/test/differential/fuzz-fail-<S + i>.ts`. `--seed <S + i> --count 1`
