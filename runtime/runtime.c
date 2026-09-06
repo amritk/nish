@@ -1,11 +1,14 @@
 /* StaticTS runtime: bump/arena allocator + length-prefixed UTF-8 strings.
  * No GC, no stdio on the hot path. Layouts here are ABI: they must match
  * the declarations emitted by src/codegen/runtime.ts. */
+#define _POSIX_C_SOURCE 200809L
+#include <fcntl.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 /* ---- Arena ------------------------------------------------------------- */
@@ -102,17 +105,89 @@ void sts_print(const sts_str *s) {
   (void)!write(1, "\n", 1);
 }
 
-sts_str *sts_str_from_i32(int32_t v) {
-  char tmp[12]; /* "-2147483648" */
+sts_str *sts_str_from_i64(int64_t v) {
+  char tmp[21]; /* "-9223372036854775808" */
   char *p = tmp + sizeof tmp;
-  uint32_t u = v < 0 ? 0u - (uint32_t)v : (uint32_t)v;
+  uint64_t u = v < 0 ? 0u - (uint64_t)v : (uint64_t)v;
   do { *--p = (char)('0' + u % 10); u /= 10; } while (u);
   if (v < 0) *--p = '-';
   return sts_str_new(p, (uint64_t)(tmp + sizeof tmp - p));
 }
 
+sts_str *sts_str_from_i32(int32_t v) { return sts_str_from_i64(v); }
+
+/* JS Number.prototype.toString: the shortest digit string that round-trips
+ * (precision 1..17 through %.*e + strtod), laid out per ECMA-262: plain
+ * notation while the exponent n is in (-6, 21], exponent form otherwise. */
 sts_str *sts_str_from_f64(double v) {
-  char tmp[32];
-  int n = snprintf(tmp, sizeof tmp, "%.17g", v);
-  return sts_str_new(tmp, n > 0 ? (uint64_t)n : 0);
+  char buf[32], out[32], dig[18], *o = out;
+  int prec, k, n, i;
+  if (v != v) return sts_str_new("NaN", 3);
+  if (v == 0) return sts_str_new("0", 1); /* -0 prints as 0 */
+  if (v < 0) { *o++ = '-'; v = -v; }
+  if (v > 1.7976931348623157e308) { memcpy(o, "Infinity", 8); return sts_str_new(out, (uint64_t)(o + 8 - out)); }
+  for (prec = 1; prec <= 17; prec++) { /* 17 digits always round-trip */
+    snprintf(buf, sizeof buf, "%.*e", prec - 1, v);
+    if (strtod(buf, 0) == v) break;
+  }
+  /* buf is d[.ddd]e[+-]xx: k significant digits, value = 0.dig * 10^n. */
+  for (k = 0, i = 0; buf[i] != 'e'; i++) if (buf[i] != '.') dig[k++] = buf[i];
+  while (k > 1 && dig[k - 1] == '0') k--;
+  n = atoi(buf + i + 1) + 1;
+  if (k <= n && n <= 21) { memcpy(o, dig, k); o += k; memset(o, '0', n - k); o += n - k; }
+  else if (0 < n && n <= 21) { memcpy(o, dig, n); o += n; *o++ = '.'; memcpy(o, dig + n, k - n); o += k - n; }
+  else if (-6 < n && n <= 0) { *o++ = '0'; *o++ = '.'; memset(o, '0', -n); o -= n; memcpy(o, dig, k); o += k; }
+  else {
+    *o++ = dig[0];
+    if (k > 1) { *o++ = '.'; memcpy(o, dig + 1, k - 1); o += k - 1; }
+    o += snprintf(o, 8, "e%c%d", n > 1 ? '+' : '-', n > 1 ? n - 1 : 1 - n);
+  }
+  return sts_str_new(out, (uint64_t)(o - out));
 }
+
+/* ---- Math.random: xorshift64*, seeded lazily from time and pid --------- */
+static uint64_t sts_rng;
+
+double sts_random(void) {
+  uint64_t x = sts_rng ? sts_rng : ((uint64_t)time(0) << 32) ^ (uint64_t)getpid() ^ 0x9E3779B97F4A7C15ull;
+  x ^= x >> 12; x ^= x << 25; x ^= x >> 27;
+  sts_rng = x;
+  return (double)((x * 0x2545F4914F6CDD1Dull) >> 11) * (1.0 / 9007199254740992.0); /* 53 bits in [0, 1) */
+}
+
+/* ---- Process and files ------------------------------------------------- */
+void sts_exit(int32_t code) { exit(code); }
+
+static void sts_io_fail(const char *what, const sts_str *path) {
+  (void)!write(2, "statictsc: cannot ", 18);
+  (void)!write(2, what, strlen(what));
+  (void)!write(2, path->data, path->len);
+  sts_die("\n");
+}
+
+/* readFileSync(path): the whole file as one arena string. */
+sts_str *sts_read_file(const sts_str *path) {
+  int fd = open(path->data, O_RDONLY);
+  off_t len = fd < 0 ? -1 : lseek(fd, 0, SEEK_END);
+  if (len < 0) sts_io_fail("read ", path);
+  sts_str *s = (sts_str *)sts_alloc_struct(sizeof(uint64_t) + (size_t)len + 1);
+  ssize_t n;
+  for (s->len = 0; (n = pread(fd, s->data + s->len, (size_t)len - s->len, (off_t)s->len)) > 0;) s->len += (uint64_t)n;
+  close(fd);
+  s->data[s->len] = 0;
+  return s;
+}
+
+static void sts_put_file(const sts_str *path, const sts_str *data, int flags) {
+  int fd = open(path->data, O_WRONLY | O_CREAT | flags, 0644);
+  for (uint64_t done = 0; done < data->len;) {
+    ssize_t n = fd < 0 ? -1 : write(fd, data->data + done, data->len - done);
+    if (n <= 0) sts_io_fail("write ", path);
+    done += (uint64_t)n;
+  }
+  if (fd < 0) sts_io_fail("write ", path);
+  close(fd);
+}
+
+void sts_write_file(const sts_str *path, const sts_str *data) { sts_put_file(path, data, O_TRUNC); }
+void sts_append_file(const sts_str *path, const sts_str *data) { sts_put_file(path, data, O_APPEND); }

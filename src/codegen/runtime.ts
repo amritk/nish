@@ -24,10 +24,37 @@ export interface RuntimeFunction {
   attrs: string[];
   /** What calling it does to memory (drives caller purity analysis). */
   effect: MemoryEffect;
+  /**
+   * An LLVM intrinsic (`llvm.*`) rather than a symbol from runtime.c. Declared
+   * only when a module uses it, even under `--runtime-decls`, because the
+   * prelude documents the C ABI and intrinsics are not part of it.
+   */
+  intrinsic?: boolean;
+  /** Never returns to the caller (`sts_exit`); callers lose `willreturn`. */
+  noreturn?: boolean;
 }
 
 const STR = "i8* noundef nonnull readonly align 8";
 const STR_NOCAP = `${STR} nocapture`;
+
+/**
+ * Pure math intrinsics (WP7). Every one is a total function of its operands
+ * with no memory access, so `readnone willreturn` is a fact, not a hope; the
+ * attribute groups here match what LLVM itself attaches to these intrinsics
+ * (`nocallback nofree nosync nounwind speculatable willreturn memory(none)`)
+ * minus the ones this compiler does not emit. `effect: "none"` keeps callers
+ * `readnone` through the purity fixpoint in attributes.ts.
+ */
+const INTRINSIC_ATTRS = ["nounwind", "willreturn", "readnone"];
+function intrinsic(name: string, ret: string, params: string): RuntimeFunction {
+  return {
+    name,
+    signature: `declare ${ret} @${name}(${params})`,
+    attrs: INTRINSIC_ATTRS,
+    effect: "none",
+    intrinsic: true,
+  };
+}
 
 export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
   {
@@ -90,6 +117,56 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     attrs: ["nounwind", "willreturn"],
     effect: "write",
   },
+  // ---- WP7: i64 strings, Math.random, process, files --------------------------
+  {
+    name: "sts_str_from_i64",
+    signature: "declare noalias noundef nonnull align 8 i8* @sts_str_from_i64(i64 noundef)",
+    attrs: ["nounwind"],
+    effect: "write",
+  },
+  {
+    // xorshift64* over a global state word: reads and writes memory.
+    name: "sts_random",
+    signature: "declare noundef double @sts_random()",
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
+    name: "sts_exit",
+    signature: "declare void @sts_exit(i32 noundef)",
+    attrs: ["noreturn", "nounwind"],
+    effect: "write",
+    noreturn: true,
+  },
+  {
+    name: "sts_read_file",
+    signature: `declare noalias noundef nonnull align 8 i8* @sts_read_file(${STR_NOCAP})`,
+    attrs: ["nounwind"],
+    effect: "write",
+  },
+  {
+    name: "sts_write_file",
+    signature: `declare void @sts_write_file(${STR_NOCAP}, ${STR_NOCAP})`,
+    attrs: ["nounwind"],
+    effect: "write",
+  },
+  {
+    name: "sts_append_file",
+    signature: `declare void @sts_append_file(${STR_NOCAP}, ${STR_NOCAP})`,
+    attrs: ["nounwind"],
+    effect: "write",
+  },
+  // ---- WP7: LLVM intrinsics behind Math.* and the numeric conversions ----------
+  ...["sqrt", "floor", "ceil", "trunc", "sin", "cos", "exp", "log", "fabs"].map((f) =>
+    intrinsic(`llvm.${f}.f64`, "double", "double")
+  ),
+  ...["pow", "minnum", "maxnum"].map((f) => intrinsic(`llvm.${f}.f64`, "double", "double, double")),
+  ...["i32", "i64"].flatMap((t) => [
+    intrinsic(`llvm.abs.${t}`, t, `${t}, i1`),
+    intrinsic(`llvm.smin.${t}`, t, `${t}, ${t}`),
+    intrinsic(`llvm.smax.${t}`, t, `${t}, ${t}`),
+    intrinsic(`llvm.fptosi.sat.${t}.f64`, t, "double"),
+  ]),
 ];
 
 export const RUNTIME_BY_NAME = new Map(RUNTIME_FUNCTIONS.map((f) => [f.name, f]));

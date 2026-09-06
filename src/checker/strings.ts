@@ -18,19 +18,19 @@
  */
 import ts from "typescript";
 import { BOOL, F64, I32, STRING, StaticType, VOID, isNumeric, sameType, typeToString } from "../types";
+import { BuiltinCallChecker, dottedName } from "./builtins";
 import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context";
-import { propertyCheckers } from "./members";
+import { namespaceProperties, propertyCheckers } from "./members";
+import { ioBuiltinCalls } from "./io";
+import { mathBuiltinCalls, mathBuiltinProperties } from "./math";
 import { Scope } from "./scope";
+
+export { dottedName } from "./builtins";
+export type { BuiltinCallChecker } from "./builtins";
 
 /** Types that can be turned into text: template holes and `console.log` arguments. */
 export function isStringifiable(t: StaticType): boolean {
   return t.kind === "string" || t.kind === "bool" || isNumeric(t);
-}
-
-/** `a.b` for a plain `identifier.identifier` property access, else undefined. */
-export function dottedName(expr: ts.Expression): string | undefined {
-  if (!ts.isPropertyAccessExpression(expr) || !ts.isIdentifier(expr.expression)) return undefined;
-  return `${expr.expression.text}.${expr.name.text}`;
 }
 
 // ---- Literals ---------------------------------------------------------------------
@@ -51,6 +51,9 @@ const checkTemplateExpression: ExpressionChecker = (ctx, node, scope) => {
 // ---- Properties -------------------------------------------------------------------
 
 /** `s.length` is the only string property today; registered in the member dispatch. */
+/** `Math.PI` / `Math.E` (WP7) are namespace properties, dispatched by dotted name. */
+for (const [name, type] of Object.entries(mathBuiltinProperties)) namespaceProperties[name] = () => type;
+
 propertyCheckers.string = (ctx, expr, target) => {
   const name = expr.name.text;
   if (name === "length") return ctx.opts.numberMode === "f64" ? F64 : I32;
@@ -85,9 +88,7 @@ const checkStrictEquality: BinaryChecker = (ctx, expr, scope) => {
   return BOOL;
 };
 
-// ---- Builtin calls (`console.log`, later `Math.sqrt`) ---------------------------------
-
-export type BuiltinCallChecker = (ctx: CheckContext, expr: ts.CallExpression, scope: Scope) => StaticType;
+// ---- Builtin calls (`console.log`, `Math.*`, `process.exit`) ------------------------------
 
 const checkConsoleLog: BuiltinCallChecker = (ctx, expr, scope) => {
   if (expr.arguments.length !== 1) {
@@ -106,6 +107,8 @@ const checkConsoleLog: BuiltinCallChecker = (ctx, expr, scope) => {
 /** Builtins keyed by dotted callee name. Add an entry to support another. */
 export const builtinCalls: Record<string, BuiltinCallChecker> = {
   "console.log": checkConsoleLog,
+  ...mathBuiltinCalls, // WP7: Math.sqrt, ..., Math.random
+  ...ioBuiltinCalls, // WP7: process.exit
 };
 
 /** Entry point for `checkCall` when the callee is a property access. */

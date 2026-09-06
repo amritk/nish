@@ -80,6 +80,15 @@ void sts_print(const sts_str *s);
 /* Number to string, as `${n}` does: decimal for i32, `%.17g` for f64. */
 sts_str *sts_str_from_i32(int32_t v);
 sts_str *sts_str_from_f64(double v);
+sts_str *sts_str_from_i64(int64_t v);
+
+/* Process and file I/O (WP7). `sts_exit` never returns; the file functions
+ * print a message to stderr and exit(1) on a fatal error. */
+double sts_random(void);
+void sts_exit(int32_t code);
+sts_str *sts_read_file(const sts_str *path);
+void sts_write_file(const sts_str *path, const sts_str *data);
+void sts_append_file(const sts_str *path, const sts_str *data);
 
 #ifdef __cplusplus
 }

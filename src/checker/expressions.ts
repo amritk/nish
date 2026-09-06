@@ -9,6 +9,9 @@
 import ts from "typescript";
 import { BOOL, F64, I32, isNumeric, sameType, typeToString } from "../types";
 import { checkMethodCall, isValueReceiver, memberExpressionCheckers } from "./members";
+import { BuiltinCallChecker } from "./builtins";
+import { ioBuiltinFunctions } from "./io";
+import { contextualLiteralType, conversionBuiltins } from "./math";
 import { checkBuiltinCall, stringBinaryCheckers, stringExpressionCheckers } from "./strings";
 import { BinaryChecker, CheckerTable, ExpressionChecker, UnaryChecker } from "./context";
 import {
@@ -22,8 +25,10 @@ import {
 const checkParenthesized: ExpressionChecker = (ctx, expr, scope) =>
   ctx.checkExpression((expr as ts.ParenthesizedExpression).expression, scope);
 
-const checkNumericLiteral: ExpressionChecker = (ctx, node) => {
+const checkNumericLiteral: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.NumericLiteral;
+  const contextual = contextualLiteralType(ctx, expr, scope); // WP7: `let x: i64 = 5`, `x + 5`, ...
+  if (contextual) return contextual;
   if (ctx.opts.numberMode === "f64") return F64;
   const n = Number(expr.text);
   if (!Number.isInteger(n)) {
@@ -150,6 +155,12 @@ const checkBinary: ExpressionChecker = (ctx, node, scope) => {
 
 // ---- Calls ---------------------------------------------------------------------
 
+/** Builtins called by plain identifier; a user function of the same name shadows them. */
+export const builtinFunctions: Record<string, BuiltinCallChecker> = {
+  ...conversionBuiltins, // WP7: toI32, toI64, toF64
+  ...ioBuiltinFunctions, // WP7: readFileSync, writeFileSync, appendFileSync
+};
+
 const checkCall: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.CallExpression;
   if (ts.isPropertyAccessExpression(expr.expression)) {
@@ -162,7 +173,11 @@ const checkCall: ExpressionChecker = (ctx, node, scope) => {
     throw ctx.error("Only direct calls to named functions are supported", expr);
   }
   const callee = ctx.sigs.get(expr.expression.text);
-  if (!callee) throw ctx.error(`Unknown function \`${expr.expression.text}\``, expr.expression);
+  if (!callee) {
+    const builtin = builtinFunctions[expr.expression.text];
+    if (builtin) return builtin(ctx, expr, scope); // no `callees` entry: the emitter knows it by name
+    throw ctx.error(`Unknown function \`${expr.expression.text}\``, expr.expression);
+  }
   if (expr.arguments.length !== callee.params.length) {
     throw ctx.error(`\`${callee.name}\` expects ${callee.params.length} argument(s), got ${expr.arguments.length}`, expr);
   }

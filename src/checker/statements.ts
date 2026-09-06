@@ -8,6 +8,7 @@ import ts from "typescript";
 import { resolveTypeNode, sameType, typeToString } from "../types";
 import { CheckContext, CheckerTable, StatementChecker } from "./context";
 import { controlFlowStatementCheckers } from "./control-flow";
+import { terminatesControlFlow } from "./io";
 import { LocalVar } from "./program";
 import { Scope } from "./scope";
 
@@ -65,8 +66,9 @@ export function checkVariableDeclarationList(
 }
 
 const checkExpressionStatement: StatementChecker = (ctx, node, scope) => {
-  ctx.checkExpression((node as ts.ExpressionStatement).expression, scope);
-  return false;
+  const expr = (node as ts.ExpressionStatement).expression;
+  ctx.checkExpression(expr, scope);
+  return terminatesControlFlow(expr); // WP7: `process.exit(n);` ends the path like `return`
 };
 
 const checkBlockStatement: StatementChecker = (ctx, node, scope) =>
@@ -82,6 +84,7 @@ export const statementCheckers: CheckerTable<StatementChecker> = {
 
 /** How a terminating statement is named in the unreachable-code diagnostic. */
 const TERMINATOR_NAMES: Partial<Record<ts.SyntaxKind, string>> = {
+  [ts.SyntaxKind.ExpressionStatement]: "process.exit",
   [ts.SyntaxKind.ReturnStatement]: "return",
   [ts.SyntaxKind.BreakStatement]: "break",
   [ts.SyntaxKind.ContinueStatement]: "continue",

@@ -49,6 +49,7 @@ import { CheckedProgram, FunctionSig, Param } from "../checker";
 import { unwrapParens } from "../checker/control-flow";
 import { StaticType } from "../types";
 import { factCollectors } from "./emit/members";
+import { collectBuiltinFacts } from "./emit/expressions";
 import { collectStringFacts, unwrapStringPassthrough } from "./emit/strings";
 import { MemoryEffect, RUNTIME_BY_NAME } from "./runtime";
 
@@ -63,6 +64,11 @@ export interface FunctionFacts {
   effect: MemoryEffect;
   /** Returns on every input (modulo stack exhaustion); refined by the call-graph fixpoint. */
   willReturn: boolean;
+  /**
+   * Can reach a `noreturn` runtime call (`process.exit`, WP7), directly or
+   * through a callee; such a function must not carry `willreturn`.
+   */
+  callsNoReturn: boolean;
   /** Parameter names that escape (returned or passed to a call). */
   escaping: Set<string>;
   /** User functions called directly (by LLVM symbol). */
@@ -105,6 +111,12 @@ export function analyzeFunctions(programs: CheckedProgram | readonly CheckedProg
           f.willReturn = false;
           changed = true;
         }
+        const noReturn = calleeFacts ? calleeFacts.callsNoReturn : (runtime?.noreturn ?? false);
+        if (noReturn && !f.callsNoReturn) {
+          f.callsNoReturn = true;
+          f.willReturn = false;
+          changed = true;
+        }
       }
     }
   }
@@ -119,6 +131,7 @@ function collectFacts(program: CheckedProgram, sig: FunctionSig): FunctionFacts 
     hasTrap: false,
     effect: "none",
     willReturn: true,
+    callsNoReturn: false,
     escaping: new Set(),
     callees: new Set(),
   };
@@ -150,13 +163,14 @@ function collectFacts(program: CheckedProgram, sig: FunctionSig): FunctionFacts 
     }
     collectStringFacts(program, node, facts);
     for (const collect of factCollectors) collect(program, node, facts);
+    collectBuiltinFacts(program, node, facts); // WP7: toI32/toF64/..., readFileSync/...
     ts.forEachChild(node, visit);
   };
   visit(sig.decl.body!);
 
   if (facts.readsMemory) facts.effect = maxEffect(facts.effect, "read");
   if (facts.hasTrap) facts.effect = "write";
-  facts.willReturn = facts.loopsBounded && !facts.hasTrap;
+  facts.willReturn = facts.loopsBounded && !facts.hasTrap && !facts.callsNoReturn;
   return facts;
 }
 

@@ -52,18 +52,18 @@ esac
 
 case "$profile" in
   debug)
-    "$CC" "${common[@]}" "${inputs[@]}" -o "$out" ;;
+    "$CC" "${common[@]}" "${inputs[@]}" -lm -o "$out" ;;
   speed)
     "$CC" "${common[@]}" -O3 -flto -DNDEBUG \
       -ffunction-sections -fdata-sections -fomit-frame-pointer \
       -fno-asynchronous-unwind-tables -fno-unwind-tables "${elf[@]}" \
-      "${gc[@]}" "${strip_flag[@]}" "${inputs[@]}" -o "$out" ;;
+      "${gc[@]}" "${strip_flag[@]}" "${inputs[@]}" -lm -o "$out" ;;
   size)
     "$CC" "${common[@]}" -Oz -flto -DNDEBUG \
       -ffunction-sections -fdata-sections -fomit-frame-pointer \
       -fno-asynchronous-unwind-tables -fno-unwind-tables "${elf[@]}" \
       -fno-stack-protector -fvisibility=hidden \
-      "${gc[@]}" "${strip_flag[@]}" "${inputs[@]}" -o "$out" ;;
+      "${gc[@]}" "${strip_flag[@]}" "${inputs[@]}" -lm -o "$out" ;;
   wasm)
     # clang resolves wasm-ld next to its own binary first, then on PATH; ask it
     # rather than probing PATH so a Homebrew llvm without a PATH entry still works.
@@ -99,7 +99,7 @@ case "$profile" in
     "$CC" "${common[@]}" -O3 -flto -DNDEBUG -I"$node_inc" -I"$runtime_inc" \
       -ffunction-sections -fdata-sections -fomit-frame-pointer \
       -fno-asynchronous-unwind-tables -fno-unwind-tables "${elf[@]}" \
-      "${shared[@]}" "${gc[@]}" "${strip_flag[@]}" "${inputs[@]}" -o "$out" ;;
+      "${shared[@]}" "${gc[@]}" "${strip_flag[@]}" "${inputs[@]}" -lm -o "$out" ;;
   *) echo "error: unknown profile '$profile'" >&2; exit 2 ;;
 esac
 

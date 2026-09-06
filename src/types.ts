@@ -38,12 +38,15 @@ export const DEFAULT_OPTIONS: CompilerOptions = {
 
 export type StaticType =
   | { kind: "i32" }
+  | { kind: "i64" }
   | { kind: "f64" }
   | { kind: "bool" }
   | { kind: "string" }
   | { kind: "void" };
 
 export const I32: StaticType = { kind: "i32" };
+/** 64-bit integer (WP7). Never the lowering of `number`; always spelled `i64`. */
+export const I64: StaticType = { kind: "i64" };
 export const F64: StaticType = { kind: "f64" };
 export const BOOL: StaticType = { kind: "bool" };
 export const STRING: StaticType = { kind: "string" };
@@ -54,6 +57,8 @@ export function llvmType(t: StaticType): string {
   switch (t.kind) {
     case "i32":
       return "i32";
+    case "i64":
+      return "i64";
     case "f64":
       return "double";
     case "bool":
@@ -70,6 +75,8 @@ export function alignOf(t: StaticType): number {
   switch (t.kind) {
     case "i32":
       return 4;
+    case "i64":
+      return 8;
     case "f64":
       return 8;
     case "bool":
@@ -90,7 +97,12 @@ export function sameType(a: StaticType, b: StaticType): boolean {
 }
 
 export function isNumeric(t: StaticType): boolean {
-  return t.kind === "i32" || t.kind === "f64";
+  return t.kind === "i32" || t.kind === "i64" || t.kind === "f64";
+}
+
+/** Integer types: wrapping two's-complement arithmetic, `icmp`, `sext`/`trunc` between them. */
+export function isInteger(t: StaticType): boolean {
+  return t.kind === "i32" || t.kind === "i64";
 }
 
 /**
@@ -122,19 +134,21 @@ export function resolveTypeNode(
         switch (ref.typeName.text) {
           case "i32":
             return I32;
+          case "i64":
+            return I64;
           case "f64":
             return F64;
         }
       }
       throw new CompileError(
-        `Unsupported type reference \`${ref.getText(sourceFile)}\` (Phase 1 supports number, i32, f64, boolean, string, void)`,
+        `Unsupported type reference \`${ref.getText(sourceFile)}\` (Phase 1 supports number, i32, i64, f64, boolean, string, void)`,
         node,
         sourceFile
       );
     }
     default:
       throw new CompileError(
-        `Unsupported type \`${node.getText(sourceFile)}\` (Phase 1 supports number, i32, f64, boolean, string, void)`,
+        `Unsupported type \`${node.getText(sourceFile)}\` (Phase 1 supports number, i32, i64, f64, boolean, string, void)`,
         node,
         sourceFile
       );
