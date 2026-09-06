@@ -24,6 +24,7 @@ import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, r
 import { EmitContext } from "./emit/context";
 import { expressionEmitters } from "./emit/expressions";
 import { statementEmitters } from "./emit/statements";
+import { addStringConstant } from "./emit/strings";
 import { IRFunction, IRModule } from "./ir";
 import { ARENA_GLOBAL, ARENA_TYPE, INLINE_ALLOCATOR_ATTRS, RUNTIME_FUNCTIONS, inlineAllocator } from "./runtime";
 
@@ -34,6 +35,8 @@ export class Emitter implements EmitContext {
   private slots = new WeakMap<LocalVar, string>();
   /** Runtime symbols referenced by this module; drives which declarations are emitted. */
   private readonly usedRuntime = new Set<string>();
+  /** Interned string literals: text -> `i8*` constant expression. */
+  private readonly strings = new Map<string, string>();
 
   constructor(
     readonly program: CheckedProgram,
@@ -83,6 +86,15 @@ export class Emitter implements EmitContext {
   useRuntime(name: string): string {
     this.usedRuntime.add(name);
     return `@${name}`;
+  }
+
+  stringConstant(text: string): string {
+    let ref = this.strings.get(text);
+    if (ref === undefined) {
+      ref = addStringConstant(this.module, this.strings.size, text);
+      this.strings.set(text, ref);
+    }
+    return ref;
   }
 
   private emitRuntimePrelude(): void {

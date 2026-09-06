@@ -11,7 +11,9 @@
  *               FunctionAttrs pass infers exactly this, so it is safe to
  *               assert it up front. (Spelled `readnone`, which every LLVM
  *               version accepts; LLVM 16+ upgrades it to `memory(none)`.)
- *   readonly    As above, but callees may read memory (e.g. string length).
+ *   readonly    As above, but the body reads memory it does not own: a
+ *               `.length` load through a string pointer, or a call to a
+ *               reading callee (e.g. `sts_str_eq`). Never with `readnone`.
  *   noundef     Every StaticTS value is initialised, so no param or return
  *               value is ever undef/poison.
  *   zeroext     `boolean` is i1; the C ABI wants it zero-extended in a register.
@@ -27,10 +29,13 @@
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, Param } from "../checker";
 import { StaticType } from "../types";
+import { collectStringFacts, unwrapStringPassthrough } from "./emit/strings";
 import { MemoryEffect, RUNTIME_BY_NAME } from "./runtime";
 
 export interface FunctionFacts {
   hasLoops: boolean;
+  /** The body itself loads from memory it does not own (a string header read). */
+  readsMemory: boolean;
   effect: MemoryEffect;
   /** Parameter names that escape (returned or passed to a call). */
   escaping: Set<string>;
@@ -70,11 +75,11 @@ export function analyzeFunctions(program: CheckedProgram): Map<string, FunctionF
 }
 
 function collectFacts(program: CheckedProgram, sig: FunctionSig): FunctionFacts {
-  const facts: FunctionFacts = { hasLoops: false, effect: "none", escaping: new Set(), callees: new Set() };
+  const facts: FunctionFacts = { hasLoops: false, readsMemory: false, effect: "none", escaping: new Set(), callees: new Set() };
   const paramNames = new Set(sig.params.map((p) => p.name));
 
   const noteEscape = (expr: ts.Expression) => {
-    while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
+    expr = unwrapStringPassthrough(program, expr); // parentheses and single-hole templates
     if (ts.isIdentifier(expr)) {
       const v = program.bindings.get(expr);
       if (v?.storage === "param" && paramNames.has(v.name)) facts.escaping.add(v.name);
@@ -86,12 +91,18 @@ function collectFacts(program: CheckedProgram, sig: FunctionSig): FunctionFacts 
     if (ts.isReturnStatement(node) && node.expression) noteEscape(node.expression);
     if (ts.isCallExpression(node)) {
       const callee = program.callees.get(node);
-      if (callee) facts.callees.add(callee.name);
-      node.arguments.forEach(noteEscape);
+      if (callee) {
+        facts.callees.add(callee.name);
+        // Only user functions can capture an argument; every runtime symbol a
+        // builtin lowers to is declared `nocapture` in runtime.ts.
+        node.arguments.forEach(noteEscape);
+      }
     }
+    collectStringFacts(program, node, facts);
     ts.forEachChild(node, visit);
   };
   visit(sig.decl.body!);
+  if (facts.readsMemory) facts.effect = "read";
   return facts;
 }
 

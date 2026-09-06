@@ -303,7 +303,7 @@ Type mapping:
 | `number` (i32 mode), `i32` | `i32` |
 | `number` (f64 mode), `f64` | `double` |
 | `boolean` | `i1` |
-| `string` | `i8*` (reserved; no string operations yet) |
+| `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }`, 8-aligned, immutable; literals are module constants, `.length` is the UTF-8 byte length |
 | `void` | `void` |
 
 Supported today:
@@ -313,6 +313,13 @@ Supported today:
 - Arithmetic `+ - * / %`, unary `-` and `!`, comparisons `< <= > >= === !==`.
 - Calls between functions in the same file, in any order.
 - `return`, expression statements, nested blocks.
+- String literals (`"..."`, `` `...` ``) as deduplicated `private unnamed_addr constant` data; UTF-8, `\XX`-escaped.
+- `a + b` on two strings (`sts_str_concat`); `"a" + 1` is rejected (no implicit conversion).
+- `===` / `!==` on strings by content (`sts_str_eq`); `<` etc. on strings stay rejected.
+- `s.length`: a direct `load i64` of the header (byte length, no call); functions that read it are `readonly`.
+- Template literals `` `n=${n}` `` with string, number, and boolean holes, chained through `sts_str_concat`.
+- `console.log(x)` for `x: string | number | boolean`, statement position only, lowered to `sts_print`.
+- Number to string via `sts_str_from_i32` / `sts_str_from_f64` (`%.17g`; shortest round-trip formatting is WP7). See [docs/wp3-strings.md](docs/wp3-strings.md).
 
 Rejected with a diagnostic (`file:line:col: error: ...`):
 

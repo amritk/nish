@@ -9,6 +9,7 @@
 import ts from "typescript";
 import { BOOL, F64, I32, isNumeric, sameType, typeToString } from "../types";
 import { BinaryChecker, CheckerTable, ExpressionChecker } from "./context";
+import { checkBuiltinCall, stringBinaryCheckers, stringExpressionCheckers } from "./strings";
 
 // ---- Leaves -----------------------------------------------------------------
 
@@ -113,6 +114,7 @@ export const binaryCheckers: CheckerTable<BinaryChecker> = {
   [ts.SyntaxKind.ExclamationEqualsEqualsToken]: checkComparison,
   [ts.SyntaxKind.EqualsEqualsToken]: rejectLooseEquality,
   [ts.SyntaxKind.ExclamationEqualsToken]: rejectLooseEquality,
+  ...stringBinaryCheckers, // string-aware `+`, `===`, `!==` (numeric behaviour unchanged)
 };
 
 const checkBinary: ExpressionChecker = (ctx, node, scope) => {
@@ -128,6 +130,7 @@ const checkBinary: ExpressionChecker = (ctx, node, scope) => {
 
 const checkCall: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.CallExpression;
+  if (ts.isPropertyAccessExpression(expr.expression)) return checkBuiltinCall(ctx, expr, scope);
   if (!ts.isIdentifier(expr.expression)) {
     throw ctx.error("Only direct calls to named functions are supported", expr);
   }
@@ -158,4 +161,5 @@ export const expressionCheckers: CheckerTable<ExpressionChecker> = {
   [ts.SyntaxKind.PrefixUnaryExpression]: checkPrefixUnary,
   [ts.SyntaxKind.BinaryExpression]: checkBinary,
   [ts.SyntaxKind.CallExpression]: checkCall,
+  ...stringExpressionCheckers,
 };
