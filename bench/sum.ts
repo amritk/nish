@@ -6,7 +6,7 @@
 // element. `sumTo` is the batched call: the host crosses once and the whole
 // sum happens natively.
 //
-// StaticTS has no loops or conditionals yet (WP1), so the batch is written in
+// The batch is written in
 // closed form. A `for` loop summing 1..n compiles to this same expression
 // anyway: LLVM's scalar evolution folds the induction variable at -O3.
 export function add(a: number, b: number): number {

@@ -20,9 +20,9 @@ export function square(n: number): number {   // callable from other modules
 function helper(n: number): number { ... }      // module-private (see Linkage)
 ```
 
-`export const`, `export class`, `export { f }`, `export * from`,
-`export default`, and `export =` are rejected with a message that names the
-form. (Classes and constants arrive with their own work packages.)
+`export const`, `export { f }`, `export * from`, `export default`, and
+`export =` are rejected with a message that names the form. `export class` /
+`export interface` are accepted since WP2 (see docs/wp2-classes.md).
 
 ### `import`
 

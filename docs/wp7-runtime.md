@@ -333,11 +333,7 @@ cycle on `build/test/runtime_test.txt`.
 `floor`, `ceil`, `trunc`, `fabs`, `minnum`, `smin`, ... are instructions).
 `tests/run.js` links the native round trips with `-lm`.
 
-TODO(WP8, `scripts/build.sh`): add `-lm` to the `debug`/`speed`/`size`
-profiles (the file is owned by WP8 and was not touched here). Until then,
-`statictsc --link` fails with `undefined reference to sin` for programs that
-call those five functions on non-constant arguments; everything else in this
-package links with the current script.
+Every native profile of `scripts/build.sh` links `-lm`.
 
 ## Tests
 

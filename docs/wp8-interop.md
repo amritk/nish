@@ -246,7 +246,7 @@ What the table says:
   one result. Arrays (WP4) will cross as `Int32Array`/`Float64Array` views
   over wasm memory or as N-API typed arrays for exactly this reason.
 
-StaticTS has no loops or conditionals yet (WP1), so `sumTo` in
+`sumTo` in
 `bench/sum.ts` is written in closed form, `(n * (n + 1)) / 2`. That is not a
 shortcut: at `-O3` LLVM's scalar evolution folds a `for` loop summing 1..n
 into this same expression, so the batched column is what the loop version
