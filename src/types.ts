@@ -99,6 +99,19 @@ export function arrayOf(elem: StaticType): StaticType {
   return { kind: "array", elem };
 }
 
+/**
+ * Typed-array aliases (WP4/WP8 interop): the JavaScript typed-array names are
+ * accepted as spellings of the element-typed array. They are the *same*
+ * StaticType (`sameType(Int32Array, i32[])` holds), so there is no second
+ * layout; the names exist so a signature reads like the buffer a Node host
+ * passes (`Int32Array` views map onto `{ len, cap, data }` byte for byte).
+ */
+export const TYPED_ARRAY_ALIASES: Readonly<Record<string, StaticType>> = {
+  Int32Array: I32,
+  Float64Array: F64,
+  BigInt64Array: I64,
+};
+
 /** True for the types that may be nullable: every StaticTS value that is an LLVM pointer. */
 export function isPointerType(t: StaticType): boolean {
   return t.kind === "struct" || t.kind === "array" || t.kind === "string";
@@ -247,6 +260,13 @@ export function resolveTypeNode(
         }
         return arrayOf(resolveTypeNode(ref.typeArguments[0], sourceFile, opts));
       }
+      if (ts.isIdentifier(ref.typeName) && ref.typeArguments && TYPED_ARRAY_ALIASES[ref.typeName.text]) {
+        throw new CompileError(
+          `\`${ref.typeName.text}\` takes no type argument (it is an alias of \`${typeToString(TYPED_ARRAY_ALIASES[ref.typeName.text])}[]\`)`,
+          node,
+          sourceFile
+        );
+      }
       if (ts.isIdentifier(ref.typeName) && !ref.typeArguments) {
         switch (ref.typeName.text) {
           case "i32":
@@ -256,11 +276,13 @@ export function resolveTypeNode(
           case "f64":
             return F64;
         }
+        const alias = TYPED_ARRAY_ALIASES[ref.typeName.text];
+        if (alias) return arrayOf(alias);
         const named = namedTypeResolvers.get(sourceFile)?.(ref.typeName.text);
         if (named) return named;
       }
       throw new CompileError(
-        `Unsupported type reference \`${ref.getText(sourceFile)}\` (supported: number, i32, i64, f64, boolean, string, void, T[], and declared classes/interfaces)`,
+        `Unsupported type reference \`${ref.getText(sourceFile)}\` (supported: number, i32, i64, f64, boolean, string, void, T[], Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)`,
         node,
         sourceFile
       );
