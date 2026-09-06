@@ -21,7 +21,9 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 - **Phase 0 validator** (`src/validator.ts`). A single syntax-only pass that
   rejects every construct StaticTS can never compile (`any`, `eval`, `with`,
   dynamic property access, ...) in about 2 ms per 1,000 lines, before the
-  checker runs. Biome lint/format configuration.
+  checker runs. Biome lint/format configuration, with a rule set that mirrors
+  the validator (`noVar`, `noParameterAssign`, `useExplicitLengthCheck`, ...)
+  and covers the example, cookbook and benchmark programs.
 - **Control flow.** `if` / `else`, `while`, `do ... while`, `for`, `break` /
   `continue`, `throw`, the ternary, short-circuit `&&` / `||`, compound
   assignment and `++` / `--`, with termination analysis feeding the

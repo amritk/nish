@@ -102,8 +102,9 @@ function elementSize(elem: StaticType): number {
 }
 
 function unwrapParens(expr: ts.Expression): ts.Expression {
-  while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
-  return expr;
+  let inner = expr;
+  while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
+  return inner;
 }
 
 /** The non-negative integer a literal length denotes, or undefined for anything else. */

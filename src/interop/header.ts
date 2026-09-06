@@ -27,7 +27,7 @@ function elementNotes(fn: ExternalFunction): string {
   }
   const r = elem(fn.sig.returnType);
   if (r) notes.push(`returns ${r} elements`);
-  return notes.length ? ` -- ${notes.join(", ")}` : "";
+  return notes.length > 0 ? ` -- ${notes.join(", ")}` : "";
 }
 
 export function generateHeader(compilation: Compilation, outFile: string): string {

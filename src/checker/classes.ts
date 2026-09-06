@@ -399,10 +399,11 @@ export function isAssignmentOperator(kind: ts.SyntaxKind): boolean {
 
 /** Fields that `expr` definitely assigns: `this.a = this.b = v` assigns both. */
 function assignedBy(expr: ts.Expression, out: Set<string>): void {
-  while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
-  if (ts.isBinaryExpression(expr) && expr.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-    if (isThisAccess(expr.left)) out.add(expr.left.name.text);
-    assignedBy(expr.right, out);
+  let inner = expr;
+  while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
+  if (ts.isBinaryExpression(inner) && inner.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+    if (isThisAccess(inner.left)) out.add(inner.left.name.text);
+    assignedBy(inner.right, out);
   }
 }
 

@@ -199,7 +199,7 @@ export function cPrototype(sig: FunctionSig, writtenParams: ReadonlySet<string> 
     params.push(`${t}${t.endsWith("*") ? "" : " "}${cParamName(p.name)}`);
   }
   const { ident, label } = cFunctionName(sig.name);
-  return `${ret}${ret.endsWith("*") ? "" : " "}${ident}(${params.length ? params.join(", ") : "void"})${label}`;
+  return `${ret}${ret.endsWith("*") ? "" : " "}${ident}(${params.length > 0 ? params.join(", ") : "void"})${label}`;
 }
 
 /** `ADD` for `build/add.h`: the stem of an output path as an identifier fragment. */

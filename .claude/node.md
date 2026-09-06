@@ -78,6 +78,20 @@ else is noise in the diff. So:
 - Keep new code in Biome's style (double quotes, semicolons, 110 columns,
   two-space indent) and run `npm run format` on the files you created.
 - Do not reformat a file you did not otherwise change.
-- `useImportType`, `useTemplate` and `noNonNullAssertion` are off on purpose;
-  the unused-variable rules are off for `examples/**`, whose files are compiler
-  inputs rather than library code.
+- The rule set is the recommended preset plus the rules that mirror what the
+  validator refuses (`noVar`, `noExplicitAny`, `noEnum`, `noNamespace`,
+  `noVoid`, `noParameterAssign`, `useExplicitLengthCheck`,
+  `useConsistentArrayType`, `useFilenamingConvention`), with `useOptionalChain`
+  and `useExponentiationOperator` turned *off* because they push code towards
+  `?.` and `**`, which StaticTS rejects. `useImportType`, `useTemplate` and
+  `noNonNullAssertion` are off as house style. The full reasoning is in
+  `docs/wp0-validator.md` ("Biome").
+- The StaticTS programs a reader learns from (`examples/`, `docs/cookbook/`,
+  `bench/*.ts`) are linted too, with the unused-variable and numeric-literal
+  rules off; the test fixtures (`tests/cases`, `tests/link`,
+  `tests/differential/corpus`) are not, because a `reject_*` case exists to
+  contain what the rules forbid.
+- The sibling repos' Biome configs use single quotes, no semicolons and
+  `trailingCommas: all`; those formatter settings are not carried over.
+  Flipping them would rewrite every file in `src/`, and the formatter is not a
+  gate here anyway.

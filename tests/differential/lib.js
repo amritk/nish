@@ -160,8 +160,8 @@ function describeMismatch(r) {
       }
     }
   }
-  if (b.stderr.length && b.status !== 1) lines.push(`node stderr: ${String(b.stderr).trim().split("\n")[0]}`);
-  if (a.stderr.length && a.status !== 1) lines.push(`native stderr: ${String(a.stderr).trim().split("\n")[0]}`);
+  if (b.stderr.length > 0 && b.status !== 1) lines.push(`node stderr: ${String(b.stderr).trim().split("\n")[0]}`);
+  if (a.stderr.length > 0 && a.status !== 1) lines.push(`native stderr: ${String(a.stderr).trim().split("\n")[0]}`);
   return lines.join("\n");
 }
 

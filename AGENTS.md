@@ -6,7 +6,7 @@ this repository**. For Claude Code the same rules live in
 [`.claude/`](./.claude/) — read the one that matches your task:
 
 - [`.claude/architecture.md`](./.claude/architecture.md) — the pipeline, the rules that shape every change, where to read next
-- [`.claude/typescript.md`](./.claude/typescript.md) — TypeScript style, principles, naming
+- [`.claude/typescript.md`](./.claude/typescript.md) — TypeScript style: the StaticTS rules for every program in the repo, and the static-friendly rules for the compiler source
 - [`.claude/node.md`](./.claude/node.md) — Node runtime, npm scripts, the LLVM toolchain, Biome
 - [`.claude/testing.md`](./.claude/testing.md) — the golden-test harness, what every construct ships with
 - [`.claude/comments.md`](./.claude/comments.md) — comment and JSDoc guidelines

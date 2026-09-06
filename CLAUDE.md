@@ -3,7 +3,7 @@
 Developer guidelines live in the `.claude/` directory:
 
 - **node.md** — Node runtime, npm scripts, the LLVM toolchain, Biome
-- **typescript.md** — TypeScript style, principles, naming (and where this repo differs from its siblings)
+- **typescript.md** — TypeScript style: the StaticTS rules for every program in the repo, and the static-friendly rules for the compiler source
 - **comments.md** — Comment guidelines and JSDoc
 - **testing.md** — The golden-test harness, what every construct ships with
 - **architecture.md** — The pipeline, the rules that shape every change, where to read next

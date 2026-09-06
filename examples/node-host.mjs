@@ -46,5 +46,5 @@ if (typeof exports[fn] !== "function") {
   console.error(`${file} does not export a function named ${fn}`);
   process.exit(1);
 }
-const args = rawArgs.length ? rawArgs.map(parseArg) : [2, 3];
+const args = rawArgs.length > 0 ? rawArgs.map(parseArg) : [2, 3];
 console.log(`${fn}(${args.map(show).join(", ")}) = ${show(exports[fn](...args))}`);

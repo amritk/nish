@@ -125,10 +125,25 @@ in the test name.
 ## Biome
 
 Biome (`biome.json`) is configured as a formatter and style linter for the
-compiler's own source, `tests/**/*.js`, and `examples/**`. It never
-influences compilation. `npm run lint` runs `biome check` with the formatter
-check disabled so that files not yet formatted to the shared style do not
-fail the gate; `npm run format` rewrites files in place. Two style rules are
-turned off (`useImportType`, `useTemplate`) and the unused-variable rules are
-off for `examples/**`, whose files are StaticTS inputs rather than library
-code.
+compiler's own source, `tests/**/*.js`, and the StaticTS programs a reader
+is meant to learn from: `examples/**`, `docs/cookbook/**`, `bench/**/*.ts`.
+It never influences compilation. `npm run lint` runs `biome check` with the
+formatter check disabled so that files not yet formatted to the shared style
+do not fail the gate; `npm run format` rewrites files in place.
+
+The rule set is the recommended preset plus the rules that mirror what the
+validator refuses, so that the compiler's own source and the example programs
+read like the language: `noVar`, `noExplicitAny`, `noEnum`, `noNamespace`,
+`noVoid`, `noParameterAssign` (parameters are immutable in StaticTS),
+`useExplicitLengthCheck` (there is no truthiness), `useConsistentArrayType`
+(`T[]`), and `useFilenamingConvention` (kebab-case for the compiler, snake_case
+for StaticTS programs). Two recommended rules are turned *off* because they
+push code towards constructs StaticTS rejects: `useOptionalChain` (`?.`) and
+`useExponentiationOperator` (`**`). `useImportType`, `useTemplate` and
+`noNonNullAssertion` are off as a matter of house style, and for the StaticTS
+program directories the unused-variable rules and the numeric-literal rules
+(`noPrecisionLoss`, `noApproximativeNumericConstant`) are off too: those
+files are compiler inputs, and the n-body constants are the benchmark's own
+digits. Test fixtures (`tests/cases`, `tests/link`, `tests/differential/corpus`)
+are not linted at all, because a `reject_*` case exists to contain what the
+rules forbid.

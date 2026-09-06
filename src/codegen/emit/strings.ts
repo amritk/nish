@@ -119,19 +119,20 @@ const emitTemplateExpression: ExpressionEmitter = (ctx, node) => {
  * `return \`${s}\`` would wrongly keep `nocapture` on `s`.
  */
 export function unwrapStringPassthrough(program: CheckedProgram, expr: ts.Expression): ts.Expression {
+  let inner = expr;
   for (;;) {
-    if (ts.isParenthesizedExpression(expr)) {
-      expr = expr.expression;
+    if (ts.isParenthesizedExpression(inner)) {
+      inner = inner.expression;
       continue;
     }
-    if (ts.isTemplateExpression(expr)) {
-      const parts = templateParts(expr);
+    if (ts.isTemplateExpression(inner)) {
+      const parts = templateParts(inner);
       if (parts.length === 1 && "hole" in parts[0] && program.types.get(parts[0].hole)?.kind === "string") {
-        expr = parts[0].hole;
+        inner = parts[0].hole;
         continue;
       }
     }
-    return expr;
+    return inner;
   }
 }
 
