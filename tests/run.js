@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 /**
- * Phase 1 test runner.
+ * StaticTS test runner.
  *
- *  1. Compile examples/add.ts and check the emitted function is byte-for-byte
- *     identical to tests/expected/add.ll.
- *  2. If LLVM tools are installed, assemble the IR with llvm-as, link it with
- *     examples/main.c via clang, run the binary, and check its output.
- *  3. Check that a few invalid programs are rejected with a diagnostic.
+ *  A. Golden cases in tests/cases/  (one .ts per case, discovered automatically)
+ *       <name>.ts    source
+ *       <name>.ll    expected IR (module header stripped). Missing + UPDATE_GOLDENS=1 -> written.
+ *       <name>.args  extra CLI flags, whitespace separated
+ *       <name>.err   expected error substring; compile must fail (no .ll needed)
+ *       <name>.out   expected stdout when linked with <name>.c (or tests/driver.c,
+ *                    which prints `test()`) and runtime/runtime.c, then run
+ *     Every successfully compiled case is also assembled with llvm-as.
+ *
+ *  B. Pipeline checks: runtime.c unit test, inline allocator vs C arena layout,
+ *     size and wasm build profiles, Node wasm host.
  */
 const { execFileSync, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
@@ -14,57 +20,86 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const cli = path.join(root, "dist", "index.js");
+const casesDir = path.join(root, "tests", "cases");
 const buildDir = path.join(root, "build", "test");
 fs.mkdirSync(buildDir, { recursive: true });
 
 let failures = 0;
+let passes = 0;
 function check(name, ok, detail) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}`);
-  if (!ok) {
+  if (ok) passes++;
+  else {
     failures++;
-    if (detail) console.log(detail.split("\n").map((l) => "      " + l).join("\n"));
+    if (detail) console.log(String(detail).split("\n").map((l) => "      " + l).join("\n"));
   }
 }
-function has(tool) {
-  return spawnSync("which", [tool]).status === 0;
+const has = (tool) => spawnSync("which", [tool]).status === 0;
+const HAS_LLVM_AS = has("llvm-as");
+const HAS_CLANG = has("clang");
+
+/** Module body with the `; ModuleID` / `source_filename` header removed. */
+function stripHeader(ir) {
+  return ir.split("\n").filter((l) => !l.startsWith(";") && !l.startsWith("source_filename")).join("\n").trim();
 }
 
-// 1. Golden IR comparison -----------------------------------------------------
-function compileGolden(name, extraArgs, goldenFile) {
-  const out = path.join(buildDir, `${name}.ll`);
-  execFileSync("node", [cli, "examples/add.ts", "-o", out, ...extraArgs], { cwd: root, stdio: "pipe" });
-  const actual = fs.readFileSync(out, "utf8");
-  const expected = fs.readFileSync(path.join(root, "tests", "expected", goldenFile), "utf8").trim();
-  // Strip the module header; only the definitions are part of the contract.
-  const body = actual.split("\n").filter((l) => !l.startsWith(";") && !l.startsWith("source_filename")).join("\n").trim();
-  check(`add.ts emits the expected LLVM IR (${name})`, body === expected, `expected:\n${expected}\n\nactual:\n${body}`);
-  return out;
-}
-compileGolden("add.plain", ["--plain"], "add.plain.ll");
-const outLl = compileGolden("add", [], "add.ll");
+// ---- A. Golden cases -------------------------------------------------------------
+const only = process.argv[2];
+const cases = fs.readdirSync(casesDir).filter((f) => f.endsWith(".ts")).map((f) => f.slice(0, -3)).sort();
+for (const name of cases) {
+  if (only && !name.includes(only)) continue;
+  const src = path.join(casesDir, `${name}.ts`);
+  const side = (ext) => path.join(casesDir, `${name}.${ext}`);
+  const args = fs.existsSync(side("args")) ? fs.readFileSync(side("args"), "utf8").trim().split(/\s+/).filter(Boolean) : [];
+  const outLl = path.join(buildDir, `${name}.ll`);
+  const r = spawnSync("node", [cli, src, "-o", outLl, ...args], { cwd: root });
+  const stderr = String(r.stderr);
 
-// 2. Toolchain round trip -----------------------------------------------------
-if (has("llvm-as")) {
-  const r = spawnSync("llvm-as", [outLl, "-o", path.join(buildDir, "add.bc")]);
-  check("llvm-as accepts the emitted IR", r.status === 0, String(r.stderr));
-} else {
-  console.log("SKIP  llvm-as not installed");
-}
+  if (fs.existsSync(side("err"))) {
+    const needle = fs.readFileSync(side("err"), "utf8").trim();
+    check(`${name}: rejected with "${needle}"`, r.status === 1 && stderr.includes(needle), stderr || "(compiled successfully)");
+    continue;
+  }
+  if (r.status !== 0) {
+    check(`${name}: compiles`, false, stderr);
+    continue;
+  }
 
-if (has("clang")) {
-  const exe = path.join(buildDir, "add_app");
-  const r = spawnSync("clang", ["-Wno-override-module", outLl, "examples/main.c", "-o", exe], { cwd: root });
-  check("clang links IR with main.c", r.status === 0, String(r.stderr));
-  if (r.status === 0) {
+  const actual = stripHeader(fs.readFileSync(outLl, "utf8"));
+  if (!fs.existsSync(side("ll"))) {
+    if (process.env.UPDATE_GOLDENS) {
+      fs.writeFileSync(side("ll"), actual + "\n");
+      console.log(`WROTE ${name}.ll`);
+    } else {
+      check(`${name}: has golden .ll (run with UPDATE_GOLDENS=1 to create)`, false);
+      continue;
+    }
+  }
+  const expected = fs.readFileSync(side("ll"), "utf8").trim();
+  check(`${name}: IR matches golden`, actual === expected, `--- expected\n${expected}\n--- actual\n${actual}`);
+
+  if (HAS_LLVM_AS) {
+    const as = spawnSync("llvm-as", [outLl, "-o", "/dev/null"]);
+    check(`${name}: llvm-as accepts IR`, as.status === 0, String(as.stderr));
+  }
+
+  if (fs.existsSync(side("out")) && HAS_CLANG) {
+    const driver = fs.existsSync(side("c")) ? side("c") : path.join(root, "tests", "driver.c");
+    const exe = path.join(buildDir, name);
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", outLl, driver, "runtime/runtime.c", "-o", exe], { cwd: root });
+    if (cc.status !== 0) {
+      check(`${name}: links natively`, false, String(cc.stderr));
+      continue;
+    }
     const run = spawnSync(exe);
-    check("native binary prints add(2, 3) = 5", String(run.stdout).trim() === "add(2, 3) = 5", String(run.stdout));
+    const want = fs.readFileSync(side("out"), "utf8").trim();
+    check(`${name}: native output matches .out`, run.status === 0 && String(run.stdout).trim() === want,
+      `--- expected\n${want}\n--- actual (exit ${run.status})\n${run.stdout}${run.stderr}`);
   }
-} else {
-  console.log("SKIP  clang not installed");
 }
 
-// 3. Runtime + optimised build pipeline ----------------------------------------------
-if (has("clang")) {
+// ---- B. Pipeline checks -----------------------------------------------------------
+if (!only && HAS_CLANG) {
   const rt = spawnSync("clang", ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "runtime/runtime.c", "tests/runtime_test.c", "-o", path.join(buildDir, "runtime_test")], { cwd: root });
   check("runtime.c compiles warning-free and passes its unit test",
     rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0, String(rt.stderr));
@@ -72,7 +107,7 @@ if (has("clang")) {
   // Emit the runtime prelude, append an IR test that uses the inline allocator, and
   // link it against runtime.c: proves the IR struct layout matches the C struct.
   const preludeLl = path.join(buildDir, "prelude.ll");
-  execFileSync("node", [cli, "examples/strings.ts", "--runtime-decls", "-o", preludeLl], { cwd: root, stdio: "pipe" });
+  execFileSync("node", [cli, "tests/cases/string_params.ts", "--runtime-decls", "-o", preludeLl], { cwd: root, stdio: "pipe" });
   const smokeLl = path.join(buildDir, "alloc_smoke.ll");
   fs.writeFileSync(smokeLl, fs.readFileSync(preludeLl, "utf8") + fs.readFileSync(path.join(root, "tests/ir/alloc_smoke.ll"), "utf8"));
   const smokeExe = path.join(buildDir, "alloc_smoke");
@@ -83,37 +118,21 @@ if (has("clang")) {
     check("inline allocator bump matches C arena layout (delta 16)", r.status === 0, String(r.stdout));
   }
 
-  for (const profile of ["size"]) {
-    const exe = path.join(buildDir, `add_${profile}`);
-    const r = spawnSync("bash", ["scripts/build.sh", outLl, "runtime/runtime.c", "examples/main.c", "-o", exe, "--profile", profile], { cwd: root });
-    const run = r.status === 0 ? spawnSync(exe) : null;
-    check(`${profile} profile builds a working stripped binary`, run !== null && String(run.stdout).trim() === "add(2, 3) = 5", String(r.stderr));
-  }
+  const addLl = path.join(buildDir, "add.ll");
+  const exe = path.join(buildDir, "add_size");
+  const r = spawnSync("bash", ["scripts/build.sh", addLl, "runtime/runtime.c", "examples/main.c", "-o", exe, "--profile", "size"], { cwd: root });
+  const run = r.status === 0 ? spawnSync(exe) : null;
+  check("size profile builds a working stripped binary", run !== null && String(run.stdout).trim() === "add(2, 3) = 5", String(r.stderr));
 
   if (has("wasm-ld")) {
     const wasm = path.join(buildDir, "add.wasm");
-    const r = spawnSync("bash", ["scripts/build.sh", outLl, "-o", wasm, "--profile", "wasm"], { cwd: root });
-    const run = r.status === 0 ? spawnSync("node", ["examples/node-host.mjs", wasm], { cwd: root }) : null;
-    check("wasm profile builds a module Node can import", run !== null && String(run.stdout).trim() === "add(2, 3) = 5", String(r.stderr) + (run ? String(run.stderr) : ""));
+    const w = spawnSync("bash", ["scripts/build.sh", addLl, "-o", wasm, "--profile", "wasm"], { cwd: root });
+    const host = w.status === 0 ? spawnSync("node", ["examples/node-host.mjs", wasm], { cwd: root }) : null;
+    check("wasm profile builds a module Node can import", host !== null && String(host.stdout).trim() === "add(2, 3) = 5", String(w.stderr) + (host ? String(host.stderr) : ""));
   }
+} else if (!HAS_CLANG) {
+  console.log("SKIP  clang not installed: native round trips and pipeline checks skipped");
 }
 
-// 4. Negative cases -------------------------------------------------------------
-const rejects = [
-  ["any parameter", "function f(a: any): number { return a; }", "`any` is forbidden"],
-  ["missing return type", "function f(a: number) { return a; }", "explicit return type"],
-  ["type mismatch", "function f(a: number): number { return a + true; }", "same numeric type"],
-  ["assign to parameter", "function f(a: number): number { a = 1; return a; }", "Cannot assign"],
-  ["missing return", "function f(a: number): number { let x = a; }", "every path"],
-  ["top-level statement", "let x = 1;", "Only top-level function declarations"],
-];
-for (const [name, src, needle] of rejects) {
-  const file = path.join(buildDir, `reject_${name.replace(/\W+/g, "_")}.ts`);
-  fs.writeFileSync(file, src + "\n");
-  const r = spawnSync("node", [cli, file], { cwd: root });
-  const err = String(r.stderr);
-  check(`rejects ${name}`, r.status === 1 && err.includes(needle), err);
-}
-
-console.log(failures === 0 ? "\nAll tests passed." : `\n${failures} test(s) failed.`);
+console.log(`\n${passes} passed, ${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);

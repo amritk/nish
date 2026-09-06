@@ -13,7 +13,9 @@
     "compile": "node dist/index.js",
     "example": "npm run build && node dist/index.js examples/add.ts -o build/add.ll && cat build/add.ll",
     "test": "npm run build && node tests/run.js",
-    "size-report": "npm run build && node dist/index.js examples/add.ts -o build/add.ll && bash scripts/size-report.sh build/add.ll examples/main.c"
+    "size-report": "npm run build && node dist/index.js examples/add.ts -o build/add.ll && bash scripts/size-report.sh build/add.ll examples/main.c",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test:update": "npm run build && UPDATE_GOLDENS=1 node tests/run.js"
   },
   "engines": {
     "node": ">=18"

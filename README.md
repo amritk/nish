@@ -273,9 +273,12 @@ The supported direction is the reverse:
 | --- | --- | --- |
 | `src/parser.ts` | A. Parse | Wraps `ts.createSourceFile`; surfaces syntax errors. |
 | `src/types.ts` | B. Types | The StaticTS type model, its 1:1 LLVM type mapping, alignment. |
-| `src/checker.ts` | B. Check | Enforces the language rules and annotates every expression with its type. |
+| `src/checker/index.ts` | B. Check | Core: signatures, function bodies, dispatch to handler tables; records types in side tables. |
+| `src/checker/statements.ts`, `expressions.ts` | B. Check | One handler per `ts.SyntaxKind` (and per binary operator). Add a construct by adding an entry. |
+| `src/checker/declarations.ts`, `scope.ts`, `program.ts` | B. Check | Signature collection, lexical scopes, the `CheckedProgram` data model. |
 | `src/codegen/ir.ts` | C. Emit | Textual IR builder: functions, blocks, attribute groups, SSA temp numbering. |
-| `src/codegen/emitter.ts` | C. Emit | AST visitor that lowers a checked program to IR. |
+| `src/codegen/emitter.ts` | C. Emit | Core: module assembly, function setup, runtime prelude, dispatch. |
+| `src/codegen/emit/statements.ts`, `expressions.ts` | C. Emit | Lowering handlers keyed by `ts.SyntaxKind` / operator, mirroring the checker tables. |
 | `src/codegen/attributes.ts` | C. Emit | Purity, loop, and escape analysis; attribute rendering. |
 | `src/codegen/runtime.ts` | C. Emit | Runtime ABI declarations and the inline arena allocator. |
 | `src/compiler.ts` | Driver | Chains the three phases. |
@@ -283,7 +286,8 @@ The supported direction is the reverse:
 | `runtime/runtime.c` | Runtime | Arena allocator and string handler linked into every binary. |
 | `scripts/build.sh` | Build | Optimised clang/LTO/wasm build profiles. |
 | `scripts/size-report.sh` | Build | Before/after binary size table. |
-| `tests/run.js` | Tests | Golden IR, toolchain round trip, runtime and layout tests, negative cases. |
+| `tests/cases/` | Tests | One `.ts` per case with `.ll` golden, optional `.args`, `.err` (must reject), `.out` (native stdout). |
+| `tests/run.js` | Tests | Discovers cases, runs llvm-as and native round trips, plus runtime and layout checks. |
 
 The checker and the emitter are deliberately separate: the checker records
 types and symbol bindings in side tables, and the emitter reads only those
@@ -336,15 +340,20 @@ Rejected with a diagnostic (`file:line:col: error: ...`):
 ## Tests
 
 ```bash
-npm test
+npm test                 # everything
+node tests/run.js locals # only cases whose name contains "locals"
+npm run test:update      # write missing .ll goldens for new cases
+npm run check            # typecheck without emitting
 ```
 
-Checks that `examples/add.ts` produces the golden IR (`tests/expected/add.ll`
-and the `--plain` form), assembles it with `llvm-as`, links it with
-`examples/main.c`, runs the binary, unit-tests `runtime.c`, links the inline
-allocator against the C arena, builds the `size` and `wasm` profiles, and
-confirms invalid programs are rejected. Toolchain steps are skipped when LLVM
-is not installed.
+Each `tests/cases/<name>.ts` is compiled and compared with `<name>.ll`
+(module header excluded), assembled with `llvm-as`, and, when `<name>.out`
+exists, linked with `<name>.c` or the default `tests/driver.c` (which prints
+`test()`) plus `runtime/runtime.c`, run, and compared. `<name>.err` marks a
+case that must be rejected with that message, and `<name>.args` adds CLI
+flags. The runner also unit-tests `runtime.c`, links the inline allocator
+against the C arena, and builds the `size` and `wasm` profiles. Toolchain
+steps are skipped when LLVM is not installed.
 
 ## Roadmap
 

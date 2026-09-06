@@ -1,0 +1,131 @@
+/**
+ * Expression lowering, one handler per `ts.SyntaxKind`, plus a table of
+ * binary operators keyed by operator token. Every handler returns the LLVM
+ * value (temp, parameter, or constant) that holds the expression's result.
+ */
+import ts from "typescript";
+import { StaticType, llvmType } from "../../types";
+import { BinaryEmitter, EmitterTable, ExpressionEmitter } from "./context";
+
+// ---- Constants --------------------------------------------------------------------
+
+export function numericConstant(text: string, type: StaticType): string {
+  const n = Number(text);
+  if (type.kind === "i32") return String(n | 0);
+  // LLVM only accepts decimal float literals that round-trip exactly, so
+  // emit the IEEE-754 bit pattern instead; that is always valid.
+  const buf = Buffer.alloc(8);
+  buf.writeDoubleBE(n);
+  return "0x" + buf.toString("hex").toUpperCase();
+}
+
+const emitParenthesized: ExpressionEmitter = (ctx, expr) =>
+  ctx.emitExpression((expr as ts.ParenthesizedExpression).expression);
+
+const emitNumericLiteral: ExpressionEmitter = (ctx, expr) =>
+  numericConstant((expr as ts.NumericLiteral).text, ctx.typeOf(expr));
+
+const emitTrue: ExpressionEmitter = () => "true";
+const emitFalse: ExpressionEmitter = () => "false";
+
+/** Parameters are SSA values; locals are loaded from their alloca slot. */
+const emitIdentifier: ExpressionEmitter = (ctx, expr) => {
+  const local = ctx.program.bindings.get(expr as ts.Identifier)!;
+  if (local.storage === "param") return `%${local.name}`;
+  const ty = llvmType(local.type);
+  return ctx.fn.emitValue(`load ${ty}, ${ty}* ${ctx.slotOf(local)}${ctx.alignSuffix(local.type)}`);
+};
+
+// ---- Operators --------------------------------------------------------------------
+
+const emitPrefixUnary: ExpressionEmitter = (ctx, node) => {
+  const expr = node as ts.PrefixUnaryExpression;
+  const type = ctx.typeOf(expr.operand);
+  const operand = ctx.emitExpression(expr.operand);
+  switch (expr.operator) {
+    case ts.SyntaxKind.MinusToken:
+      return type.kind === "f64"
+        ? ctx.fn.emitValue(`fneg double ${operand}`)
+        : ctx.fn.emitValue(`sub i32 0, ${operand}`);
+    case ts.SyntaxKind.ExclamationToken:
+      return ctx.fn.emitValue(`xor i1 ${operand}, true`);
+  }
+  throw new Error(`emitter: unexpected unary operator ${ts.SyntaxKind[expr.operator]}`);
+};
+
+/** Opcode per operator: [integer form, floating-point form]. */
+const ARITHMETIC_OPCODES: Partial<Record<ts.SyntaxKind, [string, string]>> = {
+  [ts.SyntaxKind.PlusToken]: ["add", "fadd"],
+  [ts.SyntaxKind.MinusToken]: ["sub", "fsub"],
+  [ts.SyntaxKind.AsteriskToken]: ["mul", "fmul"],
+  [ts.SyntaxKind.SlashToken]: ["sdiv", "fdiv"],
+  [ts.SyntaxKind.PercentToken]: ["srem", "frem"],
+  [ts.SyntaxKind.LessThanToken]: ["icmp slt", "fcmp olt"],
+  [ts.SyntaxKind.LessThanEqualsToken]: ["icmp sle", "fcmp ole"],
+  [ts.SyntaxKind.GreaterThanToken]: ["icmp sgt", "fcmp ogt"],
+  [ts.SyntaxKind.GreaterThanEqualsToken]: ["icmp sge", "fcmp oge"],
+  [ts.SyntaxKind.EqualsEqualsEqualsToken]: ["icmp eq", "fcmp oeq"],
+  [ts.SyntaxKind.ExclamationEqualsEqualsToken]: ["icmp ne", "fcmp une"],
+};
+
+export function binaryOpcode(op: ts.SyntaxKind, type: StaticType): string {
+  const pair = ARITHMETIC_OPCODES[op];
+  if (!pair) throw new Error(`emitter: unexpected binary operator ${ts.SyntaxKind[op]}`);
+  return type.kind === "f64" ? pair[1] : pair[0];
+}
+
+/** Arithmetic and comparison: evaluate left then right (JS order), one instruction. */
+const emitArithmetic: BinaryEmitter = (ctx, expr) => {
+  const operandType = ctx.typeOf(expr.left);
+  const lhs = ctx.emitExpression(expr.left);
+  const rhs = ctx.emitExpression(expr.right);
+  return ctx.fn.emitValue(`${binaryOpcode(expr.operatorToken.kind, operandType)} ${llvmType(operandType)} ${lhs}, ${rhs}`);
+};
+
+/** `x = e`: store into the local's slot; the expression's value is `e`. */
+const emitAssignment: BinaryEmitter = (ctx, expr) => {
+  const target = ctx.program.bindings.get(expr.left as ts.Identifier)!;
+  const ty = llvmType(target.type);
+  const value = ctx.emitExpression(expr.right);
+  ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${ctx.slotOf(target)}${ctx.alignSuffix(target.type)}`);
+  return value;
+};
+
+export const binaryEmitters: EmitterTable<BinaryEmitter> = {
+  [ts.SyntaxKind.EqualsToken]: emitAssignment,
+  ...Object.fromEntries(Object.keys(ARITHMETIC_OPCODES).map((k) => [k, emitArithmetic])),
+};
+
+const emitBinary: ExpressionEmitter = (ctx, node) => {
+  const expr = node as ts.BinaryExpression;
+  const handler = binaryEmitters[expr.operatorToken.kind];
+  if (!handler) throw new Error(`emitter: unexpected binary operator ${ts.SyntaxKind[expr.operatorToken.kind]}`);
+  return handler(ctx, expr);
+};
+
+// ---- Calls ---------------------------------------------------------------------------
+
+const emitCall: ExpressionEmitter = (ctx, node) => {
+  const expr = node as ts.CallExpression;
+  const callee = ctx.program.callees.get(expr)!;
+  const args = expr.arguments
+    .map((arg, i) => `${llvmType(callee.params[i].type)} ${ctx.emitExpression(arg)}`)
+    .join(", ");
+  const call = `call ${llvmType(callee.returnType)} @${callee.name}(${args})`;
+  if (callee.returnType.kind === "void") {
+    ctx.fn.emit(call);
+    return "void";
+  }
+  return ctx.fn.emitValue(call);
+};
+
+export const expressionEmitters: EmitterTable<ExpressionEmitter> = {
+  [ts.SyntaxKind.ParenthesizedExpression]: emitParenthesized,
+  [ts.SyntaxKind.NumericLiteral]: emitNumericLiteral,
+  [ts.SyntaxKind.TrueKeyword]: emitTrue,
+  [ts.SyntaxKind.FalseKeyword]: emitFalse,
+  [ts.SyntaxKind.Identifier]: emitIdentifier,
+  [ts.SyntaxKind.PrefixUnaryExpression]: emitPrefixUnary,
+  [ts.SyntaxKind.BinaryExpression]: emitBinary,
+  [ts.SyntaxKind.CallExpression]: emitCall,
+};
