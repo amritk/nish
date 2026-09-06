@@ -272,6 +272,7 @@ The supported direction is the reverse:
 | File | Phase | Responsibility |
 | --- | --- | --- |
 | `src/parser.ts` | A. Parse | Wraps `ts.createSourceFile`; surfaces syntax errors. |
+| `src/validator.ts` | 0. Validate | Forbidden-syntax sweep over the whole tree (`any`, `eval`, `delete`, prototypes, ...); hard fails before type checking. See `docs/wp0-validator.md`. |
 | `src/types.ts` | B. Types | The StaticTS type model, its 1:1 LLVM type mapping, alignment. |
 | `src/checker/index.ts` | B. Check | Core: signatures, function bodies, dispatch to handler tables; records types in side tables. |
 | `src/checker/statements.ts`, `expressions.ts` | B. Check | One handler per `ts.SyntaxKind` (and per binary operator). Add a construct by adding an entry. |
@@ -351,6 +352,7 @@ npm test                 # everything
 node tests/run.js locals # only cases whose name contains "locals"
 npm run test:update      # write missing .ll goldens for new cases
 npm run check            # typecheck without emitting
+npm run lint             # Biome style lint of src/, tests/*.js, examples/ (advisory, never a compile gate)
 ```
 
 Each `tests/cases/<name>.ts` is compiled and compared with `<name>.ll`
