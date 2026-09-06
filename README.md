@@ -56,23 +56,21 @@ entry:
 
 ## Setup
 
-Requirements: Node.js 18+ and, to produce binaries, an LLVM toolchain
-(`clang`, optionally `llc` / `llvm-as` / `opt`).
+Requirements: Node.js 18+ and, to produce binaries, clang (LLVM 18) + lld.
+Per-OS install commands, the `npm install -g statictsc` route, and a
+hello-world walkthrough are in [docs/INSTALL.md](docs/INSTALL.md).
 
 ```bash
-# Ubuntu / Debian
-sudo apt install clang llvm
-# macOS
-brew install llvm   # or use Xcode's clang
-
 npm install
 npm run build          # compiles src/ -> dist/ with tsc
+node dist/index.js --version
 ```
 
 ## Usage
 
 ```bash
-node dist/index.js <entry.ts> [more.ts ...] [options]
+node dist/index.js <entry.ts> [more.ts ...] [options]      # or `statictsc ...` when installed
+  -v, --version              print the version and exit
   -o, --output <file.ll>     output path for a single module (default: <input>.ll)
   -o, --output <dir>/        output directory: one <dir>/<module>.ll per module
   --link <exe>               build a native binary from every module + runtime/runtime.c
@@ -93,6 +91,12 @@ node dist/index.js examples/add.ts -o build/add.ll
 node dist/index.js examples/multi/main.ts --link build/multi && ./build/multi; echo $?
 # 49
 ```
+
+Exit codes: `0` success, `1` compile error, `2` usage error, `3` toolchain
+error (`--link` cannot find `clang`, or `scripts/build.sh` failed), `70`
+internal compiler error (please report it; `STATICTSC_DEBUG=1` adds the stack
+trace). Details in [docs/wp12-release.md](docs/wp12-release.md).
+`npm run smoke` builds and runs every example that has a `main`.
 
 `--number-mode` selects how the `number` keyword is lowered: `i32` (default,
 integer arithmetic) or `f64` (`double`, floating point). The explicit type
