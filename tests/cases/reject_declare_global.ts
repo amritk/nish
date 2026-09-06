@@ -1,0 +1,1 @@
+declare global { interface X { } }
