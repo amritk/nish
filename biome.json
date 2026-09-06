@@ -39,7 +39,8 @@
       "preset": "recommended",
       "complexity": {
         "noVoid": "error",
-        "useOptionalChain": "off"
+        "useOptionalChain": "off",
+        "useArrowFunction": "error"
       },
       "style": {
         "noEnum": "error",
@@ -66,7 +67,21 @@
         },
         "useImportType": "off",
         "useTemplate": "off",
-        "noNonNullAssertion": "off"
+        "noNonNullAssertion": "off",
+        "useConsistentTypeDefinitions": {
+          "level": "warn",
+          "options": {
+            "style": "type"
+          }
+        },
+        "useConsistentMethodSignatures": {
+          "level": "warn",
+          "options": {
+            "style": "property"
+          }
+        },
+        "useShorthandFunctionType": "error",
+        "useConsistentArrowReturn": "error"
       },
       "suspicious": {
         "noExplicitAny": "error",
@@ -97,9 +112,25 @@
           },
           "suspicious": {
             "noApproximativeNumericConstant": "off"
+          },
+          "style": {
+            "useConsistentTypeDefinitions": "off",
+            "useConsistentMethodSignatures": "off"
           }
         }
       }
+    },
+    {
+      "includes": [
+        "src/**",
+        "tests/**/*.js",
+        "docs/*.mjs",
+        "bench/**/*.mjs",
+        "examples/*.mjs"
+      ],
+      "plugins": [
+        "biome-plugins/no-function-declaration.grit"
+      ]
     }
   ]
 }

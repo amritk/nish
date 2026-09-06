@@ -140,9 +140,36 @@ read like the language: `noVar`, `noExplicitAny`, `noEnum`, `noNamespace`,
 for StaticTS programs). Two recommended rules are turned *off* because they
 push code towards constructs StaticTS rejects: `useOptionalChain` (`?.`) and
 `useExponentiationOperator` (`**`). `useImportType`, `useTemplate` and
-`noNonNullAssertion` are off as a matter of house style, and for the StaticTS
-program directories the unused-variable rules and the numeric-literal rules
-(`noPrecisionLoss`, `noApproximativeNumericConstant`) are off too: those
+`noNonNullAssertion` are off as a matter of house style.
+
+A second group is house style rather than language mirroring: `type` over
+`interface`, and a function written as an arrow bound to a `const`. Three of
+them are clean today and are errors — `useArrowFunction` (a function
+*expression* becomes an arrow), `useShorthandFunctionType` and
+`useConsistentArrowReturn`. Three have a backlog and are therefore `warn`:
+`useConsistentTypeDefinitions` (`type`, never `interface`),
+`useConsistentMethodSignatures` (a member holding a function is a property,
+which is also checked more strictly than method shorthand), and the
+`biome-plugins/no-function-declaration.grit` plugin.
+
+That last one is a plugin because Biome ships no built-in rule for it:
+`useArrowFunction` rewrites function *expressions* and says nothing about
+declarations. It is a GritQL pattern, scoped by an override to the compiler
+source and the JavaScript harness. Warnings do not fail `biome check`, so the
+gate stays green and the count measures the migration that is left;
+`npm run lint -- --diagnostic-level=error` hides it while looking for real
+errors.
+
+Neither applies to a StaticTS program: the language has no arrow functions and
+no `type` aliases, so `function` and `interface` are the only spellings there,
+and both rules plus the plugin are turned off for those directories. That is a
+Phase 1 limitation rather than a Phase 0 rule — the validator lets an arrow and
+a `type` alias through, and the checker's `Unsupported ... in Phase 1` fallback
+is what refuses them.
+
+For the StaticTS program directories the unused-variable rules and the
+numeric-literal rules (`noPrecisionLoss`, `noApproximativeNumericConstant`)
+are off too: those
 files are compiler inputs, and the n-body constants are the benchmark's own
 digits. Test fixtures (`tests/cases`, `tests/link`, `tests/differential/corpus`)
 are not linted at all, because a `reject_*` case exists to contain what the

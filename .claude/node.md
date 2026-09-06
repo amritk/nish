@@ -86,9 +86,19 @@ else is noise in the diff. So:
   `?.` and `**`, which StaticTS rejects. `useImportType`, `useTemplate` and
   `noNonNullAssertion` are off as house style. The full reasoning is in
   `docs/wp0-validator.md` ("Biome").
+- Two house-style rules are `warn` rather than `error` because the source
+  predates them: `useConsistentTypeDefinitions` (`type`, never `interface`)
+  and the `biome-plugins/no-function-declaration.grit` plugin (an arrow bound
+  to a `const`, never a `function` declaration). Biome ships no built-in rule
+  for the second, which is why it is a GritQL plugin. Warnings do not fail
+  `biome check`, so `npm run lint` stays green and the count is the migration
+  backlog; `npm run lint -- --diagnostic-level=error` hides it while you look
+  for real errors.
 - The StaticTS programs a reader learns from (`examples/`, `docs/cookbook/`,
   `bench/*.ts`) are linted too, with the unused-variable and numeric-literal
-  rules off; the test fixtures (`tests/cases`, `tests/link`,
+  rules off, and with both house-style rules off as well: the language has no
+  arrow functions and no `type` aliases, so `function` and `interface` are the
+  only spellings available there; the test fixtures (`tests/cases`, `tests/link`,
   `tests/differential/corpus`) are not, because a `reject_*` case exists to
   contain what the rules forbid.
 - The sibling repos' Biome configs use single quotes, no semicolons and

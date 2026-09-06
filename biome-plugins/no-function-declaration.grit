@@ -1,0 +1,30 @@
+// House style: a function is an arrow bound to a const.
+//
+//   const emitCall = (ctx: EmitContext, node: ts.CallExpression): string => { ... };
+//
+// Biome has no built-in rule for this (`useArrowFunction` only rewrites
+// function *expressions*), so it is a plugin.
+//
+// Two things this deliberately does not cover:
+//   - Class methods. They stay methods; an arrow property would change `this`
+//     binding and put the function on the instance rather than the prototype.
+//   - StaticTS programs (examples/, docs/cookbook/, bench/*.ts). The language
+//     has no arrow functions at all, so `function` is the only spelling there.
+//     `biome.json` turns this plugin off for those directories.
+//
+// Severity is `warn` while the compiler's own source is still being migrated:
+// `npm run lint` stays green, and the count is the size of what is left.
+language js
+
+or {
+  `function $name($params): $ret { $... }`,
+  `function $name($params) { $... }`,
+  `async function $name($params): $ret { $... }`,
+  `async function $name($params) { $... }`
+} where {
+  register_diagnostic(
+    span = $name,
+    message = "Use an arrow function bound to a const, not a function declaration.",
+    severity = "warn",
+  )
+}

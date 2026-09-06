@@ -11,8 +11,10 @@ compiler that runs them differs:
   `tests/layout/`, `tests/differential/corpus/`, `docs/cookbook/`, `bench/*.ts`,
   and every snippet in `docs/` and `README.md`. These are compiled by
   `statictsc`, and the language reference (`docs/LANGUAGE.md`) is the style
-  guide: a construct the validator rejects is not a style choice, it is a
-  compile error.
+  guide: a construct the compiler refuses is not a style choice, it is a
+  compile error. **The two house rules below cannot apply here** — the
+  language has no arrow functions and no `type` aliases, so a StaticTS
+  program declares functions with `function` and structs with `interface`.
 - **The compiler's own source** — `src/`, plus the JavaScript in `tests/`,
   `bench/` and `docs/`. This runs under Node through `tsc`, so the full
   language is available; the rule here is to write it *as if* StaticTS were
@@ -32,7 +34,23 @@ compiler that runs them differs:
 
 Everything the validator and checker refuse is listed in `docs/LANGUAGE.md`
 ("Forbidden constructs", "Rejected by the checker") with the exact message and
-the `reject_*` case that pins it. The shape of the language, as a style guide:
+the `reject_*` case that pins it.
+
+Those two lists mean different things, and it matters when you read a
+rejection. **Phase 0, the validator, is what StaticTS can never compile** —
+`any`, `eval`, prototypes, `try`, dynamic property access. **The checker's
+`Unsupported ... in Phase 1` fallback is what nobody has implemented yet**,
+and the validator's own header says a later work package makes those compile
+without touching Phase 0. Arrow functions, `type` aliases and `satisfies` are
+all in the second bucket: Phase 0 lets them through and only rejects generic
+type parameters on them. So "you must write `function` here" is a statement
+about today's checker, not a design decision that could never change. What
+*is* a design decision is the `Function` type, forbidden in Phase 0 as "no
+dynamic function values": a function passed as a value needs a function
+pointer and an indirect call, and the whole-program pass cannot prove purity,
+termination or escape facts through an unknown callee.
+
+The shape of the language, as a style guide:
 
 - **Declarations.** A module holds only `function`, `class`, `interface` and
   `import` at the top level. No `type` aliases, no top-level `let`/`const`,
@@ -105,17 +123,24 @@ write the rest the way StaticTS would have it:
   `undefined` as a value in a new type when `null` will do.
 - **Prefer `const`;** `let` is for a genuine reassignment (a loop counter, an
   accumulator, a cursor walking up `node.parent`).
-- **`interface` for struct-like records** the side tables store
-  (`StructInfo`, `FunctionSig`, `LocalVar`): fixed fields, one shape, exactly
-  the thing a StaticTS interface is. **`type` for unions and aliases**
-  (`StaticType`, `Validator`, `StatementChecker`). Discriminated unions are
-  fine in `src/` because the emitter switches on the tag; give the tag a
-  string literal type and make every switch exhaustive.
-- **`function` declarations are the norm** (a few hundred of them, one arrow
-  export). Hoisting is what lets a dispatch table at the top of a module
-  reference handlers defined below it. Arrows are for callbacks
-  (`.map`, `.filter`, `.sort`) and the small local closures inside a handler;
-  a named, top-level arrow is not the style here.
+- **`type`, never `interface`.** Every declaration is a `type` alias: the
+  struct-like records the side tables store (`StructInfo`, `FunctionSig`,
+  `LocalVar`) as much as the unions and signatures (`StaticType`, `Validator`,
+  `StatementChecker`). `useConsistentTypeDefinitions` enforces it. Write
+  members that hold a function as properties, not method shorthand
+  (`emit: (ctx: EmitContext) => string`, not `emit(ctx: EmitContext): string`);
+  `useConsistentMethodSignatures` enforces that, and it also buys stricter
+  parameter checking, because method shorthand is checked bivariantly.
+  Discriminated unions are fine here since the emitter switches on the tag;
+  give the tag a string literal type and make every switch exhaustive.
+- **Arrow functions bound to a `const`, never a `function` declaration.**
+  `const checkCall = (ctx: CheckContext, node: ts.CallExpression): StaticType => { ... };`
+  Biome has no built-in rule for this, so it is a plugin,
+  `biome-plugins/no-function-declaration.grit`. Two things to respect when you
+  convert a file: a `const` is not hoisted, so a dispatch table has to sit
+  *below* the handlers it names, and `tsc` reports a use before declaration
+  when it does not. Class methods stay methods, because an arrow property
+  would rebind `this` and move the function off the prototype.
 - **Classes are allowed where there is state with an invariant** —
   `Compilation`, `IRModule` / `IRFunction` / `IRBlock`, `Scope`,
   `CompileError`, `DiagnosticSink`. Everything else is plain functions over
@@ -150,19 +175,42 @@ write the rest the way StaticTS would have it:
   erased by `tsc`; keep it that way rather than mixing the two forms.
 - **CommonJS, Node 18+, no bundler.** `tsconfig.json` emits CommonJS into
   `dist/`; `bench/` and `runtime/shim.mjs` are the ESM exceptions.
+- **The two house rules are mid-migration.** The compiler source predates
+  them and still holds a few hundred `function` declarations and a few dozen
+  `interface`s, and so does the JavaScript test harness. Both rules are
+  therefore `warn` rather than `error`: `npm run lint` stays green, and the
+  warning count is the size of what is left. New code follows the rule, and a
+  file opened for another reason is converted while you are in it. To see only
+  real errors while that backlog stands, run
+  `npm run lint -- --diagnostic-level=error`. The `interface` half is
+  mechanical — `npx biome check --write --unsafe` rewrites every one of them —
+  but read the diff before keeping it, and do not mix that sweep into a commit
+  about something else. The arrow half has no automatic fix, because moving a
+  declaration to a `const` can reorder a file.
 
 ## What differs from the sibling repos
 
 The `.claude/` rules in `mjst`, `mini` and `agent-ummo` say "always arrow
 functions", "always `type` over `interface`", "one function per file", "no
-classes" and "use `satisfies` instead of `as`". Those are rules for
-JavaScript runtimes with a garbage collector and structural typing; here
-the language being compiled has none of that, and the source follows the
-language. Concretely: `function` declarations, `interface` for records,
-classes for stateful builders, a module per construct family rather than
-per function, and no `satisfies` (a StaticTS program cannot use it, and in
-`src/` a `satisfies` on a dispatch table is the one place it would help;
-prefer an explicit annotation there).
+classes" and "use `satisfies` instead of `as`". The first two now hold for the
+compiler's own source, and are linted. Three things still differ:
+
+- **Classes stay** where there is state with an invariant, as above. A repo of
+  pure functions is the sibling ideal; an SSA builder and a scope chain are not
+  that, and `instanceof CompileError` is how the CLI separates a user error
+  from an internal one.
+- **A module owns a construct family, not one function.** `checker/classes.ts`
+  holds every class-related handler because they share the dispatch table they
+  register into and the side tables they write. Splitting them one per file
+  would scatter a table across a directory.
+- **StaticTS programs cannot follow the first two at all.** The language has
+  neither arrow functions nor `type` aliases, so `examples/`, `docs/cookbook/`
+  and `bench/*.ts` are exempt in `biome.json`, and the plugin does not run on
+  them.
+
+`satisfies` is welcome in `src/` wherever it helps — a dispatch table checked
+against its key type while keeping its literal value types is the obvious case.
+It is only a StaticTS program that cannot use it.
 
 ## Naming Conventions
 

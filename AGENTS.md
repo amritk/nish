@@ -56,6 +56,12 @@ steps per OS are in [`docs/INSTALL.md`](./docs/INSTALL.md).
 - **Never** put Claude/session links, tracking IDs, model names or platform
   attributions in commits, code, or PR text. Commit messages: imperative
   subject, body explaining the lowering.
+- **In the compiler's own source, declare types with `type` and functions as
+  arrows bound to a `const`.** Both are linted at `warn` while the existing
+  code is migrated, so the warning count is the backlog rather than a failure.
+  Class methods stay methods. A StaticTS program is exempt and must use
+  `function` and `interface`, because the language has neither arrow functions
+  nor `type` aliases.
 - Match the surrounding code's style, comment density, and naming. Biome
   (`biome.json`) is the formatter and linter, run with the formatter disabled
   in `npm run lint`; keep new files formatted and do not reformat files you did
