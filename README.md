@@ -355,6 +355,11 @@ flags. The runner also unit-tests `runtime.c`, links the inline allocator
 against the C arena, and builds the `size` and `wasm` profiles. Toolchain
 steps are skipped when LLVM is not installed.
 
+CI runs the same steps on Ubuntu and macOS with LLVM 18 and posts a binary
+size table per run; see [docs/wp10-ci.md](docs/wp10-ci.md) for the matrix,
+how to reproduce it locally, and the diagnostic format (`file:line:col`
+summary plus a source excerpt with a `^~~~` caret line).
+
 ## Roadmap
 
 The full plan, cut into parallelisable work packages with acceptance

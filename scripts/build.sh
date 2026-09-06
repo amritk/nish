@@ -10,6 +10,9 @@
 #          `opt-level="z"`, `panic="abort"`, `strip=true` equivalent.
 #   wasm   wasm32 freestanding module exporting every non-internal function
 #          (for modules that do not use the C runtime); load it from Node.
+#
+# Works on Linux (clang + lld preferred, GNU ld tolerated) and macOS (Apple ld64
+# or Homebrew llvm). Set CC to pick a compiler (default: clang on PATH).
 set -euo pipefail
 
 profile=speed
@@ -28,13 +31,19 @@ done
 
 CC=${CC:-clang}
 common=(-Wno-override-module)          # our IR is target-neutral; clang fills the triple in
+elf=()                                 # flags that only make sense for ELF targets
 
-# Platform-specific dead-stripping and LTO linker selection.
+# Platform-specific dead-stripping, symbol stripping and LTO linker selection.
 case "$(uname -s)" in
-  Darwin) gc=(-Wl,-dead_strip) ; strip_flag=(-Wl,-x) ;;
-  *)      gc=(-Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none) ; strip_flag=(-s)
-          # GNU ld needs the gold plugin for LTO; prefer lld when present.
-          if command -v ld.lld >/dev/null 2>&1; then common+=(-fuse-ld=lld); fi ;;
+  Darwin)
+    # ld64: -dead_strip is the --gc-sections equivalent, -x drops local symbols
+    # (-s is deprecated on macOS). No -fuse-ld=lld: ld64 does LTO natively.
+    gc=(-Wl,-dead_strip); strip_flag=(-Wl,-x) ;;
+  *)
+    gc=(-Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none); strip_flag=(-s)
+    elf=(-fno-plt)
+    # GNU ld needs the gold plugin for LTO; prefer lld when clang can find it.
+    if command -v ld.lld >/dev/null 2>&1; then common+=(-fuse-ld=lld); fi ;;
 esac
 
 case "$profile" in
@@ -43,19 +52,27 @@ case "$profile" in
   speed)
     "$CC" "${common[@]}" -O3 -flto -DNDEBUG \
       -ffunction-sections -fdata-sections -fomit-frame-pointer \
-      -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-plt \
+      -fno-asynchronous-unwind-tables -fno-unwind-tables "${elf[@]}" \
       "${gc[@]}" "${strip_flag[@]}" "${inputs[@]}" -o "$out" ;;
   size)
     "$CC" "${common[@]}" -Oz -flto -DNDEBUG \
       -ffunction-sections -fdata-sections -fomit-frame-pointer \
-      -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-plt \
+      -fno-asynchronous-unwind-tables -fno-unwind-tables "${elf[@]}" \
       -fno-stack-protector -fvisibility=hidden \
       "${gc[@]}" "${strip_flag[@]}" "${inputs[@]}" -o "$out" ;;
   wasm)
+    # clang resolves wasm-ld next to its own binary first, then on PATH; ask it
+    # rather than probing PATH so a Homebrew llvm without a PATH entry still works.
+    wasm_ld=$("$CC" -print-prog-name=wasm-ld)
+    if [ ! -x "$wasm_ld" ]; then
+      echo "error: the wasm profile needs wasm-ld (install lld; on macOS: brew install llvm@18)" >&2
+      exit 2
+    fi
     "$CC" -Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib \
       -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections \
       "${inputs[@]}" -o "$out" ;;
   *) echo "error: unknown profile '$profile'" >&2; exit 2 ;;
 esac
 
-printf '%s: %s bytes (%s)\n' "$out" "$(wc -c < "$out")" "$profile"
+# `wc -c` pads with spaces on macOS; strip them so the number is clean.
+printf '%s: %s bytes (%s)\n' "$out" "$(wc -c < "$out" | tr -d ' ')" "$profile"
