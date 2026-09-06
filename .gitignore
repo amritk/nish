@@ -5,3 +5,4 @@ build/
 *.s
 *.bc
 a.out
+.claude/worktrees/
