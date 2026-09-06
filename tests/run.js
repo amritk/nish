@@ -134,5 +134,36 @@ if (!only && HAS_CLANG) {
   console.log("SKIP  clang not installed: native round trips and pipeline checks skipped");
 }
 
+// ---- WP0: validator ----------------------------------------------------------------
+// Phase 0 must stay cheap. A synthetic 1,000-line file (functions, locals, arithmetic,
+// calls, string/boolean expressions, control flow) is parsed once, then only the
+// validator is timed. Budget in docs/MASTER_PLAN.md is 5 ms; the gate is 50 ms for CI headroom.
+if (!only) {
+  const ts = require("typescript");
+  const { validateStaticTS } = require(path.join(root, "dist", "validator.js"));
+  const lines = [];
+  for (let i = 0; lines.length < 1000; i++) {
+    const callee = i === 0 ? "fn0" : `fn${i - 1}`;
+    lines.push(`function fn${i}(a: number, b: number, s: string, flag: boolean): number {`);
+    lines.push(`  const x = a * ${i} + b - (a % 7); let y = x / 2;`);
+    lines.push(`  if ((flag && y > a) || !(s === "k")) { y = y + ${callee}(x, y, s, !flag); } else { y = y - 1; }`);
+    lines.push("  for (let k = 0; k < b; k++) { y = y + k * (k - 1); } return y - x;");
+    lines.push("}");
+  }
+  const perfTs = path.join(buildDir, "validator_perf.ts");
+  fs.writeFileSync(perfTs, `${lines.join("\n")}\n`);
+  const sf = ts.createSourceFile(perfTs, fs.readFileSync(perfTs, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  let error = null;
+  const t0 = process.hrtime.bigint();
+  try {
+    validateStaticTS(sf);
+  } catch (e) {
+    error = e;
+  }
+  const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+  check(`validator accepts a ${lines.length}-line file`, error === null, error?.message);
+  check(`validator runs in under 50 ms on ${lines.length} lines (${ms.toFixed(2)} ms)`, ms < 50, `${ms.toFixed(2)} ms`);
+}
+
 console.log(`\n${passes} passed, ${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);
