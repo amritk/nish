@@ -41,6 +41,7 @@ import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
 import { CompilerOptions, StaticType, alignOf, llvmType } from "../types";
 import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, returnAttributes } from "./attributes";
+import { DebugInfo } from "./debug";
 import { emitFieldInitializers, importedStructFunctions, structTypeDeclarations } from "./emit/classes";
 import { EmitContext, LoopTarget } from "./emit/context";
 import { expressionEmitters } from "./emit/expressions";
@@ -62,6 +63,8 @@ export class Emitter implements EmitContext {
   private readonly usedRuntime = new Set<string>();
   /** Interned string literals: text -> `i8*` constant expression. */
   private readonly strings = new Map<string, string>();
+  /** DWARF metadata builder (`-g`, WP10); undefined without debug info, and then nothing is attached. */
+  readonly debug?: DebugInfo;
 
   /**
    * `facts` must cover every function this module defines *or imports*; the
@@ -74,6 +77,7 @@ export class Emitter implements EmitContext {
     facts?: Map<string, FunctionFacts>
   ) {
     this.module = new IRModule(program.sourceFile.fileName);
+    if (opts.debugInfo) this.debug = new DebugInfo(this.module, program);
     // `--target` (WP9): pin the module to a data layout so `opt` needs no `-mtriple`.
     // The driver validated the spec; an unknown one here is a programming error.
     if (opts.target !== undefined) {
@@ -133,6 +137,8 @@ export class Emitter implements EmitContext {
     }
     this.slots = new WeakMap();
     this.current = facts;
+    // `-g`: the DISubprogram, the function's default location, and the parameters' dbg.value calls.
+    this.debug?.beginFunction(this.fn, sig);
 
     // WP6: an automatic arena scope remembers the bump position before anything is allocated.
     if (facts.arenaScope) this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("sts_arena_mark")}()`);
@@ -178,6 +184,8 @@ export class Emitter implements EmitContext {
       fn.returnAttrs = ["noundef"];
       fn.attrGroup = this.module.attrGroup(["nounwind"]);
     }
+    // `-g`: an artificial subprogram at the user's `main`, so `break main` lands somewhere sensible.
+    this.debug?.beginFunction(fn, userMain, { artificial: true, name: "main" });
     const freeArena = this.useRuntime("sts_free_arena");
     let code = "0";
     if (userMain.returnType.kind === "void") fn.emit(`call void @${userMain.name}()`);
@@ -278,18 +286,37 @@ export class Emitter implements EmitContext {
   emitStatement(stmt: ts.Statement): void {
     const handler = statementEmitters[stmt.kind];
     if (!handler) throw new Error(`emitter: unexpected statement ${ts.SyntaxKind[stmt.kind]}`);
+    const saved = this.enterLocation(stmt);
     handler(this, stmt);
+    this.fn.setLocation(saved);
   }
 
   emitExpression(expr: ts.Expression): string {
     const handler = expressionEmitters[expr.kind];
     if (!handler) throw new Error(`emitter: unexpected expression ${ts.SyntaxKind[expr.kind]}`);
+    const saved = this.enterLocation(expr);
     const value = handler(this, expr);
     // A class value used as an interface it implements (WP2): same layout, so
     // the conversion the checker recorded is a pointer bitcast.
     const coercion = this.program.coercions.get(expr);
-    if (!coercion) return value;
-    return this.fn.emitValue(`bitcast ${llvmType(coercion.from)} ${value} to ${llvmType(coercion.to)}`);
+    const result = coercion
+      ? this.fn.emitValue(`bitcast ${llvmType(coercion.from)} ${value} to ${llvmType(coercion.to)}`)
+      : value;
+    this.fn.setLocation(saved);
+    return result;
+  }
+
+  /**
+   * `-g`: make `node`'s start the debug location of the instructions emitted
+   * for it and return the location to restore afterwards, so the enclosing
+   * construct's own instructions (a loop's back edge, a `store` after its
+   * initializer) point at the enclosing node again. Without `-g` this is a
+   * no-op and the location stays empty.
+   */
+  private enterLocation(node: ts.Node): string {
+    const saved = this.fn.location;
+    if (this.debug) this.fn.setLocation(this.debug.locationOf(node));
+    return saved;
   }
 
   emitVariableDeclarations(list: ts.VariableDeclarationList): void {

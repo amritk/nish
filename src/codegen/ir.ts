@@ -49,6 +49,14 @@ export class IRFunction {
   returnAttrs: string[] = [];
   /** Linkage keyword (`internal`, ...). Empty means LLVM's default, external. */
   linkage = "";
+  /** `!N` of the function's `DISubprogram` (`-g`, WP10); empty without debug info. */
+  subprogram = "";
+  /**
+   * `!N` of the `DILocation` to attach to every instruction emitted from now
+   * on (`-g`). Empty means none: the emitter sets it when a statement or
+   * expression begins and restores the previous one after.
+   */
+  private dbgLocation = "";
 
   constructor(
     readonly name: string,
@@ -64,9 +72,18 @@ export class IRFunction {
     return `%${this.nextTemp++}`;
   }
 
-  /** Append an instruction that produces no value. */
+  get location(): string {
+    return this.dbgLocation;
+  }
+
+  /** Set (or with `""` clear) the debug location appended to subsequent instructions. */
+  setLocation(ref: string): void {
+    this.dbgLocation = ref;
+  }
+
+  /** Append an instruction that produces no value (with `, !dbg !N` while a debug location is active). */
   emit(instr: string): void {
-    this.current.instructions.push(instr);
+    this.current.instructions.push(this.dbgLocation ? `${instr}, !dbg ${this.dbgLocation}` : instr);
   }
 
   /** Append `%N = <instr>` and return `%N`. */
@@ -121,7 +138,8 @@ export class IRFunction {
     const ret = [...this.returnAttrs, this.returnType].join(" ");
     const attrs = this.attrGroup ? ` ${this.attrGroup}` : "";
     const linkage = this.linkage ? `${this.linkage} ` : "";
-    const header = `define ${linkage}${ret} @${this.name}(${params})${attrs} {`;
+    const dbg = this.subprogram ? ` !dbg ${this.subprogram}` : "";
+    const header = `define ${linkage}${ret} @${this.name}(${params})${attrs}${dbg} {`;
     const body = this.blocks
       .map((b, i) => {
         if (i === 0 && this.entryPrelude.length > 0) {
@@ -146,8 +164,29 @@ export class IRModule {
   private readonly attrGroups: string[] = [];
   /** `target datalayout` / `target triple` lines (WP9, `--target`); empty keeps the module target-neutral. */
   targetHeader: string[] = [];
+  /** Metadata nodes by number (`!N = <text>`), for debug info (`-g`, WP10). Identical texts share a node. */
+  private readonly metadata: string[] = [];
+  /** Named metadata lines (`!llvm.dbg.cu = !{...}`), printed before the numbered nodes. */
+  private readonly namedMetadata: string[] = [];
 
   constructor(readonly sourceFileName: string) {}
+
+  /** Intern a metadata node and return its reference (`!N`). */
+  addMetadata(text: string): string {
+    let idx = this.metadata.indexOf(text);
+    if (idx < 0) idx = this.metadata.push(text) - 1;
+    return `!${idx}`;
+  }
+  /** Reserve a number to be filled by `setMetadata`, for nodes that must be referenced before they are complete. */
+  reserveMetadata(): string {
+    return `!${this.metadata.push("") - 1}`;
+  }
+  setMetadata(ref: string, text: string): void {
+    this.metadata[Number(ref.slice(1))] = text;
+  }
+  addNamedMetadata(line: string): void {
+    if (!this.namedMetadata.includes(line)) this.namedMetadata.push(line);
+  }
 
   addTypeDecl(text: string): void {
     if (!this.typeDecls.includes(text)) this.typeDecls.push(text);
@@ -186,6 +225,9 @@ export class IRModule {
     if (this.functions.length) sections.push(this.functions.map((f) => f.toString()).join("\n\n"));
     if (this.attrGroups.length) {
       sections.push(this.attrGroups.map((a, i) => `attributes #${i} = { ${a} }`).join("\n"));
+    }
+    if (this.metadata.length) {
+      sections.push([...this.namedMetadata, ...this.metadata.map((m, i) => `!${i} = ${m}`)].join("\n"));
     }
     return sections.join("\n\n") + "\n";
   }

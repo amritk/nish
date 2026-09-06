@@ -25,9 +25,9 @@ import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { CheckedProgram, Checker, FunctionSig, ImportBinding } from "./checker";
-import { analyzeFunctions } from "./codegen/attributes";
+import { FunctionFacts, analyzeFunctions } from "./codegen/attributes";
 import { emitProgram } from "./codegen/emitter";
-import { CompileError } from "./diagnostics";
+import { CompileError, DiagnosticSink } from "./diagnostics";
 import { parseSource } from "./parser";
 import { validateStaticTS } from "./validator";
 import { CompilerOptions, DEFAULT_OPTIONS } from "./types";
@@ -53,11 +53,14 @@ export interface EmittedModule {
 /**
  * Phase A for one file, with the Phase 0 validator slot: the forbidden-syntax
  * sweep (WP0, `src/validator.ts`) runs between parsing and checking, i.e.
- * right here, before the module's signatures are collected.
+ * right here, before the module's signatures are collected. With a `sink`
+ * every syntax error, or else every forbidden construct, of the file is
+ * reported before the phase throws; without one the first is thrown.
  */
-export function parseModule(fileName: string, sourceText: string): ts.SourceFile {
-  const ast = parseSource(fileName, sourceText); // Phase A
-  validateStaticTS(ast); // Phase 0: forbidden-syntax sweep, hard fail
+export function parseModule(fileName: string, sourceText: string, sink?: DiagnosticSink): ts.SourceFile {
+  const ast = parseSource(fileName, sourceText, sink); // Phase A
+  validateStaticTS(ast, sink); // Phase 0: forbidden-syntax sweep, hard fail
+  sink?.throwIfErrors();
   return ast;
 }
 
@@ -66,7 +69,15 @@ export class Compilation {
   readonly modules: ModuleUnit[] = [];
   private readonly byPath = new Map<string, ModuleUnit>();
   readonly opts: CompilerOptions;
+  /**
+   * Every error of the program (WP10). The phases below recover where they
+   * can and `check()` throws between phases once anything was reported, so
+   * pass 2 never runs over broken signatures and the emitter never sees a
+   * poisoned program.
+   */
+  readonly sink = new DiagnosticSink();
   private checked = false;
+  private facts?: Map<string, FunctionFacts>;
 
   constructor(options: Partial<CompilerOptions> = {}) {
     this.opts = { ...DEFAULT_OPTIONS, ...options };
@@ -87,8 +98,8 @@ export class Compilation {
     if (existing) return existing;
 
     const text = sourceText ?? fs.readFileSync(absPath, "utf8");
-    const sourceFile = parseModule(fileName, text);
-    const checker = new Checker(sourceFile, this.opts, { isEntry });
+    const sourceFile = parseModule(fileName, text, this.sink);
+    const checker = new Checker(sourceFile, this.opts, { isEntry, sink: this.sink });
     const unit: ModuleUnit = { path: absPath, fileName, sourceFile, isEntry, checker, resolved: new Map() };
     this.byPath.set(absPath, unit);
     this.modules.push(unit);
@@ -96,8 +107,11 @@ export class Compilation {
     checker.collectSignatures(); // pass 1: also validates the import syntax
     for (const imp of checker.program.imports) {
       if (unit.resolved.has(imp.specifier)) continue;
-      const target = this.resolveSpecifier(unit, imp);
-      unit.resolved.set(imp.specifier, this.load(target, displayName(target), undefined, false));
+      // A missing module is reported and the others still load; `check()` stops before binding.
+      this.sink.recover(() => {
+        const target = this.resolveSpecifier(unit, imp);
+        unit.resolved.set(imp.specifier, this.load(target, displayName(target), undefined, false));
+      });
     }
     return unit;
   }
@@ -116,14 +130,22 @@ export class Compilation {
     return resolved;
   }
 
-  /** Passes 1b and 2 over every module. */
+  /**
+   * Passes 1b and 2 over every module. Each phase runs to completion over
+   * every module, then the collected errors (if any) are thrown together: a
+   * broken signature never reaches body checking, a broken body never reaches
+   * the emitter.
+   */
   check(): void {
     if (this.checked) return;
+    this.sink.throwIfErrors(); // pass 1 (signatures, module resolution) ran during load
     for (const unit of this.modules) {
       unit.checker.bindImports((imp) => unit.resolved.get(imp.specifier)!.checker.program);
     }
     this.rejectSymbolClashes();
+    this.sink.throwIfErrors();
     for (const unit of this.modules) unit.checker.checkBodies();
+    this.sink.throwIfErrors();
     this.checked = true;
   }
 
@@ -153,16 +175,25 @@ export class Compilation {
           : sig.exported && prev.sig.exported
             ? `Exported function ${where}; exported names must be unique across the program`
             : `Function ${where}; without --strict-exports every function is an external symbol, so names must be unique across the program (or export exactly one of them)`;
-        throw new CompileError(message, sig.decl.name ?? sig.decl, unit.sourceFile); // constructors have no name node
+        // Constructors have no name node. Reported, not thrown: every clash is listed.
+        this.sink.report(new CompileError(message, sig.decl.name ?? sig.decl, unit.sourceFile));
       }
     }
   }
 
+  /** Program-wide attribute analysis (`src/codegen/attributes.ts`), computed once after checking. */
+  analyze(): Map<string, FunctionFacts> {
+    this.check();
+    if (!this.facts) {
+      const programs: CheckedProgram[] = this.modules.map((m) => m.checker.program);
+      this.facts = analyzeFunctions(programs, this.opts);
+    }
+    return this.facts;
+  }
+
   /** Program-wide attribute analysis, then one IR module per source module. */
   emit(): EmittedModule[] {
-    this.check();
-    const programs: CheckedProgram[] = this.modules.map((m) => m.checker.program);
-    const facts = analyzeFunctions(programs, this.opts);
+    const facts = this.analyze();
     return this.modules.map((unit) => ({ unit, ir: emitProgram(unit.checker.program, this.opts, facts) }));
   }
 

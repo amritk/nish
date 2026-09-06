@@ -52,6 +52,13 @@ export interface CompilerOptions {
    * Default: false (wrapping, the documented StaticTS semantics).
    */
   nsw: boolean;
+  /**
+   * Emit DWARF debug metadata (`-g`, WP10): a compile unit, a `DISubprogram`
+   * per function, a `DILocation` on every instruction, and `DILocalVariable`s
+   * for parameters and locals (`src/codegen/debug.ts`). Off leaves the IR
+   * byte-for-byte unchanged. Default: false.
+   */
+  debugInfo: boolean;
 }
 
 export const DEFAULT_OPTIONS: CompilerOptions = {
@@ -63,6 +70,7 @@ export const DEFAULT_OPTIONS: CompilerOptions = {
   target: undefined,
   nsw: false,
   stackAlloc: true,
+  debugInfo: false,
 };
 
 export type StaticType =

@@ -73,6 +73,18 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 - **CI and diagnostics.** GitHub Actions matrix (Ubuntu + macOS, LLVM 18) with
   a size table in the job summary; every error is
   `<file>:<line>:<col>: error: <message>` followed by a caret excerpt.
+- **Multi-error reporting, `--json`, debug dumps, `-g`.** A failed compile
+  reports every error (Phase 0: every forbidden construct; pass 1: per
+  declaration; pass 2: per statement, the function marked poisoned) in
+  source order, 20 at most before `...and N more errors`; a lone error prints
+  unchanged. `--json` prints one
+  `{file, line, column, endLine, endColumn, severity, message}` object per
+  line on stdout for editors. `--emit-ast` dumps the syntax tree,
+  `--emit-checked` the checker's tables and attribute facts. `-g` emits DWARF
+  (`DICompileUnit`, `DISubprogram` per function, `DILocation` on every
+  instruction, `DILocalVariable`s for parameters and locals, struct and array
+  composite types); `--link -g` and `scripts/build.sh -g` keep it through
+  every profile. Without `-g` the IR is byte-identical.
 - **Release engineering.** `--version`; documented exit codes (0 ok, 1 compile
   error, 2 usage, 3 toolchain, 70 internal compiler error, stack trace with
   `STATICTSC_DEBUG=1`); a clear per-platform install hint when `--link` cannot

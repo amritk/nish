@@ -36,6 +36,7 @@ export function emitVariableDeclarationList(ctx: EmitContext, list: ts.VariableD
     ctx.setSlot(local, slot);
     const init = ctx.emitExpression(decl.initializer!);
     ctx.fn.emit(`store ${ty} ${init}, ${ty}* ${slot}${ctx.alignSuffix(local.type)}`);
+    ctx.debug?.declareLocal(ctx.fn, local, slot, decl); // `-g`: llvm.dbg.declare on the slot
   }
 }
 

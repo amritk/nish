@@ -1,0 +1,3 @@
+reject_multi_forbidden.ts:2:10: error: `eval` is forbidden in StaticTS
+reject_multi_forbidden.ts:6:10: error: `typeof` is forbidden in StaticTS
+reject_multi_forbidden.ts:10:3: error: `delete` is forbidden in StaticTS

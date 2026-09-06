@@ -8,6 +8,7 @@
 import ts from "typescript";
 import { CheckedProgram, LocalVar } from "../../checker";
 import { CompilerOptions, StaticType } from "../../types";
+import { DebugInfo } from "../debug";
 import { IRBlock, IRFunction } from "../ir";
 
 /** Branch targets of an enclosing loop, for `break` and `continue`. */
@@ -25,6 +26,12 @@ export interface EmitContext {
   readonly fn: IRFunction;
   /** Enclosing loops, innermost last. Handlers push and pop. */
   readonly loops: LoopTarget[];
+  /**
+   * DWARF metadata builder when compiling with `-g` (WP10), else undefined.
+   * Handlers that create a variable slot call `debug?.declareLocal`; locations
+   * are attached by the core around every statement and expression.
+   */
+  readonly debug?: DebugInfo;
 
   /** Alloca slot (`%x.addr`) for a local variable. */
   slotOf(local: LocalVar): string;

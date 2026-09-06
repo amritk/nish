@@ -29,6 +29,11 @@
 # libclang-rt-<ver>-dev; it ships with Apple clang and Homebrew llvm).
 # docs/wp9-optimisation.md reports what PGO buys on the benchmark suite.
 #
+# Debug info (WP10): `-g` compiles every input with -g and skips the strip
+# step of the speed/size/napi profiles, so the DWARF that `statictsc -g`
+# put in the .ll (line table, variables) reaches the binary. `statictsc
+# --link -g` passes it through automatically.
+#
 # Works on Linux (clang + lld preferred, GNU ld tolerated) and macOS (Apple ld64
 # or Homebrew llvm). Set CC to pick a compiler (default: clang on PATH).
 set -euo pipefail
@@ -37,15 +42,17 @@ profile=speed
 out=""
 inputs=()
 pgo=()                                 # -fprofile-generate / -fprofile-use=<file>
+debug=0                                # -g: keep DWARF (statictsc -g emits it in the IR; runtime.c gets it here)
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
     --profile) profile="$2"; shift 2 ;;
+    -g) debug=1; shift ;;
     --pgo-generate) pgo=(-fprofile-generate); shift ;;
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
       pgo=("-fprofile-use=$2"); shift 2 ;;
-    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,37p' "$0"; exit 0 ;;
     *) inputs+=("$1"); shift ;;
   esac
 done
@@ -68,6 +75,10 @@ case "$(uname -s)" in
     # GNU ld needs the gold plugin for LTO; prefer lld when clang can find it.
     if command -v ld.lld >/dev/null 2>&1; then common+=(-fuse-ld=lld); fi ;;
 esac
+
+# -g: compile everything with debug info and never strip, whatever the profile,
+# so the line table statictsc emitted survives into the binary.
+if [ "$debug" = 1 ]; then common+=(-g); strip_flag=(); fi
 
 case "$profile" in
   debug)

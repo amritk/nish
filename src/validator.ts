@@ -1,11 +1,14 @@
 /**
  * Phase 0: forbidden-syntax sweep.
  *
- * Walks the entire syntax tree once (`ts.forEachChild`, pre-order) and throws
- * a `CompileError` on the first construct that StaticTS can never compile:
- * anything that requires dynamic typing, prototype lookup, reflection,
- * unwinding, or a garbage-collected heap. Every rule here is decidable from
- * syntax alone; nothing depends on types or scopes.
+ * Walks the entire syntax tree once (`ts.forEachChild`, pre-order) and
+ * reports a `CompileError` for every construct that StaticTS can never
+ * compile: anything that requires dynamic typing, prototype lookup,
+ * reflection, unwinding, or a garbage-collected heap. Every rule here is
+ * decidable from syntax alone; nothing depends on types or scopes. With a
+ * `DiagnosticSink` the sweep reports every forbidden construct in the file
+ * (skipping the inside of a rejected node, so `Array<any>` is one error, not
+ * two); without one it throws on the first, in source order.
  *
  * The validator is defence in depth. It runs before the checker so that a
  * forbidden construct is rejected even where the checker never looks (an
@@ -24,7 +27,7 @@
  * looks at `node.parent` to tell a value reference from a property name.
  */
 import ts from "typescript";
-import { CompileError } from "./diagnostics";
+import { CompileError, DiagnosticSink } from "./diagnostics";
 
 type Validator = (node: ts.Node, sf: ts.SourceFile) => void;
 
@@ -436,13 +439,19 @@ const validators: Partial<Record<ts.SyntaxKind, Validator>> = {
 };
 
 /**
- * Phase 0 entry point. Throws `CompileError` on the first forbidden construct
- * in source order (pre-order walk); returns normally when the tree is clean.
+ * Phase 0 entry point. Without a `sink`, throws `CompileError` on the first
+ * forbidden construct in source order (pre-order walk). With one, every
+ * forbidden construct is reported to it (a rejected node's subtree is not
+ * descended into) and the caller decides when to stop. Returns normally
+ * when the tree is clean.
  */
-export function validateStaticTS(sourceFile: ts.SourceFile): void {
+export function validateStaticTS(sourceFile: ts.SourceFile, sink?: DiagnosticSink): void {
   const visit = (node: ts.Node): void => {
     const rule = validators[node.kind];
-    if (rule) rule(node, sourceFile);
+    if (rule) {
+      if (!sink) rule(node, sourceFile);
+      else if (!sink.recover(() => rule(node, sourceFile))) return;
+    }
     ts.forEachChild(node, visit);
   };
   ts.forEachChild(sourceFile, visit);

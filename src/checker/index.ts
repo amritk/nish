@@ -14,7 +14,7 @@
  *   2.  `checkBodies`        function and method bodies, now that every callee is known
  */
 import ts from "typescript";
-import { CompileError } from "../diagnostics";
+import { CompileError, DiagnosticSink } from "../diagnostics";
 import { CompilerOptions, StaticType, registerNamedTypes, typeToString } from "../types";
 import {
   coerceToContext,
@@ -44,6 +44,12 @@ export type { CheckContext, StatementChecker, ExpressionChecker, BinaryChecker, 
 export interface CheckerModuleOptions {
   /** The entry module may (and with `--link` must) declare `export function main`. */
   isEntry: boolean;
+  /**
+   * Where errors are collected (WP10). Shared by every module of a
+   * Compilation, which decides between phases whether to go on. Without one
+   * the checker makes its own and `check()` throws at the end.
+   */
+  sink?: DiagnosticSink;
 }
 
 /** Maps an import binding to the checked program its specifier names (resolved by the Compilation). */
@@ -57,6 +63,7 @@ export class Checker implements CheckContext {
   readonly loops: LoopInfo[] = [];
   current!: FunctionSig;
   private readonly isEntry: boolean;
+  readonly sink: DiagnosticSink;
   /**
    * Import names used as types before pass 1b could tell whether they name a
    * class (WP2). Resolved provisionally as `%struct.<name>`; `bindImports`
@@ -71,6 +78,7 @@ export class Checker implements CheckContext {
   ) {
     this.sf = sourceFile;
     this.isEntry = module.isEntry;
+    this.sink = module.sink ?? new DiagnosticSink();
     this.program = {
       sourceFile,
       functions: [],
@@ -94,13 +102,21 @@ export class Checker implements CheckContext {
     });
   }
 
-  /** Single-module convenience: every pass in order; imports cannot be resolved here. */
+  /**
+   * Single-module convenience: every pass in order; imports cannot be
+   * resolved here. Throws the first error (with the rest attached) at the end
+   * of the pass that found it, so no phase runs over broken tables.
+   */
   check(): CheckedProgram {
     this.collectSignatures();
+    this.sink.throwIfErrors();
     this.bindImports((b) =>
       this.error(`Cannot resolve import \`${b.specifier}\` when checking a single module`, b.node)
     );
-    return this.checkBodies();
+    this.sink.throwIfErrors();
+    this.checkBodies();
+    this.sink.throwIfErrors();
+    return this.program;
   }
 
   /**
@@ -108,77 +124,93 @@ export class Checker implements CheckContext {
    * Imports and class/interface names go first so any annotation can name
    * them; then members and function signatures in source order; finally the
    * checks that need every struct's layout (`implements`, definite assignment).
+   *
+   * Recovery is per declaration (WP10): a rejected class, interface, import or
+   * function signature is reported, the struct is marked poisoned (its
+   * layout checks are skipped), and the next declaration is collected.
    */
   collectSignatures(): void {
     const structs: StructInfo[] = [];
     for (const stmt of this.sf.statements) {
-      if (ts.isImportDeclaration(stmt)) this.program.imports.push(...collectImports(stmt, this.sf));
-      else if (isStructDeclaration(stmt)) structs.push(declareStruct(this, stmt));
+      this.sink.recover(() => {
+        if (ts.isImportDeclaration(stmt)) this.program.imports.push(...collectImports(stmt, this.sf));
+        else if (isStructDeclaration(stmt)) structs.push(declareStruct(this, stmt));
+      });
     }
     for (const stmt of this.sf.statements) {
       if (ts.isImportDeclaration(stmt)) continue;
       if (isStructDeclaration(stmt)) {
-        collectStructMembers(this, this.program.structs.get(stmt.name!.text)!);
+        const info = stmt.name && this.program.structs.get(stmt.name.text);
+        if (info && info.decl === stmt && !this.sink.recover(() => collectStructMembers(this, info))) {
+          info.poisoned = true;
+        }
         continue;
       }
-      if (!ts.isFunctionDeclaration(stmt)) {
-        rejectNonFunctionExport(stmt, this.sf);
-        this.error(
-          `Only top-level function declarations are supported in Phase 1 (found ${ts.SyntaxKind[stmt.kind]})`,
-          stmt
-        );
-      }
-      const sig = collectFunctionSignature(stmt, this.sf, this.opts);
-      if (this.sigs.has(sig.sourceName)) this.error(`Duplicate function \`${sig.sourceName}\``, stmt);
-      if (this.program.structs.has(sig.sourceName)) {
-        this.error(`\`${sig.sourceName}\` is already declared as a class or interface`, stmt.name!);
-      }
-      if (sig.exported && sig.sourceName === "main") {
-        if (!this.isEntry) this.error("Only the entry module may declare `export function main`", stmt.name!);
-        this.program.entryMain = markEntryMain(sig, this.sf);
-      }
-      this.sigs.set(sig.sourceName, sig);
-      this.program.functions.push(sig);
-      if (sig.exported) this.program.exports.set(sig.sourceName, sig);
+      this.sink.recover(() => this.collectFunction(stmt));
     }
-    for (const info of structs) finishStruct(this, info);
+    for (const info of structs) {
+      if (!info.poisoned && !this.sink.recover(() => finishStruct(this, info))) info.poisoned = true;
+    }
+  }
+
+  private collectFunction(stmt: ts.Statement): void {
+    if (!ts.isFunctionDeclaration(stmt)) {
+      rejectNonFunctionExport(stmt, this.sf);
+      this.error(
+        `Only top-level function declarations are supported in Phase 1 (found ${ts.SyntaxKind[stmt.kind]})`,
+        stmt
+      );
+    }
+    const sig = collectFunctionSignature(stmt, this.sf, this.opts);
+    if (this.sigs.has(sig.sourceName)) this.error(`Duplicate function \`${sig.sourceName}\``, stmt);
+    if (this.program.structs.has(sig.sourceName)) {
+      this.error(`\`${sig.sourceName}\` is already declared as a class or interface`, stmt.name!);
+    }
+    if (sig.exported && sig.sourceName === "main") {
+      if (!this.isEntry) this.error("Only the entry module may declare `export function main`", stmt.name!);
+      this.program.entryMain = markEntryMain(sig, this.sf);
+    }
+    this.sigs.set(sig.sourceName, sig);
+    this.program.functions.push(sig);
+    if (sig.exported) this.program.exports.set(sig.sourceName, sig);
   }
 
   /** Pass 1b: bind every import to the exporter's function signature or struct. */
   bindImports(resolve: ImportResolver): void {
-    for (const imp of this.program.imports) {
-      const target = resolve(imp);
-      const struct = target.structs.get(imp.importedName);
-      if (struct && struct.decl.getSourceFile() === target.sourceFile) {
-        this.bindStructImport(imp, struct);
-        continue;
-      }
-      const sig = target.exports.get(imp.importedName);
-      if (!sig) {
-        const exists = target.functions.some((f) => f.sourceName === imp.importedName);
-        this.error(
-          exists
-            ? `\`${imp.importedName}\` is declared in \`${imp.specifier}\` but not exported (add \`export\`)`
-            : `Module \`${imp.specifier}\` has no exported function \`${imp.importedName}\``,
-          imp.element
-        );
-      }
-      if (this.importsUsedAsTypes.has(imp.localName)) {
-        this.error(`\`${imp.localName}\` is a function imported from \`${imp.specifier}\`, not a type`, imp.element);
-      }
-      const clash = this.sigs.get(imp.localName);
-      if (clash) {
-        const origin = this.program.imports.find((o) => o.sig === clash);
-        this.error(
-          origin
-            ? `\`${imp.localName}\` is already imported from \`${origin.specifier}\``
-            : `\`${imp.localName}\` is already declared in this module`,
-          imp.element
-        );
-      }
-      imp.sig = sig;
-      this.sigs.set(imp.localName, sig);
+    for (const imp of this.program.imports) this.sink.recover(() => this.bindImport(imp, resolve(imp)));
+  }
+
+  private bindImport(imp: ImportBinding, target: CheckedProgram): void {
+    const struct = target.structs.get(imp.importedName);
+    if (struct && struct.decl.getSourceFile() === target.sourceFile) {
+      this.bindStructImport(imp, struct);
+      return;
     }
+    const sig = target.exports.get(imp.importedName);
+    if (!sig) {
+      const exists = target.functions.some((f) => f.sourceName === imp.importedName);
+      this.error(
+        exists
+          ? `\`${imp.importedName}\` is declared in \`${imp.specifier}\` but not exported (add \`export\`)`
+          : `Module \`${imp.specifier}\` has no exported function \`${imp.importedName}\``,
+        imp.element
+      );
+    }
+    if (this.importsUsedAsTypes.has(imp.localName)) {
+      this.error(`\`${imp.localName}\` is a function imported from \`${imp.specifier}\`, not a type`, imp.element);
+    }
+    const clash = this.sigs.get(imp.localName);
+    if (clash) {
+      const origin = this.program.imports.find((o) => o.sig === clash);
+      this.error(
+        origin
+          ? `\`${imp.localName}\` is already imported from \`${origin.specifier}\``
+          : `\`${imp.localName}\` is already declared in this module`,
+        imp.element
+      );
+    }
+    imp.sig = sig;
+    this.sigs.set(imp.localName, sig);
   }
 
   /**
@@ -211,14 +243,21 @@ export class Checker implements CheckContext {
     this.program.structs.set(imp.localName, struct);
   }
 
-  /** Pass 2: check bodies. */
+  /** Pass 2: check bodies. Every function is checked even after an earlier one was rejected (WP10). */
   checkBodies(): CheckedProgram {
-    for (const sig of this.program.functions) this.checkFunctionBody(sig);
+    for (const sig of this.program.functions) {
+      if (!this.sink.recover(() => this.checkFunctionBody(sig))) sig.poisoned = true;
+    }
     return this.program;
   }
 
   error(message: string, node: ts.Node): never {
     throw new CompileError(message, node, this.sf);
+  }
+
+  report(err: CompileError): void {
+    this.sink.report(err);
+    if (this.current) this.current.poisoned = true;
   }
 
   private checkFunctionBody(sig: FunctionSig): void {
@@ -236,7 +275,8 @@ export class Checker implements CheckContext {
     // The body shares the parameter scope rather than opening a child, so
     // `function f(a) { let a }` is a duplicate-declaration error as in TS.
     const terminates = checkStatements(this, sig.decl.body!.statements, scope);
-    if (sig.returnType.kind !== "void" && !terminates) {
+    // A body with a rejected statement may have lost its `return`: no definite-return cascade.
+    if (sig.returnType.kind !== "void" && !terminates && !sig.poisoned) {
       this.error(
         `Function \`${sig.sourceName}\` must return a value of type ${typeToString(sig.returnType)} on every path`,
         sig.decl.name ?? sig.decl

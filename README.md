@@ -104,12 +104,23 @@ statictsc <entry.ts> [more.ts ...] [options]
                              aarch64-apple-darwin, wasm32-unknown-unknown, wasm32-wasi); default: target-neutral IR
   --nsw                      integer add/sub/mul carry `nsw`: signed overflow is undefined (like C)
   --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)
+  -g                         emit DWARF debug info (!dbg locations, variables); kept by --link
+  --json                     print diagnostics as one JSON object per line on stdout (no excerpt)
+  --emit-ast                 print the syntax tree of every module to stdout instead of IR
+  --emit-checked             print the checker's tables (signatures, locals, structs, facts) instead of IR
   -v, --version              print the statictsc version and exit
 ```
 
 Exit codes: `0` success, `1` compile error (`file:line:col: error: ...` plus
 a caret excerpt), `2` usage error, `3` toolchain error, `70` internal
 compiler error (please report it; `STATICTSC_DEBUG=1` adds the stack trace).
+A compile that fails reports every error it found (statement by statement,
+declaration by declaration), in source order, up to 20 before `...and N more
+errors`; `--json` gives editors the same list as
+`{"file","line","column","endLine","endColumn","severity","message"}` objects,
+one per line. `-g` adds a DWARF line table and variables to the IR so
+`gdb`/`lldb` step through the `.ts` source of a `--link`ed binary
+([docs/wp10-ci.md](docs/wp10-ci.md)).
 Multi-file programs: `statictsc examples/multi/main.ts --link build/multi && ./build/multi; echo $?`
 prints `49`.
 

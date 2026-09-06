@@ -315,6 +315,7 @@ const emitForOf: StatementEmitter = (ctx, node) => {
   const endBlock = fn.newBlock("forof.end");
   const slot = fn.emitAlloca(`${local.name}.addr`, ty, ctx.align(elem));
   ctx.setSlot(local, slot);
+  ctx.debug?.declareLocal(fn, local, slot, decl); // `-g`
   const idxSlot = fn.emitAlloca("forof.idx", "i64", ctx.opts.optimizeAttributes ? 8 : undefined);
 
   const arr = ctx.emitExpression(stmt.expression);

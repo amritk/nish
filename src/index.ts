@@ -14,7 +14,8 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { Compilation, EmittedModule } from "./compiler";
-import { CompileError } from "./diagnostics";
+import { CompileError, allErrors, diagnosticJson, formatErrorReport } from "./diagnostics";
+import { dumpAst, dumpChecked } from "./dump";
 import { generateDts, generateHeader, generateNapiShim } from "./interop";
 import { NumberMode } from "./types";
 import { SUPPORTED_TARGETS, resolveTarget } from "./codegen/target";
@@ -100,6 +101,10 @@ function usage(): never {
       `                             (${SUPPORTED_TARGETS.join(", ")}); default: target-neutral IR`,
       "  --nsw                      integer add/sub/mul carry `nsw`: signed overflow is undefined (like C)",
       "  --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)",
+      "  -g                         emit DWARF debug info (!dbg locations, variables); kept by --link",
+      "  --json                     print diagnostics as one JSON object per line on stdout (no excerpt)",
+      "  --emit-ast                 print the syntax tree of every module to stdout instead of IR",
+      "  --emit-checked             print the checker's tables (signatures, locals, structs, facts) instead of IR",
       "  -v, --version              print the statictsc version and exit",
       "exit codes: 0 ok, 1 compile error, 2 usage, 3 toolchain (clang / build.sh), 70 internal error",
     ].join("\n")
@@ -158,6 +163,10 @@ function main(argv: string[]): number {
   let target: string | undefined; // WP9: canonical triple, validated below
   let nsw = false;
   let stackAlloc = true;
+  // WP10 diagnostics and debugging.
+  let debugInfo = false;
+  let json = false;
+  let dump: "ast" | "checked" | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -206,6 +215,14 @@ function main(argv: string[]): number {
       nsw = true;
     } else if (arg === "--no-stack-alloc") {
       stackAlloc = false;
+    } else if (arg === "-g") {
+      debugInfo = true;
+    } else if (arg === "--json") {
+      json = true;
+    } else if (arg === "--emit-ast") {
+      dump = "ast";
+    } else if (arg === "--emit-checked") {
+      dump = "checked";
     } else if (arg === "-h" || arg === "--help") {
       usage();
     } else if (arg === "-v" || arg === "--version") {
@@ -240,12 +257,22 @@ function main(argv: string[]): number {
     target,
     nsw,
     stackAlloc,
+    debugInfo,
   });
   try {
     // Test hook for the internal-error path (tests/run.js, WP12 block); not a user feature.
     if (process.env.STATICTSC_SIMULATE_ICE) throw new TypeError("simulated internal compiler error");
     for (const input of inputs) compilation.addRoot(input);
+    // `--emit-ast` needs only the parsed (and Phase 0 validated) modules; nothing is checked or written.
+    if (dump === "ast") {
+      for (const unit of compilation.modules) process.stdout.write(dumpAst(unit.sourceFile, unit.fileName));
+      return EXIT_OK;
+    }
     compilation.check();
+    if (dump === "checked") {
+      process.stdout.write(dumpChecked(compilation));
+      return EXIT_OK;
+    }
     if (link !== undefined && !compilation.entry.checker.program.entryMain) {
       throw new CliError(
         `--link: the entry module ${compilation.entry.fileName} must declare \`export function main(): number\` (or \`: void\`)`
@@ -256,13 +283,23 @@ function main(argv: string[]): number {
   } catch (err) {
     // Expected failures: the program is wrong (CompileError), the driver refused
     // the request (CliError), or an input/output path is unusable (ENOENT, ...).
-    if (err instanceof CompileError || err instanceof CliError) {
-      console.error(err.message);
+    if (err instanceof CompileError) {
+      // `--json`: one object per line on stdout for editors; otherwise the
+      // human report (every collected error, capped) on stderr.
+      if (json) for (const e of allErrors(err)) console.log(diagnosticJson(e));
+      else console.error(formatErrorReport(err));
+      return EXIT_COMPILE_ERROR;
+    }
+    if (err instanceof CliError) {
+      if (json) console.log(JSON.stringify({ severity: "error", message: err.message }));
+      else console.error(err.message);
       return EXIT_COMPILE_ERROR;
     }
     if (isSystemError(err)) {
       const where = err.path ? ` ${err.path}` : "";
-      console.error(`error: cannot ${err.syscall ?? "access"}${where}: ${err.code}`);
+      const message = `cannot ${err.syscall ?? "access"}${where}: ${err.code}`;
+      if (json) console.log(JSON.stringify({ severity: "error", message }));
+      else console.error(`error: ${message}`);
       return EXIT_COMPILE_ERROR;
     }
     throw err; // anything else is an internal compiler error, reported at top level
@@ -289,7 +326,9 @@ function main(argv: string[]): number {
 
   if (link !== undefined) {
     fs.mkdirSync(path.dirname(path.resolve(link)), { recursive: true });
-    const build = spawnSync("bash", [BUILD_SH, ...outputs, RUNTIME_C, "-o", link, "--profile", profile], {
+    // `-g` is passed through so runtime.c gets debug info too and build.sh does not strip the binary.
+    const flags = debugInfo ? ["-g"] : [];
+    const build = spawnSync("bash", [BUILD_SH, ...outputs, RUNTIME_C, "-o", link, "--profile", profile, ...flags], {
       stdio: ["ignore", "pipe", "pipe"],
       encoding: "utf8",
     });
