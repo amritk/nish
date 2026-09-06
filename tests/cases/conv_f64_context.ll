@@ -1,4 +1,5 @@
 %struct.Config = type { double, %struct.sts_array* }
+%struct.Point = type { double, double }
 %struct.sts_array = type { i64, i64, i8* }
 %struct.sts_arena = type { i8*, i64, i64, i8* }
 
@@ -59,6 +60,15 @@ entry:
   ret void
 }
 
+define void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, double noundef %x, double noundef %y) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
+  store double %x, double* %0, align 8
+  %1 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
+  store double %y, double* %1, align 8
+  ret void
+}
+
 define noundef i32 @sts_main() #1 {
 entry:
   %xs.addr = alloca %struct.sts_array*, align 8
@@ -66,6 +76,7 @@ entry:
   %arr.data = alloca [2 x double], align 8
   %c.addr = alloca %struct.Config*, align 8
   %Config.obj = alloca %struct.Config, align 8
+  %Point.obj = alloca %struct.Point, align 8
   %0 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %arr.hdr, i64 0, i32 0
   store i64 2, i64* %0, align 8
   %1 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %arr.hdr, i64 0, i32 1
@@ -122,6 +133,11 @@ bounds.ok.1:
   %31 = fadd double %19, %30
   %32 = call i8* @sts_str_from_f64(double %31)
   call void @sts_print(i8* %32)
+  call void @Point.constructor(%struct.Point* %Point.obj, double 0x3FF8000000000000, double 0x4002000000000000)
+  %33 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj, i32 0, i32 0
+  %34 = load double, double* %33, align 8
+  %35 = call i8* @sts_str_from_f64(double %34)
+  call void @sts_print(i8* %35)
   ret i32 0
 }
 

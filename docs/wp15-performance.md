@@ -33,6 +33,40 @@ rule with no worked examples is decoration:
 
 ---
 
+## 1a. The paradigm: data-oriented and procedural
+
+Neither pure OOP nor pure functional. Both lose, for the same underlying
+reason — they put indirection between the CPU and the data.
+
+- **Pure OOP** is a cache-miss machine: vtables, deep hierarchies, and a heap
+  object per value mean the CPU follows a pointer chain to reach anything.
+- **Pure FP** is an allocation machine: immutability, closures and
+  `.map().filter().reduce()` chains allocate per step, which is precisely what
+  a bump arena and a small binary cannot afford.
+
+So the memory model dictates the style, not a paradigm: **flat structs in
+contiguous memory, top-level procedural functions that LLVM inlines, explicit
+mutation, and functional idioms only where they remove runtime work** — the
+value-based `Result<T, E>` of §5 being the example, since it replaces unwinding
+tables with one `i1` and a branch.
+
+Most of this is already what StaticTS is, which is why it is written down here
+as a frame rather than a change:
+
+| Feature | Status | Why |
+| --- | --- | --- |
+| Flat classes as C structs | **allowed, already the design** | `class` is `%struct.Name` with fixed fields in declared order, laid out exactly as clang lays out the equivalent C struct, and a layout test pins it. No prototypes, no vtables, no headers. |
+| Top-level procedural functions | **allowed, already the only form** | Nested functions, function values and closures do not exist. Purity is *computed*, not declared: the whole-program fixpoint marks a function `readnone`/`readonly` when it earns it. |
+| `Result<T, E>` | **planned (§5)** | Stack-allocated, register-passed, no unwinding. |
+| `extends` | **allowed, any depth** | Single inheritance by struct prefix, no virtual dispatch. Depth costs nothing: each ancestor is a prefix of the derived layout, so a chain of three is still one flat struct and one `getelementptr`. Considered restricting it to one level and did not — the layout reason does not bite, and a rule with no cost behind it is just a rule. |
+| Runtime closures | **forbidden** | Stricter than "restricted": a captured environment needs a heap allocation and an indirect call, and an unknown callee defeats the purity, termination and escape analyses the attributes depend on. |
+| `prototype`, dynamic property mutation | **forbidden (Phase 0)** | Breaks the fixed layout the whole model rests on. |
+
+The one place the language was **not** data-oriented is arrays of structs, and
+that is being fixed — see §2a.
+
+---
+
 ## 2. Zero-cost safety: the bounds-check pipeline
 
 A bounds check is the largest per-instruction cost in the loops that matter,
@@ -84,6 +118,42 @@ is emitted, as today. Safety is the default; speed is what the proofs buy.
 Between 2 and 4 sits LLVM's own bounds-check elimination, which already removes
 the check from ordinary counted loops. Part of this work is *measuring* how
 much it gets on its own before hand-building analysis that duplicates it.
+
+---
+
+## 2a. Arrays of structs are contiguous
+
+`Point[]` stored **one pointer per element**: the array data was
+`%struct.Point**`, each entry pointing somewhere in the arena. Iterating it
+chased a pointer per element and scattered the fields across memory — the exact
+pattern §1a exists to avoid, sitting in the middle of the language.
+
+Struct arrays become **contiguous values**: `N` structs end to end, one
+allocation, `ps[i]` an interior `getelementptr` rather than a load-then-chase.
+That is what makes a loop over `Point[]` vectorisable and what makes a struct
+array a cache line's worth of useful data instead of a cache line's worth of
+pointers.
+
+The hazard this introduces is real and is not being waved away. Growing an
+array reallocates, so an interior pointer taken before a `push` dangles
+afterwards:
+
+```ts
+const p = ps[0];    // interior pointer into the array data
+ps.push(other);     // may reallocate and move the data
+p.x = 1.0;          // would write to freed memory
+```
+
+Today that is safe, because `p` is an independent heap object. Under
+contiguous storage it is a use-after-free, so **the checker rejects it**: an
+element reference may not be held across a mutation of the array it came from.
+The rule reuses the flow-sensitive machinery the narrowing analysis already
+has, and it will reject some programs that would have been fine — that is the
+accepted cost of the layout, and the message names the fix (index again after
+the push, or hoist the push).
+
+This changes the array ABI, so the C header, the wasm bridge, the N-API shim
+and their tests move with it.
 
 ---
 
@@ -214,6 +284,7 @@ was available:
 | allocation in a loop | a `new`, array literal or concat that escapes and is inside a loop | hoist it, or bound it with an arena scope |
 | not inlinable | a hot, non-exported function kept external because `--no-strict-exports` was given | drop the flag |
 | clamp not folded | a `substring` whose bounds could not be proven in range | use the fast slice, or narrow the index |
+| wasteful struct padding | reordering a struct's fields would shrink it | names the current size, the achievable size, and the field order that gets there |
 
 They are **on by default and never affect the exit code**: visible to everyone,
 breaking nobody. That default carries an obligation — a performance warning
@@ -242,7 +313,10 @@ Roughly dependency order; each row ships with the full construct checklist from
 6. **Ranged types and length narrowing** (§2.1, §2.2) — a real flow-sensitive
    analysis; the `performance` warning for a check that survives is its
    acceptance test.
-7. **Generics, discriminated unions, `Result<T, E>`** (§5) — the largest, and
+7. **Contiguous struct arrays** (§2a) — the layout change plus the
+   escape rule that makes the dangling case a compile error, and the interop
+   surfaces that move with the ABI.
+8. **Generics, discriminated unions, `Result<T, E>`** (§5) — the largest, and
    the one self-hosting most depends on.
 
 An explicit bounds-check opt-out (§2.4) is deferred until 6 has landed and the

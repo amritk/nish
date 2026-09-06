@@ -269,6 +269,14 @@ function contextType(ctx: CheckContext, literal: ts.Expression, scope: Scope): S
     }
     return peekType(ctx, parent.left === expr ? parent.right : parent.left, scope);
   }
+  // `new Point(1.0, 2.0)`: a constructor parameter is an annotation like any
+  // other, and `params[0]` is `this`, so the argument index is offset by one.
+  if (ts.isNewExpression(parent) && ts.isIdentifier(parent.expression)) {
+    const index = parent.arguments ? Array.from(parent.arguments).indexOf(expr) : -1;
+    if (index < 0) return undefined;
+    const struct = ctx.program.structs.get(parent.expression.text);
+    return struct?.ctor?.params[index + 1]?.type;
+  }
   if (ts.isCallExpression(parent)) {
     const index = parent.arguments.indexOf(expr);
     const name = calleeName(parent);
