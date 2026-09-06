@@ -86,6 +86,17 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   overrides are rejected. The generated C header now declares every class
   and interface as a `struct` with the flattened fields and every method
   and constructor as `Class_method(struct Class *, ...)`.
+- **Memory strategy (WP6).** Escape-analysed stack allocation: a `new`,
+  object literal, array literal or `new Array<T>(<literal>)` that provably
+  does not outlive its function becomes an entry-block `alloca`
+  (`--no-stack-alloc` disables it). Automatic arena scopes: a function whose
+  arena temporaries all die with it brackets its body with the new
+  `sts_arena_mark` / `sts_arena_release` runtime calls, so hot loops keep the
+  arena flat. `Arena.reset` / `mark` / `release` / `used` builtins, and
+  `T | null` for class, interface, array and string types with checker-
+  enforced narrowing (`if (p !== null)`, early return, `while`, `&&`, `?:`).
+  See [docs/wp6-memory.md](docs/wp6-memory.md).
+
 - **Escape analysis fix.** A `new C(...)` whose constructor captures `this`
   (`registry.last = this`) is no longer placed on the stack; `new C(...)`
   where an interface or base type is expected now allocates and constructs
@@ -141,18 +152,6 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `docs/FAQ.md`, the `docs/README.md` index, `docs/check-links.mjs`, and a
   README restructured into a short tour.
 
-[Unreleased]: https://github.com/amritk/compiler/compare/v0.1.0...HEAD
-- **Memory strategy (WP6).** Escape-analysed stack allocation: a `new`,
-  object literal, array literal or `new Array<T>(<literal>)` that provably
-  does not outlive its function becomes an entry-block `alloca`
-  (`--no-stack-alloc` disables it). Automatic arena scopes: a function whose
-  arena temporaries all die with it brackets its body with the new
-  `sts_arena_mark` / `sts_arena_release` runtime calls, so hot loops keep the
-  arena flat. `Arena.reset` / `mark` / `release` / `used` builtins, and
-  `T | null` for class, interface, array and string types with checker-
-  enforced narrowing (`if (p !== null)`, early return, `while`, `&&`, `?:`).
-  See [docs/wp6-memory.md](docs/wp6-memory.md).
-
 ### Changed
 
 - **Runtime budget (WP9b).** `runtime/runtime.c` is back inside the
@@ -167,3 +166,5 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   the profile rows. Prototypes, symbols and `tests/runtime_test.c` are
   unchanged; see the "Runtime budget" section of
   [docs/wp9-optimisation.md](docs/wp9-optimisation.md).
+
+[Unreleased]: https://github.com/amritk/compiler/compare/v0.1.0...HEAD
