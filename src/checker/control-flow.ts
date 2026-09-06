@@ -195,8 +195,12 @@ const checkLogical: BinaryChecker = (ctx, expr, scope) => {
   return BOOL;
 };
 
-/** Resolve the target of `x += e` or `x++`: a mutable local (parameters and consts are rejected). */
-function resolveMutableTarget(ctx: CheckContext, target: ts.Expression, scope: Scope): LocalVar {
+/**
+ * Resolve the target of `x += e` or `x++`: a mutable local (parameters and
+ * consts are rejected). Exported for `bitwise.ts`, whose `&=` family shares
+ * this rule and differs only in the operand types it then accepts.
+ */
+export function resolveMutableTarget(ctx: CheckContext, target: ts.Expression, scope: Scope): LocalVar {
   if (!ts.isIdentifier(target)) throw ctx.error("Only simple variables can be assigned", target);
   const v = scope.lookup(target.text);
   if (!v) throw ctx.error(`Unknown identifier \`${target.text}\``, target);

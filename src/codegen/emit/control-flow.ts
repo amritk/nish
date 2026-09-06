@@ -54,12 +54,14 @@ function emitLoopBody(ctx: EmitContext, body: ts.Statement, loop: LoopTarget): L
   return loop;
 }
 
-function loadLocal(ctx: EmitContext, local: LocalVar): string {
+/** Read a mutable local from its alloca slot; shared with the `&=` family in `bitwise.ts`. */
+export function loadLocal(ctx: EmitContext, local: LocalVar): string {
   const ty = llvmType(local.type);
   return ctx.fn.emitValue(`load ${ty}, ${ty}* ${ctx.slotOf(local)}${ctx.alignSuffix(local.type)}`);
 }
 
-function storeLocal(ctx: EmitContext, local: LocalVar, value: string): void {
+/** Write a mutable local back to its alloca slot. */
+export function storeLocal(ctx: EmitContext, local: LocalVar, value: string): void {
   const ty = llvmType(local.type);
   ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${ctx.slotOf(local)}${ctx.alignSuffix(local.type)}`);
 }

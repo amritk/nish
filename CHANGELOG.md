@@ -67,6 +67,19 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
   `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
   `bench/ffi.mjs` gains the batched `Float64Array` rows.
+- **Bitwise operators.** `& | ^` (`and` / `or` / `xor`), `~` (`xor x, -1`),
+  `<< >> >>>` (`shl` / `ashr` / `lshr`), and the compound forms
+  `&= |= ^= <<= >>= >>>=` on a mutable local. Two `i32` or two `i64` of the
+  same type; `f64` is refused because StaticTS never converts implicitly, and
+  `boolean` is refused with the operator that does the job named in the
+  message (`&&`, `||`, `!==`, `!`). Shift counts are masked to the operand
+  width, as in JavaScript, so `x << 33` is `x << 1` instead of the poison LLVM
+  produces for an over-wide shift; a constant count is masked at compile time
+  and emits no `and`. `>>>` on `i32` yields the signed reading of the shifted
+  bits (`-1 >>> 0` is `-1`, not JavaScript's `4294967295`), the same choice the
+  language already makes when integer arithmetic wraps. None of these has a
+  panic path, so a function whose arithmetic is all bitwise keeps `readnone`
+  and `willreturn`.
 - **Arrays.** `T[]` / `Array<T>`, literals, `new Array<T>(n)`, indexing with
   bounds checks (panic on out-of-range), `.length`, `push`, `for ... of`, and
   `--unchecked-indexing` for benchmarks.

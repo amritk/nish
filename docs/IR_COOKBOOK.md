@@ -1073,6 +1073,115 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end expr_compound -->
 
+### Bitwise `& | ^` and `~`
+
+One instruction each, and no panic path: unlike `/` these leave the function
+`readnone` and `willreturn`. `~a` is `xor a, -1`, because LLVM has no `not`.
+
+<!-- cookbook:begin expr_bitwise -->
+```ts
+function mix(a: i32, b: i32): i32 {
+  return (a & b) | (a ^ b);
+}
+
+function invert(a: i32): i32 {
+  return ~a;
+}
+
+function pack(hi: i32, lo: i32): i32 {
+  return (hi << 16) | (lo & 65535);
+}
+```
+
+```llvm
+define noundef i32 @mix(i32 noundef %a, i32 noundef %b) #0 {
+entry:
+  %0 = and i32 %a, %b
+  %1 = xor i32 %a, %b
+  %2 = or i32 %0, %1
+  ret i32 %2
+}
+
+define noundef i32 @invert(i32 noundef %a) #0 {
+entry:
+  %0 = xor i32 %a, -1
+  ret i32 %0
+}
+
+define noundef i32 @pack(i32 noundef %hi, i32 noundef %lo) #0 {
+entry:
+  %0 = shl i32 %hi, 16
+  %1 = and i32 %lo, 65535
+  %2 = or i32 %0, %1
+  ret i32 %2
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end expr_bitwise -->
+
+### Shifts, and the count mask
+
+`<<` is `shl`, `>>` is `ashr` (sign-filling) and `>>>` is `lshr`
+(zero-filling). The count is masked to the operand width — 31 for `i32`, 63
+for `i64` — because LLVM makes a wider shift poison while JavaScript wraps the
+count; StaticTS follows JavaScript. A constant count is masked at compile time
+and no `and` appears (`a >> 3` below); a variable one costs the `and`.
+
+<!-- cookbook:begin expr_shifts -->
+```ts
+function constantCount(a: i32): i32 {
+  return a >> 3;
+}
+
+function variableCount(a: i32, n: i32): i32 {
+  return a << n;
+}
+
+function fills(a: i32, n: i32): i32 {
+  return (a >> n) + (a >>> n);
+}
+
+function wide(a: i64, n: i64): i64 {
+  return a << n;
+}
+```
+
+```llvm
+define noundef i32 @constantCount(i32 noundef %a) #0 {
+entry:
+  %0 = ashr i32 %a, 3
+  ret i32 %0
+}
+
+define noundef i32 @variableCount(i32 noundef %a, i32 noundef %n) #0 {
+entry:
+  %0 = and i32 %n, 31
+  %1 = shl i32 %a, %0
+  ret i32 %1
+}
+
+define noundef i32 @fills(i32 noundef %a, i32 noundef %n) #0 {
+entry:
+  %0 = and i32 %n, 31
+  %1 = ashr i32 %a, %0
+  %2 = and i32 %n, 31
+  %3 = lshr i32 %a, %2
+  %4 = add i32 %1, %3
+  ret i32 %4
+}
+
+define noundef i64 @wide(i64 noundef %a, i64 noundef %n) #0 {
+entry:
+  %0 = and i64 %n, 63
+  %1 = shl i64 %a, %0
+  ret i64 %1
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end expr_shifts -->
+
 ### Checked integer division
 
 `/` and `%` on `i32` / `i64` test the divisor before dividing: a zero

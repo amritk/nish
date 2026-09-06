@@ -7,6 +7,7 @@ import ts from "typescript";
 import { StaticType, isInteger, llvmType } from "../../types";
 import { emitIntBinary } from "./arithmetic";
 import { arrayExpressionEmitters, installArrayAssignmentEmitters } from "./arrays";
+import { bitwiseBinaryEmitters, bitwiseUnaryEmitters } from "./bitwise";
 import { CheckedProgram } from "../../checker";
 import { BuiltinCall, f64Constant } from "./builtins";
 import { ioFunctionEmitters } from "./io";
@@ -68,6 +69,7 @@ const emitNot: UnaryEmitter = (ctx, expr) => ctx.fn.emitValue(`xor i1 ${ctx.emit
 export const unaryEmitters: EmitterTable<UnaryEmitter> = {
   [ts.SyntaxKind.MinusToken]: emitNegate,
   [ts.SyntaxKind.ExclamationToken]: emitNot,
+  ...bitwiseUnaryEmitters, // `~`
   ...controlFlowUnaryEmitters,
 };
 
@@ -122,6 +124,7 @@ export const binaryEmitters: EmitterTable<BinaryEmitter> = {
   [ts.SyntaxKind.EqualsToken]: emitAssignment,
   ...Object.fromEntries(Object.keys(ARITHMETIC_OPCODES).map((k) => [k, emitArithmetic])),
   ...stringBinaryEmitters, // string-aware `+`, `===`, `!==` (numeric lowering unchanged)
+  ...bitwiseBinaryEmitters, // `& | ^ << >> >>>` and their compound forms
   ...controlFlowBinaryEmitters,
 };
 installArrayAssignmentEmitters(binaryEmitters); // `a[i] = v`, `a[i] op= v`; other targets keep the handlers above

@@ -65,12 +65,39 @@ function arith(kind, op, a, b) {
   return paren(plain);
 }
 
+/** The i64 shifts, which JavaScript's BigInt operators cannot express directly. */
+const I64_SHIFT_SHIMS = {
+  [ts.SyntaxKind.LessThanLessThanToken]: "shlI64",
+  [ts.SyntaxKind.GreaterThanGreaterThanToken]: "ashrI64",
+  [ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken]: "lshrI64",
+};
+
+/**
+ * `a op b` for a bitwise operator. On `i32` JavaScript already computes the
+ * `and`/`or`/`xor`/`shl`/`ashr` StaticTS emits, mask and all; only `>>>`
+ * differs, because JS produces an unsigned 32-bit value in a double where an
+ * `i32` is signed, so `| 0` reads those bits back as the type they are in.
+ * BigInt has no `>>>` at all and neither of its shifts masks the count, so the
+ * i64 shifts go through the shim.
+ */
+const bitwise = (kind, op, a, b) =>
+  kind === "i64" && op in I64_SHIFT_SHIMS
+    ? shimCall(I64_SHIFT_SHIMS[op], [a, b])
+    : wrap(kind, paren(bin(a, op, b)));
+
 const COMPOUND_TO_BINARY = {
   [ts.SyntaxKind.PlusEqualsToken]: ts.SyntaxKind.PlusToken,
   [ts.SyntaxKind.MinusEqualsToken]: ts.SyntaxKind.MinusToken,
   [ts.SyntaxKind.AsteriskEqualsToken]: ts.SyntaxKind.AsteriskToken,
   [ts.SyntaxKind.SlashEqualsToken]: ts.SyntaxKind.SlashToken,
   [ts.SyntaxKind.PercentEqualsToken]: ts.SyntaxKind.PercentToken,
+  [ts.SyntaxKind.AmpersandEqualsToken]: ts.SyntaxKind.AmpersandToken,
+  [ts.SyntaxKind.BarEqualsToken]: ts.SyntaxKind.BarToken,
+  [ts.SyntaxKind.CaretEqualsToken]: ts.SyntaxKind.CaretToken,
+  [ts.SyntaxKind.LessThanLessThanEqualsToken]: ts.SyntaxKind.LessThanLessThanToken,
+  [ts.SyntaxKind.GreaterThanGreaterThanEqualsToken]: ts.SyntaxKind.GreaterThanGreaterThanToken,
+  [ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken]:
+    ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
 };
 const ARITHMETIC = new Set([
   ts.SyntaxKind.PlusToken,
@@ -79,6 +106,18 @@ const ARITHMETIC = new Set([
   ts.SyntaxKind.SlashToken,
   ts.SyntaxKind.PercentToken,
 ]);
+const BITWISE = new Set([
+  ts.SyntaxKind.AmpersandToken,
+  ts.SyntaxKind.BarToken,
+  ts.SyntaxKind.CaretToken,
+  ts.SyntaxKind.LessThanLessThanToken,
+  ts.SyntaxKind.GreaterThanGreaterThanToken,
+  ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
+]);
+
+/** `a op b` with the StaticTS semantics of `kind`, whichever family `op` belongs to. */
+const apply = (kind, op, a, b) => (BITWISE.has(op) ? bitwise(kind, op, a, b) : arith(kind, op, a, b));
+
 /** Identifier builtins and the shim function each becomes (`Number` cannot be a shim export name). */
 const IDENTIFIER_BUILTINS = new Map([
   ["toI32", "toI32"],
@@ -208,10 +247,10 @@ function makeTransformer(unit, stems) {
       if (ts.isBinaryExpression(node)) {
         const op = node.operatorToken.kind;
         const kind = kindOf(node);
-        if (ARITHMETIC.has(op)) {
+        if (ARITHMETIC.has(op) || BITWISE.has(op)) {
           const l = ts.visitNode(node.left, visit);
           const r = ts.visitNode(node.right, visit);
-          return arith(kind, op, l, r);
+          return apply(kind, op, l, r);
         }
         if (op in COMPOUND_TO_BINARY) {
           const r = ts.visitNode(node.right, visit);
@@ -227,12 +266,12 @@ function makeTransformer(unit, stems) {
               [f.createParameterDeclaration(undefined, undefined, old)],
               undefined,
               undefined,
-              arith(kind, binop, old, r)
+              apply(kind, binop, old, r)
             );
             return shimCall("updIdx", [a, i, fn]);
           }
           // x op= v  ->  x = wrap(x op v)  (targets are always simple mutable locals)
-          return f.createAssignment(node.left, arith(kind, binop, node.left, r));
+          return f.createAssignment(node.left, apply(kind, binop, node.left, r));
         }
         if (op === ts.SyntaxKind.EqualsToken && ts.isElementAccessExpression(node.left)) {
           const a = ts.visitNode(node.left.expression, visit);
