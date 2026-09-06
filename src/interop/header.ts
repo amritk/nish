@@ -72,7 +72,7 @@ function structDefinitions(compilation: Compilation): string[] {
   for (const { info } of structs) lines.push(`struct ${info.name};`);
   for (const { info, fileName } of structs) {
     const heritage = info.base ? ` extends ${info.base.name}` : "";
-    const ifaces = info.implements.length ? ` implements ${info.implements.join(", ")}` : "";
+    const ifaces = info.implements.length > 0 ? ` implements ${info.implements.join(", ")}` : "";
     lines.push("", `/* ${fileName}: ${info.kind} ${info.name}${heritage}${ifaces} */`);
     if (info.fields.length === 0) {
       lines.push(`/* struct ${info.name} has no fields; it stays incomplete (pointers only). */`);
