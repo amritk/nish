@@ -341,6 +341,26 @@ if (!only || "layout".includes(only)) {
   }
 }
 
+// ---- Checked integer division ---------------------------------------------------
+// `/` and `%` on integers panic (exit 1) on a zero divisor or MIN / -1 instead of
+// executing an sdiv/srem with a poison result. Both programs must print nothing after
+// the offending line and name the failure on stderr.
+if (!only || "division".includes(only) || only.startsWith("div")) {
+  for (const [name, needle, expectedOut] of [
+    ["div_zero_panic", "attempt to divide by zero", "before"],
+    ["div_overflow_panic", "attempt to divide with overflow", ""],
+  ]) {
+    const ll = path.join(buildDir, `${name}.ll`);
+    if (!HAS_CLANG || !fs.existsSync(ll)) continue;
+    const exe = path.join(buildDir, name);
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", ll, "runtime/runtime.c", "-lm", "-o", exe], { cwd: root });
+    const run = cc.status === 0 ? spawnSync(exe) : null;
+    check(`${name}: exits 1 with "${needle}" on stderr`,
+      run !== null && run.status === 1 && String(run.stderr).includes(needle) && String(run.stdout).trim() === expectedOut,
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr));
+  }
+}
+
 // ---- B. Pipeline checks -----------------------------------------------------------
 if (!only && HAS_CLANG) {
   const rt = spawnSync("clang", ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "runtime/runtime.c", "tests/runtime_test.c", "-o", path.join(buildDir, "runtime_test")], { cwd: root });

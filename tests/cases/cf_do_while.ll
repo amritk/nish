@@ -1,3 +1,5 @@
+declare void @sts_panic_div(i1 noundef zeroext) #1
+
 define noundef i32 @sumDigits(i32 noundef %n) #0 {
 entry:
   %sum.addr = alloca i32, align 4
@@ -9,22 +11,46 @@ entry:
 do.body:
   %0 = load i32, i32* %sum.addr, align 4
   %1 = load i32, i32* %rest.addr, align 4
-  %2 = srem i32 %1, 10
-  %3 = add i32 %0, %2
-  store i32 %3, i32* %sum.addr, align 4
-  %4 = load i32, i32* %rest.addr, align 4
-  %5 = sdiv i32 %4, 10
-  store i32 %5, i32* %rest.addr, align 4
+  %2 = icmp eq i32 10, 0
+  %3 = icmp eq i32 %1, -2147483648
+  %4 = icmp eq i32 10, -1
+  %5 = and i1 %3, %4
+  %6 = or i1 %2, %5
+  br i1 %6, label %div.fail, label %div.ok
+
+div.fail:
+  call void @sts_panic_div(i1 zeroext %2)
+  unreachable
+
+div.ok:
+  %7 = srem i32 %1, 10
+  %8 = add i32 %0, %7
+  store i32 %8, i32* %sum.addr, align 4
+  %9 = load i32, i32* %rest.addr, align 4
+  %10 = icmp eq i32 10, 0
+  %11 = icmp eq i32 %9, -2147483648
+  %12 = icmp eq i32 10, -1
+  %13 = and i1 %11, %12
+  %14 = or i1 %10, %13
+  br i1 %14, label %div.fail.1, label %div.ok.1
+
+div.fail.1:
+  call void @sts_panic_div(i1 zeroext %10)
+  unreachable
+
+div.ok.1:
+  %15 = sdiv i32 %9, 10
+  store i32 %15, i32* %rest.addr, align 4
   br label %do.cond
 
 do.cond:
-  %6 = load i32, i32* %rest.addr, align 4
-  %7 = icmp sgt i32 %6, 0
-  br i1 %7, label %do.body, label %do.end
+  %16 = load i32, i32* %rest.addr, align 4
+  %17 = icmp sgt i32 %16, 0
+  br i1 %17, label %do.body, label %do.end
 
 do.end:
-  %8 = load i32, i32* %sum.addr, align 4
-  ret i32 %8
+  %18 = load i32, i32* %sum.addr, align 4
+  ret i32 %18
 }
 
 define noundef i32 @test() #0 {
@@ -35,4 +61,5 @@ entry:
   ret i32 %2
 }
 
-attributes #0 = { nounwind readnone }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }

@@ -1,3 +1,5 @@
+declare void @sts_panic_div(i1 noundef zeroext) #2
+
 define noundef i32 @firstMultipleOver(i32 noundef %n, i32 noundef %limit) #0 {
 entry:
   %k.addr = alloca i32, align 4
@@ -42,29 +44,41 @@ for.cond:
 
 for.body:
   %2 = load i32, i32* %i.addr, align 4
-  %3 = srem i32 %2, 2
-  %4 = icmp eq i32 %3, 0
-  br i1 %4, label %if.then, label %if.end
+  %3 = icmp eq i32 2, 0
+  %4 = icmp eq i32 %2, -2147483648
+  %5 = icmp eq i32 2, -1
+  %6 = and i1 %4, %5
+  %7 = or i1 %3, %6
+  br i1 %7, label %div.fail, label %div.ok
+
+div.fail:
+  call void @sts_panic_div(i1 zeroext %3)
+  unreachable
+
+div.ok:
+  %8 = srem i32 %2, 2
+  %9 = icmp eq i32 %8, 0
+  br i1 %9, label %if.then, label %if.end
 
 if.then:
   br label %for.inc
 
 if.end:
-  %5 = load i32, i32* %s.addr, align 4
-  %6 = load i32, i32* %i.addr, align 4
-  %7 = add i32 %5, %6
-  store i32 %7, i32* %s.addr, align 4
+  %10 = load i32, i32* %s.addr, align 4
+  %11 = load i32, i32* %i.addr, align 4
+  %12 = add i32 %10, %11
+  store i32 %12, i32* %s.addr, align 4
   br label %for.inc
 
 for.inc:
-  %8 = load i32, i32* %i.addr, align 4
-  %9 = add i32 %8, 1
-  store i32 %9, i32* %i.addr, align 4
+  %13 = load i32, i32* %i.addr, align 4
+  %14 = add i32 %13, 1
+  store i32 %14, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %10 = load i32, i32* %s.addr, align 4
-  ret i32 %10
+  %15 = load i32, i32* %s.addr, align 4
+  ret i32 %15
 }
 
 define noundef i32 @largestPowerOfTwo(i32 noundef %limit) #0 {
@@ -93,7 +107,7 @@ for.end:
   ret i32 %5
 }
 
-define noundef i32 @test() #0 {
+define noundef i32 @test() #1 {
 entry:
   %0 = call i32 @firstMultipleOver(i32 7, i32 30)
   %1 = mul i32 %0, 1000
@@ -106,4 +120,5 @@ entry:
 }
 
 attributes #0 = { nounwind readnone }
-attributes #1 = { nounwind willreturn readnone }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }

@@ -6,6 +6,7 @@
 
 declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #3
 declare void @sts_panic_index(i64 noundef, i64 noundef) #4
+declare void @sts_panic_div(i1 noundef zeroext) #4
 
 define internal noalias noundef nonnull align 8 i8* @sts_alloc_struct(i64 noundef %size) #5 {
 entry:
@@ -123,21 +124,45 @@ bounds.ok.2:
   %37 = bitcast i8* %36 to i32*
   %38 = getelementptr inbounds i32, i32* %37, i64 %31
   %39 = load i32, i32* %38, align 4
-  %40 = sdiv i32 %39, 2
-  %41 = sub nsw i32 %29, %40
-  store i32 %41, i32* %28, align 4
+  %40 = icmp eq i32 2, 0
+  %41 = icmp eq i32 %39, -2147483648
+  %42 = icmp eq i32 2, -1
+  %43 = and i1 %41, %42
+  %44 = or i1 %40, %43
+  br i1 %44, label %div.fail, label %div.ok
+
+div.fail:
+  call void @sts_panic_div(i1 zeroext %40)
+  unreachable
+
+div.ok:
+  %45 = sdiv i32 %39, 2
+  %46 = sub nsw i32 %29, %45
+  store i32 %46, i32* %28, align 4
   br label %for.inc
 
 for.inc:
-  %42 = load i32, i32* %i.addr, align 4
-  %43 = add nsw i32 %42, 1
-  store i32 %43, i32* %i.addr, align 4
+  %47 = load i32, i32* %i.addr, align 4
+  %48 = add nsw i32 %47, 1
+  store i32 %48, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %44 = load i32, i32* %s.addr, align 4
-  %45 = srem i32 %44, 1000
-  ret i32 %45
+  %49 = load i32, i32* %s.addr, align 4
+  %50 = icmp eq i32 1000, 0
+  %51 = icmp eq i32 %49, -2147483648
+  %52 = icmp eq i32 1000, -1
+  %53 = and i1 %51, %52
+  %54 = or i1 %50, %53
+  br i1 %54, label %div.fail.1, label %div.ok.1
+
+div.fail.1:
+  call void @sts_panic_div(i1 zeroext %50)
+  unreachable
+
+div.ok.1:
+  %55 = srem i32 %49, 1000
+  ret i32 %55
 }
 
 define noundef i32 @test() #2 {

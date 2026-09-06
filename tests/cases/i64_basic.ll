@@ -2,9 +2,10 @@
 @.str.1 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 
-declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
-declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #1
-declare noalias noundef nonnull align 8 i8* @sts_str_from_i64(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @sts_str_from_i64(i64 noundef) #2
+declare void @sts_panic_div(i1 noundef zeroext) #3
 
 define noundef i64 @square(i64 noundef %x) #0 {
 entry:
@@ -51,10 +52,24 @@ entry:
   %23 = call i8* @sts_str_from_i64(i64 %22)
   call void @sts_print(i8* %23)
   %24 = load i64, i64* %sq.addr, align 8
-  %25 = srem i64 %24, 1000
-  %26 = trunc i64 %25 to i32
-  ret i32 %26
+  %25 = icmp eq i64 1000, 0
+  %26 = icmp eq i64 %24, -9223372036854775808
+  %27 = icmp eq i64 1000, -1
+  %28 = and i1 %26, %27
+  %29 = or i1 %25, %28
+  br i1 %29, label %div.fail, label %div.ok
+
+div.fail:
+  call void @sts_panic_div(i1 zeroext %25)
+  unreachable
+
+div.ok:
+  %30 = srem i64 %24, 1000
+  %31 = trunc i64 %30 to i32
+  ret i32 %31
 }
 
 attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
+attributes #3 = { nounwind noreturn cold }

@@ -10,7 +10,8 @@ corpus/f64_libm            # glibc libm vs V8 fdlibm: 1-ulp differences in sin/c
 corpus/f64_minmax_nan      # llvm.minnum/maxnum return the non-NaN operand; JS returns NaN
 corpus/f64_round_negzero   # Math.round(-0.3) is +0 here, -0 in JS
 
-# Semantic gaps found by this harness
-corpus/f64_pow_spec        # pow(±1, ±Infinity) and pow(1, NaN): C99 says 1, ECMAScript says NaN
-corpus/int_div_overflow    # INT_MIN / -1: undefined (sdiv) -> SIGFPE; JS gives INT_MIN
-corpus/int_div_zero        # x / 0, x % 0: undefined (sdiv/srem) -> SIGFPE; JS gives 0 after | 0
+# By design (Rust semantics): integer division checks its divisor and panics with exit 1
+corpus/int_div_overflow    # INT_MIN / -1: "attempt to divide with overflow"; JS gives INT_MIN
+corpus/int_div_zero        # x / 0, x % 0: "attempt to divide by zero"; JS gives 0 after | 0
+cases/div_zero_panic       # 10 / 0 panics (exit 1); JS gives 0 after | 0
+cases/div_overflow_panic   # INT_MIN % -1 panics (exit 1); JS gives 0

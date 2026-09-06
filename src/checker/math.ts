@@ -205,7 +205,10 @@ export function contextualLiteralType(
   if (!Number.isInteger(n)) {
     throw ctx.error(`Non-integer literal \`${literal.text}\` where ${want.kind} is expected`, literal);
   }
-  if (want.kind === "i32" && n > 0x7fffffff) throw ctx.error(`Literal \`${literal.text}\` does not fit in i32`, literal);
+  const negated = ts.isPrefixUnaryExpression(literal.parent) && literal.parent.operator === ts.SyntaxKind.MinusToken;
+  if (want.kind === "i32" && n > 0x7fffffff + (negated ? 1 : 0)) {
+    throw ctx.error(`Literal \`${literal.text}\` does not fit in i32`, literal);
+  }
   if (want.kind === "i64" && !Number.isSafeInteger(n)) {
     throw ctx.error(
       `Literal \`${literal.text}\` exceeds 2^53 and cannot be written exactly; compute the i64 value instead`,

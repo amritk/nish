@@ -31,7 +31,8 @@ import ts from "typescript";
 import { CheckedProgram, FieldInfo, FunctionSig, ImportBinding, StructInfo } from "../../checker";
 import { isAssignmentOperator } from "../../checker/classes";
 import { StaticType, llvmType } from "../../types";
-import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, intOpcode } from "./context";
+import { emitIntBinary } from "./arithmetic";
+import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
 import {
   MemoryFacts,
   assignmentTargetEmitters,
@@ -170,7 +171,8 @@ const emitFieldAssignment: BinaryEmitter = (ctx, expr) => {
   const old = ctx.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${ctx.alignSuffix(field.type)}`);
   const rhs = ctx.emitExpression(expr.right);
   const [intOp, floatOp] = COMPOUND_OPCODES[expr.operatorToken.kind]!;
-  const value = ctx.fn.emitValue(`${field.type.kind === "f64" ? floatOp : intOpcode(ctx, intOp)} ${ty} ${old}, ${rhs}`);
+  const value =
+    field.type.kind === "f64" ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`) : emitIntBinary(ctx, intOp, ty, old, rhs);
   ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${ctx.alignSuffix(field.type)}`);
   return value;
 };

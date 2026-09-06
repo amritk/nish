@@ -222,3 +222,13 @@ void sts_panic_index(uint64_t idx, uint64_t len) {
   (void)!write(2, p, (size_t)(tmp + sizeof tmp - p));
   _exit(1);
 }
+
+/* ---- Checked integer division ------------------------------------------ */
+/* `a / b`, `a % b` on integers panic like Rust instead of hitting sdiv/srem
+ * poison: by_zero selects the message. */
+void sts_panic_div(_Bool by_zero) {
+  const char *m = by_zero ? "attempt to divide by zero\n" : "attempt to divide with overflow\n";
+  (void)!write(2, m, strlen(m));
+  _exit(1);
+}
+

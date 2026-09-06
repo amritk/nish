@@ -6,7 +6,7 @@
  * `readnone` (the intrinsics carry `effect: "none"` in runtime.ts).
  *
  *   Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x)   call double @llvm.<f>.f64(double x)
- *   Math.pow(x, y)                                  call double @llvm.pow.f64(double x, double y)
+ *   Math.pow(x, y)                                  llvm.pow.f64 plus selects for the ECMAScript NaN cases
  *   Math.abs(x)      f64: @llvm.fabs.f64          i32/i64: @llvm.abs.<T>(T x, i1 false)
  *                    (`i1 false`: INT_MIN wraps to itself instead of poison)
  *   Math.min/max     f64: @llvm.minnum/maxnum.f64   i32/i64: @llvm.smin/smax.<T>
@@ -56,9 +56,19 @@ const mathPow: BuiltinCall = {
   emit: (ctx, expr) => {
     const x = ctx.emitExpression(expr.arguments[0]);
     const y = ctx.emitExpression(expr.arguments[1]);
-    return callIntrinsic(ctx, "llvm.pow.f64", "double", `double ${x}, double ${y}`);
+    // ECMAScript special cases on top of C99 pow: pow(x, NaN) is NaN (C: pow(1, NaN) = 1)
+    // and pow(±1, ±Infinity) is NaN (C: 1). Everything else, including pow(x, ±0) = 1, agrees.
+    const p = callIntrinsic(ctx, "llvm.pow.f64", "double", `double ${x}, double ${y}`);
+    const yNaN = ctx.fn.emitValue(`fcmp uno double ${y}, ${y}`);
+    const absX = callIntrinsic(ctx, "llvm.fabs.f64", "double", `double ${x}`);
+    const absY = callIntrinsic(ctx, "llvm.fabs.f64", "double", `double ${y}`);
+    const xOne = ctx.fn.emitValue(`fcmp oeq double ${absX}, 1.0`);
+    const yInf = ctx.fn.emitValue(`fcmp oeq double ${absY}, 0x7FF0000000000000`);
+    const special = ctx.fn.emitValue(`and i1 ${xOne}, ${yInf}`);
+    const nan = ctx.fn.emitValue(`or i1 ${yNaN}, ${special}`);
+    return ctx.fn.emitValue(`select i1 ${nan}, double 0x7FF8000000000000, double ${p}`);
   },
-  callees: () => ["llvm.pow.f64"],
+  callees: () => ["llvm.pow.f64", "llvm.fabs.f64"],
 };
 
 const mathRound: BuiltinCall = {

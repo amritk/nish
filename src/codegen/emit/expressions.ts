@@ -5,6 +5,7 @@
  */
 import ts from "typescript";
 import { StaticType, isInteger, llvmType } from "../../types";
+import { emitIntBinary } from "./arithmetic";
 import { arrayExpressionEmitters, installArrayAssignmentEmitters } from "./arrays";
 import { CheckedProgram } from "../../checker";
 import { BuiltinCall, f64Constant } from "./builtins";
@@ -101,8 +102,9 @@ const emitArithmetic: BinaryEmitter = (ctx, expr) => {
   const operandType = ctx.typeOf(expr.left);
   const lhs = ctx.emitExpression(expr.left);
   const rhs = ctx.emitExpression(expr.right);
-  const opcode = binaryOpcode(expr.operatorToken.kind, operandType, ctx);
-  return ctx.fn.emitValue(`${opcode} ${llvmType(operandType)} ${lhs}, ${rhs}`);
+  const ty = llvmType(operandType);
+  if (isInteger(operandType)) return emitIntBinary(ctx, binaryOpcode(expr.operatorToken.kind, operandType), ty, lhs, rhs);
+  return ctx.fn.emitValue(`${binaryOpcode(expr.operatorToken.kind, operandType, ctx)} ${ty} ${lhs}, ${rhs}`);
 };
 
 /** `x = e`: store into the local's slot; the expression's value is `e`. */

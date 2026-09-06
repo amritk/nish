@@ -96,6 +96,9 @@ typedef struct sts_array { uint64_t len; uint64_t cap; char *data; } sts_array;
 void sts_array_grow(sts_array *a, uint64_t elem_size);
 void sts_panic_index(uint64_t idx, uint64_t len);
 
+/* Checked integer division (Rust semantics): the failed-check path. */
+void sts_panic_div(bool by_zero);
+
 #ifdef __cplusplus
 }
 #endif

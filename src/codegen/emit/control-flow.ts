@@ -27,6 +27,7 @@ import {
   UnaryEmitter,
   intOpcode,
 } from "./context";
+import { emitIntBinary } from "./arithmetic";
 
 // ---- Branch helpers -----------------------------------------------------------
 
@@ -273,8 +274,10 @@ const emitCompoundAssignment: BinaryEmitter = (ctx, expr) => {
   const old = loadLocal(ctx, target);
   const rhs = ctx.emitExpression(expr.right);
   const [intOp, floatOp] = COMPOUND_OPCODES[expr.operatorToken.kind]!;
-  const opcode = target.type.kind === "f64" ? floatOp : intOpcode(ctx, intOp);
-  const value = ctx.fn.emitValue(`${opcode} ${llvmType(target.type)} ${old}, ${rhs}`);
+  const value =
+    target.type.kind === "f64"
+      ? ctx.fn.emitValue(`${floatOp} ${llvmType(target.type)} ${old}, ${rhs}`)
+      : emitIntBinary(ctx, intOp, llvmType(target.type), old, rhs);
   storeLocal(ctx, target, value);
   return value;
 };

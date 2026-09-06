@@ -37,7 +37,8 @@ import ts from "typescript";
 import { CheckedProgram } from "../../checker";
 import { ARRAY_STRUCT, StaticType, alignOf, llvmType } from "../../types";
 import { ARRAY_TYPE } from "../runtime";
-import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, StatementEmitter, intOpcode } from "./context";
+import { emitIntBinary } from "./arithmetic";
+import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, StatementEmitter } from "./context";
 import { FactCollector, factCollectors, methodCallEmitters, newEmitters, propertyEmitters } from "./members";
 
 type ArrayType = Extract<StaticType, { kind: "array" }>;
@@ -212,7 +213,8 @@ const emitElementAssignment: BinaryEmitter = (ctx, expr) => {
   const old = ctx.fn.emitValue(`load ${ty}, ${ty}* ${slot}${ctx.alignSuffix(elem)}`);
   const rhs = ctx.emitExpression(expr.right);
   const [intOp, floatOp] = COMPOUND_OPCODES[op]!;
-  const value = ctx.fn.emitValue(`${elem.kind === "f64" ? floatOp : intOpcode(ctx, intOp)} ${ty} ${old}, ${rhs}`);
+  const value =
+    elem.kind === "f64" ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`) : emitIntBinary(ctx, intOp, ty, old, rhs);
   ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${ctx.alignSuffix(elem)}`);
   return value;
 };

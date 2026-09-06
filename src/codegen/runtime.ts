@@ -175,6 +175,15 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     effect: "write",
     noreturn: true,
   },
+  // ---- Checked integer division and ECMAScript pow ----------------------------
+  {
+    name: "sts_panic_div",
+    // Division failure: "attempt to divide by zero" (true) or "... with overflow" (false), exit 1.
+    signature: "declare void @sts_panic_div(i1 noundef zeroext)",
+    attrs: ["nounwind", "noreturn", "cold"],
+    effect: "write",
+    noreturn: true,
+  },
   // ---- WP7: LLVM intrinsics behind Math.* and the numeric conversions ----------
   ...["sqrt", "floor", "ceil", "trunc", "sin", "cos", "exp", "log", "fabs"].map((f) =>
     intrinsic(`llvm.${f}.f64`, "double", "double")

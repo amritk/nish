@@ -7,8 +7,9 @@ declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #2
 declare void @sts_free_arena() #0
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
+declare void @sts_panic_div(i1 noundef zeroext) #3
 
-define internal noalias noundef nonnull align 8 i8* @sts_alloc_struct(i64 noundef %size) #3 {
+define internal noalias noundef nonnull align 8 i8* @sts_alloc_struct(i64 noundef %size) #4 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -58,23 +59,47 @@ entry:
   ret i32 %7
 }
 
-define void @halve(%struct.Stats* noundef nonnull align 8 dereferenceable(12) nocapture %s) #0 {
+define void @halve(%struct.Stats* noundef nonnull align 8 dereferenceable(12) nocapture %s) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 1
   %1 = load i32, i32* %0, align 4
-  %2 = sdiv i32 %1, 2
-  store i32 %2, i32* %0, align 4
-  %3 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 0
-  %4 = load i32, i32* %3, align 4
-  %5 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 0
-  %6 = load i32, i32* %5, align 4
-  %7 = srem i32 %6, 2
-  %8 = sub i32 %4, %7
-  store i32 %8, i32* %3, align 4
+  %2 = icmp eq i32 2, 0
+  %3 = icmp eq i32 %1, -2147483648
+  %4 = icmp eq i32 2, -1
+  %5 = and i1 %3, %4
+  %6 = or i1 %2, %5
+  br i1 %6, label %div.fail, label %div.ok
+
+div.fail:
+  call void @sts_panic_div(i1 zeroext %2)
+  unreachable
+
+div.ok:
+  %7 = sdiv i32 %1, 2
+  store i32 %7, i32* %0, align 4
+  %8 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 0
+  %9 = load i32, i32* %8, align 4
+  %10 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 0
+  %11 = load i32, i32* %10, align 4
+  %12 = icmp eq i32 2, 0
+  %13 = icmp eq i32 %11, -2147483648
+  %14 = icmp eq i32 2, -1
+  %15 = and i1 %13, %14
+  %16 = or i1 %12, %15
+  br i1 %16, label %div.fail.1, label %div.ok.1
+
+div.fail.1:
+  call void @sts_panic_div(i1 zeroext %12)
+  unreachable
+
+div.ok.1:
+  %17 = srem i32 %11, 2
+  %18 = sub i32 %9, %17
+  store i32 %18, i32* %8, align 4
   ret void
 }
 
-define noundef i32 @sts_main() #0 {
+define noundef i32 @sts_main() #1 {
 entry:
   %s.addr = alloca %struct.Stats*, align 8
   %0 = call i8* @sts_alloc_struct(i64 12)
@@ -120,4 +145,5 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }

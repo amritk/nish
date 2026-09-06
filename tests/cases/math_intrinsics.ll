@@ -80,19 +80,27 @@ entry:
   %36 = call i8* @sts_str_from_f64(double %35)
   call void @sts_print(i8* %36)
   %37 = call double @llvm.pow.f64(double 0x4000000000000000, double 0x4024000000000000)
-  %38 = call i8* @sts_str_from_f64(double %37)
-  call void @sts_print(i8* %38)
-  %39 = call double @llvm.exp.f64(double 0x0000000000000000)
-  %40 = call i8* @sts_str_from_f64(double %39)
-  call void @sts_print(i8* %40)
-  %41 = call double @llvm.log.f64(double 0x4005BF0A8B145769)
-  %42 = call i8* @sts_str_from_f64(double %41)
-  call void @sts_print(i8* %42)
-  %43 = call double @trig(double 0x0000000000000000)
-  %44 = call i8* @sts_str_from_f64(double %43)
-  call void @sts_print(i8* %44)
-  %45 = call i8* @sts_str_from_f64(double 0x400921FB54442D18)
-  call void @sts_print(i8* %45)
+  %38 = fcmp uno double 0x4024000000000000, 0x4024000000000000
+  %39 = call double @llvm.fabs.f64(double 0x4000000000000000)
+  %40 = call double @llvm.fabs.f64(double 0x4024000000000000)
+  %41 = fcmp oeq double %39, 1.0
+  %42 = fcmp oeq double %40, 0x7FF0000000000000
+  %43 = and i1 %41, %42
+  %44 = or i1 %38, %43
+  %45 = select i1 %44, double 0x7FF8000000000000, double %37
+  %46 = call i8* @sts_str_from_f64(double %45)
+  call void @sts_print(i8* %46)
+  %47 = call double @llvm.exp.f64(double 0x0000000000000000)
+  %48 = call i8* @sts_str_from_f64(double %47)
+  call void @sts_print(i8* %48)
+  %49 = call double @llvm.log.f64(double 0x4005BF0A8B145769)
+  %50 = call i8* @sts_str_from_f64(double %49)
+  call void @sts_print(i8* %50)
+  %51 = call double @trig(double 0x0000000000000000)
+  %52 = call i8* @sts_str_from_f64(double %51)
+  call void @sts_print(i8* %52)
+  %53 = call i8* @sts_str_from_f64(double 0x400921FB54442D18)
+  call void @sts_print(i8* %53)
   ret i32 0
 }
 

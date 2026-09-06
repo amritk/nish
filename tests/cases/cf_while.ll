@@ -1,3 +1,5 @@
+declare void @sts_panic_div(i1 noundef zeroext) #2
+
 define noundef i32 @countDigits(i32 noundef %n) #0 {
 entry:
   %digits.addr = alloca i32, align 4
@@ -13,19 +15,31 @@ while.cond:
 
 while.body:
   %2 = load i32, i32* %rest.addr, align 4
-  %3 = sdiv i32 %2, 10
-  store i32 %3, i32* %rest.addr, align 4
-  %4 = load i32, i32* %digits.addr, align 4
-  %5 = add i32 %4, 1
-  store i32 %5, i32* %digits.addr, align 4
+  %3 = icmp eq i32 10, 0
+  %4 = icmp eq i32 %2, -2147483648
+  %5 = icmp eq i32 10, -1
+  %6 = and i1 %4, %5
+  %7 = or i1 %3, %6
+  br i1 %7, label %div.fail, label %div.ok
+
+div.fail:
+  call void @sts_panic_div(i1 zeroext %3)
+  unreachable
+
+div.ok:
+  %8 = sdiv i32 %2, 10
+  store i32 %8, i32* %rest.addr, align 4
+  %9 = load i32, i32* %digits.addr, align 4
+  %10 = add i32 %9, 1
+  store i32 %10, i32* %digits.addr, align 4
   br label %while.cond
 
 while.end:
-  %6 = load i32, i32* %digits.addr, align 4
-  ret i32 %6
+  %11 = load i32, i32* %digits.addr, align 4
+  ret i32 %11
 }
 
-define noundef i32 @firstPowerOver(i32 noundef %limit) #0 {
+define noundef i32 @firstPowerOver(i32 noundef %limit) #1 {
 entry:
   %x.addr = alloca i32, align 4
   store i32 1, i32* %x.addr, align 4
@@ -62,4 +76,6 @@ entry:
   ret i32 %3
 }
 
-attributes #0 = { nounwind readnone }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind readnone }
+attributes #2 = { nounwind noreturn cold }
