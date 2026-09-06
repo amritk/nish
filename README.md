@@ -137,12 +137,13 @@ Linux, glibc dynamically linked (`npm run size-report`):
 | `speed` | 4,528 | `-O3 -flto`, section GC, unwind tables off, stripped. Rust `--release`. |
 | `size` | 4,512 | `-Oz -flto`, plus hidden visibility and no stack protector. Rust `opt-level="z"`. |
 | `wasm` | 279 | Freestanding `wasm32` module, every function exported, stripped. |
+| `wasi` | 42,228 (`argv.ts`) | `wasm32-wasi` command module: the runtime linked against wasi-libc, `_start` runs `main`; needs a WASI sysroot ([INSTALL.md](docs/INSTALL.md#wasi-optional-for---profile-wasi)). |
 
-`hello.ts` with `--link` is 4,696 bytes. The whole runtime is about 3.5 KB
+`hello.ts` with `--link` is 4,696 bytes. The whole runtime is about 4 KB
 of machine code (`runtime.c`: one chunked bump arena with O(1) reset and
-mark/release, strings, JavaScript-exact number formatting, `Math.random`,
-exit, files, array growth, the panic paths); `Math.*` calls are LLVM
-intrinsics, so pure functions stay `readnone`.
+mark/release, strings, JavaScript-exact number formatting, string parsing,
+`Math.random`, exit, files, `process.argv`, array growth, the panic paths);
+`Math.*` calls are LLVM intrinsics, so pure functions stay `readnone`.
 
 Memory is the part that usually costs a compiled-JavaScript design its
 speed, so it is done statically ([docs/wp6-memory.md](docs/wp6-memory.md)):

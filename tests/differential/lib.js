@@ -18,10 +18,15 @@ const knownFile = path.join(__dirname, "known-failures.txt");
 
 const RUN_TIMEOUT_MS = 30_000;
 
-/** A program the harness can run: `{ name, entry, args, kind }`. */
+const words = (file) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim().split(/\s+/).filter(Boolean) : []);
+
+/**
+ * A program the harness can run: `{ name, entry, args, argv, kind }`. `args`
+ * are compiler flags (`<name>.args`), `argv` the command line both the native
+ * binary and the Node rewrite receive (`<name>.argv`, WP7 `process.argv`).
+ */
 function program(name, entry, argsFile, kind) {
-  const args = fs.existsSync(argsFile) ? fs.readFileSync(argsFile, "utf8").trim().split(/\s+/).filter(Boolean) : [];
-  return { name, entry, args, kind };
+  return { name, entry, args: words(argsFile), argv: words(argsFile.replace(/args$/, "argv")), kind };
 }
 
 /**
@@ -96,7 +101,8 @@ async function runProgram(prog) {
   if (cc.status !== 0) {
     return { prog, verdict: "compile-error", detail: String(cc.stderr), ms: Date.now() - t0 };
   }
-  const native = await run(exe, []);
+  const argv = prog.argv ?? []; // fuzz programs carry no command line
+  const native = await run(exe, argv);
 
   let js;
   try {
@@ -104,7 +110,7 @@ async function runProgram(prog) {
   } catch (e) {
     return { prog, verdict: "rewrite-error", detail: e.stack ?? String(e), native, ms: Date.now() - t0 };
   }
-  const node = await run("node", [js.entry]);
+  const node = await run("node", [js.entry, ...argv]);
 
   const same = native.status === node.status && native.signal === node.signal && native.stdout.equals(node.stdout);
   return { prog, verdict: same ? "match" : "mismatch", native, node, ms: Date.now() - t0, work };

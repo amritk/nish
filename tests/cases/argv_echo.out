@@ -1,0 +1,6 @@
+4 argument(s)
+1: alpha (5 bytes)
+2: 42 (2 bytes)
+3: -7 (2 bytes)
+4: héllo (6 bytes)
+sum of the numeric ones: 35

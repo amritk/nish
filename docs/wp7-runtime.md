@@ -1,20 +1,25 @@
 # WP7: Runtime and intrinsics
 
 Math builtins as LLVM intrinsics, the `i64` type with explicit numeric
-conversions, `process.exit` and synchronous file I/O, and JavaScript-accurate
-number formatting in the runtime. For every builtin: its TypeScript
-signature, the exact lowering, the attributes on the callee, and its memory
-effect (what it does to the purity of the function that calls it). Test cases
-are `tests/cases/math_*.ts`, `i64_basic.ts`, `conversions.ts`, `io_files.ts`,
-`process_exit.ts`, plus the `reject_*` cases listed at the end.
+conversions, `process.exit` and synchronous file I/O, JavaScript-accurate
+number formatting in the runtime, and (second round) `process.argv`,
+string-to-number parsing (`parseInt`, `parseFloat`, `Number`), and the
+`wasi` build profile. For every builtin: its TypeScript signature, the exact
+lowering, the attributes on the callee, and its memory effect (what it does
+to the purity of the function that calls it). Test cases are
+`tests/cases/math_*.ts`, `i64_basic.ts`, `conversions.ts`, `io_files.ts`,
+`process_exit.ts`, `argv_echo.ts`, `parse_numbers.ts`, plus the `reject_*`
+cases listed at the end.
 
 ## Where the code lives
 
 | Piece | Checker | Emitter |
 | --- | --- | --- |
 | Shared plumbing (`dottedName`, arity checks, `BuiltinCall` shape) | `src/checker/builtins.ts` | `src/codegen/emit/builtins.ts` |
-| `Math.*`, `toI32/toI64/toF64`, literal typing | `src/checker/math.ts` | `src/codegen/emit/math.ts` |
-| `process.exit`, `readFileSync`, `writeFileSync`, `appendFileSync` | `src/checker/io.ts` | `src/codegen/emit/io.ts` |
+| `Math.*`, `toI32/toI64/toF64`, `parseInt/parseFloat/Number`, literal typing | `src/checker/math.ts` | `src/codegen/emit/math.ts` |
+| `process.exit`, `process.argv`, `readFileSync`, `writeFileSync`, `appendFileSync` | `src/checker/io.ts` | `src/codegen/emit/io.ts` |
+| The `@main` wrapper (`sts_argv_init` call), `@sts_argv` in the `--runtime-decls` prelude | `src/compilation.ts` (`usesArgv`, `hasEntryMain`) | `src/codegen/emitter.ts` |
+| The `wasi` profile and the runtime's `__wasi__` guards | `scripts/build.sh` | `runtime/runtime.c` |
 
 Dotted callees (`Math.sqrt`, `process.exit`) are spread into the existing
 `builtinCalls` / `builtinCallEmitters` tables next to `console.log`. Plain
@@ -170,6 +175,114 @@ can terminate the process on a fatal error and callers still keep
 fatal runtime errors; only the *intended* non-return of `process.exit` clears
 the attribute.
 
+### process.argv
+
+| Signature | Lowering | Callee attributes | Effect |
+| --- | --- | --- | --- |
+| `process.argv: string[]` | `load %struct.sts_array*, %struct.sts_array** @sts_argv, align 8` | n/a (a global, `@sts_argv = external global %struct.sts_array*, align 8`) | read |
+| (entry wrapper) | `call void @sts_argv_init(i32 %argc, i8** %argv)` as the first statement of `@main` | `nounwind willreturn`; the `i8**` is `nocapture readonly` | write |
+
+`process.argv` is a namespace property (`namespaceProperties["process.argv"]`
+next to `Math.PI`) typed `string[]`, so everything an array supports applies
+to it and lowers through the array emitters unchanged: `.length`, `a[i]`
+with the bounds check, `for...of`, passing it to a function whose parameter
+is `string[]`. The checker records `usesArgv` on the module; the Compilation
+copies it onto the entry module so `emitEntryWrapper` inserts the
+`sts_argv_init` call, which is why `tests/link/argv_import` (only the
+imported module reads it) still gets the call in `main.ll`. Programs that
+never read it keep the wrapper they had.
+
+The runtime builds the array once, with `malloc` rather than the arena:
+`sts_argv_init` allocates the 24-byte header plus one `sts_str *` per
+argument, then each string as its own `{ len, bytes, 0 }` block, so
+`Arena.reset()` / `sts_arena_release` can never invalidate it. Index 0 is
+`argv[0]` as C sees it, the program path (Node's `process.argv[1]`-style
+convention shifted by one, since there is no interpreter in front); the
+differential shim maps it to `process.argv.slice(1)` for the same shape.
+
+Three rules, all in `checkProcessArgv` (`src/checker/io.ts`):
+
+- **It needs an entry point.** Only the `@main` wrapper has `argc`/`argv`,
+  so a program without `export function main` (a wasm or N-API library, a
+  file compiled for a C driver) rejects every use with
+  `` `process.argv` requires a `main` entry point ``, in any module: the
+  Compilation tells every checker whether the entry has `main`
+  (`hasEntryMain`) before bodies are checked (`reject_argv_no_main`,
+  `tests/link/argv_no_main`).
+- **It is read-only.** `process.argv[i] = s`, `op=`, `++`/`--` on an element
+  and `process.argv.push(s)` are `` `process.argv` is read-only ``
+  (`mutatesArgv` walks up from the property access through parentheses to
+  the consuming construct; `reject_argv_assign`, `reject_argv_push`).
+  Aliasing it (`const args = process.argv`) and then storing through the
+  alias is not caught; the array is a real `sts_array` with `cap == len`, so
+  such a store works and a `push` would copy the data into the arena, which
+  is the documented behaviour of any array.
+- **It is a memory read.** `factCollectors` marks the load, so a function
+  reading it is at most `readonly` (`count()` in `argv_echo.ll` is
+  `nounwind willreturn readonly`); `sts_argv` is written exactly once,
+  before any user code runs, so LLVM may still hoist and CSE the load.
+
+### String to number
+
+| Signature | Lowering | Callee attributes | Effect |
+| --- | --- | --- | --- |
+| `parseFloat(s: string): f64` | `call double @sts_parse_number(i8* s, i32 0)` | `nounwind willreturn`; param `nonnull readonly align 8 nocapture` | write |
+| `Number(s: string): f64` | `call double @sts_parse_number(i8* s, i32 1)` | same | write |
+| `Number(x: i32 \| i64): f64` | `sitofp <T> x to double` | n/a | none |
+| `Number(b: boolean): f64` | `uitofp i1 b to double` | n/a | none |
+| `Number(x: f64): f64` | nothing | n/a | none |
+| `parseInt(s: string): i32` | `%d = call double @sts_parse_number(i8* s, i32 2)` then `call i32 @llvm.fptosi.sat.i32.f64(double %d)` | as above; the intrinsic `nounwind willreturn readnone` | write |
+
+One runtime symbol with a mode instead of three, because every function in
+`runtime.c` costs an unwind-table entry against the size budget (below).
+The semantics, implemented in `sts_parse_number`:
+
+- **Whitespace** is ASCII only (`" \t\n\v\f\r"`, skipped with `strspn`),
+  not the Unicode `StrWhiteSpaceChar` set JavaScript trims.
+- **`parseFloat` (mode 0):** after the whitespace, the longest
+  `StrDecimalLiteral` (`[+-] digits [. digits] [e [+-] digits]`,
+  `[+-] . digits [exponent]`, or `[+-] Infinity`), `NaN` when there is none
+  (`""`, `"abc"`, `"."`, `"+"`, `"inf"`, `"nan"`). The conversion itself is
+  `strtod`, which is correctly rounded and already linked for
+  `sts_str_from_f64`; it accepts a superset of the JavaScript grammar, so the
+  function first rules out the spellings JavaScript rejects (a first
+  character that is neither a digit nor `.` must start exactly `Infinity`,
+  checked with `strncmp`, which also excludes `inf`, `infinity`, `nan`) and
+  then lets `strtod` find the end (`"1e"` is `1`, `"1.5e+"` is `1.5`,
+  `"1e400"` is `Infinity`, `"-0"` is `-0`). The one superset left is the
+  `0x` prefix: `strtod` reads `"0x1A"` as `26` (and hex floats such as
+  `0x1p3`) where JavaScript's `parseFloat` stops at the `x` and gives `0`.
+  Guarding it costs about 25 bytes that the budget does not have; it is
+  documented in LANGUAGE.md and mirrored by the shim.
+- **`Number` (mode 1):** the same literal must be the whole string bar
+  surrounding whitespace, and a blank string is `0` (`Number("")`,
+  `Number("   ")`); anything left over (`"12px"`, `"1e"`, `"Infinityx"`,
+  `"1 2"`, an embedded NUL, since the check is against `len`, not the
+  terminator) is `NaN`. Here the hex prefix agrees with JavaScript
+  (`Number("0x1A")` is `26`); the `0b`/`0o` prefixes are `NaN` where
+  JavaScript reads them.
+- **`parseInt` (mode 2):** `strtoll(s, 0, 10)`, whose grammar is exactly
+  JavaScript's base-10 `parseInt` (whitespace, sign, digits, stop at
+  anything else, including `.`, `e`, and `x`), returned as a double. There is
+  no `NaN` in an `i32`, so no digits give `0`; the compiler then applies
+  `llvm.fptosi.sat.i32.f64`, the same saturating conversion `toI32` uses, so
+  `"99999999999"` is `2147483647` and `"-99999999999"` is `-2147483648`
+  (`strtoll` itself saturates at 2^63). JavaScript's automatic hex
+  (`parseInt("0x10")` is `16`) is not reproduced: `0`. The result is `i32`
+  in both number modes; `Number(s)` is the `f64` parser.
+
+Effect: `strtod`/`strtoll` store `errno` on overflow, a write to memory the
+caller can see, so the runtime function is neither `readonly` nor
+`memory(argmem: read)` and a function that parses is at most `write`; the
+string parameter is still `readonly nocapture`, so passing a parameter to a
+parser keeps `nocapture` on it (`show` in `parse_numbers.ll`).
+
+The unit test in `tests/runtime_test.c` checks 45 inputs against
+`node -p "String(x)"` (plus the documented deviations), and
+`tests/differential/corpus/parse_strings.ts` / `parse_argv_sum.ts` run the
+same forms through the differential harness, whose shim (`runtime/shim.mjs`)
+implements the runtime's grammar rather than JavaScript's built-ins.
+
 ### Strings and console.log with i64
 
 `console.log(x)` and template holes accept `i64` (`isStringifiable` covers
@@ -295,17 +408,34 @@ faster but does not fit the runtime budget.
 
 `runtime/runtime.c` gained `sts_str_from_i64`, the new `sts_str_from_f64`,
 `sts_random`, `sts_exit`, `sts_read_file`, `sts_write_file`, and
-`sts_append_file`, and defines `_POSIX_C_SOURCE` for `pread`. Measured with
-`clang -Oz -c runtime/runtime.c && size runtime.o`:
+`sts_append_file`, and defines `_POSIX_C_SOURCE` for `pread`; the second
+round added `sts_argv` / `sts_argv_init` and `sts_parse_number`. Measured
+with `clang -Oz -c runtime/runtime.c && size runtime.o` (the `text` column
+of `size`, which also counts the read-only constants and the `.eh_frame`
+unwind entries that the `size` build profile strips):
 
-| | Before WP7 | After WP7 | Budget |
-| --- | ---: | ---: | ---: |
-| source bytes | 4,039 | 7,402 | 8,192 |
-| `.text` at `-Oz` | 1,118 | 2,688 | 4,096 |
+| | Before WP7 | After WP7 | After argv + parsing | Budget |
+| --- | ---: | ---: | ---: | ---: |
+| source bytes | 4,039 | 7,402 | 11,131 (arrays and WP6 in between) | 8,192 (exceeded since WP4; comments) |
+| `size` text at `-Oz` | 1,118 | 2,688 | 4,093 (was 3,498) | 4,096 |
+| `.text` section alone | | | 2,583 (was 2,172) | |
+
+The 595 bytes of the second round are `sts_argv_init` (162 bytes),
+`sts_parse_number` (249), their two unwind entries and the constants
+(`" \t\n\v\f\r"`, `"Infinity"`, NaN). Getting there from a first draft of
+about 1,000 bytes: `strtoll` and `strtod` replace hand-written digit loops
+(a hand-written double parser cannot be correctly rounded in that budget
+anyway), `strspn` replaces four whitespace loops, the three parsers are one
+symbol with a mode (each extra function is 30 to 60 bytes of `.eh_frame`),
+`argv` strings are copied with `strcpy` after a `strlen` instead of a
+length-carrying `memcpy`, and the `0x` guard in `parseFloat` was dropped
+(documented deviation). Three bytes of headroom remain; the next runtime
+feature has to pay for itself.
 
 `tests/runtime_test.c` covers the integer and double formatting cases above,
-1,000 draws of `sts_random` in `[0, 1)`, and a write/append/read/truncate
-cycle on `build/test/runtime_test.txt`.
+1,000 draws of `sts_random` in `[0, 1)`, a write/append/read/truncate cycle
+on `build/test/runtime_test.txt`, `sts_argv_init` (an empty argument, a UTF-8
+one, survival of `sts_reset_arena`, `argc == 0`), and the 45 parsing inputs.
 
 ## Attributes
 
@@ -322,9 +452,17 @@ cycle on `build/test/runtime_test.txt`.
 - Identifier builtins are not user callees, so `noteEscape` in
   `attributes.ts` does not run for their arguments; that is correct because
   every runtime function they lower to declares its string parameters
-  `nocapture`. `collectBuiltinFacts` (in `emit/expressions.ts`) reports their
-  callees to the fixpoint; dotted builtins are already covered by
-  `collectStringFacts` through `builtinCallEmitters`.
+  `nocapture` (`sts_parse_number` included). `collectBuiltinFacts` (in
+  `emit/expressions.ts`) reports their callees to the fixpoint; dotted
+  builtins are already covered by `collectStringFacts` through
+  `builtinCallEmitters`.
+- `sts_parse_number` is `write` (errno, see above), never `readonly`; a
+  function whose only impurity is parsing loses `readonly`, which is the
+  honest attribute. `Number` on a numeric or boolean argument reports no
+  callee and keeps the caller `readnone`.
+- `process.argv` is a load of a global: `readsMemory`, hence `readonly` at
+  best; the `@main` wrapper that calls `sts_argv_init` stays `nounwind`
+  only, as before.
 
 ## Linking
 
@@ -334,6 +472,59 @@ cycle on `build/test/runtime_test.txt`.
 `tests/run.js` links the native round trips with `-lm`.
 
 Every native profile of `scripts/build.sh` links `-lm`.
+
+### WASI target
+
+`--target wasm32-wasi` only pins the data layout; running a string program
+under wasm needs the runtime compiled against a libc, which the freestanding
+`wasm` profile (`-nostdlib`, no runtime) cannot do. The `wasi` profile of
+`scripts/build.sh` builds a command module:
+
+```
+statictsc examples/argv.ts --link build/argv.wasm --profile wasi
+node examples/wasi-host.mjs build/argv.wasm 3 4 five      # or wasmtime build/argv.wasm 3 4 five
+```
+
+- **Sysroot.** `clang --target=wasm32-wasi --sysroot=<wasi-sysroot>` with
+  the sysroot from `WASI_SYSROOT`, `/usr/lib/wasi-sysroot` (Debian's
+  `wasi-libc` package), `/opt/wasi-sdk/share/wasi-sysroot`, or
+  `/usr/share/wasi-sysroot`; without one the script prints
+  `the wasi profile needs a WASI sysroot ...` and exits 2, and `tests/run.js`
+  prints `SKIP  skipped: no WASI sysroot ...` instead of failing. With one
+  (the CI image has none; set `WASI_SYSROOT` to run it), the test builds
+  `argv_echo.ts` and checks that Node's `node:wasi` produces the native
+  output for the same arguments.
+- **Builtins.** wasi-libc's `strtoll` needs compiler-rt's `__multi3`.
+  wasi-sdk and Debian's `libclang-rt-18-dev-wasm32` put
+  `libclang_rt.builtins-wasm32.a` in clang's resource directory, where the
+  driver links it by default; a bare distro clang has none and the link
+  fails with `cannot open .../lib/wasi/libclang_rt.builtins-wasm32.a`, so
+  the script then looks for wasi-sdk's separate builtins tarball unpacked
+  next to the sysroot (or `WASI_BUILTINS=<file>`), passes it explicitly, and
+  names libc itself (`-nodefaultlibs -lc`; wasi-libc's `libc.a` includes
+  libm). Flags otherwise: `-Oz -DNDEBUG -ffunction-sections
+  -fdata-sections -Wl,--gc-sections -Wl,--strip-all`. `examples/argv.ts`
+  is 42,228 bytes this way, most of it wasi-libc's `printf`/`strtod`
+  machinery behind `sts_str_from_f64`.
+- **Entry.** wasi-libc's `_start` calls `__main_void`, which calls
+  `__main_argc_argv`, the name clang gives a C `main(int, char **)`. The
+  compiler's wrapper is a plain `@main`, so `runtime.c` bridges the two
+  under `#ifdef __wasi__` with a weak asm-labelled declaration
+  (`int sts_c_main(int, char **) __asm__("main")`) and a two-line
+  `__main_argc_argv`; weak so that a reactor build without an entry still
+  links. `process.argv` then comes from `args_get`: index 0 is whatever the
+  host names the module (`examples/wasi-host.mjs` passes the file path, like
+  the native `argv[0]`).
+- **What the runtime needed.** Only `getpid`, which WASI lacks (wasi-libc
+  marks it deprecated, `-Werror` fails): the `Math.random` seed uses the
+  monotonic clock's nanoseconds instead. `write`, `open`, `lseek`, `pread`,
+  `close`, `_exit`, `malloc`, `snprintf`, `strtod`, `strtoll`, `strspn`
+  all exist in wasi-libc, and `runtime.c` compiles clean with
+  `--target=wasm32-wasi -std=c11 -Wall -Wextra -Werror`. Files resolve
+  against the host's preopened directories (`.` in the Node host).
+- **Host.** `examples/wasi-host.mjs` (Node 20+, `node:wasi`, preview1) runs
+  the module with `args`, stdout and the exit status wired through; any
+  other WASI runtime (`wasmtime`, `wasmer`) works the same.
 
 ## Tests
 
@@ -349,23 +540,36 @@ native `.out` round trip):
 | `conversions` | every `toI32/toI64/toF64` direction, saturation and wrapping |
 | `io_files` | write, append, read back, `.length` |
 | `process_exit` | `noreturn` + `unreachable`, terminator analysis, `willreturn` dropped transitively |
+| `argv_echo` (run with `argv_echo.argv`) | the `@sts_argv` load, the `sts_argv_init` call in `@main`, a `readonly` reader, indexing, `for...of`, byte lengths of a UTF-8 argument, `parseInt` over the arguments |
+| `parse_numbers` | every `parseInt` / `parseFloat` / `Number` form above including the deviations, `Number` on `i32`/`i64`/`f64`/`boolean` |
+| `link/argv_import` | the import reads `process.argv`, the entry gets the init call (`expected.ir`), runs with no arguments |
+
+`tests/run.js` passes the whitespace-separated words of `<name>.argv` to a
+case's binary; the differential harness does the same for
+`tests/differential/corpus/<name>.argv` on both the native and the Node
+side, and `scripts/smoke.sh` honours `// smoke: argv <args>`
+(`examples/argv.ts`). The wasi profile is exercised by the pipeline block of
+`tests/run.js` when a sysroot is installed.
 
 Negative (`.err`): `reject_math_i32` (`Math.sqrt` on an i32 `number`),
 `reject_math_min_arity`, `reject_toi32_string`, `reject_readfile_number`,
 `reject_unknown_builtin` (`Math.foo`), `reject_i64_literal_float`,
-`reject_i64_mixed`, `reject_exit_unreachable`.
+`reject_i64_mixed`, `reject_exit_unreachable`, `reject_argv_no_main`,
+`reject_argv_assign`, `reject_argv_push`, `reject_parseint_number`,
+`reject_number_array`, `tests/link/argv_no_main`.
 
 ## Not in this package
 
-- `process.argv`: needs `string[]` (WP4). The entry wrapper already accepts
-  `argc`/`argv`; exposing them is a matter of building the array.
-- `Number(s)` / `parseInt(s)`: string-to-number parsing was left out to stay
-  within the runtime budget headroom needed for arrays; a `strtod`/`strtol`
-  wrapper is a small follow-up.
 - `toString(x)`: template literals and `console.log` already convert; an
   explicit function can come with string methods.
-- A WASI runtime variant: the syscall-level runtime (`write`, `open`,
-  `pread`) compiles under wasi-libc unchanged, but no `--target wasm32-wasi`
-  profile exists yet.
 - `Math.min`/`Math.max` with more than two arguments, and `Math.round`
   returning `-0`.
+- `parseInt(s, radix)`, JavaScript's automatic hex in `parseInt`, the `0b` /
+  `0o` prefixes in `Number`, Unicode whitespace in the parsers, and a `0x`
+  guard in `parseFloat`: each is a few bytes of runtime that the budget
+  cannot absorb; all are documented deviations mirrored by the shim.
+- `process.env`, `process.stdin`: the wrapper has no `envp`, and stdin
+  needs a reading primitive first.
+- A WASI reactor profile (a library module with `_initialize` instead of
+  `_start`) for calling exported functions from a wasm host with the runtime
+  linked in; the `__main_argc_argv` bridge is already weak so it would link.

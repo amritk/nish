@@ -107,6 +107,21 @@ typedef struct sts_array { uint64_t len; uint64_t cap; char *data; } sts_array;
 void sts_array_grow(sts_array *a, uint64_t elem_size);
 void sts_panic_index(uint64_t idx, uint64_t len);
 
+/* `process.argv` (WP7): a `string[]` (elements are `sts_str *`) that the entry
+ * wrapper `main` builds once from argc/argv before calling the program; index 0
+ * is the executable path. Allocated with malloc, so arena resets never touch
+ * it. Hosts that call StaticTS code without a `main` never need it: a program
+ * without an entry point cannot read `process.argv` (compile error). */
+extern sts_array *sts_argv;
+void sts_argv_init(int32_t argc, char **argv);
+
+/* String to number (WP7), ASCII whitespace only. mode 0 is `parseFloat`
+ * (longest JS decimal literal or `Infinity`, else NaN), mode 1 is `Number`
+ * (the whole string, trimmed; blank is 0; `0x` hex accepted, as in JS),
+ * mode 2 is `parseInt` (base 10 via strtoll, 0 without digits) as a double
+ * that the compiler saturates into an i32 with `llvm.fptosi.sat`. */
+double sts_parse_number(const sts_str *s, int32_t mode);
+
 /* Checked integer division (Rust semantics): the failed-check path. */
 void sts_panic_div(bool by_zero);
 

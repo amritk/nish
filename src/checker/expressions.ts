@@ -11,7 +11,7 @@ import { BOOL, F64, I32, assignable, isNumeric, sameType, typeToString } from ".
 import { arrayExpressionCheckers, installArrayAssignmentCheckers } from "./arrays";
 import { BuiltinCallChecker } from "./builtins";
 import { ioBuiltinFunctions } from "./io";
-import { contextualLiteralType, conversionBuiltins } from "./math";
+import { contextualLiteralType, conversionBuiltins, parseBuiltins } from "./math";
 import { classExpressionCheckers, isAssignmentOperator } from "./classes";
 import { assignmentTargetCheckers, checkMethodCall, isValueReceiver, memberExpressionCheckers } from "./members";
 import { nullableExpressionCheckers } from "./nullable";
@@ -173,6 +173,7 @@ const checkBinary: ExpressionChecker = (ctx, node, scope) => {
 /** Builtins called by plain identifier; a user function of the same name shadows them. */
 export const builtinFunctions: Record<string, BuiltinCallChecker> = {
   ...conversionBuiltins, // WP7: toI32, toI64, toF64
+  ...parseBuiltins, // WP7: parseInt, parseFloat, Number
   ...ioBuiltinFunctions, // WP7: readFileSync, writeFileSync, appendFileSync
 };
 

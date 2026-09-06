@@ -109,6 +109,10 @@ round/sqrt/sin/cos/exp/log/pow`, `Math.PI/E`, `Math.random`.
 | `toI64(x)` | | `__sts.toI64(x)` | int32: exact (`sext`); double: truncate and saturate |
 | `toF64(x)` | | `__sts.toF64(x)` | `Number(bigint)` rounds to nearest like `sitofp` |
 | `readFileSync`, `writeFileSync`, `appendFileSync` | | `__sts.*` over `node:fs` with UTF-8 | a failure prints `statictsc: cannot read <path>` and exits 1 |
+| `process.argv` | | `__sts.argv()` = `process.argv.slice(1)` | index 0 is the program on both sides (the executable natively, the rewritten entry script under Node); the arguments come from `<name>.argv` next to the program and are passed to both runs |
+| `parseInt(s)` | | `__sts.parseInt(s)` | base-10 `strtoll` semantics (ASCII whitespace, sign, digits; no `0x`) then `toI32` saturation, 0 without digits |
+| `parseFloat(s)` | | `__sts.parseFloat(s)` | longest decimal literal or `Infinity` after ASCII whitespace; a `0x` prefix is read as hex like `strtod` (JS gives 0) |
+| `Number(x)` | | `__sts.number(x)` | strings: one literal bar ASCII whitespace, blank is 0, `0x` hex accepted, no `0b`/`0o`; BigInt and booleans convert numerically |
 
 A user function named like a builtin (`toI32`, `readFileSync`) shadows it in
 the checker (`callees` has the call), and the rewrite follows that.

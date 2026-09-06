@@ -39,6 +39,18 @@ static void expect_f64(double v, const char *want) { expect_str(sts_str_from_f64
 /* WP4 */
 typedef struct sts_array { uint64_t len; uint64_t cap; char *data; } sts_array;
 void sts_array_grow(sts_array *, uint64_t);
+/* WP7: process.argv and string parsing */
+extern sts_array *sts_argv;
+void sts_argv_init(int32_t, char **);
+double sts_parse_number(const sts_str *, int32_t);
+
+static sts_str *lit(const char *s) { return sts_str_new(s, strlen(s)); }
+/* Expected text is `node -p "String(<js expression>)"`; a mode-2 result is what `parseInt` sees before saturation. */
+static void expect_parse(const char *input, int32_t mode, const char *want) {
+  char what[64];
+  snprintf(what, sizeof what, "parse(\"%s\", %d)", input, mode);
+  expect_str(sts_str_from_f64(sts_parse_number(lit(input), mode)), want, what);
+}
 
 int main(void) {
   /* Bump allocation: consecutive, 8-byte rounded, 8-byte aligned. */
@@ -161,6 +173,66 @@ int main(void) {
   sts_array_grow(&arr, sizeof(int32_t));
   assert(arr.cap == 8 && arr.len == 4 && arr.data != old);
   for (int i = 0; i < 4; i++) assert(((int32_t *)arr.data)[i] == i * 10);
+
+  /* WP7 process.argv: a string array outside the arena (a reset must not touch it). */
+  char *argv[] = { "./app", "", "héllo", "42" };
+  sts_argv_init(4, argv);
+  assert(sts_argv->len == 4 && sts_argv->cap == 4);
+  sts_reset_arena();
+  expect_str(((sts_str **)sts_argv->data)[0], "./app", "argv[0]");
+  expect_str(((sts_str **)sts_argv->data)[1], "", "argv[1]");
+  expect_str(((sts_str **)sts_argv->data)[2], "héllo", "argv[2]");
+  assert(((sts_str **)sts_argv->data)[2]->len == 6); /* bytes, not code points */
+  expect_str(((sts_str **)sts_argv->data)[3], "42", "argv[3]");
+  sts_argv_init(0, argv);
+  assert(sts_argv->len == 0);
+
+  /* WP7 parsing. mode 0 = parseFloat, 1 = Number, 2 = parseInt (before the i32 saturation). */
+  expect_parse("3.14xyz", 0, "3.14");
+  expect_parse("  .5", 0, "0.5");
+  expect_parse("-1e3", 0, "-1000");
+  expect_parse("1e", 0, "1");
+  expect_parse("1.5e+", 0, "1.5");
+  expect_parse("+Infinity!", 0, "Infinity");
+  expect_parse("-Infinity", 0, "-Infinity");
+  expect_parse("Infinit", 0, "NaN");
+  expect_parse("inf", 0, "NaN");
+  expect_parse("nan", 0, "NaN");
+  expect_parse("", 0, "NaN");
+  expect_parse(".", 0, "NaN");
+  expect_parse("+", 0, "NaN");
+  expect_parse("abc", 0, "NaN");
+  expect_parse("0.1", 0, "0.1");
+  expect_parse("1e400", 0, "Infinity");
+  expect_parse("0x1A", 0, "26"); /* documented: strtod reads hex, JS parseFloat would stop at the x */
+  expect_parse("42", 1, "42");
+  expect_parse("", 1, "0");
+  expect_parse(" \t\n", 1, "0");
+  expect_parse("  7.5  ", 1, "7.5");
+  expect_parse("12px", 1, "NaN");
+  expect_parse("1e3", 1, "1000");
+  expect_parse("-.5", 1, "-0.5");
+  expect_parse("0x1A", 1, "26");
+  expect_parse("Infinity", 1, "Infinity");
+  expect_parse("-Infinity ", 1, "-Infinity");
+  expect_parse("Infinityx", 1, "NaN");
+  expect_parse("infinity", 1, "NaN");
+  expect_parse("NaN", 1, "NaN");
+  expect_parse("1e", 1, "NaN");
+  expect_parse("1 2", 1, "NaN");
+  expect_parse("42", 2, "42");
+  expect_parse("  -17abc", 2, "-17");
+  expect_parse("+3.99", 2, "3");
+  expect_parse("1e5", 2, "1");
+  expect_parse("0x10", 2, "0");
+  expect_parse("abc", 2, "0");
+  expect_parse("", 2, "0");
+  expect_parse("99999999999", 2, "99999999999"); /* the compiler saturates this into an i32 */
+  { /* an embedded NUL ends the number for Number, like any other non-space byte */
+    sts_str *nul = sts_str_new("5\0", 2);
+    expect_str(sts_str_from_f64(sts_parse_number(nul, 1)), "NaN", "Number(\"5\\0\")");
+    expect_str(sts_str_from_f64(sts_parse_number(nul, 0)), "5", "parseFloat(\"5\\0\")");
+  }
 
   sts_free_arena();
   assert(sts_arena.chunks == NULL && sts_arena.cap == 0);

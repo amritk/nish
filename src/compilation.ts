@@ -123,6 +123,10 @@ export class Compilation {
       unit.checker.bindImports((imp) => unit.resolved.get(imp.specifier)!.checker.program);
     }
     this.rejectSymbolClashes();
+    // `process.argv` (WP7) is legal anywhere in a program that has an entry point, so every
+    // module needs to know whether the entry declares `main` before its bodies are checked.
+    const hasMain = this.entry.checker.program.entryMain !== undefined;
+    for (const unit of this.modules) unit.checker.entryHasMain = hasMain;
     for (const unit of this.modules) unit.checker.checkBodies();
     this.checked = true;
   }
@@ -162,6 +166,8 @@ export class Compilation {
   emit(): EmittedModule[] {
     this.check();
     const programs: CheckedProgram[] = this.modules.map((m) => m.checker.program);
+    // The entry wrapper initialises `process.argv` when any module of the program reads it (WP7).
+    if (programs.some((p) => p.usesArgv)) this.entry.checker.program.usesArgv = true;
     const facts = analyzeFunctions(programs, this.opts);
     return this.modules.map((unit) => ({ unit, ir: emitProgram(unit.checker.program, this.opts, facts) }));
   }

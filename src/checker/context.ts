@@ -26,6 +26,12 @@ export interface CheckContext {
   readonly current: FunctionSig;
   /** Enclosing loops, innermost last; empty outside any loop. Handlers push and pop. */
   readonly loops: LoopInfo[];
+  /**
+   * The program's entry module declares `export function main` (WP7): what
+   * `process.argv` needs, since only the entry wrapper can build it. Known
+   * before any body is checked (signatures come first).
+   */
+  readonly hasEntryMain: boolean;
 
   /** Throw a CompileError at `node`. Typed as never so callers can `return ctx.error(...)`. */
   error(message: string, node: ts.Node): never;

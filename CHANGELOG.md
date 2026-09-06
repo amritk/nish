@@ -37,6 +37,15 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 - **Runtime and intrinsics.** `Math.*` as LLVM intrinsics, the `i64` type with
   explicit numeric conversions, `process.exit`, synchronous file I/O, and
   JavaScript-accurate number formatting in the runtime.
+- **Command line, string parsing, WASI.** `process.argv: string[]` (built
+  once by the `@main` wrapper with `sts_argv_init`; `argv[0]` is the program
+  path; read-only; a compile error in a program without `main`),
+  `parseInt(s): i32`, `parseFloat(s): f64` and `Number(x): f64` (JavaScript
+  semantics for the decimal forms via one runtime call `sts_parse_number`;
+  `parseInt` has no NaN and saturates like `toI32`), and a `wasi` build
+  profile (`--link app.wasm --profile wasi`) that links the runtime against
+  wasi-libc so whole programs run under any WASI host, including Node's
+  (`examples/wasi-host.mjs`). Runtime `.text` at `-Oz` is 4,093 bytes.
 - **Interop.** `--emit-header` (C header), `--emit-dts` (TypeScript
   declarations for the wasm exports), `--emit-napi` (N-API shim) plus the
   `napi` and `wasm` build profiles; an FFI benchmark.

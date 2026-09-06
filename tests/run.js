@@ -9,6 +9,7 @@
  *       <name>.err   expected error substring; compile must fail (no .ll needed)
  *       <name>.out   expected stdout when linked with <name>.c (or tests/driver.c,
  *                    which prints `test()`) and runtime/runtime.c, then run
+ *       <name>.argv  command-line arguments for that run, whitespace separated (WP7)
  *     Every successfully compiled case is also assembled with llvm-as.
  *
  *  B. Pipeline checks: runtime.c unit test, inline allocator vs C arena layout,
@@ -94,7 +95,8 @@ for (const name of cases) {
       check(`${name}: links natively`, false, String(cc.stderr));
       continue;
     }
-    const run = spawnSync(exe);
+    const argv = fs.existsSync(side("argv")) ? fs.readFileSync(side("argv"), "utf8").trim().split(/\s+/).filter(Boolean) : [];
+    const run = spawnSync(exe, argv);
     const want = fs.readFileSync(side("out"), "utf8").trim();
     check(`${name}: native output matches .out`, run.status === 0 && String(run.stdout).trim() === want,
       `--- expected\n${want}\n--- actual (exit ${run.status})\n${run.stdout}${run.stderr}`);
@@ -438,6 +440,24 @@ if (!only && HAS_CLANG) {
     const w = spawnSync("bash", ["scripts/build.sh", addLl, "-o", wasm, "--profile", "wasm"], { cwd: root });
     const host = w.status === 0 ? spawnSync("node", ["examples/node-host.mjs", wasm], { cwd: root }) : null;
     check("wasm profile builds a module Node can import", host !== null && String(host.stdout).trim() === "add(2, 3) = 5", String(w.stderr) + (host ? String(host.stderr) : ""));
+  }
+
+  // WP7: the wasi profile links runtime.c against wasi-libc, so string programs run under
+  // any WASI host; Node's own implementation runs it here. Needs a WASI sysroot (wasi-sdk
+  // or the wasi-libc package; WASI_SYSROOT overrides the default locations) and, with a
+  // distro clang, compiler-rt's wasm32 builtins (see scripts/build.sh); otherwise skipped.
+  const wasiSysroot = [process.env.WASI_SYSROOT, "/usr/lib/wasi-sysroot", "/opt/wasi-sdk/share/wasi-sysroot", "/usr/share/wasi-sysroot"]
+    .find((d) => d && fs.existsSync(path.join(d, "lib")));
+  if (wasiSysroot && has("wasm-ld")) {
+    const wasm = path.join(buildDir, "argv_echo.wasm");
+    const w = spawnSync("bash", ["scripts/build.sh", path.join(buildDir, "argv_echo.ll"), "runtime/runtime.c", "-o", wasm, "--profile", "wasi"], { cwd: root });
+    const argv = fs.readFileSync(path.join(casesDir, "argv_echo.argv"), "utf8").trim().split(/\s+/);
+    const host = w.status === 0 ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm, ...argv], { cwd: root }) : null;
+    const want = fs.readFileSync(path.join(casesDir, "argv_echo.out"), "utf8").trim();
+    check(`wasi profile (sysroot ${wasiSysroot}) builds argv_echo and Node's WASI runs it with the native output`,
+      host !== null && host.status === 0 && String(host.stdout).trim() === want, String(w.stderr) + (host ? String(host.stdout) + String(host.stderr) : ""));
+  } else {
+    console.log(`SKIP  skipped: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT or install wasi-sdk, see docs/INSTALL.md): wasi profile not built`);
   }
 } else if (!HAS_CLANG) {
   console.log("SKIP  clang not installed: native round trips and pipeline checks skipped");

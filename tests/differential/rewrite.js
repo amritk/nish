@@ -74,7 +74,18 @@ const ARITHMETIC = new Set([
   ts.SyntaxKind.SlashToken,
   ts.SyntaxKind.PercentToken,
 ]);
-const IDENTIFIER_BUILTINS = new Set(["toI32", "toI64", "toF64", "readFileSync", "writeFileSync", "appendFileSync"]);
+/** Identifier builtins and the shim function each becomes (`Number` cannot be a shim export name). */
+const IDENTIFIER_BUILTINS = new Map([
+  ["toI32", "toI32"],
+  ["toI64", "toI64"],
+  ["toF64", "toF64"],
+  ["parseInt", "parseInt"],
+  ["parseFloat", "parseFloat"],
+  ["Number", "number"],
+  ["readFileSync", "readFileSync"],
+  ["writeFileSync", "writeFileSync"],
+  ["appendFileSync", "appendFileSync"],
+]);
 
 function zeroOf(elem) {
   if (elem.kind === "i64") return big(0);
@@ -201,6 +212,11 @@ function makeTransformer(unit, stems) {
         return shimCall("strLen", [ts.visitNode(node.expression, visit)]);
       }
 
+      // ---- process.argv -> the script and its arguments (argv[0] is the program, as natively) ----
+      if (dottedName(node) === "process.argv" && !bindings.has(node.expression)) {
+        return shimCall("argv", []);
+      }
+
       // ---- new Array<T>(n) -> zero-filled ----
       if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Array") {
         const t = typeOf(node);
@@ -232,7 +248,7 @@ function makeTransformer(unit, stems) {
           !callees.has(node) && // a user function of the same name shadows the builtin
           !bindings.has(node.expression)
         ) {
-          return shimCall(node.expression.text, args);
+          return shimCall(IDENTIFIER_BUILTINS.get(node.expression.text), args);
         }
         return f.updateCallExpression(node, ts.visitNode(node.expression, visit), undefined, args);
       }
