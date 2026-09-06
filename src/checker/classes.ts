@@ -39,7 +39,7 @@
  *     to the interface type implicitly (recorded in `program.coercions`).
  */
 import ts from "typescript";
-import { StaticType, VOID, alignOf, resolveTypeNode, sameType, typeToString } from "../types";
+import { StaticType, VOID, alignOf, assignable, resolveTypeNode, sameType, stripNull, typeToString } from "../types";
 import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context";
 import { hasExportModifier } from "./declarations";
 import { assignmentTargetCheckers, methodCallCheckers, newCheckers, propertyCheckers } from "./members";
@@ -169,6 +169,7 @@ function isLiteralInitializer(expr: ts.Expression): boolean {
     case ts.SyntaxKind.NoSubstitutionTemplateLiteral:
     case ts.SyntaxKind.TrueKeyword:
     case ts.SyntaxKind.FalseKeyword:
+    case ts.SyntaxKind.NullKeyword: // `next: Node | null = null` (WP6)
       return true;
     case ts.SyntaxKind.PrefixUnaryExpression: {
       const u = expr as ts.PrefixUnaryExpression;
@@ -221,7 +222,7 @@ function collectField(ctx: CheckContext, owner: StructInfo, decl: ts.PropertyDec
       throw ctx.error(`${what}: initializers must be literals (assign other values in the constructor)`, init);
     }
     const initType = ctx.checkExpression(init, new Scope());
-    if (!sameType(initType, type)) {
+    if (!assignable(initType, type)) {
       throw ctx.error(`${what} is ${typeToString(type)} but its initializer is ${typeToString(initType)}`, init);
     }
     field.initializer = init;
@@ -620,9 +621,10 @@ function calleeSignature(ctx: CheckContext, call: ts.CallExpression | ts.NewExpr
 export function coerceToContext(ctx: CheckContext, expr: ts.Expression, type: StaticType, scope: Scope): StaticType {
   if (type.kind !== "struct") return type;
   const want = contextualType(ctx, expr, scope);
-  if (!want || !implementsInterface(ctx, type, want)) return type;
-  ctx.program.coercions.set(expr, { from: type, to: want });
-  return want;
+  const target = want && stripNull(want); // a class converts to `I | null` as it does to `I` (WP6)
+  if (!target || !implementsInterface(ctx, type, target)) return type;
+  ctx.program.coercions.set(expr, { from: type, to: target });
+  return target;
 }
 
 // ---- Expressions: `this`, object literals ------------------------------------------------------
@@ -663,7 +665,7 @@ const checkObjectLiteral: ExpressionChecker = (ctx, node, scope) => {
     if (seen.has(name)) throw ctx.error(`Field \`${name}\` is set twice in the object literal`, prop);
     seen.add(name);
     const t = ctx.checkExpression(value, scope);
-    if (!sameType(t, field.type)) {
+    if (!assignable(t, field.type)) {
       throw ctx.error(`Field \`${name}\` of \`${info.name}\` is ${typeToString(field.type)}, got ${typeToString(t)}`, value);
     }
   }
@@ -704,7 +706,7 @@ function checkMethodArguments(
   }
   args.forEach((arg, i) => {
     const t = ctx.checkExpression(arg, scope);
-    if (!sameType(t, params[i].type)) {
+    if (!assignable(t, params[i].type)) {
       throw ctx.error(`Argument ${i + 1} of \`${what}\`: expected ${typeToString(params[i].type)}, got ${typeToString(t)}`, arg);
     }
   });
@@ -771,7 +773,7 @@ const checkFieldAssignment: BinaryChecker = (ctx, expr, scope) => {
   }
   const rhs = ctx.checkExpression(expr.right, scope);
   if (op === ts.SyntaxKind.EqualsToken) {
-    if (!sameType(rhs, field.type)) {
+    if (!assignable(rhs, field.type)) {
       throw ctx.error(
         `Cannot assign ${typeToString(rhs)} to ${typeToString(field.type)} field \`${field.name}\``,
         expr.right

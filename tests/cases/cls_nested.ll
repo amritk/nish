@@ -78,42 +78,41 @@ entry:
 define noundef i32 @sts_main() #0 {
 entry:
   %s.addr = alloca %struct.Segment*, align 8
-  %0 = call i8* @sts_alloc_struct(i64 24)
-  %1 = bitcast i8* %0 to %struct.Segment*
+  %Segment.obj = alloca %struct.Segment, align 8
+  %0 = call i8* @sts_alloc_struct(i64 8)
+  %1 = bitcast i8* %0 to %struct.Point*
+  call void @Point.constructor(%struct.Point* %1, i32 1, i32 2)
   %2 = call i8* @sts_alloc_struct(i64 8)
   %3 = bitcast i8* %2 to %struct.Point*
-  call void @Point.constructor(%struct.Point* %3, i32 1, i32 2)
-  %4 = call i8* @sts_alloc_struct(i64 8)
-  %5 = bitcast i8* %4 to %struct.Point*
-  call void @Point.constructor(%struct.Point* %5, i32 11, i32 22)
-  call void @Segment.constructor(%struct.Segment* %1, %struct.Point* %3, %struct.Point* %5, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
-  store %struct.Segment* %1, %struct.Segment** %s.addr, align 8
-  %6 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
-  %7 = call i32 @Segment.dx(%struct.Segment* %6)
-  %8 = call i8* @sts_str_from_i32(i32 %7)
-  call void @sts_print(i8* %8)
-  %9 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
-  %10 = call %struct.Point* @endpoint(%struct.Segment* %9)
-  %11 = getelementptr inbounds %struct.Point, %struct.Point* %10, i32 0, i32 1
-  %12 = load i32, i32* %11, align 4
-  %13 = call i8* @sts_str_from_i32(i32 %12)
-  call void @sts_print(i8* %13)
-  %14 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
-  %15 = getelementptr inbounds %struct.Segment, %struct.Segment* %14, i32 0, i32 0
-  %16 = load %struct.Point*, %struct.Point** %15, align 8
-  %17 = getelementptr inbounds %struct.Point, %struct.Point* %16, i32 0, i32 0
-  store i32 100, i32* %17, align 4
-  %18 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
-  %19 = getelementptr inbounds %struct.Segment, %struct.Segment* %18, i32 0, i32 0
-  %20 = load %struct.Point*, %struct.Point** %19, align 8
-  %21 = getelementptr inbounds %struct.Point, %struct.Point* %20, i32 0, i32 0
-  %22 = load i32, i32* %21, align 4
-  %23 = call i8* @sts_str_from_i32(i32 %22)
-  call void @sts_print(i8* %23)
-  %24 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
-  %25 = getelementptr inbounds %struct.Segment, %struct.Segment* %24, i32 0, i32 2
-  %26 = load i8*, i8** %25, align 8
-  call void @sts_print(i8* %26)
+  call void @Point.constructor(%struct.Point* %3, i32 11, i32 22)
+  call void @Segment.constructor(%struct.Segment* %Segment.obj, %struct.Point* %1, %struct.Point* %3, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
+  store %struct.Segment* %Segment.obj, %struct.Segment** %s.addr, align 8
+  %4 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
+  %5 = call i32 @Segment.dx(%struct.Segment* %4)
+  %6 = call i8* @sts_str_from_i32(i32 %5)
+  call void @sts_print(i8* %6)
+  %7 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
+  %8 = call %struct.Point* @endpoint(%struct.Segment* %7)
+  %9 = getelementptr inbounds %struct.Point, %struct.Point* %8, i32 0, i32 1
+  %10 = load i32, i32* %9, align 4
+  %11 = call i8* @sts_str_from_i32(i32 %10)
+  call void @sts_print(i8* %11)
+  %12 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
+  %13 = getelementptr inbounds %struct.Segment, %struct.Segment* %12, i32 0, i32 0
+  %14 = load %struct.Point*, %struct.Point** %13, align 8
+  %15 = getelementptr inbounds %struct.Point, %struct.Point* %14, i32 0, i32 0
+  store i32 100, i32* %15, align 4
+  %16 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
+  %17 = getelementptr inbounds %struct.Segment, %struct.Segment* %16, i32 0, i32 0
+  %18 = load %struct.Point*, %struct.Point** %17, align 8
+  %19 = getelementptr inbounds %struct.Point, %struct.Point* %18, i32 0, i32 0
+  %20 = load i32, i32* %19, align 4
+  %21 = call i8* @sts_str_from_i32(i32 %20)
+  call void @sts_print(i8* %21)
+  %22 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
+  %23 = getelementptr inbounds %struct.Segment, %struct.Segment* %22, i32 0, i32 2
+  %24 = load i8*, i8** %23, align 8
+  call void @sts_print(i8* %24)
   ret i32 0
 }
 

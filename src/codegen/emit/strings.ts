@@ -26,6 +26,7 @@ import { CheckedProgram } from "../../checker";
 import { dottedName } from "../../checker/builtins";
 import { STRING, StaticType, llvmType } from "../../types";
 import { IRModule } from "../ir";
+import { arenaBuiltinCallEmitters } from "./arena";
 import { BuiltinCall } from "./builtins";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
 import { isValueReceiver, namespacePropertyEmitters, propertyEmitters } from "./members";
@@ -167,6 +168,7 @@ const emitStrictEquality: BinaryEmitter = (ctx, expr) => {
     const eq = ctx.fn.emitValue(`call zeroext i1 ${ctx.useRuntime("sts_str_eq")}(i8* ${lhs}, i8* ${rhs})`);
     return negate ? ctx.fn.emitValue(`xor i1 ${eq}, true`) : eq;
   }
+  // `T | null` (WP6) compares against the literal `null` by pointer; the checker allows nothing else.
   const opcode = type.kind === "f64" ? (negate ? "fcmp une" : "fcmp oeq") : negate ? "icmp ne" : "icmp eq";
   return ctx.fn.emitValue(`${opcode} ${llvmType(type)} ${lhs}, ${rhs}`);
 };
@@ -187,6 +189,7 @@ export const builtinCallEmitters: Record<string, BuiltinCall> = {
   "console.log": consoleLog,
   ...mathBuiltinCallEmitters, // WP7: Math.sqrt, ..., Math.random
   ...ioBuiltinCallEmitters, // WP7: process.exit
+  ...arenaBuiltinCallEmitters, // WP6: Arena.reset / mark / release / used
 };
 
 /** Entry point for `emitCall` when the callee is a property access. */

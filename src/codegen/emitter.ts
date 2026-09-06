@@ -27,6 +27,15 @@
  *   - The entry module's `export function main` is emitted as `@sts_main`
  *     and wrapped by `define i32 @main(i32 %argc, i8** %argv)`, which calls
  *     it, releases the arena, and returns the exit code (0 for a void main).
+ *
+ * Memory (WP6, see `escape.ts`):
+ *   - Allocations in `facts.stackSites` become entry-block allocas (the
+ *     class and array emitters ask `isStackSite`).
+ *   - A function with `facts.arenaScope` starts with
+ *     `%arena.mark = call i64 @sts_arena_mark()` and calls
+ *     `@sts_arena_release(i64 %arena.mark)` before every `ret`
+ *     (`emitScopeExit`, invoked by the return emitter and by the implicit
+ *     `ret void`). `unreachable` paths (`process.exit`, `throw`) need none.
  */
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
@@ -46,6 +55,8 @@ export class Emitter implements EmitContext {
   fn!: IRFunction;
   readonly loops: LoopTarget[] = [];
   private slots = new WeakMap<LocalVar, string>();
+  /** Facts of the function being emitted (stack sites, arena scope). */
+  private current!: FunctionFacts;
   /** Runtime symbols referenced by this module; drives which declarations are emitted. */
   private readonly usedRuntime = new Set<string>();
   /** Interned string literals: text -> `i8*` constant expression. */
@@ -113,14 +124,29 @@ export class Emitter implements EmitContext {
       this.fn.attrGroup = this.module.attrGroup(functionAttributes(facts));
     }
     this.slots = new WeakMap();
+    this.current = facts;
 
+    // WP6: an automatic arena scope remembers the bump position before anything is allocated.
+    if (facts.arenaScope) this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("sts_arena_mark")}()`);
     // A constructor stores the field initializers before its body runs (WP2).
     if (sig.role === "constructor") emitFieldInitializers(this, sig.struct!, "%this");
     this.emitBlock(sig.decl.body!);
 
     // Void functions may fall off the end; give them an explicit terminator.
-    if (!this.fn.currentBlock.terminated) this.fn.emit("ret void");
+    if (!this.fn.currentBlock.terminated) {
+      this.emitScopeExit();
+      this.fn.emit("ret void");
+    }
     return this.fn;
+  }
+
+  isStackSite(node: ts.Node): boolean {
+    return this.current.stackSites.has(node);
+  }
+
+  emitScopeExit(): void {
+    if (!this.current.arenaScope) return;
+    this.fn.emit(`call void ${this.useRuntime("sts_arena_release")}(i64 %arena.mark)`);
   }
 
   /**

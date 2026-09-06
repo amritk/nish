@@ -1,0 +1,91 @@
+@.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"#\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"hello, \00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"!\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"world\00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"again\00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
+@.str.6 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
+
+declare void @sts_free_arena() #0
+declare noundef i64 @sts_arena_mark() #0
+declare void @sts_arena_release(i64 noundef) #0
+declare noundef i64 @sts_arena_used() #0
+declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
+
+define noundef nonnull align 8 i8* @label(i32 noundef %i, i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
+entry:
+  %0 = call i8* @sts_str_concat(i8* %name, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %1 = call i8* @sts_str_from_i32(i32 %i)
+  %2 = call i8* @sts_str_concat(i8* %0, i8* %1)
+  ret i8* %2
+}
+
+define void @greet(i8* noundef nonnull noalias readonly align 8 %name, i32 noundef %times) #0 {
+entry:
+  %i.addr = alloca i32, align 4
+  %line.addr = alloca i8*, align 8
+  %arena.mark = call i64 @sts_arena_mark()
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %i.addr, align 4
+  %1 = icmp slt i32 %0, %times
+  br i1 %1, label %for.body, label %for.end
+
+for.body:
+  %2 = load i32, i32* %i.addr, align 4
+  %3 = call i8* @label(i32 %2, i8* %name)
+  %4 = call i8* @sts_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.1 to i8*), i8* %3)
+  %5 = call i8* @sts_str_concat(i8* %4, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  store i8* %5, i8** %line.addr, align 8
+  %6 = load i32, i32* %i.addr, align 4
+  %7 = sub i32 %times, 1
+  %8 = icmp eq i32 %6, %7
+  br i1 %8, label %if.then, label %if.end
+
+if.then:
+  %9 = load i8*, i8** %line.addr, align 8
+  call void @sts_print(i8* %9)
+  br label %if.end
+
+if.end:
+  br label %for.inc
+
+for.inc:
+  %10 = load i32, i32* %i.addr, align 4
+  %11 = add i32 %10, 1
+  store i32 %11, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  call void @sts_arena_release(i64 %arena.mark)
+  ret void
+}
+
+define noundef i32 @sts_main() #0 {
+entry:
+  %before.addr = alloca i64, align 8
+  call void @greet(i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*), i32 3)
+  %0 = call i64 @sts_arena_used()
+  store i64 %0, i64* %before.addr, align 8
+  call void @greet(i8* bitcast ({ i64, [6 x i8] }* @.str.4 to i8*), i32 50000)
+  %1 = call i64 @sts_arena_used()
+  %2 = load i64, i64* %before.addr, align 8
+  %3 = icmp eq i64 %1, %2
+  %4 = select i1 %3, i8* bitcast ({ i64, [5 x i8] }* @.str.5 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.6 to i8*)
+  call void @sts_print(i8* %4)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @sts_main()
+  call void @sts_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }

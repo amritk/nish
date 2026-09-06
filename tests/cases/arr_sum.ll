@@ -6,6 +6,8 @@
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #1
 declare void @sts_free_arena() #2
+declare noundef i64 @sts_arena_mark() #2
+declare void @sts_arena_release(i64 noundef) #2
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #2
 declare void @sts_panic_index(i64 noundef, i64 noundef) #3
@@ -127,6 +129,7 @@ define noundef i32 @sts_main() #0 {
 entry:
   %n.addr = alloca i32, align 4
   %xs.addr = alloca %struct.sts_array*, align 8
+  %arena.mark = call i64 @sts_arena_mark()
   store i32 1000, i32* %n.addr, align 4
   %0 = load i32, i32* %n.addr, align 4
   %1 = sext i32 %0 to i64
@@ -150,6 +153,7 @@ entry:
   %13 = call i32 @sum(%struct.sts_array* %11, i32 %12)
   %14 = call i8* @sts_str_from_i32(i32 %13)
   call void @sts_print(i8* %14)
+  call void @sts_arena_release(i64 %arena.mark)
   ret i32 0
 }
 

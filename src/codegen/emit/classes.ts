@@ -10,7 +10,10 @@
  *                    `%1 = bitcast i8* %0 to %struct.P*`
  *                    `call void @P.constructor(%struct.P* %1, i32 %a, i32 %b)`
  *                    Without an explicit constructor the field initializers
- *                    are stored inline instead of the call.
+ *                    are stored inline instead of the call. When escape.ts
+ *                    proved the object does not outlive the function (WP6),
+ *                    the allocation is `%P.obj = alloca %struct.P, align 8`
+ *                    in the entry block instead of the first two lines.
  *   constructor      `define void @P.constructor(%struct.P* ... %this, ...)`:
  *                    initializer stores first (`emitFieldInitializers`), then the body.
  *   p.x              `getelementptr inbounds %struct.P, %struct.P* %p, i32 0, i32 <idx>`
@@ -36,6 +39,7 @@ import {
   MemoryFacts,
   assignmentTargetEmitters,
   factCollectors,
+  isStackOwned,
   methodCallEmitters,
   newEmitters,
   propertyEmitters,
@@ -73,8 +77,13 @@ function storeField(ctx: EmitContext, info: StructInfo, receiver: string, field:
   ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${ctx.alignSuffix(field.type)}`);
 }
 
-/** Allocate `info.size` bytes in the arena and return the typed pointer. */
-function allocate(ctx: EmitContext, info: StructInfo): string {
+/**
+ * Storage for one object of `info`: an entry-block alloca when `site` was
+ * proved not to escape (WP6, always 8-aligned like arena objects so every
+ * pointer attribute stays true), else `info.size` bytes bumped from the arena.
+ */
+function allocate(ctx: EmitContext, info: StructInfo, site: ts.Node): string {
+  if (ctx.isStackSite(site)) return ctx.fn.emitAlloca(`${info.name}.obj`, structTypeName(info), 8);
   const raw = ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_alloc_struct")}(i64 ${info.size})`);
   return ctx.fn.emitValue(`bitcast i8* ${raw} to ${structTypeName(info)}*`);
 }
@@ -93,7 +102,7 @@ const emitThis: ExpressionEmitter = () => "%this";
 const emitObjectLiteral: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.ObjectLiteralExpression;
   const info = structInfo(ctx.program, ctx.typeOf(expr));
-  const obj = allocate(ctx, info);
+  const obj = allocate(ctx, info, expr);
   for (const prop of expr.properties) {
     const p = prop as ts.PropertyAssignment | ts.ShorthandPropertyAssignment;
     const field = info.fieldsByName.get((p.name as ts.Identifier).text)!;
@@ -139,7 +148,7 @@ methodCallEmitters.struct = (ctx, expr) => {
 
 newEmitters["*"] = (ctx, expr) => {
   const info = structInfo(ctx.program, ctx.typeOf(expr));
-  const obj = allocate(ctx, info);
+  const obj = allocate(ctx, info, expr);
   if (info.ctor) emitMethodCall(ctx, info.ctor, obj, expr.arguments ?? []);
   else emitFieldInitializers(ctx, info, obj);
   return obj;
@@ -228,10 +237,14 @@ function isMethodCallee(node: ts.PropertyAccessExpression): boolean {
  *   field read        readsMemory
  *   field store       write
  *   new / literal     write, calls the inline allocator (and the constructor)
+ * A stack object (WP6) is the function's own alloca: its allocation and the
+ * field accesses through a local that only ever holds it are not memory
+ * effects. The constructor call still is whatever the constructor does.
  */
 export const collectClassFacts = (program: CheckedProgram, node: ts.Node, facts: MemoryFacts): void => {
   if (ts.isPropertyAccessExpression(node) && program.types.get(node.expression)?.kind === "struct") {
     if (isMethodCallee(node)) return; // the call itself is reported through `program.callees`
+    if (isStackOwned(program, facts, node.expression)) return; // own alloca (WP6)
     const parent = node.parent;
     const isTarget = ts.isBinaryExpression(parent) && parent.left === node && isAssignmentOperator(parent.operatorToken.kind);
     if (isTarget) {
@@ -241,11 +254,13 @@ export const collectClassFacts = (program: CheckedProgram, node: ts.Node, facts:
       facts.readsMemory = true;
     }
   } else if (ts.isNewExpression(node) && program.types.get(node)?.kind === "struct") {
-    facts.effect = "write";
-    facts.callees.add("sts_alloc_struct");
+    if (!facts.stackSites.has(node)) {
+      facts.effect = "write";
+      facts.callees.add("sts_alloc_struct");
+    }
     const info = structInfo(program, program.types.get(node)!);
     if (info.ctor) facts.callees.add(info.ctor.name);
-  } else if (ts.isObjectLiteralExpression(node)) {
+  } else if (ts.isObjectLiteralExpression(node) && !facts.stackSites.has(node)) {
     facts.effect = "write";
     facts.callees.add("sts_alloc_struct");
   }

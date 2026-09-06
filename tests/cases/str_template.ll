@@ -6,6 +6,8 @@
 @.str.5 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"answer\00" }, align 8
 @.str.6 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"solo\00" }, align 8
 
+declare noundef i64 @sts_arena_mark() #0
+declare void @sts_arena_release(i64 noundef) #0
 declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
@@ -24,12 +26,14 @@ entry:
 
 define noundef i32 @test() #0 {
 entry:
+  %arena.mark = call i64 @sts_arena_mark()
   %0 = call i8* @describe(i32 42, i1 true, i8* bitcast ({ i64, [7 x i8] }* @.str.5 to i8*))
   call void @sts_print(i8* %0)
   call void @sts_print(i8* bitcast ({ i64, [5 x i8] }* @.str.6 to i8*))
   %1 = add i32 1, 2
   %2 = call i8* @sts_str_from_i32(i32 %1)
   call void @sts_print(i8* %2)
+  call void @sts_arena_release(i64 %arena.mark)
   ret i32 0
 }
 

@@ -292,6 +292,52 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   }
 }
 
+// ---- WP6: memory --------------------------------------------------------------------
+// 1. Every mem_ module passes the IR verifier (allocas, scope calls, null compares).
+// 2. mem_stack_struct.ts has no arena allocation left: every object is an alloca, so the
+//    module never references sts_alloc_struct (and therefore emits no arena prelude).
+// 3. mem_scope_dynamic_array.ts builds a `new Array<number>(n)` per call and is called
+//    100000 times: the function's automatic arena scope releases each one, so the two
+//    `Arena.used()` lines (before and after the loop) must be identical, with no
+//    OS-specific RSS tooling involved. mem_stack_loop / mem_scope_string_temp print
+//    their own `true` for the same property (checked by their .out files).
+// 4. --no-stack-alloc keeps every object in the arena: the same source then does
+//    reference sts_alloc_struct, and still runs to the same output.
+if (!only || "memory".includes(only) || only.startsWith("mem")) {
+  if (HAS_OPT) {
+    for (const name of cases.filter((c) => c.startsWith("mem_") && (!only || c.includes(only)))) {
+      const ll = path.join(buildDir, `${name}.ll`);
+      if (!fs.existsSync(ll)) continue;
+      const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll]);
+      check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr));
+    }
+  }
+  const stackLl = path.join(buildDir, "mem_stack_struct.ll");
+  if (fs.existsSync(stackLl)) {
+    const ir = fs.readFileSync(stackLl, "utf8");
+    check("mem_stack_struct: no sts_alloc_struct and no arena prelude, five `alloca %struct.` objects",
+      !ir.includes("sts_alloc_struct") && !ir.includes("@sts_arena =") && (ir.match(/= alloca %struct\.(Pair|Point|Counter), align 8/g) ?? []).length === 5, ir);
+  }
+  const noStackLl = path.join(buildDir, "mem_stack_struct_nostack.ll");
+  const ns = spawnSync("node", [cli, path.join(casesDir, "mem_stack_struct.ts"), "--no-stack-alloc", "-o", noStackLl], { cwd: root });
+  const nsIr = ns.status === 0 ? fs.readFileSync(noStackLl, "utf8") : "";
+  check("--no-stack-alloc puts mem_stack_struct's objects back in the arena",
+    ns.status === 0 && nsIr.includes("call i8* @sts_alloc_struct(i64 8)") && !/alloca %struct\.(Pair|Point|Counter), align/.test(nsIr), String(ns.stderr) || nsIr);
+  if (HAS_CLANG && ns.status === 0) {
+    const exe = path.join(buildDir, "mem_stack_struct_nostack");
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", noStackLl, "runtime/runtime.c", "-o", exe], { cwd: root });
+    const run = cc.status === 0 ? spawnSync(exe) : null;
+    check("mem_stack_struct with --no-stack-alloc prints the same output", run !== null && String(run.stdout).trim() === "21\n7\n22", run ? String(run.stdout) + String(run.stderr) : String(cc.stderr));
+  }
+  const scopeExe = path.join(buildDir, "mem_scope_dynamic_array");
+  if (HAS_CLANG && fs.existsSync(scopeExe)) {
+    const run = spawnSync(scopeExe);
+    const lines = String(run.stdout).trim().split("\n");
+    check("mem_scope_dynamic_array: Arena.used() is identical before and after 100000 scoped calls (arena stays flat)",
+      run.status === 0 && lines.length === 4 && lines[1] === lines[3], String(run.stdout) + String(run.stderr));
+  }
+}
+
 // ---- WP2: layout -------------------------------------------------------------------
 // tests/layout/structs.ts declares ten classes; tests/layout/structs.c declares the same
 // C structs with `_Static_assert(sizeof(struct X) == N)`. The compiler's size for each

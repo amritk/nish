@@ -132,6 +132,7 @@ const LITERAL_CONTEXT_CALLS: Record<string, "other" | StaticType> = {
   "Math.min": "other",
   "Math.max": "other",
   "process.exit": I32,
+  "Arena.release": I64, // WP6: `Arena.release(0)` reads naturally
   toF64: F64, // so `toF64(2.75)` is legal in i32 mode; toI32/toI64 leave integer literals alone
 };
 

@@ -5,6 +5,8 @@
 
 declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #3
 declare void @sts_free_arena() #0
+declare noundef i64 @sts_arena_mark() #0
+declare void @sts_arena_release(i64 noundef) #0
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @sts_str_from_f64(double noundef) #0
 
@@ -109,6 +111,7 @@ define noundef nonnull align 8 dereferenceable(24) %struct.Vec3* @centroid(doubl
 entry:
   %acc.addr = alloca %struct.Vec3*, align 8
   %i.addr = alloca double, align 8
+  %Vec3.obj = alloca %struct.Vec3, align 8
   %0 = call i8* @sts_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.Vec3*
   call void @Vec3.constructor(%struct.Vec3* %1, double 0x0000000000000000, double 0x0000000000000000, double 0x0000000000000000)
@@ -123,27 +126,27 @@ for.cond:
 
 for.body:
   %4 = load %struct.Vec3*, %struct.Vec3** %acc.addr, align 8
-  %5 = call i8* @sts_alloc_struct(i64 24)
-  %6 = bitcast i8* %5 to %struct.Vec3*
-  call void @Vec3.constructor(%struct.Vec3* %6, double 0x3FF0000000000000, double 0x4000000000000000, double 0x4008000000000000)
-  %7 = call %struct.Vec3* @Vec3.scaled(%struct.Vec3* %6, double 0x3FE0000000000000)
-  call void @Vec3.addInPlace(%struct.Vec3* %4, %struct.Vec3* %7)
+  call void @Vec3.constructor(%struct.Vec3* %Vec3.obj, double 0x3FF0000000000000, double 0x4000000000000000, double 0x4008000000000000)
+  %5 = call %struct.Vec3* @Vec3.scaled(%struct.Vec3* %Vec3.obj, double 0x3FE0000000000000)
+  call void @Vec3.addInPlace(%struct.Vec3* %4, %struct.Vec3* %5)
   br label %for.inc
 
 for.inc:
-  %8 = load double, double* %i.addr, align 8
-  %9 = fadd double %8, 0x3FF0000000000000
-  store double %9, double* %i.addr, align 8
+  %6 = load double, double* %i.addr, align 8
+  %7 = fadd double %6, 0x3FF0000000000000
+  store double %7, double* %i.addr, align 8
   br label %for.cond
 
 for.end:
-  %10 = load %struct.Vec3*, %struct.Vec3** %acc.addr, align 8
-  ret %struct.Vec3* %10
+  %8 = load %struct.Vec3*, %struct.Vec3** %acc.addr, align 8
+  ret %struct.Vec3* %8
 }
 
 define void @sts_main() #2 {
 entry:
   %c.addr = alloca %struct.Vec3*, align 8
+  %Vec3.obj = alloca %struct.Vec3, align 8
+  %arena.mark = call i64 @sts_arena_mark()
   %0 = call %struct.Vec3* @centroid(double 0x4010000000000000)
   store %struct.Vec3* %0, %struct.Vec3** %c.addr, align 8
   %1 = load %struct.Vec3*, %struct.Vec3** %c.addr, align 8
@@ -162,12 +165,11 @@ entry:
   %12 = call i8* @sts_str_from_f64(double %11)
   call void @sts_print(i8* %12)
   %13 = load %struct.Vec3*, %struct.Vec3** %c.addr, align 8
-  %14 = call i8* @sts_alloc_struct(i64 24)
-  %15 = bitcast i8* %14 to %struct.Vec3*
-  call void @Vec3.constructor(%struct.Vec3* %15, double 0x3FF0000000000000, double 0x3FF0000000000000, double 0x3FF0000000000000)
-  %16 = call double @Vec3.dot(%struct.Vec3* %13, %struct.Vec3* %15)
-  %17 = call i8* @sts_str_from_f64(double %16)
-  call void @sts_print(i8* %17)
+  call void @Vec3.constructor(%struct.Vec3* %Vec3.obj, double 0x3FF0000000000000, double 0x3FF0000000000000, double 0x3FF0000000000000)
+  %14 = call double @Vec3.dot(%struct.Vec3* %13, %struct.Vec3* %Vec3.obj)
+  %15 = call i8* @sts_str_from_f64(double %14)
+  call void @sts_print(i8* %15)
+  call void @sts_arena_release(i64 %arena.mark)
   ret void
 }
 

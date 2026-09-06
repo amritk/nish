@@ -9,7 +9,7 @@
  * wrong attribute, so every emitter that touches memory must have one.
  */
 import ts from "typescript";
-import { CheckedProgram } from "../../checker";
+import { CheckedProgram, LocalVar } from "../../checker";
 import { CompilerOptions, StaticType } from "../../types";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
 
@@ -22,6 +22,20 @@ export interface MemoryFacts {
   readsMemory: boolean;
   effect: "none" | "read" | "write";
   callees: Set<string>;
+  /** WP6: allocations lowered to allocas; stores into them are own memory, not an allocator call. */
+  stackSites: Set<ts.Node>;
+  /** WP6: locals that only ever hold a stack object; a field access through one is own memory. */
+  stackLocals: Set<LocalVar>;
+}
+
+/** WP6: `expr` denotes a stack object: a stack allocation itself, or a local that only holds one. */
+export function isStackOwned(program: CheckedProgram, facts: MemoryFacts, expr: ts.Expression): boolean {
+  let e = expr;
+  while (ts.isParenthesizedExpression(e)) e = e.expression;
+  if (facts.stackSites.has(e)) return true;
+  if (!ts.isIdentifier(e)) return false;
+  const local = program.bindings.get(e);
+  return local !== undefined && facts.stackLocals.has(local);
 }
 export type FactCollector = (program: CheckedProgram, node: ts.Node, facts: MemoryFacts, opts: CompilerOptions) => void;
 

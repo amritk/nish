@@ -1,3 +1,5 @@
+declare noundef i64 @sts_arena_mark() #1
+declare void @sts_arena_release(i64 noundef) #1
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @sts_str_from_f64(double noundef) #1
 declare double @llvm.sqrt.f64(double) #0
@@ -32,6 +34,7 @@ entry:
 
 define noundef i32 @test() #1 {
 entry:
+  %arena.mark = call i64 @sts_arena_mark()
   %0 = call double @hypot(double 0x4008000000000000, double 0x4010000000000000)
   %1 = call i8* @sts_str_from_f64(double %0)
   call void @sts_print(i8* %1)
@@ -93,6 +96,7 @@ entry:
   call void @sts_print(i8* %44)
   %45 = call i8* @sts_str_from_f64(double 0x400921FB54442D18)
   call void @sts_print(i8* %45)
+  call void @sts_arena_release(i64 %arena.mark)
   ret i32 0
 }
 

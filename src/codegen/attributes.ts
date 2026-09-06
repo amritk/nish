@@ -80,6 +80,20 @@
  *               `for...of` source, `===` operand, or a direct argument to a
  *               callee that does not capture it.
  *
+ *   Nullable params (`T | null`, WP6): as the pointer kind above minus
+ *     `nonnull` and `dereferenceable`, which a null value would violate;
+ *     `align 8` stays (null is aligned to every power of two).
+ *
+ * Memory strategy (WP6, `escape.ts`): the analysis also decides which
+ * allocation sites become entry-block allocas (`stackSites`) and which
+ * functions bracket their body with `sts_arena_mark` / `sts_arena_release`
+ * (`arenaScope`). Both need the `pointerParams` fixpoint (does a callee
+ * capture the object?), so `analyzeFunctions` runs the fixpoint, decides,
+ * then re-collects the facts with the decisions applied (an allocation that
+ * moved to the stack is no longer a write or an allocator call, and a field
+ * access through a local that only ever holds a stack object is own memory)
+ * and runs the fixpoint again.
+ *
  * Cross-module facts (WP5): the analysis runs over *every* module of a
  * program at once, keyed by LLVM symbol, so a caller in `main.ts` sees the
  * same purity facts for an imported `square` as `math.ts` proved for its
@@ -89,11 +103,12 @@
  * program (the Compilation rejects clashes), so one map suffices.
  */
 import ts from "typescript";
-import { CheckedProgram, FunctionSig, Param } from "../checker";
+import { CheckedProgram, FunctionSig, LocalVar, Param } from "../checker";
 import { isAssignmentOperator } from "../checker/classes";
 import { unwrapParens } from "../checker/control-flow";
-import { CompilerOptions, DEFAULT_OPTIONS, StaticType } from "../types";
+import { CompilerOptions, DEFAULT_OPTIONS, StaticType, stripNull } from "../types";
 import { isPushCall } from "./emit/arrays";
+import { CallSite, EscapeResult, analyzeEscapes } from "./escape";
 import { collectBuiltinFacts } from "./emit/expressions";
 import { factCollectors } from "./emit/members";
 import { collectStringFacts, unwrapStringPassthrough } from "./emit/strings";
@@ -139,6 +154,25 @@ export interface FunctionFacts {
   freshThis: boolean;
   /** `sizeof` the returned struct, when the return type is a struct. */
   returnDeref?: number;
+  // ---- WP6 memory strategy (see escape.ts) ----
+  /** Allocation expressions lowered to entry-block allocas. */
+  stackSites: Set<ts.Node>;
+  /** Locals that only ever hold a stack object: accesses through them are own memory. */
+  stackLocals: Set<LocalVar>;
+  /** Bracket the body with `sts_arena_mark` / `sts_arena_release`. Decided after the fixpoint. */
+  arenaScope: boolean;
+  /** Performs an arena allocation, directly or through a callee (fixpoint). */
+  allocates: boolean;
+  /** The body has an arena allocation of its own that flows `local` (something to release). */
+  directArena: boolean;
+  /** An allocation may survive the call other than through the return value (fixpoint over callees). */
+  allocLeaks: boolean;
+  /** An allocation of this function is returned: the caller owns it, so no scope here. */
+  returnsAllocation: boolean;
+  /** Calls `Arena.reset` / `Arena.release`, directly or through a callee (fixpoint). */
+  usesArenaControl: boolean;
+  /** Calls to pointer-returning user functions and where each result flows. */
+  callSites: CallSite[];
 }
 
 const EFFECT_RANK: Record<MemoryEffect, number> = { none: 0, read: 1, write: 2 };
@@ -176,11 +210,36 @@ export function analyzeFunctions(
   opts: CompilerOptions = DEFAULT_OPTIONS
 ): Map<string, FunctionFacts> {
   const list = Array.isArray(programs) ? (programs as readonly CheckedProgram[]) : [programs as CheckedProgram];
-  const facts = new Map<string, FunctionFacts>();
+  const collect = (escapes?: Map<string, EscapeResult>) => {
+    const facts = new Map<string, FunctionFacts>();
+    for (const program of list) {
+      for (const sig of program.functions) facts.set(sig.name, collectFacts(program, sig, opts, escapes?.get(sig.name)));
+    }
+    return facts;
+  };
+  // Round 1: plain facts and the capture fixpoint, which the escape analysis needs.
+  const first = collect();
+  propagate(first);
+  const escapes = new Map<string, EscapeResult>();
   for (const program of list) {
-    for (const sig of program.functions) facts.set(sig.name, collectFacts(program, sig, opts));
+    for (const sig of program.functions) escapes.set(sig.name, analyzeEscapes(program, sig, first, opts));
   }
+  // Round 2: the same facts with stack allocations applied, then the scope decision.
+  const facts = collect(escapes);
+  propagate(facts);
+  for (const f of facts.values()) {
+    f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl;
+    if (f.arenaScope) {
+      // Both are `willreturn` and the function already writes (it allocates), so nothing else moves.
+      f.callees.add("sts_arena_mark");
+      f.callees.add("sts_arena_release");
+    }
+  }
+  return facts;
+}
 
+/** Propagate effects, termination, pointer facts and allocation facts over the call graph to a fixpoint. */
+function propagate(facts: Map<string, FunctionFacts>): void {
   let changed = true;
   while (changed) {
     changed = false;
@@ -205,6 +264,33 @@ export function analyzeFunctions(
           f.willReturn = false;
           changed = true;
         }
+        // WP6: allocation facts flow up the call graph (see escape.ts).
+        if (calleeFacts?.allocates && !f.allocates) {
+          f.allocates = true;
+          changed = true;
+        }
+        if (calleeFacts?.allocLeaks && !f.allocLeaks) {
+          f.allocLeaks = true;
+          changed = true;
+        }
+        if (calleeFacts?.usesArenaControl && !f.usesArenaControl) {
+          f.usesArenaControl = true;
+          changed = true;
+        }
+      }
+      // A pointer-returning callee that allocates makes its result an allocation of this function.
+      for (const site of f.callSites) {
+        if (!facts.get(site.callee)?.allocates) continue;
+        if (site.flow === "local" && !f.directArena) {
+          f.directArena = true;
+          changed = true;
+        } else if (site.flow === "returned" && !f.returnsAllocation) {
+          f.returnsAllocation = true;
+          changed = true;
+        } else if (site.flow === "leaks" && !f.allocLeaks) {
+          f.allocLeaks = true;
+          changed = true;
+        }
       }
       // A pointer inherits what every callee it is passed to does with the
       // corresponding parameter (only user functions take struct or array
@@ -227,7 +313,6 @@ export function analyzeFunctions(
       }
     }
   }
-  return facts;
 }
 
 // ---- Escape classification --------------------------------------------------------------
@@ -362,7 +447,18 @@ function structSize(program: CheckedProgram, t: StaticType): number | undefined 
   return t.kind === "struct" ? program.structs.get(t.name)?.size : undefined;
 }
 
-function collectFacts(program: CheckedProgram, sig: FunctionSig, opts: CompilerOptions): FunctionFacts {
+/** Struct and array params, plain or `T | null` (WP6), get pointer facts. */
+function isPointerParam(t: StaticType): boolean {
+  const inner = stripNull(t);
+  return inner.kind === "struct" || inner.kind === "array";
+}
+
+/**
+ * Per-function facts from one walk of the body. `memory` (round 2, see
+ * `analyzeFunctions`) tells the collectors which allocations are allocas and
+ * which locals hold them, and carries the allocation facts into the result.
+ */
+function collectFacts(program: CheckedProgram, sig: FunctionSig, opts: CompilerOptions, memory?: EscapeResult): FunctionFacts {
   const facts: FunctionFacts = {
     hasLoops: false,
     readsMemory: false,
@@ -377,12 +473,23 @@ function collectFacts(program: CheckedProgram, sig: FunctionSig, opts: CompilerO
     pointerParams: new Map(),
     freshThis: sig.role === "constructor",
     returnDeref: structSize(program, sig.returnType),
+    stackSites: memory?.stackSites ?? new Set(),
+    stackLocals: memory?.stackLocals ?? new Set(),
+    arenaScope: false,
+    allocates: memory?.directArena ?? false,
+    directArena: memory?.directArena ?? false,
+    allocLeaks: memory?.allocLeaks ?? false,
+    returnsAllocation: memory?.returnsAllocation ?? false,
+    usesArenaControl: memory?.usesArenaControl ?? false,
+    callSites: memory?.callSites ?? [],
   };
+  // A `returned` or `leaked` allocation is still an allocation.
+  if (facts.returnsAllocation || facts.allocLeaks) facts.allocates = true;
   const paramNames = new Set(facts.paramNames);
   for (const p of sig.params) {
-    if (p.type.kind === "struct" || p.type.kind === "array") {
+    if (isPointerParam(p.type)) {
       facts.pointerParams.set(p.name, {
-        size: structSize(program, p.type) ?? 0,
+        size: structSize(program, stripNull(p.type)) ?? 0,
         writesThrough: false,
         captured: false,
         passedTo: [],
@@ -616,6 +723,12 @@ export function paramAttributes(p: Param, f: FunctionFacts): string[] {
       if (pointer && pointer.size > 0) attrs.push(`dereferenceable(${pointer.size})`);
       if (pointer && !pointer.captured) attrs.push("nocapture");
       break;
+    case "nullable": // WP6: no `nonnull` / `dereferenceable`; the rest as for the pointee kind
+      if (p.type.inner.kind === "string") attrs.push("noalias", "readonly");
+      else if (pointer && !pointer.writesThrough && !pointer.captured) attrs.push("readonly");
+      attrs.push("align 8");
+      if (pointer ? !pointer.captured : !f.escaping.has(p.name)) attrs.push("nocapture");
+      break;
   }
   return attrs;
 }
@@ -632,6 +745,8 @@ export function returnAttributes(t: StaticType, deref?: number): string[] {
       return ["noundef", "nonnull", "align 8"];
     case "struct":
       return ["noundef", "nonnull", "align 8", ...(deref ? [`dereferenceable(${deref})`] : [])];
+    case "nullable":
+      return ["noundef", "align 8"]; // WP6: may be null
     default:
       return ["noundef"];
   }

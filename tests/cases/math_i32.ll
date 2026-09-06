@@ -1,3 +1,5 @@
+declare noundef i64 @sts_arena_mark() #1
+declare void @sts_arena_release(i64 noundef) #1
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @sts_str_from_f64(double noundef) #1
@@ -15,6 +17,7 @@ entry:
 define noundef i32 @test() #1 {
 entry:
   %tau.addr = alloca double, align 8
+  %arena.mark = call i64 @sts_arena_mark()
   %0 = sub i32 0, 7
   %1 = call i32 @llvm.abs.i32(i32 %0, i1 false)
   %2 = call i8* @sts_str_from_i32(i32 %1)
@@ -39,6 +42,7 @@ entry:
   %15 = call i8* @sts_str_from_f64(double %14)
   call void @sts_print(i8* %15)
   %16 = call i32 @clamp(i32 5, i32 0, i32 10)
+  call void @sts_arena_release(i64 %arena.mark)
   ret i32 %16
 }
 

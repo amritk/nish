@@ -95,6 +95,7 @@ function usage(): never {
       "  --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports",
       "  --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)",
       "  --unchecked-indexing       drop array bounds checks (unsafe; for benchmarks)",
+      "  --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)",
       "  -v, --version              print the statictsc version and exit",
       "exit codes: 0 ok, 1 compile error, 2 usage, 3 toolchain (clang / build.sh), 70 internal error",
     ].join("\n")
@@ -150,6 +151,7 @@ function main(argv: string[]): number {
   let emitDts: string | undefined;
   let emitNapi: string | undefined;
   let uncheckedIndexing = false;
+  let stackAlloc = true;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -184,6 +186,8 @@ function main(argv: string[]): number {
       runtimeDecls = true;
     } else if (arg === "--unchecked-indexing") {
       uncheckedIndexing = true;
+    } else if (arg === "--no-stack-alloc") {
+      stackAlloc = false;
     } else if (arg === "-h" || arg === "--help") {
       usage();
     } else if (arg === "-v" || arg === "--version") {
@@ -209,7 +213,7 @@ function main(argv: string[]): number {
     }
   }
 
-  const compilation = new Compilation({ numberMode, optimizeAttributes, runtimeDecls, strictExports, uncheckedIndexing });
+  const compilation = new Compilation({ numberMode, optimizeAttributes, runtimeDecls, strictExports, uncheckedIndexing, stackAlloc });
   try {
     // Test hook for the internal-error path (tests/run.js, WP12 block); not a user feature.
     if (process.env.STATICTSC_SIMULATE_ICE) throw new TypeError("simulated internal compiler error");

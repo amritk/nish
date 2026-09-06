@@ -20,7 +20,9 @@ import ts from "typescript";
 import { BOOL, F64, I32, STRING, StaticType, VOID, isNumeric, sameType, typeToString } from "../types";
 import { BuiltinCallChecker, dottedName } from "./builtins";
 import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context";
+import { arenaBuiltinCalls } from "./arena";
 import { namespaceProperties, propertyCheckers } from "./members";
+import { checkNullableComparison } from "./nullable";
 import { ioBuiltinCalls } from "./io";
 import { mathBuiltinCalls, mathBuiltinProperties } from "./math";
 import { Scope } from "./scope";
@@ -75,7 +77,10 @@ const checkPlus: BinaryChecker = (ctx, expr, scope) => {
   );
 };
 
-/** `===` / `!==`: any primitive against the same primitive; strings compare by content. */
+/**
+ * `===` / `!==`: any primitive against the same primitive; strings compare by
+ * content; a `T | null` value compares with the literal `null` by pointer (WP6).
+ */
 const checkStrictEquality: BinaryChecker = (ctx, expr, scope) => {
   const lhs = ctx.checkExpression(expr.left, scope);
   const rhs = ctx.checkExpression(expr.right, scope);
@@ -85,6 +90,7 @@ const checkStrictEquality: BinaryChecker = (ctx, expr, scope) => {
       expr
     );
   }
+  checkNullableComparison(ctx, expr, lhs);
   return BOOL;
 };
 
@@ -109,6 +115,7 @@ export const builtinCalls: Record<string, BuiltinCallChecker> = {
   "console.log": checkConsoleLog,
   ...mathBuiltinCalls, // WP7: Math.sqrt, ..., Math.random
   ...ioBuiltinCalls, // WP7: process.exit
+  ...arenaBuiltinCalls, // WP6: Arena.reset / mark / release / used
 };
 
 /** Entry point for `checkCall` when the callee is a property access. */

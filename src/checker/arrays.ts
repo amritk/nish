@@ -22,7 +22,7 @@
  * other target keeps going to the previous handler.
  */
 import ts from "typescript";
-import { F64, I32, StaticType, arrayOf, isNumeric, llvmType, resolveTypeNode, sameType, typeToString } from "../types";
+import { F64, I32, StaticType, arrayOf, assignable, isNumeric, llvmType, resolveTypeNode, sameType, typeToString } from "../types";
 import {
   BinaryChecker,
   CheckContext,
@@ -32,6 +32,7 @@ import {
   StatementChecker,
 } from "./context";
 import { isValueReceiver, methodCallCheckers, newCheckers, propertyCheckers } from "./members";
+import { invalidateNarrowings } from "./nullable";
 import { LocalVar } from "./program";
 import { Scope } from "./scope";
 
@@ -126,6 +127,9 @@ const checkArrayLiteral: ExpressionChecker = (ctx, node, scope) => {
 const checkElementAccess: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.ElementAccessExpression;
   const base = ctx.checkExpression(expr.expression, scope);
+  if (base.kind === "nullable") {
+    throw ctx.error(`Cannot index \`${typeToString(base)}\`; check for null first: \`if (a !== null) { ... }\``, expr.expression);
+  }
   if (base.kind !== "array") {
     throw ctx.error(`Cannot index a value of type ${typeToString(base)} (only arrays can be indexed)`, expr.expression);
   }
@@ -153,7 +157,7 @@ methodCallCheckers.array = (ctx, expr, receiver, scope) => {
     throw ctx.error(`\`push\` expects exactly 1 argument, got ${expr.arguments.length}`, expr);
   }
   const t = ctx.checkExpression(expr.arguments[0], scope);
-  if (!sameType(t, receiver.elem)) {
+  if (!assignable(t, receiver.elem)) {
     throw ctx.error(`Cannot push ${typeToString(t)} onto ${typeToString(receiver)}`, expr.arguments[0]);
   }
   return numberType(ctx);
@@ -166,9 +170,10 @@ newCheckers.Array = (ctx, expr, scope) => {
   }
   const elem = resolveTypeNode(expr.typeArguments[0], ctx.sf, ctx.opts);
   if (elem.kind === "void") throw ctx.error("Array elements cannot be void", expr.typeArguments[0]);
-  // Zero-filling is only a valid value for scalars; a zeroed pointer would be a
-  // null string / array, which StaticTS has no way to represent or check for.
-  if (llvmType(elem).endsWith("*")) {
+  // Zero-filling is only a valid value for scalars and for `T | null` (a zero
+  // pointer *is* `null`, WP6); a zeroed plain string / array would be a null
+  // value StaticTS has no way to represent or check for.
+  if (llvmType(elem).endsWith("*") && elem.kind !== "nullable") {
     throw ctx.error(
       `\`new Array<${typeToString(elem)}>(n)\` would zero-fill with null ${typeToString(elem)} values; build it with \`[]\` and \`push\` instead`,
       expr
@@ -190,7 +195,7 @@ function checkElementAssignment(ctx: CheckContext, expr: ts.BinaryExpression, sc
   const rhs = ctx.checkExpression(expr.right, scope);
   const op = expr.operatorToken.kind;
   if (op === ts.SyntaxKind.EqualsToken) {
-    if (!sameType(rhs, elem)) {
+    if (!assignable(rhs, elem)) {
       throw ctx.error(
         `Cannot assign ${typeToString(rhs)} to an element of ${typeToString(ctx.program.types.get((expr.left as ts.ElementAccessExpression).expression)!)}`,
         expr.right
@@ -253,6 +258,7 @@ const checkForOf: StatementChecker = (ctx, node, scope) => {
   if (decl.type) throw ctx.error("The `for...of` variable takes the element type; remove the annotation", decl.type);
   if (decl.initializer) throw ctx.error("The `for...of` variable cannot have an initializer", decl.initializer);
 
+  invalidateNarrowings(scope, stmt); // WP6: an assignment in the body ends a `p !== null` narrowing
   const iterable = ctx.checkExpression(stmt.expression, scope);
   if (iterable.kind !== "array") {
     throw ctx.error(`\`for...of\` requires an array, got ${typeToString(iterable)}`, stmt.expression);

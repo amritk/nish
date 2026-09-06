@@ -45,6 +45,18 @@ export interface EmitContext {
   /** Add a module-level named type (`%struct.x = type {...}`); duplicates are ignored. */
   declareType(text: string): void;
 
+  /**
+   * WP6: the allocation expression (`new`, object literal, array literal,
+   * `new Array<T>(<literal>)`) was proved not to outlive the function and is
+   * lowered to an entry-block `alloca` instead of an arena bump (escape.ts).
+   */
+  isStackSite(node: ts.Node): boolean;
+  /**
+   * WP6: emit the arena release of the function's automatic scope, if it has
+   * one. Called right before every `ret`, after the return value is computed.
+   */
+  emitScopeExit(): void;
+
   emitStatement(stmt: ts.Statement): void;
   emitBlock(block: ts.Block): void;
   /** Lower an expression and return the LLVM value holding its result. */
