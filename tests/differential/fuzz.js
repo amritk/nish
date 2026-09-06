@@ -67,7 +67,7 @@ function generateProgram(seed, opts = {}) {
   let callable = 0;
   function intExpr(d, env, mutable) {
     if (d <= 0 || r.chance(0.2)) {
-      return env.length && r.chance(0.6) ? r.pick(env) : literal();
+      return env.length > 0 && r.chance(0.6) ? r.pick(env) : literal();
     }
     const sub = () => intExpr(d - 1, env, mutable);
     switch (r.int(0, 13)) {
@@ -96,10 +96,10 @@ function generateProgram(seed, opts = {}) {
         if (callable > 0) return `h${r.int(0, callable - 1)}(${sub()}, ${sub()})`;
         return sub();
       case 11:
-        if (mutable.length) return `${r.pick(mutable)}${r.pick(["++", "--"])}`;
+        if (mutable.length > 0) return `${r.pick(mutable)}${r.pick(["++", "--"])}`;
         return sub();
       case 12:
-        if (mutable.length) return `${r.pick(["++", "--"])}${r.pick(mutable)}`;
+        if (mutable.length > 0) return `${r.pick(["++", "--"])}${r.pick(mutable)}`;
         return sub();
       default:
         return `(${sub()} - ${literal()})`;
@@ -109,7 +109,7 @@ function generateProgram(seed, opts = {}) {
   function boolExpr(d, env, mutable) {
     const sub = () => intExpr(d, env, mutable);
     if (d <= 0 || r.chance(0.15)) {
-      if (boolEnv.length && r.chance(0.5)) return r.pick(boolEnv);
+      if (boolEnv.length > 0 && r.chance(0.5)) return r.pick(boolEnv);
       return r.pick(["true", "false"]);
     }
     switch (r.int(0, 8)) {

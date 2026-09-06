@@ -125,10 +125,52 @@ in the test name.
 ## Biome
 
 Biome (`biome.json`) is configured as a formatter and style linter for the
-compiler's own source, `tests/**/*.js`, and `examples/**`. It never
-influences compilation. `npm run lint` runs `biome check` with the formatter
-check disabled so that files not yet formatted to the shared style do not
-fail the gate; `npm run format` rewrites files in place. Two style rules are
-turned off (`useImportType`, `useTemplate`) and the unused-variable rules are
-off for `examples/**`, whose files are StaticTS inputs rather than library
-code.
+compiler's own source, `tests/**/*.js`, and the StaticTS programs a reader
+is meant to learn from: `examples/**`, `docs/cookbook/**`, `bench/**/*.ts`.
+It never influences compilation. `npm run lint` runs `biome check` with the
+formatter check disabled so that files not yet formatted to the shared style
+do not fail the gate; `npm run format` rewrites files in place.
+
+The rule set is the recommended preset plus the rules that mirror what the
+validator refuses, so that the compiler's own source and the example programs
+read like the language: `noVar`, `noExplicitAny`, `noEnum`, `noNamespace`,
+`noVoid`, `noParameterAssign` (parameters are immutable in StaticTS),
+`useExplicitLengthCheck` (there is no truthiness), `useConsistentArrayType`
+(`T[]`), and `useFilenamingConvention` (kebab-case for the compiler, snake_case
+for StaticTS programs). Two recommended rules are turned *off* because they
+push code towards constructs StaticTS rejects: `useOptionalChain` (`?.`) and
+`useExponentiationOperator` (`**`). `useImportType`, `useTemplate` and
+`noNonNullAssertion` are off as a matter of house style.
+
+A second group is house style rather than language mirroring: `type` over
+`interface`, and a function written as an arrow bound to a `const`. Three of
+them are clean today and are errors — `useArrowFunction` (a function
+*expression* becomes an arrow), `useShorthandFunctionType` and
+`useConsistentArrowReturn`. Three have a backlog and are therefore `warn`:
+`useConsistentTypeDefinitions` (`type`, never `interface`),
+`useConsistentMethodSignatures` (a member holding a function is a property,
+which is also checked more strictly than method shorthand), and the
+`biome-plugins/no-function-declaration.grit` plugin.
+
+That last one is a plugin because Biome ships no built-in rule for it:
+`useArrowFunction` rewrites function *expressions* and says nothing about
+declarations. It is a GritQL pattern, scoped by an override to the compiler
+source and the JavaScript harness. Warnings do not fail `biome check`, so the
+gate stays green and the count measures the migration that is left;
+`npm run lint -- --diagnostic-level=error` hides it while looking for real
+errors.
+
+Neither applies to a StaticTS program: the language has no arrow functions and
+no `type` aliases, so `function` and `interface` are the only spellings there,
+and both rules plus the plugin are turned off for those directories. That is a
+Phase 1 limitation rather than a Phase 0 rule — the validator lets an arrow and
+a `type` alias through, and the checker's `Unsupported ... in Phase 1` fallback
+is what refuses them.
+
+For the StaticTS program directories the unused-variable rules and the
+numeric-literal rules (`noPrecisionLoss`, `noApproximativeNumericConstant`)
+are off too: those
+files are compiler inputs, and the n-body constants are the benchmark's own
+digits. Test fixtures (`tests/cases`, `tests/link`, `tests/differential/corpus`)
+are not linted at all, because a `reject_*` case exists to contain what the
+rules forbid.

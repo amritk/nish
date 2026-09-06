@@ -242,7 +242,7 @@ export function generateNapiShim(compilation: Compilation): string {
   for (const p of plans) lines.push(`${cPrototype(p.fn.sig, p.fn.writtenParams)!};`);
   lines.push("");
   for (const s of skipped) lines.push(`/* ${s} */`);
-  if (skipped.length) lines.push("");
+  if (skipped.length > 0) lines.push("");
 
   if (plans.length > 0) {
     lines.push(
