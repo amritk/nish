@@ -15,7 +15,9 @@
     "test": "npm run build && node tests/run.js",
     "size-report": "npm run build && node dist/index.js examples/add.ts -o build/add.ll && bash scripts/size-report.sh build/add.ll examples/main.c",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test:update": "npm run build && UPDATE_GOLDENS=1 node tests/run.js"
+    "test:update": "npm run build && UPDATE_GOLDENS=1 node tests/run.js",
+    "lint": "biome check --formatter-enabled=false .",
+    "format": "biome format --write ."
   },
   "engines": {
     "node": ">=18"
@@ -24,6 +26,7 @@
     "typescript": "^5.6.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.12",
     "@types/node": "^22.0.0"
   }
 }
