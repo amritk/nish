@@ -41,7 +41,9 @@ export type StaticType =
   | { kind: "f64" }
   | { kind: "bool" }
   | { kind: "string" }
-  | { kind: "void" };
+  | { kind: "void" }
+  /** A class or interface (WP2): a pointer to `%struct.<name>`, always arena-allocated and 8-aligned. */
+  | { kind: "struct"; name: string };
 
 export const I32: StaticType = { kind: "i32" };
 export const F64: StaticType = { kind: "f64" };
@@ -62,6 +64,8 @@ export function llvmType(t: StaticType): string {
       return "i8*";
     case "void":
       return "void";
+    case "struct":
+      return `%struct.${t.name}*`;
   }
 }
 
@@ -78,19 +82,39 @@ export function alignOf(t: StaticType): number {
       return 8;
     case "void":
       return 1;
+    case "struct":
+      return 8; // a pointer
   }
 }
 
 export function typeToString(t: StaticType): string {
+  if (t.kind === "struct") return t.name;
   return t.kind === "bool" ? "boolean" : t.kind;
 }
 
 export function sameType(a: StaticType, b: StaticType): boolean {
-  return a.kind === b.kind;
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "struct") return a.name === (b as { name: string }).name;
+  return true;
 }
 
 export function isNumeric(t: StaticType): boolean {
   return t.kind === "i32" || t.kind === "f64";
+}
+
+/**
+ * Named types (classes and interfaces, WP2) are declared per module. The
+ * checker registers a resolver for its source file before it resolves any
+ * annotation, and `resolveTypeNode` consults it for a bare `TypeReference`.
+ * Keying the registry by `SourceFile` keeps the signature of `resolveTypeNode`
+ * unchanged for every caller, including recursive ones (element types of
+ * arrays, for instance) that would otherwise have to thread a lookup through.
+ */
+export type NamedTypeResolver = (name: string) => StaticType | undefined;
+const namedTypeResolvers = new WeakMap<ts.SourceFile, NamedTypeResolver>();
+
+export function registerNamedTypes(sourceFile: ts.SourceFile, resolver: NamedTypeResolver): void {
+  namedTypeResolvers.set(sourceFile, resolver);
 }
 
 /**
@@ -125,9 +149,11 @@ export function resolveTypeNode(
           case "f64":
             return F64;
         }
+        const named = namedTypeResolvers.get(sourceFile)?.(ref.typeName.text);
+        if (named) return named;
       }
       throw new CompileError(
-        `Unsupported type reference \`${ref.getText(sourceFile)}\` (Phase 1 supports number, i32, f64, boolean, string, void)`,
+        `Unsupported type reference \`${ref.getText(sourceFile)}\` (Phase 1 supports number, i32, f64, boolean, string, void, and declared classes/interfaces)`,
         node,
         sourceFile
       );

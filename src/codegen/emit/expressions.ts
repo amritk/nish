@@ -4,8 +4,10 @@
  * value (temp, parameter, or constant) that holds the expression's result.
  */
 import ts from "typescript";
+import { isAssignmentOperator } from "../../checker/classes";
 import { StaticType, llvmType } from "../../types";
-import { emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members";
+import { classExpressionEmitters } from "./classes";
+import { assignmentTargetEmitters, emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members";
 import { emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from "./strings";
 import { BinaryEmitter, EmitterTable, ExpressionEmitter, UnaryEmitter } from "./context";
 import {
@@ -116,7 +118,8 @@ export const binaryEmitters: EmitterTable<BinaryEmitter> = {
 
 const emitBinary: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.BinaryExpression;
-  const handler = binaryEmitters[expr.operatorToken.kind];
+  const op = expr.operatorToken.kind;
+  const handler = (isAssignmentOperator(op) && assignmentTargetEmitters[expr.left.kind]) || binaryEmitters[op];
   if (!handler) throw new Error(`emitter: unexpected binary operator ${ts.SyntaxKind[expr.operatorToken.kind]}`);
   return handler(ctx, expr);
 };
@@ -154,4 +157,5 @@ export const expressionEmitters: EmitterTable<ExpressionEmitter> = {
   ...stringExpressionEmitters,
   ...memberExpressionEmitters, // property access, method calls, `new` (dispatch by receiver type)
   ...controlFlowExpressionEmitters,
+  ...classExpressionEmitters, // `this`, object literals (WP2)
 };

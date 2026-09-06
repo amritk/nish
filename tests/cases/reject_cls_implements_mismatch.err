@@ -1,0 +1,1 @@
+Class `Square` does not implement `Shape`: field 1 is `width: i32` in `Shape` but `height: i32` in `Square`

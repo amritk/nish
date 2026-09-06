@@ -8,7 +8,8 @@
  */
 import ts from "typescript";
 import { BOOL, F64, I32, isNumeric, sameType, typeToString } from "../types";
-import { checkMethodCall, isValueReceiver, memberExpressionCheckers } from "./members";
+import { classExpressionCheckers, isAssignmentOperator } from "./classes";
+import { assignmentTargetCheckers, checkMethodCall, isValueReceiver, memberExpressionCheckers } from "./members";
 import { checkBuiltinCall, stringBinaryCheckers, stringExpressionCheckers } from "./strings";
 import { BinaryChecker, CheckerTable, ExpressionChecker, UnaryChecker } from "./context";
 import {
@@ -107,7 +108,9 @@ const checkArithmetic: BinaryChecker = (ctx, expr, scope) => {
 const checkComparison: BinaryChecker = (ctx, expr, scope) => {
   const lhs = ctx.checkExpression(expr.left, scope);
   const rhs = ctx.checkExpression(expr.right, scope);
-  if (!sameType(lhs, rhs) || lhs.kind === "void" || lhs.kind === "string") {
+  // Ordering is defined for numbers and booleans only; `===`/`!==` on other
+  // kinds are handled by their own overrides (strings by content, structs by identity).
+  if (!sameType(lhs, rhs) || !(isNumeric(lhs) || lhs.kind === "bool")) {
     throw ctx.error(
       `Operator \`${ts.tokenToString(expr.operatorToken.kind)}\` requires two operands of the same primitive type, got ${typeToString(lhs)} and ${typeToString(rhs)}`,
       expr
@@ -141,7 +144,9 @@ export const binaryCheckers: CheckerTable<BinaryChecker> = {
 
 const checkBinary: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.BinaryExpression;
-  const handler = binaryCheckers[expr.operatorToken.kind];
+  const op = expr.operatorToken.kind;
+  // `p.x = v` and friends dispatch on the target's kind (WP2 fields, later WP4 elements).
+  const handler = (isAssignmentOperator(op) && assignmentTargetCheckers[expr.left.kind]) || binaryCheckers[op];
   if (!handler) {
     throw ctx.error(`Unsupported binary operator \`${ts.tokenToString(expr.operatorToken.kind)}\``, expr);
   }
@@ -191,4 +196,5 @@ export const expressionCheckers: CheckerTable<ExpressionChecker> = {
   ...stringExpressionCheckers,
   ...memberExpressionCheckers, // property access, method calls, `new` (dispatch by receiver type)
   ...controlFlowExpressionCheckers,
+  ...classExpressionCheckers, // `this`, object literals (WP2)
 };

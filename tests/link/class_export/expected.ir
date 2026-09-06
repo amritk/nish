@@ -1,0 +1,3 @@
+%struct.Point = type { i32, i32 }
+declare void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture, i32 noundef, i32 noundef)
+declare noundef nonnull align 8 dereferenceable(8) %struct.Point* @Point.shifted(

@@ -243,6 +243,55 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
   }
 }
 
+// ---- WP2: layout -------------------------------------------------------------------
+// tests/layout/structs.ts declares ten classes; tests/layout/structs.c declares the same
+// C structs with `_Static_assert(sizeof(struct X) == N)`. The compiler's size for each
+// class is read from the `sts_alloc_struct(i64 N)` in its `make<X>` function and must
+// equal the C file's N; then the C program (built with -std=c11 -Wall -Wextra -Werror,
+// which validates the asserts against clang's own layout) fills every struct through
+// the C definition and reads each field back through the compiled getters, so every
+// offset is verified at run time as well. Class modules must also pass `opt -passes=verify`.
+if (!only || "layout".includes(only)) {
+  const layoutTs = path.join(root, "tests", "layout", "structs.ts");
+  const layoutC = path.join(root, "tests", "layout", "structs.c");
+  const layoutLl = path.join(buildDir, "layout_structs.ll");
+  const r = spawnSync("node", [cli, layoutTs, "-o", layoutLl], { cwd: root });
+  check("layout: tests/layout/structs.ts compiles", r.status === 0, String(r.stderr));
+  if (r.status === 0) {
+    const ir = fs.readFileSync(layoutLl, "utf8");
+    const fromIr = new Map();
+    for (const m of ir.matchAll(/^define [^\n]*@make(\w+)\([^\n]*\{\n([\s\S]*?)^\}/gm)) {
+      const alloc = m[2].match(/@sts_alloc_struct\(i64 (\d+)\)/);
+      if (alloc) fromIr.set(m[1], Number(alloc[1]));
+    }
+    const fromC = new Map();
+    for (const m of fs.readFileSync(layoutC, "utf8").matchAll(/_Static_assert\(sizeof\(struct (\w+)\) == (\d+)/g)) {
+      fromC.set(m[1], Number(m[2]));
+    }
+    const diffs = [];
+    for (const [name, size] of fromC) if (fromIr.get(name) !== size) diffs.push(`${name}: C ${size}, IR ${fromIr.get(name)}`);
+    check(`layout: compiler sizes match structs.c for ${fromC.size} structs (${[...fromC].map(([n, s]) => `${n}=${s}`).join(" ")})`,
+      fromC.size === 10 && fromIr.size === 10 && diffs.length === 0, diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`);
+    if (HAS_CLANG) {
+      const exe = path.join(buildDir, "layout_structs");
+      const cc = spawnSync("clang", ["-std=c11", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", "-O2", layoutC, layoutLl, "runtime/runtime.c", "-o", exe], { cwd: root });
+      check("layout: structs.c compiles with -std=c11 -Wall -Wextra -Werror (sizes agree with clang)", cc.status === 0, String(cc.stderr));
+      if (cc.status === 0) {
+        const run = spawnSync(exe);
+        check("layout: every field offset agrees with clang at run time", run.status === 0 && String(run.stdout).trim() === "layout ok", `${run.stdout}${run.stderr}`);
+      }
+    }
+  }
+  if (HAS_OPT) {
+    for (const name of cases.filter((c) => c.startsWith("cls_") && (!only || c.includes(only)))) {
+      const ll = path.join(buildDir, `${name}.ll`);
+      if (!fs.existsSync(ll)) continue;
+      const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll]);
+      check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr));
+    }
+  }
+}
+
 // ---- B. Pipeline checks -----------------------------------------------------------
 if (!only && HAS_CLANG) {
   const rt = spawnSync("clang", ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "runtime/runtime.c", "tests/runtime_test.c", "-o", path.join(buildDir, "runtime_test")], { cwd: root });

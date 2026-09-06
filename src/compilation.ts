@@ -153,7 +153,7 @@ export class Compilation {
           : sig.exported && prev.sig.exported
             ? `Exported function ${where}; exported names must be unique across the program`
             : `Function ${where}; without --strict-exports every function is an external symbol, so names must be unique across the program (or export exactly one of them)`;
-        throw new CompileError(message, sig.decl.name!, unit.sourceFile);
+        throw new CompileError(message, sig.decl.name ?? sig.decl, unit.sourceFile); // constructors have no name node
       }
     }
   }
