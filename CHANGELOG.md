@@ -69,5 +69,10 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `npm run smoke` (`scripts/smoke.sh`) builds and runs every example with a
   `main`; `.github/workflows/release.yml` attaches the npm tarball to a GitHub
   release on `v*` tags; `docs/INSTALL.md`.
+- **Documentation.** `docs/LANGUAGE.md` (the normative reference, every rule
+  cited to a test case), `docs/IR_COOKBOOK.md` (generated from
+  `docs/cookbook/*.ts` by `docs/cookbook/regen.sh`), `docs/ARCHITECTURE.md`,
+  `docs/FAQ.md`, the `docs/README.md` index, `docs/check-links.mjs`, and a
+  README restructured into a short tour.
 
 [Unreleased]: https://github.com/amritk/compiler/compare/v0.1.0...HEAD
