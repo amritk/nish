@@ -35,8 +35,10 @@ for src in "${programs[@]}"; do
   exe="$out/$name"
   want=$(sed -n 's#^// smoke: exit \([0-9][0-9]*\).*#\1#p' "$src" | head -n 1)
   want=${want:-0}
-
-  if ! node dist/index.js "$src" --link "$exe" --profile size >"$out/$name.log" 2>&1; then
+  # `// smoke: args <flags>` passes extra compiler flags (e.g. --number-mode f64).
+  extra=$(sed -n 's#^// smoke: args \(.*\)#\1#p' "$src" | head -n 1)
+  # shellcheck disable=SC2086
+  if ! node dist/index.js "$src" $extra --link "$exe" --profile size >"$out/$name.log" 2>&1; then
     status="BUILD FAIL"
     failed=1
     sed 's/^/    /' "$out/$name.log" >&2
