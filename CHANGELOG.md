@@ -43,6 +43,20 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 - **Arrays.** `T[]` / `Array<T>`, literals, `new Array<T>(n)`, indexing with
   bounds checks (panic on out-of-range), `.length`, `push`, `for ... of`, and
   `--unchecked-indexing` for benchmarks.
+- **Classes and interfaces.** `class` / `interface` as `%struct.<Name>` with
+  clang-identical layout (verified against C `_Static_assert`s at test time),
+  constructors, methods (`this` as the first parameter), field reads and
+  writes, object literals, structural `implements`, `export class` across
+  modules, and struct-pointer attributes (`nonnull`, `dereferenceable`,
+  `readonly` / `nocapture` by a whole-program escape fixpoint).
+- **Differential testing.** `npm run test:diff` compiles every whole program
+  in `tests/cases` and a 50-program corpus, runs the same TypeScript under
+  Node through `runtime/shim.mjs` with i32-wrapping rewrites, and compares
+  stdout and exit codes byte for byte; a seeded expression fuzzer runs 10
+  programs in `npm test` and 200 on demand. Known semantic gaps are listed in
+  `tests/differential/known-failures.txt`.
+- **Examples.** `examples/nbody.ts` (classes, arrays, `Math` in f64 mode)
+  prints the reference energies and is covered by `npm run smoke`.
 - **CI and diagnostics.** GitHub Actions matrix (Ubuntu + macOS, LLVM 18) with
   a size table in the job summary; every error is
   `<file>:<line>:<col>: error: <message>` followed by a caret excerpt.
