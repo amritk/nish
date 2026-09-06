@@ -1,0 +1,323 @@
+#!/usr/bin/env node
+/**
+ * Random-program fuzzer for the differential harness (WP13).
+ *
+ * Generates straight-line StaticTS programs over 32-bit integers and
+ * booleans: locals, `+ - * / %` (divisors go through `nz(x)`, which maps any
+ * value into [2, 1001], so no division by zero and no INT_MIN / -1), unary
+ * minus, `Math.abs/min/max`, comparisons, `&&`/`||`/`!`, ternaries, `++`/`--`
+ * (prefix and postfix, also inside expressions for their side effects),
+ * compound assignment, `if`/`else`, a few `for`/`while` loops with fixed trip
+ * counts, helper functions, and `console.log` of numbers, booleans, and
+ * template literals. Every program is deterministic and prints its locals at
+ * the end, then each is run natively and under Node (lib.js) and compared.
+ *
+ * Usage: node tests/differential/fuzz.js [--count N] [--seed S] [--jobs J] [--depth D]
+ *
+ * Program i of a run uses seed S + i; a mismatching program is saved as
+ * build/test/differential/fuzz-fail-<S + i>.ts and reproduces with
+ * `node tests/differential/fuzz.js --seed <S + i> --count 1`.
+ */
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const lib = require("./lib");
+
+/** mulberry32: small, seedable, good enough for program shapes. */
+function rng(seed) {
+  let a = seed >>> 0;
+  const next = () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  return {
+    next,
+    int: (lo, hi) => lo + Math.floor(next() * (hi - lo + 1)),
+    pick: (xs) => xs[Math.floor(next() * xs.length)],
+    chance: (p) => next() < p,
+  };
+}
+
+const LITERALS = [0, 1, -1, 2, 3, 7, 10, 100, 1000, 65536, 46341, 1000000000, 2147483647, -2147483647, 2147483646];
+
+/** Build one program from a seed; returns its source text. */
+function generateProgram(seed, opts = {}) {
+  const r = rng(seed);
+  const maxDepth = opts.depth ?? 3;
+  const nLocals = r.int(3, 6);
+  const nBools = r.int(1, 3);
+  const helpers = r.int(1, 3);
+  const locals = Array.from({ length: nLocals }, (_, i) => `v${i}`);
+  const bools = Array.from({ length: nBools }, (_, i) => `b${i}`);
+
+  const literal = () => {
+    const v = r.chance(0.6) ? r.pick(LITERALS) : r.int(-2147483647, 2147483647);
+    return v < 0 ? `(${v})` : String(v);
+  };
+
+  /**
+   * Integer expression. `env` lists readable int names, `mutable` those `++` may
+   * touch, `boolEnv` the boolean locals already declared, `callable` how many
+   * helpers (`h0..h<callable-1>`) may be called.
+   */
+  let boolEnv = [];
+  let callable = 0;
+  function intExpr(d, env, mutable) {
+    if (d <= 0 || r.chance(0.2)) {
+      return env.length && r.chance(0.6) ? r.pick(env) : literal();
+    }
+    const sub = () => intExpr(d - 1, env, mutable);
+    switch (r.int(0, 13)) {
+      case 0:
+        return `(${sub()} + ${sub()})`;
+      case 1:
+        return `(${sub()} - ${sub()})`;
+      case 2:
+        return `(${sub()} * ${sub()})`;
+      case 3:
+        return `(${sub()} / nz(${sub()}))`;
+      case 4:
+        return `(${sub()} % nz(${sub()}))`;
+      case 5:
+        return `(-(${sub()}))`; // the inner parens keep `-` and `--x` from fusing into `---x`
+      case 6:
+        return `Math.abs(${sub()})`;
+      case 7:
+        return `Math.min(${sub()}, ${sub()})`;
+      case 8:
+        return `Math.max(${sub()}, ${sub()})`;
+      case 9:
+        return `(${boolExpr(d - 1, env, mutable)} ? ${sub()} : ${sub()})`;
+      case 10:
+        // Helpers may only call lower-numbered helpers, so there is no recursion.
+        if (callable > 0) return `h${r.int(0, callable - 1)}(${sub()}, ${sub()})`;
+        return sub();
+      case 11:
+        if (mutable.length) return `${r.pick(mutable)}${r.pick(["++", "--"])}`;
+        return sub();
+      case 12:
+        if (mutable.length) return `${r.pick(["++", "--"])}${r.pick(mutable)}`;
+        return sub();
+      default:
+        return `(${sub()} - ${literal()})`;
+    }
+  }
+
+  function boolExpr(d, env, mutable) {
+    const sub = () => intExpr(d, env, mutable);
+    if (d <= 0 || r.chance(0.15)) {
+      if (boolEnv.length && r.chance(0.5)) return r.pick(boolEnv);
+      return r.pick(["true", "false"]);
+    }
+    switch (r.int(0, 8)) {
+      case 0:
+        return `(${sub()} < ${sub()})`;
+      case 1:
+        return `(${sub()} <= ${sub()})`;
+      case 2:
+        return `(${sub()} > ${sub()})`;
+      case 3:
+        return `(${sub()} >= ${sub()})`;
+      case 4:
+        return `(${sub()} === ${sub()})`;
+      case 5:
+        return `(${sub()} !== ${sub()})`;
+      case 6:
+        return `(${boolExpr(d - 1, env, mutable)} && ${boolExpr(d - 1, env, mutable)})`;
+      case 7:
+        return `(${boolExpr(d - 1, env, mutable)} || ${boolExpr(d - 1, env, mutable)})`;
+      default:
+        return `!${boolExpr(d - 1, env, mutable)}`;
+    }
+  }
+
+  const lines = [];
+  lines.push("// Generated by tests/differential/fuzz.js; seed " + seed);
+  lines.push("function nz(x: number): number {");
+  lines.push("  let r = x % 1000;");
+  lines.push("  if (r < 0) {");
+  lines.push("    r = -r;");
+  lines.push("  }");
+  lines.push("  return r + 2;");
+  lines.push("}");
+  for (let h = 0; h < helpers; h++) {
+    callable = h;
+    lines.push("");
+    lines.push(`function h${h}(a: number, b: number): number {`);
+    if (r.chance(0.5)) {
+      lines.push(`  if (${boolExpr(2, ["a", "b"], [])}) {`);
+      lines.push(`    return ${intExpr(maxDepth - 1, ["a", "b"], [])};`);
+      lines.push("  }");
+    }
+    lines.push(`  return ${intExpr(maxDepth - 1, ["a", "b"], [])};`);
+    lines.push("}");
+  }
+  lines.push("");
+  lines.push("export function main(): number {");
+  callable = helpers;
+  for (const v of locals) lines.push(`  let ${v} = ${literal()};`);
+  for (const b of bools) {
+    lines.push(`  let ${b} = ${boolExpr(2, locals, [])};`);
+    boolEnv = [...boolEnv, b];
+  }
+
+  let loopId = 0;
+  function statement(indent, env, mutable, depth) {
+    const pad = " ".repeat(indent);
+    const target = r.pick(locals);
+    switch (r.int(0, 11)) {
+      case 0:
+      case 1:
+        lines.push(`${pad}${target} = ${intExpr(maxDepth, env, mutable)};`);
+        break;
+      case 2:
+        lines.push(`${pad}${target} ${r.pick(["+=", "-=", "*="])} ${intExpr(maxDepth - 1, env, mutable)};`);
+        break;
+      case 3:
+        lines.push(`${pad}${target} ${r.pick(["/=", "%="])} nz(${intExpr(maxDepth - 1, env, mutable)});`);
+        break;
+      case 4:
+        lines.push(`${pad}${r.pick(bools)} = ${boolExpr(maxDepth - 1, env, mutable)};`);
+        break;
+      case 5:
+        lines.push(`${pad}${target}${r.pick(["++", "--"])};`);
+        break;
+      case 6:
+        lines.push(`${pad}console.log(${intExpr(maxDepth, env, mutable)});`);
+        break;
+      case 7:
+        lines.push(`${pad}console.log(${boolExpr(maxDepth - 1, env, mutable)});`);
+        break;
+      case 8:
+        lines.push(`${pad}console.log(\`${target}=\${${target}} ${r.pick(bools)}=\${${r.pick(bools)}} e=\${${intExpr(1, env, mutable)}}\`);`);
+        break;
+      case 9:
+        if (depth > 0) {
+          lines.push(`${pad}if (${boolExpr(maxDepth - 1, env, mutable)}) {`);
+          statement(indent + 2, env, mutable, depth - 1);
+          lines.push(`${pad}} else {`);
+          statement(indent + 2, env, mutable, depth - 1);
+          lines.push(`${pad}}`);
+        } else lines.push(`${pad}${target} = ${intExpr(2, env, mutable)};`);
+        break;
+      case 10:
+        if (depth > 0) {
+          const i = `i${loopId++}`;
+          lines.push(`${pad}for (let ${i} = 0; ${i} < ${r.int(1, 8)}; ${i}++) {`);
+          statement(indent + 2, [...env, i], mutable, depth - 1);
+          if (r.chance(0.5)) statement(indent + 2, [...env, i], mutable, depth - 1);
+          lines.push(`${pad}}`);
+        } else lines.push(`${pad}${target} = ${intExpr(2, env, mutable)};`);
+        break;
+      default:
+        if (depth > 0) {
+          const c = `c${loopId++}`;
+          lines.push(`${pad}let ${c} = ${r.int(1, 6)};`);
+          lines.push(`${pad}while (${c} > 0) {`);
+          statement(indent + 2, [...env, c], mutable, depth - 1);
+          if (r.chance(0.3)) {
+            lines.push(`${pad}  if (${boolExpr(1, env, [])}) {`);
+            lines.push(`${pad}    ${c}--;`);
+            lines.push(`${pad}    continue;`);
+            lines.push(`${pad}  }`);
+          }
+          lines.push(`${pad}  ${c}--;`);
+          lines.push(`${pad}}`);
+        } else lines.push(`${pad}${target} = ${intExpr(2, env, mutable)};`);
+        break;
+    }
+  }
+  const nStatements = r.int(8, 16);
+  for (let s = 0; s < nStatements; s++) statement(2, locals, locals, 2);
+  for (const v of locals) lines.push(`  console.log(${v});`);
+  for (const b of bools) lines.push(`  console.log(${b});`);
+  lines.push("  return 0;");
+  lines.push("}");
+  return `${lines.join("\n")}\n`;
+}
+
+/**
+ * Generate and run `count` programs from `seed`. Returns
+ * `{ seed, count, mismatches: [{ seed, file, result }], compileErrors, results }`.
+ */
+async function fuzzRun({ count = 50, seed = 1, jobs = 4, depth = 3, log = () => {} } = {}) {
+  const dir = path.join(lib.buildDir, "fuzz");
+  fs.mkdirSync(dir, { recursive: true });
+  const programs = [];
+  for (let i = 0; i < count; i++) {
+    const s = (seed + i) >>> 0;
+    const file = path.join(dir, `fuzz-${s}.ts`);
+    fs.writeFileSync(file, generateProgram(s, { depth }));
+    programs.push({ name: `fuzz/${s}`, entry: file, args: [], kind: "fuzz", seed: s });
+  }
+  const results = await lib.pool(programs, jobs, async (p) => {
+    const r = await lib.runProgram(p);
+    log(r);
+    return r;
+  });
+  const mismatches = [];
+  const compileErrors = [];
+  for (const r of results) {
+    if (r.verdict === "match") continue;
+    const failFile = path.join(lib.buildDir, `fuzz-fail-${r.prog.seed}.ts`);
+    fs.copyFileSync(r.prog.entry, failFile);
+    (r.verdict === "mismatch" ? mismatches : compileErrors).push({ seed: r.prog.seed, file: failFile, result: r });
+  }
+  return { seed, count, mismatches, compileErrors, results };
+}
+
+module.exports = { generateProgram, fuzzRun };
+
+if (require.main === module) {
+  const argv = process.argv.slice(2);
+  let count = 50;
+  let seed = (Date.now() ^ (process.pid << 8)) >>> 0;
+  let jobs = Math.min(8, os.cpus().length || 2);
+  let depth = 3;
+  let printOnly = false;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--count") count = Number(argv[++i]);
+    else if (argv[i] === "--seed") seed = Number(argv[++i]) >>> 0;
+    else if (argv[i] === "--jobs") jobs = Number(argv[++i]);
+    else if (argv[i] === "--depth") depth = Number(argv[++i]);
+    else if (argv[i] === "--print") printOnly = true;
+    else {
+      console.error(`unknown option: ${argv[i]}`);
+      process.exit(2);
+    }
+  }
+  if (printOnly) {
+    process.stdout.write(generateProgram(seed, { depth }));
+    process.exit(0);
+  }
+  if (!lib.hasClang()) {
+    console.error("clang not installed");
+    process.exit(2);
+  }
+  console.log(`fuzz: seed=${seed} count=${count} depth=${depth} jobs=${jobs}`);
+  const t0 = Date.now();
+  fuzzRun({
+    count,
+    seed,
+    jobs,
+    depth,
+    log: (r) => {
+      const tag = r.verdict === "match" ? "ok  " : r.verdict.toUpperCase();
+      console.log(`${tag}  ${r.prog.name}  native ${lib.summarize(r.native)}  node ${lib.summarize(r.node)}  ${r.ms} ms`);
+      if (r.verdict === "mismatch") console.log(`      ${lib.describeMismatch(r).replace(/\n/g, "\n      ")}`);
+      if (r.verdict === "compile-error" || r.verdict === "rewrite-error") console.log(`      ${r.detail.trim().split("\n")[0]}`);
+    },
+  }).then((res) => {
+    const bad = res.mismatches.length + res.compileErrors.length;
+    console.log(
+      `\nfuzz: seed=${res.seed} count=${res.count} mismatches=${res.mismatches.length} errors=${res.compileErrors.length} (${((Date.now() - t0) / 1000).toFixed(1)} s)`
+    );
+    for (const m of [...res.mismatches, ...res.compileErrors]) {
+      console.log(`  ${m.result.verdict}: seed ${m.seed} saved to ${m.file}`);
+    }
+    process.exit(bad === 0 ? 0 : 1);
+  });
+}

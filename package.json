@@ -25,6 +25,7 @@
     "smoke": "npm run build && bash scripts/smoke.sh",
     "check": "tsc -p tsconfig.json --noEmit",
     "test:update": "npm run build && UPDATE_GOLDENS=1 node tests/run.js",
+    "test:diff": "npm run build && node tests/differential/run.js",
     "lint": "biome check --formatter-enabled=false .",
     "format": "biome format --write .",
     "prepublishOnly": "npm run check && npm run build && npm test"

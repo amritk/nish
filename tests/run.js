@@ -669,5 +669,28 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
   }
 }
 
+// ---- WP13: differential -------------------------------------------------------------
+// Every whole program in tests/cases and tests/differential/corpus is compiled, linked,
+// and run natively, then rewritten to JavaScript (tests/differential/rewrite.js, types
+// from the compiler's own checker) and run under Node with runtime/shim.mjs; stdout and
+// exit status must agree byte for byte. Discrepancies listed in known-failures.txt are
+// reported but do not fail. A 10-program fuzz batch with a fixed seed runs too; the seed
+// is printed so a failure reproduces with `node tests/differential/fuzz.js --seed <s> --count 1`.
+if ((!only || "differential".includes(only)) && HAS_CLANG) {
+  const diffRunner = path.join(__dirname, "differential", "run.js");
+  const d = spawnSync("node", [diffRunner, "--quick"], { cwd: root, encoding: "utf8" });
+  const summary = (d.stdout.trim().split("\n").filter((l) => l.includes("programs agree with Node")).pop() ?? "").trim();
+  check(`differential: native and Node agree on every corpus program not in known-failures.txt (${summary || "no summary"})`,
+    d.status === 0, d.stdout + d.stderr);
+
+  const fuzzSeed = 20260906;
+  const f = spawnSync("node", [path.join(__dirname, "differential", "fuzz.js"), "--seed", String(fuzzSeed), "--count", "10"],
+    { cwd: root, encoding: "utf8" });
+  const fuzzSummary = f.stdout.trim().split("\n").filter((l) => l.startsWith("fuzz: seed=")).pop() ?? "";
+  check(`differential: 10 fuzz programs agree with Node (${fuzzSummary || `seed=${fuzzSeed}`})`, f.status === 0, f.stdout + f.stderr);
+} else if (!HAS_CLANG) {
+  console.log("SKIP  clang not installed: differential tests skipped");
+}
+
 console.log(`\n${passes} passed, ${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);
