@@ -1,9 +1,11 @@
 # WP2: Classes, interfaces, structs
 
 What `class` and `interface` compile to, the layout rules, the checks the
-compiler enforces (definite assignment, `readonly`, `implements`), and the
-LLVM attributes it can prove for struct pointers. Every IR listing is the
-exact text of a golden in `tests/cases/cls_*.ll` (module header omitted).
+compiler enforces (definite assignment, `readonly`, `implements`), single
+inheritance (`extends`, `super`, static dispatch; WP2b, see
+[Inheritance](#inheritance-wp2b)), and the LLVM attributes it can prove for
+struct pointers. Every IR listing is the exact text of a golden in
+`tests/cases/cls_*.ll` (module header omitted).
 
 Code: `src/checker/classes.ts` (declarations, layout, rules) and
 `src/codegen/emit/classes.ts` (lowering, memory facts). Both register into
@@ -410,11 +412,13 @@ assignment before the loop.
 
 `public`, `private` and `protected` are accepted and ignored (no access
 control is enforced; the layout is the same). `readonly` on a class field
-forbids every assignment except `this.f = v` inside that class's own
-constructor; `readonly` on an interface field forbids assignment altogether
-(object literals still set it). `static`, `abstract`, getters/setters,
-optional fields, index signatures, parameter properties, `!` assertions and
-`extends` are rejected with a message naming the construct.
+forbids every assignment except `this.f = v` inside the constructor of the
+class that declares it (a derived constructor cannot assign an inherited
+`readonly` field, `tests/cases/reject_cls_readonly_inherited`); `readonly`
+on an interface field forbids assignment altogether (object literals still
+set it). `static`, `abstract`, getters/setters, optional fields, index
+signatures, parameter properties and `!` assertions are rejected with a
+message naming the construct.
 
 ## Interfaces and object literals
 
@@ -567,6 +571,131 @@ lose `readonly` and `nocapture`; `Segment.constructor` stores `from`, `to`
 and the string `label` into fields, so all three lose `nocapture`;
 `endpoint(s)` returns `s.to` (a loaded pointer, not `s`), so `s` keeps both.
 
+## Inheritance (WP2b)
+
+`class D extends B` is single inheritance by *layout prefix*: `%struct.D`
+lists `B`'s fields first, then `D`'s own, at the same natural alignment, so
+a `%struct.D*` is a valid `%struct.B*` after one `bitcast`. The checker
+copies the base's `FieldInfo`s (indices and offsets included) into the
+derived class (`inheritFields`, `src/checker/classes.ts`), runs the ordinary
+layout over the flattened list, and everything downstream (field access,
+`implements`, object literals, the C header, `dereferenceable`) sees one
+flat struct. A derived field may land in the base's tail padding
+(`tests/layout/structs.ts`, class `L`: `C { f64, i32 }` is 16 bytes and `L`
+adds an `i32` at offset 12, still 16 bytes), which is why the C twin of a
+derived class lists the fields flattened rather than nesting `struct C`.
+
+```ts
+class Shape {
+  x: number;
+  constructor(x: number) { this.x = x; }
+  area(): number { return 0; }
+  report(): number { return this.area() * 10 + this.x; }  // always Shape.area
+}
+
+class Square extends Shape {
+  side: number;
+  constructor(x: number, side: number) { super(x); this.side = side; }
+  area(): number { return this.side * this.side; }
+  report(): number { return super.report() + this.area(); }
+}
+
+function areaOf(s: Shape): number { return s.area(); }        // Shape.area, whatever s is
+```
+
+```llvm
+%struct.Shape = type { i32 }
+%struct.Square = type { i32, i32 }
+
+define void @Square.constructor(%struct.Square* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %side) #0 {
+entry:
+  %0 = bitcast %struct.Square* %this to %struct.Shape*
+  call void @Shape.constructor(%struct.Shape* %0, i32 %x)
+  %1 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 1
+  store i32 %side, i32* %1, align 4
+  ret void
+}
+
+define noundef i32 @Square.report(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #2 {
+entry:
+  %0 = bitcast %struct.Square* %this to %struct.Shape*
+  %1 = call i32 @Shape.report(%struct.Shape* %0)
+  %2 = call i32 @Square.area(%struct.Square* %this)
+  %3 = add i32 %1, %2
+  ret i32 %3
+}
+
+define noundef i32 @areaOf(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %s) #1 {
+entry:
+  %0 = call i32 @Shape.area(%struct.Shape* %s)
+  ret i32 %0
+}
+```
+
+(`tests/cases/cls_extends_override.ll`; `sq.report()` prints 10 and
+`areaOf(sq)` prints 0 for a `new Square(1, 3)`.)
+
+- **Upcast.** A `D` where a `B` (or `B | null`, or any ancestor) is expected
+  goes through the same `coerceToContext` path as a class converting to an
+  interface it implements: the checker records a coercion on the expression,
+  reports the target type, and the emitter core inserts the `bitcast`. The
+  contexts are every value sink: initializer, assignment, argument, return,
+  field store, ternary arm, `B[]` literal element, `xs[i] = d` and
+  `xs.push(d)` on a `B[]` (`tests/cases/cls_extends_upcast`). There is no
+  downcast. A class also inherits its base's `implements`, since the
+  interface's fields are still the prefix.
+- **Static dispatch.** `recv.m(args)` resolves in the checker to the `m` of
+  the receiver's declared class or of its nearest ancestor declaring one
+  (`findMethod`), and the emitter passes `this` bitcast to that class. An
+  override must keep the signature (parameter and return types, checked with
+  `sameType`), and is chosen only through a receiver declared as the
+  overriding class. `super.m(args)` is `this` seen as the base type
+  (`SuperKeyword` is bound to the `this` local, so the attribute analysis
+  tracks the flow) and resolves from the base. There is no vtable; this is
+  the documented deviation from JavaScript (LANGUAGE.md, "Method dispatch is
+  static").
+- **Construction.** `super(args)` must be the first statement of a derived
+  constructor and lowers to `constructObject` on the base: a call of the
+  nearest ancestor constructor with `this` bitcast, after storing the
+  initializers of any constructor-less classes in between (`emit/classes.ts`).
+  When no ancestor constructor takes parameters the statement may be
+  omitted and the same code is emitted in the constructor prologue after the
+  class's own initializer stores (`emitConstructorPrologue`). A class
+  without a constructor inherits the nearest ancestor's: `new D(args)` stores
+  `D`'s initializers, then constructs the base part with `args`
+  (`tests/cases/cls_extends_chain`: `Mob` inherits `Entity`'s constructor,
+  `Ghost` inherits `Minion`'s, `Wisp` omits `super()`). Definite assignment
+  runs over the class's own fields; the inherited ones count as assigned
+  once `super(...)` has run, and neither `this` nor `super` may appear in its
+  arguments. Initializer constants are emitted from the literal's syntax and
+  the field's type (`initializerConstant`), because an inherited or imported
+  initializer node belongs to another module's type table.
+- **Attributes and escape analysis.** `dereferenceable(N)` on a struct
+  parameter uses the declared type's size; a derived object passed there is
+  at least that large. An upcast is a coercion on the same expression node,
+  so `classifyUse` and the `pointerParams` fixpoint see the argument flow
+  unchanged: a `D` handed to `f(b: B)` is captured or written exactly as
+  `f` captures or writes `b`. The flow of `this` into the base constructor
+  (explicit or implicit `super`) is recorded per derived constructor by
+  `collectFacts` (`baseConstruction`), not from the statement, so an
+  omitted call cannot hide it. The same package fixed a gap in escape.ts:
+  a `new C(...)` whose constructor captures `this` now leaks instead of
+  becoming an alloca (`tests/cases/mem_stack_ctor_capture`), and `new C(...)`
+  in a base- or interface-typed position allocates and constructs `C`
+  (`intrinsicType`), not the target type.
+- **Modules.** The base class must be declared in the same module as the
+  derived one (an imported base would need its layout before imports are
+  bound). An importer of a derived class alone `declare`s the inherited
+  constructor and methods (`importedStructFunctions` walks the chain) and
+  gets `%struct.Base = type opaque`, which is all a bitcast and a call need
+  (`tests/link/extends_import`). An exported class may only extend an
+  exported class, so that under `--strict-exports` the base's functions are
+  never `internal` while the derived class is importable.
+- **C header.** `--emit-header` declares every class and interface as a
+  `struct` with the flattened fields, and every method and constructor as
+  `Class_method(struct Class *this_, ...)` bound to the real symbol with
+  `STS_SYMBOL("Class.method")` (docs/wp8-interop.md).
+
 ## Rejected forms
 
 | Source | Message |
@@ -582,7 +711,23 @@ and the string `label` into fields, so all three lose `nocapture`;
 | `new Point(1)` for a 2-parameter constructor | `` `new Point` expects 2 argument(s), got 1 `` |
 | `implements` with fields in a different order | `` Class `Square` does not implement `Shape`: field 1 is `width: i32` in `Shape` but `height: i32` in `Square` `` |
 | `x = 0;` without a type | `` Field `x` of class `Point` needs a type annotation `` |
-| `class D extends B` | `` Class inheritance (`extends`) is not supported yet (WP2b) `` |
+| `class User extends Named` (an interface) | `` Class `User` cannot extend interface `Named`; use `implements Named` `` |
+| `class Widget extends Gadget` (undeclared) | `` Unknown base class `Gadget` (`extends` must name a class declared in this module) `` |
+| `extends` on an imported class | `` Class `Derived` cannot extend imported class `Base`: a base class must be declared in the same module `` |
+| `class Ping extends Pong`, `class Pong extends Ping` | `` Inheritance cycle: class `Pong` extends `Ping`, which already extends `Pong` `` |
+| `class Loop extends Loop` | `` Class `Loop` cannot extend itself `` |
+| `export class Shown extends Hidden` (not exported) | `` Exported class `Shown` cannot extend non-exported class `Hidden` `` |
+| `count: number` redeclared in a derived class | `` Field `count` of class `Derived` is already declared in base class `Base`; a derived class cannot redeclare or shadow an inherited field `` |
+| `scale(by: string)` overriding `scale(by: number)` | `` Method `scale` of class `Derived` overrides `Base.scale` with a different signature: `Base.scale` is (by: i32): i32, `Derived.scale` is (by: string): i32 `` |
+| a statement before `super(...)` | `` `super(...)` must be the first statement of the constructor of `Derived` `` |
+| no `super(...)` when the base constructor takes arguments | `` Constructor of `Derived` must start with `super(...)`: the constructor of `Base` takes 1 argument(s) `` |
+| `super(this.y)` | `` `this` cannot be used before `super(...)` in the constructor of `Derived` `` |
+| `super("one")` for `constructor(x: number)` | `` Argument 1 of `super`: expected i32, got string `` |
+| `super.x` | `` `super.x` is not supported: inherited fields are read and written as `this.x` (only `super.method(...)` is allowed) `` |
+| `super.ping()` in a free function | `` `super` is only valid inside a method or constructor of a class that `extends` another class `` |
+| `super()` in a method | `` `super(...)` is only valid as the first statement of the constructor of a class that `extends` another class `` |
+| `this.id = 2` on an inherited `readonly id` | `` Cannot assign to readonly field `id` of `Base` outside its constructor `` |
+| `return b` where `b: Base` and `Derived` is expected | `` Return type mismatch: function returns Derived but expression is Base `` |
 | `static total: number` | `` `static` members are not supported `` |
 | `new Pair()` on an interface | `` Cannot `new` interface `Pair`; use an object literal `` |
 | `const p = { first: 1 }` | `` Object literal needs a contextual class or interface type `` |
@@ -597,20 +742,32 @@ and the string `label` into fields, so all three lose `nocapture`;
   `cls_field_write`, `cls_nested`, `cls_interface_literal`,
   `cls_implements`, `cls_this_method_call`, `cls_initializers`,
   `cls_compound_field`, `cls_readonly_ok`, `cls_vector` under
-  `--number-mode f64`); `reject_cls_*.ts` for every row above.
+  `--number-mode f64`; inheritance: `cls_extends_basic`,
+  `cls_extends_override`, `cls_extends_upcast`, `cls_extends_chain`);
+  `reject_cls_*.ts` for every row above.
 - `tests/layout/structs.ts` + `structs.c`: the runner reads each class's
   `sts_alloc_struct(i64 N)` from the IR and compares it with the
   `_Static_assert(sizeof(struct X) == N)` in the C file; then the C program
   is built with `clang -std=c11 -Wall -Wextra -Werror` (so the asserts are
   validated against clang's layout), fills every struct through the C
   definition and reads each field back through the compiled getters, so
-  every offset is verified at run time too.
+  every offset is verified at run time too. Classes `K`, `L`, `M` are
+  derived (WP2b); the C twins list their fields flattened, and the
+  `--emit-header` output for the same file must declare all 13 structs with
+  the sizes the C file asserts.
 - `tests/link/class_export` (imports a class and an interface, checks the
-  `declare`s attribute for attribute) and `tests/link/class_import_rename`.
+  `declare`s attribute for attribute), `tests/link/class_import_rename`,
+  `tests/link/extends_import` (imports only a derived class: the inherited
+  constructor and method are `declare`d and `%struct.Base` is opaque) and
+  `tests/link/extends_imported_base` (rejected).
+- `tests/differential/corpus/class_inheritance.ts` runs the same program
+  under Node; `cases/cls_extends_override` is a known failure there because
+  Node dispatches on the runtime class (docs/wp13-differential.md).
 
 ## Not in this package
 
-- Inheritance, `super`, virtual dispatch (WP2b), `static` members,
+- Virtual dispatch (a vtable, `abstract` methods), `protected`/`private`
+  enforcement, extending an imported class, `static` members,
   getters/setters, `++`/`--` on fields, non-literal field initializers,
   optional fields and `T | null` (WP6), escape-analysed stack allocation of
   non-escaping objects (WP6), `noalias` on struct parameters other than a

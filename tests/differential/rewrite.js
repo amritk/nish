@@ -111,6 +111,26 @@ function makeTransformer(unit, stems) {
         );
       }
 
+      // ---- implicit super() (WP2b) ----
+      // StaticTS lets a derived constructor omit `super()` when no ancestor
+      // constructor takes parameters and calls it before the body; JavaScript
+      // throws on the first `this` instead, so the call is made explicit.
+      if (ts.isConstructorDeclaration(node) && node.body && ts.isClassDeclaration(node.parent)) {
+        const derived = (node.parent.heritageClauses ?? []).some((c) => c.token === ts.SyntaxKind.ExtendsKeyword);
+        const first = node.body.statements[0];
+        const explicitSuper =
+          first &&
+          ts.isExpressionStatement(first) &&
+          ts.isCallExpression(first.expression) &&
+          first.expression.expression.kind === ts.SyntaxKind.SuperKeyword;
+        if (derived && !explicitSuper) {
+          const body = ts.visitNode(node.body, visit);
+          const superCall = f.createExpressionStatement(f.createCallExpression(f.createSuper(), undefined, []));
+          return f.updateConstructorDeclaration(node, node.modifiers, node.parameters, f.updateBlock(body, [superCall, ...body.statements]));
+        }
+        return ts.visitEachChild(node, visit, context);
+      }
+
       // ---- numeric literal typed i64 by context -> BigInt literal ----
       if (ts.isNumericLiteral(node)) {
         if (kindOf(node) === "i64") return big(BigInt(Number(node.text)));

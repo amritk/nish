@@ -220,9 +220,10 @@ Details: [docs/wp8-interop.md](docs/wp8-interop.md).
 | M4 "1.0" | frozen language reference, tagged release | next |
 
 Not in the language yet, in the order they are likely to land: optional
-reference counting for objects that must outlive an arena reset, class
-inheritance (`extends`), `switch`, labelled `break`/`continue`, string
-methods (`charCodeAt`, `slice`, ...), and `process.argv`. Release
+reference counting for objects that must outlive an arena reset, virtual
+dispatch (single inheritance is in; method calls resolve statically),
+`switch`, labelled `break`/`continue`, string methods (`charCodeAt`,
+`slice`, ...), and `process.argv`. Release
 engineering (`--version`, exit codes, npm packaging, tag-driven releases)
 landed with WP12; see [CHANGELOG.md](CHANGELOG.md) and
 [docs/wp12-release.md](docs/wp12-release.md). The plan itself is

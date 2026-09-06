@@ -1,0 +1,4 @@
+%struct.Base = type opaque
+%struct.Derived = type { i32, i32 }
+declare void @Base.constructor(%struct.Base* noundef nonnull noalias align 8 dereferenceable(4) nocapture, i32 noundef)
+declare noundef i32 @Base.twice(%struct.Base* noundef nonnull readonly align 8 dereferenceable(4) nocapture)

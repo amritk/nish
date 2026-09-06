@@ -63,6 +63,24 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   writes, object literals, structural `implements`, `export class` across
   modules, and struct-pointer attributes (`nonnull`, `dereferenceable`,
   `readonly` / `nocapture` by a whole-program escape fixpoint).
+- **Single class inheritance (WP2b).** `class D extends B` lays `D` out as
+  `B`'s fields followed by its own, so a `D` converts to `B` (or any
+  ancestor) with one `bitcast` wherever a `B` is expected (arguments,
+  variables, returns, fields, `B[]` elements, `B | null`); `super(...)` as
+  the first statement of a derived constructor (implicit when no ancestor
+  constructor takes parameters), inherited constructors, `super.m()`,
+  overriding with an identical signature, `implements` on the flattened
+  layout, and multi-level chains. Dispatch is static: a call uses the method
+  of the receiver's declared type, never a vtable (`docs/LANGUAGE.md`,
+  Classes). Downcasts, `instanceof`, extending an interface or an imported
+  class, cyclic inheritance, redeclared fields, and signature-changing
+  overrides are rejected. The generated C header now declares every class
+  and interface as a `struct` with the flattened fields and every method
+  and constructor as `Class_method(struct Class *, ...)`.
+- **Escape analysis fix.** A `new C(...)` whose constructor captures `this`
+  (`registry.last = this`) is no longer placed on the stack; `new C(...)`
+  where an interface or base type is expected now allocates and constructs
+  `C` (it previously allocated the target type and skipped the constructor).
 - **Differential testing.** `npm run test:diff` compiles every whole program
   in `tests/cases` and a 50-program corpus, runs the same TypeScript under
   Node through `runtime/shim.mjs` with i32-wrapping rewrites, and compares

@@ -43,52 +43,51 @@ entry:
   %arena.mark = call i64 @sts_arena_mark()
   %0 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %Defaults.obj, i32 0, i32 0
   store i32 42, i32* %0, align 4
-  %1 = sub i32 0, 1
-  %2 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %Defaults.obj, i32 0, i32 1
-  store i32 %1, i32* %2, align 4
-  %3 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %Defaults.obj, i32 0, i32 2
-  store i1 true, i1* %3, align 1
-  %4 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %Defaults.obj, i32 0, i32 3
-  store i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8** %4, align 8
+  %1 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %Defaults.obj, i32 0, i32 1
+  store i32 -1, i32* %1, align 4
+  %2 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %Defaults.obj, i32 0, i32 2
+  store i1 true, i1* %2, align 1
+  %3 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %Defaults.obj, i32 0, i32 3
+  store i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8** %3, align 8
   store %struct.Defaults* %Defaults.obj, %struct.Defaults** %d.addr, align 8
-  %5 = load %struct.Defaults*, %struct.Defaults** %d.addr, align 8
-  %6 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %5, i32 0, i32 0
-  %7 = load i32, i32* %6, align 4
-  %8 = load %struct.Defaults*, %struct.Defaults** %d.addr, align 8
-  %9 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %8, i32 0, i32 1
-  %10 = load i32, i32* %9, align 4
-  %11 = add i32 %7, %10
-  %12 = call i8* @sts_str_from_i32(i32 %11)
-  call void @sts_print(i8* %12)
-  %13 = load %struct.Defaults*, %struct.Defaults** %d.addr, align 8
-  %14 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %13, i32 0, i32 2
-  %15 = load i1, i1* %14, align 1
-  %16 = select i1 %15, i8* bitcast ({ i64, [5 x i8] }* @.str.3 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.4 to i8*)
-  call void @sts_print(i8* %16)
-  %17 = load %struct.Defaults*, %struct.Defaults** %d.addr, align 8
-  %18 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %17, i32 0, i32 3
-  %19 = load i8*, i8** %18, align 8
-  call void @sts_print(i8* %19)
+  %4 = load %struct.Defaults*, %struct.Defaults** %d.addr, align 8
+  %5 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %4, i32 0, i32 0
+  %6 = load i32, i32* %5, align 4
+  %7 = load %struct.Defaults*, %struct.Defaults** %d.addr, align 8
+  %8 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %7, i32 0, i32 1
+  %9 = load i32, i32* %8, align 4
+  %10 = add i32 %6, %9
+  %11 = call i8* @sts_str_from_i32(i32 %10)
+  call void @sts_print(i8* %11)
+  %12 = load %struct.Defaults*, %struct.Defaults** %d.addr, align 8
+  %13 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %12, i32 0, i32 2
+  %14 = load i1, i1* %13, align 1
+  %15 = select i1 %14, i8* bitcast ({ i64, [5 x i8] }* @.str.3 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.4 to i8*)
+  call void @sts_print(i8* %15)
+  %16 = load %struct.Defaults*, %struct.Defaults** %d.addr, align 8
+  %17 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %16, i32 0, i32 3
+  %18 = load i8*, i8** %17, align 8
+  call void @sts_print(i8* %18)
   call void @Mixed.constructor(%struct.Mixed* %Mixed.obj, i32 500)
   store %struct.Mixed* %Mixed.obj, %struct.Mixed** %m.addr, align 8
-  %20 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
-  %21 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %20, i32 0, i32 0
-  %22 = load i32, i32* %21, align 4
-  %23 = call i8* @sts_str_from_i32(i32 %22)
-  call void @sts_print(i8* %23)
-  %24 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
-  %25 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %24, i32 0, i32 1
-  %26 = load i32, i32* %25, align 4
-  %27 = call i8* @sts_str_from_i32(i32 %26)
-  call void @sts_print(i8* %27)
-  %28 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
-  %29 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %28, i32 0, i32 2
-  %30 = load i8*, i8** %29, align 8
-  call void @sts_print(i8* %30)
+  %19 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
+  %20 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %19, i32 0, i32 0
+  %21 = load i32, i32* %20, align 4
+  %22 = call i8* @sts_str_from_i32(i32 %21)
+  call void @sts_print(i8* %22)
+  %23 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
+  %24 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %23, i32 0, i32 1
+  %25 = load i32, i32* %24, align 4
+  %26 = call i8* @sts_str_from_i32(i32 %25)
+  call void @sts_print(i8* %26)
+  %27 = load %struct.Mixed*, %struct.Mixed** %m.addr, align 8
+  %28 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %27, i32 0, i32 2
+  %29 = load i8*, i8** %28, align 8
+  call void @sts_print(i8* %29)
   call void @Mixed.constructor(%struct.Mixed* %Mixed.obj.1, i32 1)
-  %31 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %Mixed.obj.1, i32 0, i32 2
-  %32 = load i8*, i8** %31, align 8
-  call void @sts_print(i8* %32)
+  %30 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %Mixed.obj.1, i32 0, i32 2
+  %31 = load i8*, i8** %30, align 8
+  call void @sts_print(i8* %31)
   call void @sts_arena_release(i64 %arena.mark)
   ret i32 0
 }

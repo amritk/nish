@@ -26,6 +26,11 @@ struct G { int32_t a; sts_string b; bool c; double d; };
 struct H { bool a; struct A *b; int32_t c; };
 struct I { int32_t a; int32_t b; int32_t c; bool d; };
 struct J { bool a; double b; bool c; int32_t d; bool e; sts_string f; };
+/* Derived classes (WP2b) list the base's fields first, flattened: no nested
+ * struct, so L's own field lands in C's tail padding and sizeof(L) stays 16. */
+struct K { int32_t a; double b; bool c; };                /* extends B */
+struct L { double a; int32_t b; int32_t c; };             /* extends C */
+struct M { int32_t a; double b; bool c; sts_string d; };  /* extends K */
 
 _Static_assert(sizeof(struct A) == 4, "A");
 _Static_assert(sizeof(struct B) == 16, "B");
@@ -37,6 +42,9 @@ _Static_assert(sizeof(struct G) == 32, "G");
 _Static_assert(sizeof(struct H) == 24, "H");
 _Static_assert(sizeof(struct I) == 16, "I");
 _Static_assert(sizeof(struct J) == 40, "J");
+_Static_assert(sizeof(struct K) == 24, "K");
+_Static_assert(sizeof(struct L) == 16, "L");
+_Static_assert(sizeof(struct M) == 32, "M");
 
 int32_t A_a(struct A *);
 int32_t B_a(struct B *);
@@ -68,6 +76,17 @@ bool J_c(struct J *);
 int32_t J_d(struct J *);
 bool J_e(struct J *);
 sts_string J_f(struct J *);
+int32_t K_a(struct K *);
+double K_b(struct K *);
+bool K_c(struct K *);
+double L_a(struct L *);
+int32_t L_b(struct L *);
+int32_t L_c(struct L *);
+int32_t M_a(struct M *);
+double M_b(struct M *);
+bool M_c(struct M *);
+sts_string M_d(struct M *);
+double M_as_B_b(struct M *);
 
 static int failures = 0;
 #define CHECK(name, cond)                              \
@@ -89,6 +108,9 @@ int main(void) {
   struct H h = { true, &a, 0x88888888 };
   struct I i = { 0x11, 0x22, 0x33, true };
   struct J j = { true, 10.5, true, 0x09999999, true, &str_abc };
+  struct K k = { 0x0aaaaaaa, 11.5, true };
+  struct L l = { -12.25, 0x0bbbbbbb, 0x0ccccccc };
+  struct M m = { 0x0ddddddd, 13.5, true, &str_hello };
 
   CHECK("A.a", A_a(&a) == 0x11111111);
   CHECK("B.a", B_a(&b) == 0x22222222);
@@ -120,6 +142,17 @@ int main(void) {
   CHECK("J.d", J_d(&j) == 0x09999999);
   CHECK("J.e", J_e(&j) == true);
   CHECK("J.f", J_f(&j) == (sts_string)&str_abc);
+  CHECK("K.a", K_a(&k) == 0x0aaaaaaa);
+  CHECK("K.b", K_b(&k) == 11.5);
+  CHECK("K.c", K_c(&k) == true);
+  CHECK("L.a", L_a(&l) == -12.25);
+  CHECK("L.b", L_b(&l) == 0x0bbbbbbb);
+  CHECK("L.c", L_c(&l) == 0x0ccccccc);
+  CHECK("M.a", M_a(&m) == 0x0ddddddd);
+  CHECK("M.b", M_b(&m) == 13.5);
+  CHECK("M.c", M_c(&m) == true);
+  CHECK("M.d", M_d(&m) == (sts_string)&str_hello);
+  CHECK("M as B: b", M_as_B_b(&m) == 13.5);
 
   if (failures == 0) printf("layout ok\n");
   return failures == 0 ? 0 : 1;

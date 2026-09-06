@@ -109,6 +109,7 @@ round/sqrt/sin/cos/exp/log/pow`, `Math.PI/E`, `Math.random`.
 | `toI64(x)` | | `__sts.toI64(x)` | int32: exact (`sext`); double: truncate and saturate |
 | `toF64(x)` | | `__sts.toF64(x)` | `Number(bigint)` rounds to nearest like `sitofp` |
 | `readFileSync`, `writeFileSync`, `appendFileSync` | | `__sts.*` over `node:fs` with UTF-8 | a failure prints `statictsc: cannot read <path>` and exits 1 |
+| derived-class constructor without `super(...)` | | `super();` prepended to the body | StaticTS calls the (parameterless) ancestor constructor implicitly (WP2b); JavaScript throws at the first `this` without an explicit call |
 
 A user function named like a builtin (`toI32`, `readFileSync`) shadows it in
 the checker (`callees` has the call), and the rewrite follows that.
@@ -136,6 +137,12 @@ visible as known failures):
 - **`new Array<T>(n)` zero-fills**; there are no holes.
 - **`a[i]` is bounds-checked** and exits 1 on failure.
 - **`throw` traps** (SIGILL) instead of unwinding.
+- **Method calls dispatch on the receiver's declared type** (WP2b,
+  [LANGUAGE.md, Classes](LANGUAGE.md#classes)): with `class Square extends
+  Shape` overriding `area`, `areaOf(s: Shape)` calls `Shape.area` on a
+  `Square` natively but `Square.area` under Node, which looks the method up
+  on the runtime object. Programs without overrides agree (`corpus/class_inheritance`);
+  `cases/cls_extends_override` exercises the override and is a known failure.
 - **`Math.min`/`Math.max` on doubles use `llvm.minnum`/`maxnum`**, which
   return the non-NaN operand when the other is NaN; JavaScript returns NaN
   (docs/wp7-runtime.md). Corpus: `f64_minmax_nan` (known failure).

@@ -42,7 +42,7 @@ import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
 import { CompilerOptions, StaticType, alignOf, llvmType } from "../types";
 import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, returnAttributes } from "./attributes";
 import { DebugInfo } from "./debug";
-import { emitFieldInitializers, importedStructFunctions, structTypeDeclarations } from "./emit/classes";
+import { emitConstructorPrologue, importedStructFunctions, structTypeDeclarations } from "./emit/classes";
 import { EmitContext, LoopTarget } from "./emit/context";
 import { expressionEmitters } from "./emit/expressions";
 import { emitVariableDeclarationList, statementEmitters } from "./emit/statements";
@@ -142,8 +142,9 @@ export class Emitter implements EmitContext {
 
     // WP6: an automatic arena scope remembers the bump position before anything is allocated.
     if (facts.arenaScope) this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("sts_arena_mark")}()`);
-    // A constructor stores the field initializers before its body runs (WP2).
-    if (sig.role === "constructor") emitFieldInitializers(this, sig.struct!, "%this");
+    // A constructor stores the field initializers before its body runs (WP2),
+    // and a derived one without an explicit `super(...)` constructs its base part (WP2b).
+    if (sig.role === "constructor") emitConstructorPrologue(this, sig);
     this.emitBlock(sig.decl.body!);
 
     // Void functions may fall off the end; give them an explicit terminator.

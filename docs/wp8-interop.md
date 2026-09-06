@@ -109,6 +109,21 @@ int32_t add(int32_t a, int32_t b);
   `tests/run.js` links a `-Werror` driver that hands `sumI32` and `fill` a
   stack-built header over an `int32_t buf[4]` (the writes land in `buf`) and
   reads `squares(4)->data`.
+- Classes and interfaces (WP2, WP2b): every one becomes a `struct <Name>`
+  with the compiled field layout (natural alignment; a derived class lists
+  its base's fields first, flattened, exactly as `%struct.<Name>` is laid
+  out), after forward declarations of all of them so fields may point at
+  structs defined later. A class without fields stays an incomplete type.
+  Field types are spelled `int32_t`, `int64_t`, `double`, `bool`,
+  `sts_str *`, `struct X *` (also for `X | null`, which may be NULL) and
+  `sts_array *` for `T[]` (with the element type in a comment). Functions
+  taking or returning objects are declared with `struct X *` parameters, and
+  methods and constructors are declared too, as
+  `void Point_constructor(struct Point *this_, int32_t x, int32_t y) STS_SYMBOL("Point.constructor");`:
+  the object pointer first, bound to the dotted symbol by the same asm-label
+  mechanism. `tests/run.js` (`layout`) compiles the header for
+  `tests/layout/structs.ts` and static-asserts every struct's size against
+  the hand-written C twins.
 - Compile a host against it with the runtime directory on the include path:
 
 ```bash

@@ -412,18 +412,22 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
 }
 
 // ---- WP2: layout -------------------------------------------------------------------
-// tests/layout/structs.ts declares ten classes; tests/layout/structs.c declares the same
-// C structs with `_Static_assert(sizeof(struct X) == N)`. The compiler's size for each
-// class is read from the `sts_alloc_struct(i64 N)` in its `make<X>` function and must
-// equal the C file's N; then the C program (built with -std=c11 -Wall -Wextra -Werror,
-// which validates the asserts against clang's own layout) fills every struct through
-// the C definition and reads each field back through the compiled getters, so every
-// offset is verified at run time as well. Class modules must also pass `opt -passes=verify`.
+// tests/layout/structs.ts declares ten classes plus three derived ones (WP2b, whose
+// layout is the base's fields followed by their own); tests/layout/structs.c declares
+// the same C structs (flattened) with `_Static_assert(sizeof(struct X) == N)`. The
+// compiler's size for each class is read from the `sts_alloc_struct(i64 N)` in its
+// `make<X>` function and must equal the C file's N; then the C program (built with
+// -std=c11 -Wall -Wextra -Werror, which validates the asserts against clang's own
+// layout) fills every struct through the C definition and reads each field back
+// through the compiled getters, so every offset is verified at run time as well.
+// The generated `--emit-header` must list the same structs with the same sizes and
+// compile cleanly. Class modules must also pass `opt -passes=verify`.
 if (!only || "layout".includes(only)) {
   const layoutTs = path.join(root, "tests", "layout", "structs.ts");
   const layoutC = path.join(root, "tests", "layout", "structs.c");
   const layoutLl = path.join(buildDir, "layout_structs.ll");
-  const r = spawnSync("node", [cli, layoutTs, "-o", layoutLl], { cwd: root });
+  const layoutH = path.join(buildDir, "layout_structs.h");
+  const r = spawnSync("node", [cli, layoutTs, "-o", layoutLl, "--emit-header", layoutH], { cwd: root });
   check("layout: tests/layout/structs.ts compiles", r.status === 0, String(r.stderr));
   if (r.status === 0) {
     const ir = fs.readFileSync(layoutLl, "utf8");
@@ -439,7 +443,21 @@ if (!only || "layout".includes(only)) {
     const diffs = [];
     for (const [name, size] of fromC) if (fromIr.get(name) !== size) diffs.push(`${name}: C ${size}, IR ${fromIr.get(name)}`);
     check(`layout: compiler sizes match structs.c for ${fromC.size} structs (${[...fromC].map(([n, s]) => `${n}=${s}`).join(" ")})`,
-      fromC.size === 10 && fromIr.size === 10 && diffs.length === 0, diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`);
+      fromC.size === 13 && fromIr.size === 13 && diffs.length === 0, diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`);
+    if (HAS_CLANG) {
+      // WP2b: the C header lists every class with its flattened fields; a derived
+      // struct must therefore have the size the compiler (and structs.c) computed.
+      const headerCheck = path.join(buildDir, "layout_header_check.c");
+      fs.writeFileSync(headerCheck, [
+        '#include "layout_structs.h"',
+        ...[...fromC].map(([n, s]) => `_Static_assert(sizeof(struct ${n}) == ${s}, "${n}");`),
+        "int main(void) { return 0; }",
+        "",
+      ].join("\n"));
+      const hc = spawnSync("clang", ["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", `-I${buildDir}`, "-Iruntime", headerCheck], { cwd: root });
+      check("layout: --emit-header declares the 13 structs (derived ones flattened) with the sizes structs.c asserts, under -Wall -Wextra -Werror",
+        hc.status === 0 && fs.readFileSync(layoutH, "utf8").includes("struct M {"), String(hc.stderr));
+    }
     if (HAS_CLANG) {
       const exe = path.join(buildDir, "layout_structs");
       const cc = spawnSync("clang", ["-std=c11", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", "-O2", layoutC, layoutLl, "runtime/runtime.c", "-o", exe], { cwd: root });
