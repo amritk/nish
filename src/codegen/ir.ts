@@ -144,6 +144,8 @@ export class IRModule {
   /** Raw IR text (e.g. the inline allocator) placed after declarations. */
   private readonly rawDefinitions: string[] = [];
   private readonly attrGroups: string[] = [];
+  /** `target datalayout` / `target triple` lines (WP9, `--target`); empty keeps the module target-neutral. */
+  targetHeader: string[] = [];
 
   constructor(readonly sourceFileName: string) {}
 
@@ -173,7 +175,9 @@ export class IRModule {
 
   toString(): string {
     const sections: string[] = [
-      [`; ModuleID = '${this.sourceFileName}'`, `source_filename = "${this.sourceFileName}"`].join("\n"),
+      [`; ModuleID = '${this.sourceFileName}'`, `source_filename = "${this.sourceFileName}"`, ...this.targetHeader].join(
+        "\n"
+      ),
     ];
     if (this.typeDecls.length) sections.push(this.typeDecls.join("\n"));
     if (this.globals.length) sections.push(this.globals.join("\n"));

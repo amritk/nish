@@ -17,6 +17,7 @@ import { Compilation, EmittedModule } from "./compiler";
 import { CompileError } from "./diagnostics";
 import { generateDts, generateHeader, generateNapiShim } from "./interop";
 import { NumberMode } from "./types";
+import { SUPPORTED_TARGETS, resolveTarget } from "./codegen/target";
 import { PKG_ROOT, packageVersion } from "./version";
 
 const PROFILES = ["speed", "size", "debug"] as const;
@@ -95,6 +96,9 @@ function usage(): never {
       "  --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports",
       "  --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)",
       "  --unchecked-indexing       drop array bounds checks (unsafe; for benchmarks)",
+      "  --target <triple>|host     emit `target datalayout`/`target triple` for that machine",
+      `                             (${SUPPORTED_TARGETS.join(", ")}); default: target-neutral IR`,
+      "  --nsw                      integer add/sub/mul carry `nsw`: signed overflow is undefined (like C)",
       "  -v, --version              print the statictsc version and exit",
       "exit codes: 0 ok, 1 compile error, 2 usage, 3 toolchain (clang / build.sh), 70 internal error",
     ].join("\n")
@@ -150,6 +154,8 @@ function main(argv: string[]): number {
   let emitDts: string | undefined;
   let emitNapi: string | undefined;
   let uncheckedIndexing = false;
+  let target: string | undefined; // WP9: canonical triple, validated below
+  let nsw = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -184,6 +190,18 @@ function main(argv: string[]): number {
       runtimeDecls = true;
     } else if (arg === "--unchecked-indexing") {
       uncheckedIndexing = true;
+    } else if (arg === "--target") {
+      const spec = argv[++i];
+      const resolved = spec ? resolveTarget(spec) : undefined;
+      if (!resolved) {
+        console.error(
+          `--target: unsupported target \`${spec ?? ""}\` (supported: host, ${SUPPORTED_TARGETS.join(", ")})`
+        );
+        usage();
+      }
+      target = resolved.triple;
+    } else if (arg === "--nsw") {
+      nsw = true;
     } else if (arg === "-h" || arg === "--help") {
       usage();
     } else if (arg === "-v" || arg === "--version") {
@@ -209,7 +227,15 @@ function main(argv: string[]): number {
     }
   }
 
-  const compilation = new Compilation({ numberMode, optimizeAttributes, runtimeDecls, strictExports, uncheckedIndexing });
+  const compilation = new Compilation({
+    numberMode,
+    optimizeAttributes,
+    runtimeDecls,
+    strictExports,
+    uncheckedIndexing,
+    target,
+    nsw,
+  });
   try {
     // Test hook for the internal-error path (tests/run.js, WP12 block); not a user feature.
     if (process.env.STATICTSC_SIMULATE_ICE) throw new TypeError("simulated internal compiler error");
@@ -281,7 +307,7 @@ function main(argv: string[]): number {
  * show the stack only on request so users are not buried in frames.
  */
 function reportInternalError(err: unknown, argv: string[]): number {
-  const takesValue = /^(-o|--output|--link|--profile|--number-mode|--emit-header|--emit-dts|--emit-napi)$/;
+  const takesValue = /^(-o|--output|--link|--profile|--number-mode|--emit-header|--emit-dts|--emit-napi|--target)$/;
   const inputs = argv.filter((a, i) => !a.startsWith("-") && !takesValue.test(argv[i - 1] ?? ""));
   const where = inputs.length > 0 ? ` while compiling ${inputs.join(", ")}` : "";
   const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);

@@ -37,7 +37,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef i32 @total(%struct.sts_array* noundef nonnull align 8 readonly nocapture %xs) #0 {
+define noundef i32 @total(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %sum.addr = alloca i32, align 4
   %x.addr = alloca i32, align 4

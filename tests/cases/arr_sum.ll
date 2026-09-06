@@ -34,7 +34,7 @@ slow:
   ret i8* %grown
 }
 
-define void @fill(%struct.sts_array* noundef nonnull align 8 nocapture %xs, i32 noundef %n) #0 {
+define void @fill(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %n) #0 {
 entry:
   %i.addr = alloca i32, align 4
   store i32 0, i32* %i.addr, align 4
@@ -76,7 +76,7 @@ for.end:
   ret void
 }
 
-define noundef i32 @sum(%struct.sts_array* noundef nonnull align 8 readonly nocapture %xs, i32 noundef %n) #0 {
+define noundef i32 @sum(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i32 noundef %n) #0 {
 entry:
   %total.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4

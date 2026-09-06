@@ -25,6 +25,7 @@ import {
   LoopTarget,
   StatementEmitter,
   UnaryEmitter,
+  intOpcode,
 } from "./context";
 
 // ---- Branch helpers -----------------------------------------------------------
@@ -272,7 +273,7 @@ const emitCompoundAssignment: BinaryEmitter = (ctx, expr) => {
   const old = loadLocal(ctx, target);
   const rhs = ctx.emitExpression(expr.right);
   const [intOp, floatOp] = COMPOUND_OPCODES[expr.operatorToken.kind]!;
-  const opcode = target.type.kind === "f64" ? floatOp : intOp;
+  const opcode = target.type.kind === "f64" ? floatOp : intOpcode(ctx, intOp);
   const value = ctx.fn.emitValue(`${opcode} ${llvmType(target.type)} ${old}, ${rhs}`);
   storeLocal(ctx, target, value);
   return value;
@@ -283,7 +284,7 @@ function emitIncDec(ctx: EmitContext, expr: ts.PrefixUnaryExpression | ts.Postfi
   const target = ctx.program.bindings.get(expr.operand as ts.Identifier)!;
   const isFloat = target.type.kind === "f64";
   const increment = expr.operator === ts.SyntaxKind.PlusPlusToken;
-  const opcode = isFloat ? (increment ? "fadd" : "fsub") : increment ? "add" : "sub";
+  const opcode = isFloat ? (increment ? "fadd" : "fsub") : intOpcode(ctx, increment ? "add" : "sub");
   const one = isFloat ? "0x3FF0000000000000" : "1";
   const old = loadLocal(ctx, target);
   const value = ctx.fn.emitValue(`${opcode} ${llvmType(target.type)} ${old}, ${one}`);

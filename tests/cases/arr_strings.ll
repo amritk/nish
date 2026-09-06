@@ -43,7 +43,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef nonnull align 8 i8* @join(%struct.sts_array* noundef nonnull align 8 readonly nocapture %words) #0 {
+define noundef nonnull align 8 i8* @join(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %words) #0 {
 entry:
   %out.addr = alloca i8*, align 8
   %w.addr = alloca i8*, align 8

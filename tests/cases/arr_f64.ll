@@ -33,7 +33,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef double @mean(%struct.sts_array* noundef nonnull align 8 readonly nocapture %xs) #0 {
+define noundef double @mean(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %total.addr = alloca double, align 8
   %x.addr = alloca double, align 8

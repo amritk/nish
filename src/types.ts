@@ -32,6 +32,19 @@ export interface CompilerOptions {
    * undefined behaviour instead of a panic. For benchmarks only. Default: false.
    */
   uncheckedIndexing: boolean;
+  /**
+   * Target triple (WP9). When set, the module carries `target datalayout` and
+   * `target triple` so `opt`/`llc` run with the right layout and vector width
+   * without `-mtriple`. Undefined keeps the IR target-neutral. Default: undefined.
+   */
+  target?: string;
+  /**
+   * Emit `nsw` on i32/i64 `add`/`sub`/`mul` (WP9): signed overflow becomes
+   * undefined behaviour, as in C (Rust release builds wrap instead), so LLVM
+   * may assume induction variables and address arithmetic never wrap.
+   * Default: false (wrapping, the documented StaticTS semantics).
+   */
+  nsw: boolean;
 }
 
 export const DEFAULT_OPTIONS: CompilerOptions = {
@@ -40,6 +53,8 @@ export const DEFAULT_OPTIONS: CompilerOptions = {
   runtimeDecls: false,
   strictExports: false,
   uncheckedIndexing: false,
+  target: undefined,
+  nsw: false,
 };
 
 export type StaticType =

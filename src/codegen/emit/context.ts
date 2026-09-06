@@ -59,3 +59,18 @@ export type BinaryEmitter = (ctx: EmitContext, expr: ts.BinaryExpression) => str
 export type UnaryEmitter = (ctx: EmitContext, expr: ts.PrefixUnaryExpression) => string;
 
 export type EmitterTable<H> = Partial<Record<ts.SyntaxKind, H>>;
+
+/**
+ * The integer opcode to emit for `add` / `sub` / `mul` (WP9). Under `--nsw`
+ * the instruction carries the no-signed-wrap flag, which makes overflow
+ * poison (C semantics) instead of wrapping; every site that lowers user-level
+ * integer arithmetic (binary operators, unary minus, `op=`, `++`/`--`, on
+ * locals, fields and elements alike) goes through here so the flag is
+ * applied uniformly. Division, remainder and the compiler's own address and
+ * length arithmetic are never flagged: `sdiv`/`srem` have no `nsw` form, and
+ * the internal `i64` counters cannot overflow.
+ */
+export function intOpcode(ctx: EmitContext, opcode: string): string {
+  if (!ctx.opts.nsw) return opcode;
+  return opcode === "add" || opcode === "sub" || opcode === "mul" ? `${opcode} nsw` : opcode;
+}

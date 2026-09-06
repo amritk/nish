@@ -15,6 +15,20 @@
 #          containing node_api.h>). Inputs: <modules.ll> runtime/runtime.c and
 #          the shim from `statictsc --emit-napi`.
 #
+# Profile-guided optimisation (WP9), for the speed, size and napi profiles:
+#   --pgo-generate         instrumented build (-fprofile-generate); running the
+#                          binary writes default_*.profraw into the current
+#                          directory (or $LLVM_PROFILE_FILE)
+#   --pgo-use <profdata>   optimise with a merged profile (-fprofile-use=<file>)
+# Recipe:
+#   scripts/build.sh app.ll runtime/runtime.c -o app.instr --profile speed --pgo-generate
+#   ./app.instr <typical input>            # one or more training runs
+#   llvm-profdata merge -o app.profdata default_*.profraw
+#   scripts/build.sh app.ll runtime/runtime.c -o app --profile speed --pgo-use app.profdata
+# The instrumented link needs the compiler-rt profile runtime (Ubuntu:
+# libclang-rt-<ver>-dev; it ships with Apple clang and Homebrew llvm).
+# docs/wp9-optimisation.md reports what PGO buys on the benchmark suite.
+#
 # Works on Linux (clang + lld preferred, GNU ld tolerated) and macOS (Apple ld64
 # or Homebrew llvm). Set CC to pick a compiler (default: clang on PATH).
 set -euo pipefail
@@ -22,11 +36,16 @@ set -euo pipefail
 profile=speed
 out=""
 inputs=()
+pgo=()                                 # -fprofile-generate / -fprofile-use=<file>
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
     --profile) profile="$2"; shift 2 ;;
-    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
+    --pgo-generate) pgo=(-fprofile-generate); shift ;;
+    --pgo-use)
+      [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
+      pgo=("-fprofile-use=$2"); shift 2 ;;
+    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
     *) inputs+=("$1"); shift ;;
   esac
 done
@@ -54,12 +73,12 @@ case "$profile" in
   debug)
     "$CC" "${common[@]}" "${inputs[@]}" -lm -o "$out" ;;
   speed)
-    "$CC" "${common[@]}" -O3 -flto -DNDEBUG \
+    "$CC" "${common[@]}" -O3 -flto -DNDEBUG "${pgo[@]}" \
       -ffunction-sections -fdata-sections -fomit-frame-pointer \
       -fno-asynchronous-unwind-tables -fno-unwind-tables "${elf[@]}" \
       "${gc[@]}" "${strip_flag[@]}" "${inputs[@]}" -lm -o "$out" ;;
   size)
-    "$CC" "${common[@]}" -Oz -flto -DNDEBUG \
+    "$CC" "${common[@]}" -Oz -flto -DNDEBUG "${pgo[@]}" \
       -ffunction-sections -fdata-sections -fomit-frame-pointer \
       -fno-asynchronous-unwind-tables -fno-unwind-tables "${elf[@]}" \
       -fno-stack-protector -fvisibility=hidden \
@@ -96,7 +115,7 @@ case "$profile" in
     case "$(uname -s)" in Darwin) shared+=(-Wl,-undefined,dynamic_lookup) ;; esac
     # runtime/statictsc.h is the public ABI header the generated shim includes.
     runtime_inc="$(cd "$(dirname "$0")/../runtime" && pwd)"
-    "$CC" "${common[@]}" -O3 -flto -DNDEBUG -I"$node_inc" -I"$runtime_inc" \
+    "$CC" "${common[@]}" -O3 -flto -DNDEBUG "${pgo[@]}" -I"$node_inc" -I"$runtime_inc" \
       -ffunction-sections -fdata-sections -fomit-frame-pointer \
       -fno-asynchronous-unwind-tables -fno-unwind-tables "${elf[@]}" \
       "${shared[@]}" "${gc[@]}" "${strip_flag[@]}" "${inputs[@]}" -lm -o "$out" ;;

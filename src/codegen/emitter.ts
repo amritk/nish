@@ -39,6 +39,7 @@ import { emitVariableDeclarationList, statementEmitters } from "./emit/statement
 import { addStringConstant } from "./emit/strings";
 import { IRFunction, IRModule } from "./ir";
 import { ARENA_GLOBAL, ARENA_TYPE, ARRAY_TYPE, INLINE_ALLOCATOR_ATTRS, RUNTIME_FUNCTIONS, inlineAllocator } from "./runtime";
+import { resolveTarget, targetHeader } from "./target";
 
 export class Emitter implements EmitContext {
   private readonly module: IRModule;
@@ -62,6 +63,13 @@ export class Emitter implements EmitContext {
     facts?: Map<string, FunctionFacts>
   ) {
     this.module = new IRModule(program.sourceFile.fileName);
+    // `--target` (WP9): pin the module to a data layout so `opt` needs no `-mtriple`.
+    // The driver validated the spec; an unknown one here is a programming error.
+    if (opts.target !== undefined) {
+      const target = resolveTarget(opts.target);
+      if (!target) throw new Error(`emitter: unsupported target \`${opts.target}\``);
+      this.module.targetHeader = targetHeader(target);
+    }
     this.facts = facts ?? analyzeFunctions(program, opts);
   }
 

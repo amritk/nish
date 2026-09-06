@@ -35,7 +35,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef i32 @trace(%struct.sts_array* noundef nonnull align 8 readonly nocapture %m) #0 {
+define noundef i32 @trace(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %m) #0 {
 entry:
   %t.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
