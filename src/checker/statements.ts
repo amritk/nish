@@ -7,6 +7,7 @@
 import ts from "typescript";
 import { resolveTypeNode, sameType, typeToString } from "../types";
 import { CheckContext, CheckerTable, StatementChecker } from "./context";
+import { controlFlowStatementCheckers } from "./control-flow";
 import { LocalVar } from "./program";
 import { Scope } from "./scope";
 
@@ -28,9 +29,18 @@ const checkReturn: StatementChecker = (ctx, node, scope) => {
 };
 
 const checkVariableStatement: StatementChecker = (ctx, node, scope) => {
-  const list = (node as ts.VariableStatement).declarationList;
+  checkVariableDeclarationList(ctx, (node as ts.VariableStatement).declarationList, scope);
+  return false;
+};
+
+/** Declare each `let`/`const` of a list in `scope`; shared by variable statements and `for` initializers. */
+export function checkVariableDeclarationList(
+  ctx: CheckContext,
+  list: ts.VariableDeclarationList,
+  scope: Scope
+): void {
   const isVar = !(list.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const));
-  if (isVar) throw ctx.error("`var` is forbidden; use `let` or `const`", node);
+  if (isVar) throw ctx.error("`var` is forbidden; use `let` or `const`", list);
   const mutable = (list.flags & ts.NodeFlags.Const) === 0;
 
   for (const decl of list.declarations) {
@@ -52,8 +62,7 @@ const checkVariableStatement: StatementChecker = (ctx, node, scope) => {
     scope.declare(v, decl.name, ctx.sf);
     ctx.program.locals.set(decl, v);
   }
-  return false;
-};
+}
 
 const checkExpressionStatement: StatementChecker = (ctx, node, scope) => {
   ctx.checkExpression((node as ts.ExpressionStatement).expression, scope);
@@ -68,14 +77,27 @@ export const statementCheckers: CheckerTable<StatementChecker> = {
   [ts.SyntaxKind.VariableStatement]: checkVariableStatement,
   [ts.SyntaxKind.ExpressionStatement]: checkExpressionStatement,
   [ts.SyntaxKind.Block]: checkBlockStatement,
+  ...controlFlowStatementCheckers,
+};
+
+/** How a terminating statement is named in the unreachable-code diagnostic. */
+const TERMINATOR_NAMES: Partial<Record<ts.SyntaxKind, string>> = {
+  [ts.SyntaxKind.ReturnStatement]: "return",
+  [ts.SyntaxKind.BreakStatement]: "break",
+  [ts.SyntaxKind.ContinueStatement]: "continue",
+  [ts.SyntaxKind.ThrowStatement]: "throw",
+  [ts.SyntaxKind.IfStatement]: "an `if` whose branches all return",
 };
 
 /** Shared helper: check a statement list; errors on code after a terminator. */
 export function checkStatements(ctx: CheckContext, stmts: readonly ts.Statement[], scope: Scope): boolean {
-  let terminated = false;
+  let terminator: ts.Statement | undefined;
   for (const stmt of stmts) {
-    if (terminated) throw ctx.error("Unreachable code after return", stmt);
-    terminated = ctx.checkStatement(stmt, scope);
+    if (terminator) {
+      const what = TERMINATOR_NAMES[terminator.kind] ?? "an infinite loop";
+      throw ctx.error(`Unreachable code after ${what}`, stmt);
+    }
+    if (ctx.checkStatement(stmt, scope)) terminator = stmt;
   }
-  return terminated;
+  return terminator !== undefined;
 }

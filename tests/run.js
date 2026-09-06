@@ -98,6 +98,24 @@ for (const name of cases) {
   }
 }
 
+// ---- WP1: optimisation ------------------------------------------------------------
+// The emitted IR is target-neutral, so `opt` needs a triple before it believes it has
+// vector registers; without one the loop vectoriser never fires. x86_64 is always built in.
+const sumLoopLl = path.join(buildDir, "cf_sum_loop.ll");
+if (has("opt") && fs.existsSync(sumLoopLl)) {
+  const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", sumLoopLl]);
+  const out = String(o.stdout);
+  check("opt -O2 vectorises the cf_sum_loop reduction (<4 x i32> or <8 x i32>)",
+    o.status === 0 && /<(4|8) x i32>/.test(out), o.status === 0 ? out : String(o.stderr));
+  // Control-flow modules must satisfy the IR verifier (dominance, terminators, phis), not just the assembler.
+  for (const name of cases.filter((c) => c.startsWith("cf_") && (!only || c.includes(only)))) {
+    const ll = path.join(buildDir, `${name}.ll`);
+    if (!fs.existsSync(ll)) continue;
+    const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll]);
+    check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr));
+  }
+}
+
 // ---- B. Pipeline checks -----------------------------------------------------------
 if (!only && HAS_CLANG) {
   const rt = spawnSync("clang", ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "runtime/runtime.c", "tests/runtime_test.c", "-o", path.join(buildDir, "runtime_test")], { cwd: root });

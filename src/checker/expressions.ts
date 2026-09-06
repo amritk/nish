@@ -8,7 +8,12 @@
  */
 import ts from "typescript";
 import { BOOL, F64, I32, isNumeric, sameType, typeToString } from "../types";
-import { BinaryChecker, CheckerTable, ExpressionChecker } from "./context";
+import { BinaryChecker, CheckerTable, ExpressionChecker, UnaryChecker } from "./context";
+import {
+  controlFlowBinaryCheckers,
+  controlFlowExpressionCheckers,
+  controlFlowUnaryCheckers,
+} from "./control-flow";
 
 // ---- Leaves -----------------------------------------------------------------
 
@@ -38,15 +43,30 @@ const checkIdentifier: ExpressionChecker = (ctx, node, scope) => {
 
 // ---- Operators ------------------------------------------------------------------
 
+const checkNegate: UnaryChecker = (ctx, expr, scope) => {
+  const operand = ctx.checkExpression(expr.operand, scope);
+  if (!isNumeric(operand)) throw ctx.error(`Unsupported unary operator \`-\` on ${typeToString(operand)}`, expr);
+  return operand;
+};
+
+const checkNot: UnaryChecker = (ctx, expr, scope) => {
+  const operand = ctx.checkExpression(expr.operand, scope);
+  if (operand.kind !== "bool") throw ctx.error(`Unsupported unary operator \`!\` on ${typeToString(operand)}`, expr);
+  return BOOL;
+};
+
+/** Prefix operators keyed by operator token, like `binaryCheckers` for binary ones. */
+export const unaryCheckers: CheckerTable<UnaryChecker> = {
+  [ts.SyntaxKind.MinusToken]: checkNegate,
+  [ts.SyntaxKind.ExclamationToken]: checkNot,
+  ...controlFlowUnaryCheckers,
+};
+
 const checkPrefixUnary: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.PrefixUnaryExpression;
-  const operand = ctx.checkExpression(expr.operand, scope);
-  if (expr.operator === ts.SyntaxKind.MinusToken && isNumeric(operand)) return operand;
-  if (expr.operator === ts.SyntaxKind.ExclamationToken && operand.kind === "bool") return BOOL;
-  throw ctx.error(
-    `Unsupported unary operator \`${ts.tokenToString(expr.operator)}\` on ${typeToString(operand)}`,
-    expr
-  );
+  const handler = unaryCheckers[expr.operator];
+  if (!handler) throw ctx.error(`Unsupported unary operator \`${ts.tokenToString(expr.operator)}\``, expr);
+  return handler(ctx, expr, scope);
 };
 
 const checkAssignment: BinaryChecker = (ctx, expr, scope) => {
@@ -113,6 +133,7 @@ export const binaryCheckers: CheckerTable<BinaryChecker> = {
   [ts.SyntaxKind.ExclamationEqualsEqualsToken]: checkComparison,
   [ts.SyntaxKind.EqualsEqualsToken]: rejectLooseEquality,
   [ts.SyntaxKind.ExclamationEqualsToken]: rejectLooseEquality,
+  ...controlFlowBinaryCheckers,
 };
 
 const checkBinary: ExpressionChecker = (ctx, node, scope) => {
@@ -158,4 +179,5 @@ export const expressionCheckers: CheckerTable<ExpressionChecker> = {
   [ts.SyntaxKind.PrefixUnaryExpression]: checkPrefixUnary,
   [ts.SyntaxKind.BinaryExpression]: checkBinary,
   [ts.SyntaxKind.CallExpression]: checkCall,
+  ...controlFlowExpressionCheckers,
 };

@@ -1,7 +1,8 @@
 /** Statement lowering, one handler per `ts.SyntaxKind`. */
 import ts from "typescript";
 import { llvmType } from "../../types";
-import { EmitterTable, StatementEmitter } from "./context";
+import { EmitContext, EmitterTable, StatementEmitter } from "./context";
+import { controlFlowStatementEmitters } from "./control-flow";
 
 const emitReturn: StatementEmitter = (ctx, node) => {
   const stmt = node as ts.ReturnStatement;
@@ -19,7 +20,12 @@ const emitReturn: StatementEmitter = (ctx, node) => {
  * alloca is named after the variable so temp numbering is unaffected.
  */
 const emitVariableStatement: StatementEmitter = (ctx, node) => {
-  for (const decl of (node as ts.VariableStatement).declarationList.declarations) {
+  emitVariableDeclarationList(ctx, (node as ts.VariableStatement).declarationList);
+};
+
+/** Shared by variable statements and `for` initializers. */
+export function emitVariableDeclarationList(ctx: EmitContext, list: ts.VariableDeclarationList): void {
+  for (const decl of list.declarations) {
     const local = ctx.program.locals.get(decl)!;
     const ty = llvmType(local.type);
     const slot = ctx.fn.emitAlloca(`${local.name}.addr`, ty, ctx.align(local.type));
@@ -27,7 +33,7 @@ const emitVariableStatement: StatementEmitter = (ctx, node) => {
     const init = ctx.emitExpression(decl.initializer!);
     ctx.fn.emit(`store ${ty} ${init}, ${ty}* ${slot}${ctx.alignSuffix(local.type)}`);
   }
-};
+}
 
 const emitExpressionStatement: StatementEmitter = (ctx, node) => {
   ctx.emitExpression((node as ts.ExpressionStatement).expression);
@@ -40,4 +46,5 @@ export const statementEmitters: EmitterTable<StatementEmitter> = {
   [ts.SyntaxKind.VariableStatement]: emitVariableStatement,
   [ts.SyntaxKind.ExpressionStatement]: emitExpressionStatement,
   [ts.SyntaxKind.Block]: emitBlockStatement,
+  ...controlFlowStatementEmitters,
 };

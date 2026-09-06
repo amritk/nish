@@ -10,21 +10,22 @@
 import ts from "typescript";
 import { CompileError } from "../diagnostics";
 import { CompilerOptions, StaticType, typeToString } from "../types";
-import { CheckContext } from "./context";
+import { CheckContext, LoopInfo } from "./context";
 import { collectFunctionSignature } from "./declarations";
 import { expressionCheckers } from "./expressions";
 import { CheckedProgram, FunctionSig, LocalVar } from "./program";
 import { Scope } from "./scope";
-import { checkStatements, statementCheckers } from "./statements";
+import { checkStatements, checkVariableDeclarationList, statementCheckers } from "./statements";
 
 export * from "./program";
 export { Scope } from "./scope";
-export type { CheckContext, StatementChecker, ExpressionChecker, BinaryChecker } from "./context";
+export type { CheckContext, StatementChecker, ExpressionChecker, BinaryChecker, UnaryChecker } from "./context";
 
 export class Checker implements CheckContext {
   readonly sf: ts.SourceFile;
   readonly program: CheckedProgram;
   readonly sigs = new Map<string, FunctionSig>();
+  readonly loops: LoopInfo[] = [];
   current!: FunctionSig;
 
   constructor(sourceFile: ts.SourceFile, readonly opts: CompilerOptions) {
@@ -97,6 +98,10 @@ export class Checker implements CheckContext {
     const t = handler(this, expr, scope);
     this.program.types.set(expr, t);
     return t;
+  }
+
+  declareVariables(list: ts.VariableDeclarationList, scope: Scope): void {
+    checkVariableDeclarationList(this, list, scope);
   }
 }
 

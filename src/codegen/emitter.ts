@@ -21,9 +21,9 @@ import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
 import { CompilerOptions, StaticType, alignOf, llvmType } from "../types";
 import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, returnAttributes } from "./attributes";
-import { EmitContext } from "./emit/context";
+import { EmitContext, LoopTarget } from "./emit/context";
 import { expressionEmitters } from "./emit/expressions";
-import { statementEmitters } from "./emit/statements";
+import { emitVariableDeclarationList, statementEmitters } from "./emit/statements";
 import { IRFunction, IRModule } from "./ir";
 import { ARENA_GLOBAL, ARENA_TYPE, INLINE_ALLOCATOR_ATTRS, RUNTIME_FUNCTIONS, inlineAllocator } from "./runtime";
 
@@ -31,6 +31,7 @@ export class Emitter implements EmitContext {
   private readonly module: IRModule;
   private readonly facts: Map<string, FunctionFacts>;
   fn!: IRFunction;
+  readonly loops: LoopTarget[] = [];
   private slots = new WeakMap<LocalVar, string>();
   /** Runtime symbols referenced by this module; drives which declarations are emitted. */
   private readonly usedRuntime = new Set<string>();
@@ -85,6 +86,10 @@ export class Emitter implements EmitContext {
     return `@${name}`;
   }
 
+  declare(text: string): void {
+    this.module.addDeclaration(text);
+  }
+
   private emitRuntimePrelude(): void {
     const all = this.opts.runtimeDecls;
     const wantsAlloc = all || this.usedRuntime.has("sts_alloc_struct");
@@ -119,6 +124,10 @@ export class Emitter implements EmitContext {
     const handler = expressionEmitters[expr.kind];
     if (!handler) throw new Error(`emitter: unexpected expression ${ts.SyntaxKind[expr.kind]}`);
     return handler(this, expr);
+  }
+
+  emitVariableDeclarations(list: ts.VariableDeclarationList): void {
+    emitVariableDeclarationList(this, list);
   }
 
   // ---- Context helpers ----------------------------------------------------
