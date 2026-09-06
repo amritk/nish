@@ -796,7 +796,7 @@ function total(xs: number[]): number {
 ```llvm
 %struct.sts_array = type { i64, i64, i8* }
 
-define noundef i32 @total(%struct.sts_array* noundef nonnull align 8 readonly nocapture %xs) #0 {
+define noundef i32 @total(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %sum.addr = alloca i32, align 4
   %x.addr = alloca i32, align 4
@@ -1150,7 +1150,7 @@ function set(a: number[], i: number, v: number): void {
 
 declare void @sts_panic_index(i64 noundef, i64 noundef) #1
 
-define noundef i32 @get(%struct.sts_array* noundef nonnull align 8 readonly nocapture %a, i32 noundef %i) #0 {
+define noundef i32 @get(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %i) #0 {
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %a, i64 0, i32 0
@@ -1171,7 +1171,7 @@ bounds.ok:
   ret i32 %8
 }
 
-define void @set(%struct.sts_array* noundef nonnull align 8 nocapture %a, i32 noundef %i, i32 noundef %v) #0 {
+define void @set(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) nocapture %a, i32 noundef %i, i32 noundef %v) #0 {
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %a, i64 0, i32 0
@@ -1215,7 +1215,7 @@ function get(a: number[], i: number): number {
 ```llvm
 %struct.sts_array = type { i64, i64, i8* }
 
-define noundef i32 @get(%struct.sts_array* noundef nonnull align 8 readonly nocapture %a, i32 noundef %i) #0 {
+define noundef i32 @get(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %i) #0 {
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %a, i64 0, i32 2
@@ -1284,7 +1284,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef nonnull align 8 %struct.sts_array* @squares(i32 noundef %n) #0 {
+define noundef nonnull align 8 dereferenceable(24) %struct.sts_array* @squares(i32 noundef %n) #0 {
 entry:
   %xs.addr = alloca %struct.sts_array*, align 8
   %i.addr = alloca i32, align 4
@@ -1343,7 +1343,7 @@ for.end:
   ret %struct.sts_array* %24
 }
 
-define noundef nonnull align 8 %struct.sts_array* @pair() #0 {
+define noundef nonnull align 8 dereferenceable(24) %struct.sts_array* @pair() #0 {
 entry:
   %0 = call i8* @sts_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.sts_array*
@@ -1417,7 +1417,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef nonnull align 8 %struct.sts_array* @zeros(i32 noundef %n) #0 {
+define noundef nonnull align 8 dereferenceable(24) %struct.sts_array* @zeros(i32 noundef %n) #0 {
 entry:
   %0 = sext i32 %n to i64
   %1 = call i8* @sts_alloc_struct(i64 24)
@@ -1434,7 +1434,7 @@ entry:
   ret %struct.sts_array* %2
 }
 
-define noundef i32 @len(%struct.sts_array* noundef nonnull align 8 readonly nocapture %xs) #1 {
+define noundef i32 @len(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #1 {
 entry:
   %0 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %xs, i64 0, i32 0
   %1 = load i64, i64* %0, align 8
