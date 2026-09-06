@@ -155,6 +155,25 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `docs/cookbook/*.ts` by `docs/cookbook/regen.sh`), `docs/ARCHITECTURE.md`,
   `docs/FAQ.md`, the `docs/README.md` index, `docs/check-links.mjs`, and a
   README restructured into a short tour.
+- **Module constants (WP14).** `const NAME: T = <constant expression>` at the
+  top level, with `export` and `import` (`tests/link/const_export`). A module
+  constant is a name for a value, not a global: the checker folds the
+  initialiser and every use site carries the value, so no symbol, no
+  initialiser and no relocation is emitted, and a module still has no
+  top-level code. The initialiser is an ordinary StaticTS expression
+  restricted to literals and other constants, so a constant can compute
+  exactly what a runtime expression can — integer arithmetic wraps at the
+  declared width, `1 / 0` is refused at compile time rather than at run time,
+  and a value that does not fit its annotation is an error. Folding is by
+  need, so a constant may name one declared later or in another module, and a
+  cycle is diagnosed. `--emit-checked` prints each constant's folded value.
+  The first item of the self-hosting gap list in
+  [docs/wp14-selfhost.md](docs/wp14-selfhost.md).
+- **Self-hosting plan.** [docs/wp14-selfhost.md](docs/wp14-selfhost.md): what
+  "the compiler compiles itself" means here (a `self/` compiler written in
+  StaticTS, and the `IR(stage1) == IR(stage2)` fixed point that proves it),
+  the StaticTS-0 subset it is written in, and the ordered list of what the
+  language is still missing.
 
 ### Fixed
 

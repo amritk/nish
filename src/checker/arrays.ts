@@ -242,7 +242,7 @@ function checkElementAssignment(ctx: CheckContext, expr: ts.BinaryExpression, sc
 function rejectLengthAssignment(ctx: CheckContext, expr: ts.BinaryExpression, scope: Scope): void {
   const left = unwrapParens(expr.left);
   if (!ts.isPropertyAccessExpression(left) || left.name.text !== "length") return;
-  if (!isValueReceiver(left.expression, scope)) return;
+  if (!isValueReceiver(ctx, left.expression, scope)) return;
   const receiver = ctx.checkExpression(left.expression, scope);
   if (receiver.kind === "array") {
     throw ctx.error(`Cannot assign to \`length\` of ${typeToString(receiver)} (array length is read-only; use \`push\`)`, left);

@@ -301,6 +301,59 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end decl_locals -->
 
+### Module constants
+
+A top-level `const` is not a global: it emits no symbol and no initialiser.
+The checker folds it, and every use site carries the value — `AREA` reaches
+`sts_str_from_i32` as the literal `64`, and `ret i32 64` is the whole of
+`return AREA`. The template literal around it is still built at run time:
+folding stops at the constant, and `${...}` is not itself a constant
+expression.
+
+<!-- cookbook:begin decl_const -->
+```ts
+const WIDTH: i32 = 8;
+const AREA: i32 = WIDTH * WIDTH;
+const LABEL: string = "area = ";
+
+export function main(): number {
+  console.log(`${LABEL}${AREA}`);
+  return AREA;
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"area = \00" }, align 8
+
+declare void @sts_free_arena() #0
+declare noundef i64 @sts_arena_mark() #0
+declare void @sts_arena_release(i64 noundef) #0
+declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
+
+define noundef i32 @sts_main() #0 {
+entry:
+  %arena.mark = call i64 @sts_arena_mark()
+  %0 = call i8* @sts_str_from_i32(i32 64)
+  %1 = call i8* @sts_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.0 to i8*), i8* %0)
+  call void @sts_print(i8* %1)
+  call void @sts_arena_release(i64 %arena.mark)
+  ret i32 64
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @sts_main()
+  call void @sts_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+```
+<!-- cookbook:end decl_const -->
+
 ### `export function main` and the entry wrapper
 
 The user's `main` becomes `@sts_main`; the compiler adds a C-ABI `@main` that

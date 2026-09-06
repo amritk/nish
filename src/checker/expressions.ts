@@ -55,9 +55,18 @@ const checkBooleanLiteral: ExpressionChecker = () => BOOL;
 const checkIdentifier: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.Identifier;
   const v = scope.lookup(expr.text);
-  if (!v) throw ctx.error(`Unknown identifier \`${expr.text}\``, expr);
-  ctx.program.bindings.set(expr, v);
-  return scope.typeOf(v); // the declared type, or the narrowed one inside `if (p !== null)` (WP6)
+  if (v) {
+    ctx.program.bindings.set(expr, v);
+    return scope.typeOf(v); // the declared type, or the narrowed one inside `if (p !== null)` (WP6)
+  }
+  // A local shadows a module constant, as it would in TypeScript, so the
+  // constant table is consulted only after the scope chain (WP14).
+  const constant = ctx.program.constants.get(expr.text);
+  if (constant) {
+    ctx.program.constRefs.set(expr, constant);
+    return constant.type;
+  }
+  throw ctx.error(`Unknown identifier \`${expr.text}\``, expr);
 };
 
 // ---- Operators ------------------------------------------------------------------
@@ -93,7 +102,12 @@ const checkPrefixUnary: ExpressionChecker = (ctx, node, scope) => {
 const checkAssignment: BinaryChecker = (ctx, expr, scope) => {
   if (!ts.isIdentifier(expr.left)) throw ctx.error("Only simple variables can be assigned", expr.left);
   const target = scope.lookup(expr.left.text);
-  if (!target) throw ctx.error(`Unknown identifier \`${expr.left.text}\``, expr.left);
+  if (!target) {
+    if (ctx.program.constants.has(expr.left.text)) {
+      throw ctx.error(`Cannot assign to \`${expr.left.text}\` because it is a module constant`, expr.left);
+    }
+    throw ctx.error(`Unknown identifier \`${expr.left.text}\``, expr.left);
+  }
   if (!target.mutable) {
     throw ctx.error(
       `Cannot assign to \`${target.name}\` because it is a ${target.storage === "param" ? "parameter" : "const"}`,
@@ -193,7 +207,7 @@ const checkCall: ExpressionChecker = (ctx, node, scope) => {
   if (expr.expression.kind === ts.SyntaxKind.SuperKeyword) return checkSuperCall(ctx, expr, scope); // WP2b
   if (ts.isPropertyAccessExpression(expr.expression)) {
     // `value.method(...)` dispatches on the receiver type; `console.log(...)` is a dotted builtin.
-    return isValueReceiver(expr.expression.expression, scope)
+    return isValueReceiver(ctx, expr.expression.expression, scope)
       ? checkMethodCall(ctx, expr, scope)
       : checkBuiltinCall(ctx, expr, scope);
   }

@@ -8,6 +8,7 @@ import { StaticType, isInteger, llvmType } from "../../types";
 import { emitIntBinary } from "./arithmetic";
 import { arrayExpressionEmitters, installArrayAssignmentEmitters } from "./arrays";
 import { CheckedProgram } from "../../checker";
+import { ConstValue, constValue } from "../../checker/constants";
 import { BuiltinCall, f64Constant } from "./builtins";
 import { ioFunctionEmitters } from "./io";
 import { conversionEmitters, parseEmitters } from "./math";
@@ -23,6 +24,14 @@ import {
 } from "./control-flow";
 
 // ---- Constants --------------------------------------------------------------------
+
+/** The LLVM constant for a folded module constant, by shape. */
+export function constantValue(ctx: EmitContext, value: ConstValue): string {
+  if (value.kind === "bool") return value.value ? "true" : "false";
+  if (value.kind === "string") return ctx.stringConstant(value.value);
+  if (value.kind === "f64") return f64Constant(value.value);
+  return String(value.value);
+}
 
 export function numericConstant(text: string, type: StaticType): string {
   const n = Number(text);
@@ -44,8 +53,14 @@ const emitFalse: ExpressionEmitter = () => "false";
 /** `null` of a `T | null` type: the pointer constant (WP6). */
 const emitNull: ExpressionEmitter = () => "null";
 
-/** Parameters are SSA values; locals are loaded from their alloca slot. */
+/**
+ * Parameters are SSA values; locals are loaded from their alloca slot; a
+ * module constant (WP14) is neither, because the checker already folded it —
+ * the name lowers to the value, with no global and no load.
+ */
 const emitIdentifier: ExpressionEmitter = (ctx, expr) => {
+  const constant = ctx.program.constRefs.get(expr as ts.Identifier);
+  if (constant) return constantValue(ctx, constValue(constant));
   const local = ctx.program.bindings.get(expr as ts.Identifier)!;
   if (local.storage === "param") return `%${local.name}`;
   const ty = llvmType(local.type);

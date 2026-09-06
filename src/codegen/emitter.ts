@@ -212,11 +212,14 @@ export class Emitter implements EmitContext {
   /**
    * One `declare` per distinct imported symbol, with the exporter's
    * attributes. An imported class (WP2) contributes its constructor and
-   * every method; an imported interface contributes nothing but its type.
+   * every method; an imported interface contributes nothing but its type,
+   * and an imported constant (WP14) nothing at all — it was folded into
+   * every use site, so there is no symbol to link against.
    */
   private emitImportDeclarations(): void {
     const seen = new Set<string>();
     for (const imp of this.program.imports) {
+      if (imp.constant) continue;
       const sigs = imp.struct ? importedStructFunctions(imp) : imp.sig ? [imp.sig] : undefined;
       if (!sigs) throw new Error(`emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``);
       for (const sig of sigs) {

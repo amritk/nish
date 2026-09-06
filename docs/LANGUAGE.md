@@ -204,12 +204,16 @@ value, so nothing is boxed; `null` takes its type from context.
 ### Program structure
 
 A module (one `.ts` file) may contain, at the top level, only `function`,
-`class`, and `interface` declarations, `import` statements, and `export`
+`class`, and `interface` declarations, `const` declarations
+([Module constants](#module-constants)), `import` statements, and `export`
 modifiers on those declarations. Any other top-level statement, including
-`let`/`const`, `enum`, and `type` aliases, is rejected with
+`let`, `enum`, and `type` aliases, is rejected with
 `Only top-level function declarations are supported in Phase 1 (found <Kind>)`
-(`tests/cases/reject_top_level_stmt`; `enum`/`type` *(CLI only)*). Modules
-have no top-level code, so there is no initialisation order to worry about.
+(`tests/cases/reject_top_level_stmt`; `enum`/`type` *(CLI only)*); top-level
+`let` and `var` name the reason instead (`` Top-level `let` is not supported ``,
+`reject_const_top_level_let`). Modules have no top-level code, so there is no
+initialisation order to worry about — which is exactly why a top-level `const`
+must be a value the compiler can compute for itself.
 
 ### Functions
 
@@ -249,14 +253,77 @@ function add(a: number, b: number): number {
   `tests/cases/reject_missing_return`, `reject_cf_missing_return_loop`); see
   [Termination](#termination-definite-return-and-unreachable-code).
 
+### Module constants
+
+```ts
+const TOKEN_NAME: i32 = 1;
+const TOKEN_END: i32 = TOKEN_NAME + 1;
+export const PROMPT: string = "> ";
+```
+
+A top-level `const` names a value the compiler already knows. It is **not a
+global variable**: no symbol is emitted, no initialiser runs, and every use of
+the name lowers to the value itself — `AREA` below is the literal `64` in the
+IR, not a load (`tests/cases/const_basic`, `const_fold`, `dump_checked_const`).
+That is what lets a module keep its table of kinds and limits while still
+having no top-level code and therefore no initialisation order.
+
+- **The type annotation is required**, as on every other top-level declaration
+  (`` Module constant `answer` needs a type annotation ``,
+  `tests/cases/reject_const_no_annotation`), and so is an initialiser.
+- **The type must be `i32`, `i64`, `f64`, `number`, `boolean`, or `string`.**
+  An array, class, or interface constant would need an allocation, and there is
+  no code to run it (`` must be a number, boolean, or string ``,
+  `tests/cases/reject_const_array`).
+- **The initialiser is an ordinary StaticTS expression restricted to literals
+  and other constants**: the operators of [Operators](#operators) over numeric,
+  boolean, and string literals, other module constants (declared anywhere in
+  the module, or imported), and parentheses. Anything else — a call, a `new`, a
+  local, a parameter — is
+  `` A module constant's initialiser must be a literal, another constant, or arithmetic over them ``
+  (`tests/cases/reject_const_not_constant`, `reject_const_unknown_name`).
+  There is deliberately no second, larger language inside `const`: a constant
+  can compute exactly what a runtime expression can.
+- **Folding follows the language's own arithmetic.** Integer arithmetic wraps
+  at the declared width, so `const WRAPPED: i32 = 2147483647 + 1` is
+  `-2147483648`, the same value the emitted `add` would produce
+  (`tests/cases/const_wrap`). A bare integer literal takes the width of the
+  constant it initialises, so `const BIG: i64 = 1000000000 * 10` is computed in
+  64 bits (`const_i64`). Mixing widths is an error, as it is anywhere else
+  (`reject_const_mixed_widths`). `f64` folds in IEEE-754 (`const_f64`), and
+  `+` on two strings concatenates at compile time, interning the result once
+  (`const_string`).
+- **The two failures the divisor check catches at run time are refused at
+  compile time** instead: `1 / 0` and `MIN / -1` in a constant are
+  `attempt to divide by zero in a constant` and
+  `attempt to divide with overflow in a constant`
+  (`tests/cases/reject_const_div_zero`; see
+  [Checked integer division](#checked-integer-division)).
+- **A value that does not fit its annotation is an error, not a wrap**:
+  `const TOO_BIG: i32 = 3000000000` is `` Constant `TOO_BIG` does not fit in i32 ``
+  (`tests/cases/reject_const_overflow`), and a folded value of the wrong type is
+  `` declared i32 but its value is string `` (`reject_const_type_mismatch`).
+- **A constant cannot be assigned**: `` Cannot assign to `LIMIT` because it is a
+  module constant `` covers `=`, `op=`, `++` and `--`
+  (`tests/cases/reject_const_assign`, `reject_const_incdec`).
+- **A local shadows a constant of the same name**, as it would in TypeScript:
+  the scope chain is consulted first (`tests/cases/const_shadow`).
+- **A constant may name a constant declared later**, in the same module or in
+  an imported one, because folding is by need rather than in source order. A
+  cycle is `` Module constant `A` is defined in terms of itself ``
+  (`tests/cases/reject_const_cycle`).
+- **A string constant is a value**, so it is a receiver like any other string:
+  `NAME.length` is the folded literal's byte length
+  (`tests/cases/const_string_member`).
+
 ### `export` and `import`
 
-- `export` is accepted on `function`, `class`, and `interface` declarations
-  (`tests/cases/export_fn`, `tests/link/class_export`). `export const`,
-  `export default`, `export { ... }`, `export * from`, and `export =` are
-  rejected (`Only functions can be exported`,
-  `tests/cases/reject_export_const`; `` `export default` is not supported ``,
-  `reject_export_default`).
+- `export` is accepted on `function`, `class`, `interface`, and `const`
+  declarations (`tests/cases/export_fn`, `tests/link/class_export`,
+  `tests/link/const_export`). `export default`, `export { ... }`,
+  `export * from`, and `export =` are rejected
+  (`Only functions can be exported`; `` `export default` is not supported ``,
+  `tests/cases/reject_export_default`).
 - The only import form is a named import from a relative specifier:
   `import { square, cube as pow3 } from "./math"` (`tests/link/two_file`).
   The specifier must start with `./` or `../`
@@ -268,6 +335,10 @@ function add(a: number, b: number): number {
   imports (`Side-effect imports`, `reject_side_effect_import`), and
   type-only imports are rejected. A missing file is
   `` Cannot find module `./does_not_exist` `` (`reject_missing_module`).
+- An imported constant contributes no `declare` and no relocation: it is
+  folded into every use site in the importing module exactly as it is in the
+  exporting one (`tests/link/const_export`,
+  `tests/differential/corpus/const_modules`).
 - Functions may be renamed on import (`as`); classes and interfaces may not,
   because the type name is part of the ABI (`%struct.Point`,
   `@Point.constructor`): `` Classes cannot be renamed on import ``
@@ -1123,7 +1194,11 @@ messages are exact for the cases cited; other rows quote
 
 | Situation | Message | Test |
 | --- | --- | --- |
-| top-level statement other than function/class/interface/import | `Only top-level function declarations are supported in Phase 1 (found <Kind>)` | `reject_top_level_stmt` |
+| top-level statement other than function/class/interface/const/import | `Only top-level function declarations are supported in Phase 1 (found <Kind>)` | `reject_top_level_stmt` |
+| top-level `let` / `var` | `` Top-level `let` is not supported; a module has no top-level code, so only `const` is available `` | `reject_const_top_level_let` |
+| constant initialiser that is not constant | `A module constant's initialiser must be a literal, another constant, or arithmetic over them` | `reject_const_not_constant` |
+| constant cycle | `` Module constant `A` is defined in terms of itself `` | `reject_const_cycle` |
+| assignment to a module constant | `` Cannot assign to `LIMIT` because it is a module constant `` | `reject_const_assign`, `reject_const_incdec` |
 | missing return type | `` Function `f` needs an explicit return type annotation `` | `reject_missing_return_type` |
 | unknown identifier | `` Unknown identifier `x` `` | `reject_unknown_ident` |
 | wrong arity | `` `f` expects 1 argument(s), got 2 `` | `reject_arity` |

@@ -24,7 +24,9 @@ import {
   isStructDeclaration,
   thisLocal,
 } from "./classes";
+import { ConstInfo, constValue } from "./constants";
 import {
+  collectConstant,
   collectFunctionSignature,
   collectImports,
   markEntryMain,
@@ -94,8 +96,11 @@ export class Checker implements CheckContext {
       functions: [],
       imports: [],
       exports: new Map(),
+      constants: new Map(),
+      exportedConstants: new Map(),
       types: new WeakMap(),
       bindings: new WeakMap(),
+      constRefs: new WeakMap(),
       locals: new WeakMap(),
       callees: new WeakMap(),
       structs: new Map(),
@@ -156,10 +161,30 @@ export class Checker implements CheckContext {
         }
         continue;
       }
+      if (ts.isVariableStatement(stmt)) {
+        this.sink.recover(() => this.collectConstants(stmt));
+        continue;
+      }
       this.sink.recover(() => this.collectFunction(stmt));
     }
     for (const info of structs) {
       if (!info.poisoned && !this.sink.recover(() => finishStruct(this, info))) info.poisoned = true;
+    }
+  }
+
+  /**
+   * A top-level `const` names a compile-time value (WP14). The initialiser is
+   * not folded here: it may reference a constant imported from a module that
+   * has not been checked yet, so folding waits for `foldConstants` in pass 2.
+   */
+  private collectConstants(stmt: ts.VariableStatement): void {
+    for (const decl of stmt.declarationList.declarations) {
+      const info = collectConstant(stmt, decl, this.sf, this.opts, this.program.constants);
+      if (this.program.constants.has(info.name) || this.sigs.has(info.name) || this.program.structs.has(info.name)) {
+        this.error(`\`${info.name}\` is already declared in this module`, decl.name);
+      }
+      this.program.constants.set(info.name, info);
+      if (info.exported) this.program.exportedConstants.set(info.name, info);
     }
   }
 
@@ -191,6 +216,11 @@ export class Checker implements CheckContext {
   }
 
   private bindImport(imp: ImportBinding, target: CheckedProgram): void {
+    const constant = target.exportedConstants.get(imp.importedName);
+    if (constant) {
+      this.bindConstantImport(imp, constant);
+      return;
+    }
     const struct = target.structs.get(imp.importedName);
     if (struct && struct.decl.getSourceFile() === target.sourceFile) {
       this.bindStructImport(imp, struct);
@@ -253,8 +283,39 @@ export class Checker implements CheckContext {
     this.program.structs.set(imp.localName, struct);
   }
 
+  /**
+   * An imported `export const` (WP14) joins this module's constant table under
+   * its local name. Nothing is linked: the value is folded into every use site
+   * here exactly as it is in the exporting module, so `import { KIND_IF }`
+   * costs no symbol and no relocation.
+   */
+  private bindConstantImport(imp: ImportBinding, constant: ConstInfo): void {
+    if (this.program.constants.has(imp.localName) || this.sigs.has(imp.localName) ||
+        this.program.structs.has(imp.localName)) {
+      this.error(`\`${imp.localName}\` is already declared in this module`, imp.element);
+    }
+    if (this.importsUsedAsTypes.has(imp.localName)) {
+      this.error(`\`${imp.localName}\` is a constant imported from \`${imp.specifier}\`, not a type`, imp.element);
+    }
+    imp.constant = constant;
+    this.program.constants.set(imp.localName, constant);
+  }
+
+  /**
+   * Fold every constant this module declares. Done before the bodies so a bad
+   * initialiser is reported once, against its own declaration, rather than
+   * once per use site; an unused constant is still folded, because a constant
+   * that cannot be computed is an error whether or not anybody reads it.
+   */
+  foldConstants(): void {
+    for (const info of this.program.constants.values()) {
+      if (info.decl.getSourceFile() === this.sf) this.sink.recover(() => constValue(info));
+    }
+  }
+
   /** Pass 2: check bodies. Every function is checked even after an earlier one was rejected (WP10). */
   checkBodies(): CheckedProgram {
+    this.foldConstants();
     for (const sig of this.program.functions) {
       if (!this.sink.recover(() => this.checkFunctionBody(sig))) sig.poisoned = true;
     }

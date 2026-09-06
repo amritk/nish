@@ -199,7 +199,12 @@ const checkLogical: BinaryChecker = (ctx, expr, scope) => {
 function resolveMutableTarget(ctx: CheckContext, target: ts.Expression, scope: Scope): LocalVar {
   if (!ts.isIdentifier(target)) throw ctx.error("Only simple variables can be assigned", target);
   const v = scope.lookup(target.text);
-  if (!v) throw ctx.error(`Unknown identifier \`${target.text}\``, target);
+  if (!v) {
+    if (ctx.program.constants.has(target.text)) {
+      throw ctx.error(`Cannot assign to \`${target.text}\` because it is a module constant`, target);
+    }
+    throw ctx.error(`Unknown identifier \`${target.text}\``, target);
+  }
   if (!v.mutable) {
     throw ctx.error(
       `Cannot assign to \`${v.name}\` because it is a ${v.storage === "param" ? "parameter" : "const"}`,

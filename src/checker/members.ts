@@ -46,13 +46,20 @@ export const namespaceProperties: Record<string, NamespacePropertyChecker> = {};
  */
 export const assignmentTargetCheckers: CheckerTable<BinaryChecker> = {};
 
-export function isValueReceiver(receiver: ts.Expression, scope: Scope): boolean {
-  return !ts.isIdentifier(receiver) || scope.lookup(receiver.text) !== undefined;
+/**
+ * Whether `receiver` is a value rather than a builtin namespace: `x.length`
+ * is a member of `x`, `Math.floor` is not a member of anything. A module
+ * constant (WP14) is a value, so it is looked up here too — otherwise
+ * `LIMIT.length` would be reported as an unknown builtin.
+ */
+export function isValueReceiver(ctx: CheckContext, receiver: ts.Expression, scope: Scope): boolean {
+  if (!ts.isIdentifier(receiver)) return true;
+  return scope.lookup(receiver.text) !== undefined || ctx.program.constants.has(receiver.text);
 }
 
 const checkPropertyAccess: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.PropertyAccessExpression;
-  if (!isValueReceiver(expr.expression, scope)) {
+  if (!isValueReceiver(ctx, expr.expression, scope)) {
     const dotted = `${(expr.expression as ts.Identifier).text}.${expr.name.text}`;
     const handler = namespaceProperties[dotted];
     if (!handler) throw ctx.error(`Unknown identifier \`${(expr.expression as ts.Identifier).text}\``, expr.expression);

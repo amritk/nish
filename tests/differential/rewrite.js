@@ -99,6 +99,34 @@ function zeroOf(elem) {
   return num(0);
 }
 
+/**
+ * The JavaScript literal for a folded module constant (WP14). A StaticTS
+ * module constant *is* its folded value — the compiler emits no global and no
+ * initialiser — so substituting the value is the faithful rewrite, and it
+ * carries the wrapping, the i64 width and the constant-folded string concat
+ * across for free.
+ */
+function constantLiteral(value) {
+  if (value.kind === "bool") return value.value ? f.createTrue() : f.createFalse();
+  if (value.kind === "string") return f.createStringLiteral(value.value);
+  if (value.kind === "f64") {
+    if (Number.isNaN(value.value)) return f.createIdentifier("NaN");
+    if (!Number.isFinite(value.value)) {
+      const inf = f.createIdentifier("Infinity");
+      return value.value > 0 ? inf : f.createPrefixUnaryExpression(ts.SyntaxKind.MinusToken, inf);
+    }
+    return negatable(value.value < 0, num(Math.abs(value.value)));
+  }
+  const magnitude = value.value < 0n ? -value.value : value.value;
+  const literal = value.type.kind === "i64" ? big(magnitude) : num(magnitude.toString());
+  return negatable(value.value < 0n, literal);
+}
+
+/** Numeric literals have no sign of their own; a negative one is unary minus. */
+function negatable(negative, literal) {
+  return negative ? f.createPrefixUnaryExpression(ts.SyntaxKind.MinusToken, literal) : literal;
+}
+
 function dottedName(expr) {
   return ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.expression)
     ? `${expr.expression.text}.${expr.name.text}`
@@ -154,6 +182,20 @@ function makeTransformer(unit, stems) {
           );
         }
         return ts.visitEachChild(node, visit, context);
+      }
+
+      // ---- top-level `const` -> its folded value (WP14) ----
+      if (ts.isVariableStatement(node) && ts.isSourceFile(node.parent)) {
+        const declarations = node.declarationList.declarations.map((decl) => {
+          const info = program.constants.get(decl.name.text);
+          if (!info || info.value === undefined) return decl;
+          return f.updateVariableDeclaration(decl, decl.name, undefined, decl.type, constantLiteral(info.value));
+        });
+        return f.updateVariableStatement(
+          node,
+          node.modifiers,
+          f.updateVariableDeclarationList(node.declarationList, declarations)
+        );
       }
 
       // ---- numeric literal typed i64 by context -> BigInt literal ----
