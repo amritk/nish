@@ -252,7 +252,8 @@ trip, a negative test, and its LANGUAGE.md and cookbook entries; no attribute
 without a proof; layout changes touch `runtime.ts` and `runtime.c` together.
 CI runs the suite on Ubuntu and macOS with LLVM 18
 ([docs/wp10-ci.md](docs/wp10-ci.md)). The documentation index is
-[docs/README.md](docs/README.md).
+[docs/README.md](docs/README.md). Coding guidelines for contributors and
+coding agents are in [AGENTS.md](AGENTS.md) and [`.claude/`](.claude/).
 
 ## License
 
