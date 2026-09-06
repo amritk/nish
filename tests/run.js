@@ -243,6 +243,54 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
   }
 }
 
+// ---- WP4: arrays ------------------------------------------------------------------
+// 1. Every arr_ module must pass the IR verifier (the bounds check adds blocks and `unreachable`).
+// 2. A failed bounds check exits 1 with "index out of range: <idx> >= <len>" on stderr.
+// 3. `arr_sum.ts` compiled with --unchecked-indexing must vectorise its sum loop under
+//    `opt -O2`. The checked build vectorises too, but only where `sum` is inlined into
+//    `main` and the length is a known constant: the standalone `sum` keeps a hoisted
+//    length compare plus a per-iteration branch to the noreturn panic block, and LLVM
+//    18's loop vectoriser does not handle multi-exit loops (see docs/wp4-arrays.md).
+if (!only || "arrays".includes(only) || only.startsWith("arr")) {
+  if (has("opt")) {
+    for (const name of cases.filter((c) => c.startsWith("arr_") && (!only || c.includes(only)))) {
+      const ll = path.join(buildDir, `${name}.ll`);
+      if (!fs.existsSync(ll)) continue;
+      const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll]);
+      check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr));
+    }
+  }
+  const panicLl = path.join(buildDir, "arr_bounds_panic.ll");
+  if (HAS_CLANG && fs.existsSync(panicLl)) {
+    const exe = path.join(buildDir, "arr_bounds_panic");
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", panicLl, "runtime/runtime.c", "-o", exe], { cwd: root });
+    const run = cc.status === 0 ? spawnSync(exe) : null;
+    check("arr_bounds_panic: exits 1 with `index out of range: 5 >= 3` on stderr (stdout keeps the earlier line)",
+      run !== null && run.status === 1 && String(run.stderr).includes("index out of range: 5 >= 3") && String(run.stdout).trim() === "3",
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr));
+  }
+  if (has("opt")) {
+    const uncheckedLl = path.join(buildDir, "arr_sum_unchecked.ll");
+    const c = spawnSync("node", [cli, path.join(casesDir, "arr_sum.ts"), "--unchecked-indexing", "-o", uncheckedLl], { cwd: root });
+    const o = c.status === 0 ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", uncheckedLl]) : null;
+    const out = o ? String(o.stdout) : "";
+    check("opt -O2 vectorises the arr_sum loop built with --unchecked-indexing (<4 x i32> or <8 x i32>)",
+      o !== null && o.status === 0 && /<(4|8) x i32>/.test(out), o ? out || String(o.stderr) : String(c.stderr));
+    // The unchecked module must not declare the panic symbol at all.
+    check("arr_sum with --unchecked-indexing references no sts_panic_index",
+      c.status === 0 && !fs.readFileSync(uncheckedLl, "utf8").includes("sts_panic_index"), String(c.stderr));
+    const checkedLl = path.join(buildDir, "arr_sum.ll");
+    if (fs.existsSync(checkedLl)) {
+      const oc = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", checkedLl]);
+      const outc = String(oc.stdout);
+      // The vector body lives in @sts_main (inlined sum, constant length); @sum itself stays scalar.
+      const mainBody = outc.slice(outc.indexOf("@sts_main("));
+      check("opt -O2 vectorises the checked arr_sum loop once inlined into main (bounds check folded)",
+        oc.status === 0 && /<(4|8) x i32>/.test(mainBody), oc.status === 0 ? outc : String(oc.stderr));
+    }
+  }
+}
+
 // ---- B. Pipeline checks -----------------------------------------------------------
 if (!only && HAS_CLANG) {
   const rt = spawnSync("clang", ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "runtime/runtime.c", "tests/runtime_test.c", "-o", path.join(buildDir, "runtime_test")], { cwd: root });

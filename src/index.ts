@@ -34,6 +34,7 @@ function usage(): never {
       "  --number-mode i32|f64      lowering of `number` (default: i32)",
       "  --plain                    no performance attributes or alignment hints",
       "  --runtime-decls            always emit the runtime ABI prelude (arena + strings)",
+      "  --unchecked-indexing       drop array bounds checks (unsafe; for benchmarks)",
     ].join("\n")
   );
   process.exit(2);
@@ -82,6 +83,7 @@ function main(argv: string[]): number {
   let optimizeAttributes = true;
   let runtimeDecls = false;
   let strictExports = false;
+  let uncheckedIndexing = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -105,6 +107,8 @@ function main(argv: string[]): number {
       optimizeAttributes = false;
     } else if (arg === "--runtime-decls") {
       runtimeDecls = true;
+    } else if (arg === "--unchecked-indexing") {
+      uncheckedIndexing = true;
     } else if (arg === "-h" || arg === "--help") {
       usage();
     } else if (arg.startsWith("-")) {
@@ -118,7 +122,7 @@ function main(argv: string[]): number {
 
   let modules: EmittedModule[];
   let outputs: string[];
-  const compilation = new Compilation({ numberMode, optimizeAttributes, runtimeDecls, strictExports });
+  const compilation = new Compilation({ numberMode, optimizeAttributes, runtimeDecls, strictExports, uncheckedIndexing });
   try {
     for (const input of inputs) compilation.addRoot(input);
     compilation.check();

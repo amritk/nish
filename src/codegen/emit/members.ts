@@ -10,7 +10,7 @@
  */
 import ts from "typescript";
 import { CheckedProgram } from "../../checker";
-import { StaticType } from "../../types";
+import { CompilerOptions, StaticType } from "../../types";
 import { EmitContext, EmitterTable, ExpressionEmitter } from "./context";
 
 export type PropertyEmitter = (ctx: EmitContext, expr: ts.PropertyAccessExpression, receiver: StaticType) => string;
@@ -23,7 +23,7 @@ export interface MemoryFacts {
   effect: "none" | "read" | "write";
   callees: Set<string>;
 }
-export type FactCollector = (program: CheckedProgram, node: ts.Node, facts: MemoryFacts) => void;
+export type FactCollector = (program: CheckedProgram, node: ts.Node, facts: MemoryFacts, opts: CompilerOptions) => void;
 
 export const propertyEmitters: Partial<Record<StaticType["kind"], PropertyEmitter>> = {};
 export const methodCallEmitters: Partial<Record<StaticType["kind"], MethodCallEmitter>> = {};

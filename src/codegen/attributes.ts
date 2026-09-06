@@ -35,6 +35,22 @@
  *               noalias guarantee only concerns *modified* memory.
  *     nocapture Only when the param never escapes: it is not returned and
  *               not passed to any call (there are no stores of pointers yet).
+ *   Array params (`%struct.sts_array*`, WP4):
+ *     nonnull   StaticTS has no null.
+ *     align 8   Headers come from the arena (8-byte rounded) only.
+ *     readonly  The body never stores through the param (no `p[i] = v`,
+ *               `p[i] op= v`, `p.push(v)`, nor through anything indexed from
+ *               it), never aliases it (`let q = p`, `[p]`, `xs.push(p)`,
+ *               `return p`, ...: an alias could be written and LLVM may fold
+ *               it back into `p`), and only passes it to callees whose
+ *               matching param is itself readonly (fixpoint over the call
+ *               graph, optimistic on cycles: a param is written only if some
+ *               actual store reaches it). Never `noalias`: two array params
+ *               may be the same array, and arrays are mutable.
+ *     nocapture As above with "captured" in place of "written": the param is
+ *               used only as an indexing base, `.length` / `push` receiver,
+ *               `for...of` source, `===` operand, or a direct argument to a
+ *               callee that does not capture it.
  *
  * Cross-module facts (WP5): the analysis runs over *every* module of a
  * program at once, keyed by LLVM symbol, so a caller in `main.ts` sees the
@@ -47,7 +63,8 @@
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, Param } from "../checker";
 import { unwrapParens } from "../checker/control-flow";
-import { StaticType } from "../types";
+import { CompilerOptions, DEFAULT_OPTIONS, StaticType } from "../types";
+import { ParamPass, collectArrayParamFacts, isPushCall } from "./emit/arrays";
 import { factCollectors } from "./emit/members";
 import { collectStringFacts, unwrapStringPassthrough } from "./emit/strings";
 import { MemoryEffect, RUNTIME_BY_NAME } from "./runtime";
@@ -67,6 +84,14 @@ export interface FunctionFacts {
   escaping: Set<string>;
   /** User functions called directly (by LLVM symbol). */
   callees: Set<string>;
+  /** Parameter names in order, so a callee's param facts can be looked up by argument index. */
+  paramNames: string[];
+  /** Array params stored through (directly, or via a callee after the fixpoint). */
+  writtenParams: Set<string>;
+  /** Array params that escape (directly, or via a callee after the fixpoint). */
+  capturedParams: Set<string>;
+  /** Params handed straight to a user callee, for the two fixpoints above. */
+  paramPasses: ParamPass[];
 }
 
 const EFFECT_RANK: Record<MemoryEffect, number> = { none: 0, read: 1, write: 2 };
@@ -80,11 +105,14 @@ function maxEffect(a: MemoryEffect, b: MemoryEffect): MemoryEffect {
  * as impure as the most impure thing it calls, and it is willreturn only if
  * everything it calls is. The result is keyed by LLVM symbol (`FunctionSig.name`).
  */
-export function analyzeFunctions(programs: CheckedProgram | readonly CheckedProgram[]): Map<string, FunctionFacts> {
+export function analyzeFunctions(
+  programs: CheckedProgram | readonly CheckedProgram[],
+  opts: CompilerOptions = DEFAULT_OPTIONS
+): Map<string, FunctionFacts> {
   const list = Array.isArray(programs) ? (programs as readonly CheckedProgram[]) : [programs as CheckedProgram];
   const facts = new Map<string, FunctionFacts>();
   for (const program of list) {
-    for (const sig of program.functions) facts.set(sig.name, collectFacts(program, sig));
+    for (const sig of program.functions) facts.set(sig.name, collectFacts(program, sig, opts));
   }
 
   let changed = true;
@@ -106,12 +134,28 @@ export function analyzeFunctions(programs: CheckedProgram | readonly CheckedProg
           changed = true;
         }
       }
+      // An array param passed to a callee is written/captured if the callee's param is.
+      // An unknown callee (no facts) is assumed to do both.
+      for (const pass of f.paramPasses) {
+        const callee = facts.get(pass.callee);
+        const name = callee?.paramNames[pass.index];
+        const written = !callee || name === undefined || callee.writtenParams.has(name);
+        const captured = !callee || name === undefined || callee.capturedParams.has(name);
+        if (written && !f.writtenParams.has(pass.param)) {
+          f.writtenParams.add(pass.param);
+          changed = true;
+        }
+        if (captured && !f.capturedParams.has(pass.param)) {
+          f.capturedParams.add(pass.param);
+          changed = true;
+        }
+      }
     }
   }
   return facts;
 }
 
-function collectFacts(program: CheckedProgram, sig: FunctionSig): FunctionFacts {
+function collectFacts(program: CheckedProgram, sig: FunctionSig, opts: CompilerOptions): FunctionFacts {
   const facts: FunctionFacts = {
     hasLoops: false,
     readsMemory: false,
@@ -121,6 +165,10 @@ function collectFacts(program: CheckedProgram, sig: FunctionSig): FunctionFacts 
     willReturn: true,
     escaping: new Set(),
     callees: new Set(),
+    paramNames: sig.params.map((p) => p.name),
+    writtenParams: new Set(),
+    capturedParams: new Set(),
+    paramPasses: [],
   };
   const paramNames = new Set(sig.params.map((p) => p.name));
 
@@ -149,10 +197,11 @@ function collectFacts(program: CheckedProgram, sig: FunctionSig): FunctionFacts 
       }
     }
     collectStringFacts(program, node, facts);
-    for (const collect of factCollectors) collect(program, node, facts);
+    for (const collect of factCollectors) collect(program, node, facts, opts);
     ts.forEachChild(node, visit);
   };
   visit(sig.decl.body!);
+  collectArrayParamFacts(program, sig, facts);
 
   if (facts.readsMemory) facts.effect = maxEffect(facts.effect, "read");
   if (facts.hasTrap) facts.effect = "write";
@@ -186,6 +235,7 @@ const INT32_MAX = 0x7fffffff;
  * Every other loop (`while`, `do`, other `for` shapes) is unbounded.
  */
 export function isCountedLoop(program: CheckedProgram, loop: ts.IterationStatement): boolean {
+  if (ts.isForOfStatement(loop)) return !bodyMayExtend(program, loop.statement);
   if (!ts.isForStatement(loop) || !loop.initializer || !loop.condition || !loop.incrementor) return false;
   if (!ts.isVariableDeclarationList(loop.initializer) || loop.initializer.declarations.length !== 1) return false;
   const iv = program.locals.get(loop.initializer.declarations[0]);
@@ -245,6 +295,26 @@ function isIncDec(kind: ts.SyntaxKind): boolean {
   return kind === ts.SyntaxKind.PlusPlusToken || kind === ts.SyntaxKind.MinusMinusToken;
 }
 
+/**
+ * `for (const x of a)` re-reads `a.length` every iteration, so it is bounded
+ * unless the body can grow an array: any `push` (on any array, since `a` may
+ * be aliased), any call to a user function (which could push through an
+ * alias it receives), or a `throw`.
+ */
+function bodyMayExtend(program: CheckedProgram, body: ts.Node): boolean {
+  let extends_ = false;
+  const visit = (node: ts.Node): void => {
+    if (extends_) return;
+    if (ts.isThrowStatement(node) || isPushCall(program, node) || (ts.isCallExpression(node) && program.callees.has(node))) {
+      extends_ = true;
+    } else {
+      ts.forEachChild(node, visit);
+    }
+  };
+  visit(body);
+  return extends_;
+}
+
 /** True when `body` may assign one of `names` (by any assignment form) or may throw. */
 function bodyDisturbs(body: ts.Node, names: Set<string>): boolean {
   let disturbed = false;
@@ -294,6 +364,11 @@ export function paramAttributes(p: Param, f: FunctionFacts): string[] {
       attrs.push("nonnull", "noalias", "readonly", "align 8");
       if (!f.escaping.has(p.name)) attrs.push("nocapture");
       break;
+    case "array":
+      attrs.push("nonnull", "align 8");
+      if (!f.writtenParams.has(p.name)) attrs.push("readonly");
+      if (!f.capturedParams.has(p.name)) attrs.push("nocapture");
+      break;
   }
   return attrs;
 }
@@ -305,6 +380,7 @@ export function returnAttributes(t: StaticType): string[] {
     case "bool":
       return ["noundef", "zeroext"];
     case "string":
+    case "array":
       return ["noundef", "nonnull", "align 8"];
     default:
       return ["noundef"];

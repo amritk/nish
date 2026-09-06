@@ -6,6 +6,7 @@
  */
 import ts from "typescript";
 import { resolveTypeNode, sameType, typeToString } from "../types";
+import { arrayStatementCheckers } from "./arrays";
 import { CheckContext, CheckerTable, StatementChecker } from "./context";
 import { controlFlowStatementCheckers } from "./control-flow";
 import { LocalVar } from "./program";
@@ -78,6 +79,7 @@ export const statementCheckers: CheckerTable<StatementChecker> = {
   [ts.SyntaxKind.ExpressionStatement]: checkExpressionStatement,
   [ts.SyntaxKind.Block]: checkBlockStatement,
   ...controlFlowStatementCheckers,
+  ...arrayStatementCheckers, // `for (const x of a)`
 };
 
 /** How a terminating statement is named in the unreachable-code diagnostic. */

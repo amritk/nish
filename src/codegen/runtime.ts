@@ -13,6 +13,8 @@
 /** Global arena state, must match `struct sts_arena` in runtime.c. */
 export const ARENA_TYPE = "%struct.sts_arena = type { i8*, i64, i64, i8* }";
 export const ARENA_GLOBAL = "@sts_arena = external global %struct.sts_arena, align 8";
+/** Array header (WP4), must match `struct sts_array` in runtime.c: { len, cap, data }. */
+export const ARRAY_TYPE = "%struct.sts_array = type { i64, i64, i8* }";
 
 export type MemoryEffect = "none" | "read" | "write";
 
@@ -88,6 +90,21 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     name: "sts_str_from_f64",
     signature: "declare noalias noundef nonnull align 8 i8* @sts_str_from_f64(double noundef)",
     attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  // ---- WP4: arrays --------------------------------------------------------
+  {
+    name: "sts_array_grow",
+    // Doubles `cap` (4 when 0), moves the elements into fresh arena storage; `len` is untouched.
+    signature: "declare void @sts_array_grow(%struct.sts_array* noundef nonnull align 8 nocapture, i64 noundef)",
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
+    name: "sts_panic_index",
+    // Bounds-check failure: prints "index out of range: <idx> >= <len>" and exits 1.
+    signature: "declare void @sts_panic_index(i64 noundef, i64 noundef)",
+    attrs: ["nounwind", "noreturn", "cold"],
     effect: "write",
   },
 ];

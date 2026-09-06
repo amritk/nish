@@ -1,6 +1,7 @@
 /** Statement lowering, one handler per `ts.SyntaxKind`. */
 import ts from "typescript";
 import { llvmType } from "../../types";
+import { arrayStatementEmitters } from "./arrays";
 import { EmitContext, EmitterTable, StatementEmitter } from "./context";
 import { controlFlowStatementEmitters } from "./control-flow";
 
@@ -47,4 +48,5 @@ export const statementEmitters: EmitterTable<StatementEmitter> = {
   [ts.SyntaxKind.ExpressionStatement]: emitExpressionStatement,
   [ts.SyntaxKind.Block]: emitBlockStatement,
   ...controlFlowStatementEmitters,
+  ...arrayStatementEmitters, // `for (const x of a)`
 };

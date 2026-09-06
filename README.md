@@ -82,6 +82,7 @@ node dist/index.js <entry.ts> [more.ts ...] [options]
   --number-mode i32|f64      lowering of `number` (default: i32)
   --plain                    no performance attributes or alignment hints
   --runtime-decls            always emit the runtime ABI prelude (arena + strings)
+  --unchecked-indexing       drop array bounds checks (unsafe: out-of-range is UB; benchmarks only)
 
 # Example
 node dist/index.js examples/add.ts -o build/add.ll
@@ -316,6 +317,7 @@ Type mapping:
 | `number` (f64 mode), `f64` | `double` |
 | `boolean` | `i1` |
 | `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }`, 8-aligned, immutable; literals are module constants, `.length` is the UTF-8 byte length |
+| `T[]`, `Array<T>` | `%struct.sts_array*` to `{ i64 len, i64 cap, i8* data }`, arena-allocated, 8-aligned; `data` holds `cap` elements of `T`; `a[i]` is bounds-checked (see [docs/wp4-arrays.md](docs/wp4-arrays.md)) |
 | `void` | `void` |
 
 Supported today:
@@ -342,6 +344,8 @@ Supported today:
 - Short-circuit `&&` / `||` on booleans (the right operand runs only when needed).
 - Compound assignment `+= -= *= /= %=` on mutable numeric locals.
 - Prefix and postfix `++` / `--` on mutable numeric locals (postfix yields the old value).
+- Arrays `T[]` / `Array<T>` of any element type (numbers, booleans, strings, nested arrays): literals `[a, b]` (one element type; `[]` needs an annotation), `new Array<T>(n)` zero-filled, `a[i]` reads and writes (`=`, `op=`), `.length`, `push(v)`, and `for (const x of a)` with `break` / `continue`.
+- Bounds checking on every `a[i]`: an out-of-range index prints `index out of range: <i> >= <len>` and exits 1; `--unchecked-indexing` removes the check.
 
 Rejected with a diagnostic (`file:line:col: error: ...`):
 

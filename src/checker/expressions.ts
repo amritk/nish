@@ -8,6 +8,7 @@
  */
 import ts from "typescript";
 import { BOOL, F64, I32, isNumeric, sameType, typeToString } from "../types";
+import { arrayExpressionCheckers, installArrayAssignmentCheckers } from "./arrays";
 import { checkMethodCall, isValueReceiver, memberExpressionCheckers } from "./members";
 import { checkBuiltinCall, stringBinaryCheckers, stringExpressionCheckers } from "./strings";
 import { BinaryChecker, CheckerTable, ExpressionChecker, UnaryChecker } from "./context";
@@ -138,6 +139,7 @@ export const binaryCheckers: CheckerTable<BinaryChecker> = {
   ...stringBinaryCheckers, // string-aware `+`, `===`, `!==` (numeric behaviour unchanged)
   ...controlFlowBinaryCheckers,
 };
+installArrayAssignmentCheckers(binaryCheckers); // `a[i] = v`, `a[i] op= v`; other targets keep the handlers above
 
 const checkBinary: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.BinaryExpression;
@@ -191,4 +193,5 @@ export const expressionCheckers: CheckerTable<ExpressionChecker> = {
   ...stringExpressionCheckers,
   ...memberExpressionCheckers, // property access, method calls, `new` (dispatch by receiver type)
   ...controlFlowExpressionCheckers,
+  ...arrayExpressionCheckers, // `[a, b]`, `a[i]`
 };

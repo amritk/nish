@@ -5,6 +5,7 @@
  */
 import ts from "typescript";
 import { StaticType, llvmType } from "../../types";
+import { arrayExpressionEmitters, installArrayAssignmentEmitters } from "./arrays";
 import { emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members";
 import { emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from "./strings";
 import { BinaryEmitter, EmitterTable, ExpressionEmitter, UnaryEmitter } from "./context";
@@ -113,6 +114,7 @@ export const binaryEmitters: EmitterTable<BinaryEmitter> = {
   ...stringBinaryEmitters, // string-aware `+`, `===`, `!==` (numeric lowering unchanged)
   ...controlFlowBinaryEmitters,
 };
+installArrayAssignmentEmitters(binaryEmitters); // `a[i] = v`, `a[i] op= v`; other targets keep the handlers above
 
 const emitBinary: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.BinaryExpression;
@@ -154,4 +156,5 @@ export const expressionEmitters: EmitterTable<ExpressionEmitter> = {
   ...stringExpressionEmitters,
   ...memberExpressionEmitters, // property access, method calls, `new` (dispatch by receiver type)
   ...controlFlowExpressionEmitters,
+  ...arrayExpressionEmitters, // `[a, b]`, `a[i]`
 };
