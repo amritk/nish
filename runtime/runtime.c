@@ -207,6 +207,14 @@ void sts_append_file(const sts_str *path, const sts_str *data) { sts_put_file(pa
 /* ---- Arrays: %struct.sts_array = type { i64, i64, i8* }, cold paths */
 typedef struct sts_array { uint64_t len; uint64_t cap; char *data; } sts_array;
 
+/* Host entry (WP8): a fresh array of `len` elements, uninitialised, len == cap. */
+sts_array *sts_alloc_array(uint64_t elem_size, uint64_t len) {
+  sts_array *a = (sts_array *)sts_alloc_struct(sizeof *a);
+  a->len = a->cap = len;
+  a->data = (char *)sts_alloc_struct(len * elem_size);
+  return a;
+}
+
 /* push() when len == cap: double the capacity (4 from empty). */
 void sts_array_grow(sts_array *a, uint64_t elem_size) {
   uint64_t cap = a->cap ? a->cap * 2 : 4;

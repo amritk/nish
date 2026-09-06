@@ -39,6 +39,7 @@ static void expect_f64(double v, const char *want) { expect_str(sts_str_from_f64
 /* WP4 */
 typedef struct sts_array { uint64_t len; uint64_t cap; char *data; } sts_array;
 void sts_array_grow(sts_array *, uint64_t);
+sts_array *sts_alloc_array(uint64_t, uint64_t);
 
 int main(void) {
   /* Bump allocation: consecutive, 8-byte rounded, 8-byte aligned. */
@@ -161,6 +162,13 @@ int main(void) {
   sts_array_grow(&arr, sizeof(int32_t));
   assert(arr.cap == 8 && arr.len == 4 && arr.data != old);
   for (int i = 0; i < 4; i++) assert(((int32_t *)arr.data)[i] == i * 10);
+
+  /* WP8 host entry: len == cap, 8-aligned data, elements writable; a zero length allocates only the header. */
+  sts_array *fresh = sts_alloc_array(sizeof(double), 3);
+  assert(fresh->len == 3 && fresh->cap == 3 && ((uintptr_t)fresh->data & 7) == 0);
+  ((double *)fresh->data)[2] = 2.5;
+  assert(((double *)fresh->data)[2] == 2.5);
+  assert(sts_alloc_array(sizeof(int32_t), 0)->len == 0);
 
   sts_free_arena();
   assert(sts_arena.chunks == NULL && sts_arena.cap == 0);
