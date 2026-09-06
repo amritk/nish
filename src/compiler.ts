@@ -14,5 +14,5 @@ export function compileToIR(
   const opts: CompilerOptions = { ...DEFAULT_OPTIONS, ...options };
   const ast = parseSource(fileName, sourceText); // Phase A
   const program = checkProgram(ast, opts); // Phase B
-  return emitProgram(program); // Phase C
+  return emitProgram(program, opts); // Phase C
 }

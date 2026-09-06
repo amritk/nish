@@ -13,9 +13,21 @@ export type NumberMode = "i32" | "f64";
 export interface CompilerOptions {
   /** How the TypeScript `number` keyword is lowered. Default: "i32". */
   numberMode: NumberMode;
+  /**
+   * Emit LLVM performance attributes (nounwind, readnone, noalias, ...) and
+   * explicit alignment on memory operations. Off produces the bare Phase 1
+   * output. Default: true.
+   */
+  optimizeAttributes: boolean;
+  /** Always emit the runtime ABI prelude, even when nothing in the module uses it. */
+  runtimeDecls: boolean;
 }
 
-export const DEFAULT_OPTIONS: CompilerOptions = { numberMode: "i32" };
+export const DEFAULT_OPTIONS: CompilerOptions = {
+  numberMode: "i32",
+  optimizeAttributes: true,
+  runtimeDecls: false,
+};
 
 export type StaticType =
   | { kind: "i32" }
@@ -43,6 +55,22 @@ export function llvmType(t: StaticType): string {
       return "i8*";
     case "void":
       return "void";
+  }
+}
+
+/** Natural alignment in bytes, as clang and rustc use for the same LLVM types. */
+export function alignOf(t: StaticType): number {
+  switch (t.kind) {
+    case "i32":
+      return 4;
+    case "f64":
+      return 8;
+    case "bool":
+      return 1;
+    case "string":
+      return 8;
+    case "void":
+      return 1;
   }
 }
 

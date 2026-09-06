@@ -2,7 +2,7 @@
 /**
  * statictsc: StaticTS -> LLVM IR command line driver.
  *
- *   statictsc <input.ts> [-o <output.ll>] [--number-mode i32|f64]
+ *   statictsc <input.ts> [-o <output.ll>] [--number-mode i32|f64] [--plain] [--runtime-decls]
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -11,7 +11,15 @@ import { CompileError } from "./diagnostics";
 import { NumberMode } from "./types";
 
 function usage(): never {
-  console.error("usage: statictsc <input.ts> [-o <output.ll>] [--number-mode i32|f64]");
+  console.error(
+    [
+      "usage: statictsc <input.ts> [options]",
+      "  -o, --output <file.ll>     output path (default: <input>.ll)",
+      "  --number-mode i32|f64      lowering of `number` (default: i32)",
+      "  --plain                    no performance attributes or alignment hints",
+      "  --runtime-decls            always emit the runtime ABI prelude (arena + strings)",
+    ].join("\n")
+  );
   process.exit(2);
 }
 
@@ -19,6 +27,8 @@ function main(argv: string[]): number {
   let input: string | undefined;
   let output: string | undefined;
   let numberMode: NumberMode = "i32";
+  let optimizeAttributes = true;
+  let runtimeDecls = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -29,6 +39,10 @@ function main(argv: string[]): number {
       const mode = argv[++i];
       if (mode !== "i32" && mode !== "f64") usage();
       numberMode = mode;
+    } else if (arg === "--plain") {
+      optimizeAttributes = false;
+    } else if (arg === "--runtime-decls") {
+      runtimeDecls = true;
     } else if (arg === "-h" || arg === "--help") {
       usage();
     } else if (arg.startsWith("-")) {
@@ -45,7 +59,7 @@ function main(argv: string[]): number {
   const source = fs.readFileSync(input, "utf8");
   let ir: string;
   try {
-    ir = compileToIR(input, source, { numberMode });
+    ir = compileToIR(input, source, { numberMode, optimizeAttributes, runtimeDecls });
   } catch (err) {
     if (err instanceof CompileError || err instanceof Error) {
       console.error(err.message);

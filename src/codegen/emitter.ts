@@ -15,34 +15,93 @@
  */
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
-import { StaticType, llvmType } from "../types";
+import { CompilerOptions, StaticType, alignOf, llvmType } from "../types";
+import {
+  FunctionFacts,
+  analyzeFunctions,
+  functionAttributes,
+  paramAttributes,
+  returnAttributes,
+} from "./attributes";
 import { IRFunction, IRModule } from "./ir";
+import {
+  ARENA_GLOBAL,
+  ARENA_TYPE,
+  INLINE_ALLOCATOR_ATTRS,
+  RUNTIME_FUNCTIONS,
+  inlineAllocator,
+} from "./runtime";
 
 export class Emitter {
   private readonly module: IRModule;
+  private readonly facts: Map<string, FunctionFacts>;
   private fn!: IRFunction;
   /** Local variable -> its alloca slot (`%x.addr`). */
   private slots = new WeakMap<LocalVar, string>();
+  /** Runtime symbols referenced by this module; drives which declarations are emitted. */
+  private readonly usedRuntime = new Set<string>();
 
-  constructor(private readonly program: CheckedProgram) {
+  constructor(
+    private readonly program: CheckedProgram,
+    private readonly opts: CompilerOptions
+  ) {
     this.module = new IRModule(program.sourceFile.fileName);
+    this.facts = analyzeFunctions(program);
   }
 
   emitModule(): string {
     for (const sig of this.program.functions) {
       this.module.addFunction(this.emitFunction(sig));
     }
+    this.emitRuntimePrelude();
     return this.module.toString();
+  }
+
+  // ---- Runtime ABI --------------------------------------------------------
+
+  /** Mark a runtime function as used so its declaration is emitted. */
+  private useRuntime(name: string): string {
+    this.usedRuntime.add(name);
+    return `@${name}`;
+  }
+
+  private emitRuntimePrelude(): void {
+    const all = this.opts.runtimeDecls;
+    const wantsAlloc = all || this.usedRuntime.has("sts_alloc_struct");
+    if (wantsAlloc) {
+      this.usedRuntime.add("sts_arena_grow");
+      this.module.addTypeDecl(ARENA_TYPE);
+      this.module.addGlobal(ARENA_GLOBAL);
+    }
+    for (const rt of RUNTIME_FUNCTIONS) {
+      if (!all && !this.usedRuntime.has(rt.name)) continue;
+      const group = this.opts.optimizeAttributes ? ` ${this.module.attrGroup(rt.attrs)}` : "";
+      this.module.addDeclaration(`${rt.signature}${group}`);
+    }
+    if (wantsAlloc) {
+      const group = this.module.attrGroup(INLINE_ALLOCATOR_ATTRS);
+      this.module.addRawDefinition(inlineAllocator(group));
+    }
   }
 
   // ---- Functions ----------------------------------------------------------
 
   private emitFunction(sig: FunctionSig): IRFunction {
+    const facts = this.facts.get(sig.name)!;
+    const optimize = this.opts.optimizeAttributes;
     this.fn = new IRFunction(
       sig.name,
-      sig.params.map((p) => ({ name: p.name, type: llvmType(p.type) })),
+      sig.params.map((p) => ({
+        name: p.name,
+        type: llvmType(p.type),
+        attrs: optimize ? paramAttributes(p, facts) : [],
+      })),
       llvmType(sig.returnType)
     );
+    if (optimize) {
+      this.fn.returnAttrs = returnAttributes(sig.returnType);
+      this.fn.attrGroup = this.module.attrGroup(functionAttributes(facts));
+    }
     this.slots = new WeakMap();
 
     this.emitBlock(sig.decl.body!);
@@ -76,10 +135,10 @@ export class Emitter {
       for (const decl of stmt.declarationList.declarations) {
         const local = this.program.locals.get(decl)!;
         const ty = llvmType(local.type);
-        const slot = this.fn.emitAlloca(`${local.name}.addr`, ty);
+        const slot = this.fn.emitAlloca(`${local.name}.addr`, ty, this.align(local.type));
         this.slots.set(local, slot);
         const init = this.emitExpression(decl.initializer!);
-        this.fn.emit(`store ${ty} ${init}, ${ty}* ${slot}`);
+        this.fn.emit(`store ${ty} ${init}, ${ty}* ${slot}${this.alignSuffix(local.type)}`);
       }
       return;
     }
@@ -116,7 +175,7 @@ export class Emitter {
       const local = this.program.bindings.get(expr)!;
       if (local.storage === "param") return `%${local.name}`;
       const ty = llvmType(local.type);
-      return this.fn.emitValue(`load ${ty}, ${ty}* ${this.slots.get(local)!}`);
+      return this.fn.emitValue(`load ${ty}, ${ty}* ${this.slots.get(local)!}${this.alignSuffix(local.type)}`);
     }
 
     if (ts.isPrefixUnaryExpression(expr)) {
@@ -161,7 +220,7 @@ export class Emitter {
       const target = this.program.bindings.get(expr.left as ts.Identifier)!;
       const ty = llvmType(target.type);
       const value = this.emitExpression(expr.right);
-      this.fn.emit(`store ${ty} ${value}, ${ty}* ${this.slots.get(target)!}`);
+      this.fn.emit(`store ${ty} ${value}, ${ty}* ${this.slots.get(target)!}${this.alignSuffix(target.type)}`);
       return value;
     }
 
@@ -176,6 +235,15 @@ export class Emitter {
   }
 
   // ---- Helpers ------------------------------------------------------------
+
+  private align(t: StaticType): number | undefined {
+    return this.opts.optimizeAttributes ? alignOf(t) : undefined;
+  }
+
+  private alignSuffix(t: StaticType): string {
+    const a = this.align(t);
+    return a ? `, align ${a}` : "";
+  }
 
   private typeOf(expr: ts.Expression): StaticType {
     const t = this.program.types.get(expr);
@@ -223,6 +291,6 @@ function binaryOpcode(op: ts.SyntaxKind, type: StaticType): string {
   throw new Error(`emitter: unexpected binary operator ${ts.SyntaxKind[op]}`);
 }
 
-export function emitProgram(program: CheckedProgram): string {
-  return new Emitter(program).emitModule();
+export function emitProgram(program: CheckedProgram, opts: CompilerOptions): string {
+  return new Emitter(program, opts).emitModule();
 }

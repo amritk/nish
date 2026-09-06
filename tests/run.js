@@ -30,13 +30,18 @@ function has(tool) {
 }
 
 // 1. Golden IR comparison -----------------------------------------------------
-const outLl = path.join(buildDir, "add.ll");
-execFileSync("node", [cli, "examples/add.ts", "-o", outLl], { cwd: root, stdio: "pipe" });
-const actual = fs.readFileSync(outLl, "utf8");
-const expected = fs.readFileSync(path.join(root, "tests", "expected", "add.ll"), "utf8").trim();
-// Strip the module header; only the function definition is part of the contract.
-const actualFn = actual.split("\n").filter((l) => !l.startsWith(";") && !l.startsWith("source_filename")).join("\n").trim();
-check("add.ts emits the expected LLVM IR", actualFn === expected, `expected:\n${expected}\n\nactual:\n${actualFn}`);
+function compileGolden(name, extraArgs, goldenFile) {
+  const out = path.join(buildDir, `${name}.ll`);
+  execFileSync("node", [cli, "examples/add.ts", "-o", out, ...extraArgs], { cwd: root, stdio: "pipe" });
+  const actual = fs.readFileSync(out, "utf8");
+  const expected = fs.readFileSync(path.join(root, "tests", "expected", goldenFile), "utf8").trim();
+  // Strip the module header; only the definitions are part of the contract.
+  const body = actual.split("\n").filter((l) => !l.startsWith(";") && !l.startsWith("source_filename")).join("\n").trim();
+  check(`add.ts emits the expected LLVM IR (${name})`, body === expected, `expected:\n${expected}\n\nactual:\n${body}`);
+  return out;
+}
+compileGolden("add.plain", ["--plain"], "add.plain.ll");
+const outLl = compileGolden("add", [], "add.ll");
 
 // 2. Toolchain round trip -----------------------------------------------------
 if (has("llvm-as")) {
@@ -58,7 +63,42 @@ if (has("clang")) {
   console.log("SKIP  clang not installed");
 }
 
-// 3. Negative cases -------------------------------------------------------------
+// 3. Runtime + optimised build pipeline ----------------------------------------------
+if (has("clang")) {
+  const rt = spawnSync("clang", ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2", "runtime/runtime.c", "tests/runtime_test.c", "-o", path.join(buildDir, "runtime_test")], { cwd: root });
+  check("runtime.c compiles warning-free and passes its unit test",
+    rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0, String(rt.stderr));
+
+  // Emit the runtime prelude, append an IR test that uses the inline allocator, and
+  // link it against runtime.c: proves the IR struct layout matches the C struct.
+  const preludeLl = path.join(buildDir, "prelude.ll");
+  execFileSync("node", [cli, "examples/strings.ts", "--runtime-decls", "-o", preludeLl], { cwd: root, stdio: "pipe" });
+  const smokeLl = path.join(buildDir, "alloc_smoke.ll");
+  fs.writeFileSync(smokeLl, fs.readFileSync(preludeLl, "utf8") + fs.readFileSync(path.join(root, "tests/ir/alloc_smoke.ll"), "utf8"));
+  const smokeExe = path.join(buildDir, "alloc_smoke");
+  const b = spawnSync("bash", ["scripts/build.sh", smokeLl, "runtime/runtime.c", "tests/ir/alloc_smoke_main.c", "-o", smokeExe, "--profile", "speed"], { cwd: root });
+  check("inline arena allocator links with runtime.c (speed profile, LTO)", b.status === 0, String(b.stderr));
+  if (b.status === 0) {
+    const r = spawnSync(smokeExe);
+    check("inline allocator bump matches C arena layout (delta 16)", r.status === 0, String(r.stdout));
+  }
+
+  for (const profile of ["size"]) {
+    const exe = path.join(buildDir, `add_${profile}`);
+    const r = spawnSync("bash", ["scripts/build.sh", outLl, "runtime/runtime.c", "examples/main.c", "-o", exe, "--profile", profile], { cwd: root });
+    const run = r.status === 0 ? spawnSync(exe) : null;
+    check(`${profile} profile builds a working stripped binary`, run !== null && String(run.stdout).trim() === "add(2, 3) = 5", String(r.stderr));
+  }
+
+  if (has("wasm-ld")) {
+    const wasm = path.join(buildDir, "add.wasm");
+    const r = spawnSync("bash", ["scripts/build.sh", outLl, "-o", wasm, "--profile", "wasm"], { cwd: root });
+    const run = r.status === 0 ? spawnSync("node", ["examples/node-host.mjs", wasm], { cwd: root }) : null;
+    check("wasm profile builds a module Node can import", run !== null && String(run.stdout).trim() === "add(2, 3) = 5", String(r.stderr) + (run ? String(run.stderr) : ""));
+  }
+}
+
+// 4. Negative cases -------------------------------------------------------------
 const rejects = [
   ["any parameter", "function f(a: any): number { return a; }", "`any` is forbidden"],
   ["missing return type", "function f(a: number) { return a; }", "explicit return type"],

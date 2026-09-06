@@ -12,7 +12,8 @@
     "build": "tsc -p tsconfig.json",
     "compile": "node dist/index.js",
     "example": "npm run build && node dist/index.js examples/add.ts -o build/add.ll && cat build/add.ll",
-    "test": "npm run build && node tests/run.js"
+    "test": "npm run build && node tests/run.js",
+    "size-report": "npm run build && node dist/index.js examples/add.ts -o build/add.ll && bash scripts/size-report.sh build/add.ll examples/main.c"
   },
   "engines": {
     "node": ">=18"
