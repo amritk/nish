@@ -286,6 +286,92 @@ depth, not the IR the compiler emits.
 - Peak RSS is measured with a small C helper (`bench/rss.c`) because
   `/usr/bin/time` is not installed in this environment.
 
+## Runtime budget
+
+`docs/MASTER_PLAN.md` section 2 caps `runtime/runtime.c` at 4 KB compiled at
+`-Oz` and 8 KB of source. The argv/parsing round of WP7 left the compiled
+size at 4,195 bytes (`clang -Oz -c runtime/runtime.c && size runtime.o`, the
+`text` column, which also counts the read-only constants and the `.eh_frame`
+unwind entries the `size` profile strips) and the source at 11,432 bytes.
+This pass brought both back down without changing any observable behaviour:
+no prototype, symbol name, message, exit status or output byte moved, and
+`tests/runtime_test.c` asserts exactly what it did before.
+
+| | Before | After | Target |
+| --- | ---: | ---: | ---: |
+| `size` text at `-Oz` | 4,195 | 3,714 | 3,900 (budget 4,096) |
+| of which `.text` (+ `.text.unlikely`) | 2,637 | 2,245 | |
+| of which `.eh_frame` | 1,344 | 1,240 | |
+| of which read-only data | 214 | 229 | |
+| source bytes | 11,432 | 9,392 | 9,000 (budget 8,192) |
+
+`scripts/size-report.sh` now prints the compiled number as a `runtime` row
+above the profile rows, so a pull request that grows the runtime shows it.
+
+Every step was measured and kept only when it paid (text at `-Oz` after each
+one, starting from 4,195):
+
+1. **One cold exit path.** `sts_die(msg)` is `noreturn, cold, noinline`; the
+   two panics that format a number or a path (`sts_panic_index`,
+   `sts_io_fail`) use one `dprintf(2, ...)` instead of hand-written digit
+   loops and four `write` calls, and `sts_panic_div` calls `sts_die` with the
+   literal it picked. 3,981 (-214). A variadic `sts_die(fmt, ...)` over
+   `vdprintf` was measured first and rejected: the x86-64 register save area
+   of `va_start` costs more than it shares (4,072).
+2. **Number formatter.** `sts_str_from_f64` no longer copies the digits out
+   of the `%.*e` buffer: a `DIG(j)` macro indexes them in place, the digit
+   count is the loop counter of the shortest-round-trip search, and the four
+   JS layouts (integer with trailing zeros, decimal point inside, `0.000ddd`,
+   exponent form) come out of one loop with an `if (i == n) '.'` and a
+   trailing `snprintf("e%+d")` for the exponent form. Checked against Node's
+   `String(x)` on 40,024 doubles (random bit patterns, decimal fractions,
+   integers up to 1e21, every boundary in the test) with zero mismatches, on
+   top of the 27 cases in `tests/runtime_test.c`. 3,738 (-243).
+3. **`sts_argv_init` with one `malloc`** for the header, the pointer table
+   and every string: rejected, the second `strlen` pass costs more than the
+   second out-of-memory check saved (3,775; a `strlen(strcpy())` variant of
+   the original loop was 3,747, also worse than the original 3,738).
+4. **`sts_parse_number` letting `strtod` do the prefix work** and rejecting
+   `inf`/`nan` afterwards: rejected, the `end - q` arithmetic and `memcmp`
+   cost more than the range check they replaced (3,761).
+5. **One chunk-freeing loop.** `sts_reset_arena`, `sts_free_arena` and
+   `sts_arena_release` share `sts_free_until(c, end)`. 3,723 (-15).
+6. **`sts_put_file`** checks the descriptor before the write loop instead of
+   inside it. 3,719 (-4). Two other shapes (one failure site through a
+   sentinel, `sts_io_fail` as a macro) were larger (3,732 and 3,755).
+7. **`sts_read_file`** accumulates the byte count in a local instead of
+   `s->len`. 3,714 (-5). Folding `sts_io_fail` into a three-argument
+   `sts_die(what, len, bytes)` to save its unwind entry was measured too:
+   the wider call sites cost more than the entry (3,723).
+
+The source pass changed no code generation (the object is byte-for-byte the
+same size per function): implicit conversions the C standard performs anyway
+lost their casts, the three copies of the out-of-memory literal and of the
+`noreturn, cold, noinline` attribute list sit behind one macro each, `NAN` /
+`INFINITY` from `<math.h>` replace the builtins (same bit patterns), and the
+comments were cut to their contract content. Three source-only rewrites
+that did move code generation were reverted: a compound-literal store in
+`sts_arena_grow` (+6), and initialising `stop` or `p` in the declarations of
+`sts_parse_number`, which hoists work above the `mode == 2` early return
+(+4 / +7). The source target of 9,000 bytes is missed by 392: what is left is
+one comment per function stating its contract (the two `%struct` layout
+lines, the string layout, the scope semantics, the `malloc`-not-arena rule
+for `process.argv`, the parse modes by reference to `statictsc.h`) and the
+WASI entry-point bridge; getting under 9,000 means deleting those.
+
+Ideas measured to be neutral or worse and not taken: `__attribute__((cold))`
+on the exported panic functions (exactly neutral at 3,714; at `-Oz` every
+function is already optimised for size), a one-`malloc` argv table (above),
+`strtoll` replaced by a digit loop (it is libc, so it is not in `runtime.o`
+at all; keeping it is free).
+
+Smoke binaries (`npm run smoke`, size profile) did not grow: `hello` 4,696
+and `multi/main` 4,488 unchanged, `argv` 10,808 -> 10,304, `nbody` 8,800 ->
+8,536. No WASI sysroot is installed here, so the `wasi` profile could not be
+linked; the guarded block compiles on the host with `-D__wasi__
+-fsyntax-only -Wall -Wextra -Werror`, and `runtime/runtime_wasm.c` is
+untouched.
+
 ## Tests
 
 - `tests/cases/opt_target_triple.ts` (+ `.args`, `.out`): golden with the

@@ -2,9 +2,10 @@
 # Before/after binary size report for a StaticTS module + driver + runtime.
 #   scripts/size-report.sh [--markdown] [module.ll] [driver.c]
 #
-# Prints one row per build profile (debug, speed, size, and wasm when wasm-ld is
-# available). --markdown emits a GitHub-flavoured table, used by CI for the job
-# summary; the default is a plain aligned table. Linux and macOS.
+# Prints the runtime.c budget row (its -Oz text size) and one row per build
+# profile (debug, speed, size, and wasm when wasm-ld is available). --markdown
+# emits a GitHub-flavoured table, used by CI for the job summary; the default
+# is a plain aligned table. Linux and macOS.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -13,7 +14,7 @@ args=()
 for a in "$@"; do
   case "$a" in
     --markdown|--md) format=markdown ;;
-    -h|--help) sed -n '2,7p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
     *) args+=("$a") ;;
   esac
 done
@@ -35,6 +36,10 @@ if [ "$format" = markdown ]; then
 else
   printf '%-8s %10s  %s\n' PROFILE BYTES COMMAND
 fi
+# The runtime budget (docs/MASTER_PLAN.md section 2): `runtime.c` compiled alone at -Oz, the
+# `text` column of `size` (code + read-only constants + unwind entries), must stay under 4 KB.
+"${CC:-clang}" -Oz -c runtime/runtime.c -o build/size/runtime.o
+row runtime "$(size build/size/runtime.o | awk 'NR == 2 { print $1 }')" "clang -Oz -c runtime/runtime.c && size runtime.o (text; budget 4096)"
 for p in debug speed size; do
   scripts/build.sh "$ll" runtime/runtime.c "$driver" -o "build/size/app-$p" --profile "$p" >/dev/null
   row "$p" "$(bytes "build/size/app-$p")" "scripts/build.sh $ll runtime/runtime.c $driver --profile $p"
