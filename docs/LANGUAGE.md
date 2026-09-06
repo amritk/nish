@@ -682,6 +682,9 @@ under [Semantics decisions](#semantics-decisions).
 | `+` | two `string` | `string` | `sts_str_concat` | `str_concat`; `reject_str_plus_number` (`no implicit string conversion`) |
 | unary `-` | `i32`, `i64`, `f64` | same | `sub i32 0, x` / `sub i64 0, x` / `fneg double x` | `cf_if` (`-x`), `i64_basic`; `f64` *(CLI only)* |
 | unary `!` | `boolean` | `boolean` | `xor i1 x, true` | `cf_logical`; `!s` on a string is `` Unsupported unary operator `!` on string `` *(CLI only)* |
+| `& \| ^` | two `i32` or two `i64` (same type) | that type | `and` / `or` / `xor`, one instruction, no panic path | `bit_and_or_xor`, `bit_i64`, `bit_attributes`; `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_boolean` (`` Operator `&` is not available on boolean (use `&&`) ``) |
+| `<< >> >>>` | two `i32` or two `i64` (same type) | that type | `shl` / `ashr` (sign-filling) / `lshr` (zero-filling), with the count masked to 31 or 63; a constant count is masked at compile time and emits no `and` (see [Semantics decisions](#semantics-decisions)) | `bit_shifts`, `bit_shift_const`, `bit_shift_fill`, `bit_i64`; `tests/differential/corpus/bit_shifts` |
+| unary `~` | `i32`, `i64` | same | `xor x, -1` (LLVM has no `not`) | `bit_not`; `reject_bit_not` (`` Operator `~` requires an integer operand, got f64 ``) |
 | `< <= > >=` | two numbers of one type (`i32`, `i64`, or `f64`); nothing else | `boolean` | `icmp slt ...` / `fcmp olt ...` | `cf_if`, `f64_mode`; booleans (`reject_bool_ordering`), strings (`reject_str_lt`, `reject_str_lt_str`), and structs (`reject_cls_ordering`) are `` Operator `<` requires two numeric operands, got boolean and boolean `` |
 | `=== !==` | any two values of the same type except `void`; a `T \| null` only against the literal `null` | `boolean` | integers and booleans: `icmp eq` / `icmp ne`; `f64`: `fcmp oeq` / `fcmp une` (so `x !== x` is true for NaN); strings: `sts_str_eq` (content); arrays and objects: `icmp eq` on the pointer (identity); `p === null`: `icmp eq` against `null` | `str_eq`, `cls_this_method_call`, `conversions`, `mem_nullable`; arrays *(CLI only)*; `reject_null_compare_two` |
 | `== !=` | – | – | forbidden | `reject_loose_equality`, `reject_loose_inequality` |
@@ -689,10 +692,11 @@ under [Semantics decisions](#semantics-decisions).
 | `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch` |
 | `x = e` | mutable local, field, or element; `e` of the target's type | the target's type | `store` | `locals`, `cls_field_write`, `arr_index_read_write` |
 | `x op= e` (`+= -= *= /= %=`) | numeric mutable local, numeric field, or numeric element; same type | the target's type | load, op, store | `cf_compound_assign`, `cls_compound_field`, `arr_index_read_write`; `reject_cf_compound_const` |
+| `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask | `bit_compound`; a field or element target is not supported yet (`` Unsupported assignment operator `&=` `` / `Only simple variables can be assigned`, *CLI only*) |
 | `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param` |
 | `,` | – | – | forbidden | `reject_comma_expression` |
 | `?? ?. in instanceof typeof delete void` | – | – | forbidden by the validator | `reject_nullish`, `reject_optional_chain`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression` |
-| `** & \| ^ << >> >>> ~ +x` | – | – | not supported | `Unsupported binary operator` / `Unsupported unary operator` *(CLI only)* |
+| `** +x` | – | – | not supported | `Unsupported binary operator` / `Unsupported unary operator` *(CLI only)* |
 
 ### Checked integer division
 
@@ -935,6 +939,26 @@ compiler's own marks are never invalidated by user resets.
   becomes undefined behaviour, as in C; division, remainder, and the
   compiler's own index, length, and allocator arithmetic are never flagged
   (`tests/cases/opt_nsw`; [wp9-optimisation.md](wp9-optimisation.md#--nsw)).
+- **Shift counts are masked**, never undefined. `a << b` uses `b & 31` on
+  `i32` and `b & 63` on `i64`, so `x << 33` is `x << 1` and `x << -1` is
+  `x << 31`, exactly as in JavaScript, rather than the poison LLVM produces
+  for a shift at or beyond the operand's width. A constant count is masked at
+  compile time and emits no `and` at all; a variable one costs one
+  instruction, which is the price of a language whose premise is that if it
+  compiles, the behaviour is known (`tests/cases/bit_shifts`,
+  `bit_shift_const`, `bit_shift_fill`; `tests/differential/corpus/bit_shifts`).
+- **`>>>` on `i32` keeps the signed reading**, and this is a deliberate
+  divergence. `lshr` fills with zeros and the result is read back as the
+  signed `i32` it is, so `-1 >>> 0` is `-1` here and `4294967295` in
+  JavaScript, which promotes the unsigned 32-bit value into a double. It is
+  the same honest choice the language already makes when integer arithmetic
+  wraps instead of promoting. `i64` has no divergence to report, because
+  JavaScript has no `>>>` for BigInt at all (`tests/cases/bit_shift_fill`;
+  the differential rewrite adds `| 0` around an `i32` `>>>` so Node and the
+  native binary agree, [wp13-differential.md](wp13-differential.md)).
+- **Bitwise operators cannot fail.** They have no divisor check and no panic
+  path, unlike `/` and `%`, so a function whose arithmetic is all bitwise
+  keeps `readnone` and `willreturn` (`tests/cases/bit_attributes`).
 - **Integer division is checked**: `sdiv`/`srem` truncating toward zero
   (`-7 / 2` is `-3`, `-7 % 2` is `-1`; `tests/cases/cf_collatz`,
   `cf_do_while`), preceded by a divisor check that exits with status 1 on a
@@ -1204,6 +1228,8 @@ messages are exact for the cases cited; other rows quote
 | wrong arity | `` `f` expects 1 argument(s), got 2 `` | `reject_arity` |
 | mixed operand types | `` Operator `+` requires two operands of the same numeric type, got i32 and boolean `` | `reject_type_mismatch`, `reject_i64_mixed` |
 | string `+` number | `` ... got string and i32 (no implicit string conversion; use a template literal) `` | `reject_str_plus_number` |
+| bitwise operator on a non-integer | `` Operator `&` requires two operands of the same integer type, got f64 and f64 `` (with `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) `` appended in that mode) / `` Operator `~` requires an integer operand, got f64 `` | `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not` |
+| bitwise operator on booleans | `` Operator `&` is not available on boolean (use `&&`) `` (`\|` names `\|\|`, `^` names `!==`, `~` names `!`) | `reject_bit_boolean` |
 | ordering on booleans / strings / structs | `` Operator `<` requires two numeric operands, got string and i32 `` | `reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |
 | `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned` |
 | `Arena.release` with a non-`i64` argument | `` `Arena.release` expects i64, got i32 `` | `reject_arena_release_type` |
@@ -1224,7 +1250,7 @@ messages are exact for the cases cited; other rows quote
 | class and interface errors | see [Classes](#classes), [Interfaces](#interfaces-and-object-literals) | `reject_cls_*` |
 | inheritance errors: `extends` on an interface, unknown or imported base, cycles, redeclared field, changed override signature, `super` misuse, downcast | `` Class `User` cannot extend interface `Named`; use `implements Named` `` / `` Inheritance cycle: class `Pong` extends `Ping`, which already extends `Pong` `` / `` `super(...)` must be the first statement of the constructor of `Derived` `` / ... (see [Classes](#classes)) | `reject_cls_extends_*`, `reject_cls_super_*`, `reject_cls_override_signature`, `reject_cls_shadow_field`, `reject_cls_this_before_super`, `reject_cls_readonly_inherited`, `reject_cls_downcast`, `tests/link/extends_imported_base` |
 | module errors | see [`export` and `import`](#export-and-import), [`main`](#main) | `reject_bare_import`, `reject_default_import`, `reject_namespace_import`, `reject_side_effect_import`, `reject_missing_module`, `reject_export_*`, `reject_main_params`, `tests/link/*` |
-| unsupported syntax the validator allows | `Unsupported statement in Phase 1: <Kind>` / `Unsupported expression in Phase 1: <Kind>` / `` Unsupported binary operator `**` `` / `` Unsupported unary operator `~` `` / `` Unsupported type `...` `` | *(CLI only)* |
+| unsupported syntax the validator allows | `Unsupported statement in Phase 1: <Kind>` / `Unsupported expression in Phase 1: <Kind>` / `` Unsupported binary operator `**` `` / `` Unsupported unary operator `+` `` / `` Unsupported type `...` `` | *(CLI only)* |
 
 ## Known inconsistencies
 

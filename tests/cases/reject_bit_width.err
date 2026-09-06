@@ -1,0 +1,1 @@
+Operator `&` requires two operands of the same integer type, got i32 and i64

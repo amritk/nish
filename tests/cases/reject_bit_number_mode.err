@@ -1,0 +1,2 @@
+Operator `^` requires two operands of the same integer type, got f64 and f64
+`number` is f64 under --number-mode f64; convert with toI32/toI64

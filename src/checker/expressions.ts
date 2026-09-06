@@ -9,6 +9,7 @@
 import ts from "typescript";
 import { BOOL, F64, I32, assignable, isNumeric, sameType, typeToString } from "../types";
 import { arrayExpressionCheckers, installArrayAssignmentCheckers } from "./arrays";
+import { bitwiseBinaryCheckers, bitwiseUnaryCheckers } from "./bitwise";
 import { BuiltinCallChecker } from "./builtins";
 import { ioBuiltinFunctions } from "./io";
 import { contextualLiteralType, conversionBuiltins, parseBuiltins } from "./math";
@@ -89,6 +90,7 @@ const checkNot: UnaryChecker = (ctx, expr, scope) => {
 export const unaryCheckers: CheckerTable<UnaryChecker> = {
   [ts.SyntaxKind.MinusToken]: checkNegate,
   [ts.SyntaxKind.ExclamationToken]: checkNot,
+  ...bitwiseUnaryCheckers, // `~`
   ...controlFlowUnaryCheckers,
 };
 
@@ -177,6 +179,7 @@ export const binaryCheckers: CheckerTable<BinaryChecker> = {
   [ts.SyntaxKind.EqualsEqualsToken]: rejectLooseEquality,
   [ts.SyntaxKind.ExclamationEqualsToken]: rejectLooseEquality,
   ...stringBinaryCheckers, // string-aware `+`, `===`, `!==` (numeric behaviour unchanged)
+  ...bitwiseBinaryCheckers, // `& | ^ << >> >>>` and their compound forms
   ...controlFlowBinaryCheckers,
 };
 installArrayAssignmentCheckers(binaryCheckers); // `a[i] = v`, `a[i] op= v`; other targets keep the handlers above

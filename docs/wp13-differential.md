@@ -91,7 +91,13 @@ round/sqrt/sin/cos/exp/log/pow`, `Math.PI/E`, `Math.random`.
 | `a + b`, `a - b`, `a * b`, `a / b`, `-a` | i64 | `__sts.wrapI64(a op b)` = `BigInt.asIntN(64, ...)` | BigInt is unbounded; wrap to 64 bits. BigInt `/` truncates toward zero like `sdiv` |
 | `a % b` | i64 | unchanged | BigInt `%` is `srem` |
 | numeric literal | i64 | `123n` | the checker typed it by context (`let x: i64 = 5`, `x * 2`, `f(5)`, `return 5`) |
+| `a & b`, `a \| b`, `a ^ b`, `a << b`, `a >> b` | i32 | `((a op b) \| 0)` | JavaScript already computes exactly these on int32 operands, mask and all; the `\| 0` is the identity that keeps the rule uniform |
+| `a >>> b` | i32 | `((a >>> b) \| 0)` | JS `>>>` yields an *unsigned* 32-bit value in a double; `\| 0` reads those bits back as the signed `i32` StaticTS has ([LANGUAGE.md, Semantics decisions](LANGUAGE.md#semantics-decisions)) |
+| `~a` | i32 / i64 | unchanged | JS `~` on an int32 and BigInt `~` are both the `xor x, -1` we emit, and neither can leave the range |
+| `a & b`, `a \| b`, `a ^ b` | i64 | `__sts.wrapI64(a op b)` | BigInt already agrees; the wrap is the uniform rule and cannot change an in-range result |
+| `a << b`, `a >> b`, `a >>> b` | i64 | `__sts.shlI64/ashrI64/lshrI64(a, b)` | BigInt shifts do not mask the count and BigInt has no `>>>` at all |
 | `x += e` etc. | i32 / i64 | `x = <a op b rule>` | targets are simple mutable locals, so evaluating `x` twice is safe |
+| `x &= e`, `x \|= e`, `x ^= e`, `x <<= e`, `x >>= e`, `x >>>= e` | i32 / i64 | `x = <a op b rule>` | the same, with the bitwise rules above |
 | `++x`, `--x` | i32 / i64 | `(x = wrap(x + 1))` | |
 | `x++`, `x--` | i32 / i64 | `wrap((x = wrap(x + 1)) - 1)` | the old value, recovered with wrapping arithmetic so `INT_MAX++` works |
 | `a[i]` read | any | `__sts.idx(a, i)` | WP4 bounds check: out of range prints `index out of range: i >= len` to stderr and exits 1; negative indices fail like the unsigned compare; a double index is truncated like `fptosi` |
@@ -133,6 +139,12 @@ visible as known failures):
   `2147483647 + 1` is `-2147483648`, `46341 * 46341` wraps,
   `7 / 2` is `3`, `-7 / 2` is `-3`, `-7 % 3` is `-1`.
 - **`i64` wraps at 64 bits**; literals are typed by context (docs/wp7-runtime.md).
+- **Shift counts are masked** to 31 (`i32`) or 63 (`i64`), which is what
+  JavaScript does too, so `x << 33` agrees on both sides. **`>>>` on `i32`
+  keeps the signed reading**: `-1 >>> 0` is `-1` here and `4294967295` in
+  JavaScript, so the rewrite appends `| 0`
+  ([LANGUAGE.md, Semantics decisions](LANGUAGE.md#semantics-decisions);
+  `corpus/bit_shifts`, `corpus/bit_fnv1a`).
 - **`s.length` is the UTF-8 byte length** (docs/wp3-strings.md): `"héllo".length`
   is `6`, `"🎉".length` is `4`.
 - **`toI32`/`toI64` from a double saturate** (`toI32(5e10)` is `2147483647`,
@@ -333,6 +345,7 @@ completed with 0 mismatches and 0 compile errors (52 s on 4 cores). The
 | `int_divmod`, `int_div_overflow`, `int_div_zero` | truncating division and remainder with every sign combination; the two undefined cases |
 | `int_abs_minmax` | `Math.abs(INT_MIN)`, `min`/`max`, clamp |
 | `int_incdec`, `int_compound` | prefix/postfix `++`/`--` in expressions, `op=` on locals and elements |
+| `bit_ops`, `bit_shifts`, `bit_i64`, `bit_fnv1a` | `& \| ^ ~` on both signs and both ends of the range, the three shifts at counts 0 to 40 and below zero, `-1 >>> 0`, the i64 forms through the BigInt shim, and an FNV-1a hash loop |
 | `digits`, `collatz`, `recursion` | loops and recursion (fib, ackermann(3, 5), power by squaring, mutual recursion) |
 | `f64_format` | `0.1 + 0.2`, `1e21`, `1e-7`, `2^53 ± 1`, `-0`, `5e-324`, `1.7976931348623157e308`, `Infinity`, `NaN` |
 | `f64_math`, `f64_arith`, `f64_libm`, `f64_pow_spec`, `f64_round_negzero`, `f64_minmax_nan` | floor/ceil/trunc/round on negatives and halves, `%` on doubles, transcendental functions, pow special cases |

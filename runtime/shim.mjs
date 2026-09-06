@@ -59,6 +59,22 @@ export function wrapI64(x) {
   return BigInt.asIntN(64, x);
 }
 
+/**
+ * The i64 shifts. BigInt has no `>>>` and neither of its shifts masks the
+ * count, so all three do here what `codegen/emit/bitwise.ts` emits: mask the
+ * count to 6 bits, then shift. `lshrI64` reads the operand as unsigned before
+ * shifting and hands back the signed reading of the result, which is `lshr`.
+ */
+export function shlI64(a, b) {
+  return BigInt.asIntN(64, a << (b & 63n));
+}
+export function ashrI64(a, b) {
+  return a >> (b & 63n);
+}
+export function lshrI64(a, b) {
+  return BigInt.asIntN(64, BigInt.asUintN(64, a) >> (b & 63n));
+}
+
 /** `llvm.abs.i64(x, false)`: the minimum value wraps to itself. */
 export function absI64(x) {
   return BigInt.asIntN(64, x < 0n ? -x : x);
