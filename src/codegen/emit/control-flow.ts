@@ -277,7 +277,7 @@ const emitCompoundAssignment: BinaryEmitter = (ctx, expr) => {
   const value =
     target.type.kind === "f64"
       ? ctx.fn.emitValue(`${floatOp} ${llvmType(target.type)} ${old}, ${rhs}`)
-      : emitIntBinary(ctx, intOp, llvmType(target.type), old, rhs);
+      : emitIntBinary(ctx, intOp, target.type, old, rhs);
   storeLocal(ctx, target, value);
   return value;
 };
@@ -287,7 +287,7 @@ function emitIncDec(ctx: EmitContext, expr: ts.PrefixUnaryExpression | ts.Postfi
   const target = ctx.program.bindings.get(expr.operand as ts.Identifier)!;
   const isFloat = target.type.kind === "f64";
   const increment = expr.operator === ts.SyntaxKind.PlusPlusToken;
-  const opcode = isFloat ? (increment ? "fadd" : "fsub") : intOpcode(ctx, increment ? "add" : "sub");
+  const opcode = isFloat ? (increment ? "fadd" : "fsub") : intOpcode(ctx, increment ? "add" : "sub", target.type);
   const one = isFloat ? "0x3FF0000000000000" : "1";
   const old = loadLocal(ctx, target);
   const value = ctx.fn.emitValue(`${opcode} ${llvmType(target.type)} ${old}, ${one}`);

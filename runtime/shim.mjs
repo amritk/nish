@@ -9,6 +9,10 @@
  *
  *   - `number` is a 32-bit integer in the default mode (`--number-mode i32`),
  *     `i64` is a 64-bit integer, both wrapping; JS has doubles and BigInt.
+ *   - `u8`/`u16`/`u32`/`u64` are unsigned and wrapping, and JavaScript has no
+ *     unsigned integers at all: the narrow three live in a `number` masked
+ *     back into range (`& 0xFF`, `& 0xFFFF`, `>>> 0`) and `u64` is a BigInt
+ *     kept in range with `BigInt.asUintN(64, x)`.
  *   - `s.length` is the UTF-8 byte length.
  *   - `a[i]` is bounds-checked: out of range prints
  *     `index out of range: <i> >= <len>` to stderr and exits 1.
@@ -70,6 +74,78 @@ export function minI64(a, b) {
 }
 export function maxI64(a, b) {
   return a > b ? a : b;
+}
+
+// ---- Unsigned integers (WP15) -------------------------------------------------------
+//
+// JavaScript has no unsigned integer type, so every unsigned result is masked
+// back into its width right where the compiled code would have relied on the
+// LLVM type. u8/u16/u32 fit a `number` exactly (2^32 - 1 < 2^53); u64 is a
+// BigInt, so it goes through `wrapU64` the way i64 goes through `wrapI64`.
+
+/** Wrap into the u64 range: every u64 `+ - * /`, unary minus and shift ends here. */
+export function wrapU64(x) {
+  return BigInt.asUintN(64, x);
+}
+
+/**
+ * `lshr` on a 64-bit value held as a BigInt. BigInt's own `>>` is an
+ * arbitrary-precision *arithmetic* shift and has no `>>>` at all, so a
+ * logical shift is spelled by reading the value's 64 bits as unsigned first.
+ */
+export function lshrI64(x, n) {
+  return BigInt.asIntN(64, BigInt.asUintN(64, x) >> n);
+}
+
+/**
+ * The widths, as the rewriter names them. `bits` drives every mask and
+ * `BigInt.asIntN`/`asUintN` call; `big` says whether the value is a BigInt
+ * (i64/u64) or a `number` in JavaScript.
+ */
+const INT_KINDS = {
+  i32: { bits: 32, signed: true, big: false },
+  i64: { bits: 64, signed: true, big: true },
+  u8: { bits: 8, signed: false, big: false },
+  u16: { bits: 16, signed: false, big: false },
+  u32: { bits: 32, signed: false, big: false },
+  u64: { bits: 64, signed: false, big: true },
+};
+
+/** `llvm.umin`/`umax` on u64 (`Math.min`/`max` reject BigInt); the u32-and-below widths use Math. */
+export function minU64(a, b) {
+  return a < b ? a : b;
+}
+export function maxU64(a, b) {
+  return a > b ? a : b;
+}
+
+/**
+ * Every numeric conversion whose source or target is unsigned (`toU8`,
+ * `toU32(i)`, `toI32(u)`, ...), as one function taking the kind names the
+ * checker recorded. Doing it through BigInt is what makes the whole matrix
+ * exact in one place: an integer source is turned into its true mathematical
+ * value, then `asIntN`/`asUintN` performs the sign-extend, zero-extend or
+ * truncate that the target's width and signedness call for — which is exactly
+ * what `sext`/`zext`/`trunc` do natively.
+ */
+export function convert(x, from, to) {
+  if (to === "f64") return typeof x === "bigint" ? Number(x) : x; // sitofp / uitofp
+  const target = INT_KINDS[to];
+  const lo = target.signed ? -(1n << BigInt(target.bits - 1)) : 0n;
+  const hi = target.signed ? (1n << BigInt(target.bits - 1)) - 1n : (1n << BigInt(target.bits)) - 1n;
+  let exact;
+  if (from === "f64") {
+    // The saturating intrinsics: NaN is 0 and out-of-range values clamp. The
+    // bounds are BigInt because 2^64 - 1 has no exact `number`.
+    if (Number.isNaN(x)) exact = 0n;
+    else if (x <= Number(lo)) exact = lo;
+    else if (x >= Number(hi)) exact = hi;
+    else exact = BigInt(Math.trunc(x));
+  } else {
+    exact = BigInt(x); // sext/zext/trunc, below
+  }
+  const wrapped = target.signed ? BigInt.asIntN(target.bits, exact) : BigInt.asUintN(target.bits, exact);
+  return target.big ? wrapped : Number(wrapped);
 }
 
 /** `s.length`: UTF-8 byte length for strings (arrays keep their own `.length`). */

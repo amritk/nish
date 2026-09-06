@@ -122,7 +122,10 @@ The checklist every work package has followed (MASTER_PLAN.md §7):
    checker's `Unsupported ... in Phase 1` fallback covers it.
 3. **Types.** New type? Extend `StaticType`, `llvmType`, `alignOf`,
    `sameType`, `typeToString`, `resolveTypeNode` in `src/types.ts`, and
-   `cType`/`isScalar`/`tsKeyword` in `src/interop/abi.ts`.
+   `cType`/`isScalar`/`tsKeyword` in `src/interop/abi.ts`. A numeric type
+   also touches `isNumeric`/`isInteger` (and `isUnsigned`/`intBits` for an
+   integer width), `wasmType` in `interop/dts.ts`, and `BASIC_TYPES`/`bitsOf`
+   in `codegen/debug.ts`.
 4. **Checker.** Write a handler in the matching family module (or a new
    one), register it in the table, record every type/binding the emitter
    will need in `CheckedProgram`, and give every rejection a message that
@@ -193,7 +196,7 @@ of `RUNTIME_FUNCTIONS`:
 | `sts_arena_mark()` | The current bump address `buf + off` as one `i64` (`0` while the arena is empty), which identifies both the chunk and the offset. Emitted at the top of every function with an automatic arena scope; `Arena.mark()` (WP6). |
 | `sts_arena_release(mark)` | Rewind to a mark: `mark == 0` acts like `sts_reset_arena`; a mark in the current chunk resets `off`; a mark in an older chunk frees every newer chunk first; a mark in no live chunk (stale, undefined behaviour by the language rule) is ignored. Emitted before every `ret` of a scoped function; `Arena.release(m)`. |
 | `sts_arena_used()` | Bytes bumped in the current chunk; `Arena.used()`, the number the `mem_*` tests watch. |
-| `sts_str_new(bytes, len)`, `sts_str_concat`, `sts_str_eq`, `sts_str_len`, `sts_print`, `sts_str_from_i32 / i64 / f64` | Length-prefixed, NUL-terminated, immutable UTF-8 strings in the arena; `from_f64` prints exactly what JavaScript's `String(x)` prints (shortest round-trip digits). `sts_str_len` exists for C hosts; compiled code loads the header directly. |
+| `sts_str_new(bytes, len)`, `sts_str_concat`, `sts_str_eq`, `sts_str_len`, `sts_print`, `sts_str_from_i32 / i64 / u64 / f64` | Length-prefixed, NUL-terminated, immutable UTF-8 strings in the arena; `from_f64` prints exactly what JavaScript's `String(x)` prints (shortest round-trip digits). `from_u64` is the one unsigned formatter: `u8`/`u16`/`u32` are `zext`ed to i64 at the call site, so four widths need one symbol and one shared digit loop (WP15). `sts_str_len` exists for C hosts; compiled code loads the header directly. |
 | `sts_random()` | `Math.random`: xorshift64\*, seeded lazily from time and pid, 53 random bits in `[0, 1)`. |
 | `sts_exit(code)` | `process.exit`, via libc `exit`. |
 | `sts_read_file / sts_write_file / sts_append_file` | `readFileSync` / `writeFileSync` / `appendFileSync`: `open`/`pread`/`write` syscalls, the whole file in one arena string; a failure prints `statictsc: cannot read <path>` (or `cannot write`) and exits 1. |

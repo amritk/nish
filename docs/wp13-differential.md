@@ -90,10 +90,19 @@ round/sqrt/sin/cos/exp/log/pow`, `Math.PI/E`, `Math.random`.
 | `-a` | i32 | `((-(a)) \| 0)` | `sub i32 0, x` wraps: `-INT_MIN` is `INT_MIN` |
 | `a + b`, `a - b`, `a * b`, `a / b`, `-a` | i64 | `__sts.wrapI64(a op b)` = `BigInt.asIntN(64, ...)` | BigInt is unbounded; wrap to 64 bits. BigInt `/` truncates toward zero like `sdiv` |
 | `a % b` | i64 | unchanged | BigInt `%` is `srem` |
-| numeric literal | i64 | `123n` | the checker typed it by context (`let x: i64 = 5`, `x * 2`, `f(5)`, `return 5`) |
-| `x += e` etc. | i32 / i64 | `x = <a op b rule>` | targets are simple mutable locals, so evaluating `x` twice is safe |
-| `++x`, `--x` | i32 / i64 | `(x = wrap(x + 1))` | |
-| `x++`, `x--` | i32 / i64 | `wrap((x = wrap(x + 1)) - 1)` | the old value, recovered with wrapping arithmetic so `INT_MAX++` works |
+| numeric literal | i64 / u64 | `123n` | the checker typed it by context (`let x: i64 = 5`, `x * 2`, `f(5)`, `return 5`) |
+| `a + b`, `a - b`, `a / b`, `a % b`, `-a` | u8 / u16 / u32 | `((a op b) & 0xFF)`, `& 0xFFFF`, `>>> 0` | JavaScript has no unsigned integers; the mask is the width. `& 0xFF` also handles a negative intermediate (ToInt32 first), and `>>> 0` is ToUint32, which is `trunc ... to i32` read as unsigned |
+| `a * b` | u32 | `(Math.imul(a, b) >>> 0)` | as i32: the double product can exceed 2^53, and `mul` is bit-identical for both signednesses |
+| `a op b`, `-a` | u64 | `__sts.wrapU64(a op b)` = `BigInt.asUintN(64, ...)` | as i64, but wrapped into `0 .. 2^64-1` |
+| `a >> b` | i32 | unchanged | JS `>>` is `ashr` |
+| `a >>> b` | i32 | `((a >>> b) \| 0)` | JS `>>>` produces the *unsigned* value; StaticTS reads the same bits as a signed `i32` |
+| `a >> b`, `a >>> b` | u8 / u16 / u32 | `((a >>> b) & mask)` | `lshr`; the value is already in range, so the mask only re-establishes the type |
+| `a >> b` | i64 | `__sts.wrapI64(a >> b)` | BigInt `>>` is an arbitrary-precision arithmetic shift = `ashr` |
+| `a >>> b` | i64 | `__sts.lshrI64(a, b)` | BigInt has no `>>>`; the shim reads the 64 bits as unsigned first |
+| `a >> b`, `a >>> b` | u64 | `__sts.wrapU64(a >> b)` | the value is non-negative, so BigInt `>>` is already logical |
+| `x += e` etc. | any integer | `x = <a op b rule>` | targets are simple mutable locals, so evaluating `x` twice is safe |
+| `++x`, `--x` | any integer | `(x = wrap(x + 1))` | |
+| `x++`, `x--` | any integer | `wrap((x = wrap(x + 1)) - 1)` | the old value, recovered with wrapping arithmetic so `INT_MAX++` works |
 | `a[i]` read | any | `__sts.idx(a, i)` | WP4 bounds check: out of range prints `index out of range: i >= len` to stderr and exits 1; negative indices fail like the unsigned compare; a double index is truncated like `fptosi` |
 | `a[i] = v` | any | `__sts.setIdx(a, i, v)` | evaluates `a`, `i`, `v`, then checks and stores; yields `v` |
 | `a[i] op= v` | i32 / i64 / f64 | `__sts.updIdx(a, i, (old) => <old op v rule>)` | evaluates `a`, `i`, checks, loads, evaluates `v`, computes, stores |
@@ -104,10 +113,13 @@ round/sqrt/sin/cos/exp/log/pow`, `Math.PI/E`, `Math.random`.
 | `throw e` | | `__sts.trap()` | SIGILL, like `llvm.trap` |
 | `Math.abs(x)` | i32 | `(Math.abs(x) \| 0)` | `llvm.abs.i32(x, false)`: `abs(INT_MIN)` is `INT_MIN` |
 | `Math.abs(x)` | i64 | `__sts.absI64(x)` | same, 64-bit |
+| `Math.abs(x)` | unsigned | the argument alone | the value is already its own magnitude, and `Math.abs` throws on a BigInt |
 | `Math.min/max(a, b)` | i64 | `__sts.minI64/maxI64` | `Math.min` rejects BigInt |
+| `Math.min/max(a, b)` | u64 | `__sts.minU64/maxU64` | same |
 | `toI32(x)` | | `__sts.toI32(x)` | BigInt: wrap (`trunc`); double: saturate, NaN -> 0 (`llvm.fptosi.sat`) |
 | `toI64(x)` | | `__sts.toI64(x)` | int32: exact (`sext`); double: truncate and saturate |
 | `toF64(x)` | | `__sts.toF64(x)` | `Number(bigint)` rounds to nearest like `sitofp` |
+| any `toX(y)` with an unsigned type on either side | | `__sts.convert(y, "<from>", "<to>")` | one helper for the whole matrix: the value becomes an exact BigInt, then `BigInt.asIntN`/`asUintN` at the target's width performs the `sext`, `zext` or `trunc`. From `f64` it saturates into `0 .. 2^bits-1` like `llvm.fptoui.sat` |
 | `readFileSync`, `writeFileSync`, `appendFileSync` | | `__sts.*` over `node:fs` with UTF-8 | a failure prints `statictsc: cannot read <path>` and exits 1 |
 | derived-class constructor without `super(...)` | | `super();` prepended to the body | StaticTS calls the (parameterless) ancestor constructor implicitly (WP2b); JavaScript throws at the first `this` without an explicit call |
 | `process.argv` | | `__sts.argv()` = `process.argv.slice(1)` | index 0 is the program on both sides (the executable natively, the rewritten entry script under Node); the arguments come from `<name>.argv` next to the program and are passed to both runs |
@@ -133,6 +145,12 @@ visible as known failures):
   `2147483647 + 1` is `-2147483648`, `46341 * 46341` wraps,
   `7 / 2` is `3`, `-7 / 2` is `-3`, `-7 % 3` is `-1`.
 - **`i64` wraps at 64 bits**; literals are typed by context (docs/wp7-runtime.md).
+- **`u8`/`u16`/`u32`/`u64` are unsigned and wrap at their width**
+  ([LANGUAGE.md, Unsigned integers](LANGUAGE.md#unsigned-integers)):
+  `(255: u8) + 1` is `0`, a `u32` above `INT_MAX` divides and compares as the
+  positive value it is, and `>>` is a logical shift. JavaScript has no
+  unsigned integers at all, so the rewrite masks each result back into its
+  width (`corpus/u_wrap`, `u_div_cmp`, `u_convert_shift`).
 - **`s.length` is the UTF-8 byte length** (docs/wp3-strings.md): `"héllo".length`
   is `6`, `"🎉".length` is `4`.
 - **`toI32`/`toI64` from a double saturate** (`toI32(5e10)` is `2147483647`,

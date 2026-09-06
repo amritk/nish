@@ -281,7 +281,9 @@ const emitFieldAssignment: BinaryEmitter = (ctx, expr) => {
   const rhs = ctx.emitExpression(expr.right);
   const [intOp, floatOp] = COMPOUND_OPCODES[expr.operatorToken.kind]!;
   const value =
-    field.type.kind === "f64" ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`) : emitIntBinary(ctx, intOp, ty, old, rhs);
+    field.type.kind === "f64"
+      ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`)
+      : emitIntBinary(ctx, intOp, field.type, old, rhs);
   ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${ctx.alignSuffix(field.type)}`);
   return value;
 };

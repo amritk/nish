@@ -104,6 +104,17 @@ export function cType(t: StaticType, position: "param" | "return", written = fal
       return "int32_t";
     case "i64":
       return "int64_t";
+    // WP15: the unsigned widths are the <stdint.h> twins of the signed ones;
+    // the LLVM type is the same, so the C prototype is the only place the
+    // signedness of a parameter is visible to a host.
+    case "u8":
+      return "uint8_t";
+    case "u16":
+      return "uint16_t";
+    case "u32":
+      return "uint32_t";
+    case "u64":
+      return "uint64_t";
     case "f64":
       return "double";
     case "bool":
@@ -140,10 +151,20 @@ export function cFieldType(t: StaticType): string {
   return cType(t, "return") ?? "void *";
 }
 
-/** True for the types the scalar-only bridges (N-API shim, wasm typings) can pass without marshalling. */
+/**
+ * True for the types the scalar-only bridges (N-API shim, wasm typings) can
+ * pass without marshalling. `u8`/`u16`/`u32` join `i32` because they all fit
+ * a JavaScript `number`; `i64` and `u64` do not, and stay out exactly as
+ * `i64` always has.
+ *
+ * TODO(WP8): the N-API shim keeps its own reader table and has no unsigned
+ * row yet, so a function with an unsigned parameter is skipped by the addon
+ * generator rather than bridged. The C header and the wasm `.d.ts` do carry
+ * the unsigned widths.
+ */
 export function isScalar(t: StaticType): boolean {
   const k = kindOf(t);
-  return k === "i32" || k === "f64" || k === "bool" || k === "void";
+  return k === "i32" || k === "u8" || k === "u16" || k === "u32" || k === "f64" || k === "bool" || k === "void";
 }
 
 /** TypeScript source spelling of a signature, for comments and declarations. */

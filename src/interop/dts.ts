@@ -26,10 +26,16 @@ import { wasmBridged } from "./wasm";
 /** JS-visible type of a wasm export value; `undefined` when the value cannot cross. */
 export function wasmType(t: StaticType, position: "param" | "return"): string | undefined {
   switch (kindOf(t)) {
+    // WP15: an unsigned width crosses as the wasm value type of its LLVM type,
+    // so u8/u16/u32 are a `number` like i32 and u64 is a `bigint` like i64.
     case "i32":
+    case "u8":
+    case "u16":
+    case "u32":
     case "f64":
       return "number";
     case "i64":
+    case "u64":
       return "bigint";
     case "bool":
       return position === "param" ? "boolean" : "WasmBool";

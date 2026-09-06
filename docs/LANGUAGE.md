@@ -79,6 +79,10 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 | `number` (i32 mode), `i32` | `i32` | 4 / 4 | `int32_t` | Wrapping two's-complement arithmetic. |
 | `number` (f64 mode), `f64` | `double` | 8 / 8 | `double` | IEEE-754; `f64` is always available, in both modes. |
 | `i64` | `i64` | 8 / 8 | `int64_t` | Never the lowering of `number`; wrapping arithmetic; literals only by context. |
+| `u8` | `i8` | 1 / 1 | `uint8_t` | [Unsigned integers](#unsigned-integers): the same LLVM type as a signed byte, with unsigned operations. Wrapping arithmetic. |
+| `u16` | `i16` | 2 / 2 | `uint16_t` | As `u8`. |
+| `u32` | `i32` | 4 / 4 | `uint32_t` | Shares `i32`'s LLVM type; `u32 + i32` is still a type error. |
+| `u64` | `i64` | 8 / 8 | `uint64_t` | Shares `i64`'s LLVM type; crosses to JavaScript as a `bigint`, like `i64`. |
 | `boolean` | `i1` | 1 / 1 | `bool` | `zeroext` at the ABI boundary. |
 | `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }` | 8 / 8 (pointer) | `const sts_str *` in, `sts_str *` out | Immutable, 8-aligned, NUL-terminated (so `data` is a C string; sharing a pointer is always safe, nothing is ever copied); literals are module constants, everything else lives in the arena; `len` is the UTF-8 byte length. |
 | `T[]`, `Array<T>` | `%struct.sts_array*` to `{ i64 len, i64 cap, i8* data }` | 8 / 8 (pointer); header 24 bytes | `const sts_array *` in (read-only), `sts_array *` in (written through) and out | One element type; `data` holds `cap` elements of `sizeof(T)`; bounds-checked. |
@@ -94,7 +98,8 @@ Sources: `src/types.ts` (`llvmType`, `alignOf`), `src/interop/abi.ts`
 
 Type rules:
 
-- **Accepted type syntax**: `number`, `i32`, `i64`, `f64`, `boolean`,
+- **Accepted type syntax**: `number`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`,
+  `f64`, `boolean`,
   `string`, `void`, `T[]`, `Array<T>` (exactly one type argument:
   `` `Array` needs exactly one type argument ``), `Int32Array`,
   `Float64Array`, `BigInt64Array` (no type argument:
@@ -113,7 +118,12 @@ Type rules:
   mode is `Cannot initialize f64 variable ... with i32` *(CLI only)*;
   `x + n` with `x: i64`, `n: number` is rejected
   (`tests/cases/reject_i64_mixed`); convert explicitly with `toI32`,
-  `toI64`, `toF64` (`tests/cases/conversions`).
+  `toI64`, `toU8`, `toU16`, `toU32`, `toU64`, `toF64`
+  (`tests/cases/conversions`, `u_conv_roundtrip`). Signedness is part of the
+  type even when the LLVM type is shared, so `u32 + i32` is
+  `` Operator `+` requires two operands of the same numeric type ... got u32 and i32 ``
+  (`tests/cases/reject_u_mixed_signedness`), and so is `u8 * u32`
+  (`tests/cases/reject_u_mixed_widths`).
 - **Field and element types** may be any type except `void`
   (`Array elements cannot be void`, `... cannot have type void`).
   Arrays of arrays (`tests/cases/arr_nested`), arrays of strings
@@ -137,10 +147,15 @@ takes that type (`src/checker/math.ts`, `contextualLiteralType`;
 | f64-only `Math.*`, `toF64` | `Math.sqrt(2)`, `toF64(3)` | `f64` |
 | `process.exit` | `process.exit(1)` in f64 mode | `i32` |
 | `Number` | `Number(2.5)` in i32 mode | `f64` |
+| element of an array literal whose own context is a `T[]` | `const bytes: u8[] = [0, 255]` | `u8` |
+| a class field's literal initializer | `b: u8 = 255` | `u8` |
+| argument to a constructor | `new Pixel(255, 0, 0)` | the parameter's type |
+| a field or element assignment target | `p.b = 255`, `bytes[i] = 255` | the field's / element's type |
 
 `-5` and `(5)` count as the literal. "Known type" means an already-checked
-left operand, a variable, or a call to a user function or to
-`toI32/toI64/toF64`. Only the literal's *immediate* context counts: in i32
+left operand, a variable, a field or element of one of those, or a call to a
+user function or to
+`toI32/toI64/toU8/toU16/toU32/toU64/toF64`. Only the literal's *immediate* context counts: in i32
 mode `const f: f64 = 0.1 + 0.2` is rejected because `0.1` is an operand of
 `+` whose other operand has no known type yet; write `const a: f64 = 0.1;
 const f = a + 0.2` *(CLI only)*. A literal in an integer context must be integral
@@ -148,7 +163,84 @@ const f = a + 0.2` *(CLI only)*. A literal in an integer context must be integra
 `tests/cases/reject_i64_literal_float`); in an `i64` context it must also be
 at most 2^53 in magnitude (`` exceeds 2^53 and cannot be written exactly ``
 *(CLI only)*) because TypeScript's parser has already rounded larger
-literals to a double.
+literals to a double. In an *unsigned* context it must also be non-negative
+and fit the width: `const b: u8 = -1` is
+`` Negative literal `-1` where u8 is expected (u8 is unsigned) ``
+(`tests/cases/reject_u_negative_literal`) and `const b: u8 = 256` is
+`` Literal `256` does not fit in u8 ``
+(`tests/cases/reject_u_literal_too_wide`). The largest `u64` values are past
+2^53 and cannot be written at all; build them arithmetically
+(`toU64(0) - toU64(1)` is 2^64 - 1, `tests/cases/u_print`).
+
+### Unsigned integers
+
+`u8`, `u16`, `u32` and `u64` are unsigned integers with wrapping arithmetic.
+LLVM has no unsigned types, so they lower to `i8`, `i16`, `i32` and `i64` and
+the signedness lives entirely in the *operations*; representing an unsigned
+value therefore costs nothing at all, and a `u8` field packs a struct as
+tightly as a C `uint8_t` does.
+
+| Operation | On `i32` / `i64` | On `u8` / `u16` / `u32` / `u64` |
+| --- | --- | --- |
+| `+ - *`, unary `-`, `++`/`--` | `add` `sub` `mul` | identical, and wrapping for both |
+| `/ %` | `sdiv` / `srem` after a two-part divisor check | `udiv` / `urem` after a single compare ([Checked integer division](#checked-integer-division)) |
+| `< <= > >=` | `icmp slt sle sgt sge` | `icmp ult ule ugt uge` |
+| `>>` | `ashr` | `lshr` |
+| `>>>` | `lshr` | `lshr` — the same instruction, so the two are synonyms |
+| `=== !==` | `icmp eq` / `icmp ne` | identical (the bits decide) |
+| widening conversion | `sext` | `zext` |
+| narrowing conversion | `trunc` | `trunc` |
+| to / from `f64` | `sitofp` / `llvm.fptosi.sat` | `uitofp` / `llvm.fptoui.sat` |
+| `Math.abs` | `llvm.abs` | nothing: the value is already its own magnitude |
+| `Math.min` / `Math.max` | `llvm.smin` / `llvm.smax` | `llvm.umin` / `llvm.umax` |
+| `console.log(x)`, `` `${x}` `` | `sts_str_from_i32` / `_i64` | `zext` to i64, then `sts_str_from_u64` |
+| `--nsw` (WP9) | `add nsw` … | `add nuw` … — an unsigned value passing 2^31 has not overflowed |
+
+The consequences worth knowing:
+
+- **A value above `INT_MAX` behaves.** `const big: u32 = 4000000000` compares,
+  divides and prints as four billion, where the same bits in an `i32` are
+  -294967296 (`tests/cases/u_compare_above_intmax`, `u_udiv_urem`, `u_print`;
+  `tests/differential/corpus/u_div_cmp`).
+- **Division is cheaper.** Unsigned division has no overflow case, so its
+  check is one compare instead of three plus an `and` and an `or`
+  (`tests/cases/u_div_one_check`).
+- **Overflow wraps**, as it does for the signed types: `(255: u8) + 1` is `0`
+  and `(0: u8) - 1` is `255` (`tests/cases/u_arith_wrap`,
+  `tests/differential/corpus/u_wrap`). No `nuw` is emitted unless `--nsw` is
+  given, exactly as no `nsw` is emitted for signed arithmetic.
+- **Mixing is an error.** `u32` and `i32` are different types even though both
+  are `i32` in the IR, and so are `u8` and `u32`; there is no implicit
+  conversion anywhere in this language
+  (`tests/cases/reject_u_mixed_signedness`, `reject_u_mixed_widths`).
+- **`i32 >>> n` still yields the raw bits read as signed** — `-1 >>> 0` is
+  `-1` here where JavaScript gives `4294967295` — because an `i32` is the only
+  place the result could go. That is now something to avoid rather than
+  something to live with: use `u32` and the answer is `4294967295`
+  (`tests/cases/u_shift_logical`, `u_conv_roundtrip`;
+  `tests/differential/corpus/u_convert_shift`).
+
+### Shifts
+
+`a >> b` and `a >>> b` take two operands of one *integer* type and produce
+that type. There is no implicit conversion, so the shift amount has the same
+type as the value (`` Operator `>>` requires two operands of the same integer
+type, got u32 and i32 ``, `tests/cases/reject_u_shift_mixed`), and `f64` has
+no shift at all.
+
+`>>` is an arithmetic shift on a signed type (`ashr`, sign bit replicated) and
+a logical one on an unsigned type (`lshr`, zeros in); `>>>` is always `lshr`,
+so on an unsigned type the two operators are synonyms and code that is generic
+over a width may spell either (`tests/cases/u_shift_logical`).
+
+The amount must be less than the width, which is what `ashr`/`lshr` define
+(LLVM makes a wider shift poison, as C makes it undefined). A *literal*
+amount is checked at compile time — `` Shift amount 8 is not less than the
+width of u8 (8 bits) `` (`tests/cases/reject_u_shift_too_wide`) — so the
+common mistake is a compile error; a computed amount is the program's
+responsibility, because masking it would cost an `and` on every shift for the
+sake of a case that is always a bug. `<<`, `&`, `|`, `^` and `~` are still
+not supported.
 
 ### Nullable types
 
@@ -607,11 +699,12 @@ under [Semantics decisions](#semantics-decisions).
 
 | Operator | Operand types | Result | Lowering | Test |
 | --- | --- | --- | --- | --- |
-| `+ - * / %` | two `i32`, two `i64`, or two `f64` (same type) | that type | `add sub mul` / `fadd fsub fmul fdiv frem`; no `nsw` unless `--nsw`; integer `sdiv` / `srem` are preceded by a divisor check that branches to `sts_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`; `reject_type_mismatch` |
+| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem`; no `nsw`/`nuw` unless `--nsw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `sts_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `u_arith_wrap`, `u_udiv_urem`; `reject_type_mismatch`, `reject_u_mixed_signedness` |
 | `+` | two `string` | `string` | `sts_str_concat` | `str_concat`; `reject_str_plus_number` (`no implicit string conversion`) |
 | unary `-` | `i32`, `i64`, `f64` | same | `sub i32 0, x` / `sub i64 0, x` / `fneg double x` | `cf_if` (`-x`), `i64_basic`; `f64` *(CLI only)* |
 | unary `!` | `boolean` | `boolean` | `xor i1 x, true` | `cf_logical`; `!s` on a string is `` Unsupported unary operator `!` on string `` *(CLI only)* |
-| `< <= > >=` | two numbers of one type (`i32`, `i64`, or `f64`); nothing else | `boolean` | `icmp slt ...` / `fcmp olt ...` | `cf_if`, `f64_mode`; booleans (`reject_bool_ordering`), strings (`reject_str_lt`, `reject_str_lt_str`), and structs (`reject_cls_ordering`) are `` Operator `<` requires two numeric operands, got boolean and boolean `` |
+| `< <= > >=` | two numbers of one type (`i32`, `i64`, the unsigned widths, or `f64`); nothing else | `boolean` | `icmp slt ...` signed, `icmp ult ...` unsigned, `fcmp olt ...` | `cf_if`, `f64_mode`, `u_compare_above_intmax`; booleans (`reject_bool_ordering`), strings (`reject_str_lt`, `reject_str_lt_str`), and structs (`reject_cls_ordering`) are `` Operator `<` requires two numeric operands, got boolean and boolean `` |
+| `>> >>>` | two operands of one integer type | that type | `>>`: `ashr` signed, `lshr` unsigned; `>>>`: always `lshr`, so the two are synonyms on an unsigned type. A literal amount at or beyond the width is a compile error ([Shifts](#shifts)) | `u_shift_logical`; `reject_u_shift_mixed`, `reject_u_shift_too_wide` |
 | `=== !==` | any two values of the same type except `void`; a `T \| null` only against the literal `null` | `boolean` | integers and booleans: `icmp eq` / `icmp ne`; `f64`: `fcmp oeq` / `fcmp une` (so `x !== x` is true for NaN); strings: `sts_str_eq` (content); arrays and objects: `icmp eq` on the pointer (identity); `p === null`: `icmp eq` against `null` | `str_eq`, `cls_this_method_call`, `conversions`, `mem_nullable`; arrays *(CLI only)*; `reject_null_compare_two` |
 | `== !=` | – | – | forbidden | `reject_loose_equality`, `reject_loose_inequality` |
 | `&& \|\|` | two `boolean` | `boolean` | short-circuit: `br` + `phi` | `cf_logical`; `reject_cf_logical_numbers` (`requires boolean operands`) |
@@ -621,7 +714,7 @@ under [Semantics decisions](#semantics-decisions).
 | `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param` |
 | `,` | – | – | forbidden | `reject_comma_expression` |
 | `?? ?. in instanceof typeof delete void` | – | – | forbidden by the validator | `reject_nullish`, `reject_optional_chain`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression` |
-| `** & \| ^ << >> >>> ~ +x` | – | – | not supported | `Unsupported binary operator` / `Unsupported unary operator` *(CLI only)* |
+| `** & \| ^ << ~ +x` | – | – | not supported | `Unsupported binary operator` / `Unsupported unary operator` *(CLI only)* |
 
 ### Checked integer division
 
@@ -640,6 +733,27 @@ containing a checked `a[i]`. The rule applies to `/`, `%`, `/=`, and `%=` on
 locals, fields, and elements, with constant divisors too (LLVM folds the
 check away at `-O1`). Floating-point division is never checked: `x / 0` on
 `f64` is `Infinity` and `0 / 0` is `NaN`.
+
+**Unsigned division is checked more cheaply.** `udiv` and `urem` have no
+overflow case at all — there is no unsigned value whose negation leaves the
+range, so `MIN / -1` has no counterpart — and the check collapses to a
+*single* compare against zero, with no `and` and no `or`.
+`tests/cases/u_div_one_check` pins the signed and the unsigned sequence side
+by side:
+
+```llvm
+; u32 a / b                          ; i32 a / b
+%0 = icmp eq i32 %b, 0               %0 = icmp eq i32 %b, 0
+br i1 %0, ...                        %1 = icmp eq i32 %a, -2147483648
+                                     %2 = icmp eq i32 %b, -1
+                                     %3 = and i1 %1, %2
+                                     %4 = or i1 %0, %3
+                                     br i1 %4, ...
+```
+
+A zero divisor still prints `attempt to divide by zero` and exits 1, and the
+function still loses `willreturn` because the panic is `noreturn`; `attempt to
+divide with overflow` is simply unreachable on an unsigned type.
 
 ### Calls
 
@@ -752,8 +866,8 @@ shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
 | `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...) | none | `math_intrinsics`; `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
 | `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` plus a `select` for the cases where ECMAScript and C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`); `pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case agrees with C | none | `math_intrinsics`; `tests/differential/corpus/f64_pow_spec` |
 | `Math.round(x: f64): f64` | JavaScript's round-half-up (`floor` + compare + `select`): `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0` | none | `math_intrinsics` |
-| `Math.abs(x: T): T` for `T` in `i32`, `i64`, `f64` | `llvm.abs.*` (wrapping for `INT_MIN`) / `llvm.fabs.f64` | none | `math_i32`, `math_intrinsics`; `i64` *(CLI only)* |
-| `Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T` | exactly two operands of one numeric type; integers: `llvm.smin/smax`; `f64`: `llvm.minnum/maxnum` | none | `math_i32`, `math_intrinsics`; `reject_math_min_arity` (`` `Math.min` expects exactly 2 arguments, got 1 ``) |
+| `Math.abs(x: T): T` for any numeric `T` | `llvm.abs.*` (wrapping for `INT_MIN`) / `llvm.fabs.f64`; on an unsigned type, no instruction at all (the value is its own magnitude) | none | `math_i32`, `math_intrinsics`; `i64` and the unsigned widths *(CLI only)* |
+| `Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T` | exactly two operands of one numeric type; signed integers: `llvm.smin/smax`; unsigned: `llvm.umin/umax`; `f64`: `llvm.minnum/maxnum` | none | `math_i32`, `math_intrinsics`; `reject_math_min_arity` (`` `Math.min` expects exactly 2 arguments, got 1 ``) |
 | `Math.random(): f64` | xorshift64\* in the runtime (`sts_random`), 53 random bits in `[0, 1)`, seeded from time and pid | write | `math_random` |
 | `Math.PI: f64`, `Math.E: f64` | constants, also in i32 mode | none | `math_i32`, `math_intrinsics` |
 
@@ -765,9 +879,11 @@ argument is typed `f64` by context (`Math.sqrt(2)` works in both modes).
 
 | Signature | Semantics | Test |
 | --- | --- | --- |
-| `toI32(x: i32 \| i64 \| f64): i32` | `i64`: truncate (wraps); `f64`: saturating `llvm.fptosi.sat` (NaN -> 0, out of range clamps); `i32`: identity | `conversions`; `reject_toi32_string` |
-| `toI64(x): i64` | `i32`: sign-extend; `f64`: saturating; `i64`: identity | `conversions` |
-| `toF64(x): f64` | integers: `sitofp`; `f64`: identity | `conversions` |
+| `toI32(x): i32` | narrower or equal width: `trunc` (wraps); wider signed source: `sext`, wider unsigned source: `zext`; `f64`: saturating `llvm.fptosi.sat` (NaN -> 0, out of range clamps); `i32`: identity | `conversions`, `u_conv_roundtrip`; `reject_toi32_string` |
+| `toI64(x): i64` | signed source: `sign-extend`; unsigned source: `zext`; `f64`: saturating; `i64`: identity | `conversions`, `u_conv_widths` |
+| `toU8`, `toU16`, `toU32`, `toU64` | widening: `zext` from an unsigned source, `sext` from a signed one (so `toU64(-1: i32)` is 2^64 - 1, as `-1i32 as u64` is in Rust); narrowing: `trunc`; `f64`: saturating `llvm.fptoui.sat`, whose clamp is `0 .. 2^bits-1`, so a negative double is `0` | `u_conv_widths`, `u_conv_f64`, `u_conv_roundtrip`; `reject_u_conversion_arg` |
+| any integer -> an integer of the **same width** and other signedness | **no instruction at all**: signedness is not part of the LLVM type and the bits do not move (`toU32(i)` on an `i32`, `toI64(q)` on a `u64`) | `u_conv_same_width` |
+| `toF64(x): f64` | signed integers: `sitofp`; unsigned integers: `uitofp`; `f64`: identity | `conversions`, `u_conv_f64` |
 | `Number(x: string \| i32 \| i64 \| f64 \| boolean): f64` | a string is parsed with JavaScript's `Number(s)` rules (below); `i32`/`i64`: `sitofp`; `boolean`: `uitofp` (`true` is `1`); `f64`: identity. A numeric literal argument is typed `f64` (`Number(2.5)` works in i32 mode) | `parse_numbers`; `reject_number_array` (`` `Number` expects a string, number, or boolean, got i32[] ``) |
 | `parseInt(s: string): i32` | base 10 only: ASCII whitespace, an optional sign, then digits (`strtoll`); stops at the first other character. **Deviations from JavaScript:** no `NaN` in an `i32`, so no digits give `0` (`parseInt("abc")`, `parseInt("")`); values beyond the `i32` range saturate exactly like `toI32` (`parseInt("99999999999")` is `2147483647`); a `0x` prefix is not hexadecimal (`parseInt("0x10")` is `0`). Always `i32`, also under `--number-mode f64` (use `Number` there) | `parse_numbers`; `reject_parseint_number` (`` `parseInt` expects a string, got i32 ``) |
 | `parseFloat(s: string): f64` | ASCII whitespace, then the longest decimal literal (`[sign] digits [. digits] [e [sign] digits]`, `. digits`, or `[sign] Infinity`), correctly rounded by `strtod`; `NaN` when there is none (`parseFloat("abc")`, `""`, `"."`); `parseFloat("3.14xyz")` is `3.14`, `"1e"` is `1`. **Deviation:** a `0x` prefix is read as hexadecimal like `strtod` (`parseFloat("0x1A")` is `26`; JavaScript stops at the `x` and gives `0`) | `parse_numbers` |
@@ -855,15 +971,19 @@ compiler's own marks are never invalidated by user resets.
 
 ## Semantics decisions
 
-- **Integers wrap.** `i32` and `i64` arithmetic is two's-complement wrapping
-  (no `nsw`), like Rust release builds: `2147483647 + 1` is `-2147483648`
-  (`tests/cases/i64_basic`, `int_min_literal`; `wp1-control-flow.md`).
-  `Math.abs(-2147483648)` wraps to itself. With `--nsw`, every user-level
-  integer `add`/`sub`/`mul` (binary operators, unary minus, `op=` on locals,
-  fields, and elements, `++`/`--`) carries the `nsw` flag and signed overflow
-  becomes undefined behaviour, as in C; division, remainder, and the
-  compiler's own index, length, and allocator arithmetic are never flagged
-  (`tests/cases/opt_nsw`; [wp9-optimisation.md](wp9-optimisation.md#--nsw)).
+- **Integers wrap.** `i32`, `i64` and the unsigned widths do two's-complement
+  wrapping arithmetic (no `nsw`, no `nuw`), like Rust release builds:
+  `2147483647 + 1` is `-2147483648` and `(255: u8) + 1` is `0`
+  (`tests/cases/i64_basic`, `int_min_literal`, `u_arith_wrap`;
+  `wp1-control-flow.md`). `Math.abs(-2147483648)` wraps to itself. With
+  `--nsw`, every user-level integer `add`/`sub`/`mul` (binary operators, unary
+  minus, `op=` on locals, fields, and elements, `++`/`--`) carries a no-wrap
+  flag and overflow becomes undefined behaviour, as in C: `nsw` on a signed
+  type and `nuw` on an unsigned one, because a `u32` passing 2^31 has not
+  overflowed and `nsw` there would poison an ordinary result. Division,
+  remainder, shifts, and the compiler's own index, length, and allocator
+  arithmetic are never flagged (`tests/cases/opt_nsw`;
+  [wp9-optimisation.md](wp9-optimisation.md#--nsw)).
 - **Integer division is checked**: `sdiv`/`srem` truncating toward zero
   (`-7 / 2` is `-3`, `-7 % 2` is `-1`; `tests/cases/cf_collatz`,
   `cf_do_while`), preceded by a divisor check that exits with status 1 on a

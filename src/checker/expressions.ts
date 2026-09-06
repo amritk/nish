@@ -7,7 +7,7 @@
  * `binaryCheckers`.
  */
 import ts from "typescript";
-import { BOOL, F64, I32, assignable, isNumeric, sameType, typeToString } from "../types";
+import { BOOL, F64, I32, assignable, intBits, isInteger, isNumeric, sameType, typeToString } from "../types";
 import { arrayExpressionCheckers, installArrayAssignmentCheckers } from "./arrays";
 import { BuiltinCallChecker } from "./builtins";
 import { ioBuiltinFunctions } from "./io";
@@ -124,6 +124,45 @@ const checkArithmetic: BinaryChecker = (ctx, expr, scope) => {
   return lhs;
 };
 
+/**
+ * `a >> b` and `a >>> b` (WP15): two operands of one *integer* type, result of
+ * that type. There is no implicit conversion in StaticTS, so the shift amount
+ * has the same type as the value; `f64` has no shift at all.
+ *
+ * The amount must be less than the width, because that is what `ashr`/`lshr`
+ * define (LLVM makes a wider shift poison, as C makes it undefined). A literal
+ * amount is checked here so the common mistake is a compile error rather than
+ * a surprise; a computed amount is the program's responsibility, and masking
+ * it would cost an `and` on every shift for the sake of a case that is
+ * always a bug. See `docs/LANGUAGE.md` -> "Shifts".
+ */
+const checkShift: BinaryChecker = (ctx, expr, scope) => {
+  const lhs = ctx.checkExpression(expr.left, scope);
+  const rhs = ctx.checkExpression(expr.right, scope);
+  const op = ts.tokenToString(expr.operatorToken.kind);
+  if (!isInteger(lhs) || !sameType(lhs, rhs)) {
+    throw ctx.error(
+      `Operator \`${op}\` requires two operands of the same integer type, got ${typeToString(lhs)} and ${typeToString(rhs)}`,
+      expr
+    );
+  }
+  const amount = shiftLiteral(expr.right);
+  if (amount !== undefined && amount >= intBits(lhs)) {
+    throw ctx.error(
+      `Shift amount ${amount} is not less than the width of ${typeToString(lhs)} (${intBits(lhs)} bits)`,
+      expr.right
+    );
+  }
+  return lhs;
+};
+
+/** The value of a literal shift amount, seen through parentheses; undefined when it is computed. */
+function shiftLiteral(expr: ts.Expression): number | undefined {
+  let inner = expr;
+  while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
+  return ts.isNumericLiteral(inner) ? Number(inner.text) : undefined;
+}
+
 const checkComparison: BinaryChecker = (ctx, expr, scope) => {
   const lhs = ctx.checkExpression(expr.left, scope);
   const rhs = ctx.checkExpression(expr.right, scope);
@@ -154,6 +193,8 @@ export const binaryCheckers: CheckerTable<BinaryChecker> = {
   [ts.SyntaxKind.AsteriskToken]: checkArithmetic,
   [ts.SyntaxKind.SlashToken]: checkArithmetic,
   [ts.SyntaxKind.PercentToken]: checkArithmetic,
+  [ts.SyntaxKind.GreaterThanGreaterThanToken]: checkShift, // WP15: `ashr` signed, `lshr` unsigned
+  [ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken]: checkShift, // always `lshr`
   [ts.SyntaxKind.LessThanToken]: checkComparison,
   [ts.SyntaxKind.LessThanEqualsToken]: checkComparison,
   [ts.SyntaxKind.GreaterThanToken]: checkComparison,

@@ -27,7 +27,10 @@ import {
 export function numericConstant(text: string, type: StaticType): string {
   const n = Number(text);
   if (type.kind === "i32") return String(n | 0);
-  if (type.kind === "i64") return String(n); // an integer with |n| <= 2^53 (checker-enforced): exact
+  // i64 and the unsigned widths: the checker proved the literal is an integer
+  // that fits and is within 2^53, so the decimal text is exact. LLVM reads an
+  // unsigned constant that fits the width as those bits, which is what we want.
+  if (isInteger(type)) return String(n);
   // LLVM only accepts decimal float literals that round-trip exactly, so
   // emit the IEEE-754 bit pattern instead; that is always valid.
   return f64Constant(n);
@@ -58,7 +61,7 @@ const emitNegate: UnaryEmitter = (ctx, expr) => {
   const type = ctx.typeOf(expr.operand);
   const operand = ctx.emitExpression(expr.operand);
   return isInteger(type)
-    ? ctx.fn.emitValue(`${intOpcode(ctx, "sub")} ${llvmType(type)} 0, ${operand}`)
+    ? ctx.fn.emitValue(`${intOpcode(ctx, "sub", type)} ${llvmType(type)} 0, ${operand}`)
     : ctx.fn.emitValue(`fneg double ${operand}`);
 };
 
@@ -85,6 +88,10 @@ const ARITHMETIC_OPCODES: Partial<Record<ts.SyntaxKind, [string, string]>> = {
   [ts.SyntaxKind.AsteriskToken]: ["mul", "fmul"],
   [ts.SyntaxKind.SlashToken]: ["sdiv", "fdiv"],
   [ts.SyntaxKind.PercentToken]: ["srem", "frem"],
+  // Shifts are integer-only (`checkShift` rejects f64), so the second slot is
+  // unreachable; `""` records that there is no floating-point counterpart.
+  [ts.SyntaxKind.GreaterThanGreaterThanToken]: ["ashr", ""],
+  [ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken]: ["lshr", ""],
   [ts.SyntaxKind.LessThanToken]: ["icmp slt", "fcmp olt"],
   [ts.SyntaxKind.LessThanEqualsToken]: ["icmp sle", "fcmp ole"],
   [ts.SyntaxKind.GreaterThanToken]: ["icmp sgt", "fcmp ogt"],
@@ -93,10 +100,16 @@ const ARITHMETIC_OPCODES: Partial<Record<ts.SyntaxKind, [string, string]>> = {
   [ts.SyntaxKind.ExclamationEqualsEqualsToken]: ["icmp ne", "fcmp une"],
 };
 
+/**
+ * The instruction for one operator on one operand type. Integer operators are
+ * returned in their *signed* spelling and `emitIntBinary` swaps in the
+ * unsigned one (WP15); the `ctx` overload is the floating-point-free path used
+ * where `--nsw` may apply.
+ */
 export function binaryOpcode(op: ts.SyntaxKind, type: StaticType, ctx?: EmitContext): string {
   const pair = ARITHMETIC_OPCODES[op];
   if (!pair) throw new Error(`emitter: unexpected binary operator ${ts.SyntaxKind[op]}`);
-  return type.kind === "f64" ? pair[1] : ctx ? intOpcode(ctx, pair[0]) : pair[0];
+  return type.kind === "f64" ? pair[1] : ctx ? intOpcode(ctx, pair[0], type) : pair[0];
 }
 
 /** Arithmetic and comparison: evaluate left then right (JS order), one instruction. */
@@ -104,9 +117,9 @@ const emitArithmetic: BinaryEmitter = (ctx, expr) => {
   const operandType = ctx.typeOf(expr.left);
   const lhs = ctx.emitExpression(expr.left);
   const rhs = ctx.emitExpression(expr.right);
-  const ty = llvmType(operandType);
-  if (isInteger(operandType)) return emitIntBinary(ctx, binaryOpcode(expr.operatorToken.kind, operandType), ty, lhs, rhs);
-  return ctx.fn.emitValue(`${binaryOpcode(expr.operatorToken.kind, operandType, ctx)} ${ty} ${lhs}, ${rhs}`);
+  const op = expr.operatorToken.kind;
+  if (isInteger(operandType)) return emitIntBinary(ctx, binaryOpcode(op, operandType), operandType, lhs, rhs);
+  return ctx.fn.emitValue(`${binaryOpcode(op, operandType, ctx)} ${llvmType(operandType)} ${lhs}, ${rhs}`);
 };
 
 /** `x = e`: store into the local's slot; the expression's value is `e`. */

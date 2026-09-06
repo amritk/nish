@@ -150,6 +150,30 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `npm run smoke` (`scripts/smoke.sh`) builds and runs every example with a
   `main`; `.github/workflows/release.yml` attaches the npm tarball to a GitHub
   release on `v*` tags; `docs/INSTALL.md`.
+- **Unsigned integers `u8`, `u16`, `u32`, `u64`.** LLVM has no unsigned types,
+  so they lower to `i8`/`i16`/`i32`/`i64` and the signedness lives in the
+  operations: `udiv`/`urem`, `icmp ult/ule/ugt/uge`, `lshr` for `>>`, `zext`
+  for a widening conversion, `uitofp`/`llvm.fptoui.sat` across `f64`, and
+  `llvm.umin`/`umax` for `Math.min`/`Math.max`. Representing an unsigned value
+  therefore costs nothing, and the unsigned divisor check is *one* compare
+  against zero rather than the signed check's three plus an `and` and an `or`,
+  because unsigned division has no `MIN / -1` case. Overflow wraps as it does
+  for the signed widths (`--nsw` emits `nuw` here, not `nsw`); a conversion
+  between two integers of the same width and different signedness emits no
+  instruction at all; `toU8`/`toU16`/`toU32`/`toU64` join the conversion
+  builtins; a literal in an unsigned context must be non-negative and fit the
+  width; mixing signednesses or widths is a type error, as `i32` and `i64`
+  already were. `console.log` and template holes print unsigned values
+  unsigned through the new `sts_str_from_u64` (the narrow widths `zext` into
+  it, so one runtime symbol serves all four). `--emit-header` spells them
+  `uint8_t` … `uint64_t` and `--emit-dts` `number` / `bigint`.
+- **Shifts `>>` and `>>>`.** Two operands of one integer type. `>>` is `ashr`
+  on a signed type and `lshr` on an unsigned one; `>>>` is always `lshr`, so
+  the two are synonyms on an unsigned type. `i32 >>> n` keeps its documented
+  behaviour of yielding the raw bits read as signed (`-1 >>> 0` is `-1`, not
+  JavaScript's `4294967295`) — with `u32` that answer is now available:
+  `toU32(-1)` is `4294967295`. A literal shift amount at or beyond the width
+  is a compile error.
 - **Documentation.** `docs/LANGUAGE.md` (the normative reference, every rule
   cited to a test case), `docs/IR_COOKBOOK.md` (generated from
   `docs/cookbook/*.ts` by `docs/cookbook/regen.sh`), `docs/ARCHITECTURE.md`,
@@ -173,6 +197,9 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `dprintf` each instead of hand-written digit loops, the JS `Number#toString`
   formatter indexes the `%.*e` buffer directly and emits all four layouts from
   one digit loop, and the three chunk-freeing loops share `sts_free_until`.
+  Adding `sts_str_from_u64` for the unsigned widths took it to 3,765 bytes,
+  still inside the 4,096-byte budget: it shares the signed formatter's digit
+  loop through a static `str_from_digits(value, negative)` helper.
   `scripts/size-report.sh` now prints a `runtime` row (the budget number) above
   the profile rows. Prototypes, symbols and `tests/runtime_test.c` are
   unchanged; see the "Runtime budget" section of
