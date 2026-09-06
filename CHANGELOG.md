@@ -152,3 +152,18 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `T | null` for class, interface, array and string types with checker-
   enforced narrowing (`if (p !== null)`, early return, `while`, `&&`, `?:`).
   See [docs/wp6-memory.md](docs/wp6-memory.md).
+
+### Changed
+
+- **Runtime budget (WP9b).** `runtime/runtime.c` is back inside the
+  `docs/MASTER_PLAN.md` budget without any observable change: `text` at `-Oz`
+  4,195 -> 3,714 bytes (`.text` 2,637 -> 2,245, `.eh_frame` 1,344 -> 1,240),
+  source 11,432 -> 9,392 bytes; the plain-message panics share one cold
+  `sts_die` and the two formatted ones (index, file path) are a single
+  `dprintf` each instead of hand-written digit loops, the JS `Number#toString`
+  formatter indexes the `%.*e` buffer directly and emits all four layouts from
+  one digit loop, and the three chunk-freeing loops share `sts_free_until`.
+  `scripts/size-report.sh` now prints a `runtime` row (the budget number) above
+  the profile rows. Prototypes, symbols and `tests/runtime_test.c` are
+  unchanged; see the "Runtime budget" section of
+  [docs/wp9-optimisation.md](docs/wp9-optimisation.md).
