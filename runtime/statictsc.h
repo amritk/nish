@@ -65,6 +65,17 @@ void *sts_arena_grow(size_t size);
 void sts_reset_arena(void);
 /* Release every chunk. The arena is lazy, so it can be used again afterwards. */
 void sts_free_arena(void);
+/* Arena scopes (WP6). A mark is the current bump address (`buf + off`), or 0
+ * while the arena is empty; `sts_arena_release(mark)` frees everything
+ * allocated since that mark (chunks pushed after it are freed, a mark of 0
+ * behaves like `sts_reset_arena`). Releasing while an object, string or
+ * array allocated after the mark is still referenced is undefined behaviour.
+ * Compiled functions whose allocations provably die with them bracket their
+ * body with these two calls; `Arena.mark/release/used` expose them. */
+uint64_t sts_arena_mark(void);
+void sts_arena_release(uint64_t mark);
+/* Bytes bumped in the current chunk (`Arena.used()`); a steady-state loop keeps it flat. */
+uint64_t sts_arena_used(void);
 
 /* ---- String operations ------------------------------------------------- */
 /* Copy `len` bytes into a new arena string (`bytes` need not be terminated). */
