@@ -1,0 +1,80 @@
+# StaticTS release: on a `v*` tag, run the full CI workflow (Ubuntu + macOS
+# test matrix, lint, smoke), then build the npm tarball and attach it to a
+# GitHub release whose notes are the matching CHANGELOG.md section.
+#
+# Publishing to npm is deliberately NOT automated yet; see the commented step
+# at the end and docs/wp12-release.md.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  ci:
+    name: ci
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: release
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Tag must match package.json version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag v$tag does not match package.json version $pkg"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack
+        id: pack
+        run: |
+          mkdir -p build/release
+          file="$(npm pack --pack-destination build/release | tail -n 1)"
+          echo "tarball=build/release/$file" >> "$GITHUB_OUTPUT"
+          tar -tzf "build/release/$file" | sed 's#^package/##' | sort | tee build/release/files.txt
+          # The tarball must be usable on its own: `--link` needs these three.
+          for f in dist/index.js runtime/runtime.c runtime/statictsc.h scripts/build.sh; do
+            grep -qx "$f" build/release/files.txt || { echo "::error::$f missing from tarball"; exit 1; }
+          done
+
+      - name: Release notes
+        run: bash scripts/changelog-section.sh "$GITHUB_REF_NAME" > build/release/notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "${{ steps.pack.outputs.tarball }}" \
+            --title "statictsc $GITHUB_REF_NAME" \
+            --notes-file build/release/notes.md \
+            --verify-tag
+
+      # npm publish is intentionally manual for now. To automate it: create an
+      # npm automation token, store it as the NPM_TOKEN repository secret, add
+      # `id-token: write` under permissions for provenance, then uncomment:
+      #
+      # - name: Publish to npm
+      #   run: npm publish "${{ steps.pack.outputs.tarball }}" --provenance --access public
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
