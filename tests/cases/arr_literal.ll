@@ -35,7 +35,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef i32 @first(%struct.sts_array* noundef nonnull align 8 readonly nocapture %xs) #0 {
+define noundef i32 @first(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %0 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %xs, i64 0, i32 0
   %1 = load i64, i64* %0, align 8

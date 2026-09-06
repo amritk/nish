@@ -36,7 +36,7 @@ slow:
   ret i8* %grown
 }
 
-define void @insertionSort(%struct.sts_array* noundef nonnull align 8 nocapture %xs) #0 {
+define void @insertionSort(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs) #0 {
 entry:
   %i.addr = alloca i32, align 4
   %key.addr = alloca i32, align 4

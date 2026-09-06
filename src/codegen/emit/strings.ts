@@ -27,7 +27,7 @@ import { dottedName } from "../../checker/builtins";
 import { STRING, StaticType, llvmType } from "../../types";
 import { IRModule } from "../ir";
 import { BuiltinCall } from "./builtins";
-import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
+import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, intOpcode } from "./context";
 import { isValueReceiver, namespacePropertyEmitters, propertyEmitters } from "./members";
 import { ioBuiltinCallEmitters } from "./io";
 import { mathBuiltinCallEmitters, mathPropertyEmitters } from "./math";
@@ -155,7 +155,7 @@ const emitPlus: BinaryEmitter = (ctx, expr) => {
   const lhs = ctx.emitExpression(expr.left);
   const rhs = ctx.emitExpression(expr.right);
   if (type.kind === "string") return emitConcat(ctx, lhs, rhs);
-  return ctx.fn.emitValue(`${type.kind === "f64" ? "fadd" : "add"} ${llvmType(type)} ${lhs}, ${rhs}`);
+  return ctx.fn.emitValue(`${type.kind === "f64" ? "fadd" : intOpcode(ctx, "add")} ${llvmType(type)} ${lhs}, ${rhs}`);
 };
 
 const emitStrictEquality: BinaryEmitter = (ctx, expr) => {

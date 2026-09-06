@@ -64,6 +64,11 @@
  *   as structs, with the array constructs classified as follows:
  *     nonnull   StaticTS has no null.
  *     align 8   Headers come from the arena (8-byte rounded) only.
+ *     dereferenceable(24)
+ *               The header `{ i64 len, i64 cap, i8* data }` is always
+ *               complete (WP9): a literal, `new Array`, or a runtime call
+ *               produced it, so LLVM may hoist the `len` load ahead of the
+ *               bounds branch and speculate it out of loops. Same on returns.
  *     readonly  The body never stores through the param: no `p[i] = v`,
  *               `p[i] op= v`, `p.push(v)`, nor through anything indexed from
  *               it (`p[i][j] = v`, `p[i].f = v`, `p[i].push(v)`: the element
@@ -582,6 +587,9 @@ function bodyDisturbs(body: ts.Node, names: Set<string>): boolean {
 
 // ---- Attribute rendering ----------------------------------------------------
 
+/** `sizeof(%struct.sts_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout, `ARRAY_TYPE` in runtime.ts). */
+const ARRAY_HEADER_BYTES = 24;
+
 export function functionAttributes(f: FunctionFacts): string[] {
   const attrs = ["nounwind"];
   if (f.willReturn) attrs.push("willreturn");
@@ -604,7 +612,10 @@ export function paramAttributes(p: Param, f: FunctionFacts): string[] {
       if (!f.escaping.has(p.name)) attrs.push("nocapture");
       break;
     case "array":
-      attrs.push("nonnull", "align 8");
+      // dereferenceable(24) (WP9): every array value points at a full
+      // `%struct.sts_array` header (len, cap, data: 24 bytes) allocated by
+      // the arena or built by a literal; there is no null and no partial header.
+      attrs.push("nonnull", "align 8", `dereferenceable(${ARRAY_HEADER_BYTES})`);
       if (pointer && !pointer.writesThrough && !pointer.captured) attrs.push("readonly");
       if (pointer && !pointer.captured) attrs.push("nocapture");
       break;
@@ -628,8 +639,9 @@ export function returnAttributes(t: StaticType, deref?: number): string[] {
     case "bool":
       return ["noundef", "zeroext"];
     case "string":
-    case "array":
       return ["noundef", "nonnull", "align 8"];
+    case "array":
+      return ["noundef", "nonnull", "align 8", `dereferenceable(${ARRAY_HEADER_BYTES})`]; // full header, see paramAttributes
     case "struct":
       return ["noundef", "nonnull", "align 8", ...(deref ? [`dereferenceable(${deref})`] : [])];
     default:

@@ -33,7 +33,7 @@ slow:
   ret i8* %grown
 }
 
-define void @set(%struct.sts_array* noundef nonnull align 8 nocapture %a, i32 noundef %i, i32 noundef %v) #0 {
+define void @set(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) nocapture %a, i32 noundef %i, i32 noundef %v) #0 {
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %a, i64 0, i32 0
@@ -54,7 +54,7 @@ bounds.ok:
   ret void
 }
 
-define noundef i32 @get(%struct.sts_array* noundef nonnull align 8 readonly nocapture %a, i32 noundef %i) #0 {
+define noundef i32 @get(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %i) #0 {
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %a, i64 0, i32 0

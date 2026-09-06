@@ -14,7 +14,7 @@ import { isAssignmentOperator } from "../../checker/classes";
 import { classExpressionEmitters } from "./classes";
 import { assignmentTargetEmitters, emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members";
 import { emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from "./strings";
-import { BinaryEmitter, EmitterTable, ExpressionEmitter, UnaryEmitter } from "./context";
+import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, UnaryEmitter, intOpcode } from "./context";
 import {
   controlFlowBinaryEmitters,
   controlFlowExpressionEmitters,
@@ -55,7 +55,7 @@ const emitNegate: UnaryEmitter = (ctx, expr) => {
   const type = ctx.typeOf(expr.operand);
   const operand = ctx.emitExpression(expr.operand);
   return isInteger(type)
-    ? ctx.fn.emitValue(`sub ${llvmType(type)} 0, ${operand}`)
+    ? ctx.fn.emitValue(`${intOpcode(ctx, "sub")} ${llvmType(type)} 0, ${operand}`)
     : ctx.fn.emitValue(`fneg double ${operand}`);
 };
 
@@ -90,10 +90,10 @@ const ARITHMETIC_OPCODES: Partial<Record<ts.SyntaxKind, [string, string]>> = {
   [ts.SyntaxKind.ExclamationEqualsEqualsToken]: ["icmp ne", "fcmp une"],
 };
 
-export function binaryOpcode(op: ts.SyntaxKind, type: StaticType): string {
+export function binaryOpcode(op: ts.SyntaxKind, type: StaticType, ctx?: EmitContext): string {
   const pair = ARITHMETIC_OPCODES[op];
   if (!pair) throw new Error(`emitter: unexpected binary operator ${ts.SyntaxKind[op]}`);
-  return type.kind === "f64" ? pair[1] : pair[0];
+  return type.kind === "f64" ? pair[1] : ctx ? intOpcode(ctx, pair[0]) : pair[0];
 }
 
 /** Arithmetic and comparison: evaluate left then right (JS order), one instruction. */
@@ -101,7 +101,8 @@ const emitArithmetic: BinaryEmitter = (ctx, expr) => {
   const operandType = ctx.typeOf(expr.left);
   const lhs = ctx.emitExpression(expr.left);
   const rhs = ctx.emitExpression(expr.right);
-  return ctx.fn.emitValue(`${binaryOpcode(expr.operatorToken.kind, operandType)} ${llvmType(operandType)} ${lhs}, ${rhs}`);
+  const opcode = binaryOpcode(expr.operatorToken.kind, operandType, ctx);
+  return ctx.fn.emitValue(`${opcode} ${llvmType(operandType)} ${lhs}, ${rhs}`);
 };
 
 /** `x = e`: store into the local's slot; the expression's value is `e`. */
