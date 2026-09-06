@@ -1,0 +1,34 @@
+module tests/cases/dump_checked.ts (entry)
+struct Vec (interface) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+struct Counter (class) size=8 align=4
+  field count: i32 index=0 offset=0 initialized
+  field step: i32 index=1 offset=4 readonly
+  constructor -> @Counter.constructor
+  method tick -> @Counter.tick
+function Counter.constructor(this: Counter, step: i32): void -> @Counter.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: step
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Counter.tick(this: Counter): i32 -> @Counter.tick [method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function dot(a: Vec, b: Vec): i32 -> @dot
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer a: size=8 writesThrough=false captured=false
+  pointer b: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function run(n: i32): i32 -> @run [exported]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Counter.constructor Counter.tick dot
+  stackSites=2 stackLocals=2
+  local 25:9 c: Counter (const)
+  callee 25:13 new Counter -> @Counter.constructor
+  local 26:7 last: i32 (let)
+  local 27:12 i: i32 (let)
+  callee 28:12 Counter.tick -> @Counter.tick
+  local 30:9 v: Vec (const)
+  callee 31:10 dot -> @dot

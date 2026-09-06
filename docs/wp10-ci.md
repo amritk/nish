@@ -97,9 +97,94 @@ parts separately; `message` is always `summary + "\n" + excerpt`.
 Tests for the format live in the `// ---- WP10: diagnostics` block of
 `tests/run.js`.
 
-## Not in this part of WP10
+## Multi-error reporting
 
-Multi-error reporting, `--json` diagnostics, `--emit-ast` / `--emit-checked`
-dumps and `!dbg` debug info are listed under WP10 in `docs/MASTER_PLAN.md`
-and are left for a follow-up; the excerpt formatter above is written so that
-a collected-diagnostics mode can reuse `formatDiagnostic` per error.
+The compiler no longer stops at the first error. Every phase that can
+recover hands its `CompileError`s to one `DiagnosticSink`
+(`src/diagnostics.ts`) owned by the `Compilation`:
+
+| Phase | Recovery unit | Where |
+| --- | --- | --- |
+| Parser | every parse diagnostic of the file | `parseSource` |
+| Phase 0 validator | every forbidden construct (a rejected node's subtree is skipped, so `Array<any>` is one error) | `validateStaticTS` |
+| Pass 1 (signatures) | per declaration: class/interface (marked `poisoned`, its layout checks skipped), import, function signature, module resolution | `Checker.collectSignatures`, `Compilation.load` |
+| Pass 1b/1c | per import binding; every symbol clash | `Checker.bindImports`, `Compilation.rejectSymbolClashes` |
+| Pass 2 (bodies) | per statement, at the innermost statement list; the enclosing function is marked `poisoned` and its definite-return check is skipped | `checkStatements` |
+
+Between phases `DiagnosticSink.throwIfErrors` sorts what was collected (files
+in load order, then line and column), throws the first error as a plain
+`CompileError` and attaches the rest as `error.additional`. So a caller that
+only knows single errors (`compileToIR`, older tests) still gets exactly the
+message it always got, pass 2 never runs over broken signatures, and the
+emitter never sees a poisoned function.
+
+The driver prints `formatErrorReport`: each error's summary and excerpt, at
+most 20 (`MAX_REPORTED_ERRORS`) before `...and N more errors`, then an
+`N errors` line. A lone error prints exactly its message, as before. To
+limit cascades, `let x: T = <rejected>` still declares `x` as `T`, and
+unreachable code is reported once per statement list.
+
+Tests: `tests/cases/reject_multi_error` (three body errors), `reject_multi_forbidden`
+(three Phase 0 errors), `reject_multi_decl` (three declaration errors). A
+`.err` golden may now hold several lines, each a fragment that must appear.
+
+## `--json`
+
+`statictsc --json file.ts` prints one JSON object per error on stdout, nothing
+else on stdout and nothing on stderr, with the same exit code:
+
+```
+{"file":"tests/cases/reject_multi_error.ts","line":2,"column":10,"endLine":2,"endColumn":18,"severity":"error","message":"Operator `+` requires two operands of the same numeric type or two strings, got i32 and boolean"}
+```
+
+`line`/`column` are 1-based, `endLine`/`endColumn` exclusive. `severity` is
+always `"error"`. Syntax errors keep the `syntax error: ` prefix in
+`message`. `code` is reserved for stable diagnostic codes and absent for
+now. A driver error without a source position (a bad `-o` layout, a missing
+input file) is `{"severity":"error","message":...}`.
+
+## `--emit-ast` and `--emit-checked`
+
+Both write to stdout instead of IR (`src/dump.ts`); file names are printed
+relative to the working directory.
+
+- `--emit-ast`: the syntax tree of every module after Phase 0, one node per
+  line, `<SyntaxKind> <line:col>-<line:col>` (start without trivia, end
+  exclusive) with identifier and literal text appended. Token kinds use their
+  real names (`EqualsToken`, not `FirstAssignment`).
+- `--emit-checked`: after every checker pass and the attribute analysis: per
+  module `struct` lines (kind, size, align, fields with index and byte offset,
+  `readonly`/`initialized`, constructor and method symbols), `import` lines,
+  and `function` lines (resolved signature, `@symbol`, `[exported]`
+  `[method]` `[constructor]` `[entry]`), each followed by its `facts:`
+  (effect, willReturn, loops, ...), `pointer <param>:` facts, and `local` /
+  `callee` lines in source order.
+
+Goldens: `tests/cases/dump_ast.stdout`, `tests/cases/dump_checked.stdout`
+(`tests/run.js` compares stdout when a `.stdout` sidecar exists).
+
+## `-g` debug info
+
+`src/codegen/debug.ts` builds the DWARF metadata; `IRFunction` gained a
+`subprogram` (`define ... !dbg !N`) and a current location that `emit`
+appends as `, !dbg !N`, set by the emitter around every statement and
+expression and restored afterwards. Emitted: `!llvm.dbg.cu`, the
+`Dwarf Version`/`Debug Info Version` module flags, a `DICompileUnit`
+(`DW_LANG_C99`, producer `statictsc <version>`), a `DIFile` (name as given,
+directory = cwd), one `distinct DISubprogram` per function (methods are
+`Owner.method`; the `@main` wrapper is an artificial `main` at the user's
+`main`), `DILocation`s, `llvm.dbg.value` for parameters, `llvm.dbg.declare`
+for `let`/`const` and `for (const x of a)` slots. Types: `int`, `long`,
+`double`, `bool`, `char*`, struct pointers to `DICompositeType`s with the
+checker's offsets, array pointers to `{ long len; long cap; T* data; }`.
+
+`--link -g` passes `-g` to `scripts/build.sh`, which adds `-g` for every
+input (so `runtime.c` has symbols too) and drops the strip flag of the
+speed/size/napi profiles. Without `-g` the IR is byte-identical (every golden
+is unchanged). `tests/cases/dbg_locals` is the `-g` golden (the harness
+replaces the repository path with `<root>`); the `-g` block of `tests/run.js`
+verifies it with `opt -passes=verify`, links a program with
+`--profile debug` and with the speed profile, and checks that
+`llvm-dwarfdump --debug-line` (or `objdump --dwarf=decodedline`) lists the
+`.ts` file with at least one row, printing a visible `SKIP` when neither
+tool exists.

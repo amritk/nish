@@ -5,7 +5,8 @@
  * `statementCheckers`. Return true when the statement definitely terminates.
  */
 import ts from "typescript";
-import { assignable, resolveTypeNode, typeToString } from "../types";
+import { CompileError } from "../diagnostics";
+import { StaticType, assignable, resolveTypeNode, typeToString } from "../types";
 import { arrayStatementCheckers } from "./arrays";
 import { CheckContext, CheckerTable, StatementChecker } from "./context";
 import { controlFlowStatementCheckers } from "./control-flow";
@@ -48,16 +49,29 @@ export function checkVariableDeclarationList(
   for (const decl of list.declarations) {
     if (!ts.isIdentifier(decl.name)) throw ctx.error("Destructuring is not supported", decl);
     if (!decl.initializer) throw ctx.error(`Variable \`${decl.name.text}\` must be initialized`, decl);
-    const initType = ctx.checkExpression(decl.initializer, scope);
-    let type = initType;
-    if (decl.type) {
-      type = resolveTypeNode(decl.type, ctx.sf, ctx.opts);
-      if (!assignable(initType, type)) {
+    // The annotation is resolved first so that, when the initializer is
+    // rejected, the variable can still be declared with its declared type and
+    // later statements do not report it as unknown (WP10 recovery).
+    const declared = decl.type ? resolveTypeNode(decl.type, ctx.sf, ctx.opts) : undefined;
+    let type: StaticType;
+    try {
+      const initType = ctx.checkExpression(decl.initializer, scope);
+      type = declared ?? initType;
+      if (declared && !assignable(initType, declared)) {
         throw ctx.error(
-          `Cannot initialize ${typeToString(type)} variable \`${decl.name.text}\` with ${typeToString(initType)}`,
+          `Cannot initialize ${typeToString(declared)} variable \`${decl.name.text}\` with ${typeToString(initType)}`,
           decl.initializer
         );
       }
+    } catch (err) {
+      if (err instanceof CompileError && declared && declared.kind !== "void") {
+        try {
+          scope.declare({ name: decl.name.text, type: declared, mutable, storage: "local" }, decl.name, ctx.sf);
+        } catch (dup) {
+          if (!(dup instanceof CompileError)) throw dup; // already declared here: keep the original error only
+        }
+      }
+      throw err;
     }
     if (type.kind === "void") throw ctx.error("Cannot declare a variable of type void", decl);
     const v: LocalVar = { name: decl.name.text, type, mutable, storage: "local" };
@@ -94,15 +108,30 @@ const TERMINATOR_NAMES: Partial<Record<ts.SyntaxKind, string>> = {
   [ts.SyntaxKind.IfStatement]: "an `if` whose branches all return",
 };
 
-/** Shared helper: check a statement list; errors on code after a terminator. */
+/**
+ * Shared helper: check a statement list; errors on code after a terminator.
+ *
+ * This is the recovery point of multi-error reporting (WP10): a statement
+ * that throws a `CompileError` is reported, the enclosing function is marked
+ * poisoned, and checking continues with the next statement. Nested lists
+ * (block bodies) recover at their own innermost statement, so one bad
+ * expression costs exactly one statement's worth of checking.
+ */
 export function checkStatements(ctx: CheckContext, stmts: readonly ts.Statement[], scope: Scope): boolean {
   let terminator: ts.Statement | undefined;
   for (const stmt of stmts) {
-    if (terminator) {
-      const what = TERMINATOR_NAMES[terminator.kind] ?? "an infinite loop";
-      throw ctx.error(`Unreachable code after ${what}`, stmt);
+    try {
+      if (terminator) {
+        const what = TERMINATOR_NAMES[terminator.kind] ?? "an infinite loop";
+        throw ctx.error(`Unreachable code after ${what}`, stmt);
+      }
+      if (ctx.checkStatement(stmt, scope)) terminator = stmt;
+    } catch (err) {
+      if (!(err instanceof CompileError)) throw err;
+      ctx.report(err);
+      // Report unreachable code once per list, then keep checking what follows.
+      terminator = undefined;
     }
-    if (ctx.checkStatement(stmt, scope)) terminator = stmt;
   }
   return terminator !== undefined;
 }

@@ -43,6 +43,8 @@ export interface StructInfo {
   implements: string[];
   decl: ts.ClassDeclaration | ts.InterfaceDeclaration;
   exported: boolean;
+  /** A member or heritage clause was rejected (WP10): the layout is incomplete; skip follow-on checks. */
+  poisoned?: boolean;
 }
 
 export interface FunctionSig {
@@ -63,6 +65,12 @@ export interface FunctionSig {
   /** Owning class when this is a method or constructor; `params[0]` is then `this`. */
   struct?: StructInfo;
   role?: "method" | "constructor";
+  /**
+   * A statement of the body was rejected (WP10): the side tables for this
+   * function are incomplete, so no IR is ever emitted for a program containing
+   * it and whole-body checks (definite return) are skipped to avoid cascades.
+   */
+  poisoned?: boolean;
 }
 
 export interface LocalVar {

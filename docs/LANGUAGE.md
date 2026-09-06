@@ -873,6 +873,46 @@ by the caller.
 - **`--unchecked-indexing`**: see *Bounds checks* above.
 - **`--no-stack-alloc`**: see *Memory model* above.
 
+### Diagnostics and debugging flags
+
+- **Errors are collected, not thrown on the first.** Phase 0 reports every
+  forbidden construct in a file; pass 1 recovers per declaration (a rejected
+  class, interface, import or function signature is skipped); pass 2 recovers
+  per statement (the enclosing function is marked poisoned and the next
+  statement is checked). A phase that found anything stops the pipeline
+  before the next one, so pass 2 never sees a broken signature and the
+  emitter never sees a poisoned function. Errors print in source order
+  (files in load order), at most 20 before `...and N more errors`, followed
+  by an `N errors` line; a lone error prints exactly as before
+  (`tests/cases/reject_multi_error`, `reject_multi_forbidden`,
+  `reject_multi_decl`). A `let x: T = <rejected>` still declares `x` as `T`
+  so later uses do not cascade.
+- **`--json`** prints every error as one JSON object per line on stdout,
+  `{"file","line","column","endLine","endColumn","severity":"error","message"}`
+  (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in
+  `message`; `code` is reserved), nothing else on stdout and nothing on
+  stderr, with the same exit code. A clean compile prints nothing.
+- **`--emit-ast`** prints the syntax tree of every module after Phase 0 as an
+  indented `<SyntaxKind> <line:col>-<line:col>` tree (identifier and literal
+  text appended) and writes no IR (`tests/cases/dump_ast`).
+- **`--emit-checked`** checks the program and prints the side tables the
+  emitter would consume: per module its structs (fields with index and byte
+  offset, size, align, constructor and methods), imports, and functions
+  (resolved signature, LLVM symbol, attribute facts, pointer-parameter facts,
+  locals with types, callees) (`tests/cases/dump_checked`).
+- **`-g`** emits DWARF metadata: a `DICompileUnit` (`DW_LANG_C99`) and
+  `DIFile` per module, a `DISubprogram` per function, a `DILocation` on every
+  instruction (each statement's and expression's start; the function's own
+  line for the prologue), `llvm.dbg.value` for parameters and
+  `llvm.dbg.declare` for `let`/`const` slots. `number` is `int`, `i64`
+  `long`, `f64` `double`, `boolean` `bool`, `string` `char*`, a class or
+  interface a pointer to a `DICompositeType` with the checker's layout, `T[]`
+  a pointer to `{ long len; long cap; T* data; }`. Without `-g` the IR is
+  byte-identical. `--link -g` passes `-g` to `scripts/build.sh`, which
+  compiles `runtime.c` with `-g` and skips the strip step of every profile
+  (`tests/cases/dbg_locals`; the `-g` block of `tests/run.js` checks the
+  linked binary's line table with `llvm-dwarfdump`).
+
 ## Forbidden constructs (Phase 0 validator)
 
 `src/validator.ts` walks the whole syntax tree before the checker and rejects

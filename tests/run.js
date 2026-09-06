@@ -56,16 +56,26 @@ for (const name of cases) {
   const stderr = String(r.stderr);
 
   if (fs.existsSync(side("err"))) {
-    const needle = fs.readFileSync(side("err"), "utf8").trim();
-    check(`${name}: rejected with "${needle}"`, r.status === 1 && stderr.includes(needle), stderr || "(compiled successfully)");
+    // One fragment per line; every one must appear (WP10: several errors from one compile).
+    const needles = fs.readFileSync(side("err"), "utf8").split("\n").map((l) => l.trim()).filter(Boolean);
+    const missing = needles.filter((n) => !stderr.includes(n));
+    check(`${name}: rejected with ${needles.map((n) => `"${n}"`).join(", ")}`, r.status === 1 && missing.length === 0, stderr || "(compiled successfully)");
     continue;
   }
   if (r.status !== 0) {
     check(`${name}: compiles`, false, stderr);
     continue;
   }
+  if (fs.existsSync(side("stdout"))) {
+    // A dump flag (`--emit-ast`, `--emit-checked`): the compiler's stdout is the golden, no IR is written.
+    const want = fs.readFileSync(side("stdout"), "utf8").trim();
+    const got = String(r.stdout).trim();
+    check(`${name}: stdout matches .stdout`, got === want, `--- expected\n${want}\n--- actual\n${got}`);
+    continue;
+  }
 
-  const actual = stripHeader(fs.readFileSync(outLl, "utf8"));
+  // `-g` names the working directory in `DIFile`; keep the golden machine-independent.
+  const actual = stripHeader(fs.readFileSync(outLl, "utf8")).split(root).join("<root>");
   if (!fs.existsSync(side("ll"))) {
     if (process.env.UPDATE_GOLDENS) {
       fs.writeFileSync(side("ll"), actual + "\n");
@@ -119,6 +129,69 @@ if (!only || "diagnostics".includes(only)) {
   const synErr = String(syn.stderr);
   check("diagnostics: syntax errors keep the `syntax error:` prefix and add the excerpt",
     syn.status === 1 && synErr.includes(": syntax error: ") && synErr.includes("  2 |   return 1;\n    |          ^"), synErr);
+
+  // Multi-error reporting: every independent error is printed, in source order, then a count.
+  const multiSrc = path.join(casesDir, "reject_multi_error.ts");
+  const multi = spawnSync("node", [cli, multiSrc, "-o", path.join(buildDir, "diag_multi.ll")], { cwd: root });
+  const multiErr = String(multi.stderr);
+  const summaries = multiErr.split("\n").filter((l) => /:\d+:\d+: error: /.test(l));
+  check("diagnostics: three independent errors are all reported, in source order, with a `3 errors` line",
+    multi.status === 1 && summaries.length === 3 && summaries.map((l) => Number(l.split(":")[1])).join(",") === "2,6,11" && multiErr.trim().endsWith("3 errors"), multiErr);
+  check("diagnostics: a lone error prints no count line (single-error output unchanged)",
+    !String(mm.stderr).includes("error\n1 error") && String(mm.stderr).split("\n").length === 4, mm.stderr);
+
+  // The report stops at 20 errors and says how many more there are.
+  const manySrc = path.join(buildDir, "diag_many.ts");
+  fs.writeFileSync(manySrc, Array.from({ length: 25 }, (_, i) => `function f${i}(a: number): number { return a + true; }`).join("\n") + "\n");
+  const many = spawnSync("node", [cli, manySrc, "-o", path.join(buildDir, "diag_many.ll")], { cwd: root });
+  const manyErr = String(many.stderr);
+  check("diagnostics: 25 errors print 20, then `...and 5 more errors` and `25 errors`",
+    many.status === 1 && manyErr.split("\n").filter((l) => /:\d+:\d+: error: /.test(l)).length === 20 && manyErr.includes("\n...and 5 more errors\n25 errors"), manyErr);
+
+  // --json: one object per line on stdout, nothing on stderr, no excerpt, exit code unchanged.
+  const js = spawnSync("node", [cli, multiSrc, "-o", path.join(buildDir, "diag_multi.ll"), "--json"], { cwd: root, encoding: "utf8" });
+  let objects = [];
+  try { objects = js.stdout.trim().split("\n").map((l) => JSON.parse(l)); } catch { objects = []; }
+  check("diagnostics: --json prints one JSON object per error on stdout with file/line/column/endLine/endColumn/severity/message",
+    js.status === 1 && js.stderr === "" && objects.length === 3
+      && objects.every((o) => o.file === multiSrc && o.severity === "error" && typeof o.message === "string" && !o.message.includes("|"))
+      && objects[0].line === 2 && objects[0].column === 10 && objects[0].endLine === 2 && objects[0].endColumn === 18,
+    js.stdout + js.stderr);
+  const jsSyn = spawnSync("node", [cli, synSrc, "-o", path.join(buildDir, "diag_syntax.ll"), "--json"], { cwd: root, encoding: "utf8" });
+  check("diagnostics: --json syntax errors carry the `syntax error:` prefix in `message`",
+    jsSyn.status === 1 && jsSyn.stdout.startsWith("{") && JSON.parse(jsSyn.stdout.split("\n")[0]).message.startsWith("syntax error: "), jsSyn.stdout + jsSyn.stderr);
+  const jsOk = spawnSync("node", [cli, path.join(casesDir, "cf_fib.ts"), "-o", path.join(buildDir, "diag_json_ok.ll"), "--json"], { cwd: root, encoding: "utf8" });
+  check("diagnostics: --json on a clean program prints nothing on stdout and exits 0", jsOk.status === 0 && jsOk.stdout === "", jsOk.stdout + jsOk.stderr);
+
+  // -g: the IR verifies, and a linked debug binary carries a DWARF line table naming the .ts file.
+  if (has("opt")) {
+    const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(buildDir, "dbg_locals.ll")]);
+    check("dbg_locals: opt -passes=verify accepts the -g IR", v.status === 0, String(v.stderr));
+  }
+  if (HAS_CLANG) {
+    const dbgSrc = path.join(buildDir, "dbg_main.ts");
+    fs.writeFileSync(dbgSrc, "function fib(n: number): number {\n  if (n < 2) return n;\n  return fib(n - 1) + fib(n - 2);\n}\n\nexport function main(): number {\n  const x = fib(10);\n  return x - 55;\n}\n");
+    const exe = path.join(buildDir, "dbg_main");
+    const link = spawnSync("node", [cli, dbgSrc, "-g", "--link", exe, "--profile", "debug"], { cwd: root, encoding: "utf8" });
+    check("-g --link --profile debug builds a binary that exits 0", link.status === 0 && spawnSync(exe).status === 0, link.stderr);
+    if (link.status === 0) {
+      const dumpers = [["llvm-dwarfdump", ["--debug-line", exe]], ["objdump", ["--dwarf=decodedline", exe]]];
+      const tool = dumpers.find(([t]) => has(t));
+      if (!tool) {
+        console.log("SKIP  -g: neither llvm-dwarfdump nor objdump is installed; line table not inspected");
+      } else {
+        const dump = spawnSync(tool[0], tool[1], { encoding: "utf8" });
+        const out = dump.stdout;
+        // A row of the line table for our file: `<address> <line> <column> ...` (dwarfdump) or `dbg_main.ts <line> <addr>` (objdump).
+        const hasRow = tool[0] === "llvm-dwarfdump" ? /^0x[0-9a-f]+\s+[1-9]\d*\s+\d+/m.test(out) : /dbg_main\.ts\s+[1-9]\d*\s+0x/.test(out);
+        check(`${tool[0]}: the linked binary's line table names dbg_main.ts and has at least one row`, dump.status === 0 && out.includes("dbg_main.ts") && hasRow, out.slice(0, 2000) + dump.stderr);
+      }
+    }
+    // The speed profile keeps the DWARF too: -g disables the strip step of build.sh.
+    const speed = spawnSync("node", [cli, dbgSrc, "-g", "--link", `${exe}.speed`], { cwd: root, encoding: "utf8" });
+    const symbols = speed.status === 0 && has("llvm-dwarfdump") ? spawnSync("llvm-dwarfdump", ["--debug-line", `${exe}.speed`], { encoding: "utf8" }).stdout : "";
+    check("-g --link (speed profile) is not stripped: the line table survives", speed.status === 0 && (!has("llvm-dwarfdump") || symbols.includes("dbg_main.ts")), speed.stderr + symbols.slice(0, 500));
+  }
 }
 
 // ---- WP5: link -------------------------------------------------------------------

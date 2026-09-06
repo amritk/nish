@@ -7,6 +7,7 @@
  * statement or expression kind means adding a file, not editing the core.
  */
 import ts from "typescript";
+import { CompileError } from "../diagnostics";
 import { CompilerOptions, StaticType } from "../types";
 import { CheckedProgram, FunctionSig } from "./program";
 import { Scope } from "./scope";
@@ -29,6 +30,13 @@ export interface CheckContext {
 
   /** Throw a CompileError at `node`. Typed as never so callers can `return ctx.error(...)`. */
   error(message: string, node: ts.Node): never;
+  /**
+   * Record an error without stopping (WP10 multi-error reporting). The
+   * recovery points (`checkStatements`, the signature passes) call this after
+   * catching a thrown `CompileError`; the enclosing function or struct is
+   * marked `poisoned` so follow-on checks that assume a valid body are skipped.
+   */
+  report(err: CompileError): void;
 
   /** Check a statement; returns true when it definitely terminates (returns). */
   checkStatement(stmt: ts.Statement, scope: Scope): boolean;
