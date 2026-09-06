@@ -560,6 +560,56 @@ if (!only) {
   check(`validator runs in under 50 ms on ${lines.length} lines (${ms.toFixed(2)} ms)`, ms < 50, `${ms.toFixed(2)} ms`);
 }
 
+// ---- WP9: bench --------------------------------------------------------------------
+// The benchmark programs in bench/ must keep printing identical checksums across
+// StaticTS, C and (when rustc is installed) Rust. `bench/run.mjs --validate` builds
+// every variant (speed, --nsw, size profile, C, Rust, Rust native) at a small size and
+// compares the outputs; nothing is timed. Also: `--target host` pins a module to a
+// data layout, so `opt -O2` vectorises it without `-mtriple`, and `--nsw` flags
+// every user-level integer add/sub/mul but nothing else.
+if (!only || "bench".includes(only) || "wp9".includes(only)) {
+  if (HAS_CLANG) {
+    const v = spawnSync("node", [path.join(root, "bench", "run.mjs"), "--validate", "--only", "fib,sieve", "--n", "fib=25,sieve=100000"], { cwd: root, encoding: "utf8" });
+    check("bench: fib(25) and sieve(1e5) print the same checksum from StaticTS, C and Rust (Rust skipped without rustc)",
+      v.status === 0 && v.stdout.includes("checksums agree") && v.stdout.includes("fib: 75025") && v.stdout.includes("sieve: 191840"),
+      `${v.stdout}${v.stderr}`);
+  }
+  const targetLl = path.join(buildDir, "opt_target_triple.ll");
+  if (has("opt") && fs.existsSync(targetLl)) {
+    const ir = fs.readFileSync(targetLl, "utf8");
+    check("opt_target_triple: module carries target datalayout and triple",
+      ir.includes('target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"') &&
+      ir.includes('target triple = "x86_64-unknown-linux-gnu"'), ir.split("\n").slice(0, 5).join("\n"));
+    const o = spawnSync("opt", ["-O2", "-S", targetLl]); // no -mtriple: the module has one
+    check("opt -O2 vectorises opt_target_triple without -mtriple (<4 x i32> or <8 x i32>)",
+      o.status === 0 && /<(4|8) x i32>/.test(String(o.stdout)), o.status === 0 ? String(o.stdout) : String(o.stderr));
+  }
+  const hostLl = path.join(buildDir, "opt_target_host.ll");
+  const host = spawnSync("node", [cli, path.join(casesDir, "opt_target_triple.ts"), "--target", "host", "-o", hostLl], { cwd: root, encoding: "utf8" });
+  const hostTriple = { linux: { x64: "x86_64-unknown-linux-gnu", arm64: "aarch64-unknown-linux-gnu" }, darwin: { x64: "x86_64-apple-darwin", arm64: "aarch64-apple-darwin" } }[process.platform]?.[process.arch];
+  if (hostTriple) {
+    check(`--target host resolves to ${hostTriple} here`,
+      host.status === 0 && fs.readFileSync(hostLl, "utf8").includes(`target triple = "${hostTriple}"`), host.stderr);
+  } else {
+    check("--target host is rejected on an unsupported host with the supported list", host.status === 2 && host.stderr.includes("supported: host,"), host.stderr);
+  }
+  const bad = spawnSync("node", [cli, path.join(casesDir, "opt_target_triple.ts"), "--target", "mips-unknown-elf", "-o", path.join(buildDir, "opt_target_bad.ll")], { cwd: root, encoding: "utf8" });
+  check("--target with an unknown triple is a usage error (exit 2) listing the supported triples",
+    bad.status === 2 && bad.stderr.includes("unsupported target `mips-unknown-elf`") && bad.stderr.includes("x86_64-unknown-linux-gnu"), bad.stderr);
+  const nswLl = path.join(buildDir, "opt_nsw.ll");
+  if (fs.existsSync(nswLl)) {
+    const ir = fs.readFileSync(nswLl, "utf8");
+    // User-level i32 arithmetic: flagged. Compiler-internal i64 index/length arithmetic and the allocator: never.
+    const userOps = [...ir.matchAll(/= (add|sub|mul)( nsw)? i32 /g)];
+    const internalOps = [...ir.matchAll(/= (add|sub|mul)( nsw)? i64 /g)];
+    check(`opt_nsw: every user-level i32 add/sub/mul carries nsw (${userOps.length} ops) and no internal i64 op does (${internalOps.length} ops)`,
+      userOps.length >= 10 && userOps.every((m) => m[2] === " nsw") && internalOps.length > 0 && internalOps.every((m) => m[2] === undefined),
+      ir);
+    const plainIr = fs.readFileSync(path.join(buildDir, "cf_fib.ll"), "utf8");
+    check("without --nsw no instruction carries nsw (cf_fib)", !plainIr.includes("nsw"), plainIr);
+  }
+}
+
 // ---- WP12: exit codes --------------------------------------------------------------
 // The CLI's contract (docs/wp12-release.md): 0 ok, 1 compile error, 2 usage, 3 toolchain,
 // 70 internal compiler error. Each failure mode is driven from outside the compiler:
