@@ -23,10 +23,13 @@
  */
 import ts from "typescript";
 import { CheckedProgram } from "../../checker";
-import { dottedName } from "../../checker/strings";
+import { dottedName } from "../../checker/builtins";
 import { STRING, StaticType, llvmType } from "../../types";
 import { IRModule } from "../ir";
+import { BuiltinCall } from "./builtins";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
+import { ioBuiltinCallEmitters } from "./io";
+import { mathBuiltinCallEmitters, mathPropertyEmitters } from "./math";
 
 // ---- Constants --------------------------------------------------------------------
 
@@ -62,6 +65,7 @@ const emitStringLiteral: ExpressionEmitter = (ctx, expr) =>
 /** Runtime symbol that converts `t` to a string, or undefined when no call is needed. */
 function conversionCallee(t: StaticType): string | undefined {
   if (t.kind === "i32") return "sts_str_from_i32";
+  if (t.kind === "i64") return "sts_str_from_i64";
   if (t.kind === "f64") return "sts_str_from_f64";
   return undefined; // string: identity; bool: select between two literals
 }
@@ -133,6 +137,8 @@ export function unwrapStringPassthrough(program: CheckedProgram, expr: ts.Expres
 
 const emitPropertyAccess: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.PropertyAccessExpression;
+  const constant = mathPropertyEmitters[dottedName(expr) ?? ""]; // WP7: Math.PI, Math.E
+  if (constant) return constant.value;
   const type = ctx.typeOf(expr);
   const str = ctx.emitExpression(expr.expression);
   const header = ctx.fn.emitValue(`bitcast i8* ${str} to i64*`);
@@ -167,12 +173,6 @@ const emitStrictEquality: BinaryEmitter = (ctx, expr) => {
 
 // ---- Builtin calls ------------------------------------------------------------------------
 
-interface BuiltinCall {
-  emit: (ctx: EmitContext, expr: ts.CallExpression) => string;
-  /** Runtime symbols the lowering may call, for the purity analysis. */
-  callees: (program: CheckedProgram, expr: ts.CallExpression) => string[];
-}
-
 const consoleLog: BuiltinCall = {
   emit: (ctx, expr) => {
     const text = emitToString(ctx, expr.arguments[0]);
@@ -185,6 +185,8 @@ const consoleLog: BuiltinCall = {
 /** Builtins keyed by dotted callee name; mirrors `builtinCalls` in the checker. */
 export const builtinCallEmitters: Record<string, BuiltinCall> = {
   "console.log": consoleLog,
+  ...mathBuiltinCallEmitters, // WP7: Math.sqrt, ..., Math.random
+  ...ioBuiltinCallEmitters, // WP7: process.exit
 };
 
 /** Entry point for `emitCall` when the callee is a property access. */
@@ -218,7 +220,7 @@ export function collectStringFacts(
       facts.callees.add("sts_str_eq");
     }
   } else if (ts.isPropertyAccessExpression(node) && program.types.get(node.expression)?.kind === "string") {
-    facts.readsMemory = true; // `.length` loads the header through the string pointer
+    facts.readsMemory = true; // `.length` loads the header through the string pointer (Math.PI has no typed target)
   } else if (ts.isTemplateExpression(node)) {
     const parts = templateParts(node);
     if (parts.length > 1) facts.callees.add("sts_str_concat");

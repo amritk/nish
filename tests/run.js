@@ -88,7 +88,8 @@ for (const name of cases) {
     // WP5: a case with its own `export function main` is a whole program; link it without the driver.
     const hasEntry = /\bexport\s+function\s+main\b/.test(fs.readFileSync(src, "utf8"));
     const exe = path.join(buildDir, name);
-    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", outLl, ...(hasEntry ? [] : [driver]), "runtime/runtime.c", "-o", exe], { cwd: root });
+    // -lm: Math.sin/cos/exp/log/pow lower to LLVM intrinsics that become libm calls (WP7).
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", outLl, ...(hasEntry ? [] : [driver]), "runtime/runtime.c", "-lm", "-o", exe], { cwd: root });
     if (cc.status !== 0) {
       check(`${name}: links natively`, false, String(cc.stderr));
       continue;

@@ -4,8 +4,12 @@
  * value (temp, parameter, or constant) that holds the expression's result.
  */
 import ts from "typescript";
-import { StaticType, llvmType } from "../../types";
+import { CheckedProgram } from "../../checker";
+import { StaticType, isInteger, llvmType } from "../../types";
+import { BuiltinCall, f64Constant } from "./builtins";
 import { BinaryEmitter, EmitterTable, ExpressionEmitter } from "./context";
+import { ioFunctionEmitters } from "./io";
+import { conversionEmitters } from "./math";
 import { emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from "./strings";
 
 // ---- Constants --------------------------------------------------------------------
@@ -13,11 +17,10 @@ import { emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from 
 export function numericConstant(text: string, type: StaticType): string {
   const n = Number(text);
   if (type.kind === "i32") return String(n | 0);
+  if (type.kind === "i64") return String(n); // an integer with |n| <= 2^53 (checker-enforced): exact
   // LLVM only accepts decimal float literals that round-trip exactly, so
   // emit the IEEE-754 bit pattern instead; that is always valid.
-  const buf = Buffer.alloc(8);
-  buf.writeDoubleBE(n);
-  return "0x" + buf.toString("hex").toUpperCase();
+  return f64Constant(n);
 }
 
 const emitParenthesized: ExpressionEmitter = (ctx, expr) =>
@@ -45,9 +48,9 @@ const emitPrefixUnary: ExpressionEmitter = (ctx, node) => {
   const operand = ctx.emitExpression(expr.operand);
   switch (expr.operator) {
     case ts.SyntaxKind.MinusToken:
-      return type.kind === "f64"
-        ? ctx.fn.emitValue(`fneg double ${operand}`)
-        : ctx.fn.emitValue(`sub i32 0, ${operand}`);
+      return isInteger(type)
+        ? ctx.fn.emitValue(`sub ${llvmType(type)} 0, ${operand}`)
+        : ctx.fn.emitValue(`fneg double ${operand}`);
     case ts.SyntaxKind.ExclamationToken:
       return ctx.fn.emitValue(`xor i1 ${operand}, true`);
   }
@@ -107,9 +110,33 @@ const emitBinary: ExpressionEmitter = (ctx, node) => {
 
 // ---- Calls ---------------------------------------------------------------------------
 
+/** Builtins called by plain identifier; mirrors `builtinFunctions` in the checker. */
+export const builtinFunctionEmitters: Record<string, BuiltinCall> = {
+  ...conversionEmitters, // WP7: toI32, toI64, toF64
+  ...ioFunctionEmitters, // WP7: readFileSync, writeFileSync, appendFileSync
+};
+
+/** The identifier builtin a call resolves to, or undefined for calls to user functions. */
+function builtinFunctionOf(program: CheckedProgram, expr: ts.CallExpression): BuiltinCall | undefined {
+  if (!ts.isIdentifier(expr.expression) || program.callees.has(expr)) return undefined;
+  return builtinFunctionEmitters[expr.expression.text];
+}
+
+/**
+ * Runtime symbols an identifier builtin call lowers to, for attributes.ts
+ * (dotted builtins are covered by `collectStringFacts`).
+ */
+export function collectBuiltinFacts(program: CheckedProgram, node: ts.Node, facts: { callees: Set<string> }): void {
+  if (!ts.isCallExpression(node)) return;
+  const builtin = builtinFunctionOf(program, node);
+  if (builtin) for (const c of builtin.callees(program, node)) facts.callees.add(c);
+}
+
 const emitCall: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.CallExpression;
   if (ts.isPropertyAccessExpression(expr.expression)) return emitBuiltinCall(ctx, expr);
+  const builtin = builtinFunctionOf(ctx.program, expr);
+  if (builtin) return builtin.emit(ctx, expr);
   const callee = ctx.program.callees.get(expr)!;
   const args = expr.arguments
     .map((arg, i) => `${llvmType(callee.params[i].type)} ${ctx.emitExpression(arg)}`)

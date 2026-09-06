@@ -42,10 +42,10 @@ function is declared `nocapture`, so passing a parameter to `sts_print` or
 - **`console.log(x)` takes exactly one `string | number | boolean`**, has
   type `void`, and may only appear as an expression statement.
 - **Number formatting.** `number` holes and `console.log(number)` use
-  `sts_str_from_i32` (exact) or `sts_str_from_f64`, which currently prints
-  with `%.17g`. That is round-trip safe but not JavaScript's shortest
-  representation (`0.1` prints as `0.10000000000000001`). Shortest round-trip
-  formatting is deferred to WP7.
+  `sts_str_from_i32` / `sts_str_from_i64` (exact) or `sts_str_from_f64`,
+  which since WP7 prints exactly what JavaScript's `String(x)` prints
+  (shortest round-trip digits, `1e+21`, `1e-7`, `NaN`, `Infinity`; see
+  `docs/wp7-runtime.md`).
 - **Booleans** convert without a runtime call: a `select` between the interned
   literals `"true"` and `"false"`.
 
@@ -310,7 +310,7 @@ name. Adding a builtin means adding one entry to each.
 | `const x = console.log("a")` | `` `console.log` returns void and can only be used as a statement `` |
 | `n.length` on a number | `` Unknown property `length` on i32 `` |
 | `s.foo` | `` Unknown property `foo` on string `` |
-| `Math.sqrt(x)` (until WP7) | `` Unknown builtin `Math.sqrt` `` |
+| `Math.foo(x)` | `` Unknown builtin `Math.foo` `` (the supported `Math.*` arrived with WP7) |
 
 ## Purity facts
 
@@ -329,5 +329,6 @@ fixpoint in `attributes.ts` sees them through `RUNTIME_BY_NAME`:
 
 ## Runtime budget
 
-`runtime/runtime.c` is unchanged by this package: 4,039 bytes of source,
-1,118 bytes of `.text` at `-Oz` (budget: 8 KB / 4 KB).
+`runtime/runtime.c` was unchanged by this package: 4,039 bytes of source,
+1,118 bytes of `.text` at `-Oz` (budget: 8 KB / 4 KB). WP7 grew it to 7,402
+and 2,688 bytes (JS number formatting, i64, random, exit, files).

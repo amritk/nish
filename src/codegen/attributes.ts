@@ -37,6 +37,7 @@
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, Param } from "../checker";
 import { StaticType } from "../types";
+import { collectBuiltinFacts } from "./emit/expressions";
 import { collectStringFacts, unwrapStringPassthrough } from "./emit/strings";
 import { MemoryEffect, RUNTIME_BY_NAME } from "./runtime";
 
@@ -45,6 +46,12 @@ export interface FunctionFacts {
   /** The body itself loads from memory it does not own (a string header read). */
   readsMemory: boolean;
   effect: MemoryEffect;
+  /**
+   * Can reach a `noreturn` runtime call (`process.exit`, WP7), directly or
+   * through a callee. `willreturn` promises the call comes back, so such a
+   * function must not carry it.
+   */
+  callsNoReturn: boolean;
   /** Parameter names that escape (returned or passed to a call). */
   escaping: Set<string>;
   /** User functions called directly (by LLVM symbol). */
@@ -83,6 +90,11 @@ export function analyzeFunctions(programs: CheckedProgram | readonly CheckedProg
           f.effect = merged;
           changed = true;
         }
+        const noReturn = calleeFacts ? calleeFacts.callsNoReturn : (RUNTIME_BY_NAME.get(callee)?.noreturn ?? false);
+        if (noReturn && !f.callsNoReturn) {
+          f.callsNoReturn = true;
+          changed = true;
+        }
       }
     }
   }
@@ -90,7 +102,14 @@ export function analyzeFunctions(programs: CheckedProgram | readonly CheckedProg
 }
 
 function collectFacts(program: CheckedProgram, sig: FunctionSig): FunctionFacts {
-  const facts: FunctionFacts = { hasLoops: false, readsMemory: false, effect: "none", escaping: new Set(), callees: new Set() };
+  const facts: FunctionFacts = {
+    hasLoops: false,
+    readsMemory: false,
+    effect: "none",
+    callsNoReturn: false,
+    escaping: new Set(),
+    callees: new Set(),
+  };
   const paramNames = new Set(sig.params.map((p) => p.name));
 
   const noteEscape = (expr: ts.Expression) => {
@@ -114,6 +133,7 @@ function collectFacts(program: CheckedProgram, sig: FunctionSig): FunctionFacts 
       }
     }
     collectStringFacts(program, node, facts);
+    collectBuiltinFacts(program, node, facts); // WP7: toI32/toF64/..., readFileSync/...
     ts.forEachChild(node, visit);
   };
   visit(sig.decl.body!);
@@ -125,7 +145,7 @@ function collectFacts(program: CheckedProgram, sig: FunctionSig): FunctionFacts 
 
 export function functionAttributes(f: FunctionFacts): string[] {
   const attrs = ["nounwind"];
-  if (!f.hasLoops) attrs.push("willreturn");
+  if (!f.hasLoops && !f.callsNoReturn) attrs.push("willreturn");
   if (f.effect === "none") attrs.push("readnone");
   else if (f.effect === "read") attrs.push("readonly");
   return attrs;

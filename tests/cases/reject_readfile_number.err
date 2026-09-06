@@ -1,0 +1,1 @@
+`readFileSync` expects string, got i32

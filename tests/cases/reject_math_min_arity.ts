@@ -1,3 +1,3 @@
 function f(x: number): number {
-  return Math.foo(x);
+  return Math.min(x);
 }

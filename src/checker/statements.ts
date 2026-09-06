@@ -7,6 +7,7 @@
 import ts from "typescript";
 import { resolveTypeNode, sameType, typeToString } from "../types";
 import { CheckContext, CheckerTable, StatementChecker } from "./context";
+import { terminatesControlFlow } from "./io";
 import { LocalVar } from "./program";
 import { Scope } from "./scope";
 
@@ -56,8 +57,9 @@ const checkVariableStatement: StatementChecker = (ctx, node, scope) => {
 };
 
 const checkExpressionStatement: StatementChecker = (ctx, node, scope) => {
-  ctx.checkExpression((node as ts.ExpressionStatement).expression, scope);
-  return false;
+  const expr = (node as ts.ExpressionStatement).expression;
+  ctx.checkExpression(expr, scope);
+  return terminatesControlFlow(expr); // WP7: `process.exit(n);` ends the path like `return`
 };
 
 const checkBlockStatement: StatementChecker = (ctx, node, scope) =>
@@ -74,7 +76,7 @@ export const statementCheckers: CheckerTable<StatementChecker> = {
 export function checkStatements(ctx: CheckContext, stmts: readonly ts.Statement[], scope: Scope): boolean {
   let terminated = false;
   for (const stmt of stmts) {
-    if (terminated) throw ctx.error("Unreachable code after return", stmt);
+    if (terminated) throw ctx.error("Unreachable code after return", stmt); // or after process.exit
     terminated = ctx.checkStatement(stmt, scope);
   }
   return terminated;

@@ -95,7 +95,11 @@ node dist/index.js examples/multi/main.ts --link build/multi && ./build/multi; e
 
 `--number-mode` selects how the `number` keyword is lowered: `i32` (default,
 integer arithmetic) or `f64` (`double`, floating point). The explicit type
-names `i32` and `f64` are always available regardless of the mode.
+names `i32`, `i64`, and `f64` are always available regardless of the mode.
+
+Programs that call `Math.sin/cos/exp/log/pow` on non-constant arguments end
+up calling libm; link them with `-lm` (`tests/run.js` does; `scripts/build.sh`
+does not yet, see the TODO in [docs/wp7-runtime.md](docs/wp7-runtime.md)).
 
 ## Running the generated LLVM IR
 
@@ -176,7 +180,7 @@ runtime functions vanish.
 
 ### Runtime: arena allocation, no GC
 
-`runtime/runtime.c` (about 4 KB of source, 1.1 KB compiled) provides:
+`runtime/runtime.c` (7.4 KB of source, 2.7 KB compiled at `-Oz`; budget 8 KB / 4 KB) provides:
 
 | Symbol | Purpose |
 | --- | --- |
@@ -184,7 +188,15 @@ runtime functions vanish.
 | `sts_reset_arena()` | Recycle everything in O(1). Keeps the newest chunk, frees the rest, so a steady-state program stops calling `malloc` at all. |
 | `sts_free_arena()` | Release all chunks. |
 | `sts_arena_grow(size)` | Slow path: push a new chunk (at least 64 KB) and bump from it. |
-| `sts_str_new / concat / eq / len / print / from_i32 / from_f64` | Length-prefixed, NUL-terminated, immutable UTF-8 strings living in the arena. |
+| `sts_str_new / concat / eq / len / print / from_i32 / from_i64 / from_f64` | Length-prefixed, NUL-terminated, immutable UTF-8 strings living in the arena. `from_f64` prints exactly what JavaScript's `String(x)` prints (shortest round-trip digits). |
+| `sts_random()` | `Math.random`: xorshift64\*, seeded lazily from time and pid, 53 random bits in `[0, 1)`. |
+| `sts_exit(code)` | `process.exit`. |
+| `sts_read_file / write_file / append_file` | `readFileSync` / `writeFileSync` / `appendFileSync`: `open`/`read`/`write` syscalls, whole file in one arena string; a failure prints `statictsc: cannot read <path>` and exits 1. |
+
+`Math.sqrt`, `Math.floor`, `Math.abs`, `Math.min`, ... are not runtime calls at
+all: they lower to LLVM intrinsics (`llvm.sqrt.f64`, `llvm.smin.i32`, ...),
+declared `readnone willreturn`, so a function built from them stays pure. See
+[docs/wp7-runtime.md](docs/wp7-runtime.md).
 
 Arena state is one global that the IR reads directly:
 
@@ -288,6 +300,7 @@ The supported direction is the reverse:
 | `src/checker/index.ts` | B. Check | Core: signatures, function bodies, dispatch to handler tables; records types in side tables. |
 | `src/checker/statements.ts`, `expressions.ts` | B. Check | One handler per `ts.SyntaxKind` (and per binary operator). Add a construct by adding an entry. |
 | `src/checker/declarations.ts`, `scope.ts`, `program.ts` | B. Check | Signature collection, lexical scopes, the `CheckedProgram` data model. |
+| `src/checker/builtins.ts`, `math.ts`, `io.ts` | B. Check | Builtin calls without a declaration: `Math.*`, `toI32/toI64/toF64`, `process.exit`, file I/O; contextual typing of numeric literals (`i64`). Mirrored by `src/codegen/emit/{builtins,math,io}.ts`. |
 | `src/codegen/ir.ts` | C. Emit | Textual IR builder: functions, blocks, attribute groups, SSA temp numbering. |
 | `src/codegen/emitter.ts` | C. Emit | Core: module assembly, function setup, runtime prelude, dispatch. |
 | `src/codegen/emit/statements.ts`, `expressions.ts` | C. Emit | Lowering handlers keyed by `ts.SyntaxKind` / operator, mirroring the checker tables. |
@@ -314,6 +327,7 @@ Type mapping:
 | --- | --- |
 | `number` (i32 mode), `i32` | `i32` |
 | `number` (f64 mode), `f64` | `double` |
+| `i64` | `i64`, align 8; wrapping arithmetic, never the lowering of `number`; literals take the type from context (`let x: i64 = 5`, `x * 2`); convert with `toI64` / `toI32` / `toF64` |
 | `boolean` | `i1` |
 | `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }`, 8-aligned, immutable; literals are module constants, `.length` is the UTF-8 byte length |
 | `void` | `void` |
@@ -331,7 +345,10 @@ Supported today:
 - `s.length`: a direct `load i64` of the header (byte length, no call); functions that read it are `readonly`.
 - Template literals `` `n=${n}` `` with string, number, and boolean holes, chained through `sts_str_concat`.
 - `console.log(x)` for `x: string | number | boolean`, statement position only, lowered to `sts_print`.
-- Number to string via `sts_str_from_i32` / `sts_str_from_f64` (`%.17g`; shortest round-trip formatting is WP7). See [docs/wp3-strings.md](docs/wp3-strings.md).
+- Number to string via `sts_str_from_i32` / `from_i64` / `from_f64`; doubles print exactly as JavaScript's `String(x)` (`0.1`, `1e+21`, `1e-7`, `NaN`, `Infinity`, `-0` as `0`). See [docs/wp3-strings.md](docs/wp3-strings.md).
+- `Math.sqrt/floor/ceil/trunc/round/sin/cos/exp/log/pow` (f64), `Math.abs/min/max` (any numeric type), `Math.PI`, `Math.E` as LLVM intrinsics and constants (`readnone`); `Math.random()` via `sts_random`. See [docs/wp7-runtime.md](docs/wp7-runtime.md).
+- `i64` values, arithmetic, comparisons, parameters, returns, and the conversions `toI32(x)`, `toI64(x)`, `toF64(x)` (`sext`/`trunc`/`sitofp`/`llvm.fptosi.sat`).
+- `process.exit(code)` (a `noreturn` call plus `unreachable`; counts as a terminator), `readFileSync(path)`, `writeFileSync(path, data)`, `appendFileSync(path, data)`.
 
 Rejected with a diagnostic (`file:line:col: error: ...`):
 

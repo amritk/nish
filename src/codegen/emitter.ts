@@ -194,7 +194,8 @@ export class Emitter implements EmitContext {
       this.module.addGlobal(ARENA_GLOBAL);
     }
     for (const rt of RUNTIME_FUNCTIONS) {
-      if (!all && !this.usedRuntime.has(rt.name)) continue;
+      // Intrinsics are not part of the C ABI prelude: declared only when used.
+      if (!this.usedRuntime.has(rt.name) && (!all || rt.intrinsic)) continue;
       const group = this.opts.optimizeAttributes ? ` ${this.module.attrGroup(rt.attrs)}` : "";
       this.module.addDeclaration(`${rt.signature}${group}`);
     }
