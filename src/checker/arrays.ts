@@ -22,7 +22,19 @@
  * other target keeps going to the previous handler.
  */
 import ts from "typescript";
-import { F64, I32, StaticType, arrayOf, assignable, isNumeric, llvmType, resolveTypeNode, sameType, typeToString } from "../types";
+import {
+  F64,
+  I32,
+  StaticType,
+  TYPED_ARRAY_ALIASES,
+  arrayOf,
+  assignable,
+  isNumeric,
+  llvmType,
+  resolveTypeNode,
+  sameType,
+  typeToString,
+} from "../types";
 import {
   BinaryChecker,
   CheckContext,
@@ -168,8 +180,21 @@ newCheckers.Array = (ctx, expr, scope) => {
   if (expr.typeArguments?.length !== 1) {
     throw ctx.error("`new Array` needs exactly one type argument, e.g. `new Array<number>(n)`", expr);
   }
-  const elem = resolveTypeNode(expr.typeArguments[0], ctx.sf, ctx.opts);
-  if (elem.kind === "void") throw ctx.error("Array elements cannot be void", expr.typeArguments[0]);
+  return checkNewArray(ctx, expr, scope, resolveTypeNode(expr.typeArguments[0], ctx.sf, ctx.opts));
+};
+
+/** `new Int32Array(n)` / `new Float64Array(n)` / `new BigInt64Array(n)`: `new Array<T>(n)` with `T` fixed by the name. */
+for (const [name, elem] of Object.entries(TYPED_ARRAY_ALIASES)) {
+  newCheckers[name] = (ctx, expr, scope) => {
+    if (expr.typeArguments) {
+      throw ctx.error(`\`new ${name}\` takes no type argument (it is \`new Array<${typeToString(elem)}>(n)\`)`, expr);
+    }
+    return checkNewArray(ctx, expr, scope, elem);
+  };
+}
+
+function checkNewArray(ctx: CheckContext, expr: ts.NewExpression, scope: Scope, elem: StaticType): StaticType {
+  if (elem.kind === "void") throw ctx.error("Array elements cannot be void", expr.typeArguments?.[0] ?? expr);
   // Zero-filling is only a valid value for scalars and for `T | null` (a zero
   // pointer *is* `null`, WP6); a zeroed plain string / array would be a null
   // value StaticTS has no way to represent or check for.
@@ -186,7 +211,7 @@ newCheckers.Array = (ctx, expr, scope) => {
   const n = ctx.checkExpression(args[0], scope);
   if (!isNumeric(n)) throw ctx.error(`Array length must be a number, got ${typeToString(n)}`, args[0]);
   return arrayOf(elem);
-};
+}
 
 // ---- Element assignment `a[i] = v`, `a[i] op= v` ---------------------------------------
 

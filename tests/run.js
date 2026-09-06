@@ -540,7 +540,11 @@ if (!only || "interop".includes(only)) {
     undeclared.length === 0 && publicHeader.includes("extern struct sts_arena sts_arena;"), `missing: ${undeclared.join(", ")}`);
 
   const strictC = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", `-I${runtimeDir}`, `-I${interopDir}`];
-  const tsc = path.join(root, "node_modules", "typescript", "bin", "tsc");
+  // Resolve tsc the way `require("typescript")` does, so a worktree without its own node_modules still finds it.
+  let tsc = path.join(root, "node_modules", "typescript", "bin", "tsc");
+  try {
+    tsc = require.resolve("typescript/bin/tsc");
+  } catch {}
   /** Compile <src> to build/test/interop/<stem>.ll (or <stem>/ for a multi-module program) plus the requested sidecars. */
   const emit = (src, extra, stem = path.basename(src, ".ts"), multi = false) => {
     const out = multi ? path.join(interopDir, stem) + path.sep : path.join(interopDir, `${stem}.ll`);
@@ -580,6 +584,8 @@ if (!only || "interop".includes(only)) {
     const cxx = spawnSync("clang", ["-std=c++17", "-x", "c++", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", path.join(runtimeDir, "statictsc.h")]);
     const c11 = spawnSync("clang", [...strictC, "-pedantic", "-fsyntax-only", "-x", "c", path.join(runtimeDir, "statictsc.h")]);
     check("statictsc.h compiles under -Wall -Wextra -Werror as C11 (-pedantic) and as C++17", cxx.status === 0 && c11.status === 0, String(cxx.stderr) + String(c11.stderr));
+    const wasmRt = spawnSync("clang", ["--target=wasm32-unknown-unknown", "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic", "-mbulk-memory", "-fsyntax-only", path.join(runtimeDir, "runtime_wasm.c")]);
+    check("runtime/runtime_wasm.c compiles for wasm32 under -std=c11 -Wall -Wextra -Werror -pedantic", wasmRt.status === 0, String(wasmRt.stderr));
 
     for (const stem of ["add", "strings", "export_fn", "export_strict", "multi"]) {
       if (!fs.existsSync(sidecar(stem, "h"))) continue;
@@ -628,14 +634,16 @@ if (!only || "interop".includes(only)) {
   const stringsShim = fs.existsSync(sidecar("strings", "napi.c")) ? fs.readFileSync(sidecar("strings", "napi.c"), "utf8") : "";
   check("add.napi.c registers `add` with type checks and a NAPI_MODULE_INIT",
     shim.includes('{"add", sts_napi_add},') && shim.includes("type != napi_number") && shim.includes("NAPI_MODULE_INIT()"), shim);
-  check("strings.napi.c skips string functions with a comment and still exposes sts_reset_arena",
-    stringsShim.includes("pick(flag: boolean, a: string, b: string): string -- not bridged") && !stringsShim.includes("sts_napi_pick") && stringsShim.includes('{"sts_reset_arena", sts_napi_reset_arena},'), stringsShim);
+  check("strings.napi.c bridges string functions (arena strings in, napi_create_string_utf8 out, released per call) and exposes sts_reset_arena",
+    stringsShim.includes('{"pick", sts_napi_pick},') && stringsShim.includes("sts_napi_string_arg(env, argv[1])") && stringsShim.includes("napi_create_string_utf8(env, result->data, result->len, &out)") &&
+      stringsShim.includes("uint64_t mark = sts_arena_mark();") && stringsShim.includes('{"sts_reset_arena", sts_napi_reset_arena},'), stringsShim);
   if (!HAS_CLANG) {
     // nothing to build
   } else if (!hasNodeHeaders) {
     console.log(`SKIP  Node headers not found (${path.join(nodeInclude, "node_api.h")}): N-API addon build skipped`);
   } else {
-    for (const stem of ["add", "strings"]) {
+    for (const stem of ["add", "strings", "arrays"]) {
+      if (!fs.existsSync(sidecar(stem, "napi.c"))) continue;
       const r = spawnSync("clang", [...strictC, `-I${nodeInclude}`, "-fsyntax-only", sidecar(stem, "napi.c")]);
       check(`${stem}.napi.c compiles under -std=c11 -Wall -Wextra -Werror`, r.status === 0, String(r.stderr));
     }
@@ -664,6 +672,125 @@ if (!only || "interop".includes(only)) {
         check("the .node and .wasm builds of add.ts return identical results (i32 wrap included)",
           cmp !== null && String(cmp.stdout).trim() === "5 42 0 -2147483648", String(w.stderr) + (cmp ? String(cmp.stdout) + String(cmp.stderr) : ""));
       }
+    }
+  }
+
+  // ---- WP4/WP8: arrays and strings across the boundary ----------------------------
+  // examples/arrays.ts takes and returns Int32Array / Float64Array / BigInt64Array. Checks:
+  //   - the header spells a read-only array parameter `const sts_array *` and a written one
+  //     `sts_array *`, compiles under -Werror, and a C driver passes a stack-built header
+  //   - the .d.ts declares typed-array signatures, type-checks, and its companion .mjs loader
+  //     marshals typed arrays into the wasm build (linked with runtime/runtime_wasm.c),
+  //     copies results out, copies written parameters back, and survives a trap
+  //   - the N-API addon borrows typed arrays (zero-copy, `fill` mutates in place), returns
+  //     fresh typed arrays, bridges strings, and agrees with the wasm build value for value
+  const arrays = emit("examples/arrays.ts", ["--emit-header", sidecar("arrays", "h"), "--emit-dts", sidecar("arrays", "d.ts"), "--emit-napi", sidecar("arrays", "napi.c")]);
+  const arraysHeader = arrays.status === 0 ? fs.readFileSync(sidecar("arrays", "h"), "utf8") : "";
+  check("arrays.h: read-only array parameters are `const sts_array *`, written ones `sts_array *`, results `sts_array *`",
+    arraysHeader.includes("double sumF64(const sts_array *xs);") && arraysHeader.includes("void fill(sts_array *xs, int32_t v);") &&
+      arraysHeader.includes("sts_array *scale(const sts_array *xs, double k);") && arraysHeader.includes("-- xs: int32_t elements, returns int64_t elements"), arraysHeader || arrays.stderr);
+  const arraysDts = arrays.status === 0 ? fs.readFileSync(sidecar("arrays", "d.ts"), "utf8") : "";
+  check("arrays.d.ts declares typed-array signatures and the runtime exports",
+    arraysDts.includes("  scale(xs: Float64Array, k: number): Float64Array;") && arraysDts.includes("  sumI64(xs: BigInt64Array): bigint;") &&
+      arraysDts.includes("  fill(xs: Int32Array, v: number): void;") && arraysDts.includes("  sts_reset_arena(): void;"), arraysDts || arrays.stderr);
+  check("--emit-dts writes the companion loader arrays.mjs with arena-scoped marshalling",
+    fs.existsSync(sidecar("arrays", "mjs")) && fs.readFileSync(sidecar("arrays", "mjs"), "utf8").includes("raw.sts_alloc_array(BigInt(elemSize), BigInt(value.length))"), arrays.stderr);
+  if (fs.existsSync(sidecar("arrays", "d.ts"))) {
+    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("arrays", "d.ts")], { cwd: root });
+    check("arrays.d.ts passes tsc --noEmit --strict", r.status === 0, String(r.stdout) + String(r.stderr));
+  }
+  if (HAS_CLANG && arrays.status === 0) {
+    const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar("arrays", "h")]);
+    check("arrays.h compiles under -std=c11 -Wall -Wextra -Werror", r.status === 0, String(r.stderr));
+    const driver = path.join(interopDir, "arrays_driver.c");
+    fs.writeFileSync(driver, [
+      "#include <stdio.h>",
+      '#include "arrays.h"',
+      "int main(void) {",
+      "  int32_t buf[4] = {1, 2, 3, 4};",
+      "  sts_array xs = {4, 4, (char *)buf}; /* a host buffer, borrowed for the calls */",
+      "  int32_t before = sumI32(&xs);",
+      "  fill(&xs, 5);",
+      "  sts_array *sq = squares(4); /* arena-owned */",
+      '  printf("sumI32 = %d; after fill buf[3] = %d, sum %d; squares len %llu last %d\\n", before, buf[3], sumI32(&xs), (unsigned long long)sq->len, ((int32_t *)sq->data)[3]);',
+      "  sts_free_arena();",
+      "  return 0;",
+      "}",
+      "",
+    ].join("\n"));
+    const exe = path.join(interopDir, "arrays_driver");
+    const cc = spawnSync("clang", [...strictC, "-O2", sidecar("arrays", "ll"), path.join(runtimeDir, "runtime.c"), driver, "-o", exe], { cwd: root });
+    const run = cc.status === 0 ? spawnSync(exe) : null;
+    check("a -Werror C driver passes a stack-built sts_array through arrays.h and reads a returned one",
+      run !== null && String(run.stdout).trim() === "sumI32 = 10; after fill buf[3] = 5, sum 20; squares len 4 last 9", String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : ""));
+  }
+  if (HAS_CLANG && arrays.status === 0 && (has("wasm-ld") || hasNodeHeaders)) {
+    const wasm = path.join(interopDir, "arrays.wasm");
+    const addon = path.join(interopDir, "arrays.node");
+    const stringsAddon = path.join(interopDir, "strings.node");
+    let wasmOk = false;
+    if (has("wasm-ld")) {
+      const w = spawnSync("bash", ["scripts/build.sh", sidecar("arrays", "ll"), "runtime/runtime_wasm.c", "-o", wasm, "--profile", "wasm"], { cwd: root });
+      check("wasm profile links examples/arrays.ts with runtime/runtime_wasm.c", w.status === 0, String(w.stderr));
+      wasmOk = w.status === 0;
+    }
+    let napiOk = false;
+    if (hasNodeHeaders) {
+      const b = spawnSync("bash", ["scripts/build.sh", sidecar("arrays", "ll"), "runtime/runtime.c", sidecar("arrays", "napi.c"), "-o", addon, "--profile", "napi"], { cwd: root });
+      const s = spawnSync("bash", ["scripts/build.sh", sidecar("strings", "ll"), "runtime/runtime.c", sidecar("strings", "napi.c"), "-o", stringsAddon, "--profile", "napi"], { cwd: root });
+      check("napi profile builds arrays.node and strings.node", b.status === 0 && s.status === 0, String(b.stderr) + String(s.stderr));
+      napiOk = b.status === 0 && s.status === 0;
+    } else {
+      console.log(`SKIP  Node headers not found (${path.join(nodeInclude, "node_api.h")}): arrays/strings addon build skipped`);
+    }
+    const script = [
+      'import { readFileSync } from "node:fs";',
+      'import { createRequire } from "node:module";',
+      "const apis = {};",
+      ...(wasmOk ? [`apis.wasm = await (await import(${JSON.stringify(sidecar("arrays", "mjs"))})).load(readFileSync(${JSON.stringify(wasm)}));`] : []),
+      ...(napiOk ? [`apis.napi = createRequire(import.meta.url)(${JSON.stringify(addon)});`] : []),
+      "const xs = new Float64Array([0.5, 1.5, 2.5]);",
+      "const is = new Int32Array([1, 2, 3, 4]);",
+      "const big = new Float64Array(1000000).fill(1);",
+      "for (const [name, api] of Object.entries(apis)) {",
+      "  const buf = new Int32Array(3);",
+      "  api.fill(buf, 7);",
+      '  let err = "";',
+      "  try { api.sumF64(is); } catch (e) { err = e.constructor.name + ': ' + e.message; }",
+      "  const row = [api.sumF64(xs), api.sumI32(is), Array.from(api.scale(xs, 2)).join(','), api.scale(xs, 2).constructor.name,",
+      "    Array.from(api.squares(5)).join(','), api.widen(is).constructor.name, String(api.sumI64(new BigInt64Array([1n << 40n, 2n]))),",
+      "    Array.from(buf).join(','), err, api.sumF64(big), api.sumF64(big)];",
+      "  console.log(name + ' | ' + row.join(' | '));",
+      "}",
+      // A trap inside wasm (`new Int32Array(-1)` is a huge allocation: memory.grow fails, `unreachable`)
+      // surfaces as a RuntimeError; the loader's `finally` releases the arena and later calls still work.
+      // The native addon would `_exit(1)` with "out of memory" instead, so only the wasm build is probed.
+      ...(wasmOk ? ['let trap = ""; try { apis.wasm.squares(-1); } catch (e) { trap = e.constructor.name; }', "console.log('trap | ' + trap + ' | ' + apis.wasm.sumF64(xs));"] : []),
+      ...(napiOk ? [`const strings = createRequire(import.meta.url)(${JSON.stringify(stringsAddon)});`,
+        'let serr = ""; try { strings.pick(true, 1, "b"); } catch (e) { serr = e.message; }',
+        'console.log(["strings", strings.pick(true, "hello", "world"), strings.identity("caf\\u00e9 \\u{1F600}"), strings.len2("x"), serr].join(" | "));'] : []),
+    ].join("\n");
+    const roundTrip = "4.5 | 10 | 1,3,5 | Float64Array | 0,1,4,9,16 | BigInt64Array | 1099511627778 | 7,7,7 | TypeError: sumF64: argument 1 (xs) must be a Float64Array | 1000000 | 1000000";
+    const r = wasmOk || napiOk ? spawnSync("node", ["--input-type=module", "-e", script], { cwd: root }) : null;
+    const lines = r ? String(r.stdout).trim().split("\n") : [];
+    const detail = r ? String(r.stdout) + String(r.stderr) : "not built";
+    if (wasmOk) {
+      check("wasm: the companion loader marshals typed arrays in and out, copies `fill` back, and a 1M-element batch grows memory",
+        lines.includes(`wasm | ${roundTrip}`), detail);
+      check("wasm: a trap (squares(-1) -> RuntimeError) releases the arena and the next call works", lines.includes("trap | RuntimeError | 4.5"), detail);
+    }
+    if (napiOk) {
+      check("N-API: typed arrays are borrowed (fill mutates the Int32Array in place), results are fresh typed arrays, i64 is a bigint",
+        lines.includes(`napi | ${roundTrip}`), detail);
+      check("N-API: strings cross both ways (UTF-8 preserved) and a non-string argument is a TypeError",
+        lines.includes("strings | hello | café \u{1F600} | 2 | pick: argument 2 (a) must be a string"), detail);
+      const ex = spawnSync("node", ["examples/node-addon.mjs", addon], { cwd: root });
+      check("examples/node-addon.mjs demonstrates the arrays addon (zero-copy fill, typed-array results)",
+        ex.status === 0 && String(ex.stdout).includes("fill(buf, 7) leaves buf = 7,7,7,7") && String(ex.stdout).includes("scale([1,2,3], 2) = 2,4,6 (Float64Array)"), String(ex.stdout) + String(ex.stderr));
+    }
+    if (wasmOk) {
+      const host = spawnSync("node", ["examples/node-host.mjs", wasm, "scale", "f64:1,2,3", "2"], { cwd: root });
+      check("examples/node-host.mjs picks up the companion loader and passes a Float64Array", String(host.stdout).trim() === "scale(1, 2, 3, 2) = 2, 4, 6", String(host.stdout) + String(host.stderr));
     }
   }
 }

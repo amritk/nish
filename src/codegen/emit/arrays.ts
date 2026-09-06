@@ -42,7 +42,7 @@
  */
 import ts from "typescript";
 import { CheckedProgram } from "../../checker";
-import { ARRAY_STRUCT, StaticType, alignOf, llvmType } from "../../types";
+import { ARRAY_STRUCT, StaticType, TYPED_ARRAY_ALIASES, alignOf, llvmType } from "../../types";
 import { ARRAY_TYPE } from "../runtime";
 import { emitIntBinary } from "./arithmetic";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, StatementEmitter } from "./context";
@@ -191,6 +191,8 @@ newEmitters.Array = (ctx, expr) => {
   storeData(ctx, arr, data);
   return arr;
 };
+// `new Int32Array(n)` and friends are `new Array<T>(n)` with `T` fixed by the checker: same lowering.
+for (const name of Object.keys(TYPED_ARRAY_ALIASES)) newEmitters[name] = newEmitters.Array;
 
 // ---- Element access -------------------------------------------------------------------
 

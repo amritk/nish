@@ -117,17 +117,21 @@ Two ways, both generated from the same signatures as the IR
 - **WebAssembly**: `scripts/build.sh a.ll -o a.wasm --profile wasm` builds a
   freestanding module; `WebAssembly.instantiate` loads it and every exported
   scalar function is callable directly (`examples/node-host.mjs`).
-  `--emit-dts a.d.ts` writes the typings. Strings and arrays are not
-  available in this profile because it does not link the C runtime.
+  `--emit-dts a.d.ts` writes the typings and `a.mjs`, a loader that passes
+  `Int32Array` / `Float64Array` / `BigInt64Array` arguments by copying them
+  into the module's memory (link `runtime/runtime_wasm.c`). Strings are not
+  available in this profile because it has no WASI runtime.
 - **Native addon**: `--emit-napi a_napi.c` writes an N-API shim,
   `scripts/build.sh a.ll runtime/runtime.c a_napi.c -o a.node --profile napi`
   builds the addon, and `require("./a.node")` loads it
-  (`examples/node-addon.mjs`). Scalar functions are bridged with argument
-  type checks; string-taking functions are listed as skipped for now.
+  (`examples/node-addon.mjs`). Numbers, booleans, `i64` (bigint), strings and
+  typed arrays are bridged with argument type checks; a typed array is
+  borrowed zero-copy, so writes through it are visible in JS.
 
 Design the boundary around batches: one call that processes a whole buffer,
 not one call per element. `node bench/ffi.mjs` measures the difference
-(about 40 ns per N-API call, 3 ns per wasm call, before any work is done).
+(about 30 ns per N-API call, 2 ns per wasm call, before any work is done;
+0.5 ns per element when a 1M-element `Float64Array` crosses in one call).
 
 ### Why not embed a JavaScript engine for npm packages?
 

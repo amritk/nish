@@ -201,8 +201,8 @@ function makeTransformer(unit, stems) {
         return shimCall("strLen", [ts.visitNode(node.expression, visit)]);
       }
 
-      // ---- new Array<T>(n) -> zero-filled ----
-      if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Array") {
+      // ---- new Array<T>(n) (and the Int32Array/Float64Array/BigInt64Array aliases) -> zero-filled ----
+      if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && /^(Array|Int32Array|Float64Array|BigInt64Array)$/.test(node.expression.text)) {
         const t = typeOf(node);
         const n = ts.visitNode(node.arguments[0], visit);
         return shimCall("newArray", [n, zeroOf(t.elem)]);

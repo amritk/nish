@@ -8,8 +8,10 @@
 #   speed  -O3 + LTO + section GC + strip. Rust `--release` equivalent.
 #   size   -Oz + LTO + section GC + strip + no unwind tables. Rust
 #          `opt-level="z"`, `panic="abort"`, `strip=true` equivalent.
-#   wasm   wasm32 freestanding module exporting every non-internal function
-#          (for modules that do not use the C runtime); load it from Node.
+#   wasm   wasm32 freestanding module exporting every non-internal function;
+#          load it from Node. Add runtime/runtime_wasm.c to the inputs when a
+#          function uses arrays (the arena and the array cold paths, no libc);
+#          strings and I/O still need a WASI runtime and are not available.
 #   napi   Node addon (<out>.node): the speed flags plus -shared -fPIC, built
 #          against the Node headers next to `node` (override: NODE_INCLUDE=<dir
 #          containing node_api.h>). Inputs: <modules.ll> runtime/runtime.c and
@@ -102,7 +104,9 @@ case "$profile" in
       echo "error: the wasm profile needs wasm-ld (install lld; on macOS: brew install llvm@18)" >&2
       exit 2
     fi
-    "$CC" -Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib \
+    # -mbulk-memory lowers llvm.memset/memcpy (`new Array<T>(n)`, `push` growth) to the
+    # memory.fill/memory.copy instructions instead of libc calls the freestanding link lacks.
+    "$CC" -Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib -mbulk-memory \
       -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections \
       "${inputs[@]}" -o "$out" ;;
   napi)

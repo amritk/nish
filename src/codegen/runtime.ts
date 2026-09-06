@@ -188,6 +188,15 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     effect: "write",
   },
   {
+    // Host entry (WP8): header + `len` uninitialised elements, `len == cap`. Compiled code
+    // never calls it (literals and `new Array` use the inline allocator); the wasm loader and
+    // C hosts do, so it is part of the declared ABI and of statictsc.h.
+    name: "sts_alloc_array",
+    signature: "declare noalias noundef nonnull align 8 %struct.sts_array* @sts_alloc_array(i64 noundef, i64 noundef)",
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
     name: "sts_panic_index",
     // Bounds-check failure: prints "index out of range: <idx> >= <len>" and exits 1.
     signature: "declare void @sts_panic_index(i64 noundef, i64 noundef)",

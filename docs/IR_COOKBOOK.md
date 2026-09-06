@@ -2692,6 +2692,7 @@ declare noalias noundef nonnull align 8 i8* @sts_read_file(i8* noundef nonnull r
 declare void @sts_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @sts_append_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @sts_array_grow(%struct.sts_array* noundef nonnull align 8 nocapture, i64 noundef) #2
+declare noalias noundef nonnull align 8 %struct.sts_array* @sts_alloc_array(i64 noundef, i64 noundef) #2
 declare void @sts_panic_index(i64 noundef, i64 noundef) #5
 declare void @sts_panic_div(i1 noundef zeroext) #5
 

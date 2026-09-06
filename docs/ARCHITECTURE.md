@@ -46,7 +46,7 @@ Compilation                                                            src/compi
 | Emitter | `src/codegen/emitter.ts` + `codegen/emit/*.ts` | Lowers the checked program to IR text: module assembly, function setup, `declare`s for imports, the `@main` wrapper, the runtime prelude, and dispatch to per-construct emitters. Contains no user-facing error handling. |
 | IR builder | `src/codegen/ir.ts` | `IRModule`, `IRFunction`, `IRBlock`: named blocks, hoisted allocas, SSA temp numbering (`%0` is always the first temp because every block and parameter is named), attribute-group interning. |
 | Runtime ABI | `src/codegen/runtime.ts` | The `declare` lines, attributes, and memory effects of every runtime symbol and intrinsic; the IR text of the inline arena allocator; the `%struct.sts_arena` / `%struct.sts_array` layouts. |
-| Runtime | `runtime/runtime.c`, `runtime/statictsc.h` | The C implementation: chunked bump arena with marks (`sts_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, exit, files, array growth, the bounds-check and division panics. The header is the public C ABI. `runtime/shim.mjs` is the Node-side twin used by the differential tests. |
+| Runtime | `runtime/runtime.c`, `runtime/statictsc.h`, `runtime/runtime_wasm.c` | The C implementation: chunked bump arena with marks (`sts_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, exit, files, array growth and `sts_alloc_array` (the host entry the wasm loader uses), the bounds-check and division panics. The header is the public C ABI. `runtime_wasm.c` is the freestanding subset (arena over linear memory, arrays, trapping panics) for the wasm profile. `runtime/shim.mjs` is the Node-side twin used by the differential tests. |
 | Interop | `src/interop/{abi,header,dts,napi}.ts` | C header, wasm `.d.ts`, and N-API shim generators, all derived from the same checked signatures the IR was emitted from. |
 | Build | `scripts/build.sh`, `size-report.sh`, `smoke.sh` | The clang/LTO profiles, the size table, the example smoke test. |
 | Tests | `tests/run.js` + `tests/{cases,link,ir,layout}`, `tests/runtime_test.c`, `tests/driver.c` | Goldens, native round trips, link tests, ABI guards, memory checks, interop, exit codes, packaging, benchmark checksums. |
@@ -162,7 +162,7 @@ host is a contract that a test enforces:
 | --- | --- | --- |
 | Arena state `%struct.sts_arena = { i8* buf, i64 off, i64 cap, i8* chunks }`, bumped directly by the inlined fast path | `codegen/runtime.ts` (`ARENA_TYPE`, `inlineAllocator`), `runtime.c` (`struct sts_arena`), `statictsc.h` | **alloc smoke** (`tests/ir/alloc_smoke.ll` + `alloc_smoke_main.c`): the `--runtime-decls` prelude plus an IR function that allocates twice is linked against `runtime.c` with LTO and must observe a 16-byte bump for two 12-byte objects (`tests/run.js`, section B) |
 | String `{ i64 len, i8 data[len], i8 0 }`, 8-aligned, immutable | `codegen/emit/strings.ts`, `runtime.c` (`sts_str`), `statictsc.h` | `tests/runtime_test.c` (concat, eq, formatting), every `str_*` golden and native round trip |
-| Array header `%struct.sts_array = { i64 len, i64 cap, i8* data }` | `codegen/runtime.ts` (`ARRAY_TYPE`), `runtime.c`, `statictsc.h` | `tests/runtime_test.c` (`sts_array_grow`), `arr_*` native round trips, `arr_bounds_panic` (exit 1 and message) |
+| Array header `%struct.sts_array = { i64 len, i64 cap, i8* data }` | `codegen/runtime.ts` (`ARRAY_TYPE`), `runtime.c`, `runtime_wasm.c`, `statictsc.h`, `interop/wasm.ts` (offsets 0 / 16 on wasm32) | `tests/runtime_test.c` (`sts_array_grow`, `sts_alloc_array`), `arr_*` native round trips, `arr_bounds_panic` (exit 1 and message), the WP4/WP8 block of `tests/run.js` (a C driver's stack-built header, the wasm loader and the N-API addon agreeing on `examples/arrays.ts`) |
 | Class/interface layout = clang's layout of the same C struct | `checker/classes.ts` (offsets, size, align) | **layout test** (`tests/layout/structs.ts` + `structs.c`): the runner reads each `sts_alloc_struct(i64 N)` from the IR and compares it with `_Static_assert(sizeof(struct X) == N)`; the C program is built with `-Wall -Wextra -Werror`, fills every struct through the C definition, and reads each field back through compiled getters |
 | Every runtime function has a prototype in the public header | `codegen/runtime.ts`, `runtime/statictsc.h` | **header test** (`tests/run.js`, WP8 section): every name in `RUNTIME_FUNCTIONS` (minus intrinsics) plus `sts_arena` must appear in `statictsc.h`, which must compile as C11 `-pedantic` and as C++17 under `-Wall -Wextra -Werror` |
 | Generated C header matches the IR's signatures | `interop/header.ts` | `add.h` content check; a C driver compiled against it with `-Werror` and run |
@@ -436,10 +436,10 @@ toolchain-dependent steps when LLVM is not installed:
 | Path | Contents |
 | --- | --- |
 | `src/` | the compiler (see the pipeline table) |
-| `runtime/` | `runtime.c`, `statictsc.h`, `shim.mjs` (the Node-side runtime for the differential tests) |
+| `runtime/` | `runtime.c`, `statictsc.h`, `runtime_wasm.c` (freestanding arena + arrays for the wasm profile), `shim.mjs` (the Node-side runtime for the differential tests) |
 | `scripts/` | `build.sh`, `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
 | `tests/` | `run.js`, `cases/`, `link/`, `ir/`, `layout/`, `differential/` (`run.js`, `lib.js`, `rewrite.js`, `fuzz.js`, `corpus/`, `known-failures.txt`), `runtime_test.c`, `driver.c` |
-| `examples/` | `add.ts`, `hello.ts`, `math.ts`, `strings.ts`, `nbody.ts`, `multi/`, `main.c`, `node-host.mjs`, `node-addon.mjs` |
+| `examples/` | `add.ts`, `hello.ts`, `math.ts`, `strings.ts`, `arrays.ts` (typed arrays across the boundary), `nbody.ts`, `multi/`, `main.c`, `node-host.mjs`, `node-addon.mjs` |
 | `bench/` | `run.mjs`, `README.md`, `{fib,nbody,spectral,sieve,strbuild,vec3}.{ts,c,rs}`, `strbuild_naive.c`, `rss.c`; `sum.ts` and `ffi.mjs` (the WP8 FFI benchmark) |
 | `docs/` | this documentation; `docs/README.md` is the index |
 | `.github/workflows/` | `ci.yml` (Ubuntu + macOS, LLVM 18), `release.yml` (tag-driven tarball) |

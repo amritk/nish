@@ -40,6 +40,20 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 - **Interop.** `--emit-header` (C header), `--emit-dts` (TypeScript
   declarations for the wasm exports), `--emit-napi` (N-API shim) plus the
   `napi` and `wasm` build profiles; an FFI benchmark.
+- **Typed arrays across the boundary.** `Int32Array`, `Float64Array` and
+  `BigInt64Array` are accepted as type annotations and as `new Int32Array(n)`;
+  they are the same type as `i32[]` / `f64[]` / `i64[]` (one layout). Exported
+  functions taking or returning them cross to Node: the N-API shim borrows a
+  JS typed array zero-copy (`napi_get_typedarray_info` under a stack
+  `sts_array` header) and returns a fresh typed array, and also bridges
+  `string` and `i64` (bigint) arguments and results, releasing the arena per
+  call; `--emit-dts` now also writes `<file>.mjs`, a loader that copies typed
+  arrays into wasm memory through the new `sts_alloc_array` runtime entry and
+  copies results (and written-through arguments) back. `runtime/runtime_wasm.c`
+  is a freestanding arena + arrays runtime for the wasm profile (which now
+  passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
+  `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
+  `bench/ffi.mjs` gains the batched `Float64Array` rows.
 - **Arrays.** `T[]` / `Array<T>`, literals, `new Array<T>(n)`, indexing with
   bounds checks (panic on out-of-range), `.length`, `push`, `for ... of`, and
   `--unchecked-indexing` for benchmarks.

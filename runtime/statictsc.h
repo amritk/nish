@@ -101,9 +101,27 @@ sts_str *sts_read_file(const sts_str *path);
 void sts_write_file(const sts_str *path, const sts_str *data);
 void sts_append_file(const sts_str *path, const sts_str *data);
 
-/* Arrays (WP4): `T[]` is an `sts_array *`; `data` holds `cap` elements of one
- * fixed size in the arena. Only the two cold paths live in the runtime. */
+/* ---- Arrays (WP4) -------------------------------------------------------
+ * A StaticTS `T[]` (also spelled `Int32Array` / `Float64Array` /
+ * `BigInt64Array` for i32 / f64 / i64 elements) is a pointer to this header:
+ *   %struct.sts_array = type { i64 len, i64 cap, i8* data }
+ * `data` holds `cap` elements of one fixed size (int32_t 4, double 8,
+ * int64_t 8, bool 1, pointers 8), 8-byte aligned when the runtime allocated
+ * it. A generated header spells a parameter the callee only reads as
+ * `const sts_array *` and one it writes through (`a[i] = v`, `push`) as
+ * `sts_array *`; the element type is in the comment above each prototype.
+ *
+ * Passing a host buffer: build the header yourself (`sts_array a = { n, n,
+ * (char *)buf }`) and pass `&a`. The callee treats it like any array, so a
+ * `push` that grows it copies the elements into the arena and leaves your
+ * buffer behind; the callee must not retain the pointer beyond the call.
+ * A returned array lives in the arena (valid until the next reset/release):
+ * copy `len` elements out of `data` before recycling. */
 typedef struct sts_array { uint64_t len; uint64_t cap; char *data; } sts_array;
+/* A fresh arena array of `len` uninitialised elements (`len == cap`), for a
+ * host that wants the runtime to own the storage (the wasm loader does). */
+sts_array *sts_alloc_array(uint64_t elem_size, uint64_t len);
+/* The cold paths compiled code calls: `push` when len == cap, a failed bounds check. */
 void sts_array_grow(sts_array *a, uint64_t elem_size);
 void sts_panic_index(uint64_t idx, uint64_t len);
 

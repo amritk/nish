@@ -81,7 +81,8 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 | `i64` | `i64` | 8 / 8 | `int64_t` | Never the lowering of `number`; wrapping arithmetic; literals only by context. |
 | `boolean` | `i1` | 1 / 1 | `bool` | `zeroext` at the ABI boundary. |
 | `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }` | 8 / 8 (pointer) | `const sts_str *` in, `sts_str *` out | Immutable, 8-aligned, NUL-terminated (so `data` is a C string; sharing a pointer is always safe, nothing is ever copied); literals are module constants, everything else lives in the arena; `len` is the UTF-8 byte length. |
-| `T[]`, `Array<T>` | `%struct.sts_array*` to `{ i64 len, i64 cap, i8* data }` | 8 / 8 (pointer); header 24 bytes | (not representable) | One element type; `data` holds `cap` elements of `sizeof(T)`; bounds-checked. |
+| `T[]`, `Array<T>` | `%struct.sts_array*` to `{ i64 len, i64 cap, i8* data }` | 8 / 8 (pointer); header 24 bytes | `const sts_array *` in (read-only), `sts_array *` in (written through) and out | One element type; `data` holds `cap` elements of `sizeof(T)`; bounds-checked. |
+| `Int32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). |
 | `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, and narrowing: [Nullable types](#nullable-types). |
 | `void` | `void` | – | `void` | Return type only. |
@@ -95,8 +96,13 @@ Type rules:
 
 - **Accepted type syntax**: `number`, `i32`, `i64`, `f64`, `boolean`,
   `string`, `void`, `T[]`, `Array<T>` (exactly one type argument:
-  `` `Array` needs exactly one type argument ``), and the name of a class or
-  interface declared or imported in the module. Anything else is
+  `` `Array` needs exactly one type argument ``), `Int32Array`,
+  `Float64Array`, `BigInt64Array` (no type argument:
+  `` `Float64Array` takes no type argument (it is an alias of `f64[]`) ``,
+  `tests/cases/reject_arr_typed_view_type_annotation_arg`; a `Float64Array`
+  is an `f64[]` wherever one is expected and vice versa,
+  `tests/cases/arr_typed_views`, `reject_arr_typed_view_mismatch`), and the
+  name of a class or interface declared or imported in the module. Anything else is
   `` Unsupported type `...` `` / `` Unsupported type reference `...` ``
   (`src/types.ts`; `tests/cases/reject_union_type`, `reject_function_type`).
   `T | null` (or `null | T`) is accepted when `T` is a class, interface,
@@ -599,6 +605,11 @@ check away at `-O1`). Floating-point division is never checked: `x / 0` on
   `U | null` (whose zero fill is `null`); type argument and length required
   (`tests/cases/arr_new_zeroed`, `mem_nullable`;
   `reject_arr_new_string`: `` would zero-fill with null string values ``).
+- `new Int32Array(n)`, `new Float64Array(n)`, `new BigInt64Array(n)`: the
+  same as `new Array<i32>(n)`, `new Array<f64>(n)`, `new Array<i64>(n)`, with
+  the same lowering (`tests/cases/arr_typed_views`); a type argument is
+  `` `new Int32Array` takes no type argument ``
+  (`reject_arr_typed_view_typearg`).
 - Anything else is `` Unsupported `new X` `` / `` Unknown class `X` ``;
   `new Function` and `new Proxy` are forbidden (`reject_new_function`,
   `reject_proxy`).
@@ -798,6 +809,11 @@ compiler's own marks are never invalidated by user resets.
 - **`new Array<T>(n)` zero-fills** (`0` / `false`), no holes; pointer element
   types are rejected because a zeroed pointer would be null
   (`tests/cases/arr_new_zeroed`, `reject_arr_new_string`).
+- **Typed-array names are aliases, not views.** `Int32Array` is `i32[]` with
+  every array operation, `push` included; there is no separate buffer type,
+  no `subarray`, and no `Uint8Array` / `Float32Array` (`boolean[]` has no
+  flat JS view because an `i1` must be 0 or 1). At a host boundary the
+  alias names the JS typed array that crosses ([wp8-interop.md](wp8-interop.md)).
 - **Evaluation order** follows JavaScript: `x op= e` reads `x` before
   evaluating `e` (`tests/cases/cf_compound_assign`); `a[i] = v` evaluates
   `a`, `i`, `v`, then checks and stores; `a[i] op= v` evaluates `a`, `i`,

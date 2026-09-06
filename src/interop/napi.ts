@@ -1,23 +1,37 @@
 /**
  * `--emit-napi <shim.c>`: a Node-API (N-API) shim that turns every external
- * scalar function into a JS function.
+ * function whose types JS can carry into a JS function.
  *
  * The shim is plain C against node_api.h (Node's stable ABI, so the addon
  * survives Node upgrades without a rebuild). Per function it:
  *   1. reads the arguments (`napi_get_cb_info`) and checks the count,
- *   2. type-checks each one (`napi_typeof`): `number` must be a JS number
- *      (converted with ToInt32 semantics in i32 mode, i.e. like `x | 0`),
- *      `boolean` must be a JS boolean,
+ *   2. type-checks and converts each one:
+ *        number   a JS number; ToInt32 semantics in i32 mode (like `x | 0`)
+ *        boolean  a JS boolean
+ *        i64      a JS bigint (`napi_get_value_bigint_int64`)
+ *        string   a JS string, copied into an arena `sts_str`
+ *                 (`napi_get_value_string_utf8`, measured first, then copied)
+ *        Int32Array / Float64Array / BigInt64Array (i32[] / f64[] / i64[])
+ *                 a JS typed array of exactly that kind, *borrowed*: the
+ *                 `sts_array` header is built on the C stack over the typed
+ *                 array's own bytes (`napi_get_typedarray_info`), so nothing
+ *                 is copied and writes through the parameter land in the
+ *                 caller's buffer. The callee must not retain the pointer
+ *                 beyond the call (the arena does not own it), and a `push`
+ *                 that grows the array moves it into the arena, invisibly to JS.
  *   3. calls the StaticTS function through its C ABI,
- *   4. boxes the result (`napi_create_int32` / `napi_create_double` /
- *      `napi_get_boolean`, or `undefined` for void).
+ *   4. boxes the result: `napi_create_int32` / `napi_create_double` /
+ *      `napi_get_boolean` / `napi_create_bigint_int64`, `undefined` for void,
+ *      `napi_create_string_utf8` for a string, and a fresh typed array
+ *      (`napi_create_arraybuffer` + memcpy + `napi_create_typedarray`) for an
+ *      array, so the JS value never aliases the arena.
  * A violated check throws a TypeError naming the function and parameter.
  *
- * Functions with string parameters or results are skipped with a comment:
- * marshalling JS strings into arena strings (and deciding who resets the
- * arena) is the buffer-passing design of a later package. The shim always
- * exposes `sts_reset_arena` / `sts_free_arena` so a host can recycle memory
- * that scalar functions allocated internally.
+ * Functions that touch the arena (a string or array parameter or result)
+ * bracket the call with `sts_arena_mark` / `sts_arena_release`: every arena
+ * string or array made for the call is recycled before the wrapper returns,
+ * so a host never has to reset the arena for bridged calls. `sts_reset_arena`
+ * / `sts_free_arena` are still exported for hosts that want to.
  *
  * Build: scripts/build.sh <modules.ll> runtime/runtime.c <shim.c> -o x.node --profile napi
  */
@@ -31,30 +45,128 @@ import {
   cType,
   externalFunctions,
   ExternalFunction,
-  isScalar,
   kindOf,
   tsKeyword,
   tsSignature,
+  typedView,
 } from "./abi";
 
-/** How one scalar type is read from a JS value: the napi_valuetype it must have and the getter. */
-function argReader(t: StaticType): { jsType: string; typeTag: string; getter: string } {
-  switch (kindOf(t)) {
-    case "i32":
-      return { jsType: "number", typeTag: "napi_number", getter: "napi_get_value_int32" };
-    case "f64":
-      return { jsType: "number", typeTag: "napi_number", getter: "napi_get_value_double" };
-    case "bool":
-      return { jsType: "boolean", typeTag: "napi_boolean", getter: "napi_get_value_bool" };
-    default:
-      throw new Error(`no N-API reader for type kind ${kindOf(t)}`);
-  }
+/** `a Float64Array`, `an Int32Array`. */
+export function withArticle(noun: string): string {
+  return `${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun}`;
 }
 
-function wrapper(fn: ExternalFunction): string[] {
+/** How a JS value becomes a parameter of this type: check, getter, C declaration. */
+interface Reader {
+  /** The JS type named in the TypeError. */
+  jsType: string;
+  /** Declaration and conversion lines for parameter `c` read from `argv[i]`; `fail(msg)` is the failing return. */
+  lines(c: string, i: number, fail: (msg: string) => string): string[];
+  /** Needs the shared `napi_valuetype type` local. */
+  usesTypeof: boolean;
+  /** Allocates in the arena or borrows JS memory: the call is arena-scoped. */
+  arena: boolean;
+}
+
+const SCALAR_READERS: Record<string, { jsType: string; tag: string; getter: string; c: string }> = {
+  i32: { jsType: "number", tag: "napi_number", getter: "napi_get_value_int32", c: "int32_t" },
+  f64: { jsType: "number", tag: "napi_number", getter: "napi_get_value_double", c: "double" },
+  bool: { jsType: "boolean", tag: "napi_boolean", getter: "napi_get_value_bool", c: "bool" },
+  i64: { jsType: "bigint", tag: "napi_bigint", getter: "napi_get_value_bigint_int64", c: "int64_t" },
+};
+
+function reader(t: StaticType, written: boolean): Reader | undefined {
+  const scalar = SCALAR_READERS[kindOf(t)];
+  if (scalar) {
+    const convert = (c: string, i: number) =>
+      kindOf(t) === "i64" ? `${scalar.getter}(env, argv[${i}], &${c}, &lossless)` : `${scalar.getter}(env, argv[${i}], &${c})`;
+    return {
+      jsType: scalar.jsType,
+      usesTypeof: true,
+      arena: false,
+      lines: (c, i, fail) => [
+        `${scalar.c} ${c};`,
+        `if (napi_typeof(env, argv[${i}], &type) != napi_ok || type != ${scalar.tag})`,
+        `  return ${fail(`must be a ${scalar.jsType}`)};`,
+        `if (${convert(c, i)} != napi_ok)`,
+        `  return ${fail("could not be converted")};`,
+      ],
+    };
+  }
+  if (kindOf(t) === "string") {
+    return {
+      jsType: "string",
+      usesTypeof: true,
+      arena: true,
+      lines: (c, i, fail) => [
+        `const sts_str *${c};`,
+        `if (napi_typeof(env, argv[${i}], &type) != napi_ok || type != napi_string)`,
+        `  return ${fail("must be a string")};`,
+        `if ((${c} = sts_napi_string_arg(env, argv[${i}])) == NULL)`,
+        `  return ${fail("could not be converted")};`,
+      ],
+    };
+  }
+  const view = typedView(t);
+  if (view) {
+    return {
+      jsType: view.ctor,
+      usesTypeof: false,
+      arena: true,
+      lines: (c, i, fail) => [
+        `sts_array ${c}_hdr; /* borrowed: the ${view.ctor}'s own bytes, for this call only */`,
+        `if (!sts_napi_array_arg(env, argv[${i}], ${view.napiType}, &${c}_hdr))`,
+        `  return ${fail(`must be ${withArticle(view.ctor)}`)};`,
+        `${cType(t, "param", written)}${c} = &${c}_hdr;`,
+      ],
+    };
+  }
+  return undefined;
+}
+
+/** The boxing call for a result of this type, or undefined when it cannot cross. */
+function boxer(t: StaticType): { call: (value: string) => string; arena: boolean } | undefined {
+  const scalar: Record<string, string> = {
+    i32: "napi_create_int32",
+    f64: "napi_create_double",
+    bool: "napi_get_boolean",
+    i64: "napi_create_bigint_int64",
+  };
+  const k = kindOf(t);
+  if (scalar[k]) return { call: (v) => `${scalar[k]}(env, ${v}, &out)`, arena: false };
+  if (k === "void") return { call: () => "napi_get_undefined(env, &out)", arena: false };
+  if (k === "string") return { call: (v) => `napi_create_string_utf8(env, ${v}->data, ${v}->len, &out)`, arena: true };
+  const view = typedView(t);
+  if (view) return { call: (v) => `sts_napi_array_result(env, ${v}, ${view.napiType}, ${view.elemSize}, &out)`, arena: true };
+  return undefined;
+}
+
+/** What one function needs from the shim's shared helpers. */
+interface Plan {
+  fn: ExternalFunction;
+  readers: Reader[];
+  box: NonNullable<ReturnType<typeof boxer>>;
+  /** Strings or arrays cross: bracket the call with an arena mark/release. */
+  scoped: boolean;
+}
+
+function plan(fn: ExternalFunction): Plan | undefined {
+  const readers: Reader[] = [];
+  for (const p of fn.sig.params) {
+    const r = reader(p.type, fn.writtenParams.has(p.name));
+    if (!r) return undefined;
+    readers.push(r);
+  }
+  const box = boxer(fn.sig.returnType);
+  if (!box) return undefined;
+  return { fn, readers, box, scoped: box.arena || readers.some((r) => r.arena) };
+}
+
+function wrapper({ fn, readers, box, scoped }: Plan): string[] {
   const { sig } = fn;
   const name = sig.name;
   const n = sig.params.length;
+  const fail = (msg: string) => (scoped ? `sts_napi_fail_at(env, mark, "${msg}")` : `sts_napi_fail(env, "${msg}")`);
   const lines: string[] = [`static napi_value sts_napi_${name}(napi_env env, napi_callback_info info) {`];
   if (n === 0) {
     lines.push("  (void)info;");
@@ -65,50 +177,48 @@ function wrapper(fn: ExternalFunction): string[] {
       "  if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok)",
       `    return sts_napi_fail(env, "${name}: cannot read arguments");`,
       `  if (argc < ${n})`,
-      `    return sts_napi_fail(env, "${name} expects ${n} argument${n === 1 ? "" : "s"}");`,
-      "  napi_valuetype type;"
+      `    return sts_napi_fail(env, "${name} expects ${n} argument${n === 1 ? "" : "s"}");`
     );
+    if (readers.some((r) => r.usesTypeof)) lines.push("  napi_valuetype type;");
+    if (sig.params.some((p) => kindOf(p.type) === "i64")) lines.push("  bool lossless;");
   }
-  sig.params.forEach((p, i) => {
-    const r = argReader(p.type);
-    const c = cParamName(p.name);
-    lines.push(
-      `  ${cType(p.type, "param")} ${c};`,
-      `  if (napi_typeof(env, argv[${i}], &type) != napi_ok || type != ${r.typeTag})`,
-      `    return sts_napi_fail(env, "${name}: argument ${i + 1} (${p.name}) must be a ${r.jsType}");`,
-      `  if (${r.getter}(env, argv[${i}], &${c}) != napi_ok)`,
-      `    return sts_napi_fail(env, "${name}: argument ${i + 1} (${p.name}) could not be converted");`
-    );
+  if (scoped) lines.push("  uint64_t mark = sts_arena_mark(); /* arena strings/arrays made for this call are released on return */");
+  readers.forEach((r, i) => {
+    const p = sig.params[i];
+    const what = `${name}: argument ${i + 1} (${p.name})`;
+    lines.push(...r.lines(cParamName(p.name), i, (msg) => fail(`${what} ${msg}`)).map((l) => `  ${l}`));
   });
 
   const call = `${cFunctionName(name).ident}(${sig.params.map((p) => cParamName(p.name)).join(", ")})`;
-  const boxers: Record<string, string> = {
-    i32: "napi_create_int32",
-    f64: "napi_create_double",
-    bool: "napi_get_boolean",
-  };
-  const retKind = kindOf(sig.returnType);
   lines.push("  napi_value out;");
-  if (retKind === "void") {
-    lines.push(`  ${call};`, "  if (napi_get_undefined(env, &out) != napi_ok)");
-  } else {
-    lines.push(`  ${cType(sig.returnType, "return")} result = ${call};`, `  if (${boxers[retKind]}(env, result, &out) != napi_ok)`);
-  }
-  lines.push(`    return sts_napi_fail(env, "${name}: cannot create the result");`, "  return out;", "}", "");
+  if (kindOf(sig.returnType) === "void") lines.push(`  ${call};`);
+  else lines.push(`  ${cType(sig.returnType, "return")}${cType(sig.returnType, "return")!.endsWith("*") ? "" : " "}result = ${call};`);
+  lines.push(`  if (${box.call("result")} != napi_ok)`, `    return ${fail(`${name}: cannot create the result`)};`);
+  if (scoped) lines.push("  sts_arena_release(mark);");
+  lines.push("  return out;", "}", "");
   return lines;
 }
 
 export function generateNapiShim(compilation: Compilation): string {
   const fns = externalFunctions(compilation);
-  const bridged: ExternalFunction[] = [];
+  const plans: Plan[] = [];
   const skipped: string[] = [];
   for (const fn of fns) {
     const source = `${fn.unit.fileName}: ${tsSignature(fn.sig, tsKeyword)}`;
-    if (fn.sig.name === "main") skipped.push(`${source} -- not bridged: \`main\` is reserved for a process entry`);
-    else if (!isScalar(fn.sig.returnType) || fn.sig.params.some((p) => !isScalar(p.type)))
-      skipped.push(`${source} -- not bridged: string values are not marshalled by this shim`);
-    else bridged.push(fn);
+    if (fn.sig.name === "main") {
+      skipped.push(`${source} -- not bridged: \`main\` is reserved for a process entry`);
+      continue;
+    }
+    const p = plan(fn);
+    if (p) plans.push(p);
+    else skipped.push(`${source} -- not bridged: only numbers, booleans, i64, strings and Int32Array/Float64Array/BigInt64Array cross this shim`);
   }
+  const needs = {
+    string: plans.some((p) => p.readers.some((r) => r.jsType === "string")),
+    arrayArg: plans.some((p) => p.readers.some((r) => r.jsType.endsWith("Array"))),
+    arrayResult: plans.some((p) => typedView(p.fn.sig.returnType) !== undefined),
+    scoped: plans.some((p) => p.scoped),
+  };
 
   const lines: string[] = [
     banner(compilation, "--emit-napi", (t) => `/* ${t}`),
@@ -116,27 +226,85 @@ export function generateNapiShim(compilation: Compilation): string {
     " * Build it into an addon together with the compiled module(s) and the runtime:",
     " *   scripts/build.sh <modules.ll> runtime/runtime.c <this file> -o <name>.node --profile napi",
     " * Then `require(\"./<name>.node\")` (or createRequire in ESM) and call the",
-    " * functions below. Numbers convert with ToInt32 (`x | 0`) in i32 mode.",
+    " * functions below. Numbers convert with ToInt32 (`x | 0`) in i32 mode; typed",
+    " * arrays are borrowed for the call (writes through them are visible to JS);",
+    " * strings and array results are copied, and the arena is released per call.",
     " */",
     "#include <node_api.h>",
     "#include <stdbool.h>",
     "#include <stddef.h>",
     "#include <stdint.h>",
+    ...(needs.arrayResult ? ["#include <string.h>"] : []),
     '#include "statictsc.h" /* runtime/; the napi profile adds it to the include path */',
     "",
     "/* C ABI of the bridged StaticTS functions (identical to --emit-header). */",
   ];
-  for (const fn of bridged) lines.push(`${cPrototype(fn.sig)!};`);
+  for (const p of plans) lines.push(`${cPrototype(p.fn.sig, p.fn.writtenParams)!};`);
   lines.push("");
   for (const s of skipped) lines.push(`/* ${s} */`);
   if (skipped.length) lines.push("");
 
-  if (bridged.length > 0) {
+  if (plans.length > 0) {
     lines.push(
       "/* Throw a TypeError; returning NULL hands `undefined` back while the exception is pending. */",
       "static napi_value sts_napi_fail(napi_env env, const char *message) {",
       "  napi_throw_type_error(env, NULL, message);",
       "  return NULL;",
+      "}",
+      ""
+    );
+  }
+  if (needs.scoped) {
+    lines.push(
+      "/* The same, from a call that already marked the arena: release first. */",
+      "static napi_value sts_napi_fail_at(napi_env env, uint64_t mark, const char *message) {",
+      "  sts_arena_release(mark);",
+      "  return sts_napi_fail(env, message);",
+      "}",
+      ""
+    );
+  }
+  if (needs.string) {
+    lines.push(
+      "/* A JS string as an arena string: the first call measures, the second copies (NUL included). */",
+      "static sts_str *sts_napi_string_arg(napi_env env, napi_value value) {",
+      "  size_t len;",
+      "  if (napi_get_value_string_utf8(env, value, NULL, 0, &len) != napi_ok) return NULL;",
+      "  sts_str *s = (sts_str *)sts_alloc_struct(sizeof(uint64_t) + len + 1);",
+      "  if (napi_get_value_string_utf8(env, value, s->data, len + 1, &len) != napi_ok) return NULL;",
+      "  s->len = len;",
+      "  return s;",
+      "}",
+      ""
+    );
+  }
+  if (needs.arrayArg) {
+    lines.push(
+      "/* A typed array of the expected kind as a borrowed sts_array header over its own bytes. */",
+      "static bool sts_napi_array_arg(napi_env env, napi_value value, napi_typedarray_type want, sts_array *out) {",
+      "  bool is_typedarray;",
+      "  napi_typedarray_type type;",
+      "  size_t len;",
+      "  void *data;",
+      "  if (napi_is_typedarray(env, value, &is_typedarray) != napi_ok || !is_typedarray) return false;",
+      "  if (napi_get_typedarray_info(env, value, &type, &len, &data, NULL, NULL) != napi_ok || type != want) return false;",
+      "  out->len = out->cap = len;",
+      "  out->data = (char *)data;",
+      "  return true;",
+      "}",
+      ""
+    );
+  }
+  if (needs.arrayResult) {
+    lines.push(
+      "/* An arena array as a fresh typed array: copied, because the arena is released when the call returns. */",
+      "static napi_status sts_napi_array_result(napi_env env, const sts_array *a, napi_typedarray_type type, size_t elem_size, napi_value *out) {",
+      "  void *data;",
+      "  napi_value buffer;",
+      "  napi_status status = napi_create_arraybuffer(env, a->len * elem_size, &data, &buffer);",
+      "  if (status != napi_ok) return status;",
+      "  if (a->len) memcpy(data, a->data, a->len * elem_size);",
+      "  return napi_create_typedarray(env, type, a->len, buffer, 0, out);",
       "}",
       ""
     );
@@ -162,8 +330,8 @@ export function generateNapiShim(compilation: Compilation): string {
     "}",
     ""
   );
-  for (const fn of bridged) {
-    lines.push(`/* ${fn.unit.fileName}: ${tsSignature(fn.sig, tsKeyword)} */`, ...wrapper(fn));
+  for (const p of plans) {
+    lines.push(`/* ${p.fn.unit.fileName}: ${tsSignature(p.fn.sig, tsKeyword)} */`, ...wrapper(p));
   }
 
   lines.push(
@@ -171,7 +339,7 @@ export function generateNapiShim(compilation: Compilation): string {
     "  const char *name;",
     "  napi_callback callback;",
     "} sts_napi_exports[] = {",
-    ...bridged.map((fn) => `  {"${fn.sig.sourceName}", sts_napi_${fn.sig.name}},`),
+    ...plans.map((p) => `  {"${p.fn.sig.sourceName}", sts_napi_${p.fn.sig.name}},`),
     '  {"sts_reset_arena", sts_napi_reset_arena},',
     '  {"sts_free_arena", sts_napi_free_arena},',
     "};",
