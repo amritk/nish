@@ -2,7 +2,15 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
-    "includes": ["src/**", "tests/**/*.js", "examples/**", "!**/dist", "!**/build", "!**/node_modules", "!tests/cases"]
+    "includes": [
+      "src/**",
+      "tests/**/*.js",
+      "examples/**",
+      "!**/dist",
+      "!**/build",
+      "!**/node_modules",
+      "!tests/cases"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -20,7 +28,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "style": {
         "useImportType": "off",
         "useTemplate": "off",
