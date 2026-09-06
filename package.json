@@ -16,6 +16,7 @@
     "size-report": "npm run build && node dist/index.js examples/add.ts -o build/add.ll && bash scripts/size-report.sh build/add.ll examples/main.c",
     "check": "tsc -p tsconfig.json --noEmit",
     "test:update": "npm run build && UPDATE_GOLDENS=1 node tests/run.js",
+    "test:diff": "npm run build && node tests/differential/run.js",
     "lint": "biome check --formatter-enabled=false .",
     "format": "biome format --write ."
   },

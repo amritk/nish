@@ -1,0 +1,16 @@
+# Programs whose native behaviour is known to differ from Node. One program name per
+# line; `#` starts a comment. Every entry is explained, with a reproducer, in
+# docs/wp13-differential.md ("Discrepancies"). The runner reports these as KNOWN and
+# does not fail on them; a listed program that starts to agree is reported as XPASS.
+#
+# Regenerate from the current results with: node tests/differential/run.js --update-known
+
+# By design (documented in docs/wp7-runtime.md and README.md)
+corpus/f64_libm            # glibc libm vs V8 fdlibm: 1-ulp differences in sin/cos/log/pow
+corpus/f64_minmax_nan      # llvm.minnum/maxnum return the non-NaN operand; JS returns NaN
+corpus/f64_round_negzero   # Math.round(-0.3) is +0 here, -0 in JS
+
+# Semantic gaps found by this harness
+corpus/f64_pow_spec        # pow(±1, ±Infinity) and pow(1, NaN): C99 says 1, ECMAScript says NaN
+corpus/int_div_overflow    # INT_MIN / -1: undefined (sdiv) -> SIGFPE; JS gives INT_MIN
+corpus/int_div_zero        # x / 0, x % 0: undefined (sdiv/srem) -> SIGFPE; JS gives 0 after | 0
