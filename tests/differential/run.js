@@ -96,7 +96,7 @@ async function main(argv) {
       if (verbose) {
         console.log(`      --- native stdout\n${indent(String(r.native.stdout))}`);
         console.log(`      --- node stdout\n${indent(String(r.node.stdout))}`);
-        if (r.node.stderr.length) console.log(`      --- node stderr\n${indent(String(r.node.stderr))}`);
+        if (r.node.stderr.length > 0) console.log(`      --- node stderr\n${indent(String(r.node.stderr))}`);
       }
     } else if (r.verdict === "compile-error" || r.verdict === "rewrite-error") {
       console.log(indent(r.detail.trim().split("\n").slice(0, 8).join("\n")));

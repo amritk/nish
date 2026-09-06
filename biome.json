@@ -1,11 +1,19 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
-  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
     "includes": [
       "src/**",
       "tests/**/*.js",
       "examples/**",
+      "docs/cookbook/**/*.ts",
+      "docs/*.mjs",
+      "bench/**/*.ts",
+      "bench/**/*.mjs",
       "!**/dist",
       "!**/build",
       "!**/node_modules",
@@ -29,27 +37,100 @@
     "enabled": true,
     "rules": {
       "preset": "recommended",
+      "complexity": {
+        "noVoid": "error",
+        "useOptionalChain": "off",
+        "useArrowFunction": "error"
+      },
       "style": {
+        "noEnum": "error",
+        "noNamespace": "error",
+        "noParameterAssign": "error",
+        "useConsistentArrayType": {
+          "level": "error",
+          "options": {
+            "syntax": "shorthand"
+          }
+        },
+        "useExplicitLengthCheck": "error",
+        "useExponentiationOperator": "off",
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": {
+            "strictCase": false,
+            "requireAscii": true,
+            "filenameCases": [
+              "kebab-case",
+              "snake_case"
+            ]
+          }
+        },
         "useImportType": "off",
         "useTemplate": "off",
-        "noNonNullAssertion": "off"
+        "noNonNullAssertion": "off",
+        "useConsistentTypeDefinitions": {
+          "level": "warn",
+          "options": {
+            "style": "type"
+          }
+        },
+        "useConsistentMethodSignatures": {
+          "level": "warn",
+          "options": {
+            "style": "property"
+          }
+        },
+        "useShorthandFunctionType": "error",
+        "useConsistentArrowReturn": "error"
+      },
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noVar": "error"
       }
     }
   },
   "assist": {
-    "actions": { "source": { "organizeImports": "off" } }
+    "actions": {
+      "source": {
+        "organizeImports": "off"
+      }
+    }
   },
   "overrides": [
     {
-      "includes": ["examples/**"],
+      "includes": [
+        "examples/**",
+        "docs/cookbook/**",
+        "bench/**/*.ts"
+      ],
       "linter": {
         "rules": {
           "correctness": {
             "noUnusedVariables": "off",
-            "noUnusedFunctionParameters": "off"
+            "noUnusedFunctionParameters": "off",
+            "noPrecisionLoss": "off"
+          },
+          "suspicious": {
+            "noApproximativeNumericConstant": "off"
+          },
+          "style": {
+            "useConsistentTypeDefinitions": "off",
+            "useConsistentMethodSignatures": "off"
           }
         }
       }
+    },
+    {
+      "includes": [
+        "src/**",
+        "tests/**/*.js",
+        "docs/*.mjs",
+        "bench/**/*.mjs",
+        "examples/*.mjs"
+      ],
+      "plugins": [
+        "biome-plugins/no-function-declaration.grit"
+      ]
     }
   ]
 }

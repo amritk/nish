@@ -217,8 +217,9 @@ const COMPOUND_OPCODES: Partial<Record<ts.SyntaxKind, [string, string]>> = {
 };
 
 function unwrapParens(expr: ts.Expression): ts.Expression {
-  while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
-  return expr;
+  let inner = expr;
+  while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
+  return inner;
 }
 
 /**

@@ -41,8 +41,9 @@ import { LocalVar } from "./program";
 import { Scope } from "./scope";
 
 function unwrapParens(expr: ts.Expression): ts.Expression {
-  while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
-  return expr;
+  let inner = expr;
+  while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
+  return inner;
 }
 
 export function isNullLiteral(expr: ts.Expression): boolean {

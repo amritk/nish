@@ -218,15 +218,15 @@ export class IRModule {
         "\n"
       ),
     ];
-    if (this.typeDecls.length) sections.push(this.typeDecls.join("\n"));
-    if (this.globals.length) sections.push(this.globals.join("\n"));
-    if (this.declarations.length) sections.push(this.declarations.join("\n"));
-    if (this.rawDefinitions.length) sections.push(this.rawDefinitions.join("\n\n"));
-    if (this.functions.length) sections.push(this.functions.map((f) => f.toString()).join("\n\n"));
-    if (this.attrGroups.length) {
+    if (this.typeDecls.length > 0) sections.push(this.typeDecls.join("\n"));
+    if (this.globals.length > 0) sections.push(this.globals.join("\n"));
+    if (this.declarations.length > 0) sections.push(this.declarations.join("\n"));
+    if (this.rawDefinitions.length > 0) sections.push(this.rawDefinitions.join("\n\n"));
+    if (this.functions.length > 0) sections.push(this.functions.map((f) => f.toString()).join("\n\n"));
+    if (this.attrGroups.length > 0) {
       sections.push(this.attrGroups.map((a, i) => `attributes #${i} = { ${a} }`).join("\n"));
     }
-    if (this.metadata.length) {
+    if (this.metadata.length > 0) {
       sections.push([...this.namedMetadata, ...this.metadata.map((m, i) => `!${i} = ${m}`)].join("\n"));
     }
     return sections.join("\n\n") + "\n";
