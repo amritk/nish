@@ -273,10 +273,37 @@ The supported direction is the reverse:
 - `scripts/build.sh --profile wasm` produces a module `WebAssembly.instantiate`
   loads directly; `examples/node-host.mjs` shows it. Exports use the plain C
   ABI (`i32`, `f64`, `i1`), so no glue code is needed for scalars.
-- Native `.node` addons (N-API) and `--target` cross builds are on the roadmap;
-  the emitted IR is target-neutral, so they are linker work, not compiler work.
+- Native `.node` addons: `--emit-napi` writes a Node-API shim in C and
+  `--profile napi` builds it with the module and the runtime into an addon
+  that `require` loads; `examples/node-addon.mjs` shows it.
 - Design the boundary around buffers: pass a whole array or string in, process
-  it in native memory, return one result.
+  it in native memory, return one result. An N-API call costs about 40 ns and
+  a wasm call about 3 ns before any work is done (`node bench/ffi.mjs`).
+
+Three flags write host-side declarations from the same signatures the IR was
+emitted from (details in [docs/wp8-interop.md](docs/wp8-interop.md)):
+
+```bash
+node dist/index.js examples/add.ts -o build/add.ll \
+  --emit-header build/add.h        # C prototypes: int32_t add(int32_t a, int32_t b);
+  --emit-dts build/add.d.ts        # typings for the wasm exports + load(bytes)
+  --emit-napi build/add_napi.c     # N-API shim with argument type checks
+
+# C host: include runtime/statictsc.h (sts_str, arena API) via -Iruntime
+clang -Iruntime -Ibuild build/add.ll runtime/runtime.c my_host.c -o my_host
+
+# Node addon
+scripts/build.sh build/add.ll runtime/runtime.c build/add_napi.c -o build/add.node --profile napi
+node examples/node-addon.mjs build/add.node
+# add(2, 3) = 5
+# add("2", 3) throws: add: argument 1 (a) must be a number
+```
+
+`number` maps to `int32_t` (or `double` under `--number-mode f64`), `boolean`
+to `bool`, `string` to `sts_str *` (`{ uint64_t len; char data[]; }`, arena
+owned, valid until `sts_reset_arena()`). The N-API shim bridges scalar
+functions and lists string-taking ones as skipped; the `.d.ts` does the same
+for the freestanding wasm profile.
 
 ## Project layout
 
