@@ -2,8 +2,8 @@
 @.str.1 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 
-declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #1
-declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #1
+declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
 
 define noundef i32 @test() #0 {
 entry:
@@ -22,4 +22,3 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }

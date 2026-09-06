@@ -3,7 +3,7 @@
 @.str.2 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 
 declare zeroext i1 @sts_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
-declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #3
+declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #1
 
 define noundef nonnull align 8 i8* @first() #0 {
 entry:
@@ -31,4 +31,3 @@ entry:
 attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind willreturn memory(argmem: read) }
-attributes #3 = { nounwind }

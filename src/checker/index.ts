@@ -16,22 +16,22 @@
 import ts from "typescript";
 import { CompileError } from "../diagnostics";
 import { CompilerOptions, StaticType, typeToString } from "../types";
-import { CheckContext } from "./context";
 import {
   collectFunctionSignature,
   collectImports,
   markEntryMain,
   rejectNonFunctionExport,
 } from "./declarations";
+import { CheckContext, LoopInfo } from "./context";
 import { expressionCheckers } from "./expressions";
 import { CheckedProgram, FunctionSig, ImportBinding, LocalVar } from "./program";
 import { Scope } from "./scope";
-import { checkStatements, statementCheckers } from "./statements";
+import { checkStatements, checkVariableDeclarationList, statementCheckers } from "./statements";
 
 export * from "./program";
 export { Scope } from "./scope";
 export { ENTRY_MAIN_SYMBOL } from "./declarations";
-export type { CheckContext, StatementChecker, ExpressionChecker, BinaryChecker } from "./context";
+export type { CheckContext, StatementChecker, ExpressionChecker, BinaryChecker, UnaryChecker } from "./context";
 
 export interface CheckerModuleOptions {
   /** The entry module may (and with `--link` must) declare `export function main`. */
@@ -46,6 +46,7 @@ export class Checker implements CheckContext {
   readonly program: CheckedProgram;
   /** Local name -> signature: own functions plus bound imports. */
   readonly sigs = new Map<string, FunctionSig>();
+  readonly loops: LoopInfo[] = [];
   current!: FunctionSig;
   private readonly isEntry: boolean;
 
@@ -177,6 +178,10 @@ export class Checker implements CheckContext {
     const t = handler(this, expr, scope);
     this.program.types.set(expr, t);
     return t;
+  }
+
+  declareVariables(list: ts.VariableDeclarationList, scope: Scope): void {
+    checkVariableDeclarationList(this, list, scope);
   }
 }
 

@@ -33,31 +33,31 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
   {
     name: "sts_arena_grow",
     signature: "declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef)",
-    attrs: ["nounwind", "cold", "noinline", "allocsize(0)"],
+    attrs: ["nounwind", "willreturn", "cold", "noinline", "allocsize(0)"],
     effect: "write",
   },
   {
     name: "sts_reset_arena",
     signature: "declare void @sts_reset_arena()",
-    attrs: ["nounwind"],
+    attrs: ["nounwind", "willreturn"],
     effect: "write",
   },
   {
     name: "sts_free_arena",
     signature: "declare void @sts_free_arena()",
-    attrs: ["nounwind"],
+    attrs: ["nounwind", "willreturn"],
     effect: "write",
   },
   {
     name: "sts_str_new",
     signature: `declare noalias noundef nonnull align 8 i8* @sts_str_new(i8* noundef readonly nocapture, i64 noundef)`,
-    attrs: ["nounwind"],
+    attrs: ["nounwind", "willreturn"],
     effect: "write",
   },
   {
     name: "sts_str_concat",
     signature: `declare noalias noundef nonnull align 8 i8* @sts_str_concat(${STR_NOCAP}, ${STR_NOCAP})`,
-    attrs: ["nounwind"],
+    attrs: ["nounwind", "willreturn"],
     effect: "write",
   },
   {
@@ -75,19 +75,19 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
   {
     name: "sts_print",
     signature: `declare void @sts_print(${STR_NOCAP})`,
-    attrs: ["nounwind"],
+    attrs: ["nounwind", "willreturn"],
     effect: "write",
   },
   {
     name: "sts_str_from_i32",
     signature: "declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef)",
-    attrs: ["nounwind"],
+    attrs: ["nounwind", "willreturn"],
     effect: "write",
   },
   {
     name: "sts_str_from_f64",
     signature: "declare noalias noundef nonnull align 8 i8* @sts_str_from_f64(double noundef)",
-    attrs: ["nounwind"],
+    attrs: ["nounwind", "willreturn"],
     effect: "write",
   },
 ];
@@ -124,4 +124,4 @@ slow:
 }`;
 }
 
-export const INLINE_ALLOCATOR_ATTRS = ["alwaysinline", "nounwind", "allocsize(0)"];
+export const INLINE_ALLOCATOR_ATTRS = ["alwaysinline", "nounwind", "willreturn", "allocsize(0)"];

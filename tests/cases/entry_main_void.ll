@@ -1,4 +1,4 @@
-declare void @sts_free_arena() #1
+declare void @sts_free_arena() #2
 
 define void @side() #0 {
 entry:
@@ -20,3 +20,4 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }

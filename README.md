@@ -332,6 +332,16 @@ Supported today:
 - Template literals `` `n=${n}` `` with string, number, and boolean holes, chained through `sts_str_concat`.
 - `console.log(x)` for `x: string | number | boolean`, statement position only, lowered to `sts_print`.
 - Number to string via `sts_str_from_i32` / `sts_str_from_f64` (`%.17g`; shortest round-trip formatting is WP7). See [docs/wp3-strings.md](docs/wp3-strings.md).
+- `if` / `else` (including `else if` chains); conditions must be `boolean`, there is no truthiness.
+- `while` loops.
+- `do ... while` loops.
+- `for (init; cond; update)` loops; a `let` in the initializer is scoped to the loop.
+- `break` and `continue` (unlabelled) inside loops.
+- `throw <expr>`: aborts via `llvm.trap` (no unwinding); the thrown value is discarded for now.
+- Ternary `c ? a : b` with both arms of the same type, lowered to `phi`.
+- Short-circuit `&&` / `||` on booleans (the right operand runs only when needed).
+- Compound assignment `+= -= *= /= %=` on mutable numeric locals.
+- Prefix and postfix `++` / `--` on mutable numeric locals (postfix yields the old value).
 
 Rejected with a diagnostic (`file:line:col: error: ...`):
 

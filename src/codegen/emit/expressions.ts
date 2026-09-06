@@ -5,8 +5,13 @@
  */
 import ts from "typescript";
 import { StaticType, llvmType } from "../../types";
-import { BinaryEmitter, EmitterTable, ExpressionEmitter } from "./context";
 import { emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from "./strings";
+import { BinaryEmitter, EmitterTable, ExpressionEmitter, UnaryEmitter } from "./context";
+import {
+  controlFlowBinaryEmitters,
+  controlFlowExpressionEmitters,
+  controlFlowUnaryEmitters,
+} from "./control-flow";
 
 // ---- Constants --------------------------------------------------------------------
 
@@ -39,19 +44,28 @@ const emitIdentifier: ExpressionEmitter = (ctx, expr) => {
 
 // ---- Operators --------------------------------------------------------------------
 
-const emitPrefixUnary: ExpressionEmitter = (ctx, node) => {
-  const expr = node as ts.PrefixUnaryExpression;
+const emitNegate: UnaryEmitter = (ctx, expr) => {
   const type = ctx.typeOf(expr.operand);
   const operand = ctx.emitExpression(expr.operand);
-  switch (expr.operator) {
-    case ts.SyntaxKind.MinusToken:
-      return type.kind === "f64"
-        ? ctx.fn.emitValue(`fneg double ${operand}`)
-        : ctx.fn.emitValue(`sub i32 0, ${operand}`);
-    case ts.SyntaxKind.ExclamationToken:
-      return ctx.fn.emitValue(`xor i1 ${operand}, true`);
-  }
-  throw new Error(`emitter: unexpected unary operator ${ts.SyntaxKind[expr.operator]}`);
+  return type.kind === "f64"
+    ? ctx.fn.emitValue(`fneg double ${operand}`)
+    : ctx.fn.emitValue(`sub i32 0, ${operand}`);
+};
+
+const emitNot: UnaryEmitter = (ctx, expr) => ctx.fn.emitValue(`xor i1 ${ctx.emitExpression(expr.operand)}, true`);
+
+/** Prefix operators keyed by operator token, mirroring `unaryCheckers`. */
+export const unaryEmitters: EmitterTable<UnaryEmitter> = {
+  [ts.SyntaxKind.MinusToken]: emitNegate,
+  [ts.SyntaxKind.ExclamationToken]: emitNot,
+  ...controlFlowUnaryEmitters,
+};
+
+const emitPrefixUnary: ExpressionEmitter = (ctx, node) => {
+  const expr = node as ts.PrefixUnaryExpression;
+  const handler = unaryEmitters[expr.operator];
+  if (!handler) throw new Error(`emitter: unexpected unary operator ${ts.SyntaxKind[expr.operator]}`);
+  return handler(ctx, expr);
 };
 
 /** Opcode per operator: [integer form, floating-point form]. */
@@ -96,6 +110,7 @@ export const binaryEmitters: EmitterTable<BinaryEmitter> = {
   [ts.SyntaxKind.EqualsToken]: emitAssignment,
   ...Object.fromEntries(Object.keys(ARITHMETIC_OPCODES).map((k) => [k, emitArithmetic])),
   ...stringBinaryEmitters, // string-aware `+`, `===`, `!==` (numeric lowering unchanged)
+  ...controlFlowBinaryEmitters,
 };
 
 const emitBinary: ExpressionEmitter = (ctx, node) => {
@@ -132,4 +147,5 @@ export const expressionEmitters: EmitterTable<ExpressionEmitter> = {
   [ts.SyntaxKind.BinaryExpression]: emitBinary,
   [ts.SyntaxKind.CallExpression]: emitCall,
   ...stringExpressionEmitters,
+  ...controlFlowExpressionEmitters,
 };

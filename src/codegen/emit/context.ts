@@ -8,13 +8,23 @@
 import ts from "typescript";
 import { CheckedProgram, LocalVar } from "../../checker";
 import { CompilerOptions, StaticType } from "../../types";
-import { IRFunction } from "../ir";
+import { IRBlock, IRFunction } from "../ir";
+
+/** Branch targets of an enclosing loop, for `break` and `continue`. */
+export interface LoopTarget {
+  breakBlock: IRBlock;
+  continueBlock: IRBlock;
+  /** Set once a `break` has targeted this loop; an infinite loop without one never exits. */
+  hasBreak: boolean;
+}
 
 export interface EmitContext {
   readonly program: CheckedProgram;
   readonly opts: CompilerOptions;
   /** Function currently being emitted. */
   readonly fn: IRFunction;
+  /** Enclosing loops, innermost last. Handlers push and pop. */
+  readonly loops: LoopTarget[];
 
   /** Alloca slot (`%x.addr`) for a local variable. */
   slotOf(local: LocalVar): string;
@@ -30,15 +40,20 @@ export interface EmitContext {
   useRuntime(name: string): string;
   /** `i8*` constant expression for a string literal; identical texts share one `@.str.N`. */
   stringConstant(text: string): string;
+  /** Add a module-level `declare` line (e.g. an LLVM intrinsic); duplicates are ignored. */
+  declare(text: string): void;
 
   emitStatement(stmt: ts.Statement): void;
   emitBlock(block: ts.Block): void;
   /** Lower an expression and return the LLVM value holding its result. */
   emitExpression(expr: ts.Expression): string;
+  /** Lower the `let`/`const` locals of a declaration list (a statement's or a `for` initializer's). */
+  emitVariableDeclarations(list: ts.VariableDeclarationList): void;
 }
 
 export type StatementEmitter = (ctx: EmitContext, stmt: ts.Statement) => void;
 export type ExpressionEmitter = (ctx: EmitContext, expr: ts.Expression) => string;
 export type BinaryEmitter = (ctx: EmitContext, expr: ts.BinaryExpression) => string;
+export type UnaryEmitter = (ctx: EmitContext, expr: ts.PrefixUnaryExpression) => string;
 
 export type EmitterTable<H> = Partial<Record<ts.SyntaxKind, H>>;

@@ -1,6 +1,6 @@
 @.str.0 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"hello, world\00" }, align 8
 
-declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #1
 
 define noundef nonnull align 8 i8* @greeting() #0 {
 entry:
@@ -16,4 +16,3 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind }

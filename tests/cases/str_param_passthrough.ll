@@ -2,7 +2,7 @@
 @.str.1 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"pass\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"printed\00" }, align 8
 
-declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #1
 
 define noundef nonnull align 8 i8* @passthrough(i8* noundef nonnull noalias readonly align 8 %s) #0 {
 entry:
@@ -32,4 +32,3 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind }

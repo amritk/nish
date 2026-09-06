@@ -1,5 +1,5 @@
 declare noundef i32 @square(i32 noundef) #0
-declare void @sts_free_arena() #1
+declare void @sts_free_arena() #2
 
 define noundef i32 @sts_main() #0 {
 entry:
@@ -16,3 +16,4 @@ entry:
 
 attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }

@@ -40,6 +40,8 @@ export class IRFunction {
   private nextTemp = 0;
   /** Instructions hoisted into the entry block before everything else (allocas). */
   private readonly entryPrelude: string[] = [];
+  /** How many times each block base name has been handed out (`if.then`, `if.then.1`, ...). */
+  private readonly labelCounts = new Map<string, number>();
   /** Function attribute group reference, e.g. "#0". Empty when none. */
   attrGroup = "";
   returnAttrs: string[] = [];
@@ -85,6 +87,25 @@ export class IRFunction {
 
   get currentBlock(): IRBlock {
     return this.current;
+  }
+
+  /**
+   * Create a block whose label is unique within the function: the first
+   * `if.then` is `if.then`, later ones `if.then.1`, `if.then.2`, ... The
+   * block is not part of the function until `placeBlock` appends it, so
+   * labels can be reserved in source order while blocks are laid out in
+   * control-flow order. Named blocks never consume an SSA number.
+   */
+  newBlock(base: string): IRBlock {
+    const n = this.labelCounts.get(base) ?? 0;
+    this.labelCounts.set(base, n + 1);
+    return new IRBlock(n === 0 ? base : `${base}.${n}`);
+  }
+
+  /** Append a block to the function body and make it the insertion point. */
+  placeBlock(block: IRBlock): void {
+    this.blocks.push(block);
+    this.current = block;
   }
 
   toString(): string {
