@@ -36,7 +36,9 @@ const checkNumericLiteral: ExpressionChecker = (ctx, node, scope) => {
   if (!Number.isInteger(n)) {
     throw ctx.error(`Non-integer literal \`${expr.text}\` in i32 number mode (use --number-mode f64)`, expr);
   }
-  if (n > 0x7fffffff) throw ctx.error(`Literal \`${expr.text}\` does not fit in i32`, expr);
+  // `-2147483648` parses as minus applied to 2147483648; allow exactly that form.
+  const negated = ts.isPrefixUnaryExpression(expr.parent) && expr.parent.operator === ts.SyntaxKind.MinusToken;
+  if (n > 0x7fffffff + (negated ? 1 : 0)) throw ctx.error(`Literal \`${expr.text}\` does not fit in i32`, expr);
   return I32;
 };
 

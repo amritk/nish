@@ -272,6 +272,9 @@ const checkIdentifier: Validator = (node, sf) => {
 };
 
 const checkBinary: Validator = (node, sf) => {
+  if ((node as ts.BinaryExpression).operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+    fail("Nullish coalescing `??` is forbidden in StaticTS (narrow with `!== null` instead)", node, sf);
+  }
   const bin = node as ts.BinaryExpression;
   switch (bin.operatorToken.kind) {
     case ts.SyntaxKind.EqualsEqualsToken:
@@ -310,6 +313,9 @@ const rejectSpreadAssignment: Validator = (node, sf) =>
   fail("Object spread is forbidden in StaticTS (object layout is fixed at compile time)", node, sf);
 
 const checkCall: Validator = (node, sf) => {
+  if ((node as ts.CallExpression).questionDotToken) {
+    fail("Optional chaining `?.` is forbidden in StaticTS (narrow with `!== null` instead)", node, sf);
+  }
   const call = node as ts.CallExpression;
   if (call.expression.kind === ts.SyntaxKind.ImportKeyword) {
     fail("Dynamic `import()` is forbidden in StaticTS (modules are resolved at compile time)", call, sf);
@@ -337,6 +343,7 @@ const checkNew: Validator = (node, sf) => {
 
 const checkPropertyAccess: Validator = (node, sf) => {
   const access = node as ts.PropertyAccessExpression;
+  if (access.questionDotToken) fail("Optional chaining `?.` is forbidden in StaticTS (narrow with `!== null` instead)", access, sf);
   const name = access.name.text;
   if (name === "__proto__")
     fail("`__proto__` access is forbidden in StaticTS (no prototype chain)", access.name, sf);
@@ -352,6 +359,9 @@ const checkPropertyAccess: Validator = (node, sf) => {
 };
 
 const checkElementAccess: Validator = (node, sf) => {
+  if ((node as ts.ElementAccessExpression).questionDotToken) {
+    fail("Optional chaining `?.` is forbidden in StaticTS (narrow with `!== null` instead)", node, sf);
+  }
   const access = node as ts.ElementAccessExpression;
   const key = access.argumentExpression;
   if (ts.isStringLiteralLike(key) || ts.isTemplateExpression(key)) {
