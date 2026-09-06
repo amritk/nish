@@ -15,7 +15,7 @@ import path from "node:path";
 import os from "node:os";
 import { Compilation, EmittedModule } from "./compiler";
 import { CompileError } from "./diagnostics";
-import { generateDts, generateHeader, generateNapiShim } from "./interop";
+import { generateDts, generateHeader, generateNapiShim, generateWasmLoader, wasmLoaderPath } from "./interop";
 import { NumberMode } from "./types";
 import { SUPPORTED_TARGETS, resolveTarget } from "./codegen/target";
 import { PKG_ROOT, packageVersion } from "./version";
@@ -93,7 +93,8 @@ function usage(): never {
       "  --plain                    no performance attributes or alignment hints",
       "  --runtime-decls            always emit the runtime ABI prelude (arena + strings)",
       "  --emit-header <file.h>     also write a C header for the callable functions",
-      "  --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports",
+      "  --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports, plus",
+      "                             <file>.mjs, a loader that marshals typed arrays",
       "  --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)",
       "  --unchecked-indexing       drop array bounds checks (unsafe; for benchmarks)",
       "  --target <triple>|host     emit `target datalayout`/`target triple` for that machine",
@@ -278,6 +279,8 @@ function main(argv: string[]): number {
   const sidecars: [string | undefined, () => string][] = [
     [emitHeader, () => generateHeader(compilation, emitHeader!)],
     [emitDts, () => generateDts(compilation)],
+    // The `.d.ts` declares `load()`; the `.mjs` next to it implements it (array marshalling included).
+    [emitDts && wasmLoaderPath(emitDts), () => generateWasmLoader(compilation, emitDts!)],
     [emitNapi, () => generateNapiShim(compilation)],
   ];
   for (const [file, generate] of sidecars) {

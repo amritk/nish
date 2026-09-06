@@ -18,12 +18,15 @@ order, no hidden context, no name mangling. `runtime/statictsc.h` is the
 public header for the runtime side of that ABI, and `--emit-header` writes
 the user side.
 
-| StaticTS | LLVM | C | N-API (JS) | wasm export (JS) |
+| StaticTS | LLVM | C | N-API (JS) | wasm export (JS, through the generated loader) |
 | --- | --- | --- | --- | --- |
 | `number` (i32 mode), `i32` | `i32` | `int32_t` | `number`, converted with ToInt32 (`x \| 0`) | `number` |
 | `number` (f64 mode), `f64` | `double` | `double` | `number` | `number` |
+| `i64` | `i64` | `int64_t` | `bigint` | `bigint` |
 | `boolean` | `i1` (`zeroext`) | `bool` | `boolean` | in: `boolean`; out: `0 \| 1` |
-| `string` | `i8*` | `const sts_str *` in, `sts_str *` out | skipped | not available |
+| `string` | `i8*` | `const sts_str *` in, `sts_str *` out | `string`, copied into the arena in, copied out | not available (no WASI runtime) |
+| `i32[]` / `Int32Array`, `f64[]` / `Float64Array`, `i64[]` / `BigInt64Array` | `%struct.sts_array*` | `const sts_array *` in (read-only), `sts_array *` in (written through) and out | that typed array; borrowed in (zero-copy), fresh typed array out | that typed array; copied into the arena in, copied out |
+| other arrays (`string[]`, `boolean[]`, `T[][]`, `C[]`), classes, `T \| null` | pointers | `sts_array *` for arrays; classes not declared | skipped | skipped |
 | `void` | `void` | `void` | `undefined` | `void` |
 
 `sts_str` is `{ uint64_t len; char data[]; }`: `len` is the UTF-8 byte
@@ -31,6 +34,17 @@ length, `data` is NUL-terminated so it doubles as a C string. Strings are
 immutable and live in the arena: a string a StaticTS function returns stays
 valid until `sts_reset_arena()` or `sts_free_arena()`, and a host never frees
 one. Literals live in the module's constant data and outlive resets.
+
+`sts_array` is `{ uint64_t len; uint64_t cap; char *data; }`
+([wp4-arrays.md](wp4-arrays.md#layout-abi)): `data` holds `cap` elements of
+one fixed size (the header comment names the C element type). A C host
+passes its own buffer by building the header on the stack,
+`sts_array a = { n, n, (char *)buf };`, and reads a returned array's `len`
+elements out of `data` before recycling the arena. `sts_alloc_array(elemSize,
+len)` makes a fresh arena array for hosts that want the runtime to own the
+storage; it is what the wasm loader calls. A parameter is `const sts_array *`
+when the function provably never stores through it, the same whole-program
+proof that gives the IR parameter `readonly`, and `sts_array *` otherwise.
 
 `runtime/statictsc.h` also declares `struct sts_arena` with its global
 (the compiled fast path bumps it directly, so the layout is ABI) and every
@@ -81,6 +95,20 @@ int32_t add(int32_t a, int32_t b);
   supplies the `_` Mach-O prepends). Parameters named after C keywords or
   `<stdbool.h>` macros get a trailing underscore; their names are documentation
   only.
+- Arrays: `examples/arrays.ts` gives
+
+  ```c
+  /* sumF64(xs: number[]): number -- xs: double elements */
+  double sumF64(const sts_array *xs);
+  /* fill(xs: number[], v: number): void -- xs: int32_t elements */
+  void fill(sts_array *xs, int32_t v);
+  /* scale(xs: number[], k: number): number[] -- xs: double elements, returns double elements */
+  sts_array *scale(const sts_array *xs, double k);
+  ```
+
+  `tests/run.js` links a `-Werror` driver that hands `sumI32` and `fill` a
+  stack-built header over an `int32_t buf[4]` (the writes land in `buf`) and
+  reads `squares(4)->data`.
 - Compile a host against it with the runtime directory on the include path:
 
 ```bash
@@ -88,44 +116,100 @@ clang -std=c11 -Wall -Wextra -Werror -Wno-override-module -Iruntime -Ibuild \
       build/add.ll runtime/runtime.c my_host.c -o my_host
 ```
 
-## `--emit-dts <file.d.ts>`: typings for the wasm build
+## `--emit-dts <file.d.ts>`: typings and a loader for the wasm build
 
 `scripts/build.sh --profile wasm` links a freestanding wasm32 module with
 `--export-all`, so JavaScript sees every external function directly, with
-the wasm C ABI: `i32` and `f64` are JS numbers; an `i1` result arrives as the
-number `0` or `1` (typed `WasmBool`), while `true`/`false` are fine as
-arguments because ToInt32 maps them to 1/0. Strings need `runtime.c`, which
-the freestanding profile does not link, so functions that take or return a
-string are listed as comments:
+the wasm C ABI: `i32` and `f64` are JS numbers, `i64` is a bigint; an `i1`
+result arrives as the number `0` or `1` (typed `WasmBool`), while
+`true`/`false` are fine as arguments because ToInt32 maps them to 1/0. An
+array is an `i32` pointer to an arena header, which is not a JS value, so
+`--emit-dts x.d.ts` writes two files: the declarations, whose signatures use
+`Int32Array` / `Float64Array` / `BigInt64Array`, and `x.mjs`, the loader that
+implements them. Strings need a WASI runtime, which the freestanding profile
+does not have, so functions that take or return a string are listed as
+comments:
 
 ```ts
-// Generated by statictsc --emit-dts from examples/strings.ts; do not edit.
+// Generated by statictsc --emit-dts from examples/arrays.ts; do not edit.
 export type WasmBool = 0 | 1;
 
 export interface Exports {
   /** Linear memory of the instance (the arena and string constants live here). */
   readonly memory: WebAssembly.Memory;
+  /** runtime_wasm.c: recycle everything the module allocated (arrays passed and returned are already copies). */
+  sts_reset_arena(): void;
+  sts_free_arena(): void;
   // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: string values need the StaticTS runtime, ...
-  /** examples/add.ts: add(a: number, b: number): number */
-  add(a: number, b: number): number;
+  /** examples/arrays.ts: scale(xs: number[], k: number): number[] */
+  scale(xs: Float64Array, k: number): Float64Array;
+  /** examples/arrays.ts: fill(xs: number[], v: number): void */
+  fill(xs: Int32Array, v: number): void;
+  /** examples/arrays.ts: sumI64(xs: i64[]): i64 */
+  sumI64(xs: BigInt64Array): bigint;
 }
 
 export function load(bytes: BufferSource): Promise<Exports>;
 ```
 
-`load` is the four-line loader `examples/node-host.mjs` implements
-(`WebAssembly.instantiate(bytes, {})` and return `instance.exports`); the
-declaration lets a TypeScript host import the wasm module with full types:
+The loader (`src/interop/wasm.ts`) instantiates the module and returns the
+raw exports with every array-taking function wrapped. Scalar-only exports
+are passed through untouched. A wrapped call, `scale(xs, 2)`:
 
-```ts
-import { load } from "./add";           // add.d.ts + your copy of load()
-const { add } = await load(readFileSync("build/add.wasm"));
-add(2, 3);                              // number
+```js
+scale: (xs, k) => scoped(() => {
+  const xs$ = arrayIn(xs, Float64Array, 8, "scale: argument 1 (xs)");
+  return arrayOut(raw.scale(xs$, k), Float64Array);
+}),
 ```
 
-`node examples/node-host.mjs build/add.wasm add 40 2` calls any export by
-name from the command line. A WASI variant of the runtime (WP7) is what
-makes string functions callable from wasm; the typings will follow it.
+1. `scoped` takes `sts_arena_mark()` first and calls `sts_arena_release(mark)`
+   in a `finally`, so every arena byte the call used is recycled even when
+   the module traps.
+2. `arrayIn` checks `xs instanceof Float64Array` (a `TypeError` naming the
+   function and parameter otherwise), asks the module for
+   `sts_alloc_array(8n, len)`, reads the header's `data` pointer (offset 16;
+   `len` is the `i64` at offset 0, `cap` at 8), and `.set(xs)` through a
+   `Float64Array` view on `memory.buffer`. The copy costs one `memcpy`
+   (`bench/ffi.mjs`: about 0.6 ns per element on top of the loop).
+3. `arrayOut` reads `len` and `data` from the returned header and returns
+   `new Float64Array(memory.buffer, data, len).slice()`: a copy, because the
+   next `memory.grow` would detach a view and the release in step 1 would
+   let the module overwrite it.
+4. A parameter the function writes through (`fill(xs, 7)`; the same fact
+   that makes it `sts_array *` in the header) is copied back into the
+   caller's typed array after the call, so the wasm and N-API builds agree
+   on what the caller observes.
+
+`memory.buffer` is re-read after every call into the module because
+`memory.grow` replaces the `ArrayBuffer`. The runtime the loader calls,
+`sts_alloc_array` / `sts_arena_mark` / `sts_arena_release`, comes from
+`runtime/runtime_wasm.c`, a freestanding subset of the runtime: linear
+memory past `__heap_base` is one arena chunk that grows with `memory.grow`,
+`sts_array_grow` and the panics are there (`sts_panic_index` is
+`unreachable`, which the host sees as a `RuntimeError`), and there are no
+strings or I/O. The wasm profile now passes `-mbulk-memory` so the
+`llvm.memset` of `new Array<T>(n)` and the `memcpy` of a `push` lower to
+`memory.fill` / `memory.copy` instead of libc calls. Link it whenever a
+function takes or returns an array:
+
+```bash
+node dist/index.js examples/arrays.ts -o build/arrays.ll --emit-dts build/arrays.d.ts
+scripts/build.sh build/arrays.ll runtime/runtime_wasm.c -o build/arrays.wasm --profile wasm
+node examples/node-host.mjs build/arrays.wasm scale f64:1,2,3 2      # scale(1, 2, 3, 2) = 2, 4, 6
+```
+
+```ts
+import { load } from "./arrays";                        // arrays.d.ts + arrays.mjs
+const m = await load(readFileSync("build/arrays.wasm"));
+m.sumF64(new Float64Array([0.5, 1.5, 2.5]));            // 4.5
+m.scale(new Float64Array([1, 2, 3]), 2);                // Float64Array [2, 4, 6], yours to keep
+```
+
+`examples/node-host.mjs` uses the companion loader when `<module>.mjs` sits
+next to the `.wasm` file (arguments spelled `i32:1,2,3`, `f64:...`,
+`i64:...` become typed arrays) and its plain four-line `load` otherwise.
+`add.wasm` stays 279 bytes: a module without arrays links nothing extra.
 
 ## `--emit-napi <shim.c>` and `--profile napi`: a native Node addon
 
@@ -142,13 +226,15 @@ node examples/node-addon.mjs build/add.node
 ```
 
 The shim is generated per module. For every external function whose
-parameters and result are scalars it emits a `napi_callback` that reads the
-arguments, checks the count and the JS type of each (`napi_typeof`: a number
-for `number`, a boolean for `boolean`; anything else throws a `TypeError`
+parameters and result are numbers, booleans, `i64`, strings or typed arrays
+it emits a `napi_callback` that reads the arguments, checks the count and
+the JS type of each (`napi_typeof`: a number for `number`, a boolean for
+`boolean`, a bigint for `i64`, a string for `string`; `napi_is_typedarray`
+plus the element kind for an array; anything else throws a `TypeError`
 naming the function and the parameter), converts them (`napi_get_value_int32`
 in i32 mode, so `2.9` becomes `2` like `2.9 | 0`; `napi_get_value_double` in
-f64 mode; `napi_get_value_bool`), calls the StaticTS function through its C
-ABI, and boxes the result:
+f64 mode; `napi_get_value_bool`; `napi_get_value_bigint_int64`), calls the
+StaticTS function through its C ABI, and boxes the result:
 
 ```c
 /* examples/add.ts: add(a: number, b: number): number */
@@ -179,13 +265,62 @@ NAPI_MODULE_INIT() {
 }
 ```
 
-Functions with a `string` parameter or result are skipped with a comment in
-the shim (marshalling JS strings into arena strings, and deciding who resets
-the arena, is the buffer-passing design below). Two housekeeping exports are
-always present: `sts_reset_arena()` recycles everything the module allocated
-since the last reset in O(1), `sts_free_arena()` releases the chunks. Call
-`sts_reset_arena()` between batches once string or object functions are
-bridged; scalar functions allocate nothing.
+### Arrays and strings across the boundary
+
+A typed-array argument is **borrowed, not copied**. The shim asks
+`napi_get_typedarray_info` for the element kind, length and data pointer,
+checks the kind against the parameter (`Float64Array` for `f64[]`,
+`Int32Array` for `i32[]`, `BigInt64Array` for `i64[]`), and builds the
+`sts_array` header on the C stack over the typed array's own bytes:
+
+```c
+/* examples/arrays.ts: fill(xs: number[], v: number): void */
+static napi_value sts_napi_fill(napi_env env, napi_callback_info info) {
+  ...
+  uint64_t mark = sts_arena_mark(); /* arena strings/arrays made for this call are released on return */
+  sts_array xs_hdr; /* borrowed: the Int32Array's own bytes, for this call only */
+  if (!sts_napi_array_arg(env, argv[0], napi_int32_array, &xs_hdr))
+    return sts_napi_fail_at(env, mark, "fill: argument 1 (xs) must be an Int32Array");
+  sts_array *xs = &xs_hdr;
+  ...
+  fill(xs, v);
+  ...
+  sts_arena_release(mark);
+  return out;
+}
+```
+
+So a 1M-element `Float64Array` crosses in the time it takes to read one
+pointer, and a function that writes through its parameter (`fill`) writes
+into the JS buffer the caller still holds. Two rules follow from the borrow:
+the callee must not retain the pointer beyond the call, because the arena
+does not own the bytes (StaticTS has no module-level state, so only a
+returned alias could do that, and results are copied), and a `push` that
+grows a borrowed array moves it into the arena, invisibly to JS.
+
+A returned array is copied into a fresh typed array
+(`napi_create_arraybuffer`, `memcpy`, `napi_create_typedarray`), and a
+returned string into a JS string (`napi_create_string_utf8`), so no JS value
+ever aliases the arena. A string argument is measured and copied into an
+arena `sts_str` (`napi_get_value_string_utf8` twice: NUL-terminated, `len`
+the UTF-8 byte count, as `s.length` in StaticTS). Every function that
+touches the arena brackets the call with `sts_arena_mark` /
+`sts_arena_release`, on the failure paths too (`sts_napi_fail_at`), so the
+arena is back where it was when the wrapper returns and a host never has to
+reset it for bridged calls. Two housekeeping exports remain for hosts that
+call `sts_reset_arena()` between batches anyway, and `sts_free_arena()`
+releases the chunks. Functions with a class, `T | null`, nested-array,
+`string[]` or `boolean[]` parameter or result are skipped with a comment.
+
+```
+$ node examples/node-addon.mjs build/arrays.node
+sumF64([1,2,3]) = 6
+scale([1,2,3], 2) = 2,4,6 (Float64Array)
+squares(5) = 0,1,4,9,16
+fill(buf, 7) leaves buf = 7,7,7,7
+sumI64([1n << 40n, 2n]) = 1099511627778
+sumF64(new Int32Array(3)) throws: sumF64: argument 1 (xs) must be a Float64Array
+```
 
 `scripts/build.sh --profile napi` uses the `speed` flags (`-O3 -flto`,
 section GC, no unwind tables, stripped) plus `-shared -fPIC`, and on macOS
@@ -209,70 +344,92 @@ addon.add(2, 3); // 5
 
 Every call from JS into native code costs more than the work a small
 function does. `bench/ffi.mjs` builds `bench/sum.ts` (f64 mode, so JS numbers
-cross unchanged) as an addon and as wasm and sums 1..1,000,000 three ways:
-one native call per element, one native call for the whole batch, and a JS
-loop for scale. Best of 5 on x86_64 Linux, Node 22, clang 18:
+cross unchanged) as an addon and as wasm and sums 1..1,000,000 four ways:
+one native call per element, one native call for the whole batch with no
+data (`sumTo(n)`), one native call with the data as a `Float64Array`
+(`sumArray(xs)`, a `for...of` over the buffer), and a JS loop for scale.
+Best of 5 on x86_64 Linux, Node 22, clang 18:
 
 | Path | Time | Per element |
 | --- | ---: | ---: |
-| N-API: 1,000,000 calls to `add(acc, i)` | 42.4 ms | 42.4 ns |
+| N-API: 1,000,000 calls to `add(acc, i)` | 29.9 ms | 29.9 ns |
 | N-API: one call to `sumTo(1000000)` | 0.3 us | 0.0003 ns |
-| wasm: 1,000,000 calls to `add(acc, i)` | 2.8 ms | 2.8 ns |
+| N-API: one call to `sumArray(Float64Array)`, borrowed | 0.54 ms | 0.54 ns |
+| wasm: 1,000,000 calls to `add(acc, i)` | 2.3 ms | 2.3 ns |
 | wasm: one call to `sumTo(1000000)` | 0.1 us | 0.0001 ns |
-| JS loop, no boundary | 0.6 ms | 0.6 ns |
+| wasm: one call to `sumArray(Float64Array)`, copied in | 1.13 ms | 1.13 ns |
+| JS loop, no boundary | 0.48 ms | 0.48 ns |
+| JS loop over the `Float64Array` | 0.96 ms | 0.96 ns |
 
 ```
 $ node bench/ffi.mjs
-N-API: N calls to add(acc, i)         42.4162 ms      42.42 ns/element   result 500000500000
-N-API: one call to sumTo(N)            0.0003 ms       0.00 ns/element   result 500000500000
-wasm: N calls to add(acc, i)           2.8410 ms       2.84 ns/element   result 500000500000
-wasm: one call to sumTo(N)             0.0001 ms       0.00 ns/element   result 500000500000
-JS loop (no boundary)                  0.5919 ms       0.59 ns/element   result 500000500000
+N-API: N calls to add(acc, i)               29.8553 ms      29.86 ns/element   result 500000500000
+N-API: one call to sumTo(N)                  0.0003 ms       0.00 ns/element   result 500000500000
+N-API: one call to sumArray(Float64Array)     0.5353 ms       0.54 ns/element   result 500000500000
+wasm: N calls to add(acc, i)                 2.2724 ms       2.27 ns/element   result 500000500000
+wasm: one call to sumTo(N)                   0.0001 ms       0.00 ns/element   result 500000500000
+wasm: one call to sumArray(Float64Array)     1.1254 ms       1.13 ns/element   result 500000500000
+JS loop (no boundary)                        0.4772 ms       0.48 ns/element   result 500000500000
+JS loop over the Float64Array                0.9560 ms       0.96 ns/element   result 500000500000
 ```
 
 Rerun it for your machine; the ratios are what matter.
 
 What the table says:
 
-- An N-API crossing costs about 40 ns: argument boxing, the type checks,
+- An N-API crossing costs about 30 ns: argument boxing, the type checks,
   `napi_get_value_*`, `napi_create_*`. For a function that does one add,
-  that is 70x the cost of doing the add in JS. Per-element calls into an
+  that is 60x the cost of doing the add in JS. Per-element calls into an
   addon are never a win.
-- A wasm crossing is about 15x cheaper (V8 inlines the trampolines and
+- A wasm crossing is about 13x cheaper (V8 inlines the trampolines and
   passes scalars in registers) but still 5x slower than the JS loop body.
 - One call that does the whole batch natively is measured in nanoseconds
   in both builds. That is the design rule for every StaticTS boundary: pass
   a whole array, string, or buffer in, process it in native memory, return
-  one result. Arrays (WP4) will cross as `Int32Array`/`Float64Array` views
-  over wasm memory or as N-API typed arrays for exactly this reason.
+  one result.
+- With the data in the call, the addon reads the JS buffer in place and its
+  `-O3` loop beats V8's loop over the same `Float64Array` (0.54 versus
+  0.96 ns per element, one crossing for a million elements). The wasm
+  path pays for the copy into the arena, `8 MB` here, about 0.6 ns per
+  element, and lands near the JS loop; it wins once the function does more
+  than one add per element, and the copy is what a WASI-less module can
+  offer (there is no way to alias a JS buffer from inside wasm memory).
 
 `sumTo` in
 `bench/sum.ts` is written in closed form, `(n * (n + 1)) / 2`. That is not a
 shortcut: at `-O3` LLVM's scalar evolution folds a `for` loop summing 1..n
 into this same expression, so the batched column is what the loop version
-will measure too.
+will measure too. `sumArray` has to read every element, so it measures a
+real pass over the buffer on top of the crossing.
 
 ## Files
 
 | File | Role |
 | --- | --- |
-| `runtime/statictsc.h` | Public C header: `sts_str`, `struct sts_arena`, runtime prototypes, `STS_SYMBOL`. |
-| `src/interop/abi.ts` | Which functions are external, C spelling of every type, keyword escaping. |
-| `src/interop/header.ts`, `dts.ts`, `napi.ts` | The three generators. |
-| `src/index.ts` | `--emit-header`, `--emit-dts`, `--emit-napi`. |
-| `scripts/build.sh` | `--profile napi`. |
-| `examples/node-addon.mjs`, `examples/node-host.mjs` | Loading the `.node` addon and the `.wasm` module. |
+| `runtime/statictsc.h` | Public C header: `sts_str`, `sts_array`, `struct sts_arena`, runtime prototypes (`sts_alloc_array` included), `STS_SYMBOL`. |
+| `runtime/runtime_wasm.c` | Freestanding runtime for the wasm profile: arena over linear memory, arrays, trapping panics. |
+| `src/interop/abi.ts` | Which functions are external, C spelling of every type, `const` from the written-parameter facts, the typed-view table (`Int32Array` / `Float64Array` / `BigInt64Array`), keyword escaping. |
+| `src/interop/header.ts`, `dts.ts`, `wasm.ts`, `napi.ts` | The generators: header, `.d.ts`, its companion loader, the shim. |
+| `src/index.ts` | `--emit-header`, `--emit-dts` (writes the `.mjs` next to it), `--emit-napi`. |
+| `scripts/build.sh` | `--profile napi`; `-mbulk-memory` in `--profile wasm`. |
+| `examples/arrays.ts`, `examples/node-addon.mjs`, `examples/node-host.mjs` | The typed-array module, loading the `.node` addon and the `.wasm` module. |
 | `bench/sum.ts`, `bench/ffi.mjs` | The batching benchmark. |
-| `tests/run.js` (`WP8: interop`) | Header/runtime.ts agreement, `-Werror` header compiles and a C driver, `tsc` on the `.d.ts`, addon build, load, type-check errors, `.node` versus `.wasm` agreement. |
+| `tests/run.js` (`WP8: interop`) | Header/runtime.ts agreement, `-Werror` header compiles and C drivers (a stack-built `sts_array` included), `tsc` on the `.d.ts`, addon builds, loads, type-check errors, `.node` versus `.wasm` agreement on scalars and on typed arrays, in-place `fill`, the wasm trap path, strings through the addon. |
 
 ## Not in this package
 
-- String and object marshalling in the N-API shim, and `Int32Array` views in
-  the `.d.ts`: both need the array layout from WP4 and the WASI runtime from
-  WP7 to be more than a copy loop. The generators already report those
-  functions as skipped rather than silently omitting them.
+- Strings and I/O from wasm: `runtime_wasm.c` has no `sts_str_*`, `sts_print`
+  or files, so string functions stay commented out in the `.d.ts`; a WASI
+  build of `runtime.c` would lift that.
+- Zero-copy arrays in wasm: a JS buffer cannot be aliased from linear
+  memory, so the loader copies; a host that wants to skip the copy can keep
+  its data in `memory.buffer` and call the raw export with a header it
+  builds itself (`sts_alloc_array` is exported for that).
+- Classes, `T | null`, `string[]`, `boolean[]` and nested arrays across
+  either boundary: the generators report those functions as skipped rather
+  than silently omitting them.
 - `--target` cross builds (ARM64, wasm32-wasi): linker work in `build.sh`
-  once WP7 provides the WASI runtime variant.
+  once a WASI runtime variant exists.
 - A `--link`-style one-shot flag for addons. Two commands (`--emit-napi`
   then `build.sh --profile napi`) keep the CLI's `--link` contract (a program
   with `main`) unchanged.

@@ -31,18 +31,38 @@ The type is `%struct.sts_array*` in every signature, alloca, and load, so
 `User[]` all use the same header; only the element size and the `T*` cast
 differ. `T[]` and `Array<T>` are the same type.
 
-Two runtime functions own the cold paths (`src/codegen/runtime.ts`,
-appended to `runtime/runtime.c`):
+Three runtime functions belong to arrays (`src/codegen/runtime.ts`,
+`runtime/runtime.c`, and the freestanding `runtime/runtime_wasm.c`):
 
 | Symbol | Purpose | Attributes |
 | --- | --- | --- |
 | `sts_array_grow(hdr, elemSize)` | `push` when `len == cap`: doubles `cap` (4 from 0), moves the elements to fresh arena storage. `len` untouched. | `nounwind willreturn`, param `nonnull align 8 nocapture` |
-| `sts_panic_index(idx, len)` | Failed bounds check: writes `index out of range: <idx> >= <len>` to stderr, `_exit(1)`. | `nounwind noreturn cold` |
+| `sts_panic_index(idx, len)` | Failed bounds check: writes `index out of range: <idx> >= <len>` to stderr, `_exit(1)` (`unreachable` in wasm). | `nounwind noreturn cold` |
+| `sts_alloc_array(elemSize, len)` | Host entry (WP8): header plus `len` uninitialised elements, `len == cap`. Compiled code never calls it; the wasm loader and C hosts do. | `nounwind willreturn`, returns `noalias nonnull align 8` |
 
 Header and element storage come from the compiler's inline
 `sts_alloc_struct` (`call i8* @sts_alloc_struct(i64 bytes)`), not from C.
-`tests/runtime_test.c` checks `sts_array_grow`; `runtime.c` is 5,461 bytes
-of source and 1,496 bytes of `.text` at `-Oz` (budget: 8 KB / 4 KB).
+`tests/runtime_test.c` checks `sts_array_grow` and `sts_alloc_array`;
+`runtime.c` is 8,594 bytes of source and 3,600 bytes of `.text` at `-Oz`
+(budget: 8 KB / 4 KB; `sts_alloc_array` added 102 bytes of `.text`).
+
+### Typed-array aliases
+
+`Int32Array`, `Float64Array` and `BigInt64Array` are accepted as type
+annotations and as `new Int32Array(n)` / `new Float64Array(n)` /
+`new BigInt64Array(n)`. They resolve to the *same* `StaticType` as `i32[]`,
+`f64[]` and `i64[]` (`TYPED_ARRAY_ALIASES` in `src/types.ts`; the `new`
+forms share `newCheckers.Array` / `newEmitters.Array`), so there is no
+second layout, no view semantics, and no conversion: a `Float64Array`
+parameter accepts an `f64[]` argument and vice versa, `push` works, and the
+IR is byte for byte the `new Array<T>(n)` lowering above
+(`tests/cases/arr_typed_views`). A type argument on the alias is rejected
+(`reject_arr_typed_view_typearg`, `reject_arr_typed_view_type_annotation_arg`).
+The names exist for the host boundary: they are what a Node host passes and
+receives, and `--emit-dts` / `--emit-napi` map exactly these element types
+to JS typed arrays ([wp8-interop.md](wp8-interop.md#arrays-and-strings-across-the-boundary)).
+`boolean[]` has no alias: a JS `Uint8Array` could carry values other than 0
+and 1, which an `i1` load may not see.
 
 ## Decisions
 
@@ -481,8 +501,9 @@ attribute changes, but the facts are what an `xs` parameter would get).
 
 - `pop`, `slice`, `indexOf`, `map`, `forEach`, spread, destructuring,
   holes, `Array.from`, `length` assignment, negative-index wraparound.
-- Typed views (`Int32Array`, `Float64Array`) for Node interop: same layout,
-  WP8.
+- Typed *views* in the JavaScript sense (`subarray`, a byte offset into a
+  shared buffer, `Uint8Array` / `Float32Array`): the aliases above are plain
+  arrays; the host-side view is built by the interop layer (WP8).
 - Hoisting a range check out of a counted loop so checked code vectorises
   without inlining (WP9).
 - Escape-analysed stack allocation of arrays that do not outlive the

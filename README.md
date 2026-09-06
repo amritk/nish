@@ -96,7 +96,8 @@ statictsc <entry.ts> [more.ts ...] [options]
   --plain                    no performance attributes or alignment hints
   --runtime-decls            always emit the runtime ABI prelude (arena + strings)
   --emit-header <file.h>     also write a C header for the callable functions
-  --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports
+  --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports, plus
+                             <file>.mjs, a loader that marshals typed arrays
   --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)
   --unchecked-indexing       drop array bounds checks (unsafe; for benchmarks)
   --target <triple>|host     emit `target datalayout`/`target triple` for that machine
@@ -178,14 +179,23 @@ The supported direction is Node importing StaticTS:
 
 - `scripts/build.sh --profile wasm` produces a module `WebAssembly.instantiate`
   loads directly (`examples/node-host.mjs`); exports use the plain C ABI.
+  Add `runtime/runtime_wasm.c` (arena + arrays, no libc) when a function
+  takes or returns an array.
 - `--emit-napi` + `scripts/build.sh --profile napi` build a `.node` addon
   with argument type checks (`examples/node-addon.mjs`).
-- `--emit-header` writes C prototypes (`int32_t add(int32_t a, int32_t b);`)
-  next to `runtime/statictsc.h`, the public runtime ABI (arena, strings,
-  `sts_reset_arena`, `sts_arena_mark` / `sts_arena_release` for a host that
-  manages batches); `--emit-dts` writes typings for the wasm exports.
-- An N-API call costs about 40 ns and a wasm call about 3 ns before any work
-  is done (`node bench/ffi.mjs`), so pass whole buffers, not elements.
+- Buffers cross as typed arrays: a StaticTS `Int32Array` / `Float64Array` /
+  `BigInt64Array` parameter (the spellings of `i32[]` / `f64[]` / `i64[]`,
+  one layout) is a JS typed array on both paths. The addon borrows it
+  (zero-copy; writes are visible in JS), the wasm loader that `--emit-dts`
+  writes next to the `.d.ts` copies it into the module's memory and results
+  back out; strings cross the addon as copies (`examples/arrays.ts`).
+- `--emit-header` writes C prototypes (`int32_t add(int32_t a, int32_t b);`,
+  `double sumF64(const sts_array *xs);`) next to `runtime/statictsc.h`, the
+  public runtime ABI (arena, strings, arrays, `sts_reset_arena`,
+  `sts_arena_mark` / `sts_arena_release` for a host that manages batches).
+- An N-API call costs about 30 ns and a wasm call about 2 ns before any work
+  is done; one call with a 1M-element `Float64Array` runs at 0.5 ns/element
+  (`node bench/ffi.mjs`), so pass whole buffers, not elements.
 
 Details: [docs/wp8-interop.md](docs/wp8-interop.md).
 
