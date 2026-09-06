@@ -13,6 +13,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { Compilation, EmittedModule } from "./compiler";
+import { generateDts, generateHeader, generateNapiShim } from "./interop";
 import { NumberMode } from "./types";
 
 const PROFILES = ["speed", "size", "debug"] as const;
@@ -34,6 +35,9 @@ function usage(): never {
       "  --number-mode i32|f64      lowering of `number` (default: i32)",
       "  --plain                    no performance attributes or alignment hints",
       "  --runtime-decls            always emit the runtime ABI prelude (arena + strings)",
+      "  --emit-header <file.h>     also write a C header for the callable functions",
+      "  --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports",
+      "  --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)",
     ].join("\n")
   );
   process.exit(2);
@@ -82,12 +86,25 @@ function main(argv: string[]): number {
   let optimizeAttributes = true;
   let runtimeDecls = false;
   let strictExports = false;
+  // WP8 interop outputs: each is derived from the checked program after emit.
+  let emitHeader: string | undefined;
+  let emitDts: string | undefined;
+  let emitNapi: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "-o" || arg === "--output") {
       output = argv[++i];
       if (!output) usage();
+    } else if (arg === "--emit-header") {
+      emitHeader = argv[++i];
+      if (!emitHeader) usage();
+    } else if (arg === "--emit-dts") {
+      emitDts = argv[++i];
+      if (!emitDts) usage();
+    } else if (arg === "--emit-napi") {
+      emitNapi = argv[++i];
+      if (!emitNapi) usage();
     } else if (arg === "--link") {
       link = argv[++i];
       if (!link) usage();
@@ -142,6 +159,19 @@ function main(argv: string[]): number {
     fs.writeFileSync(outputs[i], m.ir);
     console.error(`wrote ${outputs[i]}`);
   });
+
+  // Interop artefacts (WP8). They read the same signatures the IR was emitted from.
+  const sidecars: [string | undefined, () => string][] = [
+    [emitHeader, () => generateHeader(compilation, emitHeader!)],
+    [emitDts, () => generateDts(compilation)],
+    [emitNapi, () => generateNapiShim(compilation)],
+  ];
+  for (const [file, generate] of sidecars) {
+    if (file === undefined) continue;
+    fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
+    fs.writeFileSync(file, generate());
+    console.error(`wrote ${file}`);
+  }
 
   if (link !== undefined) {
     fs.mkdirSync(path.dirname(path.resolve(link)), { recursive: true });

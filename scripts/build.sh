@@ -10,6 +10,10 @@
 #          `opt-level="z"`, `panic="abort"`, `strip=true` equivalent.
 #   wasm   wasm32 freestanding module exporting every non-internal function
 #          (for modules that do not use the C runtime); load it from Node.
+#   napi   Node addon (<out>.node): the speed flags plus -shared -fPIC, built
+#          against the Node headers next to `node` (override: NODE_INCLUDE=<dir
+#          containing node_api.h>). Inputs: <modules.ll> runtime/runtime.c and
+#          the shim from `statictsc --emit-napi`.
 #
 # Works on Linux (clang + lld preferred, GNU ld tolerated) and macOS (Apple ld64
 # or Homebrew llvm). Set CC to pick a compiler (default: clang on PATH).
@@ -71,6 +75,31 @@ case "$profile" in
     "$CC" -Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib \
       -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections \
       "${inputs[@]}" -o "$out" ;;
+  napi)
+    # Node ships its C headers next to the binary: <prefix>/bin/node and
+    # <prefix>/include/node/node_api.h (official tarballs, nvm, fnm, volta).
+    # Distro packages put them in libnode-dev; NODE_INCLUDE overrides the guess.
+    node_bin=${NODE:-node}
+    node_inc=${NODE_INCLUDE:-}
+    if [ -z "$node_inc" ]; then
+      node_inc=$("$node_bin" -p "require('path').dirname(process.execPath) + '/../include/node'" 2>/dev/null || true)
+    fi
+    if [ -z "$node_inc" ] || [ ! -f "$node_inc/node_api.h" ]; then
+      echo "error: the napi profile needs the Node headers, but ${node_inc:-<node not found>}/node_api.h does not exist." >&2
+      echo "       Install Node from nodejs.org/nvm (they ship include/node), or apt install libnode-dev and" >&2
+      echo "       set NODE_INCLUDE=/usr/include/node (any directory that contains node_api.h)." >&2
+      exit 2
+    fi
+    shared=(-shared -fPIC)
+    # macOS: the napi_* symbols come from the node binary at load time, so the
+    # linker must not insist on resolving them. ELF shared objects allow this.
+    case "$(uname -s)" in Darwin) shared+=(-Wl,-undefined,dynamic_lookup) ;; esac
+    # runtime/statictsc.h is the public ABI header the generated shim includes.
+    runtime_inc="$(cd "$(dirname "$0")/../runtime" && pwd)"
+    "$CC" "${common[@]}" -O3 -flto -DNDEBUG -I"$node_inc" -I"$runtime_inc" \
+      -ffunction-sections -fdata-sections -fomit-frame-pointer \
+      -fno-asynchronous-unwind-tables -fno-unwind-tables "${elf[@]}" \
+      "${shared[@]}" "${gc[@]}" "${strip_flag[@]}" "${inputs[@]}" -o "$out" ;;
   *) echo "error: unknown profile '$profile'" >&2; exit 2 ;;
 esac
 

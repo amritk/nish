@@ -262,6 +262,158 @@ if (!only && HAS_CLANG) {
   console.log("SKIP  clang not installed: native round trips and pipeline checks skipped");
 }
 
+// ---- WP8: interop ------------------------------------------------------------------
+// runtime/statictsc.h is the public C ABI; --emit-header / --emit-dts / --emit-napi derive
+// host-side declarations from the same checked program the IR came from. Checks:
+//   - every function in src/codegen/runtime.ts has a prototype in statictsc.h, and the
+//     header is clean under -Wall -Wextra -Werror as C11 and as C++
+//   - generated headers compile under the same flags and link a C driver (including a
+//     function named `double`, bound through STS_SYMBOL), strings map to sts_str, and
+//     --strict-exports hides internal functions
+//   - the generated .d.ts type-checks with tsc; string functions are commented out
+//   - the N-API shim compiles warning-free, builds into a .node addon with the napi
+//     profile, loads in Node, type-checks its arguments, and agrees with the wasm build
+//     of the same module (skipped when the Node headers are not installed)
+if (!only || "interop".includes(only)) {
+  const interopDir = path.join(buildDir, "interop");
+  fs.mkdirSync(interopDir, { recursive: true });
+  const runtimeDir = path.join(root, "runtime");
+  const publicHeader = fs.readFileSync(path.join(runtimeDir, "statictsc.h"), "utf8");
+  const { RUNTIME_FUNCTIONS } = require(path.join(root, "dist", "codegen", "runtime.js"));
+  const runtimeNames = [...RUNTIME_FUNCTIONS.map((f) => f.name), "sts_alloc_struct"];
+  const undeclared = runtimeNames.filter((n) => !new RegExp(`\\b${n}\\s*\\(`).test(publicHeader));
+  check(`statictsc.h declares every runtime.ts function (${runtimeNames.length}) and the arena global`,
+    undeclared.length === 0 && publicHeader.includes("extern struct sts_arena sts_arena;"), `missing: ${undeclared.join(", ")}`);
+
+  const strictC = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-Wno-override-module", `-I${runtimeDir}`, `-I${interopDir}`];
+  const tsc = path.join(root, "node_modules", "typescript", "bin", "tsc");
+  /** Compile <src> to build/test/interop/<stem>.ll (or <stem>/ for a multi-module program) plus the requested sidecars. */
+  const emit = (src, extra, stem = path.basename(src, ".ts"), multi = false) => {
+    const out = multi ? path.join(interopDir, stem) + path.sep : path.join(interopDir, `${stem}.ll`);
+    const r = spawnSync("node", [cli, src, "-o", out, ...extra], { cwd: root });
+    return { stem, status: r.status, stderr: String(r.stderr) };
+  };
+  const sidecar = (stem, ext) => path.join(interopDir, `${stem}.${ext}`);
+
+  // Headers.
+  const add = emit("examples/add.ts", ["--emit-header", sidecar("add", "h"), "--emit-dts", sidecar("add", "d.ts"), "--emit-napi", sidecar("add", "napi.c")]);
+  check("--emit-header/--emit-dts/--emit-napi write their files", add.status === 0 && ["h", "d.ts", "napi.c"].every((e) => fs.existsSync(sidecar("add", e))), add.stderr);
+  const addHeader = fs.existsSync(sidecar("add", "h")) ? fs.readFileSync(sidecar("add", "h"), "utf8") : "";
+  check("add.h declares `int32_t add(int32_t a, int32_t b);` with guards and statictsc.h",
+    addHeader.includes("int32_t add(int32_t a, int32_t b);") && addHeader.includes("#ifndef STATICTSC_ADD_H") && addHeader.includes('#include "statictsc.h"') && addHeader.includes('extern "C"'), addHeader);
+
+  const strings = emit("examples/strings.ts", ["--emit-header", sidecar("strings", "h"), "--emit-dts", sidecar("strings", "d.ts"), "--emit-napi", sidecar("strings", "napi.c")]);
+  const stringsHeader = strings.status === 0 ? fs.readFileSync(sidecar("strings", "h"), "utf8") : "";
+  check("strings.h maps string to `sts_str *` (const parameters) and boolean to bool",
+    stringsHeader.includes("sts_str *pick(bool flag, const sts_str *a, const sts_str *b);") && stringsHeader.includes("int32_t len2(const sts_str *s);"), stringsHeader || strings.stderr);
+
+  const keyword = emit("tests/cases/export_fn.ts", ["--emit-header", sidecar("export_fn", "h")]);
+  const keywordHeader = keyword.status === 0 ? fs.readFileSync(sidecar("export_fn", "h"), "utf8") : "";
+  check("a function named `double` is declared as double_ bound with STS_SYMBOL(\"double\")",
+    keywordHeader.includes('int32_t double_(int32_t n) STS_SYMBOL("double");') && keywordHeader.includes("int32_t helper(int32_t n);"), keywordHeader || keyword.stderr);
+
+  const strict = emit("tests/cases/export_strict.ts", ["--strict-exports", "--emit-header", sidecar("export_strict", "h")], "export_strict");
+  const strictHeader = strict.status === 0 ? fs.readFileSync(sidecar("export_strict", "h"), "utf8") : "";
+  check("--strict-exports keeps internal functions out of the header",
+    strictHeader.includes("int32_t next(int32_t n);") && !strictHeader.includes("helper"), strictHeader || strict.stderr);
+
+  const entry = emit("examples/multi/main.ts", ["--emit-header", sidecar("multi", "h")], "multi", true);
+  const entryHeader = entry.status === 0 ? fs.readFileSync(sidecar("multi", "h"), "utf8") : "";
+  check("the entry `export function main` is omitted; imported modules are listed",
+    !entryHeader.includes("main(") && entryHeader.includes("int32_t square(int32_t n);") && entryHeader.includes("/* examples/multi/math.ts */"), entryHeader || entry.stderr);
+
+  if (HAS_CLANG) {
+    const cxx = spawnSync("clang", ["-std=c++17", "-x", "c++", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", path.join(runtimeDir, "statictsc.h")]);
+    const c11 = spawnSync("clang", [...strictC, "-pedantic", "-fsyntax-only", "-x", "c", path.join(runtimeDir, "statictsc.h")]);
+    check("statictsc.h compiles under -Wall -Wextra -Werror as C11 (-pedantic) and as C++17", cxx.status === 0 && c11.status === 0, String(cxx.stderr) + String(c11.stderr));
+
+    for (const stem of ["add", "strings", "export_fn", "export_strict", "multi"]) {
+      if (!fs.existsSync(sidecar(stem, "h"))) continue;
+      const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar(stem, "h")]);
+      check(`${stem}.h compiles under -std=c11 -Wall -Wextra -Werror`, r.status === 0, String(r.stderr));
+    }
+
+    // A C driver that calls through the generated header, including the keyword-named `double`.
+    const driver = path.join(interopDir, "header_driver.c");
+    fs.writeFileSync(driver, [
+      "#include <stdio.h>",
+      '#include "add.h"',
+      '#include "export_fn.h"',
+      "int main(void) {",
+      "  sts_str *s = sts_str_from_i32(add(40, 2));",
+      '  printf("add(40, 2) = %s; double_(21) = %d; next(20) = %d\\n", s->data, double_(21), next(20));',
+      "  sts_free_arena();",
+      "  return 0;",
+      "}",
+      "",
+    ].join("\n"));
+    const exe = path.join(interopDir, "header_driver");
+    const cc = spawnSync("clang", [...strictC, "-O2", sidecar("add", "ll"), sidecar("export_fn", "ll"), path.join(runtimeDir, "runtime.c"), driver, "-o", exe], { cwd: root });
+    const run = cc.status === 0 ? spawnSync(exe) : null;
+    check("a -Werror C driver links through the generated headers and runtime.c",
+      run !== null && String(run.stdout).trim() === "add(40, 2) = 42; double_(21) = 42; next(20) = 41", String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : ""));
+  }
+
+  // TypeScript declarations for the wasm build.
+  const addDts = fs.existsSync(sidecar("add", "d.ts")) ? fs.readFileSync(sidecar("add", "d.ts"), "utf8") : "";
+  const stringsDts = fs.existsSync(sidecar("strings", "d.ts")) ? fs.readFileSync(sidecar("strings", "d.ts"), "utf8") : "";
+  check("add.d.ts declares `add(a: number, b: number): number` and `load(bytes: BufferSource): Promise<Exports>`",
+    addDts.includes("  add(a: number, b: number): number;") && addDts.includes("export function load(bytes: BufferSource): Promise<Exports>;"), addDts);
+  check("strings.d.ts comments out every string function",
+    stringsDts.includes("  // pick(flag: boolean, a: string, b: string): string  -- not exported to JS") && !/^\s*pick\(/m.test(stringsDts), stringsDts);
+  for (const stem of ["add", "strings"]) {
+    if (!fs.existsSync(sidecar(stem, "d.ts"))) continue;
+    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar(stem, "d.ts")], { cwd: root });
+    check(`${stem}.d.ts passes tsc --noEmit --strict`, r.status === 0, String(r.stdout) + String(r.stderr));
+  }
+
+  // N-API addon.
+  const nodeInclude = process.env.NODE_INCLUDE || path.join(path.dirname(process.execPath), "..", "include", "node");
+  const hasNodeHeaders = fs.existsSync(path.join(nodeInclude, "node_api.h"));
+  const shim = fs.existsSync(sidecar("add", "napi.c")) ? fs.readFileSync(sidecar("add", "napi.c"), "utf8") : "";
+  const stringsShim = fs.existsSync(sidecar("strings", "napi.c")) ? fs.readFileSync(sidecar("strings", "napi.c"), "utf8") : "";
+  check("add.napi.c registers `add` with type checks and a NAPI_MODULE_INIT",
+    shim.includes('{"add", sts_napi_add},') && shim.includes("type != napi_number") && shim.includes("NAPI_MODULE_INIT()"), shim);
+  check("strings.napi.c skips string functions with a comment and still exposes sts_reset_arena",
+    stringsShim.includes("pick(flag: boolean, a: string, b: string): string -- not bridged") && !stringsShim.includes("sts_napi_pick") && stringsShim.includes('{"sts_reset_arena", sts_napi_reset_arena},'), stringsShim);
+  if (!HAS_CLANG) {
+    // nothing to build
+  } else if (!hasNodeHeaders) {
+    console.log(`SKIP  Node headers not found (${path.join(nodeInclude, "node_api.h")}): N-API addon build skipped`);
+  } else {
+    for (const stem of ["add", "strings"]) {
+      const r = spawnSync("clang", [...strictC, `-I${nodeInclude}`, "-fsyntax-only", sidecar(stem, "napi.c")]);
+      check(`${stem}.napi.c compiles under -std=c11 -Wall -Wextra -Werror`, r.status === 0, String(r.stderr));
+    }
+    const addon = path.join(interopDir, "add.node");
+    const b = spawnSync("bash", ["scripts/build.sh", sidecar("add", "ll"), "runtime/runtime.c", sidecar("add", "napi.c"), "-o", addon, "--profile", "napi"], { cwd: root });
+    check("napi profile builds add.node", b.status === 0, String(b.stderr));
+    if (b.status === 0) {
+      const ex = spawnSync("node", ["examples/node-addon.mjs", addon], { cwd: root });
+      const lines = String(ex.stdout).trim().split("\n");
+      check("examples/node-addon.mjs prints add(2, 3) = 5 and the TypeError for add(\"2\", 3)",
+        ex.status === 0 && lines[0] === "add(2, 3) = 5" && lines[1] === 'add("2", 3) throws: add: argument 1 (a) must be a number', String(ex.stdout) + String(ex.stderr));
+
+      if (has("wasm-ld")) {
+        const wasm = path.join(interopDir, "add.wasm");
+        const w = spawnSync("bash", ["scripts/build.sh", sidecar("add", "ll"), "-o", wasm, "--profile", "wasm"], { cwd: root });
+        const script = [
+          'import { readFileSync } from "node:fs";',
+          'import { createRequire } from "node:module";',
+          `const addon = createRequire(import.meta.url)(${JSON.stringify(addon)});`,
+          `const { instance } = await WebAssembly.instantiate(readFileSync(${JSON.stringify(wasm)}), {});`,
+          "const pairs = [[2, 3], [40, 2], [-7, 7], [2147483647, 1]];",
+          "const same = pairs.every(([a, b]) => addon.add(a, b) === instance.exports.add(a, b));",
+          "console.log(same ? pairs.map(([a, b]) => addon.add(a, b)).join(\" \") : \"mismatch\");",
+        ].join("\n");
+        const cmp = w.status === 0 ? spawnSync("node", ["--input-type=module", "-e", script], { cwd: root }) : null;
+        check("the .node and .wasm builds of add.ts return identical results (i32 wrap included)",
+          cmp !== null && String(cmp.stdout).trim() === "5 42 0 -2147483648", String(w.stderr) + (cmp ? String(cmp.stdout) + String(cmp.stderr) : ""));
+      }
+    }
+  }
+}
+
 // ---- WP0: validator ----------------------------------------------------------------
 // Phase 0 must stay cheap. A synthetic 1,000-line file (functions, locals, arithmetic,
 // calls, string/boolean expressions, control flow) is parsed once, then only the
