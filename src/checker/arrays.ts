@@ -43,6 +43,7 @@ import {
   LoopInfo,
   StatementChecker,
 } from "./context";
+import { structOf } from "./classes";
 import { isValueReceiver, methodCallCheckers, newCheckers, propertyCheckers } from "./members";
 import { invalidateNarrowings } from "./nullable";
 import { LocalVar } from "./program";
@@ -91,6 +92,10 @@ function contextualType(ctx: CheckContext, expr: ts.Expression, scope: Scope): S
       const base = ctx.program.types.get(target.expression);
       return base?.kind === "array" ? base.elem : undefined;
     }
+    // `this.children = []`: a field is an annotated target like any other, and
+    // a constructor filling an array field is the ordinary way to write one,
+    // because a field *initializer* may only be a literal (WP2).
+    if (ts.isPropertyAccessExpression(target)) return fieldType(ctx, target);
     return undefined;
   }
   if (ts.isArrayLiteralExpression(parent)) {
@@ -106,6 +111,13 @@ function contextualType(ctx: CheckContext, expr: ts.Expression, scope: Scope): S
     }
   }
   return undefined;
+}
+
+/** The declared type of `recv.f`, or undefined when `recv` is not a struct. */
+function fieldType(ctx: CheckContext, target: ts.PropertyAccessExpression): StaticType | undefined {
+  const receiver = ctx.program.types.get(target.expression);
+  if (receiver?.kind !== "struct") return undefined;
+  return structOf(ctx, receiver).fieldsByName.get(target.name.text)?.type;
 }
 
 // ---- Expressions ------------------------------------------------------------------

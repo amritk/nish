@@ -101,17 +101,39 @@ export const nullableExpressionCheckers: CheckerTable<ExpressionChecker> = {
 
 // ---- Members on an un-narrowed nullable ------------------------------------------------
 
-function hint(receiver: StaticType): string {
-  return `check for null first: \`if (p !== null) { ... }\` narrows \`${typeToString(receiver)}\` to \`${typeToString(stripNull(receiver))}\``;
+/**
+ * What to do about an un-narrowed nullable, phrased for what the programmer
+ * actually wrote. Narrowing is keyed by local variable, so `if (n.parent !==
+ * null)` does *not* narrow `n.parent`: a store through any alias, or any call
+ * that could reach one, would invalidate it, and the checker runs before the
+ * effect facts that could rule that out. The fix is to bind the field to a
+ * local, which is both provably safe and one load instead of two — so the
+ * message names that idiom with the reader's own expression rather than
+ * telling someone who just wrote a null check to write a null check.
+ */
+function hint(ctx: CheckContext, receiver: StaticType, receiverExpr: ts.Expression): string {
+  const narrows = `\`${typeToString(receiver)}\` to \`${typeToString(stripNull(receiver))}\``;
+  if (ts.isPropertyAccessExpression(receiverExpr) || ts.isElementAccessExpression(receiverExpr)) {
+    const text = receiverExpr.getText(ctx.sf);
+    const local = ts.isPropertyAccessExpression(receiverExpr) ? receiverExpr.name.text : "value";
+    return `only a local is narrowed, not a field or element, so bind it first: \`const ${local} = ${text}; if (${local} !== null) { ... }\` narrows ${narrows}`;
+  }
+  return `check for null first: \`if (p !== null) { ... }\` narrows ${narrows}`;
 }
 
 propertyCheckers.nullable = (ctx, expr, receiver) => {
-  throw ctx.error(`Cannot read property \`${expr.name.text}\` of \`${typeToString(receiver)}\`; ${hint(receiver)}`, expr.name);
+  throw ctx.error(
+    `Cannot read property \`${expr.name.text}\` of \`${typeToString(receiver)}\`; ${hint(ctx, receiver, expr.expression)}`,
+    expr.name
+  );
 };
 
 methodCallCheckers.nullable = (ctx, expr, receiver) => {
   const access = expr.expression as ts.PropertyAccessExpression;
-  throw ctx.error(`Cannot call \`${access.name.text}\` on \`${typeToString(receiver)}\`; ${hint(receiver)}`, access.name);
+  throw ctx.error(
+    `Cannot call \`${access.name.text}\` on \`${typeToString(receiver)}\`; ${hint(ctx, receiver, access.expression)}`,
+    access.name
+  );
 };
 
 // ---- `===` / `!==` involving nullable operands ----------------------------------------------

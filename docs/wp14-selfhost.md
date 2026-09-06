@@ -113,36 +113,112 @@ the end. `join` is therefore a language requirement (§3), not a convenience.
 
 ---
 
-## 3. The gap, in dependency order
+## 3. The gap, measured
 
-What the language is missing before `self/` can be written. Each row is a
-construct and ships with everything in the `docs/ARCHITECTURE.md` checklist:
-a golden `.ll`, an `llvm-as` pass, a native round trip, a `reject_*` case, a
+This list is not a guess. It comes from two independent sweeps that agree:
+a **census of `src/`** (all 53 files, 11,799 lines — every library facility and
+every string and array method it uses), and a set of **probe programs** compiled
+against today's language to find what it actually refuses. Counts below are
+call sites in `src/`.
+
+Each row ships with everything in the `docs/ARCHITECTURE.md` checklist: a
+golden `.ll`, an `llvm-as` pass, a native round trip, a `reject_*` case, a
 `docs/LANGUAGE.md` rule and a cookbook entry.
 
 ### Wave A — the front end cannot be written without these
 
-| # | Construct | Why `self/` needs it |
+| # | Construct | Evidence |
 | --- | --- | --- |
-| A1 | `switch` / `case` / `default` | Every phase is a dispatch on a node kind. Without it each table is an `if` chain. |
-| A2 | `charCodeAt`, `substring`, `indexOf`, `startsWith`, `endsWith`, `String.fromCharCode` | A lexer is `charCodeAt` in a loop and `substring` at the end. |
-| A3 | Module-level `const` | Token kinds, node kinds and keyword tables. Today they would be magic numbers repeated at every use site. |
-| A4 | `pop`, `indexOf`, `join` on arrays | `pop` is the scope stack and the block stack; `join` is §2.3. |
-| A5 | `& \| ^ ~ << >> >>>` and their compound forms | The `StringMap` of §2.2 hashes with FNV-1a, which is a multiply and an XOR. These were never forbidden — they fell through the checker's operator table into the "not implemented" bucket. |
+| A1 | `switch` / `case` / `default` | Every phase is a dispatch on a node kind. `src/` has 21 `switch`es plus ~30 dispatch tables that all become switches. Lowers to LLVM's `switch`, so the backend builds a jump table — the fast shape, not an `if` chain. |
+| A2 | `charCodeAt`, `substring`, `indexOf`, `startsWith`, `endsWith`, `String.fromCharCode` | A lexer is `charCodeAt` in a loop and `substring` at the end. `src/` itself never lexes (the `typescript` package does), so this set is sized for `self/`'s lexer, not for `src/`. |
+| A3 | Module-level `const` | **Done.** Token kinds, node kinds, and the 14 string-literal union types that become `i32` constants. |
+| A4 | `pop`, `indexOf`, `join` on arrays | `join` has **66 call sites** and is not optional: see the measurement below. `pop` 4, `indexOf` 7 — five of those seven search by *identity* over AST nodes, which `===` on class values already gives. |
+| A5 | `& \| ^ ~ << >> >>>` and their compound forms | The `StringMap` of §2.2 hashes with FNV-1a, and the emitter formats `f64` constants as hex (see B1). Never forbidden — they fell through the checker's operator table into the "not implemented" bucket. |
 
-### Wave B — the back end and the plumbing
+**`join` is a hard requirement, not a convenience.** Building 88 KB of IR text
+by repeated `+` costs **180 MB of peak RSS**, because every concatenation
+allocates a fresh copy and the arena never reclaims. Quadratic in both time and
+memory. A self-compile emitting ~1 MB of IR that way would need tens of
+gigabytes. `join` must therefore be the fast shape: one pass to sum the lengths,
+one allocation, one `memcpy` per part.
 
-| # | Construct | Why `self/` needs it |
+### Wave B — the back end cannot be written without these
+
+| # | Addition | Evidence |
 | --- | --- | --- |
-| B1 | `readFileSync` returning the whole source, `writeFileSync`, `process.argv` | Present already (WP7); confirm they are enough for a real CLI and fix what is not. |
-| B2 | Integer formatting and parsing round trip | `${n}` covers formatting; parsing needs `parseInt` on a substring. |
-| B3 | Whatever the port turns up | Kept honest by rule: a missing construct is added to the language, with its tests, before the line of `self/` that wanted it is written. |
+| B1 | `f64ToBits(x: f64): i64` (and `bitsToF64`) | **A blocker, and the least obvious one.** LLVM only accepts decimal float literals that round-trip exactly, so the emitter writes `double 0x400921FB54442D18` — today via `Buffer.writeDoubleBE`. StaticTS has no way to see a double's bits, so without this the self-hosted emitter cannot emit any `f64` constant. One `bitcast` in the IR: zero instructions, zero runtime. |
+| B2 | `console.error(x)` and a newline-free write | Every one of the 16 diagnostic writes goes to **stderr**, and two dumps write without a trailing newline. `console.log` is stdout-and-newline only. Without these, every `.err` golden and the runner's stream expectations have to be re-baselined — a worse outcome than two five-line runtime functions. |
+| B3 | A file read that can fail | `readFileSync` **exits the process** on a missing file, so a compiler cannot turn it into its own `` Cannot find module `./x` `` diagnostic and carry on loading the other imports. Smallest fix: `readFileSyncOrNull(path): string \| null` — it subsumes `existsSync`, has no time-of-check race, and needs no new type. |
+| B4 | Contextual `[]` in a field assignment | **Done.** `this.children = []` in a constructor did not take its element type from the field, which every container class hits on its first line. |
 
-Nothing in Wave A or B is a new *kind* of thing — no generics, no closures, no
-GC, no exceptions. That is the point of §2: the subset was chosen so that
-self-hosting needs no change to the model, only more of the same.
+### Wave C — library code in `self/`, no language change
 
----
+Written once in StaticTS and then just there. Listed so nobody mistakes them
+for language work: `StringMap` / `StringSet` (~200 `Map`/`Set` sites),
+`StringBuilder` (§2.3), a **stable** sort (the diagnostic order is
+golden-compared) and a byte-wise `compareStrings` (StaticTS has no `<` on
+strings, deliberately), `jsonQuote` matching JSON escaping exactly, hex
+formatting for B1, and a `resolvePath` that normalises `.` and `..` the way
+Node does — see D3.
+
+### What is deliberately *not* being added
+
+- **Nullable field narrowing.** `if (n.parent !== null) { n.parent.kind }` does
+  not narrow; only locals do. A sound rule would have to invalidate on every
+  call, because the checker runs before the effect facts that could prove a
+  callee harmless. The idiom `const parent = n.parent; if (parent !== null)` is
+  one line, provably safe, and one load instead of two. The diagnostic names it
+  with the reader's own expression.
+- **Generics, closures, function values, `try`/`catch`, a `Map` builtin.** Each
+  is designed around in §2. None is on the path.
+
+## 3a. Decisions this forces
+
+Five things the census turned up that are choices, not omissions.
+
+**D1. Error recovery is the hard one.** `CompileError` is thrown from 292 sites
+and caught in six, every one load-bearing: `DiagnosticSink.recover` (10 call
+sites, per-declaration recovery), per-statement recovery in `checkStatements`,
+and `checkVariableDeclarationList`, which catches, *declares the variable with
+its annotated type anyway*, and rethrows so later statements do not cascade
+`Unknown identifier`. StaticTS `throw` traps and discards the value.
+
+The plan is error-value threading: a diagnostic array, an `ERROR` sentinel type,
+and status returns. Be honest that this is **genuinely worse** than
+`try`/`catch` — it is the classic recursive-descent recovery tax, ~292 edit
+sites, and it will cost real bugs where a caller forgets to check a sentinel.
+The alternative, reporting only the first error, would delete WP10's multi-error
+guarantee and stop stage1 being diff-comparable with stage0 on the
+`reject_multi_*` cases. Add a `panic(msg)` builtin so the 16 internal
+invariants keep their messages.
+
+**D2. Switching the dispatch tables costs self-registration.** Today
+`checker/arrays.ts` adds `for...of` by writing one line into a table and
+touching no other file. With a central `switch`, one `checkExpression` must name
+every construct, so `checker/` becomes a core plus helpers rather than a set of
+peers. Take the central `switch` — it is smallest and it is the shape that
+compiles to a jump table — but note that the paired `BuiltinCall { emit,
+callees }` invariant stops being enforced by locality, so it needs a test.
+
+**D3. Module resolution has a real hazard, not just tedium.** Module identity is
+the absolute resolved path; a hand-written `resolve` that normalises `..`
+differently from Node makes one file load twice, cycles stop terminating, and
+bogus duplicate-symbol errors appear. Separately, `src/` imports *directories*
+(`from "../checker"` at 15 sites) and re-exports (`export * from`) — neither of
+which StaticTS resolves, so the barrels must go.
+
+**D4. stage1 should not link.** `--link` shells out to `bash scripts/build.sh`
+and `-o dir/` creates directories, which would mean `spawnSync` and `mkdirSync`
+builtins and real runtime growth against §5 rule 4. Drop `--link`, `--profile`
+and directory creation from stage1: it emits `.ll`, and a wrapper script links.
+Costs nothing for the bootstrap proof, which compares IR.
+
+**D5. Measure peak memory before S5, not after.** `self/` allocates every node,
+type, string and array from the bump arena and never releases it — an
+`Arena.reset` is unsafe while the AST lives. Add to that `IRModule.toString()`
+building the whole module text in memory before one write. Peak is roughly AST +
+all interned IR text + the final string. Probably fine at hundreds of MB; the
+point is to know rather than to find out at the last milestone.
 
 ## 4. Milestones
 
@@ -160,7 +236,40 @@ compiler compiles itself.
 
 ---
 
-## 5. Rules for this work package
+## 5. Performance is the tiebreaker
+
+The project's northern star is the speed of what the compiler produces. Where a
+language decision here has two defensible answers, the faster lowering wins, and
+"faster" means measured rather than assumed. Three worked examples, because the
+rule is only worth stating if it changes something:
+
+- **Shift counts are masked** (`x << b` lowers to `shl x, (b & 31)`), which
+  makes `i32` shifts exactly JavaScript's and removes LLVM's
+  out-of-range-shift undefined behaviour. That looked like a correctness/speed
+  trade until it was measured: `llc -O3` emits **byte-identical assembly** for
+  the masked and unmasked forms on both x86-64 and aarch64, because both ISAs
+  mask in hardware and the backend drops the `and`. Free, so it stays.
+- **`switch` is integer-only**, so it lowers to LLVM's `switch` instruction and
+  the backend builds a jump table. A string `switch` would have been a chain of
+  `sts_str_eq` calls wearing a `switch`'s clothes; `if`/`else` says that
+  honestly.
+- **String methods lower inline, not to calls.** `charCodeAt` is a bounds check
+  and a `load i8`; `substring` is a length computation, a bump allocation and a
+  `memcpy`. That keeps `runtime.c` inside its budget *and* lets LLVM optimise
+  through the operation instead of across a call boundary. Both goals point the
+  same way, which is the usual case.
+
+Self-hosting serves this star directly rather than competing with it: stage1 is
+a native binary with no Node process to start and no TypeScript parser to load,
+so the compiler's own speed is one of the things self-hosting buys.
+
+Two performance questions are open and want the `bench/` harness rather than an
+opinion: whether `--strict-exports` (internal linkage for non-exported
+functions, which unlocks inlining and specialisation) should become the
+default, and what `--nsw` is actually worth on the benchmark suite now that
+there is more than arithmetic to measure.
+
+## 6. Rules for this work package
 
 These are in addition to `docs/MASTER_PLAN.md` §7, not instead of it.
 
@@ -181,3 +290,6 @@ These are in addition to `docs/MASTER_PLAN.md` §7, not instead of it.
    §2 is an edit to this file and a line in `CHANGELOG.md`, because every
    addition is something stage1 must then implement in order to compile
    itself.
+6. **A new construct is lowered for speed and the lowering is checked.** Read
+   the emitted assembly, not just the IR, when the choice is not obvious — §5
+   exists because one such reading changed nothing and another would have.
