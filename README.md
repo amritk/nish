@@ -81,6 +81,7 @@ node dist/index.js <entry.ts> [more.ts ...] [options]      # or `statictsc ...` 
   --plain                    no performance attributes or alignment hints
   --runtime-decls            always emit the runtime ABI prelude (arena + strings)
   --unchecked-indexing       drop array bounds checks (unsafe: out-of-range is UB; benchmarks only)
+  --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas; debugging)
 
 # Example
 node dist/index.js examples/add.ts -o build/add.ll
@@ -185,7 +186,7 @@ runtime functions vanish.
 
 ### Runtime: arena allocation, no GC
 
-`runtime/runtime.c` (7.4 KB of source, 2.7 KB compiled at `-Oz`; budget 8 KB / 4 KB) provides:
+`runtime/runtime.c` (8.0 KB of source, 3.3 KB compiled at `-Oz`; budget 8 KB / 4 KB) provides:
 
 | Symbol | Purpose |
 | --- | --- |
@@ -193,6 +194,8 @@ runtime functions vanish.
 | `sts_reset_arena()` | Recycle everything in O(1). Keeps the newest chunk, frees the rest, so a steady-state program stops calling `malloc` at all. |
 | `sts_free_arena()` | Release all chunks. |
 | `sts_arena_grow(size)` | Slow path: push a new chunk (at least 64 KB) and bump from it. |
+| `sts_arena_mark()` / `sts_arena_release(mark)` | Arena scopes (WP6): a mark is the current bump address; release frees everything allocated since it (chunks pushed after it are freed). Compiled functions whose temporaries provably die with them bracket their body with these; `Arena.mark()` / `Arena.release(m)` expose them. |
+| `sts_arena_used()` | Bytes bumped in the current chunk (`Arena.used()`), the number the memory tests watch. |
 | `sts_str_new / concat / eq / len / print / from_i32 / from_i64 / from_f64` | Length-prefixed, NUL-terminated, immutable UTF-8 strings living in the arena. `from_f64` prints exactly what JavaScript's `String(x)` prints (shortest round-trip digits). |
 | `sts_random()` | `Math.random`: xorshift64\*, seeded lazily from time and pid, 53 random bits in `[0, 1)`. |
 | `sts_exit(code)` | `process.exit`. |
@@ -254,6 +257,7 @@ behaviour, so nothing is emitted speculatively.
 | `readonly` on `string` params | always | Strings are immutable. |
 | `noalias` on `string` params | always | `noalias` only concerns memory that is modified, and nothing writes through a string pointer. |
 | `nocapture` on `string` params | the param is never returned or passed to a call | Escape analysis in `attributes.ts`. |
+| no `nonnull` / `dereferenceable` on `T \| null` params and returns | always | A null value would violate them; `align 8`, `readonly`, `nocapture` stay (WP6). |
 | `alwaysinline allocsize(0)` | the inline allocator | Forces the fast path into callers; `allocsize` tells LLVM the object size. |
 | `cold noinline` | `sts_arena_grow` | Keeps the slow path out of the hot loop. |
 | `align 4/8` on `alloca`/`load`/`store` | always | Natural alignment, identical to clang and rustc. |
@@ -337,6 +341,8 @@ for the freestanding wasm profile.
 | `src/codegen/emitter.ts` | C. Emit | Core: module assembly, function setup, runtime prelude, dispatch. |
 | `src/codegen/emit/statements.ts`, `expressions.ts` | C. Emit | Lowering handlers keyed by `ts.SyntaxKind` / operator, mirroring the checker tables. |
 | `src/codegen/attributes.ts` | C. Emit | Purity, loop, and escape analysis; attribute rendering. |
+| `src/codegen/escape.ts` | C. Emit | Allocation escape analysis (WP6): which `new` / literals become allocas, which functions get an arena scope. |
+| `src/checker/nullable.ts`, `arena.ts` | B. Check | `T \| null` (the `null` literal, narrowing) and the `Arena.*` builtins; lowered by `src/codegen/emit/arena.ts`. |
 | `src/codegen/runtime.ts` | C. Emit | Runtime ABI declarations and the inline arena allocator. |
 | `src/compiler.ts` | Driver | Chains the three phases. |
 | `src/index.ts` | CLI | Argument parsing and file I/O. |
@@ -365,6 +371,7 @@ Type mapping:
 | `T[]`, `Array<T>` | `%struct.sts_array*` to `{ i64 len, i64 cap, i8* data }`, arena-allocated, 8-aligned; `data` holds `cap` elements of `T`; `a[i]` is bounds-checked (see [docs/wp4-arrays.md](docs/wp4-arrays.md)) |
 | `class C` | `%struct.C*` to `%struct.C = type { fields in declaration order }`, arena-allocated, natural alignment and padding exactly as clang lays out the same C struct. See [docs/wp2-classes.md](docs/wp2-classes.md). |
 | `interface I` | `%struct.I*`, same layout rules; built from object literals, no methods |
+| `T \| null` (`T` a class, interface, array or string) | the same pointer type as `T`, with the constant `null` as an extra value; only `=== null` / `!== null`, assignment, passing, and narrowing inside `if (p !== null)` are allowed on it (see [docs/wp6-memory.md](docs/wp6-memory.md)) |
 | `void` | `void` |
 
 Supported today:
@@ -402,6 +409,10 @@ Supported today:
 - Definite assignment: every field is initialised (inline literal or constructor) before it can be read; `this` cannot leak from a constructor early.
 - `interface` declarations as struct types built from object literals (`const p: P = { x: 1, y: 2 }`, all fields required); `class C implements I` requires the identical field list, and a `C` converts to `I` by `bitcast`.
 - `export class` / `export interface` and importing them by name (no renaming); methods of an imported class are `declare`d with the exporter's attributes.
+- Escape-analysed stack allocation: a `new C(...)`, object literal, array literal, or `new Array<T>(<literal>)` whose value provably does not outlive the function (never returned, stored, pushed, re-assigned, or passed to a capturing callee) becomes an entry-block `alloca` instead of an arena bump; a temporary in a loop reuses one hoisted slot. `--no-stack-alloc` turns it off. See [docs/wp6-memory.md](docs/wp6-memory.md).
+- Automatic arena scopes: a function whose arena temporaries (dynamic arrays, `push` growth, concatenated strings, number-to-string conversions, callee results) all die with it calls `sts_arena_mark` on entry and `sts_arena_release` before every `ret`, so a function called a million times keeps the arena flat.
+- `Arena.reset()`, `Arena.mark(): i64`, `Arena.release(m: i64)`, `Arena.used(): i64` for explicit control (releasing while an object allocated after the mark is still referenced is undefined behaviour).
+- `T | null` for class, interface, array, and string types: `null` typed by context, `=== null` / `!== null`, and narrowing to `T` inside `if (p !== null) { ... }`, after `if (p === null) { return ...; }`, in `while (p !== null)`, in the right operand of `p !== null && ...`, and in ternary arms; any field, method, index, or `.length` access on an un-narrowed nullable is an error.
 
 Rejected with a diagnostic (`file:line:col: error: ...`):
 
@@ -413,8 +424,9 @@ Rejected with a diagnostic (`file:line:col: error: ...`):
   signatures, parameter properties, `new` on an interface, object literals
   without a contextual type, `<` on struct values, reading a field before the
   constructor assigns it (see [docs/wp2-classes.md](docs/wp2-classes.md)).
-- Anything else outside the Phase 1 subset (arrays, `null`), which later
-  phases add.
+- `null` where a plain `T` is expected, member access on a `T | null` that
+  was not narrowed, comparing two nullable values directly, `number | null`.
+- Anything else outside the current subset, which later phases add.
 
 ## Lowering rules
 

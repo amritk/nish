@@ -57,3 +57,13 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   release on `v*` tags; `docs/INSTALL.md`.
 
 [Unreleased]: https://github.com/amritk/compiler/compare/v0.1.0...HEAD
+- **Memory strategy (WP6).** Escape-analysed stack allocation: a `new`,
+  object literal, array literal or `new Array<T>(<literal>)` that provably
+  does not outlive its function becomes an entry-block `alloca`
+  (`--no-stack-alloc` disables it). Automatic arena scopes: a function whose
+  arena temporaries all die with it brackets its body with the new
+  `sts_arena_mark` / `sts_arena_release` runtime calls, so hot loops keep the
+  arena flat. `Arena.reset` / `mark` / `release` / `used` builtins, and
+  `T | null` for class, interface, array and string types with checker-
+  enforced narrowing (`if (p !== null)`, early return, `while`, `&&`, `?:`).
+  See [docs/wp6-memory.md](docs/wp6-memory.md).
