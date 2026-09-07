@@ -179,6 +179,51 @@ export function resolveModule(importerDir: string, specifier: string): string {
   return `${resolved}.ts`;
 }
 
+/**
+ * `path.posix.relative(from, to)` for two paths **rooted at the same base**:
+ * both relative, or both absolute, and neither climbing above that base. That
+ * is the contract, and it is not a simplification of Node's function so much
+ * as the only part of it that is well defined without a working directory —
+ * `path.posix.relative` resolves its arguments against `process.cwd()` first,
+ * and stage1 has none (docs/wp14-selfhost.md §3a D4).
+ *
+ * Inside the contract the answers are identical, which is what
+ * `tests/self/support_oracle.js` checks: the common prefix of segments is
+ * dropped, one `..` is emitted per segment left in `from`, and the rest of
+ * `to` follows.
+ */
+export function relativePath(from: string, to: string): string {
+  const fromParts = pathSegments(normalizePath(from));
+  const toParts = pathSegments(normalizePath(to));
+  let common = 0;
+  while (common < fromParts.length && common < toParts.length && fromParts[common] === toParts[common]) {
+    common = common + 1;
+  }
+  const out: string[] = [];
+  let i = common;
+  while (i < fromParts.length) {
+    out.push("..");
+    i = i + 1;
+  }
+  i = common;
+  while (i < toParts.length) {
+    out.push(toParts[i]);
+    i = i + 1;
+  }
+  return out.join("/");
+}
+
+/** The meaningful segments of a normalised path: no empties, no bare `.`. */
+function pathSegments(p: string): string[] {
+  const out: string[] = [];
+  for (const part of splitByte(p, SLASH)) {
+    if (part.length > 0 && part !== ".") {
+      out.push(part);
+    }
+  }
+  return out;
+}
+
 /** `parts` joined with `/` and normalised, for building a path in pieces. */
 export function joinPath(parts: string[]): string {
   const out = new StringBuilder();

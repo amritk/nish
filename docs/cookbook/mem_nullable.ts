@@ -20,3 +20,11 @@ function sum(head: Node | null): number {
   }
   return total;
 }
+
+// `(Node | null)[]`, which is where a type needs its parentheses: `Node |
+// null[]` would group the other way. The element loads as a nullable and
+// narrows like any local once it is bound to one.
+function firstValue(slots: (Node | null)[]): number {
+  const head = slots[0];
+  return head !== null ? head.value : 0;
+}

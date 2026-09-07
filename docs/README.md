@@ -35,6 +35,8 @@ where they disagree with LANGUAGE.md, LANGUAGE.md wins.
 | [wp10-ci.md](wp10-ci.md) | Design note: the CI matrix, running it locally, the diagnostic format. |
 | [wp12-release.md](wp12-release.md) | Design note: package contents, exit codes and failure modes, the smoke test, the release procedure. |
 | [wp13-differential.md](wp13-differential.md) | Design note: differential testing against Node, the typed rewrite rules, `runtime/shim.mjs`, the corpus and the fuzzer, every discrepancy found (with which ones were fixed since). |
+| [wp14-selfhost.md](wp14-selfhost.md) | The plan of record for self-hosting, and what it cost: StaticTS-0 and what it forces, the language gap measured, the five milestones, the oracles, and the bootstrap that closed it. |
+| [wp15-performance.md](wp15-performance.md) | The rule that speed decides a tie and that "faster" means measured: the data-oriented paradigm and how it is enforced, the language features the ordering requires, and the diagnostics that keep the decisions visible. |
 
 The remaining semantic changes after WP13 (checked integer division,
 ECMAScript `Math.pow`, numeric-only ordering, `?.`/`??` rejected,

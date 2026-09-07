@@ -81,6 +81,7 @@ import {
   N_UNARY,
   N_TYPE_ARRAY,
   N_TYPE_NULL,
+  N_TYPE_PAREN,
   N_TYPE_REF,
   N_TYPE_UNION,
   N_VAR,
@@ -688,6 +689,18 @@ export class Parser {
 
   parsePrimaryType(): Node {
     const start = this.start;
+    if (this.at(TOK_LPAREN)) {
+      // `(T | null)[]`: the parentheses are not decoration, because `T | null[]`
+      // is `T | (null[])`. The node is kept rather than unwrapped so the tree
+      // is the `typescript` parser's, span for span; `resolveType` reads
+      // through it exactly as stage0's `ParenthesizedType` case does.
+      this.advance();
+      const node = this.node(N_TYPE_PAREN, start, this.end);
+      node.children.push(this.parseType());
+      this.expect(TOK_RPAREN);
+      node.end = this.previousEnd;
+      return node;
+    }
     if (this.at(TOK_NULL)) {
       this.advance();
       return this.node(N_TYPE_NULL, start, this.previousEnd);

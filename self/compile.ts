@@ -1,33 +1,25 @@
-// `compile <file> [flags]`: stage1's compiler driver for one module
-// (docs/wp14-selfhost.md milestone S4). It lexes, parses, validates, checks
-// and emits, and writes the LLVM IR to stdout.
+// `compile <entry.ts> [flags]`: stage1's compiler driver
+// (docs/wp14-selfhost.md milestones S4 and S5).
 //
-// One module at a time, deliberately. Resolving an `import` means loading
-// another file, ordering the modules and running the attribute fixpoint over
-// all of them at once, which is milestone S5's driver; until it lands this
-// binary is what `tests/self/ir_oracle.js` compares against stage0's `-o`
-// output over every import-free program in the corpus.
+// It loads the entry module and everything it imports, checks the program as a
+// whole, and writes one `.ll` per module. With no `--out-dir` it writes the IR
+// of a single-module program to stdout, which is what the S4 oracle compares;
+// with `--out-dir <dir>` it writes `<dir>/<stem>.ll` per module, which is what
+// the bootstrap links. The directory must already exist: `mkdir` would mean a
+// runtime call stage1 does not have, and D4 keeps the host-dependent half of
+// the driver in stage0.
 //
-// The flags are the subset of stage0's that change the IR — everything else
-// (`--link`, `--profile`, `-o dir/`, the interop sidecars, `-g`) is stage0's
-// by D4, because it needs `spawnSync`, `mkdirSync` or a DWARF builder and none
-// of that is on the path to the bootstrap proof.
+// The flags are the subset of stage0's that change the IR. Everything else —
+// `--link`, `--profile`, the interop sidecars, `-g` — is stage0's for the same
+// reason.
 
-import { analyzeFunctions, AnalysisUnit } from "./attributes";
-import { Checker } from "./checker";
+import { Compilation } from "./compilation";
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context";
-import { DiagnosticSink, SourceFile } from "./diagnostics";
-import { emitProgram } from "./emit";
 import { Options } from "./options";
-import { ParentTable } from "./parents";
-import { Parser } from "./parser";
-import { RuntimeTable } from "./runtime";
 import { resolveTarget, supportedTargets } from "./target";
-import { TypeTable } from "./types";
-import { validate } from "./validator";
 
 const USAGE: string =
-  "usage: compile <file.ts> [--number-mode i32|f64] [--plain] [--strict-exports] [--unchecked-indexing] [--nsw] [--no-stack-alloc] [--runtime-decls] [--target <triple>]";
+  "usage: compile <file.ts> [--out-dir <dir>] [--number-mode i32|f64] [--plain] [--strict-exports] [--unchecked-indexing] [--nsw] [--no-stack-alloc] [--runtime-decls] [--target <triple>]";
 
 export function main(): number {
   if (process.argv.length < 2) {
@@ -36,6 +28,7 @@ export function main(): number {
   }
   const opts = new Options();
   let path = "";
+  let outDir = "";
   let arg = 1;
   while (arg < process.argv.length) {
     const value = process.argv[arg];
@@ -46,6 +39,13 @@ export function main(): number {
         return 2;
       }
       opts.numberMode = process.argv[arg] === "f64" ? NUMBER_MODE_F64 : NUMBER_MODE_I32;
+    } else if (value === "--out-dir") {
+      arg = arg + 1;
+      if (arg >= process.argv.length) {
+        console.error("compile: --out-dir needs a directory");
+        return 2;
+      }
+      outDir = process.argv[arg];
     } else if (value === "--target") {
       arg = arg + 1;
       if (arg >= process.argv.length) {
@@ -84,46 +84,32 @@ export function main(): number {
     return 2;
   }
 
-  const text = readFileSyncOrNull(path);
-  if (text === null) {
-    console.error(`compile: cannot read ${path}`);
+  const compilation = new Compilation(opts);
+  if (!compilation.load(path)) {
+    if (compilation.sink.hasErrors()) {
+      writeError(`${compilation.sink.format(20)}\n`);
+    }
     return 1;
   }
-  const source = new SourceFile(path, text);
-  const parser = new Parser(source);
-  const file = parser.parseSourceFile();
-  for (const diagnostic of parser.diagnostics) {
-    writeError(`${diagnostic.message()}\n`);
-  }
-  if (parser.diagnostics.length > 0) {
+  if (!compilation.check()) {
+    writeError(`${compilation.sink.format(20)}\n`);
     return 1;
   }
-
-  const sink = new DiagnosticSink();
-  const table = new TypeTable();
-  const checker = new Checker(table, source, file, true, parser.nodeCount, sink, opts.numberMode);
-  // Phase 0 first: what is forbidden by design is refused before the checker
-  // has a chance to report it as something merely unsupported.
-  validate(checker.ctx, file);
-  if (sink.hasErrors()) {
-    writeError(`${sink.format(20)}\n`);
-    return 1;
+  const emitted = compilation.emit();
+  if (outDir.length === 0) {
+    if (emitted.length > 1) {
+      console.error(
+        `compile: ${path} imports ${emitted.length - 1} module(s); pass --out-dir <dir> so each one gets its own .ll`
+      );
+      return 2;
+    }
+    write(emitted[0].ir);
+    return 0;
   }
-  checker.collectSignatures();
-  // A whole compilation asks the *entry* module; one module on its own is the
-  // entry, so its own `main` is the answer.
-  checker.ctx.entryHasMain = checker.program.entryMain !== null;
-  checker.foldConstants();
-  checker.checkBodies();
-  if (sink.hasErrors()) {
-    writeError(`${sink.format(20)}\n`);
-    return 1;
+  for (const module of emitted) {
+    const file = `${outDir}/${module.stem}.ll`;
+    writeFileSync(file, module.ir);
+    console.log(`wrote ${file}`);
   }
-
-  const units: AnalysisUnit[] = [];
-  units.push(new AnalysisUnit(checker.program, new ParentTable(file, parser.nodeCount)));
-  const runtime = new RuntimeTable();
-  const facts = analyzeFunctions(units, table, opts, runtime);
-  write(emitProgram(units[0], table, opts, runtime, facts));
   return 0;
 }

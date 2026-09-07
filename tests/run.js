@@ -1763,6 +1763,24 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       irOracle.status === 0,
       `${irOracle.stdout}${irOracle.stderr}`
     );
+
+    // S5, and the claim the work package exists for: `self/` compiles `self/`.
+    // stage1 is `self/` built by stage0, stage2 is `self/` built by stage1,
+    // stage3 is `self/` built by stage2. `IR(stage1) == IR(stage2)` is the
+    // fixed point — nothing about stage0 leaks into the result any more — and
+    // stage3 must be byte-identical to stage2 so the binaries are compared as
+    // well as the text. Three links, so it is the slowest check here.
+    const bootstrap = spawnSync("node", [path.join(root, "tests", "self", "bootstrap.js")], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const bootstrapSummary = bootstrap.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/ compiles self/: the bootstrap reaches a fixed point (${bootstrapSummary})`,
+      bootstrap.status === 0,
+      `${bootstrap.stdout}${bootstrap.stderr}`
+    );
   }
 }
 

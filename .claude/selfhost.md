@@ -4,16 +4,21 @@
 is [`docs/wp14-selfhost.md`](../docs/wp14-selfhost.md); this file is the map you
 need before touching a line of it.
 
-## The claim being built
+## The claim, and that it holds
 
 ```
 IR(stage1, self/)  ==  IR(stage2, self/)      byte for byte
 ```
 
 stage1 is `self/` built by stage0, stage2 is `self/` built by stage1, stage3 is
-`self/` built by stage2 and must be byte-identical to stage2. A second, weaker
-equality — `IR(stage0, p) == IR(stage1, p)` over `tests/cases/` — is the S4
-oracle, enabled per file as the port lands.
+`self/` built by stage2 and must be byte-identical to stage2. All of that holds
+today over the 41 modules of `self/`, and so does the stronger
+`IR(stage0, self/) == IR(stage1, self/)`: the two implementations are the same
+compiler, not two compilers that agree about the tests.
+
+`self/` is therefore **frozen against stage0 rather than ahead of it**: a
+construct still enters the language (and `src/`) before it enters `self/`, and
+`npm test` fails the moment the two disagree about one byte of one module.
 
 ## Milestones
 
@@ -23,7 +28,7 @@ oracle, enabled per file as the port lands.
 | S2 | `self/parser.ts` builds the tree | **done** — `tests/parser_oracle.js`, 447/447 files |
 | S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js` and `reject_oracle.js` |
 | S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 206/206 files byte for byte |
-| S5 | `self/` compiles `self/` | in progress |
+| S5 | `self/` compiles `self/` | **done** — `tests/self/bootstrap.js`: `IR(stage1) == IR(stage2)`, stage3 == stage2 |
 
 ## The rules that are specific to this work
 
@@ -82,6 +87,7 @@ No generics, arrow functions, closures, nested functions or function values; no
 | `parents.ts` | `node.parent`, which this tree does not have |
 | `escape.ts` `attributes.ts` | `src/codegen/escape.ts` and `attributes.ts` |
 | `emit.ts` `emit_util.ts` `emit_ops.ts` `emit_control.ts` `emit_strings.ts` `emit_arrays.ts` `emit_classes.ts` `emit_builtins.ts` | `src/codegen/emitter.ts` and `emit/*.ts` |
+| `compilation.ts` | `src/compilation.ts`: the whole-program driver |
 | `dump_tokens.ts` `dump_ast.ts` `dump_checked.ts` `compile.ts` | the `--emit-*` dumps in `src/dump.ts`, and the CLI |
 
 Cyclic imports between family modules are fine and already used
@@ -104,7 +110,8 @@ wired into the WP14 section of `tests/run.js` and skipped without clang.
 | `tests/self/symbols_oracle.js` | the scope chain and the narrowing rules |
 | `tests/self/checked_oracle.js` | the `--emit-checked` dump, over every positive program in the corpus |
 | `tests/self/reject_oracle.js` | every `reject_*` case, against its own `.err` fragments |
-| `tests/self/ir_oracle.js` | the emitted IR, byte for byte, over every import-free program in the corpus |
+| `tests/self/ir_oracle.js` | the emitted IR, byte for byte, over every whole program in the corpus |
+| `tests/self/bootstrap.js` | the stages: `IR(stage0) == IR(stage1) == IR(stage2)`, and stage3 byte-identical to stage2 |
 
 The corpus is `tests/cases/`, `examples/`, `self/`, `docs/cookbook/`, `bench/`,
 `tests/differential/corpus/` and `tests/parser/`. A skip in an oracle summary is
@@ -130,4 +137,9 @@ node tests/run.js self                 # all of them, as the suite runs them
   `??` is tokenised and then rejected by the parser with a message that names
   the idiom to use instead.
 - **A disagreement is triaged before the next phase starts.** Three stage0 bugs
-  came out of S3 that way and all three shipped with cases in `tests/`.
+  came out of S3 that way and three more out of S4 — all wrong *attributes*
+  rather than wrong instructions, which is the class of bug a golden `.ll` is
+  worst at catching — and every one shipped with a case in `tests/`.
+- **A skip in an oracle is a to-do list.** S2's "needs ParenthesizedType" skip
+  sat there for three milestones and named exactly the grammar S5 turned out
+  to need.

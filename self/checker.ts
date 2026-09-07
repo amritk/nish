@@ -27,6 +27,7 @@ import {
   N_MODULE_CONST,
   Node,
 } from "./nodes";
+import { StringSet } from "./map";
 import {
   CheckedProgram,
   ConstInfo,
@@ -34,10 +35,17 @@ import {
   STRUCT_CLASS,
   STRUCT_INTERFACE,
   StructInfo,
+  StructRegistry,
 } from "./program";
 import { checkStatements } from "./statements";
 import { Local, STORAGE_PARAM, Scope } from "./symbols";
-import { checkImplements, collectStructMembers, declareStruct } from "./structs";
+import {
+  checkImplements,
+  collectStructMembers,
+  declareStruct,
+  referencedStructNames,
+  signatureStructNames,
+} from "./structs";
 import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING, T_VOID, TypeTable } from "./types";
 
 export class Checker {
@@ -237,6 +245,68 @@ export class Checker {
         foldConstant(this.ctx, info);
       }
     }
+  }
+
+  /**
+   * The layouts an imported class or function drags in with it. `import
+   * { Box }` where `Box.all(): Item[]` gives this module `Item` values it can
+   * call methods on and read fields of, and both the checker and the emitter
+   * need the layout — a `%struct.Item = type opaque` would make a field access
+   * impossible to emit. Run after *every* module is bound, so that a struct
+   * reached through a chain of modules does not depend on the binding order.
+   */
+  closeReachableStructs(declared: StructRegistry): void {
+    const pending: StructInfo[] = [];
+    const seen = new StringSet();
+    for (const imp of this.program.imports) {
+      const struct = imp.struct;
+      if (struct !== null) {
+        // The imported class itself is already registered under its name.
+        seen.add(struct.name);
+        pending.push(struct);
+      }
+      // An imported *function* drags its types in the same way: `parse(): Node`
+      // hands this module `Node` values with no mention of `Node` anywhere.
+      const sig = imp.sig;
+      if (sig !== null) {
+        const names = new StringSet();
+        signatureStructNames(this.ctx.table, sig, names);
+        this.reachAll(declared, seen, pending, names);
+      }
+    }
+    while (pending.length > 0) {
+      const info = pending.pop();
+      const names = new StringSet();
+      // A self-referential field (`parent: Node | null`) puts the struct's own
+      // name in here. `src/` deletes it; `reach` already ignores it, because
+      // nothing reaches `pending` without its name being marked seen first.
+      referencedStructNames(this.ctx.table, info, names);
+      this.reachAll(declared, seen, pending, names);
+    }
+  }
+
+  reachAll(declared: StructRegistry, seen: StringSet, pending: StructInfo[], names: StringSet): void {
+    let i = 0;
+    while (i < names.size()) {
+      this.reach(declared, seen, pending, names.at(i));
+      i = i + 1;
+    }
+  }
+
+  /** Register `name`'s layout here, if the program declares it and this module has not seen it. */
+  reach(declared: StructRegistry, seen: StringSet, pending: StructInfo[], name: string): void {
+    if (!seen.add(name)) {
+      return;
+    }
+    const info = declared.get(name);
+    if (info === null) {
+      return;
+    }
+    if (!this.program.structs.has(name)) {
+      this.program.reachableStructs.push(this.program.structList.length);
+      this.program.addStruct(name, info);
+    }
+    pending.push(info);
   }
 
   bindImports(targets: CheckedProgram[]): void {

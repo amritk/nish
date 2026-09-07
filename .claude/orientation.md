@@ -10,15 +10,16 @@ Two compilers for one language.
 | | Source | Written in | Built by | Role |
 | --- | --- | --- | --- | --- |
 | **stage0** | `src/` | TypeScript on Node, parsing with the `typescript` package | `tsc` into `dist/` | the shipped compiler, the bootstrap seed, and the oracle |
-| **stage1** | `self/` | StaticTS (the language itself) | stage0 | the self-hosted compiler being written now |
+| **stage1** | `self/` | StaticTS (the language itself) | stage0 | the self-hosted compiler; it compiles itself to a fixed point |
 
 `statictsc` compiles a strictly static subset of TypeScript to textual LLVM IR.
 The pipeline is parse → validate (Phase 0) → check (signatures, then bodies) →
 emit, and the shape is the same on both sides.
 
-The current work is **self-hosting** (`docs/wp14-selfhost.md`). Read
-[`selfhost.md`](./selfhost.md) next if you are touching `self/`, `tests/self/`,
-`tests/lexer_oracle.js` or `tests/parser_oracle.js` — which today is most work.
+`self/` compiles `self/` to a byte-identical fixed point today
+(`docs/wp14-selfhost.md`, milestone S5), and `npm test` proves it on every run.
+Read [`selfhost.md`](./selfhost.md) next if you are touching `self/`,
+`tests/self/`, `tests/lexer_oracle.js` or `tests/parser_oracle.js`.
 
 ## The five things that are always true
 
@@ -61,7 +62,7 @@ docs/               LANGUAGE, ARCHITECTURE, IR_COOKBOOK, MASTER_PLAN, wp*.md
 ```bash
 npm ci                      # install
 npm run check               # tsc --noEmit
-npm test                    # build + the whole suite (~2 min with LLVM)
+npm test                    # build + the whole suite (~3 min with LLVM)
 node tests/run.js <sub>     # only checks whose name contains <sub>
 node tests/run.js self      # the WP14 self-hosting section alone
 npm run test:update         # write missing .ll goldens

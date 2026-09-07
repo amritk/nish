@@ -1,6 +1,6 @@
 /**
  * The S4 emitter oracle: `IR(stage0, p) == IR(stage1, p)`, byte for byte, over
- * every import-free program in the corpus (docs/wp14-selfhost.md §6 rule 3).
+ * every program in the corpus (docs/wp14-selfhost.md §6 rule 3).
  *
  *   node tests/self/ir_oracle.js              the whole corpus
  *   node tests/self/ir_oracle.js <file>...    just those files
@@ -12,10 +12,12 @@
  * a difference of one character in one attribute is a failure, which is the
  * point — the attributes are the half of the output a golden test reads past.
  *
- * Three kinds of file are skipped, and each skip is a fact about how far S4
- * has got rather than a file that is allowed to disagree:
+ * A program that imports is compiled whole, by both compilers, and every
+ * module of it is compared — the module *set* included, so a stage that
+ * emitted one module fewer has not agreed about the rest. Two kinds of file
+ * are skipped, and each skip is a fact rather than a file that is allowed to
+ * disagree:
  *
- *   - it imports, which needs the module driver of S5;
  *   - its `.args` ask for something stage1 does not do (`-g`, the dump flags):
  *     debug info is stage0's, as `--link` is (docs/wp14-selfhost.md §3a D4);
  *   - stage0 itself rejects it, so there is no IR to compare against.
@@ -54,26 +56,33 @@ function argsFor(file) {
   return { flags, unsupported };
 }
 
-function compare(binary, outDir, file) {
-  const source = fs.readFileSync(file, "utf8");
-  if (/^\s*import\s/m.test(source)) return { skipped: "imports (needs the S5 driver)" };
+function llFiles(dir) {
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith(".ll"))
+    .sort();
+}
+
+function compare(binary, work, file) {
   const { flags, unsupported } = argsFor(file);
   if (unsupported.length > 0) return { skipped: `stage1 has no ${unsupported.join(" ")}` };
-  // Both sides name the module by the path they were given, and stage0 writes
-  // that path into the module header, so the input must be spelled the same.
+  // Both sides name each module by the path they resolved it to, and stage0
+  // writes that path into the module header, so the entry must be spelled the
+  // same for both.
   const named = path.relative(root, file);
+  const dir0 = fresh(path.join(work, "stage0"));
+  const dir1 = fresh(path.join(work, "stage1"));
 
-  const stage0 = spawnSync("node", [cli, named, "-o", `${outDir}/`, ...flags], {
+  const stage0 = spawnSync("node", [cli, named, "-o", `${dir0}/`, ...flags], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
   if (stage0.status !== 0) return { skipped: "stage0 rejects it" };
-  const written = path.join(outDir, `${path.basename(file, ".ts")}.ll`);
-  if (!fs.existsSync(written)) return { skipped: "stage0 wrote no IR" };
-  const want = fs.readFileSync(written, "utf8");
+  const names = llFiles(dir0);
+  if (names.length === 0) return { skipped: "stage0 wrote no IR" };
 
-  const stage1 = spawnSync(binary, [...flags, named], {
+  const stage1 = spawnSync(binary, [...flags, named, "--out-dir", dir1], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
@@ -82,18 +91,37 @@ function compare(binary, outDir, file) {
     const first = stage1.stderr.trim().split("\n")[0] ?? `exit ${stage1.status}`;
     return { rejected: first };
   }
-  if (stage1.stdout === want) return { lines: want.split("\n").length };
-
-  const got = stage1.stdout.split("\n");
-  const expected = want.split("\n");
-  for (let i = 0; i < Math.max(got.length, expected.length); i++) {
-    if (got[i] !== expected[i]) {
-      return {
-        failed: `line ${i + 1}: ours \`${got[i] ?? "<end>"}\`, stage0 \`${expected[i] ?? "<end>"}\``,
-      };
-    }
+  const ours = llFiles(dir1);
+  if (names.join(",") !== ours.join(",")) {
+    return { failed: `stage0 emitted [${names.join(" ")}], ours [${ours.join(" ")}]` };
   }
-  return { failed: "the texts differ but no line does (a trailing newline?)" };
+
+  let lines = 0;
+  for (const name of names) {
+    const want = fs.readFileSync(path.join(dir0, name), "utf8");
+    const got = fs.readFileSync(path.join(dir1, name), "utf8");
+    if (want === got) {
+      lines += want.split("\n").length;
+      continue;
+    }
+    const wantLines = want.split("\n");
+    const gotLines = got.split("\n");
+    for (let i = 0; i < Math.max(wantLines.length, gotLines.length); i++) {
+      if (wantLines[i] !== gotLines[i]) {
+        return {
+          failed: `${name} line ${i + 1}: ours \`${gotLines[i] ?? "<end>"}\`, stage0 \`${wantLines[i] ?? "<end>"}\``,
+        };
+      }
+    }
+    return { failed: `${name}: the texts differ but no line does` };
+  }
+  return { lines, modules: names.length };
+}
+
+function fresh(dir) {
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
 }
 
 /** Every positive StaticTS program the other oracles read, plus `self/` itself. */
@@ -115,6 +143,15 @@ function corpus() {
       // A `.err` case is a rejection: there is no IR on either side.
       if (fs.existsSync(file.replace(/\.ts$/, ".err"))) continue;
       files.push(file);
+    }
+  }
+  // The whole programs of `tests/link/`, which is where the multi-module
+  // shapes live: cycles, diamonds, re-exported classes, reachable structs.
+  const linkDir = path.join(root, "tests", "link");
+  if (fs.existsSync(linkDir)) {
+    for (const name of fs.readdirSync(linkDir).sort()) {
+      const main = path.join(linkDir, name, "main.ts");
+      if (fs.existsSync(main)) files.push(main);
     }
   }
   return files;
@@ -140,15 +177,16 @@ function main(argv) {
   const named = argv.filter((a) => !a.startsWith("--"));
   const binary = build();
   if (binary === null) return 1;
-  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "sts-ir-"));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "sts-ir-"));
   const inputs = named.length > 0 ? named.map((f) => path.resolve(f)) : corpus();
   let agreed = 0;
   let lines = 0;
+  let modules = 0;
   const skipped = [];
   const rejected = [];
   const failed = [];
   for (const file of inputs) {
-    const result = compare(binary, outDir, file);
+    const result = compare(binary, work, file);
     const name = path.relative(root, file);
     if (result.skipped !== undefined) skipped.push(`${name}: ${result.skipped}`);
     else if (result.rejected !== undefined) rejected.push(`${name}: ${result.rejected}`);
@@ -156,9 +194,10 @@ function main(argv) {
     else {
       agreed++;
       lines += result.lines;
+      modules += result.modules;
     }
   }
-  fs.rmSync(outDir, { recursive: true, force: true });
+  fs.rmSync(work, { recursive: true, force: true });
   for (const f of failed) process.stdout.write(`  FAIL ${f}\n`);
   if (verbose || showDiff) {
     for (const r of rejected) process.stdout.write(`  reject ${r}\n`);
@@ -172,7 +211,7 @@ function main(argv) {
   // of this milestone, and it must not be able to hide inside a skip count.
   const note = rejected.length > 0 ? `, ${rejected.length} rejected by stage1` : "";
   process.stdout.write(
-    `${agreed}/${compared} files agree (${lines} IR lines), ${skipped.length} skipped${note}\n`
+    `${agreed}/${compared} programs agree (${modules} modules, ${lines} IR lines), ${skipped.length} skipped${note}\n`
   );
   return failed.length === 0 && rejected.length === 0 ? 0 : 1;
 }

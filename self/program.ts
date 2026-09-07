@@ -266,6 +266,35 @@ export class ImportBinding {
 }
 
 /**
+ * Every class and interface declared anywhere in the program, by name.
+ *
+ * A struct name is already a program-wide symbol (`%struct.<name>` and
+ * `@<name>.method`), so a collision is a broken program either way and the
+ * first declaration wins here, as it does in `src/compilation.ts`.
+ */
+export class StructRegistry {
+  index: StringMap;
+  list: StructInfo[];
+
+  constructor() {
+    this.index = new StringMap();
+    this.list = [];
+  }
+
+  add(info: StructInfo): void {
+    if (!this.index.has(info.name)) {
+      this.index.set(info.name, this.list.length);
+      this.list.push(info);
+    }
+  }
+
+  get(name: string): StructInfo | null {
+    const at = this.index.get(name, -1);
+    return at < 0 ? null : this.list[at];
+  }
+}
+
+/**
  * Everything the checker knows about one module.
  *
  * The `node*` arrays are the side tables, indexed by `Node.id`. They are

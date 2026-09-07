@@ -114,7 +114,11 @@ Type rules:
   `T | null` (or `null | T`) is accepted when `T` is a class, interface,
   array, or string; a scalar is
   `` `i32 | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value) ``
-  (`tests/cases/reject_nullable_scalar`).
+  (`tests/cases/reject_nullable_scalar`). A type may be **parenthesised**, and
+  `(T | null)[]` is where it matters: `T | null[]` groups the other way and
+  means "a `T`, or an array of `null`". The parentheses only group — the type
+  inside them is the type — so `(A | B)[]` is still refused as a union
+  (`tests/cases/cls_parenthesized_type`, `reject_paren_union_type`).
 - **No implicit conversion.** `const y: f64 = x` with `x: number` in i32
   mode is `Cannot initialize f64 variable ... with i32` *(CLI only)*;
   `x + n` with `x: i64`, `n: number` is rejected

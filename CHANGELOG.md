@@ -9,6 +9,19 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **Self-hosting S5: the compiler compiles itself.** `self/compilation.ts` is
+  the whole-program driver — transitive module loading through `import`,
+  cross-module binding, the reachable-struct closure, symbol-clash rejection
+  and a program-wide attribute fixpoint — and `self/compile.ts --out-dir <dir>`
+  writes one `.ll` per module. `tests/self/bootstrap.js` builds stage1 with
+  stage0, stage2 with stage1 and stage3 with stage2, and all three equalities
+  hold over the 41 modules and 4 MB of IR that make up `self/`:
+  `IR(stage0) == IR(stage1) == IR(stage2)`, byte for byte, and stage3 is
+  byte-identical to stage2. Compiling the whole compiler costs stage1 91 ms and
+  86 MB of peak RSS, against stage0's 786 ms and 178 MB.
+- **Parenthesised types.** `(T | null)[]` needs its parentheses — `T | null[]`
+  groups the other way — and stage0 always accepted them; the `self/` parser now
+  does too (`tests/cases/cls_parenthesized_type`, `reject_paren_union_type`).
 - **Self-hosting S4: the StaticTS emitter.** `self/` now carries the whole back
   end — the IR builder, the runtime ABI table, the target layouts, the escape
   analysis, the whole-program attribute fixpoint, the six construct families,
