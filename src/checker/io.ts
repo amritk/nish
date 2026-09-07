@@ -57,14 +57,14 @@ export const ioBuiltinCalls: Record<string, BuiltinCallChecker> = {
 /**
  * The construct that consumes `process.argv` mutates it: the array is the
  * target of an element store (`process.argv[i] = s`, `op=`, `++`/`--`) or the
- * receiver of `push`. Anything else (indexing, `.length`, `for...of`, passing
- * it on, aliasing it) only reads it.
+ * receiver of `push` or `pop`. Anything else (indexing, `.length`, `for...of`,
+ * `indexOf`, `join`, passing it on, aliasing it) only reads it.
  */
 function mutatesArgv(access: ts.PropertyAccessExpression): boolean {
   let node: ts.Node = access;
   while (ts.isParenthesizedExpression(node.parent)) node = node.parent;
   const parent = node.parent;
-  if (ts.isPropertyAccessExpression(parent) && parent.name.text === "push") {
+  if (ts.isPropertyAccessExpression(parent) && (parent.name.text === "push" || parent.name.text === "pop")) {
     return ts.isCallExpression(parent.parent) && parent.parent.expression === parent;
   }
   if (!ts.isElementAccessExpression(parent) || parent.expression !== node) return false;

@@ -119,7 +119,7 @@ import {
 } from "../checker/classes";
 import { unwrapParens } from "../checker/control-flow";
 import { CompilerOptions, DEFAULT_OPTIONS, StaticType, stripNull } from "../types";
-import { isPushCall } from "./emit/arrays";
+import { arrayMethodName, isPushCall } from "./emit/arrays";
 import { CallSite, EscapeResult, analyzeEscapes } from "./escape";
 import { collectBuiltinFacts } from "./emit/expressions";
 import { factCollectors } from "./emit/members";
@@ -391,11 +391,14 @@ export function classifyUse(program: CheckedProgram, ref: ts.Expression): ParamU
       if (ts.isCallExpression(use) && use.expression === parent) {
         const callee = program.callees.get(use);
         if (callee) return { kind: "argument", callee, index: 0 };
-        // `p.push(v)` stores into the array; the string byte methods (WP14)
-        // read the bytes through `nocapture readonly` runtime parameters and
+        // `p.push(v)` and `p.pop()` store into the array header; `indexOf`
+        // and `join` only read it, and so do the string byte methods (WP14),
+        // whose runtime parameters are all `nocapture readonly` and whose
         // `substring` copies what it keeps. Anything else is treated as
         // retaining the receiver.
-        if (isPushCall(program, use)) return USE_WRITE;
+        const method = arrayMethodName(program, use);
+        if (method === "push" || method === "pop") return USE_WRITE;
+        if (method !== undefined) return USE_READ;
         return isStringMethodCall(program, use) ? USE_READ : USE_ESCAPE;
       }
       return isAssignmentTarget(parent) ? USE_WRITE : USE_READ; // `p.f = v` / `p.f`, `p.length`

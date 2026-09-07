@@ -57,7 +57,7 @@ import { dottedName } from "../checker/builtins";
 import { effectiveConstructor, intrinsicType, isAssignmentOperator } from "../checker/classes";
 import { CompilerOptions, StaticType, alignOf, isNumeric, stripNull } from "../types";
 import { FunctionFacts, classifyUse } from "./attributes";
-import { isPushCall } from "./emit/arrays";
+import { isJoinCall, isPushCall } from "./emit/arrays";
 import { isStringAllocCall, unwrapStringPassthrough } from "./emit/strings";
 
 /** Largest array data block (`[n x T]`) placed on the stack, in bytes. */
@@ -203,9 +203,10 @@ export function analyzeEscapes(
       pushes.push(call);
       return;
     }
-    // WP14: `s.substring(...)` and `String.fromCharCode(c)` each bump one
-    // string out of the arena, so they are allocation sites like `a + b` is.
-    if (isStringAllocCall(program, call)) {
+    // WP14: `s.substring(...)`, `String.fromCharCode(c)` and `parts.join(s)`
+    // each bump one string out of the arena, so they are allocation sites
+    // like `a + b` is.
+    if (isStringAllocCall(program, call) || isJoinCall(program, call)) {
       sites.push({ node: call, stackable: false });
       return;
     }

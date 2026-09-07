@@ -21,7 +21,8 @@
  *     `indexOf` answers with one. `String.fromCharCode` builds a one-byte
  *     string from the low 8 bits.
  *   - `a[i]` is bounds-checked: out of range prints
- *     `index out of range: <i> >= <len>` to stderr and exits 1.
+ *     `index out of range: <i> >= <len>` to stderr and exits 1, and so is
+ *     `a.pop()` on an empty array, which has no `undefined` to return.
  *   - `toI32/toI64` from f64 saturate (NaN -> 0), integer conversions wrap.
  *   - `console.log(x)` never prints the `n` suffix of an i64 and writes
  *     synchronously so `process.exit` cannot lose output.
@@ -266,6 +267,12 @@ export function idx(a, i) {
   const k = toIndex(i);
   if (!(k >= 0 && k < a.length)) panicIndex(k, a.length);
   return a[k];
+}
+
+/** `a.pop()`: the last element, or the bounds panic — StaticTS has no `undefined` to return. */
+export function pop(a) {
+  if (a.length === 0) panicIndex(0, 0);
+  return a.pop();
 }
 
 /** `a[i] = v`: evaluates `a`, `i`, `v`, then checks and stores; yields `v`. */

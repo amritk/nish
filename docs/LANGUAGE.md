@@ -1107,6 +1107,9 @@ Paths are relative to the working directory. These are globals, not
 | --- | --- | --- |
 | `a.length` | `number`; read-only | `arr_length`, `reject_arr_length_assign` |
 | `a.push(v: T): number` | appends; grows capacity by doubling (4 from 0) through `sts_array_grow`; returns the new length | `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`) |
+| `a.pop(): T` | removes and returns the last element. An empty array **panics** and exits 1 (`index out of range: 0 >= 0`) — there is no `undefined` to return. The capacity is untouched, so the next `push` reuses the storage | `arr_pop_index`; `reject_arr_pop_arity` |
+| `a.indexOf(v: T): number` | the first index whose element is `=== v`, or `-1`: strings by content, classes / interfaces / arrays by identity, floats with `fcmp oeq` (a `NaN` element is never found, as in JavaScript). A scan in the emitted code | `arr_pop_index`; `reject_arr_index_of_type` |
+| `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3) | `arr_join`; `reject_arr_join_elem` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`sts_str_new`) | `str_bytes`; `reject_str_substring_arity` |
@@ -1120,13 +1123,18 @@ and a code-point index would need a decode per access. Cutting a multi-byte
 character in half is therefore possible and produces bytes that are not a
 valid string (docs/wp13-differential.md notes what Node then does with them).
 
-There are no other array or string methods (`pop`, `slice`, `map`,
+A numeric literal argument to `push` or `indexOf` takes the element type, so
+`wide.push(3)` on an `i64[]` is an `i64` three
+([Numeric literals](#numeric-literals)).
+
+There are no other array or string methods (`slice`, `map`, `shift`,
 `toUpperCase`, `charAt`, ...) and no `toString` (template literals
 and `console.log` convert numbers); string-to-number parsing is the bare
 `Number(s)` / `parseInt(s)` / `parseFloat(s)` under
 [Numeric conversions](#numeric-conversions). An unknown name is
-`` Unknown method `codePointAt` on string `` with the supported list
-(`tests/cases/reject_str_method_unknown`).
+`` Unknown method `codePointAt` on string `` or
+`` Unknown method `shift` on i32[] ``, each with the supported list
+(`tests/cases/reject_str_method_unknown`, `reject_arr_method_unknown`).
 
 ### `Arena`
 

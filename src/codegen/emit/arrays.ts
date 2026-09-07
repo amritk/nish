@@ -27,6 +27,16 @@
  *                    computes and stores.
  *   a.length         `load i64` of the header, then `trunc` to i32 / `sitofp`.
  *   a.push(v)        `len == cap` -> `sts_array_grow`; store at `len`; `len + 1`.
+ *   a.pop()          empty -> `sts_panic_index(0, 0)`; else `len - 1` stored
+ *                    back and the element loaded. The capacity is untouched,
+ *                    so the storage is reused by the next `push`.
+ *   a.indexOf(v)     a scan (`idx.scan` / `idx.test` / `idx.next`) comparing
+ *                    with `===` for the element type; -1 when it falls out.
+ *   a.join(sep)      `string[]` only: one pass summing the lengths
+ *                    (`join.sum`), one `sts_alloc_struct`, then one
+ *                    `llvm.memcpy` per part and per separator (`join.copy`).
+ *                    Never `sts_str_concat` in a loop, which is quadratic in
+ *                    both time and arena (docs/wp14-selfhost.md §3).
  *   for (x of a)     index loop `forof.cond` / `forof.body` / `forof.inc` /
  *                    `forof.end`; `len` is re-read each iteration (a `push` in
  *                    the body extends the loop, as in JavaScript).
@@ -44,6 +54,7 @@ import ts from "typescript";
 import { CheckedProgram } from "../../checker";
 import {
   ARRAY_STRUCT,
+  STRING,
   StaticType,
   TYPED_ARRAY_ALIASES,
   alignOf,
@@ -62,6 +73,7 @@ const HEADER = ARRAY_STRUCT;
 const HEADER_PTR = `${ARRAY_STRUCT}*`;
 const HEADER_BYTES = 24;
 const MEMSET = "llvm.memset.p0i8.i64";
+const MEMCPY = "llvm.memcpy.p0i8.p0i8.i64";
 
 /** Bytes per element. Every StaticTS value is a scalar or a pointer, so its size is its natural alignment. */
 function elementSize(elem: StaticType): number {
@@ -309,12 +321,30 @@ propertyEmitters.array = (ctx, expr) => {
 };
 
 /** `a.push(v)`: grow when full (`push.grow`), store at `len` (`push.store`), bump `len`; yields the new length. */
-methodCallEmitters.array = (ctx, expr, receiver) => {
-  const { elem } = receiver as ArrayType;
+/** Runtime `i8*` of a string element, plus its length; shared by `join`. */
+function stringLength(ctx: EmitContext, str: string): string {
+  const header = ctx.fn.emitValue(`bitcast i8* ${str} to i64*`);
+  return ctx.fn.emitValue(`load i64, i64* ${header}${align8(ctx)}`);
+}
+
+/**
+ * `===` for an element type, mirroring `emitStrictEquality` in `strings.ts`:
+ * strings compare by content, floats with `fcmp oeq` (so a `NaN` element is
+ * never found, as in JavaScript), and everything else — integers, booleans,
+ * and the pointers of classes, interfaces and arrays — with `icmp eq`.
+ */
+function emitElementEquals(ctx: EmitContext, elem: StaticType, a: string, b: string): string {
+  if (elem.kind === "string") {
+    return ctx.fn.emitValue(`call zeroext i1 ${ctx.useRuntime("sts_str_eq")}(i8* ${a}, i8* ${b})`);
+  }
+  const opcode = isFloat(elem) ? "fcmp oeq" : "icmp eq";
+  return ctx.fn.emitValue(`${opcode} ${llvmType(elem)} ${a}, ${b}`);
+}
+
+/** `a.push(v)`: grow when full, store at `len`, and answer the new length. */
+function emitPush(ctx: EmitContext, expr: ts.CallExpression, arr: string, elem: StaticType): string {
   const ty = llvmType(elem);
   const fn = ctx.fn;
-  ctx.declareType(ARRAY_TYPE);
-  const arr = ctx.emitExpression((expr.expression as ts.PropertyAccessExpression).expression);
   const value = ctx.emitExpression(expr.arguments[0]);
   const lenPtr = fieldPointer(ctx, arr, 0);
   const len = fn.emitValue(`load i64, i64* ${lenPtr}${align8(ctx)}`);
@@ -331,6 +361,191 @@ methodCallEmitters.array = (ctx, expr, receiver) => {
   const newLen = fn.emitValue(`add i64 ${len}, 1`);
   fn.emit(`store i64 ${newLen}, i64* ${lenPtr}${align8(ctx)}`);
   return emitNumberFromI64(ctx, newLen, expr);
+}
+
+/**
+ * `a.pop()`: the last element, with the length decremented. An empty array
+ * panics through the same `sts_panic_index` an index does — reported as
+ * `0 >= 0`, which is the access being attempted — because there is no
+ * `undefined` to return and no second return type to widen to.
+ */
+function emitPop(ctx: EmitContext, arr: string, elem: StaticType): string {
+  const fn = ctx.fn;
+  const lenPtr = fieldPointer(ctx, arr, 0);
+  const len = fn.emitValue(`load i64, i64* ${lenPtr}${align8(ctx)}`);
+  if (!ctx.opts.uncheckedIndexing) {
+    const empty = fn.emitValue(`icmp eq i64 ${len}, 0`);
+    const failBlock = fn.newBlock("pop.empty");
+    const okBlock = fn.newBlock("pop.ok");
+    fn.emit(`br i1 ${empty}, label %${failBlock.label}, label %${okBlock.label}`);
+    fn.placeBlock(failBlock);
+    fn.emit(`call void ${ctx.useRuntime("sts_panic_index")}(i64 0, i64 0)`);
+    fn.emit("unreachable");
+    fn.placeBlock(okBlock);
+  }
+  const last = fn.emitValue(`sub i64 ${len}, 1`);
+  fn.emit(`store i64 ${last}, i64* ${lenPtr}${align8(ctx)}`);
+  const ty = llvmType(elem);
+  return fn.emitValue(`load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, last)}${ctx.alignSuffix(elem)}`);
+}
+
+/**
+ * `a.indexOf(v)`: the first index whose element is `=== v`, or -1. The scan
+ * is emitted here rather than in `runtime.c`, which has a budget and would
+ * need one search per element type anyway.
+ *
+ * The loop is invisible to `attributes.ts`, which counts *source* loops, so
+ * it must terminate on its own for `willreturn` to stay sound: the index
+ * rises by one per pass and stops at `len`.
+ */
+function emitIndexOf(ctx: EmitContext, expr: ts.CallExpression, arr: string, elem: StaticType): string {
+  const fn = ctx.fn;
+  const value = ctx.emitExpression(expr.arguments[0]);
+  const len = loadLength(ctx, arr);
+  const slot = fn.emitAlloca("idx.at", "i64", 8);
+  fn.emit(`store i64 0, i64* ${slot}, align 8`);
+  const scanBlock = fn.newBlock("idx.scan");
+  const testBlock = fn.newBlock("idx.test");
+  const nextBlock = fn.newBlock("idx.next");
+  const missBlock = fn.newBlock("idx.miss");
+  const endBlock = fn.newBlock("idx.found");
+
+  fn.emit(`br label %${scanBlock.label}`);
+  fn.placeBlock(scanBlock);
+  const at = fn.emitValue(`load i64, i64* ${slot}, align 8`);
+  const more = fn.emitValue(`icmp ult i64 ${at}, ${len}`);
+  fn.emit(`br i1 ${more}, label %${testBlock.label}, label %${missBlock.label}`);
+
+  fn.placeBlock(testBlock);
+  const ty = llvmType(elem);
+  const element = fn.emitValue(
+    `load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, at)}${ctx.alignSuffix(elem)}`
+  );
+  const hit = emitElementEquals(ctx, elem, element, value);
+  fn.emit(`br i1 ${hit}, label %${endBlock.label}, label %${nextBlock.label}`);
+
+  fn.placeBlock(nextBlock);
+  const next = fn.emitValue(`add i64 ${at}, 1`);
+  fn.emit(`store i64 ${next}, i64* ${slot}, align 8`);
+  fn.emit(`br label %${scanBlock.label}`);
+
+  fn.placeBlock(missBlock);
+  fn.emit(`br label %${endBlock.label}`);
+
+  fn.placeBlock(endBlock);
+  const found = fn.emitValue(`phi i64 [ ${at}, %${testBlock.label} ], [ -1, %${missBlock.label} ]`);
+  return emitNumberFromI64(ctx, found, expr);
+}
+
+/**
+ * `parts.join(sep)` on a `string[]`: one pass over the lengths, one
+ * allocation, one `memcpy` per part. Building the same text with `+` in a
+ * loop copies everything again per part and never reclaims, which measured
+ * 180 MB of peak arena for 88 KB of output (docs/wp14-selfhost.md §3); this
+ * is the shape that replaces it.
+ *
+ * The separator is copied before every part but the first, with the *length*
+ * selected rather than the branch taken, so the copy loop stays one block.
+ * Both loops count up to `len` and terminate, which is what keeps
+ * `willreturn` sound (see `indexOf` above).
+ */
+function emitJoin(ctx: EmitContext, expr: ts.CallExpression, arr: string): string {
+  const fn = ctx.fn;
+  const sep = expr.arguments.length > 0 ? ctx.emitExpression(expr.arguments[0]) : ctx.stringConstant(",");
+  const len = loadLength(ctx, arr);
+  const sepLen = stringLength(ctx, sep);
+  ctx.declare(
+    `declare void @${MEMCPY}(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)`
+  );
+
+  // The separators: `len - 1` of them, and none at all for an empty array.
+  const gaps = fn.emitValue(`sub i64 ${len}, 1`);
+  const sepBytes = fn.emitValue(`mul i64 ${sepLen}, ${gaps}`);
+  const empty = fn.emitValue(`icmp eq i64 ${len}, 0`);
+  const totalSlot = fn.emitAlloca("join.total", "i64", 8);
+  const indexSlot = fn.emitAlloca("join.at", "i64", 8);
+  const cursorSlot = fn.emitAlloca("join.p", "i8*", 8);
+  const base = fn.emitValue(`select i1 ${empty}, i64 0, i64 ${sepBytes}`);
+  fn.emit(`store i64 ${base}, i64* ${totalSlot}, align 8`);
+  fn.emit(`store i64 0, i64* ${indexSlot}, align 8`);
+
+  const sumBlock = fn.newBlock("join.sum");
+  const sumBodyBlock = fn.newBlock("join.sum.body");
+  const copyBlock = fn.newBlock("join.copy");
+  const copyBodyBlock = fn.newBlock("join.copy.body");
+  const endBlock = fn.newBlock("join.end");
+
+  fn.emit(`br label %${sumBlock.label}`);
+  fn.placeBlock(sumBlock);
+  const sumAt = fn.emitValue(`load i64, i64* ${indexSlot}, align 8`);
+  const sumMore = fn.emitValue(`icmp ult i64 ${sumAt}, ${len}`);
+  fn.emit(`br i1 ${sumMore}, label %${sumBodyBlock.label}, label %${copyBlock.label}`);
+
+  fn.placeBlock(sumBodyBlock);
+  const partPtr = elementPointer(ctx, arr, STRING, sumAt);
+  const part = fn.emitValue(`load i8*, i8** ${partPtr}${align8(ctx)}`);
+  const total = fn.emitValue(`load i64, i64* ${totalSlot}, align 8`);
+  const grown = fn.emitValue(`add i64 ${total}, ${stringLength(ctx, part)}`);
+  fn.emit(`store i64 ${grown}, i64* ${totalSlot}, align 8`);
+  const sumNext = fn.emitValue(`add i64 ${sumAt}, 1`);
+  fn.emit(`store i64 ${sumNext}, i64* ${indexSlot}, align 8`);
+  fn.emit(`br label %${sumBlock.label}`);
+
+  // One string of exactly that length: the 8-byte header, the bytes, the NUL.
+  fn.placeBlock(copyBlock);
+  const size = fn.emitValue(`load i64, i64* ${totalSlot}, align 8`);
+  const bytes = fn.emitValue(`add i64 ${size}, 9`);
+  const out = fn.emitValue(`call i8* ${ctx.useRuntime("sts_alloc_struct")}(i64 ${bytes})`);
+  const outHeader = fn.emitValue(`bitcast i8* ${out} to i64*`);
+  fn.emit(`store i64 ${size}, i64* ${outHeader}${align8(ctx)}`);
+  const outData = fn.emitValue(`getelementptr inbounds i8, i8* ${out}, i64 8`);
+  fn.emit(`store i8* ${outData}, i8** ${cursorSlot}, align 8`);
+  fn.emit(`store i64 0, i64* ${indexSlot}, align 8`);
+  fn.emit(`br label %${copyBodyBlock.label}`);
+
+  fn.placeBlock(copyBodyBlock);
+  const copyAt = fn.emitValue(`load i64, i64* ${indexSlot}, align 8`);
+  const copyMore = fn.emitValue(`icmp ult i64 ${copyAt}, ${len}`);
+  const copyPartBlock = fn.newBlock("join.part");
+  fn.emit(`br i1 ${copyMore}, label %${copyPartBlock.label}, label %${endBlock.label}`);
+
+  fn.placeBlock(copyPartBlock);
+  const cursor = fn.emitValue(`load i8*, i8** ${cursorSlot}, align 8`);
+  const first = fn.emitValue(`icmp eq i64 ${copyAt}, 0`);
+  const gapLen = fn.emitValue(`select i1 ${first}, i64 0, i64 ${sepLen}`);
+  const sepData = fn.emitValue(`getelementptr inbounds i8, i8* ${sep}, i64 8`);
+  fn.emit(`call void @${MEMCPY}(i8* ${cursor}, i8* ${sepData}, i64 ${gapLen}, i1 false)`);
+  const afterGap = fn.emitValue(`getelementptr inbounds i8, i8* ${cursor}, i64 ${gapLen}`);
+  const item = fn.emitValue(`load i8*, i8** ${elementPointer(ctx, arr, STRING, copyAt)}${align8(ctx)}`);
+  const itemLen = stringLength(ctx, item);
+  const itemData = fn.emitValue(`getelementptr inbounds i8, i8* ${item}, i64 8`);
+  fn.emit(`call void @${MEMCPY}(i8* ${afterGap}, i8* ${itemData}, i64 ${itemLen}, i1 false)`);
+  const afterItem = fn.emitValue(`getelementptr inbounds i8, i8* ${afterGap}, i64 ${itemLen}`);
+  fn.emit(`store i8* ${afterItem}, i8** ${cursorSlot}, align 8`);
+  const copyNext = fn.emitValue(`add i64 ${copyAt}, 1`);
+  fn.emit(`store i64 ${copyNext}, i64* ${indexSlot}, align 8`);
+  fn.emit(`br label %${copyBodyBlock.label}`);
+
+  fn.placeBlock(endBlock);
+  const tail = fn.emitValue(`load i8*, i8** ${cursorSlot}, align 8`);
+  fn.emit(`store i8 0, i8* ${tail}, align 1`);
+  return out;
+}
+
+methodCallEmitters.array = (ctx, expr, receiver) => {
+  const { elem } = receiver as ArrayType;
+  ctx.declareType(ARRAY_TYPE);
+  const arr = ctx.emitExpression((expr.expression as ts.PropertyAccessExpression).expression);
+  switch ((expr.expression as ts.PropertyAccessExpression).name.text) {
+    case "push":
+      return emitPush(ctx, expr, arr, elem);
+    case "pop":
+      return emitPop(ctx, arr, elem);
+    case "indexOf":
+      return emitIndexOf(ctx, expr, arr, elem);
+    default:
+      return emitJoin(ctx, expr, arr);
+  }
 };
 
 // ---- `for (const x of a)` ------------------------------------------------------------------
@@ -394,12 +609,18 @@ function isArray(program: CheckedProgram, expr: ts.Expression): boolean {
 
 /** `recv.push(...)` on an array receiver. */
 export function isPushCall(program: CheckedProgram, node: ts.Node): node is ts.CallExpression {
-  return (
-    ts.isCallExpression(node) &&
-    ts.isPropertyAccessExpression(node.expression) &&
-    node.expression.name.text === "push" &&
-    isArray(program, node.expression.expression)
-  );
+  return arrayMethodName(program, node) === "push";
+}
+
+/** The array method `node` calls (`push`, `pop`, `indexOf`, `join`), or undefined. */
+export function arrayMethodName(program: CheckedProgram, node: ts.Node): string | undefined {
+  if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return undefined;
+  return isArray(program, node.expression.expression) ? node.expression.name.text : undefined;
+}
+
+/** `a.join(sep)` bumps one string out of the arena, so it is an allocation site. */
+export function isJoinCall(program: CheckedProgram, node: ts.Node): boolean {
+  return arrayMethodName(program, node) === "join";
 }
 
 function isElementAssignment(node: ts.Node): node is ts.BinaryExpression {
@@ -423,6 +644,31 @@ function isElementAssignment(node: ts.Node): node is ts.BinaryExpression {
  *     and is no effect at all. Element accesses are still counted even
  *     through a stack local: a `push` may have moved the data into the arena.
  */
+/** What each array method does to memory; mirrors the emitters above exactly. */
+const collectMethodFacts: FactCollector = (program, node, facts, opts) => {
+  const call = node as ts.CallExpression;
+  const elem = program.types.get((call.expression as ts.PropertyAccessExpression).expression);
+  switch (arrayMethodName(program, node)) {
+    case "push":
+      facts.effect = "write";
+      facts.callees.add("sts_array_grow");
+      break;
+    case "pop":
+      // Stores the shortened length back, and panics on an empty array.
+      facts.effect = "write";
+      if (!opts.uncheckedIndexing) facts.callees.add("sts_panic_index");
+      break;
+    case "join":
+      facts.effect = "write"; // one arena allocation
+      facts.callees.add("sts_alloc_struct");
+      break;
+    default:
+      facts.readsMemory = true; // `indexOf` scans the elements
+      if (elem?.kind === "array" && elem.elem.kind === "string") facts.callees.add("sts_str_eq");
+      break;
+  }
+};
+
 const collectArrayFacts: FactCollector = (program, node, facts, opts) => {
   if (ts.isElementAccessExpression(node) && isArray(program, node.expression)) {
     facts.readsMemory = true;
@@ -433,9 +679,8 @@ const collectArrayFacts: FactCollector = (program, node, facts, opts) => {
     facts.readsMemory = true;
   } else if (ts.isArrayLiteralExpression(node) || (ts.isNewExpression(node) && isArray(program, node))) {
     if (!facts.stackSites.has(node)) facts.effect = "write";
-  } else if (isPushCall(program, node)) {
-    facts.effect = "write";
-    facts.callees.add("sts_array_grow");
+  } else if (ts.isCallExpression(node) && arrayMethodName(program, node) !== undefined) {
+    collectMethodFacts(program, node, facts, opts);
   } else if (isElementAssignment(node)) {
     facts.effect = "write";
   }

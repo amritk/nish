@@ -97,6 +97,22 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   string method reads its receiver and that `substring` allocates
   (`tests/cases/str_bytes`, `str_search`, four `reject_str_*` cases,
   `tests/differential/corpus/str_methods.ts`).
+- **Array `pop`, `indexOf` and `join`** (`docs/wp14-selfhost.md` A4). `pop`
+  hands back the last element and stores the shortened length; an empty array
+  panics through the same `sts_panic_index` an index does, because there is no
+  `undefined` to return. `indexOf` scans with the `===` of the element type —
+  content for strings, identity for classes and arrays, `fcmp oeq` for floats,
+  so a `NaN` element is never found. `join` is `string[]` only and is the fast
+  shape the port needs: one pass summing the lengths, one `sts_alloc_struct`,
+  one `llvm.memcpy` per part and per separator, with the separator before the
+  first part skipped by selecting a length of zero rather than by branching.
+  Building the same text with `+` in a loop copies everything again per part
+  and never reclaims — 180 MB of peak arena for 88 KB of output. All three
+  lower inline, so `runtime.c` gains nothing (a runtime `join` would have cost
+  252 bytes of a 254-byte margin). A numeric literal argument to `push` or
+  `indexOf` now takes the element type, so `wide.push(3)` on an `i64[]` is an
+  `i64` three (`tests/cases/arr_join`, `arr_pop_index`, five `reject_*` cases,
+  `tests/differential/corpus/arr_methods.ts`).
 - **Bitwise operators.** `& | ^` (`and` / `or` / `xor`), `~` (`xor x, -1`),
   `<< >> >>>` (`shl` / `ashr` / `lshr`), and the compound forms
   `&= |= ^= <<= >>= >>>=` on a mutable local. Two `i32` or two `i64` of the

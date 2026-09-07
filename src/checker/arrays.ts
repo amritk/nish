@@ -25,6 +25,7 @@ import ts from "typescript";
 import {
   F64,
   I32,
+  STRING,
   StaticType,
   TYPED_ARRAY_ALIASES,
   arrayOf,
@@ -43,6 +44,7 @@ import {
   LoopInfo,
   StatementChecker,
 } from "./context";
+import { checkArgumentType, checkArity } from "./builtins";
 import { structOf } from "./classes";
 import { isValueReceiver, methodCallCheckers, newCheckers, propertyCheckers } from "./members";
 import { invalidateNarrowings } from "./nullable";
@@ -85,7 +87,11 @@ function contextualType(ctx: CheckContext, expr: ts.Expression, scope: Scope): S
     return parent.type ? resolveTypeNode(parent.type, ctx.sf, ctx.opts) : undefined;
   }
   if (ts.isReturnStatement(parent)) return ctx.current.returnType;
-  if (ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && parent.right === node) {
+  if (
+    ts.isBinaryExpression(parent) &&
+    parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    parent.right === node
+  ) {
     const target = unwrapParens(parent.left);
     if (ts.isIdentifier(target)) return scope.lookup(target.text)?.type;
     if (ts.isElementAccessExpression(target)) {
@@ -134,7 +140,8 @@ const checkArrayLiteral: ExpressionChecker = (ctx, node, scope) => {
   let elem: StaticType | undefined;
   for (const element of expr.elements) {
     if (ts.isSpreadElement(element)) throw ctx.error("Spread in array literals is not supported", element);
-    if (ts.isOmittedExpression(element)) throw ctx.error("Holes in array literals are not supported", element);
+    if (ts.isOmittedExpression(element))
+      throw ctx.error("Holes in array literals are not supported", element);
     const t = ctx.checkExpression(element, scope);
     if (t.kind === "void") throw ctx.error("Array elements cannot be void", element);
     if (elem === undefined) elem = t;
@@ -153,10 +160,16 @@ const checkElementAccess: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.ElementAccessExpression;
   const base = ctx.checkExpression(expr.expression, scope);
   if (base.kind === "nullable") {
-    throw ctx.error(`Cannot index \`${typeToString(base)}\`; check for null first: \`if (a !== null) { ... }\``, expr.expression);
+    throw ctx.error(
+      `Cannot index \`${typeToString(base)}\`; check for null first: \`if (a !== null) { ... }\``,
+      expr.expression
+    );
   }
   if (base.kind !== "array") {
-    throw ctx.error(`Cannot index a value of type ${typeToString(base)} (only arrays can be indexed)`, expr.expression);
+    throw ctx.error(
+      `Cannot index a value of type ${typeToString(base)} (only arrays can be indexed)`,
+      expr.expression
+    );
   }
   const index = ctx.checkExpression(expr.argumentExpression, scope);
   if (!isNumeric(index)) {
@@ -172,20 +185,60 @@ propertyCheckers.array = (ctx, expr, receiver) => {
   throw ctx.error(`Unknown property \`${expr.name.text}\` on ${typeToString(receiver)}`, expr.name);
 };
 
+/** The method set, in the order the "supported:" message lists them. */
+export const ARRAY_METHODS = ["push", "pop", "indexOf", "join"];
+
 methodCallCheckers.array = (ctx, expr, receiver, scope) => {
   const access = expr.expression as ts.PropertyAccessExpression;
-  if (access.name.text !== "push") {
-    throw ctx.error(`Unknown method \`${access.name.text}\` on ${typeToString(receiver)} (supported: push)`, access.name);
-  }
+  const name = access.name.text;
   if (receiver.kind !== "array") throw ctx.error("internal: array method on non-array", expr);
-  if (expr.arguments.length !== 1) {
-    throw ctx.error(`\`push\` expects exactly 1 argument, got ${expr.arguments.length}`, expr);
+  switch (name) {
+    case "push": {
+      checkArity(ctx, expr, "push", 1);
+      const t = ctx.checkExpression(expr.arguments[0], scope);
+      if (!assignable(t, receiver.elem)) {
+        throw ctx.error(`Cannot push ${typeToString(t)} onto ${typeToString(receiver)}`, expr.arguments[0]);
+      }
+      return numberType(ctx);
+    }
+    case "pop":
+      // No `undefined` in StaticTS, so an empty array is a panic rather than
+      // a second return type; the check is the one `a[i]` already pays for.
+      checkArity(ctx, expr, "pop", 0);
+      return receiver.elem;
+    case "indexOf": {
+      checkArity(ctx, expr, "indexOf", 1);
+      const t = ctx.checkExpression(expr.arguments[0], scope);
+      if (!assignable(t, receiver.elem)) {
+        throw ctx.error(
+          `\`indexOf\` expects ${typeToString(receiver.elem)} (the element type of ${typeToString(receiver)}), got ${typeToString(t)}`,
+          expr.arguments[0]
+        );
+      }
+      return numberType(ctx);
+    }
+    case "join":
+      // `string[]` only: that is the shape that joins in one pass over the
+      // lengths and one memcpy per part. Converting elements would mean an
+      // allocation each, which is the quadratic shape `join` exists to avoid
+      // (docs/wp14-selfhost.md §3).
+      if (receiver.elem.kind !== "string") {
+        throw ctx.error(
+          `\`join\` requires string[], got ${typeToString(receiver)} (build the parts with template literals first)`,
+          access.name
+        );
+      }
+      if (expr.arguments.length > 1) {
+        throw ctx.error(`\`join\` expects 0 or 1 arguments, got ${expr.arguments.length}`, expr);
+      }
+      if (expr.arguments.length === 1) checkArgumentType(ctx, expr.arguments[0], scope, "join", STRING);
+      return STRING;
+    default:
+      throw ctx.error(
+        `Unknown method \`${name}\` on ${typeToString(receiver)} (supported: ${ARRAY_METHODS.join(", ")})`,
+        access.name
+      );
   }
-  const t = ctx.checkExpression(expr.arguments[0], scope);
-  if (!assignable(t, receiver.elem)) {
-    throw ctx.error(`Cannot push ${typeToString(t)} onto ${typeToString(receiver)}`, expr.arguments[0]);
-  }
-  return numberType(ctx);
 };
 
 /** `new Array<T>(n)`: the type argument is required (there is no inference from later pushes). */
@@ -200,13 +253,21 @@ newCheckers.Array = (ctx, expr, scope) => {
 for (const [name, elem] of Object.entries(TYPED_ARRAY_ALIASES)) {
   newCheckers[name] = (ctx, expr, scope) => {
     if (expr.typeArguments) {
-      throw ctx.error(`\`new ${name}\` takes no type argument (it is \`new Array<${typeToString(elem)}>(n)\`)`, expr);
+      throw ctx.error(
+        `\`new ${name}\` takes no type argument (it is \`new Array<${typeToString(elem)}>(n)\`)`,
+        expr
+      );
     }
     return checkNewArray(ctx, expr, scope, elem);
   };
 }
 
-function checkNewArray(ctx: CheckContext, expr: ts.NewExpression, scope: Scope, elem: StaticType): StaticType {
+function checkNewArray(
+  ctx: CheckContext,
+  expr: ts.NewExpression,
+  scope: Scope,
+  elem: StaticType
+): StaticType {
   if (elem.kind === "void") throw ctx.error("Array elements cannot be void", expr.typeArguments?.[0] ?? expr);
   // Zero-filling is only a valid value for scalars and for `T | null` (a zero
   // pointer *is* `null`, WP6); a zeroed plain string / array would be a null
@@ -257,7 +318,10 @@ function rejectLengthAssignment(ctx: CheckContext, expr: ts.BinaryExpression, sc
   if (!isValueReceiver(ctx, left.expression, scope)) return;
   const receiver = ctx.checkExpression(left.expression, scope);
   if (receiver.kind === "array") {
-    throw ctx.error(`Cannot assign to \`length\` of ${typeToString(receiver)} (array length is read-only; use \`push\`)`, left);
+    throw ctx.error(
+      `Cannot assign to \`length\` of ${typeToString(receiver)} (array length is read-only; use \`push\`)`,
+      left
+    );
   }
 }
 
@@ -272,7 +336,11 @@ export function installArrayAssignmentCheckers(table: CheckerTable<BinaryChecker
     if (!previous) continue;
     table[op] = (ctx, expr, scope) => {
       if (ts.isElementAccessExpression(unwrapParens(expr.left))) {
-        return checkElementAssignment(ctx, { ...expr, left: unwrapParens(expr.left) } as ts.BinaryExpression, scope);
+        return checkElementAssignment(
+          ctx,
+          { ...expr, left: unwrapParens(expr.left) } as ts.BinaryExpression,
+          scope
+        );
       }
       rejectLengthAssignment(ctx, expr, scope);
       return previous(ctx, expr, scope);
@@ -286,15 +354,21 @@ const checkForOf: StatementChecker = (ctx, node, scope) => {
   const stmt = node as ts.ForOfStatement;
   if (stmt.awaitModifier) throw ctx.error("`for await` is not supported", stmt.awaitModifier);
   if (!ts.isVariableDeclarationList(stmt.initializer)) {
-    throw ctx.error("`for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)`", stmt.initializer);
+    throw ctx.error(
+      "`for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)`",
+      stmt.initializer
+    );
   }
   const list = stmt.initializer;
-  if (!(list.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const))) throw ctx.error("`var` is forbidden; use `let` or `const`", list);
+  if (!(list.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)))
+    throw ctx.error("`var` is forbidden; use `let` or `const`", list);
   if (list.declarations.length !== 1) throw ctx.error("`for...of` declares exactly one variable", list);
   const decl = list.declarations[0];
   if (!ts.isIdentifier(decl.name)) throw ctx.error("Destructuring is not supported", decl.name);
-  if (decl.type) throw ctx.error("The `for...of` variable takes the element type; remove the annotation", decl.type);
-  if (decl.initializer) throw ctx.error("The `for...of` variable cannot have an initializer", decl.initializer);
+  if (decl.type)
+    throw ctx.error("The `for...of` variable takes the element type; remove the annotation", decl.type);
+  if (decl.initializer)
+    throw ctx.error("The `for...of` variable cannot have an initializer", decl.initializer);
 
   invalidateNarrowings(scope, stmt); // WP6: an assignment in the body ends a `p !== null` narrowing
   const iterable = ctx.checkExpression(stmt.expression, scope);

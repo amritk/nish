@@ -477,6 +477,15 @@ function makeTransformer(unit, stems) {
         if (dotted === "String.fromCharCode" && !bindings.has(node.expression.expression)) {
           return shimCall("fromCharCode", args);
         }
+        // `a.pop()` panics on an empty array; `push`, `indexOf` and `join`
+        // mean the same thing on both sides and pass through.
+        if (
+          ts.isPropertyAccessExpression(node.expression) &&
+          node.expression.name.text === "pop" &&
+          typeOf(node.expression.expression)?.kind === "array"
+        ) {
+          return shimCall("pop", [ts.visitNode(node.expression.expression, visit)]);
+        }
         if (dotted === "process.exit") return shimCall("exit", args);
         if (dotted === "Arena.used") return shimCall("arenaUsed", args);
         if (dotted === "Arena.mark") return shimCall("arenaMark", args);

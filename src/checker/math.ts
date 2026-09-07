@@ -99,7 +99,8 @@ function f64Builtin(name: string, arity: number): BuiltinCallChecker {
 const checkMathAbs: BuiltinCallChecker = (ctx, expr, scope) => {
   checkArity(ctx, expr, "Math.abs", 1);
   const t = ctx.checkExpression(expr.arguments[0], scope);
-  if (!isNumeric(t)) throw ctx.error(`\`Math.abs\` expects a number, got ${typeToString(t)}`, expr.arguments[0]);
+  if (!isNumeric(t))
+    throw ctx.error(`\`Math.abs\` expects a number, got ${typeToString(t)}`, expr.arguments[0]);
   return t;
 };
 
@@ -203,7 +204,8 @@ function stringParser(name: string, result: StaticType): BuiltinCallChecker {
   return (ctx, expr, scope) => {
     checkArity(ctx, expr, name, 1);
     const t = ctx.checkExpression(expr.arguments[0], scope);
-    if (t.kind !== "string") throw ctx.error(`\`${name}\` expects a string, got ${typeToString(t)}`, expr.arguments[0]);
+    if (t.kind !== "string")
+      throw ctx.error(`\`${name}\` expects a string, got ${typeToString(t)}`, expr.arguments[0]);
     return result;
   };
 }
@@ -213,7 +215,10 @@ const checkNumber: BuiltinCallChecker = (ctx, expr, scope) => {
   checkArity(ctx, expr, "Number", 1);
   const t = ctx.checkExpression(expr.arguments[0], scope);
   if (t.kind !== "string" && t.kind !== "bool" && !isNumeric(t)) {
-    throw ctx.error(`\`Number\` expects a string, number, or boolean, got ${typeToString(t)}`, expr.arguments[0]);
+    throw ctx.error(
+      `\`Number\` expects a string, number, or boolean, got ${typeToString(t)}`,
+      expr.arguments[0]
+    );
   }
   return F64;
 };
@@ -298,12 +303,16 @@ function contextType(ctx: CheckContext, node: ts.Expression, scope: Scope): Stat
   }
   if (!parent) return undefined;
   if (ts.isVariableDeclaration(parent)) {
-    return parent.initializer === expr && parent.type ? resolveTypeNode(parent.type, ctx.sf, ctx.opts) : undefined;
+    return parent.initializer === expr && parent.type
+      ? resolveTypeNode(parent.type, ctx.sf, ctx.opts)
+      : undefined;
   }
   // A class field's literal initializer (`b: u8 = 255`) is checked with an empty
   // scope before any body, so the annotation is the only context there is.
   if (ts.isPropertyDeclaration(parent)) {
-    return parent.initializer === expr && parent.type ? resolveTypeNode(parent.type, ctx.sf, ctx.opts) : undefined;
+    return parent.initializer === expr && parent.type
+      ? resolveTypeNode(parent.type, ctx.sf, ctx.opts)
+      : undefined;
   }
   if (ts.isArrayLiteralExpression(parent)) {
     const array = contextType(ctx, parent, scope);
@@ -343,6 +352,15 @@ function contextType(ctx: CheckContext, node: ts.Expression, scope: Scope): Stat
     const index = parent.arguments.indexOf(expr);
     const name = calleeName(parent);
     if (index < 0 || name === undefined) return undefined;
+    // `xs.push(3)` / `xs.indexOf(3)`: the element type, so a literal reaches
+    // the widths it cannot otherwise be written at (`wide.push(3)` on i64[]).
+    if (index === 0 && ts.isPropertyAccessExpression(parent.expression)) {
+      const method = parent.expression.name.text;
+      if (method === "push" || method === "indexOf") {
+        const receiver = peekType(ctx, parent.expression.expression, scope);
+        if (receiver?.kind === "array") return receiver.elem;
+      }
+    }
     const userParam = ctx.sigs.get(name)?.params[index]?.type;
     if (userParam) return userParam;
     const rule = lookup(LITERAL_CONTEXT_CALLS, name);
@@ -369,7 +387,8 @@ export function contextualLiteralType(
   if (!Number.isInteger(n)) {
     throw ctx.error(`Non-integer literal \`${literal.text}\` where ${want.kind} is expected`, literal);
   }
-  const negated = ts.isPrefixUnaryExpression(literal.parent) && literal.parent.operator === ts.SyntaxKind.MinusToken;
+  const negated =
+    ts.isPrefixUnaryExpression(literal.parent) && literal.parent.operator === ts.SyntaxKind.MinusToken;
   if (isUnsigned(want)) {
     // WP15: an unsigned context takes no negative value at all, and the range
     // is the width's, so `-1` and `256` are both errors on a `u8`. Naming the
