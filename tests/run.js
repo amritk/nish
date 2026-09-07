@@ -1696,6 +1696,22 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       diagnosticsOracle.status === 0,
       `${diagnosticsOracle.stdout}${diagnosticsOracle.stderr}`
     );
+
+    // S3: the scope chain, and with it the narrowing rules. This is the part
+    // of the checker a program can observe going wrong — a narrowing kept one
+    // statement too long compiles a load through a pointer the checker
+    // promised was not null — so both implementations are driven through one
+    // script and every answer compared.
+    const symbolsOracle = spawnSync("node", [path.join(root, "tests", "self", "symbols_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const symbolsSummary = symbolsOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/symbols.ts agrees with src/checker/scope.ts (${symbolsSummary})`,
+      symbolsOracle.status === 0,
+      `${symbolsOracle.stdout}${symbolsOracle.stderr}`
+    );
   }
 }
 

@@ -88,7 +88,13 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   either side can build (119 lines), and `tests/self/diagnostics_oracle.js`
   diffs every byte of the messages, the line/column index over *every* offset
   in the fixture, the report order, the `...and N more errors` cut and the
-  JSON (570 lines).
+  JSON (570 lines). `self/symbols.ts` is the scope chain and the narrowing
+  rules, keyed by identity as `src/checker/scope.ts` is — this is the part of
+  the checker a program can observe going wrong, since a narrowing kept one
+  statement too long compiles a load through a pointer the checker promised
+  was not null, so both implementations are driven through one script
+  (shadowing, a narrowing that holds through the chain, an inner one that
+  wins, an assignment that drops both) and every answer compared.
 - **An imported class brings the layouts its members mention.** `import
   { Registry }` where `Registry.all(): Entry[]` gives a module `Entry` values
   it can call methods on and read fields of; until now the checker crashed
