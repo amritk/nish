@@ -462,6 +462,12 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Fixed
 
+- **`readFileSyncOrNull` is an allocation site.** Its result is bumped out of
+  the arena exactly as `readFileSync`'s is, but the escape analysis only knew
+  about the second name, so a function that returned the bytes could still be
+  given an automatic arena scope — and its `sts_arena_release` rewound past the
+  string the caller was about to read. Found by porting the analysis to `self/`
+  for milestone S4 (`tests/cases/mem_read_or_null_scope`).
 - **Dispatch tables no longer see `Object.prototype`.** The validator, checker
   and emitter are each a table keyed by identifier, read with a key taken from
   the program being compiled. A plain object literal inherits from

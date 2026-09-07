@@ -7,7 +7,8 @@
  *   new C(...), { ... }        a struct            (stackable)
  *   [a, b], new Array<T>(<literal>)  an array      (stackable up to STACK_ARRAY_BYTES)
  *   new Array<T>(n)            an array, dynamic   (arena)
- *   a + b, `...${x}...`, readFileSync(p)   a string (arena)
+ *   a + b, `...${x}...`, readFileSync(p),
+ *   readFileSyncOrNull(p)      a string            (arena)
  *   f(...) returning a pointer type         whatever `f` allocated and
  *                              returned; counted only if `f` allocates
  *                              (decided by the fixpoint in attributes.ts)
@@ -211,7 +212,14 @@ export function analyzeEscapes(
       return;
     }
     if (ts.isIdentifier(call.expression)) {
-      if (call.expression.text === "readFileSync") sites.push({ node: call, stackable: false });
+      // Both file readers bump their result out of the arena, so both are
+      // allocation sites. Missing the `OrNull` half gave a function that
+      // returns it an automatic arena scope, which released the bytes before
+      // the caller could read them (`tests/cases/mem_read_or_null_scope`).
+      const name = call.expression.text;
+      if (name === "readFileSync" || name === "readFileSyncOrNull") {
+        sites.push({ node: call, stackable: false });
+      }
       return;
     }
     const name = dottedName(call.expression);
