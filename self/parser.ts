@@ -22,6 +22,7 @@
 // about the operator the programmer wrote beats one about a token they did
 // not. Anything it cannot make a node of is an `N_ERROR` with the reason.
 
+import { Diagnostic, SourceFile } from "./diagnostics";
 import { Lexer } from "./lexer";
 import {
   FLAG_CONST,
@@ -176,22 +177,6 @@ import {
 } from "./tokens";
 
 /**
- * One diagnostic. The parser collects rather than throws; `self/`'s driver
- * prints them in source order, which is the order they are found in.
- */
-export class Diagnostic {
-  message: string;
-  start: i32;
-  end: i32;
-
-  constructor(message: string, start: i32, end: i32) {
-    this.message = message;
-    this.start = start;
-    this.end = end;
-  }
-}
-
-/**
  * Binding power of a binary operator, or 0 when the token is not one. The
  * levels are JavaScript's, so that a program means here what it means there:
  * `||` binds loosest, then `&&`, then the bitwise trio, equality, relational,
@@ -230,7 +215,13 @@ export function isAssignment(kind: i32): boolean {
 }
 
 export class Parser {
-  source: string;
+  /**
+   * The file being parsed. A `SourceFile` rather than a bare string because a
+   * diagnostic is anchored to one: the parser's errors and the checker's go
+   * into the same report, sorted together, and there is one `Diagnostic`
+   * class in `self/` rather than a syntax one and a semantic one.
+   */
+  file: SourceFile;
   lexer: Lexer;
   diagnostics: Diagnostic[];
 
@@ -254,10 +245,14 @@ export class Parser {
   aheadValue: string;
   hasAhead: boolean;
 
-  constructor(source: string) {
-    this.source = source;
-    this.lexer = new Lexer(source);
+  /** How many nodes this parser has made; also the next id it will hand out. */
+  nodeCount: i32;
+
+  constructor(file: SourceFile) {
+    this.file = file;
+    this.lexer = new Lexer(file.text);
     this.diagnostics = [];
+    this.nodeCount = 0;
     this.kind = TOK_END;
     this.start = 0;
     this.end = 0;
@@ -311,11 +306,18 @@ export class Parser {
   }
 
   report(message: string, start: i32, end: i32): void {
-    this.diagnostics.push(new Diagnostic(message, start, end));
+    this.diagnostics.push(new Diagnostic(this.file, start, end, "syntax error", message));
   }
 
+  /**
+   * Every node of this tree comes from here, which is what lets the ids be
+   * dense: `nodeCount` is the size the checker's side tables need.
+   */
   node(kind: i32, start: i32, end: i32): Node {
-    return new Node(kind, start, end);
+    const made = new Node(kind, start, end);
+    made.id = this.nodeCount;
+    this.nodeCount = this.nodeCount + 1;
+    return made;
   }
 
   /**
@@ -383,7 +385,7 @@ export class Parser {
   // ---- Declarations ------------------------------------------------------------------
 
   parseSourceFile(): Node {
-    const file = this.node(N_SOURCE_FILE, 0, this.source.length);
+    const file = this.node(N_SOURCE_FILE, 0, this.file.text.length);
     while (!this.at(TOK_END)) {
       const before = this.start;
       file.children.push(this.parseDeclaration());
@@ -576,7 +578,9 @@ export class Parser {
       return ctor;
     }
     if (!this.at(TOK_IDENT)) {
-      return this.fail(`a class member is a field, a method or a constructor, found \`${tokenName(this.kind)}\``);
+      return this.fail(
+        `a class member is a field, a method or a constructor, found \`${tokenName(this.kind)}\``
+      );
     }
     if (this.peek() === TOK_LPAREN) {
       const method = this.node(N_METHOD, start, this.end);

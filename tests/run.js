@@ -1712,6 +1712,23 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       symbolsOracle.status === 0,
       `${symbolsOracle.stdout}${symbolsOracle.stderr}`
     );
+
+    // S3, pass 1: signatures. `self/dump_checked.ts` prints what the pass
+    // collected in exactly the format `--emit-checked` prints it, so what is
+    // compared over the whole corpus is every struct's layout — field indices
+    // and byte offsets included — every signature, every symbol, every folded
+    // constant, and the order they come out in.
+    const checkedOracle = spawnSync("node", [path.join(root, "tests", "self", "checked_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const checkedSummary = checkedOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/checker.ts pass 1 agrees with stage0 (${checkedSummary})`,
+      checkedOracle.status === 0,
+      `${checkedOracle.stdout}${checkedOracle.stderr}`
+    );
   }
 }
 

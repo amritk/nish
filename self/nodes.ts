@@ -111,6 +111,15 @@ export const FLAG_READONLY: i32 = 4;
  */
 export class Node {
   kind: i32;
+  /**
+   * Dense index into the side tables the checker fills (`self/program.ts`),
+   * assigned by the parser as it builds the tree. `src/` keys those tables by
+   * `WeakMap<ts.Node, ...>`; StaticTS has no `WeakMap` and this is the faster
+   * shape anyway — an array index rather than a hash of a pointer — and it
+   * keeps the rule that the checker records and the emitter reads, with the
+   * AST itself holding nothing but syntax. -1 until a parser assigns one.
+   */
+  id: i32;
   /** Byte offsets into the source, the first inclusive and the second not. */
   start: i32;
   end: i32;
@@ -122,6 +131,7 @@ export class Node {
 
   constructor(kind: i32, start: i32, end: i32) {
     this.kind = kind;
+    this.id = -1;
     this.start = start;
     this.end = end;
     this.text = "";

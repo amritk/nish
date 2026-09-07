@@ -67,6 +67,29 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
   `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
   `bench/ffi.mjs` gains the batched `Float64Array` rows.
+- **Self-hosting, milestone S3: the signature pass** (`docs/wp14-selfhost.md`
+  §4). `self/checker.ts` and the five modules around it — `program.ts` (the
+  side tables), `context.ts`, `annotations.ts`, `declarations.ts`,
+  `structs.ts`, `constants.ts` — are stage0's pass 1 in StaticTS: imports and
+  class names first so any annotation resolves, then members, layouts and
+  function signatures, then `implements`. **206 of 206 corpus files agree with
+  stage0 over 1,255 signature lines**, compared through the `--emit-checked`
+  dump both compilers write (`tests/self/checked_oracle.js`), so what is
+  checked is not "it accepted the file" but every struct's size and alignment,
+  every field's index and byte offset, every symbol, every folded constant and
+  the order they come out in. The lines later phases fill in — the attribute
+  facts, the per-body locals and callees — are filtered rather than left out of
+  the format, so they start being compared the moment those phases land.
+  Three shape changes carry their reasons: side tables are arrays indexed by a
+  dense `Node.id` the parser hands out rather than `WeakMap`s (StaticTS has no
+  `WeakMap`, and an index beats hashing a pointer); an annotation's names come
+  from a `typeNames` set narrower than the layout registry, which is what keeps
+  a reachable layout from becoming a spellable type; and constant folding needs
+  no `bigint`, because StaticTS `i64` arithmetic already wraps where stage0 has
+  to wrap by hand. The parser now reports into the shared `Diagnostic` of
+  `self/diagnostics.ts` rather than a class of its own, so a syntax error and a
+  checker error land in one report — and print `file:line:col: syntax error:`
+  with an excerpt, exactly as stage0 does.
 - **Self-hosting, milestone S3 begun: the type model and the diagnostics**
   (`docs/wp14-selfhost.md` §4). `self/types.ts` is `src/types.ts` with one
   change of representation: a type is an **interned `i32`**, so "are these the
