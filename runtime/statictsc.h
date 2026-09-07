@@ -90,6 +90,8 @@ uint64_t sts_str_len(const sts_str *s);
 bool sts_str_at(const sts_str *s, int64_t at, const sts_str *sub);
 /* `console.log(s)`: one write(2) of the bytes plus a newline to stdout. */
 void sts_print(const sts_str *s);
+/* `console.error` and the newline-free `write` / `writeError`: fd 1 or 2. */
+void sts_write(const sts_str *s, int32_t fd, bool newline);
 /* Number to string, as `${n}` does: decimal for integers, shortest round-trip (JS Number#toString) for f64. */
 sts_str *sts_str_from_i32(int32_t v);
 sts_str *sts_str_from_f64(double v);
@@ -103,6 +105,8 @@ sts_str *sts_str_from_u64(uint64_t v);
 double sts_random(void);
 void sts_exit(int32_t code);
 sts_str *sts_read_file(const sts_str *path);
+/* As above, but NULL instead of exiting when the file cannot be read. */
+sts_str *sts_read_file_or_null(const sts_str *path);
 void sts_write_file(const sts_str *path, const sts_str *data);
 void sts_append_file(const sts_str *path, const sts_str *data);
 

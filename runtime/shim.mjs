@@ -252,6 +252,26 @@ export function log(x) {
   fs.writeSync(1, `${String(x)}\n`);
 }
 
+/** `console.error(x)`: the same, on stderr. */
+export function error(x) {
+  fs.writeSync(2, `${String(x)}\n`);
+}
+
+/** `write(s)` / `writeError(s)`: the bytes as they are, no trailing newline. */
+export function write(s) {
+  fs.writeSync(1, s);
+}
+
+export function writeError(s) {
+  fs.writeSync(2, s);
+}
+
+/** `panic(message)`: the message on stderr, then exit 1. */
+export function panic(message) {
+  fs.writeSync(2, `${message}\n`);
+  process.exit(1);
+}
+
 /** Index conversion as in the compiler: `sext` from i32, `fptosi` (truncation) from f64. */
 function toIndex(i) {
   return typeof i === "bigint" ? Number(i) : Math.trunc(i);
@@ -319,6 +339,15 @@ export function readFileSync(path) {
     return fs.readFileSync(path, "utf8");
   } catch {
     return ioFail("read", path);
+  }
+}
+
+/** `readFileSyncOrNull(path)`: null instead of exiting, so the program decides. */
+export function readFileSyncOrNull(path) {
+  try {
+    return fs.readFileSync(path, "utf8");
+  } catch {
+    return null;
   }
 }
 

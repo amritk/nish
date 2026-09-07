@@ -147,8 +147,8 @@ one allocation, one `memcpy` per part.
 | # | Addition | Evidence |
 | --- | --- | --- |
 | B1 | `f64ToBits(x: f64): i64` (and `bitsToF64`) | **A blocker, and the least obvious one.** LLVM only accepts decimal float literals that round-trip exactly, so the emitter writes `double 0x400921FB54442D18` — today via `Buffer.writeDoubleBE`. StaticTS has no way to see a double's bits, so without this the self-hosted emitter cannot emit any `f64` constant. One `bitcast` in the IR: zero instructions, zero runtime. |
-| B2 | `console.error(x)` and a newline-free write | Every one of the 16 diagnostic writes goes to **stderr**, and two dumps write without a trailing newline. `console.log` is stdout-and-newline only. Without these, every `.err` golden and the runner's stream expectations have to be re-baselined — a worse outcome than two five-line runtime functions. |
-| B3 | A file read that can fail | `readFileSync` **exits the process** on a missing file, so a compiler cannot turn it into its own `` Cannot find module `./x` `` diagnostic and carry on loading the other imports. Smallest fix: `readFileSyncOrNull(path): string \| null` — it subsumes `existsSync`, has no time-of-check race, and needs no new type. |
+| B2 | `console.error(x)` and a newline-free write **Done.** | Every one of the 16 diagnostic writes goes to **stderr**, and two dumps write without a trailing newline. `console.log` is stdout-and-newline only. Without these, every `.err` golden and the runner's stream expectations have to be re-baselined — a worse outcome than two five-line runtime functions. |
+| B3 | A file read that can fail **Done.** | `readFileSync` **exits the process** on a missing file, so a compiler cannot turn it into its own `` Cannot find module `./x` `` diagnostic and carry on loading the other imports. Smallest fix: `readFileSyncOrNull(path): string \| null` — it subsumes `existsSync`, has no time-of-check race, and needs no new type. |
 | B4 | Contextual `[]` in a field assignment | **Done.** `this.children = []` in a constructor did not take its element type from the field, which every container class hits on its first line. |
 
 ### Wave C — library code in `self/`, no language change
@@ -189,8 +189,8 @@ and status returns. Be honest that this is **genuinely worse** than
 sites, and it will cost real bugs where a caller forgets to check a sentinel.
 The alternative, reporting only the first error, would delete WP10's multi-error
 guarantee and stop stage1 being diff-comparable with stage0 on the
-`reject_multi_*` cases. Add a `panic(msg)` builtin so the 16 internal
-invariants keep their messages.
+`reject_multi_*` cases. A `panic(msg)` builtin, so the 16 internal
+invariants keep their messages, is **done**.
 
 **D2. Switching the dispatch tables costs self-registration.** Today
 `checker/arrays.ts` adds `for...of` by writing one line into a table and

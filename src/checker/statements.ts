@@ -83,7 +83,7 @@ export function checkVariableDeclarationList(
 const checkExpressionStatement: StatementChecker = (ctx, node, scope) => {
   const expr = (node as ts.ExpressionStatement).expression;
   ctx.checkExpression(expr, scope);
-  return terminatesControlFlow(expr); // WP7: `process.exit(n);` ends the path like `return`
+  return terminatesControlFlow(ctx, expr); // WP7/WP14: `process.exit(n);` and `panic(m);` end the path like `return`
 };
 
 const checkBlockStatement: StatementChecker = (ctx, node, scope) =>

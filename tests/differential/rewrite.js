@@ -222,6 +222,10 @@ const IDENTIFIER_BUILTINS = new Map([
   ["parseFloat", "parseFloat"],
   ["Number", "number"],
   ["readFileSync", "readFileSync"],
+  ["readFileSyncOrNull", "readFileSyncOrNull"],
+  ["write", "write"],
+  ["writeError", "writeError"],
+  ["panic", "panic"],
   ["writeFileSync", "writeFileSync"],
   ["appendFileSync", "appendFileSync"],
 ]);
@@ -464,6 +468,7 @@ function makeTransformer(unit, stems) {
         const args = node.arguments.map((a) => ts.visitNode(a, visit));
         const dotted = dottedName(node.expression);
         if (dotted === "console.log") return shimCall("log", args);
+        if (dotted === "console.error") return shimCall("error", args);
         // The string byte methods (WP14 A2): every offset is a UTF-8 byte
         // offset, which JavaScript's own methods do not use.
         if (

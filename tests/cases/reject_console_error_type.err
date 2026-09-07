@@ -1,0 +1,1 @@
+`console.error` accepts string, number, or boolean, got i32[]

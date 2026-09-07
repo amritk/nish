@@ -3297,6 +3297,83 @@ attributes #0 = { nounwind willreturn }
 ```
 <!-- cookbook:end builtin_random -->
 
+### Streams, `readFileSyncOrNull` and `panic`
+
+`console.error` and the newline-free writes are one `sts_write(s, fd,
+newline)`; `console.log` keeps its own one-argument `sts_print`. `panic` needs
+no runtime function of its own — the message goes through `sts_write` and the
+`noreturn` `sts_exit` closes the block, which is what lets `load` end without
+a `ret` on that path. `readFileSyncOrNull` returns a pointer that may be
+`null`, so the checker makes the caller narrow it before it can be read.
+
+<!-- cookbook:begin builtin_streams -->
+```ts
+function report(problem: string): void {
+  console.error(problem);
+  write("progress: ");
+  writeError(problem);
+}
+
+function load(path: string): number {
+  const text = readFileSyncOrNull(path);
+  if (text === null) {
+    panic(`cannot read ${path}`);
+  } else {
+    return text.length;
+  }
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [11 x i8] } { i64 10, [11 x i8] c"progress: \00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"cannot read \00" }, align 8
+
+declare noundef i64 @sts_arena_mark() #0
+declare void @sts_arena_release(i64 noundef) #0
+declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @sts_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #0
+declare void @sts_exit(i32 noundef) #2
+declare noalias noundef align 8 i8* @sts_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define void @report(i8* noundef nonnull noalias readonly align 8 nocapture %problem) #0 {
+entry:
+  call void @sts_write(i8* %problem, i32 2, i1 true)
+  call void @sts_write(i8* bitcast ({ i64, [11 x i8] }* @.str.0 to i8*), i32 1, i1 false)
+  call void @sts_write(i8* %problem, i32 2, i1 false)
+  ret void
+}
+
+define noundef i32 @load(i8* noundef nonnull noalias readonly align 8 nocapture %path) #1 {
+entry:
+  %text.addr = alloca i8*, align 8
+  %arena.mark = call i64 @sts_arena_mark()
+  %0 = call i8* @sts_read_file_or_null(i8* %path)
+  store i8* %0, i8** %text.addr, align 8
+  %1 = load i8*, i8** %text.addr, align 8
+  %2 = icmp eq i8* %1, null
+  br i1 %2, label %if.then, label %if.else
+
+if.then:
+  %3 = call i8* @sts_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.1 to i8*), i8* %path)
+  call void @sts_write(i8* %3, i32 2, i1 true)
+  call void @sts_exit(i32 1)
+  unreachable
+
+if.else:
+  %4 = load i8*, i8** %text.addr, align 8
+  %5 = bitcast i8* %4 to i64*
+  %6 = load i64, i64* %5, align 8
+  %7 = trunc i64 %6 to i32
+  call void @sts_arena_release(i64 %arena.mark)
+  ret i32 %7
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { noreturn nounwind }
+```
+<!-- cookbook:end builtin_streams -->
+
 ### File I/O
 
 <!-- cookbook:begin builtin_files -->
@@ -3454,6 +3531,7 @@ declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull 
 declare zeroext i1 @sts_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
 declare zeroext i1 @sts_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #3
 declare i64 @sts_str_len(i8* noundef nonnull readonly align 8 nocapture) #3
+declare void @sts_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_from_f64(double noundef) #2
@@ -3462,6 +3540,7 @@ declare noalias noundef nonnull align 8 i8* @sts_str_from_u64(i64 noundef) #2
 declare noundef double @sts_random() #2
 declare void @sts_exit(i32 noundef) #4
 declare noalias noundef nonnull align 8 i8* @sts_read_file(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef align 8 i8* @sts_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @sts_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @sts_append_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @sts_argv_init(i32 noundef, i8** noundef nocapture readonly) #2

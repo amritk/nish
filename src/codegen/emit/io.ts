@@ -3,6 +3,10 @@
  *
  *   process.exit(code)          call void @sts_exit(i32 code)   then `unreachable`
  *   readFileSync(path)          call i8* @sts_read_file(i8* path)
+ *   readFileSyncOrNull(path)    call i8* @sts_read_file_or_null(i8* path)
+ *   write(s) / writeError(s)    call void @sts_write(i8* s, i32 fd, i1 false)
+ *   panic(message)              call void @sts_write(i8* m, i32 2, i1 true)
+ *                               then @sts_exit(i32 1) and `unreachable`
  *   writeFileSync(path, data)   call void @sts_write_file(i8* path, i8* data)
  *   appendFileSync(path, data)  call void @sts_append_file(i8* path, i8* data)
  *   process.argv                load %struct.sts_array*, %struct.sts_array** @sts_argv
@@ -46,8 +50,45 @@ const processExit: BuiltinCall = {
 };
 
 const readFileSync: BuiltinCall = {
-  emit: (ctx, expr) => ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_read_file")}(${stringArgs(ctx, expr)})`),
+  emit: (ctx, expr) =>
+    ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_read_file")}(${stringArgs(ctx, expr)})`),
   callees: () => ["sts_read_file"],
+};
+
+const readFileSyncOrNull: BuiltinCall = {
+  emit: (ctx, expr) =>
+    ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_read_file_or_null")}(${stringArgs(ctx, expr)})`),
+  callees: () => ["sts_read_file_or_null"],
+};
+
+/** `write` / `writeError`: the bytes as they are, on fd 1 or 2. */
+function streamWriter(fd: 1 | 2): BuiltinCall {
+  return {
+    emit: (ctx, expr) => {
+      const text = ctx.emitExpression(expr.arguments[0]);
+      ctx.fn.emit(`call void ${ctx.useRuntime("sts_write")}(i8* ${text}, i32 ${fd}, i1 false)`);
+      return "void";
+    },
+    callees: () => ["sts_write"],
+  };
+}
+
+/**
+ * `panic(message)`: the message and a newline on stderr, then exit 1 — the
+ * same observable ending as the index panic, so a program has one failure
+ * mode rather than two. No runtime function of its own: `sts_write` and
+ * `sts_exit` already exist, and `sts_exit` is `noreturn`, which is what makes
+ * the `unreachable` legal and lets a non-void function end with a panic.
+ */
+const panic: BuiltinCall = {
+  emit: (ctx, expr) => {
+    const message = ctx.emitExpression(expr.arguments[0]);
+    ctx.fn.emit(`call void ${ctx.useRuntime("sts_write")}(i8* ${message}, i32 2, i1 true)`);
+    ctx.fn.emit(`call void ${ctx.useRuntime("sts_exit")}(i32 1)`);
+    ctx.fn.emit("unreachable");
+    return "void";
+  },
+  callees: () => ["sts_write", "sts_exit"],
 };
 
 function fileWriter(symbol: string): BuiltinCall {
@@ -68,8 +109,12 @@ export const ioBuiltinCallEmitters: Record<string, BuiltinCall> = {
 /** Identifier callees, spread into `builtinFunctionEmitters`; mirrors `ioBuiltinFunctions`. */
 export const ioFunctionEmitters: Record<string, BuiltinCall> = {
   readFileSync,
+  readFileSyncOrNull,
   writeFileSync: fileWriter("sts_write_file"),
   appendFileSync: fileWriter("sts_append_file"),
+  write: streamWriter(1),
+  writeError: streamWriter(2),
+  panic,
 };
 
 // ---- process.argv -------------------------------------------------------------------

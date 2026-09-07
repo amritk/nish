@@ -20,7 +20,8 @@
  *   - `charCodeAt` bounds-checks and panics like `a[i]` rather than
  *     returning JavaScript's `NaN`, which `number` cannot represent.
  *   - `console.log` takes exactly one string | number | boolean, returns
- *     `void`, and may only appear as a statement.
+ *     `void`, and may only appear as a statement. `console.error` is the
+ *     same on stderr (WP14 B2), which is where a compiler's diagnostics go.
  */
 import ts from "typescript";
 import { BOOL, F64, I32, STRING, StaticType, VOID, isNumeric, sameType, typeToString } from "../types";
@@ -178,26 +179,30 @@ const checkFromCharCode: BuiltinCallChecker = (ctx, expr, scope) => {
 
 // ---- Builtin calls (`console.log`, `Math.*`, `process.exit`) ------------------------------
 
-const checkConsoleLog: BuiltinCallChecker = (ctx, expr, scope) => {
-  if (expr.arguments.length !== 1) {
-    throw ctx.error(`\`console.log\` expects exactly 1 argument, got ${expr.arguments.length}`, expr);
-  }
-  const t = ctx.checkExpression(expr.arguments[0], scope);
-  if (!isStringifiable(t)) {
-    throw ctx.error(
-      `\`console.log\` accepts string, number, or boolean, got ${typeToString(t)}`,
-      expr.arguments[0]
-    );
-  }
-  if (!ts.isExpressionStatement(expr.parent)) {
-    throw ctx.error("`console.log` returns void and can only be used as a statement", expr);
-  }
-  return VOID;
-};
+/** `console.log` and `console.error` differ only in the stream they write to. */
+const consoleWriter =
+  (name: string): BuiltinCallChecker =>
+  (ctx, expr, scope) => {
+    if (expr.arguments.length !== 1) {
+      throw ctx.error(`\`${name}\` expects exactly 1 argument, got ${expr.arguments.length}`, expr);
+    }
+    const t = ctx.checkExpression(expr.arguments[0], scope);
+    if (!isStringifiable(t)) {
+      throw ctx.error(
+        `\`${name}\` accepts string, number, or boolean, got ${typeToString(t)}`,
+        expr.arguments[0]
+      );
+    }
+    if (!ts.isExpressionStatement(expr.parent)) {
+      throw ctx.error(`\`${name}\` returns void and can only be used as a statement`, expr);
+    }
+    return VOID;
+  };
 
 /** Builtins keyed by dotted callee name. Add an entry to support another. */
 export const builtinCalls: Record<string, BuiltinCallChecker> = {
-  "console.log": checkConsoleLog,
+  "console.log": consoleWriter("console.log"),
+  "console.error": consoleWriter("console.error"), // WP14 B2: the same, on stderr
   "String.fromCharCode": checkFromCharCode, // WP14 A2
   ...mathBuiltinCalls, // WP7: Math.sqrt, ..., Math.random
   ...ioBuiltinCalls, // WP7: process.exit

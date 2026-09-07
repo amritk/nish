@@ -113,6 +113,23 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `indexOf` now takes the element type, so `wide.push(3)` on an `i64[]` is an
   `i64` three (`tests/cases/arr_join`, `arr_pop_index`, five `reject_*` cases,
   `tests/differential/corpus/arr_methods.ts`).
+- **`console.error`, the newline-free writes, `readFileSyncOrNull` and
+  `panic`** (`docs/wp14-selfhost.md` B2, B3 and D1). A compiler's diagnostics
+  go to stderr and two of its dumps write without a trailing newline, neither
+  of which `console.log` can do: `console.error(x)` takes what `console.log`
+  takes and writes it to stderr, and `write(s)` / `writeError(s)` write a
+  string as it is, on fd 1 or 2. All three share one runtime entry point,
+  `sts_write(s, fd, newline)`, which `sts_print` now delegates to, so no
+  existing golden moved. `readFileSyncOrNull(path): string | null` is the same
+  read as `readFileSync` but answers `null` where that one exits, which is
+  what lets a program turn a missing import into its own diagnostic and carry
+  on loading the rest; it subsumes an `existsSync` and has no time-of-check
+  race. `panic(message)` writes the message to stderr and exits 1, the same
+  ending an out-of-range index has, and terminates control flow like
+  `process.exit`, so an internal invariant keeps the message that `throw`
+  discards. `runtime.c` is 3,950 bytes of `.text` at `-Oz`, inside the
+  4,096-byte budget (`tests/cases/io_streams`, three `reject_*` cases,
+  `tests/differential/corpus/io_streams.ts`, `io_panic.ts`).
 - **Bitwise operators.** `& | ^` (`and` / `or` / `xor`), `~` (`xor x, -1`),
   `<< >> >>>` (`shl` / `ashr` / `lshr`), and the compound forms
   `&= |= ^= <<= >>= >>>=` on a mutable local. Two `i32` or two `i64` of the

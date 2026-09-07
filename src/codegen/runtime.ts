@@ -134,6 +134,12 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     effect: "read",
   },
   {
+    name: "sts_write",
+    signature: `declare void @sts_write(${STR_NOCAP}, i32 noundef, i1 noundef zeroext)`,
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
     name: "sts_print",
     signature: `declare void @sts_print(${STR_NOCAP})`,
     attrs: ["nounwind", "willreturn"],
@@ -184,6 +190,12 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
   {
     name: "sts_read_file",
     signature: `declare noalias noundef nonnull align 8 i8* @sts_read_file(${STR_NOCAP})`,
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
+    name: "sts_read_file_or_null",
+    signature: `declare noalias noundef align 8 i8* @sts_read_file_or_null(${STR_NOCAP})`,
     attrs: ["nounwind", "willreturn"],
     effect: "write",
   },

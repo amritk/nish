@@ -382,6 +382,10 @@ const emitStrictEquality: BinaryEmitter = (ctx, expr) => {
 
 // ---- Builtin calls ------------------------------------------------------------------------
 
+/**
+ * `console.log` keeps `sts_print`, its own one-argument entry point;
+ * `console.error` goes through the general `sts_write(s, fd, newline)`.
+ */
 const consoleLog: BuiltinCall = {
   emit: (ctx, expr) => {
     const text = emitToString(ctx, expr.arguments[0]);
@@ -391,9 +395,19 @@ const consoleLog: BuiltinCall = {
   callees: (program, expr) => ["sts_print", ...conversionCallees(program, expr.arguments[0])],
 };
 
+const consoleError: BuiltinCall = {
+  emit: (ctx, expr) => {
+    const text = emitToString(ctx, expr.arguments[0]);
+    ctx.fn.emit(`call void ${ctx.useRuntime("sts_write")}(i8* ${text}, i32 2, i1 true)`);
+    return "void";
+  },
+  callees: (program, expr) => ["sts_write", ...conversionCallees(program, expr.arguments[0])],
+};
+
 /** Builtins keyed by dotted callee name; mirrors `builtinCalls` in the checker. */
 export const builtinCallEmitters: Record<string, BuiltinCall> = {
   "console.log": consoleLog,
+  "console.error": consoleError, // WP14 B2
   "String.fromCharCode": fromCharCode, // WP14 A2
   ...mathBuiltinCallEmitters, // WP7: Math.sqrt, ..., Math.random
   ...ioBuiltinCallEmitters, // WP7: process.exit

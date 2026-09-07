@@ -828,7 +828,7 @@ purposes, the current path: a non-`void` function may end with it
 ### Termination, definite return, and unreachable code
 
 A statement *terminates* when control cannot fall out of it: `return`,
-`break`, `continue`, `throw`, `process.exit(...)`; an `if` whose branches
+`break`, `continue`, `throw`, `process.exit(...)`, `panic(...)`; an `if` whose branches
 both terminate; a `switch` with a `default`, no `break` aimed at it and a
 terminating last clause; a loop with no condition or the condition `true` and
 no `break` aimed at it. Any other loop may run zero times and does not
@@ -1019,6 +1019,10 @@ function ([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `console.log(x: string \| number \| i64 \| f64 \| boolean): void` | Writes `x` and a newline to stdout with one `write(2)`; statement position only; exactly one argument | write | `str_console_log`, `i64_basic`; `reject_console_log_noargs`, `reject_console_log_two_args`, `reject_console_log_as_value`; arrays and objects are rejected (`` `console.log` accepts string, number, or boolean, got i32[] `` *(CLI only)*) |
+| `console.error(x): void` | the same, on **stderr** — the stream a compiler's diagnostics belong on (WP14 B2). Identical rules and identical messages under its own name | write | `io_streams`; `reject_console_error_type` |
+| `write(s: string): void` | `s` to stdout with **no** trailing newline and no conversion (a `string` only); statement position | write | `io_streams` |
+| `writeError(s: string): void` | the same, on stderr | write | `io_streams` |
+| `panic(message: string): void` | `message` and a newline to stderr, then exit 1 — the same ending an out-of-range index has. Statement position, and it **terminates control flow** like `process.exit`, so a non-`void` function may end with it. Where `throw` discards its value, this keeps it (WP14 D1) | write | `io_streams`; `reject_panic_value` |
 
 Numbers print as JavaScript's `String(x)`: exact decimal for `i32`/`i64`,
 shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
@@ -1095,11 +1099,14 @@ supplies the arguments (`examples/wasi-host.mjs`).
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `readFileSync(path: string): string` | whole file as one arena string; failure prints `statictsc: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects string, got i32 ``) |
+| `readFileSyncOrNull(path: string): string \| null` | the same read, `null` where the other exits, so a program can report the missing file itself and carry on with the rest (WP14 B3). It subsumes an `existsSync` and has no time-of-check race. The result is narrowed with `if (text !== null)` like any other nullable | write | `io_streams`; `reject_readfile_or_null_unchecked` |
 | `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position | write | `io_files` |
 | `appendFileSync(path: string, data: string): void` | create/append and write; statement position | write | `io_files` |
 
 Paths are relative to the working directory. These are globals, not
-`import { readFileSync } from "fs"` (bare imports are rejected).
+`import { readFileSync } from "fs"` (bare imports are rejected), and so are
+`write`, `writeError` and `panic` above. A user function of the same name
+wins, as it does for every identifier builtin.
 
 ### Arrays and strings as receivers
 

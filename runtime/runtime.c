@@ -125,11 +125,14 @@ uint64_t sts_str_len(const sts_str *s) { return s->len; }
 _Bool sts_str_at(const sts_str *s, int64_t at, const sts_str *sub) {
   return at >= 0 && (uint64_t)at + sub->len <= s->len && !memcmp(s->data + at, sub->data, sub->len);
 }
-/* console.log(s) */
-void sts_print(const sts_str *s) {
-  (void)!write(1, s->data, s->len);
-  (void)!write(1, "\n", 1);
+/* `console.log` / `console.error` / `write` / `writeError` and the message of
+   `panic`: fd 1 or 2, with or without the trailing newline. */
+void sts_write(const sts_str *s, int32_t fd, _Bool newline) {
+  (void)!write(fd, s->data, s->len);
+  if (newline) (void)!write(fd, "\n", 1);
 }
+/* console.log(s) */
+void sts_print(const sts_str *s) { sts_write(s, 1, 1); }
 
 /* Decimal digits of `u`, with a '-' in front when `neg`. 20 digits is the
    widest a uint64_t can be, plus the sign. */
@@ -189,10 +192,12 @@ static STS_COLD void sts_io_fail(const char *what, const sts_str *path) {
   _exit(1);
 }
 
-sts_str *sts_read_file(const sts_str *path) {
+/* `readFileSyncOrNull(path)`: null rather than a message, so a program can
+   turn a missing file into its own diagnostic and carry on. */
+sts_str *sts_read_file_or_null(const sts_str *path) {
   int fd = open(path->data, O_RDONLY);
   off_t len = fd < 0 ? -1 : lseek(fd, 0, SEEK_END);
-  if (len < 0) sts_io_fail("read ", path);
+  if (len < 0) return 0;
   sts_str *s = sts_alloc_struct(8 + len + 1);
   uint64_t got = 0;
   ssize_t n;
@@ -200,6 +205,12 @@ sts_str *sts_read_file(const sts_str *path) {
   close(fd);
   s->len = got;
   s->data[got] = 0;
+  return s;
+}
+
+sts_str *sts_read_file(const sts_str *path) {
+  sts_str *s = sts_read_file_or_null(path);
+  if (!s) sts_io_fail("read ", path);
   return s;
 }
 
