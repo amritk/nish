@@ -130,7 +130,7 @@ golden `.ll`, an `llvm-as` pass, a native round trip, a `reject_*` case, a
 | # | Construct | Evidence |
 | --- | --- | --- |
 | A1 | `switch` / `case` / `default` **Done.** | Every phase is a dispatch on a node kind. `src/` has 21 `switch`es plus ~30 dispatch tables that all become switches. Lowers to LLVM's `switch`, so the backend builds a jump table — the fast shape, not an `if` chain. |
-| A2 | `charCodeAt`, `substring`, `indexOf`, `startsWith`, `endsWith`, `String.fromCharCode` | A lexer is `charCodeAt` in a loop and `substring` at the end. `src/` itself never lexes (the `typescript` package does), so this set is sized for `self/`'s lexer, not for `src/`. |
+| A2 | `charCodeAt`, `substring`, `indexOf`, `startsWith`, `endsWith`, `String.fromCharCode` **Done.** | A lexer is `charCodeAt` in a loop and `substring` at the end. `src/` itself never lexes (the `typescript` package does), so this set is sized for `self/`'s lexer, not for `src/`. |
 | A3 | Module-level `const` | **Done.** Token kinds, node kinds, and the 14 string-literal union types that become `i32` constants. |
 | A4 | `pop`, `indexOf`, `join` on arrays | `join` has **66 call sites** and is not optional: see the measurement below. `pop` 4, `indexOf` 7 — five of those seven search by *identity* over AST nodes, which `===` on class values already gives. |
 | A5 | `& \| ^ ~ << >> >>>` and their compound forms | The `StringMap` of §2.2 hashes with FNV-1a, and the emitter formats `f64` constants as hex (see B1). Never forbidden — they fell through the checker's operator table into the "not implemented" bucket. |

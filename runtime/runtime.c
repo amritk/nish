@@ -119,6 +119,12 @@ _Bool sts_str_eq(const sts_str *a, const sts_str *b) {
 }
 
 uint64_t sts_str_len(const sts_str *s) { return s->len; }
+
+/* `s.startsWith(sub)` is at 0, `s.endsWith(sub)` at len - sub->len, which is
+   negative when `sub` is the longer string. */
+_Bool sts_str_at(const sts_str *s, int64_t at, const sts_str *sub) {
+  return at >= 0 && (uint64_t)at + sub->len <= s->len && !memcmp(s->data + at, sub->data, sub->len);
+}
 /* console.log(s) */
 void sts_print(const sts_str *s) {
   (void)!write(1, s->data, s->len);

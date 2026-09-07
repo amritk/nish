@@ -15,7 +15,11 @@
  *     kept in range with `BigInt.asUintN(64, x)`.
  *   - `f32` is a 32-bit float and JavaScript has only doubles, so every `f32`
  *     result is rounded with `Math.fround`.
- *   - `s.length` is the UTF-8 byte length.
+ *   - `s.length` is the UTF-8 byte length, and so is every index the string
+ *     methods take or return: `charCodeAt` yields a byte (and bounds-checks
+ *     instead of returning `NaN`), `substring` cuts on byte offsets, and
+ *     `indexOf` answers with one. `String.fromCharCode` builds a one-byte
+ *     string from the low 8 bits.
  *   - `a[i]` is bounds-checked: out of range prints
  *     `index out of range: <i> >= <len>` to stderr and exits 1.
  *   - `toI32/toI64` from f64 saturate (NaN -> 0), integer conversions wrap.
@@ -193,6 +197,53 @@ export function convert(x, from, to) {
 /** `s.length`: UTF-8 byte length for strings (arrays keep their own `.length`). */
 export function strLen(x) {
   return typeof x === "string" ? Buffer.byteLength(x, "utf8") : x.length;
+}
+
+/** The UTF-8 bytes of `s`, which is what a StaticTS string holds. */
+function bytesOf(s) {
+  return Buffer.from(s, "utf8");
+}
+
+/** `s.charCodeAt(i)`: the byte at `i`, bounds-checked as `a[i]` is (JavaScript answers NaN). */
+export function charCodeAt(s, i) {
+  const bytes = bytesOf(s);
+  const k = toIndex(i);
+  if (!(k >= 0 && k < bytes.length)) panicIndex(k, bytes.length);
+  return bytes[k];
+}
+
+/** `s.substring(a, b)`: JavaScript's clamp and swap, over byte offsets. */
+export function substring(s, a, b) {
+  const bytes = bytesOf(s);
+  const clamp = (v) => Math.max(0, Math.min(toIndex(v), bytes.length));
+  const from = clamp(a);
+  const to = b === undefined ? bytes.length : clamp(b);
+  return bytes.subarray(Math.min(from, to), Math.max(from, to)).toString("utf8");
+}
+
+/** `s.indexOf(sub)`: the first *byte* offset, or -1. */
+export function indexOf(s, sub) {
+  return bytesOf(s).indexOf(bytesOf(sub));
+}
+
+/** `sts_str_at`: whether `sub`'s bytes sit at byte offset `at`. */
+function occursAt(s, at, sub) {
+  const bytes = bytesOf(s);
+  const needle = bytesOf(sub);
+  return at >= 0 && at + needle.length <= bytes.length && bytes.subarray(at, at + needle.length).equals(needle);
+}
+
+export function startsWith(s, sub) {
+  return occursAt(s, 0, sub);
+}
+
+export function endsWith(s, sub) {
+  return occursAt(s, bytesOf(s).length - bytesOf(sub).length, sub);
+}
+
+/** `String.fromCharCode(c)`: the one-byte string of `c & 0xFF`. */
+export function fromCharCode(code) {
+  return Buffer.from([toIndex(code) & 0xff]).toString("latin1");
 }
 
 /** `console.log(x)`: `String(x)` (no `n` suffix for i64) plus a newline, written synchronously. */

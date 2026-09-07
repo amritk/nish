@@ -81,6 +81,22 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `continue` reaches past it to the enclosing loop
   (`tests/cases/cf_switch`, `cf_switch_break`, six `reject_switch_*` cases,
   `tests/differential/corpus/cf_switch.ts`).
+- **The string byte methods** (`docs/wp14-selfhost.md` A2): `charCodeAt`,
+  `substring`, `indexOf`, `startsWith`, `endsWith` and `String.fromCharCode`.
+  Every offset is a UTF-8 byte offset, like `s.length`, because a lexer walks
+  bytes and a code-point index would cost a decode per access. They lower
+  inline rather than to runtime calls: `charCodeAt` is the array bounds check
+  and a `load i8`, `substring` is JavaScript's clamp — `llvm.smin`/`llvm.smax`
+  into `[0, len]`, then the pair in order, which `opt -O2` folds to one
+  `max(0, min(n, len))` — plus one `sts_str_new`, and `indexOf` is a scan in
+  the emitted code. The one new runtime symbol is `sts_str_at(s, at, sub)`,
+  which `startsWith`, `endsWith` and the `indexOf` scan share; `runtime.c` is
+  3,842 bytes of `.text` at `-Oz`, inside the 4,096-byte budget.
+  `charCodeAt` bounds-checks and exits 1 where JavaScript answers `NaN`, which
+  `number` cannot hold, and the escape and attribute analyses learned that a
+  string method reads its receiver and that `substring` allocates
+  (`tests/cases/str_bytes`, `str_search`, four `reject_str_*` cases,
+  `tests/differential/corpus/str_methods.ts`).
 - **Bitwise operators.** `& | ^` (`and` / `or` / `xor`), `~` (`xor x, -1`),
   `<< >> >>>` (`shl` / `ashr` / `lshr`), and the compound forms
   `&= |= ^= <<= >>= >>>=` on a mutable local. Two `i32` or two `i64` of the

@@ -1108,12 +1108,25 @@ Paths are relative to the working directory. These are globals, not
 | `a.length` | `number`; read-only | `arr_length`, `reject_arr_length_assign` |
 | `a.push(v: T): number` | appends; grows capacity by doubling (4 from 0) through `sts_array_grow`; returns the new length | `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`) |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
+| `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
+| `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`sts_str_new`) | `str_bytes`; `reject_str_substring_arity` |
+| `s.indexOf(sub: string): number` | the first **byte** offset at which `sub` occurs, or `-1`; `s.indexOf("")` is `0`. A scan in the emitted code rather than a runtime function | `str_search`; `reject_str_index_of_type` |
+| `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`sts_str_at`) | `str_search` |
+| `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
+| `String.fromCharCode(c: number): string` | the one-byte string of `c & 0xFF`, the inverse of `charCodeAt`. A value above 127 makes a byte that is not valid UTF-8 on its own; nothing validates it | `str_search` |
 
-There are no other array or string methods (`pop`, `slice`, `indexOf`,
-`map`, `toUpperCase`, `charAt`, ...) and no `toString` (template literals
+Every offset above is a **byte** offset, like `s.length`: a lexer walks bytes,
+and a code-point index would need a decode per access. Cutting a multi-byte
+character in half is therefore possible and produces bytes that are not a
+valid string (docs/wp13-differential.md notes what Node then does with them).
+
+There are no other array or string methods (`pop`, `slice`, `map`,
+`toUpperCase`, `charAt`, ...) and no `toString` (template literals
 and `console.log` convert numbers); string-to-number parsing is the bare
 `Number(s)` / `parseInt(s)` / `parseFloat(s)` under
-[Numeric conversions](#numeric-conversions).
+[Numeric conversions](#numeric-conversions). An unknown name is
+`` Unknown method `codePointAt` on string `` with the supported list
+(`tests/cases/reject_str_method_unknown`).
 
 ### `Arena`
 

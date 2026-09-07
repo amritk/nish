@@ -47,6 +47,9 @@ const big = (n) => f.createBigIntLiteral(`${n}n`);
 
 const str = (s) => f.createStringLiteral(s);
 
+/** String methods whose offsets are UTF-8 byte offsets, so the shim owns them (WP14 A2). */
+const STRING_METHODS = new Set(["charCodeAt", "substring", "indexOf", "startsWith", "endsWith"]);
+
 /** The integer kinds and how a value of each is held in JavaScript. */
 const INT_KINDS = new Set(["i32", "i64", "u8", "u16", "u32", "u64"]);
 const UNSIGNED_KINDS = new Set(["u8", "u16", "u32", "u64"]);
@@ -320,7 +323,13 @@ function makeTransformer(unit, stems) {
         const declarations = node.declarationList.declarations.map((decl) => {
           const info = program.constants.get(decl.name.text);
           if (!info || info.value === undefined) return decl;
-          return f.updateVariableDeclaration(decl, decl.name, undefined, decl.type, constantLiteral(info.value));
+          return f.updateVariableDeclaration(
+            decl,
+            decl.name,
+            undefined,
+            decl.type,
+            constantLiteral(info.value)
+          );
         });
         return f.updateVariableStatement(
           node,
@@ -455,6 +464,19 @@ function makeTransformer(unit, stems) {
         const args = node.arguments.map((a) => ts.visitNode(a, visit));
         const dotted = dottedName(node.expression);
         if (dotted === "console.log") return shimCall("log", args);
+        // The string byte methods (WP14 A2): every offset is a UTF-8 byte
+        // offset, which JavaScript's own methods do not use.
+        if (
+          ts.isPropertyAccessExpression(node.expression) &&
+          STRING_METHODS.has(node.expression.name.text) &&
+          kindOf(node.expression.expression) === "string"
+        ) {
+          const receiver = ts.visitNode(node.expression.expression, visit);
+          return shimCall(node.expression.name.text, [receiver, ...args]);
+        }
+        if (dotted === "String.fromCharCode" && !bindings.has(node.expression.expression)) {
+          return shimCall("fromCharCode", args);
+        }
         if (dotted === "process.exit") return shimCall("exit", args);
         if (dotted === "Arena.used") return shimCall("arenaUsed", args);
         if (dotted === "Arena.mark") return shimCall("arenaMark", args);

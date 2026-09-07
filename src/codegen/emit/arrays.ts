@@ -42,7 +42,15 @@
  */
 import ts from "typescript";
 import { CheckedProgram } from "../../checker";
-import { ARRAY_STRUCT, StaticType, TYPED_ARRAY_ALIASES, alignOf, isFloat, isUnsigned, llvmType } from "../../types";
+import {
+  ARRAY_STRUCT,
+  StaticType,
+  TYPED_ARRAY_ALIASES,
+  alignOf,
+  isFloat,
+  isUnsigned,
+  llvmType,
+} from "../../types";
 import { ARRAY_TYPE } from "../runtime";
 import { emitIntBinary } from "./arithmetic";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, StatementEmitter } from "./context";
@@ -90,7 +98,7 @@ function elementPointer(ctx: EmitContext, arr: string, elem: StaticType, idx: st
  * index above `INT_MAX` from becoming a negative i64 and failing the
  * unsigned bounds compare), `fptosi` from double (truncates).
  */
-function emitIndex(ctx: EmitContext, expr: ts.Expression): string {
+export function emitIndex(ctx: EmitContext, expr: ts.Expression): string {
   const type = ctx.typeOf(expr);
   const literal = unwrapParens(expr);
   // Fold the widening of a constant index. `| 0` is the i32 truncation the
@@ -105,17 +113,20 @@ function emitIndex(ctx: EmitContext, expr: ts.Expression): string {
 }
 
 /** Convert an i64 length back to the `number` type the checker recorded for `expr`. */
-function emitNumberFromI64(ctx: EmitContext, value: string, expr: ts.Expression): string {
+export function emitNumberFromI64(ctx: EmitContext, value: string, expr: ts.Expression): string {
   const type = ctx.typeOf(expr);
   if (type.kind === "f64") return ctx.fn.emitValue(`sitofp i64 ${value} to double`);
   return ctx.fn.emitValue(`trunc i64 ${value} to i32`);
 }
 
-/** `idx < len` (unsigned) or branch to a cold block that panics and never returns. */
-function emitBoundsCheck(ctx: EmitContext, arr: string, idx: string): void {
+/**
+ * `idx < len` (unsigned) or branch to a cold block that panics and never
+ * returns. `len` is a value rather than an array, so `s.charCodeAt(i)`
+ * (WP14) shares this one check, this one panic and this one message.
+ */
+export function emitRangeCheck(ctx: EmitContext, idx: string, len: string): void {
   if (ctx.opts.uncheckedIndexing) return;
   const fn = ctx.fn;
-  const len = loadLength(ctx, arr);
   const inRange = fn.emitValue(`icmp ult i64 ${idx}, ${len}`);
   const failBlock = fn.newBlock("bounds.fail");
   const okBlock = fn.newBlock("bounds.ok");
@@ -124,6 +135,12 @@ function emitBoundsCheck(ctx: EmitContext, arr: string, idx: string): void {
   fn.emit(`call void ${ctx.useRuntime("sts_panic_index")}(i64 ${idx}, i64 ${len})`);
   fn.emit("unreachable");
   fn.placeBlock(okBlock);
+}
+
+/** The bounds check of `a[i]`: the array's length, then the shared range check. */
+function emitBoundsCheck(ctx: EmitContext, arr: string, idx: string): void {
+  if (ctx.opts.uncheckedIndexing) return;
+  emitRangeCheck(ctx, idx, loadLength(ctx, arr));
 }
 
 /**
@@ -149,7 +166,13 @@ function emitHeader(ctx: EmitContext, n: string, site: ts.Node): string {
  * stack allocation (the count is then a literal, see escape.ts), else
  * `bytes` from the arena.
  */
-function emitData(ctx: EmitContext, site: ts.Node, elem: StaticType, count: number | undefined, bytes: string): string {
+function emitData(
+  ctx: EmitContext,
+  site: ts.Node,
+  elem: StaticType,
+  count: number | undefined,
+  bytes: string
+): string {
   if (count !== undefined && ctx.isStackSite(site)) {
     const ty = `[${count} x ${llvmType(elem)}]`;
     const slot = ctx.fn.emitAlloca("arr.data", ty, 8);
@@ -212,7 +235,9 @@ const emitElementAccess: ExpressionEmitter = (ctx, node) => {
   const idx = emitIndex(ctx, expr.argumentExpression);
   emitBoundsCheck(ctx, arr, idx);
   const ty = llvmType(elem);
-  return ctx.fn.emitValue(`load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}`);
+  return ctx.fn.emitValue(
+    `load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}`
+  );
 };
 
 /** Opcode per compound operator: [integer form, floating-point form]. */
@@ -246,7 +271,9 @@ const emitElementAssignment: BinaryEmitter = (ctx, expr) => {
   if (op === ts.SyntaxKind.EqualsToken) {
     const value = ctx.emitExpression(expr.right);
     emitBoundsCheck(ctx, arr, idx);
-    ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}`);
+    ctx.fn.emit(
+      `store ${ty} ${value}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}`
+    );
     return value;
   }
   emitBoundsCheck(ctx, arr, idx);
@@ -254,8 +281,9 @@ const emitElementAssignment: BinaryEmitter = (ctx, expr) => {
   const old = ctx.fn.emitValue(`load ${ty}, ${ty}* ${slot}${ctx.alignSuffix(elem)}`);
   const rhs = ctx.emitExpression(expr.right);
   const [intOp, floatOp] = COMPOUND_OPCODES[op]!;
-  const value =
-    isFloat(elem) ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`) : emitIntBinary(ctx, intOp, elem, old, rhs);
+  const value = isFloat(elem)
+    ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`)
+    : emitIntBinary(ctx, intOp, elem, old, rhs);
   ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${ctx.alignSuffix(elem)}`);
   return value;
 };
@@ -266,7 +294,9 @@ export function installArrayAssignmentEmitters(table: EmitterTable<BinaryEmitter
     const previous = table[op as ts.SyntaxKind];
     if (!previous) continue;
     table[op as ts.SyntaxKind] = (ctx, expr) =>
-      ts.isElementAccessExpression(unwrapParens(expr.left)) ? emitElementAssignment(ctx, expr) : previous(ctx, expr);
+      ts.isElementAccessExpression(unwrapParens(expr.left))
+        ? emitElementAssignment(ctx, expr)
+        : previous(ctx, expr);
   }
 }
 
@@ -339,7 +369,9 @@ const emitForOf: StatementEmitter = (ctx, node) => {
   fn.emit(`br i1 ${more}, label %${bodyBlock.label}, label %${endBlock.label}`);
 
   fn.placeBlock(bodyBlock);
-  const value = fn.emitValue(`load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}`);
+  const value = fn.emitValue(
+    `load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}`
+  );
   fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${ctx.alignSuffix(elem)}`);
   ctx.loops.push({ breakBlock: endBlock, continueBlock: incBlock, hasBreak: false });
   ctx.emitStatement(stmt.statement);
@@ -372,10 +404,10 @@ export function isPushCall(program: CheckedProgram, node: ts.Node): node is ts.C
 
 function isElementAssignment(node: ts.Node): node is ts.BinaryExpression {
   return (
-    ts.isBinaryExpression(node) &&
-    COMPOUND_OPCODES[node.operatorToken.kind] !== undefined ||
-    (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken)
-  ) && ts.isElementAccessExpression(unwrapParens((node as ts.BinaryExpression).left));
+    ((ts.isBinaryExpression(node) && COMPOUND_OPCODES[node.operatorToken.kind] !== undefined) ||
+      (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken)) &&
+    ts.isElementAccessExpression(unwrapParens((node as ts.BinaryExpression).left))
+  );
 }
 
 /**

@@ -86,6 +86,8 @@ sts_str *sts_str_concat(const sts_str *a, const sts_str *b);
 bool sts_str_eq(const sts_str *a, const sts_str *b);
 /* `s.length`: the byte length. Compiled code loads the header directly. */
 uint64_t sts_str_len(const sts_str *s);
+/* Whether `sub` occurs at byte offset `at` (negative: never); `startsWith` / `endsWith`. */
+bool sts_str_at(const sts_str *s, int64_t at, const sts_str *sub);
 /* `console.log(s)`: one write(2) of the bytes plus a newline to stdout. */
 void sts_print(const sts_str *s);
 /* Number to string, as `${n}` does: decimal for integers, shortest round-trip (JS Number#toString) for f64. */

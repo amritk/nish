@@ -122,6 +122,12 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     effect: "read",
   },
   {
+    name: "sts_str_at",
+    signature: `declare zeroext i1 @sts_str_at(${STR_NOCAP}, i64 noundef, ${STR_NOCAP})`,
+    attrs: ["nounwind", "willreturn", "memory(argmem: read)"],
+    effect: "read",
+  },
+  {
     name: "sts_str_len",
     signature: `declare i64 @sts_str_len(${STR_NOCAP})`,
     attrs: ["nounwind", "willreturn", "memory(argmem: read)"],
