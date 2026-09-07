@@ -125,15 +125,20 @@ Each row ships with everything in the `docs/ARCHITECTURE.md` checklist: a
 golden `.ll`, an `llvm-as` pass, a native round trip, a `reject_*` case, a
 `docs/LANGUAGE.md` rule and a cookbook entry.
 
+**Every row below is now done**, and so is the `panic(msg)` of D1. The
+language gap is closed: what remains between here and S5 is wave C (library
+code in `self/`) and the four decisions of §3a, which are about how `self/`
+is written rather than about what StaticTS can express.
+
 ### Wave A — the front end cannot be written without these
 
 | # | Construct | Evidence |
 | --- | --- | --- |
-| A1 | `switch` / `case` / `default` | Every phase is a dispatch on a node kind. `src/` has 21 `switch`es plus ~30 dispatch tables that all become switches. Lowers to LLVM's `switch`, so the backend builds a jump table — the fast shape, not an `if` chain. |
-| A2 | `charCodeAt`, `substring`, `indexOf`, `startsWith`, `endsWith`, `String.fromCharCode` | A lexer is `charCodeAt` in a loop and `substring` at the end. `src/` itself never lexes (the `typescript` package does), so this set is sized for `self/`'s lexer, not for `src/`. |
+| A1 | `switch` / `case` / `default` **Done.** | Every phase is a dispatch on a node kind. `src/` has 21 `switch`es plus ~30 dispatch tables that all become switches. Lowers to LLVM's `switch`, so the backend builds a jump table — the fast shape, not an `if` chain. |
+| A2 | `charCodeAt`, `substring`, `indexOf`, `startsWith`, `endsWith`, `String.fromCharCode` **Done.** | A lexer is `charCodeAt` in a loop and `substring` at the end. `src/` itself never lexes (the `typescript` package does), so this set is sized for `self/`'s lexer, not for `src/`. |
 | A3 | Module-level `const` | **Done.** Token kinds, node kinds, and the 14 string-literal union types that become `i32` constants. |
-| A4 | `pop`, `indexOf`, `join` on arrays | `join` has **66 call sites** and is not optional: see the measurement below. `pop` 4, `indexOf` 7 — five of those seven search by *identity* over AST nodes, which `===` on class values already gives. |
-| A5 | `& \| ^ ~ << >> >>>` and their compound forms | The `StringMap` of §2.2 hashes with FNV-1a, and the emitter formats `f64` constants as hex (see B1). Never forbidden — they fell through the checker's operator table into the "not implemented" bucket. |
+| A4 | `pop`, `indexOf`, `join` on arrays **Done.** | `join` has **66 call sites** and is not optional: see the measurement below. `pop` 4, `indexOf` 7 — five of those seven search by *identity* over AST nodes, which `===` on class values already gives. |
+| A5 | `& \| ^ ~ << >> >>>` and their compound forms **Done.** | The `StringMap` of §2.2 hashes with FNV-1a, and the emitter formats `f64` constants as hex (see B1). Never forbidden — they fell through the checker's operator table into the "not implemented" bucket. |
 
 **`join` is a hard requirement, not a convenience.** Building 88 KB of IR text
 by repeated `+` costs **180 MB of peak RSS**, because every concatenation
@@ -146,9 +151,9 @@ one allocation, one `memcpy` per part.
 
 | # | Addition | Evidence |
 | --- | --- | --- |
-| B1 | `f64ToBits(x: f64): i64` (and `bitsToF64`) | **A blocker, and the least obvious one.** LLVM only accepts decimal float literals that round-trip exactly, so the emitter writes `double 0x400921FB54442D18` — today via `Buffer.writeDoubleBE`. StaticTS has no way to see a double's bits, so without this the self-hosted emitter cannot emit any `f64` constant. One `bitcast` in the IR: zero instructions, zero runtime. |
-| B2 | `console.error(x)` and a newline-free write | Every one of the 16 diagnostic writes goes to **stderr**, and two dumps write without a trailing newline. `console.log` is stdout-and-newline only. Without these, every `.err` golden and the runner's stream expectations have to be re-baselined — a worse outcome than two five-line runtime functions. |
-| B3 | A file read that can fail | `readFileSync` **exits the process** on a missing file, so a compiler cannot turn it into its own `` Cannot find module `./x` `` diagnostic and carry on loading the other imports. Smallest fix: `readFileSyncOrNull(path): string \| null` — it subsumes `existsSync`, has no time-of-check race, and needs no new type. |
+| B1 | `f64ToBits(x: f64): i64` (and `bitsToF64`) **Done.** | **A blocker, and the least obvious one.** LLVM only accepts decimal float literals that round-trip exactly, so the emitter writes `double 0x400921FB54442D18` — today via `Buffer.writeDoubleBE`. StaticTS has no way to see a double's bits, so without this the self-hosted emitter cannot emit any `f64` constant. One `bitcast` in the IR: zero instructions, zero runtime. |
+| B2 | `console.error(x)` and a newline-free write **Done.** | Every one of the 16 diagnostic writes goes to **stderr**, and two dumps write without a trailing newline. `console.log` is stdout-and-newline only. Without these, every `.err` golden and the runner's stream expectations have to be re-baselined — a worse outcome than two five-line runtime functions. |
+| B3 | A file read that can fail **Done.** | `readFileSync` **exits the process** on a missing file, so a compiler cannot turn it into its own `` Cannot find module `./x` `` diagnostic and carry on loading the other imports. Smallest fix: `readFileSyncOrNull(path): string \| null` — it subsumes `existsSync`, has no time-of-check race, and needs no new type. |
 | B4 | Contextual `[]` in a field assignment | **Done.** `this.children = []` in a constructor did not take its element type from the field, which every container class hits on its first line. |
 
 ### Wave C — library code in `self/`, no language change
@@ -189,8 +194,8 @@ and status returns. Be honest that this is **genuinely worse** than
 sites, and it will cost real bugs where a caller forgets to check a sentinel.
 The alternative, reporting only the first error, would delete WP10's multi-error
 guarantee and stop stage1 being diff-comparable with stage0 on the
-`reject_multi_*` cases. Add a `panic(msg)` builtin so the 16 internal
-invariants keep their messages.
+`reject_multi_*` cases. A `panic(msg)` builtin, so the 16 internal
+invariants keep their messages, is **done**.
 
 **D2. Switching the dispatch tables costs self-registration.** Today
 `checker/arrays.ts` adds `for...of` by writing one line into a table and
@@ -224,8 +229,8 @@ point is to know rather than to find out at the last milestone.
 
 | | Deliverable | Proof |
 | --- | --- | --- |
-| **S1 Lexer** | `self/lexer.ts` tokenises StaticTS-0 | A token dump of every `tests/cases/*.ts` matches a golden; the lexer built by stage0 runs natively |
-| **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 | The tree dump matches stage0's `--emit-ast` for the corpus, modulo the documented shape differences |
+| **S1 Lexer** | `self/lexer.ts` tokenises StaticTS-0 **Done.** | Its token stream agrees with the `typescript` scanner's over every `tests/cases/*.ts`; the lexer built by stage0 runs natively |
+| **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 **Done.** | Its tree matches the `typescript` parser's, span for span, for every program in the corpus that StaticTS-0's grammar covers |
 | **S3 Checker** | `self/checker.ts` — types, scopes, the side tables | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
 | **S4 Emitter** | `self/emit.ts` — IR text | `IR(stage0, p) == IR(stage1, p)` for a growing whitelist of `tests/cases/` |
 | **S5 Bootstrap** | `self/` compiles `self/` | `IR(stage1, self/) == IR(stage2, self/)`, and stage3 is byte-identical to stage2 |
@@ -233,6 +238,134 @@ point is to know rather than to find out at the last milestone.
 S1–S4 are each useful on their own and each testable against stage0, which is
 what keeps this from being a single unlandable change. S5 is the day the
 compiler compiles itself.
+
+### What S1 cost, and what it says
+
+`self/tokens.ts`, `self/lexer.ts` and `self/dump_tokens.ts` are **1,222 lines
+of StaticTS**, and the four numbers the gate wants are already forming:
+
+- **StaticTS-0 held.** The lexer needed no language addition beyond the ones
+  §3 already lists. It is written with `switch`, `charCodeAt`, `substring`,
+  `push`/`pop`, `join`, the bitwise operators and module constants — that is,
+  with wave A, which is the first evidence that the census measured the right
+  thing.
+- **It agrees with the oracle exactly.** `tests/lexer_oracle.js` runs the
+  `typescript` scanner over `tests/cases/`, `examples/`, `self/`,
+  `docs/cookbook/`, the differential corpus and `tests/lexer/`, prints the
+  token stream in `dump_tokens`' format and diffs it: **482 of 482 files,
+  50,968 tokens, no disagreement.** That includes every `reject_*` case, whose
+  forbidden syntax the lexer has to tokenise without an opinion, and files with
+  multi-byte characters, where the scanner's UTF-16 offsets are mapped through
+  the source's byte prefix.
+- **The oracle cost almost nothing to keep.** Two mismatches, both real bugs in
+  the same direction: the lexer had opinions. It refused `==` and `!=` where
+  the scanner tokenises them, and it split `?.`, `??`, `...`, `**`, `@` and
+  `#name` into pieces. The fix was to lex what is written and leave the
+  refusing to the parser, which is better diagnostics anyway ("`??` is
+  forbidden; narrow with `!== null`" rather than a complaint about a stray
+  `?`). One divergence stands by design: the scanner hands back a bare `>` so
+  the parser can close nested type arguments one at a time, and this lexer
+  merges `>>` and `>>>` because StaticTS-0 has no nested type argument list —
+  the oracle asks for `reScanGreaterToken` to match, and the parser will have
+  to split a `>>` where it wants two closers.
+- **It is not slow.** Over 129 KB of the compiler's own source, the native
+  binary reads the file, lexes 14,000 tokens, formats and writes the dump in
+  **5 ms**; the `typescript` scanner alone, warm, takes 4 ms — after the 258 ms
+  it costs to load.
+
+### What S2 cost, and the gate's four numbers
+
+`self/nodes.ts`, `self/parser.ts` and `self/dump_ast.ts` bring `self/` to
+**2,817 lines of StaticTS**. `tests/parser_oracle.js` is the lexer oracle one
+level up: it walks the `typescript` tree, prints it in `dump_ast`'s format and
+diffs, so what is compared is not "did it parse" but "is it the same tree, out
+of the same pieces, with the same spans".
+
+**447 of 447 files agree, 53,673 nodes, 43 skipped — and every one of the 43
+is a `reject_*` case.** Every positive program in `tests/cases/`, `examples/`,
+`self/`, `docs/cookbook/`, `bench/`, the differential corpus and the new
+`tests/parser/` fixtures parses to exactly the tree TypeScript builds.
+
+So the gate's questions have answers:
+
+1. **Did StaticTS-0 hold?** Yes, again, and this time under more pressure: a
+   recursive-descent parser with no exceptions, no closures, no generics and
+   no `Map`. The one-`Node`-class decision of §2.1 paid for itself — a fixed
+   child layout per kind with `N_LIST` for the variable-length groups and
+   `N_EMPTY` for the absent ones reads as well as a class hierarchy would and
+   needs no downcast. Nothing was added to the language for S1 or S2.
+2. **How far off was the line count?** `src/` is 13,757 lines; the lexer and
+   parser are 2,817, and they replace the ~1,558 `ts.*` calls that `src/` gets
+   from a 60,000-line package. That is roughly the ratio the plan assumed. The
+   port of the checker and the emitter is the remaining ~11,000 lines of
+   `src/`, and there is now a measured basis for expecting it to be about that
+   again rather than twice it.
+3. **What did the oracle cost?** Four bugs across S1 and S2, all found in
+   minutes, all in the same direction — the front end having opinions the
+   scanner does not. `==` and `?.` refused instead of tokenised; `>` merged
+   where the scanner splits (kept, and the parser splits it back where a type
+   argument list closes); `super` missing from the model although the language
+   has inheritance; and `from` and `of` made hard keywords when they are
+   contextual, which `tests/cases/cls_nested.ts` catches with a field called
+   `from`. None of them needed a redesign. That is the strongest evidence for
+   S3: the oracle habit works, and it is cheap.
+4. **How fast is it?** Over 84 KB of `self/`'s own source the native binary
+   reads, lexes, parses and writes a 30,000-line tree dump in **7 ms**; the
+   `typescript` parser alone, warm, takes 14.5 ms for the same input — before
+   the 258 ms it costs to load.
+
+The 43 skips are the honest remainder, and they are all one thing: **grammar
+for constructs StaticTS forbids**. Stage0 rejects those by name in its
+Phase 0 validator, *after* the `typescript` package has parsed them, so for
+stage1 to produce the same message this parser must read them and turn them
+down itself. The tally, largest first: `try` (1), `enum` (2), `namespace` (2),
+`typeof` (2), `as` and `<T>x` casts (2), arrow functions and generics (7
+across functions, classes and imports), `void`/`delete`/`await` (3), getters
+(1), `static` (1), decorators (1), labels (1), `with` (1), `debugger` (1),
+regex literals (1), spread (1), computed keys (1), `export default` (1),
+`?.`/`??`/`==`/`!=` in expression position (4), and top-level statements (2).
+That is a bounded list — roughly 25 constructs, each a few lines of
+read-and-refuse — not an open-ended one, which is the answer the gate needed
+about how much of TypeScript `self/` ends up parsing.
+
+### The gate at S2
+
+S1 and S2 are done first and the project is re-decided there, because they
+carry the risk the other three do not. S3, S4 and S5 are a *port*: `src/`
+already contains a checker and an emitter, and the question is only whether
+StaticTS-0 can express them. S1 and S2 are **new code** — `src/` has no lexer
+and no parser, because the `typescript` package is the parser, and 1,558 of
+the references in `src/` are calls into it. That code has to be written from
+nothing and then made to agree with a 60,000-line scanner well enough for the
+IR equality of §1 to mean anything.
+
+So the sequencing puts the unknown first, and both artifacts are worth having
+whichever way the gate goes: a lexer and a recursive-descent parser are the
+largest StaticTS program in existence, which is the dogfooding evidence the
+language wants, and they belong in `bench/` as a workload that is neither
+numeric nor synthetic.
+
+At the gate, three things decide it:
+
+1. **Did StaticTS-0 hold?** If S1 and S2 needed language additions beyond §3,
+   S3–S5 will need more, and each one is something stage1 must then implement
+   in order to compile itself.
+2. **How far off was the line count?** `src/` is 13,757 lines. If the lexer and
+   parser came in near the estimate, the rest can be estimated; if they came in
+   at twice it, the port is a different project from the one costed here.
+3. **What did the oracle cost?** S1 and S2 both compare against stage0. If
+   keeping them in agreement is a steady drip of one-off differences, S3, whose
+   proof is *every* diagnostic matching, is much worse than it looks.
+
+The honest case against continuing past the gate is that self-hosting serves
+the compiler's own speed, not §5's northern star, and that maintaining two
+implementations doubles the cost of every construct added afterwards. The
+answer to the second half is that stage0 is **frozen** at S5 rather than
+retired: it stays buildable as the bootstrap seed and as the differential
+oracle, but new constructs land in `self/` only, so the doubling is bounded by
+the language as it stands on that day. Deciding that now is what makes the
+tax finite, and it is why §1's "stage0 is not going away" means *kept*, not
+*kept up to date*.
 
 ---
 

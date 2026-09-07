@@ -1,0 +1,4 @@
+const 302 307
+IDENT 308 311 bad
+= 312 313
+ERROR 314 327 unterminated string literal

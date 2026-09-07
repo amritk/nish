@@ -1,0 +1,19 @@
+// Numeric and string literal shapes, including the ones StaticTS rejects.
+const dec = 1234;
+const sep = 1_000_000;
+const hex = 0xdeadBEEF;
+const bin = 0b1010_0101;
+const oct = 0o777;
+const flt = 3.14;
+const dot = .5;
+const exp = 1e10;
+const negExp = 1.5e-7;
+const plusExp = 2E+3;
+const big = 10n;
+const bigHex = 0xffn;
+const s1 = "plain";
+const s2 = 'single';
+const s3 = "esc \n \t \\ \" \0 \x41 A \u{1F600}";
+const s4 = "";
+const div = 1 / 2 / 3;
+const notRegex = a / b / c;

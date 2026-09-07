@@ -1,0 +1,2 @@
+tests/parser/recovery.ts:385: expected an expression, found `}`
+tests/parser/recovery.ts:385: expected `;`, found `}`

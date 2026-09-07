@@ -1,0 +1,41 @@
+SOURCE_FILE 0 443
+  FUNCTION 287 333
+    IDENT 296 298 ok
+    LIST 299 308
+      PARAM 299 308
+        IDENT 299 300 a
+        TYPE_REF 302 308 number
+          LIST 0 0
+    TYPE_REF 311 317 number
+      LIST 0 0
+    BLOCK 318 333
+      RETURN 322 331
+        IDENT 329 330 a
+  FUNCTION 335 386
+    IDENT 344 350 broken
+    LIST 351 360
+      PARAM 351 360
+        IDENT 351 352 a
+        TYPE_REF 354 360 number
+          LIST 0 0
+    TYPE_REF 363 369 number
+      LIST 0 0
+    BLOCK 370 386
+      RETURN 374 384
+        BINARY 381 386 +
+          IDENT 381 382 a
+          ERROR 385 386 expected an expression, found `}`
+  FUNCTION 388 442
+    IDENT 397 403 alsoOk
+    LIST 404 413
+      PARAM 404 413
+        IDENT 404 405 b
+        TYPE_REF 407 413 number
+          LIST 0 0
+    TYPE_REF 416 422 number
+      LIST 0 0
+    BLOCK 423 442
+      RETURN 427 440
+        BINARY 434 439 *
+          IDENT 434 435 b
+          NUMBER 438 439 2

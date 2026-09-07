@@ -12,6 +12,17 @@
  *   a === b        `call zeroext i1 @sts_str_eq(i8* a, i8* b)` (`!==` adds `xor i1 .., true`)
  *   s.length       `bitcast i8* s to i64*` + `load i64, align 8`, then `trunc`
  *                  to i32 (i32 mode) or `sitofp` to double (f64 mode). No call.
+ *   s.charCodeAt(i)  the array bounds check against the byte length, then
+ *                  `getelementptr` past the 8-byte header and `load i8`. No call.
+ *   s.substring(a, b)  the JavaScript clamp (`llvm.smin` / `llvm.smax` into
+ *                  `[0, len]`, then the two in order), one `getelementptr`
+ *                  and one `sts_str_new`: one allocation, one `memcpy`.
+ *   s.startsWith(p)  `sts_str_at(s, 0, p)`; `endsWith` passes `len - p.len`,
+ *                  which is negative, and so false, when `p` is the longer.
+ *   s.indexOf(p)   a loop over `sts_str_at` (`str.find` blocks), inline
+ *                  rather than a runtime function so `runtime.c` stays inside
+ *                  its budget (docs/wp14-selfhost.md §6 rule 4).
+ *   String.fromCharCode(c)  a one-byte `alloca`, `store i8`, `sts_str_new`.
  *   `a${x}b`       constant parts are literals; holes are converted with
  *                  `sts_str_from_i32` / `sts_str_from_f64` / `sts_str_from_u64`
  *                  (an unsigned hole narrower than 64 bits is `zext`ed first)
@@ -30,7 +41,8 @@ import { IRModule } from "../ir";
 import { arenaBuiltinCallEmitters } from "./arena";
 import { BuiltinCall } from "./builtins";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, intOpcode } from "./context";
-import { isValueReceiver, namespacePropertyEmitters, propertyEmitters } from "./members";
+import { emitIndex, emitNumberFromI64, emitRangeCheck } from "./arrays";
+import { isValueReceiver, methodCallEmitters, namespacePropertyEmitters, propertyEmitters } from "./members";
 import { ioBuiltinCallEmitters } from "./io";
 import { mathBuiltinCallEmitters, mathPropertyEmitters } from "./math";
 
@@ -84,7 +96,9 @@ function emitToString(ctx: EmitContext, expr: ts.Expression): string {
   const type = ctx.typeOf(expr);
   let value = ctx.emitExpression(expr);
   if (type.kind === "bool") {
-    return ctx.fn.emitValue(`select i1 ${value}, i8* ${ctx.stringConstant("true")}, i8* ${ctx.stringConstant("false")}`);
+    return ctx.fn.emitValue(
+      `select i1 ${value}, i8* ${ctx.stringConstant("true")}, i8* ${ctx.stringConstant("false")}`
+    );
   }
   const callee = conversionCallee(type);
   if (!callee) return value;
@@ -158,7 +172,8 @@ export function unwrapStringPassthrough(program: CheckedProgram, expr: ts.Expres
 
 // ---- `.length` --------------------------------------------------------------------------
 
-for (const [name, prop] of Object.entries(mathPropertyEmitters)) namespacePropertyEmitters[name] = () => prop.value; // Math.PI, Math.E
+for (const [name, prop] of Object.entries(mathPropertyEmitters))
+  namespacePropertyEmitters[name] = () => prop.value; // Math.PI, Math.E
 
 propertyEmitters.string = (ctx, expr) => {
   const type = ctx.typeOf(expr);
@@ -169,6 +184,176 @@ propertyEmitters.string = (ctx, expr) => {
     ? ctx.fn.emitValue(`sitofp i64 ${len} to double`)
     : ctx.fn.emitValue(`trunc i64 ${len} to i32`);
 };
+
+// ---- Byte methods (WP14 A2) ---------------------------------------------------------------
+
+/** Method names that lower here; also the list the checker's message prints. */
+const STRING_METHODS = new Set(["charCodeAt", "substring", "indexOf", "startsWith", "endsWith"]);
+
+/** Byte length, from the header the string pointer points at. */
+function loadStringLength(ctx: EmitContext, str: string): string {
+  const header = ctx.fn.emitValue(`bitcast i8* ${str} to i64*`);
+  return ctx.fn.emitValue(`load i64, i64* ${header}${ctx.alignSuffix(STRING)}`);
+}
+
+/** The bytes themselves: past the 8-byte length header. */
+function stringData(ctx: EmitContext, str: string): string {
+  return ctx.fn.emitValue(`getelementptr inbounds i8, i8* ${str}, i64 8`);
+}
+
+/** `llvm.smax(0, llvm.smin(value, len))`: JavaScript's `substring` clamp. */
+function clampToLength(ctx: EmitContext, value: string, len: string): string {
+  const low = ctx.fn.emitValue(`call i64 ${ctx.useRuntime("llvm.smin.i64")}(i64 ${value}, i64 ${len})`);
+  return ctx.fn.emitValue(`call i64 ${ctx.useRuntime("llvm.smax.i64")}(i64 ${low}, i64 0)`);
+}
+
+/** A fresh arena string holding `n` bytes copied from `bytes`. */
+function newString(ctx: EmitContext, bytes: string, n: string): string {
+  return ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_str_new")}(i8* ${bytes}, i64 ${n})`);
+}
+
+/** `s.charCodeAt(i)`: the byte at `i`, bounds-checked exactly as `a[i]` is. */
+function emitCharCodeAt(ctx: EmitContext, expr: ts.CallExpression, str: string): string {
+  const index = emitIndex(ctx, expr.arguments[0]);
+  emitRangeCheck(ctx, index, loadStringLength(ctx, str));
+  const at = ctx.fn.emitValue(`getelementptr inbounds i8, i8* ${stringData(ctx, str)}, i64 ${index}`);
+  const byte = ctx.fn.emitValue(`load i8, i8* ${at}, align 1`);
+  return ctx.typeOf(expr).kind === "f64"
+    ? ctx.fn.emitValue(`uitofp i8 ${byte} to double`)
+    : ctx.fn.emitValue(`zext i8 ${byte} to i32`);
+}
+
+/**
+ * `s.substring(a, b)`: both ends clamped into `[0, len]` and then swapped
+ * into order, as JavaScript specifies, so the length is never negative and
+ * the copy never leaves the string.
+ */
+function emitSubstring(ctx: EmitContext, expr: ts.CallExpression, str: string): string {
+  const len = loadStringLength(ctx, str);
+  const first = clampToLength(ctx, emitIndex(ctx, expr.arguments[0]), len);
+  const second = expr.arguments.length > 1 ? clampToLength(ctx, emitIndex(ctx, expr.arguments[1]), len) : len;
+  const from = ctx.fn.emitValue(`call i64 ${ctx.useRuntime("llvm.smin.i64")}(i64 ${first}, i64 ${second})`);
+  const to = ctx.fn.emitValue(`call i64 ${ctx.useRuntime("llvm.smax.i64")}(i64 ${first}, i64 ${second})`);
+  const n = ctx.fn.emitValue(`sub i64 ${to}, ${from}`);
+  const at = ctx.fn.emitValue(`getelementptr inbounds i8, i8* ${stringData(ctx, str)}, i64 ${from}`);
+  return newString(ctx, at, n);
+}
+
+/** `sts_str_at(s, at, sub)`: whether `sub`'s bytes sit at offset `at`. */
+function emitOccursAt(ctx: EmitContext, str: string, at: string, sub: string): string {
+  return ctx.fn.emitValue(
+    `call zeroext i1 ${ctx.useRuntime("sts_str_at")}(i8* ${str}, i64 ${at}, i8* ${sub})`
+  );
+}
+
+/**
+ * `s.indexOf(sub)`: the first offset where `sub` occurs, or -1. The scan is
+ * a loop here rather than a runtime function, which keeps `runtime.c` inside
+ * its budget and lets LLVM see through the search when the needle is a
+ * constant. `str.probe` tests one offset; `str.miss` is the -1 edge.
+ *
+ * The loop is invisible to `attributes.ts`, which counts *source* loops, so
+ * it must terminate on its own for `willreturn` to stay sound: the offset
+ * rises by one per pass and the guard fails once it passes `len - sub.len`,
+ * a length the arena already allocated and therefore far below 2^64.
+ */
+function emitIndexOf(ctx: EmitContext, expr: ts.CallExpression, str: string): string {
+  const fn = ctx.fn;
+  const sub = ctx.emitExpression(expr.arguments[0]);
+  const len = loadStringLength(ctx, str);
+  const subLen = loadStringLength(ctx, sub);
+  const slot = fn.emitAlloca("str.at", "i64", 8);
+  fn.emit(`store i64 0, i64* ${slot}, align 8`);
+  const condBlock = fn.newBlock("str.find");
+  const probeBlock = fn.newBlock("str.probe");
+  const nextBlock = fn.newBlock("str.next");
+  const missBlock = fn.newBlock("str.miss");
+  const endBlock = fn.newBlock("str.found");
+
+  fn.emit(`br label %${condBlock.label}`);
+  fn.placeBlock(condBlock);
+  const at = fn.emitValue(`load i64, i64* ${slot}, align 8`);
+  const end = fn.emitValue(`add i64 ${at}, ${subLen}`);
+  const fits = fn.emitValue(`icmp ule i64 ${end}, ${len}`);
+  fn.emit(`br i1 ${fits}, label %${probeBlock.label}, label %${missBlock.label}`);
+
+  fn.placeBlock(probeBlock);
+  const hit = emitOccursAt(ctx, str, at, sub);
+  fn.emit(`br i1 ${hit}, label %${endBlock.label}, label %${nextBlock.label}`);
+
+  fn.placeBlock(nextBlock);
+  const next = fn.emitValue(`add i64 ${at}, 1`);
+  fn.emit(`store i64 ${next}, i64* ${slot}, align 8`);
+  fn.emit(`br label %${condBlock.label}`);
+
+  fn.placeBlock(missBlock);
+  fn.emit(`br label %${endBlock.label}`);
+
+  fn.placeBlock(endBlock);
+  const found = fn.emitValue(`phi i64 [ ${at}, %${probeBlock.label} ], [ -1, %${missBlock.label} ]`);
+  return emitNumberFromI64(ctx, found, expr);
+}
+
+methodCallEmitters.string = (ctx, expr) => {
+  const access = expr.expression as ts.PropertyAccessExpression;
+  const str = ctx.emitExpression(access.expression);
+  switch (access.name.text) {
+    case "charCodeAt":
+      return emitCharCodeAt(ctx, expr, str);
+    case "substring":
+      return emitSubstring(ctx, expr, str);
+    case "indexOf":
+      return emitIndexOf(ctx, expr, str);
+    case "startsWith":
+      return emitOccursAt(ctx, str, "0", ctx.emitExpression(expr.arguments[0]));
+    default: {
+      // `endsWith`: the suffix sits at `len - sub.len`, which is negative when
+      // the suffix is the longer string and `sts_str_at` then answers false.
+      const sub = ctx.emitExpression(expr.arguments[0]);
+      const at = ctx.fn.emitValue(`sub i64 ${loadStringLength(ctx, str)}, ${loadStringLength(ctx, sub)}`);
+      return emitOccursAt(ctx, str, at, sub);
+    }
+  }
+};
+
+/** `String.fromCharCode(c)`: one byte on the stack, copied into an arena string. */
+const fromCharCode: BuiltinCall = {
+  emit: (ctx, expr) => {
+    const code = emitIndex(ctx, expr.arguments[0]);
+    const byte = ctx.fn.emitValue(`trunc i64 ${code} to i8`);
+    const slot = ctx.fn.emitAlloca("chr", "i8", 1);
+    ctx.fn.emit(`store i8 ${byte}, i8* ${slot}, align 1`);
+    return newString(ctx, slot, "1");
+  },
+  callees: () => ["sts_str_new"],
+};
+
+/** Runtime symbols a string method calls, for the attribute fixpoint. */
+function methodCallees(name: string): string[] {
+  if (name === "substring") return ["sts_str_new"];
+  return name === "charCodeAt" ? [] : ["sts_str_at"];
+}
+
+/** `expr` is a call of one of the byte methods on a string receiver. */
+export function isStringMethodCall(program: CheckedProgram, expr: ts.CallExpression): boolean {
+  const access = expr.expression;
+  if (!ts.isPropertyAccessExpression(access) || !STRING_METHODS.has(access.name.text)) return false;
+  return program.types.get(access.expression)?.kind === "string";
+}
+
+/** `expr` allocates a string: `s.substring(...)` or `String.fromCharCode(c)`. */
+export function isStringAllocCall(program: CheckedProgram, expr: ts.CallExpression): boolean {
+  if (
+    dottedName(expr.expression) === "String.fromCharCode" &&
+    !isValueReceiver(program, (expr.expression as ts.PropertyAccessExpression).expression)
+  ) {
+    return true;
+  }
+  return (
+    isStringMethodCall(program, expr) &&
+    (expr.expression as ts.PropertyAccessExpression).name.text === "substring"
+  );
+}
 
 // ---- Operators (string-aware `+`, `===`, `!==`) ---------------------------------------------
 
@@ -197,6 +382,10 @@ const emitStrictEquality: BinaryEmitter = (ctx, expr) => {
 
 // ---- Builtin calls ------------------------------------------------------------------------
 
+/**
+ * `console.log` keeps `sts_print`, its own one-argument entry point;
+ * `console.error` goes through the general `sts_write(s, fd, newline)`.
+ */
 const consoleLog: BuiltinCall = {
   emit: (ctx, expr) => {
     const text = emitToString(ctx, expr.arguments[0]);
@@ -206,9 +395,20 @@ const consoleLog: BuiltinCall = {
   callees: (program, expr) => ["sts_print", ...conversionCallees(program, expr.arguments[0])],
 };
 
+const consoleError: BuiltinCall = {
+  emit: (ctx, expr) => {
+    const text = emitToString(ctx, expr.arguments[0]);
+    ctx.fn.emit(`call void ${ctx.useRuntime("sts_write")}(i8* ${text}, i32 2, i1 true)`);
+    return "void";
+  },
+  callees: (program, expr) => ["sts_write", ...conversionCallees(program, expr.arguments[0])],
+};
+
 /** Builtins keyed by dotted callee name; mirrors `builtinCalls` in the checker. */
 export const builtinCallEmitters: Record<string, BuiltinCall> = {
   "console.log": consoleLog,
+  "console.error": consoleError, // WP14 B2
+  "String.fromCharCode": fromCharCode, // WP14 A2
   ...mathBuiltinCallEmitters, // WP7: Math.sqrt, ..., Math.random
   ...ioBuiltinCallEmitters, // WP7: process.exit
   ...arenaBuiltinCallEmitters, // WP6: Arena.reset / mark / release / used
@@ -236,14 +436,27 @@ export function collectStringFacts(
   node: ts.Node,
   facts: { readsMemory: boolean; callees: Set<string> }
 ): void {
-  if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && !isValueReceiver(program, node.expression.expression)) {
-    for (const c of builtinCallEmitters[dottedName(node.expression)!].callees(program, node)) facts.callees.add(c);
+  if (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    !isValueReceiver(program, node.expression.expression)
+  ) {
+    for (const c of builtinCallEmitters[dottedName(node.expression)!].callees(program, node))
+      facts.callees.add(c);
   } else if (ts.isBinaryExpression(node) && program.types.get(node.left)?.kind === "string") {
     const op = node.operatorToken.kind;
     if (op === ts.SyntaxKind.PlusToken) facts.callees.add("sts_str_concat");
-    else if (op === ts.SyntaxKind.EqualsEqualsEqualsToken || op === ts.SyntaxKind.ExclamationEqualsEqualsToken) {
+    else if (
+      op === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+      op === ts.SyntaxKind.ExclamationEqualsEqualsToken
+    ) {
       facts.callees.add("sts_str_eq");
     }
+  } else if (ts.isCallExpression(node) && isStringMethodCall(program, node)) {
+    // The byte methods all read the string's bytes; `substring` also allocates.
+    facts.readsMemory = true;
+    for (const c of methodCallees((node.expression as ts.PropertyAccessExpression).name.text))
+      facts.callees.add(c);
   } else if (ts.isPropertyAccessExpression(node) && program.types.get(node.expression)?.kind === "string") {
     facts.readsMemory = true; // `.length` loads the header through the string pointer (Math.PI has no typed target)
   } else if (ts.isTemplateExpression(node)) {

@@ -1,6 +1,7 @@
 /**
- * Control flow: `if`, `while`, `do`, `for`, `break`/`continue`, `throw`,
- * the ternary and short-circuit operators, compound assignment, `++`/`--`.
+ * Control flow: `if`, `while`, `do`, `for`, `switch`, `break`/`continue`,
+ * `throw`, the ternary and short-circuit operators, compound assignment,
+ * `++`/`--`.
  *
  * Conditions must be `boolean`. StaticTS has no truthiness coercion, so
  * `if (n)` on a number is an error rather than an implicit `n !== 0`.
@@ -12,6 +13,9 @@
  *     terminate when their body contains no `break` aimed at them.
  *   - Any other loop may run zero times, so it never terminates.
  *   - `break`, `continue` and `throw` terminate the list they appear in.
+ *   - a `switch` terminates when it has a `default`, no `break` targets it,
+ *     and its last clause terminates: only then is every value handled by a
+ *     clause that cannot fall out.
  *
  * Nullable narrowing (WP6, see `nullable.ts`): a condition of the form
  * `p !== null` / `p === null` (possibly under `!`, `&&`, `||`) narrows `p`
@@ -19,7 +23,8 @@
  * an `if` whose other branch cannot fall through.
  */
 import ts from "typescript";
-import { BOOL, assignable, isNumeric, sameType, typeToString } from "../types";
+import { BOOL, assignable, isInteger, isNumeric, sameType, typeToString } from "../types";
+import { constValue } from "./constants";
 import {
   BinaryChecker,
   CheckContext,
@@ -29,7 +34,13 @@ import {
   StatementChecker,
   UnaryChecker,
 } from "./context";
-import { Narrowing, applyNarrowings, conditionNarrowings, invalidateNarrowings, narrowedScope } from "./nullable";
+import {
+  Narrowing,
+  applyNarrowings,
+  conditionNarrowings,
+  invalidateNarrowings,
+  narrowedScope,
+} from "./nullable";
 import { LocalVar } from "./program";
 import { Scope } from "./scope";
 
@@ -62,14 +73,24 @@ function checkCondition(ctx: CheckContext, expr: ts.Expression, scope: Scope): v
  * one too. `narrowings` hold throughout the body (a scope of their own, so a
  * `let` declared in the body cannot collide with them).
  */
-function checkBody(ctx: CheckContext, stmt: ts.Statement, scope: Scope, narrowings: Narrowing[] = []): boolean {
+function checkBody(
+  ctx: CheckContext,
+  stmt: ts.Statement,
+  scope: Scope,
+  narrowings: Narrowing[] = []
+): boolean {
   const inner = narrowings.length > 0 ? narrowedScope(scope, narrowings) : scope;
   return ts.isBlock(stmt) ? ctx.checkBlock(stmt, inner) : ctx.checkStatement(stmt, inner.child());
 }
 
 /** Check a loop body with the loop on the stack; returns true if it contains a `break` for this loop. */
-function checkLoopBody(ctx: CheckContext, body: ts.Statement, scope: Scope, narrowings: Narrowing[] = []): boolean {
-  const loop: LoopInfo = { hasBreak: false };
+function checkLoopBody(
+  ctx: CheckContext,
+  body: ts.Statement,
+  scope: Scope,
+  narrowings: Narrowing[] = []
+): boolean {
+  const loop: LoopInfo = { kind: "loop", hasBreak: false };
   ctx.loops.push(loop);
   checkBody(ctx, body, scope, narrowings);
   ctx.loops.pop();
@@ -94,7 +115,12 @@ const checkWhile: StatementChecker = (ctx, node, scope) => {
   const stmt = node as ts.WhileStatement;
   invalidateNarrowings(scope, stmt);
   checkCondition(ctx, stmt.expression, scope);
-  const hasBreak = checkLoopBody(ctx, stmt.statement, scope, conditionNarrowings(stmt.expression, scope).whenTrue);
+  const hasBreak = checkLoopBody(
+    ctx,
+    stmt.statement,
+    scope,
+    conditionNarrowings(stmt.expression, scope).whenTrue
+  );
   return isAlwaysTrue(stmt.expression) && !hasBreak;
 };
 
@@ -125,17 +151,141 @@ const checkFor: StatementChecker = (ctx, node, scope) => {
 const checkBreak: StatementChecker = (ctx, node) => {
   const stmt = node as ts.BreakStatement;
   if (stmt.label) throw ctx.error("Labelled `break` is not supported", stmt);
-  const loop = ctx.loops[ctx.loops.length - 1];
-  if (!loop) throw ctx.error("`break` outside of a loop", stmt);
-  loop.hasBreak = true;
+  const target = ctx.loops[ctx.loops.length - 1];
+  if (!target) throw ctx.error("`break` outside of a loop or `switch`", stmt);
+  target.hasBreak = true;
   return true;
 };
 
 const checkContinue: StatementChecker = (ctx, node) => {
   const stmt = node as ts.ContinueStatement;
   if (stmt.label) throw ctx.error("Labelled `continue` is not supported", stmt);
-  if (ctx.loops.length === 0) throw ctx.error("`continue` outside of a loop", stmt);
+  // A `switch` on the stack is a `break` target only: `continue` inside one
+  // belongs to the enclosing loop, as it does in JavaScript.
+  if (!ctx.loops.some((target) => target.kind === "loop")) {
+    throw ctx.error("`continue` outside of a loop", stmt);
+  }
   return true;
+};
+
+/**
+ * The value a `case` label selects on. It has to be known at compile time,
+ * because LLVM's `switch` table holds constants: an integer literal, its
+ * negation, or a module constant (WP14 A3), which is where a program's token
+ * and node kinds live. Anything else is a runtime value and belongs in an
+ * `if`.
+ */
+const caseValue = (ctx: CheckContext, expr: ts.Expression): bigint | undefined => {
+  const inner = unwrapParens(expr);
+  if (ts.isNumericLiteral(inner)) {
+    // TypeScript normalises every numeric literal's text to decimal digits
+    // (`0x10` reads back as `16`), so this is exact past 2^53 as well.
+    return /^\d+$/.test(inner.text) ? BigInt(inner.text) : undefined;
+  }
+  if (ts.isPrefixUnaryExpression(inner) && inner.operator === ts.SyntaxKind.MinusToken) {
+    const operand = caseValue(ctx, inner.operand);
+    return operand === undefined ? undefined : -operand;
+  }
+  if (ts.isIdentifier(inner)) {
+    const constant = ctx.program.constRefs.get(inner);
+    if (!constant) return undefined;
+    const value = constValue(constant);
+    return value.kind === "int" ? value.value : undefined;
+  }
+  return undefined;
+};
+
+/**
+ * A clause declares a variable directly, without a block of its own. Every
+ * clause shares one scope in TypeScript, so `case 1: const x = 1; break;`
+ * would leave `x` visible but unassigned in the clauses below it — reachable
+ * in StaticTS, a temporal-dead-zone throw under Node. Requiring the braces
+ * removes the difference rather than documenting it, and it is what
+ * ESLint's `no-case-declarations` asks for anyway.
+ */
+const declaresDirectly = (clause: ts.CaseOrDefaultClause): ts.Statement | undefined =>
+  clause.statements.find((stmt) => ts.isVariableStatement(stmt));
+
+/**
+ * `switch (e) { case k: ...; default: ... }`.
+ *
+ * The discriminant is an integer and every label a compile-time integer
+ * constant, so the whole statement lowers to LLVM's `switch` and the backend
+ * builds a jump table. A `string` switch would have been a chain of
+ * `sts_str_eq` calls wearing a switch's clothes, and `if`/`else` says that
+ * honestly (docs/wp14-selfhost.md §5).
+ *
+ * There is no implicit fallthrough: a clause with statements ends in `break`,
+ * `return`, `continue`, `throw` or `process.exit`, and only the last clause
+ * may fall out of the statement. An *empty* clause does fall through, which
+ * is how `case 1: case 2:` gives a group of labels one body.
+ */
+const checkSwitch: StatementChecker = (ctx, node, scope) => {
+  const stmt = node as ts.SwitchStatement;
+  const subject = ctx.checkExpression(stmt.expression, scope);
+  if (!isInteger(subject)) {
+    throw ctx.error(
+      `\`switch\` requires an integer discriminant, got ${typeToString(subject)} (use \`if\` / \`else\`; only an integer switch lowers to a jump table)`,
+      stmt.expression
+    );
+  }
+
+  const clauses = stmt.caseBlock.clauses;
+  const seen = new Map<string, ts.CaseClause>();
+  let defaultClause: ts.DefaultClause | undefined;
+  const target: LoopInfo = { kind: "switch", hasBreak: false };
+  ctx.loops.push(target);
+  let lastTerminates = false;
+  for (let i = 0; i < clauses.length; i++) {
+    const clause = clauses[i];
+    if (ts.isDefaultClause(clause)) {
+      if (defaultClause) throw ctx.error("`switch` has more than one `default` clause", clause);
+      defaultClause = clause;
+    } else {
+      const labelType = ctx.checkExpression(clause.expression, scope);
+      if (!sameType(labelType, subject)) {
+        throw ctx.error(
+          `\`case\` label is ${typeToString(labelType)} but the discriminant is ${typeToString(subject)}`,
+          clause.expression
+        );
+      }
+      const value = caseValue(ctx, clause.expression);
+      if (value === undefined) {
+        throw ctx.error(
+          "`case` label must be an integer literal or a module constant (LLVM's `switch` table holds constants)",
+          clause.expression
+        );
+      }
+      const duplicate = seen.get(String(value));
+      if (duplicate)
+        throw ctx.error(`Duplicate \`case\` label \`${value}\` in this \`switch\``, clause.expression);
+      seen.set(String(value), clause);
+      ctx.program.caseValues.set(clause, value);
+    }
+
+    const declaration = declaresDirectly(clause);
+    if (declaration) {
+      throw ctx.error(
+        "A `case` clause cannot declare a variable directly; wrap the clause body in a block (`case 1: { ... }`)",
+        declaration
+      );
+    }
+    const terminates =
+      clause.statements.length > 0 ? ctx.checkStatementList(clause.statements, scope.child()) : false;
+    if (clause.statements.length > 0 && !terminates && i < clauses.length - 1) {
+      throw ctx.error(
+        "A `case` clause with statements must end in `break`, `return`, `continue` or `throw` (StaticTS has no implicit fallthrough; leave a clause empty to give several labels one body)",
+        clause.statements[clause.statements.length - 1]
+      );
+    }
+    lastTerminates = terminates;
+  }
+  ctx.loops.pop();
+
+  // Anything not named by a clause reaches the statement after the `switch`
+  // unless a `default` catches it, and so does a `break` or a last clause
+  // that falls out of the bottom.
+  return defaultClause !== undefined && !target.hasBreak && lastTerminates;
 };
 
 /** `throw` aborts the process (no unwinding); the value is evaluated and, for now, discarded. */
@@ -151,6 +301,7 @@ export const controlFlowStatementCheckers: CheckerTable<StatementChecker> = {
   [ts.SyntaxKind.WhileStatement]: checkWhile,
   [ts.SyntaxKind.DoStatement]: checkDo,
   [ts.SyntaxKind.ForStatement]: checkFor,
+  [ts.SyntaxKind.SwitchStatement]: checkSwitch,
   [ts.SyntaxKind.BreakStatement]: checkBreak,
   [ts.SyntaxKind.ContinueStatement]: checkContinue,
   [ts.SyntaxKind.ThrowStatement]: checkThrow,
@@ -165,7 +316,11 @@ const checkConditional: ExpressionChecker = (ctx, node, scope) => {
   const narrowings = conditionNarrowings(expr.condition, scope);
   const whenTrue = ctx.checkExpression(expr.whenTrue, narrowedScope(scope, narrowings.whenTrue));
   const whenFalse = ctx.checkExpression(expr.whenFalse, narrowedScope(scope, narrowings.whenFalse));
-  const result = assignable(whenTrue, whenFalse) ? whenFalse : assignable(whenFalse, whenTrue) ? whenTrue : undefined;
+  const result = assignable(whenTrue, whenFalse)
+    ? whenFalse
+    : assignable(whenFalse, whenTrue)
+      ? whenTrue
+      : undefined;
   if (!result) {
     throw ctx.error(
       `Ternary branches must have the same type, got ${typeToString(whenTrue)} and ${typeToString(whenFalse)}`,

@@ -168,7 +168,20 @@ visible as known failures):
   unsigned integers at all, so the rewrite masks each result back into its
   width (`corpus/u_wrap`, `u_div_cmp`, `u_convert_shift`).
 - **`s.length` is the UTF-8 byte length** (docs/wp3-strings.md): `"héllo".length`
-  is `6`, `"🎉".length` is `4`.
+  is `6`, `"🎉".length` is `4`. So is every offset the string methods take or
+  return (WP14 A2): the shim runs `charCodeAt`, `substring`, `indexOf`,
+  `startsWith` and `endsWith` over `Buffer.from(s, "utf8")` rather than over
+  the JavaScript string, so `"héllo".charCodeAt(1)` is `195`, the first byte
+  of `é`, on both sides (`corpus/str_methods`).
+- **`s.charCodeAt(i)` bounds-checks** and exits 1, where JavaScript answers
+  `NaN`, which an `i32` cannot hold; `String.fromCharCode(c)` builds the
+  one-byte string of `c & 0xFF`. A code above 127 is therefore one byte that
+  is not valid UTF-8 on its own, which a JavaScript string cannot represent —
+  the shim produces the two bytes of the same code point instead, so the
+  corpus keeps `String.fromCharCode` to ASCII. `substring` has the same edge:
+  a cut through the middle of a multi-byte character leaves bytes that are not
+  a valid string, and Node replaces them with `U+FFFD` where the native side
+  prints them raw, so `corpus/str_methods` cuts on character boundaries.
 - **`toI32`/`toI64` from a double saturate** (`toI32(5e10)` is `2147483647`,
   `toI32(NaN)` is `0`), unlike JavaScript's `ToInt32`; integer-to-integer
   conversions wrap (docs/wp7-runtime.md).

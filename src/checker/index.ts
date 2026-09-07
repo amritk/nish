@@ -105,6 +105,7 @@ export class Checker implements CheckContext {
       callees: new WeakMap(),
       structs: new Map(),
       coercions: new WeakMap(),
+      caseValues: new WeakMap(),
     };
     registerNamedTypes(sourceFile, (name) => {
       const own = this.program.structs.get(name);
@@ -357,6 +358,10 @@ export class Checker implements CheckContext {
 
   checkBlock(block: ts.Block, scope: Scope): boolean {
     return checkStatements(this, block.statements, scope.child());
+  }
+
+  checkStatementList(stmts: readonly ts.Statement[], scope: Scope): boolean {
+    return checkStatements(this, stmts, scope);
   }
 
   checkStatement(stmt: ts.Statement, scope: Scope): boolean {

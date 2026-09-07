@@ -67,6 +67,102 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
   `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
   `bench/ffi.mjs` gains the batched `Float64Array` rows.
+- **Self-hosting, milestone S2: the parser** (`docs/wp14-selfhost.md` §4).
+  `self/parser.ts` is recursive descent over the S1 lexer, building the
+  one-`Node`-class tree of `self/nodes.ts` — a `kind` discriminant, a fixed
+  child layout per kind, `N_LIST` for the variable-length groups and `N_EMPTY`
+  for the absent ones, so nothing ever downcasts. It has no exceptions,
+  because StaticTS `throw` discards its value: a failed parse is an `N_ERROR`
+  node plus a diagnostic on the parser, and the declaration after it still
+  parses. `tests/parser_oracle.js` walks the `typescript` tree, prints it in
+  `self/dump_ast.ts`'s format and diffs: **447 files, 53,673 nodes, no
+  disagreement**, span for span, with the 43 skipped files all `reject_*`
+  cases whose forbidden constructs StaticTS-0 has no grammar for yet. Four
+  front-end bugs came out of the two oracles, all the same shape — a lexer or
+  parser having an opinion the scanner does not: `==` and `?.` refused rather
+  than read, `super` missing from the model although the language has
+  inheritance, and `from` and `of` made hard keywords when they are contextual
+  (`tests/cases/cls_nested.ts` has a field called `from`). `self/` is 2,817
+  lines of StaticTS and parses 84 KB of its own source in 7 ms, against
+  14.5 ms for the `typescript` parser warm in a Node process.
+- **Self-hosting, milestone S1: the lexer** (`docs/wp14-selfhost.md` §4).
+  `self/lexer.ts` tokenises StaticTS-0 and is written in it — 1,222 lines with
+  `self/tokens.ts` and `self/dump_tokens.ts`, using nothing the language did
+  not already have. It is new code rather than a port: `src/` has no lexer,
+  because the `typescript` package is the scanner there. Byte offsets
+  throughout, since `s.length` and `charCodeAt` are byte-oriented; template
+  literals are lexed without the parser's help, with one brace counter per
+  open substitution telling a substitution's `}` from a block's.
+  `tests/lexer_oracle.js` is the test: it runs the `typescript` scanner over
+  `tests/cases/`, `examples/`, `self/`, `docs/cookbook/`, the differential
+  corpus and the new `tests/lexer/` fixtures, prints the token stream in the
+  same format and diffs it — **482 files, 50,968 tokens, no disagreement**,
+  with the scanner's UTF-16 offsets mapped through the source's byte prefix.
+  The lexer has no opinions: `==`, `?.`, `??`, `**`, `...`, `@` and `#name`
+  are all tokenised as written, and the parser is where StaticTS refuses them.
+- **`switch` / `case` / `default`** (`docs/wp14-selfhost.md` A1). An integer
+  discriminant and constant labels — a literal, its negation, or a module
+  constant — lower to one LLVM `switch`, so the backend builds a jump table
+  (`llc -O2` emits `jmpq *.LJTI0_0(,%rax,8)` for twelve dense labels). Only an
+  integer switches: a string one would have been a chain of `sts_str_eq` calls
+  wearing a switch's clothes. There is no implicit fallthrough — a clause with
+  statements ends in `break`, `return`, `continue` or `throw` unless it is the
+  last, while an *empty* clause falls through, which is how `case 1: case 2:`
+  gives several labels one body. A clause may not declare a variable without a
+  block of its own, because TypeScript's one shared clause scope would leave it
+  visible and unassigned below. `break` inside a `switch` leaves the switch and
+  `continue` reaches past it to the enclosing loop
+  (`tests/cases/cf_switch`, `cf_switch_break`, six `reject_switch_*` cases,
+  `tests/differential/corpus/cf_switch.ts`).
+- **The string byte methods** (`docs/wp14-selfhost.md` A2): `charCodeAt`,
+  `substring`, `indexOf`, `startsWith`, `endsWith` and `String.fromCharCode`.
+  Every offset is a UTF-8 byte offset, like `s.length`, because a lexer walks
+  bytes and a code-point index would cost a decode per access. They lower
+  inline rather than to runtime calls: `charCodeAt` is the array bounds check
+  and a `load i8`, `substring` is JavaScript's clamp — `llvm.smin`/`llvm.smax`
+  into `[0, len]`, then the pair in order, which `opt -O2` folds to one
+  `max(0, min(n, len))` — plus one `sts_str_new`, and `indexOf` is a scan in
+  the emitted code. The one new runtime symbol is `sts_str_at(s, at, sub)`,
+  which `startsWith`, `endsWith` and the `indexOf` scan share; `runtime.c` is
+  3,842 bytes of `.text` at `-Oz`, inside the 4,096-byte budget.
+  `charCodeAt` bounds-checks and exits 1 where JavaScript answers `NaN`, which
+  `number` cannot hold, and the escape and attribute analyses learned that a
+  string method reads its receiver and that `substring` allocates
+  (`tests/cases/str_bytes`, `str_search`, four `reject_str_*` cases,
+  `tests/differential/corpus/str_methods.ts`).
+- **Array `pop`, `indexOf` and `join`** (`docs/wp14-selfhost.md` A4). `pop`
+  hands back the last element and stores the shortened length; an empty array
+  panics through the same `sts_panic_index` an index does, because there is no
+  `undefined` to return. `indexOf` scans with the `===` of the element type —
+  content for strings, identity for classes and arrays, `fcmp oeq` for floats,
+  so a `NaN` element is never found. `join` is `string[]` only and is the fast
+  shape the port needs: one pass summing the lengths, one `sts_alloc_struct`,
+  one `llvm.memcpy` per part and per separator, with the separator before the
+  first part skipped by selecting a length of zero rather than by branching.
+  Building the same text with `+` in a loop copies everything again per part
+  and never reclaims — 180 MB of peak arena for 88 KB of output. All three
+  lower inline, so `runtime.c` gains nothing (a runtime `join` would have cost
+  252 bytes of a 254-byte margin). A numeric literal argument to `push` or
+  `indexOf` now takes the element type, so `wide.push(3)` on an `i64[]` is an
+  `i64` three (`tests/cases/arr_join`, `arr_pop_index`, five `reject_*` cases,
+  `tests/differential/corpus/arr_methods.ts`).
+- **`console.error`, the newline-free writes, `readFileSyncOrNull` and
+  `panic`** (`docs/wp14-selfhost.md` B2, B3 and D1). A compiler's diagnostics
+  go to stderr and two of its dumps write without a trailing newline, neither
+  of which `console.log` can do: `console.error(x)` takes what `console.log`
+  takes and writes it to stderr, and `write(s)` / `writeError(s)` write a
+  string as it is, on fd 1 or 2. All three share one runtime entry point,
+  `sts_write(s, fd, newline)`, which `sts_print` now delegates to, so no
+  existing golden moved. `readFileSyncOrNull(path): string | null` is the same
+  read as `readFileSync` but answers `null` where that one exits, which is
+  what lets a program turn a missing import into its own diagnostic and carry
+  on loading the rest; it subsumes an `existsSync` and has no time-of-check
+  race. `panic(message)` writes the message to stderr and exits 1, the same
+  ending an out-of-range index has, and terminates control flow like
+  `process.exit`, so an internal invariant keeps the message that `throw`
+  discards. `runtime.c` is 3,950 bytes of `.text` at `-Oz`, inside the
+  4,096-byte budget (`tests/cases/io_streams`, three `reject_*` cases,
+  `tests/differential/corpus/io_streams.ts`, `io_panic.ts`).
 - **Bitwise operators.** `& | ^` (`and` / `or` / `xor`), `~` (`xor x, -1`),
   `<< >> >>>` (`shl` / `ashr` / `lshr`), and the compound forms
   `&= |= ^= <<= >>= >>>=` on a mutable local. Two `i32` or two `i64` of the

@@ -1,7 +1,9 @@
 /**
  * String constructs (WP3): literals, template literals, `+` concatenation,
- * `===` / `!==` by content, `.length`, and builtin calls such as
- * `console.log` whose callee is a dotted name rather than a user function.
+ * `===` / `!==` by content, `.length`, the byte methods of WP14 A2
+ * (`charCodeAt`, `substring`, `indexOf`, `startsWith`, `endsWith`) and
+ * builtin calls such as `console.log` and `String.fromCharCode` whose callee
+ * is a dotted name rather than a user function.
  *
  * Everything here is registered into the core tables with a spread. The
  * binary handlers replace the numeric-only `+`, `===`, `!==` entries with
@@ -12,12 +14,19 @@
  *   - `"a" + 1` is rejected. StaticTS has no implicit string conversion; a
  *     template literal is the explicit spelling.
  *   - `<`, `<=`, `>`, `>=` on strings stay rejected (no collation semantics).
- *   - `s.length` is the UTF-8 *byte* length (see docs/wp3-strings.md).
+ *   - `s.length` is the UTF-8 *byte* length (see docs/wp3-strings.md), and
+ *     every method here is byte-indexed for the same reason: a lexer walks
+ *     bytes, and a code-point index would need a decode per access.
+ *   - `charCodeAt` bounds-checks and panics like `a[i]` rather than
+ *     returning JavaScript's `NaN`, which `number` cannot represent.
  *   - `console.log` takes exactly one string | number | boolean, returns
- *     `void`, and may only appear as a statement.
+ *     `void`, and may only appear as a statement. `console.error` is the
+ *     same on stderr (WP14 B2), which is where a compiler's diagnostics go.
  */
 import ts from "typescript";
 import { BOOL, F64, I32, STRING, StaticType, VOID, isNumeric, sameType, typeToString } from "../types";
+import { checkArgumentType, checkArity } from "./builtins";
+import { methodCallCheckers } from "./members";
 import { BuiltinCallChecker, dottedName } from "./builtins";
 import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context";
 import { arenaBuiltinCalls } from "./arena";
@@ -45,7 +54,10 @@ const checkTemplateExpression: ExpressionChecker = (ctx, node, scope) => {
   for (const span of expr.templateSpans) {
     const t = ctx.checkExpression(span.expression, scope);
     if (!isStringifiable(t)) {
-      throw ctx.error(`Template literal hole must be string, number, or boolean, got ${typeToString(t)}`, span.expression);
+      throw ctx.error(
+        `Template literal hole must be string, number, or boolean, got ${typeToString(t)}`,
+        span.expression
+      );
     }
   }
   return STRING;
@@ -73,7 +85,9 @@ const checkPlus: BinaryChecker = (ctx, expr, scope) => {
   if (isNumeric(lhs) && sameType(lhs, rhs)) return lhs;
   throw ctx.error(
     `Operator \`+\` requires two operands of the same numeric type or two strings, got ${typeToString(lhs)} and ${typeToString(rhs)}` +
-      (lhs.kind === "string" || rhs.kind === "string" ? " (no implicit string conversion; use a template literal)" : ""),
+      (lhs.kind === "string" || rhs.kind === "string"
+        ? " (no implicit string conversion; use a template literal)"
+        : ""),
     expr
   );
 };
@@ -102,25 +116,94 @@ const checkStrictEquality: BinaryChecker = (ctx, expr, scope) => {
   return BOOL;
 };
 
+// ---- Methods ----------------------------------------------------------------------
+
+/** `number` in the current mode: `i32`, or `f64` under `--number-mode f64`. */
+const numberType = (ctx: CheckContext): StaticType => (ctx.opts.numberMode === "f64" ? F64 : I32);
+
+/**
+ * The byte methods (WP14 A2). Every index is a byte offset, matching
+ * `.length`; `substring` clamps its arguments the way JavaScript does, and
+ * `charCodeAt` bounds-checks the way `a[i]` does.
+ */
+const STRING_METHODS = ["charCodeAt", "substring", "indexOf", "startsWith", "endsWith"];
+
+const checkIndexArgument = (ctx: CheckContext, arg: ts.Expression, scope: Scope, name: string): void => {
+  const t = ctx.checkExpression(arg, scope);
+  if (!isNumeric(t)) throw ctx.error(`\`${name}\` expects a number index, got ${typeToString(t)}`, arg);
+};
+
+methodCallCheckers.string = (ctx, expr, receiver, scope) => {
+  const access = expr.expression as ts.PropertyAccessExpression;
+  const name = access.name.text;
+  switch (name) {
+    case "charCodeAt":
+      checkArity(ctx, expr, "charCodeAt", 1);
+      checkIndexArgument(ctx, expr.arguments[0], scope, "charCodeAt");
+      return numberType(ctx);
+    case "substring":
+      if (expr.arguments.length === 0 || expr.arguments.length > 2) {
+        throw ctx.error(`\`substring\` expects 1 or 2 arguments, got ${expr.arguments.length}`, expr);
+      }
+      for (const arg of expr.arguments) checkIndexArgument(ctx, arg, scope, "substring");
+      return STRING;
+    case "indexOf":
+      checkArity(ctx, expr, "indexOf", 1);
+      checkArgumentType(ctx, expr.arguments[0], scope, "indexOf", STRING);
+      return numberType(ctx);
+    case "startsWith":
+    case "endsWith":
+      checkArity(ctx, expr, name, 1);
+      checkArgumentType(ctx, expr.arguments[0], scope, name, STRING);
+      return BOOL;
+    default:
+      throw ctx.error(
+        `Unknown method \`${name}\` on ${typeToString(receiver)} (supported: ${STRING_METHODS.join(", ")})`,
+        access.name
+      );
+  }
+};
+
+/**
+ * `String.fromCharCode(code)`: the one-byte string of `code & 0xFF`, the
+ * inverse of `charCodeAt`. It is a byte, not a UTF-16 code unit, for the same
+ * reason the rest of the family is byte-indexed; the high bits are dropped
+ * the way integer arithmetic wraps rather than by rejecting the value, which
+ * would need a check on a path that is always a constant in practice.
+ */
+const checkFromCharCode: BuiltinCallChecker = (ctx, expr, scope) => {
+  checkArity(ctx, expr, "String.fromCharCode", 1);
+  checkIndexArgument(ctx, expr.arguments[0], scope, "String.fromCharCode");
+  return STRING;
+};
+
 // ---- Builtin calls (`console.log`, `Math.*`, `process.exit`) ------------------------------
 
-const checkConsoleLog: BuiltinCallChecker = (ctx, expr, scope) => {
-  if (expr.arguments.length !== 1) {
-    throw ctx.error(`\`console.log\` expects exactly 1 argument, got ${expr.arguments.length}`, expr);
-  }
-  const t = ctx.checkExpression(expr.arguments[0], scope);
-  if (!isStringifiable(t)) {
-    throw ctx.error(`\`console.log\` accepts string, number, or boolean, got ${typeToString(t)}`, expr.arguments[0]);
-  }
-  if (!ts.isExpressionStatement(expr.parent)) {
-    throw ctx.error("`console.log` returns void and can only be used as a statement", expr);
-  }
-  return VOID;
-};
+/** `console.log` and `console.error` differ only in the stream they write to. */
+const consoleWriter =
+  (name: string): BuiltinCallChecker =>
+  (ctx, expr, scope) => {
+    if (expr.arguments.length !== 1) {
+      throw ctx.error(`\`${name}\` expects exactly 1 argument, got ${expr.arguments.length}`, expr);
+    }
+    const t = ctx.checkExpression(expr.arguments[0], scope);
+    if (!isStringifiable(t)) {
+      throw ctx.error(
+        `\`${name}\` accepts string, number, or boolean, got ${typeToString(t)}`,
+        expr.arguments[0]
+      );
+    }
+    if (!ts.isExpressionStatement(expr.parent)) {
+      throw ctx.error(`\`${name}\` returns void and can only be used as a statement`, expr);
+    }
+    return VOID;
+  };
 
 /** Builtins keyed by dotted callee name. Add an entry to support another. */
 export const builtinCalls: Record<string, BuiltinCallChecker> = {
-  "console.log": checkConsoleLog,
+  "console.log": consoleWriter("console.log"),
+  "console.error": consoleWriter("console.error"), // WP14 B2: the same, on stderr
+  "String.fromCharCode": checkFromCharCode, // WP14 A2
   ...mathBuiltinCalls, // WP7: Math.sqrt, ..., Math.random
   ...ioBuiltinCalls, // WP7: process.exit
   ...arenaBuiltinCalls, // WP6: Arena.reset / mark / release / used

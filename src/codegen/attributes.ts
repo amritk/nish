@@ -111,14 +111,19 @@
  */
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar, Param } from "../checker";
-import { baseConstruction, effectiveConstructor, intrinsicType, isAssignmentOperator } from "../checker/classes";
+import {
+  baseConstruction,
+  effectiveConstructor,
+  intrinsicType,
+  isAssignmentOperator,
+} from "../checker/classes";
 import { unwrapParens } from "../checker/control-flow";
 import { CompilerOptions, DEFAULT_OPTIONS, StaticType, stripNull } from "../types";
-import { isPushCall } from "./emit/arrays";
+import { arrayMethodName, isPushCall } from "./emit/arrays";
 import { CallSite, EscapeResult, analyzeEscapes } from "./escape";
 import { collectBuiltinFacts } from "./emit/expressions";
 import { factCollectors } from "./emit/members";
-import { collectStringFacts, unwrapStringPassthrough } from "./emit/strings";
+import { collectStringFacts, isStringMethodCall, unwrapStringPassthrough } from "./emit/strings";
 import { INLINE_ALLOCATOR_ATTRS, MemoryEffect, RUNTIME_BY_NAME } from "./runtime";
 
 /** What a function does with one pointer-typed parameter: a struct (WP2, `this` included) or an array (WP4). */
@@ -216,11 +221,14 @@ export function analyzeFunctions(
   programs: CheckedProgram | readonly CheckedProgram[],
   opts: CompilerOptions = DEFAULT_OPTIONS
 ): Map<string, FunctionFacts> {
-  const list = Array.isArray(programs) ? (programs as readonly CheckedProgram[]) : [programs as CheckedProgram];
+  const list = Array.isArray(programs)
+    ? (programs as readonly CheckedProgram[])
+    : [programs as CheckedProgram];
   const collect = (escapes?: Map<string, EscapeResult>) => {
     const facts = new Map<string, FunctionFacts>();
     for (const program of list) {
-      for (const sig of program.functions) facts.set(sig.name, collectFacts(program, sig, opts, escapes?.get(sig.name)));
+      for (const sig of program.functions)
+        facts.set(sig.name, collectFacts(program, sig, opts, escapes?.get(sig.name)));
     }
     return facts;
   };
@@ -254,8 +262,10 @@ function propagate(facts: Map<string, FunctionFacts>): void {
       for (const callee of f.callees) {
         const calleeFacts = facts.get(callee);
         const runtime = runtimeFacts(callee);
-        const calleeEffect: MemoryEffect = calleeFacts ? calleeFacts.effect : runtime?.effect ?? "write";
-        const calleeReturns = calleeFacts ? calleeFacts.willReturn : runtime?.attrs.includes("willreturn") ?? false;
+        const calleeEffect: MemoryEffect = calleeFacts ? calleeFacts.effect : (runtime?.effect ?? "write");
+        const calleeReturns = calleeFacts
+          ? calleeFacts.willReturn
+          : (runtime?.attrs.includes("willreturn") ?? false);
         const merged = maxEffect(f.effect, calleeEffect);
         if (merged !== f.effect) {
           f.effect = merged;
@@ -344,7 +354,9 @@ function isStringPassthrough(program: CheckedProgram, template: ts.TemplateExpre
 
 function isAssignmentTarget(node: ts.Node): boolean {
   const parent = node.parent;
-  return ts.isBinaryExpression(parent) && parent.left === node && isAssignmentOperator(parent.operatorToken.kind);
+  return (
+    ts.isBinaryExpression(parent) && parent.left === node && isAssignmentOperator(parent.operatorToken.kind)
+  );
 }
 
 /**
@@ -379,9 +391,15 @@ export function classifyUse(program: CheckedProgram, ref: ts.Expression): ParamU
       if (ts.isCallExpression(use) && use.expression === parent) {
         const callee = program.callees.get(use);
         if (callee) return { kind: "argument", callee, index: 0 };
-        // `p.push(v)` stores into the array. No other builtin method takes a
-        // pointer receiver; anything unexpected is treated as retaining it.
-        return isPushCall(program, use) ? USE_WRITE : USE_ESCAPE;
+        // `p.push(v)` and `p.pop()` store into the array header; `indexOf`
+        // and `join` only read it, and so do the string byte methods (WP14),
+        // whose runtime parameters are all `nocapture readonly` and whose
+        // `substring` copies what it keeps. Anything else is treated as
+        // retaining the receiver.
+        const method = arrayMethodName(program, use);
+        if (method === "push" || method === "pop") return USE_WRITE;
+        if (method !== undefined) return USE_READ;
+        return isStringMethodCall(program, use) ? USE_READ : USE_ESCAPE;
       }
       return isAssignmentTarget(parent) ? USE_WRITE : USE_READ; // `p.f = v` / `p.f`, `p.length`
     }
@@ -407,7 +425,8 @@ export function classifyUse(program: CheckedProgram, ref: ts.Expression): ParamU
     }
     if (ts.isBinaryExpression(parent)) {
       // Assignment retains the right-hand side; every other operator (`===`, `+`, ...) consumes both operands.
-      if (isAssignmentOperator(parent.operatorToken.kind)) return parent.right === node ? USE_ESCAPE : USE_NONE;
+      if (isAssignmentOperator(parent.operatorToken.kind))
+        return parent.right === node ? USE_ESCAPE : USE_NONE;
       return USE_NONE;
     }
     if (ts.isForOfStatement(parent)) return parent.expression === node ? USE_READ : USE_ESCAPE;
@@ -433,7 +452,10 @@ function classifyElementUse(program: CheckedProgram, access: ts.ElementAccessExp
   let node: ts.Expression = access;
   for (;;) {
     const parent = node.parent;
-    if (ts.isParenthesizedExpression(parent) || (ts.isElementAccessExpression(parent) && parent.expression === node)) {
+    if (
+      ts.isParenthesizedExpression(parent) ||
+      (ts.isElementAccessExpression(parent) && parent.expression === node)
+    ) {
       node = parent;
       continue;
     }
@@ -469,7 +491,12 @@ function isPointerParam(t: StaticType): boolean {
  * `analyzeFunctions`) tells the collectors which allocations are allocas and
  * which locals hold them, and carries the allocation facts into the result.
  */
-function collectFacts(program: CheckedProgram, sig: FunctionSig, opts: CompilerOptions, memory?: EscapeResult): FunctionFacts {
+function collectFacts(
+  program: CheckedProgram,
+  sig: FunctionSig,
+  opts: CompilerOptions,
+  memory?: EscapeResult
+): FunctionFacts {
   const facts: FunctionFacts = {
     hasLoops: false,
     readsMemory: false,
@@ -510,7 +537,11 @@ function collectFacts(program: CheckedProgram, sig: FunctionSig, opts: CompilerO
 
   /** A reference to one of this function's parameters (`this` included, also as `super`, WP2b), by name. */
   const paramRef = (node: ts.Node): string | undefined => {
-    if (!ts.isIdentifier(node) && node.kind !== ts.SyntaxKind.ThisKeyword && node.kind !== ts.SyntaxKind.SuperKeyword) {
+    if (
+      !ts.isIdentifier(node) &&
+      node.kind !== ts.SyntaxKind.ThisKeyword &&
+      node.kind !== ts.SyntaxKind.SuperKeyword
+    ) {
       return undefined;
     }
     const v = program.bindings.get(node as ts.Identifier);
@@ -614,7 +645,8 @@ const INT32_MAX = 0x7fffffff;
 export function isCountedLoop(program: CheckedProgram, loop: ts.IterationStatement): boolean {
   if (ts.isForOfStatement(loop)) return !bodyMayExtend(program, loop.statement);
   if (!ts.isForStatement(loop) || !loop.initializer || !loop.condition || !loop.incrementor) return false;
-  if (!ts.isVariableDeclarationList(loop.initializer) || loop.initializer.declarations.length !== 1) return false;
+  if (!ts.isVariableDeclarationList(loop.initializer) || loop.initializer.declarations.length !== 1)
+    return false;
   const iv = program.locals.get(loop.initializer.declarations[0]);
   if (iv?.type.kind !== "i32") return false;
 
@@ -678,7 +710,11 @@ function bodyMayExtend(program: CheckedProgram, body: ts.Node): boolean {
   let extends_ = false;
   const visit = (node: ts.Node): void => {
     if (extends_) return;
-    if (ts.isThrowStatement(node) || isPushCall(program, node) || (ts.isCallExpression(node) && program.callees.has(node))) {
+    if (
+      ts.isThrowStatement(node) ||
+      isPushCall(program, node) ||
+      (ts.isCallExpression(node) && program.callees.has(node))
+    ) {
       extends_ = true;
     } else {
       ts.forEachChild(node, visit);

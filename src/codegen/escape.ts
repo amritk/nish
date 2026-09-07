@@ -57,8 +57,8 @@ import { dottedName } from "../checker/builtins";
 import { effectiveConstructor, intrinsicType, isAssignmentOperator } from "../checker/classes";
 import { CompilerOptions, StaticType, alignOf, isNumeric, stripNull } from "../types";
 import { FunctionFacts, classifyUse } from "./attributes";
-import { isPushCall } from "./emit/arrays";
-import { unwrapStringPassthrough } from "./emit/strings";
+import { isJoinCall, isPushCall } from "./emit/arrays";
+import { isStringAllocCall, unwrapStringPassthrough } from "./emit/strings";
 
 /** Largest array data block (`[n x T]`) placed on the stack, in bytes. */
 export const STACK_ARRAY_BYTES = 4096;
@@ -117,7 +117,9 @@ function literalLength(expr: ts.Expression): number | undefined {
 
 function isAssignmentTarget(node: ts.Node): boolean {
   const parent = node.parent;
-  return ts.isBinaryExpression(parent) && parent.left === node && isAssignmentOperator(parent.operatorToken.kind);
+  return (
+    ts.isBinaryExpression(parent) && parent.left === node && isAssignmentOperator(parent.operatorToken.kind)
+  );
 }
 
 function isPointerResult(t: StaticType): boolean {
@@ -125,7 +127,8 @@ function isPointerResult(t: StaticType): boolean {
   return inner.kind === "struct" || inner.kind === "array" || inner.kind === "string";
 }
 
-const worse = (a: Flow, b: Flow): Flow => (a === "leaks" || b === "leaks" ? "leaks" : a === "returned" || b === "returned" ? "returned" : "local");
+const worse = (a: Flow, b: Flow): Flow =>
+  a === "leaks" || b === "leaks" ? "leaks" : a === "returned" || b === "returned" ? "returned" : "local";
 
 export function analyzeEscapes(
   program: CheckedProgram,
@@ -171,10 +174,14 @@ export function analyzeEscapes(
       sites.push({ node, stackable: true });
     } else if (ts.isArrayLiteralExpression(node)) {
       const t = program.types.get(node);
-      const bytes = t?.kind === "array" ? node.elements.length * elementSize(t.elem) : Number.POSITIVE_INFINITY;
+      const bytes =
+        t?.kind === "array" ? node.elements.length * elementSize(t.elem) : Number.POSITIVE_INFINITY;
       sites.push({ node, stackable: bytes <= STACK_ARRAY_BYTES });
     } else if (ts.isBinaryExpression(node)) {
-      if (node.operatorToken.kind === ts.SyntaxKind.PlusToken && program.types.get(node.left)?.kind === "string") {
+      if (
+        node.operatorToken.kind === ts.SyntaxKind.PlusToken &&
+        program.types.get(node.left)?.kind === "string"
+      ) {
         sites.push({ node, stackable: false });
       }
     } else if (ts.isTemplateExpression(node)) {
@@ -187,12 +194,20 @@ export function analyzeEscapes(
   const visitCall = (call: ts.CallExpression): void => {
     const callee = program.callees.get(call);
     if (callee) {
-      if (isPointerResult(callee.returnType)) sites.push({ node: call, stackable: false, callee: callee.name });
+      if (isPointerResult(callee.returnType))
+        sites.push({ node: call, stackable: false, callee: callee.name });
       return;
     }
     const push: boolean = isPushCall(program, call); // a plain boolean: the guard would narrow `call` to never
     if (push) {
       pushes.push(call);
+      return;
+    }
+    // WP14: `s.substring(...)`, `String.fromCharCode(c)` and `parts.join(s)`
+    // each bump one string out of the arena, so they are allocation sites
+    // like `a + b` is.
+    if (isStringAllocCall(program, call) || isJoinCall(program, call)) {
+      sites.push({ node: call, stackable: false });
       return;
     }
     if (ts.isIdentifier(call.expression)) {
@@ -214,7 +229,10 @@ export function analyzeEscapes(
     let node: ts.Expression = expr;
     for (;;) {
       const parent = node.parent;
-      if (ts.isParenthesizedExpression(parent) || (ts.isConditionalExpression(parent) && parent.condition !== node)) {
+      if (
+        ts.isParenthesizedExpression(parent) ||
+        (ts.isConditionalExpression(parent) && parent.condition !== node)
+      ) {
         node = parent;
         continue;
       }

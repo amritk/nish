@@ -20,7 +20,7 @@ export class IRBlock {
   /** True once a terminator (ret/br) has been emitted. */
   get terminated(): boolean {
     const last = this.instructions[this.instructions.length - 1];
-    return last !== undefined && /^(ret|br|unreachable)\b/.test(last);
+    return last !== undefined && /^(ret|br|switch|unreachable)\b/.test(last);
   }
 
   toString(): string {

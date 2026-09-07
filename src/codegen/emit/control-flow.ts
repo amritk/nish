@@ -1,7 +1,7 @@
 /**
- * Control-flow lowering: `if`, `while`, `do`, `for`, `break`/`continue`,
- * `throw`, the ternary and short-circuit operators, compound assignment and
- * `++`/`--`.
+ * Control-flow lowering: `if`, `while`, `do`, `for`, `switch`,
+ * `break`/`continue`, `throw`, the ternary and short-circuit operators,
+ * compound assignment and `++`/`--`.
  *
  * Block layout follows clang. Labels are reserved in source order
  * (`if.then`, `if.else`, `if.end`, suffixed `.N` on reuse) and the blocks
@@ -188,14 +188,88 @@ const emitFor: StatementEmitter = (ctx, node) => {
   }
 };
 
-const emitBreak: StatementEmitter = (ctx) => {
-  const loop = ctx.loops[ctx.loops.length - 1];
-  loop.hasBreak = true;
-  branch(ctx, loop.breakBlock);
+/**
+ * `switch` becomes LLVM's `switch`: one table of constant-to-label pairs and
+ * a default edge, which the backend turns into a jump table, a bit test or a
+ * comparison chain depending on how dense the labels are.
+ *
+ * A clause with no statements has no block of its own — its label points at
+ * the next clause that has one, which is exactly the fallthrough of
+ * `case 1: case 2: body`. Every other clause ends in a terminator (the
+ * checker proved it), except the last, which may fall out into `sw.end`.
+ */
+const emitSwitch: StatementEmitter = (ctx, node) => {
+  const stmt = node as ts.SwitchStatement;
+  const fn = ctx.fn;
+  const clauses = stmt.caseBlock.clauses;
+  const bodies = clauses.map((clause) =>
+    clause.statements.length > 0
+      ? fn.newBlock(ts.isDefaultClause(clause) ? "sw.default" : "sw.case")
+      : undefined
+  );
+  const endBlock = fn.newBlock("sw.end");
+  /** Where a label jumps: its own body, or the first one below it that exists. */
+  const targetOf = (from: number): IRBlock => {
+    for (let i = from; i < clauses.length; i++) {
+      const body = bodies[i];
+      if (body) return body;
+    }
+    return endBlock;
+  };
+
+  const type = llvmType(ctx.typeOf(stmt.expression));
+  const subject = ctx.emitExpression(stmt.expression);
+  const defaultIndex = clauses.findIndex((clause) => ts.isDefaultClause(clause));
+  const table = clauses
+    .map((clause, i) =>
+      ts.isDefaultClause(clause)
+        ? undefined
+        : `    ${type} ${ctx.program.caseValues.get(clause)}, label %${targetOf(i).label}`
+    )
+    .filter((line): line is string => line !== undefined);
+  const defaultLabel = (defaultIndex < 0 ? endBlock : targetOf(defaultIndex)).label;
+  fn.emit(`switch ${type} ${subject}, label %${defaultLabel} [\n${table.join("\n")}\n  ]`);
+
+  // `sw.end` is reachable from the implicit default edge, from a `break`, and
+  // from a last clause that falls out; an empty trailing clause is the same
+  // edge as the second of those.
+  let reachesEnd = defaultIndex < 0 || targetOf(defaultIndex) === endBlock;
+  const target: LoopTarget = {
+    breakBlock: endBlock,
+    continueBlock: undefined,
+    hasBreak: false,
+  };
+  ctx.loops.push(target);
+  for (let i = 0; i < clauses.length; i++) {
+    const body = bodies[i];
+    if (!body) {
+      if (targetOf(i) === endBlock) reachesEnd = true;
+      continue;
+    }
+    fn.placeBlock(body);
+    for (const statement of clauses[i].statements) ctx.emitStatement(statement);
+    if (fallThrough(ctx, endBlock)) reachesEnd = true;
+  }
+  ctx.loops.pop();
+  if (target.hasBreak) reachesEnd = true;
+  if (reachesEnd) fn.placeBlock(endBlock);
 };
 
+const emitBreak: StatementEmitter = (ctx) => {
+  const target = ctx.loops[ctx.loops.length - 1];
+  target.hasBreak = true;
+  branch(ctx, target.breakBlock);
+};
+
+/** `continue` looks past any enclosing `switch` for the innermost loop. */
 const emitContinue: StatementEmitter = (ctx) => {
-  branch(ctx, ctx.loops[ctx.loops.length - 1].continueBlock);
+  for (let i = ctx.loops.length - 1; i >= 0; i--) {
+    const target = ctx.loops[i].continueBlock;
+    if (target) {
+      branch(ctx, target);
+      return;
+    }
+  }
 };
 
 /** `throw e`: evaluate `e` for its effects, then trap. There is no unwinding in StaticTS. */
@@ -211,6 +285,7 @@ export const controlFlowStatementEmitters: EmitterTable<StatementEmitter> = {
   [ts.SyntaxKind.WhileStatement]: emitWhile,
   [ts.SyntaxKind.DoStatement]: emitDo,
   [ts.SyntaxKind.ForStatement]: emitFor,
+  [ts.SyntaxKind.SwitchStatement]: emitSwitch,
   [ts.SyntaxKind.BreakStatement]: emitBreak,
   [ts.SyntaxKind.ContinueStatement]: emitContinue,
   [ts.SyntaxKind.ThrowStatement]: emitThrow,

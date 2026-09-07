@@ -742,6 +742,60 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end stmt_for -->
 
+### `switch`
+
+One `switch` instruction: a constant-to-label table and a default edge, which
+the backend turns into a jump table once the labels are dense enough. Empty
+clauses have no block of their own — `case 1:` points at the body of `case 2:`,
+which is the whole of StaticTS's fallthrough. A label that names a module
+constant is folded before the table is written, so `KIND_CALL` is a `4` here.
+
+<!-- cookbook:begin stmt_switch -->
+```ts
+const KIND_CALL: i32 = 4;
+
+function classify(kind: number): number {
+  switch (kind) {
+    case 0:
+      return 10;
+    case 1:
+    case 2:
+      return 20;
+    case KIND_CALL:
+      return 30;
+    default:
+      return 40;
+  }
+}
+```
+
+```llvm
+define noundef i32 @classify(i32 noundef %kind) #0 {
+entry:
+  switch i32 %kind, label %sw.default [
+    i32 0, label %sw.case
+    i32 1, label %sw.case.1
+    i32 2, label %sw.case.1
+    i32 4, label %sw.case.2
+  ]
+
+sw.case:
+  ret i32 10
+
+sw.case.1:
+  ret i32 20
+
+sw.case.2:
+  ret i32 30
+
+sw.default:
+  ret i32 40
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end stmt_switch -->
+
 ### `break` / `continue`
 
 `break` is `br label %for.end`; `continue` is `br label %for.inc`. Both end
@@ -1521,6 +1575,105 @@ attributes #2 = { nounwind willreturn memory(argmem: read) }
 ```
 <!-- cookbook:end str_ops -->
 
+### The byte methods
+
+`charCodeAt` is the array bounds check against the byte length, one
+`getelementptr` past the 8-byte header and a `load i8` — no call, so a
+function that only reads bytes stays `readonly`. `substring` is JavaScript's
+clamp (`llvm.smin` / `llvm.smax` into `[0, len]`, then the pair in order) and
+one `sts_str_new`: one allocation, one `memcpy`. `startsWith` and `endsWith`
+are a single `sts_str_at`, which reads through `nocapture readonly`
+parameters.
+
+Under `opt -O2` the clamp of a literal `0` folds away entirely and `head`
+becomes `max(0, min(n, len))` and the call.
+
+<!-- cookbook:begin str_bytes -->
+```ts
+function firstByte(s: string): number {
+  return s.charCodeAt(0);
+}
+
+function head(s: string, n: number): string {
+  return s.substring(0, n);
+}
+
+function has(s: string, sub: string): boolean {
+  return s.startsWith(sub) || s.endsWith(sub);
+}
+```
+
+```llvm
+declare noalias noundef nonnull align 8 i8* @sts_str_new(i8* noundef readonly nocapture, i64 noundef) #1
+declare zeroext i1 @sts_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #2
+declare void @sts_panic_index(i64 noundef, i64 noundef) #3
+declare i64 @llvm.smin.i64(i64, i64) #4
+declare i64 @llvm.smax.i64(i64, i64) #4
+
+define noundef i32 @firstByte(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
+entry:
+  %0 = bitcast i8* %s to i64*
+  %1 = load i64, i64* %0, align 8
+  %2 = icmp ult i64 0, %1
+  br i1 %2, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @sts_panic_index(i64 0, i64 %1)
+  unreachable
+
+bounds.ok:
+  %3 = getelementptr inbounds i8, i8* %s, i64 8
+  %4 = getelementptr inbounds i8, i8* %3, i64 0
+  %5 = load i8, i8* %4, align 1
+  %6 = zext i8 %5 to i32
+  ret i32 %6
+}
+
+define noundef nonnull align 8 i8* @head(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %n) #1 {
+entry:
+  %0 = bitcast i8* %s to i64*
+  %1 = load i64, i64* %0, align 8
+  %2 = call i64 @llvm.smin.i64(i64 0, i64 %1)
+  %3 = call i64 @llvm.smax.i64(i64 %2, i64 0)
+  %4 = sext i32 %n to i64
+  %5 = call i64 @llvm.smin.i64(i64 %4, i64 %1)
+  %6 = call i64 @llvm.smax.i64(i64 %5, i64 0)
+  %7 = call i64 @llvm.smin.i64(i64 %3, i64 %6)
+  %8 = call i64 @llvm.smax.i64(i64 %3, i64 %6)
+  %9 = sub i64 %8, %7
+  %10 = getelementptr inbounds i8, i8* %s, i64 8
+  %11 = getelementptr inbounds i8, i8* %10, i64 %7
+  %12 = call i8* @sts_str_new(i8* %11, i64 %9)
+  ret i8* %12
+}
+
+define noundef zeroext i1 @has(i8* noundef nonnull noalias readonly align 8 nocapture %s, i8* noundef nonnull noalias readonly align 8 nocapture %sub) #0 {
+entry:
+  %0 = call zeroext i1 @sts_str_at(i8* %s, i64 0, i8* %sub)
+  br i1 %0, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %1 = bitcast i8* %s to i64*
+  %2 = load i64, i64* %1, align 8
+  %3 = bitcast i8* %sub to i64*
+  %4 = load i64, i64* %3, align 8
+  %5 = sub i64 %2, %4
+  %6 = call zeroext i1 @sts_str_at(i8* %s, i64 %5, i8* %sub)
+  br label %lor.end
+
+lor.end:
+  %7 = phi i1 [ true, %entry ], [ %6, %lor.rhs ]
+  ret i1 %7
+}
+
+attributes #0 = { nounwind willreturn readonly }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn memory(argmem: read) }
+attributes #3 = { nounwind noreturn cold }
+attributes #4 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end str_bytes -->
+
 ### Template literals
 
 Constant parts are interned, holes are converted (`sts_str_from_i32`, a
@@ -1836,6 +1989,187 @@ attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end arr_literal_push -->
+
+### `join` and `indexOf`
+
+`join` is two loops and one allocation: `join.sum` adds the parts' lengths to
+the separators' total, `sts_alloc_struct` takes the whole string at once, and
+`join.copy` walks a cursor with one `llvm.memcpy` per separator and per part.
+The separator before the first part is skipped by selecting a *length* of
+zero rather than by branching, so the copy body stays one block. `indexOf`
+scans with the `===` of the element type — `sts_str_eq` here, an `icmp eq` for
+a number.
+
+<!-- cookbook:begin arr_join -->
+```ts
+function report(parts: string[]): string {
+  return parts.join(", ");
+}
+
+function firstAt(names: string[], name: string): number {
+  return names.indexOf(name);
+}
+```
+
+```llvm
+%struct.sts_array = type { i64, i64, i8* }
+%struct.sts_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c", \00" }, align 8
+@sts_arena = external global %struct.sts_arena, align 8
+
+declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
+declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #2
+declare zeroext i1 @sts_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
+
+define internal noalias noundef nonnull align 8 i8* @sts_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @sts_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define noundef nonnull align 8 i8* @report(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %parts) #0 {
+entry:
+  %join.total = alloca i64, align 8
+  %join.at = alloca i64, align 8
+  %join.p = alloca i8*, align 8
+  %0 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %parts, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8
+  %2 = bitcast i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*) to i64*
+  %3 = load i64, i64* %2, align 8
+  %4 = sub i64 %1, 1
+  %5 = mul i64 %3, %4
+  %6 = icmp eq i64 %1, 0
+  %7 = select i1 %6, i64 0, i64 %5
+  store i64 %7, i64* %join.total, align 8
+  store i64 0, i64* %join.at, align 8
+  br label %join.sum
+
+join.sum:
+  %8 = load i64, i64* %join.at, align 8
+  %9 = icmp ult i64 %8, %1
+  br i1 %9, label %join.sum.body, label %join.copy
+
+join.sum.body:
+  %10 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %parts, i64 0, i32 2
+  %11 = load i8*, i8** %10, align 8
+  %12 = bitcast i8* %11 to i8**
+  %13 = getelementptr inbounds i8*, i8** %12, i64 %8
+  %14 = load i8*, i8** %13, align 8
+  %15 = load i64, i64* %join.total, align 8
+  %16 = bitcast i8* %14 to i64*
+  %17 = load i64, i64* %16, align 8
+  %18 = add i64 %15, %17
+  store i64 %18, i64* %join.total, align 8
+  %19 = add i64 %8, 1
+  store i64 %19, i64* %join.at, align 8
+  br label %join.sum
+
+join.copy:
+  %20 = load i64, i64* %join.total, align 8
+  %21 = add i64 %20, 9
+  %22 = call i8* @sts_alloc_struct(i64 %21)
+  %23 = bitcast i8* %22 to i64*
+  store i64 %20, i64* %23, align 8
+  %24 = getelementptr inbounds i8, i8* %22, i64 8
+  store i8* %24, i8** %join.p, align 8
+  store i64 0, i64* %join.at, align 8
+  br label %join.copy.body
+
+join.copy.body:
+  %25 = load i64, i64* %join.at, align 8
+  %26 = icmp ult i64 %25, %1
+  br i1 %26, label %join.part, label %join.end
+
+join.part:
+  %27 = load i8*, i8** %join.p, align 8
+  %28 = icmp eq i64 %25, 0
+  %29 = select i1 %28, i64 0, i64 %3
+  %30 = getelementptr inbounds i8, i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*), i64 8
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %27, i8* %30, i64 %29, i1 false)
+  %31 = getelementptr inbounds i8, i8* %27, i64 %29
+  %32 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %parts, i64 0, i32 2
+  %33 = load i8*, i8** %32, align 8
+  %34 = bitcast i8* %33 to i8**
+  %35 = getelementptr inbounds i8*, i8** %34, i64 %25
+  %36 = load i8*, i8** %35, align 8
+  %37 = bitcast i8* %36 to i64*
+  %38 = load i64, i64* %37, align 8
+  %39 = getelementptr inbounds i8, i8* %36, i64 8
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %31, i8* %39, i64 %38, i1 false)
+  %40 = getelementptr inbounds i8, i8* %31, i64 %38
+  store i8* %40, i8** %join.p, align 8
+  %41 = add i64 %25, 1
+  store i64 %41, i64* %join.at, align 8
+  br label %join.copy.body
+
+join.end:
+  %42 = load i8*, i8** %join.p, align 8
+  store i8 0, i8* %42, align 1
+  ret i8* %22
+}
+
+define noundef i32 @firstAt(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %names, i8* noundef nonnull noalias readonly align 8 nocapture %name) #1 {
+entry:
+  %idx.at = alloca i64, align 8
+  %0 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %names, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8
+  store i64 0, i64* %idx.at, align 8
+  br label %idx.scan
+
+idx.scan:
+  %2 = load i64, i64* %idx.at, align 8
+  %3 = icmp ult i64 %2, %1
+  br i1 %3, label %idx.test, label %idx.miss
+
+idx.test:
+  %4 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %names, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8
+  %6 = bitcast i8* %5 to i8**
+  %7 = getelementptr inbounds i8*, i8** %6, i64 %2
+  %8 = load i8*, i8** %7, align 8
+  %9 = call zeroext i1 @sts_str_eq(i8* %8, i8* %name)
+  br i1 %9, label %idx.found, label %idx.next
+
+idx.next:
+  %10 = add i64 %2, 1
+  store i64 %10, i64* %idx.at, align 8
+  br label %idx.scan
+
+idx.miss:
+  br label %idx.found
+
+idx.found:
+  %11 = phi i64 [ %2, %idx.test ], [ -1, %idx.miss ]
+  %12 = trunc i64 %11 to i32
+  ret i32 %12
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readonly }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #3 = { nounwind willreturn memory(argmem: read) }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+```
+<!-- cookbook:end arr_join -->
 
 ### `new Array<T>(n)` and `.length`
 
@@ -2963,6 +3297,83 @@ attributes #0 = { nounwind willreturn }
 ```
 <!-- cookbook:end builtin_random -->
 
+### Streams, `readFileSyncOrNull` and `panic`
+
+`console.error` and the newline-free writes are one `sts_write(s, fd,
+newline)`; `console.log` keeps its own one-argument `sts_print`. `panic` needs
+no runtime function of its own — the message goes through `sts_write` and the
+`noreturn` `sts_exit` closes the block, which is what lets `load` end without
+a `ret` on that path. `readFileSyncOrNull` returns a pointer that may be
+`null`, so the checker makes the caller narrow it before it can be read.
+
+<!-- cookbook:begin builtin_streams -->
+```ts
+function report(problem: string): void {
+  console.error(problem);
+  write("progress: ");
+  writeError(problem);
+}
+
+function load(path: string): number {
+  const text = readFileSyncOrNull(path);
+  if (text === null) {
+    panic(`cannot read ${path}`);
+  } else {
+    return text.length;
+  }
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [11 x i8] } { i64 10, [11 x i8] c"progress: \00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"cannot read \00" }, align 8
+
+declare noundef i64 @sts_arena_mark() #0
+declare void @sts_arena_release(i64 noundef) #0
+declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @sts_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #0
+declare void @sts_exit(i32 noundef) #2
+declare noalias noundef align 8 i8* @sts_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define void @report(i8* noundef nonnull noalias readonly align 8 nocapture %problem) #0 {
+entry:
+  call void @sts_write(i8* %problem, i32 2, i1 true)
+  call void @sts_write(i8* bitcast ({ i64, [11 x i8] }* @.str.0 to i8*), i32 1, i1 false)
+  call void @sts_write(i8* %problem, i32 2, i1 false)
+  ret void
+}
+
+define noundef i32 @load(i8* noundef nonnull noalias readonly align 8 nocapture %path) #1 {
+entry:
+  %text.addr = alloca i8*, align 8
+  %arena.mark = call i64 @sts_arena_mark()
+  %0 = call i8* @sts_read_file_or_null(i8* %path)
+  store i8* %0, i8** %text.addr, align 8
+  %1 = load i8*, i8** %text.addr, align 8
+  %2 = icmp eq i8* %1, null
+  br i1 %2, label %if.then, label %if.else
+
+if.then:
+  %3 = call i8* @sts_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.1 to i8*), i8* %path)
+  call void @sts_write(i8* %3, i32 2, i1 true)
+  call void @sts_exit(i32 1)
+  unreachable
+
+if.else:
+  %4 = load i8*, i8** %text.addr, align 8
+  %5 = bitcast i8* %4 to i64*
+  %6 = load i64, i64* %5, align 8
+  %7 = trunc i64 %6 to i32
+  call void @sts_arena_release(i64 %arena.mark)
+  ret i32 %7
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { noreturn nounwind }
+```
+<!-- cookbook:end builtin_streams -->
+
 ### File I/O
 
 <!-- cookbook:begin builtin_files -->
@@ -3118,7 +3529,9 @@ declare noundef i64 @sts_arena_used() #2
 declare noalias noundef nonnull align 8 i8* @sts_str_new(i8* noundef readonly nocapture, i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare zeroext i1 @sts_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
+declare zeroext i1 @sts_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #3
 declare i64 @sts_str_len(i8* noundef nonnull readonly align 8 nocapture) #3
+declare void @sts_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_from_f64(double noundef) #2
@@ -3127,6 +3540,7 @@ declare noalias noundef nonnull align 8 i8* @sts_str_from_u64(i64 noundef) #2
 declare noundef double @sts_random() #2
 declare void @sts_exit(i32 noundef) #4
 declare noalias noundef nonnull align 8 i8* @sts_read_file(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef align 8 i8* @sts_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @sts_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @sts_append_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @sts_argv_init(i32 noundef, i8** noundef nocapture readonly) #2

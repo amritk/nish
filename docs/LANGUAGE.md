@@ -751,13 +751,64 @@ The condition must be `boolean`: there is no truthiness
   (`tests/cases/arr_for_of`). `break` and `continue` work
   (`tests/cases/arr_for_of`).
 
+### `switch`
+
+```typescript
+switch (node.kind) {
+  case KIND_IF:
+  case KIND_WHILE:
+    return checkBranch(node);
+  case KIND_CALL:
+    return checkCall(node);
+  default:
+    return ERROR;
+}
+```
+
+- The discriminant is an **integer** (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`;
+  so a `number` in the default mode but not under `--number-mode f64`). Any
+  other type is `` `switch` requires an integer discriminant, got <type> ``
+  (`tests/cases/reject_switch_string`). Only an integer switch lowers to
+  LLVM's `switch` and a jump table; a string switch would have been a chain
+  of `sts_str_eq` calls wearing a switch's clothes, and `if`/`else` says that
+  honestly.
+- Every `case` label is an **integer constant expression** of the
+  discriminant's type: a literal, its negation, or a module constant
+  (`` `case` label must be an integer literal or a module constant ``,
+  `tests/cases/reject_switch_case_not_constant`; `` `case` label is i64 but
+  the discriminant is i32 ``, `reject_switch_case_type`). A literal takes the
+  discriminant's width, so `case 1:` on an `i64` switch is an `i64` one.
+- Labels are distinct (``Duplicate `case` label `1` in this `switch` ``,
+  `tests/cases/reject_switch_duplicate_case`), and there is at most one
+  `default` (`` `switch` has more than one `default` clause `` *(CLI only)*),
+  which may appear anywhere among the clauses.
+- **There is no implicit fallthrough.** A clause with statements ends in
+  `break`, `return`, `continue`, `throw` or `process.exit`, unless it is the
+  last clause (``A `case` clause with statements must end in `break`,
+  `return`, `continue` or `throw` ``,
+  `tests/cases/reject_switch_fallthrough`). An **empty** clause does fall
+  through, which is how `case 1: case 2:` gives several labels one body
+  (`tests/cases/cf_switch`).
+- A clause cannot declare a variable directly; wrap its body in a block
+  (``A `case` clause cannot declare a variable directly ``,
+  `tests/cases/reject_switch_case_declaration`). Clauses share one scope in
+  TypeScript, so a declaration in one would be visible but unassigned in the
+  ones below it.
+- `break` inside a `switch` leaves the switch, not an enclosing loop;
+  `continue` looks past the switch to the loop
+  (`tests/cases/cf_switch_break`).
+- A `switch` terminates (see Termination) when it has a `default`, no `break`
+  targets it, and its last clause terminates.
+
 ### `break` / `continue`
 
 Unlabelled only (`Labelled `break` is not supported`; labeled statements are
-forbidden outright, `tests/cases/reject_labeled_statement`), and only inside
-a loop (`` `break` outside of a loop ``, `tests/cases/reject_cf_break_outside`;
-`` `continue` outside of a loop ``, `reject_cf_continue_outside`).
-`tests/cases/cf_break_continue`.
+forbidden outright, `tests/cases/reject_labeled_statement`). `break` needs an
+enclosing loop or `switch` (`` `break` outside of a loop or `switch` ``,
+`tests/cases/reject_cf_break_outside`) and `continue` an enclosing loop
+(`` `continue` outside of a loop ``, `reject_cf_continue_outside`), which it
+finds past any `switch` in between. `tests/cases/cf_break_continue`,
+`cf_switch_break`.
 
 ### `throw`
 
@@ -777,9 +828,10 @@ purposes, the current path: a non-`void` function may end with it
 ### Termination, definite return, and unreachable code
 
 A statement *terminates* when control cannot fall out of it: `return`,
-`break`, `continue`, `throw`, `process.exit(...)`; an `if` whose branches
-both terminate; a loop with no condition or the condition `true` and no
-`break` aimed at it. Any other loop may run zero times and does not
+`break`, `continue`, `throw`, `process.exit(...)`, `panic(...)`; an `if` whose branches
+both terminate; a `switch` with a `default`, no `break` aimed at it and a
+terminating last clause; a loop with no condition or the condition `true` and
+no `break` aimed at it. Any other loop may run zero times and does not
 terminate. Rules (`src/checker/control-flow.ts`, `statements.ts`):
 
 - A non-`void` function's body must terminate
@@ -788,13 +840,13 @@ terminate. Rules (`src/checker/control-flow.ts`, `statements.ts`):
   `if (true) { return 1; }` alone is not enough *(CLI only)*).
 - A statement after a terminating one is `Unreachable code after <what>`,
   where `<what>` is `return`, `break`, `continue`, `throw`, `process.exit`,
-  `` an `if` whose branches all return ``, or `an infinite loop`
+  `` an `if` whose branches all return ``, `` a `switch` whose clauses all
+  return ``, or `an infinite loop`
   (`tests/cases/reject_unreachable`, `reject_cf_unreachable_after_break`,
   `reject_exit_unreachable`; `throw` and `if` forms *(CLI only)*).
 
 ### Rejected statements
 
-`switch` (`Unsupported statement in Phase 1: SwitchStatement` *(CLI only)*),
 `with` (`tests/cases/reject_with_statement`), `try` (`reject_try_catch`),
 `debugger` (`reject_debugger`), labeled statements (`reject_labeled_statement`),
 `var` (`reject_var_keyword`), `for...in`, nested `function`, `enum`, `type`,
@@ -967,6 +1019,10 @@ function ([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `console.log(x: string \| number \| i64 \| f64 \| boolean): void` | Writes `x` and a newline to stdout with one `write(2)`; statement position only; exactly one argument | write | `str_console_log`, `i64_basic`; `reject_console_log_noargs`, `reject_console_log_two_args`, `reject_console_log_as_value`; arrays and objects are rejected (`` `console.log` accepts string, number, or boolean, got i32[] `` *(CLI only)*) |
+| `console.error(x): void` | the same, on **stderr** — the stream a compiler's diagnostics belong on (WP14 B2). Identical rules and identical messages under its own name | write | `io_streams`; `reject_console_error_type` |
+| `write(s: string): void` | `s` to stdout with **no** trailing newline and no conversion (a `string` only); statement position | write | `io_streams` |
+| `writeError(s: string): void` | the same, on stderr | write | `io_streams` |
+| `panic(message: string): void` | `message` and a newline to stderr, then exit 1 — the same ending an out-of-range index has. Statement position, and it **terminates control flow** like `process.exit`, so a non-`void` function may end with it. Where `throw` discards its value, this keeps it (WP14 D1) | write | `io_streams`; `reject_panic_value` |
 
 Numbers print as JavaScript's `String(x)`: exact decimal for `i32`/`i64`,
 shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
@@ -1043,11 +1099,14 @@ supplies the arguments (`examples/wasi-host.mjs`).
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `readFileSync(path: string): string` | whole file as one arena string; failure prints `statictsc: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects string, got i32 ``) |
+| `readFileSyncOrNull(path: string): string \| null` | the same read, `null` where the other exits, so a program can report the missing file itself and carry on with the rest (WP14 B3). It subsumes an `existsSync` and has no time-of-check race. The result is narrowed with `if (text !== null)` like any other nullable | write | `io_streams`; `reject_readfile_or_null_unchecked` |
 | `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position | write | `io_files` |
 | `appendFileSync(path: string, data: string): void` | create/append and write; statement position | write | `io_files` |
 
 Paths are relative to the working directory. These are globals, not
-`import { readFileSync } from "fs"` (bare imports are rejected).
+`import { readFileSync } from "fs"` (bare imports are rejected), and so are
+`write`, `writeError` and `panic` above. A user function of the same name
+wins, as it does for every identifier builtin.
 
 ### Arrays and strings as receivers
 
@@ -1055,13 +1114,34 @@ Paths are relative to the working directory. These are globals, not
 | --- | --- | --- |
 | `a.length` | `number`; read-only | `arr_length`, `reject_arr_length_assign` |
 | `a.push(v: T): number` | appends; grows capacity by doubling (4 from 0) through `sts_array_grow`; returns the new length | `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`) |
+| `a.pop(): T` | removes and returns the last element. An empty array **panics** and exits 1 (`index out of range: 0 >= 0`) — there is no `undefined` to return. The capacity is untouched, so the next `push` reuses the storage | `arr_pop_index`; `reject_arr_pop_arity` |
+| `a.indexOf(v: T): number` | the first index whose element is `=== v`, or `-1`: strings by content, classes / interfaces / arrays by identity, floats with `fcmp oeq` (a `NaN` element is never found, as in JavaScript). A scan in the emitted code | `arr_pop_index`; `reject_arr_index_of_type` |
+| `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3) | `arr_join`; `reject_arr_join_elem` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
+| `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
+| `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`sts_str_new`) | `str_bytes`; `reject_str_substring_arity` |
+| `s.indexOf(sub: string): number` | the first **byte** offset at which `sub` occurs, or `-1`; `s.indexOf("")` is `0`. A scan in the emitted code rather than a runtime function | `str_search`; `reject_str_index_of_type` |
+| `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`sts_str_at`) | `str_search` |
+| `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
+| `String.fromCharCode(c: number): string` | the one-byte string of `c & 0xFF`, the inverse of `charCodeAt`. A value above 127 makes a byte that is not valid UTF-8 on its own; nothing validates it | `str_search` |
 
-There are no other array or string methods (`pop`, `slice`, `indexOf`,
-`map`, `toUpperCase`, `charAt`, ...) and no `toString` (template literals
+Every offset above is a **byte** offset, like `s.length`: a lexer walks bytes,
+and a code-point index would need a decode per access. Cutting a multi-byte
+character in half is therefore possible and produces bytes that are not a
+valid string (docs/wp13-differential.md notes what Node then does with them).
+
+A numeric literal argument to `push` or `indexOf` takes the element type, so
+`wide.push(3)` on an `i64[]` is an `i64` three
+([Numeric literals](#numeric-literals)).
+
+There are no other array or string methods (`slice`, `map`, `shift`,
+`toUpperCase`, `charAt`, ...) and no `toString` (template literals
 and `console.log` convert numbers); string-to-number parsing is the bare
 `Number(s)` / `parseInt(s)` / `parseFloat(s)` under
-[Numeric conversions](#numeric-conversions).
+[Numeric conversions](#numeric-conversions). An unknown name is
+`` Unknown method `codePointAt` on string `` or
+`` Unknown method `shift` on i32[] ``, each with the supported list
+(`tests/cases/reject_str_method_unknown`, `reject_arr_method_unknown`).
 
 ### `Arena`
 
