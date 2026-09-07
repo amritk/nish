@@ -42,7 +42,7 @@ import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
 import { CompilerOptions, StaticType, alignOf, llvmType } from "../types";
 import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, returnAttributes } from "./attributes";
 import { DebugInfo } from "./debug";
-import { emitConstructorPrologue, importedStructFunctions, structTypeDeclarations } from "./emit/classes";
+import { emitConstructorPrologue, importedStructFunctions, structFunctions, structTypeDeclarations } from "./emit/classes";
 import { EmitContext, LoopTarget } from "./emit/context";
 import { expressionEmitters } from "./emit/expressions";
 import { emitVariableDeclarationList, statementEmitters } from "./emit/statements";
@@ -218,16 +218,23 @@ export class Emitter implements EmitContext {
    */
   private emitImportDeclarations(): void {
     const seen = new Set<string>();
-    for (const imp of this.program.imports) {
-      if (imp.constant) continue;
-      const sigs = imp.struct ? importedStructFunctions(imp) : imp.sig ? [imp.sig] : undefined;
-      if (!sigs) throw new Error(`emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``);
+    const declare = (sigs: FunctionSig[]): void => {
       for (const sig of sigs) {
         if (seen.has(sig.name)) continue;
         seen.add(sig.name);
         this.module.addDeclaration(this.declarationFor(sig));
       }
+    };
+    for (const imp of this.program.imports) {
+      if (imp.constant) continue;
+      const sigs = imp.struct ? importedStructFunctions(imp) : imp.sig ? [imp.sig] : undefined;
+      if (!sigs) throw new Error(`emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``);
+      declare(sigs);
     }
+    // A struct this module never named but can hold values of: its methods
+    // and constructor are defined by whichever module declared it, so they
+    // are `declare`d here for the same reason an imported class's are.
+    for (const info of this.program.reachableStructs) declare(structFunctions(info));
   }
 
   /**

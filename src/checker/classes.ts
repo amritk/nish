@@ -131,6 +131,45 @@ export function structOf(ctx: CheckContext, t: StaticType): StructInfo {
   return info;
 }
 
+/**
+ * The struct names that appear in `info`'s *types*: its field types and the
+ * parameter and return types of its methods and constructor — its own and
+ * the ones it inherits — through arrays and nullables.
+ *
+ * An importer needs these even though it never names them. `import { Box }`
+ * brings in a class whose `all(): Item[]` hands out `Item` values, and the
+ * checker has to find `Item`'s methods and the emitter its field offsets in a
+ * module where `Item` was never written. See `Checker.registerReachableStructs`.
+ *
+ * The base chain is walked but its *names* are not collected, and neither are
+ * the `implements` names: a base and an interface are reached through the
+ * `StructInfo` pointer the checker already holds, never by a lookup, so
+ * registering them would only turn a `%struct.Base = type opaque` an importer
+ * is entitled to into a full definition (`tests/link/extends_import`).
+ */
+export function referencedStructNames(info: StructInfo): string[] {
+  const names = new Set<string>();
+  const note = (t: StaticType): void => {
+    if (t.kind === "struct") names.add(t.name);
+    else if (t.kind === "array") note(t.elem);
+    else if (t.kind === "nullable") note(t.inner);
+  };
+  // `this` is skipped: it is the owner or its base, which is reached through
+  // the `StructInfo` pointer rather than by name, and noting it would pull an
+  // inherited constructor's `%struct.Base` in behind a derived class.
+  const noteSig = (sig: FunctionSig): void => {
+    for (const p of sig.params.slice(sig.struct ? 1 : 0)) note(p.type);
+    note(sig.returnType);
+  };
+  for (let c: StructInfo | undefined = info; c; c = c.base) {
+    for (const f of c.fields) note(f.type);
+    for (const m of c.methods.values()) noteSig(m);
+    if (c.ctor) noteSig(c.ctor);
+  }
+  names.delete(info.name);
+  return [...names];
+}
+
 function modifierKinds(node: ts.Node): ts.SyntaxKind[] {
   return ts.canHaveModifiers(node) ? (ts.getModifiers(node) ?? []).map((m) => m.kind) : [];
 }

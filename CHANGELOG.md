@@ -67,6 +67,22 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
   `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
   `bench/ffi.mjs` gains the batched `Float64Array` rows.
+- **An imported class brings the layouts its members mention.** `import
+  { Registry }` where `Registry.all(): Entry[]` gives a module `Entry` values
+  it can call methods on and read fields of; until now the checker crashed
+  with an internal error (`structOf: no struct named \`Entry\``) because
+  `Entry` was in no registry there, and the emitter would have had only
+  `%struct.Entry = type opaque` to compute a field offset from. The layouts
+  now travel with the import, transitively, and their symbols are `declare`d
+  the way an imported class's are. Only the layout travels: an annotation
+  still needs the name in scope, so `const e: Entry` in that module is
+  unchanged (`tests/link/reachable_struct`,
+  `tests/link/reachable_struct_annotation`). A base reached through `extends`
+  and a `this` parameter are deliberately excluded — both are used through a
+  pointer the checker already holds, and including them would turn the
+  `%struct.Base = type opaque` of `tests/link/extends_import` into a
+  definition. Found by writing `self/diagnostics.ts`, whose sink hands back a
+  `Diagnostic[]`.
 - **Self-hosting, wave C: the support library** (`docs/wp14-selfhost.md` §3).
   `self/strings.ts`, `self/map.ts` and `self/paths.ts` are the 598 lines of
   StaticTS the checker and the emitter are written over, and no language

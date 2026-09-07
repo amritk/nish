@@ -480,6 +480,18 @@ having no top-level code and therefore no initialisation order.
   (`tests/link/not_exported`, `tests/link/unknown_export`); importing the
   same local name twice, or a name also declared locally, is an error
   (`tests/link/duplicate_import`).
+- An imported class or interface brings the **layouts** of the classes and
+  interfaces its own members mention — field types, and the parameter and
+  return types of its methods and constructor, through arrays and nullables —
+  so a module that imports `Registry` may hold, call and read the `Entry`
+  values `Registry.all(): Entry[]` hands it without importing `Entry`
+  (`tests/link/reachable_struct`). Only the layout travels, not the name: a
+  type *annotation* still needs the import, and `const e: Entry` in that
+  module is `` Unsupported type reference `Entry` ``
+  (`tests/link/reachable_struct_annotation`). A base class reached only
+  through `extends` is not brought in either — it is used through its pointer,
+  so the importer declares `%struct.Base = type opaque`
+  (`tests/link/extends_import`).
 - Import cycles are allowed (`tests/link/cycle`); a shared dependency is
   compiled once (`tests/link/diamond`).
 - **Linkage.** Every function is an external C-ABI symbol by default, so two
