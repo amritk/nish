@@ -1,0 +1,23 @@
+# The `reject_*` cases stage1 does not yet refuse the way stage0 does
+# (docs/wp14-selfhost.md, milestone S3). One name per line; the file shrinks
+# as the port finishes and disappears with the last entry. A case listed here
+# that starts agreeing fails the oracle, so the list cannot go stale.
+#
+# What is left, by rule:
+#   `process.argv` is read-only          argv_assign, argv_pop, argv_push
+#   definite assignment in a constructor read_before_assign, uninitialised,
+#                                        uninitialised_no_ctor
+#   `super(...)` placement                super_missing, super_not_first,
+#                                        this_before_super, super_in_method
+#   a narrowing dropped by an assignment  null_narrowing_assigned
+reject_argv_assign
+reject_argv_pop
+reject_argv_push
+reject_cls_read_before_assign
+reject_cls_super_in_method
+reject_cls_super_missing
+reject_cls_super_not_first
+reject_cls_this_before_super
+reject_cls_uninitialised
+reject_cls_uninitialised_no_ctor
+reject_null_narrowing_assigned

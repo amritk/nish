@@ -17,6 +17,9 @@ import { T_ERROR, T_F64, T_I32, TypeTable } from "./types";
 export const NUMBER_MODE_I32: i32 = 0;
 export const NUMBER_MODE_F64: i32 = 1;
 
+export const LOOP_ITERATION: i32 = 0;
+export const LOOP_SWITCH: i32 = 1;
+
 export class CheckContext {
   /** Shared by every module of one compilation, so a type id means one thing. */
   table: TypeTable;
@@ -28,6 +31,22 @@ export class CheckContext {
   sigs: StringMap;
   /** The program has an entry point, so `process.argv` may be read. */
   entryHasMain: boolean;
+  /** The function whose body is being checked, for `return` and `this`. */
+  current: FunctionSig | null;
+  /**
+   * The loops and `switch`es enclosing the statement being checked, innermost
+   * last. `break` marks the innermost; `continue` needs a real loop, because a
+   * `switch` on the stack is a `break` target only, as it is in JavaScript.
+   */
+  loopKinds: i32[];
+  loopBreaks: boolean[];
+  /**
+   * The expression of the statement being checked, when it is an expression
+   * statement. `console.log` and the other `void` builtins may only appear
+   * there; stage0 asks the node's parent, and this is the parent pointer the
+   * tree does not have, recorded by the one caller that knows.
+   */
+  statementExpression: Node | null;
 
   constructor(table: TypeTable, program: CheckedProgram, sink: DiagnosticSink, numberMode: i32) {
     this.table = table;
@@ -37,6 +56,10 @@ export class CheckContext {
     this.numberMode = numberMode;
     this.sigs = new StringMap();
     this.entryHasMain = false;
+    this.current = null;
+    this.loopKinds = [];
+    this.loopBreaks = [];
+    this.statementExpression = null;
   }
 
   /** Report against a node's own span. Nothing is thrown; the caller decides. */
@@ -70,5 +93,19 @@ export class CheckContext {
   addFunction(sig: FunctionSig): void {
     this.sigs.set(sig.sourceName, this.program.functions.length);
     this.program.functions.push(sig);
+  }
+
+  /** Enter a loop (`LOOP_ITERATION`) or a `switch` (`LOOP_SWITCH`). */
+  pushLoop(kind: i32): void {
+    this.loopKinds.push(kind);
+    this.loopBreaks.push(false);
+  }
+
+  /** Leave it, answering whether a `break` targeted it. */
+  popLoop(): boolean {
+    const broke = this.loopBreaks[this.loopBreaks.length - 1];
+    this.loopKinds.pop();
+    this.loopBreaks.pop();
+    return broke;
   }
 }

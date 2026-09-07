@@ -60,6 +60,7 @@ export function collectParams(ctx: CheckContext, sig: FunctionSig, list: Node, o
 export function collectFunctionSignature(ctx: CheckContext, decl: Node): FunctionSig {
   const name = decl.children[0].text;
   const sig = new FunctionSig(name, name, decl);
+  sig.origin = ctx.source;
   sig.exported = isExported(decl);
   sig.role = ROLE_FUNCTION;
   if (name.startsWith("sts_")) {

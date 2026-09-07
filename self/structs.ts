@@ -193,7 +193,7 @@ function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void {
 }
 
 /** The class in `info`'s chain that declares `name`; `info` itself if none above does. */
-function fieldOwner(info: StructInfo, name: string): StructInfo {
+export function fieldOwner(info: StructInfo, name: string): StructInfo {
   let owner = info;
   let walk = info.base;
   while (walk !== null) {
@@ -233,6 +233,7 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void {
   }
   const symbol = `${owner.name}.${name}`;
   const sig = new FunctionSig(symbol, symbol, decl);
+  sig.origin = ctx.source;
   sig.exported = owner.exported;
   sig.owner = owner;
   sig.role = ROLE_METHOD;
@@ -285,6 +286,7 @@ function collectConstructor(ctx: CheckContext, owner: StructInfo, decl: Node): v
   }
   const symbol = `${owner.name}.constructor`;
   const sig = new FunctionSig(symbol, symbol, decl);
+  sig.origin = ctx.source;
   sig.exported = owner.exported;
   sig.owner = owner;
   sig.role = ROLE_CONSTRUCTOR;
@@ -415,25 +417,77 @@ export function checkImplements(ctx: CheckContext, cls: StructInfo): void {
     if (iface === null) {
       continue;
     }
-    let index = 0;
-    while (index < iface.fields.length) {
-      const want = iface.fields[index];
-      if (index >= cls.fields.length) {
-        ctx.error(
-          cls.decl.children[0],
-          `Class \`${cls.name}\` implements \`${name}\` but is missing field \`${want.name}\``
-        );
-        return;
+    const count = cls.fields.length > iface.fields.length ? cls.fields.length : iface.fields.length;
+    let i = 0;
+    while (i < count) {
+      const hasWant = i < iface.fields.length;
+      const hasGot = i < cls.fields.length;
+      if (hasWant && hasGot) {
+        const want = iface.fields[i];
+        const got = cls.fields[i];
+        if (want.name === got.name && want.type === got.type) {
+          i = i + 1;
+          continue;
+        }
       }
-      const got = cls.fields[index];
-      if (got.name !== want.name || got.type !== want.type) {
-        ctx.error(
-          cls.decl.children[0],
-          `Class \`${cls.name}\` implements \`${name}\` but field ${index} is \`${got.name}: ${ctx.table.typeName(got.type)}\`, not \`${want.name}: ${ctx.table.typeName(want.type)}\` (an interface is a layout: same fields, same order, same types)`
-        );
-        return;
-      }
-      index = index + 1;
+      const why = !hasGot
+        ? `it lacks field ${describeField(ctx, iface.fields[i])}`
+        : !hasWant
+          ? `it declares extra field ${describeField(ctx, cls.fields[i])}`
+          : `field ${i + 1} is ${describeField(ctx, iface.fields[i])} in \`${iface.name}\` but ${describeField(ctx, cls.fields[i])} in \`${cls.name}\``;
+      ctx.error(
+        cls.decl.children[0],
+        `Class \`${cls.name}\` does not implement \`${iface.name}\`: ${why} (fields must match exactly, in order)`
+      );
+      return;
     }
   }
+}
+
+function describeField(ctx: CheckContext, field: FieldInfo): string {
+  return `\`${field.name}: ${ctx.table.typeName(field.type)}\``;
+}
+
+/**
+ * Whether a class value may stand where `want` is expected without a
+ * conversion the reader has to write: `want` is a class it extends, or an
+ * interface it implements. Both are one pointer `bitcast` — an interface has
+ * the identical layout and a base class is a layout prefix — so nothing is
+ * checked at run time and nothing converts back.
+ */
+export function coercesTo(ctx: CheckContext, from: i32, want: i32): boolean {
+  if (want < 0 || !ctx.table.isStruct(from)) {
+    return false;
+  }
+  const target = ctx.table.stripNull(want); // a class converts to `I | null` as it does to `I`
+  if (!ctx.table.isStruct(target) || target === from) {
+    return false;
+  }
+  const source = ctx.program.struct(ctx.table.nameOf(from));
+  const wanted = ctx.program.struct(ctx.table.nameOf(target));
+  if (source === null || wanted === null) {
+    return false;
+  }
+  if (wanted.kind === STRUCT_INTERFACE) {
+    // An interface a base implements is implemented by the derived class too:
+    // the base's fields are the prefix, so the layout still matches.
+    let walk: StructInfo | null = source;
+    while (walk !== null) {
+      for (const name of walk.implementsNames) {
+        if (name === wanted.name) {
+          return true;
+        }
+      }
+      walk = walk.base;
+    }
+    return false;
+  }
+  let base = source.base;
+  while (base !== null) {
+    if (base === wanted) {
+      return true;
+    }
+    base = base.base;
+  }
+  return false;
 }

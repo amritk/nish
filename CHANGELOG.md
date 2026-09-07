@@ -67,6 +67,31 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
   `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
   `bench/ffi.mjs` gains the batched `Float64Array` rows.
+- **Self-hosting, milestone S3: the body pass and Phase 0**
+  (`docs/wp14-selfhost.md` §4). `self/expressions.ts`, `statements.ts`,
+  `members.ts`, `arrays.ts`, `builtins.ts` and `validator.ts` are stage0's
+  pass 2 and its forbidden-syntax sweep in StaticTS. Two shape decisions
+  carry their reasons: the dispatch is **one central `switch`** (D2 of §3a) —
+  a table of function values would need function pointers, which StaticTS does
+  not have, and a `switch` on a node kind lowers to a jump table — and the
+  **contextual type is threaded down** rather than walked up, because the tree
+  has no parent pointers; the one place that shows is `console.log` and the
+  other `void` builtins, where "must be a statement" is answered by the
+  statement checker recording the expression it is about to check.
+  `self/` is now **9,235 lines** of StaticTS.
+  The proof is both halves of what a checker does. On what it *accepts*,
+  `tests/self/checked_oracle.js` compares the `--emit-checked` dump over the
+  whole corpus: **207 of 207 files agree over 2,079 lines**, and those lines
+  now include the per-body locals and callees, so what is compared is every
+  variable's type, every call's resolved callee, every struct's field offsets
+  and every folded constant. On what it *refuses*,
+  `tests/self/reject_oracle.js` runs every `reject_*` case through stage1 and
+  requires the same `.err` fragments the suite already requires of stage0:
+  **154 of 154 agree**, with 11 cases named in `tests/self/reject_backlog.txt`
+  — `process.argv` being read-only, definite assignment in a constructor,
+  `super(...)` placement, and one narrowing rule — so the remaining work is
+  counted in the suite output rather than hidden in a skip, and a backlog
+  entry that starts agreeing fails until it is removed.
 - **A numeric literal in a ternary arm takes the conditional's context.**
   `const x: f64 = c ? 1.5 : 2.5` was rejected — the annotation reached a
   literal written directly but not one behind a `?:`, because the context walk

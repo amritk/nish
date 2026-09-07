@@ -1725,9 +1725,25 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     });
     const checkedSummary = checkedOracle.stdout.trim().split("\n").pop() ?? "";
     check(
-      `self/checker.ts pass 1 agrees with stage0 (${checkedSummary})`,
+      `self/checker.ts agrees with stage0 on what it accepts (${checkedSummary})`,
       checkedOracle.status === 0,
       `${checkedOracle.stdout}${checkedOracle.stderr}`
+    );
+
+    // The other half of milestone S3: refusing the same programs for the same
+    // reason. A dump comparison cannot see that, so every `reject_*` case is
+    // run through stage1 and its own `.err` fragments are required of the
+    // output — the same assertion the suite already makes of stage0.
+    const rejectOracle = spawnSync("node", [path.join(root, "tests", "self", "reject_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const rejectSummary = rejectOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/ refuses what stage0 refuses (${rejectSummary})`,
+      rejectOracle.status === 0,
+      `${rejectOracle.stdout}${rejectOracle.stderr}`
     );
   }
 }

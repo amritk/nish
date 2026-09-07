@@ -31,8 +31,11 @@ const { spawnSync } = require("node:child_process");
 const root = path.resolve(__dirname, "..", "..");
 const cli = path.join(root, "dist", "index.js");
 
-/** Lines of the dump that a later phase fills in, not pass 1. */
-const LATER_PHASES = /^ {2}(facts:|escaping:|calls:|pointer |stackSites|local |callee )/;
+/**
+ * Lines of the dump that a later phase fills in. Only the attribute pass is
+ * left: the locals and callees of each body are pass 2's, and are compared.
+ */
+const LATER_PHASES = /^ {2}(facts:|escaping:|calls:|pointer |stackSites)/;
 
 function signatureLines(dump) {
   return dump.split("\n").filter((line) => line.length > 0 && !LATER_PHASES.test(line));
@@ -130,12 +133,13 @@ function main(argv) {
   let agreed = 0;
   let lines = 0;
   const skipped = [];
+  const rejected = [];
   const failed = [];
   for (const file of inputs) {
     const result = compare(binary, file);
     const name = path.relative(root, file);
     if (result.skipped !== undefined) skipped.push(`${name}: ${result.skipped}`);
-    else if (result.rejected !== undefined) skipped.push(`${name}: stage1 rejects it: ${result.rejected}`);
+    else if (result.rejected !== undefined) rejected.push(`${name}: ${result.rejected}`);
     else if (result.failed !== undefined) failed.push(`${name}: ${result.failed}`);
     else {
       agreed++;
@@ -143,10 +147,17 @@ function main(argv) {
     }
   }
   for (const f of failed) process.stdout.write(`  FAIL ${f}\n`);
-  if (verbose) for (const s of skipped) process.stdout.write(`  skip ${s}\n`);
-  const compared = inputs.length - skipped.length;
+  if (verbose) {
+    for (const r of rejected) process.stdout.write(`  reject ${r}\n`);
+    for (const s of skipped) process.stdout.write(`  skip ${s}\n`);
+  }
+  const compared = inputs.length - skipped.length - rejected.length;
+  // Rejections are counted apart from the other skips and named in the
+  // summary: a file stage0 accepts and stage1 does not is the remaining work
+  // of this milestone, and it must not be able to hide inside a skip count.
+  const note = rejected.length > 0 ? `, ${rejected.length} rejected by stage1` : "";
   process.stdout.write(
-    `${agreed}/${compared} files agree (${lines} signature lines), ${skipped.length} skipped\n`
+    `${agreed}/${compared} files agree (${lines} dump lines), ${skipped.length} skipped${note}\n`
   );
   return failed.length === 0 ? 0 : 1;
 }

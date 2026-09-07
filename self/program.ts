@@ -46,6 +46,8 @@ export class FunctionSig {
   paramTypes: i32[];
   returnType: i32;
   decl: Node;
+  /** The module that declares it, so pass 2 skips the ones it only imported. */
+  origin: SourceFile | null;
   exported: boolean;
   role: i32;
   /** The class this is a member of, or `null` for a free function. */
@@ -60,6 +62,7 @@ export class FunctionSig {
     this.paramTypes = [];
     this.returnType = 0;
     this.decl = decl;
+    this.origin = null;
     this.exported = false;
     this.role = ROLE_FUNCTION;
     this.owner = null;
@@ -306,8 +309,10 @@ export class CheckedProgram {
   /** Call node id -> the callee, free functions and methods alike. */
   nodeCallees: (FunctionSig | null)[];
   /**
-   * Node id -> the interface type a class-typed value is used as. `nodeTypes`
-   * records the interface; the emitter inserts one `bitcast`.
+   * Node id -> the type a coerced expression *was*, when a class value stands
+   * where a base class or an implemented interface is expected. `nodeTypes`
+   * records the target; this is the source, and the emitter turns the pair
+   * into one `bitcast`.
    */
   nodeCoercions: i32[];
   /** `N_CASE` node id -> the folded label, which a `switch` needs as a constant. */

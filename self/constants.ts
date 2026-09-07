@@ -291,8 +291,13 @@ function foldUnary(ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32
   );
 }
 
-/** Whether an operator answers a boolean whatever its operands are. */
-function yieldsBool(op: string): boolean {
+/**
+ * Whether an operator answers a boolean whatever its operands are. The
+ * checker has the same predicate over a wider set (`==` and `!=` reach it and
+ * are refused); the folder never sees those, because the parser turns them
+ * down before a constant is folded.
+ */
+function foldsToBool(op: string): boolean {
   return op === "<" || op === "<=" || op === ">" || op === ">=" || op === "===" || op === "!==";
 }
 
@@ -302,7 +307,7 @@ function foldBinary(ctx: CheckContext, info: ConstInfo, expr: Node, expected: i3
   const right = expr.children[1];
   // A comparison says nothing about its operands' width, so a bare literal on
   // one side takes it from the other: `KIND === 3` folds with `KIND: i64`.
-  const hint = yieldsBool(op) ? -1 : expected;
+  const hint = foldsToBool(op) ? -1 : expected;
   let a = new ConstValue(T_ERROR);
   let b = new ConstValue(T_ERROR);
   if (left.kind === N_NUMBER && right.kind !== N_NUMBER) {
@@ -352,7 +357,7 @@ function foldBinary(ctx: CheckContext, info: ConstInfo, expr: Node, expected: i3
       `Operator \`${op}\` is not available on ${valueTypeName(ctx, a)} in a constant`
     );
   }
-  if (yieldsBool(op)) {
+  if (foldsToBool(op)) {
     return foldComparison(op, a, b);
   }
   if (a.type === T_F64) {
@@ -437,4 +442,45 @@ function foldFloat(ctx: CheckContext, info: ConstInfo, op: string, expr: Node, x
     return floatValue(x % y);
   }
   return reject(ctx, info, expr, `Unsupported operator \`${op}\` on f64 in a constant`);
+}
+
+/** A compile-time integer, and whether there was one. */
+export class CaseValue {
+  known: boolean;
+  value: i64;
+
+  constructor(known: boolean, value: i64) {
+    this.known = known;
+    this.value = value;
+  }
+}
+
+/**
+ * The value a `case` label selects on. It has to be known at compile time,
+ * because LLVM's `switch` table holds constants: an integer literal, its
+ * negation, or a module constant — which is where a program's token and node
+ * kinds live. Anything else is a runtime value and belongs in an `if`.
+ */
+export function caseValue(ctx: CheckContext, expr: Node): CaseValue {
+  if (expr.kind === N_PAREN) {
+    return caseValue(ctx, expr.children[0]);
+  }
+  if (expr.kind === N_NUMBER) {
+    return isFractional(expr.text)
+      ? new CaseValue(false, toI64(0))
+      : new CaseValue(true, parseIntegerLiteral(expr.text));
+  }
+  if (expr.kind === N_UNARY && expr.text === "-") {
+    const operand = caseValue(ctx, expr.children[0]);
+    return new CaseValue(operand.known, -operand.value);
+  }
+  if (expr.kind === N_IDENT) {
+    const constant = ctx.program.nodeConstants[expr.id];
+    if (constant === null || (constant.type !== T_I32 && constant.type !== T_I64)) {
+      return new CaseValue(false, toI64(0));
+    }
+    foldConstant(ctx, constant);
+    return new CaseValue(true, constant.intValue);
+  }
+  return new CaseValue(false, toI64(0));
 }

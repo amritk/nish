@@ -15,8 +15,18 @@ import { Checker } from "./checker";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context";
 import { jsonQuote } from "./strings";
+import { N_BLOCK, N_CALL, N_CONSTRUCTOR, N_IDENT, N_NEW, N_VAR_DECL, Node } from "./nodes";
 import { Parser } from "./parser";
-import { ROLE_CONSTRUCTOR, ROLE_METHOD, STRUCT_CLASS, ConstInfo, FunctionSig, StructInfo } from "./program";
+import { validate } from "./validator";
+import {
+  CheckedProgram,
+  ConstInfo,
+  FunctionSig,
+  ROLE_CONSTRUCTOR,
+  ROLE_METHOD,
+  STRUCT_CLASS,
+  StructInfo,
+} from "./program";
 import { T_BOOL, T_F64, T_STRING, TypeTable } from "./types";
 
 /** `name(a: i32, b: string): void`, the signature as `src/dump.ts` writes it. */
@@ -75,6 +85,65 @@ function constantText(table: TypeTable, info: ConstInfo): string {
   return `${info.intValue}`;
 }
 
+/** `line:col`, as `src/dump.ts` writes a position. */
+function position(source: SourceFile, offset: i32): string {
+  return `${source.lineOf(offset)}:${source.columnOf(offset)}`;
+}
+
+/**
+ * The locals and callees of one body, in source order, read back out of the
+ * side tables. This is the half of the dump that pass 2 fills in, so it is
+ * also the half that says whether pass 2 bound the same things stage0 did.
+ */
+function bodyTables(
+  program: CheckedProgram,
+  source: SourceFile,
+  table: TypeTable,
+  sig: FunctionSig,
+  out: string[]
+): void {
+  const body = sig.decl.kind === N_CONSTRUCTOR ? sig.decl.children[1] : sig.decl.children[3];
+  if (body.kind === N_BLOCK) {
+    walkBody(program, source, table, body, out);
+  }
+}
+
+function walkBody(
+  program: CheckedProgram,
+  source: SourceFile,
+  table: TypeTable,
+  node: Node,
+  out: string[]
+): void {
+  if (node.kind === N_VAR_DECL) {
+    const local = program.nodeLocals[node.id];
+    if (local !== null) {
+      const kind = local.mutable ? "let" : "const";
+      out.push(
+        `  local ${position(source, node.start)} ${local.name}: ${table.typeName(local.type)} (${kind})`
+      );
+    }
+  } else if (node.kind === N_CALL) {
+    const callee = program.nodeCallees[node.id];
+    if (callee !== null) {
+      out.push(`  callee ${position(source, node.start)} ${callee.sourceName} -> @${callee.name}`);
+    }
+  } else if (node.kind === N_NEW && node.children[0].kind === N_IDENT) {
+    // `new C(...)` is bound through the struct registry rather than the
+    // callee table, and only a class's *own* constructor is named there.
+    const info = program.struct(node.children[0].text);
+    if (info !== null) {
+      const ctor = info.ctor;
+      if (ctor !== null) {
+        out.push(`  callee ${position(source, node.start)} new ${info.name} -> @${ctor.name}`);
+      }
+    }
+  }
+  for (const child of node.children) {
+    walkBody(program, source, table, child, out);
+  }
+}
+
 export function main(): number {
   if (process.argv.length < 2) {
     console.error("usage: dump_checked [--number-mode f64] <file>");
@@ -114,8 +183,19 @@ export function main(): number {
   const sink = new DiagnosticSink();
   const table = new TypeTable();
   const checker = new Checker(table, source, file, true, parser.nodeCount, sink, numberMode);
+  // Phase 0 first: what is forbidden by design is refused before the checker
+  // has a chance to report it as something merely unsupported.
+  validate(checker.ctx, file);
+  if (sink.hasErrors()) {
+    writeError(`${sink.format(20)}\n`);
+    return 1;
+  }
   checker.collectSignatures();
+  // A whole compilation asks the *entry* module; one module on its own is the
+  // entry, so its own `main` is the answer.
+  checker.ctx.entryHasMain = checker.program.entryMain !== null;
   checker.foldConstants();
+  checker.checkBodies();
   if (sink.hasErrors()) {
     writeError(`${sink.format(20)}\n`);
     return 1;
@@ -152,6 +232,7 @@ export function main(): number {
     }
     const suffix = tags.length > 0 ? ` [${tags.join(" ")}]` : "";
     out.push(`function ${signatureText(table, sig)} -> @${sig.name}${suffix}`);
+    bodyTables(program, source, table, sig, out);
   }
   write(`${out.join("\n")}\n`);
   return 0;

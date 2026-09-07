@@ -265,7 +265,7 @@ point is to know rather than to find out at the last milestone.
 | --- | --- | --- |
 | **S1 Lexer** | `self/lexer.ts` tokenises StaticTS-0 **Done.** | Its token stream agrees with the `typescript` scanner's over every `tests/cases/*.ts`; the lexer built by stage0 runs natively |
 | **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 **Done.** | Its tree matches the `typescript` parser's, span for span, for every program in the corpus that StaticTS-0's grammar covers |
-| **S3 Checker** | `self/checker.ts` — types, scopes, the side tables *(in progress: pass 1 — signatures, layouts and constants — agrees with stage0 over the whole corpus)* | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
+| **S3 Checker** | `self/checker.ts` — types, scopes, the side tables *(in progress: pass 1, pass 2 and Phase 0 agree with stage0 over the whole corpus — 207/207 files accepted alike, 154/154 `reject_*` cases refused alike, 11 rules left in `tests/self/reject_backlog.txt`)* | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
 | **S4 Emitter** | `self/emit.ts` — IR text | `IR(stage0, p) == IR(stage1, p)` for a growing whitelist of `tests/cases/` |
 | **S5 Bootstrap** | `self/` compiles `self/` | `IR(stage1, self/) == IR(stage2, self/)`, and stage3 is byte-identical to stage2 |
 

@@ -15,10 +15,29 @@ import { foldConstant } from "./constants";
 import { CheckContext } from "./context";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations";
-import { N_CLASS, N_FUNCTION, N_IMPORT, N_INTERFACE, N_MODULE_CONST, Node } from "./nodes";
-import { CheckedProgram, ConstInfo, STRUCT_CLASS, STRUCT_INTERFACE, StructInfo } from "./program";
+import {
+  N_BLOCK,
+  N_CLASS,
+  N_CONSTRUCTOR,
+  N_EMPTY,
+  N_FUNCTION,
+  N_IMPORT,
+  N_INTERFACE,
+  N_MODULE_CONST,
+  Node,
+} from "./nodes";
+import {
+  CheckedProgram,
+  ConstInfo,
+  FunctionSig,
+  STRUCT_CLASS,
+  STRUCT_INTERFACE,
+  StructInfo,
+} from "./program";
+import { checkStatements } from "./statements";
+import { Local, STORAGE_PARAM, Scope } from "./symbols";
 import { checkImplements, collectStructMembers, declareStruct } from "./structs";
-import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING, TypeTable } from "./types";
+import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING, T_VOID, TypeTable } from "./types";
 
 export class Checker {
   ctx: CheckContext;
@@ -108,6 +127,14 @@ export class Checker {
     const exported = isExported(stmt);
     for (const decl of stmt.children[0].children) {
       const name = decl.children[0].text;
+      if (decl.children[1].kind === N_EMPTY) {
+        this.ctx.error(decl.children[0], `Module constant \`${name}\` needs a type annotation`);
+        continue;
+      }
+      if (decl.children[2].kind === N_EMPTY) {
+        this.ctx.error(decl.children[0], `Module constant \`${name}\` needs an initialiser`);
+        continue;
+      }
       const type = resolveType(decl.children[1], this.ctx);
       if (
         type !== T_ERROR &&
@@ -133,6 +160,59 @@ export class Checker {
       info.scope = this.program;
       this.program.addConstant(info);
     }
+  }
+
+  /**
+   * Pass 2: every body, now that every callee in the program is known.
+   * Recovery is per statement, so one bad expression costs one statement's
+   * worth of checking and the rest of the function is still checked.
+   */
+  checkBodies(): void {
+    for (const sig of this.program.functions) {
+      const origin = sig.origin;
+      if (origin !== null && origin === this.program.source) {
+        this.checkFunctionBody(sig);
+      }
+    }
+  }
+
+  checkFunctionBody(sig: FunctionSig): void {
+    this.ctx.current = sig;
+    this.ctx.loopKinds = [];
+    this.ctx.loopBreaks = [];
+    const scope = new Scope(null);
+    let i = 0;
+    while (i < sig.paramNames.length) {
+      // A parameter is an SSA value, so it is immutable, and `this` is one
+      // too — which is what makes `this = x` a parameter assignment error.
+      const local = new Local(sig.paramNames[i], sig.paramTypes[i], false, STORAGE_PARAM);
+      if (!scope.declare(local)) {
+        this.ctx.error(sig.decl, `Duplicate parameter \`${sig.paramNames[i]}\``);
+      }
+      i = i + 1;
+    }
+    const body = bodyOf(sig);
+    if (body === null) {
+      return;
+    }
+    // The body shares the parameter scope rather than opening a child, so
+    // `function f(a) { let a; }` is a duplicate declaration as in TypeScript.
+    const before = this.ctx.sink.count();
+    const terminates = checkStatements(this.ctx, body.children, scope);
+    const failed = this.ctx.sink.count() > before;
+    if (failed) {
+      sig.poisoned = true;
+    }
+    // A body with a rejected statement may have lost its `return`; reporting
+    // a missing one on top of that is a cascade, not a second bug.
+    if (sig.returnType !== T_VOID && sig.returnType !== T_ERROR && !terminates && !failed) {
+      const spelled = this.ctx.table.typeName(sig.returnType);
+      this.ctx.error(
+        nameOf(sig),
+        `Function \`${sig.sourceName}\` must return a value of type ${spelled} on every path`
+      );
+    }
+    this.ctx.current = null;
   }
 
   /**
@@ -258,4 +338,16 @@ export class Checker {
     this.program.constants.set(localName, this.program.constantList.length);
     this.program.constantList.push(constant);
   }
+}
+
+/** The `BLOCK` of a function, method or constructor; `null` when it has none. */
+function bodyOf(sig: FunctionSig): Node | null {
+  const decl = sig.decl;
+  const body = decl.kind === N_CONSTRUCTOR ? decl.children[1] : decl.children[3];
+  return body.kind === N_BLOCK ? body : null;
+}
+
+/** The node a "must return on every path" diagnostic points at: the name, or the declaration. */
+function nameOf(sig: FunctionSig): Node {
+  return sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
 }
