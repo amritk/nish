@@ -262,6 +262,10 @@ building the whole module text in memory before one write. Peak is roughly AST +
 all interned IR text + the final string. Probably fine at hundreds of MB; the
 point is to know rather than to find out at the last milestone.
 
+*Answered at S5, below: **86 MB and 91 ms** for the whole compiler, against
+stage0's 178 MB and 786 ms. The arena never being released does not matter at
+this size.*
+
 ## 4. Milestones
 
 | | Deliverable | Proof |
@@ -269,7 +273,7 @@ point is to know rather than to find out at the last milestone.
 | **S1 Lexer** | `self/lexer.ts` tokenises StaticTS-0 **Done.** | Its token stream agrees with the `typescript` scanner's over every `tests/cases/*.ts`; the lexer built by stage0 runs natively |
 | **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 **Done.** | Its tree matches the `typescript` parser's, span for span, for every program in the corpus that StaticTS-0's grammar covers |
 | **S3 Checker** | `self/checker.ts` — types, scopes, the side tables **Done.** | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
-| **S4 Emitter** | `self/emit.ts` — IR text **Done.** | `IR(stage0, p) == IR(stage1, p)` for a growing whitelist of `tests/cases/` |
+| **S4 Emitter** | `self/emit.ts` — IR text **Done.** | `IR(stage0, p) == IR(stage1, p)`; it holds for the whole corpus rather than a whitelist |
 | **S5 Bootstrap** | `self/` compiles `self/` **Done.** | `IR(stage1, self/) == IR(stage2, self/)`, and stage3 is byte-identical to stage2 |
 
 S1–S4 are each useful on their own and each testable against stage0, which is
