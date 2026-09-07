@@ -50,9 +50,8 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   rules (`type` over `interface`, arrow functions over `function` declarations)
   reported as warnings while the compiler's own source is migrated.
 - **Control flow.** `if` / `else`, `while`, `do ... while`, `for`, `break` /
-  `continue`, `throw`, the ternary, short-circuit `&&` / `||`, compound
-  assignment and `++` / `--`, with termination analysis feeding the
-  `willreturn` attribute.
+  `continue`, the ternary, short-circuit `&&` / `||`, compound assignment and
+  `++` / `--`, with termination analysis feeding the `willreturn` attribute.
 - **Strings.** Arena-allocated immutable `string` (header + UTF-8 bytes),
   literals, `+` concatenation, `===` / `!==`, `.length`, template literals,
   and `console.log`.
@@ -482,6 +481,55 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   StaticTS, and the `IR(stage1) == IR(stage2)` fixed point that proves it),
   the StaticTS-0 subset it is written in, and the ordered list of what the
   language is still missing.
+- **`Result<T, E>` and Rust-style error handling (WP16).** A function that can
+  fail says so in its return type and hands the caller a `Result`, and the
+  caller cannot reach the success value without first deciding what happens to
+  the failure. `Ok(v)` / `Err(e)` build one (typed by context, as `null` is);
+  `r.isOk()` / `r.isErr()` — and `r.ok`, the discriminant a TypeScript reader
+  expects — test it and narrow `r`; `r.value` and `r.error` are legal only in
+  the arm that was proved; `r.orReturn()` is Rust's `?`; `r.unwrapOr(d)` and
+  `r.expect(message)` handle the failure on the spot. Three rules are checker
+  errors rather than lints: a `Result` may not be dropped (neither as a bare
+  expression statement nor as a local nobody reads), the payload is
+  unreachable until the discriminant is tested, and `orReturn()` is legal only
+  inside a function that itself returns a compatible `Result` — so propagating
+  a callee's failure is contagious through the signatures. `Result<T, E>` is a
+  built-in type constructor, not a user generic: each pair of payload types
+  gets one monomorphised `%struct.sts_result.<T>.<E>`, laid out and allocated
+  exactly as a class is, so the WP6 escape analysis turns a `Result` that does
+  not outlive its function into an entry-block `alloca` with no allocator call
+  at all. `Result<void, E>` is the fallible operation with nothing to hand
+  back. Narrowing is the `T | null` engine, extracted into
+  `src/checker/narrowing.ts` and shared. Implemented in **both** compilers, as
+  S5 requires: `self/` gains the type, the rules and the lowering, and the S3
+  and S4 oracles hold it to stage0's exact messages and byte-identical IR.
+  Design and the reason the representation is a pointer rather than an LLVM
+  aggregate: [docs/wp16-results.md](docs/wp16-results.md).
+- **Ambient declarations (`runtime/statictsc.d.ts`).** A StaticTS program has
+  always *parsed* as TypeScript; with this file on the include path a `Result`
+  program also **type-checks** under plain `tsc --strict`, and an editor stops
+  underlining `Result`, `Ok`, `i32`, `panic` and the rest. `Result` is
+  declared as the tagged union TypeScript would use anyway, intersected with
+  the method surface, so `if (r.ok)` and `if (r.isOk())` narrow in `tsc` for
+  the same reason and in the same places they narrow in `statictsc` — the
+  suite asserts both that every `res_*` case type-checks and that `tsc`
+  refuses `r.value` before the test, which is what proves the declarations
+  model the narrowing and not just the names. `statictsc` remains the
+  authority: the widths are aliases of `number` there, and `tsc` cannot see
+  the three rules above.
+
+### Removed
+
+- **`throw` (WP16).** It never unwound: it evaluated its operand, discarded
+  it, and executed `llvm.trap`, which made it an abort wearing the syntax of
+  error handling — a program could report a failure in a way no caller could
+  see, and the one thing a reader wants when a program dies was the one thing
+  it could not keep. Both of its uses have a better spelling now: a failure a
+  caller should handle is a `Result<T, E>`, and an invariant that cannot hold
+  is `panic(message)`, which keeps the message. Phase 0 rejects `throw` in
+  both the compiler and the self-hosted stage1, with a message naming both
+  replacements (`tests/cases/reject_throw`), and `try` / `catch` / `finally`
+  keeps its own rejection for the same reason.
 
 ### Fixed
 

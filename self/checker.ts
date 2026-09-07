@@ -37,6 +37,7 @@ import {
   StructInfo,
   StructRegistry,
 } from "./program";
+import { checkResultLocalsHandled } from "./result";
 import { checkStatements } from "./statements";
 import { Local, STORAGE_PARAM, Scope } from "./symbols";
 import {
@@ -214,6 +215,10 @@ export class Checker {
     const failed = this.ctx.sink.count() > before;
     if (failed) {
       sig.poisoned = true;
+    } else {
+      // WP16: a `Result` local nobody reads is an unhandled failure. Reported
+      // after the body so the diagnostic names a variable whose type is known.
+      checkResultLocalsHandled(this.ctx, sig, body);
     }
     // A body with a rejected statement may have lost its `return`; reporting
     // a missing one on top of that is a cascade, not a second bug.

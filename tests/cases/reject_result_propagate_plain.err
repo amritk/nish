@@ -1,0 +1,1 @@
+`orReturn()` propagates the error, so `main` must return a `Result<T, E>` (it returns i32)

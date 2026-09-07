@@ -9,6 +9,7 @@
  *   new Array<T>(n)            an array, dynamic   (arena)
  *   a + b, `...${x}...`, readFileSync(p),
  *   readFileSyncOrNull(p)      a string            (arena)
+ *   Ok(v), Err(e)              a Result (WP16)     (stackable)
  *   f(...) returning a pointer type         whatever `f` allocated and
  *                              returned; counted only if `f` allocates
  *                              (decided by the fixpoint in attributes.ts)
@@ -59,6 +60,7 @@ import { effectiveConstructor, intrinsicType, isAssignmentOperator } from "../ch
 import { CompilerOptions, StaticType, alignOf, isNumeric, stripNull } from "../types";
 import { FunctionFacts, classifyUse } from "./attributes";
 import { isJoinCall, isPushCall } from "./emit/arrays";
+import { isResultConstructorCall, resultMethodName } from "./emit/result";
 import { isStringAllocCall, unwrapStringPassthrough } from "./emit/strings";
 
 /** Largest array data block (`[n x T]`) placed on the stack, in bytes. */
@@ -125,7 +127,11 @@ function isAssignmentTarget(node: ts.Node): boolean {
 
 function isPointerResult(t: StaticType): boolean {
   const inner = stripNull(t);
-  return inner.kind === "struct" || inner.kind === "array" || inner.kind === "string";
+  // A `Result` (WP16) is a pointer into the arena like the others, so a call
+  // that answers one is an allocation site of its caller.
+  return (
+    inner.kind === "struct" || inner.kind === "array" || inner.kind === "string" || inner.kind === "result"
+  );
 }
 
 const worse = (a: Flow, b: Flow): Flow =>
@@ -211,7 +217,20 @@ export function analyzeEscapes(
       sites.push({ node: call, stackable: false });
       return;
     }
+    // WP16: `r.orReturn()` builds the `Result` this function returns early, so
+    // the body hands out arena memory whatever else it does — which is exactly
+    // what disqualifies it from an automatic arena scope.
+    if (resultMethodName(program, call) === "orReturn") {
+      result.returnsAllocation = true;
+      return;
+    }
     if (ts.isIdentifier(call.expression)) {
+      // `Ok(v)` / `Err(e)` bump one fixed-size struct, so they are stackable
+      // exactly as `new C(...)` is.
+      if (isResultConstructorCall(program, call)) {
+        sites.push({ node: call, stackable: true });
+        return;
+      }
       // Both file readers bump their result out of the arena, so both are
       // allocation sites. Missing the `OrNull` half gave a function that
       // returns it an automatic arena scope, which released the bytes before

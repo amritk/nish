@@ -1,13 +1,13 @@
 /**
  * Control-flow lowering: `if`, `while`, `do`, `for`, `switch`,
- * `break`/`continue`, `throw`, the ternary and short-circuit operators,
- * compound assignment and `++`/`--`.
+ * `break`/`continue`, the ternary and short-circuit operators, compound
+ * assignment and `++`/`--`.
  *
  * Block layout follows clang. Labels are reserved in source order
  * (`if.then`, `if.else`, `if.end`, suffixed `.N` on reuse) and the blocks
  * are placed in control-flow order. Every placed block ends in a
  * terminator: a block that cannot fall through (after `return`, `break`,
- * `continue`, `throw`) is left alone, and the exit block of an infinite loop
+ * `continue`) is left alone, and the exit block of an infinite loop
  * ends in `unreachable`. Values that merge from two arms (`?:`, `&&`, `||`)
  * use `phi`; mutable locals already live in allocas, so loops simply load
  * and store them and `mem2reg` builds the loop phis later.
@@ -272,13 +272,6 @@ const emitContinue: StatementEmitter = (ctx) => {
   }
 };
 
-/** `throw e`: evaluate `e` for its effects, then trap. There is no unwinding in StaticTS. */
-const emitThrow: StatementEmitter = (ctx, node) => {
-  ctx.emitExpression((node as ts.ThrowStatement).expression);
-  ctx.declare("declare void @llvm.trap()");
-  ctx.fn.emit("call void @llvm.trap()");
-  ctx.fn.emit("unreachable");
-};
 
 export const controlFlowStatementEmitters: EmitterTable<StatementEmitter> = {
   [ts.SyntaxKind.IfStatement]: emitIf,
@@ -288,7 +281,6 @@ export const controlFlowStatementEmitters: EmitterTable<StatementEmitter> = {
   [ts.SyntaxKind.SwitchStatement]: emitSwitch,
   [ts.SyntaxKind.BreakStatement]: emitBreak,
   [ts.SyntaxKind.ContinueStatement]: emitContinue,
-  [ts.SyntaxKind.ThrowStatement]: emitThrow,
 };
 
 // ---- Expressions --------------------------------------------------------------

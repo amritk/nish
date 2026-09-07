@@ -1,0 +1,1 @@
+`orReturn()` would propagate IoError but `read` returns Result<i32, string>

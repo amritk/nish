@@ -37,11 +37,11 @@ Compilation                                                            src/compi
 | Compilation | `src/compilation.ts` | Owns every `ModuleUnit` of one program: loads roots and imports (keyed by absolute path, so cycles terminate), runs the checker passes in the right order, rejects symbol clashes, runs the attribute analysis over all modules, emits one `.ll` per module, and computes output stems. |
 | Parser | `src/parser.ts` | Wraps `ts.createSourceFile` with `setParentNodes`; turns TypeScript syntax diagnostics into `StaticSyntaxError`. |
 | Validator | `src/validator.ts` | One pre-order `ts.forEachChild` walk, dispatched by `ts.SyntaxKind` through the `validators` table; decides everything from syntax alone (no types, no scopes); throws on the first forbidden construct. Defence in depth: it sees nodes the checker never visits. |
-| Types | `src/types.ts` | The `StaticType` model, `llvmType`, `alignOf`, `sameType`, `resolveTypeNode` (annotation to `StaticType`), the per-file named-type resolver for classes. |
+| Types | `src/types.ts` | The `StaticType` model, `llvmType`, `alignOf`, `sameType`, `resolveTypeNode` (annotation to `StaticType`), the per-file named-type resolver for classes, and the mangling that gives each `Result<T, E>` its monomorphised struct name. |
 | Checker | `src/checker/index.ts` + `checker/*.ts` | Pass 1 collects signatures and struct layouts; pass 1b binds imports; pass 2 checks bodies. Every statement and expression is dispatched through a table keyed by `ts.SyntaxKind` (see below) and its type is recorded in a side table. |
 | Diagnostics | `src/diagnostics.ts` | `CompileError` with the `file:line:col: error: message` summary and the caret excerpt. |
 | Attributes | `src/codegen/attributes.ts` | Per-function facts (loops, memory effect, escapes, pointer-parameter facts, allocation facts) and the call-graph fixpoint that turns them into LLVM attributes, arena scopes, and stack slots. Runs over the whole program at once. |
-| Escape analysis | `src/codegen/escape.ts` | Per allocation site (`new`, object literal, array literal, `new Array<T>(<literal>)`): does the value stay `local`, is it `returned`, or does it `leak`? Decides stack allocation and feeds the arena-scope facts (WP6). |
+| Escape analysis | `src/codegen/escape.ts` | Per allocation site (`new`, object literal, array literal, `new Array<T>(<literal>)`, `Ok(v)` / `Err(e)`): does the value stay `local`, is it `returned`, or does it `leak`? Decides stack allocation and feeds the arena-scope facts (WP6). |
 | Target | `src/codegen/target.ts` | The `--target` table: canonical triples, their aliases, `host` resolution from `process.platform`/`arch`, and the clang 18 data-layout string written into the module header (WP9). |
 | Emitter | `src/codegen/emitter.ts` + `codegen/emit/*.ts` | Lowers the checked program to IR text: module assembly, function setup, `declare`s for imports, the `@main` wrapper, the runtime prelude, and dispatch to per-construct emitters. Contains no user-facing error handling. |
 | IR builder | `src/codegen/ir.ts` | `IRModule`, `IRFunction`, `IRBlock`: named blocks, hoisted allocas, SSA temp numbering (`%0` is always the first temp because every block and parameter is named), attribute-group interning. |
@@ -95,14 +95,16 @@ into the core tables at load time:
 | `expressionCheckers` (`expressions.ts`) | `expressionEmitters` (`expressions.ts`) | expression `SyntaxKind` |
 | `binaryCheckers`, `unaryCheckers` | `binaryEmitters`, `unaryEmitters` | operator token |
 | `assignmentTargetCheckers` (`members.ts`) | `assignmentTargetEmitters` (`members.ts`) | kind of the assignment *target* (`p.x = v`, `a[i] = v`) |
-| `propertyCheckers`, `methodCallCheckers`, `newCheckers`, `namespaceProperties` (`members.ts`) | the same names in `emit/members.ts` | receiver type kind (`string`, `array`, `struct`) or constructor name |
+| `propertyCheckers`, `methodCallCheckers`, `newCheckers`, `namespaceProperties` (`members.ts`) | the same names in `emit/members.ts` | receiver type kind (`string`, `array`, `struct`, `result`) or constructor name |
 | `builtinCalls` (dotted: `console.log`, `Math.*`, `process.exit`; `strings.ts`) | `builtinCallEmitters` (`emit/strings.ts`) | dotted name |
 | `builtinFunctions` (bare: `toI32`, `readFileSync`; `expressions.ts`) | `builtinFunctionEmitters` (`emit/expressions.ts`) | identifier, consulted only when no user function has that name |
 
 Family modules: `control-flow.ts`, `strings.ts`, `math.ts`, `io.ts`,
 `arrays.ts`, `classes.ts`, `arena.ts` (the `Arena.*` builtins) on both sides
-(`checker/` and `codegen/emit/`), `checker/nullable.ts` (the `null` literal,
-`T | null` assignability, narrowing) and `emit/arithmetic.ts` (integer
+(`checker/` and `codegen/emit/`), `result.ts` on both sides (WP16),
+`checker/nullable.ts` (the `null` literal, `T | null` assignability),
+`checker/narrowing.ts` (the flow engine `nullable.ts` and `result.ts` both
+register a rule with) and `emit/arithmetic.ts` (integer
 operators with the checked `sdiv`/`srem`, shared by binary operators and
 every `op=` form) on one side, plus `builtins.ts` for the shared plumbing. The array module *wraps* the
 existing `=`/`op=` handlers (`installArrayAssignmentCheckers`) instead of
@@ -247,10 +249,10 @@ it.
 
 | Attribute | Emitted when | Proof |
 | --- | --- | --- |
-| `nounwind` | always | No exceptions exist; `throw` is `llvm.trap`. |
-| `willreturn` | `loopsBounded && !hasTrap && !callsNoReturn` and every callee `willreturn` | Counted loops only (`isCountedLoop`: `for (let i = init; i CMP bound; STEP)` over `i32`, bound an identifier or non-negative literal, step toward the bound, no wrap possible, body assigns neither `i` nor `bound` and has no `throw`; `for...of` whose body cannot extend the array); `throw`, `process.exit`, a checked `a[i]` (`sts_panic_index` is `noreturn`), and an integer `/` or `%` (`sts_panic_div`) clear it. Unbounded recursion is allowed by LangRef. `mustprogress` is never emitted. |
+| `nounwind` | always | No exceptions exist and there is no `throw`; a failure a caller should handle is a `Result<T, E>` (WP16). |
+| `willreturn` | `loopsBounded && !hasTrap && !callsNoReturn` and every callee `willreturn` | Counted loops only (`isCountedLoop`: `for (let i = init; i CMP bound; STEP)` over `i32`, bound an identifier or non-negative literal, step toward the bound, no wrap possible, body assigns neither `i` nor `bound`; `for...of` whose body cannot extend the array); `process.exit`, `panic`, a checked `a[i]` (`sts_panic_index` is `noreturn`), and an integer `/` or `%` (`sts_panic_div`) clear it. Unbounded recursion is allowed by LangRef. `mustprogress` is never emitted. |
 | `readnone` | effect `none` | The body touches no memory but its own allocas and calls only `readnone` callees (LLVM's own FunctionAttrs would infer it). |
-| `readonly` (function) | effect `read` | The body reads memory it does not own (`.length`, field/element reads, `sts_str_eq`) and nothing writes; `throw`, a checked `a[i]`, and an integer division force `write` (their panic callees are `write`). Field access through a local that only ever holds a stack object (`stackLocals`) is the function's own memory and counts as neither (WP6). |
+| `readonly` (function) | effect `read` | The body reads memory it does not own (`.length`, field/element reads, a `Result` payload, `sts_str_eq`) and nothing writes; building a `Result`, a checked `a[i]`, and an integer division force `write` (the allocator and the panic callees are `write`). Field access through a local that only ever holds a stack object (`stackLocals`) is the function's own memory and counts as neither (WP6). |
 | `noundef` (params, returns) | always | Every StaticTS value is initialised. |
 | `zeroext` | `boolean` | C ABI for `bool`. |
 | `nonnull align 8` | non-nullable strings, arrays, structs | No null value in those types; literals, arena objects, and stack objects are 8-aligned. A `T \| null` parameter or return keeps `align 8` (null is aligned) and loses `nonnull` and `dereferenceable` (WP6). |
@@ -318,6 +320,30 @@ Only locals and parameters narrow, never property paths. The emitter sees
 no difference between `T` and `T | null` except in the attributes
 (`nonnull` and `dereferenceable` are dropped, [rules above](#attribute-soundness-rules))
 and in `icmp eq ... null` for the comparisons.
+
+### `Result<T, E>`
+
+`checker/result.ts` owns the type, the three rules that make an error
+impossible to ignore, and the layout every `Result` shares with the emitter;
+`codegen/emit/result.ts` owns the lowering. The layout is *derived* from the
+type rather than declared, so nothing has to be registered or kept in sync:
+both sides call `resultLayout`, and an imported signature that mentions a
+`Result` brings across only the layouts of its payloads.
+
+The narrowing is the `T | null` engine, extracted into
+`checker/narrowing.ts` and given a registry: `nullable.ts` contributes the
+rule that recognises `p !== null`, `result.ts` the one that recognises
+`r.ok` / `r.isOk()` / `r.isErr()`, and the engine owns the boolean algebra
+and the scope plumbing. The soundness argument is therefore literally the
+same one — variables only, dropped on assignment, dropped before a loop that
+assigns. The refinement rides on the type as `state`, which `sameType`
+ignores because the LLVM value is the same pointer either way.
+
+`Ok(v)` / `Err(e)` are allocation sites for WP6 like `new C(...)` is, so a
+`Result` that does not outlive its function is an entry-block `alloca`;
+`orReturn()` returns memory, which is what disqualifies its function from an
+automatic arena scope. Design, and why the representation is a pointer rather
+than an LLVM aggregate: [wp16-results.md](wp16-results.md).
 
 ### `--nsw` and `--target`
 

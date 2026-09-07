@@ -194,6 +194,13 @@ export function tsKeyword(t: StaticType): string {
       return `${tsKeyword((t as { elem: StaticType }).elem)}[]`;
     case "nullable":
       return `${tsKeyword((t as { inner: StaticType }).inner)} | null`;
+    // WP16: a `Result` has no host spelling yet (its layout is monomorphised
+    // and the C ABI for returning one by value is not settled), so the
+    // generators skip the function and name the type in the note they leave.
+    case "result": {
+      const r = t as { ok: StaticType; err: StaticType };
+      return `Result<${tsKeyword(r.ok)}, ${tsKeyword(r.err)}>`;
+    }
     default:
       return kindOf(t);
   }

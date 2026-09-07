@@ -386,6 +386,13 @@ branch. Outside a loop they are errors ("`break` outside of a loop").
 
 ## `throw`
 
+> **Superseded by WP16.** `throw` is gone: Phase 0 rejects it
+> (`tests/cases/reject_throw`), a failure a caller should handle is a
+> `Result<T, E>`, and an invariant that cannot hold is `panic(message)`.
+> The reasoning is in [wp16-results.md](wp16-results.md) §1; what follows
+> records what `throw` did while it existed.
+
+
 ```ts
 function checkedDiv(a: number, b: number): number {
   if (b === 0) {

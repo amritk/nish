@@ -98,6 +98,11 @@ export class DebugInfo {
       ref = this.pointerTo(this.arrayHeader(t.elem, key));
     } else if (t.kind === "struct") {
       ref = this.pointerTo(this.composite(this.program.structs.get(t.name)!));
+    } else if (t.kind === "result") {
+      // WP16: a `Result` has no `StructInfo` to describe (its layout is derived
+      // from the type), so a debugger sees the pointer without the members.
+      // TODO(WP17): emit a `DW_TAG_structure_type` for it from `resultLayout`.
+      ref = this.pointerTo(this.module.addMetadata('!DIBasicType(name: "sts_result", size: 8, encoding: DW_ATE_unsigned)'));
     } else {
       ref = this.module.addMetadata(BASIC_TYPES[t.kind]!);
     }

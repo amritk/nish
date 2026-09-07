@@ -16,6 +16,7 @@ import { checkCondition, checkExpression, clearNarrowingsAssignedIn, narrow } fr
 import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context";
 import { resolveType } from "./annotations";
 import { terminatesControlFlow } from "./builtins";
+import { rejectDiscardedResult } from "./result";
 import {
   FLAG_CONST,
   N_BLOCK,
@@ -93,7 +94,8 @@ export function checkStatement(ctx: CheckContext, stmt: Node, scope: Scope): boo
       return false;
     case N_EXPR_STMT:
       ctx.statementExpression = stmt.children[0];
-      checkExpression(ctx, stmt.children[0], scope, -1);
+      // WP16: a failure may not be dropped.
+      rejectDiscardedResult(ctx, stmt.children[0], checkExpression(ctx, stmt.children[0], scope, -1));
       ctx.statementExpression = null;
       // `process.exit(n)` and `panic(m)` end the path exactly as `return` does.
       return terminatesControlFlow(ctx, stmt.children[0]);
@@ -309,7 +311,7 @@ function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
  * honestly (docs/wp14-selfhost.md §5).
  *
  * There is no implicit fallthrough: a clause with statements ends in `break`,
- * `return`, `continue`, `throw` or `process.exit`, and only the last clause
+ * `return`, `continue` or `process.exit`, and only the last clause
  * may fall out. An *empty* clause does fall through, which is how
  * `case 1: case 2:` gives a group of labels one body.
  */
@@ -350,7 +352,7 @@ function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
     if (body.children.length > 0 && !terminates && i < clauses.length - 1) {
       ctx.error(
         body.children[body.children.length - 1],
-        "A `case` clause with statements must end in `break`, `return`, `continue` or `throw` (StaticTS has no implicit fallthrough; leave a clause empty to give several labels one body)"
+        "A `case` clause with statements must end in `break`, `return`, `continue` or `process.exit` (StaticTS has no implicit fallthrough; leave a clause empty to give several labels one body)"
       );
     }
     lastTerminates = terminates;

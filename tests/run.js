@@ -1996,6 +1996,69 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   );
 }
 
+// ---- WP16: the ambient declarations -------------------------------------------------
+// `runtime/statictsc.d.ts` is what makes a StaticTS program legal TypeScript to
+// `tsc` and to an editor, not just to this compiler's parser. The claim is only
+// worth what it is tested against, so:
+//   - the file itself type-checks under --strict;
+//   - every `res_*` case type-checks against it, which is the whole `Result`
+//     surface (`Result<T, E>`, `Ok`/`Err`, `isOk`/`isErr`, `value`/`error`,
+//     `orReturn`/`unwrapOr`/`expect`) plus `i32`, `console` and `parseInt`;
+//   - `reject_result_value_unchecked` is refused by tsc *as well*, which is the
+//     one that proves the declarations model the narrowing rather than just the
+//     names: a `.d.ts` that typed `value` as always present would pass it.
+if (!only || "ambient".includes(only) || "dts".includes(only)) {
+  const ambientDir = path.join(buildDir, "ambient");
+  fs.mkdirSync(ambientDir, { recursive: true });
+  let tscBin = path.join(root, "node_modules", "typescript", "bin", "tsc");
+  try {
+    tscBin = require.resolve("typescript/bin/tsc");
+  } catch {}
+  const declarations = path.join(root, "runtime", "statictsc.d.ts");
+  /** Type-check `files` against the ambient declarations with a project of their own. */
+  const typeCheck = (name, files) => {
+    const config = path.join(ambientDir, `tsconfig.${name}.json`);
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        compilerOptions: {
+          strict: true,
+          noEmit: true,
+          target: "ES2022",
+          lib: ["ES2022"],
+          types: [],
+          moduleDetection: "force",
+        },
+        files: [declarations, ...files],
+      })
+    );
+    const r = spawnSync("node", [tscBin, "-p", config], { cwd: root, encoding: "utf8" });
+    return { ok: r.status === 0, output: `${r.stdout}${r.stderr}` };
+  };
+
+  const own = typeCheck("self", []);
+  check("runtime/statictsc.d.ts type-checks under tsc --strict", own.ok, own.output);
+
+  const resultCases = fs
+    .readdirSync(casesDir)
+    .filter((f) => f.startsWith("res_") && f.endsWith(".ts"))
+    .map((f) => path.join(casesDir, f));
+  const accepted = typeCheck("cases", resultCases);
+  check(
+    `tsc accepts every res_* case against the ambient declarations (${resultCases.length} cases)`,
+    accepted.ok,
+    accepted.output
+  );
+
+  const unchecked = path.join(casesDir, "reject_result_value_unchecked.ts");
+  const refused = typeCheck("narrowing", [unchecked]);
+  check(
+    "tsc refuses `r.value` before the discriminant test, exactly as statictsc does",
+    !refused.ok && refused.output.includes("Property 'value' does not exist"),
+    refused.output
+  );
+}
+
 // ---- WP12: package ------------------------------------------------------------------
 // The npm tarball must be self-contained: `npm pack`, install it into a temporary prefix,
 // and drive the installed `statictsc` from an unrelated directory. That proves the `files`
@@ -2035,13 +2098,14 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "dist/version.js",
       "runtime/runtime.c",
       "runtime/statictsc.h",
+      "runtime/statictsc.d.ts",
       "scripts/build.sh",
       "LICENSE",
       "docs/INSTALL.md",
     ];
     const absent = required.filter((f) => !files.includes(f));
     check(
-      "npm pack includes everything --link needs (runtime.c, statictsc.h, build.sh) plus LICENSE/INSTALL.md",
+      "npm pack includes everything --link needs (runtime.c, statictsc.h, statictsc.d.ts, build.sh) plus LICENSE/INSTALL.md",
       absent.length === 0,
       absent.join("\n")
     );

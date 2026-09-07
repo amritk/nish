@@ -19,13 +19,9 @@
  * `console.log` on an un-narrowed nullable are checker errors (the receiver
  * kind `nullable` has no handler, or an explicit one below with a hint).
  *
- * Narrowing is flow-insensitive within a region and sound by construction:
- *   - it applies to a *variable* (local or parameter), not to a property path;
- *   - it is dropped at any assignment to the variable (`Scope.clearNarrowing`),
- *     and before a loop whose body, condition or update assigns it
- *     (`invalidateNarrowings`), since the body may run again with the
- *     assigned value;
- *   - `this` is never nullable.
+ * The narrowing itself is the shared engine in `narrowing.ts`; this module
+ * only contributes the rule that recognises a null test, and the fact that
+ * `this` is never nullable.
  *
  * The `null` literal takes its type from the context: a `T | null` annotation
  * on the variable, the return type, a parameter, a field, a `push` receiver,
@@ -37,14 +33,9 @@ import { StaticType, resolveTypeNode, stripNull, typeToString } from "../types";
 import { contextualType } from "./classes";
 import { CheckContext, CheckerTable, ExpressionChecker } from "./context";
 import { methodCallCheckers, propertyCheckers } from "./members";
+import { Narrowing, Narrowings, conditionNarrowers, unwrapParens } from "./narrowing";
 import { LocalVar } from "./program";
 import { Scope } from "./scope";
-
-function unwrapParens(expr: ts.Expression): ts.Expression {
-  let inner = expr;
-  while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
-  return inner;
-}
 
 export function isNullLiteral(expr: ts.Expression): boolean {
   return unwrapParens(expr).kind === ts.SyntaxKind.NullKeyword;
@@ -155,19 +146,12 @@ export function checkNullableComparison(ctx: CheckContext, expr: ts.BinaryExpres
 
 // ---- Narrowing ------------------------------------------------------------------------------
 
-export interface Narrowing {
-  v: LocalVar;
-  type: StaticType;
-}
-
-export interface Narrowings {
-  whenTrue: Narrowing[];
-  whenFalse: Narrowing[];
-}
-
-const NONE: Narrowings = { whenTrue: [], whenFalse: [] };
-
-/** `x !== null`, `null !== x`, `x === null`: the nullable variable `x` and whether the test is for non-null. */
+/**
+ * `x !== null`, `null !== x`, `x === null`: the nullable variable `x` and
+ * whether the test is for non-null. The literal has to be on exactly one
+ * side, and the other side a bare identifier bound to a nullable — a property
+ * path is deliberately not narrowed (see `narrowing.ts`).
+ */
 function nullTest(cond: ts.BinaryExpression, scope: Scope): { v: LocalVar; nonNull: boolean } | undefined {
   if (!isStrictEquality(cond.operatorToken.kind)) return undefined;
   const leftNull = isNullLiteral(cond.left);
@@ -180,64 +164,13 @@ function nullTest(cond: ts.BinaryExpression, scope: Scope): { v: LocalVar; nonNu
   return { v, nonNull: cond.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken };
 }
 
-/**
- * What a condition proves about nullable variables when it is true and when
- * it is false. Purely syntactic plus scope lookups: nothing is checked here,
- * so it can run before or after the condition itself is checked.
- */
-export function conditionNarrowings(cond: ts.Expression, scope: Scope): Narrowings {
-  const expr = unwrapParens(cond);
-  if (ts.isPrefixUnaryExpression(expr) && expr.operator === ts.SyntaxKind.ExclamationToken) {
-    const inner = conditionNarrowings(expr.operand, scope);
-    return { whenTrue: inner.whenFalse, whenFalse: inner.whenTrue };
-  }
-  if (!ts.isBinaryExpression(expr)) return NONE;
-  const op = expr.operatorToken.kind;
-  if (op === ts.SyntaxKind.AmpersandAmpersandToken) {
-    const l = conditionNarrowings(expr.left, scope);
-    const r = conditionNarrowings(expr.right, scope);
-    return { whenTrue: [...l.whenTrue, ...r.whenTrue], whenFalse: [] };
-  }
-  if (op === ts.SyntaxKind.BarBarToken) {
-    const l = conditionNarrowings(expr.left, scope);
-    const r = conditionNarrowings(expr.right, scope);
-    return { whenTrue: [], whenFalse: [...l.whenFalse, ...r.whenFalse] };
-  }
-  const test = nullTest(expr, scope);
-  if (!test) return NONE;
+/** The `T | null` rule for the shared narrowing engine (`narrowing.ts`). */
+const narrowNullTest = (cond: ts.Expression, scope: Scope): Narrowings | undefined => {
+  if (!ts.isBinaryExpression(cond)) return undefined;
+  const test = nullTest(cond, scope);
+  if (!test) return undefined;
   const narrowing: Narrowing = { v: test.v, type: stripNull(scope.typeOf(test.v)) };
   return test.nonNull ? { whenTrue: [narrowing], whenFalse: [] } : { whenTrue: [], whenFalse: [narrowing] };
-}
+};
 
-/** A child scope of `scope` in which every narrowing in `list` holds. */
-export function narrowedScope(scope: Scope, list: Narrowing[]): Scope {
-  const child = scope.child();
-  for (const n of list) child.narrow(n.v, n.type);
-  return child;
-}
-
-/** Make `list` hold for the rest of `scope` (after an early exit). */
-export function applyNarrowings(scope: Scope, list: Narrowing[]): void {
-  for (const n of list) scope.narrow(n.v, n.type);
-}
-
-/**
- * Before a loop: every variable assigned anywhere in it (`x = ...`, `x op= ...`)
- * loses its narrowing, because the second iteration sees the assigned value
- * before the statements that precede the assignment textually.
- */
-export function invalidateNarrowings(scope: Scope, loop: ts.Node): void {
-  const visit = (node: ts.Node): void => {
-    if (
-      ts.isBinaryExpression(node) &&
-      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
-      ts.isIdentifier(node.left)
-    ) {
-      const v = scope.lookup(node.left.text);
-      if (v) scope.clearNarrowing(v);
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(loop);
-}
+conditionNarrowers.push(narrowNullTest);

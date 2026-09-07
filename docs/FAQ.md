@@ -206,7 +206,7 @@ when you inspect optimised IR by hand compile with `--target host` and
 ### Why does my function not get `willreturn` / `readnone`?
 
 Because the compiler could not prove it. A `while` loop, a `for` loop that
-is not a counted loop, a `throw`, a checked `a[i]`, an integer `/` or `%`
+is not a counted loop, a checked `a[i]`, an integer `/` or `%`
 (the divisor check can panic), or a call to `process.exit` drops
 `willreturn`; any arena allocation, `console.log`, string concatenation,
 field store through a non-stack object, integer division, or `Math.random`

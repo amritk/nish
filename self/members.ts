@@ -11,6 +11,7 @@
 
 import { checkArrayMethod, checkArrayProperty, checkNewArray } from "./arrays";
 import { checkBuiltinArity, checkNamespaceProperty, isNamespace } from "./builtins";
+import { checkResultMethod, checkResultProperty } from "./result";
 import { fieldOwner } from "./structs";
 import { CheckContext } from "./context";
 import { assignInto, checkExpression, isBitwiseCompound } from "./expressions";
@@ -78,6 +79,9 @@ export function checkMember(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   if (receiver === T_STRING) {
     return checkStringProperty(ctx, expr, receiver);
   }
+  if (ctx.table.isResult(receiver)) {
+    return checkResultProperty(ctx, expr, receiver); // WP16
+  }
   if (ctx.table.isArray(receiver)) {
     return checkArrayProperty(ctx, expr, receiver);
   }
@@ -126,6 +130,9 @@ export function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i3
   }
   if (receiver === T_STRING) {
     return checkStringMethod(ctx, expr, access, args, scope);
+  }
+  if (ctx.table.isResult(receiver)) {
+    return checkResultMethod(ctx, expr, access, args, receiver, scope); // WP16
   }
   if (ctx.table.isArray(receiver)) {
     return checkArrayMethod(ctx, expr, access, args, receiver, scope);
@@ -280,6 +287,12 @@ export function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scop
     return ctx.errorType(
       target,
       `Cannot assign to \`length\` of ${ctx.table.typeName(receiver)} (array length is read-only; use \`push\`)`
+    );
+  }
+  if (ctx.table.isResult(receiver)) {
+    return ctx.errorType(
+      target,
+      `Cannot assign to \`${target.text}\` of ${ctx.table.typeName(receiver)}: a \`Result\` is immutable once built (return a new \`Ok(...)\` or \`Err(...)\` instead)`
     );
   }
   if (!ctx.table.isStruct(receiver)) {

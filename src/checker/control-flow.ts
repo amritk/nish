@@ -1,7 +1,6 @@
 /**
  * Control flow: `if`, `while`, `do`, `for`, `switch`, `break`/`continue`,
- * `throw`, the ternary and short-circuit operators, compound assignment,
- * `++`/`--`.
+ * the ternary and short-circuit operators, compound assignment, `++`/`--`.
  *
  * Conditions must be `boolean`. StaticTS has no truthiness coercion, so
  * `if (n)` on a number is an error rather than an implicit `n !== 0`.
@@ -12,15 +11,16 @@
  *   - `while (true)`, `do {} while (true)`, `for (;;)` and `for (; true;)`
  *     terminate when their body contains no `break` aimed at them.
  *   - Any other loop may run zero times, so it never terminates.
- *   - `break`, `continue` and `throw` terminate the list they appear in.
+ *   - `break` and `continue` terminate the list they appear in.
  *   - a `switch` terminates when it has a `default`, no `break` targets it,
  *     and its last clause terminates: only then is every value handled by a
  *     clause that cannot fall out.
  *
- * Nullable narrowing (WP6, see `nullable.ts`): a condition of the form
- * `p !== null` / `p === null` (possibly under `!`, `&&`, `||`) narrows `p`
- * in the branch, loop body, right operand or ternary arm it guards, and after
- * an `if` whose other branch cannot fall through.
+ * Narrowing (see `narrowing.ts`): a condition of the form `p !== null` /
+ * `p === null` (WP6) or `r.ok` (WP16), possibly under `!`, `&&`, `||`,
+ * narrows the variable it tests in the branch, loop body, right operand or
+ * ternary arm it guards, and after an `if` whose other branch cannot fall
+ * through.
  */
 import ts from "typescript";
 import { BOOL, assignable, isInteger, isNumeric, sameType, typeToString } from "../types";
@@ -40,7 +40,7 @@ import {
   conditionNarrowings,
   invalidateNarrowings,
   narrowedScope,
-} from "./nullable";
+} from "./narrowing";
 import { LocalVar } from "./program";
 import { Scope } from "./scope";
 
@@ -216,7 +216,7 @@ const declaresDirectly = (clause: ts.CaseOrDefaultClause): ts.Statement | undefi
  * honestly (docs/wp14-selfhost.md §5).
  *
  * There is no implicit fallthrough: a clause with statements ends in `break`,
- * `return`, `continue`, `throw` or `process.exit`, and only the last clause
+ * `return`, `continue` or `process.exit`, and only the last clause
  * may fall out of the statement. An *empty* clause does fall through, which
  * is how `case 1: case 2:` gives a group of labels one body.
  */
@@ -274,7 +274,7 @@ const checkSwitch: StatementChecker = (ctx, node, scope) => {
       clause.statements.length > 0 ? ctx.checkStatementList(clause.statements, scope.child()) : false;
     if (clause.statements.length > 0 && !terminates && i < clauses.length - 1) {
       throw ctx.error(
-        "A `case` clause with statements must end in `break`, `return`, `continue` or `throw` (StaticTS has no implicit fallthrough; leave a clause empty to give several labels one body)",
+        "A `case` clause with statements must end in `break`, `return`, `continue` or `process.exit` (StaticTS has no implicit fallthrough; leave a clause empty to give several labels one body)",
         clause.statements[clause.statements.length - 1]
       );
     }
@@ -288,13 +288,6 @@ const checkSwitch: StatementChecker = (ctx, node, scope) => {
   return defaultClause !== undefined && !target.hasBreak && lastTerminates;
 };
 
-/** `throw` aborts the process (no unwinding); the value is evaluated and, for now, discarded. */
-const checkThrow: StatementChecker = (ctx, node, scope) => {
-  const stmt = node as ts.ThrowStatement;
-  const t = ctx.checkExpression(stmt.expression, scope);
-  if (t.kind === "void") throw ctx.error("Cannot throw a void expression", stmt.expression);
-  return true;
-};
 
 export const controlFlowStatementCheckers: CheckerTable<StatementChecker> = {
   [ts.SyntaxKind.IfStatement]: checkIf,
@@ -304,7 +297,6 @@ export const controlFlowStatementCheckers: CheckerTable<StatementChecker> = {
   [ts.SyntaxKind.SwitchStatement]: checkSwitch,
   [ts.SyntaxKind.BreakStatement]: checkBreak,
   [ts.SyntaxKind.ContinueStatement]: checkContinue,
-  [ts.SyntaxKind.ThrowStatement]: checkThrow,
 };
 
 // ---- Expressions --------------------------------------------------------------

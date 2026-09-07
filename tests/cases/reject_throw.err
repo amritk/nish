@@ -1,0 +1,2 @@
+`throw` is forbidden in StaticTS
+return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process

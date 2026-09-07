@@ -55,6 +55,7 @@ import {
   N_VAR_DECL,
   Node,
 } from "./nodes";
+import { isResultConstructorCall, resultMethodName } from "./emit_result";
 import { Options } from "./options";
 import { CheckedProgram, FunctionSig } from "./program";
 import { Local, STORAGE_LOCAL } from "./symbols";
@@ -291,8 +292,21 @@ class EscapeAnalysis {
       this.sites.push(new Site(call, false));
       return;
     }
+    // WP16: `r.orReturn()` builds the `Result` this function returns early, so
+    // the body hands out arena memory whatever else it does — which is exactly
+    // what disqualifies it from an automatic arena scope.
+    if (resultMethodName(program, this.table, call) === "orReturn") {
+      this.result.returnsAllocation = true;
+      return;
+    }
     const target = call.children[0];
     if (target.kind === N_IDENT) {
+      // `Ok(v)` / `Err(e)` bump one fixed-size struct, so they are stackable
+      // exactly as `new C(...)` is.
+      if (isResultConstructorCall(program, this.table, call)) {
+        this.sites.push(new Site(call, true));
+        return;
+      }
       if (target.text === "readFileSync" || target.text === "readFileSyncOrNull") {
         this.sites.push(new Site(call, false));
       }
@@ -315,7 +329,14 @@ class EscapeAnalysis {
 
   isPointerResult(type: i32): boolean {
     const inner = this.table.stripNull(type);
-    return this.table.isStruct(inner) || this.table.isArray(inner) || inner === T_STRING;
+    // A `Result` (WP16) is a pointer into the arena like the others, so a call
+    // that answers one is an allocation site of its caller.
+    return (
+      this.table.isStruct(inner) ||
+      this.table.isArray(inner) ||
+      inner === T_STRING ||
+      this.table.isResult(inner)
+    );
   }
 
   // ---- Flow of one value -------------------------------------------------------------

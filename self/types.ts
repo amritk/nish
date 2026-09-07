@@ -43,6 +43,16 @@ export const T_FIRST_DERIVED: i32 = 12;
 export const K_ARRAY: i32 = 12;
 export const K_STRUCT: i32 = 13;
 export const K_NULLABLE: i32 = 14;
+/** `Result<T, E>` (WP16): a pointer to a monomorphised two-arm struct. */
+export const K_RESULT: i32 = 15;
+
+// What the checker has proved about a `Result` at one use site. The state is
+// part of the *id* because narrowing maps a variable to a type, and it is
+// ignored by `assignable` and `typeName` because the LLVM value is the same
+// pointer whatever has been proved about it.
+export const R_UNKNOWN: i32 = 0;
+export const R_OK: i32 = 1;
+export const R_ERR: i32 = 2;
 
 /** The one header type every array shares; `ARRAY_TYPE` in `src/codegen/runtime.ts`. */
 export const ARRAY_STRUCT: string = "%struct.sts_array";
@@ -101,6 +111,10 @@ export class TypeTable {
   kinds: i32[];
   refs: i32[];
   names: string[];
+  /** The error arm of a `Result`; -1 for every other kind. */
+  errs: i32[];
+  /** The proof carried by a `Result` id; `R_UNKNOWN` for every other kind. */
+  states: i32[];
   /** The interning index: a key built by `derivedKey` -> the id it names. */
   index: StringMap;
 
@@ -108,12 +122,16 @@ export class TypeTable {
     this.kinds = [];
     this.refs = [];
     this.names = [];
+    this.errs = [];
+    this.states = [];
     this.index = new StringMap();
     let scalar = 0;
     while (scalar < T_FIRST_DERIVED) {
       this.kinds.push(scalar);
       this.refs.push(-1);
       this.names.push("");
+      this.errs.push(-1);
+      this.states.push(R_UNKNOWN);
       scalar = scalar + 1;
     }
   }
@@ -148,7 +166,12 @@ export class TypeTable {
 
   /** The id for a derived type, interning it the first time it is asked for. */
   intern(kind: i32, ref: i32, name: string): i32 {
-    const key = this.derivedKey(kind, ref, name);
+    return this.internAll(kind, ref, name, -1, R_UNKNOWN);
+  }
+
+  /** `intern` with the two `Result` payloads; every other kind takes the defaults. */
+  internAll(kind: i32, ref: i32, name: string, err: i32, state: i32): i32 {
+    const key = kind === K_RESULT ? `${kind}:${ref}:${err}:${state}` : this.derivedKey(kind, ref, name);
     const existing = this.index.get(key, -1);
     if (existing >= 0) {
       return existing;
@@ -157,6 +180,8 @@ export class TypeTable {
     this.kinds.push(kind);
     this.refs.push(ref);
     this.names.push(name);
+    this.errs.push(err);
+    this.states.push(state);
     this.index.set(key, id);
     return id;
   }
@@ -180,6 +205,75 @@ export class TypeTable {
   /** `T` for `T | null`; any other type unchanged. */
   stripNull(type: i32): i32 {
     return this.kinds[type] === K_NULLABLE ? this.refs[type] : type;
+  }
+
+  // ---- `Result<T, E>` (WP16) ----------------------------------------------
+
+  resultOf(ok: i32, err: i32, state: i32): i32 {
+    return this.internAll(K_RESULT, ok, "", err, state);
+  }
+
+  /**
+   * The side tables hand out -1 for a node whose type was never recorded (a
+   * callee position, a node the checker rejected), and this predicate is asked
+   * about those, so it answers rather than indexing past the table.
+   */
+  isResult(type: i32): boolean {
+    return type >= 0 && this.kinds[type] === K_RESULT;
+  }
+
+  /** The success arm of a `Result`; `refOf` under another name, for readers. */
+  okOf(type: i32): i32 {
+    return this.refs[type];
+  }
+
+  errOf(type: i32): i32 {
+    return this.errs[type];
+  }
+
+  stateOf(type: i32): i32 {
+    return this.states[type];
+  }
+
+  /** The same `Result` read under a different proof; anything else unchanged. */
+  withState(type: i32, state: i32): i32 {
+    if (this.kinds[type] !== K_RESULT) {
+      return type;
+    }
+    return this.resultOf(this.refs[type], this.errs[type], state);
+  }
+
+  /**
+   * A prefix-coded name for a type, so one LLVM struct is monomorphised per
+   * distinct `Result<T, E>` and two different ones can never share a layout.
+   * Every constructor writes its tag before its operands, which makes the
+   * encoding unambiguous without separators of its own: `res.res.i32.str.str`
+   * can only be read one way. A class name is prefixed with `$` because that
+   * character cannot appear in a TypeScript identifier, so a `Result` over a
+   * class called `res` cannot collide with the constructor.
+   */
+  mangle(type: i32): string {
+    switch (this.kinds[type]) {
+      case T_STRING:
+        return "str";
+      case T_BOOL:
+        return "bool";
+      case K_ARRAY:
+        return `arr.${this.mangle(this.refs[type])}`;
+      case K_NULLABLE:
+        return `opt.${this.mangle(this.refs[type])}`;
+      case K_STRUCT:
+        return `$${this.names[type]}`;
+      case K_RESULT:
+        return `res.${this.mangle(this.refs[type])}.${this.mangle(this.errs[type])}`;
+      default:
+        return this.scalarName(type);
+    }
+  }
+
+  /** The LLVM struct name (without the `%struct.` prefix) backing a `Result`. */
+  resultStructName(type: i32): string {
+    return `sts_result.${this.mangle(this.refs[type])}.${this.mangle(this.errs[type])}`;
   }
 
   /** The types that may be nullable: every StaticTS value that is an LLVM pointer. */
@@ -233,6 +327,8 @@ export class TypeTable {
         return `%struct.${this.names[type]}*`;
       case K_NULLABLE:
         return this.llvmType(this.refs[type]);
+      case K_RESULT:
+        return `%struct.${this.resultStructName(type)}*`;
       default:
         panic(`internal error: llvmType of kind ${this.kinds[type]}`);
     }
@@ -273,6 +369,10 @@ export class TypeTable {
         return this.names[type];
       case K_NULLABLE:
         return `${this.typeName(this.refs[type])} | null`;
+      case K_RESULT:
+        // The proof is not part of the name: a narrowed `Result` reads the
+        // same in a diagnostic as the value it was narrowed from.
+        return `Result<${this.typeName(this.refs[type])}, ${this.typeName(this.errs[type])}>`;
       default:
         return this.scalarName(type);
     }
@@ -322,6 +422,12 @@ export class TypeTable {
     }
     if (from === to) {
       return true;
+    }
+    // `state` is a proof about one use site, not part of the type: a `Result`
+    // narrowed to its ok arm is the same value, and the same LLVM pointer, as
+    // the un-narrowed one it came from (WP16).
+    if (this.kinds[from] === K_RESULT && this.kinds[to] === K_RESULT) {
+      return this.refs[from] === this.refs[to] && this.errs[from] === this.errs[to];
     }
     return this.kinds[to] === K_NULLABLE && this.refs[to] === from;
   }

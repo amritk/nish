@@ -45,6 +45,7 @@ import { DebugInfo } from "./debug";
 import { emitConstructorPrologue, importedStructFunctions, structFunctions, structTypeDeclarations } from "./emit/classes";
 import { EmitContext, LoopTarget } from "./emit/context";
 import { expressionEmitters } from "./emit/expressions";
+import { declareResultTypes } from "./emit/result";
 import { emitVariableDeclarationList, statementEmitters } from "./emit/statements";
 import { addStringConstant } from "./emit/strings";
 import { IRFunction, IRModule } from "./ir";
@@ -63,6 +64,7 @@ export class Emitter implements EmitContext {
   private readonly module: IRModule;
   private readonly facts: Map<string, FunctionFacts>;
   fn!: IRFunction;
+  currentSig!: FunctionSig;
   readonly loops: LoopTarget[] = [];
   private slots = new WeakMap<LocalVar, string>();
   /** Facts of the function being emitted (stack sites, arena scope). */
@@ -116,15 +118,17 @@ export class Emitter implements EmitContext {
     return facts;
   }
 
-  /** Named types a signature mentions must be declared in the module (the array header, WP4). */
+  /** Named types a signature mentions must be declared in the module (the array header, WP4; a `Result` struct, WP16). */
   private declareSignatureTypes(sig: FunctionSig): void {
     for (const t of [sig.returnType, ...sig.params.map((p) => p.type)]) {
       if (t.kind === "array") this.module.addTypeDecl(ARRAY_TYPE);
+      declareResultTypes(this, t);
     }
   }
 
   private emitFunction(sig: FunctionSig): IRFunction {
     const facts = this.factsFor(sig);
+    this.currentSig = sig;
     this.declareSignatureTypes(sig);
     const optimize = this.opts.optimizeAttributes;
     this.fn = new IRFunction(

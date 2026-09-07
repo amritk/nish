@@ -6,7 +6,7 @@
  * side tables, and helpers for alignment and runtime symbols.
  */
 import ts from "typescript";
-import { CheckedProgram, LocalVar } from "../../checker";
+import { CheckedProgram, FunctionSig, LocalVar } from "../../checker";
 import { CompilerOptions, StaticType, isUnsigned } from "../../types";
 import { DebugInfo } from "../debug";
 import { IRBlock, IRFunction } from "../ir";
@@ -28,6 +28,12 @@ export interface EmitContext {
   readonly opts: CompilerOptions;
   /** Function currently being emitted. */
   readonly fn: IRFunction;
+  /**
+   * Its checked signature. `orReturn` (WP16) needs the enclosing function's
+   * *StaticTS* return type to build the `Result` it returns early, which the
+   * LLVM type on `fn` cannot give back.
+   */
+  readonly currentSig: FunctionSig;
   /** Enclosing loops, innermost last. Handlers push and pop. */
   readonly loops: LoopTarget[];
   /**

@@ -37,6 +37,7 @@ import {
 import { CheckContext, LoopInfo } from "./context";
 import { expressionCheckers } from "./expressions";
 import { CheckedProgram, FunctionSig, ImportBinding, LocalVar, StructInfo } from "./program";
+import { checkResultLocalsHandled } from "./result";
 import { Scope } from "./scope";
 import { checkStatements, checkVariableDeclarationList, statementCheckers } from "./statements";
 
@@ -428,6 +429,9 @@ export class Checker implements CheckContext {
     // The body shares the parameter scope rather than opening a child, so
     // `function f(a) { let a }` is a duplicate-declaration error as in TS.
     const terminates = checkStatements(this, sig.decl.body!.statements, scope);
+    // WP16: a `Result` local nobody reads is an unhandled failure. Reported
+    // after the body so the diagnostic names a variable whose type is known.
+    if (!sig.poisoned) checkResultLocalsHandled(this, sig);
     // A body with a rejected statement may have lost its `return`: no definite-return cascade.
     if (sig.returnType.kind !== "void" && !terminates && !sig.poisoned) {
       this.error(

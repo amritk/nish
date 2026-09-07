@@ -26,7 +26,6 @@
  *   - `toI32/toI64` from f64 saturate (NaN -> 0), integer conversions wrap.
  *   - `console.log(x)` never prints the `n` suffix of an i64 and writes
  *     synchronously so `process.exit` cannot lose output.
- *   - `throw` traps (`llvm.trap` -> SIGILL) instead of unwinding.
  *   - file I/O errors print `statictsc: cannot read <path>` and exit 1.
  *   - `process.argv[0]` is the program (the script here, the executable
  *     natively); `parseInt` is base 10 only and saturates into i32 (0 for no
@@ -272,6 +271,67 @@ export function panic(message) {
   process.exit(1);
 }
 
+// ---- Result (WP16) ---------------------------------------------------------
+//
+// Natively a `Result` is a two-arm struct in the arena; here it is an ordinary
+// object with the same three names, so `r.ok`, `r.value` and `r.error` in the
+// rewritten program mean what they mean in the compiled one. Only `orReturn`
+// needs help: it returns from the *enclosing* function, which no expression in
+// JavaScript can do, so it throws a sentinel that `rewrite.js` catches in a
+// wrapper around every body that contains one.
+
+class Propagate {
+  constructor(error) {
+    this.error = error;
+  }
+}
+
+class StsResult {
+  constructor(ok, value, error) {
+    this.ok = ok;
+    if (ok) this.value = value;
+    else this.error = error;
+  }
+  isOk() {
+    return this.ok;
+  }
+  isErr() {
+    return !this.ok;
+  }
+  unwrapOr(fallback) {
+    return this.ok ? this.value : fallback;
+  }
+  expect(message) {
+    if (this.ok) return this.value;
+    panic(message);
+  }
+  orReturn() {
+    if (this.ok) return this.value;
+    throw new Propagate(this.error);
+  }
+}
+
+/** `Ok(v)`; `Ok()` on a `Result<void, E>` carries nothing. */
+export function Ok(value) {
+  return new StsResult(true, value, undefined);
+}
+
+/** `Err(e)`. */
+export function Err(error) {
+  return new StsResult(false, undefined, error);
+}
+
+/**
+ * The `catch` half of `orReturn`: re-raise anything that is not a propagation,
+ * and answer the `Err` the enclosing function should return otherwise. The
+ * rewriter emits `return __sts.caught(e)` and nothing else, so a genuine
+ * runtime error still reaches Node unchanged.
+ */
+export function caught(thrown) {
+  if (thrown instanceof Propagate) return new StsResult(false, undefined, thrown.error);
+  throw thrown;
+}
+
 /** Index conversion as in the compiler: `sext` from i32, `fptosi` (truncation) from f64. */
 function toIndex(i) {
   return typeof i === "bigint" ? Number(i) : Math.trunc(i);
@@ -322,12 +382,6 @@ export function exit(code) {
   process.exit(toIndex(code));
 }
 
-/** `throw`: `llvm.trap` kills the native binary with SIGILL; do the same here. */
-export function trap() {
-  process.kill(process.pid, "SIGILL");
-  // A signal handler could intercept SIGILL; never fall through into the rest of the program.
-  process.exit(132);
-}
 
 function ioFail(verb, path) {
   fs.writeSync(2, `statictsc: cannot ${verb} ${path}\n`);

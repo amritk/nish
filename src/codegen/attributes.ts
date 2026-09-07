@@ -123,6 +123,8 @@ import { arrayMethodName, isPushCall } from "./emit/arrays";
 import { CallSite, EscapeResult, analyzeEscapes } from "./escape";
 import { collectBuiltinFacts } from "./emit/expressions";
 import { factCollectors } from "./emit/members";
+import { resultLayout } from "../checker/result";
+import { isResultConstructorCall, resultMethodName } from "./emit/result";
 import { collectStringFacts, isStringMethodCall, unwrapStringPassthrough } from "./emit/strings";
 import { INLINE_ALLOCATOR_ATTRS, MemoryEffect, RUNTIME_BY_NAME } from "./runtime";
 
@@ -399,6 +401,9 @@ export function classifyUse(program: CheckedProgram, ref: ts.Expression): ParamU
         const method = arrayMethodName(program, use);
         if (method === "push" || method === "pop") return USE_WRITE;
         if (method !== undefined) return USE_READ;
+        // WP16: `r.orReturn()`, `r.unwrapOr(d)` and `r.expect(m)` load out of
+        // the receiver and never store the pointer itself anywhere.
+        if (resultMethodName(program, use) !== undefined) return USE_READ;
         return isStringMethodCall(program, use) ? USE_READ : USE_ESCAPE;
       }
       return isAssignmentTarget(parent) ? USE_WRITE : USE_READ; // `p.f = v` / `p.f`, `p.length`
@@ -411,9 +416,12 @@ export function classifyUse(program: CheckedProgram, ref: ts.Expression): ParamU
       if (index < 0) return USE_ESCAPE;
       const callee = program.callees.get(parent);
       if (callee) return { kind: "argument", callee, index: index + (callee.struct ? 1 : 0) };
-      // `xs.push(p)` stores `p` into the array; every other builtin lowers to
-      // runtime functions whose pointer params are all declared `nocapture`.
-      return isPushCall(program, parent) ? USE_ESCAPE : USE_NONE;
+      // `xs.push(p)` stores `p` into the array, `ok(p)` / `err(p)` store it
+      // into the `Result` they build (WP16), and `r.unwrapOr(p)` hands it back
+      // as the expression's value; every other builtin lowers to runtime
+      // functions whose pointer params are all declared `nocapture`.
+      if (isPushCall(program, parent) || isResultConstructorCall(program, parent)) return USE_ESCAPE;
+      return resultMethodName(program, parent) === "unwrapOr" ? USE_ESCAPE : USE_NONE;
     }
     if (ts.isNewExpression(parent)) {
       const index = parent.arguments?.indexOf(node) ?? -1;
@@ -431,7 +439,7 @@ export function classifyUse(program: CheckedProgram, ref: ts.Expression): ParamU
     }
     if (ts.isForOfStatement(parent)) return parent.expression === node ? USE_READ : USE_ESCAPE;
     if (ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent)) return USE_NONE;
-    if (ts.isExpressionStatement(parent) || ts.isThrowStatement(parent)) return USE_NONE;
+    if (ts.isExpressionStatement(parent)) return USE_NONE;
     if (ts.isIfStatement(parent) || ts.isWhileStatement(parent) || ts.isDoStatement(parent)) return USE_NONE;
     if (ts.isForStatement(parent)) return USE_NONE;
     return USE_ESCAPE; // return, variable initializer, array/object literal element, ...
@@ -476,14 +484,16 @@ function classifyElementUse(program: CheckedProgram, access: ts.ElementAccessExp
   }
 }
 
+/** `sizeof` the pointee, for `dereferenceable`; undefined where there is nothing fixed to claim. */
 function structSize(program: CheckedProgram, t: StaticType): number | undefined {
+  if (t.kind === "result") return resultLayout(t).size; // WP16: derived from the type, not declared
   return t.kind === "struct" ? program.structs.get(t.name)?.size : undefined;
 }
 
-/** Struct and array params, plain or `T | null` (WP6), get pointer facts. */
+/** Struct, array and `Result` params, plain or `T | null` (WP6), get pointer facts. */
 function isPointerParam(t: StaticType): boolean {
   const inner = stripNull(t);
-  return inner.kind === "struct" || inner.kind === "array";
+  return inner.kind === "struct" || inner.kind === "array" || inner.kind === "result";
 }
 
 /**
@@ -795,6 +805,16 @@ export function paramAttributes(p: Param, f: FunctionFacts): string[] {
       if (pointer && pointer.size > 0) attrs.push(`dereferenceable(${pointer.size})`);
       if (pointer && !pointer.captured) attrs.push("nocapture");
       break;
+    case "result":
+      // WP16: every `Result` comes from `ok(...)` / `err(...)`, so the object
+      // is whole and never null, and nothing in the language can store through
+      // one — `readonly` here needs no more than the absence of a write, which
+      // the fixpoint checks anyway.
+      attrs.push("nonnull", "align 8");
+      if (pointer && pointer.size > 0) attrs.push(`dereferenceable(${pointer.size})`);
+      if (pointer && !pointer.writesThrough && !pointer.captured) attrs.push("readonly");
+      if (pointer && !pointer.captured) attrs.push("nocapture");
+      break;
     case "nullable": // WP6: no `nonnull` / `dereferenceable`; the rest as for the pointee kind
       if (p.type.inner.kind === "string") attrs.push("noalias", "readonly");
       else if (pointer && !pointer.writesThrough && !pointer.captured) attrs.push("readonly");
@@ -817,6 +837,7 @@ export function returnAttributes(t: StaticType, deref?: number): string[] {
     case "array":
       return ["noundef", "nonnull", "align 8", `dereferenceable(${ARRAY_HEADER_BYTES})`]; // full header, see paramAttributes
     case "struct":
+    case "result": // WP16: a whole, never-null object, exactly like a struct
       return ["noundef", "nonnull", "align 8", ...(deref ? [`dereferenceable(${deref})`] : [])];
     case "nullable":
       return ["noundef", "align 8"]; // WP6: may be null
