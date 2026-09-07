@@ -9,6 +9,19 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **Shipping the self-hosted compiler.** `scripts/bootstrap.sh` builds it from
+  a checkout — stage0 builds stage1, stage1 builds stage2, and `--verify` also
+  builds stage3 and compares every stage's IR for `self/` and the two binaries
+  byte for byte — and `scripts/statictsc.sh` is its command line, adding the
+  directory creation and the `--link` step that `docs/wp14-selfhost.md` D4
+  deliberately kept out of the compiler (D4's bet, settled: 120 lines of bash
+  and no runtime growth). `npm run bootstrap` writes `build/statictsc`. The
+  suite now builds a compiler with the script and uses it through the wrapper
+  to compile, link and run a one-module and a two-module program, so what is
+  checked is the artifact and not only the fixed point. `npm install -g
+  statictsc` still ships stage0: it is the bootstrap seed, the oracle every
+  `self/` phase is compared against, and the only one of the two that emits
+  DWARF and the interop sidecars.
 - **Self-hosting S5: the compiler compiles itself.** `self/compilation.ts` is
   the whole-program driver — transitive module loading through `import`,
   cross-module binding, the reachable-struct closure, symbol-clash rejection

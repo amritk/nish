@@ -18,6 +18,7 @@
   ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
+    "bootstrap": "npm run build && bash scripts/bootstrap.sh",
     "compile": "node dist/index.js",
     "example": "npm run build && node dist/index.js examples/add.ts -o build/add.ll && cat build/add.ll",
     "test": "npm run build && node tests/run.js",

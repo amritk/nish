@@ -1781,6 +1781,92 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       bootstrap.status === 0,
       `${bootstrap.stdout}${bootstrap.stderr}`
     );
+
+    // The deployment path (docs/wp14-selfhost.md §7). The check above proves
+    // the fixed point and then deletes every compiler it built; this one
+    // proves the artifact: `scripts/bootstrap.sh` builds a compiler you can
+    // keep, and `scripts/statictsc.sh` is the command line D4 said a wrapper
+    // would supply — the directory creation and the link step stage1 does not
+    // do itself. One stage rather than three, because what is under test here
+    // is the recipe and the wrapper, not the equalities.
+    const shipDir = path.join(buildDir, "selfhost");
+    fs.rmSync(shipDir, { recursive: true, force: true });
+    const compiler = path.join(shipDir, "statictsc");
+    const shipped = spawnSync(
+      "bash",
+      [
+        path.join(root, "scripts", "bootstrap.sh"),
+        "--stages", "1",
+        "--profile", "debug",
+        "--work", shipDir,
+        "-o", compiler,
+        "--quiet",
+      ],
+      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+    );
+    if (
+      check(
+        "scripts/bootstrap.sh builds the self-hosted compiler from source",
+        shipped.status === 0 && fs.existsSync(compiler),
+        `${shipped.stdout}${shipped.stderr}`
+      )
+    ) {
+      const env = { ...process.env, STATICTSC: compiler };
+      const wrapper = path.join(root, "scripts", "statictsc.sh");
+
+      // One module: the IR lands next to the binary as `<exe>.ll`, which is
+      // where stage0's `--link` puts it too.
+      const hello = path.join(shipDir, "hello");
+      const one = spawnSync(
+        "bash",
+        [wrapper, "examples/hello.ts", "--link", hello, "--profile", "debug"],
+        { cwd: root, encoding: "utf8", env }
+      );
+      const ranHello = one.status === 0 ? spawnSync(hello, [], { encoding: "utf8" }) : null;
+      check(
+        "scripts/statictsc.sh: the self-hosted compiler links and runs examples/hello.ts",
+        one.status === 0 &&
+          fs.existsSync(`${hello}.ll`) &&
+          ranHello !== null &&
+          ranHello.status === 0 &&
+          ranHello.stdout === "hello from StaticTS\n",
+        `${one.stdout}${one.stderr}${ranHello ? `ran: ${ranHello.status} ${JSON.stringify(ranHello.stdout)}` : ""}`
+      );
+
+      // Two modules: the wrapper makes the `<exe>.modules/` directory the
+      // compiler will not make for itself, and `main()` returns the exit code.
+      const multi = path.join(shipDir, "multi");
+      const many = spawnSync(
+        "bash",
+        [wrapper, "examples/multi/main.ts", "--link", multi, "--profile", "debug"],
+        { cwd: root, encoding: "utf8", env }
+      );
+      const ranMulti = many.status === 0 ? spawnSync(multi, [], { encoding: "utf8" }) : null;
+      const emitted = fs.existsSync(`${multi}.modules`)
+        ? fs.readdirSync(`${multi}.modules`).filter((f) => f.endsWith(".ll")).sort()
+        : [];
+      check(
+        "scripts/statictsc.sh: a program with imports links from <exe>.modules/ and exits 49",
+        many.status === 0 &&
+          emitted.join(",") === "main.ll,math.ll" &&
+          ranMulti !== null &&
+          ranMulti.status === 49,
+        `${many.stdout}${many.stderr}modules: ${emitted.join(",")}${ranMulti ? ` exit ${ranMulti.status}` : ""}`
+      );
+
+      // A flag that is stage0's is refused by name rather than ignored: a
+      // build that asked for debug info must not quietly come out without it.
+      const refused = spawnSync("bash", [wrapper, "examples/hello.ts", "-g", "-o", path.join(shipDir, "g.ll")], {
+        cwd: root,
+        encoding: "utf8",
+        env,
+      });
+      check(
+        "scripts/statictsc.sh: -g is refused by name, not ignored (D4)",
+        refused.status === 2 && refused.stderr.includes("is stage0's"),
+        `${refused.status}: ${refused.stdout}${refused.stderr}`
+      );
+    }
   }
 }
 
