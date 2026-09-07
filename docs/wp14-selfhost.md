@@ -229,7 +229,7 @@ point is to know rather than to find out at the last milestone.
 
 | | Deliverable | Proof |
 | --- | --- | --- |
-| **S1 Lexer** | `self/lexer.ts` tokenises StaticTS-0 | A token dump of every `tests/cases/*.ts` matches a golden; the lexer built by stage0 runs natively |
+| **S1 Lexer** | `self/lexer.ts` tokenises StaticTS-0 **Done.** | Its token stream agrees with the `typescript` scanner's over every `tests/cases/*.ts`; the lexer built by stage0 runs natively |
 | **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 | The tree dump matches stage0's `--emit-ast` for the corpus, modulo the documented shape differences |
 | **S3 Checker** | `self/checker.ts` — types, scopes, the side tables | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
 | **S4 Emitter** | `self/emit.ts` — IR text | `IR(stage0, p) == IR(stage1, p)` for a growing whitelist of `tests/cases/` |
@@ -238,6 +238,79 @@ point is to know rather than to find out at the last milestone.
 S1–S4 are each useful on their own and each testable against stage0, which is
 what keeps this from being a single unlandable change. S5 is the day the
 compiler compiles itself.
+
+### What S1 cost, and what it says
+
+`self/tokens.ts`, `self/lexer.ts` and `self/dump_tokens.ts` are **1,222 lines
+of StaticTS**, and the four numbers the gate wants are already forming:
+
+- **StaticTS-0 held.** The lexer needed no language addition beyond the ones
+  §3 already lists. It is written with `switch`, `charCodeAt`, `substring`,
+  `push`/`pop`, `join`, the bitwise operators and module constants — that is,
+  with wave A, which is the first evidence that the census measured the right
+  thing.
+- **It agrees with the oracle exactly.** `tests/lexer_oracle.js` runs the
+  `typescript` scanner over `tests/cases/`, `examples/`, `self/`,
+  `docs/cookbook/`, the differential corpus and `tests/lexer/`, prints the
+  token stream in `dump_tokens`' format and diffs it: **482 of 482 files,
+  50,968 tokens, no disagreement.** That includes every `reject_*` case, whose
+  forbidden syntax the lexer has to tokenise without an opinion, and files with
+  multi-byte characters, where the scanner's UTF-16 offsets are mapped through
+  the source's byte prefix.
+- **The oracle cost almost nothing to keep.** Two mismatches, both real bugs in
+  the same direction: the lexer had opinions. It refused `==` and `!=` where
+  the scanner tokenises them, and it split `?.`, `??`, `...`, `**`, `@` and
+  `#name` into pieces. The fix was to lex what is written and leave the
+  refusing to the parser, which is better diagnostics anyway ("`??` is
+  forbidden; narrow with `!== null`" rather than a complaint about a stray
+  `?`). One divergence stands by design: the scanner hands back a bare `>` so
+  the parser can close nested type arguments one at a time, and this lexer
+  merges `>>` and `>>>` because StaticTS-0 has no nested type argument list —
+  the oracle asks for `reScanGreaterToken` to match, and the parser will have
+  to split a `>>` where it wants two closers.
+- **It is not slow.** Over 129 KB of the compiler's own source, the native
+  binary reads the file, lexes 14,000 tokens, formats and writes the dump in
+  **5 ms**; the `typescript` scanner alone, warm, takes 4 ms — after the 258 ms
+  it costs to load.
+
+### The gate at S2
+
+S1 and S2 are done first and the project is re-decided there, because they
+carry the risk the other three do not. S3, S4 and S5 are a *port*: `src/`
+already contains a checker and an emitter, and the question is only whether
+StaticTS-0 can express them. S1 and S2 are **new code** — `src/` has no lexer
+and no parser, because the `typescript` package is the parser, and 1,558 of
+the references in `src/` are calls into it. That code has to be written from
+nothing and then made to agree with a 60,000-line scanner well enough for the
+IR equality of §1 to mean anything.
+
+So the sequencing puts the unknown first, and both artifacts are worth having
+whichever way the gate goes: a lexer and a recursive-descent parser are the
+largest StaticTS program in existence, which is the dogfooding evidence the
+language wants, and they belong in `bench/` as a workload that is neither
+numeric nor synthetic.
+
+At the gate, three things decide it:
+
+1. **Did StaticTS-0 hold?** If S1 and S2 needed language additions beyond §3,
+   S3–S5 will need more, and each one is something stage1 must then implement
+   in order to compile itself.
+2. **How far off was the line count?** `src/` is 13,757 lines. If the lexer and
+   parser came in near the estimate, the rest can be estimated; if they came in
+   at twice it, the port is a different project from the one costed here.
+3. **What did the oracle cost?** S1 and S2 both compare against stage0. If
+   keeping them in agreement is a steady drip of one-off differences, S3, whose
+   proof is *every* diagnostic matching, is much worse than it looks.
+
+The honest case against continuing past the gate is that self-hosting serves
+the compiler's own speed, not §5's northern star, and that maintaining two
+implementations doubles the cost of every construct added afterwards. The
+answer to the second half is that stage0 is **frozen** at S5 rather than
+retired: it stays buildable as the bootstrap seed and as the differential
+oracle, but new constructs land in `self/` only, so the doubling is bounded by
+the language as it stands on that day. Deciding that now is what makes the
+tax finite, and it is why §1's "stage0 is not going away" means *kept*, not
+*kept up to date*.
 
 ---
 

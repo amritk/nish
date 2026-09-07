@@ -67,6 +67,21 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
   `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
   `bench/ffi.mjs` gains the batched `Float64Array` rows.
+- **Self-hosting, milestone S1: the lexer** (`docs/wp14-selfhost.md` §4).
+  `self/lexer.ts` tokenises StaticTS-0 and is written in it — 1,222 lines with
+  `self/tokens.ts` and `self/dump_tokens.ts`, using nothing the language did
+  not already have. It is new code rather than a port: `src/` has no lexer,
+  because the `typescript` package is the scanner there. Byte offsets
+  throughout, since `s.length` and `charCodeAt` are byte-oriented; template
+  literals are lexed without the parser's help, with one brace counter per
+  open substitution telling a substitution's `}` from a block's.
+  `tests/lexer_oracle.js` is the test: it runs the `typescript` scanner over
+  `tests/cases/`, `examples/`, `self/`, `docs/cookbook/`, the differential
+  corpus and the new `tests/lexer/` fixtures, prints the token stream in the
+  same format and diffs it — **482 files, 50,968 tokens, no disagreement**,
+  with the scanner's UTF-16 offsets mapped through the source's byte prefix.
+  The lexer has no opinions: `==`, `?.`, `??`, `**`, `...`, `@` and `#name`
+  are all tokenised as written, and the parser is where StaticTS refuses them.
 - **`switch` / `case` / `default`** (`docs/wp14-selfhost.md` A1). An integer
   discriminant and constant labels — a literal, its negation, or a module
   constant — lower to one LLVM `switch`, so the backend builds a jump table
