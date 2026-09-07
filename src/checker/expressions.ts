@@ -7,8 +7,9 @@
  * `binaryCheckers`.
  */
 import ts from "typescript";
-import { BOOL, F64, I32, assignable, isNumeric, sameType, typeToString } from "../types";
+import { BOOL, F64, I32, assignable, isInteger, isNumeric, sameType, typeToString } from "../types";
 import { arrayExpressionCheckers, installArrayAssignmentCheckers } from "./arrays";
+import { bitwiseBinaryCheckers, bitwiseUnaryCheckers } from "./bitwise";
 import { BuiltinCallChecker } from "./builtins";
 import { ioBuiltinFunctions } from "./io";
 import { contextualLiteralType, conversionBuiltins, parseBuiltins } from "./math";
@@ -27,6 +28,7 @@ import {
   controlFlowExpressionCheckers,
   controlFlowUnaryCheckers,
 } from "./control-flow";
+import { lookup } from "../lookup";
 
 // ---- Leaves -----------------------------------------------------------------
 
@@ -55,9 +57,18 @@ const checkBooleanLiteral: ExpressionChecker = () => BOOL;
 const checkIdentifier: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.Identifier;
   const v = scope.lookup(expr.text);
-  if (!v) throw ctx.error(`Unknown identifier \`${expr.text}\``, expr);
-  ctx.program.bindings.set(expr, v);
-  return scope.typeOf(v); // the declared type, or the narrowed one inside `if (p !== null)` (WP6)
+  if (v) {
+    ctx.program.bindings.set(expr, v);
+    return scope.typeOf(v); // the declared type, or the narrowed one inside `if (p !== null)` (WP6)
+  }
+  // A local shadows a module constant, as it would in TypeScript, so the
+  // constant table is consulted only after the scope chain (WP14).
+  const constant = ctx.program.constants.get(expr.text);
+  if (constant) {
+    ctx.program.constRefs.set(expr, constant);
+    return constant.type;
+  }
+  throw ctx.error(`Unknown identifier \`${expr.text}\``, expr);
 };
 
 // ---- Operators ------------------------------------------------------------------
@@ -80,6 +91,7 @@ const checkNot: UnaryChecker = (ctx, expr, scope) => {
 export const unaryCheckers: CheckerTable<UnaryChecker> = {
   [ts.SyntaxKind.MinusToken]: checkNegate,
   [ts.SyntaxKind.ExclamationToken]: checkNot,
+  ...bitwiseUnaryCheckers, // `~`
   ...controlFlowUnaryCheckers,
 };
 
@@ -93,7 +105,12 @@ const checkPrefixUnary: ExpressionChecker = (ctx, node, scope) => {
 const checkAssignment: BinaryChecker = (ctx, expr, scope) => {
   if (!ts.isIdentifier(expr.left)) throw ctx.error("Only simple variables can be assigned", expr.left);
   const target = scope.lookup(expr.left.text);
-  if (!target) throw ctx.error(`Unknown identifier \`${expr.left.text}\``, expr.left);
+  if (!target) {
+    if (ctx.program.constants.has(expr.left.text)) {
+      throw ctx.error(`Cannot assign to \`${expr.left.text}\` because it is a module constant`, expr.left);
+    }
+    throw ctx.error(`Unknown identifier \`${expr.left.text}\``, expr.left);
+  }
   if (!target.mutable) {
     throw ctx.error(
       `Cannot assign to \`${target.name}\` because it is a ${target.storage === "param" ? "parameter" : "const"}`,
@@ -163,6 +180,7 @@ export const binaryCheckers: CheckerTable<BinaryChecker> = {
   [ts.SyntaxKind.EqualsEqualsToken]: rejectLooseEquality,
   [ts.SyntaxKind.ExclamationEqualsToken]: rejectLooseEquality,
   ...stringBinaryCheckers, // string-aware `+`, `===`, `!==` (numeric behaviour unchanged)
+  ...bitwiseBinaryCheckers, // `& | ^ << >> >>>` and their compound forms
   ...controlFlowBinaryCheckers,
 };
 installArrayAssignmentCheckers(binaryCheckers); // `a[i] = v`, `a[i] op= v`; other targets keep the handlers above
@@ -193,7 +211,7 @@ const checkCall: ExpressionChecker = (ctx, node, scope) => {
   if (expr.expression.kind === ts.SyntaxKind.SuperKeyword) return checkSuperCall(ctx, expr, scope); // WP2b
   if (ts.isPropertyAccessExpression(expr.expression)) {
     // `value.method(...)` dispatches on the receiver type; `console.log(...)` is a dotted builtin.
-    return isValueReceiver(expr.expression.expression, scope)
+    return isValueReceiver(ctx, expr.expression.expression, scope)
       ? checkMethodCall(ctx, expr, scope)
       : checkBuiltinCall(ctx, expr, scope);
   }
@@ -202,7 +220,7 @@ const checkCall: ExpressionChecker = (ctx, node, scope) => {
   }
   const callee = ctx.sigs.get(expr.expression.text);
   if (!callee) {
-    const builtin = builtinFunctions[expr.expression.text];
+    const builtin = lookup(builtinFunctions, expr.expression.text);
     if (builtin) return builtin(ctx, expr, scope); // no `callees` entry: the emitter knows it by name
     throw ctx.error(`Unknown function \`${expr.expression.text}\``, expr.expression);
   }

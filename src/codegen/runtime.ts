@@ -153,6 +153,15 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     effect: "write",
   },
   {
+    // WP15: the one unsigned formatter. `u8`/`u16`/`u32` are `zext`ed to i64 at
+    // the call site rather than getting three more symbols of their own, which
+    // is what keeps `runtime.c` inside its `.text` budget.
+    name: "sts_str_from_u64",
+    signature: "declare noalias noundef nonnull align 8 i8* @sts_str_from_u64(i64 noundef)",
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
     // xorshift64* over a global state word: reads and writes memory.
     name: "sts_random",
     signature: "declare noundef double @sts_random()",
@@ -246,6 +255,21 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     intrinsic(`llvm.smax.${t}`, t, `${t}, ${t}`),
     intrinsic(`llvm.fptosi.sat.${t}.f64`, t, "double"),
   ]),
+  // ---- WP15: the unsigned halves of the same intrinsics. `u8`/`u16` lower to
+  // `i8`/`i16`, so the narrow widths appear here and nowhere else.
+  ...["i8", "i16", "i32", "i64"].flatMap((t) => [
+    intrinsic(`llvm.umin.${t}`, t, `${t}, ${t}`),
+    intrinsic(`llvm.umax.${t}`, t, `${t}, ${t}`),
+    intrinsic(`llvm.fptoui.sat.${t}.f64`, t, "double"),
+    // f32 saturating conversions; the `.f32` suffix is the *source* type.
+    intrinsic(`llvm.fptosi.sat.${t}.f32`, t, "float"),
+    intrinsic(`llvm.fptoui.sat.${t}.f32`, t, "float"),
+  ]),
+  // ---- WP15: `Math.abs`/`min`/`max` on an `f32`. The f64-only Math functions
+  // (sqrt, pow, ...) stay f64-only, so there is no `llvm.sqrt.f32` here.
+  intrinsic("llvm.fabs.f32", "float", "float"),
+  intrinsic("llvm.minnum.f32", "float", "float, float"),
+  intrinsic("llvm.maxnum.f32", "float", "float, float"),
 ];
 
 export const RUNTIME_BY_NAME = new Map(RUNTIME_FUNCTIONS.map((f) => [f.name, f]));

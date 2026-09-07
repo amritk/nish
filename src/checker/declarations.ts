@@ -14,6 +14,7 @@
 import ts from "typescript";
 import { CompileError } from "../diagnostics";
 import { CompilerOptions, resolveTypeNode, typeToString } from "../types";
+import { ConstInfo } from "./constants";
 import { FunctionSig, ImportBinding, Param } from "./program";
 
 /** Symbol the entry module's `export function main` is emitted under. */
@@ -171,3 +172,46 @@ export function collectImports(decl: ts.ImportDeclaration, sf: ts.SourceFile): I
     return { node: decl, specifier, importedName, localName: element.name.text, element };
   });
 }
+
+/**
+ * `const NAME: T = <constant expression>;` at the top level (WP14). The
+ * annotation is required, as it is on every other top-level declaration, and
+ * the initialiser is folded lazily by `constValue` once every module has
+ * collected its signatures — an initialiser may name an imported constant.
+ *
+ * `let` and `var` are rejected here rather than by the generic top-level
+ * message, because "a module has no top-level code" is the reason and it is
+ * worth saying.
+ */
+export const collectConstant = (
+  stmt: ts.VariableStatement,
+  decl: ts.VariableDeclaration,
+  sf: ts.SourceFile,
+  opts: CompilerOptions,
+  scope: Map<string, ConstInfo>
+): ConstInfo => {
+  if ((stmt.declarationList.flags & ts.NodeFlags.Const) === 0) {
+    const keyword = (stmt.declarationList.flags & ts.NodeFlags.Let) !== 0 ? "let" : "var";
+    throw new CompileError(
+      `Top-level \`${keyword}\` is not supported; a module has no top-level code, so only \`const\` is available`,
+      stmt,
+      sf
+    );
+  }
+  if (!ts.isIdentifier(decl.name)) throw new CompileError("Destructured constants are not supported", decl, sf);
+  if (!decl.type) {
+    throw new CompileError(`Module constant \`${decl.name.text}\` needs a type annotation`, decl.name, sf);
+  }
+  if (!decl.initializer) {
+    throw new CompileError(`Module constant \`${decl.name.text}\` needs an initialiser`, decl.name, sf);
+  }
+  const type = resolveTypeNode(decl.type, sf, opts);
+  if (type.kind !== "i32" && type.kind !== "i64" && type.kind !== "f64" && type.kind !== "bool" && type.kind !== "string") {
+    throw new CompileError(
+      `Module constant \`${decl.name.text}\` must be a number, boolean, or string, not ${typeToString(type)}; there is no top-level code to build anything else`,
+      decl.type,
+      sf
+    );
+  }
+  return { name: decl.name.text, type, decl, exported: hasExportModifier(stmt), scope };
+};

@@ -1,5 +1,6 @@
 /** Data model produced by the checker and consumed by the emitter. */
 import ts from "typescript";
+import { ConstInfo } from "./constants";
 import { StaticType } from "../types";
 
 export interface Param {
@@ -106,6 +107,8 @@ export interface ImportBinding {
   sig?: FunctionSig;
   /** Set instead of `sig` when the imported name is an exported class or interface (WP2). */
   struct?: StructInfo;
+  /** Set instead of `sig` when the imported name is an exported module constant (WP14). */
+  constant?: ConstInfo;
 }
 
 export interface CheckedProgram {
@@ -116,6 +119,15 @@ export interface CheckedProgram {
   imports: ImportBinding[];
   /** Source name -> signature, for every `export function` in this module. */
   exports: Map<string, FunctionSig>;
+  /**
+   * Module constants visible in this module by the name they are used under
+   * (WP14): the ones it declares plus the ones it imports. A constant emits no
+   * symbol — every reference folds to its value — so this table is the whole
+   * of their existence.
+   */
+  constants: Map<string, ConstInfo>;
+  /** Declared name -> constant, for every `export const` in this module. */
+  exportedConstants: Map<string, ConstInfo>;
   /**
    * Set on the entry module when it declares `export function main`. The
    * emitter then adds the `define i32 @main(i32, i8**)` wrapper around it.
@@ -131,6 +143,8 @@ export interface CheckedProgram {
   types: WeakMap<ts.Node, StaticType>;
   /** Identifier node -> the variable it refers to. */
   bindings: WeakMap<ts.Identifier, LocalVar>;
+  /** Identifier node -> the module constant it names, when it is not a variable (WP14). */
+  constRefs: WeakMap<ts.Identifier, ConstInfo>;
   /** VariableDeclaration node -> the local it introduces. */
   locals: WeakMap<ts.VariableDeclaration, LocalVar>;
   /** CallExpression node -> callee signature (free functions and methods alike). */

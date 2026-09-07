@@ -67,6 +67,19 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
   `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
   `bench/ffi.mjs` gains the batched `Float64Array` rows.
+- **Bitwise operators.** `& | ^` (`and` / `or` / `xor`), `~` (`xor x, -1`),
+  `<< >> >>>` (`shl` / `ashr` / `lshr`), and the compound forms
+  `&= |= ^= <<= >>= >>>=` on a mutable local. Two `i32` or two `i64` of the
+  same type; `f64` is refused because StaticTS never converts implicitly, and
+  `boolean` is refused with the operator that does the job named in the
+  message (`&&`, `||`, `!==`, `!`). Shift counts are masked to the operand
+  width, as in JavaScript, so `x << 33` is `x << 1` instead of the poison LLVM
+  produces for an over-wide shift; a constant count is masked at compile time
+  and emits no `and`. `>>>` on `i32` yields the signed reading of the shifted
+  bits (`-1 >>> 0` is `-1`, not JavaScript's `4294967295`), the same choice the
+  language already makes when integer arithmetic wraps. None of these has a
+  panic path, so a function whose arithmetic is all bitwise keeps `readnone`
+  and `willreturn`.
 - **Arrays.** `T[]` / `Array<T>`, literals, `new Array<T>(n)`, indexing with
   bounds checks (panic on out-of-range), `.length`, `push`, `for ... of`, and
   `--unchecked-indexing` for benchmarks.
@@ -150,14 +163,93 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `npm run smoke` (`scripts/smoke.sh`) builds and runs every example with a
   `main`; `.github/workflows/release.yml` attaches the npm tarball to a GitHub
   release on `v*` tags; `docs/INSTALL.md`.
+- **Unsigned integers `u8`, `u16`, `u32`, `u64`.** LLVM has no unsigned types,
+  so they lower to `i8`/`i16`/`i32`/`i64` and the signedness lives in the
+  operations: `udiv`/`urem`, `icmp ult/ule/ugt/uge`, `lshr` for `>>`, `zext`
+  for a widening conversion, `uitofp`/`llvm.fptoui.sat` across `f64`, and
+  `llvm.umin`/`umax` for `Math.min`/`Math.max`. Representing an unsigned value
+  therefore costs nothing, and the unsigned divisor check is *one* compare
+  against zero rather than the signed check's three plus an `and` and an `or`,
+  because unsigned division has no `MIN / -1` case. Overflow wraps as it does
+  for the signed widths (`--nsw` emits `nuw` here, not `nsw`); a conversion
+  between two integers of the same width and different signedness emits no
+  instruction at all; `toU8`/`toU16`/`toU32`/`toU64` join the conversion
+  builtins; a literal in an unsigned context must be non-negative and fit the
+  width; mixing signednesses or widths is a type error, as `i32` and `i64`
+  already were. `console.log` and template holes print unsigned values
+  unsigned through the new `sts_str_from_u64` (the narrow widths `zext` into
+  it, so one runtime symbol serves all four). `--emit-header` spells them
+  `uint8_t` … `uint64_t` and `--emit-dts` `number` / `bigint`.
+- **32-bit floats: `f32`.** LLVM's `float`, with the same instructions `f64`
+  already uses one width down (`fadd`/`fsub`/`fmul`/`fdiv`/`frem`, `fcmp o*`,
+  `fneg`); float division stays unchecked. A struct of `f32` is half the
+  footprint of one of `f64` and gives twice the SIMD lane count, which serves
+  the speed and the size goal at once. `toF32` joins the conversion builtins:
+  `fptrunc` down from an `f64`, `fpext` up, `sitofp`/`uitofp` in from an
+  integer by the source's signedness, and the saturating
+  `llvm.fpto{s,u}i.sat.<T>.f32` out to one. There is no implicit widening, so
+  `f32 + f64` is the same same-type error as `u32 + i32`. A non-integer
+  literal takes `f32` from context and is emitted as the hex of the double it
+  equals, rounded so that double is exactly a float — `0.1` is
+  `float 0x3FB99999A0000000`, not the `f64` spelling `0x3FB999999999999A`.
+  `console.log` and template holes widen with `fpext` and reuse
+  `sts_str_from_f64`, adding no runtime code, so an `f32` prints
+  JavaScript's digits for the float's value (`0.10000000149011612` for `0.1`).
+  `Math.abs`/`min`/`max` work through the `.f32` intrinsics; the f64-only
+  `Math` functions stay f64-only. `Float32Array` is one more typed-array alias
+  for `f32[]`. `--emit-header` spells it `float` and `--emit-dts` `number`.
+- **Bitwise operators on every integer width.** `& | ^ ~ << >> >>>` and their
+  compound forms already worked on `i32` and `i64`; they now take any integer
+  type. `>>` is the one operator whose lowering depends on signedness: `ashr`
+  on a signed type, `lshr` on an unsigned one, which makes `>>` and `>>>`
+  the same instruction there (`tests/cases/u_shift_logical`). `i32 >>> n`
+  keeps its documented behaviour of yielding the raw bits read as signed
+  (`-1 >>> 0` is `-1`, not JavaScript's `4294967295`) — with `u32` the other
+  answer is now available: `toU32(-1)` is `4294967295`. The shift-count mask
+  follows the operand's own width, so `u8` masks to 7 and `u16` to 15 rather
+  than to JavaScript's 31 (`tests/cases/bit_shift_narrow`).
 - **Documentation.** `docs/LANGUAGE.md` (the normative reference, every rule
   cited to a test case), `docs/IR_COOKBOOK.md` (generated from
   `docs/cookbook/*.ts` by `docs/cookbook/regen.sh`), `docs/ARCHITECTURE.md`,
   `docs/FAQ.md`, the `docs/README.md` index, `docs/check-links.mjs`, and a
   README restructured into a short tour.
+- **Module constants (WP14).** `const NAME: T = <constant expression>` at the
+  top level, with `export` and `import` (`tests/link/const_export`). A module
+  constant is a name for a value, not a global: the checker folds the
+  initialiser and every use site carries the value, so no symbol, no
+  initialiser and no relocation is emitted, and a module still has no
+  top-level code. The initialiser is an ordinary StaticTS expression
+  restricted to literals and other constants, so a constant can compute
+  exactly what a runtime expression can — integer arithmetic wraps at the
+  declared width, `1 / 0` is refused at compile time rather than at run time,
+  and a value that does not fit its annotation is an error. Folding is by
+  need, so a constant may name one declared later or in another module, and a
+  cycle is diagnosed. `--emit-checked` prints each constant's folded value.
+  The first item of the self-hosting gap list in
+  [docs/wp14-selfhost.md](docs/wp14-selfhost.md).
+- **Self-hosting plan.** [docs/wp14-selfhost.md](docs/wp14-selfhost.md): what
+  "the compiler compiles itself" means here (a `self/` compiler written in
+  StaticTS, and the `IR(stage1) == IR(stage2)` fixed point that proves it),
+  the StaticTS-0 subset it is written in, and the ordered list of what the
+  language is still missing.
 
 ### Fixed
 
+- **Dispatch tables no longer see `Object.prototype`.** The validator, checker
+  and emitter are each a table keyed by identifier, read with a key taken from
+  the program being compiled. A plain object literal inherits from
+  `Object.prototype`, so a program declaring `function valueOf`, `class
+  toString`, `const hasOwnProperty` or calling `new constructor()` found a
+  native function sitting in the table and used it as a handler — reporting
+  `error: function valueOf() { [native code] }`. All ten such lookups now go
+  through `src/lookup.ts`, whose one line of `Object.hasOwn` is the fix
+  (`tests/cases/decl_prototype_names`).
+- **Contextual typing of non-integer literals** reaches two more positions: an
+  array-literal element and a field assignment, so `const xs: f64[] = [0.5]`
+  and `this.ratio = 0.25` compile in the default i32 number mode rather than
+  being rejected as non-integer literals (`tests/cases/conv_f64_context`). An
+  empty array literal likewise takes its element type from a field target, so
+  `this.children = []` works in a constructor (`docs/wp14-selfhost.md` B4).
 - **Fuzzer validity.** `tests/differential/fuzz.js` parses each generated
   program and re-rolls the seed while it has a syntax error, so a run no
   longer reports a compile error for a program TypeScript itself rejects
@@ -173,6 +265,9 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `dprintf` each instead of hand-written digit loops, the JS `Number#toString`
   formatter indexes the `%.*e` buffer directly and emits all four layouts from
   one digit loop, and the three chunk-freeing loops share `sts_free_until`.
+  Adding `sts_str_from_u64` for the unsigned widths took it to 3,765 bytes,
+  still inside the 4,096-byte budget: it shares the signed formatter's digit
+  loop through a static `str_from_digits(value, negative)` helper.
   `scripts/size-report.sh` now prints a `runtime` row (the budget number) above
   the profile rows. Prototypes, symbols and `tests/runtime_test.c` are
   unchanged; see the "Runtime budget" section of

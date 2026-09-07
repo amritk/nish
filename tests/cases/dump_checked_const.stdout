@@ -1,0 +1,8 @@
+module tests/cases/dump_checked_const.ts (entry)
+const WIDTH: i32 = 8
+const AREA: i32 = 64
+const NAME: string = "box"
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: sts_print
+  stackSites=0 stackLocals=0

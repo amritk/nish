@@ -26,6 +26,7 @@ import { checkNullableComparison } from "./nullable";
 import { ioBuiltinCalls } from "./io";
 import { mathBuiltinCalls, mathBuiltinProperties } from "./math";
 import { Scope } from "./scope";
+import { lookup } from "../lookup";
 
 export { dottedName } from "./builtins";
 export type { BuiltinCallChecker } from "./builtins";
@@ -128,7 +129,7 @@ export const builtinCalls: Record<string, BuiltinCallChecker> = {
 /** Entry point for `checkCall` when the callee is a property access. */
 export function checkBuiltinCall(ctx: CheckContext, expr: ts.CallExpression, scope: Scope): StaticType {
   const name = dottedName(expr.expression);
-  const builtin = name === undefined ? undefined : builtinCalls[name];
+  const builtin = name === undefined ? undefined : lookup(builtinCalls, name);
   if (!builtin) {
     throw ctx.error(
       `Unknown builtin \`${name ?? expr.expression.getText(ctx.sf)}\` (supported: ${Object.keys(builtinCalls).join(", ")})`,

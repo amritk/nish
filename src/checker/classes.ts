@@ -60,7 +60,17 @@
  *     to the interface type implicitly (recorded in `program.coercions`).
  */
 import ts from "typescript";
-import { StaticType, VOID, alignOf, assignable, resolveTypeNode, sameType, stripNull, typeToString } from "../types";
+import {
+  StaticType,
+  VOID,
+  alignOf,
+  assignable,
+  isNumeric,
+  resolveTypeNode,
+  sameType,
+  stripNull,
+  typeToString,
+} from "../types";
 import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context";
 import { hasExportModifier } from "./declarations";
 import { assignmentTargetCheckers, methodCallCheckers, newCheckers, propertyCheckers } from "./members";
@@ -1118,7 +1128,10 @@ const checkFieldAssignment: BinaryChecker = (ctx, expr, scope) => {
     ts.SyntaxKind.PercentEqualsToken,
   ];
   if (!compound.includes(op)) throw ctx.error(`Unsupported assignment operator \`${opText}\``, expr);
-  if ((field.type.kind !== "i32" && field.type.kind !== "f64") || !sameType(rhs, field.type)) {
+  // Every numeric width works here: the emitter lowers `op=` on a field through
+  // the same `emitIntBinary` as a binary operator, so i64 and the unsigned
+  // widths need nothing beyond being let through.
+  if (!isNumeric(field.type) || !sameType(rhs, field.type)) {
     throw ctx.error(
       `Operator \`${opText}\` requires two operands of the same numeric type, got ${typeToString(field.type)} and ${typeToString(rhs)}`,
       expr

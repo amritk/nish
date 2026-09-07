@@ -50,6 +50,16 @@ dynamic function values": a function passed as a value needs a function
 pointer and an indirect call, and the whole-program pass cannot prove purity,
 termination or escape facts through an unknown callee.
 
+**The paradigm is data-oriented and procedural**, and it is a deliberate
+"neither" rather than a compromise: pure OOP puts a pointer chase between the
+CPU and the data, pure FP puts an allocation between them, and this compiler
+cannot afford either. So flat structs in contiguous memory, top-level
+functions that LLVM inlines, explicit mutation, and functional idioms only
+where they remove runtime work. The reasoning and the enforcement table are in
+[docs/wp15-performance.md](../docs/wp15-performance.md) §1a; the practical
+consequence for a StaticTS program is that a loop over an array of structs is
+the fast shape and a chain of small objects linked by pointers is not.
+
 The shape of the language, as a style guide:
 
 - **Declarations.** A module holds only `function`, `class`, `interface` and

@@ -14,6 +14,7 @@ corpus/f64_round_negzero   # Math.round(-0.3) is +0 here, -0 in JS
 corpus/int_div_overflow    # INT_MIN / -1: "attempt to divide with overflow"; JS gives INT_MIN
 corpus/int_div_zero        # x / 0, x % 0: "attempt to divide by zero"; JS gives 0 after | 0
 cases/div_zero_panic       # 10 / 0 panics (exit 1); JS gives 0 after | 0
+cases/u_div_zero_panic     # u32 / 0 panics too (one compare instead of two); JS gives Infinity >>> 0
 cases/div_overflow_panic   # INT_MIN % -1 panics (exit 1); JS gives 0
 
 # By design (documented in docs/LANGUAGE.md, Classes): methods dispatch on the receiver's

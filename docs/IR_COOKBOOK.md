@@ -301,6 +301,59 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end decl_locals -->
 
+### Module constants
+
+A top-level `const` is not a global: it emits no symbol and no initialiser.
+The checker folds it, and every use site carries the value — `AREA` reaches
+`sts_str_from_i32` as the literal `64`, and `ret i32 64` is the whole of
+`return AREA`. The template literal around it is still built at run time:
+folding stops at the constant, and `${...}` is not itself a constant
+expression.
+
+<!-- cookbook:begin decl_const -->
+```ts
+const WIDTH: i32 = 8;
+const AREA: i32 = WIDTH * WIDTH;
+const LABEL: string = "area = ";
+
+export function main(): number {
+  console.log(`${LABEL}${AREA}`);
+  return AREA;
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"area = \00" }, align 8
+
+declare void @sts_free_arena() #0
+declare noundef i64 @sts_arena_mark() #0
+declare void @sts_arena_release(i64 noundef) #0
+declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
+
+define noundef i32 @sts_main() #0 {
+entry:
+  %arena.mark = call i64 @sts_arena_mark()
+  %0 = call i8* @sts_str_from_i32(i32 64)
+  %1 = call i8* @sts_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.0 to i8*), i8* %0)
+  call void @sts_print(i8* %1)
+  call void @sts_arena_release(i64 %arena.mark)
+  ret i32 64
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @sts_main()
+  call void @sts_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+```
+<!-- cookbook:end decl_const -->
+
 ### `export function main` and the entry wrapper
 
 The user's `main` becomes `@sts_main`; the compiler adds a C-ABI `@main` that
@@ -1073,6 +1126,115 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end expr_compound -->
 
+### Bitwise `& | ^` and `~`
+
+One instruction each, and no panic path: unlike `/` these leave the function
+`readnone` and `willreturn`. `~a` is `xor a, -1`, because LLVM has no `not`.
+
+<!-- cookbook:begin expr_bitwise -->
+```ts
+function mix(a: i32, b: i32): i32 {
+  return (a & b) | (a ^ b);
+}
+
+function invert(a: i32): i32 {
+  return ~a;
+}
+
+function pack(hi: i32, lo: i32): i32 {
+  return (hi << 16) | (lo & 65535);
+}
+```
+
+```llvm
+define noundef i32 @mix(i32 noundef %a, i32 noundef %b) #0 {
+entry:
+  %0 = and i32 %a, %b
+  %1 = xor i32 %a, %b
+  %2 = or i32 %0, %1
+  ret i32 %2
+}
+
+define noundef i32 @invert(i32 noundef %a) #0 {
+entry:
+  %0 = xor i32 %a, -1
+  ret i32 %0
+}
+
+define noundef i32 @pack(i32 noundef %hi, i32 noundef %lo) #0 {
+entry:
+  %0 = shl i32 %hi, 16
+  %1 = and i32 %lo, 65535
+  %2 = or i32 %0, %1
+  ret i32 %2
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end expr_bitwise -->
+
+### Shifts, and the count mask
+
+`<<` is `shl`, `>>` is `ashr` (sign-filling) and `>>>` is `lshr`
+(zero-filling). The count is masked to the operand width — 31 for `i32`, 63
+for `i64` — because LLVM makes a wider shift poison while JavaScript wraps the
+count; StaticTS follows JavaScript. A constant count is masked at compile time
+and no `and` appears (`a >> 3` below); a variable one costs the `and`.
+
+<!-- cookbook:begin expr_shifts -->
+```ts
+function constantCount(a: i32): i32 {
+  return a >> 3;
+}
+
+function variableCount(a: i32, n: i32): i32 {
+  return a << n;
+}
+
+function fills(a: i32, n: i32): i32 {
+  return (a >> n) + (a >>> n);
+}
+
+function wide(a: i64, n: i64): i64 {
+  return a << n;
+}
+```
+
+```llvm
+define noundef i32 @constantCount(i32 noundef %a) #0 {
+entry:
+  %0 = ashr i32 %a, 3
+  ret i32 %0
+}
+
+define noundef i32 @variableCount(i32 noundef %a, i32 noundef %n) #0 {
+entry:
+  %0 = and i32 %n, 31
+  %1 = shl i32 %a, %0
+  ret i32 %1
+}
+
+define noundef i32 @fills(i32 noundef %a, i32 noundef %n) #0 {
+entry:
+  %0 = and i32 %n, 31
+  %1 = ashr i32 %a, %0
+  %2 = and i32 %n, 31
+  %3 = lshr i32 %a, %2
+  %4 = add i32 %1, %3
+  ret i32 %4
+}
+
+define noundef i64 @wide(i64 noundef %a, i64 noundef %n) #0 {
+entry:
+  %0 = and i64 %n, 63
+  %1 = shl i64 %a, %0
+  ret i64 %1
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end expr_shifts -->
+
 ### Checked integer division
 
 `/` and `%` on `i32` / `i64` test the divisor before dividing: a zero
@@ -1115,6 +1277,162 @@ attributes #0 = { nounwind }
 attributes #1 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end expr_div_checked -->
+
+### Unsigned integers
+
+`u8`/`u16`/`u32`/`u64` *are* `i8`/`i16`/`i32`/`i64`: LLVM has no unsigned
+types, so the signedness is carried by the instruction. `udiv` replaces
+`sdiv`, `icmp ult` replaces `icmp slt`, `>>` becomes `lshr` instead of `ashr`,
+and a widening conversion is `zext` instead of `sext`. Two things are worth
+looking at in the listing below:
+
+- `divide` checks the divisor with **one** `icmp eq ..., 0`. Unsigned division
+  has no `MIN / -1` case, so the three extra instructions the signed version
+  needs above are simply absent.
+- `reinterpret` has an empty body. A conversion between two integers of the
+  same width and different signedness moves no bits and emits no instruction,
+  which is why an unsigned type costs nothing to represent.
+
+<!-- cookbook:begin expr_unsigned -->
+```ts
+function divide(a: u32, b: u32): u32 {
+  return a / b;
+}
+
+function below(a: u32, b: u32): boolean {
+  return a < b;
+}
+
+function halve(a: u32): u32 {
+  return a >> 1;
+}
+
+function widen(a: u32): u64 {
+  return toU64(a);
+}
+
+function reinterpret(a: i32): u32 {
+  return toU32(a);
+}
+```
+
+```llvm
+declare void @sts_panic_div(i1 noundef zeroext) #2
+
+define noundef i32 @divide(i32 noundef %a, i32 noundef %b) #0 {
+entry:
+  %0 = icmp eq i32 %b, 0
+  br i1 %0, label %div.fail, label %div.ok
+
+div.fail:
+  call void @sts_panic_div(i1 zeroext %0)
+  unreachable
+
+div.ok:
+  %1 = udiv i32 %a, %b
+  ret i32 %1
+}
+
+define noundef zeroext i1 @below(i32 noundef %a, i32 noundef %b) #1 {
+entry:
+  %0 = icmp ult i32 %a, %b
+  ret i1 %0
+}
+
+define noundef i32 @halve(i32 noundef %a) #1 {
+entry:
+  %0 = lshr i32 %a, 1
+  ret i32 %0
+}
+
+define noundef i64 @widen(i32 noundef %a) #1 {
+entry:
+  %0 = zext i32 %a to i64
+  ret i64 %0
+}
+
+define noundef i32 @reinterpret(i32 noundef %a) #1 {
+entry:
+  ret i32 %a
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn readnone }
+attributes #2 = { nounwind noreturn cold }
+```
+<!-- cookbook:end expr_unsigned -->
+
+### `f32`
+
+`f32` is LLVM's `float`: the same instructions as `f64`, one width down.
+`fptrunc` narrows from a double and `fpext` widens back, and a float-to-integer
+conversion uses the saturating intrinsic with an `.f32` source suffix.
+
+The constant is the part worth reading closely. LLVM writes a `float` constant
+with the **64-bit** hex of the double it equals, and requires that double to be
+exactly representable as a float — so `0.1` as an `f32` is
+`0x3FB99999A0000000`, the double nearest to `(float) 0.1`, and not the `f64`
+spelling `0x3FB999999999999A`.
+
+<!-- cookbook:begin expr_f32 -->
+```ts
+function blend(a: f32, b: f32): f32 {
+  return (a + b) / b;
+}
+
+function narrow(x: f64): f32 {
+  return toF32(x);
+}
+
+function widen(x: f32): f64 {
+  return toF64(x);
+}
+
+function truncate(x: f32): i32 {
+  return toI32(x);
+}
+
+function tenth(): f32 {
+  return 0.1;
+}
+```
+
+```llvm
+declare i32 @llvm.fptosi.sat.i32.f32(float) #0
+
+define noundef float @blend(float noundef %a, float noundef %b) #0 {
+entry:
+  %0 = fadd float %a, %b
+  %1 = fdiv float %0, %b
+  ret float %1
+}
+
+define noundef float @narrow(double noundef %x) #0 {
+entry:
+  %0 = fptrunc double %x to float
+  ret float %0
+}
+
+define noundef double @widen(float noundef %x) #0 {
+entry:
+  %0 = fpext float %x to double
+  ret double %0
+}
+
+define noundef i32 @truncate(float noundef %x) #0 {
+entry:
+  %0 = call i32 @llvm.fptosi.sat.i32.f32(float %x)
+  ret i32 %0
+}
+
+define noundef float @tenth() #0 {
+entry:
+  ret float 0x3FB99999A0000000
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end expr_f32 -->
 
 ## Strings
 
@@ -2805,6 +3123,7 @@ declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_from_f64(double noundef) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i64(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @sts_str_from_u64(i64 noundef) #2
 declare noundef double @sts_random() #2
 declare void @sts_exit(i32 noundef) #4
 declare noalias noundef nonnull align 8 i8* @sts_read_file(i8* noundef nonnull readonly align 8 nocapture) #2

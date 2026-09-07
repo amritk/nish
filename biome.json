@@ -8,6 +8,7 @@
   "files": {
     "includes": [
       "src/**",
+      "self/**/*.ts",
       "tests/**/*.js",
       "examples/**",
       "docs/cookbook/**/*.ts",
@@ -101,7 +102,8 @@
       "includes": [
         "examples/**",
         "docs/cookbook/**",
-        "bench/**/*.ts"
+        "bench/**/*.ts",
+        "self/**/*.ts"
       ],
       "linter": {
         "rules": {

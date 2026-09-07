@@ -445,7 +445,7 @@ if (!only || "layout".includes(only)) {
     const diffs = [];
     for (const [name, size] of fromC) if (fromIr.get(name) !== size) diffs.push(`${name}: C ${size}, IR ${fromIr.get(name)}`);
     check(`layout: compiler sizes match structs.c for ${fromC.size} structs (${[...fromC].map(([n, s]) => `${n}=${s}`).join(" ")})`,
-      fromC.size === 13 && fromIr.size === 13 && diffs.length === 0, diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`);
+      fromC.size === 15 && fromIr.size === 15 && diffs.length === 0, diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`);
     if (HAS_CLANG) {
       // WP2b: the C header lists every class with its flattened fields; a derived
       // struct must therefore have the size the compiler (and structs.c) computed.
@@ -457,7 +457,7 @@ if (!only || "layout".includes(only)) {
         "",
       ].join("\n"));
       const hc = spawnSync("clang", ["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", `-I${buildDir}`, "-Iruntime", headerCheck], { cwd: root });
-      check("layout: --emit-header declares the 13 structs (derived ones flattened) with the sizes structs.c asserts, under -Wall -Wextra -Werror",
+      check(`layout: --emit-header declares the ${fromC.size} structs (derived ones flattened) with the sizes structs.c asserts, under -Wall -Wextra -Werror`,
         hc.status === 0 && fs.readFileSync(layoutH, "utf8").includes("struct M {"), String(hc.stderr));
     }
     if (HAS_CLANG) {
@@ -484,10 +484,12 @@ if (!only || "layout".includes(only)) {
 // `/` and `%` on integers panic (exit 1) on a zero divisor or MIN / -1 instead of
 // executing an sdiv/srem with a poison result. Both programs must print nothing after
 // the offending line and name the failure on stderr.
-if (!only || "division".includes(only) || only.startsWith("div")) {
+if (!only || "division".includes(only) || only.startsWith("div") || only.startsWith("u_")) {
   for (const [name, needle, expectedOut] of [
     ["div_zero_panic", "attempt to divide by zero", "before"],
     ["div_overflow_panic", "attempt to divide with overflow", ""],
+    // WP15: the cheaper one-compare unsigned check still catches a zero divisor.
+    ["u_div_zero_panic", "attempt to divide by zero", "before"],
   ]) {
     const ll = path.join(buildDir, `${name}.ll`);
     if (!HAS_CLANG || !fs.existsSync(ll)) continue;
@@ -862,6 +864,33 @@ if (!only) {
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
   check(`validator accepts a ${lines.length}-line file`, error === null, error?.message);
   check(`validator runs in under 50 ms on ${lines.length} lines (${ms.toFixed(2)} ms)`, ms < 50, `${ms.toFixed(2)} ms`);
+}
+
+// ---- WP14: self-hosting ---------------------------------------------------------------
+// `self/` is the compiler being written in StaticTS (docs/wp14-selfhost.md). It is
+// checked here rather than in tests/cases because it is a program, not a construct:
+// the property is that stage0 compiles every module of it cleanly, which is the
+// floor the staged bootstrap stands on. As phases land this section grows into the
+// stage comparisons of the plan; until then it is a compile gate that fails the
+// moment `self/` uses something the language does not have.
+if (!only || "selfhost".includes(only) || only.includes("self")) {
+  const selfDir = path.join(root, "self");
+  const modules = fs.existsSync(selfDir) ? fs.readdirSync(selfDir).filter((f) => f.endsWith(".ts")).sort() : [];
+  check("self/ has at least one module", modules.length > 0, `${modules.length} modules`);
+  for (const m of modules) {
+    const out = path.join(buildDir, "self");
+    fs.mkdirSync(out, { recursive: true });
+    const r = spawnSync("node", [cli, path.join(selfDir, m), "-o", `${out}/`], { cwd: root, encoding: "utf8" });
+    check(`self/${m} compiles`, r.status === 0, r.stderr);
+  }
+  // Module constants are the reason `self/` can name its token kinds at all: if
+  // one ever became a global, every kind would cost a load on the lexer's hot path.
+  const tokensLl = path.join(buildDir, "self", "tokens.ll");
+  if (fs.existsSync(tokensLl)) {
+    const ir = fs.readFileSync(tokensLl, "utf8");
+    check("self/tokens.ts emits no global for its token kinds",
+      !/^@(?!\.str\.)/m.test(ir), ir.split("\n").filter((l) => l.startsWith("@")).join(" | "));
+  }
 }
 
 // ---- WP9: bench --------------------------------------------------------------------

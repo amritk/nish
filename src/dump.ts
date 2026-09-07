@@ -19,6 +19,7 @@
 import path from "node:path";
 import ts from "typescript";
 import { FunctionSig, LocalVar, StructInfo } from "./checker";
+import { ConstInfo, constValue } from "./checker/constants";
 import { FunctionFacts } from "./codegen/attributes";
 import { Compilation, ModuleUnit } from "./compilation";
 import { typeToString } from "./types";
@@ -147,6 +148,12 @@ function structText(info: StructInfo): string[] {
 }
 
 /** Every module of a checked compilation, in load order. */
+/** The folded value, in source syntax, so the dump can be pasted back into a program. */
+function constantText(info: ConstInfo): string {
+  const value = constValue(info);
+  return value.kind === "string" ? JSON.stringify(value.value) : String(value.value);
+}
+
 export function dumpChecked(compilation: Compilation): string {
   const facts = compilation.analyze();
   const lines: string[] = [];
@@ -154,8 +161,21 @@ export function dumpChecked(compilation: Compilation): string {
     const program = unit.checker.program;
     lines.push(`module ${displayName(unit.fileName)}${unit.isEntry ? " (entry)" : ""}`);
     for (const imp of program.imports) {
-      const what = imp.struct ? `struct ${imp.struct.name}` : imp.sig ? `function @${imp.sig.name}` : "unbound";
+      const what = imp.struct
+        ? `struct ${imp.struct.name}`
+        : imp.constant
+          ? `const ${imp.constant.name}`
+          : imp.sig
+            ? `function @${imp.sig.name}`
+            : "unbound";
       lines.push(`import ${imp.localName} from ${JSON.stringify(imp.specifier)} -> ${what}`);
+    }
+    // Module constants (WP14) carry their folded value: it is the whole of
+    // what the emitter will see, so the dump is the place to read it.
+    for (const info of program.constants.values()) {
+      if (info.decl.getSourceFile() !== unit.sourceFile) continue; // imported: listed by its own module
+      const tag = info.exported ? " [exported]" : "";
+      lines.push(`const ${info.name}: ${typeToString(info.type)} = ${constantText(info)}${tag}`);
     }
     for (const info of program.structs.values()) {
       if (info.decl.getSourceFile() !== unit.sourceFile) continue; // imported: listed by its own module

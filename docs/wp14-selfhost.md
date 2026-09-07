@@ -1,0 +1,295 @@
+# WP14 — Self-hosting
+
+The goal that closes the project: **a compiler for StaticTS, written in
+StaticTS, that compiles its own source.** Everything below is the definition
+of that claim, the proof we will accept for it, and the ordered list of what
+is missing today.
+
+This note is the plan of record for the work. `docs/LANGUAGE.md` stays
+normative for what the language *is*; this file says what it must become and
+why.
+
+---
+
+## 1. What "compiles itself" means here
+
+Two compilers exist by the end, and only the second one is self-hosted.
+
+| | Source | Written in | Built by |
+| --- | --- | --- | --- |
+| **stage0** | `src/` | TypeScript on Node, parsing with the `typescript` package | `tsc` |
+| **stage1** | `self/` | StaticTS | stage0 |
+| **stage2** | `self/` | StaticTS | stage1 |
+| **stage3** | `self/` | StaticTS | stage2 |
+
+stage0 is not going away. It is the bootstrap seed, it is what `npm install
+-g statictsc` ships today, and it stays the reference implementation: a
+program that stage0 and stage1 disagree about is a bug in one of them, and
+saying which is a diff.
+
+stage1, stage2 and stage3 are *the same program* — `self/`. They differ only
+in which compiler built the binary. So:
+
+```
+IR(stage1, self/)  ==  IR(stage2, self/)      byte for byte
+```
+
+is the self-hosting proof. If the compiler stage0 built and the compiler
+stage1 built emit the same text for the same input, the source has reached a
+fixed point and nothing about stage0 leaks into the result any more. stage3
+exists only so the binaries can be compared as well as the IR; it must be
+byte-identical to stage2.
+
+There is a second, stronger equality worth aiming at but not worth blocking
+on:
+
+```
+IR(stage0, self/)  ==  IR(stage1, self/)
+```
+
+That says the TypeScript implementation and the StaticTS implementation agree
+on the IR for the self-hosted compiler's own source. It only holds while
+`self/` uses no construct the two lower differently, so it is a check we
+enable per-file as the port lands, not a milestone.
+
+### The test
+
+The WP14 section of `tests/run.js` runs the stages and compares. It is
+skipped, not failed, without LLVM, the same as every other toolchain-dependent
+check (`.claude/testing.md`). Until stage1 exists it is a compile gate — stage0
+must compile every module of `self/` cleanly — so it is green from the first
+commit and grows one stage comparison at a time. That gate is not a formality:
+it fails the moment `self/` reaches for something the language does not have,
+which is rule 1 of §5 enforced by the suite rather than by good intentions.
+
+---
+
+## 2. StaticTS-0: the subset `self/` is written in
+
+The trap in every bootstrap is writing the compiler in more language than the
+compiler implements. **StaticTS-0** is the fixed, deliberately small subset
+that `self/` may use, and the closure condition is that StaticTS-0 is a subset
+of what `self/` compiles. Every line of `self/` is checked against that.
+
+StaticTS-0 is today's language plus §3, minus everything `self/` does not need.
+Notably `self/` is written **without**:
+
+- generics, arrow functions, closures, nested functions, function values;
+- `type` aliases, `enum`, `namespace`, `static` members, getters/setters;
+- `try`/`catch` — diagnostics are collected into an array and a failed parse
+  returns a sentinel node, the way the error recovery in a real front end
+  works anyway;
+- inheritance and downcasts, because of the decision in §2.1.
+
+### 2.1 One `Node` class, not a class hierarchy
+
+StaticTS has single inheritance (WP2b) but no downcast, and adding one would
+mean a runtime tag check, a `T | null` result, and a new rule in the checker
+for a cast that can fail. A bootstrap compiler does not need any of that.
+
+`self/` uses **one `Node` class** with a `kind: i32` discriminant and the union
+of the fields any node needs — children in a `Node[]`, a `text: string`, a
+couple of numeric payloads. Field access is unchecked by the type system and
+guarded by `kind` instead, exactly as `switch (node.kind)` already reads. It
+costs memory we do not care about and it removes downcasting from the critical
+path entirely.
+
+The same trick applies to types and symbols: one `TypeInfo`, one `Symbol`,
+each with a `kind`.
+
+### 2.2 No hash-map builtin
+
+Name lookup is a `StringMap`: a class in `self/` over parallel `string[]` and
+`i32[]` arrays with FNV-1a hashing and linear probing. Beyond the bitwise
+operators of A5 it needs no language feature that is not already listed here,
+so it is library code, not compiler work. Resist the urge to add `Map<K, V>` to the language for it — that would
+drag in generics, which is a work package of its own and is not on the path.
+
+### 2.3 String building
+
+The emitter produces text, and `s = s + t` in a loop is quadratic. `self/`
+builds output through a `StringBuilder` over a `string[]` plus one `join` at
+the end. `join` is therefore a language requirement (§3), not a convenience.
+
+---
+
+## 3. The gap, measured
+
+This list is not a guess. It comes from two independent sweeps that agree:
+a **census of `src/`** (all 53 files, 11,799 lines — every library facility and
+every string and array method it uses), and a set of **probe programs** compiled
+against today's language to find what it actually refuses. Counts below are
+call sites in `src/`.
+
+Each row ships with everything in the `docs/ARCHITECTURE.md` checklist: a
+golden `.ll`, an `llvm-as` pass, a native round trip, a `reject_*` case, a
+`docs/LANGUAGE.md` rule and a cookbook entry.
+
+### Wave A — the front end cannot be written without these
+
+| # | Construct | Evidence |
+| --- | --- | --- |
+| A1 | `switch` / `case` / `default` | Every phase is a dispatch on a node kind. `src/` has 21 `switch`es plus ~30 dispatch tables that all become switches. Lowers to LLVM's `switch`, so the backend builds a jump table — the fast shape, not an `if` chain. |
+| A2 | `charCodeAt`, `substring`, `indexOf`, `startsWith`, `endsWith`, `String.fromCharCode` | A lexer is `charCodeAt` in a loop and `substring` at the end. `src/` itself never lexes (the `typescript` package does), so this set is sized for `self/`'s lexer, not for `src/`. |
+| A3 | Module-level `const` | **Done.** Token kinds, node kinds, and the 14 string-literal union types that become `i32` constants. |
+| A4 | `pop`, `indexOf`, `join` on arrays | `join` has **66 call sites** and is not optional: see the measurement below. `pop` 4, `indexOf` 7 — five of those seven search by *identity* over AST nodes, which `===` on class values already gives. |
+| A5 | `& \| ^ ~ << >> >>>` and their compound forms | The `StringMap` of §2.2 hashes with FNV-1a, and the emitter formats `f64` constants as hex (see B1). Never forbidden — they fell through the checker's operator table into the "not implemented" bucket. |
+
+**`join` is a hard requirement, not a convenience.** Building 88 KB of IR text
+by repeated `+` costs **180 MB of peak RSS**, because every concatenation
+allocates a fresh copy and the arena never reclaims. Quadratic in both time and
+memory. A self-compile emitting ~1 MB of IR that way would need tens of
+gigabytes. `join` must therefore be the fast shape: one pass to sum the lengths,
+one allocation, one `memcpy` per part.
+
+### Wave B — the back end cannot be written without these
+
+| # | Addition | Evidence |
+| --- | --- | --- |
+| B1 | `f64ToBits(x: f64): i64` (and `bitsToF64`) | **A blocker, and the least obvious one.** LLVM only accepts decimal float literals that round-trip exactly, so the emitter writes `double 0x400921FB54442D18` — today via `Buffer.writeDoubleBE`. StaticTS has no way to see a double's bits, so without this the self-hosted emitter cannot emit any `f64` constant. One `bitcast` in the IR: zero instructions, zero runtime. |
+| B2 | `console.error(x)` and a newline-free write | Every one of the 16 diagnostic writes goes to **stderr**, and two dumps write without a trailing newline. `console.log` is stdout-and-newline only. Without these, every `.err` golden and the runner's stream expectations have to be re-baselined — a worse outcome than two five-line runtime functions. |
+| B3 | A file read that can fail | `readFileSync` **exits the process** on a missing file, so a compiler cannot turn it into its own `` Cannot find module `./x` `` diagnostic and carry on loading the other imports. Smallest fix: `readFileSyncOrNull(path): string \| null` — it subsumes `existsSync`, has no time-of-check race, and needs no new type. |
+| B4 | Contextual `[]` in a field assignment | **Done.** `this.children = []` in a constructor did not take its element type from the field, which every container class hits on its first line. |
+
+### Wave C — library code in `self/`, no language change
+
+Written once in StaticTS and then just there. Listed so nobody mistakes them
+for language work: `StringMap` / `StringSet` (~200 `Map`/`Set` sites),
+`StringBuilder` (§2.3), a **stable** sort (the diagnostic order is
+golden-compared) and a byte-wise `compareStrings` (StaticTS has no `<` on
+strings, deliberately), `jsonQuote` matching JSON escaping exactly, hex
+formatting for B1, and a `resolvePath` that normalises `.` and `..` the way
+Node does — see D3.
+
+### What is deliberately *not* being added
+
+- **Nullable field narrowing.** `if (n.parent !== null) { n.parent.kind }` does
+  not narrow; only locals do. A sound rule would have to invalidate on every
+  call, because the checker runs before the effect facts that could prove a
+  callee harmless. The idiom `const parent = n.parent; if (parent !== null)` is
+  one line, provably safe, and one load instead of two. The diagnostic names it
+  with the reader's own expression.
+- **Generics, closures, function values, `try`/`catch`, a `Map` builtin.** Each
+  is designed around in §2. None is on the path.
+
+## 3a. Decisions this forces
+
+Five things the census turned up that are choices, not omissions.
+
+**D1. Error recovery is the hard one.** `CompileError` is thrown from 292 sites
+and caught in six, every one load-bearing: `DiagnosticSink.recover` (10 call
+sites, per-declaration recovery), per-statement recovery in `checkStatements`,
+and `checkVariableDeclarationList`, which catches, *declares the variable with
+its annotated type anyway*, and rethrows so later statements do not cascade
+`Unknown identifier`. StaticTS `throw` traps and discards the value.
+
+The plan is error-value threading: a diagnostic array, an `ERROR` sentinel type,
+and status returns. Be honest that this is **genuinely worse** than
+`try`/`catch` — it is the classic recursive-descent recovery tax, ~292 edit
+sites, and it will cost real bugs where a caller forgets to check a sentinel.
+The alternative, reporting only the first error, would delete WP10's multi-error
+guarantee and stop stage1 being diff-comparable with stage0 on the
+`reject_multi_*` cases. Add a `panic(msg)` builtin so the 16 internal
+invariants keep their messages.
+
+**D2. Switching the dispatch tables costs self-registration.** Today
+`checker/arrays.ts` adds `for...of` by writing one line into a table and
+touching no other file. With a central `switch`, one `checkExpression` must name
+every construct, so `checker/` becomes a core plus helpers rather than a set of
+peers. Take the central `switch` — it is smallest and it is the shape that
+compiles to a jump table — but note that the paired `BuiltinCall { emit,
+callees }` invariant stops being enforced by locality, so it needs a test.
+
+**D3. Module resolution has a real hazard, not just tedium.** Module identity is
+the absolute resolved path; a hand-written `resolve` that normalises `..`
+differently from Node makes one file load twice, cycles stop terminating, and
+bogus duplicate-symbol errors appear. Separately, `src/` imports *directories*
+(`from "../checker"` at 15 sites) and re-exports (`export * from`) — neither of
+which StaticTS resolves, so the barrels must go.
+
+**D4. stage1 should not link.** `--link` shells out to `bash scripts/build.sh`
+and `-o dir/` creates directories, which would mean `spawnSync` and `mkdirSync`
+builtins and real runtime growth against §5 rule 4. Drop `--link`, `--profile`
+and directory creation from stage1: it emits `.ll`, and a wrapper script links.
+Costs nothing for the bootstrap proof, which compares IR.
+
+**D5. Measure peak memory before S5, not after.** `self/` allocates every node,
+type, string and array from the bump arena and never releases it — an
+`Arena.reset` is unsafe while the AST lives. Add to that `IRModule.toString()`
+building the whole module text in memory before one write. Peak is roughly AST +
+all interned IR text + the final string. Probably fine at hundreds of MB; the
+point is to know rather than to find out at the last milestone.
+
+## 4. Milestones
+
+| | Deliverable | Proof |
+| --- | --- | --- |
+| **S1 Lexer** | `self/lexer.ts` tokenises StaticTS-0 | A token dump of every `tests/cases/*.ts` matches a golden; the lexer built by stage0 runs natively |
+| **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 | The tree dump matches stage0's `--emit-ast` for the corpus, modulo the documented shape differences |
+| **S3 Checker** | `self/checker.ts` — types, scopes, the side tables | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
+| **S4 Emitter** | `self/emit.ts` — IR text | `IR(stage0, p) == IR(stage1, p)` for a growing whitelist of `tests/cases/` |
+| **S5 Bootstrap** | `self/` compiles `self/` | `IR(stage1, self/) == IR(stage2, self/)`, and stage3 is byte-identical to stage2 |
+
+S1–S4 are each useful on their own and each testable against stage0, which is
+what keeps this from being a single unlandable change. S5 is the day the
+compiler compiles itself.
+
+---
+
+## 5. Performance is the tiebreaker
+
+The project's northern star is the speed of what the compiler produces. Where a
+language decision here has two defensible answers, the faster lowering wins, and
+"faster" means measured rather than assumed. Three worked examples, because the
+rule is only worth stating if it changes something:
+
+- **Shift counts are masked** (`x << b` lowers to `shl x, (b & 31)`), which
+  makes `i32` shifts exactly JavaScript's and removes LLVM's
+  out-of-range-shift undefined behaviour. That looked like a correctness/speed
+  trade until it was measured: `llc -O3` emits **byte-identical assembly** for
+  the masked and unmasked forms on both x86-64 and aarch64, because both ISAs
+  mask in hardware and the backend drops the `and`. Free, so it stays.
+- **`switch` is integer-only**, so it lowers to LLVM's `switch` instruction and
+  the backend builds a jump table. A string `switch` would have been a chain of
+  `sts_str_eq` calls wearing a `switch`'s clothes; `if`/`else` says that
+  honestly.
+- **String methods lower inline, not to calls.** `charCodeAt` is a bounds check
+  and a `load i8`; `substring` is a length computation, a bump allocation and a
+  `memcpy`. That keeps `runtime.c` inside its budget *and* lets LLVM optimise
+  through the operation instead of across a call boundary. Both goals point the
+  same way, which is the usual case.
+
+Self-hosting serves this star directly rather than competing with it: stage1 is
+a native binary with no Node process to start and no TypeScript parser to load,
+so the compiler's own speed is one of the things self-hosting buys.
+
+Two performance questions are open and want the `bench/` harness rather than an
+opinion: whether `--strict-exports` (internal linkage for non-exported
+functions, which unlocks inlining and specialisation) should become the
+default, and what `--nsw` is actually worth on the benchmark suite now that
+there is more than arithmetic to measure.
+
+## 6. Rules for this work package
+
+These are in addition to `docs/MASTER_PLAN.md` §7, not instead of it.
+
+1. **A construct enters the language before it enters `self/`.** Wanting it
+   for the port is not a reason to skip its `reject_*` case or its cookbook
+   entry. `self/` is the customer, not the exception.
+2. **`self/` is a StaticTS program.** It follows `docs/LANGUAGE.md` and the
+   StaticTS half of `.claude/typescript.md` — `function` declarations,
+   `interface` for structs, no arrow functions, no `type` aliases. The house
+   rules for `src/` do not apply to it, and `biome.json` must exempt it the
+   way it already exempts `examples/` and `bench/`.
+3. **stage0 is the oracle.** Every `self/` phase is tested by comparing it
+   with the corresponding stage0 output over `tests/cases/`, not by a golden
+   written by hand. A disagreement is triaged before the next phase starts.
+4. **The runtime budget still holds.** Self-hosting is not a licence to grow
+   `runtime.c` past §2 of the master plan. Lower inline instead.
+5. **StaticTS-0 does not grow quietly.** Adding a construct to the subset in
+   §2 is an edit to this file and a line in `CHANGELOG.md`, because every
+   addition is something stage1 must then implement in order to compile
+   itself.
+6. **A new construct is lowered for speed and the lowering is checked.** Read
+   the emitted assembly, not just the IR, when the choice is not obvious — §5
+   exists because one such reading changed nothing and another would have.

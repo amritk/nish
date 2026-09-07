@@ -1,0 +1,2 @@
+declare noundef i32 @offset(i32 noundef)
+ret i32 3

@@ -9,11 +9,16 @@
  *   Math.pow(x, y)                                  llvm.pow.f64 plus selects for the ECMAScript NaN cases
  *   Math.abs(x)      f64: @llvm.fabs.f64          i32/i64: @llvm.abs.<T>(T x, i1 false)
  *                    (`i1 false`: INT_MIN wraps to itself instead of poison)
+ *                    unsigned: nothing, the value is already its own magnitude
  *   Math.min/max     f64: @llvm.minnum/maxnum.f64   i32/i64: @llvm.smin/smax.<T>
+ *                    unsigned: @llvm.umin/umax.<T>
  *   Math.round(x)    f = floor(x); f + 1 when x - f >= 0.5 else f  (see below)
  *   Math.random()    call double @sts_random()   (write effect: RNG state)
  *   Math.PI, Math.E  f64 constants
  *   toI32/toI64/toF64(x)   sext / trunc / sitofp / @llvm.fptosi.sat.<T>.f64
+ *   toU8/toU16/toU32/toU64(x)  zext / trunc / uitofp / @llvm.fptoui.sat.<T>.f64,
+ *                    and *nothing* between two integers of the same width that
+ *                    differ only in signedness (WP15)
  *   parseFloat(s)          call double @sts_parse_number(i8* s, i32 0)
  *   Number(s)              call double @sts_parse_number(i8* s, i32 1)   (string)
  *   Number(x)              sitofp / `uitofp i1` / nothing                (i32, i64, boolean, f64)
@@ -41,10 +46,26 @@
  * toI32/toI64 from f64 use the saturating intrinsics: NaN becomes 0 and
  * out-of-range values clamp, so the conversion is defined for every input
  * (plain `fptosi` would be poison there). This is C#/Rust `as` behaviour, not
- * JavaScript's modulo-2^32 `ToInt32`.
+ * JavaScript's modulo-2^32 `ToInt32`. The unsigned targets use `fptoui.sat`,
+ * whose clamp is to `0 .. 2^bits-1`, so a negative double becomes 0.
  */
 import { CheckedProgram } from "../../checker";
-import { StaticType, isInteger, llvmType } from "../../types";
+import {
+  F32,
+  F64,
+  I32,
+  I64,
+  StaticType,
+  U8,
+  U16,
+  U32,
+  U64,
+  intBits,
+  isFloat,
+  isInteger,
+  isUnsigned,
+  llvmType,
+} from "../../types";
 import { BuiltinCall, BuiltinProperty, f64Constant } from "./builtins";
 import { EmitContext } from "./context";
 
@@ -57,7 +78,8 @@ function callIntrinsic(ctx: EmitContext, name: string, ret: string, args: string
 /** `Math.<f>(x: f64): f64` as one intrinsic call. */
 function f64Unary(intrinsic: string): BuiltinCall {
   return {
-    emit: (ctx, expr) => callIntrinsic(ctx, intrinsic, "double", `double ${ctx.emitExpression(expr.arguments[0])}`),
+    emit: (ctx, expr) =>
+      callIntrinsic(ctx, intrinsic, "double", `double ${ctx.emitExpression(expr.arguments[0])}`),
     callees: () => [intrinsic],
   };
 }
@@ -93,22 +115,34 @@ const mathRound: BuiltinCall = {
   callees: () => ["llvm.floor.f64"],
 };
 
-function absIntrinsic(t: StaticType): string {
-  return isInteger(t) ? `llvm.abs.${t.kind}` : "llvm.fabs.f64";
+/**
+ * `Math.abs` on an unsigned value is the identity, so it lowers to no
+ * instruction; `undefined` says "there is no intrinsic to call" (WP15).
+ */
+function absIntrinsic(t: StaticType): string | undefined {
+  if (isUnsigned(t)) return undefined;
+  return isInteger(t) ? `llvm.abs.${llvmType(t)}` : `llvm.fabs.${t.kind}`;
 }
 
 const mathAbs: BuiltinCall = {
   emit: (ctx, expr) => {
     const t = ctx.typeOf(expr.arguments[0]);
     const x = ctx.emitExpression(expr.arguments[0]);
+    const intrinsic = absIntrinsic(t);
+    if (!intrinsic) return x;
     const ty = llvmType(t);
-    return callIntrinsic(ctx, absIntrinsic(t), ty, isInteger(t) ? `${ty} ${x}, i1 false` : `${ty} ${x}`);
+    return callIntrinsic(ctx, intrinsic, ty, isInteger(t) ? `${ty} ${x}, i1 false` : `${ty} ${x}`);
   },
-  callees: (program, expr) => [absIntrinsic(program.types.get(expr.arguments[0])!)],
+  callees: (program, expr) => {
+    const intrinsic = absIntrinsic(program.types.get(expr.arguments[0])!);
+    return intrinsic ? [intrinsic] : [];
+  },
 };
 
+/** `llvm.umin`/`umax` for the unsigned widths, `smin`/`smax` for the signed ones. */
 function minMaxIntrinsic(which: "min" | "max", t: StaticType): string {
-  return isInteger(t) ? `llvm.s${which}.${t.kind}` : `llvm.${which}num.f64`;
+  if (!isInteger(t)) return `llvm.${which}num.${t.kind}`;
+  return `llvm.${isUnsigned(t) ? "u" : "s"}${which}.${llvmType(t)}`;
 }
 
 function mathMinMax(which: "min" | "max"): BuiltinCall {
@@ -142,7 +176,9 @@ const F64_UNARY: Record<string, string> = {
 
 /** Dotted callees, spread into `builtinCallEmitters`; mirrors `mathBuiltinCalls`. */
 export const mathBuiltinCallEmitters: Record<string, BuiltinCall> = {
-  ...Object.fromEntries(Object.entries(F64_UNARY).map(([f, intrinsic]) => [`Math.${f}`, f64Unary(intrinsic)])),
+  ...Object.fromEntries(
+    Object.entries(F64_UNARY).map(([f, intrinsic]) => [`Math.${f}`, f64Unary(intrinsic)])
+  ),
   "Math.pow": mathPow,
   "Math.round": mathRound,
   "Math.abs": mathAbs,
@@ -159,19 +195,45 @@ export const mathPropertyEmitters: Record<string, BuiltinProperty> = {
 
 // ---- Conversions ------------------------------------------------------------------
 
-/** The intrinsic a `from -> to` conversion calls, if any (only f64 -> integer needs one). */
+/**
+ * The intrinsic a `from -> to` conversion calls, if any (only f64 -> integer
+ * needs one). The saturating family is chosen by the *target's* signedness:
+ * `fptoui.sat` clamps a negative double to 0 rather than to the type's
+ * minimum, which is the only sensible answer for an unsigned type (WP15).
+ */
 function conversionIntrinsic(from: StaticType, to: StaticType): string | undefined {
-  return from.kind === "f64" && isInteger(to) ? `llvm.fptosi.sat.${to.kind}.f64` : undefined;
+  if (!isFloat(from) || !isInteger(to)) return undefined;
+  return `llvm.${isUnsigned(to) ? "fptoui" : "fptosi"}.sat.${llvmType(to)}.${from.kind}`;
 }
 
-/** Lower a numeric `value` of type `from` to type `to`. Same type: no instruction. */
+/**
+ * Lower a numeric `value` of type `from` to type `to`.
+ *
+ * Same type, or two integers of the same width that differ only in
+ * signedness: no instruction at all, because signedness is not in the LLVM
+ * type and the bits do not move (WP15; `tests/cases/u_conv_same_width`).
+ * Otherwise: widen with `sext`/`zext` by the *source's* signedness, narrow
+ * with `trunc`, and cross to or from `f64` with the signed or unsigned form.
+ */
 export function emitConversion(ctx: EmitContext, value: string, from: StaticType, to: StaticType): string {
   if (from.kind === to.kind) return value;
+  const fromTy = llvmType(from);
+  const toTy = llvmType(to);
   const intrinsic = conversionIntrinsic(from, to);
-  if (intrinsic) return callIntrinsic(ctx, intrinsic, llvmType(to), `double ${value}`);
-  if (to.kind === "f64") return ctx.fn.emitValue(`sitofp ${llvmType(from)} ${value} to double`);
-  const op = from.kind === "i32" ? "sext" : "trunc";
-  return ctx.fn.emitValue(`${op} ${llvmType(from)} ${value} to ${llvmType(to)}`);
+  if (intrinsic) return callIntrinsic(ctx, intrinsic, toTy, `${fromTy} ${value}`);
+  if (isFloat(to)) {
+    // float -> float is a plain widen or narrow; integer -> float picks the
+    // family by the source's signedness, so a u32 above INT_MAX converts to
+    // four billion rather than to a negative double (WP15).
+    if (isFloat(from)) {
+      const widen = from.kind === "f32"; // the only float pair today is f32 <-> f64
+      return ctx.fn.emitValue(`${widen ? "fpext" : "fptrunc"} ${fromTy} ${value} to ${toTy}`);
+    }
+    return ctx.fn.emitValue(`${isUnsigned(from) ? "uitofp" : "sitofp"} ${fromTy} ${value} to ${toTy}`);
+  }
+  if (fromTy === toTy) return value; // i32 <-> u32, i64 <-> u64: the same bits, read differently
+  const op = intBits(from) < intBits(to) ? (isUnsigned(from) ? "zext" : "sext") : "trunc";
+  return ctx.fn.emitValue(`${op} ${fromTy} ${value} to ${toTy}`);
 }
 
 function conversion(to: StaticType): BuiltinCall {
@@ -187,11 +249,30 @@ function conversion(to: StaticType): BuiltinCall {
   };
 }
 
+/**
+ * `f64ToBits` / `bitsToF64`: one `bitcast`, which LLVM resolves in the register
+ * allocator rather than emitting an instruction. No call, no memory, no runtime
+ * symbol, so a function that only reinterprets bits stays `readnone`.
+ */
+function bitcast(from: string, to: string): BuiltinCall {
+  return {
+    emit: (ctx, expr) => ctx.fn.emitValue(`bitcast ${from} ${ctx.emitExpression(expr.arguments[0])} to ${to}`),
+    callees: () => [],
+  };
+}
+
 /** Identifier callees, spread into `builtinFunctionEmitters`; mirrors `conversionBuiltins`. */
 export const conversionEmitters: Record<string, BuiltinCall> = {
-  toI32: conversion({ kind: "i32" }),
-  toI64: conversion({ kind: "i64" }),
-  toF64: conversion({ kind: "f64" }),
+  toI32: conversion(I32),
+  toI64: conversion(I64),
+  toU8: conversion(U8),
+  toU16: conversion(U16),
+  toU32: conversion(U32),
+  toU64: conversion(U64),
+  toF32: conversion(F32),
+  toF64: conversion(F64),
+  f64ToBits: bitcast("double", "i64"),
+  bitsToF64: bitcast("i64", "double"),
 };
 
 // ---- String to number (WP7) ---------------------------------------------------------
@@ -225,9 +306,10 @@ const numberOf: BuiltinCall = {
     const value = ctx.emitExpression(arg);
     if (from.kind === "string") return parseCall(ctx, value, 1);
     if (from.kind === "bool") return ctx.fn.emitValue(`uitofp i1 ${value} to double`);
-    return emitConversion(ctx, value, from, { kind: "f64" });
+    return emitConversion(ctx, value, from, F64);
   },
-  callees: (program, expr) => (program.types.get(expr.arguments[0])!.kind === "string" ? [PARSE_RUNTIME] : []),
+  callees: (program, expr) =>
+    program.types.get(expr.arguments[0])!.kind === "string" ? [PARSE_RUNTIME] : [],
 };
 
 /** Identifier callees, spread into `builtinFunctionEmitters`; mirrors `parseBuiltins`. */

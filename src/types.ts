@@ -76,6 +76,24 @@ export const DEFAULT_OPTIONS: CompilerOptions = {
 export type StaticType =
   | { kind: "i32" }
   | { kind: "i64" }
+  /**
+   * Unsigned integers (WP15). They share the LLVM types of the signed widths
+   * (`u8`/`u16`/`u32`/`u64` are `i8`/`i16`/`i32`/`i64`), because LLVM has no
+   * signedness: it lives in the *operations* (`udiv`, `icmp ult`, `lshr`,
+   * `zext`, `uitofp`), which is why an unsigned type costs nothing to
+   * represent. See `docs/LANGUAGE.md` -> "Unsigned integers".
+   */
+  | { kind: "u8" }
+  | { kind: "u16" }
+  | { kind: "u32" }
+  | { kind: "u64" }
+  /**
+   * 32-bit IEEE-754 (WP15). `float` in LLVM: half the footprint of an `f64`
+   * and twice the SIMD lane count, which is why a struct of coordinates or a
+   * buffer of samples wants it. It never mixes with `f64` implicitly, exactly
+   * as `i32` never mixes with `i64`.
+   */
+  | { kind: "f32" }
   | { kind: "f64" }
   | { kind: "bool" }
   | { kind: "string" }
@@ -95,6 +113,11 @@ export type StaticType =
 export const I32: StaticType = { kind: "i32" };
 /** 64-bit integer (WP7). Never the lowering of `number`; always spelled `i64`. */
 export const I64: StaticType = { kind: "i64" };
+export const U8: StaticType = { kind: "u8" };
+export const U16: StaticType = { kind: "u16" };
+export const U32: StaticType = { kind: "u32" };
+export const U64: StaticType = { kind: "u64" };
+export const F32: StaticType = { kind: "f32" };
 export const F64: StaticType = { kind: "f64" };
 export const BOOL: StaticType = { kind: "bool" };
 export const STRING: StaticType = { kind: "string" };
@@ -116,6 +139,7 @@ export function arrayOf(elem: StaticType): StaticType {
  */
 export const TYPED_ARRAY_ALIASES: Readonly<Record<string, StaticType>> = {
   Int32Array: I32,
+  Float32Array: F32,
   Float64Array: F64,
   BigInt64Array: I64,
 };
@@ -141,6 +165,16 @@ export function llvmType(t: StaticType): string {
       return "i32";
     case "i64":
       return "i64";
+    case "u8":
+      return "i8";
+    case "u16":
+      return "i16";
+    case "u32":
+      return "i32";
+    case "u64":
+      return "i64";
+    case "f32":
+      return "float";
     case "f64":
       return "double";
     case "bool":
@@ -165,6 +199,16 @@ export function alignOf(t: StaticType): number {
       return 4;
     case "i64":
       return 8;
+    case "u8":
+      return 1;
+    case "u16":
+      return 2;
+    case "u32":
+      return 4;
+    case "u64":
+      return 8;
+    case "f32":
+      return 4;
     case "f64":
       return 8;
     case "bool":
@@ -208,12 +252,59 @@ export function assignable(from: StaticType, to: StaticType): boolean {
 }
 
 export function isNumeric(t: StaticType): boolean {
-  return t.kind === "i32" || t.kind === "i64" || t.kind === "f64";
+  return isInteger(t) || isFloat(t);
 }
 
-/** Integer types: wrapping two's-complement arithmetic, `icmp`, `sext`/`trunc` between them. */
+/**
+ * IEEE-754 types (WP15). Every float lowering (`fadd`, `fcmp o*`, `fneg`,
+ * `fptrunc`/`fpext`, `sitofp`) is the same instruction at both widths, so
+ * almost every site that used to test `kind === "f64"` tests this instead;
+ * only the LLVM type name and the constant encoding differ.
+ */
+export function isFloat(t: StaticType): boolean {
+  return t.kind === "f32" || t.kind === "f64";
+}
+
+/**
+ * Integer widths in bits. The map doubles as the membership test for "is this
+ * an integer type", so a width added here becomes an integer everywhere at
+ * once: `isInteger`, `intBits`, and through them the whole conversion matrix.
+ */
+const INT_BITS: Readonly<Partial<Record<StaticType["kind"], number>>> = {
+  i32: 32,
+  i64: 64,
+  u8: 8,
+  u16: 16,
+  u32: 32,
+  u64: 64,
+};
+
+/** Integer types: wrapping two's-complement arithmetic, `icmp`, `sext`/`zext`/`trunc` between them. */
 export function isInteger(t: StaticType): boolean {
-  return t.kind === "i32" || t.kind === "i64";
+  return INT_BITS[t.kind] !== undefined;
+}
+
+/**
+ * Unsigned integer types (WP15). Signedness is not part of the LLVM type, so
+ * this predicate is what every lowering consults to pick `udiv` over `sdiv`,
+ * `icmp ult` over `icmp slt`, `lshr` over `ashr`, `zext` over `sext`, and
+ * `uitofp` over `sitofp`.
+ */
+export function isUnsigned(t: StaticType): boolean {
+  return t.kind === "u8" || t.kind === "u16" || t.kind === "u32" || t.kind === "u64";
+}
+
+/** Width in bits of an integer type; `0` for everything else. */
+export function intBits(t: StaticType): number {
+  return INT_BITS[t.kind] ?? 0;
+}
+
+/**
+ * Largest value an unsigned type can hold, as a `bigint` so that `u64` is
+ * exact. Only meaningful for the unsigned widths; `isUnsigned` gates callers.
+ */
+export function unsignedMax(t: StaticType): bigint {
+  return (1n << BigInt(intBits(t))) - 1n;
 }
 
 /**
@@ -281,6 +372,16 @@ export function resolveTypeNode(
             return I32;
           case "i64":
             return I64;
+          case "u8":
+            return U8;
+          case "u16":
+            return U16;
+          case "u32":
+            return U32;
+          case "u64":
+            return U64;
+          case "f32":
+            return F32;
           case "f64":
             return F64;
         }
@@ -290,14 +391,14 @@ export function resolveTypeNode(
         if (named) return named;
       }
       throw new CompileError(
-        `Unsupported type reference \`${ref.getText(sourceFile)}\` (supported: number, i32, i64, f64, boolean, string, void, T[], Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)`,
+        `Unsupported type reference \`${ref.getText(sourceFile)}\` (supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)`,
         node,
         sourceFile
       );
     }
     default:
       throw new CompileError(
-        `Unsupported type \`${node.getText(sourceFile)}\` (Phase 1 supports number, i32, i64, f64, boolean, string, void)`,
+        `Unsupported type \`${node.getText(sourceFile)}\` (Phase 1 supports number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void)`,
         node,
         sourceFile
       );

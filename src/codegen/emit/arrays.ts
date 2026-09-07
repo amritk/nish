@@ -42,7 +42,7 @@
  */
 import ts from "typescript";
 import { CheckedProgram } from "../../checker";
-import { ARRAY_STRUCT, StaticType, TYPED_ARRAY_ALIASES, alignOf, llvmType } from "../../types";
+import { ARRAY_STRUCT, StaticType, TYPED_ARRAY_ALIASES, alignOf, isFloat, isUnsigned, llvmType } from "../../types";
 import { ARRAY_TYPE } from "../runtime";
 import { emitIntBinary } from "./arithmetic";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, StatementEmitter } from "./context";
@@ -84,16 +84,24 @@ function elementPointer(ctx: EmitContext, arr: string, elem: StaticType, idx: st
   return ctx.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${typed}, i64 ${idx}`);
 }
 
-/** Lower a numeric expression and widen it to i64: `sext` from i32, `fptosi` from double (truncates). */
+/**
+ * Lower a numeric expression and widen it to i64: `sext` from a signed
+ * integer, `zext` from an unsigned one (WP15: `zext` is what keeps a `u32`
+ * index above `INT_MAX` from becoming a negative i64 and failing the
+ * unsigned bounds compare), `fptosi` from double (truncates).
+ */
 function emitIndex(ctx: EmitContext, expr: ts.Expression): string {
   const type = ctx.typeOf(expr);
   const literal = unwrapParens(expr);
-  if (type.kind === "i32" && ts.isNumericLiteral(literal)) return String(Number(literal.text) | 0); // fold `sext i32 C`
+  // Fold the widening of a constant index. `| 0` is the i32 truncation the
+  // checker already allows for; an i64 or unsigned literal is exact as written.
+  if (type.kind === "i32" && ts.isNumericLiteral(literal)) return String(Number(literal.text) | 0);
+  if (isUnsigned(type) && ts.isNumericLiteral(literal)) return String(Number(literal.text));
   const value = ctx.emitExpression(expr);
   const ty = llvmType(type);
   if (ty === "i64") return value;
-  if (ty === "double") return ctx.fn.emitValue(`fptosi double ${value} to i64`);
-  return ctx.fn.emitValue(`sext ${ty} ${value} to i64`);
+  if (isFloat(type)) return ctx.fn.emitValue(`fptosi ${ty} ${value} to i64`);
+  return ctx.fn.emitValue(`${isUnsigned(type) ? "zext" : "sext"} ${ty} ${value} to i64`);
 }
 
 /** Convert an i64 length back to the `number` type the checker recorded for `expr`. */
@@ -247,7 +255,7 @@ const emitElementAssignment: BinaryEmitter = (ctx, expr) => {
   const rhs = ctx.emitExpression(expr.right);
   const [intOp, floatOp] = COMPOUND_OPCODES[op]!;
   const value =
-    elem.kind === "f64" ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`) : emitIntBinary(ctx, intOp, ty, old, rhs);
+    isFloat(elem) ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`) : emitIntBinary(ctx, intOp, elem, old, rhs);
   ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${ctx.alignSuffix(elem)}`);
   return value;
 };

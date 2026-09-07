@@ -28,7 +28,7 @@
  */
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar, StructInfo } from "../checker";
-import { StaticType, llvmType, typeToString } from "../types";
+import { StaticType, intBits, isInteger, llvmType, typeToString } from "../types";
 import { packageVersion } from "../version";
 import { IRFunction, IRModule } from "./ir";
 
@@ -36,6 +36,13 @@ import { IRFunction, IRModule } from "./ir";
 const BASIC_TYPES: Partial<Record<StaticType["kind"], string>> = {
   i32: '!DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)',
   i64: '!DIBasicType(name: "long", size: 64, encoding: DW_ATE_signed)',
+  // WP15: the unsigned widths carry `DW_ATE_unsigned` so a debugger prints
+  // 4294967295 rather than -1, which is the whole point of having them.
+  u8: '!DIBasicType(name: "unsigned char", size: 8, encoding: DW_ATE_unsigned_char)',
+  u16: '!DIBasicType(name: "unsigned short", size: 16, encoding: DW_ATE_unsigned)',
+  u32: '!DIBasicType(name: "unsigned int", size: 32, encoding: DW_ATE_unsigned)',
+  u64: '!DIBasicType(name: "unsigned long", size: 64, encoding: DW_ATE_unsigned)',
+  f32: '!DIBasicType(name: "float", size: 32, encoding: DW_ATE_float)',
   f64: '!DIBasicType(name: "double", size: 64, encoding: DW_ATE_float)',
   bool: '!DIBasicType(name: "bool", size: 8, encoding: DW_ATE_boolean)',
 };
@@ -195,8 +202,9 @@ export class DebugInfo {
 
 /** Storage size of a field, for `DW_TAG_member`; pointers are 64-bit on every supported target. */
 function bitsOf(t: StaticType): number {
+  if (isInteger(t)) return intBits(t);
   switch (t.kind) {
-    case "i32":
+    case "f32":
       return 32;
     case "bool":
       return 8;

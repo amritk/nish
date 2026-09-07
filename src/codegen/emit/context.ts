@@ -7,7 +7,7 @@
  */
 import ts from "typescript";
 import { CheckedProgram, LocalVar } from "../../checker";
-import { CompilerOptions, StaticType } from "../../types";
+import { CompilerOptions, StaticType, isUnsigned } from "../../types";
 import { DebugInfo } from "../debug";
 import { IRBlock, IRFunction } from "../ir";
 
@@ -83,15 +83,21 @@ export type EmitterTable<H> = Partial<Record<ts.SyntaxKind, H>>;
 
 /**
  * The integer opcode to emit for `add` / `sub` / `mul` (WP9). Under `--nsw`
- * the instruction carries the no-signed-wrap flag, which makes overflow
- * poison (C semantics) instead of wrapping; every site that lowers user-level
- * integer arithmetic (binary operators, unary minus, `op=`, `++`/`--`, on
- * locals, fields and elements alike) goes through here so the flag is
- * applied uniformly. Division, remainder and the compiler's own address and
- * length arithmetic are never flagged: `sdiv`/`srem` have no `nsw` form, and
- * the internal `i64` counters cannot overflow.
+ * the instruction carries a no-wrap flag, which makes overflow poison (C
+ * semantics) instead of wrapping; every site that lowers user-level integer
+ * arithmetic (binary operators, unary minus, `op=`, `++`/`--`, on locals,
+ * fields and elements alike) goes through here so the flag is applied
+ * uniformly. Division, remainder, shifts, and the compiler's own address and
+ * length arithmetic are never flagged: they have no such form, and the
+ * internal `i64` counters cannot overflow.
+ *
+ * The flag has to match the *type's* signedness (WP15). An unsigned value that
+ * passes 2^31 has not overflowed, so `nsw` on a `u32` add would make a
+ * perfectly ordinary result poison; `nuw` is the claim that is true there.
+ * Without `--nsw` both widths keep the documented wrapping semantics.
  */
-export function intOpcode(ctx: EmitContext, opcode: string): string {
+export function intOpcode(ctx: EmitContext, opcode: string, type: StaticType): string {
   if (!ctx.opts.nsw) return opcode;
-  return opcode === "add" || opcode === "sub" || opcode === "mul" ? `${opcode} nsw` : opcode;
+  if (opcode !== "add" && opcode !== "sub" && opcode !== "mul") return opcode;
+  return `${opcode} ${isUnsigned(type) ? "nuw" : "nsw"}`;
 }

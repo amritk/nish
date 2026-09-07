@@ -31,6 +31,12 @@ struct J { bool a; double b; bool c; int32_t d; bool e; sts_string f; };
 struct K { int32_t a; double b; bool c; };                /* extends B */
 struct L { double a; int32_t b; int32_t c; };             /* extends C */
 struct M { int32_t a; double b; bool c; sts_string d; };  /* extends K */
+/* WP15: the unsigned widths. `e` cannot share `a`'s slot, so it lands after
+   `d` and the struct is 24 bytes, not 16. */
+struct N { uint8_t a; uint16_t b; uint32_t c; uint64_t d; uint8_t e; };
+/* WP15: an f32 beside an f64. `a` is 4 bytes so `b` starts at 8, `c` at 16
+   and `d` at 20: 24 bytes, where four doubles would have been 32. */
+struct O { float a; double b; float c; bool d; };
 
 _Static_assert(sizeof(struct A) == 4, "A");
 _Static_assert(sizeof(struct B) == 16, "B");
@@ -45,6 +51,8 @@ _Static_assert(sizeof(struct J) == 40, "J");
 _Static_assert(sizeof(struct K) == 24, "K");
 _Static_assert(sizeof(struct L) == 16, "L");
 _Static_assert(sizeof(struct M) == 32, "M");
+_Static_assert(sizeof(struct N) == 24, "N");
+_Static_assert(sizeof(struct O) == 24, "O");
 
 int32_t A_a(struct A *);
 int32_t B_a(struct B *);
@@ -87,6 +95,15 @@ double M_b(struct M *);
 bool M_c(struct M *);
 sts_string M_d(struct M *);
 double M_as_B_b(struct M *);
+uint8_t N_a(struct N *);
+uint16_t N_b(struct N *);
+uint32_t N_c(struct N *);
+uint64_t N_d(struct N *);
+uint8_t N_e(struct N *);
+float O_a(struct O *);
+double O_b(struct O *);
+float O_c(struct O *);
+bool O_d(struct O *);
 
 static int failures = 0;
 #define CHECK(name, cond)                              \
@@ -111,6 +128,8 @@ int main(void) {
   struct K k = { 0x0aaaaaaa, 11.5, true };
   struct L l = { -12.25, 0x0bbbbbbb, 0x0ccccccc };
   struct M m = { 0x0ddddddd, 13.5, true, &str_hello };
+  struct N n = { 0xEE, 0xEEEE, 0xEEEEEEEE, 0xEEEEEEEEEEEEEEEEu, 0xDD };
+  struct O o = { 1.5f, -2.25, 3.75f, true };
 
   CHECK("A.a", A_a(&a) == 0x11111111);
   CHECK("B.a", B_a(&b) == 0x22222222);
@@ -153,6 +172,19 @@ int main(void) {
   CHECK("M.c", M_c(&m) == true);
   CHECK("M.d", M_d(&m) == (sts_string)&str_hello);
   CHECK("M as B: b", M_as_B_b(&m) == 13.5);
+  /* Every one of these would read the wrong bytes if a narrow width were
+     laid out at another offset, and the two u8s would collide if `e` were
+     packed next to `a`. */
+  CHECK("N.a", N_a(&n) == 0xEE);
+  CHECK("N.b", N_b(&n) == 0xEEEE);
+  CHECK("N.c", N_c(&n) == 0xEEEEEEEE);
+  CHECK("N.d", N_d(&n) == 0xEEEEEEEEEEEEEEEEu);
+  CHECK("N.e", N_e(&n) == 0xDD);
+  /* Exact in a float, so the comparison needs no epsilon. */
+  CHECK("O.a", O_a(&o) == 1.5f);
+  CHECK("O.b", O_b(&o) == -2.25);
+  CHECK("O.c", O_c(&o) == 3.75f);
+  CHECK("O.d", O_d(&o) == true);
 
   if (failures == 0) printf("layout ok\n");
   return failures == 0 ? 0 : 1;
