@@ -57,7 +57,7 @@ import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
 import { dottedName } from "../checker/builtins";
 import { effectiveConstructor, intrinsicType, isAssignmentOperator } from "../checker/classes";
-import { CompilerOptions, StaticType, alignOf, isNumeric, stripNull } from "../types";
+import { CompilerOptions, StaticType, alignOf, isNumeric, resultByValue, stripNull } from "../types";
 import { FunctionFacts, classifyUse } from "./attributes";
 import { isJoinCall, isPushCall } from "./emit/arrays";
 import { isResultConstructorCall, resultMethodName } from "./emit/result";
@@ -128,9 +128,14 @@ function isAssignmentTarget(node: ts.Node): boolean {
 function isPointerResult(t: StaticType): boolean {
   const inner = stripNull(t);
   // A `Result` (WP16) is a pointer into the arena like the others, so a call
-  // that answers one is an allocation site of its caller.
+  // that answers one is an allocation site of its caller — unless WP17 packs
+  // it into a register, in which case the callee allocated nothing and the
+  // caller's copy is its own (see the `resultByValue` arm of `visitCall`).
   return (
-    inner.kind === "struct" || inner.kind === "array" || inner.kind === "string" || inner.kind === "result"
+    inner.kind === "struct" ||
+    inner.kind === "array" ||
+    inner.kind === "string" ||
+    (inner.kind === "result" && !resultByValue(inner))
   );
 }
 
@@ -152,6 +157,8 @@ export function analyzeEscapes(
     usesArenaControl: false,
     callSites: [],
   };
+  /** WP17: this function hands its `Result` back in a register, not as a pointer. */
+  const returnsByValueResult = resultByValue(sig.returnType);
   const sites: Site[] = [];
   /** Every identifier reference to each local of this function, in source order. */
   const refs = new Map<LocalVar, ts.Identifier[]>();
@@ -203,6 +210,11 @@ export function analyzeEscapes(
     if (callee) {
       if (isPointerResult(callee.returnType))
         sites.push({ node: call, stackable: false, callee: callee.name });
+      // WP17: a `Result` returned in a register is materialised by the *caller*,
+      // so the call is an allocation site of this function like `new C(...)` is:
+      // an entry-block alloca unless the pointer is handed to something that
+      // keeps it, and never memory the callee owns.
+      else if (resultByValue(callee.returnType)) sites.push({ node: call, stackable: true });
       return;
     }
     const push: boolean = isPushCall(program, call); // a plain boolean: the guard would narrow `call` to never
@@ -219,9 +231,11 @@ export function analyzeEscapes(
     }
     // WP16: `r.orReturn()` builds the `Result` this function returns early, so
     // the body hands out arena memory whatever else it does — which is exactly
-    // what disqualifies it from an automatic arena scope.
+    // what disqualifies it from an automatic arena scope. WP17: not when the
+    // `Result` is packed into the return register, because then nothing is
+    // built at all.
     if (resultMethodName(program, call) === "orReturn") {
-      result.returnsAllocation = true;
+      if (!resultByValue(sig.returnType)) result.returnsAllocation = true;
       return;
     }
     if (ts.isIdentifier(call.expression)) {
@@ -319,7 +333,11 @@ export function analyzeEscapes(
 
   const valueOutcome = (expr: ts.Expression, visiting: Set<LocalVar>): Outcome => {
     const target = flowTarget(expr);
-    if (target === "return") return { flow: "returned", stable: true };
+    // WP17: `return r` on a by-value `Result` copies the two live words into
+    // the return register; the object itself does not leave the frame, so it
+    // is as local as one that is never returned at all.
+    if (target === "return")
+      return { flow: returnsByValueResult ? "local" : "returned", stable: true };
     if (target) return localOutcome(target, visiting);
     return useOutcome(expr);
   };

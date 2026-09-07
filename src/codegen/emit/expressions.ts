@@ -4,7 +4,7 @@
  * value (temp, parameter, or constant) that holds the expression's result.
  */
 import ts from "typescript";
-import { StaticType, isFloat, isInteger, llvmType } from "../../types";
+import { StaticType, isFloat, isInteger, llvmReturnType, llvmType, resultByValue } from "../../types";
 import { emitIntBinary } from "./arithmetic";
 import { arrayExpressionEmitters, installArrayAssignmentEmitters } from "./arrays";
 import { bitwiseBinaryEmitters, bitwiseUnaryEmitters } from "./bitwise";
@@ -13,7 +13,7 @@ import { ConstValue, constValue } from "../../checker/constants";
 import { BuiltinCall, f64Constant, floatConstant } from "./builtins";
 import { ioFunctionEmitters } from "./io";
 import { conversionEmitters, parseEmitters } from "./math";
-import { resultFunctionEmitters } from "./result";
+import { emitResultReturningCall, resultFunctionEmitters } from "./result";
 import { isAssignmentOperator } from "../../checker/classes";
 import { classExpressionEmitters, emitSuperCall } from "./classes";
 import { assignmentTargetEmitters, emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members";
@@ -209,11 +209,15 @@ const emitCall: ExpressionEmitter = (ctx, node) => {
   const args = expr.arguments
     .map((arg, i) => `${llvmType(callee.params[i].type)} ${ctx.emitExpression(arg)}`)
     .join(", ");
-  const call = `call ${llvmType(callee.returnType)} @${callee.name}(${args})`;
+  const call = `call ${llvmReturnType(callee.returnType)} @${callee.name}(${args})`;
   if (callee.returnType.kind === "void") {
     ctx.fn.emit(call);
     return "void";
   }
+  // WP17: a small `Result` comes back in a register; unpack it into the
+  // caller's own object, which is what every other construct reads.
+  if (resultByValue(callee.returnType))
+    return emitResultReturningCall(ctx, call, callee.returnType, expr);
   return ctx.fn.emitValue(call);
 };
 

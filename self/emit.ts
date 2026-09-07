@@ -62,9 +62,11 @@ import {
 import { constantText, emitAssignment, emitBinary, emitUnary, numericConstant } from "./emit_ops";
 import {
   declareResultTypes,
+  emitPackedReturn,
   emitResultConstructor,
   emitResultMethod,
   emitResultProperty,
+  emitResultReturningCall,
   isResultConstructorCall,
 } from "./emit_result";
 import { addStringConstant, emitTemplate } from "./emit_strings";
@@ -256,7 +258,7 @@ export class Emitter {
       params.push(new IRParam(name, this.llvm(type), attrs));
       i = i + 1;
     }
-    this.fn = new IRFunction(sig.name, params, this.llvm(sig.returnType));
+    this.fn = new IRFunction(sig.name, params, this.llvmReturn(sig.returnType));
     // Linkage: exported functions are always external (they are the module's
     // ABI). Others are external too unless --strict-exports hides them.
     if (this.opts.strictExports && !sig.exported) {
@@ -413,7 +415,7 @@ export class Emitter {
         ret.push(attr);
       }
     }
-    ret.push(this.llvm(sig.returnType));
+    ret.push(this.llvmReturn(sig.returnType));
     const group = optimize ? ` ${this.module.attrGroupFor(functionAttributes(facts))}` : "";
     return `declare ${ret.join(" ")} @${sig.name}(${params.join(", ")})${group}`;
   }
@@ -538,6 +540,19 @@ export class Emitter {
     if (value.kind === N_EMPTY) {
       this.emitScopeExit();
       this.fn.emit("ret void");
+      return;
+    }
+    const sig = this.currentSig;
+    if (sig === null) {
+      panic("emitter: `return` outside a function");
+    }
+    // WP17: a small `Result` leaves in a register. The word is built before the
+    // scope release, because the object it may be read out of is arena memory
+    // the release reclaims.
+    if (this.table.resultByValue(sig.returnType)) {
+      const word = emitPackedReturn(this, value, sig.returnType);
+      this.emitScopeExit();
+      this.fn.emit(`ret i64 ${word}`);
       return;
     }
     const type = this.typeOf(value);
@@ -690,10 +705,15 @@ export class Emitter {
       operands.push(`${this.llvm(sig.paramTypes[i])} ${this.emitExpression(args.children[i])}`);
       i = i + 1;
     }
-    const call = `call ${this.llvm(sig.returnType)} @${sig.name}(${operands.join(", ")})`;
+    const call = `call ${this.llvmReturn(sig.returnType)} @${sig.name}(${operands.join(", ")})`;
     if (sig.returnType === T_VOID) {
       this.fn.emit(call);
       return "void";
+    }
+    // WP17: a small `Result` comes back in a register; unpack it into the
+    // caller's own object, which is what every other construct reads.
+    if (this.table.resultByValue(sig.returnType)) {
+      return emitResultReturningCall(this, call, sig.returnType, expr);
     }
     return this.fn.emitValue(call);
   }
@@ -726,6 +746,11 @@ export class Emitter {
 
   llvm(type: i32): string {
     return this.table.llvmType(type);
+  }
+
+  /** The LLVM type of a return slot: `i64` for a `Result` the ABI packs (WP17). */
+  llvmReturn(type: i32): string {
+    return this.table.llvmReturnType(type);
   }
 
   /** Alignment for a type, or 0 when attributes are disabled. */

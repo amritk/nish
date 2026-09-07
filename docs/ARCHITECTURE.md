@@ -342,8 +342,18 @@ ignores because the LLVM value is the same pointer either way.
 `Ok(v)` / `Err(e)` are allocation sites for WP6 like `new C(...)` is, so a
 `Result` that does not outlive its function is an entry-block `alloca`;
 `orReturn()` returns memory, which is what disqualifies its function from an
-automatic arena scope. Design, and why the representation is a pointer rather
-than an LLVM aggregate: [wp16-results.md](wp16-results.md).
+automatic arena scope.
+
+A `Result` whose two payloads are each a scalar of at most four bytes is
+**returned in a register** (WP17): `resultByValue` in `types.ts` decides,
+`llvmReturnType` gives the `define` its `i64`, and `emit/result.ts` packs at
+every `ret` and unpacks at every call site into an object the caller owns —
+so nothing else in the lowering changed, and the allocation moved from the
+callee to the caller (which is why `collectResultFacts` reports the
+allocator on a call and `escape.ts` records the call as a site of *this*
+function). Design, the six-target tables, the assembly and the measurement:
+[wp17-result-abi.md](wp17-result-abi.md); why the in-memory representation
+is still a pointer: [wp16-results.md](wp16-results.md).
 
 ### `--nsw` and `--target`
 

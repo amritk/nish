@@ -22,13 +22,18 @@
  * `char*` (the header precedes the bytes, so `p s` in gdb shows the text), a
  * class or interface a pointer to a `DICompositeType` with the exact field
  * offsets the checker computed, and `T[]` a pointer to the array header with
- * `data` typed as `T*` so `p a->data[i]` works.
+ * `data` typed as `T*` so `p a->data[i]` works. A `Result<T, E>` (WP17) is a
+ * pointer to a composite built from `resultLayout` — `ok`, `value`, `error`
+ * at their computed offsets — except in a return slot the ABI packs into a
+ * register, where it is the packed `{ int32_t ok; union { T; E; }; }` the C
+ * header declares (`docs/wp17-result-abi.md` §3).
  *
  * Without `-g` nothing here runs and the IR is byte-for-byte what it was.
  */
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar, StructInfo } from "../checker";
-import { StaticType, intBits, isInteger, llvmType, typeToString } from "../types";
+import { ResultLayout, ResultSlot, resultLayout } from "../checker/result";
+import { StaticType, intBits, isInteger, llvmType, resultByValue, typeToString } from "../types";
 import { packageVersion } from "../version";
 import { IRFunction, IRModule } from "./ir";
 
@@ -99,10 +104,12 @@ export class DebugInfo {
     } else if (t.kind === "struct") {
       ref = this.pointerTo(this.composite(this.program.structs.get(t.name)!));
     } else if (t.kind === "result") {
-      // WP16: a `Result` has no `StructInfo` to describe (its layout is derived
-      // from the type), so a debugger sees the pointer without the members.
-      // TODO(WP17): emit a `DW_TAG_structure_type` for it from `resultLayout`.
-      ref = this.pointerTo(this.module.addMetadata('!DIBasicType(name: "sts_result", size: 8, encoding: DW_ATE_unsigned)'));
+      // WP17: a `Result` has no `StructInfo` — its layout is derived from the
+      // type — but `resultLayout` knows everything a `DW_TAG_structure_type`
+      // needs, so `p *r` shows `ok`, `value` and `error` rather than an opaque
+      // pointer. Only the arm the discriminant selects is meaningful; the
+      // other is whatever the construction left there (WP16 does not zero it).
+      ref = this.pointerTo(this.resultComposite(resultLayout(t)));
     } else {
       ref = this.module.addMetadata(BASIC_TYPES[t.kind]!);
     }
@@ -153,6 +160,70 @@ export class DebugInfo {
     return ref;
   }
 
+  /**
+   * `%struct.sts_result.<T>.<E>` with the layout the checker derived: the
+   * discriminant, the success payload (absent for `Result<void, E>`) and the
+   * error payload, each at its computed byte offset. There is no declaration
+   * to take a source line from, so the members carry none.
+   */
+  private resultComposite(layout: ResultLayout): string {
+    const ref = this.module.reserveMetadata();
+    const slots: [string, ResultSlot][] = [["ok", layout.ok]];
+    if (layout.value) slots.push(["value", layout.value]);
+    slots.push(["error", layout.error]);
+    const members = slots.map(([name, slot]) =>
+      this.member(name, ref, this.typeRef(slot.type), bitsOf(slot.type), slot.offset * 8)
+    );
+    const elements = this.module.addMetadata(`!{${members.join(", ")}}`);
+    this.module.setMetadata(
+      ref,
+      `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(layout.name)}, file: ${this.file}, size: ${layout.size * 8}, align: ${layout.align * 8}, elements: ${elements})`
+    );
+    return ref;
+  }
+
+  /**
+   * WP17: the *packed* shape of a `Result` that is returned in a register —
+   * `struct { int32_t ok; union { T value; E error; }; }`, which is the C type
+   * `--emit-header` writes and the one the ABI actually carries. A debugger
+   * told the in-memory layout instead would read a return value that is not
+   * there, so the subroutine type uses this in return position and the
+   * in-memory composite everywhere else.
+   */
+  private resultWord(t: StaticType): string {
+    const key = `${typeToString(t)}.word`;
+    const known = this.types.get(key);
+    if (known) return known;
+    const layout = resultLayout(t);
+    const ref = this.module.reserveMetadata();
+    const union = this.module.reserveMetadata();
+    const arms: [string, StaticType][] = [];
+    if (layout.value) arms.push(["value", layout.value.type]);
+    if (layout.error.type.kind !== "void") arms.push(["error", layout.error.type]);
+    const armBits = Math.max(8, ...arms.map(([, a]) => bitsOf(a)));
+    this.module.setMetadata(
+      union,
+      `distinct !DICompositeType(tag: DW_TAG_union_type, name: ${quote(`${layout.name}.arms`)}, file: ${this.file}, size: ${armBits}, elements: ${this.module.addMetadata(
+        `!{${arms.map(([name, a]) => this.member(name, union, this.typeRef(a), bitsOf(a), 0)).join(", ")}}`
+      )})`
+    );
+    const members = [
+      this.member("ok", ref, this.typeRef({ kind: "i32" }), 32, 0),
+      this.member("as", ref, union, armBits, 32),
+    ];
+    this.module.setMetadata(
+      ref,
+      `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(`${layout.name}.word`)}, file: ${this.file}, size: 64, align: 32, elements: ${this.module.addMetadata(`!{${members.join(", ")}}`)})`
+    );
+    this.types.set(key, ref);
+    return ref;
+  }
+
+  /** The type a signature's return slot really carries (WP17: packed, for a small `Result`). */
+  private returnTypeRef(t: StaticType): string {
+    return resultByValue(t) ? this.resultWord(t) : this.typeRef(t);
+  }
+
   // ---- Functions ----------------------------------------------------------------
 
   /**
@@ -166,7 +237,7 @@ export class DebugInfo {
     // The artificial entry wrapper is `int main(int, char**)`; its parameters are not described.
     const types = options.artificial
       ? [this.typeRef({ kind: "i32" })]
-      : [this.typeRef(sig.returnType), ...sig.params.map((p) => this.typeRef(p.type))];
+      : [this.returnTypeRef(sig.returnType), ...sig.params.map((p) => this.typeRef(p.type))];
     const signature = this.module.addMetadata(`!DISubroutineType(types: ${this.module.addMetadata(`!{${types.join(", ")}}`)})`);
     const name = options.name ?? sig.sourceName; // methods' `sourceName` already reads `Owner.method`
     const flags = ["DIFlagPrototyped", ...(options.artificial ? ["DIFlagArtificial"] : [])].join(" | ");

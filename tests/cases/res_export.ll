@@ -1,0 +1,153 @@
+%struct.IoError = type { i32, i8* }
+%struct.sts_result.i32.i32 = type { i1, i32, i32 }
+%struct.sts_result.void.i32 = type { i1, i32 }
+%struct.sts_result.i32.$IoError = type { i1, i32, %struct.IoError* }
+%struct.sts_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
+@sts_arena = external global %struct.sts_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #3
+declare zeroext i1 @sts_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
+declare void @sts_panic_div(i1 noundef zeroext) #5
+
+define internal noalias noundef nonnull align 8 i8* @sts_alloc_struct(i64 noundef %size) #6 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @sts_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define noundef i64 @half(i32 noundef %n) #0 {
+entry:
+  %0 = icmp eq i32 2, 0
+  %1 = icmp eq i32 %n, -2147483648
+  %2 = icmp eq i32 2, -1
+  %3 = and i1 %1, %2
+  %4 = or i1 %0, %3
+  br i1 %4, label %div.fail, label %div.ok
+
+div.fail:
+  call void @sts_panic_div(i1 zeroext %0)
+  unreachable
+
+div.ok:
+  %5 = srem i32 %n, 2
+  %6 = icmp ne i32 %5, 0
+  br i1 %6, label %if.then, label %if.end
+
+if.then:
+  %7 = zext i32 %n to i64
+  %8 = shl i64 %7, 32
+  ret i64 %8
+
+if.end:
+  %9 = icmp eq i32 2, 0
+  %10 = icmp eq i32 %n, -2147483648
+  %11 = icmp eq i32 2, -1
+  %12 = and i1 %10, %11
+  %13 = or i1 %9, %12
+  br i1 %13, label %div.fail.1, label %div.ok.1
+
+div.fail.1:
+  call void @sts_panic_div(i1 zeroext %9)
+  unreachable
+
+div.ok.1:
+  %14 = sdiv i32 %n, 2
+  %15 = zext i32 %14 to i64
+  %16 = shl i64 %15, 32
+  %17 = or i64 %16, 1
+  ret i64 %17
+}
+
+define noundef i64 @checkPort(i32 noundef %port) #1 {
+entry:
+  %0 = icmp sle i32 %port, 0
+  br i1 %0, label %if.then, label %if.end
+
+if.then:
+  %1 = zext i32 %port to i64
+  %2 = shl i64 %1, 32
+  ret i64 %2
+
+if.end:
+  ret i64 1
+}
+
+define noundef nonnull align 8 dereferenceable(16) %struct.sts_result.i32.$IoError* @openFile(i8* noundef nonnull noalias readonly align 8 %path) #1 {
+entry:
+  %problem.addr = alloca %struct.IoError*, align 8
+  %0 = call zeroext i1 @sts_str_eq(i8* %path, i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*))
+  br i1 %0, label %if.then, label %if.end
+
+if.then:
+  %1 = call i8* @sts_alloc_struct(i64 16)
+  %2 = bitcast i8* %1 to %struct.IoError*
+  %3 = getelementptr inbounds %struct.IoError, %struct.IoError* %2, i32 0, i32 0
+  store i32 2, i32* %3, align 4
+  %4 = getelementptr inbounds %struct.IoError, %struct.IoError* %2, i32 0, i32 1
+  store i8* %path, i8** %4, align 8
+  store %struct.IoError* %2, %struct.IoError** %problem.addr, align 8
+  %5 = load %struct.IoError*, %struct.IoError** %problem.addr, align 8
+  %6 = call i8* @sts_alloc_struct(i64 16)
+  %7 = bitcast i8* %6 to %struct.sts_result.i32.$IoError*
+  %8 = getelementptr inbounds %struct.sts_result.i32.$IoError, %struct.sts_result.i32.$IoError* %7, i32 0, i32 0
+  store i1 false, i1* %8, align 1
+  %9 = getelementptr inbounds %struct.sts_result.i32.$IoError, %struct.sts_result.i32.$IoError* %7, i32 0, i32 2
+  store %struct.IoError* %5, %struct.IoError** %9, align 8
+  ret %struct.sts_result.i32.$IoError* %7
+
+if.end:
+  %10 = call i8* @sts_alloc_struct(i64 16)
+  %11 = bitcast i8* %10 to %struct.sts_result.i32.$IoError*
+  %12 = getelementptr inbounds %struct.sts_result.i32.$IoError, %struct.sts_result.i32.$IoError* %11, i32 0, i32 0
+  store i1 true, i1* %12, align 1
+  %13 = getelementptr inbounds %struct.sts_result.i32.$IoError, %struct.sts_result.i32.$IoError* %11, i32 0, i32 1
+  store i32 3, i32* %13, align 4
+  ret %struct.sts_result.i32.$IoError* %11
+}
+
+define noundef i32 @describe(%struct.sts_result.i32.i32* noundef nonnull align 8 dereferenceable(12) readonly nocapture %r) #2 {
+entry:
+  %0 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %r, i32 0, i32 0
+  %1 = load i1, i1* %0, align 1
+  %2 = xor i1 %1, true
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  %3 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %r, i32 0, i32 2
+  %4 = load i32, i32* %3, align 4
+  %5 = sub i32 0, %4
+  ret i32 %5
+
+if.end:
+  %6 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %r, i32 0, i32 1
+  %7 = load i32, i32* %6, align 4
+  ret i32 %7
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn readonly }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #4 = { nounwind willreturn memory(argmem: read) }
+attributes #5 = { nounwind noreturn cold }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }

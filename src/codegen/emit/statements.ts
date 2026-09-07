@@ -1,6 +1,7 @@
 /** Statement lowering, one handler per `ts.SyntaxKind`. */
 import ts from "typescript";
-import { llvmType } from "../../types";
+import { ResultType, llvmType, resultByValue } from "../../types";
+import { emitPackedReturn } from "./result";
 import { arrayStatementEmitters } from "./arrays";
 import { EmitContext, EmitterTable, StatementEmitter } from "./context";
 import { controlFlowStatementEmitters } from "./control-flow";
@@ -11,6 +12,16 @@ const emitReturn: StatementEmitter = (ctx, node) => {
   if (!stmt.expression) {
     ctx.emitScopeExit();
     ctx.fn.emit("ret void");
+    return;
+  }
+  // WP17: a small `Result` leaves in a register. The word is built before the
+  // scope release, because the object it may be read out of is arena memory
+  // the release reclaims.
+  const want = ctx.currentSig.returnType;
+  if (resultByValue(want)) {
+    const word = emitPackedReturn(ctx, stmt.expression, want as ResultType);
+    ctx.emitScopeExit();
+    ctx.fn.emit(`ret i64 ${word}`);
     return;
   }
   const type = ctx.typeOf(stmt.expression);

@@ -92,7 +92,7 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 | `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). |
 | `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, and narrowing: [Nullable types](#nullable-types). |
-| `Result<T, E>` | `%struct.sts_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable yet) | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
+| `Result<T, E>` | `%struct.sts_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **returned** as one `i64` when both payloads are scalars of at most 4 bytes | 8 / 8 (pointer); struct as clang lays out the same C struct | `sts_result_<T>_<E>_word` returned by value, `struct sts_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
 | `void` | `void` | – | `void` | Return type only. |
 
 Sources: `src/types.ts` (`llvmType`, `alignOf`), `src/interop/abi.ts`
@@ -396,6 +396,26 @@ allocated exactly as a class is — so a `Result` costs what a small object
 costs, and one that does not outlive its function becomes an entry-block
 `alloca` with no allocator call at all (`tests/cases/res_stack`).
 
+A **returned** `Result` is different, and this is the one place its
+representation is not a pointer. When both payload types are scalars of at
+most four bytes — `void`, `boolean`, `u8`, `u16`, `i32`/`number`, `u32`,
+`f32` — the function returns one `i64` instead:
+
+```
+bits  0..31   the discriminant: 1 for Ok, 0 for Err
+bits 32..63   the live arm's payload, zero-extended (f32 through a bitcast)
+```
+
+so `return Ok(v)` is a shift and an `or` with no allocation at all
+(`tests/cases/res_by_value`, and `res_by_value_payloads` for each payload
+width), and the caller unpacks the word into its own entry-block object, which
+every construct below reads exactly as before. Only
+the returned value changes: a `Result` *parameter*, a `Result` in a field, and
+a `Result` whose payloads do not fit all stay the WP16 pointer. Eight bytes is
+where the six supported targets agree about a register return rather than a
+number worth tuning; the measurements are in
+[wp17-result-abi.md](wp17-result-abi.md).
+
 ### The surface
 
 | Spelling | Meaning | Test |
@@ -404,9 +424,9 @@ costs, and one that does not outlive its function becomes an entry-block
 | `Err(e)` | the failure value, likewise | `res_basic` |
 | `r.isOk()`, `r.isErr()` | the discriminant test, and what narrows `r` | `res_basic` |
 | `r.ok` | the same bit as a plain `boolean`; `if (r.ok)` narrows too, because a tagged union is how TypeScript itself would spell this | `res_basic` |
-| `r.value` | `T`, only where the checker proved `isOk()` | `res_basic`; `reject_result_value_unchecked` |
+| `r.value` | `T`, only where the checker proved `isOk()` | `res_basic`; `reject_result_value_unchecked`, `reject_result_by_value_unchecked` |
 | `r.error` | `E`, only where it proved `isErr()` | `res_basic`; `reject_result_error_in_ok_arm` |
-| `r.orReturn()` | `T` when ok; otherwise `return Err(r.error)` from the enclosing function — Rust's `?` | `res_propagate`; `reject_result_propagate_plain`, `reject_result_propagate_error_type` |
+| `r.orReturn()` | `T` when ok; otherwise `return Err(r.error)` from the enclosing function — Rust's `?` | `res_propagate`, `res_by_value_propagate`; `reject_result_propagate_plain`, `reject_result_propagate_error_type` |
 | `r.unwrapOr(d)` | `T` when ok, `d` otherwise | `res_unwrap` |
 | `r.expect(message)` | `T` when ok; otherwise `message` on stderr and exit 1, the same ending `panic` has | `res_unwrap`, `res_void` |
 
@@ -477,11 +497,40 @@ still be rejected here; the reverse is a bug in the declarations.
 
 ### Interop
 
-A `Result` may not cross the host boundary yet. `--emit-header`, `--emit-dts`
-and `--emit-napi` skip a function whose signature mentions one and leave a
-note naming the type, because the C ABI for returning a small struct by value
-is lowering this frontend does not do (see
-[wp16-results.md](wp16-results.md) for what would change).
+A `Result` crosses the host boundary. `--emit-header` writes two C types per
+`Result` and a signature uses whichever its position calls for:
+
+```c
+/* Result<number, number> */
+
+/* the arena object: what a `Result` parameter points at, and what a returned
+   `Result` too large to pack comes back as */
+struct sts_result_i32_i32 {
+  bool ok; /* 1 = value, 0 = error */
+  int32_t value;
+  int32_t error;
+};
+
+/* the by-value return: one 64-bit word */
+typedef struct sts_result_i32_i32_word {
+  int32_t ok; /* 1 = value, 0 = error */
+  union { int32_t value; int32_t error; } as;
+} sts_result_i32_i32_word;
+STS_RESULT_ASSERT(sizeof(sts_result_i32_i32_word) == 8, "...");
+```
+
+The word is not a description of the ABI, it is the ABI: clang lowers a
+function returning that type to `i64` on every supported native target, which
+is the same declaration the module already defines
+([wp17-result-abi.md](wp17-result-abi.md) §3). A C host includes the header
+and calls across with no glue (`tests/run.js`, the WP17 interop block).
+
+`--emit-napi` bridges a `Result` returned by value whose payloads are numbers
+or booleans, as the object JS already models — `{ ok: true, value }` or
+`{ ok: false, error }`. `--emit-dts` declares the same union for the wasm
+build and the generated loader unpacks the `i64` the export answers.
+A `Result` held by pointer still does not cross either JS boundary, for the
+reason a string does not: it is arena memory the next call may recycle.
 
 ## Declarations
 

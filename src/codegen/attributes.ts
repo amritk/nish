@@ -118,7 +118,7 @@ import {
   isAssignmentOperator,
 } from "../checker/classes";
 import { unwrapParens } from "../checker/control-flow";
-import { CompilerOptions, DEFAULT_OPTIONS, StaticType, stripNull } from "../types";
+import { CompilerOptions, DEFAULT_OPTIONS, StaticType, resultByValue, stripNull } from "../types";
 import { arrayMethodName, isPushCall } from "./emit/arrays";
 import { CallSite, EscapeResult, analyzeEscapes } from "./escape";
 import { collectBuiltinFacts } from "./emit/expressions";
@@ -836,8 +836,14 @@ export function returnAttributes(t: StaticType, deref?: number): string[] {
       return ["noundef", "nonnull", "align 8"];
     case "array":
       return ["noundef", "nonnull", "align 8", `dereferenceable(${ARRAY_HEADER_BYTES})`]; // full header, see paramAttributes
-    case "struct":
-    case "result": // WP16: a whole, never-null object, exactly like a struct
+    case "result":
+      // WP17: a small `Result` comes back packed in an `i64`, so none of the
+      // pointer facts are about it; the word is always fully defined, because
+      // the dead arm is discarded by a `select` before it is shifted in. A
+      // pointer `Result` is exactly a struct here, as it was in WP16.
+      if (resultByValue(t)) return ["noundef"];
+      return ["noundef", "nonnull", "align 8", ...(deref ? [`dereferenceable(${deref})`] : [])];
+    case "struct": // WP16: a whole, never-null object
       return ["noundef", "nonnull", "align 8", ...(deref ? [`dereferenceable(${deref})`] : [])];
     case "nullable":
       return ["noundef", "align 8"]; // WP6: may be null

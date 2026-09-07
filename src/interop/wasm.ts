@@ -23,7 +23,7 @@
  */
 import path from "node:path";
 import { Compilation } from "../compilation";
-import { StaticType } from "../types";
+import { ResultType, StaticType, resultByValue } from "../types";
 import { banner, ExternalFunction, externalFunctions, kindOf, tsKeyword, tsSignature, typedView } from "./abi";
 
 /** `x.d.ts` -> `x.mjs`. */
@@ -42,7 +42,77 @@ function crossesWasm(t: StaticType, position: "param" | "return"): boolean {
   const k = kindOf(t);
   if (k === "i32" || k === "f32" || k === "f64" || k === "i64" || k === "bool") return true;
   if (k === "void") return position === "return";
+  // WP17: the packed `Result` arrives as one i64, which the loader unpacks.
+  if (k === "result")
+    return position === "return" && resultByValue(t) && wasmResultType(t as ResultType) !== undefined;
   return typedView(t) !== undefined;
+}
+
+/** The JS type of one packed `Result` payload, or undefined when it cannot cross. */
+export function wasmPayloadType(t: StaticType): string | undefined {
+  switch (kindOf(t)) {
+    case "i32":
+    case "u8":
+    case "u16":
+    case "u32":
+    case "f32":
+      return "number";
+    // The loader builds the object, so it converts; a payload boolean is a
+    // real boolean rather than the `WasmBool` a bare `i1` return comes back as.
+    case "bool":
+      return "boolean";
+    default:
+      return undefined;
+  }
+}
+
+/** `{ ok: true; value: number } | { ok: false; error: number }`. */
+export function wasmResultType(t: ResultType): string | undefined {
+  const error = wasmPayloadType(t.err);
+  if (error === undefined) return undefined;
+  if (t.ok.kind === "void") return `{ ok: true } | { ok: false; error: ${error} }`;
+  const value = wasmPayloadType(t.ok);
+  if (value === undefined) return undefined;
+  return `{ ok: true; value: ${value} } | { ok: false; error: ${error} }`;
+}
+
+/**
+ * How the loader reads one packed payload out of the high half of the word.
+ * `p` is already `BigInt.asUintN(32, word >> 32n)`, so each reader only has to
+ * give the bits their type back: a signed width sign-extends, `f32` is a
+ * reinterpretation rather than a conversion, and `boolean` is the low bit.
+ */
+function payloadReader(t: StaticType): string | undefined {
+  switch (kindOf(t)) {
+    case "i32":
+      return "(p) => Number(BigInt.asIntN(32, p))";
+    case "u8":
+      return "(p) => Number(BigInt.asUintN(8, p))";
+    case "u16":
+      return "(p) => Number(BigInt.asUintN(16, p))";
+    case "u32":
+      return "(p) => Number(p)";
+    case "f32":
+      return "f32Bits";
+    case "bool":
+      return "(p) => (p & 1n) === 1n";
+    default:
+      return undefined;
+  }
+}
+
+/** `resultOut(<call>, <ok reader or null>, <err reader>)` for a by-value `Result` return. */
+function resultUnpack(call: string, t: ResultType): string {
+  const ok = t.ok.kind === "void" ? "null" : payloadReader(t.ok)!;
+  return `resultOut(${call}, ${ok}, ${payloadReader(t.err)!})`;
+}
+
+/** True when some bridged function unpacks an f32 payload, so the loader needs the bit view. */
+function needsF32(fns: readonly ExternalFunction[]): boolean {
+  return fns.some((fn) => {
+    const t = fn.sig.returnType;
+    return t.kind === "result" && (kindOf(t.ok) === "f32" || kindOf(t.err) === "f32");
+  });
 }
 
 export function wasmBridged(fns: ExternalFunction[]): WasmBridge {
@@ -61,7 +131,16 @@ function wrapper(fn: ExternalFunction): string[] {
   const { sig } = fn;
   const ret = typedView(sig.returnType);
   const views = sig.params.map((p) => typedView(p.type));
-  if (!ret && views.every((v) => v === undefined)) return [`${sig.name}: raw.${sig.name},`];
+  if (!ret && views.every((v) => v === undefined)) {
+    // WP17: a packed `Result` needs unpacking but no arena scope — nothing was
+    // copied into the module for the call, so there is nothing to release.
+    if (resultByValue(sig.returnType)) {
+      const params = sig.params.map((p) => jsParam(p.name));
+      const call = `raw.${sig.name}(${params.join(", ")})`;
+      return [`${sig.name}: (${params.join(", ")}) => ${resultUnpack(call, sig.returnType as ResultType)},`];
+    }
+    return [`${sig.name}: raw.${sig.name},`];
+  }
 
   const body: string[] = [];
   const args = sig.params.map((p, i) => {
@@ -72,11 +151,45 @@ function wrapper(fn: ExternalFunction): string[] {
   });
   const call = `raw.${sig.name}(${args.join(", ")})`;
   const isVoid = kindOf(sig.returnType) === "void";
-  const value = ret ? `arrayOut(${call}, ${ret.ctor})` : call;
+  const value = ret
+    ? `arrayOut(${call}, ${ret.ctor})`
+    : resultByValue(sig.returnType)
+      ? resultUnpack(call, sig.returnType as ResultType)
+      : call;
   const copyBacks = sig.params.filter((p, i) => views[i] && fn.writtenParams.has(p.name)).map((p) => `copyBack(${p.name}$, ${jsParam(p.name)});`);
   if (copyBacks.length === 0) body.push(isVoid ? `${value};` : `return ${value};`);
   else body.push(isVoid ? `${value};` : `const result = ${value};`, ...copyBacks, ...(isVoid ? [] : ["return result;"]));
   return [`${sig.name}: (${sig.params.map((p) => jsParam(p.name)).join(", ")}) => scoped(() => {`, ...body.map((l) => `  ${l}`), "}),"];
+}
+
+/**
+ * The loader's half of WP17. A packed `Result` reaches JS as the wasm export's
+ * `i64`, i.e. a bigint: bit 0 is the discriminant and bits 32..63 are the arm
+ * it selects. `resultOut` turns that into the object `--emit-dts` declares, so
+ * a caller never sees the encoding.
+ */
+function resultHelpers(bridged: readonly ExternalFunction[]): string[] {
+  if (!bridged.some((fn) => resultByValue(fn.sig.returnType))) return [];
+  const lines = [
+    "  /** A Result returned in one i64 (WP17): bit 0 is the tag, bits 32..63 the payload. */",
+    "  const resultOut = (word, readValue, readError) => {",
+    "    const payload = BigInt.asUintN(32, word >> 32n);",
+    "    if ((word & 1n) === 0n) return { ok: false, error: readError(payload) };",
+    "    return readValue === null ? { ok: true } : { ok: true, value: readValue(payload) };",
+    "  };",
+  ];
+  if (needsF32(bridged)) {
+    lines.push(
+      "  /** An f32 payload is the same 32 bits, not a converted number. */",
+      "  const f32View = new Float32Array(1);",
+      "  const f32Words = new Uint32Array(f32View.buffer);",
+      "  const f32Bits = (p) => {",
+      "    f32Words[0] = Number(p);",
+      "    return f32View[0];",
+      "  };"
+    );
+  }
+  return lines;
 }
 
 export function generateWasmLoader(compilation: Compilation, dtsFile: string): string {
@@ -129,13 +242,14 @@ export function generateWasmLoader(compilation: Compilation, dtsFile: string): s
       "      raw.sts_arena_release(mark);",
       "    }",
       "  };",
+      ...resultHelpers(bridged),
       "  return {",
       "    memory,",
       "    sts_reset_arena: raw.sts_reset_arena,",
       "    sts_free_arena: raw.sts_free_arena,"
     );
   } else {
-    lines.push("  return {", "    memory: raw.memory,");
+    lines.push(...resultHelpers(bridged), "  return {", "    memory: raw.memory,");
   }
   for (const fn of bridged) {
     lines.push(`    /** ${fn.unit.fileName}: ${tsSignature(fn.sig, tsKeyword)} */`, ...wrapper(fn).map((l) => `    ${l}`));

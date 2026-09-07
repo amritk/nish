@@ -9,6 +9,9 @@
  *               never stores through it, the same proof that gives the IR
  *               parameter `readonly`); the element type is in the comment
  *   void     -> void
+ *   Result<T,E> -> the one-word `sts_result_<T>_<E>_word` when it is returned
+ *               by value (WP17), otherwise `struct sts_result_<T>_<E> *`; both
+ *               are defined below and the word carries a `sizeof` assertion
  * Parameters are passed by value, in order; there is no hidden context
  * argument, no return-slot pointer, no name mangling. A `.ll` module and a C
  * file that includes this header therefore link with a plain `clang a.ll b.c`.
@@ -27,6 +30,7 @@ import {
   externalFunctions,
   ExternalFunction,
   guardStem,
+  resultDefinitions,
   tsKeyword,
   tsSignature,
 } from "./abi";
@@ -90,6 +94,17 @@ function structDefinitions(compilation: Compilation): string[] {
   return lines;
 }
 
+/** Every field type of every class and interface, for the `Result` definitions above. */
+function structFieldTypes(compilation: Compilation): StaticType[] {
+  const out: StaticType[] = [];
+  for (const unit of compilation.modules) {
+    for (const info of unit.checker.program.structs.values()) {
+      for (const f of info.fields) out.push(f.type);
+    }
+  }
+  return out;
+}
+
 export function generateHeader(compilation: Compilation, outFile: string): string {
   const guard = `STATICTSC_${guardStem(outFile)}_H`;
   const lines: string[] = [
@@ -115,8 +130,11 @@ export function generateHeader(compilation: Compilation, outFile: string): strin
     ...structDefinitions(compilation),
   ];
 
+  const fns = externalFunctions(compilation);
+  lines.push(...resultDefinitions(fns, structFieldTypes(compilation)));
+
   let lastUnit: ExternalFunction["unit"] | undefined;
-  for (const fn of externalFunctions(compilation)) {
+  for (const fn of fns) {
     if (fn.unit !== lastUnit) {
       lines.push("", `/* ${fn.unit.fileName} */`);
       lastUnit = fn.unit;

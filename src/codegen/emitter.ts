@@ -39,7 +39,7 @@
  */
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
-import { CompilerOptions, StaticType, alignOf, llvmType } from "../types";
+import { CompilerOptions, StaticType, alignOf, llvmReturnType, llvmType } from "../types";
 import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, returnAttributes } from "./attributes";
 import { DebugInfo } from "./debug";
 import { emitConstructorPrologue, importedStructFunctions, structFunctions, structTypeDeclarations } from "./emit/classes";
@@ -138,7 +138,7 @@ export class Emitter implements EmitContext {
         type: llvmType(p.type),
         attrs: optimize ? paramAttributes(p, facts) : [],
       })),
-      llvmType(sig.returnType)
+      llvmReturnType(sig.returnType)
     );
     // Linkage: exported functions are always external (they are the module's
     // ABI). Others are external too unless --strict-exports hides them.
@@ -253,7 +253,7 @@ export class Emitter implements EmitContext {
     const params = sig.params
       .map((p) => [llvmType(p.type), ...(optimize ? paramAttributes(p, facts) : [])].join(" "))
       .join(", ");
-    const ret = [...(optimize ? returnAttributes(sig.returnType, facts.returnDeref) : []), llvmType(sig.returnType)].join(" ");
+    const ret = [...(optimize ? returnAttributes(sig.returnType, facts.returnDeref) : []), llvmReturnType(sig.returnType)].join(" ");
     const group = optimize ? ` ${this.module.attrGroup(functionAttributes(facts))}` : "";
     return `declare ${ret} @${sig.name}(${params})${group}`;
   }

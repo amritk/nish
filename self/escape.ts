@@ -153,15 +153,25 @@ class EscapeAnalysis {
   /** `push` receivers that are locals, checked against the site locals below. */
   pushes: Node[];
   logsNumbers: boolean;
+  /** WP17: this function hands its `Result` back in a register, not as a pointer. */
+  returnsByValueResult: boolean;
   /** Memoised outcomes, keyed by local identity. */
   outcomeLocals: Local[];
   outcomeValues: Outcome[];
 
-  constructor(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, opts: Options, nodeCount: i32) {
+  constructor(
+    unit: AnalysisUnit,
+    table: TypeTable,
+    facts: FactsTable,
+    opts: Options,
+    nodeCount: i32,
+    returnsByValueResult: boolean
+  ) {
     this.unit = unit;
     this.table = table;
     this.facts = facts;
     this.opts = opts;
+    this.returnsByValueResult = returnsByValueResult;
     this.result = new EscapeResult(nodeCount);
     this.sites = [];
     this.refLocals = [];
@@ -278,6 +288,12 @@ class EscapeAnalysis {
         const site = new Site(call, false);
         site.callee = callee.name;
         this.sites.push(site);
+      } else if (this.table.resultByValue(callee.returnType)) {
+        // WP17: a `Result` returned in a register is materialised by the
+        // *caller*, so the call is an allocation site of this function like
+        // `new C(...)` is: an entry-block alloca unless the pointer is handed
+        // to something that keeps it, and never memory the callee owns.
+        this.sites.push(new Site(call, true));
       }
       return;
     }
@@ -294,9 +310,13 @@ class EscapeAnalysis {
     }
     // WP16: `r.orReturn()` builds the `Result` this function returns early, so
     // the body hands out arena memory whatever else it does — which is exactly
-    // what disqualifies it from an automatic arena scope.
+    // what disqualifies it from an automatic arena scope. WP17: not when the
+    // `Result` is packed into the return register, because then nothing is
+    // built at all.
     if (resultMethodName(program, this.table, call) === "orReturn") {
-      this.result.returnsAllocation = true;
+      if (!this.returnsByValueResult) {
+        this.result.returnsAllocation = true;
+      }
       return;
     }
     const target = call.children[0];
@@ -330,12 +350,14 @@ class EscapeAnalysis {
   isPointerResult(type: i32): boolean {
     const inner = this.table.stripNull(type);
     // A `Result` (WP16) is a pointer into the arena like the others, so a call
-    // that answers one is an allocation site of its caller.
+    // that answers one is an allocation site of its caller — unless WP17 packs
+    // it into a register, in which case the callee allocated nothing and the
+    // caller's copy is its own (see the `resultByValue` arm of `visitCall`).
     return (
       this.table.isStruct(inner) ||
       this.table.isArray(inner) ||
       inner === T_STRING ||
-      this.table.isResult(inner)
+      (this.table.isResult(inner) && !this.table.resultByValue(inner))
     );
   }
 
@@ -433,7 +455,10 @@ class EscapeAnalysis {
   valueOutcome(expr: Node, visiting: Local[]): Outcome {
     const target = this.flowTarget(expr);
     if (target.isReturn) {
-      return new Outcome(FLOW_RETURNED, true);
+      // WP17: `return r` on a by-value `Result` copies the two live words into
+      // the return register; the object itself does not leave the frame, so it
+      // is as local as one that is never returned at all.
+      return new Outcome(this.returnsByValueResult ? FLOW_LOCAL : FLOW_RETURNED, true);
     }
     const local = target.local;
     if (local !== null) {
@@ -566,7 +591,14 @@ export function analyzeEscapes(
   facts: FactsTable,
   opts: Options
 ): EscapeResult {
-  const analysis = new EscapeAnalysis(unit, table, facts, opts, unit.program.nodeTypes.length);
+  const analysis = new EscapeAnalysis(
+    unit,
+    table,
+    facts,
+    opts,
+    unit.program.nodeTypes.length,
+    table.resultByValue(sig.returnType)
+  );
   const body = sig.body();
   if (body === null) {
     return analysis.result;

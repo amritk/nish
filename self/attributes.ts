@@ -836,6 +836,7 @@ class FactCollector {
 
   /**
    * `Result` constructs (WP16), mirroring `self/emit_result.ts`:
+   *   a call answering a packed `Result`   the caller's own object (WP17)
    *   Ok / Err                write, calls the allocator unless it is a stack site
    *   r.ok / .value / .error  read
    *   orReturn                read plus the allocation of the propagated Result
@@ -845,6 +846,21 @@ class FactCollector {
     const program = this.unit.program;
     const table = this.table;
     if (node.kind === N_CALL) {
+      // WP17: a call that answers a `Result` in a register hands back no
+      // memory, so the *caller* builds the object the rest of the lowering
+      // reads. That is an allocation of this function — an own alloca when the
+      // escape analysis says so, an arena bump otherwise — and the allocator
+      // call has to be reported here, because the callee no longer makes it.
+      const callee = program.nodeCallees[node.id];
+      if (callee !== null) {
+        if (table.resultByValue(callee.returnType)) {
+          if (!this.facts.isStackSite(node)) {
+            this.facts.callees.add("sts_alloc_struct");
+          }
+          this.facts.effect = EFFECT_WRITE;
+        }
+        return;
+      }
       const method = resultMethodName(program, table, node);
       if (method.length > 0) {
         if (this.isStackOwned(node.children[0].children[0])) {
@@ -1564,6 +1580,12 @@ export function returnAttributes(table: TypeTable, type: i32, deref: i32): strin
     attrs.push("nonnull");
     attrs.push("align 8");
     attrs.push(`dereferenceable(${ARRAY_HEADER_BYTES})`);
+    return attrs;
+  }
+  if (kind === K_RESULT && table.resultByValue(type)) {
+    // WP17: a small `Result` comes back packed in an `i64`, so none of the
+    // pointer facts are about it; the word is always fully defined, because
+    // the dead arm is discarded by a `select` before it is shifted in.
     return attrs;
   }
   if (kind === K_STRUCT || kind === K_RESULT) {

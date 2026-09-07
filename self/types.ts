@@ -54,6 +54,9 @@ export const R_UNKNOWN: i32 = 0;
 export const R_OK: i32 = 1;
 export const R_ERR: i32 = 2;
 
+/** WP17: bit position of the payload in the packed `Result` word; the tag owns the low half. */
+export const RESULT_PAYLOAD_SHIFT: i32 = 32;
+
 /** The one header type every array shares; `ARRAY_TYPE` in `src/codegen/runtime.ts`. */
 export const ARRAY_STRUCT: string = "%struct.sts_array";
 
@@ -292,6 +295,58 @@ export class TypeTable {
 
   isStruct(type: i32): boolean {
     return this.kinds[type] === K_STRUCT;
+  }
+
+  /**
+   * WP17: the payload types the packed by-value `Result` word can carry — a
+   * scalar of at most four bytes, so a discriminant word and a payload word
+   * together are one `i64`. `i64`, `u64` and `f64` are four bytes too many; a
+   * string, an array, a class, a nullable or a nested `Result` is a pointer,
+   * and a pointer payload would need the whole word on its own.
+   */
+  packablePayload(type: i32): boolean {
+    const kind = this.kinds[type];
+    return (
+      kind === T_VOID ||
+      kind === T_BOOL ||
+      kind === T_U8 ||
+      kind === T_U16 ||
+      kind === T_I32 ||
+      kind === T_U32 ||
+      kind === T_F32
+    );
+  }
+
+  /**
+   * WP17: whether a `Result` is returned by value, in one `i64`, rather than
+   * as the WP16 pointer to an arena struct.
+   *
+   *   bits  0..31   the discriminant: 1 for `Ok`, 0 for `Err`
+   *   bits 32..63   the live arm's payload, zero-extended
+   *
+   * The dead arm is not represented, which is what makes `Result<i32, i32>` —
+   * twelve bytes as a struct — fit in a word. Eight bytes is not a tuning
+   * knob: `i64` is the only return width whose C-ABI lowering is the same LLVM
+   * type on all six supported triples. `docs/wp17-result-abi.md` has the
+   * measurements; `src/types.ts` has the same predicate.
+   */
+  resultByValue(type: i32): boolean {
+    if (!this.isResult(type)) {
+      return false;
+    }
+    return this.packablePayload(this.refs[type]) && this.packablePayload(this.errs[type]);
+  }
+
+  /**
+   * The LLVM type of a function's return slot. It differs from `llvmType` for
+   * exactly one shape: a `Result` small enough to pack comes back in a
+   * register as an `i64`, never as a pointer to arena memory.
+   */
+  llvmReturnType(type: i32): string {
+    if (this.resultByValue(type)) {
+      return "i64";
+    }
+    return this.llvmType(type);
   }
 
   /** The LLVM textual type. A nullable is its inner type: `null` is a pointer value, not a type. */
