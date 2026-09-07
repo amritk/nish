@@ -12,8 +12,13 @@ import { CompilerOptions, StaticType } from "../types";
 import { CheckedProgram, FunctionSig } from "./program";
 import { Scope } from "./scope";
 
-/** A loop whose body is being checked; `break` inside it records itself here. */
+/**
+ * A `break` target whose body is being checked: a loop, or a `switch` (WP14).
+ * `break` inside it records itself here; `continue` skips past the `switch`
+ * entries to the innermost `loop`, exactly as it does in JavaScript.
+ */
 export interface LoopInfo {
+  kind: "loop" | "switch";
   hasBreak: boolean;
 }
 
@@ -48,6 +53,12 @@ export interface CheckContext {
   checkStatement(stmt: ts.Statement, scope: Scope): boolean;
   /** Check a block in a fresh child scope; returns true when it definitely terminates. */
   checkBlock(block: ts.Block, scope: Scope): boolean;
+  /**
+   * Check a bare statement list in `scope`, with the unreachable-code rule and
+   * the per-statement error recovery a block gets. The clauses of a `switch`
+   * are the only statement list that is not a block.
+   */
+  checkStatementList(stmts: readonly ts.Statement[], scope: Scope): boolean;
   /** Check an expression, record its type in `program.types`, and return it. */
   checkExpression(expr: ts.Expression, scope: Scope): StaticType;
   /** Declare the `let`/`const` locals of a declaration list (a statement's or a `for` initializer's). */

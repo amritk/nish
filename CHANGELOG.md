@@ -67,6 +67,20 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
   `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
   `bench/ffi.mjs` gains the batched `Float64Array` rows.
+- **`switch` / `case` / `default`** (`docs/wp14-selfhost.md` A1). An integer
+  discriminant and constant labels — a literal, its negation, or a module
+  constant — lower to one LLVM `switch`, so the backend builds a jump table
+  (`llc -O2` emits `jmpq *.LJTI0_0(,%rax,8)` for twelve dense labels). Only an
+  integer switches: a string one would have been a chain of `sts_str_eq` calls
+  wearing a switch's clothes. There is no implicit fallthrough — a clause with
+  statements ends in `break`, `return`, `continue` or `throw` unless it is the
+  last, while an *empty* clause falls through, which is how `case 1: case 2:`
+  gives several labels one body. A clause may not declare a variable without a
+  block of its own, because TypeScript's one shared clause scope would leave it
+  visible and unassigned below. `break` inside a `switch` leaves the switch and
+  `continue` reaches past it to the enclosing loop
+  (`tests/cases/cf_switch`, `cf_switch_break`, six `reject_switch_*` cases,
+  `tests/differential/corpus/cf_switch.ts`).
 - **Bitwise operators.** `& | ^` (`and` / `or` / `xor`), `~` (`xor x, -1`),
   `<< >> >>>` (`shl` / `ashr` / `lshr`), and the compound forms
   `&= |= ^= <<= >>= >>>=` on a mutable local. Two `i32` or two `i64` of the

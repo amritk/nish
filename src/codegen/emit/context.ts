@@ -11,10 +11,14 @@ import { CompilerOptions, StaticType, isUnsigned } from "../../types";
 import { DebugInfo } from "../debug";
 import { IRBlock, IRFunction } from "../ir";
 
-/** Branch targets of an enclosing loop, for `break` and `continue`. */
+/**
+ * Branch targets of an enclosing loop, for `break` and `continue`. A `switch`
+ * (WP14) pushes one too, with no `continueBlock`: it catches `break` while
+ * `continue` looks past it for the enclosing loop, as in JavaScript.
+ */
 export interface LoopTarget {
   breakBlock: IRBlock;
-  continueBlock: IRBlock;
+  continueBlock: IRBlock | undefined;
   /** Set once a `break` has targeted this loop; an infinite loop without one never exits. */
   hasBreak: boolean;
 }

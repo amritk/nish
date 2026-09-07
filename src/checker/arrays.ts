@@ -311,7 +311,7 @@ const checkForOf: StatementChecker = (ctx, node, scope) => {
   loopScope.declare(v, decl.name, ctx.sf);
   ctx.program.locals.set(decl, v);
 
-  const loop: LoopInfo = { hasBreak: false };
+  const loop: LoopInfo = { kind: "loop", hasBreak: false };
   ctx.loops.push(loop);
   if (ts.isBlock(stmt.statement)) ctx.checkBlock(stmt.statement, loopScope);
   else ctx.checkStatement(stmt.statement, loopScope.child());

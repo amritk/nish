@@ -742,6 +742,60 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end stmt_for -->
 
+### `switch`
+
+One `switch` instruction: a constant-to-label table and a default edge, which
+the backend turns into a jump table once the labels are dense enough. Empty
+clauses have no block of their own — `case 1:` points at the body of `case 2:`,
+which is the whole of StaticTS's fallthrough. A label that names a module
+constant is folded before the table is written, so `KIND_CALL` is a `4` here.
+
+<!-- cookbook:begin stmt_switch -->
+```ts
+const KIND_CALL: i32 = 4;
+
+function classify(kind: number): number {
+  switch (kind) {
+    case 0:
+      return 10;
+    case 1:
+    case 2:
+      return 20;
+    case KIND_CALL:
+      return 30;
+    default:
+      return 40;
+  }
+}
+```
+
+```llvm
+define noundef i32 @classify(i32 noundef %kind) #0 {
+entry:
+  switch i32 %kind, label %sw.default [
+    i32 0, label %sw.case
+    i32 1, label %sw.case.1
+    i32 2, label %sw.case.1
+    i32 4, label %sw.case.2
+  ]
+
+sw.case:
+  ret i32 10
+
+sw.case.1:
+  ret i32 20
+
+sw.case.2:
+  ret i32 30
+
+sw.default:
+  ret i32 40
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end stmt_switch -->
+
 ### `break` / `continue`
 
 `break` is `br label %for.end`; `continue` is `br label %for.inc`. Both end

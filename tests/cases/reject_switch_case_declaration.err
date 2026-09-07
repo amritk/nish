@@ -1,0 +1,1 @@
+A `case` clause cannot declare a variable directly; wrap the clause body in a block

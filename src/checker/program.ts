@@ -157,4 +157,10 @@ export interface CheckedProgram {
    * inserts one `bitcast` from `from` to `to`.
    */
   coercions: WeakMap<ts.Expression, { from: StaticType; to: StaticType }>;
+  /**
+   * `case` label -> the integer it selects on (WP14). The label is a constant
+   * expression, folded here so the emitter can write LLVM's `switch` table
+   * without re-deriving anything.
+   */
+  caseValues: WeakMap<ts.CaseClause, bigint>;
 }

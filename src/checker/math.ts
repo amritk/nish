@@ -310,6 +310,11 @@ function contextType(ctx: CheckContext, node: ts.Expression, scope: Scope): Stat
     return array?.kind === "array" ? array.elem : undefined;
   }
   if (ts.isReturnStatement(parent)) return ctx.current.returnType;
+  // `case 3:` takes the width of the discriminant (WP14), which the checker
+  // has already typed: `switch (kind)` on an `i64` makes its labels `i64`.
+  if (ts.isCaseClause(parent) && parent.expression === expr) {
+    return peekType(ctx, (parent.parent.parent as ts.SwitchStatement).expression, scope);
+  }
   if (ts.isBinaryExpression(parent)) {
     // `this.ratio = 0.5`: a field is an annotated target like a variable is.
     if (parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && parent.right === expr) {

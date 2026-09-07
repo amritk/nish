@@ -751,13 +751,64 @@ The condition must be `boolean`: there is no truthiness
   (`tests/cases/arr_for_of`). `break` and `continue` work
   (`tests/cases/arr_for_of`).
 
+### `switch`
+
+```typescript
+switch (node.kind) {
+  case KIND_IF:
+  case KIND_WHILE:
+    return checkBranch(node);
+  case KIND_CALL:
+    return checkCall(node);
+  default:
+    return ERROR;
+}
+```
+
+- The discriminant is an **integer** (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`;
+  so a `number` in the default mode but not under `--number-mode f64`). Any
+  other type is `` `switch` requires an integer discriminant, got <type> ``
+  (`tests/cases/reject_switch_string`). Only an integer switch lowers to
+  LLVM's `switch` and a jump table; a string switch would have been a chain
+  of `sts_str_eq` calls wearing a switch's clothes, and `if`/`else` says that
+  honestly.
+- Every `case` label is an **integer constant expression** of the
+  discriminant's type: a literal, its negation, or a module constant
+  (`` `case` label must be an integer literal or a module constant ``,
+  `tests/cases/reject_switch_case_not_constant`; `` `case` label is i64 but
+  the discriminant is i32 ``, `reject_switch_case_type`). A literal takes the
+  discriminant's width, so `case 1:` on an `i64` switch is an `i64` one.
+- Labels are distinct (``Duplicate `case` label `1` in this `switch` ``,
+  `tests/cases/reject_switch_duplicate_case`), and there is at most one
+  `default` (`` `switch` has more than one `default` clause `` *(CLI only)*),
+  which may appear anywhere among the clauses.
+- **There is no implicit fallthrough.** A clause with statements ends in
+  `break`, `return`, `continue`, `throw` or `process.exit`, unless it is the
+  last clause (``A `case` clause with statements must end in `break`,
+  `return`, `continue` or `throw` ``,
+  `tests/cases/reject_switch_fallthrough`). An **empty** clause does fall
+  through, which is how `case 1: case 2:` gives several labels one body
+  (`tests/cases/cf_switch`).
+- A clause cannot declare a variable directly; wrap its body in a block
+  (``A `case` clause cannot declare a variable directly ``,
+  `tests/cases/reject_switch_case_declaration`). Clauses share one scope in
+  TypeScript, so a declaration in one would be visible but unassigned in the
+  ones below it.
+- `break` inside a `switch` leaves the switch, not an enclosing loop;
+  `continue` looks past the switch to the loop
+  (`tests/cases/cf_switch_break`).
+- A `switch` terminates (see Termination) when it has a `default`, no `break`
+  targets it, and its last clause terminates.
+
 ### `break` / `continue`
 
 Unlabelled only (`Labelled `break` is not supported`; labeled statements are
-forbidden outright, `tests/cases/reject_labeled_statement`), and only inside
-a loop (`` `break` outside of a loop ``, `tests/cases/reject_cf_break_outside`;
-`` `continue` outside of a loop ``, `reject_cf_continue_outside`).
-`tests/cases/cf_break_continue`.
+forbidden outright, `tests/cases/reject_labeled_statement`). `break` needs an
+enclosing loop or `switch` (`` `break` outside of a loop or `switch` ``,
+`tests/cases/reject_cf_break_outside`) and `continue` an enclosing loop
+(`` `continue` outside of a loop ``, `reject_cf_continue_outside`), which it
+finds past any `switch` in between. `tests/cases/cf_break_continue`,
+`cf_switch_break`.
 
 ### `throw`
 
@@ -778,8 +829,9 @@ purposes, the current path: a non-`void` function may end with it
 
 A statement *terminates* when control cannot fall out of it: `return`,
 `break`, `continue`, `throw`, `process.exit(...)`; an `if` whose branches
-both terminate; a loop with no condition or the condition `true` and no
-`break` aimed at it. Any other loop may run zero times and does not
+both terminate; a `switch` with a `default`, no `break` aimed at it and a
+terminating last clause; a loop with no condition or the condition `true` and
+no `break` aimed at it. Any other loop may run zero times and does not
 terminate. Rules (`src/checker/control-flow.ts`, `statements.ts`):
 
 - A non-`void` function's body must terminate
@@ -788,13 +840,13 @@ terminate. Rules (`src/checker/control-flow.ts`, `statements.ts`):
   `if (true) { return 1; }` alone is not enough *(CLI only)*).
 - A statement after a terminating one is `Unreachable code after <what>`,
   where `<what>` is `return`, `break`, `continue`, `throw`, `process.exit`,
-  `` an `if` whose branches all return ``, or `an infinite loop`
+  `` an `if` whose branches all return ``, `` a `switch` whose clauses all
+  return ``, or `an infinite loop`
   (`tests/cases/reject_unreachable`, `reject_cf_unreachable_after_break`,
   `reject_exit_unreachable`; `throw` and `if` forms *(CLI only)*).
 
 ### Rejected statements
 
-`switch` (`Unsupported statement in Phase 1: SwitchStatement` *(CLI only)*),
 `with` (`tests/cases/reject_with_statement`), `try` (`reject_try_catch`),
 `debugger` (`reject_debugger`), labeled statements (`reject_labeled_statement`),
 `var` (`reject_var_keyword`), `for...in`, nested `function`, `enum`, `type`,

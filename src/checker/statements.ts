@@ -106,6 +106,7 @@ const TERMINATOR_NAMES: Partial<Record<ts.SyntaxKind, string>> = {
   [ts.SyntaxKind.ContinueStatement]: "continue",
   [ts.SyntaxKind.ThrowStatement]: "throw",
   [ts.SyntaxKind.IfStatement]: "an `if` whose branches all return",
+  [ts.SyntaxKind.SwitchStatement]: "a `switch` whose clauses all return",
 };
 
 /**
