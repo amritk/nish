@@ -109,8 +109,14 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   and a `this` parameter are deliberately excluded — both are used through a
   pointer the checker already holds, and including them would turn the
   `%struct.Base = type opaque` of `tests/link/extends_import` into a
-  definition. Found by writing `self/diagnostics.ts`, whose sink hands back a
-  `Diagnostic[]`.
+  definition. The closure is a whole-program pass after every module has bound
+  its imports, not a step inside binding: a struct that reaches a module
+  through a chain of two — `main` imports `mid`'s class, whose method returns
+  `leaf`'s — would otherwise be found or not depending on the order the
+  modules happened to be bound in (`tests/link/reachable_struct_chain`). Found
+  by writing the self-hosted compiler's own `diagnostics` and `annotations`
+  modules, whose sink hands back a `Diagnostic[]` and whose context reads a
+  `StringSet` field.
 - **Self-hosting, wave C: the support library** (`docs/wp14-selfhost.md` §3).
   `self/strings.ts`, `self/map.ts` and `self/paths.ts` are the 598 lines of
   StaticTS the checker and the emitter are written over, and no language

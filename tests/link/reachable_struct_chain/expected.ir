@@ -1,0 +1,2 @@
+%struct.Leaf = type { i32 }
+declare noundef i32 @Leaf.doubled(%struct.Leaf* noundef nonnull readonly align 8 dereferenceable(4) nocapture)

@@ -247,7 +247,6 @@ export class Checker implements CheckContext {
     const struct = target.structs.get(imp.importedName);
     if (struct && struct.decl.getSourceFile() === target.sourceFile) {
       this.bindStructImport(imp, struct);
-      this.registerReachableStructs(struct, target);
       return;
     }
     const sig = target.exports.get(imp.importedName);
@@ -322,17 +321,28 @@ export class Checker implements CheckContext {
    * They go into `program.structs` but not into `typeNames`, so nothing about
    * what may be *spelled* as a type changes: `const x: Item` in this module is
    * still `Unknown type` until `Item` is imported.
+   *
+   * `declared` is every struct declared anywhere in the program, which is why
+   * this is a pass of its own after every module has bound its imports: a
+   * chain (`A` imports `B`'s class, whose method returns `C`'s) would
+   * otherwise depend on the order the modules happened to be bound in.
    */
-  private registerReachableStructs(root: StructInfo, target: CheckedProgram): void {
-    const pending: StructInfo[] = [root];
-    const seen = new Set<string>([root.name]);
+  closeReachableStructs(declared: ReadonlyMap<string, StructInfo>): void {
+    const pending: StructInfo[] = [];
+    const seen = new Set<string>();
+    for (const imp of this.program.imports) {
+      if (imp.struct) {
+        pending.push(imp.struct);
+        seen.add(imp.struct.name);
+      }
+    }
     while (pending.length > 0) {
       // biome-ignore lint/style/noNonNullAssertion: the loop guard is the length check
       const info = pending.pop()!;
       for (const name of referencedStructNames(info)) {
         if (seen.has(name)) continue;
         seen.add(name);
-        const next = target.structs.get(name);
+        const next = declared.get(name);
         if (!next) continue;
         if (!this.program.structs.has(name)) {
           this.program.structs.set(name, next);
