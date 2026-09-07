@@ -15,7 +15,7 @@
 import ts from "typescript";
 import { LocalVar } from "../../checker";
 import { isAlwaysTrue } from "../../checker/control-flow";
-import { llvmType } from "../../types";
+import { isFloat, llvmType } from "../../types";
 import { IRBlock } from "../ir";
 import {
   BinaryEmitter,
@@ -105,7 +105,11 @@ const emitWhile: StatementEmitter = (ctx, node) => {
   condBranch(ctx, ctx.emitExpression(stmt.expression), bodyBlock, endBlock);
 
   fn.placeBlock(bodyBlock);
-  const loop = emitLoopBody(ctx, stmt.statement, { breakBlock: endBlock, continueBlock: condBlock, hasBreak: false });
+  const loop = emitLoopBody(ctx, stmt.statement, {
+    breakBlock: endBlock,
+    continueBlock: condBlock,
+    hasBreak: false,
+  });
   fallThrough(ctx, condBlock);
 
   fn.placeBlock(endBlock);
@@ -121,7 +125,11 @@ const emitDo: StatementEmitter = (ctx, node) => {
 
   branch(ctx, bodyBlock);
   fn.placeBlock(bodyBlock);
-  const loop = emitLoopBody(ctx, stmt.statement, { breakBlock: endBlock, continueBlock: condBlock, hasBreak: false });
+  const loop = emitLoopBody(ctx, stmt.statement, {
+    breakBlock: endBlock,
+    continueBlock: condBlock,
+    hasBreak: false,
+  });
   fallThrough(ctx, condBlock);
 
   fn.placeBlock(condBlock);
@@ -276,10 +284,9 @@ const emitCompoundAssignment: BinaryEmitter = (ctx, expr) => {
   const old = loadLocal(ctx, target);
   const rhs = ctx.emitExpression(expr.right);
   const [intOp, floatOp] = COMPOUND_OPCODES[expr.operatorToken.kind]!;
-  const value =
-    target.type.kind === "f64"
-      ? ctx.fn.emitValue(`${floatOp} ${llvmType(target.type)} ${old}, ${rhs}`)
-      : emitIntBinary(ctx, intOp, llvmType(target.type), old, rhs);
+  const value = isFloat(target.type)
+    ? ctx.fn.emitValue(`${floatOp} ${llvmType(target.type)} ${old}, ${rhs}`)
+    : emitIntBinary(ctx, intOp, target.type, old, rhs);
   storeLocal(ctx, target, value);
   return value;
 };
@@ -287,10 +294,15 @@ const emitCompoundAssignment: BinaryEmitter = (ctx, expr) => {
 /** `++x`/`x++`/`--x`/`x--`: postfix yields the old value, prefix the new one. */
 function emitIncDec(ctx: EmitContext, expr: ts.PrefixUnaryExpression | ts.PostfixUnaryExpression): string {
   const target = ctx.program.bindings.get(expr.operand as ts.Identifier)!;
-  const isFloat = target.type.kind === "f64";
+  const float = isFloat(target.type);
   const increment = expr.operator === ts.SyntaxKind.PlusPlusToken;
-  const opcode = isFloat ? (increment ? "fadd" : "fsub") : intOpcode(ctx, increment ? "add" : "sub");
-  const one = isFloat ? "0x3FF0000000000000" : "1";
+  const opcode = float
+    ? increment
+      ? "fadd"
+      : "fsub"
+    : intOpcode(ctx, increment ? "add" : "sub", target.type);
+  // `1.0` in LLVM's hex form; the same 64-bit pattern serves `float` and `double`.
+  const one = float ? "0x3FF0000000000000" : "1";
   const old = loadLocal(ctx, target);
   const value = ctx.fn.emitValue(`${opcode} ${llvmType(target.type)} ${old}, ${one}`);
   storeLocal(ctx, target, value);

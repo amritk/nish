@@ -7,7 +7,7 @@
  * `binaryCheckers`.
  */
 import ts from "typescript";
-import { BOOL, F64, I32, assignable, isNumeric, sameType, typeToString } from "../types";
+import { BOOL, F64, I32, assignable, isInteger, isNumeric, sameType, typeToString } from "../types";
 import { arrayExpressionCheckers, installArrayAssignmentCheckers } from "./arrays";
 import { bitwiseBinaryCheckers, bitwiseUnaryCheckers } from "./bitwise";
 import { BuiltinCallChecker } from "./builtins";

@@ -125,14 +125,22 @@ void sts_print(const sts_str *s) {
   (void)!write(1, "\n", 1);
 }
 
-sts_str *sts_str_from_i64(int64_t v) {
+/* Decimal digits of `u`, with a '-' in front when `neg`. 20 digits is the
+   widest a uint64_t can be, plus the sign. */
+static sts_str *str_from_digits(uint64_t u, int neg) {
   char tmp[21], *p = tmp + 21;
-  uint64_t u = v < 0 ? -(uint64_t)v : (uint64_t)v;
   do { *--p = '0' + u % 10; u /= 10; } while (u);
-  if (v < 0) *--p = '-';
+  if (neg) *--p = '-';
   return sts_str_new(p, tmp + 21 - p);
 }
+
+sts_str *sts_str_from_i64(int64_t v) {
+  return str_from_digits(v < 0 ? -(uint64_t)v : (uint64_t)v, v < 0);
+}
 sts_str *sts_str_from_i32(int32_t v) { return sts_str_from_i64(v); }
+/* The one unsigned formatter (WP15): u8/u16/u32 are zero-extended by the
+   caller, so 0xFFFFFFFF prints as 4294967295 rather than -1. */
+sts_str *sts_str_from_u64(uint64_t v) { return str_from_digits(v, 0); }
 
 /* JS Number#toString: shortest round-trip digits, e-form outside (-6, 21] */
 sts_str *sts_str_from_f64(double v) {

@@ -92,6 +92,9 @@ void sts_print(const sts_str *s);
 sts_str *sts_str_from_i32(int32_t v);
 sts_str *sts_str_from_f64(double v);
 sts_str *sts_str_from_i64(int64_t v);
+/* Unsigned decimal (WP15). u8/u16/u32 are zero-extended by the caller, so one
+   symbol serves every unsigned width. */
+sts_str *sts_str_from_u64(uint64_t v);
 
 /* Process and file I/O (WP7). `sts_exit` never returns; the file functions
  * print a message to stderr and exit(1) on a fatal error. */

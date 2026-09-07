@@ -40,7 +40,7 @@ export interface WasmBridge {
 
 function crossesWasm(t: StaticType, position: "param" | "return"): boolean {
   const k = kindOf(t);
-  if (k === "i32" || k === "f64" || k === "i64" || k === "bool") return true;
+  if (k === "i32" || k === "f32" || k === "f64" || k === "i64" || k === "bool") return true;
   if (k === "void") return position === "return";
   return typedView(t) !== undefined;
 }

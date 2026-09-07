@@ -13,9 +13,10 @@
  *   s.length       `bitcast i8* s to i64*` + `load i64, align 8`, then `trunc`
  *                  to i32 (i32 mode) or `sitofp` to double (f64 mode). No call.
  *   `a${x}b`       constant parts are literals; holes are converted with
- *                  `sts_str_from_i32` / `sts_str_from_f64` or, for booleans, a
- *                  `select` between the literals "true" / "false"; parts are
- *                  joined left to right with `sts_str_concat`.
+ *                  `sts_str_from_i32` / `sts_str_from_f64` / `sts_str_from_u64`
+ *                  (an unsigned hole narrower than 64 bits is `zext`ed first)
+ *                  or, for booleans, a `select` between the literals "true" /
+ *                  "false"; parts are joined left to right with `sts_str_concat`.
  *   console.log(x) convert as above, then `call void @sts_print(i8* s)`.
  *
  * `collectStringFacts` tells `attributes.ts` which runtime symbols these
@@ -24,7 +25,7 @@
 import ts from "typescript";
 import { CheckedProgram } from "../../checker";
 import { dottedName } from "../../checker/builtins";
-import { STRING, StaticType, llvmType } from "../../types";
+import { STRING, StaticType, isFloat, isUnsigned, llvmType } from "../../types";
 import { IRModule } from "../ir";
 import { arenaBuiltinCallEmitters } from "./arena";
 import { BuiltinCall } from "./builtins";
@@ -64,24 +65,43 @@ const emitStringLiteral: ExpressionEmitter = (ctx, expr) =>
 
 // ---- Conversion to string -----------------------------------------------------------
 
-/** Runtime symbol that converts `t` to a string, or undefined when no call is needed. */
+/**
+ * Runtime symbol that converts `t` to a string, or undefined when no call is
+ * needed. Every unsigned width shares `sts_str_from_u64`: the value is `zext`ed
+ * to i64 first, which is one instruction the optimiser usually folds away and
+ * is much cheaper than four formatters in a runtime with a size budget (WP15).
+ */
 function conversionCallee(t: StaticType): string | undefined {
+  if (isUnsigned(t)) return "sts_str_from_u64";
   if (t.kind === "i32") return "sts_str_from_i32";
   if (t.kind === "i64") return "sts_str_from_i64";
-  if (t.kind === "f64") return "sts_str_from_f64";
+  if (isFloat(t)) return "sts_str_from_f64";
   return undefined; // string: identity; bool: select between two literals
 }
 
 /** Lower `expr` (string | number | boolean) and return an `i8*` string value. */
 function emitToString(ctx: EmitContext, expr: ts.Expression): string {
   const type = ctx.typeOf(expr);
-  const value = ctx.emitExpression(expr);
+  let value = ctx.emitExpression(expr);
   if (type.kind === "bool") {
     return ctx.fn.emitValue(`select i1 ${value}, i8* ${ctx.stringConstant("true")}, i8* ${ctx.stringConstant("false")}`);
   }
   const callee = conversionCallee(type);
   if (!callee) return value;
-  return ctx.fn.emitValue(`call i8* ${ctx.useRuntime(callee)}(${llvmType(type)} ${value})`);
+  let ty = llvmType(type);
+  // `zext`, never `sext`: printing a u32 of 0xFFFFFFFF must give 4294967295.
+  if (isUnsigned(type) && ty !== "i64") {
+    value = ctx.fn.emitValue(`zext ${ty} ${value} to i64`);
+    ty = "i64";
+  }
+  // An `f32` widens to double and reuses the f64 formatter: `fpext` is exact,
+  // so the digits are JavaScript's for the float's *value*, and the runtime
+  // needs no second formatter (WP15).
+  if (type.kind === "f32") {
+    value = ctx.fn.emitValue(`fpext float ${value} to double`);
+    ty = "double";
+  }
+  return ctx.fn.emitValue(`call i8* ${ctx.useRuntime(callee)}(${ty} ${value})`);
 }
 
 function emitConcat(ctx: EmitContext, lhs: string, rhs: string): string {
@@ -157,7 +177,8 @@ const emitPlus: BinaryEmitter = (ctx, expr) => {
   const lhs = ctx.emitExpression(expr.left);
   const rhs = ctx.emitExpression(expr.right);
   if (type.kind === "string") return emitConcat(ctx, lhs, rhs);
-  return ctx.fn.emitValue(`${type.kind === "f64" ? "fadd" : intOpcode(ctx, "add")} ${llvmType(type)} ${lhs}, ${rhs}`);
+  const opcode = isFloat(type) ? "fadd" : intOpcode(ctx, "add", type);
+  return ctx.fn.emitValue(`${opcode} ${llvmType(type)} ${lhs}, ${rhs}`);
 };
 
 const emitStrictEquality: BinaryEmitter = (ctx, expr) => {
@@ -170,7 +191,7 @@ const emitStrictEquality: BinaryEmitter = (ctx, expr) => {
     return negate ? ctx.fn.emitValue(`xor i1 ${eq}, true`) : eq;
   }
   // `T | null` (WP6) compares against the literal `null` by pointer; the checker allows nothing else.
-  const opcode = type.kind === "f64" ? (negate ? "fcmp une" : "fcmp oeq") : negate ? "icmp ne" : "icmp eq";
+  const opcode = isFloat(type) ? (negate ? "fcmp une" : "fcmp oeq") : negate ? "icmp ne" : "icmp eq";
   return ctx.fn.emitValue(`${opcode} ${llvmType(type)} ${lhs}, ${rhs}`);
 };
 

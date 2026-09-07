@@ -3,8 +3,10 @@
  *
  * A StaticTS program is valid TypeScript, but its *semantics* are not
  * JavaScript's: `number` is a wrapping 32-bit integer in the default mode,
- * `i64` is a wrapping 64-bit integer, `s.length` is a byte count, `a[i]` is
- * bounds-checked, `throw` traps. To run the same program under Node we
+ * `i64` is a wrapping 64-bit integer, `u8`/`u16`/`u32`/`u64` are unsigned and
+ * JavaScript has no unsigned integers at all, `f32` is a 32-bit float and
+ * JavaScript has only doubles, `s.length` is a byte count,
+ * `a[i]` is bounds-checked, `throw` traps. To run the same program under Node we
  *
  *   1. check it with the compiler's own checker (dist/compiler.js), which
  *      records the StaticType of every expression in a side table;
@@ -43,47 +45,118 @@ const bin = (l, op, r) => f.createBinaryExpression(l, op, r);
 const num = (n) => f.createNumericLiteral(String(n));
 const big = (n) => f.createBigIntLiteral(`${n}n`);
 
-/** Give an arithmetic *result* the wrapping semantics of its StaticType. */
+const str = (s) => f.createStringLiteral(s);
+
+/** The integer kinds and how a value of each is held in JavaScript. */
+const INT_KINDS = new Set(["i32", "i64", "u8", "u16", "u32", "u64"]);
+const UNSIGNED_KINDS = new Set(["u8", "u16", "u32", "u64"]);
+/** BigInt kinds: the two 64-bit widths, which do not fit a JavaScript `number`. */
+const BIG_KINDS = new Set(["i64", "u64"]);
+
+/** `Math.fround(x)`: the nearest 32-bit float, which is what an `f32` holds. */
+const froundCall = (expr) =>
+  f.createCallExpression(f.createPropertyAccessExpression(f.createIdentifier("Math"), "fround"), undefined, [
+    expr,
+  ]);
+
+/**
+ * Give an arithmetic *result* the wrapping semantics of its StaticType.
+ *
+ * JavaScript has no unsigned integers, so an unsigned result is masked back
+ * into its width: `& 0xFF` / `& 0xFFFF` for the narrow pair (whose ToInt32
+ * truncation also handles a negative intermediate) and `>>> 0` for u32, whose
+ * ToUint32 is exactly `trunc ... to i32` read as unsigned. u64 is a BigInt and
+ * goes through `BigInt.asUintN(64, x)` the way i64 goes through `asIntN`.
+ */
 function wrap(kind, expr) {
   if (kind === "i32") return paren(bin(expr, ts.SyntaxKind.BarToken, num(0)));
   if (kind === "i64") return shimCall("wrapI64", [expr]);
+  if (kind === "u8") return paren(bin(expr, ts.SyntaxKind.AmpersandToken, num(0xff)));
+  if (kind === "u16") return paren(bin(expr, ts.SyntaxKind.AmpersandToken, num(0xffff)));
+  if (kind === "u32") return paren(bin(expr, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken, num(0)));
+  if (kind === "u64") return shimCall("wrapU64", [expr]);
+  // f32: JavaScript has only doubles, so every f32 result is rounded to the
+  // nearest float with `Math.fround`. Without it 0.1 stays 0.1 here and is
+  // 0.10000000149011612 natively, which is where a missing round shows up.
+  if (kind === "f32") return froundCall(expr);
   return expr;
 }
 
 /** `a op b` with the integer semantics of `kind` (`f64`/string results are plain JS). */
 function arith(kind, op, a, b) {
-  if (kind === "i32" && op === ts.SyntaxKind.AsteriskToken) {
-    // (a * b) | 0 is wrong once the double product exceeds 2^53; imul is the exact `mul i32`.
-    return f.createCallExpression(
+  if ((kind === "i32" || kind === "u32") && op === ts.SyntaxKind.AsteriskToken) {
+    // (a * b) | 0 is wrong once the double product exceeds 2^53; imul is the
+    // exact `mul i32`, and its low 32 bits are the same for both signednesses.
+    const imul = f.createCallExpression(
       f.createPropertyAccessExpression(f.createIdentifier("Math"), "imul"),
       undefined,
       [a, b]
     );
+    return kind === "u32" ? wrap(kind, imul) : imul;
   }
   const plain = bin(a, op, b);
-  if (kind === "i32" || kind === "i64") return wrap(kind, paren(plain));
+  if (INT_KINDS.has(kind) || kind === "f32") return wrap(kind, paren(plain));
   return paren(plain);
 }
 
-/** The i64 shifts, which JavaScript's BigInt operators cannot express directly. */
-const I64_SHIFT_SHIMS = {
-  [ts.SyntaxKind.LessThanLessThanToken]: "shlI64",
-  [ts.SyntaxKind.GreaterThanGreaterThanToken]: "ashrI64",
-  [ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken]: "lshrI64",
-};
+/** The bit width of each integer kind, which is what a shift count is masked to. */
+const KIND_BITS = { i32: 32, i64: 64, u8: 8, u16: 16, u32: 32, u64: 64 };
 
 /**
- * `a op b` for a bitwise operator. On `i32` JavaScript already computes the
- * `and`/`or`/`xor`/`shl`/`ashr` StaticTS emits, mask and all; only `>>>`
- * differs, because JS produces an unsigned 32-bit value in a double where an
- * `i32` is signed, so `| 0` reads those bits back as the type they are in.
- * BigInt has no `>>>` at all and neither of its shifts masks the count, so the
- * i64 shifts go through the shim.
+ * The 64-bit shifts, which JavaScript's BigInt operators cannot express: BigInt
+ * has no `>>>`, its `>>` is arbitrary-precision, and neither masks the count.
+ * Picked by kind and operator, so `>>` lands on `ashr` for i64 and `lshr` for
+ * u64, exactly as the emitter picks the opcode.
  */
-const bitwise = (kind, op, a, b) =>
-  kind === "i64" && op in I64_SHIFT_SHIMS
-    ? shimCall(I64_SHIFT_SHIMS[op], [a, b])
-    : wrap(kind, paren(bin(a, op, b)));
+const BIG_SHIFT_SHIMS = {
+  i64: {
+    [ts.SyntaxKind.LessThanLessThanToken]: "shlI64",
+    [ts.SyntaxKind.GreaterThanGreaterThanToken]: "ashrI64",
+    [ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken]: "lshrI64",
+  },
+  u64: {
+    [ts.SyntaxKind.LessThanLessThanToken]: "shlU64",
+    [ts.SyntaxKind.GreaterThanGreaterThanToken]: "lshrU64",
+    [ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken]: "lshrU64",
+  },
+};
+
+/** The shift operators, whose right operand is a count rather than a value. */
+const SHIFT_OPS = new Set([
+  ts.SyntaxKind.LessThanLessThanToken,
+  ts.SyntaxKind.GreaterThanGreaterThanToken,
+  ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
+]);
+
+/**
+ * `a op b` for a bitwise operator.
+ *
+ * `& | ^` are JavaScript's own once the result is wrapped back into the width.
+ * The shifts need two adjustments:
+ *
+ *   - **The count.** StaticTS masks it to the operand width. JavaScript's
+ *     number shifts already mask to 31, which is that rule at 32 bits, so only
+ *     `u8` and `u16` need the mask spelled out.
+ *   - **The opcode.** `>>` is arithmetic on a signed type and logical on an
+ *     unsigned one, so an unsigned `>>` is rewritten to JavaScript's `>>>`.
+ *     An `i32 >>>` is the reverse case: JavaScript yields the *unsigned*
+ *     32-bit value in a double where an `i32` is signed, and `wrap` puts those
+ *     bits back with `| 0`. That wart is the reason `u32` exists.
+ */
+function bitwise(kind, op, a, b) {
+  const shim = SHIFT_OPS.has(op) ? BIG_SHIFT_SHIMS[kind]?.[op] : undefined;
+  if (shim !== undefined) return shimCall(shim, [a, b]);
+  let right = b;
+  let operator = op;
+  if (SHIFT_OPS.has(op)) {
+    const bits = KIND_BITS[kind];
+    if (bits !== undefined && bits < 32) right = paren(bin(b, ts.SyntaxKind.AmpersandToken, num(bits - 1)));
+    if (op === ts.SyntaxKind.GreaterThanGreaterThanToken && UNSIGNED_KINDS.has(kind)) {
+      operator = ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken;
+    }
+  }
+  return wrap(kind, paren(bin(a, operator, right)));
+}
 
 const COMPOUND_TO_BINARY = {
   [ts.SyntaxKind.PlusEqualsToken]: ts.SyntaxKind.PlusToken,
@@ -118,6 +191,23 @@ const BITWISE = new Set([
 /** `a op b` with the StaticTS semantics of `kind`, whichever family `op` belongs to. */
 const apply = (kind, op, a, b) => (BITWISE.has(op) ? bitwise(kind, op, a, b) : arith(kind, op, a, b));
 
+/**
+ * The numeric conversion builtins and the StaticType each produces. A
+ * conversion with an unsigned type or an `f32` on either side goes through
+ * `__sts.convert`, which takes both kinds; the plain signed/f64 ones keep
+ * their own shim helpers.
+ */
+const CONVERSION_TARGETS = {
+  toI32: "i32",
+  toI64: "i64",
+  toU8: "u8",
+  toU16: "u16",
+  toU32: "u32",
+  toU64: "u64",
+  toF32: "f32",
+  toF64: "f64",
+};
+
 /** Identifier builtins and the shim function each becomes (`Number` cannot be a shim export name). */
 const IDENTIFIER_BUILTINS = new Map([
   ["toI32", "toI32"],
@@ -134,7 +224,7 @@ const IDENTIFIER_BUILTINS = new Map([
 ]);
 
 function zeroOf(elem) {
-  if (elem.kind === "i64") return big(0);
+  if (BIG_KINDS.has(elem.kind)) return big(0);
   if (elem.kind === "bool") return f.createFalse();
   if (elem.kind === "nullable") return f.createNull(); // zero-filled pointers are `null`
   return num(0);
@@ -239,10 +329,12 @@ function makeTransformer(unit, stems) {
         );
       }
 
-      // ---- numeric literal typed i64 by context -> BigInt literal ----
+      // ---- numeric literal typed i64/u64 by context -> BigInt literal ----
       if (ts.isNumericLiteral(node)) {
-        if (kindOf(node) === "i64") return big(BigInt(Number(node.text)));
-        return node;
+        const k = kindOf(node);
+        if (BIG_KINDS.has(k)) return big(BigInt(Number(node.text)));
+        if (k === "f32") return froundCall(node); // `0.1` is not a float
+        return node; // u8/u16/u32 literals are non-negative and in range already
       }
 
       // ---- `throw e` -> trap ----
@@ -261,12 +353,12 @@ function makeTransformer(unit, stems) {
           node.operator === ts.SyntaxKind.PlusPlusToken ||
           node.operator === ts.SyntaxKind.MinusMinusToken
         ) {
-          if (kind !== "i32" && kind !== "i64") return node; // f64: JS semantics are the fadd/fsub
+          if (!INT_KINDS.has(kind) && kind !== "f32") return node; // f64: JS semantics are the fadd/fsub
           const op =
             node.operator === ts.SyntaxKind.PlusPlusToken
               ? ts.SyntaxKind.PlusToken
               : ts.SyntaxKind.MinusToken;
-          const one = kind === "i64" ? big(1) : num(1);
+          const one = BIG_KINDS.has(kind) ? big(1) : num(1);
           // ++x  ->  (x = wrap(x + 1))
           return paren(f.createAssignment(node.operand, arith(kind, op, node.operand, one)));
         }
@@ -274,9 +366,9 @@ function makeTransformer(unit, stems) {
       }
       if (ts.isPostfixUnaryExpression(node)) {
         const kind = kindOf(node);
-        if (kind !== "i32" && kind !== "i64") return node;
+        if (!INT_KINDS.has(kind) && kind !== "f32") return node;
         const inc = node.operator === ts.SyntaxKind.PlusPlusToken;
-        const one = kind === "i64" ? big(1) : num(1);
+        const one = BIG_KINDS.has(kind) ? big(1) : num(1);
         // x++  ->  wrap((x = wrap(x + 1)) - 1): the old value, recovered with wrapping arithmetic.
         const assign = paren(
           f.createAssignment(
@@ -351,7 +443,7 @@ function makeTransformer(unit, stems) {
       if (
         ts.isNewExpression(node) &&
         ts.isIdentifier(node.expression) &&
-        /^(Array|Int32Array|Float64Array|BigInt64Array)$/.test(node.expression.text)
+        /^(Array|Int32Array|Float32Array|Float64Array|BigInt64Array)$/.test(node.expression.text)
       ) {
         const t = typeOf(node);
         const n = ts.visitNode(node.arguments[0], visit);
@@ -371,18 +463,34 @@ function makeTransformer(unit, stems) {
         if (dotted === "Math.abs") {
           const k = kindOf(node.arguments[0]);
           if (k === "i64") return shimCall("absI64", args);
+          // An unsigned value is already its own magnitude, and `Math.abs`
+          // throws on a BigInt, so the call simply disappears.
+          if (UNSIGNED_KINDS.has(k)) return args[0];
           if (k === "i32") return wrap("i32", f.updateCallExpression(node, node.expression, undefined, args));
         }
-        if ((dotted === "Math.min" || dotted === "Math.max") && kindOf(node.arguments[0]) === "i64") {
-          return shimCall(dotted === "Math.min" ? "minI64" : "maxI64", args);
+        if (dotted === "Math.min" || dotted === "Math.max") {
+          const k = kindOf(node.arguments[0]);
+          const isMin = dotted === "Math.min";
+          if (k === "i64") return shimCall(isMin ? "minI64" : "maxI64", args);
+          if (k === "u64") return shimCall(isMin ? "minU64" : "maxU64", args); // Math.* rejects BigInt
         }
         if (
           ts.isIdentifier(node.expression) &&
-          IDENTIFIER_BUILTINS.has(node.expression.text) &&
           !callees.has(node) && // a user function of the same name shadows the builtin
           !bindings.has(node.expression)
         ) {
-          return shimCall(IDENTIFIER_BUILTINS.get(node.expression.text), args);
+          // A conversion with an unsigned type or an `f32` on either side goes
+          // through the one shim helper that knows the whole
+          // sext/zext/trunc/fptrunc/fround matrix (WP15).
+          const to = CONVERSION_TARGETS[node.expression.text];
+          const from = to === undefined ? undefined : kindOf(node.arguments[0]);
+          const touchesF32 = to === "f32" || from === "f32";
+          if (to !== undefined && (touchesF32 || UNSIGNED_KINDS.has(to) || UNSIGNED_KINDS.has(from))) {
+            return shimCall("convert", [args[0], str(from), str(to)]);
+          }
+          if (IDENTIFIER_BUILTINS.has(node.expression.text)) {
+            return shimCall(IDENTIFIER_BUILTINS.get(node.expression.text), args);
+          }
         }
         return f.updateCallExpression(node, ts.visitNode(node.expression, visit), undefined, args);
       }

@@ -1,0 +1,1 @@
+Negative literal `-1` where u8 is expected (u8 is unsigned)

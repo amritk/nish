@@ -1278,6 +1278,162 @@ attributes #1 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end expr_div_checked -->
 
+### Unsigned integers
+
+`u8`/`u16`/`u32`/`u64` *are* `i8`/`i16`/`i32`/`i64`: LLVM has no unsigned
+types, so the signedness is carried by the instruction. `udiv` replaces
+`sdiv`, `icmp ult` replaces `icmp slt`, `>>` becomes `lshr` instead of `ashr`,
+and a widening conversion is `zext` instead of `sext`. Two things are worth
+looking at in the listing below:
+
+- `divide` checks the divisor with **one** `icmp eq ..., 0`. Unsigned division
+  has no `MIN / -1` case, so the three extra instructions the signed version
+  needs above are simply absent.
+- `reinterpret` has an empty body. A conversion between two integers of the
+  same width and different signedness moves no bits and emits no instruction,
+  which is why an unsigned type costs nothing to represent.
+
+<!-- cookbook:begin expr_unsigned -->
+```ts
+function divide(a: u32, b: u32): u32 {
+  return a / b;
+}
+
+function below(a: u32, b: u32): boolean {
+  return a < b;
+}
+
+function halve(a: u32): u32 {
+  return a >> 1;
+}
+
+function widen(a: u32): u64 {
+  return toU64(a);
+}
+
+function reinterpret(a: i32): u32 {
+  return toU32(a);
+}
+```
+
+```llvm
+declare void @sts_panic_div(i1 noundef zeroext) #2
+
+define noundef i32 @divide(i32 noundef %a, i32 noundef %b) #0 {
+entry:
+  %0 = icmp eq i32 %b, 0
+  br i1 %0, label %div.fail, label %div.ok
+
+div.fail:
+  call void @sts_panic_div(i1 zeroext %0)
+  unreachable
+
+div.ok:
+  %1 = udiv i32 %a, %b
+  ret i32 %1
+}
+
+define noundef zeroext i1 @below(i32 noundef %a, i32 noundef %b) #1 {
+entry:
+  %0 = icmp ult i32 %a, %b
+  ret i1 %0
+}
+
+define noundef i32 @halve(i32 noundef %a) #1 {
+entry:
+  %0 = lshr i32 %a, 1
+  ret i32 %0
+}
+
+define noundef i64 @widen(i32 noundef %a) #1 {
+entry:
+  %0 = zext i32 %a to i64
+  ret i64 %0
+}
+
+define noundef i32 @reinterpret(i32 noundef %a) #1 {
+entry:
+  ret i32 %a
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn readnone }
+attributes #2 = { nounwind noreturn cold }
+```
+<!-- cookbook:end expr_unsigned -->
+
+### `f32`
+
+`f32` is LLVM's `float`: the same instructions as `f64`, one width down.
+`fptrunc` narrows from a double and `fpext` widens back, and a float-to-integer
+conversion uses the saturating intrinsic with an `.f32` source suffix.
+
+The constant is the part worth reading closely. LLVM writes a `float` constant
+with the **64-bit** hex of the double it equals, and requires that double to be
+exactly representable as a float — so `0.1` as an `f32` is
+`0x3FB99999A0000000`, the double nearest to `(float) 0.1`, and not the `f64`
+spelling `0x3FB999999999999A`.
+
+<!-- cookbook:begin expr_f32 -->
+```ts
+function blend(a: f32, b: f32): f32 {
+  return (a + b) / b;
+}
+
+function narrow(x: f64): f32 {
+  return toF32(x);
+}
+
+function widen(x: f32): f64 {
+  return toF64(x);
+}
+
+function truncate(x: f32): i32 {
+  return toI32(x);
+}
+
+function tenth(): f32 {
+  return 0.1;
+}
+```
+
+```llvm
+declare i32 @llvm.fptosi.sat.i32.f32(float) #0
+
+define noundef float @blend(float noundef %a, float noundef %b) #0 {
+entry:
+  %0 = fadd float %a, %b
+  %1 = fdiv float %0, %b
+  ret float %1
+}
+
+define noundef float @narrow(double noundef %x) #0 {
+entry:
+  %0 = fptrunc double %x to float
+  ret float %0
+}
+
+define noundef double @widen(float noundef %x) #0 {
+entry:
+  %0 = fpext float %x to double
+  ret double %0
+}
+
+define noundef i32 @truncate(float noundef %x) #0 {
+entry:
+  %0 = call i32 @llvm.fptosi.sat.i32.f32(float %x)
+  ret i32 %0
+}
+
+define noundef float @tenth() #0 {
+entry:
+  ret float 0x3FB99999A0000000
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end expr_f32 -->
+
 ## Strings
 
 ### Literals
@@ -2967,6 +3123,7 @@ declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_from_f64(double noundef) #2
 declare noalias noundef nonnull align 8 i8* @sts_str_from_i64(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @sts_str_from_u64(i64 noundef) #2
 declare noundef double @sts_random() #2
 declare void @sts_exit(i32 noundef) #4
 declare noalias noundef nonnull align 8 i8* @sts_read_file(i8* noundef nonnull readonly align 8 nocapture) #2

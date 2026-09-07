@@ -445,7 +445,7 @@ if (!only || "layout".includes(only)) {
     const diffs = [];
     for (const [name, size] of fromC) if (fromIr.get(name) !== size) diffs.push(`${name}: C ${size}, IR ${fromIr.get(name)}`);
     check(`layout: compiler sizes match structs.c for ${fromC.size} structs (${[...fromC].map(([n, s]) => `${n}=${s}`).join(" ")})`,
-      fromC.size === 13 && fromIr.size === 13 && diffs.length === 0, diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`);
+      fromC.size === 15 && fromIr.size === 15 && diffs.length === 0, diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`);
     if (HAS_CLANG) {
       // WP2b: the C header lists every class with its flattened fields; a derived
       // struct must therefore have the size the compiler (and structs.c) computed.
@@ -457,7 +457,7 @@ if (!only || "layout".includes(only)) {
         "",
       ].join("\n"));
       const hc = spawnSync("clang", ["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", `-I${buildDir}`, "-Iruntime", headerCheck], { cwd: root });
-      check("layout: --emit-header declares the 13 structs (derived ones flattened) with the sizes structs.c asserts, under -Wall -Wextra -Werror",
+      check(`layout: --emit-header declares the ${fromC.size} structs (derived ones flattened) with the sizes structs.c asserts, under -Wall -Wextra -Werror`,
         hc.status === 0 && fs.readFileSync(layoutH, "utf8").includes("struct M {"), String(hc.stderr));
     }
     if (HAS_CLANG) {
@@ -484,10 +484,12 @@ if (!only || "layout".includes(only)) {
 // `/` and `%` on integers panic (exit 1) on a zero divisor or MIN / -1 instead of
 // executing an sdiv/srem with a poison result. Both programs must print nothing after
 // the offending line and name the failure on stderr.
-if (!only || "division".includes(only) || only.startsWith("div")) {
+if (!only || "division".includes(only) || only.startsWith("div") || only.startsWith("u_")) {
   for (const [name, needle, expectedOut] of [
     ["div_zero_panic", "attempt to divide by zero", "before"],
     ["div_overflow_panic", "attempt to divide with overflow", ""],
+    // WP15: the cheaper one-compare unsigned check still catches a zero divisor.
+    ["u_div_zero_panic", "attempt to divide by zero", "before"],
   ]) {
     const ll = path.join(buildDir, `${name}.ll`);
     if (!HAS_CLANG || !fs.existsSync(ll)) continue;

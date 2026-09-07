@@ -14,7 +14,10 @@
  *   - `Math.PI`, `Math.E`: f64 constants (also in i32 mode: `f64` always exists).
  *
  * Conversions (plain identifier calls, any numeric argument):
- *   `toI32(x)`, `toI64(x)`, `toF64(x)`. Same-type calls are identities.
+ *   `toI32(x)`, `toI64(x)`, `toU8(x)`, `toU16(x)`, `toU32(x)`, `toU64(x)`,
+ *   `toF64(x)`. Same-type calls are identities, and so is a conversion between
+ *   two integers of the same width that differ only in signedness (WP15):
+ *   `toU32(i)` on an `i32` emits no instruction at all.
  *
  * String to number (plain identifier calls, lowered to the runtime):
  *   `parseInt(s: string): i32`, `parseFloat(s: string): f64`, and
@@ -32,12 +35,36 @@
  *     already-checked left operand)
  *   - `Math.min(x, 5)`, `Math.max(5, x)`, `process.exit(5)`, `toF64(5)`,
  *     and the f64-only Math functions (`Math.sqrt(2)`, `Math.pow(x, 0.5)`)
+ *   - an element of an array literal whose own context is a `T[]`
+ *     (`const bytes: u8[] = [0, 255]`), a class field's literal initializer
+ *     (`b: u8 = 255`), and a constructor argument (`new Pixel(255, 0, 0)`)
+ *   - a field or element assignment (`p.b = 255`, `bytes[i] = 255`), through
+ *     the target's recorded type
  * `-5` and `(5)` count as the literal. A literal in an integer context must
  * be an integer with |n| <= 2^53 (TypeScript's parser has already rounded
- * larger literals to a double); build bigger i64 values arithmetically.
+ * larger literals to a double); build bigger i64 values arithmetically. In an
+ * *unsigned* context it must also be non-negative and within the width, so
+ * `const b: u8 = -1` and `const b: u8 = 256` are both errors naming `u8`.
  */
 import ts from "typescript";
-import { F64, I32, I64, StaticType, isNumeric, resolveTypeNode, sameType, typeToString } from "../types";
+import {
+  F32,
+  F64,
+  I32,
+  I64,
+  StaticType,
+  U8,
+  U16,
+  U32,
+  U64,
+  isFloat,
+  isNumeric,
+  isUnsigned,
+  resolveTypeNode,
+  sameType,
+  typeToString,
+  unsignedMax,
+} from "../types";
 import { BuiltinCallChecker, calleeName, checkArity } from "./builtins";
 import { CheckContext } from "./context";
 import { Scope } from "./scope";
@@ -119,13 +146,25 @@ function conversionBuiltin(name: string, target: StaticType): BuiltinCallChecker
     checkArity(ctx, expr, name, 1);
     const t = ctx.checkExpression(expr.arguments[0], scope);
     if (!isNumeric(t)) {
-      throw ctx.error(`\`${name}\` expects a number (i32, i64, or f64), got ${typeToString(t)}`, expr.arguments[0]);
+      throw ctx.error(
+        `\`${name}\` expects a number (i32, i64, u8, u16, u32, u64, f32, or f64), got ${typeToString(t)}`,
+        expr.arguments[0]
+      );
     }
     return target;
   };
 }
 
-const CONVERSION_TARGETS: Record<string, StaticType> = { toI32: I32, toI64: I64, toF64: F64 };
+const CONVERSION_TARGETS: Record<string, StaticType> = {
+  toI32: I32,
+  toI64: I64,
+  toU8: U8,
+  toU16: U16,
+  toU32: U32,
+  toU64: U64,
+  toF32: F32,
+  toF64: F64,
+};
 
 /**
  * `f64ToBits(x: f64): i64` and `bitsToF64(b: i64): f64` (WP14): reinterpret the
@@ -196,6 +235,7 @@ const LITERAL_CONTEXT_CALLS: Record<string, "other" | StaticType> = {
   "Math.max": "other",
   "process.exit": I32,
   "Arena.release": I64, // WP6: `Arena.release(0)` reads naturally
+  toF32: F32, // `toF32(2.75)` likewise, and the literal is rounded to f32
   toF64: F64, // so `toF64(2.75)` is legal in i32 mode; toI32/toI64 leave integer literals alone
   Number: F64, // `Number(2.5)` likewise
   f64ToBits: F64, // `f64ToBits(0.5)` reinterprets a double, so the literal is one
@@ -207,8 +247,9 @@ const BUILTIN_RETURNS: Record<string, StaticType> = { ...CONVERSION_TARGETS, ...
 
 /**
  * Type of `expr` without checking it, when it is cheap to see: an
- * already-checked node, a variable, a call to a user function, or one of
- * those behind parentheses / unary minus. Undefined otherwise.
+ * already-checked node, a variable, a field or element of one of those, a call
+ * to a user function, or any of them behind parentheses / unary minus.
+ * Undefined otherwise.
  */
 function peekType(ctx: CheckContext, expr: ts.Expression, scope: Scope): StaticType | undefined {
   const known = ctx.program.types.get(expr);
@@ -218,6 +259,18 @@ function peekType(ctx: CheckContext, expr: ts.Expression, scope: Scope): StaticT
     return peekType(ctx, expr.operand, scope);
   }
   if (ts.isIdentifier(expr)) return scope.lookup(expr.text)?.type;
+  // A field or element of something whose type is already visible. This is what
+  // gives `p.b = 255` and `bytes[i] = 255` their narrow type, and it matters
+  // most for the widths a literal cannot otherwise reach (i64, u8, u16, ...).
+  if (ts.isPropertyAccessExpression(expr)) {
+    const receiver = peekType(ctx, expr.expression, scope);
+    if (receiver?.kind !== "struct") return undefined;
+    return ctx.program.structs.get(receiver.name)?.fieldsByName.get(expr.name.text)?.type;
+  }
+  if (ts.isElementAccessExpression(expr)) {
+    const receiver = peekType(ctx, expr.expression, scope);
+    return receiver?.kind === "array" ? receiver.elem : undefined;
+  }
   if (ts.isCallExpression(expr) && ts.isIdentifier(expr.expression)) {
     const name = expr.expression.text;
     return ctx.sigs.get(name)?.returnType ?? lookup(BUILTIN_RETURNS, name);
@@ -226,14 +279,14 @@ function peekType(ctx: CheckContext, expr: ts.Expression, scope: Scope): StaticT
 }
 
 /**
- * The numeric type the surrounding context demands for `expr`, if any.
+ * The numeric type the surrounding context demands for `node`, if any.
  *
- * `expr` is a numeric literal at the top-level call; the array-literal case
- * recurses with the enclosing literal, so `const xs: f64[] = [0.5]` reaches the
- * element type the same way `const x: f64 = 0.5` reaches the annotation.
+ * `node` is the literal itself on the way in; the array-literal case recurses
+ * with the enclosing `[...]`, so `const bytes: u8[] = [0, 255]` reaches its
+ * element type the same way `const x: f64 = 0.5` reaches its annotation.
  */
-function contextType(ctx: CheckContext, literal: ts.Expression, scope: Scope): StaticType | undefined {
-  let expr: ts.Expression = literal;
+function contextType(ctx: CheckContext, node: ts.Expression, scope: Scope): StaticType | undefined {
+  let expr: ts.Expression = node;
   let parent = expr.parent;
   while (
     parent &&
@@ -247,14 +300,16 @@ function contextType(ctx: CheckContext, literal: ts.Expression, scope: Scope): S
   if (ts.isVariableDeclaration(parent)) {
     return parent.initializer === expr && parent.type ? resolveTypeNode(parent.type, ctx.sf, ctx.opts) : undefined;
   }
-  if (ts.isReturnStatement(parent)) return ctx.current.returnType;
-  if (ts.isArrayLiteralExpression(parent)) {
-    const outer = contextType(ctx, parent, scope);
-    return outer?.kind === "array" ? outer.elem : undefined;
-  }
+  // A class field's literal initializer (`b: u8 = 255`) is checked with an empty
+  // scope before any body, so the annotation is the only context there is.
   if (ts.isPropertyDeclaration(parent)) {
     return parent.initializer === expr && parent.type ? resolveTypeNode(parent.type, ctx.sf, ctx.opts) : undefined;
   }
+  if (ts.isArrayLiteralExpression(parent)) {
+    const array = contextType(ctx, parent, scope);
+    return array?.kind === "array" ? array.elem : undefined;
+  }
+  if (ts.isReturnStatement(parent)) return ctx.current.returnType;
   if (ts.isBinaryExpression(parent)) {
     // `this.ratio = 0.5`: a field is an annotated target like a variable is.
     if (parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && parent.right === expr) {
@@ -269,13 +324,15 @@ function contextType(ctx: CheckContext, literal: ts.Expression, scope: Scope): S
     }
     return peekType(ctx, parent.left === expr ? parent.right : parent.left, scope);
   }
-  // `new Point(1.0, 2.0)`: a constructor parameter is an annotation like any
-  // other, and `params[0]` is `this`, so the argument index is offset by one.
   if (ts.isNewExpression(parent) && ts.isIdentifier(parent.expression)) {
-    const index = parent.arguments ? Array.from(parent.arguments).indexOf(expr) : -1;
+    const index = parent.arguments?.indexOf(expr) ?? -1;
     if (index < 0) return undefined;
-    const struct = ctx.program.structs.get(parent.expression.text);
-    return struct?.ctor?.params[index + 1]?.type;
+    // `new Pixel(255, 0, 0)`: the class's constructor, or the nearest ancestor's.
+    // `params[0]` is `this`, so the argument at `index` is `params[index + 1]`.
+    for (let c = ctx.program.structs.get(parent.expression.text); c; c = c.base) {
+      if (c.ctor) return c.ctor.params[index + 1]?.type;
+    }
+    return undefined;
   }
   if (ts.isCallExpression(parent)) {
     const index = parent.arguments.indexOf(expr);
@@ -302,12 +359,34 @@ export function contextualLiteralType(
 ): StaticType | undefined {
   const want = contextType(ctx, literal, scope);
   if (!want || !isNumeric(want)) return undefined;
-  if (want.kind === "f64") return F64;
+  if (isFloat(want)) return want; // `const x: f32 = 0.1` rounds at emit time
   const n = Number(literal.text);
   if (!Number.isInteger(n)) {
     throw ctx.error(`Non-integer literal \`${literal.text}\` where ${want.kind} is expected`, literal);
   }
   const negated = ts.isPrefixUnaryExpression(literal.parent) && literal.parent.operator === ts.SyntaxKind.MinusToken;
+  if (isUnsigned(want)) {
+    // WP15: an unsigned context takes no negative value at all, and the range
+    // is the width's, so `-1` and `256` are both errors on a `u8`. Naming the
+    // width is the whole point of the message: it is what the reader must fix.
+    if (negated && n !== 0) {
+      // Point the caret at the whole `-1`, not just the digits after the sign.
+      throw ctx.error(
+        `Negative literal \`-${literal.text}\` where ${want.kind} is expected (${want.kind} is unsigned)`,
+        literal.parent
+      );
+    }
+    if (n > 2 ** 53) {
+      throw ctx.error(
+        `Literal \`${literal.text}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the ${want.kind} value instead`,
+        literal
+      );
+    }
+    if (BigInt(n) > unsignedMax(want)) {
+      throw ctx.error(`Literal \`${literal.text}\` does not fit in ${want.kind}`, literal);
+    }
+    return want;
+  }
   if (want.kind === "i32" && n > 0x7fffffff + (negated ? 1 : 0)) {
     throw ctx.error(`Literal \`${literal.text}\` does not fit in i32`, literal);
   }
