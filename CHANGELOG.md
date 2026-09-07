@@ -67,6 +67,14 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
   `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
   `bench/ffi.mjs` gains the batched `Float64Array` rows.
+- **A numeric literal in a ternary arm takes the conditional's context.**
+  `const x: f64 = c ? 1.5 : 2.5` was rejected — the annotation reached a
+  literal written directly but not one behind a `?:`, because the context walk
+  had no clause for a conditional. Both arms are the value the context asked
+  for, so they inherit it; the condition is a boolean and inherits nothing
+  (`tests/cases/f64_ternary_literal`, `reject_ternary_literal_float`). Found
+  writing the self-hosted checker, where an `i32`/`f64` limit is chosen with a
+  ternary.
 - **Self-hosting, milestone S3: the signature pass** (`docs/wp14-selfhost.md`
   §4). `self/checker.ts` and the five modules around it — `program.ts` (the
   side tables), `context.ts`, `annotations.ts`, `declarations.ts`,

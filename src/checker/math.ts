@@ -318,6 +318,12 @@ function contextType(ctx: CheckContext, node: ts.Expression, scope: Scope): Stat
     const array = contextType(ctx, parent, scope);
     return array?.kind === "array" ? array.elem : undefined;
   }
+  // Both arms of a ternary are the value the context wanted, so they inherit
+  // its type: `const x: f64 = c ? 1.5 : 2.5`. The condition is a boolean and
+  // inherits nothing.
+  if (ts.isConditionalExpression(parent) && parent.condition !== expr) {
+    return contextType(ctx, parent, scope);
+  }
   if (ts.isReturnStatement(parent)) return ctx.current.returnType;
   // `case 3:` takes the width of the discriminant (WP14), which the checker
   // has already typed: `switch (kind)` on an `i64` makes its labels `i64`.

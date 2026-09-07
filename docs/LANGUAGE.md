@@ -156,6 +156,7 @@ takes that type (`src/checker/math.ts`, `contextualLiteralType`;
 | a class field's literal initializer | `b: u8 = 255` | `u8` |
 | argument to a constructor | `new Pixel(255, 0, 0)` | the parameter's type |
 | a field or element assignment target | `p.b = 255`, `bytes[i] = 255` | the field's / element's type |
+| a ternary arm, from the conditional's own context | `const x: f64 = c ? 1.5 : 2.5` | `f64` (`tests/cases/f64_ternary_literal`) |
 
 `-5` and `(5)` count as the literal. "Known type" means an already-checked
 left operand, a variable, a field or element of one of those, or a call to a
