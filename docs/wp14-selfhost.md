@@ -125,6 +125,11 @@ Each row ships with everything in the `docs/ARCHITECTURE.md` checklist: a
 golden `.ll`, an `llvm-as` pass, a native round trip, a `reject_*` case, a
 `docs/LANGUAGE.md` rule and a cookbook entry.
 
+**Every row below is now done**, and so is the `panic(msg)` of D1. The
+language gap is closed: what remains between here and S5 is wave C (library
+code in `self/`) and the four decisions of §3a, which are about how `self/`
+is written rather than about what StaticTS can express.
+
 ### Wave A — the front end cannot be written without these
 
 | # | Construct | Evidence |
@@ -133,7 +138,7 @@ golden `.ll`, an `llvm-as` pass, a native round trip, a `reject_*` case, a
 | A2 | `charCodeAt`, `substring`, `indexOf`, `startsWith`, `endsWith`, `String.fromCharCode` **Done.** | A lexer is `charCodeAt` in a loop and `substring` at the end. `src/` itself never lexes (the `typescript` package does), so this set is sized for `self/`'s lexer, not for `src/`. |
 | A3 | Module-level `const` | **Done.** Token kinds, node kinds, and the 14 string-literal union types that become `i32` constants. |
 | A4 | `pop`, `indexOf`, `join` on arrays **Done.** | `join` has **66 call sites** and is not optional: see the measurement below. `pop` 4, `indexOf` 7 — five of those seven search by *identity* over AST nodes, which `===` on class values already gives. |
-| A5 | `& \| ^ ~ << >> >>>` and their compound forms | The `StringMap` of §2.2 hashes with FNV-1a, and the emitter formats `f64` constants as hex (see B1). Never forbidden — they fell through the checker's operator table into the "not implemented" bucket. |
+| A5 | `& \| ^ ~ << >> >>>` and their compound forms **Done.** | The `StringMap` of §2.2 hashes with FNV-1a, and the emitter formats `f64` constants as hex (see B1). Never forbidden — they fell through the checker's operator table into the "not implemented" bucket. |
 
 **`join` is a hard requirement, not a convenience.** Building 88 KB of IR text
 by repeated `+` costs **180 MB of peak RSS**, because every concatenation
@@ -146,7 +151,7 @@ one allocation, one `memcpy` per part.
 
 | # | Addition | Evidence |
 | --- | --- | --- |
-| B1 | `f64ToBits(x: f64): i64` (and `bitsToF64`) | **A blocker, and the least obvious one.** LLVM only accepts decimal float literals that round-trip exactly, so the emitter writes `double 0x400921FB54442D18` — today via `Buffer.writeDoubleBE`. StaticTS has no way to see a double's bits, so without this the self-hosted emitter cannot emit any `f64` constant. One `bitcast` in the IR: zero instructions, zero runtime. |
+| B1 | `f64ToBits(x: f64): i64` (and `bitsToF64`) **Done.** | **A blocker, and the least obvious one.** LLVM only accepts decimal float literals that round-trip exactly, so the emitter writes `double 0x400921FB54442D18` — today via `Buffer.writeDoubleBE`. StaticTS has no way to see a double's bits, so without this the self-hosted emitter cannot emit any `f64` constant. One `bitcast` in the IR: zero instructions, zero runtime. |
 | B2 | `console.error(x)` and a newline-free write **Done.** | Every one of the 16 diagnostic writes goes to **stderr**, and two dumps write without a trailing newline. `console.log` is stdout-and-newline only. Without these, every `.err` golden and the runner's stream expectations have to be re-baselined — a worse outcome than two five-line runtime functions. |
 | B3 | A file read that can fail **Done.** | `readFileSync` **exits the process** on a missing file, so a compiler cannot turn it into its own `` Cannot find module `./x` `` diagnostic and carry on loading the other imports. Smallest fix: `readFileSyncOrNull(path): string \| null` — it subsumes `existsSync`, has no time-of-check race, and needs no new type. |
 | B4 | Contextual `[]` in a field assignment | **Done.** `this.children = []` in a constructor did not take its element type from the field, which every container class hits on its first line. |
