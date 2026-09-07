@@ -9,16 +9,29 @@ a second, invisible way to report a failure.
 The normative rules are in [LANGUAGE.md](LANGUAGE.md#result-and-error-handling);
 this note is the *why*.
 
-Files: `src/types.ts` (the type and its mangling), `src/checker/result.ts`
-(the rules), `src/checker/narrowing.ts` (the engine `T | null` and `Result`
-now share), `src/codegen/emit/result.ts` (the lowering),
-`src/codegen/escape.ts` and `attributes.ts` (allocation sites and pointer
-facts), `src/validator.ts` and `self/validator.ts` (Phase 0 refuses `throw`),
-`runtime/statictsc.d.ts` (the ambient declarations),
+**Both compilers have it.** S5 froze stage0 as the bootstrap seed and the
+differential oracle, and said new constructs land in `self/` (§4 of
+[wp14-selfhost.md](wp14-selfhost.md)); the IR oracle enforces that by
+requiring stage1 to compile every program in the corpus, with no exemption
+list. So this package is implemented twice, and the oracle is what says the
+two agree: `IR(stage0, p) == IR(stage1, p)` byte for byte over all six
+`res_*` cases and the `result_import` link test, and every one of the ten
+`reject_result_*` messages matching character for character.
+
+Files, stage0: `src/types.ts` (the type and its mangling),
+`src/checker/result.ts` (the rules), `src/checker/narrowing.ts` (the engine
+`T | null` and `Result` now share), `src/codegen/emit/result.ts` (the
+lowering), `src/codegen/escape.ts` and `attributes.ts` (allocation sites and
+pointer facts), `src/validator.ts` (Phase 0 refuses `throw`).
+Stage1, mirroring each: `self/types.ts`, `self/annotations.ts`,
+`self/result.ts`, `self/expressions.ts` (`narrow`), `self/emit_result.ts`,
+`self/escape.ts`, `self/attributes.ts`, `self/validator.ts`.
+Shared: `runtime/statictsc.d.ts` (the ambient declarations),
 `runtime/shim.mjs` and `tests/differential/rewrite.js` (the Node twin).
 Tests: `tests/cases/res_*`, `tests/cases/reject_result_*`,
-`tests/cases/reject_throw`, `tests/link/result_import`, and the
-"WP16: the ambient declarations" block in `tests/run.js`.
+`tests/cases/reject_throw`, `tests/link/result_import`, the
+"WP16: the ambient declarations" block in `tests/run.js`, and the S3/S4
+oracles in `tests/self/`.
 
 ## 1. Why `throw` had to go
 
@@ -188,6 +201,10 @@ reverse would be a bug in the declarations.
 - **DWARF members for a `Result`.** `-g` describes the pointer but not the
   fields, since there is no `StructInfo` to render; `TODO(WP17)` in
   `src/codegen/debug.ts`.
-- **Stage1 support.** `self/` refuses `throw` but does not yet know the type;
-  the ten `reject_result_*` cases are listed in
-  `tests/self/reject_backlog.txt`, which is the measurement of what is left.
+- **Nothing, on the stage1 side.** `self/` implements the whole package, and
+  the S3 and S4 oracles hold it to stage0's exact messages and exact IR. What
+  the two do *not* share is the shape of the code: stage0 interns nothing and
+  compares types structurally, stage1 interns every type into a table and
+  compares ids, so the `state` refinement is a third interned id there rather
+  than a field on an object. That is the same difference the rest of the port
+  already carries, not a WP16 decision.

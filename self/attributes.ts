@@ -89,7 +89,20 @@ import { ParentTable } from "./parents";
 import { CheckedProgram, FieldInfo, FunctionSig, ROLE_CONSTRUCTOR, StructInfo } from "./program";
 import { EFFECT_NONE, EFFECT_READ, EFFECT_WRITE, inlineAllocatorAttrs, maxEffect, RuntimeTable } from "./runtime";
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols";
-import { isInteger, K_ARRAY, K_NULLABLE, K_STRUCT, T_BOOL, T_I32, T_STRING, T_VOID, TypeTable } from "./types";
+import { isResultConstructorCall, resultMethodName } from "./emit_result";
+import { resultLayout } from "./result";
+import {
+  isInteger,
+  K_ARRAY,
+  K_NULLABLE,
+  K_RESULT,
+  K_STRUCT,
+  T_BOOL,
+  T_I32,
+  T_STRING,
+  T_VOID,
+  TypeTable,
+} from "./types";
 
 /** `sizeof(%struct.sts_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout). */
 const ARRAY_HEADER_BYTES: i32 = 24;
@@ -409,6 +422,11 @@ function classifyMemberUse(unit: AnalysisUnit, table: TypeTable, access: Node): 
     if (method.length > 0) {
       return use(USE_READ);
     }
+    // WP16: `r.orReturn()`, `r.unwrapOr(d)` and `r.expect(m)` load out of the
+    // receiver and never store the pointer itself anywhere.
+    if (resultMethodName(program, table, above).length > 0) {
+      return use(USE_READ);
+    }
     return use(isStringMethodCall(program, above) ? USE_READ : USE_ESCAPE);
   }
   return use(isAssignmentTarget(above, access) ? USE_WRITE : USE_READ);
@@ -430,9 +448,14 @@ function classifyArgumentUse(unit: AnalysisUnit, table: TypeTable, list: Node, n
     if (callee !== null) {
       return argumentUse(callee, index + (callee.owner !== null ? 1 : 0));
     }
-    // `xs.push(p)` stores `p` into the array; every other builtin lowers to
-    // runtime functions whose pointer params are all declared `nocapture`.
-    return use(isPushCall(program, table, owner) ? USE_ESCAPE : USE_NONE);
+    // `xs.push(p)` stores `p` into the array, `Ok(p)` / `Err(p)` store it into
+    // the `Result` they build (WP16), and `r.unwrapOr(p)` hands it back as the
+    // expression's value; every other builtin lowers to runtime functions
+    // whose pointer params are all declared `nocapture`.
+    if (isPushCall(program, table, owner) || isResultConstructorCall(program, table, owner)) {
+      return use(USE_ESCAPE);
+    }
+    return use(resultMethodName(program, table, owner) === "unwrapOr" ? USE_ESCAPE : USE_NONE);
   }
   if (owner.kind === N_NEW) {
     // `new C(...)` has two lists: type arguments and value arguments.
@@ -527,19 +550,29 @@ function isStringPassthrough(program: CheckedProgram, template: Node): boolean {
 
 // ---- Per-function collection ------------------------------------------------------------
 
-/** `sizeof` the struct `type` names, or 0 when it is not a struct. */
+/**
+ * `sizeof` the pointee, for `dereferenceable`; 0 where there is nothing fixed
+ * to claim. A `Result` layout is derived from the type, not declared (WP16),
+ * so it is computed rather than looked up.
+ */
 function structSize(program: CheckedProgram, table: TypeTable, type: i32): i32 {
-  if (type < 0 || !table.isStruct(type)) {
+  if (type < 0) {
+    return 0;
+  }
+  if (table.isResult(type)) {
+    return resultLayout(table, type).size;
+  }
+  if (!table.isStruct(type)) {
     return 0;
   }
   const info = program.struct(table.nameOf(type));
   return info === null ? 0 : info.size;
 }
 
-/** Struct and array params, plain or `T | null`, get pointer facts. */
+/** Struct, array and `Result` params, plain or `T | null`, get pointer facts. */
 function isPointerParam(table: TypeTable, type: i32): boolean {
   const inner = table.stripNull(type);
-  return table.isStruct(inner) || table.isArray(inner);
+  return table.isStruct(inner) || table.isArray(inner) || table.isResult(inner);
 }
 
 /** The fields `info` declares itself: everything after the inherited prefix. */
@@ -686,6 +719,7 @@ class FactCollector {
     }
     this.collectStringFacts(node);
     this.collectClassFacts(node);
+    this.collectResultFacts(node);
     this.collectArrayFacts(node);
     this.collectDivisionFacts(node);
     this.collectArgvFacts(node);
@@ -797,6 +831,59 @@ class FactCollector {
     if (node.kind === N_OBJECT && !this.facts.isStackSite(node)) {
       this.facts.effect = EFFECT_WRITE;
       this.facts.callees.add("sts_alloc_struct");
+    }
+  }
+
+  /**
+   * `Result` constructs (WP16), mirroring `self/emit_result.ts`:
+   *   Ok / Err                write, calls the allocator unless it is a stack site
+   *   r.ok / .value / .error  read
+   *   orReturn                read plus the allocation of the propagated Result
+   *   unwrapOr / expect       read; `expect` also calls the two runtime symbols
+   */
+  collectResultFacts(node: Node): void {
+    const program = this.unit.program;
+    const table = this.table;
+    if (node.kind === N_CALL) {
+      const method = resultMethodName(program, table, node);
+      if (method.length > 0) {
+        if (this.isStackOwned(node.children[0].children[0])) {
+          return; // own alloca (WP6)
+        }
+        this.facts.readsMemory = true;
+        if (method === "orReturn") {
+          this.facts.effect = EFFECT_WRITE;
+          this.facts.callees.add("sts_alloc_struct");
+        } else if (method === "expect") {
+          this.facts.callees.add("sts_write");
+          this.facts.callees.add("sts_exit");
+        }
+        return;
+      }
+      // `Ok(...)` / `Err(...)`: a user function of that name is in `nodeCallees`
+      // and is reported through the call graph instead.
+      if (!isResultConstructorCall(program, table, node)) {
+        return;
+      }
+      if (!this.facts.isStackSite(node)) {
+        this.facts.callees.add("sts_alloc_struct");
+      }
+      this.facts.effect = EFFECT_WRITE;
+      return;
+    }
+    if (node.kind === N_MEMBER) {
+      const receiver = node.children[0];
+      if (!table.isResult(program.nodeTypes[receiver.id])) {
+        return;
+      }
+      const above = this.unit.parents.parentOf(node);
+      if (above !== null && above.kind === N_CALL && above.children[0] === node) {
+        return; // the method call above
+      }
+      if (this.isStackOwned(receiver)) {
+        return; // own alloca (WP6)
+      }
+      this.facts.readsMemory = true;
     }
   }
 
@@ -1423,6 +1510,22 @@ export function paramAttributes(table: TypeTable, name: string, type: i32, f: Fu
     }
     return attrs;
   }
+  if (kind === K_RESULT) {
+    // WP16: every `Result` comes from `Ok(...)` / `Err(...)`, so the object is
+    // whole and never null, and nothing in the language can store through one.
+    attrs.push("nonnull");
+    attrs.push("align 8");
+    if (pointer !== null && pointer.size > 0) {
+      attrs.push(`dereferenceable(${pointer.size})`);
+    }
+    if (pointer !== null && !pointer.writesThrough && !pointer.captured) {
+      attrs.push("readonly");
+    }
+    if (pointer !== null && !pointer.captured) {
+      attrs.push("nocapture");
+    }
+    return attrs;
+  }
   if (kind === K_NULLABLE) {
     // WP6: no `nonnull` / `dereferenceable`; the rest as for the pointee kind.
     if (table.refOf(type) === T_STRING) {
@@ -1463,7 +1566,8 @@ export function returnAttributes(table: TypeTable, type: i32, deref: i32): strin
     attrs.push(`dereferenceable(${ARRAY_HEADER_BYTES})`);
     return attrs;
   }
-  if (kind === K_STRUCT) {
+  if (kind === K_STRUCT || kind === K_RESULT) {
+    // WP16: a `Result` is a whole, never-null object, exactly like a struct.
     attrs.push("nonnull");
     attrs.push("align 8");
     if (deref > 0) {

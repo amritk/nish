@@ -54,7 +54,8 @@ export function sizeOfField(ctx: CheckContext, type: i32): i32 {
   return ctx.table.alignOf(type);
 }
 
-function roundUp(value: i32, align: i32): i32 {
+/** The next multiple of `align` at or above `value`; shared with `result.ts`. */
+export function roundUpTo(value: i32, align: i32): i32 {
   const remainder = value % align;
   return remainder === 0 ? value : value + align - remainder;
 }
@@ -65,14 +66,14 @@ export function computeLayout(ctx: CheckContext, info: StructInfo): void {
   let align = 1;
   for (const field of info.fields) {
     const fieldAlign = ctx.table.alignOf(field.type);
-    offset = roundUp(offset, fieldAlign);
+    offset = roundUpTo(offset, fieldAlign);
     field.offset = offset;
     offset = offset + sizeOfField(ctx, field.type);
     if (fieldAlign > align) {
       align = fieldAlign;
     }
   }
-  info.size = roundUp(offset, align);
+  info.size = roundUpTo(offset, align);
   info.align = align;
 }
 
@@ -464,6 +465,13 @@ function describeField(ctx: CheckContext, field: FieldInfo): string {
 export function noteStructNames(table: TypeTable, type: i32, out: StringSet): void {
   if (table.isStruct(type)) {
     out.add(table.nameOf(type));
+    return;
+  }
+  // A `Result<Config, IoError>` hands the importer both payload layouts
+  // without either name appearing in its source (WP16), so both arms count.
+  if (table.isResult(type)) {
+    noteStructNames(table, table.okOf(type), out);
+    noteStructNames(table, table.errOf(type), out);
     return;
   }
   const inner = table.refOf(type);

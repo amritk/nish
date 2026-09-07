@@ -60,6 +60,13 @@ import {
   structTypeDeclarations,
 } from "./emit_classes";
 import { constantText, emitAssignment, emitBinary, emitUnary, numericConstant } from "./emit_ops";
+import {
+  declareResultTypes,
+  emitResultConstructor,
+  emitResultMethod,
+  emitResultProperty,
+  isResultConstructorCall,
+} from "./emit_result";
 import { addStringConstant, emitTemplate } from "./emit_strings";
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit_util";
 import { IRBlock, IRFunction, IRModule, IRParam } from "./ir";
@@ -224,10 +231,12 @@ export class Emitter {
     if (this.table.isArray(sig.returnType)) {
       this.module.addTypeDecl(ARRAY_TYPE);
     }
+    declareResultTypes(this, sig.returnType);
     for (const type of sig.paramTypes) {
       if (this.table.isArray(type)) {
         this.module.addTypeDecl(ARRAY_TYPE);
       }
+      declareResultTypes(this, type);
     }
   }
 
@@ -643,6 +652,9 @@ export class Emitter {
     if (!receiverIsValue(this.program, expr.children[0])) {
       return emitNamespaceProperty(this, expr, dottedName(expr));
     }
+    if (this.table.isResult(this.typeOf(expr.children[0]))) {
+      return emitResultProperty(this, expr, this.typeOf(expr.children[0])); // WP16
+    }
     return emitPropertyAccess(this, expr);
   }
 
@@ -652,9 +664,17 @@ export class Emitter {
       return emitSuperCall(this, expr);
     }
     if (callee.kind === N_MEMBER) {
-      return receiverIsValue(this.program, callee.children[0])
-        ? emitMethodCall(this, expr)
-        : emitBuiltinCall(this, expr, dottedName(callee));
+      if (!receiverIsValue(this.program, callee.children[0])) {
+        return emitBuiltinCall(this, expr, dottedName(callee));
+      }
+      const receiver = this.typeOf(callee.children[0]);
+      if (this.table.isResult(receiver)) {
+        return emitResultMethod(this, expr, receiver); // WP16
+      }
+      return emitMethodCall(this, expr);
+    }
+    if (isResultConstructorCall(this.program, this.table, expr)) {
+      return emitResultConstructor(this, expr, callee.text); // WP16: `Ok(v)` / `Err(e)`
     }
     if (isIdentifierBuiltinCall(this.program, expr)) {
       return emitIdentifierBuiltinCall(this, expr, callee.text);

@@ -18,6 +18,7 @@
 import { CheckContext } from "./context";
 import { checkArrayLiteral, checkIndex, checkIndexAssignment } from "./arrays";
 import { checkBuiltinCall, checkBuiltinFunction, isBuiltinFunction } from "./builtins";
+import { checkResultConstructor, isResultConstructor, narrowResultTest } from "./result";
 import {
   checkMember,
   checkMemberAssignment,
@@ -121,7 +122,7 @@ function computeType(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     case N_CONDITIONAL:
       return checkConditional(ctx, expr, scope, want);
     case N_CALL:
-      return checkCall(ctx, expr, scope);
+      return checkCall(ctx, expr, scope, want);
     case N_NEW:
       return checkNew(ctx, expr, scope);
     case N_MEMBER:
@@ -622,6 +623,9 @@ export function narrow(ctx: CheckContext, cond: Node, scope: Scope, whenTrue: bo
       narrowBinary(ctx, cond, scope, whenTrue);
       return;
     default:
+      // WP16: `r.ok`, `r.isOk()` and `r.isErr()` prove the same one bit, and
+      // compose with `!`, `&&` and `||` through the cases above.
+      narrowResultTest(cond, scope, ctx.table, whenTrue);
       return;
   }
 }
@@ -737,7 +741,7 @@ export function assignInto(
 
 // ---- Calls ---------------------------------------------------------------------
 
-function checkCall(ctx: CheckContext, expr: Node, scope: Scope): i32 {
+function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
   const callee = expr.children[0];
   if (callee.kind === N_SUPER) {
     return checkSuperCall(ctx, expr, scope);
@@ -754,6 +758,9 @@ function checkCall(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   }
   const sig = ctx.signature(callee.text);
   if (sig === null) {
+    if (isResultConstructor(callee.text)) {
+      return checkResultConstructor(ctx, expr, scope, want); // WP16: `Ok(v)` / `Err(e)`
+    }
     if (isBuiltinFunction(callee.text)) {
       return checkBuiltinFunction(ctx, expr, scope);
     }

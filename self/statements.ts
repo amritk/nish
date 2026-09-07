@@ -16,6 +16,7 @@ import { checkCondition, checkExpression, clearNarrowingsAssignedIn, narrow } fr
 import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context";
 import { resolveType } from "./annotations";
 import { terminatesControlFlow } from "./builtins";
+import { rejectDiscardedResult } from "./result";
 import {
   FLAG_CONST,
   N_BLOCK,
@@ -93,7 +94,8 @@ export function checkStatement(ctx: CheckContext, stmt: Node, scope: Scope): boo
       return false;
     case N_EXPR_STMT:
       ctx.statementExpression = stmt.children[0];
-      checkExpression(ctx, stmt.children[0], scope, -1);
+      // WP16: a failure may not be dropped.
+      rejectDiscardedResult(ctx, stmt.children[0], checkExpression(ctx, stmt.children[0], scope, -1));
       ctx.statementExpression = null;
       // `process.exit(n)` and `panic(m)` end the path exactly as `return` does.
       return terminatesControlFlow(ctx, stmt.children[0]);

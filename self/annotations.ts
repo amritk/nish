@@ -29,10 +29,11 @@ import {
   T_U64,
   T_U8,
   T_VOID,
+  R_UNKNOWN,
 } from "./types";
 
 const SUPPORTED_REFERENCES: string =
-  "(supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)";
+  "(supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Result<T, E>, Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)";
 const SUPPORTED_TYPES: string =
   "(Phase 1 supports number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void)";
 
@@ -128,6 +129,10 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
   const args = node.children[0];
   const argc = args.kind === N_LIST ? args.children.length : 0;
 
+  if (name === "Result") {
+    return resolveResult(node, args, argc, ctx);
+  }
+
   if (name === "Array") {
     if (argc !== 1) {
       return ctx.errorType(node, "`Array` needs exactly one type argument, e.g. `Array<number>`");
@@ -176,6 +181,33 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
 }
 
 /**
+ * `Result<T, E>` (WP16). Written like a generic, but there are no user
+ * generics in StaticTS: this is one built-in type constructor whose two
+ * arguments pick a monomorphised layout, exactly as `Array<T>` does.
+ *
+ * `T` may be `void` — `Result<void, E>` is the fallible operation that has
+ * nothing to hand back, and it carries no `value` field at all. `E` may not
+ * be, because a failure that says nothing is what `panic` is for.
+ */
+function resolveResult(node: Node, args: Node, argc: i32, ctx: CheckContext): i32 {
+  if (argc !== 2) {
+    return ctx.errorType(node, "`Result` needs exactly two type arguments, e.g. `Result<number, string>`");
+  }
+  const ok = resolveType(args.children[0], ctx);
+  const err = resolveType(args.children[1], ctx);
+  if (ok === T_ERROR || err === T_ERROR) {
+    return T_ERROR;
+  }
+  if (err === T_VOID) {
+    return ctx.errorType(
+      args.children[1],
+      "`Result<T, void>` is not supported: an error must carry a value (use `Result<T, string>`)"
+    );
+  }
+  return ctx.table.resultOf(ok, err, R_UNKNOWN);
+}
+
+/**
  * `T | null`. The validator already refuses every other union, so this only
  * has to find the non-null member and require it to be a pointer type — a
  * scalar has no null value to add.
@@ -197,6 +229,12 @@ function resolveNullableUnion(node: Node, ctx: CheckContext): i32 {
   }
   if (inner === T_ERROR) {
     return T_ERROR;
+  }
+  if (ctx.table.isResult(inner)) {
+    return ctx.errorType(
+      node,
+      "`Result<T, E> | null` is not supported: a `Result` already models absence through its error arm"
+    );
   }
   if (!ctx.table.isPointer(inner)) {
     const spelled = ctx.table.typeName(inner);

@@ -500,9 +500,11 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   not outlive its function into an entry-block `alloca` with no allocator call
   at all. `Result<void, E>` is the fallible operation with nothing to hand
   back. Narrowing is the `T | null` engine, extracted into
-  `src/checker/narrowing.ts` and shared. Design and the reason the
-  representation is a pointer rather than an LLVM aggregate:
-  [docs/wp16-results.md](docs/wp16-results.md).
+  `src/checker/narrowing.ts` and shared. Implemented in **both** compilers, as
+  S5 requires: `self/` gains the type, the rules and the lowering, and the S3
+  and S4 oracles hold it to stage0's exact messages and byte-identical IR.
+  Design and the reason the representation is a pointer rather than an LLVM
+  aggregate: [docs/wp16-results.md](docs/wp16-results.md).
 - **Ambient declarations (`runtime/statictsc.d.ts`).** A StaticTS program has
   always *parsed* as TypeScript; with this file on the include path a `Result`
   program also **type-checks** under plain `tsc --strict`, and an editor stops

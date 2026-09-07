@@ -21,6 +21,7 @@
 import { explicitSuperCall } from "./assignment";
 import { ownFields } from "./attributes";
 import { Emitter } from "./emit";
+import { resultTypeDecl } from "./emit_result";
 import { emitArrayLength, emitArrayMethodCall, emitNewArray } from "./emit_arrays";
 import { compoundFloatOpcode, compoundIntegerOpcode, emitIntBinary, floatText } from "./emit_ops";
 import { parseIntegerLiteral } from "./constants";
@@ -350,6 +351,10 @@ export function structTypeDeclarations(emitter: Emitter): string[] {
   const lines: string[] = [];
   const declared: string[] = [];
   const referenced: string[] = [];
+  // A `Result` layout is derived from the type, not declared (WP16), so it is
+  // emitted here rather than looked up: a field or signature that mentions one
+  // is enough to need it in this module.
+  const results: string[] = [];
   for (const info of emitter.program.structList) {
     if (declared.indexOf(info.name) >= 0) {
       continue;
@@ -362,30 +367,30 @@ export function structTypeDeclarations(emitter: Emitter): string[] {
     const body = types.length > 0 ? ` ${types.join(", ")} ` : "";
     lines.push(`%struct.${info.name} = type {${body}}`);
     for (const field of info.fields) {
-      noteStruct(emitter, referenced, field.type);
+      noteStruct(emitter, referenced, results, field.type);
     }
     // Inherited constructors and methods are called through the base type,
     // which an importer of the derived class alone only points at.
     let c: StructInfo | null = info;
     while (c !== null) {
-      noteStruct(emitter, referenced, c.type);
+      noteStruct(emitter, referenced, results, c.type);
       for (const method of c.methodSigs) {
-        noteSignature(emitter, referenced, method);
+        noteSignature(emitter, referenced, results, method);
       }
       const ctor = c.ctor;
       if (ctor !== null) {
-        noteSignature(emitter, referenced, ctor);
+        noteSignature(emitter, referenced, results, ctor);
       }
       c = c.base;
     }
   }
   for (const sig of emitter.program.functions) {
-    noteSignature(emitter, referenced, sig);
+    noteSignature(emitter, referenced, results, sig);
   }
   for (const imp of emitter.program.imports) {
     const sig = imp.sig;
     if (sig !== null) {
-      noteSignature(emitter, referenced, sig);
+      noteSignature(emitter, referenced, results, sig);
     }
   }
   for (const name of referenced) {
@@ -393,24 +398,41 @@ export function structTypeDeclarations(emitter: Emitter): string[] {
       lines.push(`%struct.${name} = type opaque`);
     }
   }
+  for (const decl of results) {
+    lines.push(decl);
+  }
   return lines;
 }
 
-function noteStruct(emitter: Emitter, referenced: string[], type: i32): void {
-  if (!emitter.table.isStruct(type)) {
+function noteStruct(emitter: Emitter, referenced: string[], results: string[], type: i32): void {
+  const table = emitter.table;
+  if (table.isArray(type) || table.isNullable(type)) {
+    noteStruct(emitter, referenced, results, table.refOf(type));
     return;
   }
-  const name = emitter.table.nameOf(type);
+  if (table.isResult(type)) {
+    noteStruct(emitter, referenced, results, table.okOf(type));
+    noteStruct(emitter, referenced, results, table.errOf(type));
+    const decl = resultTypeDecl(table, type);
+    if (results.indexOf(decl) < 0) {
+      results.push(decl);
+    }
+    return;
+  }
+  if (!table.isStruct(type)) {
+    return;
+  }
+  const name = table.nameOf(type);
   if (referenced.indexOf(name) < 0) {
     referenced.push(name);
   }
 }
 
-function noteSignature(emitter: Emitter, referenced: string[], sig: FunctionSig): void {
+function noteSignature(emitter: Emitter, referenced: string[], results: string[], sig: FunctionSig): void {
   for (const type of sig.paramTypes) {
-    noteStruct(emitter, referenced, type);
+    noteStruct(emitter, referenced, results, type);
   }
-  noteStruct(emitter, referenced, sig.returnType);
+  noteStruct(emitter, referenced, results, sig.returnType);
 }
 
 /**

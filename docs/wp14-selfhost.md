@@ -550,6 +550,23 @@ the language as it stands on that day. Deciding that now is what makes the
 tax finite, and it is why §1's "stage0 is not going away" means *kept*, not
 *kept up to date*.
 
+**What the first construct after the freeze actually cost.**
+`Result<T, E>` (WP16) is that construct, and it landed in *both* compilers
+rather than in `self/` alone, because stage0 is still what `dist/` ships and
+what every golden in `tests/cases/` is compiled by: a construct stage0 cannot
+compile has no goldens, no differential coverage and no released
+implementation. So the doubling was paid in full — a type model entry, a
+checker, a lowering, escape sites and pointer facts on each side.
+
+The oracles are what made that cheap rather than frightening. The S4 IR
+oracle refuses to skip a program stage1 rejects, so the port could not be
+quietly narrowed; and once the two sides disagreed only in attributes, the
+byte diff named the missing fact collector directly. Every disagreement found
+this way was a real omission in stage1, and none was a difference of opinion
+about the language. That is the evidence for the §5 claim above being about
+*effort* and not about *risk*: the second implementation is work, but it is
+work an oracle can check line by line.
+
 ---
 
 ## 5. Performance is the tiebreaker
