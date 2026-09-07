@@ -12,7 +12,7 @@ IR(stage1, self/)  ==  IR(stage2, self/)      byte for byte
 
 stage1 is `self/` built by stage0, stage2 is `self/` built by stage1, stage3 is
 `self/` built by stage2 and must be byte-identical to stage2. All of that holds
-today over the 41 modules of `self/`, and so does the stronger
+today over the 43 modules of `self/`, and so does the stronger
 `IR(stage0, self/) == IR(stage1, self/)`: the two implementations are the same
 compiler, not two compilers that agree about the tests.
 
@@ -29,6 +29,24 @@ construct still enters the language (and `src/`) before it enters `self/`, and
 | S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js` and `reject_oracle.js` |
 | S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 206/206 files byte for byte |
 | S5 | `self/` compiles `self/` | **done** — `tests/self/bootstrap.js`: `IR(stage1) == IR(stage2)`, stage3 == stage2 |
+
+## Building it for use
+
+The oracles build compilers into temporary directories and delete them. To get
+one you can keep:
+
+```bash
+npm run bootstrap                            # build/statictsc (stage2, speed)
+scripts/bootstrap.sh --verify                # the three equalities, with cmp
+scripts/statictsc.sh hello.ts --link hello   # its command line: -o, --link, --profile
+```
+
+`scripts/statictsc.sh` is the wrapper D4 promised: it makes the output
+directory and runs `scripts/build.sh`, which is the half of the driver stage1
+does not have. It refuses `-g`, the dumps and the interop sidecars **by name**
+— they are stage0's, not missing — and mirrors stage0's file layout exactly, so
+either compiler can be dropped into a build script. See
+`docs/wp14-selfhost.md` §7.
 
 ## The rules that are specific to this work
 

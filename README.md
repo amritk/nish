@@ -212,6 +212,32 @@ The supported direction is Node importing StaticTS:
 
 Details: [docs/wp8-interop.md](docs/wp8-interop.md).
 
+## Self-hosting
+
+`self/` is the same compiler written in StaticTS — lexer, parser, checker and
+emitter, 43 modules, no `typescript` package underneath — and it compiles its
+own source to a fixed point:
+
+```
+IR(stage0, self/) == IR(stage1, self/) == IR(stage2, self/)     byte for byte
+```
+
+stage1 is `self/` built by the Node compiler, stage2 is `self/` built by
+stage1, and `npm test` re-proves both equalities (and that a stage3 binary is
+byte-identical to stage2) on every run. Compiling the whole compiler costs the
+native one **91 ms and 86 MB** against the Node one's 786 ms and 178 MB.
+
+```bash
+npm run bootstrap                            # build/statictsc, built by itself
+scripts/statictsc.sh hello.ts --link hello   # its command line: -o, --link, --profile
+```
+
+`npm install -g statictsc` still ships the Node compiler: it is the seed every
+bootstrap starts from, the oracle every `self/` phase is compared against, and
+the one that emits debug info and the interop sidecars. Details, and the
+subset `self/` is written in, are in
+[docs/wp14-selfhost.md](docs/wp14-selfhost.md).
+
 ## Project status
 
 | Milestone | Contents | State |
@@ -220,14 +246,17 @@ Details: [docs/wp8-interop.md](docs/wp8-interop.md).
 | M2 "Data" | classes and interfaces, arrays, runtime and intrinsics | done |
 | M3 "Rust parity" | interop, memory strategy (stack allocation, arena scopes, `T \| null`), benchmarks with `--target`/`--nsw`/PGO, differential testing against Node | done |
 | M4 "1.0" | frozen language reference, tagged release | next |
+| M5 "Self-hosting" | `self/`: the compiler, written in StaticTS, compiling itself | done |
 
 Not in the language yet, in the order they are likely to land: optional
 reference counting for objects that must outlive an arena reset, virtual
-dispatch (single inheritance is in; method calls resolve statically),
-`switch`, labelled `break`/`continue`, string methods (`charCodeAt`,
-`slice`, ...), and `process.argv`. Release
-engineering (`--version`, exit codes, npm packaging, tag-driven releases)
-landed with WP12; see [CHANGELOG.md](CHANGELOG.md) and
+dispatch (single inheritance is in; method calls resolve statically), and
+returning a small `Result<T, E>` by value instead of through the arena.
+Generics, closures, `try`/`catch` and labelled `break`/`continue` are
+refusals rather than gaps, each with the message and the idiom to use
+instead ([docs/LANGUAGE.md](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)).
+Release engineering (`--version`, exit codes, npm packaging, tag-driven
+releases) landed with WP12; see [CHANGELOG.md](CHANGELOG.md) and
 [docs/wp12-release.md](docs/wp12-release.md). The plan itself is
 [docs/MASTER_PLAN.md](docs/MASTER_PLAN.md).
 
@@ -243,6 +272,7 @@ node tests/differential/fuzz.js --count 200   # random integer programs against 
 npm run check            # tsc --noEmit
 npm run lint             # Biome style lint (advisory, never a compile gate)
 npm run smoke            # build and run every example with a main
+npm run bootstrap        # build the self-hosted compiler into build/statictsc
 node bench/run.mjs       # the benchmark suite; rewrites docs/BENCHMARKS.md (about 3 minutes)
 docs/cookbook/regen.sh   # refresh docs/IR_COOKBOOK.md; node docs/check-links.mjs checks the links
 ```

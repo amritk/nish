@@ -66,6 +66,7 @@ npm test                    # build + the whole suite (~3 min with LLVM)
 node tests/run.js <sub>     # only checks whose name contains <sub>
 node tests/run.js self      # the WP14 self-hosting section alone
 npm run test:update         # write missing .ll goldens
+npm run bootstrap           # build the self-hosted compiler (build/statictsc)
 npm run lint                # biome, advisory, never a compile gate
 ```
 

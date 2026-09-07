@@ -120,6 +120,31 @@ header), and `scripts/build.sh` (the link pipeline). `statictsc` locates the
 runtime and the script relative to its own install directory, so a global
 install works from any working directory.
 
+## 2a. Building the self-hosted compiler (optional)
+
+`self/` is the same compiler written in StaticTS, and it compiles itself
+([docs/wp14-selfhost.md](wp14-selfhost.md)). From a checkout, with clang on
+`PATH`:
+
+```bash
+npm run bootstrap                  # dist/ -> stage1 -> build/statictsc
+scripts/statictsc.sh hello.ts --link hello
+./hello
+```
+
+`scripts/bootstrap.sh` builds stage1 with the Node compiler, then stage2 with
+stage1, and installs stage2 as `build/statictsc`. `--verify` also builds stage3
+and compares the IR and the binaries byte for byte; `--stages 1` stops one link
+sooner. `scripts/statictsc.sh` is that compiler's command line: it adds the
+directory creation and the `--link` step the self-hosted compiler deliberately
+does not do itself, and takes the same `-o`, `--link` and `--profile` spellings
+as `statictsc`.
+
+The native compiler is about eight times faster than the Node one and needs no
+Node at all, but it does not emit debug info (`-g`) or the interop sidecars
+(`--emit-header`, `--emit-dts`, `--emit-napi`) — those stay with `statictsc`,
+which is also what the npm package installs.
+
 ## 3. Hello world
 
 Create `hello.ts`:

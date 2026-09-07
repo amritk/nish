@@ -626,3 +626,60 @@ These are in addition to `docs/MASTER_PLAN.md` §7, not instead of it.
 6. **A new construct is lowered for speed and the lowering is checked.** Read
    the emitted assembly, not just the IR, when the choice is not obvious — §5
    exists because one such reading changed nothing and another would have.
+
+---
+
+## 7. Shipping it: the bootstrap script and the wrapper
+
+S5 proved the fixed point inside the test harness. It did not leave a compiler
+behind: `tests/self/bootstrap.js` builds four of them in a temporary directory,
+compares them and deletes the lot. So the last step between "self-hosting
+holds" and "the self-hosted compiler is the one you run" is a build recipe that
+is not a test, and the command line D4 said a wrapper would supply.
+
+```bash
+npm run bootstrap                         # build/statictsc, stage2, speed profile
+scripts/statictsc.sh hello.ts --link hello && ./hello
+```
+
+**`scripts/bootstrap.sh` builds the chain.** stage0 (`dist/index.js`) builds
+stage1, stage1 builds stage2, stage2 builds stage3, and `-o` copies the stage
+asked for. The default is **stage2**, because that is the first binary in the
+chain no part of stage0 emitted: stage0 built the compiler that built it.
+`--stages 1` stops at the seed's own output — the same program, two links
+sooner — and `--verify` runs the three equalities of §1 with `cmp` rather than
+with the suite's reporting, which makes the script self-checking for anyone
+building it outside a checkout of the tests.
+
+**`scripts/statictsc.sh` is the command line.** D4 kept `--link`, `--profile`
+and directory creation out of stage1, on the grounds that a wrapper could
+supply them for nothing; this is that wrapper, and D4's bet is settled at 120
+lines of `bash` with no runtime growth at all. It mirrors stage0's spelling
+exactly — `-o <file.ll>`, `-o <dir>/`, `--link <exe>` writing `<exe>.ll` for a
+single module and `<exe>.modules/` for a program with imports — so the two
+compilers leave the same files behind and a build script can be pointed at
+either. The flags that are stage0's rather than missing (`-g`, the interop
+sidecars, the dumps) are refused **by name**, with what to run instead: a flag
+that is silently ignored is how a build ends up not carrying the thing it
+asked for.
+
+What the wrapper is not is a second implementation of the driver. It plans no
+output, resolves no module and reads no source; it makes a directory, runs the
+compiler, and hands `scripts/build.sh` the `.ll` files that came out — which
+is why the whole of it can be read in one sitting and why nothing in it can
+disagree with stage1 about the language.
+
+**The suite checks the artifact, not just the proof.** The WP14 section builds
+a compiler with `scripts/bootstrap.sh --stages 1` and then uses it, through the
+wrapper, to compile, link and run `examples/hello.ts` (one module, `<exe>.ll`)
+and `examples/multi/main.ts` (two modules, `<exe>.modules/`, exit code 49).
+One stage rather than three, because what is being tested here is the
+deployment path and not the fixed point — the bootstrap check above owns that,
+and this one would only pay for the same two links again.
+
+**stage0 stays the published package.** `npm install -g statictsc` still ships
+`dist/`, and it has to: it is the seed every bootstrap starts from, the oracle
+every `self/` phase is compared against, and the only one of the two that emits
+DWARF and the interop sidecars. What changed is that a checkout can now produce
+the self-hosted compiler in one command, and that compiler compiles the same
+programs about eight times faster (§4, D5).
