@@ -126,9 +126,10 @@ golden `.ll`, an `llvm-as` pass, a native round trip, a `reject_*` case, a
 `docs/LANGUAGE.md` rule and a cookbook entry.
 
 **Every row below is now done**, and so is the `panic(msg)` of D1. The
-language gap is closed: what remains between here and S5 is wave C (library
-code in `self/`) and the four decisions of §3a, which are about how `self/`
-is written rather than about what StaticTS can express.
+language gap is closed, and wave C below has landed too, so what remains
+between here and S5 is the port itself and the four decisions of §3a, which
+are about how `self/` is written rather than about what StaticTS can
+express.
 
 ### Wave A — the front end cannot be written without these
 
@@ -165,6 +166,39 @@ golden-compared) and a byte-wise `compareStrings` (StaticTS has no `<` on
 strings, deliberately), `jsonQuote` matching JSON escaping exactly, hex
 formatting for B1, and a `resolvePath` that normalises `.` and `..` the way
 Node does — see D3.
+
+**Landed**, in 598 lines and with no language change, which is the claim this
+wave was making: `self/strings.ts` (`StringBuilder`, `compareStrings`,
+`jsonQuote`, the LLVM `c"..."` escape, `f64Hex` / `f32Hex` over B1's
+`f64ToBits`, `splitByte`), `self/map.ts` (`StringMap`, `StringSet`) and
+`self/paths.ts` (`normalizePath`, `resolvePath`, `resolveModule`, `dirname`,
+`basename`). The stable sort is the one item still outstanding; it lands with
+the diagnostics it orders.
+
+Two shape decisions are worth carrying forward:
+
+- **`StringMap` is open addressing over a dense entry list**, not keys in the
+  buckets: `slots` holds entry indices and the entries live in insertion order
+  in parallel `string[]` / `i32[]`. Iteration is therefore insertion order,
+  which is what a golden-compared dump needs — a hash order would make the
+  output depend on the table size — and `""` is an ordinary key rather than a
+  sentinel to get wrong. There is no `delete`; scopes are popped whole, so the
+  probe loop needs no tombstones.
+- **`self/paths.ts` matches `node:path` exactly, quirks included**, because
+  D3's failure mode is a `..` that normalises differently, and "differently"
+  has no small version. `dirname("/a//b")` is therefore `"/a/"`, not `"/a"`.
+  The one function that is deliberately *not* Node's is `basenameWithout`:
+  `path.basename(p, ext)` answers `"///"` for `basename("///", ".ts")` and
+  disagrees with itself about `".ts"`, and a module's name is not the place
+  to inherit that.
+
+The test is `tests/self/support_oracle.js`, and rule 3 holds for it without a
+`src/` phase to diff against: every line has an implementation on the other
+side that was written first — stage0's own `escapeBytes` and `f64Constant`
+for the IR escapes (a disagreement there *is* stage1 emitting a different
+module), `node:path`'s POSIX side for the paths, and `JSON.stringify`,
+`Buffer.compare` and `Map` for the rest. Both sides read the same case table,
+so they cannot drift onto different inputs. 863 lines agree.
 
 ### What is deliberately *not* being added
 

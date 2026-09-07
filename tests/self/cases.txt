@@ -1,0 +1,49 @@
+# Cases for tests/self/support.ts and tests/self/support_oracle.js, one per
+# line, tab separated: `text <string>`, `path <base> <spec>`, `num <literal>`.
+# Blank lines and lines starting with `#` are skipped, so a case cannot begin
+# with `#` — nothing here needs to.
+text	hello
+text	
+text	a"b\c
+text	/leading/and/trailing/
+text	a//b
+text	héllo wörld
+text	日本語
+text	the quick brown fox jumps over the lazy dog
+text	0
+text	-1
+text	x
+path	/a/b/c.ts	./d
+path	/a/b/c.ts	../d/e
+path	/a/b/c.ts	../../../../up
+path	/a/b/c.ts	/abs/olute
+path	.	./x
+path	..	./x
+path	a/b	../../../c
+path	/	./x
+path	/a//b///c	.././d
+path	a/b/c.ts	./sibling.js
+path	relative/dir	nested/deep/../file
+path	/x	.
+path	trailing/	./f
+path	/only/dir/	../g
+num	0
+num	1
+num	-1
+num	0.1
+num	-0.5
+num	3.141592653589793
+num	1e21
+num	1e-7
+num	2.5
+num	1234567.75
+num	-0
+path	/a//b	./x
+path	//	./x
+path	///	./x
+path	a/b//	./x
+path	/a/	./x
+path	/a/b.ts	./c.js
+path	/a/b.ts	../lib/util.ts
+path	x	.ts
+path	/a	.ts

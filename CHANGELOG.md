@@ -67,6 +67,28 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
   `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
   `bench/ffi.mjs` gains the batched `Float64Array` rows.
+- **Self-hosting, wave C: the support library** (`docs/wp14-selfhost.md` §3).
+  `self/strings.ts`, `self/map.ts` and `self/paths.ts` are the 598 lines of
+  StaticTS the checker and the emitter are written over, and no language
+  change came with them. `StringBuilder` is a `string[]` and one `join`,
+  because `s = s + t` in a loop is quadratic in both time and memory — 88 KB
+  of IR built that way costs 180 MB of peak RSS. `StringMap` / `StringSet`
+  replace the ~200 `Map` / `Set` sites in `src/` with open addressing over a
+  *dense entry list*: FNV-1a and linear probing into a bucket table of entry
+  indices, so iteration is insertion order (a hash order would make a
+  golden-compared diagnostic dump depend on the table size) and `""` needs no
+  sentinel. `self/paths.ts` is `node:path`'s POSIX behaviour, which §3a D3
+  calls a hazard rather than tedium: module identity is the resolved path, so
+  a `..` normalised differently from Node's loads one file twice and stops
+  cycles terminating. `tests/self/support_oracle.js` is the test, and every
+  line of it has an implementation that already exists on the other side —
+  stage0's own `escapeBytes` and `f64Constant` for the two IR escapes,
+  `node:path`'s POSIX side for the path functions, and `JSON.stringify`,
+  `Buffer.compare` and `Map` for the rest, over the shared case table both
+  sides read. **863 lines agree.** One divergence is deliberate and written
+  down: `basenameWithout` is not `path.basename(p, ext)`, whose corners are
+  artifacts (`basename("///", ".ts")` is `"///"`, and `basename(".ts", ".ts")`
+  is `""` while `basename("x/.ts", ".ts")` is `".ts"`).
 - **Self-hosting, milestone S2: the parser** (`docs/wp14-selfhost.md` §4).
   `self/parser.ts` is recursive descent over the S1 lexer, building the
   one-`Node`-class tree of `self/nodes.ts` — a `kind` discriminant, a fixed

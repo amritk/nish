@@ -1648,6 +1648,23 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         `exit ${recovery.status}\n${recovery.stdout}${recovery.stderr}`
       );
     }
+
+    // Wave C: the support library the checker and the emitter are written
+    // over (docs/wp14-selfhost.md §3). It has no counterpart in `src/` to
+    // diff phase by phase, so each function is matched with something that
+    // already exists — stage0's own IR escape and f64 hex, `node:path` for
+    // the module-identity hazard of §3a D3, and `JSON.stringify` / `Map` for
+    // the rest.
+    const supportOracle = spawnSync("node", [path.join(root, "tests", "self", "support_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const supportSummary = supportOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/ support library agrees with node and stage0 (${supportSummary})`,
+      supportOracle.status === 0,
+      `${supportOracle.stdout}${supportOracle.stderr}`
+    );
   }
 }
 
