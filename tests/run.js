@@ -1612,6 +1612,42 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         `exit ${run.status}\n${run.stdout}`
       );
     }
+
+    // S2: the same shape one level up. Every positive program in the corpus
+    // must parse to the tree the `typescript` parser builds, span for span;
+    // the files the oracle skips are the forbidden constructs StaticTS-0 has
+    // no grammar for yet, and that count is the S2 gate's own measurement.
+    const parserOracle = spawnSync("node", [path.join(root, "tests", "parser_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const parserSummary = parserOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/parser.ts agrees with the typescript parser (${parserSummary})`,
+      parserOracle.status === 0,
+      `${parserOracle.stdout}${parserOracle.stderr}`
+    );
+
+    // And the half of the parser the oracle cannot see: recovery. A failed
+    // parse is an `N_ERROR` node and a diagnostic, and the declaration after
+    // it still parses (docs/wp14-selfhost.md §3a D1).
+    const astDumper = path.join(buildDir, "self", "dump_ast");
+    const builtAst = spawnSync("node", [cli, path.join(selfDir, "dump_ast.ts"), "--link", astDumper], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    if (check("self/dump_ast.ts links", builtAst.status === 0, builtAst.stderr)) {
+      // Relative, because the diagnostics quote the path they were given and
+      // the golden cannot hold this machine's checkout directory.
+      const recovery = spawnSync(astDumper, ["tests/parser/recovery.ts"], { cwd: root, encoding: "utf8" });
+      const wantOut = fs.readFileSync(path.join(root, "tests", "parser", "recovery.out"), "utf8");
+      const wantErr = fs.readFileSync(path.join(root, "tests", "parser", "recovery.err"), "utf8");
+      check(
+        "self/parser.ts reports a syntax error and keeps parsing what follows",
+        recovery.stdout === wantOut && recovery.stderr === wantErr && recovery.status === 1,
+        `exit ${recovery.status}\n${recovery.stdout}${recovery.stderr}`
+      );
+    }
   }
 }
 

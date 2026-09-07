@@ -230,7 +230,7 @@ point is to know rather than to find out at the last milestone.
 | | Deliverable | Proof |
 | --- | --- | --- |
 | **S1 Lexer** | `self/lexer.ts` tokenises StaticTS-0 **Done.** | Its token stream agrees with the `typescript` scanner's over every `tests/cases/*.ts`; the lexer built by stage0 runs natively |
-| **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 | The tree dump matches stage0's `--emit-ast` for the corpus, modulo the documented shape differences |
+| **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 **Done.** | Its tree matches the `typescript` parser's, span for span, for every program in the corpus that StaticTS-0's grammar covers |
 | **S3 Checker** | `self/checker.ts` — types, scopes, the side tables | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
 | **S4 Emitter** | `self/emit.ts` — IR text | `IR(stage0, p) == IR(stage1, p)` for a growing whitelist of `tests/cases/` |
 | **S5 Bootstrap** | `self/` compiles `self/` | `IR(stage1, self/) == IR(stage2, self/)`, and stage3 is byte-identical to stage2 |
@@ -272,6 +272,61 @@ of StaticTS**, and the four numbers the gate wants are already forming:
   binary reads the file, lexes 14,000 tokens, formats and writes the dump in
   **5 ms**; the `typescript` scanner alone, warm, takes 4 ms — after the 258 ms
   it costs to load.
+
+### What S2 cost, and the gate's four numbers
+
+`self/nodes.ts`, `self/parser.ts` and `self/dump_ast.ts` bring `self/` to
+**2,817 lines of StaticTS**. `tests/parser_oracle.js` is the lexer oracle one
+level up: it walks the `typescript` tree, prints it in `dump_ast`'s format and
+diffs, so what is compared is not "did it parse" but "is it the same tree, out
+of the same pieces, with the same spans".
+
+**447 of 447 files agree, 53,673 nodes, 43 skipped — and every one of the 43
+is a `reject_*` case.** Every positive program in `tests/cases/`, `examples/`,
+`self/`, `docs/cookbook/`, `bench/`, the differential corpus and the new
+`tests/parser/` fixtures parses to exactly the tree TypeScript builds.
+
+So the gate's questions have answers:
+
+1. **Did StaticTS-0 hold?** Yes, again, and this time under more pressure: a
+   recursive-descent parser with no exceptions, no closures, no generics and
+   no `Map`. The one-`Node`-class decision of §2.1 paid for itself — a fixed
+   child layout per kind with `N_LIST` for the variable-length groups and
+   `N_EMPTY` for the absent ones reads as well as a class hierarchy would and
+   needs no downcast. Nothing was added to the language for S1 or S2.
+2. **How far off was the line count?** `src/` is 13,757 lines; the lexer and
+   parser are 2,817, and they replace the ~1,558 `ts.*` calls that `src/` gets
+   from a 60,000-line package. That is roughly the ratio the plan assumed. The
+   port of the checker and the emitter is the remaining ~11,000 lines of
+   `src/`, and there is now a measured basis for expecting it to be about that
+   again rather than twice it.
+3. **What did the oracle cost?** Four bugs across S1 and S2, all found in
+   minutes, all in the same direction — the front end having opinions the
+   scanner does not. `==` and `?.` refused instead of tokenised; `>` merged
+   where the scanner splits (kept, and the parser splits it back where a type
+   argument list closes); `super` missing from the model although the language
+   has inheritance; and `from` and `of` made hard keywords when they are
+   contextual, which `tests/cases/cls_nested.ts` catches with a field called
+   `from`. None of them needed a redesign. That is the strongest evidence for
+   S3: the oracle habit works, and it is cheap.
+4. **How fast is it?** Over 84 KB of `self/`'s own source the native binary
+   reads, lexes, parses and writes a 30,000-line tree dump in **7 ms**; the
+   `typescript` parser alone, warm, takes 14.5 ms for the same input — before
+   the 258 ms it costs to load.
+
+The 43 skips are the honest remainder, and they are all one thing: **grammar
+for constructs StaticTS forbids**. Stage0 rejects those by name in its
+Phase 0 validator, *after* the `typescript` package has parsed them, so for
+stage1 to produce the same message this parser must read them and turn them
+down itself. The tally, largest first: `try` (1), `enum` (2), `namespace` (2),
+`typeof` (2), `as` and `<T>x` casts (2), arrow functions and generics (7
+across functions, classes and imports), `void`/`delete`/`await` (3), getters
+(1), `static` (1), decorators (1), labels (1), `with` (1), `debugger` (1),
+regex literals (1), spread (1), computed keys (1), `export default` (1),
+`?.`/`??`/`==`/`!=` in expression position (4), and top-level statements (2).
+That is a bounded list — roughly 25 constructs, each a few lines of
+read-and-refuse — not an open-ended one, which is the answer the gate needed
+about how much of TypeScript `self/` ends up parsing.
 
 ### The gate at S2
 

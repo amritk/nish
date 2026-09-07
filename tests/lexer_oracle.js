@@ -121,7 +121,6 @@ const KEYWORDS = new Set([
   "new",
   "this",
   "import",
-  "from",
   "export",
   "true",
   "false",
@@ -132,7 +131,7 @@ const KEYWORDS = new Set([
   "default",
   "implements",
   "extends",
-  "of",
+  "super",
 ]);
 
 /** Byte offset of every UTF-16 index in `source`, so the two streams can be compared. */

@@ -55,7 +55,6 @@ import {
   TOK_EXTENDS,
   TOK_FALSE,
   TOK_FOR,
-  TOK_FROM,
   TOK_FUNCTION,
   TOK_GE,
   TOK_GT,
@@ -78,7 +77,6 @@ import {
   TOK_NE_LOOSE,
   TOK_NULL,
   TOK_NUMBER,
-  TOK_OF,
   TOK_OR_OR,
   TOK_OR_OR_ASSIGN,
   TOK_PERCENT,
@@ -109,6 +107,7 @@ import {
   TOK_STAR_STAR,
   TOK_STAR_STAR_ASSIGN,
   TOK_STRING,
+  TOK_SUPER,
   TOK_SWITCH,
   TOK_TEMPLATE,
   TOK_TEMPLATE_HEAD,
@@ -225,7 +224,9 @@ export function hexValue(c: i32): i32 {
  * A word that is a keyword in TypeScript but not in StaticTS-0 (`try`, `var`,
  * `typeof`, `any`, ...) is an identifier here, deliberately: the parser
  * refuses it where it stands, with a message about the construct rather than
- * about a token nobody wrote.
+ * about a token nobody wrote. So are the two *contextual* keywords, `from`
+ * and `of`, which are only special where the grammar already expects them and
+ * are ordinary names anywhere else.
  */
 export function keywordKind(word: string): i32 {
   if (word === "function") return TOK_FUNCTION;
@@ -244,7 +245,6 @@ export function keywordKind(word: string): i32 {
   if (word === "new") return TOK_NEW;
   if (word === "this") return TOK_THIS;
   if (word === "import") return TOK_IMPORT;
-  if (word === "from") return TOK_FROM;
   if (word === "export") return TOK_EXPORT;
   if (word === "true") return TOK_TRUE;
   if (word === "false") return TOK_FALSE;
@@ -255,7 +255,7 @@ export function keywordKind(word: string): i32 {
   if (word === "default") return TOK_DEFAULT;
   if (word === "implements") return TOK_IMPLEMENTS;
   if (word === "extends") return TOK_EXTENDS;
-  if (word === "of") return TOK_OF;
+  if (word === "super") return TOK_SUPER;
   return TOK_IDENT;
 }
 

@@ -45,7 +45,13 @@ export const TOK_INTERFACE: i32 = 21;
 export const TOK_NEW: i32 = 22;
 export const TOK_THIS: i32 = 23;
 export const TOK_IMPORT: i32 = 24;
-export const TOK_FROM: i32 = 25;
+// 25 and 36 are not used: `from` and `of` are *contextual* keywords, words
+// that are only special where the grammar is already expecting them
+// (`import ... from`, `for (const x of ...)`) and are ordinary identifiers
+// everywhere else — `tests/cases/cls_nested.ts` has a field called `from`.
+// The parser matches them by text at the two places that want them, and the
+// numbering keeps the holes rather than renumbering forty constants to close
+// them.
 export const TOK_EXPORT: i32 = 26;
 export const TOK_TRUE: i32 = 27;
 export const TOK_FALSE: i32 = 28;
@@ -56,79 +62,79 @@ export const TOK_CASE: i32 = 32;
 export const TOK_DEFAULT: i32 = 33;
 export const TOK_IMPLEMENTS: i32 = 34;
 export const TOK_EXTENDS: i32 = 35;
-export const TOK_OF: i32 = 36;
-export const TOK_KEYWORD_LAST: i32 = 36;
+export const TOK_SUPER: i32 = 37;
+export const TOK_KEYWORD_LAST: i32 = 37;
 
 // Punctuation and operators.
-export const TOK_LPAREN: i32 = 37;
-export const TOK_RPAREN: i32 = 38;
-export const TOK_LBRACE: i32 = 39;
-export const TOK_RBRACE: i32 = 40;
-export const TOK_LBRACKET: i32 = 41;
-export const TOK_RBRACKET: i32 = 42;
-export const TOK_COMMA: i32 = 43;
-export const TOK_SEMICOLON: i32 = 44;
-export const TOK_COLON: i32 = 45;
-export const TOK_DOT: i32 = 46;
-export const TOK_QUESTION: i32 = 47;
-export const TOK_ARROW: i32 = 48;
+export const TOK_LPAREN: i32 = 38;
+export const TOK_RPAREN: i32 = 39;
+export const TOK_LBRACE: i32 = 40;
+export const TOK_RBRACE: i32 = 41;
+export const TOK_LBRACKET: i32 = 42;
+export const TOK_RBRACKET: i32 = 43;
+export const TOK_COMMA: i32 = 44;
+export const TOK_SEMICOLON: i32 = 45;
+export const TOK_COLON: i32 = 46;
+export const TOK_DOT: i32 = 47;
+export const TOK_QUESTION: i32 = 48;
+export const TOK_ARROW: i32 = 49;
 
-export const TOK_PLUS: i32 = 49;
-export const TOK_MINUS: i32 = 50;
-export const TOK_STAR: i32 = 51;
-export const TOK_SLASH: i32 = 52;
-export const TOK_PERCENT: i32 = 53;
-export const TOK_ASSIGN: i32 = 54;
-export const TOK_PLUS_ASSIGN: i32 = 55;
-export const TOK_MINUS_ASSIGN: i32 = 56;
-export const TOK_STAR_ASSIGN: i32 = 57;
-export const TOK_SLASH_ASSIGN: i32 = 58;
-export const TOK_PERCENT_ASSIGN: i32 = 59;
-export const TOK_PLUS_PLUS: i32 = 60;
-export const TOK_MINUS_MINUS: i32 = 61;
-export const TOK_EQ: i32 = 62;
-export const TOK_NE: i32 = 63;
-export const TOK_LT: i32 = 64;
-export const TOK_LE: i32 = 65;
-export const TOK_GT: i32 = 66;
-export const TOK_GE: i32 = 67;
-export const TOK_AND_AND: i32 = 68;
-export const TOK_OR_OR: i32 = 69;
-export const TOK_BANG: i32 = 70;
-export const TOK_AMP: i32 = 71;
-export const TOK_PIPE: i32 = 72;
-export const TOK_CARET: i32 = 73;
-export const TOK_TILDE: i32 = 74;
-export const TOK_SHL: i32 = 75;
-export const TOK_SHR: i32 = 76;
-export const TOK_USHR: i32 = 77;
-export const TOK_AMP_ASSIGN: i32 = 78;
-export const TOK_PIPE_ASSIGN: i32 = 79;
-export const TOK_CARET_ASSIGN: i32 = 80;
-export const TOK_SHL_ASSIGN: i32 = 81;
-export const TOK_SHR_ASSIGN: i32 = 82;
-export const TOK_USHR_ASSIGN: i32 = 83;
+export const TOK_PLUS: i32 = 50;
+export const TOK_MINUS: i32 = 51;
+export const TOK_STAR: i32 = 52;
+export const TOK_SLASH: i32 = 53;
+export const TOK_PERCENT: i32 = 54;
+export const TOK_ASSIGN: i32 = 55;
+export const TOK_PLUS_ASSIGN: i32 = 56;
+export const TOK_MINUS_ASSIGN: i32 = 57;
+export const TOK_STAR_ASSIGN: i32 = 58;
+export const TOK_SLASH_ASSIGN: i32 = 59;
+export const TOK_PERCENT_ASSIGN: i32 = 60;
+export const TOK_PLUS_PLUS: i32 = 61;
+export const TOK_MINUS_MINUS: i32 = 62;
+export const TOK_EQ: i32 = 63;
+export const TOK_NE: i32 = 64;
+export const TOK_LT: i32 = 65;
+export const TOK_LE: i32 = 66;
+export const TOK_GT: i32 = 67;
+export const TOK_GE: i32 = 68;
+export const TOK_AND_AND: i32 = 69;
+export const TOK_OR_OR: i32 = 70;
+export const TOK_BANG: i32 = 71;
+export const TOK_AMP: i32 = 72;
+export const TOK_PIPE: i32 = 73;
+export const TOK_CARET: i32 = 74;
+export const TOK_TILDE: i32 = 75;
+export const TOK_SHL: i32 = 76;
+export const TOK_SHR: i32 = 77;
+export const TOK_USHR: i32 = 78;
+export const TOK_AMP_ASSIGN: i32 = 79;
+export const TOK_PIPE_ASSIGN: i32 = 80;
+export const TOK_CARET_ASSIGN: i32 = 81;
+export const TOK_SHL_ASSIGN: i32 = 82;
+export const TOK_SHR_ASSIGN: i32 = 83;
+export const TOK_USHR_ASSIGN: i32 = 84;
 
 // Tokens StaticTS-0 has no use for, lexed anyway. The lexer's job is to say
 // what is written, not what is allowed: `a ?? b` is one `??`, and the parser
 // refuses it by name ("`??` is forbidden; narrow with `!== null`") instead of
 // complaining about a stray `?`. It is also what lets the lexer be diffed
 // against the `typescript` scanner token for token (tests/lexer_oracle.js).
-export const TOK_EQ_LOOSE: i32 = 84; // ==
-export const TOK_NE_LOOSE: i32 = 85; // !=
-export const TOK_STAR_STAR: i32 = 86; // **
-export const TOK_STAR_STAR_ASSIGN: i32 = 87; // **=
-export const TOK_QUESTION_DOT: i32 = 88; // ?.
-export const TOK_QUESTION_QUESTION: i32 = 89; // ??
-export const TOK_QUESTION_QUESTION_ASSIGN: i32 = 90; // ??=
-export const TOK_AND_AND_ASSIGN: i32 = 91; // &&=
-export const TOK_OR_OR_ASSIGN: i32 = 92; // ||=
-export const TOK_DOT_DOT_DOT: i32 = 93; // ...
-export const TOK_AT: i32 = 94; // @, a decorator
-export const TOK_PRIVATE_IDENT: i32 = 95; // #name
-export const TOK_BIGINT: i32 = 96; // 1n
+export const TOK_EQ_LOOSE: i32 = 85; // ==
+export const TOK_NE_LOOSE: i32 = 86; // !=
+export const TOK_STAR_STAR: i32 = 87; // **
+export const TOK_STAR_STAR_ASSIGN: i32 = 88; // **=
+export const TOK_QUESTION_DOT: i32 = 89; // ?.
+export const TOK_QUESTION_QUESTION: i32 = 90; // ??
+export const TOK_QUESTION_QUESTION_ASSIGN: i32 = 91; // ??=
+export const TOK_AND_AND_ASSIGN: i32 = 92; // &&=
+export const TOK_OR_OR_ASSIGN: i32 = 93; // ||=
+export const TOK_DOT_DOT_DOT: i32 = 94; // ...
+export const TOK_AT: i32 = 95; // @, a decorator
+export const TOK_PRIVATE_IDENT: i32 = 96; // #name
+export const TOK_BIGINT: i32 = 97; // 1n
 
-export const TOK_COUNT: i32 = 97;
+export const TOK_COUNT: i32 = 98;
 
 export function isKeyword(kind: i32): boolean {
   return kind >= TOK_KEYWORD_FIRST && kind <= TOK_KEYWORD_LAST;
@@ -189,8 +195,6 @@ export function tokenName(kind: i32): string {
       return "this";
     case TOK_IMPORT:
       return "import";
-    case TOK_FROM:
-      return "from";
     case TOK_EXPORT:
       return "export";
     case TOK_TRUE:
@@ -211,8 +215,8 @@ export function tokenName(kind: i32): string {
       return "implements";
     case TOK_EXTENDS:
       return "extends";
-    case TOK_OF:
-      return "of";
+    case TOK_SUPER:
+      return "super";
     case TOK_LPAREN:
       return "(";
     case TOK_RPAREN:

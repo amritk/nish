@@ -67,6 +67,24 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
   `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
   `bench/ffi.mjs` gains the batched `Float64Array` rows.
+- **Self-hosting, milestone S2: the parser** (`docs/wp14-selfhost.md` §4).
+  `self/parser.ts` is recursive descent over the S1 lexer, building the
+  one-`Node`-class tree of `self/nodes.ts` — a `kind` discriminant, a fixed
+  child layout per kind, `N_LIST` for the variable-length groups and `N_EMPTY`
+  for the absent ones, so nothing ever downcasts. It has no exceptions,
+  because StaticTS `throw` discards its value: a failed parse is an `N_ERROR`
+  node plus a diagnostic on the parser, and the declaration after it still
+  parses. `tests/parser_oracle.js` walks the `typescript` tree, prints it in
+  `self/dump_ast.ts`'s format and diffs: **447 files, 53,673 nodes, no
+  disagreement**, span for span, with the 43 skipped files all `reject_*`
+  cases whose forbidden constructs StaticTS-0 has no grammar for yet. Four
+  front-end bugs came out of the two oracles, all the same shape — a lexer or
+  parser having an opinion the scanner does not: `==` and `?.` refused rather
+  than read, `super` missing from the model although the language has
+  inheritance, and `from` and `of` made hard keywords when they are contextual
+  (`tests/cases/cls_nested.ts` has a field called `from`). `self/` is 2,817
+  lines of StaticTS and parses 84 KB of its own source in 7 ms, against
+  14.5 ms for the `typescript` parser warm in a Node process.
 - **Self-hosting, milestone S1: the lexer** (`docs/wp14-selfhost.md` §4).
   `self/lexer.ts` tokenises StaticTS-0 and is written in it — 1,222 lines with
   `self/tokens.ts` and `self/dump_tokens.ts`, using nothing the language did
