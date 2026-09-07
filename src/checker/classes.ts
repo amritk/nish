@@ -147,6 +147,19 @@ export function structOf(ctx: CheckContext, t: StaticType): StructInfo {
  * registering them would only turn a `%struct.Base = type opaque` an importer
  * is entitled to into a full definition (`tests/link/extends_import`).
  */
+/** The struct names in one signature's parameter and return types. */
+export function signatureStructNames(sig: FunctionSig): string[] {
+  const names = new Set<string>();
+  const note = (t: StaticType): void => {
+    if (t.kind === "struct") names.add(t.name);
+    else if (t.kind === "array") note(t.elem);
+    else if (t.kind === "nullable") note(t.inner);
+  };
+  for (const p of sig.params.slice(sig.struct ? 1 : 0)) note(p.type);
+  note(sig.returnType);
+  return [...names];
+}
+
 export function referencedStructNames(info: StructInfo): string[] {
   const names = new Set<string>();
   const note = (t: StaticType): void => {

@@ -492,8 +492,11 @@ having no top-level code and therefore no initialisation order.
   (`tests/link/reachable_struct_annotation`). A base class reached only
   through `extends` is not brought in either — it is used through its pointer,
   so the importer declares `%struct.Base = type opaque`
-  (`tests/link/extends_import`). The layouts travel however many modules apart
-  the declaration is (`tests/link/reachable_struct_chain`).
+  (`tests/link/extends_import`). An imported *function* brings its own
+  signature's layouts the same way — `import { lex }` where `lex(): Token`
+  gives this module `Token` values it never names
+  (`tests/link/reachable_struct_return`) — and the layouts travel however many
+  modules apart the declaration is (`tests/link/reachable_struct_chain`).
 - Import cycles are allowed (`tests/link/cycle`); a shared dependency is
   compiled once (`tests/link/diamond`).
 - **Linkage.** Every function is an external C-ABI symbol by default, so two

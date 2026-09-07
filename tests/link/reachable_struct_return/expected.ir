@@ -1,0 +1,2 @@
+%struct.Token = type { i32 }
+declare noundef nonnull align 8 i8* @Token.describe(%struct.Token* noundef nonnull readonly align 8 dereferenceable(4) nocapture)

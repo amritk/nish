@@ -23,6 +23,7 @@ import {
   finishStruct,
   isStructDeclaration,
   referencedStructNames,
+  signatureStructNames,
   thisLocal,
 } from "./classes";
 import { ConstInfo, constValue } from "./constants";
@@ -322,6 +323,9 @@ export class Checker implements CheckContext {
    * what may be *spelled* as a type changes: `const x: Item` in this module is
    * still `Unknown type` until `Item` is imported.
    *
+   * The same is true of an imported *function*: `parse(): Node` hands this
+   * module `Node` values without `Node` appearing anywhere in it.
+   *
    * `declared` is every struct declared anywhere in the program, which is why
    * this is a pass of its own after every module has bound its imports: a
    * chain (`A` imports `B`'s class, whose method returns `C`'s) would
@@ -330,27 +334,34 @@ export class Checker implements CheckContext {
   closeReachableStructs(declared: ReadonlyMap<string, StructInfo>): void {
     const pending: StructInfo[] = [];
     const seen = new Set<string>();
+    const reach = (name: string): void => {
+      if (seen.has(name)) return;
+      seen.add(name);
+      const info = declared.get(name);
+      if (!info) return;
+      if (!this.program.structs.has(name)) {
+        this.program.structs.set(name, info);
+        this.program.reachableStructs.push(info);
+        this.reachableOnly.add(name);
+      }
+      pending.push(info);
+    };
     for (const imp of this.program.imports) {
       if (imp.struct) {
-        pending.push(imp.struct);
+        // The imported class itself is already registered by name.
         seen.add(imp.struct.name);
+        pending.push(imp.struct);
+      }
+      // An imported *function* drags its types in the same way: `parse(): Node`
+      // hands this module `Node` values with no mention of `Node` anywhere.
+      if (imp.sig) {
+        for (const name of signatureStructNames(imp.sig)) reach(name);
       }
     }
     while (pending.length > 0) {
       // biome-ignore lint/style/noNonNullAssertion: the loop guard is the length check
       const info = pending.pop()!;
-      for (const name of referencedStructNames(info)) {
-        if (seen.has(name)) continue;
-        seen.add(name);
-        const next = declared.get(name);
-        if (!next) continue;
-        if (!this.program.structs.has(name)) {
-          this.program.structs.set(name, next);
-          this.program.reachableStructs.push(next);
-          this.reachableOnly.add(name);
-        }
-        pending.push(next);
-      }
+      for (const name of referencedStructNames(info)) reach(name);
     }
   }
 

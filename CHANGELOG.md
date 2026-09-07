@@ -126,7 +126,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   was not null, so both implementations are driven through one script
   (shadowing, a narrowing that holds through the chain, an inner one that
   wins, an assignment that drops both) and every answer compared.
-- **An imported class brings the layouts its members mention.** `import
+- **An imported class or function brings the layouts its signature mentions.** `import
   { Registry }` where `Registry.all(): Entry[]` gives a module `Entry` values
   it can call methods on and read fields of; until now the checker crashed
   with an internal error (`structOf: no struct named \`Entry\``) because
@@ -145,9 +145,10 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   through a chain of two — `main` imports `mid`'s class, whose method returns
   `leaf`'s — would otherwise be found or not depending on the order the
   modules happened to be bound in (`tests/link/reachable_struct_chain`). Found
-  by writing the self-hosted compiler's own `diagnostics` and `annotations`
-  modules, whose sink hands back a `Diagnostic[]` and whose context reads a
-  `StringSet` field.
+  by writing the self-hosted compiler's own `diagnostics`, `annotations` and
+  `statements` modules — a sink that hands back a `Diagnostic[]`, a context
+  that reads a `StringSet` field, and an imported `caseValue(): CaseValue`
+  (`tests/link/reachable_struct_return`).
 - **Self-hosting, wave C: the support library** (`docs/wp14-selfhost.md` §3).
   `self/strings.ts`, `self/map.ts` and `self/paths.ts` are the 598 lines of
   StaticTS the checker and the emitter are written over, and no language
