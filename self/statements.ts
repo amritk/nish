@@ -309,7 +309,7 @@ function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
  * honestly (docs/wp14-selfhost.md §5).
  *
  * There is no implicit fallthrough: a clause with statements ends in `break`,
- * `return`, `continue`, `throw` or `process.exit`, and only the last clause
+ * `return`, `continue` or `process.exit`, and only the last clause
  * may fall out. An *empty* clause does fall through, which is how
  * `case 1: case 2:` gives a group of labels one body.
  */
@@ -350,7 +350,7 @@ function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
     if (body.children.length > 0 && !terminates && i < clauses.length - 1) {
       ctx.error(
         body.children[body.children.length - 1],
-        "A `case` clause with statements must end in `break`, `return`, `continue` or `throw` (StaticTS has no implicit fallthrough; leave a clause empty to give several labels one body)"
+        "A `case` clause with statements must end in `break`, `return`, `continue` or `process.exit` (StaticTS has no implicit fallthrough; leave a clause empty to give several labels one body)"
       );
     }
     lastTerminates = terminates;

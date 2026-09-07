@@ -4,7 +4,7 @@
  * Walks the entire syntax tree once (`ts.forEachChild`, pre-order) and
  * reports a `CompileError` for every construct that StaticTS can never
  * compile: anything that requires dynamic typing, prototype lookup,
- * reflection, unwinding, or a garbage-collected heap. Every rule here is
+ * reflection, unwinding, exceptions, or a garbage-collected heap. Every rule here is
  * decidable from syntax alone; nothing depends on types or scopes. With a
  * `DiagnosticSink` the sweep reports every forbidden construct in the file
  * (skipping the inside of a rejected node, so `Array<any>` is one error, not
@@ -261,7 +261,21 @@ const rejectComputedPropertyName: Validator = (node, sf) =>
 const rejectWith: Validator = (node, sf) =>
   fail("`with` is forbidden in StaticTS (no dynamic scope)", node, sf);
 const rejectTry: Validator = (node, sf) =>
-  fail("`try`/`catch`/`finally` is forbidden in StaticTS (no unwinding; `throw` aborts)", node, sf);
+  fail("`try`/`catch`/`finally` is forbidden in StaticTS (no unwinding; use `Result<T, E>`)", node, sf);
+/**
+ * `throw` is gone as of WP16. It never unwound — it trapped and discarded its
+ * value — so it was an abort wearing the syntax of error handling, and having
+ * it around meant a program could report a failure in a way no caller could
+ * see. The two things it was used for now have their own spelling: a failure
+ * a caller should handle is a `Result<T, E>`, and an invariant that cannot
+ * hold is `panic(message)`, which at least says what went wrong.
+ */
+const rejectThrow: Validator = (node, sf) =>
+  fail(
+    "`throw` is forbidden in StaticTS (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
+    node,
+    sf
+  );
 const rejectDebugger: Validator = (node, sf) =>
   fail("`debugger` is forbidden in StaticTS (no debugger hook)", node, sf);
 const rejectLabeled: Validator = (node, sf) =>
@@ -418,6 +432,7 @@ const validators: Partial<Record<ts.SyntaxKind, Validator>> = {
   // statements
   [ts.SyntaxKind.WithStatement]: rejectWith,
   [ts.SyntaxKind.TryStatement]: rejectTry,
+  [ts.SyntaxKind.ThrowStatement]: rejectThrow,
   [ts.SyntaxKind.DebuggerStatement]: rejectDebugger,
   [ts.SyntaxKind.LabeledStatement]: rejectLabeled,
   // expressions

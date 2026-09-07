@@ -1,0 +1,2 @@
+Cannot read `value` of `Result<i32, string>` before the error is handled
+test it first: `if (outcome.isOk()) { ... outcome.value ... }`

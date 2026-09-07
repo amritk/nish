@@ -28,6 +28,7 @@ import {
   N_PROPERTY,
   N_STRING,
   N_TEMPLATE,
+  N_THROW,
   N_TYPE_NULL,
   N_TYPE_REF,
   N_TYPE_UNION,
@@ -197,6 +198,16 @@ function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void {
       break;
     case N_CALL:
       rejectForbiddenCall(ctx, node);
+      break;
+    case N_THROW:
+      // WP16: `throw` never unwound, it trapped and discarded its value, so it
+      // was an abort wearing the syntax of error handling. The parser still
+      // reads it (so the message can point at the statement) and Phase 0
+      // refuses it, exactly as stage0 does.
+      ctx.error(
+        node,
+        "`throw` is forbidden in StaticTS (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process"
+      );
       break;
     default:
       break;

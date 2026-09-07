@@ -99,13 +99,13 @@ methods, generators, `async`/`await`, decorators, enums with computed
 values, namespaces, `declare global`, dynamic `import()`, optional chaining
 and nullish coalescing on non-nullable types, union types other than
 `T | null`, generics (until a monomorphisation WP exists), `symbol`,
-`bigint`, regex literals, `try`/`catch` (no unwinding; `throw` aborts).
+`bigint`, regex literals, `try`/`catch` and `throw` (no unwinding; a failure is a `Result<T, E>`, WP16).
 
 ### 3.3 Semantics decisions already made
 
 - Integer overflow wraps (Rust release semantics). Revisit under WP9.
 - Strings are immutable and shared by pointer; equality is by content.
-- Functions are `nounwind`; `throw` lowers to print + `abort`.
+- Functions are `nounwind`; there is no `throw` (WP16), and `panic(message)` prints and exits 1.
 - Parameters are immutable (`const` semantics) and used as SSA values.
 - Locals use `alloca`/`load`/`store` with natural alignment; `opt -mem2reg`
   promotes them, so this is free.

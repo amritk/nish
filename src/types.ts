@@ -108,7 +108,32 @@ export type StaticType =
    * `=== null` / `!== null`, assignment, passing, and narrowing to `T` inside
    * `if (p !== null)`; everything else is a checker error.
    */
-  | { kind: "nullable"; inner: StaticType };
+  | { kind: "nullable"; inner: StaticType }
+  /**
+   * `Result<T, E>` (WP16): the one way a StaticTS function reports failure.
+   * A pointer to a monomorphised `%struct.sts_result.<T>.<E>` holding the
+   * `ok` discriminant, the success payload and the error payload, so a
+   * `Result` costs exactly what a class costs and the escape analysis stack-
+   * allocates the ones that do not outlive their function.
+   *
+   * `state` is a *checker-only* refinement, not part of the layout: an
+   * un-narrowed value is `"unknown"` and neither payload can be read; inside
+   * `if (r.ok)` it reads as `"ok"` and `r.value` is legal; in the other
+   * branch it reads as `"err"` and `r.error` is legal. `sameType` ignores it
+   * for exactly that reason — the LLVM value is the same pointer either way.
+   * See `src/checker/result.ts` and `docs/LANGUAGE.md` -> "Result and error handling".
+   */
+  | { kind: "result"; ok: StaticType; err: StaticType; state: ResultState };
+
+/**
+ * What the checker has proved about a `Result` value at one use site.
+ * `"unknown"` is the declared state of every `Result`; the narrowing engine
+ * (`src/checker/narrowing.ts`) produces the other two from an `r.ok` test.
+ */
+export type ResultState = "unknown" | "ok" | "err";
+
+/** The `Result` member of `StaticType`, for handlers a dispatch table already selected. */
+export type ResultType = Extract<StaticType, { kind: "result" }>;
 
 export const I32: StaticType = { kind: "i32" };
 /** 64-bit integer (WP7). Never the lowering of `number`; always spelled `i64`. */
@@ -158,6 +183,53 @@ export function stripNull(t: StaticType): StaticType {
   return t.kind === "nullable" ? t.inner : t;
 }
 
+// ---- `Result<T, E>` (WP16) --------------------------------------------------
+
+export function resultOf(ok: StaticType, err: StaticType, state: ResultState = "unknown"): StaticType {
+  return { kind: "result", ok, err, state };
+}
+
+/** The same `Result` type read under a different proof; the LLVM value is unchanged. */
+export function withResultState(t: StaticType, state: ResultState): StaticType {
+  return t.kind === "result" ? { kind: "result", ok: t.ok, err: t.err, state } : t;
+}
+
+/**
+ * A prefix-coded name for a type, so that one LLVM struct is monomorphised
+ * per distinct `Result<T, E>` and two different `Result`s can never share a
+ * layout. Every constructor writes its tag before its operands (`arr.i32`,
+ * `res.i32.str`), which makes the encoding unambiguous without separators
+ * of its own: `res.res.i32.str.str` can only be read one way.
+ *
+ * A class or interface name is prefixed with `$` because that character
+ * cannot appear in a TypeScript identifier, so `Result<Foo, string>` cannot
+ * collide with a `Result` over a class that happens to be called `res`.
+ */
+export function mangleType(t: StaticType): string {
+  switch (t.kind) {
+    case "string":
+      return "str";
+    case "bool":
+      return "bool";
+    case "array":
+      return `arr.${mangleType(t.elem)}`;
+    case "nullable":
+      return `opt.${mangleType(t.inner)}`;
+    case "struct":
+      return `$${t.name}`;
+    case "result":
+      return `res.${mangleType(t.ok)}.${mangleType(t.err)}`;
+    default:
+      return t.kind;
+  }
+}
+
+/** The LLVM struct name (without the `%struct.` prefix) backing a `Result` type. */
+export function resultStructName(t: StaticType): string {
+  if (t.kind !== "result") throw new Error(`resultStructName: not a Result type (${t.kind})`);
+  return `sts_result.${mangleType(t.ok)}.${mangleType(t.err)}`;
+}
+
 /** LLVM textual type for a StaticType. */
 export function llvmType(t: StaticType): string {
   switch (t.kind) {
@@ -189,6 +261,8 @@ export function llvmType(t: StaticType): string {
       return `%struct.${t.name}*`;
     case "nullable":
       return llvmType(t.inner);
+    case "result":
+      return `%struct.${resultStructName(t)}*`;
   }
 }
 
@@ -223,6 +297,8 @@ export function alignOf(t: StaticType): number {
       return 8; // a pointer
     case "nullable":
       return 8; // a pointer
+    case "result":
+      return 8; // a pointer
   }
 }
 
@@ -230,6 +306,7 @@ export function typeToString(t: StaticType): string {
   if (t.kind === "array") return `${typeToString(t.elem)}[]`;
   if (t.kind === "struct") return t.name;
   if (t.kind === "nullable") return `${typeToString(t.inner)} | null`;
+  if (t.kind === "result") return `Result<${typeToString(t.ok)}, ${typeToString(t.err)}>`;
   return t.kind === "bool" ? "boolean" : t.kind;
 }
 
@@ -238,6 +315,13 @@ export function sameType(a: StaticType, b: StaticType): boolean {
   if (a.kind === "struct") return a.name === (b as { name: string }).name;
   if (a.kind === "array") return sameType(a.elem, (b as { elem: StaticType }).elem);
   if (a.kind === "nullable") return sameType(a.inner, (b as { inner: StaticType }).inner);
+  // `state` is a proof about one use site, not part of the type: a `Result`
+  // narrowed to its `ok` arm is the same value, and the same LLVM pointer, as
+  // the un-narrowed one it came from (WP16).
+  if (a.kind === "result") {
+    const other = b as { ok: StaticType; err: StaticType };
+    return sameType(a.ok, other.ok) && sameType(a.err, other.err);
+  }
   return true;
 }
 
@@ -353,6 +437,9 @@ export function resolveTypeNode(
       return resolveNullableUnion(node as ts.UnionTypeNode, sourceFile, opts);
     case ts.SyntaxKind.TypeReference: {
       const ref = node as ts.TypeReferenceNode;
+      if (ts.isIdentifier(ref.typeName) && ref.typeName.text === "Result") {
+        return resolveResult(ref, sourceFile, opts);
+      }
       if (ts.isIdentifier(ref.typeName) && ref.typeName.text === "Array") {
         if (ref.typeArguments?.length !== 1) {
           throw new CompileError("`Array` needs exactly one type argument, e.g. `Array<number>`", node, sourceFile);
@@ -391,7 +478,7 @@ export function resolveTypeNode(
         if (named) return named;
       }
       throw new CompileError(
-        `Unsupported type reference \`${ref.getText(sourceFile)}\` (supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)`,
+        `Unsupported type reference \`${ref.getText(sourceFile)}\` (supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Result<T, E>, Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)`,
         node,
         sourceFile
       );
@@ -403,6 +490,35 @@ export function resolveTypeNode(
         sourceFile
       );
   }
+}
+
+/**
+ * `Result<T, E>` (WP16). Written like a generic, but there are no user
+ * generics in StaticTS: this is one built-in type constructor whose two
+ * arguments pick a monomorphised layout, exactly as `Array<T>` does.
+ *
+ * `T` may be `void` — `Result<void, E>` is the fallible operation that has
+ * nothing to hand back, and it carries no `value` field at all. `E` may not
+ * be, because a failure that says nothing is what `panic` is for.
+ */
+function resolveResult(ref: ts.TypeReferenceNode, sourceFile: ts.SourceFile, opts: CompilerOptions): StaticType {
+  if (ref.typeArguments?.length !== 2) {
+    throw new CompileError(
+      "`Result` needs exactly two type arguments, e.g. `Result<number, string>`",
+      ref,
+      sourceFile
+    );
+  }
+  const ok = resolveTypeNode(ref.typeArguments[0], sourceFile, opts);
+  const err = resolveTypeNode(ref.typeArguments[1], sourceFile, opts);
+  if (err.kind === "void") {
+    throw new CompileError(
+      "`Result<T, void>` is not supported: an error must carry a value (use `Result<T, string>`)",
+      ref.typeArguments[1],
+      sourceFile
+    );
+  }
+  return resultOf(ok, err);
 }
 
 function isNullTypeNode(t: ts.TypeNode): boolean {
@@ -419,6 +535,13 @@ function resolveNullableUnion(node: ts.UnionTypeNode, sourceFile: ts.SourceFile,
     throw new CompileError("Union types other than `T | null` are forbidden in StaticTS", node, sourceFile);
   }
   const inner = resolveTypeNode(members[0], sourceFile, opts);
+  if (inner.kind === "result") {
+    throw new CompileError(
+      "`Result<T, E> | null` is not supported: a `Result` already models absence through its error arm",
+      node,
+      sourceFile
+    );
+  }
   if (!isPointerType(inner)) {
     throw new CompileError(
       `\`${typeToString(inner)} | null\` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)`,

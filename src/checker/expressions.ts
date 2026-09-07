@@ -21,6 +21,7 @@ import {
   memberExpressionCheckers,
 } from "./members";
 import { nullableExpressionCheckers } from "./nullable";
+import { resultBuiltinFunctions } from "./result";
 import { checkBuiltinCall, stringBinaryCheckers, stringExpressionCheckers } from "./strings";
 import { BinaryChecker, CheckerTable, ExpressionChecker, UnaryChecker } from "./context";
 import {
@@ -204,6 +205,7 @@ export const builtinFunctions: Record<string, BuiltinCallChecker> = {
   ...conversionBuiltins, // WP7: toI32, toI64, toF64
   ...parseBuiltins, // WP7: parseInt, parseFloat, Number
   ...ioBuiltinFunctions, // WP7: readFileSync, writeFileSync, appendFileSync
+  ...resultBuiltinFunctions, // WP16: ok, err
 };
 
 const checkCall: ExpressionChecker = (ctx, node, scope) => {

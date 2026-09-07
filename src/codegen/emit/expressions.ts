@@ -13,6 +13,7 @@ import { ConstValue, constValue } from "../../checker/constants";
 import { BuiltinCall, f64Constant, floatConstant } from "./builtins";
 import { ioFunctionEmitters } from "./io";
 import { conversionEmitters, parseEmitters } from "./math";
+import { resultFunctionEmitters } from "./result";
 import { isAssignmentOperator } from "../../checker/classes";
 import { classExpressionEmitters, emitSuperCall } from "./classes";
 import { assignmentTargetEmitters, emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members";
@@ -175,6 +176,7 @@ export const builtinFunctionEmitters: Record<string, BuiltinCall> = {
   ...conversionEmitters, // WP7: toI32, toI64, toF64
   ...parseEmitters, // WP7: parseInt, parseFloat, Number
   ...ioFunctionEmitters, // WP7: readFileSync, writeFileSync, appendFileSync
+  ...resultFunctionEmitters, // WP16: ok, err
 };
 
 /** The identifier builtin a call resolves to, or undefined for calls to user functions. */

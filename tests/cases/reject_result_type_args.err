@@ -1,0 +1,1 @@
+`Result` needs exactly two type arguments, e.g. `Result<number, string>`

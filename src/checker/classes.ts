@@ -154,6 +154,12 @@ export function signatureStructNames(sig: FunctionSig): string[] {
     if (t.kind === "struct") names.add(t.name);
     else if (t.kind === "array") note(t.elem);
     else if (t.kind === "nullable") note(t.inner);
+    // A `Result<Config, IoError>` hands the importer both payload layouts
+    // without either name appearing in its source (WP16).
+    else if (t.kind === "result") {
+      note(t.ok);
+      note(t.err);
+    }
   };
   for (const p of sig.params.slice(sig.struct ? 1 : 0)) note(p.type);
   note(sig.returnType);
@@ -166,6 +172,10 @@ export function referencedStructNames(info: StructInfo): string[] {
     if (t.kind === "struct") names.add(t.name);
     else if (t.kind === "array") note(t.elem);
     else if (t.kind === "nullable") note(t.inner);
+    else if (t.kind === "result") {
+      note(t.ok);
+      note(t.err);
+    }
   };
   // `this` is skipped: it is the owner or its base, which is reached through
   // the `StructInfo` pointer rather than by name, and noting it would pull an
@@ -747,10 +757,6 @@ class DefiniteAssignment {
       this.requireAll(assigned, stmt);
       return "terminated";
     }
-    if (ts.isThrowStatement(stmt)) {
-      this.checkReads(stmt.expression, assigned);
-      return "terminated";
-    }
     if (ts.isBreakStatement(stmt) || ts.isContinueStatement(stmt)) return "terminated";
     if (ts.isIterationStatement(stmt, false)) {
       // The body may run zero times: its assignments do not count, but every
@@ -1140,6 +1146,12 @@ const checkFieldAssignment: BinaryChecker = (ctx, expr, scope) => {
     throw ctx.error(`Cannot assign to \`${target.getText(ctx.sf)}\``, target);
   }
   const receiver = ctx.checkExpression(target.expression, scope);
+  if (receiver.kind === "result") {
+    throw ctx.error(
+      `Cannot assign to \`${target.name.text}\` of ${typeToString(receiver)}: a \`Result\` is immutable once built (return a new \`ok(...)\` or \`err(...)\` instead)`,
+      target
+    );
+  }
   if (receiver.kind !== "struct") {
     throw ctx.error(`Cannot assign to property \`${target.name.text}\` of ${typeToString(receiver)}`, target);
   }

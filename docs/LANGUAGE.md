@@ -20,7 +20,9 @@ Conventions:
 - The exact IR for each construct is in [IR_COOKBOOK.md](IR_COOKBOOK.md).
 
 Contents: [Lexical rules](#lexical-rules) · [Types](#types) ·
-[Nullable types](#nullable-types) · [Declarations](#declarations) ·
+[Nullable types](#nullable-types) ·
+[Result and error handling](#result-and-error-handling) ·
+[Declarations](#declarations) ·
 [Statements](#statements) · [Expressions](#expressions) ·
 [Builtins](#builtins) · [Semantics decisions](#semantics-decisions) ·
 [Memory model](#memory-model) ·
@@ -90,6 +92,7 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 | `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). |
 | `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, and narrowing: [Nullable types](#nullable-types). |
+| `Result<T, E>` | `%struct.sts_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable yet) | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
 | `void` | `void` | – | `void` | Return type only. |
 
 Sources: `src/types.ts` (`llvmType`, `alignOf`), `src/interop/abi.ts`
@@ -315,7 +318,7 @@ value, so nothing is boxed; `null` takes its type from context.
   | Form | Where `p` is `T` |
   | --- | --- |
   | `if (p !== null) A else B` | in `A`; and after the `if` when `B` cannot fall through |
-  | `if (p === null) A else B` | in `B`; and after the `if` when `A` cannot fall through (`return`, `throw`, `break`, `continue`, `process.exit`) |
+  | `if (p === null) A else B` | in `B`; and after the `if` when `A` cannot fall through (`return`, `break`, `continue`, `process.exit`, `panic`) |
   | `while (p !== null) A`, `for (...; p !== null; ...) A` | in `A`, on every iteration |
   | `p !== null && e`, `p === null \|\| e` | in `e` |
   | `p !== null ? a : b` | in `a` (and in `b` for `=== null`) |
@@ -335,6 +338,150 @@ value, so nothing is boxed; `null` takes its type from context.
 - **Attributes**: a nullable parameter or return loses `nonnull` and
   `dereferenceable`; `align 8`, `readonly` and `nocapture` follow the usual
   rules ([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
+
+## Result and error handling
+
+A function that can fail says so in its return type, hands back a
+`Result<T, E>`, and the caller cannot get at the success value without first
+deciding what happens to the failure. There is no `throw`, no `try`, and no
+unwinding anywhere in the language (WP16;
+[wp16-results.md](wp16-results.md)).
+
+```ts
+function half(n: i32): Result<i32, string> {
+  if (n % 2 !== 0) {
+    return Err("odd");
+  }
+  return Ok(n / 2);
+}
+
+function quarter(n: i32): Result<i32, string> {
+  const h = half(n).orReturn();   // Rust's `?`: propagate the error
+  return half(h);
+}
+
+export function main(): i32 {
+  const outcome = quarter(8);
+  if (outcome.isErr()) {
+    console.log(outcome.error);
+    return 1;
+  }
+  console.log(outcome.value);
+  return 0;
+}
+```
+
+### The type
+
+`Result<T, E>` is a built-in type constructor with exactly two arguments — the
+same kind of thing `Array<T>` is, not a user generic, which StaticTS still does
+not have (`` `Result` needs exactly two type arguments, e.g. `Result<number, string>` ``,
+`tests/cases/reject_result_type_args`).
+
+- `T` may be `void`: `Result<void, E>` is the fallible operation with nothing
+  to hand back, and it carries no `value` at all
+  (`tests/cases/res_void`).
+- `E` may not be `void` (`` `Result<T, void>` is not supported ``): a failure
+  that says nothing is what `panic` is for.
+- `Result<T, E> | null` is refused (`tests/cases/reject_result_nullable`): the
+  error arm already models absence.
+- A `Result` is **immutable**. `r.ok = false` is
+  `` Cannot assign to `ok` of Result<i32, string>: a `Result` is immutable once built ``
+  (`tests/cases/reject_result_immutable`), which is what keeps a narrowing from
+  being falsified under it.
+
+Each distinct pair of payload types gets one monomorphised struct,
+`%struct.sts_result.<T>.<E> = type { i1, <T>, <E> }`, held by pointer and
+allocated exactly as a class is — so a `Result` costs what a small object
+costs, and one that does not outlive its function becomes an entry-block
+`alloca` with no allocator call at all (`tests/cases/res_stack`).
+
+### The surface
+
+| Spelling | Meaning | Test |
+| --- | --- | --- |
+| `Ok(v)`, `Ok()` | the success value; takes its `Result` type from the context, as `null` does. `Ok()` is the `Result<void, E>` form | `res_basic`, `res_void`; `reject_result_no_context` |
+| `Err(e)` | the failure value, likewise | `res_basic` |
+| `r.isOk()`, `r.isErr()` | the discriminant test, and what narrows `r` | `res_basic` |
+| `r.ok` | the same bit as a plain `boolean`; `if (r.ok)` narrows too, because a tagged union is how TypeScript itself would spell this | `res_basic` |
+| `r.value` | `T`, only where the checker proved `isOk()` | `res_basic`; `reject_result_value_unchecked` |
+| `r.error` | `E`, only where it proved `isErr()` | `res_basic`; `reject_result_error_in_ok_arm` |
+| `r.orReturn()` | `T` when ok; otherwise `return Err(r.error)` from the enclosing function — Rust's `?` | `res_propagate`; `reject_result_propagate_plain`, `reject_result_propagate_error_type` |
+| `r.unwrapOr(d)` | `T` when ok, `d` otherwise | `res_unwrap` |
+| `r.expect(message)` | `T` when ok; otherwise `message` on stderr and exit 1, the same ending `panic` has | `res_unwrap`, `res_void` |
+
+There is deliberately no `unwrap()`: `expect(message)` says the same thing and
+insists on a reason. There is no `map` / `andThen` / `orElse` either — they
+need function values, which StaticTS forbids because the whole-program pass
+cannot prove purity, termination or escape through an unknown callee.
+Narrowing plus `orReturn()` covers what those combinators are for.
+
+### The three rules
+
+**1. A `Result` cannot be dropped.** A call that answers one may not stand as
+an expression statement (`` `Result<i32, string>` must be handled, not
+discarded ``, `tests/cases/reject_result_discarded`), and a local that holds
+one must be read at least once (`` `outcome` holds a `Result<i32, string>`
+that is never inspected ``, `reject_result_unhandled`). Handing the value on —
+an argument, a `return` — counts as reading it: the responsibility moves with
+the value, and the receiving signature carries the same rules.
+
+**2. The error arm comes first.** `r.value` is legal only where the checker
+proved `isOk()`, `r.error` only where it proved `isErr()`. There is no
+spelling that reaches the success payload without deciding what happens to the
+failure, so the success path cannot be written before the error path is
+handled.
+
+Narrowing is the same engine as `T | null` (`src/checker/narrowing.ts`) and
+obeys the same rules: it applies to a **variable**, not a property path; it
+ends at any assignment to that variable; and it is dropped before a loop that
+assigns it. All three spellings compose with `!`, `&&`, `||` and the ternary,
+and hold after an `if` whose other branch cannot fall through:
+
+| Form | Where `r` reads as its ok arm |
+| --- | --- |
+| `if (r.isOk()) A else B` | in `A`; and after the `if` when `B` cannot fall through |
+| `if (r.isErr()) A else B` | in `B`; and after the `if` when `A` cannot fall through |
+| `if (r.ok) A else B` | as `isOk()` |
+| `r.isOk() && e`, `r.isErr() \|\| e` | in `e` |
+| `r.isOk() ? a : b` | in `a` (and in `b` for `isErr()`) |
+
+A field or element holding a `Result` is not narrowed; bind it to a local
+first, exactly as for a nullable.
+
+**3. Propagation is contagious.** `r.orReturn()` is legal only inside a
+function that itself returns a `Result` whose error arm accepts `E`
+(`` `orReturn()` propagates the error, so `main` must return a `Result<T, E>`
+(it returns i32) ``, and `` `orReturn()` would propagate IoError but `read`
+returns Result<i32, string> ``). A function that propagates a callee's failure
+therefore has to admit it in its own signature. There is no implicit error
+conversion — Rust's `From<E>` needs a trait and StaticTS has none — so a
+mismatch is named rather than papered over; convert it by hand with
+`if (r.isErr()) { return Err(...); }`.
+
+### It is still TypeScript
+
+Every line above parses as TypeScript, and with
+[`runtime/statictsc.d.ts`](../runtime/statictsc.d.ts) on the include path it
+type-checks under plain `tsc --strict` and in an editor too. The declarations
+model `Result` as the tagged union TypeScript would use anyway, intersected
+with the method surface, so `if (r.ok)` and `if (r.isOk())` narrow `r` in
+`tsc` for the same reason and in the same places they narrow here — and `tsc`
+refuses `r.value` before the test just as this compiler does (`tests/run.js`,
+"WP16: the ambient declarations").
+
+`statictsc` remains the authority: `tsc` cannot see that a `Result` may not be
+dropped, that `orReturn()` returns early, or that the enclosing function has
+to return a `Result` for it to be legal at all. A program `tsc` accepts may
+still be rejected here; the reverse is a bug in the declarations.
+
+### Interop
+
+A `Result` may not cross the host boundary yet. `--emit-header`, `--emit-dts`
+and `--emit-napi` skip a function whose signature mentions one and leave a
+note naming the type, because the C ABI for returning a small struct by value
+is lowering this frontend does not do (see
+[wp16-results.md](wp16-results.md) for what would change).
 
 ## Declarations
 
@@ -804,9 +951,9 @@ switch (node.kind) {
   `default` (`` `switch` has more than one `default` clause `` *(CLI only)*),
   which may appear anywhere among the clauses.
 - **There is no implicit fallthrough.** A clause with statements ends in
-  `break`, `return`, `continue`, `throw` or `process.exit`, unless it is the
+  `break`, `return`, `continue` or `process.exit`, unless it is the
   last clause (``A `case` clause with statements must end in `break`,
-  `return`, `continue` or `throw` ``,
+  `return`, `continue` or `process.exit` ``,
   `tests/cases/reject_switch_fallthrough`). An **empty** clause does fall
   through, which is how `case 1: case 2:` gives several labels one body
   (`tests/cases/cf_switch`).
@@ -831,12 +978,19 @@ enclosing loop or `switch` (`` `break` outside of a loop or `switch` ``,
 finds past any `switch` in between. `tests/cases/cf_break_continue`,
 `cf_switch_break`.
 
-### `throw`
+### `throw` (removed)
 
-`throw e` evaluates `e` (any non-`void` type; `Cannot throw a void expression`)
-and aborts the process via `llvm.trap`: there is no unwinding, no `catch`,
-and the value is discarded (`tests/cases/cf_throw`; `throw "message"`
-*(CLI only)*). `try`/`catch`/`finally` is forbidden
+`throw` is forbidden by Phase 0 (`tests/cases/reject_throw`). Until WP16 it
+compiled to `llvm.trap` — it aborted the process and discarded its value —
+which made it an abort wearing the syntax of error handling, and let a program
+report a failure in a way no caller could see. The two things it was used for
+have their own spelling now:
+
+- a failure a caller should handle is a **[`Result<T, E>`](#result-and-error-handling)**;
+- an invariant that cannot hold is **`panic(message)`**, which keeps the
+  message `throw` threw away.
+
+`try`/`catch`/`finally` is forbidden for the same reason
 (`tests/cases/reject_try_catch`).
 
 ### `process.exit(code)` as a statement
@@ -849,7 +1003,7 @@ purposes, the current path: a non-`void` function may end with it
 ### Termination, definite return, and unreachable code
 
 A statement *terminates* when control cannot fall out of it: `return`,
-`break`, `continue`, `throw`, `process.exit(...)`, `panic(...)`; an `if` whose branches
+`break`, `continue`, `process.exit(...)`, `panic(...)`; an `if` whose branches
 both terminate; a `switch` with a `default`, no `break` aimed at it and a
 terminating last clause; a loop with no condition or the condition `true` and
 no `break` aimed at it. Any other loop may run zero times and does not
@@ -860,11 +1014,11 @@ terminate. Rules (`src/checker/control-flow.ts`, `statements.ts`):
   `tests/cases/reject_missing_return`, `reject_cf_missing_return_loop`;
   `if (true) { return 1; }` alone is not enough *(CLI only)*).
 - A statement after a terminating one is `Unreachable code after <what>`,
-  where `<what>` is `return`, `break`, `continue`, `throw`, `process.exit`,
+  where `<what>` is `return`, `break`, `continue`, `process.exit`,
   `` an `if` whose branches all return ``, `` a `switch` whose clauses all
   return ``, or `an infinite loop`
   (`tests/cases/reject_unreachable`, `reject_cf_unreachable_after_break`,
-  `reject_exit_unreachable`; `throw` and `if` forms *(CLI only)*).
+  `reject_exit_unreachable`; the `if` form *(CLI only)*).
 
 ### Rejected statements
 
@@ -1043,7 +1197,7 @@ function ([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
 | `console.error(x): void` | the same, on **stderr** — the stream a compiler's diagnostics belong on (WP14 B2). Identical rules and identical messages under its own name | write | `io_streams`; `reject_console_error_type` |
 | `write(s: string): void` | `s` to stdout with **no** trailing newline and no conversion (a `string` only); statement position | write | `io_streams` |
 | `writeError(s: string): void` | the same, on stderr | write | `io_streams` |
-| `panic(message: string): void` | `message` and a newline to stderr, then exit 1 — the same ending an out-of-range index has. Statement position, and it **terminates control flow** like `process.exit`, so a non-`void` function may end with it. Where `throw` discards its value, this keeps it (WP14 D1) | write | `io_streams`; `reject_panic_value` |
+| `panic(message: string): void` | `message` and a newline to stderr, then exit 1 — the same ending an out-of-range index has. Statement position, and it **terminates control flow** like `process.exit`, so a non-`void` function may end with it. It is how a program ends on an unmet invariant now that `throw` is gone (WP14 D1, WP16) | write | `io_streams`; `reject_panic_value` |
 
 Numbers print as JavaScript's `String(x)`: exact decimal for `i32`/`i64`,
 shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
@@ -1258,8 +1412,9 @@ compiler's own marks are never invalidated by user resets.
   `2147483647`) like a Rust `as` cast, not JavaScript's modulo-2^32
   `ToInt32`. Integer-to-integer conversions wrap (`toI32(5000000000)` ->
   `705032704`) (`tests/cases/conversions`).
-- **No exceptions.** Functions are `nounwind`; `throw` traps
-  (`tests/cases/cf_throw`); runtime failures (bounds check, integer
+- **No exceptions.** Functions are `nounwind`, there is no `throw` and no
+  unwinding, and a failure a caller should handle is a `Result<T, E>`
+  (`tests/cases/res_basic`); runtime failures (bounds check, integer
   division, file errors, out of memory) print a message to stderr and exit
   with status 1 (`tests/cases/arr_bounds_panic`:
   `index out of range: <i> >= <len>`; `div_zero_panic`:
@@ -1438,7 +1593,8 @@ fragment `tests/run.js` matches and the case that proves it.
 | Construct | Message | Test |
 | --- | --- | --- |
 | `with` | `` `with` is forbidden in StaticTS (no dynamic scope) `` | `reject_with_statement` |
-| `try` / `catch` / `finally` | `` `try`/`catch`/`finally` is forbidden in StaticTS (no unwinding; `throw` aborts) `` | `reject_try_catch` |
+| `try` / `catch` / `finally` | `` `try`/`catch`/`finally` is forbidden in StaticTS (no unwinding; use `Result<T, E>`) `` | `reject_try_catch` |
+| `throw` | `` `throw` is forbidden in StaticTS (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process `` | `reject_throw` |
 | `debugger` | `` `debugger` is forbidden in StaticTS (no debugger hook) `` | `reject_debugger` |
 | labeled statements | `` Labeled statements are forbidden in StaticTS (use structured loops) `` | `reject_labeled_statement` |
 

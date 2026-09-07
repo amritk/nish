@@ -12,6 +12,7 @@ import { CheckContext, CheckerTable, StatementChecker } from "./context";
 import { controlFlowStatementCheckers } from "./control-flow";
 import { terminatesControlFlow } from "./io";
 import { LocalVar } from "./program";
+import { rejectDiscardedResult } from "./result";
 import { Scope } from "./scope";
 
 const checkReturn: StatementChecker = (ctx, node, scope) => {
@@ -82,7 +83,7 @@ export function checkVariableDeclarationList(
 
 const checkExpressionStatement: StatementChecker = (ctx, node, scope) => {
   const expr = (node as ts.ExpressionStatement).expression;
-  ctx.checkExpression(expr, scope);
+  rejectDiscardedResult(ctx, expr, ctx.checkExpression(expr, scope)); // WP16: a failure may not be dropped
   return terminatesControlFlow(ctx, expr); // WP7/WP14: `process.exit(n);` and `panic(m);` end the path like `return`
 };
 
@@ -104,7 +105,6 @@ const TERMINATOR_NAMES: Partial<Record<ts.SyntaxKind, string>> = {
   [ts.SyntaxKind.ReturnStatement]: "return",
   [ts.SyntaxKind.BreakStatement]: "break",
   [ts.SyntaxKind.ContinueStatement]: "continue",
-  [ts.SyntaxKind.ThrowStatement]: "throw",
   [ts.SyntaxKind.IfStatement]: "an `if` whose branches all return",
   [ts.SyntaxKind.SwitchStatement]: "a `switch` whose clauses all return",
 };

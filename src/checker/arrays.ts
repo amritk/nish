@@ -47,7 +47,7 @@ import {
 import { checkArgumentType, checkArity } from "./builtins";
 import { structOf } from "./classes";
 import { isValueReceiver, methodCallCheckers, newCheckers, propertyCheckers } from "./members";
-import { invalidateNarrowings } from "./nullable";
+import { invalidateNarrowings } from "./narrowing";
 import { LocalVar } from "./program";
 import { Scope } from "./scope";
 

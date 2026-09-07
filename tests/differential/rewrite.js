@@ -6,7 +6,7 @@
  * `i64` is a wrapping 64-bit integer, `u8`/`u16`/`u32`/`u64` are unsigned and
  * JavaScript has no unsigned integers at all, `f32` is a 32-bit float and
  * JavaScript has only doubles, `s.length` is a byte count,
- * `a[i]` is bounds-checked, `throw` traps. To run the same program under Node we
+ * `a[i]` is bounds-checked, an unmet invariant panics. To run the same program under Node we
  *
  *   1. check it with the compiler's own checker (dist/compiler.js), which
  *      records the StaticType of every expression in a side table;
@@ -228,7 +228,54 @@ const IDENTIFIER_BUILTINS = new Map([
   ["panic", "panic"],
   ["writeFileSync", "writeFileSync"],
   ["appendFileSync", "appendFileSync"],
+  // WP16: natively these bump a struct out of the arena; in JavaScript they
+  // build the object with the same three field names (`runtime/shim.mjs`).
+  ["Ok", "Ok"],
+  ["Err", "Err"],
 ]);
+
+/**
+ * `orReturn()` returns from the *enclosing* function, and no JavaScript
+ * expression can do that. The shim's method throws a sentinel instead and the
+ * body that contains the call is wrapped in the `try`/`catch` this predicate
+ * selects; `__sts.caught` turns the sentinel back into the `Err` the function
+ * should have returned, and re-raises anything else.
+ */
+function propagates(body) {
+  let found = false;
+  const walk = (node) => {
+    if (found) return;
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "orReturn"
+    ) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(node, walk);
+  };
+  walk(body);
+  return found;
+}
+
+/** `{ try { <body> } catch (e) { return __sts.caught(e); } }` */
+function wrapPropagation(body) {
+  const thrown = f.createIdentifier("__propagated");
+  return f.createBlock(
+    [
+      f.createTryStatement(
+        f.createBlock(body.statements, true),
+        f.createCatchClause(
+          f.createVariableDeclaration(thrown),
+          f.createBlock([f.createReturnStatement(shimCall("caught", [thrown]))], true)
+        ),
+        undefined
+      ),
+    ],
+    true
+  );
+}
 
 function zeroOf(elem) {
   if (BIG_KINDS.has(elem.kind)) return big(0);
@@ -350,11 +397,6 @@ function makeTransformer(unit, stems) {
         return node; // u8/u16/u32 literals are non-negative and in range already
       }
 
-      // ---- `throw e` -> trap ----
-      if (ts.isThrowStatement(node)) {
-        return f.createExpressionStatement(shimCall("trap", []));
-      }
-
       // ---- unary minus and ++/-- ----
       if (ts.isPrefixUnaryExpression(node)) {
         const kind = kindOf(node);
@@ -461,6 +503,21 @@ function makeTransformer(unit, stems) {
         const t = typeOf(node);
         const n = ts.visitNode(node.arguments[0], visit);
         return shimCall("newArray", [n, zeroOf(t.elem)]);
+      }
+
+      // ---- a body that propagates (WP16) ----
+      if (ts.isFunctionDeclaration(node) && node.body && propagates(node.body)) {
+        const body = ts.visitNode(node.body, visit);
+        return f.updateFunctionDeclaration(
+          node,
+          node.modifiers,
+          node.asteriskToken,
+          node.name,
+          node.typeParameters,
+          node.parameters.map((p) => ts.visitNode(p, visit)),
+          node.type,
+          wrapPropagation(body)
+        );
       }
 
       // ---- calls ----

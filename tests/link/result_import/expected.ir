@@ -1,0 +1,3 @@
+%struct.ParseError = type { i32, i8* }
+%struct.sts_result.i32.$ParseError = type { i1, i32, %struct.ParseError* }
+declare noundef nonnull align 8 dereferenceable(16) %struct.sts_result.i32.$ParseError* @parseDigit(i8* noundef nonnull noalias readonly align 8 nocapture, i32 noundef)

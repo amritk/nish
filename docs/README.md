@@ -23,7 +23,7 @@ where they disagree with LANGUAGE.md, LANGUAGE.md wins.
 | Document | One line |
 | --- | --- |
 | [wp0-validator.md](wp0-validator.md) | Design note: the Phase 0 forbidden-syntax sweep, every rule with the guarantee it protects, Biome setup. |
-| [wp1-control-flow.md](wp1-control-flow.md) | Design note: `if`, loops, `break`/`continue`, `throw`, ternary, `&&`/`\|\|`, compound assignment, `++`/`--`, and the `willreturn` rule. |
+| [wp1-control-flow.md](wp1-control-flow.md) | Design note: `if`, loops, `break`/`continue`, ternary, `&&`/`\|\|`, compound assignment, `++`/`--`, and the `willreturn` rule. |
 | [wp2-classes.md](wp2-classes.md) | Design note: classes and interfaces as LLVM structs, layout, definite assignment, `readonly`, `implements`, struct-pointer attributes. |
 | [wp3-strings.md](wp3-strings.md) | Design note: string layout, literals, concatenation, equality, `.length`, templates, `console.log`, purity facts. |
 | [wp4-arrays.md](wp4-arrays.md) | Design note: the array header, literals, `new Array`, bounds checks and `--unchecked-indexing`, `push`, `for...of`, vectorisation. |
@@ -37,6 +37,8 @@ where they disagree with LANGUAGE.md, LANGUAGE.md wins.
 | [wp13-differential.md](wp13-differential.md) | Design note: differential testing against Node, the typed rewrite rules, `runtime/shim.mjs`, the corpus and the fuzzer, every discrepancy found (with which ones were fixed since). |
 | [wp14-selfhost.md](wp14-selfhost.md) | The plan of record for self-hosting, and what it cost: StaticTS-0 and what it forces, the language gap measured, the five milestones, the oracles, and the bootstrap that closed it. |
 | [wp15-performance.md](wp15-performance.md) | The rule that speed decides a tie and that "faster" means measured: the data-oriented paradigm and how it is enforced, the language features the ordering requires, and the diagnostics that keep the decisions visible. |
+
+| [wp16-results.md](wp16-results.md) | Design note: `Result<T, E>`, the three rules that make a failure impossible to ignore, why the representation is a pointer rather than an LLVM aggregate, why `throw` was removed, and the ambient declarations that keep a StaticTS program type-checkable by `tsc`. |
 
 The remaining semantic changes after WP13 (checked integer division,
 ECMAScript `Math.pow`, numeric-only ordering, `?.`/`??` rejected,

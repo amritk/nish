@@ -1,0 +1,18 @@
+# Cases stage1 does not yet refuse with stage0's message, one name per line;
+# `#` starts a comment. This is the current state of the self-hosting port
+# (docs/wp14-selfhost.md), not a permanent exemption: the oracle fails if a
+# listed case starts agreeing, so an entry is removed as the port reaches it.
+
+# WP16: `Result<T, E>` is not in stage1's type model yet, so every case below is
+# refused by `Unsupported type reference \`Result<...>\`` rather than by the rule
+# it is there to pin. Stage1 does refuse them all — it just cannot say why yet.
+reject_result_discarded
+reject_result_error_in_ok_arm
+reject_result_immutable
+reject_result_no_context
+reject_result_nullable
+reject_result_propagate_error_type
+reject_result_propagate_plain
+reject_result_type_args
+reject_result_unhandled
+reject_result_value_unchecked

@@ -54,6 +54,7 @@ import { CheckedProgram, FieldInfo, FunctionSig, ImportBinding, StructInfo } fro
 import { effectiveConstructor, explicitSuperCall, intrinsicType, isAssignmentOperator, ownFields } from "../../checker/classes";
 import { StaticType, isFloat, llvmType } from "../../types";
 import { emitIntBinary } from "./arithmetic";
+import { resultTypeDecl } from "./result";
 import { floatConstant } from "./builtins";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
 import {
@@ -302,8 +303,19 @@ export function structTypeDeclarations(program: CheckedProgram): string[] {
   const lines: string[] = [];
   const declared = new Set<string>();
   const referenced = new Set<string>();
+  // A `Result` layout is derived from the type, not declared (WP16), so it is
+  // emitted here rather than looked up: a field or signature that mentions one
+  // is enough to need it in this module.
+  const results = new Set<string>();
   const note = (t: StaticType) => {
     if (t.kind === "struct") referenced.add(t.name);
+    else if (t.kind === "array") note(t.elem);
+    else if (t.kind === "nullable") note(t.inner);
+    else if (t.kind === "result") {
+      note(t.ok);
+      note(t.err);
+      results.add(resultTypeDecl(t));
+    }
   };
   const noteSig = (sig: FunctionSig) => {
     for (const p of sig.params) note(p.type);
@@ -326,6 +338,7 @@ export function structTypeDeclarations(program: CheckedProgram): string[] {
   for (const sig of program.functions) noteSig(sig);
   for (const imp of program.imports) if (imp.sig) noteSig(imp.sig);
   for (const name of referenced) if (!declared.has(name)) lines.push(`%struct.${name} = type opaque`);
+  lines.push(...results);
   return lines;
 }
 

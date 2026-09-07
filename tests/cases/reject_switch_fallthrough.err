@@ -1,1 +1,1 @@
-must end in `break`, `return`, `continue` or `throw`
+must end in `break`, `return`, `continue` or `process.exit`
