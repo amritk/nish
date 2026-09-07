@@ -1,1 +1,1 @@
-`toU32` expects a number (i32, i64, u8, u16, u32, u64, or f64), got string
+`toU32` expects a number (i32, i64, u8, u16, u32, u64, f32, or f64), got string

@@ -42,6 +42,7 @@ const BASIC_TYPES: Partial<Record<StaticType["kind"], string>> = {
   u16: '!DIBasicType(name: "unsigned short", size: 16, encoding: DW_ATE_unsigned)',
   u32: '!DIBasicType(name: "unsigned int", size: 32, encoding: DW_ATE_unsigned)',
   u64: '!DIBasicType(name: "unsigned long", size: 64, encoding: DW_ATE_unsigned)',
+  f32: '!DIBasicType(name: "float", size: 32, encoding: DW_ATE_float)',
   f64: '!DIBasicType(name: "double", size: 64, encoding: DW_ATE_float)',
   bool: '!DIBasicType(name: "bool", size: 8, encoding: DW_ATE_boolean)',
 };
@@ -203,6 +204,8 @@ export class DebugInfo {
 function bitsOf(t: StaticType): number {
   if (isInteger(t)) return intBits(t);
   switch (t.kind) {
+    case "f32":
+      return 32;
     case "bool":
       return 8;
     case "void":

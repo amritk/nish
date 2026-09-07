@@ -167,6 +167,24 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   unsigned through the new `sts_str_from_u64` (the narrow widths `zext` into
   it, so one runtime symbol serves all four). `--emit-header` spells them
   `uint8_t` … `uint64_t` and `--emit-dts` `number` / `bigint`.
+- **32-bit floats: `f32`.** LLVM's `float`, with the same instructions `f64`
+  already uses one width down (`fadd`/`fsub`/`fmul`/`fdiv`/`frem`, `fcmp o*`,
+  `fneg`); float division stays unchecked. A struct of `f32` is half the
+  footprint of one of `f64` and gives twice the SIMD lane count, which serves
+  the speed and the size goal at once. `toF32` joins the conversion builtins:
+  `fptrunc` down from an `f64`, `fpext` up, `sitofp`/`uitofp` in from an
+  integer by the source's signedness, and the saturating
+  `llvm.fpto{s,u}i.sat.<T>.f32` out to one. There is no implicit widening, so
+  `f32 + f64` is the same same-type error as `u32 + i32`. A non-integer
+  literal takes `f32` from context and is emitted as the hex of the double it
+  equals, rounded so that double is exactly a float — `0.1` is
+  `float 0x3FB99999A0000000`, not the `f64` spelling `0x3FB999999999999A`.
+  `console.log` and template holes widen with `fpext` and reuse
+  `sts_str_from_f64`, adding no runtime code, so an `f32` prints
+  JavaScript's digits for the float's value (`0.10000000149011612` for `0.1`).
+  `Math.abs`/`min`/`max` work through the `.f32` intrinsics; the f64-only
+  `Math` functions stay f64-only. `Float32Array` is one more typed-array alias
+  for `f32[]`. `--emit-header` spells it `float` and `--emit-dts` `number`.
 - **Shifts `>>` and `>>>`.** Two operands of one integer type. `>>` is `ashr`
   on a signed type and `lshr` on an unsigned one; `>>>` is always `lshr`, so
   the two are synonyms on an unsigned type. `i32 >>> n` keeps its documented

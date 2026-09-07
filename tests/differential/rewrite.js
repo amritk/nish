@@ -4,7 +4,8 @@
  * A StaticTS program is valid TypeScript, but its *semantics* are not
  * JavaScript's: `number` is a wrapping 32-bit integer in the default mode,
  * `i64` is a wrapping 64-bit integer, `u8`/`u16`/`u32`/`u64` are unsigned and
- * JavaScript has no unsigned integers at all, `s.length` is a byte count,
+ * JavaScript has no unsigned integers at all, `f32` is a 32-bit float and
+ * JavaScript has only doubles, `s.length` is a byte count,
  * `a[i]` is bounds-checked, `throw` traps. To run the same program under Node we
  *
  *   1. check it with the compiler's own checker (dist/compiler.js), which
@@ -52,6 +53,12 @@ const UNSIGNED_KINDS = new Set(["u8", "u16", "u32", "u64"]);
 /** BigInt kinds: the two 64-bit widths, which do not fit a JavaScript `number`. */
 const BIG_KINDS = new Set(["i64", "u64"]);
 
+/** `Math.fround(x)`: the nearest 32-bit float, which is what an `f32` holds. */
+const froundCall = (expr) =>
+  f.createCallExpression(f.createPropertyAccessExpression(f.createIdentifier("Math"), "fround"), undefined, [
+    expr,
+  ]);
+
 /**
  * Give an arithmetic *result* the wrapping semantics of its StaticType.
  *
@@ -68,6 +75,10 @@ function wrap(kind, expr) {
   if (kind === "u16") return paren(bin(expr, ts.SyntaxKind.AmpersandToken, num(0xffff)));
   if (kind === "u32") return paren(bin(expr, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken, num(0)));
   if (kind === "u64") return shimCall("wrapU64", [expr]);
+  // f32: JavaScript has only doubles, so every f32 result is rounded to the
+  // nearest float with `Math.fround`. Without it 0.1 stays 0.1 here and is
+  // 0.10000000149011612 natively, which is where a missing round shows up.
+  if (kind === "f32") return froundCall(expr);
   return expr;
 }
 
@@ -84,7 +95,7 @@ function arith(kind, op, a, b) {
     return kind === "u32" ? wrap(kind, imul) : imul;
   }
   const plain = bin(a, op, b);
-  if (INT_KINDS.has(kind)) return wrap(kind, paren(plain));
+  if (INT_KINDS.has(kind) || kind === "f32") return wrap(kind, paren(plain));
   return paren(plain);
 }
 
@@ -128,8 +139,9 @@ const ARITHMETIC = new Set([
 ]);
 /**
  * The numeric conversion builtins and the StaticType each produces. A
- * conversion with an unsigned type on either side goes through `__sts.convert`,
- * which takes both kinds; the purely signed ones keep their own shim helpers.
+ * conversion with an unsigned type or an `f32` on either side goes through
+ * `__sts.convert`, which takes both kinds; the plain signed/f64 ones keep
+ * their own shim helpers.
  */
 const CONVERSION_TARGETS = {
   toI32: "i32",
@@ -138,6 +150,7 @@ const CONVERSION_TARGETS = {
   toU16: "u16",
   toU32: "u32",
   toU64: "u64",
+  toF32: "f32",
   toF64: "f64",
 };
 
@@ -220,7 +233,9 @@ function makeTransformer(unit, stems) {
 
       // ---- numeric literal typed i64/u64 by context -> BigInt literal ----
       if (ts.isNumericLiteral(node)) {
-        if (BIG_KINDS.has(kindOf(node))) return big(BigInt(Number(node.text)));
+        const k = kindOf(node);
+        if (BIG_KINDS.has(k)) return big(BigInt(Number(node.text)));
+        if (k === "f32") return froundCall(node); // `0.1` is not a float
         return node; // u8/u16/u32 literals are non-negative and in range already
       }
 
@@ -240,7 +255,7 @@ function makeTransformer(unit, stems) {
           node.operator === ts.SyntaxKind.PlusPlusToken ||
           node.operator === ts.SyntaxKind.MinusMinusToken
         ) {
-          if (!INT_KINDS.has(kind)) return node; // f64: JS semantics are the fadd/fsub
+          if (!INT_KINDS.has(kind) && kind !== "f32") return node; // f64: JS semantics are the fadd/fsub
           const op =
             node.operator === ts.SyntaxKind.PlusPlusToken
               ? ts.SyntaxKind.PlusToken
@@ -253,7 +268,7 @@ function makeTransformer(unit, stems) {
       }
       if (ts.isPostfixUnaryExpression(node)) {
         const kind = kindOf(node);
-        if (!INT_KINDS.has(kind)) return node;
+        if (!INT_KINDS.has(kind) && kind !== "f32") return node;
         const inc = node.operator === ts.SyntaxKind.PlusPlusToken;
         const one = BIG_KINDS.has(kind) ? big(1) : num(1);
         // x++  ->  wrap((x = wrap(x + 1)) - 1): the old value, recovered with wrapping arithmetic.
@@ -338,7 +353,7 @@ function makeTransformer(unit, stems) {
       if (
         ts.isNewExpression(node) &&
         ts.isIdentifier(node.expression) &&
-        /^(Array|Int32Array|Float64Array|BigInt64Array)$/.test(node.expression.text)
+        /^(Array|Int32Array|Float32Array|Float64Array|BigInt64Array)$/.test(node.expression.text)
       ) {
         const t = typeOf(node);
         const n = ts.visitNode(node.arguments[0], visit);
@@ -374,11 +389,13 @@ function makeTransformer(unit, stems) {
           !callees.has(node) && // a user function of the same name shadows the builtin
           !bindings.has(node.expression)
         ) {
-          // A conversion with an unsigned type on either side goes through the
-          // one shim helper that knows the whole sext/zext/trunc matrix (WP15).
+          // A conversion with an unsigned type or an `f32` on either side goes
+          // through the one shim helper that knows the whole
+          // sext/zext/trunc/fptrunc/fround matrix (WP15).
           const to = CONVERSION_TARGETS[node.expression.text];
           const from = to === undefined ? undefined : kindOf(node.arguments[0]);
-          if (to !== undefined && (UNSIGNED_KINDS.has(to) || UNSIGNED_KINDS.has(from))) {
+          const touchesF32 = to === "f32" || from === "f32";
+          if (to !== undefined && (touchesF32 || UNSIGNED_KINDS.has(to) || UNSIGNED_KINDS.has(from))) {
             return shimCall("convert", [args[0], str(from), str(to)]);
           }
           if (IDENTIFIER_BUILTINS.has(node.expression.text)) {

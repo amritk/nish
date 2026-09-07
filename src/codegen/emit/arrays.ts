@@ -42,7 +42,7 @@
  */
 import ts from "typescript";
 import { CheckedProgram } from "../../checker";
-import { ARRAY_STRUCT, StaticType, TYPED_ARRAY_ALIASES, alignOf, isUnsigned, llvmType } from "../../types";
+import { ARRAY_STRUCT, StaticType, TYPED_ARRAY_ALIASES, alignOf, isFloat, isUnsigned, llvmType } from "../../types";
 import { ARRAY_TYPE } from "../runtime";
 import { emitIntBinary } from "./arithmetic";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, StatementEmitter } from "./context";
@@ -100,7 +100,7 @@ function emitIndex(ctx: EmitContext, expr: ts.Expression): string {
   const value = ctx.emitExpression(expr);
   const ty = llvmType(type);
   if (ty === "i64") return value;
-  if (ty === "double") return ctx.fn.emitValue(`fptosi double ${value} to i64`);
+  if (isFloat(type)) return ctx.fn.emitValue(`fptosi ${ty} ${value} to i64`);
   return ctx.fn.emitValue(`${isUnsigned(type) ? "zext" : "sext"} ${ty} ${value} to i64`);
 }
 
@@ -255,7 +255,7 @@ const emitElementAssignment: BinaryEmitter = (ctx, expr) => {
   const rhs = ctx.emitExpression(expr.right);
   const [intOp, floatOp] = COMPOUND_OPCODES[op]!;
   const value =
-    elem.kind === "f64" ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`) : emitIntBinary(ctx, intOp, elem, old, rhs);
+    isFloat(elem) ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`) : emitIntBinary(ctx, intOp, elem, old, rhs);
   ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${ctx.alignSuffix(elem)}`);
   return value;
 };

@@ -445,7 +445,7 @@ if (!only || "layout".includes(only)) {
     const diffs = [];
     for (const [name, size] of fromC) if (fromIr.get(name) !== size) diffs.push(`${name}: C ${size}, IR ${fromIr.get(name)}`);
     check(`layout: compiler sizes match structs.c for ${fromC.size} structs (${[...fromC].map(([n, s]) => `${n}=${s}`).join(" ")})`,
-      fromC.size === 14 && fromIr.size === 14 && diffs.length === 0, diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`);
+      fromC.size === 15 && fromIr.size === 15 && diffs.length === 0, diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`);
     if (HAS_CLANG) {
       // WP2b: the C header lists every class with its flattened fields; a derived
       // struct must therefore have the size the compiler (and structs.c) computed.

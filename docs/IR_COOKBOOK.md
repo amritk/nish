@@ -1200,6 +1200,78 @@ attributes #2 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end expr_unsigned -->
 
+### `f32`
+
+`f32` is LLVM's `float`: the same instructions as `f64`, one width down.
+`fptrunc` narrows from a double and `fpext` widens back, and a float-to-integer
+conversion uses the saturating intrinsic with an `.f32` source suffix.
+
+The constant is the part worth reading closely. LLVM writes a `float` constant
+with the **64-bit** hex of the double it equals, and requires that double to be
+exactly representable as a float — so `0.1` as an `f32` is
+`0x3FB99999A0000000`, the double nearest to `(float) 0.1`, and not the `f64`
+spelling `0x3FB999999999999A`.
+
+<!-- cookbook:begin expr_f32 -->
+```ts
+function blend(a: f32, b: f32): f32 {
+  return (a + b) / b;
+}
+
+function narrow(x: f64): f32 {
+  return toF32(x);
+}
+
+function widen(x: f32): f64 {
+  return toF64(x);
+}
+
+function truncate(x: f32): i32 {
+  return toI32(x);
+}
+
+function tenth(): f32 {
+  return 0.1;
+}
+```
+
+```llvm
+declare i32 @llvm.fptosi.sat.i32.f32(float) #0
+
+define noundef float @blend(float noundef %a, float noundef %b) #0 {
+entry:
+  %0 = fadd float %a, %b
+  %1 = fdiv float %0, %b
+  ret float %1
+}
+
+define noundef float @narrow(double noundef %x) #0 {
+entry:
+  %0 = fptrunc double %x to float
+  ret float %0
+}
+
+define noundef double @widen(float noundef %x) #0 {
+entry:
+  %0 = fpext float %x to double
+  ret double %0
+}
+
+define noundef i32 @truncate(float noundef %x) #0 {
+entry:
+  %0 = call i32 @llvm.fptosi.sat.i32.f32(float %x)
+  ret i32 %0
+}
+
+define noundef float @tenth() #0 {
+entry:
+  ret float 0x3FB99999A0000000
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end expr_f32 -->
+
 ## Strings
 
 ### Literals

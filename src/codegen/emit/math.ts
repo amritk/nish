@@ -50,7 +50,22 @@
  * whose clamp is to `0 .. 2^bits-1`, so a negative double becomes 0.
  */
 import { CheckedProgram } from "../../checker";
-import { F64, I32, I64, StaticType, U8, U16, U32, U64, intBits, isInteger, isUnsigned, llvmType } from "../../types";
+import {
+  F32,
+  F64,
+  I32,
+  I64,
+  StaticType,
+  U8,
+  U16,
+  U32,
+  U64,
+  intBits,
+  isFloat,
+  isInteger,
+  isUnsigned,
+  llvmType,
+} from "../../types";
 import { BuiltinCall, BuiltinProperty, f64Constant } from "./builtins";
 import { EmitContext } from "./context";
 
@@ -63,7 +78,8 @@ function callIntrinsic(ctx: EmitContext, name: string, ret: string, args: string
 /** `Math.<f>(x: f64): f64` as one intrinsic call. */
 function f64Unary(intrinsic: string): BuiltinCall {
   return {
-    emit: (ctx, expr) => callIntrinsic(ctx, intrinsic, "double", `double ${ctx.emitExpression(expr.arguments[0])}`),
+    emit: (ctx, expr) =>
+      callIntrinsic(ctx, intrinsic, "double", `double ${ctx.emitExpression(expr.arguments[0])}`),
     callees: () => [intrinsic],
   };
 }
@@ -105,7 +121,7 @@ const mathRound: BuiltinCall = {
  */
 function absIntrinsic(t: StaticType): string | undefined {
   if (isUnsigned(t)) return undefined;
-  return isInteger(t) ? `llvm.abs.${llvmType(t)}` : "llvm.fabs.f64";
+  return isInteger(t) ? `llvm.abs.${llvmType(t)}` : `llvm.fabs.${t.kind}`;
 }
 
 const mathAbs: BuiltinCall = {
@@ -125,7 +141,7 @@ const mathAbs: BuiltinCall = {
 
 /** `llvm.umin`/`umax` for the unsigned widths, `smin`/`smax` for the signed ones. */
 function minMaxIntrinsic(which: "min" | "max", t: StaticType): string {
-  if (!isInteger(t)) return `llvm.${which}num.f64`;
+  if (!isInteger(t)) return `llvm.${which}num.${t.kind}`;
   return `llvm.${isUnsigned(t) ? "u" : "s"}${which}.${llvmType(t)}`;
 }
 
@@ -160,7 +176,9 @@ const F64_UNARY: Record<string, string> = {
 
 /** Dotted callees, spread into `builtinCallEmitters`; mirrors `mathBuiltinCalls`. */
 export const mathBuiltinCallEmitters: Record<string, BuiltinCall> = {
-  ...Object.fromEntries(Object.entries(F64_UNARY).map(([f, intrinsic]) => [`Math.${f}`, f64Unary(intrinsic)])),
+  ...Object.fromEntries(
+    Object.entries(F64_UNARY).map(([f, intrinsic]) => [`Math.${f}`, f64Unary(intrinsic)])
+  ),
   "Math.pow": mathPow,
   "Math.round": mathRound,
   "Math.abs": mathAbs,
@@ -184,8 +202,8 @@ export const mathPropertyEmitters: Record<string, BuiltinProperty> = {
  * minimum, which is the only sensible answer for an unsigned type (WP15).
  */
 function conversionIntrinsic(from: StaticType, to: StaticType): string | undefined {
-  if (from.kind !== "f64" || !isInteger(to)) return undefined;
-  return `llvm.${isUnsigned(to) ? "fptoui" : "fptosi"}.sat.${llvmType(to)}.f64`;
+  if (!isFloat(from) || !isInteger(to)) return undefined;
+  return `llvm.${isUnsigned(to) ? "fptoui" : "fptosi"}.sat.${llvmType(to)}.${from.kind}`;
 }
 
 /**
@@ -199,13 +217,20 @@ function conversionIntrinsic(from: StaticType, to: StaticType): string | undefin
  */
 export function emitConversion(ctx: EmitContext, value: string, from: StaticType, to: StaticType): string {
   if (from.kind === to.kind) return value;
-  const intrinsic = conversionIntrinsic(from, to);
-  if (intrinsic) return callIntrinsic(ctx, intrinsic, llvmType(to), `double ${value}`);
-  if (to.kind === "f64") {
-    return ctx.fn.emitValue(`${isUnsigned(from) ? "uitofp" : "sitofp"} ${llvmType(from)} ${value} to double`);
-  }
   const fromTy = llvmType(from);
   const toTy = llvmType(to);
+  const intrinsic = conversionIntrinsic(from, to);
+  if (intrinsic) return callIntrinsic(ctx, intrinsic, toTy, `${fromTy} ${value}`);
+  if (isFloat(to)) {
+    // float -> float is a plain widen or narrow; integer -> float picks the
+    // family by the source's signedness, so a u32 above INT_MAX converts to
+    // four billion rather than to a negative double (WP15).
+    if (isFloat(from)) {
+      const widen = from.kind === "f32"; // the only float pair today is f32 <-> f64
+      return ctx.fn.emitValue(`${widen ? "fpext" : "fptrunc"} ${fromTy} ${value} to ${toTy}`);
+    }
+    return ctx.fn.emitValue(`${isUnsigned(from) ? "uitofp" : "sitofp"} ${fromTy} ${value} to ${toTy}`);
+  }
   if (fromTy === toTy) return value; // i32 <-> u32, i64 <-> u64: the same bits, read differently
   const op = intBits(from) < intBits(to) ? (isUnsigned(from) ? "zext" : "sext") : "trunc";
   return ctx.fn.emitValue(`${op} ${fromTy} ${value} to ${toTy}`);
@@ -232,6 +257,7 @@ export const conversionEmitters: Record<string, BuiltinCall> = {
   toU16: conversion(U16),
   toU32: conversion(U32),
   toU64: conversion(U64),
+  toF32: conversion(F32),
   toF64: conversion(F64),
 };
 
@@ -268,7 +294,8 @@ const numberOf: BuiltinCall = {
     if (from.kind === "bool") return ctx.fn.emitValue(`uitofp i1 ${value} to double`);
     return emitConversion(ctx, value, from, F64);
   },
-  callees: (program, expr) => (program.types.get(expr.arguments[0])!.kind === "string" ? [PARSE_RUNTIME] : []),
+  callees: (program, expr) =>
+    program.types.get(expr.arguments[0])!.kind === "string" ? [PARSE_RUNTIME] : [],
 };
 
 /** Identifier callees, spread into `builtinFunctionEmitters`; mirrors `parseBuiltins`. */

@@ -4,11 +4,11 @@
  * value (temp, parameter, or constant) that holds the expression's result.
  */
 import ts from "typescript";
-import { StaticType, isInteger, llvmType } from "../../types";
+import { StaticType, isFloat, isInteger, llvmType } from "../../types";
 import { emitIntBinary } from "./arithmetic";
 import { arrayExpressionEmitters, installArrayAssignmentEmitters } from "./arrays";
 import { CheckedProgram } from "../../checker";
-import { BuiltinCall, f64Constant } from "./builtins";
+import { BuiltinCall, floatConstant } from "./builtins";
 import { ioFunctionEmitters } from "./io";
 import { conversionEmitters, parseEmitters } from "./math";
 import { isAssignmentOperator } from "../../checker/classes";
@@ -32,8 +32,10 @@ export function numericConstant(text: string, type: StaticType): string {
   // unsigned constant that fits the width as those bits, which is what we want.
   if (isInteger(type)) return String(n);
   // LLVM only accepts decimal float literals that round-trip exactly, so
-  // emit the IEEE-754 bit pattern instead; that is always valid.
-  return f64Constant(n);
+  // emit the IEEE-754 bit pattern instead; that is always valid. An `f32`
+  // constant is written with the hex of the *double* it equals, rounded
+  // through `fround` so that double is exactly a float (WP15).
+  return floatConstant(n, type);
 }
 
 const emitParenthesized: ExpressionEmitter = (ctx, expr) =>
@@ -62,7 +64,7 @@ const emitNegate: UnaryEmitter = (ctx, expr) => {
   const operand = ctx.emitExpression(expr.operand);
   return isInteger(type)
     ? ctx.fn.emitValue(`${intOpcode(ctx, "sub", type)} ${llvmType(type)} 0, ${operand}`)
-    : ctx.fn.emitValue(`fneg double ${operand}`);
+    : ctx.fn.emitValue(`fneg ${llvmType(type)} ${operand}`);
 };
 
 const emitNot: UnaryEmitter = (ctx, expr) => ctx.fn.emitValue(`xor i1 ${ctx.emitExpression(expr.operand)}, true`);
@@ -109,7 +111,7 @@ const ARITHMETIC_OPCODES: Partial<Record<ts.SyntaxKind, [string, string]>> = {
 export function binaryOpcode(op: ts.SyntaxKind, type: StaticType, ctx?: EmitContext): string {
   const pair = ARITHMETIC_OPCODES[op];
   if (!pair) throw new Error(`emitter: unexpected binary operator ${ts.SyntaxKind[op]}`);
-  return type.kind === "f64" ? pair[1] : ctx ? intOpcode(ctx, pair[0], type) : pair[0];
+  return isFloat(type) ? pair[1] : ctx ? intOpcode(ctx, pair[0], type) : pair[0];
 }
 
 /** Arithmetic and comparison: evaluate left then right (JS order), one instruction. */

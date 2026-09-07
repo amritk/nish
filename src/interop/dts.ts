@@ -32,6 +32,7 @@ export function wasmType(t: StaticType, position: "param" | "return"): string | 
     case "u8":
     case "u16":
     case "u32":
+    case "f32":
     case "f64":
       return "number";
     case "i64":

@@ -123,9 +123,11 @@ The checklist every work package has followed (MASTER_PLAN.md §7):
 3. **Types.** New type? Extend `StaticType`, `llvmType`, `alignOf`,
    `sameType`, `typeToString`, `resolveTypeNode` in `src/types.ts`, and
    `cType`/`isScalar`/`tsKeyword` in `src/interop/abi.ts`. A numeric type
-   also touches `isNumeric`/`isInteger` (and `isUnsigned`/`intBits` for an
-   integer width), `wasmType` in `interop/dts.ts`, and `BASIC_TYPES`/`bitsOf`
-   in `codegen/debug.ts`.
+   also touches `isNumeric` plus `isInteger` (and `isUnsigned`/`intBits` for
+   an integer width) or `isFloat` (and `floatConstant` in
+   `codegen/emit/builtins.ts` for the constant encoding), `wasmType` in
+   `interop/dts.ts`, `crossesWasm` in `interop/wasm.ts`, and
+   `BASIC_TYPES`/`bitsOf` in `codegen/debug.ts`.
 4. **Checker.** Write a handler in the matching family module (or a new
    one), register it in the table, record every type/binding the emitter
    will need in `CheckedProgram`, and give every rejection a message that

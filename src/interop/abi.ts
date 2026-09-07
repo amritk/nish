@@ -61,7 +61,7 @@ function writtenArrayParams(sig: FunctionSig, facts: FunctionFacts | undefined):
  * arrays and objects are pointers into the arena).
  */
 export interface TypedView {
-  /** `Int32Array`, `Float64Array`, `BigInt64Array`: the StaticTS alias and the JS constructor. */
+  /** `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array`: the StaticTS alias and the JS constructor. */
   ctor: string;
   elemSize: 4 | 8;
   cElem: string;
@@ -73,6 +73,8 @@ export function typedView(t: StaticType): TypedView | undefined {
   switch (kindOf((t as { elem: StaticType }).elem)) {
     case "i32":
       return { ctor: "Int32Array", elemSize: 4, cElem: "int32_t", napiType: "napi_int32_array" };
+    case "f32":
+      return { ctor: "Float32Array", elemSize: 4, cElem: "float", napiType: "napi_float32_array" };
     case "f64":
       return { ctor: "Float64Array", elemSize: 8, cElem: "double", napiType: "napi_float64_array" };
     case "i64":
@@ -115,6 +117,8 @@ export function cType(t: StaticType, position: "param" | "return", written = fal
       return "uint32_t";
     case "u64":
       return "uint64_t";
+    case "f32":
+      return "float";
     case "f64":
       return "double";
     case "bool":
@@ -153,9 +157,9 @@ export function cFieldType(t: StaticType): string {
 
 /**
  * True for the types the scalar-only bridges (N-API shim, wasm typings) can
- * pass without marshalling. `u8`/`u16`/`u32` join `i32` because they all fit
- * a JavaScript `number`; `i64` and `u64` do not, and stay out exactly as
- * `i64` always has.
+ * pass without marshalling. `u8`/`u16`/`u32` and `f32` join `i32` and `f64`
+ * because they all fit a JavaScript `number`; `i64` and `u64` do not, and stay
+ * out exactly as `i64` always has.
  *
  * TODO(WP8): the N-API shim keeps its own reader table and has no unsigned
  * row yet, so a function with an unsigned parameter is skipped by the addon
@@ -164,7 +168,7 @@ export function cFieldType(t: StaticType): string {
  */
 export function isScalar(t: StaticType): boolean {
   const k = kindOf(t);
-  return k === "i32" || k === "u8" || k === "u16" || k === "u32" || k === "f64" || k === "bool" || k === "void";
+  return k === "i32" || k === "u8" || k === "u16" || k === "u32" || k === "f32" || k === "f64" || k === "bool" || k === "void";
 }
 
 /** TypeScript source spelling of a signature, for comments and declarations. */

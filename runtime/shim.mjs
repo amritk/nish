@@ -13,6 +13,8 @@
  *     unsigned integers at all: the narrow three live in a `number` masked
  *     back into range (`& 0xFF`, `& 0xFFFF`, `>>> 0`) and `u64` is a BigInt
  *     kept in range with `BigInt.asUintN(64, x)`.
+ *   - `f32` is a 32-bit float and JavaScript has only doubles, so every `f32`
+ *     result is rounded with `Math.fround`.
  *   - `s.length` is the UTF-8 byte length.
  *   - `a[i]` is bounds-checked: out of range prints
  *     `index out of range: <i> >= <len>` to stderr and exits 1.
@@ -129,14 +131,17 @@ export function maxU64(a, b) {
  * what `sext`/`zext`/`trunc` do natively.
  */
 export function convert(x, from, to) {
-  if (to === "f64") return typeof x === "bigint" ? Number(x) : x; // sitofp / uitofp
+  const num = typeof x === "bigint" ? Number(x) : x;
+  if (to === "f64") return num; // sitofp / uitofp / fpext
+  if (to === "f32") return Math.fround(num); // ... / fptrunc, then rounded to a float
   const target = INT_KINDS[to];
   const lo = target.signed ? -(1n << BigInt(target.bits - 1)) : 0n;
   const hi = target.signed ? (1n << BigInt(target.bits - 1)) - 1n : (1n << BigInt(target.bits)) - 1n;
   let exact;
-  if (from === "f64") {
-    // The saturating intrinsics: NaN is 0 and out-of-range values clamp. The
-    // bounds are BigInt because 2^64 - 1 has no exact `number`.
+  if (INT_KINDS[from] === undefined) {
+    // A float source (f32 or f64) goes through the saturating intrinsics: NaN
+    // is 0 and out-of-range values clamp. The bounds are BigInt because
+    // 2^64 - 1 has no exact `number`.
     if (Number.isNaN(x)) exact = 0n;
     else if (x <= Number(lo)) exact = lo;
     else if (x >= Number(hi)) exact = hi;

@@ -94,6 +94,8 @@ round/sqrt/sin/cos/exp/log/pow`, `Math.PI/E`, `Math.random`.
 | `a + b`, `a - b`, `a / b`, `a % b`, `-a` | u8 / u16 / u32 | `((a op b) & 0xFF)`, `& 0xFFFF`, `>>> 0` | JavaScript has no unsigned integers; the mask is the width. `& 0xFF` also handles a negative intermediate (ToInt32 first), and `>>> 0` is ToUint32, which is `trunc ... to i32` read as unsigned |
 | `a * b` | u32 | `(Math.imul(a, b) >>> 0)` | as i32: the double product can exceed 2^53, and `mul` is bit-identical for both signednesses |
 | `a op b`, `-a` | u64 | `__sts.wrapU64(a op b)` = `BigInt.asUintN(64, ...)` | as i64, but wrapped into `0 .. 2^64-1` |
+| `a op b`, `-a`, `++`/`--` | f32 | `Math.fround(a op b)` | JavaScript has only doubles; every f32 result is rounded to the nearest float |
+| numeric literal | f32 | `Math.fround(0.1)` | 0.1 is not a float, so the literal rounds at its source |
 | `a >> b` | i32 | unchanged | JS `>>` is `ashr` |
 | `a >>> b` | i32 | `((a >>> b) \| 0)` | JS `>>>` produces the *unsigned* value; StaticTS reads the same bits as a signed `i32` |
 | `a >> b`, `a >>> b` | u8 / u16 / u32 | `((a >>> b) & mask)` | `lshr`; the value is already in range, so the mask only re-establishes the type |
@@ -119,7 +121,7 @@ round/sqrt/sin/cos/exp/log/pow`, `Math.PI/E`, `Math.random`.
 | `toI32(x)` | | `__sts.toI32(x)` | BigInt: wrap (`trunc`); double: saturate, NaN -> 0 (`llvm.fptosi.sat`) |
 | `toI64(x)` | | `__sts.toI64(x)` | int32: exact (`sext`); double: truncate and saturate |
 | `toF64(x)` | | `__sts.toF64(x)` | `Number(bigint)` rounds to nearest like `sitofp` |
-| any `toX(y)` with an unsigned type on either side | | `__sts.convert(y, "<from>", "<to>")` | one helper for the whole matrix: the value becomes an exact BigInt, then `BigInt.asIntN`/`asUintN` at the target's width performs the `sext`, `zext` or `trunc`. From `f64` it saturates into `0 .. 2^bits-1` like `llvm.fptoui.sat` |
+| any `toX(y)` with an unsigned type or an `f32` on either side | | `__sts.convert(y, "<from>", "<to>")` | one helper for the whole matrix: the value becomes an exact BigInt, then `BigInt.asIntN`/`asUintN` at the target's width performs the `sext`, `zext` or `trunc`. From a float it saturates like `llvm.fpto{s,u}i.sat`; to an `f32` it is `Math.fround` |
 | `readFileSync`, `writeFileSync`, `appendFileSync` | | `__sts.*` over `node:fs` with UTF-8 | a failure prints `statictsc: cannot read <path>` and exits 1 |
 | derived-class constructor without `super(...)` | | `super();` prepended to the body | StaticTS calls the (parameterless) ancestor constructor implicitly (WP2b); JavaScript throws at the first `this` without an explicit call |
 | `process.argv` | | `__sts.argv()` = `process.argv.slice(1)` | index 0 is the program on both sides (the executable natively, the rewritten entry script under Node); the arguments come from `<name>.argv` next to the program and are passed to both runs |
@@ -145,6 +147,9 @@ visible as known failures):
   `2147483647 + 1` is `-2147483648`, `46341 * 46341` wraps,
   `7 / 2` is `3`, `-7 / 2` is `-3`, `-7 % 3` is `-1`.
 - **`i64` wraps at 64 bits**; literals are typed by context (docs/wp7-runtime.md).
+- **`f32` is a 32-bit float** and JavaScript has only doubles, so every `f32`
+  result is rounded with `Math.fround`: `const tenth: f32 = 0.1` prints
+  `0.10000000149011612` (`corpus/f32_round`).
 - **`u8`/`u16`/`u32`/`u64` are unsigned and wrap at their width**
   ([LANGUAGE.md, Unsigned integers](LANGUAGE.md#unsigned-integers)):
   `(255: u8) + 1` is `0`, a `u32` above `INT_MAX` divides and compares as the

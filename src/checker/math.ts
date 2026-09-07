@@ -48,6 +48,7 @@
  */
 import ts from "typescript";
 import {
+  F32,
   F64,
   I32,
   I64,
@@ -56,6 +57,7 @@ import {
   U16,
   U32,
   U64,
+  isFloat,
   isNumeric,
   isUnsigned,
   resolveTypeNode,
@@ -143,7 +145,7 @@ function conversionBuiltin(name: string, target: StaticType): BuiltinCallChecker
     const t = ctx.checkExpression(expr.arguments[0], scope);
     if (!isNumeric(t)) {
       throw ctx.error(
-        `\`${name}\` expects a number (i32, i64, u8, u16, u32, u64, or f64), got ${typeToString(t)}`,
+        `\`${name}\` expects a number (i32, i64, u8, u16, u32, u64, f32, or f64), got ${typeToString(t)}`,
         expr.arguments[0]
       );
     }
@@ -158,6 +160,7 @@ const CONVERSION_TARGETS: Record<string, StaticType> = {
   toU16: U16,
   toU32: U32,
   toU64: U64,
+  toF32: F32,
   toF64: F64,
 };
 
@@ -204,6 +207,7 @@ const LITERAL_CONTEXT_CALLS: Record<string, "other" | StaticType> = {
   "Math.max": "other",
   "process.exit": I32,
   "Arena.release": I64, // WP6: `Arena.release(0)` reads naturally
+  toF32: F32, // `toF32(2.75)` likewise, and the literal is rounded to f32
   toF64: F64, // so `toF64(2.75)` is legal in i32 mode; toI32/toI64 leave integer literals alone
   Number: F64, // `Number(2.5)` likewise
 };
@@ -315,7 +319,7 @@ export function contextualLiteralType(
 ): StaticType | undefined {
   const want = contextType(ctx, literal, scope);
   if (!want || !isNumeric(want)) return undefined;
-  if (want.kind === "f64") return F64;
+  if (isFloat(want)) return want; // `const x: f32 = 0.1` rounds at emit time
   const n = Number(literal.text);
   if (!Number.isInteger(n)) {
     throw ctx.error(`Non-integer literal \`${literal.text}\` where ${want.kind} is expected`, literal);

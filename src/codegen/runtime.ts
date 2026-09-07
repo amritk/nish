@@ -261,7 +261,15 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     intrinsic(`llvm.umin.${t}`, t, `${t}, ${t}`),
     intrinsic(`llvm.umax.${t}`, t, `${t}, ${t}`),
     intrinsic(`llvm.fptoui.sat.${t}.f64`, t, "double"),
+    // f32 saturating conversions; the `.f32` suffix is the *source* type.
+    intrinsic(`llvm.fptosi.sat.${t}.f32`, t, "float"),
+    intrinsic(`llvm.fptoui.sat.${t}.f32`, t, "float"),
   ]),
+  // ---- WP15: `Math.abs`/`min`/`max` on an `f32`. The f64-only Math functions
+  // (sqrt, pow, ...) stay f64-only, so there is no `llvm.sqrt.f32` here.
+  intrinsic("llvm.fabs.f32", "float", "float"),
+  intrinsic("llvm.minnum.f32", "float", "float, float"),
+  intrinsic("llvm.maxnum.f32", "float", "float, float"),
 ];
 
 export const RUNTIME_BY_NAME = new Map(RUNTIME_FUNCTIONS.map((f) => [f.name, f]));

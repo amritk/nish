@@ -87,6 +87,13 @@ export type StaticType =
   | { kind: "u16" }
   | { kind: "u32" }
   | { kind: "u64" }
+  /**
+   * 32-bit IEEE-754 (WP15). `float` in LLVM: half the footprint of an `f64`
+   * and twice the SIMD lane count, which is why a struct of coordinates or a
+   * buffer of samples wants it. It never mixes with `f64` implicitly, exactly
+   * as `i32` never mixes with `i64`.
+   */
+  | { kind: "f32" }
   | { kind: "f64" }
   | { kind: "bool" }
   | { kind: "string" }
@@ -110,6 +117,7 @@ export const U8: StaticType = { kind: "u8" };
 export const U16: StaticType = { kind: "u16" };
 export const U32: StaticType = { kind: "u32" };
 export const U64: StaticType = { kind: "u64" };
+export const F32: StaticType = { kind: "f32" };
 export const F64: StaticType = { kind: "f64" };
 export const BOOL: StaticType = { kind: "bool" };
 export const STRING: StaticType = { kind: "string" };
@@ -131,6 +139,7 @@ export function arrayOf(elem: StaticType): StaticType {
  */
 export const TYPED_ARRAY_ALIASES: Readonly<Record<string, StaticType>> = {
   Int32Array: I32,
+  Float32Array: F32,
   Float64Array: F64,
   BigInt64Array: I64,
 };
@@ -164,6 +173,8 @@ export function llvmType(t: StaticType): string {
       return "i32";
     case "u64":
       return "i64";
+    case "f32":
+      return "float";
     case "f64":
       return "double";
     case "bool":
@@ -196,6 +207,8 @@ export function alignOf(t: StaticType): number {
       return 4;
     case "u64":
       return 8;
+    case "f32":
+      return 4;
     case "f64":
       return 8;
     case "bool":
@@ -239,7 +252,17 @@ export function assignable(from: StaticType, to: StaticType): boolean {
 }
 
 export function isNumeric(t: StaticType): boolean {
-  return isInteger(t) || t.kind === "f64";
+  return isInteger(t) || isFloat(t);
+}
+
+/**
+ * IEEE-754 types (WP15). Every float lowering (`fadd`, `fcmp o*`, `fneg`,
+ * `fptrunc`/`fpext`, `sitofp`) is the same instruction at both widths, so
+ * almost every site that used to test `kind === "f64"` tests this instead;
+ * only the LLVM type name and the constant encoding differ.
+ */
+export function isFloat(t: StaticType): boolean {
+  return t.kind === "f32" || t.kind === "f64";
 }
 
 /**
@@ -357,6 +380,8 @@ export function resolveTypeNode(
             return U32;
           case "u64":
             return U64;
+          case "f32":
+            return F32;
           case "f64":
             return F64;
         }
@@ -366,14 +391,14 @@ export function resolveTypeNode(
         if (named) return named;
       }
       throw new CompileError(
-        `Unsupported type reference \`${ref.getText(sourceFile)}\` (supported: number, i32, i64, u8, u16, u32, u64, f64, boolean, string, void, T[], Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)`,
+        `Unsupported type reference \`${ref.getText(sourceFile)}\` (supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)`,
         node,
         sourceFile
       );
     }
     default:
       throw new CompileError(
-        `Unsupported type \`${node.getText(sourceFile)}\` (Phase 1 supports number, i32, i64, u8, u16, u32, u64, f64, boolean, string, void)`,
+        `Unsupported type \`${node.getText(sourceFile)}\` (Phase 1 supports number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void)`,
         node,
         sourceFile
       );

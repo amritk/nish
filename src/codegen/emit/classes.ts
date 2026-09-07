@@ -52,9 +52,9 @@
 import ts from "typescript";
 import { CheckedProgram, FieldInfo, FunctionSig, ImportBinding, StructInfo } from "../../checker";
 import { effectiveConstructor, explicitSuperCall, intrinsicType, isAssignmentOperator, ownFields } from "../../checker/classes";
-import { StaticType, llvmType } from "../../types";
+import { StaticType, isFloat, llvmType } from "../../types";
 import { emitIntBinary } from "./arithmetic";
-import { f64Constant } from "./builtins";
+import { floatConstant } from "./builtins";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
 import {
   MemoryFacts,
@@ -132,7 +132,7 @@ function initializerConstant(ctx: EmitContext, field: FieldInfo): string {
       return ctx.stringConstant((literal as ts.StringLiteral).text);
     default: {
       const n = Number((literal as ts.NumericLiteral).text) * (negated ? -1 : 1);
-      if (field.type.kind === "f64") return f64Constant(n);
+      if (isFloat(field.type)) return floatConstant(n, field.type);
       return field.type.kind === "i32" ? String(n | 0) : String(n);
     }
   }
@@ -281,7 +281,7 @@ const emitFieldAssignment: BinaryEmitter = (ctx, expr) => {
   const rhs = ctx.emitExpression(expr.right);
   const [intOp, floatOp] = COMPOUND_OPCODES[expr.operatorToken.kind]!;
   const value =
-    field.type.kind === "f64"
+    isFloat(field.type)
       ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`)
       : emitIntBinary(ctx, intOp, field.type, old, rhs);
   ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${ctx.alignSuffix(field.type)}`);

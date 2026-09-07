@@ -1,4 +1,4 @@
-// Fourteen classes with mixed field types. tests/layout/structs.c declares the
+// Fifteen classes with mixed field types. tests/layout/structs.c declares the
 // same structs in C, asserts the sizes the compiler computes, and reads every
 // field through the getters below to check each offset at run time.
 
@@ -264,8 +264,8 @@ class M extends K {
   }
 }
 
-// WP15: the unsigned widths, so the narrow ones are pinned against clang's
-// padding rules too (`e` lands in the tail, not next to `a`).
+// WP15: the unsigned widths and `f32`, so the narrow ones are pinned against
+// clang's padding rules too (`e` lands in the tail, not next to `a`).
 class N {
   a: u8;
   b: u16;
@@ -281,6 +281,22 @@ class N {
   }
 }
 
+// WP15: `f32` next to an `f64`. `a` is 4 bytes, so `b` starts at 8 and `c`
+// lands at 16 with the boolean after it: 24 bytes, where four `f64`s would
+// have been 32.
+class O {
+  a: f32;
+  b: f64;
+  c: f32;
+  d: boolean;
+  constructor(a: f32, b: f64, c: f32) {
+    this.a = a;
+    this.b = b;
+    this.c = c;
+    this.d = true;
+  }
+}
+
 function makeK(d: f64): K {
   return new K(1, d, true);
 }
@@ -292,6 +308,9 @@ function makeM(s: string, d: f64): M {
 }
 function makeN(d: u64): N {
   return new N(1, 2, 3, d, 4);
+}
+function makeO(a: f32, b: f64): O {
+  return new O(a, b, a);
 }
 
 function K_a(p: K): number {
@@ -342,4 +361,16 @@ function N_d(p: N): u64 {
 }
 function N_e(p: N): u8 {
   return p.e;
+}
+function O_a(p: O): f32 {
+  return p.a;
+}
+function O_b(p: O): f64 {
+  return p.b;
+}
+function O_c(p: O): f32 {
+  return p.c;
+}
+function O_d(p: O): boolean {
+  return p.d;
 }
