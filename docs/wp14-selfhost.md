@@ -172,8 +172,8 @@ wave was making: `self/strings.ts` (`StringBuilder`, `compareStrings`,
 `jsonQuote`, the LLVM `c"..."` escape, `f64Hex` / `f32Hex` over B1's
 `f64ToBits`, `splitByte`), `self/map.ts` (`StringMap`, `StringSet`) and
 `self/paths.ts` (`normalizePath`, `resolvePath`, `resolveModule`, `dirname`,
-`basename`). The stable sort is the one item still outstanding; it lands with
-the diagnostics it orders.
+`basename`). The stable sort landed with the diagnostics it orders
+(`DiagnosticSink.sorted`, a bottom-up merge sort), so the wave is complete.
 
 Two shape decisions are worth carrying forward:
 
@@ -265,7 +265,7 @@ point is to know rather than to find out at the last milestone.
 | --- | --- | --- |
 | **S1 Lexer** | `self/lexer.ts` tokenises StaticTS-0 **Done.** | Its token stream agrees with the `typescript` scanner's over every `tests/cases/*.ts`; the lexer built by stage0 runs natively |
 | **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 **Done.** | Its tree matches the `typescript` parser's, span for span, for every program in the corpus that StaticTS-0's grammar covers |
-| **S3 Checker** | `self/checker.ts` — types, scopes, the side tables | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
+| **S3 Checker** | `self/checker.ts` — types, scopes, the side tables *(in progress: `self/types.ts` and `self/diagnostics.ts` done)* | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
 | **S4 Emitter** | `self/emit.ts` — IR text | `IR(stage0, p) == IR(stage1, p)` for a growing whitelist of `tests/cases/` |
 | **S5 Bootstrap** | `self/` compiles `self/` | `IR(stage1, self/) == IR(stage2, self/)`, and stage3 is byte-identical to stage2 |
 

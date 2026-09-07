@@ -1665,6 +1665,37 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       supportOracle.status === 0,
       `${supportOracle.stdout}${supportOracle.stderr}`
     );
+
+    // S3, first piece: the type model. stage1 interns types and names them by
+    // an `i32`; stage0 keeps discriminated-union objects and compares them
+    // structurally. The oracle is that nothing downstream can tell — same
+    // LLVM type, same alignment, same name in a diagnostic, same
+    // assignability matrix.
+    const typesOracle = spawnSync("node", [path.join(root, "tests", "self", "types_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const typesSummary = typesOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/types.ts agrees with src/types.ts (${typesSummary})`,
+      typesOracle.status === 0,
+      `${typesOracle.stdout}${typesOracle.stderr}`
+    );
+
+    // S3: diagnostics. The `.err` goldens match on a summary line and the CLI
+    // prints an excerpt, so "stage1 reports the same errors" means every byte
+    // of both — plus the order a phase's errors come out in, the
+    // `...and N more` cut and the `--json` object.
+    const diagnosticsOracle = spawnSync("node", [path.join(root, "tests", "self", "diagnostics_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const diagnosticsSummary = diagnosticsOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/diagnostics.ts agrees with src/diagnostics.ts (${diagnosticsSummary})`,
+      diagnosticsOracle.status === 0,
+      `${diagnosticsOracle.stdout}${diagnosticsOracle.stderr}`
+    );
   }
 }
 

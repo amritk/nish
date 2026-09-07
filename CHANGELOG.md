@@ -67,6 +67,28 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
   `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
   `bench/ffi.mjs` gains the batched `Float64Array` rows.
+- **Self-hosting, milestone S3 begun: the type model and the diagnostics**
+  (`docs/wp14-selfhost.md` §4). `self/types.ts` is `src/types.ts` with one
+  change of representation: a type is an **interned `i32`**, so "are these the
+  same type?" — the checker's hottest question — is one integer compare
+  instead of a recursive `sameType`, a type fits in the `i32` a `StringMap`
+  stores, and `T[]` costs one entry rather than one per mention. It carries a
+  thirteenth kind stage0 has no counterpart for: `T_ERROR`, D1's sentinel,
+  assignable in both directions so that one bad expression does not produce a
+  diagnostic at every site it reaches. `self/diagnostics.ts` is the same
+  summary line, source excerpt and `--json` object, over a `SourceFile` that
+  indexes its line starts once (a scan per diagnostic is quadratic in a file
+  with many errors) and a sink that orders by file-first-mentioned and then
+  position with a **stable** bottom-up merge sort — the last outstanding item
+  of wave C, and stable because two errors at one position have to keep the
+  order the phases produced them in for a multi-error golden to be
+  reproducible. Both are checked against stage0's own implementation:
+  `tests/self/types_oracle.js` diffs the LLVM type, the alignment, the
+  diagnostic spelling and the whole assignability matrix over every type
+  either side can build (119 lines), and `tests/self/diagnostics_oracle.js`
+  diffs every byte of the messages, the line/column index over *every* offset
+  in the fixture, the report order, the `...and N more errors` cut and the
+  JSON (570 lines).
 - **An imported class brings the layouts its members mention.** `import
   { Registry }` where `Registry.all(): Entry[]` gives a module `Entry` values
   it can call methods on and read fields of; until now the checker crashed
