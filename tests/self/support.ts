@@ -28,6 +28,7 @@ import {
   dirname,
   joinPath,
   normalizePath,
+  relativePath,
   resolveModule,
   resolvePath,
 } from "../../self/paths";
@@ -64,6 +65,11 @@ function reportPath(out: string[], base: string, spec: string): void {
   out.push(`stem ${jsonQuote(basenameWithout(base, ".ts"))}`);
   out.push(`resolve ${jsonQuote(resolvePath(base, spec))}`);
   out.push(`module ${jsonQuote(resolveModule(base, spec))}`);
+}
+
+/** `relativePath`, over one `from<TAB>to` case; both are rooted at the same base. */
+function reportRelative(out: string[], from: string, to: string): void {
+  out.push(`relative ${jsonQuote(relativePath(from, to))}`);
 }
 
 /**
@@ -150,6 +156,9 @@ export function main(): number {
     } else if (section === "path") {
       out.push(`# path ${jsonQuote(fields[1])} ${jsonQuote(fields[2])}`);
       reportPath(out, fields[1], fields[2]);
+    } else if (section === "rel") {
+      out.push(`# rel ${jsonQuote(fields[1])} ${jsonQuote(fields[2])}`);
+      reportRelative(out, fields[1], fields[2]);
     } else if (section === "num") {
       out.push(`# num ${fields[1]}`);
       out.push(`f64 ${f64Hex(Number(fields[1]))}`);

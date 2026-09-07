@@ -1,0 +1,335 @@
+// Whole-program compilation for stage1 (`src/compilation.ts`,
+// docs/wp14-selfhost.md milestone S5).
+//
+// A `Compilation` owns every module of one program:
+//
+//   1. **Load.** Parse the entry file and, transitively, everything it
+//      imports. Each file is parsed exactly once, keyed by its resolved path,
+//      so an import cycle simply terminates. Signatures are collected as soon
+//      as a module is parsed (pass 1), which is what makes cycles legal: no
+//      body is checked until every module's exports are known.
+//   2. **Check.** Bind each import to the exporter's signature (pass 1b),
+//      close the reachable-struct set once every module is bound, reject the
+//      symbol clashes that would fail at link time, then check bodies (pass 2).
+//   3. **Emit.** Run the attribute analysis over *all* modules, so the purity,
+//      escape and pointer facts are program-wide, then emit one module of IR
+//      per source module. An imported function appears as a `declare` carrying
+//      exactly the attributes its exporter's `define` does.
+//
+// **Module identity is the resolved path, and it stays relative.**
+// `src/compilation.ts` resolves against `process.cwd()` and then prints a
+// cwd-relative name; stage1 has no working directory (D4), so a module's
+// identity is its specifier resolved against the *name the importer was given*.
+// For an entry named relatively — which is how every caller names it — the two
+// agree string for string, which is what lets the IR headers match.
+//
+// The one thing this driver does not do is decide where the output goes: it
+// answers with the IR text per module and the stem each module's file should
+// use, and `self/compile.ts` writes them. There is no `mkdir` here (D4).
+
+import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes";
+import { Checker } from "./checker";
+import { DiagnosticSink, SourceFile } from "./diagnostics";
+import { emitProgram } from "./emit";
+import { StringMap } from "./map";
+import { N_CONSTRUCTOR, Node } from "./nodes";
+import { Options } from "./options";
+import { ParentTable } from "./parents";
+import { Parser } from "./parser";
+import { CheckedProgram, FunctionSig, StructRegistry } from "./program";
+import { basenameWithout, dirname, relativePath, resolveModule } from "./paths";
+import { RuntimeTable } from "./runtime";
+import { splitByte } from "./strings";
+import { TypeTable } from "./types";
+import { validate } from "./validator";
+
+const SLASH: i32 = 47;
+
+/** One source module: its identity, its tree, and the checker that owns it. */
+export class ModuleUnit {
+  /** The resolved path, which is the module's identity and the name in its IR header. */
+  path: string;
+  source: SourceFile;
+  file: Node;
+  nodeCount: i32;
+  /** The entry module; the only one allowed to declare `export function main`. */
+  isEntry: boolean;
+  checker: Checker;
+  parents: ParentTable;
+  /** Specifier text -> index into `Compilation.modules`, for this importer. */
+  resolved: StringMap;
+
+  constructor(path: string, source: SourceFile, file: Node, nodeCount: i32, isEntry: boolean, checker: Checker) {
+    this.path = path;
+    this.source = source;
+    this.file = file;
+    this.nodeCount = nodeCount;
+    this.isEntry = isEntry;
+    this.checker = checker;
+    this.parents = new ParentTable(file, nodeCount);
+    this.resolved = new StringMap();
+  }
+}
+
+/** One module's IR, with the stem its `.ll` file should be named after. */
+export class EmittedModule {
+  stem: string;
+  ir: string;
+
+  constructor(stem: string, ir: string) {
+    this.stem = stem;
+    this.ir = ir;
+  }
+}
+
+export class Compilation {
+  opts: Options;
+  /** Shared by every module, so a type id means one thing across the program. */
+  table: TypeTable;
+  sink: DiagnosticSink;
+  runtime: RuntimeTable;
+  /** Load order: entry first, then imports depth-first. */
+  modules: ModuleUnit[];
+  /** Resolved path -> index into `modules`. */
+  byPath: StringMap;
+
+  constructor(opts: Options) {
+    this.opts = opts;
+    this.table = new TypeTable();
+    this.sink = new DiagnosticSink();
+    this.runtime = new RuntimeTable();
+    this.modules = [];
+    this.byPath = new StringMap();
+  }
+
+  entry(): ModuleUnit {
+    return this.modules[0];
+  }
+
+  /**
+   * Load `path` and everything it imports. Answers false when a file could not
+   * be read or a module failed to parse; the diagnostics are in the sink.
+   */
+  load(path: string): boolean {
+    const at = this.byPath.get(path, -1);
+    if (at >= 0) {
+      return true;
+    }
+    const text = readFileSyncOrNull(path);
+    if (text === null) {
+      // The entry has no importer to point at, so the message stands alone.
+      console.error(`compile: cannot read ${path}`);
+      return false;
+    }
+    const source = new SourceFile(path, text);
+    const parser = new Parser(source);
+    const file = parser.parseSourceFile();
+    for (const diagnostic of parser.diagnostics) {
+      writeError(`${diagnostic.message()}\n`);
+    }
+    if (parser.diagnostics.length > 0) {
+      return false;
+    }
+    const isEntry = this.modules.length === 0;
+    const checker = new Checker(this.table, source, file, isEntry, parser.nodeCount, this.sink, this.opts.numberMode);
+    const unit = new ModuleUnit(path, source, file, parser.nodeCount, isEntry, checker);
+    this.byPath.set(path, this.modules.length);
+    this.modules.push(unit);
+
+    // Phase 0 before pass 1, so what is forbidden by design is refused before
+    // the checker can report it as merely unsupported.
+    validate(checker.ctx, file);
+    checker.collectSignatures(); // pass 1, which also validates the import syntax
+    const dir = dirname(path);
+    let ok = true;
+    for (const imp of checker.program.imports) {
+      if (unit.resolved.has(imp.specifier)) {
+        continue;
+      }
+      const target = resolveModule(dir, imp.specifier);
+      if (readFileSyncOrNull(target) === null) {
+        this.sink.report(
+          source,
+          imp.node.start,
+          imp.node.end,
+          `Cannot find module \`${imp.specifier}\` (looked for ${target})`
+        );
+        continue;
+      }
+      // A module that fails to load is reported and the others still load;
+      // `check` stops before binding anything.
+      if (!this.load(target)) {
+        ok = false;
+      } else {
+        unit.resolved.set(imp.specifier, this.byPath.get(target, -1));
+      }
+    }
+    return ok;
+  }
+
+  /**
+   * Passes 1b and 2 over every module. Each phase runs to completion over
+   * every module and then the errors are answered together: a broken signature
+   * never reaches body checking and a broken body never reaches the emitter.
+   */
+  check(): boolean {
+    if (this.sink.hasErrors()) {
+      return false; // pass 1 and module resolution ran during load
+    }
+    for (const unit of this.modules) {
+      const targets: CheckedProgram[] = [];
+      for (const imp of unit.checker.program.imports) {
+        const index = unit.resolved.get(imp.specifier, -1);
+        targets.push(this.modules[index].checker.program);
+      }
+      unit.checker.bindImports(targets);
+    }
+    // After every module is bound, so a struct reached through a chain of
+    // modules does not depend on the order they were bound in.
+    const declared = this.declaredStructs();
+    for (const unit of this.modules) {
+      unit.checker.closeReachableStructs(declared);
+    }
+    this.rejectSymbolClashes();
+    if (this.sink.hasErrors()) {
+      return false;
+    }
+    // `process.argv` is legal anywhere in a program that has an entry point, so
+    // every module needs to know whether the entry declares `main` before its
+    // bodies are checked.
+    const hasMain = this.entry().checker.program.entryMain !== null;
+    for (const unit of this.modules) {
+      unit.checker.ctx.entryHasMain = hasMain;
+    }
+    // Constants fold once every module has its signatures, because an
+    // initialiser may name a constant imported from a module checked later.
+    for (const unit of this.modules) {
+      unit.checker.foldConstants();
+    }
+    for (const unit of this.modules) {
+      unit.checker.checkBodies();
+    }
+    return !this.sink.hasErrors();
+  }
+
+  /** Every class and interface declared anywhere in the program, by name. */
+  declaredStructs(): StructRegistry {
+    const declared = new StructRegistry();
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.structList) {
+        if (info.origin === unit.source) {
+          declared.add(info);
+        }
+      }
+    }
+    return declared;
+  }
+
+  /**
+   * Every function that is not `internal` is one external symbol in the final
+   * link, so its name must be unique across the program. Exported names are
+   * always external; the others only without `--strict-exports`. The entry
+   * wrapper reserves `main` as well.
+   */
+  rejectSymbolClashes(): void {
+    const owners = new StringMap();
+    const ownerSigs: (FunctionSig | null)[] = [];
+    const ownerModules: ModuleUnit[] = [];
+    const entry = this.entry();
+    if (entry.checker.program.entryMain !== null) {
+      owners.set("main", ownerSigs.length);
+      ownerSigs.push(null);
+      ownerModules.push(entry);
+    }
+    for (const unit of this.modules) {
+      for (const sig of unit.checker.program.functions) {
+        if (!sig.definedIn(unit.source)) {
+          continue; // an imported signature is the exporter's symbol, not a second one
+        }
+        if (!sig.exported && this.opts.strictExports) {
+          continue; // `internal` linkage: the name never reaches the linker
+        }
+        const at = owners.get(sig.name, -1);
+        if (at < 0) {
+          owners.set(sig.name, ownerSigs.length);
+          ownerSigs.push(sig);
+          ownerModules.push(unit);
+          continue;
+        }
+        const previousSig = ownerSigs[at];
+        const previousModule = ownerModules[at];
+        const where = `\`${sig.sourceName}\` is also defined in ${previousModule.path}`;
+        let message = "";
+        if (previousSig === null) {
+          message = `Function \`main\` in ${unit.path} collides with the entry wrapper \`@main\` that ${previousModule.path} needs; rename it or use --strict-exports`;
+        } else if (sig.exported && previousSig.exported) {
+          message = `Exported function ${where}; exported names must be unique across the program`;
+        } else {
+          message = `Function ${where}; without --strict-exports every function is an external symbol, so names must be unique across the program (or export exactly one of them)`;
+        }
+        // Reported, not thrown: every clash is listed.
+        const at2 = nameNode(sig);
+        this.sink.report(unit.source, at2.start, at2.end, message);
+      }
+    }
+  }
+
+  /** Program-wide attribute analysis, then one IR module per source module. */
+  emit(): EmittedModule[] {
+    const units: AnalysisUnit[] = [];
+    for (const unit of this.modules) {
+      units.push(new AnalysisUnit(unit.checker.program, unit.parents));
+    }
+    // The entry wrapper initialises `process.argv` when any module reads it.
+    for (const unit of this.modules) {
+      if (unit.checker.program.usesArgv) {
+        this.entry().checker.program.usesArgv = true;
+      }
+    }
+    const facts = analyzeFunctions(units, this.table, this.opts, this.runtime);
+    const stems = this.outputStems();
+    const out: EmittedModule[] = [];
+    let i = 0;
+    while (i < this.modules.length) {
+      out.push(new EmittedModule(stems[i], emitProgram(units[i], this.table, this.opts, this.runtime, facts)));
+      i = i + 1;
+    }
+    return out;
+  }
+
+  /**
+   * The file stem per module: its basename normally, and — when two modules
+   * share one — its path relative to the entry's directory with the separators
+   * turned into `_`, so `--out-dir` never overwrites a module.
+   */
+  outputStems(): string[] {
+    const counts = new StringMap();
+    for (const unit of this.modules) {
+      const base = basenameWithout(unit.path, ".ts");
+      counts.set(base, counts.get(base, 0) + 1);
+    }
+    const root = dirname(this.entry().path);
+    const stems: string[] = [];
+    for (const unit of this.modules) {
+      const base = basenameWithout(unit.path, ".ts");
+      if (counts.get(base, 0) === 1) {
+        stems.push(base);
+        continue;
+      }
+      const parts: string[] = [];
+      for (const segment of splitByte(relativePath(root, unit.path), SLASH)) {
+        if (segment !== "." && segment !== "..") {
+          parts.push(segment);
+        }
+      }
+      const joined = parts.join("_");
+      stems.push(joined.endsWith(".ts") ? joined.substring(0, joined.length - 3) : joined);
+    }
+    return stems;
+  }
+}
+
+/** The node a symbol-clash diagnostic points at: the name, or the declaration. */
+function nameNode(sig: FunctionSig): Node {
+  return sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
+}

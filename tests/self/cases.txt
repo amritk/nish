@@ -24,6 +24,17 @@ path	/	./x
 path	/a//b///c	.././d
 path	a/b/c.ts	./sibling.js
 path	relative/dir	nested/deep/../file
+# `rel <from> <to>`: two paths rooted at the same base, which is the contract
+# `relativePath` states. The output stems of a multi-module compilation are
+# built from these, so a module in a subdirectory keeps its own `.ll`.
+rel	self	self/nodes.ts
+rel	tests/link/dup	tests/link/dup/sub/x.ts
+rel	a/b	a/c
+rel	a/b/c	a
+rel	.	a/b
+rel	a	a
+rel	/a/b	/a/b/c/d.ts
+rel	/a/b/c	/a/x
 path	/x	.
 path	trailing/	./f
 path	/only/dir/	../g

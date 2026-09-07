@@ -15,7 +15,7 @@
 // context is one argument that is already being threaded.
 
 import { CheckContext, NUMBER_MODE_I32 } from "./context";
-import { N_LIST, N_TYPE_ARRAY, N_TYPE_NULL, N_TYPE_REF, N_TYPE_UNION, Node } from "./nodes";
+import { N_LIST, N_TYPE_ARRAY, N_TYPE_NULL, N_TYPE_PAREN, N_TYPE_REF, N_TYPE_UNION, Node } from "./nodes";
 import {
   T_BOOL,
   T_ERROR,
@@ -106,6 +106,11 @@ function scalarNamed(name: string, numberMode: i32): i32 {
  */
 export function resolveType(node: Node, ctx: CheckContext): i32 {
   switch (node.kind) {
+    case N_TYPE_PAREN:
+      // Transparent, as `ParenthesizedType` is in `src/types.ts`: the
+      // parentheses exist to group, and `(T | null)[]` is the shape that needs
+      // them, because `T | null[]` groups the other way.
+      return resolveType(node.children[0], ctx);
     case N_TYPE_ARRAY:
       return ctx.table.arrayOf(resolveType(node.children[0], ctx));
     case N_TYPE_UNION:

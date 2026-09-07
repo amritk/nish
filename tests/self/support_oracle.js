@@ -124,6 +124,9 @@ function expected(caseText) {
       out.push(`stem ${JSON.stringify(basenameWithout(first, ".ts"))}`);
       out.push(`resolve ${JSON.stringify(resolvePath(first, second))}`);
       out.push(`module ${JSON.stringify(resolveModule(first, second))}`);
+    } else if (section === "rel") {
+      out.push(`# rel ${JSON.stringify(first)} ${JSON.stringify(second)}`);
+      out.push(`relative ${JSON.stringify(path.posix.relative(first, second))}`);
     } else if (section === "num") {
       out.push(`# num ${first}`);
       out.push(`f64 ${f64Constant(Number(first))}`);

@@ -1745,6 +1745,42 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       rejectOracle.status === 0,
       `${rejectOracle.stdout}${rejectOracle.stderr}`
     );
+
+    // S4: the emitter. `IR(stage0, p) == IR(stage1, p)` byte for byte over
+    // every import-free program in the corpus — not a golden a human wrote,
+    // and not a summary either: every attribute, every block label and every
+    // SSA number has to match, which is the half of the output a golden test
+    // reads past. The skips are the programs that need the S5 module driver
+    // and the flags stage1 does not have (`-g`, the dumps).
+    const irOracle = spawnSync("node", [path.join(root, "tests", "self", "ir_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const irSummary = irOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/emit.ts emits the IR stage0 emits (${irSummary})`,
+      irOracle.status === 0,
+      `${irOracle.stdout}${irOracle.stderr}`
+    );
+
+    // S5, and the claim the work package exists for: `self/` compiles `self/`.
+    // stage1 is `self/` built by stage0, stage2 is `self/` built by stage1,
+    // stage3 is `self/` built by stage2. `IR(stage1) == IR(stage2)` is the
+    // fixed point — nothing about stage0 leaks into the result any more — and
+    // stage3 must be byte-identical to stage2 so the binaries are compared as
+    // well as the text. Three links, so it is the slowest check here.
+    const bootstrap = spawnSync("node", [path.join(root, "tests", "self", "bootstrap.js")], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const bootstrapSummary = bootstrap.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/ compiles self/: the bootstrap reaches a fixed point (${bootstrapSummary})`,
+      bootstrap.status === 0,
+      `${bootstrap.stdout}${bootstrap.stderr}`
+    );
   }
 }
 

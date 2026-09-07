@@ -120,6 +120,10 @@ function printTypeScriptTree(source, sf) {
         list(depth + 1, node.typeArguments ?? [], type);
         return;
       }
+      case ts.SyntaxKind.ParenthesizedType:
+        emit(depth, "TYPE_PAREN", s, e);
+        type(node.type, depth + 1);
+        return;
       case ts.SyntaxKind.ArrayType:
         emit(depth, "TYPE_ARRAY", s, e);
         type(node.elementType, depth + 1);

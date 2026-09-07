@@ -466,3 +466,4 @@ Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 | M2 "Data" | WP2, WP4, WP7 | nbody with structs and arrays, matches C output bit for bit. |
 | M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. |
 | M4 "1.0" | WP2b, remaining docs, stabilised spec | tagged release, language reference frozen. |
+| M5 "Self-hosting" | WP14 ([wp14-selfhost.md](wp14-selfhost.md)) | `self/` compiles `self/`: `IR(stage1, self/) == IR(stage2, self/)` byte for byte, and stage3 is byte-identical to stage2 (`tests/self/bootstrap.js`). |

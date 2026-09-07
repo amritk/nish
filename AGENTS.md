@@ -5,6 +5,8 @@ this repository**. For Claude Code the same rules live in
 [`CLAUDE.md`](./CLAUDE.md); the detailed developer guidelines are in
 [`.claude/`](./.claude/) — read the one that matches your task:
 
+- [`.claude/orientation.md`](./.claude/orientation.md) — **start here**: the two compilers, the code map, the commands, what is always true
+- [`.claude/selfhost.md`](./.claude/selfhost.md) — working in `self/`: StaticTS-0, the module map, the oracles, the milestones
 - [`.claude/architecture.md`](./.claude/architecture.md) — the pipeline, the rules that shape every change, where to read next
 - [`.claude/typescript.md`](./.claude/typescript.md) — TypeScript style: the StaticTS rules for every program in the repo, and the static-friendly rules for the compiler source
 - [`.claude/node.md`](./.claude/node.md) — Node runtime, npm scripts, the LLVM toolchain, Biome

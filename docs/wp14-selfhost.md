@@ -49,16 +49,19 @@ IR(stage0, self/)  ==  IR(stage1, self/)
 
 That says the TypeScript implementation and the StaticTS implementation agree
 on the IR for the self-hosted compiler's own source. It only holds while
-`self/` uses no construct the two lower differently, so it is a check we
-enable per-file as the port lands, not a milestone.
+`self/` uses no construct the two lower differently, so it was a check to
+enable per file as the port landed rather than a milestone. **It holds for
+every file**, and `tests/self/bootstrap.js` asserts it alongside the proof
+itself.
 
 ### The test
 
 The WP14 section of `tests/run.js` runs the stages and compares. It is
 skipped, not failed, without LLVM, the same as every other toolchain-dependent
-check (`.claude/testing.md`). Until stage1 exists it is a compile gate — stage0
-must compile every module of `self/` cleanly — so it is green from the first
-commit and grows one stage comparison at a time. That gate is not a formality:
+check (`.claude/testing.md`). It began as a compile gate — stage0 must compile
+every module of `self/` cleanly — and grew one oracle at a time until
+`tests/self/bootstrap.js` closed it: build stage1 with stage0, stage2 with
+stage1, stage3 with stage2, and compare. That gate is not a formality:
 it fails the moment `self/` reaches for something the language does not have,
 which is rule 1 of §5 enforced by the suite rather than by good intentions.
 
@@ -259,6 +262,10 @@ building the whole module text in memory before one write. Peak is roughly AST +
 all interned IR text + the final string. Probably fine at hundreds of MB; the
 point is to know rather than to find out at the last milestone.
 
+*Answered at S5, below: **86 MB and 91 ms** for the whole compiler, against
+stage0's 178 MB and 786 ms. The arena never being released does not matter at
+this size.*
+
 ## 4. Milestones
 
 | | Deliverable | Proof |
@@ -266,12 +273,112 @@ point is to know rather than to find out at the last milestone.
 | **S1 Lexer** | `self/lexer.ts` tokenises StaticTS-0 **Done.** | Its token stream agrees with the `typescript` scanner's over every `tests/cases/*.ts`; the lexer built by stage0 runs natively |
 | **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 **Done.** | Its tree matches the `typescript` parser's, span for span, for every program in the corpus that StaticTS-0's grammar covers |
 | **S3 Checker** | `self/checker.ts` — types, scopes, the side tables **Done.** | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
-| **S4 Emitter** | `self/emit.ts` — IR text | `IR(stage0, p) == IR(stage1, p)` for a growing whitelist of `tests/cases/` |
-| **S5 Bootstrap** | `self/` compiles `self/` | `IR(stage1, self/) == IR(stage2, self/)`, and stage3 is byte-identical to stage2 |
+| **S4 Emitter** | `self/emit.ts` — IR text **Done.** | `IR(stage0, p) == IR(stage1, p)`; it holds for the whole corpus rather than a whitelist |
+| **S5 Bootstrap** | `self/` compiles `self/` **Done.** | `IR(stage1, self/) == IR(stage2, self/)`, and stage3 is byte-identical to stage2 |
 
 S1–S4 are each useful on their own and each testable against stage0, which is
 what keeps this from being a single unlandable change. S5 is the day the
 compiler compiles itself.
+
+### The bootstrap, and what it says
+
+`tests/self/bootstrap.js` runs the stages and compares them. All three
+equalities hold over the whole of `self/` — 41 modules, 4,095,128 bytes of IR:
+
+```
+IR(stage0, self/) == IR(stage1, self/)     the two implementations agree
+IR(stage1, self/) == IR(stage2, self/)     the fixed point: self-hosted
+stage3            == stage2                byte for byte, as files
+```
+
+The middle line is the proof §1 defined. The first is the stronger equality §1
+said was worth aiming at and not worth blocking on: it holds for every module,
+so the TypeScript implementation and the StaticTS one are the same compiler and
+not merely two compilers that agree about the tests. The third compares the
+binaries rather than the text.
+
+**S5 needed one addition to StaticTS-0, and it was grammar rather than
+semantics: the parenthesised type.** `self/program.ts` writes
+`(Local | null)[]`, and it has to, because `Local | null[]` groups the other
+way. stage0 has always accepted it (`ParenthesizedType` in `src/types.ts`);
+the S2 parser had no rule for it and the parser oracle recorded the gap as a
+skip, which is exactly what that skip count is for. It is now `N_TYPE_PAREN`,
+transparent in `resolveType` as it is in stage0, with
+`tests/cases/cls_parenthesized_type`, `reject_paren_union_type`, a
+`docs/LANGUAGE.md` rule and a cookbook entry — rule 1 of §6, which says a
+construct enters the language before it enters `self/`.
+
+**D5, measured rather than guessed.** Compiling the whole of `self/` — 41
+modules, 16,700 lines, 4 MB of IR out — costs stage1 **86 MB of peak RSS and
+91 ms**. stage0 needs 178 MB and 786 ms for the same input, so self-hosting
+bought a factor of 8.6 in time and half the memory, which is §5's northern star
+pointing at the compiler itself. The arena never being released was the worry;
+at this size it does not matter.
+
+**D3's hazard did not fire.** Module identity is the specifier resolved against
+the name the importer was given, so it stays relative and needs no working
+directory (`self/paths.ts`'s `resolveModule`, and `relativePath` for the output
+stems, both checked against `node:path` by the support oracle). stage0 resolves
+against `process.cwd()` and prints a cwd-relative name; for an entry named
+relatively the two agree string for string, which is why the module headers
+match and the whole-program comparison is byte for byte rather than
+normalised.
+
+The `tests/self/ir_oracle.js` corpus grew with the driver: it now compiles
+**whole programs** rather than single modules, `tests/link/` included, and
+compares every module of each — the module *set* too, so a stage that emitted
+one module fewer has not agreed about the rest. 259 of 259 programs, 848
+modules, 1,074,371 lines of IR.
+
+### What S4 cost
+
+`self/` is 16,496 lines of StaticTS, and the emitter half of it — the IR
+builder, the runtime ABI table, the targets, the escape analysis, the
+attribute fixpoint, the six construct families, the module assembly and the
+driver — is 6,761 of them, against the 5,686 lines of `src/codegen/` it
+replaces. The ratio S2 measured is holding: the port comes in near the code it
+replaces rather than at twice it.
+
+The proof is the one §4 asked for, and it turned out to be affordable in one
+go rather than as a whitelist: `tests/self/ir_oracle.js` compares the two
+compilers' **whole output, byte for byte**, over every import-free program in
+the corpus — **206 of 206 files agree over 19,452 lines of IR**. That is every
+attribute group, every block label, every SSA number and the order the
+declarations come out in, which is the half of the output a golden `.ll` reads
+past. The 49 skips are 39 files that need the S5 module driver, 6 that stage0
+itself rejects without the flags the harness passes, and 4 that ask for `-g` or
+a dump flag stage1 does not have.
+
+Four things are worth carrying into S5:
+
+1. **StaticTS-0 held for the fourth time.** Nothing was added to the language
+   for the emitter either. The one place the subset genuinely pushed back was
+   `src/`'s `factCollectors` array — a list of *functions* each `emit/*.ts`
+   registers into — which became one collector class in `self/attributes.ts`.
+   D2 predicted exactly that, and predicted the cost: the `BuiltinCall
+   { emit, callees }` pairing is no longer enforced by locality, so the two
+   halves sit side by side in `self/emit_builtins.ts` and the IR oracle is
+   what keeps them honest.
+2. **The escape analysis wanted parent links, and got a side table.** S3's "no
+   parent pointers" is a statement about the checker, which threads the
+   contextual type down. `classifyUse` genuinely reads upwards — "what does the
+   enclosing construct do with this value?" — so `self/parents.ts` builds the
+   links once, as an array indexed by `Node.id`, which is the shape every other
+   side table already has. The AST still carries syntax only.
+3. **The oracle paid for itself again, and this time in soundness.** Three
+   stage0 bugs came out of writing this, all of them wrong *attributes* rather
+   than wrong instructions, which is the class of bug a golden `.ll` is worst
+   at catching: `readFileSyncOrNull` was not an allocation site, so a function
+   returning the bytes could still get an arena scope that released them; and a
+   compound integer division (`x /= k`, `p.f %= k`) contributed no
+   `sts_panic_div` callee, so its caller kept `willreturn` and `readnone` over
+   a call that writes and never returns. Both are fixed with cases in
+   `tests/cases/`. Three S3 leftovers came out too — `p.f++`, `p.f |= 1` and
+   `a[i] &= 1` were accepted by stage1 and refused by stage0 — and they are
+   fixed with `reject_*` cases that now pin both compilers.
+4. **stage1 emits no debug info.** `-g` is stage0's, for the same reason D4
+   drops `--link`: a DWARF metadata builder is not on the path to the bootstrap
+   proof. The driver reports the flag rather than ignoring it.
 
 ### What S3 cost
 

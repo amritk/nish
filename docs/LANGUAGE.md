@@ -114,7 +114,11 @@ Type rules:
   `T | null` (or `null | T`) is accepted when `T` is a class, interface,
   array, or string; a scalar is
   `` `i32 | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value) ``
-  (`tests/cases/reject_nullable_scalar`).
+  (`tests/cases/reject_nullable_scalar`). A type may be **parenthesised**, and
+  `(T | null)[]` is where it matters: `T | null[]` groups the other way and
+  means "a `T`, or an array of `null`". The parentheses only group — the type
+  inside them is the type — so `(A | B)[]` is still refused as a union
+  (`tests/cases/cls_parenthesized_type`, `reject_paren_union_type`).
 - **No implicit conversion.** `const y: f64 = x` with `x: number` in i32
   mode is `Cannot initialize f64 variable ... with i32` *(CLI only)*;
   `x + n` with `x: i64`, `n: number` is rejected
@@ -893,8 +897,8 @@ under [Semantics decisions](#semantics-decisions).
 | `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch` |
 | `x = e` | mutable local, field, or element; `e` of the target's type | the target's type | `store` | `locals`, `cls_field_write`, `arr_index_read_write` |
 | `x op= e` (`+= -= *= /= %=`) | numeric mutable local, numeric field, or numeric element; same type | the target's type | load, op, store | `cf_compound_assign`, `cls_compound_field`, `arr_index_read_write`; `reject_cf_compound_const` |
-| `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask | `bit_compound`; a field or element target is not supported yet (`` Unsupported assignment operator `&=` `` / `Only simple variables can be assigned`, *CLI only*) |
-| `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param` |
+| `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask | `bit_compound`; a field or element target is not supported yet (`reject_cls_field_bitwise_assign`, `reject_arr_element_bitwise_assign`) |
+| `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec` |
 | `,` | – | – | forbidden | `reject_comma_expression` |
 | `?? ?. in instanceof typeof delete void` | – | – | forbidden by the validator | `reject_nullish`, `reject_optional_chain`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression` |
 | `** +x` | – | – | not supported | `Unsupported binary operator` / `Unsupported unary operator` *(CLI only)* |

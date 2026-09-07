@@ -41,7 +41,8 @@ import {
   STRUCT_INTERFACE,
   StructInfo,
 } from "./program";
-import { T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types";
+import { StringSet } from "./map";
+import { T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types";
 
 /**
  * Size in bytes of a value stored in a struct field. `bool` is one byte
@@ -455,6 +456,58 @@ function describeField(ctx: CheckContext, field: FieldInfo): string {
  * the identical layout and a base class is a layout prefix — so nothing is
  * checked at run time and nothing converts back.
  */
+/**
+ * The struct names a type mentions, following `T[]` and `T | null` inwards.
+ * A name reached this way is a *layout* this module needs even though it
+ * never wrote the name.
+ */
+export function noteStructNames(table: TypeTable, type: i32, out: StringSet): void {
+  if (table.isStruct(type)) {
+    out.add(table.nameOf(type));
+    return;
+  }
+  const inner = table.refOf(type);
+  if (inner >= 0) {
+    noteStructNames(table, inner, out);
+  }
+}
+
+/**
+ * The struct names a signature mentions. `this` is skipped: it is the owner or
+ * its base, which is reached through the `StructInfo` itself rather than by
+ * name, and noting it would pull an inherited constructor's `%struct.Base` in
+ * behind a derived class.
+ */
+export function signatureStructNames(table: TypeTable, sig: FunctionSig, out: StringSet): void {
+  let i = sig.owner === null ? 0 : 1;
+  while (i < sig.paramTypes.length) {
+    noteStructNames(table, sig.paramTypes[i], out);
+    i = i + 1;
+  }
+  noteStructNames(table, sig.returnType, out);
+}
+
+/**
+ * The struct names `info` mentions through its fields and its members, its
+ * inherited ones included. Its own name is not one of them.
+ */
+export function referencedStructNames(table: TypeTable, info: StructInfo, out: StringSet): void {
+  let c: StructInfo | null = info;
+  while (c !== null) {
+    for (const field of c.fields) {
+      noteStructNames(table, field.type, out);
+    }
+    for (const method of c.methodSigs) {
+      signatureStructNames(table, method, out);
+    }
+    const ctor = c.ctor;
+    if (ctor !== null) {
+      signatureStructNames(table, ctor, out);
+    }
+    c = c.base;
+  }
+}
+
 export function coercesTo(ctx: CheckContext, from: i32, want: i32): boolean {
   if (want < 0 || !ctx.table.isStruct(from)) {
     return false;

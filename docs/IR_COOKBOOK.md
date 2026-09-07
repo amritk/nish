@@ -3026,7 +3026,9 @@ A nullable value is the same pointer type as `T`; `null` is the constant
 nothing at run time: inside the guarded region the checker simply reads the
 variable as `T`. Nullable parameters and returns lose `nonnull` and
 `dereferenceable` but keep `align 8`, `readonly`, and `nocapture` where the
-usual rules allow them.
+usual rules allow them. A type may be parenthesised, and `(T | null)[]` is
+where it matters: `T | null[]` groups the other way, so the parentheses are
+what make the *element* nullable rather than the array.
 
 <!-- cookbook:begin mem_nullable -->
 ```ts
@@ -3052,10 +3054,21 @@ function sum(head: Node | null): number {
   }
   return total;
 }
+
+// `(Node | null)[]`, which is where a type needs its parentheses: `Node |
+// null[]` would group the other way. The element loads as a nullable and
+// narrows like any local once it is bound to one.
+function firstValue(slots: (Node | null)[]): number {
+  const head = slots[0];
+  return head !== null ? head.value : 0;
+}
 ```
 
 ```llvm
 %struct.Node = type { i32, %struct.Node* }
+%struct.sts_array = type { i64, i64, i8* }
+
+declare void @sts_panic_index(i64 noundef, i64 noundef) #4
 
 define void @Node.constructor(%struct.Node* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %value) #0 {
 entry:
@@ -3115,9 +3128,48 @@ while.end:
   ret i32 %10
 }
 
+define noundef i32 @firstValue(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %slots) #3 {
+entry:
+  %head.addr = alloca %struct.Node*, align 8
+  %0 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %slots, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8
+  %2 = icmp ult i64 0, %1
+  br i1 %2, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @sts_panic_index(i64 0, i64 %1)
+  unreachable
+
+bounds.ok:
+  %3 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %slots, i64 0, i32 2
+  %4 = load i8*, i8** %3, align 8
+  %5 = bitcast i8* %4 to %struct.Node**
+  %6 = getelementptr inbounds %struct.Node*, %struct.Node** %5, i64 0
+  %7 = load %struct.Node*, %struct.Node** %6, align 8
+  store %struct.Node* %7, %struct.Node** %head.addr, align 8
+  %8 = load %struct.Node*, %struct.Node** %head.addr, align 8
+  %9 = icmp ne %struct.Node* %8, null
+  br i1 %9, label %cond.true, label %cond.false
+
+cond.true:
+  %10 = load %struct.Node*, %struct.Node** %head.addr, align 8
+  %11 = getelementptr inbounds %struct.Node, %struct.Node* %10, i32 0, i32 0
+  %12 = load i32, i32* %11, align 4
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %13 = phi i32 [ %12, %cond.true ], [ 0, %cond.false ]
+  ret i32 %13
+}
+
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind readonly }
+attributes #3 = { nounwind }
+attributes #4 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end mem_nullable -->
 

@@ -1,4 +1,4 @@
-declare void @sts_panic_div(i1 noundef zeroext) #1
+declare void @sts_panic_div(i1 noundef zeroext) #2
 
 define noundef double @scale(double noundef %v, double noundef %k) #0 {
 entry:
@@ -17,7 +17,7 @@ entry:
   ret double %6
 }
 
-define noundef i32 @test() #0 {
+define noundef i32 @test() #1 {
 entry:
   %x.addr = alloca i32, align 4
   %y.addr = alloca i32, align 4
@@ -76,4 +76,5 @@ div.ok.1:
 }
 
 attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind noreturn cold }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }

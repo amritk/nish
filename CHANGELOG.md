@@ -9,6 +9,29 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **Self-hosting S5: the compiler compiles itself.** `self/compilation.ts` is
+  the whole-program driver — transitive module loading through `import`,
+  cross-module binding, the reachable-struct closure, symbol-clash rejection
+  and a program-wide attribute fixpoint — and `self/compile.ts --out-dir <dir>`
+  writes one `.ll` per module. `tests/self/bootstrap.js` builds stage1 with
+  stage0, stage2 with stage1 and stage3 with stage2, and all three equalities
+  hold over the 41 modules and 4 MB of IR that make up `self/`:
+  `IR(stage0) == IR(stage1) == IR(stage2)`, byte for byte, and stage3 is
+  byte-identical to stage2. Compiling the whole compiler costs stage1 91 ms and
+  86 MB of peak RSS, against stage0's 786 ms and 178 MB.
+- **Parenthesised types.** `(T | null)[]` needs its parentheses — `T | null[]`
+  groups the other way — and stage0 always accepted them; the `self/` parser now
+  does too (`tests/cases/cls_parenthesized_type`, `reject_paren_union_type`).
+- **Self-hosting S4: the StaticTS emitter.** `self/` now carries the whole back
+  end — the IR builder, the runtime ABI table, the target layouts, the escape
+  analysis, the whole-program attribute fixpoint, the six construct families,
+  the module assembly and a one-module driver — in 6,761 lines of StaticTS
+  against the 5,686 of `src/codegen/` they replace. `tests/self/ir_oracle.js`
+  compares the two compilers' entire output byte for byte over every
+  import-free program in the corpus: 206 of 206 files agree over 19,452 lines
+  of IR. Three stage0 bugs and three stage1 divergences came out of writing it,
+  each with a case of its own. stage1 emits no debug info: `-g` stays stage0's,
+  as `--link` does.
 - **Phase 1: basic math.** `function`, `number` (`i32` by default, `f64` with
   `--number-mode f64`), `boolean`, arithmetic, comparisons, locals, calls, and
   exact LLVM IR output (`add(a, b)` compiles to the documented target IR).
@@ -462,6 +485,19 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Fixed
 
+- **A compound integer division contributes its panic callee.** `x /= k`,
+  `p.f %= k` and their `/=` twins can call the noreturn `sts_panic_div` exactly
+  as `a / b` can, but the checker resolves the target as an *assignment target*
+  and records no type for it, so the fact went missing and the enclosing
+  function kept `willreturn` and `readnone` over a call that writes and never
+  returns — an attribute LLVM is entitled to delete the call on. Found by the
+  S4 IR oracle (`tests/cases/div_compound_attributes`).
+- **`readFileSyncOrNull` is an allocation site.** Its result is bumped out of
+  the arena exactly as `readFileSync`'s is, but the escape analysis only knew
+  about the second name, so a function that returned the bytes could still be
+  given an automatic arena scope — and its `sts_arena_release` rewound past the
+  string the caller was about to read. Found by porting the analysis to `self/`
+  for milestone S4 (`tests/cases/mem_read_or_null_scope`).
 - **Dispatch tables no longer see `Object.prototype`.** The validator, checker
   and emitter are each a table keyed by identifier, read with a key taken from
   the program being compiled. A plain object literal inherits from

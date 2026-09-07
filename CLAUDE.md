@@ -1,7 +1,14 @@
 # Project rules
 
+**New session? Read [`.claude/orientation.md`](.claude/orientation.md) first** —
+it is the ninety-second map of the repository, the two compilers, and the
+commands. If the work touches `self/`, read
+[`.claude/selfhost.md`](.claude/selfhost.md) straight after it.
+
 Developer guidelines live in the `.claude/` directory:
 
+- **orientation.md** — start here: what the repo is, where the code is, what to run
+- **selfhost.md** — the `self/` compiler: StaticTS-0, the module map, the oracles
 - **node.md** — Node runtime, npm scripts, the LLVM toolchain, Biome
 - **typescript.md** — TypeScript style: the StaticTS rules for every program in the repo, and the static-friendly rules for the compiler source
 - **comments.md** — Comment guidelines and JSDoc
