@@ -772,3 +772,31 @@ export function checkArguments(ctx: CheckContext, args: Node, scope: Scope, want
     checkExpression(ctx, arg, scope, want);
   }
 }
+
+/**
+ * Drop the narrowing of every variable a loop assigns, before its body is
+ * checked. `if (cur !== null) { while (...) { cur = cur.next; } }` narrows
+ * `cur` at the `if` and the second iteration sees the assigned value, so the
+ * narrowing cannot hold inside the loop — the rule `docs/LANGUAGE.md` states
+ * as "before a loop whose body, condition, or update assigns the variable".
+ */
+export function clearNarrowingsAssignedIn(ctx: CheckContext, node: Node, scope: Scope): void {
+  if (node.kind === N_BINARY && writesLeft(node.text)) {
+    clearTarget(node.children[0], scope);
+  } else if (node.kind === N_UNARY && (node.text === "++" || node.text === "--")) {
+    clearTarget(node.children[0], scope);
+  }
+  for (const child of node.children) {
+    clearNarrowingsAssignedIn(ctx, child, scope);
+  }
+}
+
+function clearTarget(target: Node, scope: Scope): void {
+  if (target.kind !== N_IDENT) {
+    return;
+  }
+  const local = scope.lookup(target.text);
+  if (local !== null) {
+    scope.clearNarrowing(local);
+  }
+}

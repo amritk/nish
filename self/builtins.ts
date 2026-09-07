@@ -15,7 +15,7 @@
 
 import { CheckContext } from "./context";
 import { checkExpression } from "./expressions";
-import { N_CALL, N_IDENT, N_MEMBER, Node } from "./nodes";
+import { N_CALL, N_IDENT, N_MEMBER, N_PAREN, Node } from "./nodes";
 import { Scope } from "./symbols";
 import {
   isNumeric,
@@ -446,4 +446,28 @@ export function terminatesControlFlow(ctx: CheckContext, expr: Node): boolean {
     return false;
   }
   return callee.children[0].text === "process" && callee.text === "exit";
+}
+
+/**
+ * Whether an expression *is* `process.argv`. The array is built once by the
+ * `@main` wrapper and lives outside the arena, so a program may read it any
+ * way it likes and may not write it: a store, a `push` or a `pop` would
+ * change what every other module sees and would outlive an `Arena.reset`.
+ */
+export function isArgvExpression(ctx: CheckContext, expr: Node, scope: Scope): boolean {
+  // `(process.argv).push(...)` is the same write as `process.argv.push(...)`,
+  // so the parentheses are stepped through rather than hiding it.
+  let inner = expr;
+  while (inner.kind === N_PAREN) {
+    inner = inner.children[0];
+  }
+  if (inner.kind !== N_MEMBER || inner.text !== "argv") {
+    return false;
+  }
+  const receiver = inner.children[0];
+  if (receiver.kind !== N_IDENT || receiver.text !== "process") {
+    return false;
+  }
+  // A local called `process` shadows the namespace, as it would in TypeScript.
+  return scope.lookup("process") === null && ctx.program.constant("process") === null;
 }

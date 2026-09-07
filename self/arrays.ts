@@ -3,7 +3,7 @@
 // and element assignment.
 
 import { resolveType, typedArrayElement } from "./annotations";
-import { checkBuiltinArity } from "./builtins";
+import { checkBuiltinArity, isArgvExpression } from "./builtins";
 import { CheckContext } from "./context";
 import { checkExpression } from "./expressions";
 import { Node } from "./nodes";
@@ -75,6 +75,9 @@ export function checkIndex(ctx: CheckContext, expr: Node, scope: Scope): i32 {
 
 /** `a[i] = v` and `a[i] op= v`. */
 export function checkIndexAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 {
+  if (isArgvExpression(ctx, expr.children[0].children[0], scope)) {
+    return ctx.errorType(expr, "`process.argv` is read-only");
+  }
   const elem = checkIndex(ctx, expr.children[0], scope);
   ctx.program.nodeTypes[expr.children[0].id] = elem;
   const op = expr.text;
@@ -118,6 +121,9 @@ export function checkArrayMethod(
   scope: Scope
 ): i32 {
   const name = access.text;
+  if ((name === "push" || name === "pop") && isArgvExpression(ctx, access.children[0], scope)) {
+    return ctx.errorType(call, "`process.argv` is read-only");
+  }
   const elem = ctx.table.refOf(receiver);
   const spelled = ctx.table.typeName(receiver);
   if (name === "push") {

@@ -78,7 +78,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   has no parent pointers; the one place that shows is `console.log` and the
   other `void` builtins, where "must be a statement" is answered by the
   statement checker recording the expression it is about to check.
-  `self/` is now **9,235 lines** of StaticTS.
+  `self/` is now **9,702 lines** of StaticTS.
   The proof is both halves of what a checker does. On what it *accepts*,
   `tests/self/checked_oracle.js` compares the `--emit-checked` dump over the
   whole corpus: **207 of 207 files agree over 2,079 lines**, and those lines
@@ -87,11 +87,13 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   and every folded constant. On what it *refuses*,
   `tests/self/reject_oracle.js` runs every `reject_*` case through stage1 and
   requires the same `.err` fragments the suite already requires of stage0:
-  **154 of 154 agree**, with 11 cases named in `tests/self/reject_backlog.txt`
-  — `process.argv` being read-only, definite assignment in a constructor,
-  `super(...)` placement, and one narrowing rule — so the remaining work is
-  counted in the suite output rather than hidden in a skip, and a backlog
-  entry that starts agreeing fails until it is removed.
+  **165 of 165 agree over 168 message fragments**, with nothing left in a
+  backlog: definite assignment (`self/assignment.ts`), `super(...)` placement,
+  `process.argv` being read-only and the rule that a narrowing does not
+  survive a loop that assigns the variable all landed, and the backlog file
+  that carried them is gone. The 44 skipped cases are the ones the S2 *parser*
+  refuses by name rather than by the wording Phase 0 uses, which is a
+  deliberate difference, plus five that need the S5 module driver.
 - **A numeric literal in a ternary arm takes the conditional's context.**
   `const x: f64 = c ? 1.5 : 2.5` was rejected — the annotation reached a
   literal written directly but not one behind a `?:`, because the context walk

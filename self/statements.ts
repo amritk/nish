@@ -12,7 +12,7 @@
 // carry on instead (D1). The cost is visible — every caller of a checker that
 // can fail has to decide what to do next rather than being unwound past.
 
-import { checkCondition, checkExpression, narrow } from "./expressions";
+import { checkCondition, checkExpression, clearNarrowingsAssignedIn, narrow } from "./expressions";
 import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context";
 import { resolveType } from "./annotations";
 import { terminatesControlFlow } from "./builtins";
@@ -217,6 +217,7 @@ function checkIf(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
 }
 
 function checkWhile(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
+  clearNarrowingsAssignedIn(ctx, stmt, scope);
   checkCondition(ctx, stmt.children[0], scope);
   const body = scope.child();
   narrow(ctx, stmt.children[0], body, true);
@@ -229,6 +230,7 @@ function checkWhile(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
 }
 
 function checkDo(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
+  clearNarrowingsAssignedIn(ctx, stmt, scope);
   ctx.pushLoop(LOOP_ITERATION);
   checkStatement(ctx, stmt.children[0], scope.child());
   const broke = ctx.popLoop();
@@ -237,6 +239,7 @@ function checkDo(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
 }
 
 function checkFor(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
+  clearNarrowingsAssignedIn(ctx, stmt, scope);
   // The initializer's variables live in a scope of their own, so `i` is not
   // visible after the loop and two `for` loops may both declare one.
   const outer = scope.child();
@@ -265,6 +268,7 @@ function checkFor(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
 }
 
 function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
+  clearNarrowingsAssignedIn(ctx, stmt, scope);
   const iterable = checkExpression(ctx, stmt.children[1], scope, -1);
   const outer = scope.child();
   const decl = stmt.children[0].children[0].children[0];

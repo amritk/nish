@@ -381,7 +381,7 @@ function checkSuperMethodCall(ctx: CheckContext, expr: Node, access: Node, scope
 export function checkSuperCall(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   const current = ctx.current;
   if (current === null || current.role !== ROLE_CONSTRUCTOR) {
-    return ctx.errorType(expr, "`super(...)` is only available in a constructor");
+    return ctx.errorType(expr, "`super(...)` is only valid as the first statement of the constructor");
   }
   const owner = current.owner;
   const base: StructInfo | null = owner === null ? null : owner.base;

@@ -11,6 +11,7 @@
 // than the six `try`/`catch` sites `src/` uses.
 
 import { resolveType } from "./annotations";
+import { checkDefiniteAssignment } from "./assignment";
 import { foldConstant } from "./constants";
 import { CheckContext } from "./context";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
@@ -93,9 +94,13 @@ export class Checker {
       }
     }
 
+    // The checks that need every layout: `implements` compares field lists,
+    // and definite assignment needs the inherited prefix to know what
+    // `super(...)` covers.
     for (const info of declared) {
       if (info.kind === STRUCT_CLASS) {
         checkImplements(this.ctx, info);
+        checkDefiniteAssignment(this.ctx, info);
       }
     }
   }
