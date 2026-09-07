@@ -156,6 +156,7 @@ takes that type (`src/checker/math.ts`, `contextualLiteralType`;
 | a class field's literal initializer | `b: u8 = 255` | `u8` |
 | argument to a constructor | `new Pixel(255, 0, 0)` | the parameter's type |
 | a field or element assignment target | `p.b = 255`, `bytes[i] = 255` | the field's / element's type |
+| a ternary arm, from the conditional's own context | `const x: f64 = c ? 1.5 : 2.5` | `f64` (`tests/cases/f64_ternary_literal`) |
 
 `-5` and `(5)` count as the literal. "Known type" means an already-checked
 left operand, a variable, a field or element of one of those, or a call to a
@@ -480,6 +481,22 @@ having no top-level code and therefore no initialisation order.
   (`tests/link/not_exported`, `tests/link/unknown_export`); importing the
   same local name twice, or a name also declared locally, is an error
   (`tests/link/duplicate_import`).
+- An imported class or interface brings the **layouts** of the classes and
+  interfaces its own members mention — field types, and the parameter and
+  return types of its methods and constructor, through arrays and nullables —
+  so a module that imports `Registry` may hold, call and read the `Entry`
+  values `Registry.all(): Entry[]` hands it without importing `Entry`
+  (`tests/link/reachable_struct`). Only the layout travels, not the name: a
+  type *annotation* still needs the import, and `const e: Entry` in that
+  module is `` Unsupported type reference `Entry` ``
+  (`tests/link/reachable_struct_annotation`). A base class reached only
+  through `extends` is not brought in either — it is used through its pointer,
+  so the importer declares `%struct.Base = type opaque`
+  (`tests/link/extends_import`). An imported *function* brings its own
+  signature's layouts the same way — `import { lex }` where `lex(): Token`
+  gives this module `Token` values it never names
+  (`tests/link/reachable_struct_return`) — and the layouts travel however many
+  modules apart the declaration is (`tests/link/reachable_struct_chain`).
 - Import cycles are allowed (`tests/link/cycle`); a shared dependency is
   compiled once (`tests/link/diamond`).
 - **Linkage.** Every function is an external C-ABI symbol by default, so two

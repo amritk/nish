@@ -12,8 +12,19 @@
 // oracle knows the file needs grammar StaticTS-0 does not have yet rather than
 // that the two disagree.
 
-import { Diagnostic, Parser } from "./parser";
-import { FLAG_CONST, FLAG_EXPORTED, FLAG_POSTFIX, FLAG_READONLY, N_STRING, N_TEMPLATE_TEXT, N_UNARY, Node, nodeName } from "./nodes";
+import { SourceFile } from "./diagnostics";
+import { Parser } from "./parser";
+import {
+  FLAG_CONST,
+  FLAG_EXPORTED,
+  FLAG_POSTFIX,
+  FLAG_READONLY,
+  N_STRING,
+  N_TEMPLATE_TEXT,
+  N_UNARY,
+  Node,
+  nodeName,
+} from "./nodes";
 
 /** Two spaces per level of depth. */
 function indent(depth: i32): string {
@@ -65,14 +76,14 @@ export function main(): number {
     return 1;
   }
 
-  const parser = new Parser(source);
+  const parser = new Parser(new SourceFile(path, source));
   const file = parser.parseSourceFile();
   const lines: string[] = [];
   dump(file, 0, lines);
   write(`${lines.join("\n")}\n`);
 
   for (const diagnostic of parser.diagnostics) {
-    console.error(`${path}:${diagnostic.start}: ${diagnostic.message}`);
+    writeError(`${diagnostic.message()}\n`);
   }
   return parser.diagnostics.length > 0 ? 1 : 0;
 }

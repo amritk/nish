@@ -22,6 +22,8 @@ import {
   declareStruct,
   finishStruct,
   isStructDeclaration,
+  referencedStructNames,
+  signatureStructNames,
   thisLocal,
 } from "./classes";
 import { ConstInfo, constValue } from "./constants";
@@ -82,6 +84,22 @@ export class Checker implements CheckContext {
    * rejects the ones that turn out to be functions.
    */
   private readonly importsUsedAsTypes = new Set<string>();
+  /**
+   * The struct names this module may *write* as a type: the ones it declares
+   * and the ones it imports. `program.structs` is wider than this — it also
+   * holds the layouts reached through an imported class's members
+   * (`registerReachableStructs`) — and resolving an annotation against that
+   * wider map would make `Item` a legal annotation in a module that never
+   * imported it.
+   */
+  private readonly typeNames = new Set<string>();
+  /**
+   * The entries of `program.structs` that are there only because they were
+   * reachable. They are not a declaration, so they must not collide with one:
+   * an explicit `import { Item }` after an `import { Box }` that reached it
+   * replaces the entry rather than reporting a duplicate.
+   */
+  private readonly reachableOnly = new Set<string>();
 
   constructor(
     sourceFile: ts.SourceFile,
@@ -104,11 +122,12 @@ export class Checker implements CheckContext {
       locals: new WeakMap(),
       callees: new WeakMap(),
       structs: new Map(),
+      reachableStructs: [],
       coercions: new WeakMap(),
       caseValues: new WeakMap(),
     };
     registerNamedTypes(sourceFile, (name) => {
-      const own = this.program.structs.get(name);
+      const own = this.typeNames.has(name) ? this.program.structs.get(name) : undefined;
       if (own) return own.type;
       if (this.program.imports.some((imp) => imp.localName === name)) {
         this.importsUsedAsTypes.add(name);
@@ -150,7 +169,11 @@ export class Checker implements CheckContext {
     for (const stmt of this.sf.statements) {
       this.sink.recover(() => {
         if (ts.isImportDeclaration(stmt)) this.program.imports.push(...collectImports(stmt, this.sf));
-        else if (isStructDeclaration(stmt)) structs.push(declareStruct(this, stmt));
+        else if (isStructDeclaration(stmt)) {
+          const info = declareStruct(this, stmt);
+          this.typeNames.add(info.name);
+          structs.push(info);
+        }
       });
     }
     for (const stmt of this.sf.statements) {
@@ -269,7 +292,7 @@ export class Checker implements CheckContext {
         imp.element
       );
     }
-    const clash = this.program.structs.get(imp.localName);
+    const clash = this.reachableOnly.has(imp.localName) ? undefined : this.program.structs.get(imp.localName);
     if (clash) {
       const origin = this.program.imports.find((o) => o.struct === clash);
       this.error(
@@ -281,7 +304,65 @@ export class Checker implements CheckContext {
     }
     if (this.sigs.has(imp.localName)) this.error(`\`${imp.localName}\` is already declared in this module`, imp.element);
     imp.struct = struct;
+    if (this.reachableOnly.delete(imp.localName)) {
+      const at = this.program.reachableStructs.indexOf(struct);
+      if (at >= 0) this.program.reachableStructs.splice(at, 1);
+    }
+    this.typeNames.add(imp.localName);
     this.program.structs.set(imp.localName, struct);
+  }
+
+  /**
+   * The layouts an imported class drags in with it. `import { Box }` where
+   * `Box.all(): Item[]` gives this module `Item` values it can call methods on
+   * and read fields of, and both the checker (`structOf`) and the emitter
+   * (field offsets, `%struct.Item = type { ... }` rather than `type opaque`)
+   * need `Item`'s layout to do it — in a module where `Item` is never written.
+   *
+   * They go into `program.structs` but not into `typeNames`, so nothing about
+   * what may be *spelled* as a type changes: `const x: Item` in this module is
+   * still `Unknown type` until `Item` is imported.
+   *
+   * The same is true of an imported *function*: `parse(): Node` hands this
+   * module `Node` values without `Node` appearing anywhere in it.
+   *
+   * `declared` is every struct declared anywhere in the program, which is why
+   * this is a pass of its own after every module has bound its imports: a
+   * chain (`A` imports `B`'s class, whose method returns `C`'s) would
+   * otherwise depend on the order the modules happened to be bound in.
+   */
+  closeReachableStructs(declared: ReadonlyMap<string, StructInfo>): void {
+    const pending: StructInfo[] = [];
+    const seen = new Set<string>();
+    const reach = (name: string): void => {
+      if (seen.has(name)) return;
+      seen.add(name);
+      const info = declared.get(name);
+      if (!info) return;
+      if (!this.program.structs.has(name)) {
+        this.program.structs.set(name, info);
+        this.program.reachableStructs.push(info);
+        this.reachableOnly.add(name);
+      }
+      pending.push(info);
+    };
+    for (const imp of this.program.imports) {
+      if (imp.struct) {
+        // The imported class itself is already registered by name.
+        seen.add(imp.struct.name);
+        pending.push(imp.struct);
+      }
+      // An imported *function* drags its types in the same way: `parse(): Node`
+      // hands this module `Node` values with no mention of `Node` anywhere.
+      if (imp.sig) {
+        for (const name of signatureStructNames(imp.sig)) reach(name);
+      }
+    }
+    while (pending.length > 0) {
+      // biome-ignore lint/style/noNonNullAssertion: the loop guard is the length check
+      const info = pending.pop()!;
+      for (const name of referencedStructNames(info)) reach(name);
+    }
   }
 
   /**
@@ -292,7 +373,7 @@ export class Checker implements CheckContext {
    */
   private bindConstantImport(imp: ImportBinding, constant: ConstInfo): void {
     if (this.program.constants.has(imp.localName) || this.sigs.has(imp.localName) ||
-        this.program.structs.has(imp.localName)) {
+        (this.program.structs.has(imp.localName) && !this.reachableOnly.has(imp.localName))) {
       this.error(`\`${imp.localName}\` is already declared in this module`, imp.element);
     }
     if (this.importsUsedAsTypes.has(imp.localName)) {

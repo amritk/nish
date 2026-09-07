@@ -544,7 +544,7 @@ function compare(binary, file) {
   const run = spawnSync(binary, [file], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   if (run.status !== 0) {
     const first = run.stderr.trim().split("\n")[0] ?? "";
-    return { skipped: `parser: ${first.replace(/^.*?:\d+: /, "")}` };
+    return { skipped: `parser: ${first.replace(/^.*?:\d+:\d+: [a-z ]+: /, "")}` };
   }
   const ours = run.stdout.split("\n").filter((l) => l.length > 0);
   for (let i = 0; i < Math.max(ours.length, want.length); i++) {

@@ -1,0 +1,276 @@
+// Phase 0 for stage1 (`src/validator.ts`, docs/wp14-selfhost.md milestone S3):
+// a syntax-only sweep that refuses every construct StaticTS can *never*
+// compile, before the checker runs.
+//
+// The distinction Phase 0 draws is the one `docs/LANGUAGE.md` draws: what is
+// here is forbidden by design — an interpreter at run time, a prototype
+// chain, dynamic property lookup, unwinding — and what the checker refuses
+// with `Unsupported ... in Phase 1` is merely not implemented yet. Keeping
+// them apart is why a rejection message can say *why* rather than "no".
+//
+// It is smaller than stage0's, and for the same reason `self/declarations.ts`
+// is: the S2 parser refuses most of this syntax where it stands, by name.
+// What is left is what parses as ordinary StaticTS and is forbidden anyway —
+// a banned identifier, a `__proto__` or `.prototype` member, an `Object.*`
+// shape mutation, a string-keyed element access.
+
+import { CheckContext } from "./context";
+import {
+  N_BIGINT,
+  N_BINARY,
+  N_CALL,
+  N_IDENT,
+  N_INDEX,
+  N_MEMBER,
+  N_NEW,
+  N_NUMBER,
+  N_PAREN,
+  N_PROPERTY,
+  N_STRING,
+  N_TEMPLATE,
+  N_TYPE_NULL,
+  N_TYPE_REF,
+  N_TYPE_UNION,
+  N_UNARY,
+  Node,
+} from "./nodes";
+
+/** The message for an identifier that may never appear as a value, or "". */
+function forbiddenValue(name: string): string {
+  if (name === "eval") {
+    return "`eval` is forbidden in StaticTS (no interpreter at runtime)";
+  }
+  if (name === "Function") {
+    return "`Function` is forbidden in StaticTS (no interpreter at runtime)";
+  }
+  if (name === "Proxy") {
+    return "`Proxy` is forbidden in StaticTS (no dynamic property interception)";
+  }
+  if (name === "Reflect") {
+    return "`Reflect` is forbidden in StaticTS (no runtime reflection)";
+  }
+  if (name === "Symbol") {
+    return "`Symbol` is forbidden in StaticTS (no symbol type)";
+  }
+  if (name === "globalThis") {
+    return "`globalThis` is forbidden in StaticTS (no global object)";
+  }
+  if (name === "arguments") {
+    return "`arguments` is forbidden in StaticTS (functions have fixed arity)";
+  }
+  if (name === "undefined") {
+    return "`undefined` is forbidden in StaticTS; use `null` with a `T | null` type";
+  }
+  if (name === "debugger") {
+    // `debugger;` parses as an expression statement naming an identifier, so
+    // this is where it lands rather than in the parser.
+    return "`debugger` is forbidden in StaticTS (no debugger hook)";
+  }
+  return "";
+}
+
+/** The message for a type name that may never be referenced, or "". */
+function forbiddenType(name: string): string {
+  if (name === "Function") {
+    return "`Function` type is forbidden in StaticTS (no dynamic function values)";
+  }
+  if (name === "Symbol") {
+    return "`Symbol` type is forbidden in StaticTS (no symbol type)";
+  }
+  if (name === "Proxy") {
+    return "`Proxy` type is forbidden in StaticTS (no dynamic property interception)";
+  }
+  if (name === "symbol") {
+    return "`symbol` type is forbidden in StaticTS (no symbol type)";
+  }
+  if (name === "bigint") {
+    return "`bigint` type is forbidden in StaticTS (use number, i32, or f64)";
+  }
+  if (name === "undefined") {
+    return "`undefined` is forbidden in StaticTS; use `null` with a `T | null` type";
+  }
+  if (name === "any") {
+    return "`any` is forbidden in StaticTS";
+  }
+  if (name === "unknown") {
+    return "`unknown` is forbidden in StaticTS";
+  }
+  return "";
+}
+
+/** `Object.<member>` calls that mutate an object's shape or its prototype chain. */
+function isShapeMutation(member: string): boolean {
+  return (
+    member === "assign" ||
+    member === "create" ||
+    member === "defineProperty" ||
+    member === "defineProperties" ||
+    member === "setPrototypeOf" ||
+    member === "getPrototypeOf"
+  );
+}
+
+/**
+ * Whether an element-access key *looks* numeric. It is a syntactic test, not
+ * a type test — Phase 0 has no types — so it accepts anything arithmetic and
+ * refuses the shapes that could only be a property name.
+ */
+function isNumericIndexShape(expr: Node): boolean {
+  switch (expr.kind) {
+    case N_IDENT:
+      return true;
+    case N_NUMBER:
+      return true;
+    case N_CALL:
+      return true;
+    case N_MEMBER:
+      return true;
+    case N_INDEX:
+      return true;
+    case N_PAREN:
+      return isNumericIndexShape(expr.children[0]);
+    case N_UNARY:
+      return expr.text === "-" || expr.text === "+";
+    case N_BINARY:
+      if (
+        expr.text === "+" ||
+        expr.text === "-" ||
+        expr.text === "*" ||
+        expr.text === "/" ||
+        expr.text === "%"
+      ) {
+        return isNumericIndexShape(expr.children[0]) && isNumericIndexShape(expr.children[1]);
+      }
+      return false;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Sweep a whole tree. Every rejection is reported and the walk continues, so
+ * a file with several forbidden constructs names them all — which is the
+ * behaviour stage0's sink gives Phase 0 and the reason it is a *sweep* rather
+ * than a bail-out.
+ */
+export function validate(ctx: CheckContext, node: Node): void {
+  visit(ctx, node, false);
+}
+
+function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void {
+  switch (node.kind) {
+    case N_IDENT: {
+      const message = forbiddenValue(node.text);
+      if (message.length > 0) {
+        ctx.error(node, message);
+      }
+      break;
+    }
+    case N_TYPE_REF: {
+      const message = forbiddenType(node.text);
+      if (message.length > 0) {
+        ctx.error(node, message);
+      }
+      break;
+    }
+    case N_MEMBER:
+      rejectForbiddenMember(ctx, node);
+      break;
+    case N_INDEX:
+      rejectForbiddenIndex(ctx, node);
+      break;
+    case N_BIGINT:
+      ctx.error(node, "`bigint` literals are forbidden in StaticTS; use the `i64` type");
+      break;
+    case N_TYPE_UNION:
+      // Everything but `T | null` is refused here, before the checker reports
+      // the offending member on its own — `T | undefined` is a union first.
+      checkNullUnion(ctx, node);
+      break;
+    case N_PROPERTY:
+      if (node.text === "__proto__") {
+        ctx.error(node, "`__proto__` is forbidden in StaticTS (no prototype chain)");
+      }
+      break;
+    case N_NEW:
+      rejectForbiddenNew(ctx, node);
+      break;
+    case N_CALL:
+      rejectForbiddenCall(ctx, node);
+      break;
+    default:
+      break;
+  }
+  for (const child of node.children) {
+    visit(ctx, child, inTypePosition);
+  }
+}
+
+function rejectForbiddenMember(ctx: CheckContext, node: Node): void {
+  if (node.text === "__proto__") {
+    ctx.error(node, "`__proto__` access is forbidden in StaticTS (no prototype chain)");
+    return;
+  }
+  if (node.text === "prototype") {
+    ctx.error(node, "`.prototype` access is forbidden in StaticTS (no prototype chain)");
+    return;
+  }
+  const receiver = node.children[0];
+  if (receiver.kind === N_IDENT && receiver.text === "Object" && isShapeMutation(node.text)) {
+    ctx.error(
+      node,
+      `\`Object.${node.text}\` is forbidden in StaticTS (object layout is fixed at compile time)`
+    );
+  }
+}
+
+function rejectForbiddenIndex(ctx: CheckContext, node: Node): void {
+  const key = node.children[1];
+  if (key.kind === N_STRING || key.kind === N_TEMPLATE) {
+    ctx.error(
+      key,
+      "String-keyed element access is forbidden in StaticTS; use `obj.name` (no dynamic property lookup)"
+    );
+    return;
+  }
+  if (!isNumericIndexShape(key)) {
+    ctx.error(key, "Element access requires a numeric index in StaticTS (no dynamic property lookup)");
+  }
+}
+
+function rejectForbiddenNew(ctx: CheckContext, node: Node): void {
+  const callee = node.children[0];
+  if (callee.kind !== N_IDENT) {
+    return;
+  }
+  if (callee.text === "Function") {
+    ctx.error(node, "`new Function` is forbidden in StaticTS (no interpreter at runtime)");
+  } else if (callee.text === "Proxy") {
+    ctx.error(node, "`new Proxy` is forbidden in StaticTS (no dynamic property interception)");
+  }
+}
+
+function rejectForbiddenCall(ctx: CheckContext, node: Node): void {
+  const callee = node.children[0];
+  if (callee.kind !== N_IDENT) {
+    return;
+  }
+  if (callee.text === "eval") {
+    ctx.error(node, "`eval` is forbidden in StaticTS (no interpreter at runtime)");
+  } else if (callee.text === "Function") {
+    ctx.error(node, "`Function` constructor is forbidden in StaticTS (no interpreter at runtime)");
+  }
+}
+
+/** `T | null` is the only union; anything else is refused with one message. */
+function checkNullUnion(ctx: CheckContext, node: Node): void {
+  let nulls = 0;
+  for (const member of node.children) {
+    if (member.kind === N_TYPE_NULL) {
+      nulls = nulls + 1;
+    }
+  }
+  if (nulls !== 1 || node.children.length !== 2) {
+    ctx.error(node, "Union types other than `T | null` are forbidden in StaticTS");
+  }
+}

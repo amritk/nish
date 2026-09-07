@@ -1648,6 +1648,103 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         `exit ${recovery.status}\n${recovery.stdout}${recovery.stderr}`
       );
     }
+
+    // Wave C: the support library the checker and the emitter are written
+    // over (docs/wp14-selfhost.md §3). It has no counterpart in `src/` to
+    // diff phase by phase, so each function is matched with something that
+    // already exists — stage0's own IR escape and f64 hex, `node:path` for
+    // the module-identity hazard of §3a D3, and `JSON.stringify` / `Map` for
+    // the rest.
+    const supportOracle = spawnSync("node", [path.join(root, "tests", "self", "support_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const supportSummary = supportOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/ support library agrees with node and stage0 (${supportSummary})`,
+      supportOracle.status === 0,
+      `${supportOracle.stdout}${supportOracle.stderr}`
+    );
+
+    // S3, first piece: the type model. stage1 interns types and names them by
+    // an `i32`; stage0 keeps discriminated-union objects and compares them
+    // structurally. The oracle is that nothing downstream can tell — same
+    // LLVM type, same alignment, same name in a diagnostic, same
+    // assignability matrix.
+    const typesOracle = spawnSync("node", [path.join(root, "tests", "self", "types_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const typesSummary = typesOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/types.ts agrees with src/types.ts (${typesSummary})`,
+      typesOracle.status === 0,
+      `${typesOracle.stdout}${typesOracle.stderr}`
+    );
+
+    // S3: diagnostics. The `.err` goldens match on a summary line and the CLI
+    // prints an excerpt, so "stage1 reports the same errors" means every byte
+    // of both — plus the order a phase's errors come out in, the
+    // `...and N more` cut and the `--json` object.
+    const diagnosticsOracle = spawnSync("node", [path.join(root, "tests", "self", "diagnostics_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const diagnosticsSummary = diagnosticsOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/diagnostics.ts agrees with src/diagnostics.ts (${diagnosticsSummary})`,
+      diagnosticsOracle.status === 0,
+      `${diagnosticsOracle.stdout}${diagnosticsOracle.stderr}`
+    );
+
+    // S3: the scope chain, and with it the narrowing rules. This is the part
+    // of the checker a program can observe going wrong — a narrowing kept one
+    // statement too long compiles a load through a pointer the checker
+    // promised was not null — so both implementations are driven through one
+    // script and every answer compared.
+    const symbolsOracle = spawnSync("node", [path.join(root, "tests", "self", "symbols_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const symbolsSummary = symbolsOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/symbols.ts agrees with src/checker/scope.ts (${symbolsSummary})`,
+      symbolsOracle.status === 0,
+      `${symbolsOracle.stdout}${symbolsOracle.stderr}`
+    );
+
+    // S3, pass 1: signatures. `self/dump_checked.ts` prints what the pass
+    // collected in exactly the format `--emit-checked` prints it, so what is
+    // compared over the whole corpus is every struct's layout — field indices
+    // and byte offsets included — every signature, every symbol, every folded
+    // constant, and the order they come out in.
+    const checkedOracle = spawnSync("node", [path.join(root, "tests", "self", "checked_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const checkedSummary = checkedOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/checker.ts agrees with stage0 on what it accepts (${checkedSummary})`,
+      checkedOracle.status === 0,
+      `${checkedOracle.stdout}${checkedOracle.stderr}`
+    );
+
+    // The other half of milestone S3: refusing the same programs for the same
+    // reason. A dump comparison cannot see that, so every `reject_*` case is
+    // run through stage1 and its own `.err` fragments are required of the
+    // output — the same assertion the suite already makes of stage0.
+    const rejectOracle = spawnSync("node", [path.join(root, "tests", "self", "reject_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const rejectSummary = rejectOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/ refuses what stage0 refuses (${rejectSummary})`,
+      rejectOracle.status === 0,
+      `${rejectOracle.stdout}${rejectOracle.stderr}`
+    );
   }
 }
 

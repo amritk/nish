@@ -126,9 +126,10 @@ golden `.ll`, an `llvm-as` pass, a native round trip, a `reject_*` case, a
 `docs/LANGUAGE.md` rule and a cookbook entry.
 
 **Every row below is now done**, and so is the `panic(msg)` of D1. The
-language gap is closed: what remains between here and S5 is wave C (library
-code in `self/`) and the four decisions of §3a, which are about how `self/`
-is written rather than about what StaticTS can express.
+language gap is closed, and wave C below has landed too, so what remains
+between here and S5 is the port itself and the four decisions of §3a, which
+are about how `self/` is written rather than about what StaticTS can
+express.
 
 ### Wave A — the front end cannot be written without these
 
@@ -165,6 +166,39 @@ golden-compared) and a byte-wise `compareStrings` (StaticTS has no `<` on
 strings, deliberately), `jsonQuote` matching JSON escaping exactly, hex
 formatting for B1, and a `resolvePath` that normalises `.` and `..` the way
 Node does — see D3.
+
+**Landed**, in 598 lines and with no language change, which is the claim this
+wave was making: `self/strings.ts` (`StringBuilder`, `compareStrings`,
+`jsonQuote`, the LLVM `c"..."` escape, `f64Hex` / `f32Hex` over B1's
+`f64ToBits`, `splitByte`), `self/map.ts` (`StringMap`, `StringSet`) and
+`self/paths.ts` (`normalizePath`, `resolvePath`, `resolveModule`, `dirname`,
+`basename`). The stable sort landed with the diagnostics it orders
+(`DiagnosticSink.sorted`, a bottom-up merge sort), so the wave is complete.
+
+Two shape decisions are worth carrying forward:
+
+- **`StringMap` is open addressing over a dense entry list**, not keys in the
+  buckets: `slots` holds entry indices and the entries live in insertion order
+  in parallel `string[]` / `i32[]`. Iteration is therefore insertion order,
+  which is what a golden-compared dump needs — a hash order would make the
+  output depend on the table size — and `""` is an ordinary key rather than a
+  sentinel to get wrong. There is no `delete`; scopes are popped whole, so the
+  probe loop needs no tombstones.
+- **`self/paths.ts` matches `node:path` exactly, quirks included**, because
+  D3's failure mode is a `..` that normalises differently, and "differently"
+  has no small version. `dirname("/a//b")` is therefore `"/a/"`, not `"/a"`.
+  The one function that is deliberately *not* Node's is `basenameWithout`:
+  `path.basename(p, ext)` answers `"///"` for `basename("///", ".ts")` and
+  disagrees with itself about `".ts"`, and a module's name is not the place
+  to inherit that.
+
+The test is `tests/self/support_oracle.js`, and rule 3 holds for it without a
+`src/` phase to diff against: every line has an implementation on the other
+side that was written first — stage0's own `escapeBytes` and `f64Constant`
+for the IR escapes (a disagreement there *is* stage1 emitting a different
+module), `node:path`'s POSIX side for the paths, and `JSON.stringify`,
+`Buffer.compare` and `Map` for the rest. Both sides read the same case table,
+so they cannot drift onto different inputs. 863 lines agree.
 
 ### What is deliberately *not* being added
 
@@ -231,13 +265,55 @@ point is to know rather than to find out at the last milestone.
 | --- | --- | --- |
 | **S1 Lexer** | `self/lexer.ts` tokenises StaticTS-0 **Done.** | Its token stream agrees with the `typescript` scanner's over every `tests/cases/*.ts`; the lexer built by stage0 runs natively |
 | **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 **Done.** | Its tree matches the `typescript` parser's, span for span, for every program in the corpus that StaticTS-0's grammar covers |
-| **S3 Checker** | `self/checker.ts` — types, scopes, the side tables | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
+| **S3 Checker** | `self/checker.ts` — types, scopes, the side tables **Done.** | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
 | **S4 Emitter** | `self/emit.ts` — IR text | `IR(stage0, p) == IR(stage1, p)` for a growing whitelist of `tests/cases/` |
 | **S5 Bootstrap** | `self/` compiles `self/` | `IR(stage1, self/) == IR(stage2, self/)`, and stage3 is byte-identical to stage2 |
 
 S1–S4 are each useful on their own and each testable against stage0, which is
 what keeps this from being a single unlandable change. S5 is the day the
 compiler compiles itself.
+
+### What S3 cost
+
+`self/` is 9,702 lines of StaticTS, and the checker half of it — types,
+diagnostics, scopes, the side tables, annotations, declarations, structs,
+constants, expressions, statements, members, arrays, builtins, definite
+assignment and Phase 0 — is about 5,000 of them, against the ~5,100 lines of
+`src/checker/` plus `src/validator.ts` it replaces. That is the ratio S2's
+gate asked about, holding for the port as it did for the new code.
+
+The proof is both halves of what a checker does, and the second one is the
+half a dump cannot see:
+
+- **What it accepts.** `tests/self/checked_oracle.js` compares the
+  `--emit-checked` dump both compilers write, over every positive program in
+  the corpus: **207 of 207 files agree over 2,079 lines** — every struct's
+  size, alignment and per-field byte offsets, every signature and symbol,
+  every folded constant, and every body's locals and resolved callees. The 30
+  skips are 24 files that need the S5 module driver and 6 that stage0 itself
+  rejects without the flags the harness passes.
+- **What it refuses.** `tests/self/reject_oracle.js` runs every `reject_*`
+  case through stage1 and requires the fragments the case's own `.err` file
+  pins — the same assertion the suite already makes of stage0: **165 of 165
+  agree over 168 fragments.** The 44 skips are 39 cases the S2 parser refuses
+  by name rather than by Phase 0's wording, which is the deliberate difference
+  §4 recorded at S2, and 5 that need the driver.
+
+Three decisions are worth carrying into S4:
+
+1. **StaticTS-0 still held.** Nothing was added to the language for the
+   checker either. Two stage0 bugs and one contextual-typing gap came out of
+   writing it — an imported class's or function's layouts not reaching the
+   importer, a reachability closure that depended on module order, and a
+   numeric literal in a ternary arm not inheriting its context — and all
+   three are fixed with cases in `tests/`.
+2. **The central `switch` of D2 cost what D2 said it would**, and no more: a
+   construct is now an entry in `checkExpression` or `checkStatement` as well
+   as in its family's module.
+3. **No parent pointers.** The contextual type is threaded down instead of
+   walked up, which is a better fit for a checker that is one pass, and the
+   only place stage0's parent walk had no substitute is "this call must be a
+   statement" — answered by one field the statement checker sets.
 
 ### What S1 cost, and what it says
 

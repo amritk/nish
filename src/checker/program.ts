@@ -152,6 +152,14 @@ export interface CheckedProgram {
   /** Classes and interfaces visible in this module (declared or imported), keyed by name (WP2). */
   structs: Map<string, StructInfo>;
   /**
+   * The entries of `structs` that this module never named: the layouts an
+   * imported class dragged in through its own members (an `all(): Item[]`
+   * hands out `Item` values in a module that never wrote `Item`). They are
+   * not in scope as type names, and the emitter declares their symbols
+   * exactly as it declares an imported class's.
+   */
+  reachableStructs: StructInfo[];
+  /**
    * Expressions whose class-typed value is used where an interface it
    * implements is expected (WP2). `types` records the interface; the emitter
    * inserts one `bitcast` from `from` to `to`.

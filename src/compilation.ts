@@ -24,7 +24,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { CheckedProgram, Checker, FunctionSig, ImportBinding } from "./checker";
+import { CheckedProgram, Checker, FunctionSig, ImportBinding, StructInfo } from "./checker";
 import { FunctionFacts, analyzeFunctions } from "./codegen/attributes";
 import { emitProgram } from "./codegen/emitter";
 import { CompileError, DiagnosticSink } from "./diagnostics";
@@ -147,6 +147,10 @@ export class Compilation {
     for (const unit of this.modules) {
       unit.checker.bindImports((imp) => unit.resolved.get(imp.specifier)!.checker.program);
     }
+    // After every module is bound, so that a struct reached through a chain of
+    // modules does not depend on the order they were bound in.
+    const declared = this.declaredStructs();
+    for (const unit of this.modules) unit.checker.closeReachableStructs(declared);
     this.rejectSymbolClashes();
     this.sink.throwIfErrors();
     // `process.argv` (WP7) is legal anywhere in a program that has an entry point, so every
@@ -156,6 +160,23 @@ export class Compilation {
     for (const unit of this.modules) unit.checker.checkBodies();
     this.sink.throwIfErrors();
     this.checked = true;
+  }
+
+  /**
+   * Every class and interface declared anywhere in the program, by name. A
+   * struct name is already a program-wide symbol (`%struct.<name>` and
+   * `@<name>.method`), so a collision is a broken program either way and the
+   * first declaration wins here.
+   */
+  private declaredStructs(): Map<string, StructInfo> {
+    const declared = new Map<string, StructInfo>();
+    for (const unit of this.modules) {
+      for (const info of unit.checker.program.structs.values()) {
+        if (info.decl.getSourceFile() !== unit.sourceFile) continue;
+        if (!declared.has(info.name)) declared.set(info.name, info);
+      }
+    }
+    return declared;
   }
 
   /**

@@ -67,6 +67,137 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
   `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
   `bench/ffi.mjs` gains the batched `Float64Array` rows.
+- **Self-hosting, milestone S3: the body pass and Phase 0**
+  (`docs/wp14-selfhost.md` §4). `self/expressions.ts`, `statements.ts`,
+  `members.ts`, `arrays.ts`, `builtins.ts` and `validator.ts` are stage0's
+  pass 2 and its forbidden-syntax sweep in StaticTS. Two shape decisions
+  carry their reasons: the dispatch is **one central `switch`** (D2 of §3a) —
+  a table of function values would need function pointers, which StaticTS does
+  not have, and a `switch` on a node kind lowers to a jump table — and the
+  **contextual type is threaded down** rather than walked up, because the tree
+  has no parent pointers; the one place that shows is `console.log` and the
+  other `void` builtins, where "must be a statement" is answered by the
+  statement checker recording the expression it is about to check.
+  `self/` is now **9,702 lines** of StaticTS.
+  The proof is both halves of what a checker does. On what it *accepts*,
+  `tests/self/checked_oracle.js` compares the `--emit-checked` dump over the
+  whole corpus: **207 of 207 files agree over 2,079 lines**, and those lines
+  now include the per-body locals and callees, so what is compared is every
+  variable's type, every call's resolved callee, every struct's field offsets
+  and every folded constant. On what it *refuses*,
+  `tests/self/reject_oracle.js` runs every `reject_*` case through stage1 and
+  requires the same `.err` fragments the suite already requires of stage0:
+  **165 of 165 agree over 168 message fragments**, with nothing left in a
+  backlog: definite assignment (`self/assignment.ts`), `super(...)` placement,
+  `process.argv` being read-only and the rule that a narrowing does not
+  survive a loop that assigns the variable all landed, and the backlog file
+  that carried them is gone. The 44 skipped cases are the ones the S2 *parser*
+  refuses by name rather than by the wording Phase 0 uses, which is a
+  deliberate difference, plus five that need the S5 module driver.
+- **A numeric literal in a ternary arm takes the conditional's context.**
+  `const x: f64 = c ? 1.5 : 2.5` was rejected — the annotation reached a
+  literal written directly but not one behind a `?:`, because the context walk
+  had no clause for a conditional. Both arms are the value the context asked
+  for, so they inherit it; the condition is a boolean and inherits nothing
+  (`tests/cases/f64_ternary_literal`, `reject_ternary_literal_float`). Found
+  writing the self-hosted checker, where an `i32`/`f64` limit is chosen with a
+  ternary.
+- **Self-hosting, milestone S3: the signature pass** (`docs/wp14-selfhost.md`
+  §4). `self/checker.ts` and the five modules around it — `program.ts` (the
+  side tables), `context.ts`, `annotations.ts`, `declarations.ts`,
+  `structs.ts`, `constants.ts` — are stage0's pass 1 in StaticTS: imports and
+  class names first so any annotation resolves, then members, layouts and
+  function signatures, then `implements`. **206 of 206 corpus files agree with
+  stage0 over 1,255 signature lines**, compared through the `--emit-checked`
+  dump both compilers write (`tests/self/checked_oracle.js`), so what is
+  checked is not "it accepted the file" but every struct's size and alignment,
+  every field's index and byte offset, every symbol, every folded constant and
+  the order they come out in. The lines later phases fill in — the attribute
+  facts, the per-body locals and callees — are filtered rather than left out of
+  the format, so they start being compared the moment those phases land.
+  Three shape changes carry their reasons: side tables are arrays indexed by a
+  dense `Node.id` the parser hands out rather than `WeakMap`s (StaticTS has no
+  `WeakMap`, and an index beats hashing a pointer); an annotation's names come
+  from a `typeNames` set narrower than the layout registry, which is what keeps
+  a reachable layout from becoming a spellable type; and constant folding needs
+  no `bigint`, because StaticTS `i64` arithmetic already wraps where stage0 has
+  to wrap by hand. The parser now reports into the shared `Diagnostic` of
+  `self/diagnostics.ts` rather than a class of its own, so a syntax error and a
+  checker error land in one report — and print `file:line:col: syntax error:`
+  with an excerpt, exactly as stage0 does.
+- **Self-hosting, milestone S3 begun: the type model and the diagnostics**
+  (`docs/wp14-selfhost.md` §4). `self/types.ts` is `src/types.ts` with one
+  change of representation: a type is an **interned `i32`**, so "are these the
+  same type?" — the checker's hottest question — is one integer compare
+  instead of a recursive `sameType`, a type fits in the `i32` a `StringMap`
+  stores, and `T[]` costs one entry rather than one per mention. It carries a
+  thirteenth kind stage0 has no counterpart for: `T_ERROR`, D1's sentinel,
+  assignable in both directions so that one bad expression does not produce a
+  diagnostic at every site it reaches. `self/diagnostics.ts` is the same
+  summary line, source excerpt and `--json` object, over a `SourceFile` that
+  indexes its line starts once (a scan per diagnostic is quadratic in a file
+  with many errors) and a sink that orders by file-first-mentioned and then
+  position with a **stable** bottom-up merge sort — the last outstanding item
+  of wave C, and stable because two errors at one position have to keep the
+  order the phases produced them in for a multi-error golden to be
+  reproducible. Both are checked against stage0's own implementation:
+  `tests/self/types_oracle.js` diffs the LLVM type, the alignment, the
+  diagnostic spelling and the whole assignability matrix over every type
+  either side can build (119 lines), and `tests/self/diagnostics_oracle.js`
+  diffs every byte of the messages, the line/column index over *every* offset
+  in the fixture, the report order, the `...and N more errors` cut and the
+  JSON (570 lines). `self/symbols.ts` is the scope chain and the narrowing
+  rules, keyed by identity as `src/checker/scope.ts` is — this is the part of
+  the checker a program can observe going wrong, since a narrowing kept one
+  statement too long compiles a load through a pointer the checker promised
+  was not null, so both implementations are driven through one script
+  (shadowing, a narrowing that holds through the chain, an inner one that
+  wins, an assignment that drops both) and every answer compared.
+- **An imported class or function brings the layouts its signature mentions.** `import
+  { Registry }` where `Registry.all(): Entry[]` gives a module `Entry` values
+  it can call methods on and read fields of; until now the checker crashed
+  with an internal error (`structOf: no struct named \`Entry\``) because
+  `Entry` was in no registry there, and the emitter would have had only
+  `%struct.Entry = type opaque` to compute a field offset from. The layouts
+  now travel with the import, transitively, and their symbols are `declare`d
+  the way an imported class's are. Only the layout travels: an annotation
+  still needs the name in scope, so `const e: Entry` in that module is
+  unchanged (`tests/link/reachable_struct`,
+  `tests/link/reachable_struct_annotation`). A base reached through `extends`
+  and a `this` parameter are deliberately excluded — both are used through a
+  pointer the checker already holds, and including them would turn the
+  `%struct.Base = type opaque` of `tests/link/extends_import` into a
+  definition. The closure is a whole-program pass after every module has bound
+  its imports, not a step inside binding: a struct that reaches a module
+  through a chain of two — `main` imports `mid`'s class, whose method returns
+  `leaf`'s — would otherwise be found or not depending on the order the
+  modules happened to be bound in (`tests/link/reachable_struct_chain`). Found
+  by writing the self-hosted compiler's own `diagnostics`, `annotations` and
+  `statements` modules — a sink that hands back a `Diagnostic[]`, a context
+  that reads a `StringSet` field, and an imported `caseValue(): CaseValue`
+  (`tests/link/reachable_struct_return`).
+- **Self-hosting, wave C: the support library** (`docs/wp14-selfhost.md` §3).
+  `self/strings.ts`, `self/map.ts` and `self/paths.ts` are the 598 lines of
+  StaticTS the checker and the emitter are written over, and no language
+  change came with them. `StringBuilder` is a `string[]` and one `join`,
+  because `s = s + t` in a loop is quadratic in both time and memory — 88 KB
+  of IR built that way costs 180 MB of peak RSS. `StringMap` / `StringSet`
+  replace the ~200 `Map` / `Set` sites in `src/` with open addressing over a
+  *dense entry list*: FNV-1a and linear probing into a bucket table of entry
+  indices, so iteration is insertion order (a hash order would make a
+  golden-compared diagnostic dump depend on the table size) and `""` needs no
+  sentinel. `self/paths.ts` is `node:path`'s POSIX behaviour, which §3a D3
+  calls a hazard rather than tedium: module identity is the resolved path, so
+  a `..` normalised differently from Node's loads one file twice and stops
+  cycles terminating. `tests/self/support_oracle.js` is the test, and every
+  line of it has an implementation that already exists on the other side —
+  stage0's own `escapeBytes` and `f64Constant` for the two IR escapes,
+  `node:path`'s POSIX side for the path functions, and `JSON.stringify`,
+  `Buffer.compare` and `Map` for the rest, over the shared case table both
+  sides read. **863 lines agree.** One divergence is deliberate and written
+  down: `basenameWithout` is not `path.basename(p, ext)`, whose corners are
+  artifacts (`basename("///", ".ts")` is `"///"`, and `basename(".ts", ".ts")`
+  is `""` while `basename("x/.ts", ".ts")` is `".ts"`).
 - **Self-hosting, milestone S2: the parser** (`docs/wp14-selfhost.md` §4).
   `self/parser.ts` is recursive descent over the S1 lexer, building the
   one-`Node`-class tree of `self/nodes.ts` — a `kind` discriminant, a fixed

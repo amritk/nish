@@ -1,0 +1,2 @@
+%struct.Entry = type { i8*, i32 }
+declare noundef nonnull align 8 i8* @Entry.label(%struct.Entry* noundef nonnull readonly align 8 dereferenceable(16) nocapture)

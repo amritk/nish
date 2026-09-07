@@ -334,13 +334,17 @@ export function structTypeDeclarations(program: CheckedProgram): string[] {
  * ones included (WP2b: `new D()` may run `B.constructor`, `d.m()` may be
  * `B.m`); each gets a `declare`.
  */
-export function importedStructFunctions(imp: ImportBinding): FunctionSig[] {
+export function structFunctions(info: StructInfo | undefined): FunctionSig[] {
   const out: FunctionSig[] = [];
-  for (let c = imp.struct; c; c = c.base) {
+  for (let c = info; c; c = c.base) {
     if (c.ctor) out.push(c.ctor);
     out.push(...c.methods.values());
   }
   return out;
+}
+
+export function importedStructFunctions(imp: ImportBinding): FunctionSig[] {
+  return structFunctions(imp.struct);
 }
 
 // ---- Facts for attributes.ts --------------------------------------------------------------------
