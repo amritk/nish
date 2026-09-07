@@ -22,8 +22,8 @@ oracle, enabled per file as the port lands.
 | S1 | `self/lexer.ts` tokenises StaticTS-0 | **done** — `tests/lexer_oracle.js`, 482/482 files |
 | S2 | `self/parser.ts` builds the tree | **done** — `tests/parser_oracle.js`, 447/447 files |
 | S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js` and `reject_oracle.js` |
-| S4 | the emitter: IR text | in progress |
-| S5 | `self/` compiles `self/` | not started |
+| S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 206/206 files byte for byte |
+| S5 | `self/` compiles `self/` | in progress |
 
 ## The rules that are specific to this work
 
@@ -78,7 +78,11 @@ No generics, arrow functions, closures, nested functions or function values; no
 | `validator.ts` | `src/validator.ts` (Phase 0) |
 | `checker.ts` `declarations.ts` `structs.ts` `annotations.ts` `constants.ts` `assignment.ts` | `src/checker/index.ts` and friends |
 | `expressions.ts` `statements.ts` `members.ts` `arrays.ts` `builtins.ts` | `src/checker/<family>.ts` |
-| `dump_tokens.ts` `dump_ast.ts` `dump_checked.ts` | the `--emit-*` dumps in `src/dump.ts` |
+| `ir.ts` `runtime.ts` `target.ts` `options.ts` | `src/codegen/ir.ts`, `runtime.ts`, `target.ts`, `CompilerOptions` |
+| `parents.ts` | `node.parent`, which this tree does not have |
+| `escape.ts` `attributes.ts` | `src/codegen/escape.ts` and `attributes.ts` |
+| `emit.ts` `emit_util.ts` `emit_ops.ts` `emit_control.ts` `emit_strings.ts` `emit_arrays.ts` `emit_classes.ts` `emit_builtins.ts` | `src/codegen/emitter.ts` and `emit/*.ts` |
+| `dump_tokens.ts` `dump_ast.ts` `dump_checked.ts` `compile.ts` | the `--emit-*` dumps in `src/dump.ts`, and the CLI |
 
 Cyclic imports between family modules are fine and already used
 (`expressions.ts` ↔ `members.ts`), because the dispatch entry point and its
@@ -100,6 +104,7 @@ wired into the WP14 section of `tests/run.js` and skipped without clang.
 | `tests/self/symbols_oracle.js` | the scope chain and the narrowing rules |
 | `tests/self/checked_oracle.js` | the `--emit-checked` dump, over every positive program in the corpus |
 | `tests/self/reject_oracle.js` | every `reject_*` case, against its own `.err` fragments |
+| `tests/self/ir_oracle.js` | the emitted IR, byte for byte, over every import-free program in the corpus |
 
 The corpus is `tests/cases/`, `examples/`, `self/`, `docs/cookbook/`, `bench/`,
 `tests/differential/corpus/` and `tests/parser/`. A skip in an oracle summary is

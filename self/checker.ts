@@ -174,8 +174,7 @@ export class Checker {
    */
   checkBodies(): void {
     for (const sig of this.program.functions) {
-      const origin = sig.origin;
-      if (origin !== null && origin === this.program.source) {
+      if (sig.definedIn(this.program.source)) {
         this.checkFunctionBody(sig);
       }
     }
@@ -196,7 +195,7 @@ export class Checker {
       }
       i = i + 1;
     }
-    const body = bodyOf(sig);
+    const body = sig.body();
     if (body === null) {
       return;
     }
@@ -343,13 +342,6 @@ export class Checker {
     this.program.constants.set(localName, this.program.constantList.length);
     this.program.constantList.push(constant);
   }
-}
-
-/** The `BLOCK` of a function, method or constructor; `null` when it has none. */
-function bodyOf(sig: FunctionSig): Node | null {
-  const decl = sig.decl;
-  const body = decl.kind === N_CONSTRUCTOR ? decl.children[1] : decl.children[3];
-  return body.kind === N_BLOCK ? body : null;
 }
 
 /** The node a "must return on every path" diagnostic points at: the name, or the declaration. */

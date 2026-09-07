@@ -92,9 +92,22 @@ const DIVISION_OPERATORS = new Set<ts.SyntaxKind>([
   ts.SyntaxKind.PercentEqualsToken,
 ]);
 
-/** Every integer division may call the noreturn panic; `attributes.ts` needs to know. */
+/**
+ * Every integer division may call the noreturn panic; `attributes.ts` needs to
+ * know, or the caller keeps `willreturn` and `readnone` over a call that
+ * writes and never returns.
+ *
+ * The type to ask about is the operands', and where it is recorded depends on
+ * the form. `a / b` is an ordinary binary expression, so the left operand has
+ * a type of its own. `x /= b` does not: the checker resolves the target as an
+ * *assignment target* rather than checking it as an expression, so nothing is
+ * recorded for `x`, `p.f` or `a[i]` there — but the assignment expression
+ * itself has the target's type, which is the same answer.
+ */
 factCollectors.push((program, node, facts) => {
   if (!ts.isBinaryExpression(node) || !DIVISION_OPERATORS.has(node.operatorToken.kind)) return;
-  const left = program.types.get(node.left);
-  if (left && isInteger(left)) facts.callees.add("sts_panic_div");
+  const op = node.operatorToken.kind;
+  const compound = op !== ts.SyntaxKind.SlashToken && op !== ts.SyntaxKind.PercentToken;
+  const type = compound ? program.types.get(node) : program.types.get(node.left);
+  if (type && isInteger(type)) facts.callees.add("sts_panic_div");
 });

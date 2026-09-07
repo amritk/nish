@@ -1745,6 +1745,24 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       rejectOracle.status === 0,
       `${rejectOracle.stdout}${rejectOracle.stderr}`
     );
+
+    // S4: the emitter. `IR(stage0, p) == IR(stage1, p)` byte for byte over
+    // every import-free program in the corpus — not a golden a human wrote,
+    // and not a summary either: every attribute, every block label and every
+    // SSA number has to match, which is the half of the output a golden test
+    // reads past. The skips are the programs that need the S5 module driver
+    // and the flags stage1 does not have (`-g`, the dumps).
+    const irOracle = spawnSync("node", [path.join(root, "tests", "self", "ir_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const irSummary = irOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/emit.ts emits the IR stage0 emits (${irSummary})`,
+      irOracle.status === 0,
+      `${irOracle.stdout}${irOracle.stderr}`
+    );
   }
 }
 

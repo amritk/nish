@@ -271,7 +271,7 @@ function findSuperCall(node: Node): Node | null {
 }
 
 /** `super(...)` written as the first statement of the constructor, or `null`. */
-function explicitSuperCall(body: Node): Node | null {
+export function explicitSuperCall(body: Node): Node | null {
   if (body.children.length === 0) {
     return null;
   }

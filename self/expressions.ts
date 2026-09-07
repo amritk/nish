@@ -316,6 +316,12 @@ function checkUnary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32
 /** `++x`, `x--`: an assignment in disguise, so the target's rules apply. */
 function checkIncrement(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   const target = expr.children[0];
+  // The target is resolved before the operand is checked, as stage0's
+  // `resolveMutableTarget` does, so `p.f++` is refused for being a field
+  // rather than for whatever type the field turns out to have.
+  if (target.kind !== N_IDENT) {
+    return ctx.errorType(target, "Only simple variables can be assigned");
+  }
   const type = checkExpression(ctx, target, scope, -1);
   if (type === T_ERROR) {
     return T_ERROR;
@@ -369,6 +375,11 @@ function yieldsBool(op: string): boolean {
     op === ">" ||
     op === ">="
   );
+}
+
+/** The compound assignments whose operator is bitwise rather than arithmetic. */
+export function isBitwiseCompound(op: string): boolean {
+  return op === "&=" || op === "|=" || op === "^=" || op === "<<=" || op === ">>=" || op === ">>>=";
 }
 
 /** The arithmetic behind a compound assignment: `+=` is `+`. */
@@ -659,6 +670,12 @@ function checkAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 {
     return checkMemberAssignment(ctx, expr, scope);
   }
   if (target.kind === N_INDEX) {
+    // `a[i] &= v` and the rest of the bitwise family take a local only: they
+    // load, apply and store through a variable's slot, and there is no element
+    // form of that lowering yet.
+    if (isBitwiseCompound(expr.text)) {
+      return ctx.errorType(target, "Only simple variables can be assigned");
+    }
     return checkIndexAssignment(ctx, expr, scope);
   }
   if (target.kind !== N_IDENT) {

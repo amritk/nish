@@ -19,7 +19,7 @@
 
 import { SourceFile } from "./diagnostics";
 import { StringMap, StringSet } from "./map";
-import { Node } from "./nodes";
+import { N_BLOCK, N_CONSTRUCTOR, Node } from "./nodes";
 import { Local } from "./symbols";
 
 /** What a `FunctionSig` is: a free function, a method, or a constructor. */
@@ -54,6 +54,23 @@ export class FunctionSig {
   owner: StructInfo | null;
   /** A statement of the body was rejected: no IR is emitted for this program. */
   poisoned: boolean;
+
+  /** The `BLOCK` of the body, or `null` when the declaration has none. */
+  body(): Node | null {
+    const block = this.decl.kind === N_CONSTRUCTOR ? this.decl.children[1] : this.decl.children[3];
+    return block.kind === N_BLOCK ? block : null;
+  }
+
+  /**
+   * Whether this module *defines* the function rather than importing it. Pass
+   * 1b appends an imported signature to the importer's `functions`, so the
+   * emitter and the attribute analysis both need the distinction, and
+   * `origin` is nullable until pass 1 fills it in.
+   */
+  definedIn(source: SourceFile): boolean {
+    const origin = this.origin;
+    return origin !== null && origin === source;
+  }
 
   constructor(name: string, sourceName: string, decl: Node) {
     this.name = name;
