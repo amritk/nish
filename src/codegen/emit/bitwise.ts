@@ -1,7 +1,8 @@
 /**
  * Bitwise lowering: `& | ^` to `and` / `or` / `xor`, `~x` to `xor x, -1`,
  * `<<` to `shl` and `>>>` to `lshr` (zero-filling), plus the compound forms on
- * a mutable local. `>>` is `ashr` on a signed type and `lshr` on an unsigned
+ * a mutable local, a field or an element (`emitBitwiseCombine` is the half the
+ * three share). `>>` is `ashr` on a signed type and `lshr` on an unsigned
  * one, which makes `>>` and `>>>` the same instruction on `u8`..`u64`
  * (`tests/cases/u_shift_logical`).
  *
@@ -50,6 +51,9 @@ const COMPOUND_OPERATORS = new Set<ts.SyntaxKind>([
   ts.SyntaxKind.GreaterThanGreaterThanEqualsToken,
   ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
 ]);
+
+/** `&= |= ^= <<= >>= >>>=`; the field and element emitters ask before choosing an opcode table. */
+export const isBitwiseCompoundOperator = (op: ts.SyntaxKind): boolean => COMPOUND_OPERATORS.has(op);
 
 /** The three opcodes whose right operand is a count and therefore needs the mask. */
 const SHIFTS = new Set(["shl", "ashr", "lshr"]);
@@ -119,14 +123,30 @@ const emitBitwise: BinaryEmitter = (ctx, expr) => {
   return ctx.fn.emitValue(`${opcode} ${ty} ${lhs}, ${rhs}`);
 };
 
+/**
+ * The right-hand half of `t op= e` once `old` — whatever the target held — is
+ * in hand: evaluate `e` (masked when the opcode is a shift) and apply the
+ * operator. A local, a field and an element differ only in how they read
+ * `old` and where they store the result, so they all end up here and the
+ * shift-count mask cannot go missing on one of the three.
+ */
+export const emitBitwiseCombine = (
+  ctx: EmitContext,
+  op: ts.SyntaxKind,
+  type: StaticType,
+  old: string,
+  right: ts.Expression
+): string => {
+  const opcode = opcodeFor(BITWISE_OPCODES[op]!, type);
+  const rhs = emitRightOperand(ctx, opcode, type, right);
+  return ctx.fn.emitValue(`${opcode} ${llvmType(type)} ${old}, ${rhs}`);
+};
+
 /** `x &= e`: JS reads `x` before evaluating `e`; the expression's value is what was stored. */
 const emitBitwiseAssignment: BinaryEmitter = (ctx, expr) => {
   const target = ctx.program.bindings.get(expr.left as ts.Identifier)!;
-  const ty = llvmType(target.type);
-  const opcode = opcodeFor(BITWISE_OPCODES[expr.operatorToken.kind]!, target.type);
   const old = loadLocal(ctx, target);
-  const rhs = emitRightOperand(ctx, opcode, target.type, expr.right);
-  const value = ctx.fn.emitValue(`${opcode} ${ty} ${old}, ${rhs}`);
+  const value = emitBitwiseCombine(ctx, expr.operatorToken.kind, target.type, old, expr.right);
   storeLocal(ctx, target, value);
   return value;
 };

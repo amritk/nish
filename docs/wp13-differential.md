@@ -110,13 +110,13 @@ round/sqrt/sin/cos/exp/log/pow`, `Math.PI/E`, `Math.random`.
 | `a >> b`, `a >>> b` | u8 / u16 / u32 | `((a >>> (b & w)) & mask)` | `>>` is `lshr` on an unsigned type, which is JavaScript's `>>>` |
 | `a << b`, `a >> b`, `a >>> b` | i64 | `__amrit.shlI64/ashrI64/lshrI64(a, b)` | BigInt shifts do not mask the count and BigInt has no `>>>` at all |
 | `a << b`, `a >> b`, `a >>> b` | u64 | `__amrit.shlU64/lshrU64(a, b)` | the same, with the unsigned wrap; a u64 is non-negative, so BigInt `>>` is already logical |
-| `x += e` etc. | any integer | `x = <a op b rule>` | targets are simple mutable locals, so evaluating `x` twice is safe |
+| `x += e` etc. | any integer | `x = <a op b rule>` | the target is a local or a field, both of which are re-read rather than re-evaluated, so spelling `x` twice is safe; an element target has its own row below |
 | `x &= e`, `x \|= e`, `x ^= e`, `x <<= e`, `x >>= e`, `x >>>= e` | any integer | `x = <a op b rule>` | the same, with the bitwise rules above |
 | `++x`, `--x` | any integer | `(x = wrap(x + 1))` | |
 | `x++`, `x--` | any integer | `wrap((x = wrap(x + 1)) - 1)` | the old value, recovered with wrapping arithmetic so `INT_MAX++` works |
 | `a[i]` read | any | `__amrit.idx(a, i)` | WP4 bounds check: out of range prints `index out of range: i >= len` to stderr and exits 1; negative indices fail like the unsigned compare; a double index is truncated like `fptosi` |
 | `a[i] = v` | any | `__amrit.setIdx(a, i, v)` | evaluates `a`, `i`, `v`, then checks and stores; yields `v` |
-| `a[i] op= v` | i32 / i64 / f64 | `__amrit.updIdx(a, i, (old) => <old op v rule>)` | evaluates `a`, `i`, checks, loads, evaluates `v`, computes, stores |
+| `a[i] op= v` | any numeric, and any integer for the bitwise forms | `__amrit.updIdx(a, i, (old) => <old op v rule>)` | evaluates `a`, `i`, checks, loads, evaluates `v`, computes, stores — once each, which is what `corpus/bit_compound_target` counts |
 | `s.length` | receiver string | `__amrit.strLen(s)` = `Buffer.byteLength(s, "utf8")` | UTF-8 byte length. Arrays keep `.length` |
 | `new Array<T>(n)` | | `__amrit.newArray(n, 0 \| 0n \| false)` | zero-filled, no holes |
 | `console.log(x)` | | `__amrit.log(x)` | `String(x)` + newline via `fs.writeSync(1)`: no `n` suffix on BigInt, synchronous so `process.exit` cannot lose it |

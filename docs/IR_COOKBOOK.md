@@ -1536,6 +1536,89 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end expr_bitwise -->
 
+### A field or an element as the compound target
+
+`f.bits |= mask` and `bytes[i] &= 255` are the same load-apply-store as
+`x |= mask` on a local, with the target's address computed once and shared by
+the load and the store: one `getelementptr` for the field, and for the element
+one bounds check followed by one `getelementptr`. The target expression is
+therefore evaluated exactly once, so `bytes[next()] &= 255` calls `next()` a
+single time. The shift-count mask is the local's, too — `f.bits <<= n` masks
+`n` to 31 before the `shl`.
+
+<!-- cookbook:begin expr_compound_target -->
+```ts
+class Flags {
+  bits: i32 = 0;
+}
+
+function set(f: Flags, mask: i32): void {
+  f.bits |= mask;
+}
+
+function clamp(bytes: i32[], i: i32): void {
+  bytes[i] &= 255;
+}
+
+function shiftField(f: Flags, n: i32): void {
+  f.bits <<= n;
+}
+```
+
+```llvm
+%struct.Flags = type { i32 }
+%struct.amrit_array = type { i64, i64, i8* }
+
+declare void @amrit_panic_index(i64 noundef, i64 noundef) #2
+
+define void @set(%struct.Flags* noundef nonnull align 8 dereferenceable(4) nocapture %f, i32 noundef %mask) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Flags, %struct.Flags* %f, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4
+  %2 = or i32 %1, %mask
+  store i32 %2, i32* %0, align 4
+  ret void
+}
+
+define void @clamp(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %bytes, i32 noundef %i) #1 {
+entry:
+  %0 = sext i32 %i to i64
+  %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %bytes, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @amrit_panic_index(i64 %0, i64 %2)
+  unreachable
+
+bounds.ok:
+  %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %bytes, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8
+  %6 = bitcast i8* %5 to i32*
+  %7 = getelementptr inbounds i32, i32* %6, i64 %0
+  %8 = load i32, i32* %7, align 4
+  %9 = and i32 %8, 255
+  store i32 %9, i32* %7, align 4
+  ret void
+}
+
+define void @shiftField(%struct.Flags* noundef nonnull align 8 dereferenceable(4) nocapture %f, i32 noundef %n) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Flags, %struct.Flags* %f, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4
+  %2 = and i32 %n, 31
+  %3 = shl i32 %1, %2
+  store i32 %3, i32* %0, align 4
+  ret void
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind noreturn cold }
+```
+<!-- cookbook:end expr_compound_target -->
+
 ### Shifts, and the count mask
 
 `<<` is `shl`, `>>` is `ashr` (sign-filling) and `>>>` is `lshr`

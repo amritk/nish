@@ -445,14 +445,29 @@ export function emitAssignment(emitter: Emitter, expr: Node): string {
   return emitCompoundAssignment(emitter, expr);
 }
 
+/** Whether `op` is one of `&= |= ^= <<= >>= >>>=`, which the field and element emitters ask too. */
+export function isBitwiseAssignment(op: string): boolean {
+  return op.length > 1 && op.endsWith("=") && bitwiseOpcode(op).length > 0;
+}
+
+/**
+ * The right-hand half of `t op= e` once `old` — whatever the target held — is
+ * in hand: evaluate `e` (masked when the opcode is a shift) and apply the
+ * operator. A local, a field and an element differ only in how they read `old`
+ * and where they store the result, so all three come here and the shift-count
+ * mask cannot go missing on one of them.
+ */
+export function emitBitwiseCombine(emitter: Emitter, op: string, type: i32, old: string, right: Node): string {
+  const opcode = shiftOpcodeFor(bitwiseOpcode(op), type);
+  const rhs = emitRightOperand(emitter, opcode, type, right);
+  return emitter.fn.emitValue(`${opcode} ${emitter.llvm(type)} ${old}, ${rhs}`);
+}
+
 /** `x &= e`: JS reads `x` before evaluating `e`; the expression's value is what was stored. */
 function emitBitwiseAssignment(emitter: Emitter, expr: Node): string {
   const local = targetLocal(emitter, expr.children[0]);
-  const ty = emitter.llvm(local.type);
-  const opcode = shiftOpcodeFor(bitwiseOpcode(expr.text), local.type);
   const old = loadLocal(emitter, local);
-  const rhs = emitRightOperand(emitter, opcode, local.type, expr.children[1]);
-  const value = emitter.fn.emitValue(`${opcode} ${ty} ${old}, ${rhs}`);
+  const value = emitBitwiseCombine(emitter, expr.text, local.type, old, expr.children[1]);
   storeLocal(emitter, local, value);
   return value;
 }

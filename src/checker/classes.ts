@@ -74,6 +74,7 @@ import {
 import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context";
 import { hasExportModifier } from "./declarations";
 import { assignmentTargetCheckers, methodCallCheckers, newCheckers, propertyCheckers } from "./members";
+import { checkBitwiseAssignOperands, isBitwiseCompoundOperator } from "./bitwise";
 import { CheckedProgram, FieldInfo, FunctionSig, LocalVar, Param, StructInfo } from "./program";
 import { Scope } from "./scope";
 
@@ -1184,6 +1185,9 @@ const checkFieldAssignment: BinaryChecker = (ctx, expr, scope) => {
     }
     return field.type;
   }
+  // `p.f &= e` and the rest of the bitwise family: same load-apply-store, but
+  // the operand rule is `&`'s, so `bitwise.ts` owns the message as well.
+  if (isBitwiseCompoundOperator(op)) return checkBitwiseAssignOperands(ctx, expr, field.type, rhs);
   const compound = [
     ts.SyntaxKind.PlusEqualsToken,
     ts.SyntaxKind.MinusEqualsToken,

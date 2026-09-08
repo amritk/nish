@@ -387,6 +387,32 @@ export function isBitwiseCompound(op: string): boolean {
   return op === "&=" || op === "|=" || op === "^=" || op === "<<=" || op === ">>=" || op === ">>>=";
 }
 
+/**
+ * `x &= e`, `p.f |= e`, `a[i] ^= e`: the operand rule of `&` applied to
+ * whatever the target denotes, with the refusal naming the compound token that
+ * was written rather than the operator it decomposes into. The three targets
+ * call this with the type of the local, the field or the element, so they are
+ * accepted and refused in exactly the same words.
+ */
+export function checkBitwiseAssignOperands(ctx: CheckContext, expr: Node, target: i32, rhs: i32): i32 {
+  const op = expr.text;
+  if (target === T_ERROR || rhs === T_ERROR) {
+    return T_ERROR;
+  }
+  if (target === T_BOOL || rhs === T_BOOL) {
+    return ctx.errorType(expr, `Operator \`${op}\` is not available on boolean${booleanAlternative(op)}`);
+  }
+  if (!isInteger(target) || rhs !== target) {
+    const a = ctx.table.typeName(target);
+    const b = ctx.table.typeName(rhs);
+    return ctx.errorType(
+      expr,
+      `Operator \`${op}\` requires two operands of the same integer type, got ${a} and ${b}${f64Hint(ctx, target, rhs)}`
+    );
+  }
+  return target;
+}
+
 /** The arithmetic behind a compound assignment: `+=` is `+`. */
 function compoundOperator(op: string): string {
   return op.substring(0, op.length - 1);
@@ -700,12 +726,6 @@ function checkAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 {
     return checkMemberAssignment(ctx, expr, scope);
   }
   if (target.kind === N_INDEX) {
-    // `a[i] &= v` and the rest of the bitwise family take a local only: they
-    // load, apply and store through a variable's slot, and there is no element
-    // form of that lowering yet.
-    if (isBitwiseCompound(expr.text)) {
-      return ctx.errorType(target, "Only simple variables can be assigned");
-    }
     return checkIndexAssignment(ctx, expr, scope);
   }
   if (target.kind !== N_IDENT) {
@@ -752,6 +772,16 @@ export function assignInto(
       return ctx.errorType(value, `Cannot assign ${got} to ${ctx.table.typeName(slot)} ${what} \`${name}\``);
     }
     return slot;
+  }
+  if (isBitwiseCompound(op)) {
+    // The bitwise family reads the target, applies one instruction and writes
+    // it back, whatever the target is, so a local, a field and an element all
+    // share the operand rule (and the refusal) below.
+    const bits = checkExpression(ctx, value, scope, slot);
+    if (local !== null) {
+      scope.clearNarrowing(local);
+    }
+    return checkBitwiseAssignOperands(ctx, expr, slot, bits);
   }
   const arithmetic = compoundOperator(op);
   const result = checkOperator(ctx, expr, arithmetic, expr.children[0], value, scope, slot);

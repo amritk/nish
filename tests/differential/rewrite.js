@@ -463,8 +463,11 @@ function makeTransformer(unit, stems) {
             );
             return shimCall("updIdx", [a, i, fn]);
           }
-          // x op= v  ->  x = wrap(x op v)  (targets are always simple mutable locals)
-          return f.createAssignment(node.left, apply(kind, binop, node.left, r));
+          // x op= v  ->  x = wrap(x op v), for a local and for a field alike.
+          // The target is rewritten once and reused on both sides, so a
+          // receiver that itself needs rewriting is not visited twice.
+          const l = ts.visitNode(node.left, visit);
+          return f.createAssignment(l, apply(kind, binop, l, r));
         }
         if (op === ts.SyntaxKind.EqualsToken && ts.isElementAccessExpression(node.left)) {
           const a = ts.visitNode(node.left.expression, visit);

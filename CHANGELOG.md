@@ -70,7 +70,43 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   names. Without that the two new goldens ran natively and failed under Node,
   which is the shape of every builtin that was ever added and forgotten there.
 
+- **`&= |= ^= <<= >>= >>>=` reach a field and an element.** `this.flags |= MASK`
+  and `xs[i] &= 0xff` used to be refused (`` Unsupported assignment operator
+  `|=` `` for a field, `Only simple variables can be assigned` for an element)
+  while the arithmetic compound operators had taken both targets since WP2 and
+  WP4. There was nothing behind the refusal but a missing row: the lowering is
+  the one `+=` already had — address the target once, load, apply one
+  instruction, store — so the three targets now share one operand rule
+  (`checkBitwiseAssignOperands`) and one apply step (`emitBitwiseCombine`), in
+  both compilers. That sharing is what makes the guarantees hold everywhere at
+  once: the shift count is masked to the operand width on a field and an element
+  exactly as on a local (`f.bits <<= 33` is a shift by one), `>>` still reads the
+  target's signedness (`ashr` on `i32`, `lshr` on a `u32`, where `>>>` is always
+  `lshr`), and the target expression is evaluated exactly once — one call and one
+  bounds check for `a[next()] |= 1`, because the check and the `getelementptr`
+  happen once and the load and the store share the address.
+
+  `readonly` is unaffected: a compound assignment is a write, so `this.mask |=
+  bit` is refused for an inherited `readonly` field like any other write
+  (`reject_cls_field_bitwise_readonly`), and the operand rule is still `&`'s, so
+  an `f64` element is refused naming the compound token
+  (`reject_arr_element_bitwise_f64`). Those two cases are the repointed
+  `reject_cls_field_bitwise_assign` and `reject_arr_element_bitwise_assign`,
+  which described behaviour that is now legal. New: `cls_field_bitwise_assign`,
+  `arr_element_bitwise_assign` (whose `.out` proves the single evaluation),
+  `tests/differential/corpus/bit_compound_target`, and the
+  `expr_compound_target` cookbook entry.
+
 ### Fixed
+
+- **An element assignment reported its type errors through a synthesised node.**
+  `installArrayAssignmentCheckers` handed `checkElementAssignment` a spread copy
+  of the binary expression so that the parentheses around `(a[i]) += v` were
+  already peeled; a spread copy is a plain object with no `getStart`, so the
+  moment that handler reported on the expression itself — a compound assignment
+  whose operands disagree — the compiler died with exit 70 instead of printing
+  the error. The unwrapped target is passed alongside the real node now, and
+  `reject_arr_element_bitwise_f64` is the case that would have caught it.
 
 - **A builtin's argument is checked down to its element type.**
   `checkArgumentType` compared type *kinds*, which was enough while every
