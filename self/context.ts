@@ -67,6 +67,15 @@ export class CheckContext {
     this.sink.report(this.source, node.start, node.end, message);
   }
 
+  /**
+   * Report a WP15 §8 performance warning against a node's own span. It never
+   * poisons anything and never reaches the exit code: the compilation goes on
+   * exactly as it would have without it.
+   */
+  performance(node: Node, message: string): void {
+    this.sink.reportPerformance(this.source, node.start, node.end, message);
+  }
+
   /** Report and answer the sentinel type, for the many callers that want both. */
   errorType(node: Node, message: string): i32 {
     this.error(node, message);

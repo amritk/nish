@@ -50,7 +50,7 @@ import { jsonQuote } from "./strings";
 import { resolveTarget, supportedTargets } from "./target";
 
 const USAGE: string =
-  "usage: compile <file.ts> [more.ts ...] [-o <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--out-dir <dir>] [--number-mode i32|f64] [--plain] [--strict-exports] [--unchecked-indexing] [--nsw] [--no-stack-alloc] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile --version | --help";
+  "usage: compile <file.ts> [more.ts ...] [-o <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--out-dir <dir>] [--number-mode i32|f64] [--plain] [--strict-exports] [--unchecked-indexing] [--nsw] [--no-stack-alloc] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile --version | --help";
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -175,6 +175,26 @@ function report(compilation: Compilation, json: boolean): void {
 }
 
 /**
+ * The `performance` diagnostics of a *successful* compilation (WP15 §8), in
+ * the same two shapes: the human report on stderr, capped where stage0 caps
+ * it, or one flat object per line on stdout under `--json`. Nothing here
+ * touches the exit code, and a failed compilation prints none of it — an error
+ * report is never diluted with advice about code that is about to change.
+ */
+function reportPerformance(compilation: Compilation, enabled: boolean, json: boolean): void {
+  if (!enabled || compilation.sink.warningCount() === 0) {
+    return;
+  }
+  if (!json) {
+    writeError(`${compilation.sink.formatWarnings(20)}\n`);
+    return;
+  }
+  for (const warning of compilation.sink.warnings) {
+    console.log(warning.json());
+  }
+}
+
+/**
  * A failure that belongs to the command line rather than to the program: it
  * has no source span, so it cannot go through the sink. stage0 prints it with
  * an `error:` prefix on stderr, or as one flat object on stdout under
@@ -201,6 +221,11 @@ export function main(): number {
   let profile = "speed";
   let json = false;
   let emitChecked = false;
+  // WP15 §8: the performance warnings are on by default. The checker computes
+  // them either way — the walk costs nothing worth an `Options` field that
+  // `--emit-checked` and the interop surfaces would then have to carry — and
+  // this only decides whether the driver prints them.
+  let warnPerformance = true;
   let arg = 1;
   while (arg < process.argv.length) {
     const value = process.argv[arg];
@@ -302,6 +327,8 @@ export function main(): number {
       opts.nsw = true;
     } else if (value === "--no-stack-alloc") {
       opts.stackAlloc = false;
+    } else if (value === "--no-warn-performance") {
+      warnPerformance = false;
     } else if (value === "--runtime-decls") {
       opts.runtimeDecls = true;
     } else if (value === "-g") {
@@ -368,6 +395,7 @@ export function main(): number {
     report(compilation, json);
     return 1;
   }
+  reportPerformance(compilation, warnPerformance, json);
   // The checked dump is what pass 2 leaves behind, so it is written here
   // rather than after `emit`: nothing about the IR changes it.
   if (emitChecked) {

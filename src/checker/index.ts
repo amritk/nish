@@ -14,7 +14,7 @@
  *   2.  `checkBodies`        function and method bodies, now that every callee is known
  */
 import ts from "typescript";
-import { CompileError, DiagnosticSink } from "../diagnostics";
+import { CompileError, DiagnosticSink, PerformanceWarning } from "../diagnostics";
 import { CompilerOptions, StaticType, registerNamedTypes, typeToString } from "../types";
 import {
   coerceToContext,
@@ -37,6 +37,7 @@ import {
 import { CheckContext, LoopInfo } from "./context";
 import { expressionCheckers } from "./expressions";
 import { CheckedProgram, FunctionSig, ImportBinding, LocalVar, StructInfo } from "./program";
+import { checkPerformance } from "./performance";
 import { checkResultLocalsHandled } from "./result";
 import { Scope } from "./scope";
 import { checkStatements, checkVariableDeclarationList, statementCheckers } from "./statements";
@@ -414,6 +415,15 @@ export class Checker implements CheckContext {
     if (this.current) this.current.poisoned = true;
   }
 
+  /**
+   * WP15 §8. Nothing is thrown and nothing is poisoned: a performance warning
+   * is advice about code that compiles, so the compilation goes on exactly as
+   * it would have without it.
+   */
+  reportPerformance(message: string, node: ts.Node): void {
+    this.sink.reportPerformance(new PerformanceWarning(message, node, this.sf));
+  }
+
   private checkFunctionBody(sig: FunctionSig): void {
     this.current = sig;
     const scope = new Scope();
@@ -431,7 +441,14 @@ export class Checker implements CheckContext {
     const terminates = checkStatements(this, sig.decl.body!.statements, scope);
     // WP16: a `Result` local nobody reads is an unhandled failure. Reported
     // after the body so the diagnostic names a variable whose type is known.
-    if (!sig.poisoned) checkResultLocalsHandled(this, sig);
+    if (!sig.poisoned) {
+      checkResultLocalsHandled(this, sig);
+      // WP15 §8: the performance warnings, over the same body and the same
+      // side tables. Only for a body that checked cleanly — advice about code
+      // that does not compile is noise, and a poisoned body has incomplete
+      // side tables anyway.
+      checkPerformance(this, sig);
+    }
     // A body with a rejected statement may have lost its `return`: no definite-return cascade.
     if (sig.returnType.kind !== "void" && !terminates && !sig.poisoned) {
       this.error(

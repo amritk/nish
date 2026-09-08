@@ -20,6 +20,14 @@
 // character is the one place stage0 and stage1 can print different columns for
 // the same error, and the same mapping the lexer oracle already does resolves
 // it.
+//
+// The performance warnings of WP15 §8 are the one diagnostic here that is not
+// an error. They ride on the same `Diagnostic` with `kind` set to
+// `performance`, live in a second list the sink never throws or clears, and
+// are dropped whenever the compilation failed — an error report is never
+// diluted with advice about code that is about to change. They need no sort:
+// the analysis meets them in module load order and then in source order, which
+// is the order `sorted()` puts errors into anyway.
 
 import { jsonQuote, StringBuilder } from "./strings";
 import { StringMap } from "./map";
@@ -30,6 +38,9 @@ const CH_TAB: i32 = 9;
 
 /** Errors printed in full before the report is cut short with `...and N more`. */
 export const MAX_REPORTED_ERRORS: i32 = 20;
+
+/** The `kind` word of a WP15 §8 diagnostic, in the summary line and in `--json`. */
+export const PERFORMANCE: string = "performance";
 
 /**
  * One source file and the line index a diagnostic needs. The line starts are
@@ -172,12 +183,19 @@ export class Diagnostic {
     return `${this.summary()}\n${this.excerpt()}`;
   }
 
-  /** The `--json` form: one flat object, no excerpt. */
+  /**
+   * The `--json` form: one flat object, no excerpt. `severity` is the field a
+   * tool filters on, so a WP15 §8 warning says `performance` there; a syntax
+   * error keeps its `syntax error: ` prefix inside `message`, because its
+   * severity is still `error`.
+   */
   json(): string {
     const endLine = this.source.lineOf(this.end);
     const endColumn = this.source.columnOf(this.end);
-    const message = this.kind === "error" ? this.text : `${this.kind}: ${this.text}`;
-    return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"error","message":${jsonQuote(message)}}`;
+    const performance = this.kind === PERFORMANCE;
+    const severity = performance ? PERFORMANCE : "error";
+    const message = this.kind === "error" || performance ? this.text : `${this.kind}: ${this.text}`;
+    return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"${severity}","message":${jsonQuote(message)}}`;
   }
 }
 
@@ -189,11 +207,18 @@ export class Diagnostic {
  */
 export class DiagnosticSink {
   items: Diagnostic[];
+  /**
+   * The WP15 §8 performance warnings, in the order the analysis found them.
+   * Kept apart from `items` so `hasErrors` stays a statement about errors and
+   * nothing here can ever stop a compilation.
+   */
+  warnings: Diagnostic[];
   /** File path -> the order it was first mentioned in. */
   fileOrder: StringMap;
 
   constructor() {
     this.items = [];
+    this.warnings = [];
     this.fileOrder = new StringMap();
   }
 
@@ -208,8 +233,21 @@ export class DiagnosticSink {
     this.items.push(new Diagnostic(source, start, end, kind, text));
   }
 
+  /**
+   * Record a performance warning (WP15 §8). The file order is deliberately
+   * not touched: it is the error report's index, and a warning must not be
+   * able to move one error in front of another.
+   */
+  reportPerformance(source: SourceFile, start: i32, end: i32, text: string): void {
+    this.warnings.push(new Diagnostic(source, start, end, PERFORMANCE, text));
+  }
+
   hasErrors(): boolean {
     return this.items.length > 0;
+  }
+
+  warningCount(): i32 {
+    return this.warnings.length;
   }
 
   count(): i32 {
@@ -298,6 +336,34 @@ export class DiagnosticSink {
       lines.push(`...and ${hidden} more error${hidden === 1 ? "" : "s"}`);
     }
     lines.push(`${errors.length} errors`);
+    return lines.join("\n");
+  }
+
+  /**
+   * The performance report (WP15 §8), shaped exactly like `format` so there
+   * is one layout to read on either side: each warning's summary and excerpt,
+   * at most `max` of them, then `...and N more performance warnings` and a
+   * count line. A lone warning prints exactly its message, and no warnings
+   * print nothing at all.
+   */
+  formatWarnings(max: i32): string {
+    if (this.warnings.length === 0) {
+      return "";
+    }
+    if (this.warnings.length === 1) {
+      return this.warnings[0].message();
+    }
+    const lines: string[] = [];
+    let i = 0;
+    while (i < this.warnings.length && i < max) {
+      lines.push(this.warnings[i].message());
+      i = i + 1;
+    }
+    const hidden = this.warnings.length - max;
+    if (hidden > 0) {
+      lines.push(`...and ${hidden} more performance warning${hidden === 1 ? "" : "s"}`);
+    }
+    lines.push(`${this.warnings.length} performance warnings`);
     return lines.join("\n");
   }
 }

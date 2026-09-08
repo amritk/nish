@@ -377,6 +377,144 @@ if (!only || "diagnostics".includes(only)) {
   }
 }
 
+// ---- WP15 §8: the `performance` diagnostic class -----------------------------------
+// Warnings, not errors: a program that trips one still compiles and still exits 0.
+// They print `file:line:col: performance: <text>` with the same excerpt an error
+// gets, carry `"severity":"performance"` in `--json`, and `--no-warn-performance`
+// silences the class without changing one byte of the IR. The guard cases matter
+// most: a warning that fires where the compiler already did the right thing is what
+// teaches people to ignore a whole diagnostic class.
+if (!only || "performance".includes(only)) {
+  /** Compile one case to its own output file and hand back the whole result. */
+  const compile = (name, out, extra = []) =>
+    spawnSync("node", [cli, path.join(casesDir, `${name}.ts`), "-o", path.join(buildDir, out), ...extra], {
+      cwd: root,
+      encoding: "utf8",
+    });
+  const summaries = (text) => text.split("\n").filter((l) => /:\d+:\d+: performance: /.test(l));
+
+  const str = compile("perf_str_concat_loop", "perf_str.ll");
+  const strLines = summaries(str.stderr);
+  // `for`, `while`, a nested loop whose accumulator is declared one level out,
+  // and `do` — each is a loop, and a template hole copies as much as `+` does.
+  check(
+    "performance: every self-accumulating string assignment in a loop warns, naming the variable and the `string[]` + `join` rewrite",
+    str.status === 0 &&
+      strLines.length === 4 &&
+      strLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") ===
+        "7:5,14:5,24:7,33:5" &&
+      strLines[0].includes("performance: `out` is rebuilt from its own value on every iteration of this loop") &&
+      strLines[1].includes("performance: `tagged` is rebuilt from its own value") &&
+      strLines[2].includes("performance: `row` is rebuilt from its own value") &&
+      strLines[3].includes("performance: `tail` is rebuilt from its own value") &&
+      strLines.every((l) => l.includes("collect the pieces in a `string[]` and `join` them after the loop")) &&
+      str.stderr.includes("\n4 performance warnings\n"),
+    str.stderr
+  );
+  check(
+    "performance: a warning carries the same caret excerpt an error does",
+    str.stderr.includes('  7 |     out = out + "ab";\n    |     ^~~\n'),
+    str.stderr
+  );
+
+  const alloc = compile("perf_alloc_loop", "perf_alloc.ll");
+  const allocLines = summaries(alloc.stderr);
+  check(
+    "performance: a dynamically sized `new Array<T>(n)` in a loop warns and names the hoist and the arena scope",
+    alloc.status === 0 &&
+      allocLines.length === 1 &&
+      allocLines[0].includes(
+        ":10:11: performance: `row` allocates a dynamically sized array on every iteration of this loop"
+      ) &&
+      allocLines[0].includes(
+        "hoist the allocation above the loop and reuse it, or bracket the loop body with `Arena.mark()` and `Arena.release(m)`"
+      ),
+    alloc.stderr
+  );
+
+  // The false-positive guards. Each of these compiles loops that concatenate or
+  // allocate where the faster form is already what the compiler emits, or where the
+  // program genuinely asked for the memory, so it must say nothing at all.
+  for (const name of ["perf_str_concat_quiet", "perf_alloc_quiet"]) {
+    const quiet = compile(name, `${name}.ll`);
+    check(
+      `performance: ${name} takes no slow path with a faster form to name, so nothing is reported`,
+      quiet.status === 0 && summaries(quiet.stderr).length === 0,
+      quiet.stderr
+    );
+  }
+
+  // The flag decides what is printed and nothing else.
+  const off = compile("perf_str_concat_loop", "perf_str_off.ll", ["--no-warn-performance"]);
+  check(
+    "performance: --no-warn-performance silences the class and leaves the IR byte-identical",
+    off.status === 0 &&
+      summaries(off.stderr).length === 0 &&
+      stripHeader(fs.readFileSync(path.join(buildDir, "perf_str_off.ll"), "utf8")) ===
+        stripHeader(fs.readFileSync(path.join(buildDir, "perf_str.ll"), "utf8")),
+    off.stderr
+  );
+
+  // --json: one object per warning on stdout, with a severity a tool can filter on.
+  const js = compile("perf_alloc_loop", "perf_alloc_json.ll", ["--json"]);
+  const jsLines = js.stdout.trim().length > 0 ? js.stdout.trim().split("\n") : [];
+  let jsObj = null;
+  try {
+    jsObj = JSON.parse(jsLines[0]);
+  } catch {
+    jsObj = null;
+  }
+  check(
+    'performance: --json prints one object per warning on stdout with "severity":"performance", and exits 0',
+    js.status === 0 &&
+      jsLines.length === 1 &&
+      jsObj !== null &&
+      jsObj.severity === "performance" &&
+      jsObj.line === 10 &&
+      jsObj.column === 11 &&
+      !jsObj.message.includes("|"),
+    js.stdout + js.stderr
+  );
+
+  // An error report is never diluted with advice about code that is about to change.
+  const mixedSrc = path.join(buildDir, "perf_mixed.ts");
+  fs.writeFileSync(
+    mixedSrc,
+    'export function test(): number {\n  let s = "";\n  for (let i = 0; i < 2; i = i + 1) {\n    s = s + "x";\n  }\n  return s;\n}\n'
+  );
+  const mixed = spawnSync("node", [cli, mixedSrc, "-o", path.join(buildDir, "perf_mixed.ll")], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  check(
+    "performance: a compilation that failed prints its errors and none of its warnings",
+    mixed.status === 1 && mixed.stderr.includes(": error: ") && summaries(mixed.stderr).length === 0,
+    mixed.stderr
+  );
+
+  // The report is capped exactly where the error report is.
+  const manySrc = path.join(buildDir, "perf_many.ts");
+  fs.writeFileSync(
+    manySrc,
+    Array.from(
+      { length: 25 },
+      (_, i) =>
+        `export function f${i}(): number {\n  let s = "";\n  for (let j = 0; j < 2; j = j + 1) {\n    s = s + "x";\n  }\n  return s.length;\n}`
+    ).join("\n") + "\n"
+  );
+  const many = spawnSync("node", [cli, manySrc, "-o", path.join(buildDir, "perf_many.ll")], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  check(
+    "performance: 25 warnings print 20, then `...and 5 more performance warnings` and `25 performance warnings`",
+    many.status === 0 &&
+      summaries(many.stderr).length === 20 &&
+      many.stderr.includes("\n...and 5 more performance warnings\n25 performance warnings"),
+    many.stderr
+  );
+}
+
 // ---- WP5: link -------------------------------------------------------------------
 // Multi-module programs in tests/link/<name>/. `main.ts` is the entry; the program is
 // compiled with `-o <dir>/` (one .ll per module) and `--link` (scripts/build.sh, speed

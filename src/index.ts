@@ -16,7 +16,13 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { Compilation, EmittedModule } from "./compiler";
-import { CompileError, allErrors, diagnosticJson, formatErrorReport } from "./diagnostics";
+import {
+  CompileError,
+  allErrors,
+  diagnosticJson,
+  formatErrorReport,
+  formatWarningReport,
+} from "./diagnostics";
 import { dumpAst, dumpChecked } from "./dump";
 import { generateDts, generateHeader, generateNapiShim, generateWasmLoader, wasmLoaderPath } from "./interop";
 import { NumberMode } from "./types";
@@ -106,6 +112,8 @@ function usage(): never {
       `                             (${SUPPORTED_TARGETS.join(", ")}); default: target-neutral IR`,
       "  --nsw                      integer add/sub/mul carry `nsw`: signed overflow is undefined (like C)",
       "  --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)",
+      "  --no-warn-performance      do not report the `performance` diagnostics (WP15 §8; they are on by",
+      "                             default, print on stderr, and never change the exit code)",
       "  -g                         emit DWARF debug info (!dbg locations, variables); kept by --link",
       "  --json                     print diagnostics as one JSON object per line on stdout (no excerpt)",
       "  --emit-ast                 print the syntax tree of every module to stdout instead of IR",
@@ -151,6 +159,20 @@ function planOutputs(
   return modules.map((m) => m.unit.fileName.replace(/\.ts$/, "") + ".ll");
 }
 
+/**
+ * Print the `performance` diagnostics of a successful compilation (WP15 §8),
+ * capped like the error report at `MAX_REPORTED_ERRORS`. Never changes the
+ * exit code and never writes anything when the class is switched off or when
+ * nothing was found.
+ */
+const reportPerformance = (compilation: Compilation, enabled: boolean, json: boolean): void => {
+  if (!enabled) return;
+  const warnings = compilation.sink.performanceWarnings;
+  if (warnings.length === 0) return;
+  if (json) for (const w of warnings) console.log(diagnosticJson(w));
+  else console.error(formatWarningReport(warnings));
+};
+
 function main(argv: string[]): number {
   const inputs: string[] = [];
   let output: string | undefined;
@@ -172,6 +194,12 @@ function main(argv: string[]): number {
   let debugInfo = false;
   let json = false;
   let dump: "ast" | "checked" | undefined;
+  // WP15 §8: the performance warnings are on by default. The checker computes
+  // them either way — the walk is a few hundred nodes and costs nothing worth
+  // a `CompilerOptions` field that both compilers, `--emit-checked` and the
+  // interop surfaces would then have to carry — and this only decides whether
+  // the driver prints them.
+  let warnPerformance = true;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -220,6 +248,8 @@ function main(argv: string[]): number {
       nsw = true;
     } else if (arg === "--no-stack-alloc") {
       stackAlloc = false;
+    } else if (arg === "--no-warn-performance") {
+      warnPerformance = false;
     } else if (arg === "-g") {
       debugInfo = true;
     } else if (arg === "--json") {
@@ -274,6 +304,12 @@ function main(argv: string[]): number {
       return EXIT_OK;
     }
     compilation.check();
+    // WP15 §8. Only a compilation that got this far has warnings to print: an
+    // error report is never diluted with advice, so the `catch` below drops
+    // them. They go to stderr like every other human-readable diagnostic, and
+    // to stdout as JSON objects under `--json`, and neither touches the exit
+    // code.
+    reportPerformance(compilation, warnPerformance, json);
     if (dump === "checked") {
       process.stdout.write(dumpChecked(compilation));
       return EXIT_OK;

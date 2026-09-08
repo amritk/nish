@@ -116,6 +116,8 @@ amritc <entry.ts> [more.ts ...] [options]
                              aarch64-apple-darwin, wasm32-unknown-unknown, wasm32-wasi); default: target-neutral IR
   --nsw                      integer add/sub/mul carry `nsw`: signed overflow is undefined (like C)
   --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)
+  --no-warn-performance      do not report the `performance` diagnostics (they are on by default,
+                             print on stderr, and never change the exit code)
   -g                         emit DWARF debug info (!dbg locations, variables); kept by --link
   --json                     print diagnostics as one JSON object per line on stdout (no excerpt)
   --emit-ast                 print the syntax tree of every module to stdout instead of IR

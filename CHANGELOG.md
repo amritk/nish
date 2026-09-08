@@ -9,6 +9,57 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **The `performance` diagnostic class, with its first two warnings (WP15
+  §8).** The compiler now says something when it had to take a slow path and
+  a faster one was available. A warning is the same anchored, excerpted
+  diagnostic an error is, with `performance` where the word `error` would be
+  (`file:line:col: performance: <text>`), so nothing that greps `: error: `
+  picks one up; in `--json` it carries `"severity":"performance"`, the field a
+  tool filters on. Warnings are **on by default**, print on stderr, and
+  **never change the exit code** — a program that trips one still compiles and
+  still exits 0. A compilation that failed prints its errors and none of its
+  warnings, so no error report is diluted with advice about code that is about
+  to change; more than one warning is capped at 20 like the error report, with
+  `...and N more performance warnings` and an `N performance warnings` line.
+  `--no-warn-performance` silences the class and changes nothing else: the IR
+  is byte-identical either way, because the flag never reaches
+  `CompilerOptions` and only the driver reads it. Both compilers print the
+  same bytes.
+
+  The two warnings, each of which names the rewrite in the user's own terms,
+  because a warning nobody can act on trains people to ignore the whole class:
+
+  - **quadratic string building** — `s = <something built from s>`, through
+    `+` operands or a template hole, where `s` is a string local declared
+    outside the loop the assignment sits in. Every pass copies the whole
+    accumulator, which §1 measures at 180 MB of peak RSS for 88 KB of output;
+    the hint is a `string[]` and one `join`.
+  - **allocation in a loop** — a `new Array<T>(n)` with a non-constant `n`
+    declared inside a loop whose value never leaves the iteration. A
+    dynamically sized array can never be an entry-block alloca, so the arena
+    grows once per pass and is only released when the function returns; the
+    hint is to hoist it above the loop or bracket the loop body with
+    `Arena.mark()` / `Arena.release(m)`.
+
+  The analysis is a per-function pass in the checker after the body is checked
+  (`src/checker/performance.ts`, and the WP15 section of `self/checker.ts`):
+  both facts are syntax plus the types and bindings pass 2 already wrote, and
+  the emitter may not report user-facing diagnostics at all. The guards are the
+  point of the design — everything WP6's escape analysis already handles stays
+  silent, so a `new C(...)`, an object or array literal and a
+  `new Array<T>(<literal>)` in a loop are never reported (each is one
+  entry-block alloca whose slot is reused every pass), nor is an allocation
+  that is pushed, stored, returned or passed on, nor a concatenation in a loop
+  that does not accumulate into its own target. `tests/cases/perf_*` covers
+  both halves and the `WP15 §8` block of `tests/run.js` pins the exact text,
+  the flag, the `--json` shape and the cap.
+
+  Run over the corpus, the warnings found one real bug: `self/lexer.ts` builds
+  the text of a string and of a template literal one character at a time with
+  `text = text + ...` inside a `while` loop, the shape `.claude/selfhost.md`
+  forbids in `self/`. It is reported rather than fixed here; the fix is a
+  `StringBuilder`, as the rest of `self/` already uses.
+
 - **The self-hosted compiler links its own output; `scripts/amritc.sh` is
   gone (WP14, reversing §3a D4).** `amritc self/compile.ts --link amritc`
   now produces a compiler byte-identical to the one that ran it, with no shell

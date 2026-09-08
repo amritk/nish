@@ -137,10 +137,11 @@ else on stdout and nothing on stderr, with the same exit code:
 {"file":"tests/cases/reject_multi_error.ts","line":2,"column":10,"endLine":2,"endColumn":18,"severity":"error","message":"Operator `+` requires two operands of the same numeric type or two strings, got i32 and boolean"}
 ```
 
-`line`/`column` are 1-based, `endLine`/`endColumn` exclusive. `severity` is
-always `"error"`. Syntax errors keep the `syntax error: ` prefix in
-`message`. `code` is reserved for stable diagnostic codes and absent for
-now. A driver error without a source position (a bad `-o` layout, a missing
+`line`/`column` are 1-based, `endLine`/`endColumn` exclusive. `severity` was
+always `"error"` here; since WP15 §8 it is `"error"` for every error and
+`"performance"` for a performance warning, which is the field a tool filters
+on. Syntax errors keep the `syntax error: ` prefix in `message`. `code` is
+reserved for stable diagnostic codes and absent for now. A driver error without a source position (a bad `-o` layout, a missing
 input file) is `{"severity":"error","message":...}`.
 
 ## `--emit-ast` and `--emit-checked`

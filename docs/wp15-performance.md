@@ -277,14 +277,14 @@ code unless promoted.
 The compiler emits one whenever it *had* to take the slow path and a faster one
 was available:
 
-| Warning | Fires when | Hint |
-| --- | --- | --- |
-| bounds check not eliminated | `a[i]` in a loop where neither the range nor a length guard proved it | hoist the length check, use `for...of`, or a ranged index |
-| quadratic string building | `s = s + t` where `s` is assigned in an enclosing loop | build a `string[]` and `join` it |
-| allocation in a loop | a `new`, array literal or concat that escapes and is inside a loop | hoist it, or bound it with an arena scope |
-| not inlinable | a hot, non-exported function kept external because `--no-strict-exports` was given | drop the flag |
-| clamp not folded | a `substring` whose bounds could not be proven in range | use the fast slice, or narrow the index |
-| wasteful struct padding | reordering a struct's fields would shrink it | names the current size, the achievable size, and the field order that gets there |
+| Warning | Fires when | Hint | State |
+| --- | --- | --- | --- |
+| quadratic string building | `s = <something built from s>` where `s` is a string local declared outside the loop the assignment sits in | build a `string[]` and `join` it | **shipped** |
+| allocation in a loop | `new Array<T>(n)` with a non-constant `n`, declared inside a loop, whose value never leaves the iteration | hoist it, or bound it with an arena scope | **shipped** |
+| bounds check not eliminated | `a[i]` in a loop where neither the range nor a length guard proved it | hoist the length check, use `for...of`, or a ranged index | needs §2.1 |
+| not inlinable | a hot, non-exported function kept external because `--no-strict-exports` was given | drop the flag | later |
+| clamp not folded | a `substring` whose bounds could not be proven in range | use the fast slice, or narrow the index | needs §4 |
+| wasteful struct padding | reordering a struct's fields would shrink it | names the current size, the achievable size, and the field order that gets there | later |
 
 They are **on by default and never affect the exit code**: visible to everyone,
 breaking nobody. That default carries an obligation — a performance warning
@@ -292,6 +292,128 @@ must never fire on code that has no faster form. A warning nobody can act on
 trains people to ignore the whole class, so "is there a concrete rewrite this
 message can name?" is the bar each new warning has to clear before it ships,
 and the hint column above is part of the specification rather than a nicety.
+
+### 8a. What shipped
+
+The framework and the two warnings that need no analysis the checker does not
+already have. Files: `src/diagnostics.ts` and `self/diagnostics.ts` (the
+severity), `src/checker/performance.ts` and the WP15 section at the end of
+`self/checker.ts` (the analysis), `src/index.ts` and `self/compile.ts` (the
+flag and the printing). Tests: `tests/cases/perf_*` and the WP15 §8 block of
+`tests/run.js`.
+
+**The shape of a warning.** The same anchored, excerpted diagnostic an error
+is, with `performance` where the word `error` would be:
+
+```
+tests/cases/perf_alloc_loop.ts:10:11: performance: `row` allocates a dynamically sized array on every
+iteration of this loop and nothing keeps it past the iteration, so the arena grows once per pass: hoist
+the allocation above the loop and reuse it, or bracket the loop body with `Arena.mark()` and `Arena.release(m)`
+  10 |     const row = new Array<i32>(width + i);
+     |           ^~~
+```
+
+Choosing `performance` rather than `warning` for that word means nothing that
+greps `: error: ` picks a warning up, and the human line says the same thing
+the machine field does. In `--json` that field is `"severity":"performance"`,
+which is what a tool filters on; `message` carries no prefix, because the
+severity already says what it is.
+
+**Severity, the exit code and the sink.** A warning is a `PerformanceWarning`
+in stage0 and a `Diagnostic` with `kind = "performance"` in stage1, and in
+both it lives in a second list on the `DiagnosticSink` that is never thrown
+and never cleared between phases. `hasErrors` stays a statement about errors,
+so a program that trips a warning compiles and exits **0**.
+
+Three consequences worth writing down:
+
+- **A failed compilation prints no warnings at all.** An error report is never
+  diluted with advice about code that is about to change anyway, and it keeps
+  the single-error output byte-identical to what WP10 pinned.
+- **The 20-warning cap is separate from the 20-error cap**, and shaped the
+  same way: 20 in full, then `...and N more performance warnings`, then an
+  `N performance warnings` line. A lone warning prints exactly its message.
+  The two budgets never compete, because a compilation prints one or the other.
+- **No sort.** The analysis meets warnings in module load order and then in
+  source order, which is exactly the order `throwIfErrors` sorts errors into,
+  so there is nothing to sort and no second file-order table to keep in step
+  with the error report's.
+
+**The flag: `--no-warn-performance`, default on.** §8 asks for on by default
+and that is what shipped. It costs nothing in the suite: outside the four
+`perf_*` cases written for it, nothing in `tests/cases/` trips either warning —
+its concatenations in loops are either non-accumulating or outside a loop — and
+the golden loop compares `.ll` files and a case's stdout, never the compiler's
+stderr. The flag deliberately does
+**not** reach `CompilerOptions`: the checker computes the warnings either way
+and only the driver consults the flag, so the option struct that
+`--emit-checked`, the interop surfaces and both compilers mirror is untouched,
+and the IR is byte-identical with the flag and without it.
+
+**Where the analysis lives: the checker, in a per-function pass after the body
+is checked**, beside `checkResultLocalsHandled`. Both facts are syntax plus
+the types and bindings pass 2 already wrote, so nothing is re-derived and no
+extra traversal of anything else is needed. The emitter could not host them:
+`emit/*.ts` reports no user-facing diagnostics at all and an unexpected node
+there is exit 70. A poisoned body is skipped.
+
+**Quadratic string building** fires on `s = <rhs>` where `s` is a string
+local, the assignment is inside a loop, `s` was *not* declared inside that
+innermost loop, and `rhs` reaches `s` through `+` operands, parentheses or
+template holes. `s += t` is not a case: `+=` requires numeric operands in this
+language, so the only spelling is `s = s + t`. The false-positive guards, each
+with a case in `tests/cases/perf_str_concat_quiet.ts`:
+
+| Not warned | Why |
+| --- | --- |
+| `line = part + "!"` in a loop | the result does not include the target: one bounded string per pass, linear |
+| an accumulator declared *inside* the loop | reset every pass, so it is bounded by one iteration |
+| `head = head + "b"` outside any loop | one copy, once |
+| `s = f(s)`, `s = cond ? s : t` | only `+` and template holes are followed; anything else may copy nothing, and a guess would break the "name a concrete rewrite" bar |
+| `this.buf = this.buf + t` | the target is a field, not a local; hoisting a field into a builder is not a rewrite this message can name |
+
+A `for` initializer runs once, so `for (let s = ""; ...) { s = s + t; }` does
+warn; a `for...of` variable is a fresh binding every pass, so it does not.
+
+**Allocation in a loop** is the one that needed the most narrowing, because
+WP6 already does the right thing for most of it (`docs/wp6-memory.md` §1).
+What warrants a warning is exactly the intersection of *the compiler could not
+put it on the stack* and *the value dies with the iteration*:
+
+| In a loop | WP6 does | Warned |
+| --- | --- | --- |
+| `new C(...)`, `{ ... }`, `[a, b]`, `new Array<T>(<literal>)`, flow `local` | one entry-block alloca, slot reused every pass | **no** — free already, nothing to hoist |
+| `new Array<T>(n)`, `n` not a literal, flow `local` | arena, released only when the *function* returns | **yes** — the arena grows once per pass |
+| any of the above, flow `returned` or `leaks` | arena, and rightly so | **no** — the program asked for N objects |
+| `a + b`, a template, `readFileSync` | arena | **no** — the quadratic case is the string warning's; a bounded concat per pass is linear and necessary |
+| a call to a user function returning a pointer | depends on the whole-program fixpoint | **no** — the checker cannot know, and a guess would be the un-actionable kind |
+
+"Dies with the iteration" is decided conservatively over the innermost
+enclosing loop: every reference to the local must be an element read or write,
+a `.length`, or a `for...of` source. A `push`, an argument, a store, a
+`return`, a reassignment or a bare mention all suppress the warning, because
+any of them may keep the value and hoisting would then be wrong. The guards
+have a case in `tests/cases/perf_alloc_quiet.ts`.
+
+Two things deliberately left out of this warning, both because they buy
+precision the checker cannot pay for cleanly: a stackable allocation whose
+data exceeds `STACK_ARRAY_BYTES` (the checker would have to import a codegen
+constant, inverting the layering), and promotion of the class to an error,
+which §8 leaves to whoever needs it.
+
+**What it found.** Run over the whole corpus, the two warnings fire in exactly
+two places outside the `perf_*` cases written for them, and both are true
+positives:
+
+- **`self/lexer.ts` lines 506, 509, 608 and 611** build the text of a string
+  and of a template literal one character at a time with `text = text + ...`
+  inside a `while` loop — the very shape `.claude/selfhost.md` forbids in
+  `self/` and §1 measures at 180 MB of peak RSS for 88 KB of output. This is a
+  real performance bug in the self-hosted compiler's lexer, found by the
+  warning on its first run, and it is left for the change that fixes it
+  (a `StringBuilder`, as the rest of `self/` already uses).
+- **`bench/strbuild.ts`**, which exists to measure exactly this and is
+  therefore the one place where the slow form is the point.
 
 ---
 
@@ -303,8 +425,10 @@ Roughly dependency order; each row ships with the full construct checklist from
 1. **Fast defaults** (§3) — flag flips plus the honest re-pointing of every
    affected test and doc. Small, and it moves the baseline everything else is
    measured against.
-2. **`performance` diagnostics** (§8) — the framework plus the two warnings that
-   need no new analysis (quadratic string building, allocation in a loop).
+2. **`performance` diagnostics** (§8) — **done**: the framework plus the two
+   warnings that need no new analysis (quadratic string building, allocation in
+   a loop). What actually shipped, and the cases each warning deliberately
+   stays silent on, are in §8a.
 3. **Slice iterators** (§2.3) — the biggest speed win per line of emitter code,
    and no new syntax.
 4. **Unsigned types** (§6) — foundational for §2.1, touches every numeric path,

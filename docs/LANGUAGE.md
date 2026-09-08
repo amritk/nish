@@ -1638,11 +1638,43 @@ by the caller.
   (`tests/cases/reject_multi_error`, `reject_multi_forbidden`,
   `reject_multi_decl`). A `let x: T = <rejected>` still declares `x` as `T`
   so later uses do not cascade.
+- **Performance warnings are the one diagnostic that is not an error**
+  (WP15 §8). The compiler reports one whenever it had to take a slow path and a
+  faster one was available, in the same anchored, excerpted shape an error has
+  but with `performance` where `error` would be:
+  `file:line:col: performance: <text>`. They are **on by default**, print on
+  stderr, and **never change the exit code**: a program that trips one still
+  compiles and still exits 0. `--no-warn-performance` silences the class and
+  changes nothing else — the IR is byte-identical either way. A compilation
+  that *failed* prints its errors and none of its warnings; a report of more
+  than one warning is capped at 20, like the error report, with
+  `...and N more performance warnings` and an `N performance warnings` line.
+  Two warnings exist today, and each names the rewrite:
+  - **quadratic string building** — `s = <something built from s>` where `s`
+    is a string local declared outside the loop the assignment sits in, so
+    every pass copies the whole accumulator. The hint is a `string[]` and one
+    `join` (`tests/cases/perf_str_concat_loop`). Not reported when the result
+    does not include the target (`line = part + "!"`), when the accumulator is
+    declared inside the loop and therefore reset every pass, or outside any
+    loop (`tests/cases/perf_str_concat_quiet`).
+  - **allocation in a loop** — a `new Array<T>(n)` with a non-constant `n`
+    declared inside a loop whose value never leaves the iteration. A
+    dynamically sized array cannot be a stack slot, so the arena grows once per
+    pass; the hint is to hoist it above the loop or to bracket the loop body
+    with `Arena.mark()` / `Arena.release(m)`
+    (`tests/cases/perf_alloc_loop`). Not reported for a `new C(...)`, an object
+    or array literal, or a `new Array<T>(<literal>)`, all of which the escape
+    analysis already turns into one entry-block alloca whose slot is reused
+    every pass, and not when the value is pushed, stored, returned or passed
+    on, because then the program asked for one object per iteration
+    (`tests/cases/perf_alloc_quiet`).
 - **`--json`** prints every error as one JSON object per line on stdout,
-  `{"file","line","column","endLine","endColumn","severity":"error","message"}`
+  `{"file","line","column","endLine","endColumn","severity","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in
   `message`; `code` is reserved), nothing else on stdout and nothing on
-  stderr, with the same exit code. A clean compile prints nothing.
+  stderr, with the same exit code. `severity` is `"error"` for every error and
+  `"performance"` for a WP15 §8 warning, which is the field a tool filters on.
+  A clean compile with no warnings prints nothing.
 - **`--emit-ast`** prints the syntax tree of every module after Phase 0 as an
   indented `<SyntaxKind> <line:col>-<line:col>` tree (identifier and literal
   text appended) and writes no IR (`tests/cases/dump_ast`).
