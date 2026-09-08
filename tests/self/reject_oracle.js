@@ -1,35 +1,47 @@
 /**
- * The S3 rejection oracle: every `reject_*` case, refused by stage1 with the
- * message the case pins (docs/wp14-selfhost.md §4, milestone S3).
+ * The S3 rejection oracle: every negative case in the suite, refused by stage1
+ * with the message the case pins (docs/wp14-selfhost.md §4, milestone S3).
  *
  *   node tests/self/reject_oracle.js             the whole set
  *   node tests/self/reject_oracle.js --verbose   name every skip
  *
  * Accepting the same programs is half of a checker being the same checker;
  * *refusing* the same ones, for the same reason, is the other half, and it is
- * the half a dump comparison cannot see. Each case's `.err` file holds the
- * message fragments the suite already requires of stage0, so this asserts
- * exactly the same thing of stage1: it must exit non-zero and its output must
- * contain every fragment.
+ * the half a dump comparison cannot see. Each case's expected fragments are
+ * the ones the suite already requires of stage0 — one per line of
+ * `tests/cases/<name>.err`, and the whole of `tests/link/<name>/expected.err`
+ * for a program of several modules — so this asserts exactly the same thing of
+ * stage1: it must exit non-zero and its output must contain every fragment.
  *
- * A case is skipped only when it is not stage1's to answer yet:
+ * The `tests/link/` cases are here because a rejection that needs more than
+ * one module — a name imported twice, a `main` outside the entry, a class
+ * reached through a chain of modules — can only be provoked by a whole
+ * program, and stage1 has driven whole programs since S5.
  *
- *   - it needs the module driver of S5 (it imports, or it is a `tests/link`
- *     case);
- *   - it is rejected by the S2 *parser*, which turns forbidden syntax down by
+ * Two kinds of case are not stage1's to answer, and each is counted and named
+ * apart from the other so that neither can hide in a total:
+ *
+ *   - it is refused by the S2 *parser*, which turns forbidden syntax down by
  *     name rather than by the message stage0's Phase 0 validator writes. Those
  *     wordings are deliberately different — a message about the operator the
  *     programmer wrote beats one about a node kind — and the count is the
- *     measurement, not a hole.
+ *     measurement, not a hole;
+ *   - stage0 compiles it and only the link step refuses it, and `--link` is
+ *     stage0's half of the driver (docs/wp14-selfhost.md §3a D4), so stage1
+ *     has no such message to write.
  */
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { extraArgs, linkPrograms, root } = require("./corpus");
 
-const root = path.resolve(__dirname, "..", "..");
 const cli = path.join(root, "dist", "index.js");
 const CASES = path.join(root, "tests", "cases");
 const BACKLOG = path.join(root, "tests", "self", "reject_backlog.txt");
+
+/** `--number-mode` is the only flag `self/dump_checked.ts` takes. */
+const SUPPORTED_FLAGS = new Set(["--number-mode"]);
 
 /**
  * The cases stage1 does not refuse the same way *yet*, one name per line.
@@ -49,28 +61,29 @@ function backlog() {
   );
 }
 
-/** The fragments `<name>.err` requires, one per line. */
-function fragments(file) {
-  return fs
-    .readFileSync(file.replace(/\.ts$/, ".err"), "utf8")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-}
-
+/** The flags this case is compiled with, split into what stage1 takes and what it does not. */
 function argsFor(file) {
-  const argsFile = file.replace(/\.ts$/, ".args");
-  if (!fs.existsSync(argsFile)) return [];
-  const flags = fs.readFileSync(argsFile, "utf8").trim().split(/\s+/).filter(Boolean);
-  const at = flags.indexOf("--number-mode");
-  return at >= 0 ? ["--number-mode", flags[at + 1]] : [];
+  const flags = [];
+  const unsupported = [];
+  const raw = extraArgs(file);
+  for (let i = 0; i < raw.length; i++) {
+    if (SUPPORTED_FLAGS.has(raw[i])) flags.push(raw[i], raw[++i]);
+    else unsupported.push(raw[i]);
+  }
+  return { flags, unsupported };
 }
 
-function compare(binary, file) {
-  const source = fs.readFileSync(file, "utf8");
-  if (/^\s*import\s/m.test(source)) return { skipped: "imports (needs the S5 driver)" };
-  const named = path.relative(root, file);
-  const run = spawnSync(binary, [...argsFor(file), named], {
+function compare(binary, entry) {
+  const { flags, unsupported } = argsFor(entry.file);
+  if (unsupported.length > 0) return { skipped: `stage1's dump_checked has no ${unsupported.join(" ")}` };
+  const named = path.relative(root, entry.file);
+  // A `tests/link` case may be refused by the compiler or only by the linker,
+  // and `expected.err` does not say which. stage0 answers it: what it compiles
+  // is a `--link` failure, and `--link` never reached stage1 (D4).
+  if (entry.linked && compiles(named, flags)) {
+    return { skipped: "stage0 compiles it; only `--link` refuses it, and `--link` is stage0's" };
+  }
+  const run = spawnSync(binary, [...flags, named], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
@@ -78,12 +91,24 @@ function compare(binary, file) {
   const output = `${run.stdout}${run.stderr}`;
   if (run.status === 0) return { failed: "stage1 accepted it" };
   // A parser refusal is a different wording by design; the checker's is not.
-  if (/syntax error:/.test(output)) return { skipped: `refused by the parser: ${firstLine(output)}` };
-  const missing = fragments(file).filter((fragment) => !output.includes(fragment));
+  if (/syntax error:/.test(output)) return { parser: firstLine(output) };
+  const missing = entry.fragments.filter((fragment) => !output.includes(fragment));
   if (missing.length > 0) {
     return { failed: `wanted ${JSON.stringify(missing[0])}, got ${JSON.stringify(firstLine(output))}` };
   }
-  return { fragments: fragments(file).length };
+  return { fragments: entry.fragments.length };
+}
+
+/** Whether stage0 compiles the program at all, IR written to a directory it then forgets. */
+function compiles(named, flags) {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "amrit-reject-"));
+  const r = spawnSync("node", [cli, named, "-o", `${out}${path.sep}`, ...flags], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  fs.rmSync(out, { recursive: true, force: true });
+  return r.status === 0;
 }
 
 function firstLine(output) {
@@ -91,13 +116,41 @@ function firstLine(output) {
   return line.replace(/^[^:]*:\d+:\d+: /, "");
 }
 
+/**
+ * Every negative case: the single-module `reject_*` goldens, then the whole
+ * programs of `tests/link/` that carry an `expected.err`. `name` is what the
+ * backlog file lists a case under.
+ */
 function corpus() {
-  return fs
-    .readdirSync(CASES)
-    .filter((name) => name.startsWith("reject_") && name.endsWith(".ts"))
-    .filter((name) => fs.existsSync(path.join(CASES, name.replace(/\.ts$/, ".err"))))
-    .sort()
-    .map((name) => path.join(CASES, name));
+  const entries = [];
+  for (const name of fs.readdirSync(CASES).sort()) {
+    if (!name.startsWith("reject_") || !name.endsWith(".ts")) continue;
+    const file = path.join(CASES, name);
+    const err = file.replace(/\.ts$/, ".err");
+    if (!fs.existsSync(err)) continue;
+    entries.push({
+      name: path.basename(name, ".ts"),
+      file,
+      linked: false,
+      // One expected fragment per line, as `tests/run.js` reads them.
+      fragments: fs
+        .readFileSync(err, "utf8")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+    });
+  }
+  for (const program of linkPrograms()) {
+    if (program.expectedErr === null) continue;
+    // `tests/link/<name>/expected.err` is one needle, newlines and all.
+    entries.push({
+      name: `link/${program.name}`,
+      file: program.main,
+      linked: true,
+      fragments: [program.expectedErr],
+    });
+  }
+  return entries;
 }
 
 function build() {
@@ -119,23 +172,31 @@ function main(argv) {
   const named = argv.filter((a) => !a.startsWith("--"));
   const binary = build();
   if (binary === null) return 1;
-  const inputs = named.length > 0 ? named.map((f) => path.resolve(f)) : corpus();
+  const all = corpus();
+  const inputs =
+    named.length > 0
+      ? named
+          .map((f) => path.resolve(f))
+          .map((f) => all.find((e) => e.file === f) ?? { name: f, file: f, linked: false, fragments: [] })
+      : all;
   const known = backlog();
   let agreed = 0;
   let checked = 0;
+  const parser = [];
   const skipped = [];
   const failed = [];
   const pending = [];
-  for (const file of inputs) {
-    const result = compare(binary, file);
-    const name = path.basename(file, ".ts");
-    const where = path.relative(root, file);
-    if (result.skipped !== undefined) {
+  for (const entry of inputs) {
+    const result = compare(binary, entry);
+    const where = path.relative(root, entry.file);
+    if (result.parser !== undefined) {
+      parser.push(`${where}: ${result.parser}`);
+    } else if (result.skipped !== undefined) {
       skipped.push(`${where}: ${result.skipped}`);
     } else if (result.failed !== undefined) {
-      if (known.has(name)) pending.push(`${where}: ${result.failed}`);
+      if (known.has(entry.name)) pending.push(`${where}: ${result.failed}`);
       else failed.push(`${where}: ${result.failed}`);
-    } else if (known.has(name)) {
+    } else if (known.has(entry.name)) {
       failed.push(`${where}: agrees now — remove it from tests/self/reject_backlog.txt`);
     } else {
       agreed++;
@@ -145,12 +206,14 @@ function main(argv) {
   for (const f of failed) process.stdout.write(`  FAIL ${f}\n`);
   if (verbose) {
     for (const p of pending) process.stdout.write(`  backlog ${p}\n`);
+    for (const p of parser) process.stdout.write(`  parser ${p}\n`);
     for (const s of skipped) process.stdout.write(`  skip ${s}\n`);
   }
-  const compared = inputs.length - skipped.length - pending.length;
+  const compared = inputs.length - parser.length - skipped.length - pending.length;
   const note = pending.length > 0 ? `, ${pending.length} in the backlog` : "";
   process.stdout.write(
-    `${agreed}/${compared} cases rejected with the expected message (${checked} fragments), ${skipped.length} skipped${note}\n`
+    `${agreed}/${compared} cases rejected with the expected message (${checked} fragments), ` +
+      `${parser.length} refused by the parser instead, ${skipped.length} skipped${note}\n`
   );
   return failed.length === 0 ? 0 : 1;
 }

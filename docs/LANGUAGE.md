@@ -1597,10 +1597,13 @@ by the caller.
   offset, size, align, constructor and methods), imports, and functions
   (resolved signature, LLVM symbol, attribute facts, pointer-parameter facts,
   locals with types, callees) (`tests/cases/dump_checked`).
-- **`-g`** emits DWARF metadata: a `DICompileUnit` (`DW_LANG_C99`) and
-  `DIFile` per module, a `DISubprogram` per function, a `DILocation` on every
-  instruction (each statement's and expression's start; the function's own
-  line for the prologue), `llvm.dbg.value` for parameters and
+- **`-g`** emits DWARF metadata: a `DICompileUnit` (`DW_LANG_C99`) and a
+  `DIFile` per source file a declaration comes from — the name as it was given
+  on the command line, with `.` for the directory, so the metadata depends only
+  on the command line and not on where the build ran — a `DISubprogram` per
+  function, a `DILocation` on every instruction (each statement's and
+  expression's start; the function's own line for the prologue),
+  `llvm.dbg.value` for parameters and
   `llvm.dbg.declare` for `let`/`const` slots. `number` is `int`, `i64`
   `long`, `f64` `double`, `boolean` `bool`, `string` `char*`, a class or
   interface a pointer to a `DICompositeType` with the checker's layout, `T[]`
@@ -1608,7 +1611,9 @@ by the caller.
   byte-identical. `--link -g` passes `-g` to `scripts/build.sh`, which
   compiles `runtime.c` with `-g` and skips the strip step of every profile
   (`tests/cases/dbg_locals`; the `-g` block of `tests/run.js` checks the
-  linked binary's line table with `llvm-dwarfdump`).
+  linked binary's line table with `llvm-dwarfdump`). The self-hosted compiler
+  takes `-g` too and emits the same bytes, which is what
+  `tests/self/ir_oracle.js` compares.
 
 ## Forbidden constructs (Phase 0 validator)
 

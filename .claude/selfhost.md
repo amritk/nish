@@ -24,10 +24,10 @@ construct still enters the language (and `src/`) before it enters `self/`, and
 
 | | Deliverable | State |
 | --- | --- | --- |
-| S1 | `self/lexer.ts` tokenises AmritScript-0 | **done** — `tests/lexer_oracle.js`, 482/482 files |
-| S2 | `self/parser.ts` builds the tree | **done** — `tests/parser_oracle.js`, 447/447 files |
-| S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js` and `reject_oracle.js` |
-| S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 206/206 files byte for byte |
+| S1 | `self/lexer.ts` tokenises AmritScript-0 | **done** — `tests/lexer_oracle.js`, 565/565 files |
+| S2 | `self/parser.ts` builds the tree | **done** — `tests/parser_oracle.js`, 528/528 files |
+| S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js`, 279/279 whole programs; `reject_oracle.js`, 194/194 cases |
+| S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 289/289 programs byte for byte, and `interop_oracle.js`, 52 sidecars |
 | S5 | `self/` compiles `self/` | **done** — `tests/self/bootstrap.js`: `IR(stage1) == IR(stage2)`, stage3 == stage2 |
 
 ## Building it for use
@@ -43,10 +43,21 @@ scripts/amritc.sh hello.ts --link hello   # its command line: -o, --link, --prof
 
 `scripts/amritc.sh` is the wrapper D4 promised: it makes the output
 directory and runs `scripts/build.sh`, which is the half of the driver stage1
-does not have. It refuses `-g`, the dumps and the interop sidecars **by name**
-— they are stage0's, not missing — and mirrors stage0's file layout exactly, so
-either compiler can be dropped into a build script. See
-`docs/wp14-selfhost.md` §7.
+does not have. It takes `-g` and passes it on to both halves, and passes
+`--json`, `--emit-checked`, `--version` and the interop sidecars
+(`--emit-header`, `--emit-dts`, `--emit-napi`, and the loader `--emit-dts`
+writes beside its declarations) through to the compiler, which answers them
+itself; it makes the sidecars' directory as it makes the IR's. It refuses
+`--emit-ast` **by name** — that one is stage0's, not missing — and mirrors
+stage0's file layout exactly, so either compiler can be dropped into a build
+script. See `docs/wp14-selfhost.md` §7.
+
+`--emit-ast` is the one flag that is stage0's *by design* rather than for now:
+stage0's dump prints the `typescript` package's node names and line:column
+spans, and stage1's tree is the flattened one `self/nodes.ts` defines. The
+parser oracle translates TypeScript into stage1's vocabulary; going the other
+way would put someone else's SyntaxKind naming inside the self-hosted
+compiler.
 
 ## The rules that are specific to this work
 
@@ -105,9 +116,12 @@ No generics, arrow functions, closures, nested functions or function values; no
 | `ir.ts` `runtime.ts` `target.ts` `options.ts` | `src/codegen/ir.ts`, `runtime.ts`, `target.ts`, `CompilerOptions` |
 | `parents.ts` | `node.parent`, which this tree does not have |
 | `escape.ts` `attributes.ts` | `src/codegen/escape.ts` and `attributes.ts` |
+| `debug.ts` | `src/codegen/debug.ts`: the DWARF metadata `-g` emits |
 | `emit.ts` `emit_util.ts` `emit_ops.ts` `emit_control.ts` `emit_strings.ts` `emit_arrays.ts` `emit_classes.ts` `emit_builtins.ts` | `src/codegen/emitter.ts` and `emit/*.ts` |
 | `compilation.ts` | `src/compilation.ts`: the whole-program driver |
-| `dump_tokens.ts` `dump_ast.ts` `dump_checked.ts` `compile.ts` | the `--emit-*` dumps in `src/dump.ts`, and the CLI |
+| `interop_abi.ts` `interop_header.ts` `interop_dts.ts` `interop_wasm.ts` `interop_napi.ts` | `src/interop/*.ts`: the WP8 sidecars, one module per file so the two stay diffable |
+| `dump.ts` | `src/dump.ts`'s `--emit-checked` text, printed by both the driver and the dump entry |
+| `dump_tokens.ts` `dump_ast.ts` `dump_checked.ts` `compile.ts` | the dump entry points the oracles spawn, and the CLI |
 
 Cyclic imports between family modules are fine and already used
 (`expressions.ts` ↔ `members.ts`), because the dispatch entry point and its
@@ -127,15 +141,30 @@ wired into the WP14 section of `tests/run.js` and skipped without clang.
 | `tests/self/types_oracle.js` | `self/types.ts` against `src/types.ts` |
 | `tests/self/diagnostics_oracle.js` | `self/diagnostics.ts` against `src/diagnostics.ts` |
 | `tests/self/symbols_oracle.js` | the scope chain and the narrowing rules |
-| `tests/self/checked_oracle.js` | the `--emit-checked` dump, over every positive program in the corpus |
-| `tests/self/reject_oracle.js` | every `reject_*` case, against its own `.err` fragments |
+| `tests/self/checked_oracle.js` | the `--emit-checked` dump of every positive program in the corpus, whole program by whole program |
+| `tests/self/reject_oracle.js` | every `reject_*` case and every `tests/link/` negative, against its own expected fragments |
 | `tests/self/ir_oracle.js` | the emitted IR, byte for byte, over every whole program in the corpus |
+| `tests/self/interop_oracle.js` | the WP8 sidecars — `.h`, `.d.ts`, its `.mjs` loader, `.napi.c` — byte for byte over the interop corpus (`--all` for the whole one) |
 | `tests/self/bootstrap.js` | the stages: `IR(stage0) == IR(stage1) == IR(stage2)`, and stage3 byte-identical to stage2 |
+| `tests/differential/fuzz.js --stage1` | the emitted IR, byte for byte, over random programs the WP13 generator invents — the same comparison as the IR oracle, on a corpus that is not checked in |
 
 The corpus is `tests/cases/`, `examples/`, `self/`, `docs/cookbook/`, `bench/`,
-`tests/differential/corpus/` and `tests/parser/`. A skip in an oracle summary is
-a fact about how far the port has got, not a file that is allowed to disagree —
-which is why rejections are counted and named apart from the other skips.
+`tests/differential/corpus/`, `tests/parser/` and `tests/link/`;
+`tests/self/corpus.js` enumerates it and answers what flags each program is
+compiled with, so that a program needing `--number-mode f64` is not refused by
+stage0 and then counted as though the *port* could not reach it. The fuzzer's
+`--stage1` mode has no corpus at all: it generates its programs from a seed, so
+the only thing that reproduces a failure is the seed it prints
+(`--stage1 --seed <s> --count 1`) and the program it saves under
+`build/test/differential/`.
+
+A skip in an oracle summary is a fact about how far the port has got, not a
+file that is allowed to disagree — which is why every other outcome is counted
+and named apart from it: a stage1 rejection, a parser refusal whose wording
+differs by design, a program the reject oracle owns. Three skips are left, and
+none of them is about `self/`: `tests/parser/precedence.ts` is a parser fixture
+no checker accepts, `tests/link/no_main` is refused by `--link`, which is
+stage0's, and the dump-flag cases ask for what stage1 does not do.
 
 ### Running one
 
@@ -144,6 +173,7 @@ npm run build                          # the oracles spawn dist/index.js
 node tests/lexer_oracle.js
 node tests/parser_oracle.js  --verbose
 node tests/self/checked_oracle.js tests/cases/cls_fields.ts
+node tests/differential/fuzz.js --stage1 --count 300
 node tests/run.js self                 # all of them, as the suite runs them
 ```
 

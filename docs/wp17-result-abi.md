@@ -354,7 +354,10 @@ already there, which is why it ships no new surface syntax and its `reject_*`
 case pins that the WP16 rules still hold on the new shape rather than a new
 rule of its own.
 
-`-g` and the interop sidecars are stage0's, as they have been since WP14 §4:
-stage1 has no DWARF builder and no header generator, and the driver reports
-those flags by name rather than ignoring them. (3) is therefore a stage0-only
-change, and the IR oracle skips the `-g` corpus exactly as it did before.
+`-g` and the interop sidecars were stage0's when this package landed, as they
+had been since WP14 §4: stage1 had no DWARF builder and no header generator,
+and the driver reported those flags by name rather than ignoring them. (3) was
+therefore a stage0-only change, and the IR oracle skips the `-g` corpus exactly
+as it did before. The sidecars have since been ported to `self/`
+(`docs/wp14-selfhost.md` §7), so the two compilers now write the C shapes
+above byte for byte alike; the DWARF is still stage0's.

@@ -20,6 +20,11 @@
 //     `string[]` rather than a `Set`. The lists are short — a module declares
 //     a few dozen symbols — and they have to keep insertion order anyway,
 //     which is what makes the output stable enough to diff against stage0.
+//
+// The metadata list is the `-g` half (`self/debug.ts`): numbered nodes that
+// are interned by text so identical `!DILocation`s share one, plus the named
+// lines (`!llvm.dbg.cu`) that must precede them. Without `-g` nothing is
+// added and the module text is byte for byte what it was.
 
 import { StringBuilder } from "./strings";
 import { StringMap } from "./map";
@@ -70,12 +75,31 @@ export class IRBlock {
   }
 }
 
-/** `text` begins with `word` followed by the end of the string or a space. */
+/**
+ * `text` begins with `word` at a word boundary, which is `\b` in the regular
+ * expression `src/` uses. The boundary matters: with `-g` an `unreachable` is
+ * written `unreachable, !dbg !9`, so testing only for a following space would
+ * miss the terminator and the emitter would add a second one.
+ */
 function startsWithWord(text: string, word: string): boolean {
   if (!text.startsWith(word)) {
     return false;
   }
-  return text.length === word.length || text.charCodeAt(word.length) === 32;
+  return text.length === word.length || !isWordByte(text.charCodeAt(word.length));
+}
+
+/** The `\w` of a regular expression: a letter, a digit or an underscore. */
+function isWordByte(code: i32): boolean {
+  if (code >= 48 && code <= 57) {
+    return true;
+  }
+  if (code >= 65 && code <= 90) {
+    return true;
+  }
+  if (code >= 97 && code <= 122) {
+    return true;
+  }
+  return code === 95;
 }
 
 /** One parameter of a `define`: `<type> <attrs...> %<name>`. */
@@ -109,6 +133,14 @@ export class IRFunction {
   returnAttrs: string[];
   /** Linkage keyword (`internal`, ...). Empty means LLVM's default, external. */
   linkage: string;
+  /** `!N` of the function's `DISubprogram` (`-g`); empty without debug info. */
+  subprogram: string;
+  /**
+   * `!N` of the `DILocation` to attach to every instruction emitted from now
+   * on (`-g`). Empty means none: the emitter sets it when a statement or an
+   * expression begins and restores the previous one afterwards.
+   */
+  dbgLocation: string;
 
   constructor(name: string, params: IRParam[], returnType: string) {
     this.name = name;
@@ -123,6 +155,8 @@ export class IRFunction {
     this.attrGroup = "";
     this.returnAttrs = [];
     this.linkage = "";
+    this.subprogram = "";
+    this.dbgLocation = "";
   }
 
   /** Allocate the next unnamed SSA temporary: `%0`, `%1`, ... */
@@ -132,9 +166,23 @@ export class IRFunction {
     return temp;
   }
 
-  /** Append an instruction that produces no value. */
+  /** The debug location instructions currently carry, so a caller can restore it. */
+  location(): string {
+    return this.dbgLocation;
+  }
+
+  /** Set (or with `""` clear) the debug location appended to subsequent instructions. */
+  setLocation(ref: string): void {
+    this.dbgLocation = ref;
+  }
+
+  /** Append an instruction that produces no value, with `, !dbg !N` while a location is active. */
   emit(instr: string): void {
-    this.current.instructions.push(instr);
+    if (this.dbgLocation.length > 0) {
+      this.current.instructions.push(`${instr}, !dbg ${this.dbgLocation}`);
+    } else {
+      this.current.instructions.push(instr);
+    }
   }
 
   /** Append `%N = <instr>` and answer `%N`. */
@@ -200,8 +248,9 @@ export class IRFunction {
     retParts.push(this.returnType);
     const attrs = this.attrGroup.length > 0 ? ` ${this.attrGroup}` : "";
     const linkage = this.linkage.length > 0 ? `${this.linkage} ` : "";
+    const dbg = this.subprogram.length > 0 ? ` !dbg ${this.subprogram}` : "";
     const out = new StringBuilder();
-    out.add(`define ${linkage}${retParts.join(" ")} @${this.name}(${params.join(", ")})${attrs} {\n`);
+    out.add(`define ${linkage}${retParts.join(" ")} @${this.name}(${params.join(", ")})${attrs}${dbg} {\n`);
     let i = 0;
     while (i < this.blocks.length) {
       if (i > 0) {
@@ -238,6 +287,10 @@ export class IRModule {
   attrGroups: string[];
   /** `target datalayout` / `target triple`; empty keeps the module target-neutral. */
   targetHeader: string[];
+  /** Metadata nodes by number (`!N = <text>`), for debug info (`-g`). Identical texts share a node. */
+  metadata: string[];
+  /** Named metadata lines (`!llvm.dbg.cu = !{...}`), printed before the numbered nodes. */
+  namedMetadata: string[];
 
   constructor(sourceFileName: string) {
     this.sourceFileName = sourceFileName;
@@ -248,6 +301,39 @@ export class IRModule {
     this.rawDefinitions = [];
     this.attrGroups = [];
     this.targetHeader = [];
+    this.metadata = [];
+    this.namedMetadata = [];
+  }
+
+  /** Intern a metadata node and answer its reference (`!N`). */
+  addMetadata(text: string): string {
+    let index = this.metadata.indexOf(text);
+    if (index < 0) {
+      index = this.metadata.length;
+      this.metadata.push(text);
+    }
+    return `!${index}`;
+  }
+
+  /**
+   * Reserve a number for `setMetadata` to fill later. A composite type has to
+   * be referenced before its members are built — a field of a class may be the
+   * class itself — so its number is handed out before its text exists.
+   */
+  reserveMetadata(): string {
+    const index = this.metadata.length;
+    this.metadata.push("");
+    return `!${index}`;
+  }
+
+  setMetadata(ref: string, text: string): void {
+    this.metadata[metadataIndex(ref)] = text;
+  }
+
+  addNamedMetadata(line: string): void {
+    if (this.namedMetadata.indexOf(line) < 0) {
+      this.namedMetadata.push(line);
+    }
   }
 
   addTypeDecl(text: string): void {
@@ -324,6 +410,33 @@ export class IRModule {
       }
       sections.push(groups.join("\n"));
     }
+    if (this.metadata.length > 0) {
+      const nodes: string[] = [];
+      for (const line of this.namedMetadata) {
+        nodes.push(line);
+      }
+      let m = 0;
+      while (m < this.metadata.length) {
+        nodes.push(`!${m} = ${this.metadata[m]}`);
+        m = m + 1;
+      }
+      sections.push(nodes.join("\n"));
+    }
     return `${sections.join("\n\n")}\n`;
   }
+}
+
+/**
+ * The number in a `!N` reference. `src/` writes `Number(ref.slice(1))`; the
+ * digits are read here instead so that filling a reserved slot needs no
+ * `parseInt` call at run time.
+ */
+function metadataIndex(ref: string): i32 {
+  let value = 0;
+  let i = 1; // past the `!`
+  while (i < ref.length) {
+    value = value * 10 + (ref.charCodeAt(i) - 48);
+    i = i + 1;
+  }
+  return value;
 }

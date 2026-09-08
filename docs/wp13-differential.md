@@ -12,11 +12,16 @@ npm run test:diff                       # corpus + tests/cases, table + summary
 node tests/differential/run.js --only i64 --verbose
 node tests/differential/fuzz.js --count 200        # random seed, printed
 node tests/differential/fuzz.js --seed 20260906 --count 1
+node tests/differential/fuzz.js --stage1 --count 300   # stage0 vs stage1 IR, not Node
 node tests/differential/rewrite.js prog.ts         # show the JavaScript
 ```
 
 `npm test` runs the same corpus (`--quick`) plus a 10-program fuzz batch with
 a fixed seed as two checks in the WP13 block of `tests/run.js` (about 10 s).
+The generator has a second customer in the WP14 block: `--stage1` compiles the
+same random programs with both compilers and compares the IR, which is a
+statement about `self/` rather than about Node ("The same programs, compiled by
+both compilers", below).
 
 ## Files
 
@@ -26,7 +31,7 @@ a fixed seed as two checks in the WP13 block of `tests/run.js` (about 10 s).
 | `tests/differential/lib.js` | Shared pieces: discovery, `runProgram` (build, run, rewrite, run, compare), the pool, known-failure parsing, mismatch description. |
 | `tests/differential/rewrite.js` | AmritScript -> JavaScript. Checks the program with the compiler's own checker and rewrites the AST from the recorded types. |
 | `runtime/shim.mjs` | The Node side of the runtime: `toI32`/`toI64`/`toF64`, wrapping helpers, byte length, bounds-checked indexing, `console.log`, file I/O, `process.exit`, trap. |
-| `tests/differential/fuzz.js` | Random integer/boolean program generator and driver. |
+| `tests/differential/fuzz.js` | Random integer/boolean program generator and driver: `fuzzRun` compares the binary with Node, `stage1Run` (`--stage1`) compares stage0's IR with stage1's through `tests/self/ir_oracle.js`. |
 | `tests/differential/corpus/` | 50 hand-written programs (`<name>.ts` + optional `<name>.args`; multi-module ones as `<name>/main.ts` + `args`). |
 | `tests/differential/known-failures.txt` | Programs whose native behaviour is known to differ; each is explained below. |
 
@@ -351,6 +356,36 @@ reproduces it; `--print` writes the program to stdout without running it.
 Results: `node tests/differential/fuzz.js --seed 20260906 --count 200`
 completed with 0 mismatches and 0 compile errors (52 s on 4 cores). The
 `tests/run.js` block runs seeds `20260906..20260915`.
+
+### The same programs, compiled by both compilers
+
+`--stage1` points the generator at the *other* differential question (WP14):
+not "does the binary behave like Node" but "do the two compilers emit the same
+IR". Each generated program is compiled by stage0 and by the self-hosted
+compiler and the two texts are compared byte for byte, module set included —
+the equality `tests/self/ir_oracle.js` asserts over the checked-in corpus,
+here on programs neither compiler has ever seen. stage0 is the oracle: there
+is no golden in this path, and a stage1 rejection of a program stage0 accepts
+counts as a disagreement rather than a skip.
+
+The mode reuses `ir_oracle.js`'s `build` and `compare` rather than repeating
+them, and links the stage1 binary once per run (about 15 s), after which each
+program costs about a third of a second. It is a separate mode, not a
+replacement: the default run still compares stage0 against Node and knows
+nothing about `self/`.
+
+```
+node tests/differential/fuzz.js --stage1 --count 300            # random seed, printed
+node tests/differential/fuzz.js --stage1 --seed 20261001 --count 1
+```
+
+A disagreement saves the program as
+`build/test/differential/fuzz-stage1-fail-<S + i>.ts` and prints the reproduce
+command with its seed and the first differing line. Results:
+`--stage1 --seed 20261001 --count 300` agreed on every byte of every module —
+300 of 300 programs, 141,098 lines of IR, 108 s. The WP14 block of
+`tests/run.js` runs 16 programs from the same seed (about 20 s, most of it the
+one link), sized so `npm test` keeps its shape; see `docs/wp14-selfhost.md` §4.
 
 ## Runner options and conventions
 

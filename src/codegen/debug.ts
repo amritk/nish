@@ -56,6 +56,14 @@ const BASIC_TYPES: Partial<Record<StaticType["kind"], string>> = {
 export class DebugInfo {
   private readonly cu: string;
   private readonly file: string;
+  /**
+   * One `DIFile` per source file a declaration comes from, by file name. There
+   * is more than one: a class this module never named can still reach it
+   * through an imported class's signatures (`tests/link/reachable_struct`), and
+   * describing its fields with *this* module's file would point a debugger at
+   * lines in the wrong source.
+   */
+  private readonly files = new Map<string, string>();
   /** `typeToString` -> metadata reference; composites are reserved before their members so self-references resolve. */
   private readonly types = new Map<string, string>();
   /** The `DISubprogram` of the function being emitted; the scope of every location and variable. */
@@ -69,10 +77,16 @@ export class DebugInfo {
     this.sourceFile = program.sourceFile;
     // The compile unit refers to the file, so reserve its number first (`!0`, as clang does).
     this.cu = module.reserveMetadata();
-    // clang's convention: the name as given on the command line, resolved against the working directory.
-    this.file = module.addMetadata(
-      `!DIFile(filename: ${quote(this.sourceFile.fileName)}, directory: ${quote(process.cwd())})`
-    );
+    // The name as given on the command line, and `.` for the directory rather
+    // than `process.cwd()`. Two things come of spelling it that way, and the
+    // second is why it changed: the metadata depends only on the command line,
+    // so a `-g` build is reproducible across machines (clang spells the same
+    // thing `-fdebug-compilation-dir=.`); and stage1 can produce it, which it
+    // could not do for a working directory it has no way to ask the operating
+    // system for (WP14 D4). For a relatively-spelled entry the two compilers
+    // now agree on the whole `DIFile`, exactly as they already agreed on the
+    // module header (docs/wp14-selfhost.md §4).
+    this.file = this.fileOf(this.sourceFile);
     module.setMetadata(
       this.cu,
       `distinct !DICompileUnit(language: DW_LANG_C99, file: ${this.file}, producer: ${quote(`${CLI} ${packageVersion()}`)}, isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)`
@@ -83,8 +97,22 @@ export class DebugInfo {
     module.addNamedMetadata(`!llvm.module.flags = !{${dwarf}, ${version}}`);
   }
 
+  /** The `DIFile` of one source file, interned so the module's own is written once. */
+  private fileOf(sf: ts.SourceFile): string {
+    const known = this.files.get(sf.fileName);
+    if (known) return known;
+    const ref = this.module.addMetadata(`!DIFile(filename: ${quote(sf.fileName)}, directory: ".")`);
+    this.files.set(sf.fileName, ref);
+    return ref;
+  }
+
+  /**
+   * The 1-based line a declaration starts on, in *its own* file: a struct
+   * reached through an import is not measured against the importer's lines.
+   */
   private lineOf(node: ts.Node): number {
-    return this.sourceFile.getLineAndCharacterOfPosition(node.getStart(this.sourceFile)).line + 1;
+    const sf = node.getSourceFile();
+    return sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
   }
 
   // ---- Types ------------------------------------------------------------------
@@ -122,8 +150,17 @@ export class DebugInfo {
     return this.module.addMetadata(`!DIDerivedType(tag: DW_TAG_pointer_type, baseType: ${base}, size: 64)`);
   }
 
-  private member(name: string, scope: string, type: string, sizeBits: number, offsetBits: number, line?: number): string {
-    const at = line === undefined ? "" : `, file: ${this.file}, line: ${line}`;
+  /** One `DW_TAG_member`; `file` empty is a member with no declaration to point at. */
+  private member(
+    name: string,
+    scope: string,
+    type: string,
+    sizeBits: number,
+    offsetBits: number,
+    file: string,
+    line: number
+  ): string {
+    const at = file === "" ? "" : `, file: ${file}, line: ${line}`;
     return this.module.addMetadata(
       `!DIDerivedType(tag: DW_TAG_member, name: ${quote(name)}, scope: ${scope}${at}, baseType: ${type}, size: ${sizeBits}, offset: ${offsetBits})`
     );
@@ -133,13 +170,14 @@ export class DebugInfo {
   private composite(info: StructInfo): string {
     const ref = this.module.reserveMetadata();
     this.types.set(info.name, this.pointerTo(ref));
+    const file = this.fileOf(info.decl.getSourceFile());
     const members = info.fields.map((f) =>
-      this.member(f.name, ref, this.typeRef(f.type), bitsOf(f.type), f.offset * 8, this.lineOf(f.decl))
+      this.member(f.name, ref, this.typeRef(f.type), bitsOf(f.type), f.offset * 8, file, this.lineOf(f.decl))
     );
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`);
     this.module.setMetadata(
       ref,
-      `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(info.name)}, file: ${this.file}, line: ${this.lineOf(info.decl)}, size: ${info.size * 8}, align: ${info.align * 8}, elements: ${elements})`
+      `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(info.name)}, file: ${file}, line: ${this.lineOf(info.decl)}, size: ${info.size * 8}, align: ${info.align * 8}, elements: ${elements})`
     );
     return ref;
   }
@@ -149,9 +187,9 @@ export class DebugInfo {
     const ref = this.module.reserveMetadata();
     const long = this.typeRef({ kind: "i64" });
     const members = [
-      this.member("len", ref, long, 64, 0),
-      this.member("cap", ref, long, 64, 64),
-      this.member("data", ref, this.pointerTo(this.typeRef(elem)), 64, 128),
+      this.member("len", ref, long, 64, 0, "", 0),
+      this.member("cap", ref, long, 64, 64, "", 0),
+      this.member("data", ref, this.pointerTo(this.typeRef(elem)), 64, 128, "", 0),
     ];
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`);
     this.module.setMetadata(
@@ -173,7 +211,7 @@ export class DebugInfo {
     if (layout.value) slots.push(["value", layout.value]);
     slots.push(["error", layout.error]);
     const members = slots.map(([name, slot]) =>
-      this.member(name, ref, this.typeRef(slot.type), bitsOf(slot.type), slot.offset * 8)
+      this.member(name, ref, this.typeRef(slot.type), bitsOf(slot.type), slot.offset * 8, "", 0)
     );
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`);
     this.module.setMetadata(
@@ -205,12 +243,12 @@ export class DebugInfo {
     this.module.setMetadata(
       union,
       `distinct !DICompositeType(tag: DW_TAG_union_type, name: ${quote(`${layout.name}.arms`)}, file: ${this.file}, size: ${armBits}, elements: ${this.module.addMetadata(
-        `!{${arms.map(([name, a]) => this.member(name, union, this.typeRef(a), bitsOf(a), 0)).join(", ")}}`
+        `!{${arms.map(([name, a]) => this.member(name, union, this.typeRef(a), bitsOf(a), 0, "", 0)).join(", ")}}`
       )})`
     );
     const members = [
-      this.member("ok", ref, this.typeRef({ kind: "i32" }), 32, 0),
-      this.member("as", ref, union, armBits, 32),
+      this.member("ok", ref, this.typeRef({ kind: "i32" }), 32, 0, "", 0),
+      this.member("as", ref, union, armBits, 32, "", 0),
     ];
     this.module.setMetadata(
       ref,

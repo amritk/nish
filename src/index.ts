@@ -381,4 +381,10 @@ try {
 } catch (err) {
   code = reportInternalError(err, argv);
 }
-process.exit(code);
+// `process.exit` here would drop whatever is still buffered in stdout: writes
+// to a pipe are asynchronous and take 64 KB at a time, so `--emit-checked` on a
+// program of any size came out truncated mid-line when the output was piped
+// rather than written to a terminal or a file. Setting the code instead lets
+// Node flush the pending write and then exit with it; nothing in the compiler
+// holds the event loop open, so the process still exits as soon as it is done.
+process.exitCode = code;

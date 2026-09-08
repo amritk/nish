@@ -141,9 +141,9 @@ does not do itself, and takes the same `-o`, `--link` and `--profile` spellings
 as `amritc`.
 
 The native compiler is about eight times faster than the Node one and needs no
-Node at all, but it does not emit debug info (`-g`) or the interop sidecars
-(`--emit-header`, `--emit-dts`, `--emit-napi`) — those stay with `amritc`,
-which is also what the npm package installs.
+Node at all. It writes the interop sidecars (`--emit-header`, `--emit-dts`,
+`--emit-napi`) byte for byte as `amritc` does; what it does not emit is debug
+info (`-g`), which stays with `amritc` — also what the npm package installs.
 
 ## 3. Hello world
 

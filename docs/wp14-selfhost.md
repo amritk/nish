@@ -283,7 +283,9 @@ compiler compiles itself.
 ### The bootstrap, and what it says
 
 `tests/self/bootstrap.js` runs the stages and compares them. All three
-equalities hold over the whole of `self/` — 41 modules, 4,095,128 bytes of IR:
+equalities hold over the whole of `self/` — 51 modules, 5,963,202 bytes of IR
+(41 modules and 4,095,128 bytes when S5 first closed; the port has since taken
+on DWARF and the interop sidecars):
 
 ```
 IR(stage0, self/) == IR(stage1, self/)     the two implementations agree
@@ -327,8 +329,63 @@ normalised.
 The `tests/self/ir_oracle.js` corpus grew with the driver: it now compiles
 **whole programs** rather than single modules, `tests/link/` included, and
 compares every module of each — the module *set* too, so a stage that emitted
-one module fewer has not agreed about the rest. 259 of 259 programs, 848
-modules, 1,074,371 lines of IR.
+one module fewer has not agreed about the rest. 280 of 280 programs, 989
+modules, 1,335,240 lines of IR.
+
+### The skips S5 left behind, closed
+
+The driver landed, but two oracles went on skipping every file that imports,
+with the reason "needs the S5 driver" — a skip that had stopped being true.
+All three now measure what they say they measure:
+
+| Oracle | Before | Now |
+| --- | --- | --- |
+| `checked_oracle.js` | 225 agree, 48 skipped (42 imports, 6 stage0 rejects) | **272 agree**, 1 skipped |
+| `reject_oracle.js` | 181 agree, 44 skipped (39 parser, 5 imports) | **194 agree**, 42 refused by the parser, 1 skipped |
+| `ir_oracle.js` | 275 agree, 22 skipped (17 stage0 rejects) | **280 agree**, 6 skipped, 11 negatives |
+
+What changed:
+
+- `self/dump_checked.ts` drives `self/compilation.ts` instead of one `Checker`,
+  so `--emit-checked` is compared over **whole programs**: every module in load
+  order, what pass 1b bound each import to, and each module's own constants,
+  structs and functions. The 42 modules of `self/` are compared against stage0
+  by the dump as well as by their IR.
+- `reject_oracle.js` reads the `tests/link/` negatives too, because a rejection
+  that needs more than one module — a name imported twice, `main` outside the
+  entry — cannot be provoked by a single file. Two rules were missing from
+  stage1's pass 1b and are ported: "`f` is already imported from `./a`" and
+  "Only the entry module may declare `export function main`".
+- Every oracle now gives a program the flags it is compiled with everywhere
+  else, from its `.args` sidecar or its `// smoke: args` line
+  (`tests/self/corpus.js`). Six files were being refused by stage0 for want of
+  `--number-mode f64` and counted as though the *port* could not reach them.
+- Fixing that turned up one real divergence, in stage1's contextual typing of a
+  bare numeric literal: `checkOperator` preferred the type the whole expression
+  was being checked into over the other operand's, where stage0 consults only
+  the operand (`src/checker/math.ts`). In f64 mode that made
+  `toF64((ij * (ij + 1)) / 2 + i + 1)` mix widths at every `+`.
+
+One skip is left per oracle and each is a fact about the corpus rather than the
+port: `tests/parser/precedence.ts` is a parser fixture whose `c || d` no checker
+accepts, and `tests/link/no_main` is refused by `--link`, which is stage0's
+(§3a D4). `ir_oracle.js` also skips the five cases that ask for `-g` or a dump
+flag, and names the 11 `tests/link` negatives as negatives rather than skips,
+since `reject_oracle.js` compares them in full.
+
+**The same equality now also runs on programs nobody wrote.** That corpus is
+checked in, so it is finite and both compilers have been adapted to it;
+`tests/differential/fuzz.js --stage1` takes the WP13 random-program generator
+and asks *both* compilers for the IR of each program it invents, comparing the
+texts byte for byte with the module set, through `ir_oracle.js`'s own `build`
+and `compare` (docs/wp13-differential.md, "The fuzzer"). It links one stage1
+binary per run and then costs about a third of a second per program; a
+disagreement saves the program as
+`build/test/differential/fuzz-stage1-fail-<seed>.ts` and reproduces with
+`--stage1 --seed <seed> --count 1`. The WP14 block of `npm test` runs 16
+programs from a fixed seed; **300 programs from seed 20261001 agreed on every
+one of 141,098 lines of IR** (108 s), which is the first time the two
+compilers have been compared on input neither of them was written against.
 
 ### What S4 cost
 
@@ -376,9 +433,10 @@ Four things are worth carrying into S5:
    `tests/cases/`. Three S3 leftovers came out too — `p.f++`, `p.f |= 1` and
    `a[i] &= 1` were accepted by stage1 and refused by stage0 — and they are
    fixed with `reject_*` cases that now pin both compilers.
-4. **stage1 emits no debug info.** `-g` is stage0's, for the same reason D4
-   drops `--link`: a DWARF metadata builder is not on the path to the bootstrap
-   proof. The driver reports the flag rather than ignoring it.
+4. **stage1 emitted no debug info yet.** `-g` was left to stage0 at S4, for
+   the same reason D4 drops `--link`: a DWARF metadata builder was not on the
+   path to the bootstrap proof, and the driver reported the flag rather than
+   ignoring it. *That gap is now closed — see "`-g` on both sides" below.*
 
 ### What S3 cost
 
@@ -583,9 +641,58 @@ object, and whether that object may be an `alloca` is the same `localOutcome`
 walk a local holding an allocation gets — and the oracle is what said the two
 walks agreed, over 274 of 274 programs, before the bootstrap was allowed to
 close.
-`-g` and the interop sidecars stayed stage0's, as D4 said they would: the
-DWARF and the C header for a `Result` are stage0-only changes, and the driver
-still reports those flags by name rather than ignoring them.
+The interop sidecars and `-g` stayed stage0's while WP17 landed, as D4 said
+they would: the DWARF and the C header for a `Result` were stage0-only changes,
+and the driver reported those flags by name rather than ignoring them. Both
+have since been ported — the sidecars in §7, `-g` in the section below — so
+what a `Result` is spelled as in a generated header, and how it is described in
+DWARF, are two-sided changes like every other.
+
+### `-g` on both sides
+
+`self/debug.ts` is the port of `src/codegen/debug.ts`: the same compile unit,
+the same `DISubprogram` per function, the same `DILocation` on every
+instruction, the same `llvm.dbg.value` / `llvm.dbg.declare`, and the same type
+mapping down to the packed `Result` word a call boundary carries (WP17).
+`self/ir.ts` grew the metadata list the builder writes into, `-g` is a flag of
+`self/compile.ts` and of `scripts/amritc.sh` — which hands it to
+`scripts/build.sh` as well, so the DWARF survives the link — and
+`tests/cases/dbg_locals` and `tests/cases/dbg_result` are compared by
+`tests/self/ir_oracle.js` byte for byte, metadata numbering included, rather
+than skipped.
+
+**One thing had to change on stage0's side, and it is the same shape as §4's
+module-header problem.** A `DIFile` carries a filename and a directory, and
+stage0 spelled the directory `process.cwd()`. stage1 has no working directory
+to ask for, and D4 will not grow the runtime for one string, so *both*
+compilers now write `.` — which is what clang's `-fdebug-compilation-dir=.`
+writes, and which makes a `-g` build depend only on the command line rather
+than on where it ran. For a relatively-spelled entry the two agree on the whole
+`DIFile`, exactly as they already agreed on the module header.
+
+Writing the port also found a stage0 bug of the kind §4 said the oracle is for.
+A class reached through an import — `tests/link/reachable_struct`, where
+`Entry` is never named by the importer — was described with the *importer's*
+`DIFile` and with its declaration offset looked up in the *importer's* line
+table, so a debugger was pointed at a line in the wrong file. Both compilers
+now describe a struct against the file that declares it, which is why a program
+with imports has more than one `DIFile`.
+
+The two disagreed on one more thing, and it was stage1's: `IRBlock.terminated`
+spelled `src/`'s `^(ret|br|switch|unreachable)\b` as "the word, then a space or
+the end", which is not `\b`. With `-g` an `unreachable` is written
+`unreachable, !dbg !9`, the test said "not a terminator", and the emitter added
+a second one. It is a word-boundary test now.
+
+All three came out of the same one-off experiment, which is worth recording
+because the suite does not run it: the oracle's own corpus compiled by both
+compilers with `-g` **forced on every file**, rather than only on the two cases
+whose `.args` ask for it. That is 278 programs — the corpus as it stood that
+day — and `self/` itself, and it is
+what turned "the two `-g` goldens match" into "the two compilers agree about
+DWARF". The suite compares the two cases that ask for `-g`, because forcing the
+flag over the whole corpus would double the oracle's four minutes for a
+property the port is not going to lose quietly.
 
 ---
 
@@ -678,10 +785,44 @@ lines of `bash` with no runtime growth at all. It mirrors stage0's spelling
 exactly — `-o <file.ll>`, `-o <dir>/`, `--link <exe>` writing `<exe>.ll` for a
 single module and `<exe>.modules/` for a program with imports — so the two
 compilers leave the same files behind and a build script can be pointed at
-either. The flags that are stage0's rather than missing (`-g`, the interop
-sidecars, the dumps) are refused **by name**, with what to run instead: a flag
-that is silently ignored is how a build ends up not carrying the thing it
-asked for.
+either, `-g` included: the wrapper passes it to stage1, which puts the DWARF
+in the `.ll`, and on to `scripts/build.sh`, which compiles `runtime.c` with it
+and skips the strip step. `--json`, `--emit-checked` and `--version` go
+straight through: stage1 answers them itself, and the two that print text
+rather than IR skip the output planning and the link entirely. The one flag
+that is stage0's rather than missing, `--emit-ast`, is refused **by name**,
+with what to run instead: a flag that is silently ignored is how a build ends
+up not carrying the thing it asked for.
+
+**The interop sidecars are stage1's too.** `--emit-header`, `--emit-dts` (which
+writes its companion `.mjs` loader beside the declarations) and `--emit-napi`
+are ~1,900 lines of `self/` ported from `src/interop/`, module for module, and
+they cost the runtime nothing: a sidecar is derived from the checked program
+after the IR and written with the `writeFileSync` stage1 already had, to the
+path it was given. D4 is untouched — stage1 still makes no directory, spawns
+no linker — so the wrapper creates the sidecar's directory the way it creates
+the IR's, and passes the three flags straight through.
+`tests/self/interop_oracle.js` is the oracle: both compilers over the WP8
+corpus, all four generated files compared byte for byte, and `--all` runs the
+same comparison over every whole program in the tree (287 programs, 1,148
+sidecars, 16.9 MB of generated C, TypeScript and JavaScript, no difference;
+18 skipped, every one of them a program stage0 itself rejects). The one host-shaped
+generator was the N-API shim, whose readers and boxers are records of closures
+in `src/`; here they are records with a kind tag and a `switch` that writes
+the same lines, which is the same trade D2 made for the dispatch tables.
+
+**`--emit-ast` is stage0's by design, not by backlog.** Its dump prints the
+`typescript` package's node names and line:column spans; stage1's tree is the
+flattened single-`Node` one of §2.1, with its own vocabulary and byte offsets,
+and `tests/parser_oracle.js` translates TypeScript *into* that vocabulary
+rather than the reverse. Matching stage0's dump would mean carrying a mirror of
+`ts.SyntaxKind` inside the self-hosted compiler to imitate an implementation
+detail of the seed — the opposite of what §1 means by the two being the same
+compiler. `self/dump_ast.ts` keeps the shape its own oracle compares.
+`--emit-checked` is the other way about, and that is why it *is* stage1's: the
+dump is the compiler's own tables, and `tests/self/checked_oracle.js` already
+proves stage1 writes them byte for byte as stage0 does over 279 whole
+programs.
 
 What the wrapper is not is a second implementation of the driver. It plans no
 output, resolves no module and reads no source; it makes a directory, runs the
@@ -698,8 +839,10 @@ deployment path and not the fixed point — the bootstrap check above owns that,
 and this one would only pay for the same two links again.
 
 **stage0 stays the published package.** `npm install -g amritc` still ships
-`dist/`, and it has to: it is the seed every bootstrap starts from, the oracle
-every `self/` phase is compared against, and the only one of the two that emits
-DWARF and the interop sidecars. What changed is that a checkout can now produce
+`dist/`, and it has to: it is the seed every bootstrap starts from and the
+oracle every `self/` phase is compared against. What it is no longer is the
+only one that emits DWARF or the interop sidecars; what is still only stage0's
+is the link step, the directory creation and the AST dump. What changed is that
+a checkout can now produce
 the self-hosted compiler in one command, and that compiler compiles the same
 programs about eight times faster (§4, D5).

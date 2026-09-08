@@ -45,6 +45,8 @@ function check(name, ok, detail) {
 const has = (tool) => spawnSync("which", [tool]).status === 0;
 const HAS_LLVM_AS = has("llvm-as");
 const HAS_CLANG = has("clang");
+/** `-g` end to end: the linked binary is read with the dumper when there is one. */
+const HAS_LLVM_DWARFDUMP = has("llvm-dwarfdump");
 
 /** Module body with the `; ModuleID` / `source_filename` header removed. */
 function stripHeader(ir) {
@@ -290,6 +292,35 @@ if (!only || "diagnostics".includes(only)) {
     const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(buildDir, "dbg_locals.ll")]);
     check("dbg_locals: opt -passes=verify accepts the -g IR", v.status === 0, String(v.stderr));
   }
+  // A class reached only through an imported class's signatures is described
+  // against the file that *declares* it, not against the importer: two
+  // `DIFile`s in one module, and the composite naming the second. Before this,
+  // `Entry`'s declaration offset was looked up in main.ts's line table and a
+  // debugger was sent to a line in the wrong source.
+  const reachDir = path.join(buildDir, "dbg_reachable") + path.sep;
+  fs.rmSync(reachDir, { recursive: true, force: true });
+  const reach = spawnSync(
+    "node",
+    [cli, path.join(root, "tests", "link", "reachable_struct", "main.ts"), "-o", reachDir, "-g"],
+    { cwd: root, encoding: "utf8" }
+  );
+  const reachIr =
+    reach.status === 0 && fs.existsSync(path.join(reachDir, "main.ll"))
+      ? fs.readFileSync(path.join(reachDir, "main.ll"), "utf8")
+      : "";
+  const libFile = /^(![0-9]+) = !DIFile\(filename: "[^"]*reachable_struct[/\\]lib\.ts", directory: "\."\)$/m.exec(
+    reachIr
+  );
+  check(
+    "-g: a class reached through an import is described against the file that declares it",
+    libFile !== null && reachIr.includes(`name: "Entry", file: ${libFile[1]}, line: 4,`),
+    reach.stderr +
+      reachIr
+        .split("\n")
+        .filter((l) => l.includes("DIFile") || l.includes('name: "Entry"'))
+        .join("\n")
+  );
+
   if (HAS_CLANG) {
     const dbgSrc = path.join(buildDir, "dbg_main.ts");
     fs.writeFileSync(
@@ -1780,6 +1811,26 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     );
   }
 
+  // The DWARF `producer` string is "amritc <version>" on both sides, and stage1
+  // cannot read package.json to find the version, so it is a constant in
+  // `self/branding.ts`. This is what stops that constant going stale: a
+  // disagreement here is a byte of every `-g` module the two compilers would
+  // then emit differently.
+  const brandingTs = path.join(root, "self", "branding.ts");
+  if (fs.existsSync(brandingTs)) {
+    const branding = fs.readFileSync(brandingTs, "utf8");
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+    check(
+      `self/branding.ts names the CLI and version stage0 does (amritc ${pkg.version})`,
+      branding.includes(`export const CLI: string = "amritc";`) &&
+        branding.includes(`export const VERSION: string = "${pkg.version}";`),
+      branding
+        .split("\n")
+        .filter((l) => l.startsWith("export const"))
+        .join(" | ")
+    );
+  }
+
   // S1: the lexer built by stage0 runs natively, and its token stream agrees
   // with the `typescript` scanner's over the whole corpus. The oracle links a
   // binary, so it needs clang; without one this is skipped like every other
@@ -1915,11 +1966,13 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       `${symbolsOracle.stdout}${symbolsOracle.stderr}`
     );
 
-    // S3, pass 1: signatures. `self/dump_checked.ts` prints what the pass
-    // collected in exactly the format `--emit-checked` prints it, so what is
-    // compared over the whole corpus is every struct's layout — field indices
-    // and byte offsets included — every signature, every symbol, every folded
-    // constant, and the order they come out in.
+    // S3, the checker. `self/dump_checked.ts` prints what it collected in
+    // exactly the format `--emit-checked` prints it, so what is compared over
+    // the whole corpus is every struct's layout — field indices and byte
+    // offsets included — every signature, every symbol, every folded constant,
+    // and the order they come out in. A program that imports is loaded whole
+    // through the S5 driver and every module of it is dumped, so the binding
+    // of each imported name is compared too.
     const checkedOracle = spawnSync("node", [path.join(root, "tests", "self", "checked_oracle.js")], {
       cwd: root,
       encoding: "utf8",
@@ -1933,9 +1986,10 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     );
 
     // The other half of milestone S3: refusing the same programs for the same
-    // reason. A dump comparison cannot see that, so every `reject_*` case is
-    // run through stage1 and its own `.err` fragments are required of the
-    // output — the same assertion the suite already makes of stage0.
+    // reason. A dump comparison cannot see that, so every `reject_*` case and
+    // every `tests/link/` negative is run through stage1 and its own expected
+    // fragments are required of the output — the same assertion the suite
+    // already makes of stage0.
     const rejectOracle = spawnSync("node", [path.join(root, "tests", "self", "reject_oracle.js")], {
       cwd: root,
       encoding: "utf8",
@@ -1949,11 +2003,11 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     );
 
     // S4: the emitter. `IR(stage0, p) == IR(stage1, p)` byte for byte over
-    // every import-free program in the corpus — not a golden a human wrote,
-    // and not a summary either: every attribute, every block label and every
-    // SSA number has to match, which is the half of the output a golden test
-    // reads past. The skips are the programs that need the S5 module driver
-    // and the flags stage1 does not have (`-g`, the dumps).
+    // every whole program in the corpus — not a golden a human wrote, and not
+    // a summary either: every attribute, every block label and every SSA
+    // number has to match, which is the half of the output a golden test reads
+    // past. The skips are the flags stage1 does not have (`-g`, the dumps) and
+    // the one parser fixture no checker accepts.
     const irOracle = spawnSync("node", [path.join(root, "tests", "self", "ir_oracle.js")], {
       cwd: root,
       encoding: "utf8",
@@ -1964,6 +2018,65 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       `self/emit.ts emits the IR stage0 emits (${irSummary})`,
       irOracle.status === 0,
       `${irOracle.stdout}${irOracle.stderr}`
+    );
+
+    // The same equality, on programs nobody wrote. The corpus the oracle above
+    // reads is checked in and therefore finite and adapted-to; the WP13 fuzzer
+    // generates random straight-line programs, and here both compilers are
+    // asked for the IR of each and the texts compared byte for byte, module set
+    // included (`fuzz.js --stage1`, docs/wp13-differential.md "The fuzzer").
+    //
+    // Sixteen programs from one fixed seed. The count is a time budget rather
+    // than a coverage judgement: the run links one stage1 binary (about 15 s)
+    // and each program then costs about a third of a second, so sixteen keeps
+    // the whole check near 20 s, most of it the link, and leaves the suite the
+    // length it was. Three hundred programs is about two minutes and belongs in
+    // a manual `node tests/differential/fuzz.js --stage1 --count 300` rather
+    // than in every `npm test`. The seed is fixed
+    // so the check is deterministic and a failure reproduces from the summary
+    // line alone, and it is deliberately not the seed the WP13 batch uses, so
+    // the two checks look at different programs.
+    const stage1FuzzSeed = 20261001;
+    const stage1Fuzz = spawnSync(
+      "node",
+      [
+        path.join(root, "tests", "differential", "fuzz.js"),
+        "--stage1",
+        "--seed",
+        String(stage1FuzzSeed),
+        "--count",
+        "16",
+      ],
+      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+    );
+    const stage1FuzzSummary =
+      stage1Fuzz.stdout
+        .trim()
+        .split("\n")
+        .filter((l) => l.startsWith("fuzz: stage1 seed="))
+        .pop() ?? "";
+    check(
+      `self/emit.ts emits the IR stage0 emits for random programs (${stage1FuzzSummary || `seed=${stage1FuzzSeed}`})`,
+      stage1Fuzz.status === 0,
+      `${stage1Fuzz.stdout}${stage1Fuzz.stderr}`
+    );
+
+    // WP8 from stage1: the interop sidecars. `--emit-header`, `--emit-dts`
+    // (which also writes its companion loader) and `--emit-napi` are derived
+    // from the same checked program the IR came from, so the oracle is the
+    // same one: run both compilers over the corpus the WP8 section above
+    // drives the generators over, and compare all four files byte for byte.
+    // Only the link step and the directory creation are still stage0's (D4).
+    const interopOracle = spawnSync("node", [path.join(root, "tests", "self", "interop_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const interopSummary = interopOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/ writes the interop sidecars stage0 writes (${interopSummary})`,
+      interopOracle.status === 0,
+      `${interopOracle.stdout}${interopOracle.stderr}`
     );
 
     // S5, and the claim the work package exists for: `self/` compiles `self/`.
@@ -2056,17 +2169,130 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         `${many.stdout}${many.stderr}modules: ${emitted.join(",")}${ranMulti ? ` exit ${ranMulti.status}` : ""}`
       );
 
-      // A flag that is stage0's is refused by name rather than ignored: a
-      // build that asked for debug info must not quietly come out without it.
-      const refused = spawnSync("bash", [wrapper, "examples/hello.ts", "-g", "-o", path.join(shipDir, "g.ll")], {
-        cwd: root,
-        encoding: "utf8",
-        env,
-      });
+      // `-g` is stage1's now: the wrapper hands it to the compiler *and* to
+      // scripts/build.sh, so the DWARF in the .ll survives the link instead of
+      // being stripped with the profile. A `.debug_info` section in the linked
+      // binary is the end-to-end proof; the metadata in the IR is what the
+      // oracle compares byte for byte.
+      const dbgExe = path.join(shipDir, "hello-g");
+      const withG = spawnSync(
+        "bash",
+        [wrapper, "examples/hello.ts", "--link", dbgExe, "--profile", "debug", "-g"],
+        { cwd: root, encoding: "utf8", env }
+      );
+      const dbgIr = fs.existsSync(`${dbgExe}.ll`) ? fs.readFileSync(`${dbgExe}.ll`, "utf8") : "";
+      const dwarf = withG.status === 0 && HAS_LLVM_DWARFDUMP
+        ? spawnSync("llvm-dwarfdump", ["--debug-info", dbgExe], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
+        : null;
+      // Without llvm-dwarfdump, read the section table clang already wrote.
+      const hasDwarf = dwarf
+        ? dwarf.status === 0 && dwarf.stdout.includes("DW_TAG_compile_unit")
+        : withG.status === 0 && fs.readFileSync(dbgExe).includes("debug_info");
       check(
-        "scripts/amritc.sh: -g is refused by name, not ignored (D4)",
+        "scripts/amritc.sh: -g reaches the compiler and the linked program carries DWARF",
+        withG.status === 0 &&
+          dbgIr.includes("!llvm.dbg.cu") &&
+          dbgIr.includes("distinct !DISubprogram(name: \"main\"") &&
+          hasDwarf,
+        `${withG.status}: ${withG.stdout}${withG.stderr}${dwarf ? dwarf.stdout.slice(0, 400) : ""}`
+      );
+
+      // stage1 answers `--version` itself, and the answer has to be the same
+      // string stage0 prints: `self/branding.ts` carries the version as a
+      // constant because stage1 cannot read `package.json`, so this is what
+      // catches the two drifting apart at the next release bump.
+      const ourVersion = spawnSync("bash", [wrapper, "--version"], { cwd: root, encoding: "utf8", env });
+      const theirVersion = spawnSync("node", [cli, "--version"], { cwd: root, encoding: "utf8" });
+      check(
+        "scripts/amritc.sh: --version is the line stage0 prints",
+        ourVersion.status === 0 &&
+          ourVersion.stdout === theirVersion.stdout &&
+          ourVersion.stdout.trim() ===
+            `amritc ${JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version}`,
+        `ours ${JSON.stringify(ourVersion.stdout)} theirs ${JSON.stringify(theirVersion.stdout)}`
+      );
+
+      // `--json` is the editor-facing diagnostic shape, and an editor pointed
+      // at either compiler must get the same bytes: same objects, same order,
+      // same spans. A multi-error program is the case worth pinning, because
+      // it is also the one that proves stage1 collected every error rather
+      // than stopping at the first.
+      const jsonCase = path.join("tests", "cases", "reject_multi_error.ts");
+      const ourJson = spawnSync("bash", [wrapper, jsonCase, "--json"], { cwd: root, encoding: "utf8", env });
+      const theirJson = spawnSync("node", [cli, jsonCase, "--json"], { cwd: root, encoding: "utf8" });
+      check(
+        "scripts/amritc.sh: --json diagnostics are byte-identical to stage0's",
+        ourJson.status === 1 &&
+          theirJson.status === 1 &&
+          ourJson.stdout === theirJson.stdout &&
+          ourJson.stdout.split("\n").filter(Boolean).length === 3,
+        `ours:\n${ourJson.stdout}${ourJson.stderr}\ntheirs:\n${theirJson.stdout}`
+      );
+
+      // `--emit-checked` through the driver, rather than through the
+      // `dump_checked` entry the oracle spawns: the same text has to come out
+      // of both, which is why one `self/dump.ts` writes it for both. The
+      // attribute pass's lines are dropped on stage0's side exactly as
+      // `tests/self/checked_oracle.js` drops them.
+      const laterPhases = /^ {2}(facts:|escaping:|calls:|pointer |stackSites)/;
+      const checkerLines = (text) => text.split("\n").filter((l) => l.length > 0 && !laterPhases.test(l));
+      const dumpCase = path.join("examples", "multi", "main.ts");
+      const ourDump = spawnSync("bash", [wrapper, dumpCase, "--emit-checked"], { cwd: root, encoding: "utf8", env });
+      const theirDump = spawnSync("node", [cli, dumpCase, "--emit-checked"], { cwd: root, encoding: "utf8" });
+      check(
+        "scripts/amritc.sh: --emit-checked dumps a whole program as stage0 dumps it",
+        ourDump.status === 0 &&
+          theirDump.status === 0 &&
+          checkerLines(ourDump.stdout).join("\n") === checkerLines(theirDump.stdout).join("\n") &&
+          ourDump.stdout.includes("module examples/multi/main.ts (entry)"),
+        `ours:\n${ourDump.stdout}${ourDump.stderr}\ntheirs:\n${theirDump.stdout}`
+      );
+
+      // The mechanism is still there for the flags that *are* stage0's: one of
+      // them refused by name rather than quietly ignored, because a build that
+      // asked for a sidecar must not come out without it. `--emit-ast` is the
+      // one that stays stage0's on purpose rather than for now: its dump
+      // prints the `typescript` package's node names and line:column spans,
+      // and stage1's tree is the flattened one `self/nodes.ts` defines, so
+      // matching it would be imitation rather than parity.
+      const refused = spawnSync(
+        "bash",
+        [wrapper, "examples/hello.ts", "--emit-ast"],
+        { cwd: root, encoding: "utf8", env }
+      );
+      check(
+        "scripts/amritc.sh: --emit-ast is refused by name, not ignored (D4)",
         refused.status === 2 && refused.stderr.includes("is stage0's"),
         `${refused.status}: ${refused.stdout}${refused.stderr}`
+      );
+
+      // The interop sidecars are stage1's, so the wrapper passes them through
+      // and supplies for them the one thing D4 kept out of the compiler: the
+      // directory. The bytes themselves are the interop oracle's business.
+      const sidecarDir = path.join(shipDir, "interop");
+      const sidecarFiles = ["add.h", "add.d.ts", "add.mjs", "add.napi.c"];
+      const sidecars = spawnSync(
+        "bash",
+        [
+          wrapper,
+          "examples/add.ts",
+          "-o", path.join(shipDir, "add.ll"),
+          "--emit-header", path.join(sidecarDir, "add.h"),
+          "--emit-dts", path.join(sidecarDir, "add.d.ts"),
+          "--emit-napi", path.join(sidecarDir, "add.napi.c"),
+        ],
+        { cwd: root, encoding: "utf8", env }
+      );
+      const wrote = sidecarFiles.filter((f) => fs.existsSync(path.join(sidecarDir, f)));
+      const selfHeader = wrote.includes("add.h")
+        ? fs.readFileSync(path.join(sidecarDir, "add.h"), "utf8")
+        : "";
+      check(
+        "scripts/amritc.sh: the interop sidecars are passed through and their directory made",
+        sidecars.status === 0 &&
+          wrote.length === sidecarFiles.length &&
+          selfHeader.includes("int32_t add(int32_t a, int32_t b);"),
+        `${sidecars.status}: ${sidecars.stdout}${sidecars.stderr}wrote: ${wrote.join(",")}`
       );
     }
   }
