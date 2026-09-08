@@ -330,6 +330,20 @@ compares every module of each — the module *set* too, so a stage that emitted
 one module fewer has not agreed about the rest. 259 of 259 programs, 848
 modules, 1,074,371 lines of IR.
 
+**The same equality now also runs on programs nobody wrote.** That corpus is
+checked in, so it is finite and both compilers have been adapted to it;
+`tests/differential/fuzz.js --stage1` takes the WP13 random-program generator
+and asks *both* compilers for the IR of each program it invents, comparing the
+texts byte for byte with the module set, through `ir_oracle.js`'s own `build`
+and `compare` (docs/wp13-differential.md, "The fuzzer"). It links one stage1
+binary per run and then costs about a third of a second per program; a
+disagreement saves the program as
+`build/test/differential/fuzz-stage1-fail-<seed>.ts` and reproduces with
+`--stage1 --seed <seed> --count 1`. The WP14 block of `npm test` runs 16
+programs from a fixed seed; **300 programs from seed 20261001 agreed on every
+one of 141,098 lines of IR** (108 s), which is the first time the two
+compilers have been compared on input neither of them was written against.
+
 ### What S4 cost
 
 `self/` is 16,496 lines of AmritScript, and the emitter half of it — the IR

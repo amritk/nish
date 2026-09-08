@@ -131,9 +131,14 @@ wired into the WP14 section of `tests/run.js` and skipped without clang.
 | `tests/self/reject_oracle.js` | every `reject_*` case, against its own `.err` fragments |
 | `tests/self/ir_oracle.js` | the emitted IR, byte for byte, over every whole program in the corpus |
 | `tests/self/bootstrap.js` | the stages: `IR(stage0) == IR(stage1) == IR(stage2)`, and stage3 byte-identical to stage2 |
+| `tests/differential/fuzz.js --stage1` | the emitted IR, byte for byte, over random programs the WP13 generator invents — the same comparison as the IR oracle, on a corpus that is not checked in |
 
 The corpus is `tests/cases/`, `examples/`, `self/`, `docs/cookbook/`, `bench/`,
-`tests/differential/corpus/` and `tests/parser/`. A skip in an oracle summary is
+`tests/differential/corpus/` and `tests/parser/`, plus `tests/link/` for the
+whole-program oracles. The fuzzer's `--stage1` mode has no corpus at all: it
+generates its programs from a seed, so the only thing that reproduces a failure
+is the seed it prints (`--stage1 --seed <s> --count 1`), and the program it
+saves under `build/test/differential/`. A skip in an oracle summary is
 a fact about how far the port has got, not a file that is allowed to disagree —
 which is why rejections are counted and named apart from the other skips.
 
@@ -144,6 +149,7 @@ npm run build                          # the oracles spawn dist/index.js
 node tests/lexer_oracle.js
 node tests/parser_oracle.js  --verbose
 node tests/self/checked_oracle.js tests/cases/cls_fields.ts
+node tests/differential/fuzz.js --stage1 --count 300
 node tests/run.js self                 # all of them, as the suite runs them
 ```
 

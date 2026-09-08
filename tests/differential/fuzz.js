@@ -10,18 +10,31 @@
  * compound assignment, `if`/`else`, a few `for`/`while` loops with fixed trip
  * counts, helper functions, and `console.log` of numbers, booleans, and
  * template literals. Every program is deterministic and prints its locals at
- * the end, then each is run natively and under Node (lib.js) and compared.
+ * the end.
+ *
+ * The generator feeds two comparisons, and they are independent:
+ *
+ *   - the default mode (WP13) builds each program natively and runs the same
+ *     program under Node through the rewrite (lib.js), and compares stdout,
+ *     exit status and signal;
+ *   - `--stage1` (WP14) compiles each program with stage0 *and* with the
+ *     self-hosted compiler and compares the emitted IR byte for byte, module
+ *     set included, reusing the build and comparison of
+ *     `tests/self/ir_oracle.js`. The stage1 binary is linked once per run.
  *
  * Usage: node tests/differential/fuzz.js [--count N] [--seed S] [--jobs J] [--depth D]
+ *        node tests/differential/fuzz.js --stage1 [--count N] [--seed S] [--depth D]
  *
  * Program i of a run uses seed S + i; a mismatching program is saved as
- * build/test/differential/fuzz-fail-<S + i>.ts and reproduces with
- * `node tests/differential/fuzz.js --seed <S + i> --count 1`.
+ * build/test/differential/fuzz-fail-<S + i>.ts (`fuzz-stage1-fail-<S + i>.ts`
+ * in stage1 mode) and reproduces with
+ * `node tests/differential/fuzz.js [--stage1] --seed <S + i> --count 1`.
  */
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const lib = require("./lib");
+const irOracle = require("../self/ir_oracle");
 const ts = require("typescript");
 
 /** mulberry32: small, seedable, good enough for program shapes. */
@@ -289,7 +302,68 @@ async function fuzzRun({ count = 50, seed = 1, jobs = 4, depth = 3, log = () => 
   return { seed, count, mismatches, compileErrors, results };
 }
 
-module.exports = { generateProgram, fuzzRun };
+/**
+ * The stage1 mode: generate `count` programs and require
+ * `IR(stage0, p) == IR(stage1, p)` for each, byte for byte and module set
+ * included — the same equality `tests/self/ir_oracle.js` asserts over the
+ * checked-in corpus, on programs neither compiler has ever seen. stage0 is the
+ * oracle; there is no golden anywhere in this path.
+ *
+ * The stage1 binary is linked once (about 15 s) and every program reuses it;
+ * the programs themselves are compared one at a time, because the oracle's
+ * `compare` is synchronous and empties the directory it works in, so `--jobs`
+ * does not apply to this mode.
+ * Returns `{ seed, count, agreed, modules, lines, disagreements }`, where a
+ * disagreement is `{ seed, verdict, detail, file }` and `file` is the saved
+ * reproducer. `binary === null` means the link failed and nothing was compared.
+ */
+function stage1Run({ count = 20, seed = 1, depth = 3, log = () => {} } = {}) {
+  const binary = irOracle.build();
+  if (binary === null) return { seed, count, binary, agreed: 0, modules: 0, lines: 0, disagreements: [] };
+  const dir = path.join(lib.buildDir, "fuzz");
+  fs.mkdirSync(dir, { recursive: true });
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "sts-fuzz-ir-"));
+  const disagreements = [];
+  let agreed = 0;
+  let modules = 0;
+  let lines = 0;
+  for (let i = 0; i < count; i++) {
+    const s = (seed + i) >>> 0;
+    const file = path.join(dir, `fuzz-${s}.ts`);
+    fs.writeFileSync(file, generateProgram(s, { depth }));
+    const t0 = Date.now();
+    const result = irOracle.compare(binary, work, file);
+    // A generated program carries no `.args` and stays inside the language, so
+    // the oracle's "skipped" outcomes cannot happen here for a benign reason:
+    // every verdict other than an agreement is a failure worth saving.
+    const entry = { seed: s, name: `fuzz/${s}`, verdict: "agree", detail: "", ms: Date.now() - t0, file };
+    if (result.failed !== undefined) {
+      entry.verdict = "ir-mismatch";
+      entry.detail = result.failed;
+    } else if (result.rejected !== undefined) {
+      entry.verdict = "stage1-rejected";
+      entry.detail = result.rejected;
+    } else if (result.skipped !== undefined) {
+      entry.verdict = "stage0-error";
+      entry.detail = result.skipped;
+    } else {
+      agreed++;
+      modules += result.modules;
+      lines += result.lines;
+    }
+    if (entry.verdict !== "agree") {
+      const failFile = path.join(lib.buildDir, `fuzz-stage1-fail-${s}.ts`);
+      fs.copyFileSync(file, failFile);
+      entry.file = failFile;
+      disagreements.push(entry);
+    }
+    log(entry);
+  }
+  fs.rmSync(work, { recursive: true, force: true });
+  return { seed, count, binary, agreed, modules, lines, disagreements };
+}
+
+module.exports = { generateProgram, fuzzRun, stage1Run };
 
 if (require.main === module) {
   const argv = process.argv.slice(2);
@@ -298,12 +372,14 @@ if (require.main === module) {
   let jobs = Math.min(8, os.cpus().length || 2);
   let depth = 3;
   let printOnly = false;
+  let stage1 = false;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--count") count = Number(argv[++i]);
     else if (argv[i] === "--seed") seed = Number(argv[++i]) >>> 0;
     else if (argv[i] === "--jobs") jobs = Number(argv[++i]);
     else if (argv[i] === "--depth") depth = Number(argv[++i]);
     else if (argv[i] === "--print") printOnly = true;
+    else if (argv[i] === "--stage1") stage1 = true;
     else {
       console.error(`unknown option: ${argv[i]}`);
       process.exit(2);
@@ -316,6 +392,32 @@ if (require.main === module) {
   if (!lib.hasClang()) {
     console.error("clang not installed");
     process.exit(2);
+  }
+  if (stage1) {
+    console.log(`fuzz: stage1 seed=${seed} count=${count} depth=${depth} (linking stage1)`);
+    const tStage1 = Date.now();
+    const res = stage1Run({
+      count,
+      seed,
+      depth,
+      log: (e) => {
+        const tag = e.verdict === "agree" ? "ok  " : e.verdict.toUpperCase();
+        console.log(`${tag}  ${e.name}  ${e.ms} ms${e.detail ? `  ${e.detail}` : ""}`);
+      },
+    });
+    if (res.binary === null) {
+      console.error("fuzz: stage1 did not link; nothing compared");
+      process.exit(2);
+    }
+    console.log(
+      `\nfuzz: stage1 seed=${res.seed} count=${res.count} agree=${res.agreed} disagreements=${res.disagreements.length} (${res.modules} modules, ${res.lines} IR lines, ${((Date.now() - tStage1) / 1000).toFixed(1)} s)`
+    );
+    for (const d of res.disagreements) {
+      console.log(`  ${d.verdict}: seed ${d.seed} saved to ${d.file}`);
+      console.log(`      ${d.detail}`);
+      console.log(`      reproduce: node tests/differential/fuzz.js --stage1 --seed ${d.seed} --count 1`);
+    }
+    process.exit(res.disagreements.length === 0 ? 0 : 1);
   }
   console.log(`fuzz: seed=${seed} count=${count} depth=${depth} jobs=${jobs}`);
   const t0 = Date.now();
