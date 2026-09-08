@@ -14,20 +14,30 @@
  *
  * A program that imports is compiled whole, by both compilers, and every
  * module of it is compared — the module *set* included, so a stage that
- * emitted one module fewer has not agreed about the rest. Two kinds of file
- * are skipped, and each skip is a fact rather than a file that is allowed to
- * disagree:
+ * emitted one module fewer has not agreed about the rest. Every program is
+ * given the flags it is compiled with everywhere else, from its `.args`
+ * sidecar or its `// smoke: args` line (`tests/self/corpus.js`): a program
+ * that needs `--number-mode f64` and does not get it is refused by stage0,
+ * and a file nobody compares must not be able to look like one that agrees.
+ *
+ * What is left out is left out for a reason, and each reason is counted apart:
  *
  *   - its `.args` ask for something stage1 does not do (`-g`, the dump flags):
  *     debug info is stage0's, as `--link` is (docs/wp14-selfhost.md §3a D4);
- *   - stage0 itself rejects it, so there is no IR to compare against.
+ *   - it is one of the `tests/link/` programs that exists to be *refused*, so
+ *     there is no IR on either side and `tests/self/reject_oracle.js` is what
+ *     compares it;
+ *   - stage0 itself rejects it, so there is no IR to compare against. The
+ *     reason stage0 gives is printed with the skip, because that is what says
+ *     whether the file is a fixture nothing can type-check or a program this
+ *     oracle is compiling wrongly.
  */
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { extraArgs, linkPrograms, programs, root } = require("./corpus");
 
-const root = path.resolve(__dirname, "..", "..");
 const cli = path.join(root, "dist", "index.js");
 
 /** Flags that change the IR and that stage1 accepts; anything else is a skip. */
@@ -41,11 +51,9 @@ const SHARED_FLAGS = new Set([
 ]);
 const VALUE_FLAGS = new Set(["--number-mode", "--target"]);
 
-/** The `.args` of a case, split into what both compilers take and what stage1 cannot. */
+/** The flags a program is compiled with, split into what both compilers take and what stage1 cannot. */
 function argsFor(file) {
-  const argsFile = file.replace(/\.ts$/, ".args");
-  if (!fs.existsSync(argsFile)) return { flags: [], unsupported: [] };
-  const raw = fs.readFileSync(argsFile, "utf8").trim().split(/\s+/).filter(Boolean);
+  const raw = extraArgs(file);
   const flags = [];
   const unsupported = [];
   for (let i = 0; i < raw.length; i++) {
@@ -63,9 +71,13 @@ function llFiles(dir) {
     .sort();
 }
 
-function compare(binary, work, file) {
+function compare(binary, work, file, negatives) {
   const { flags, unsupported } = argsFor(file);
   if (unsupported.length > 0) return { skipped: `stage1 has no ${unsupported.join(" ")}` };
+  // A `tests/link` program that carries an `expected.err` may be a compile-time
+  // rejection — no IR on either side — or one only `--link` refuses, which
+  // still emits every module. stage0 below is what tells the two apart.
+  const negative = negatives.has(file);
   // Both sides name each module by the path they resolved it to, and stage0
   // writes that path into the module header, so the entry must be spelled the
   // same for both.
@@ -78,7 +90,10 @@ function compare(binary, work, file) {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
-  if (stage0.status !== 0) return { skipped: "stage0 rejects it" };
+  if (stage0.status !== 0) {
+    if (negative) return { negative: true };
+    return { skipped: `stage0 rejects it: ${firstLine(stage0.stderr)}` };
+  }
   const names = llFiles(dir0);
   if (names.length === 0) return { skipped: "stage0 wrote no IR" };
 
@@ -87,10 +102,7 @@ function compare(binary, work, file) {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
-  if (stage1.status !== 0) {
-    const first = stage1.stderr.trim().split("\n")[0] ?? `exit ${stage1.status}`;
-    return { rejected: first };
-  }
+  if (stage1.status !== 0) return { rejected: firstLine(stage1.stderr) || `exit ${stage1.status}` };
   const ours = llFiles(dir1);
   if (names.join(",") !== ours.join(",")) {
     return { failed: `stage0 emitted [${names.join(" ")}], ours [${ours.join(" ")}]` };
@@ -124,37 +136,24 @@ function fresh(dir) {
   return dir;
 }
 
-/** Every positive AmritScript program the other oracles read, plus `self/` itself. */
+/** The first diagnostic of a compiler's stderr, without its file:line:col prefix. */
+function firstLine(output) {
+  const line = output.trim().split("\n")[0] ?? "";
+  return line.replace(/^[^:]*:\d+:\d+: /, "");
+}
+
+/**
+ * Every positive AmritScript program of the corpus, plus `self/` itself, plus
+ * the whole programs of `tests/link/`, which is where the multi-module shapes
+ * live: cycles, diamonds, re-exported classes, reachable structs.
+ */
 function corpus() {
-  const dirs = [
-    path.join(root, "tests", "cases"),
-    path.join(root, "examples"),
-    path.join(root, "self"),
-    path.join(root, "docs", "cookbook"),
-    path.join(root, "bench"),
-    path.join(root, "tests", "parser"),
-  ];
-  const files = [];
-  for (const dir of dirs) {
-    if (!fs.existsSync(dir)) continue;
-    for (const name of fs.readdirSync(dir).sort()) {
-      if (!name.endsWith(".ts")) continue;
-      const file = path.join(dir, name);
-      // A `.err` case is a rejection: there is no IR on either side.
-      if (fs.existsSync(file.replace(/\.ts$/, ".err"))) continue;
-      files.push(file);
-    }
-  }
-  // The whole programs of `tests/link/`, which is where the multi-module
-  // shapes live: cycles, diamonds, re-exported classes, reachable structs.
-  const linkDir = path.join(root, "tests", "link");
-  if (fs.existsSync(linkDir)) {
-    for (const name of fs.readdirSync(linkDir).sort()) {
-      const main = path.join(linkDir, name, "main.ts");
-      if (fs.existsSync(main)) files.push(main);
-    }
-  }
-  return files;
+  return [...programs(), ...linkPrograms().map((program) => program.main)];
+}
+
+/** The `tests/link` programs that exist to be refused; `reject_oracle.js` owns their message. */
+function negativePrograms() {
+  return new Set(linkPrograms().filter((p) => p.expectedErr !== null).map((p) => p.main));
 }
 
 function build() {
@@ -179,16 +178,19 @@ function main(argv) {
   if (binary === null) return 1;
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "sts-ir-"));
   const inputs = named.length > 0 ? named.map((f) => path.resolve(f)) : corpus();
+  const negatives = negativePrograms();
   let agreed = 0;
   let lines = 0;
   let modules = 0;
   const skipped = [];
   const rejected = [];
   const failed = [];
+  const refused = [];
   for (const file of inputs) {
-    const result = compare(binary, work, file);
+    const result = compare(binary, work, file, negatives);
     const name = path.relative(root, file);
-    if (result.skipped !== undefined) skipped.push(`${name}: ${result.skipped}`);
+    if (result.negative !== undefined) refused.push(name);
+    else if (result.skipped !== undefined) skipped.push(`${name}: ${result.skipped}`);
     else if (result.rejected !== undefined) rejected.push(`${name}: ${result.rejected}`);
     else if (result.failed !== undefined) failed.push(`${name}: ${result.failed}`);
     else {
@@ -204,14 +206,20 @@ function main(argv) {
   }
   if (verbose) {
     for (const s of skipped) process.stdout.write(`  skip ${s}\n`);
+    for (const r of refused) process.stdout.write(`  negative ${r}\n`);
   }
-  const compared = inputs.length - skipped.length - rejected.length;
-  // Rejections are counted apart from the other skips and named in the
-  // summary: a file stage0 accepts and stage1 does not is the remaining work
-  // of this milestone, and it must not be able to hide inside a skip count.
+  const compared = inputs.length - skipped.length - rejected.length - refused.length;
+  // Each of these is counted apart from the others and named in the summary. A
+  // file stage0 accepts and stage1 does not is the remaining work of this
+  // milestone and must not be able to hide inside a skip count; a program that
+  // exists to be refused is compared in full by `reject_oracle.js` and is not
+  // a gap at all.
+  const negativeNote =
+    refused.length > 0 ? `, ${refused.length} negatives (tests/self/reject_oracle.js compares them)` : "";
   const note = rejected.length > 0 ? `, ${rejected.length} rejected by stage1` : "";
   process.stdout.write(
-    `${agreed}/${compared} programs agree (${modules} modules, ${lines} IR lines), ${skipped.length} skipped${note}\n`
+    `${agreed}/${compared} programs agree (${modules} modules, ${lines} IR lines), ` +
+      `${skipped.length} skipped${negativeNote}${note}\n`
   );
   return failed.length === 0 && rejected.length === 0 ? 0 : 1;
 }

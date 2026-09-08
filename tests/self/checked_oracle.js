@@ -1,34 +1,39 @@
 /**
- * The S3 signature oracle: stage1's pass 1 against stage0's, through the
+ * The S3 checker oracle: stage1's checker against stage0's, through the
  * `--emit-checked` dump both of them write (docs/wp14-selfhost.md §6 rule 3).
  *
  *   node tests/self/checked_oracle.js              the whole corpus
  *   node tests/self/checked_oracle.js <file>...    just those files
  *   node tests/self/checked_oracle.js --verbose    name every skip
  *
- * `self/dump_checked.ts` prints what pass 1 collected in exactly the format
- * `src/dump.ts` prints it, so what is compared is not "it accepted the file"
- * but every struct's layout — field indices and byte offsets included — every
- * signature, every symbol, and the order they come out in.
+ * `self/dump_checked.ts` prints what the checker collected in exactly the
+ * format `src/dump.ts` prints it, so what is compared is not "it accepted the
+ * file" but every struct's layout — field indices and byte offsets included —
+ * every signature, every folded constant, every local and callee of every
+ * body, and the order they all come out in.
  *
- * Three kinds of file are skipped, and each skip is a fact about how far S3
- * has got rather than a file that is allowed to disagree:
+ * A program that imports is loaded whole, by both compilers, and every module
+ * of it is dumped in load order — the module *set* and the binding of each
+ * imported name included, so a stage that resolved one import differently has
+ * not agreed about the rest.
  *
- *   - it needs grammar the S2 parser turns down (the `reject_*` cases, whose
- *     forbidden constructs stage1 refuses by name);
- *   - it imports, which needs the module driver of S5;
- *   - stage0 itself rejects it, so there is no dump to compare against.
+ * A file is skipped only when there is nothing to compare: stage0 itself
+ * rejects it, so it has no dump of its own. The reason stage0 gives is printed
+ * with the skip, because a file the corpus cannot type-check at all (a parser
+ * fixture, say) and a file that is merely missing a flag read the same in a
+ * summary line otherwise. Every skip is a fact about the corpus rather than a
+ * file that is allowed to disagree.
  *
- * The lines stage0 prints that pass 1 is not responsible for — the attribute
- * facts and the per-body locals and callees — are dropped here rather than
- * left out of the format, so they start being compared the moment the phase
- * that fills them lands.
+ * The lines stage0 prints that the checker is not responsible for — the
+ * attribute pass's facts, escape sets and stack sites — are dropped here
+ * rather than left out of the format, so they start being compared the moment
+ * that phase is ported.
  */
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { numberModeArgs, programs, root } = require("./corpus");
 
-const root = path.resolve(__dirname, "..", "..");
 const cli = path.join(root, "dist", "index.js");
 
 /**
@@ -41,22 +46,12 @@ function signatureLines(dump) {
   return dump.split("\n").filter((line) => line.length > 0 && !LATER_PHASES.test(line));
 }
 
-/** The `.args` a golden case is compiled with, when they matter to pass 1. */
-function argsFor(file) {
-  const argsFile = file.replace(/\.ts$/, ".args");
-  if (!fs.existsSync(argsFile)) return { flags: [], skip: undefined };
-  const flags = fs.readFileSync(argsFile, "utf8").trim().split(/\s+/).filter(Boolean);
-  const numberMode = flags.indexOf("--number-mode");
-  if (numberMode >= 0) return { flags: ["--number-mode", flags[numberMode + 1]], skip: undefined };
-  return { flags: [], skip: undefined };
-}
-
 function compare(binary, file) {
-  const source = fs.readFileSync(file, "utf8");
-  if (/^\s*import\s/m.test(source)) return { skipped: "imports (needs the S5 driver)" };
-  const { flags } = argsFor(file);
-  // Both sides name the module by the path they were given, and stage0's
-  // dump is relative to the working directory, so the input must be too.
+  // `--number-mode` is the only flag the dump depends on; the rest change the
+  // IR, which is `ir_oracle.js`'s half of the comparison.
+  const flags = numberModeArgs(file);
+  // Both sides name each module by the path they resolved it to, and stage0's
+  // dump is relative to the working directory, so the entry must be too.
   const named = path.relative(root, file);
 
   const stage0 = spawnSync("node", [cli, named, "--emit-checked", ...flags], {
@@ -64,17 +59,14 @@ function compare(binary, file) {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
-  if (stage0.status !== 0) return { skipped: "stage0 rejects it" };
+  if (stage0.status !== 0) return { skipped: `stage0 rejects it: ${firstLine(stage0.stderr)}` };
 
   const stage1 = spawnSync(binary, [...flags, named], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
-  if (stage1.status !== 0) {
-    const first = stage1.stderr.trim().split("\n")[0] ?? "";
-    return { rejected: first };
-  }
+  if (stage1.status !== 0) return { rejected: firstLine(stage1.stderr) };
 
   const want = signatureLines(stage0.stdout);
   const got = signatureLines(stage1.stdout);
@@ -86,28 +78,15 @@ function compare(binary, file) {
   return { lines: want.length };
 }
 
-/** Every positive AmritScript program the other oracles read, plus `self/` itself. */
+/** The first diagnostic of a compiler's stderr, without its file:line:col prefix. */
+function firstLine(output) {
+  const line = output.trim().split("\n")[0] ?? "";
+  return line.replace(/^[^:]*:\d+:\d+: /, "");
+}
+
+/** Every positive AmritScript program of the corpus, plus `self/` itself. */
 function corpus() {
-  const dirs = [
-    path.join(root, "tests", "cases"),
-    path.join(root, "examples"),
-    path.join(root, "self"),
-    path.join(root, "docs", "cookbook"),
-    path.join(root, "bench"),
-    path.join(root, "tests", "parser"),
-  ];
-  const files = [];
-  for (const dir of dirs) {
-    if (!fs.existsSync(dir)) continue;
-    for (const name of fs.readdirSync(dir).sort()) {
-      if (!name.endsWith(".ts")) continue;
-      const file = path.join(dir, name);
-      // A `.err` case is a rejection: there is no dump on either side.
-      if (fs.existsSync(file.replace(/\.ts$/, ".err"))) continue;
-      files.push(file);
-    }
-  }
-  return files;
+  return programs();
 }
 
 function build() {

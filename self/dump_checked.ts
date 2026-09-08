@@ -1,23 +1,27 @@
-// `dump_checked <file>`: the signatures stage1's pass 1 collected, in exactly
+// `dump_checked <file>`: the side tables stage1's checker filled in, in exactly
 // the format `amritc --emit-checked` prints them (`src/dump.ts`).
 //
 // This is how S3 is tested (docs/wp14-selfhost.md §6 rule 3):
 // `tests/self/checked_oracle.js` runs stage0 with `--emit-checked` over the
-// same file, keeps the lines pass 1 is responsible for, and diffs. The lines
-// it drops are the ones later phases fill in — the attribute facts and the
-// per-body locals and callees — so the whitelist of files that agree grows
-// as those land rather than the format changing.
+// same file, keeps the lines the checker is responsible for, and diffs. The
+// lines it drops are the attribute pass's — the facts, the escape sets and the
+// stack sites — so they start being compared the moment that phase is ported
+// rather than the format changing.
 //
-// One module at a time: `import` is reported as `unbound`, because resolving
-// a specifier means loading another file and that is the driver's job in S5.
+// A *whole program*, not one module: the entry is loaded together with
+// everything it imports through `self/compilation.ts` (the S5 driver), checked
+// as one program, and every module is dumped in load order, exactly as
+// `dumpChecked(compilation)` walks `compilation.modules`. So an `import` line
+// names what pass 1b bound it to — a function, a struct or a constant — and
+// each module lists only the constants, structs and functions it declares
+// itself.
 
-import { Checker } from "./checker";
-import { DiagnosticSink, SourceFile } from "./diagnostics";
+import { Compilation, ModuleUnit } from "./compilation";
+import { SourceFile } from "./diagnostics";
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context";
 import { jsonQuote } from "./strings";
 import { N_BLOCK, N_CALL, N_CONSTRUCTOR, N_IDENT, N_NEW, N_VAR_DECL, Node } from "./nodes";
-import { Parser } from "./parser";
-import { validate } from "./validator";
+import { Options } from "./options";
 import {
   CheckedProgram,
   ConstInfo,
@@ -72,7 +76,7 @@ function structText(table: TypeTable, info: StructInfo, out: string[]): void {
 }
 
 /** The folded value in source syntax, so a dump can be pasted back into a program. */
-function constantText(table: TypeTable, info: ConstInfo): string {
+function constantSyntax(table: TypeTable, info: ConstInfo): string {
   if (info.type === T_STRING) {
     return jsonQuote(info.textValue);
   }
@@ -144,72 +148,38 @@ function walkBody(
   }
 }
 
-export function main(): number {
-  if (process.argv.length < 2) {
-    console.error("usage: dump_checked [--number-mode f64] <file>");
-    return 2;
-  }
-  let numberMode = NUMBER_MODE_I32;
-  let path = "";
-  let arg = 1;
-  while (arg < process.argv.length) {
-    const value = process.argv[arg];
-    if (value === "--number-mode") {
-      arg = arg + 1;
-      if (arg < process.argv.length && process.argv[arg] === "f64") {
-        numberMode = NUMBER_MODE_F64;
-      }
-    } else {
-      path = value;
-    }
-    arg = arg + 1;
-  }
-  const text = readFileSyncOrNull(path);
-  if (text === null) {
-    console.error(`dump_checked: cannot read ${path}`);
-    return 1;
-  }
-
-  const source = new SourceFile(path, text);
-  const parser = new Parser(source);
-  const file = parser.parseSourceFile();
-  for (const diagnostic of parser.diagnostics) {
-    writeError(`${diagnostic.message()}\n`);
-  }
-  if (parser.diagnostics.length > 0) {
-    return 1;
-  }
-
-  const sink = new DiagnosticSink();
-  const table = new TypeTable();
-  const checker = new Checker(table, source, file, true, parser.nodeCount, sink, numberMode);
-  // Phase 0 first: what is forbidden by design is refused before the checker
-  // has a chance to report it as something merely unsupported.
-  validate(checker.ctx, file);
-  if (sink.hasErrors()) {
-    writeError(`${sink.format(20)}\n`);
-    return 1;
-  }
-  checker.collectSignatures();
-  // A whole compilation asks the *entry* module; one module on its own is the
-  // entry, so its own `main` is the answer.
-  checker.ctx.entryHasMain = checker.program.entryMain !== null;
-  checker.foldConstants();
-  checker.checkBodies();
-  if (sink.hasErrors()) {
-    writeError(`${sink.format(20)}\n`);
-    return 1;
-  }
-
-  const program = checker.program;
-  const out: string[] = [];
-  out.push(`module ${path}${program.isEntry ? " (entry)" : ""}`);
+/**
+ * One module of a checked program, in the order `src/dump.ts` writes it: the
+ * module line, what each import bound to, then the constants, structs and
+ * functions *this* module declares. An imported constant, struct or signature
+ * belongs to the section of the module that defines it, which is why each list
+ * is filtered by origin rather than printed as the checker's table holds it —
+ * pass 1b adds every imported name to the importer's tables too.
+ */
+function dumpModule(unit: ModuleUnit, table: TypeTable, out: string[]): void {
+  const program = unit.checker.program;
+  const source = unit.source;
+  out.push(`module ${unit.path}${unit.isEntry ? " (entry)" : ""}`);
   for (const imp of program.imports) {
-    out.push(`import ${imp.localName} from ${jsonQuote(imp.specifier)} -> unbound`);
+    const struct = imp.struct;
+    const constant = imp.constant;
+    const sig = imp.sig;
+    let what = "unbound";
+    if (struct !== null) {
+      what = `struct ${struct.name}`;
+    } else if (constant !== null) {
+      what = `const ${constant.name}`;
+    } else if (sig !== null) {
+      what = `function @${sig.name}`;
+    }
+    out.push(`import ${imp.localName} from ${jsonQuote(imp.specifier)} -> ${what}`);
   }
   for (const info of program.constantList) {
+    if (info.origin !== source) {
+      continue; // imported: listed by its own module
+    }
     const tag = info.exported ? " [exported]" : "";
-    out.push(`const ${info.name}: ${table.typeName(info.type)} = ${constantText(table, info)}${tag}`);
+    out.push(`const ${info.name}: ${table.typeName(info.type)} = ${constantSyntax(table, info)}${tag}`);
   }
   for (const info of program.structList) {
     if (info.origin === source) {
@@ -218,6 +188,9 @@ export function main(): number {
   }
   const entry = program.entryMain;
   for (const sig of program.functions) {
+    if (!sig.definedIn(source)) {
+      continue; // imported: listed by the module that defines it
+    }
     const tags: string[] = [];
     if (sig.exported) {
       tags.push("exported");
@@ -233,6 +206,54 @@ export function main(): number {
     const suffix = tags.length > 0 ? ` [${tags.join(" ")}]` : "";
     out.push(`function ${signatureText(table, sig)} -> @${sig.name}${suffix}`);
     bodyTables(program, source, table, sig, out);
+  }
+}
+
+export function main(): number {
+  if (process.argv.length < 2) {
+    console.error("usage: dump_checked [--number-mode f64] <file>");
+    return 2;
+  }
+  const opts = new Options();
+  let path = "";
+  let arg = 1;
+  while (arg < process.argv.length) {
+    const value = process.argv[arg];
+    if (value === "--number-mode") {
+      arg = arg + 1;
+      if (arg < process.argv.length && process.argv[arg] === "f64") {
+        opts.numberMode = NUMBER_MODE_F64;
+      } else {
+        opts.numberMode = NUMBER_MODE_I32;
+      }
+    } else {
+      path = value;
+    }
+    arg = arg + 1;
+  }
+  if (path.length === 0) {
+    console.error("usage: dump_checked [--number-mode f64] <file>");
+    return 2;
+  }
+
+  const compilation = new Compilation(opts);
+  // `load` parses every module, sweeps it with Phase 0 and collects its
+  // signatures, so a forbidden construct or an unreadable module is answered
+  // before anything is bound; `check` binds the imports and checks the bodies.
+  if (!compilation.load(path)) {
+    if (compilation.sink.hasErrors()) {
+      writeError(`${compilation.sink.format(20)}\n`);
+    }
+    return 1;
+  }
+  if (!compilation.check()) {
+    writeError(`${compilation.sink.format(20)}\n`);
+    return 1;
+  }
+
+  const out: string[] = [];
+  for (const unit of compilation.modules) {
+    dumpModule(unit, compilation.table, out);
   }
   write(`${out.join("\n")}\n`);
   return 0;

@@ -1915,11 +1915,13 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       `${symbolsOracle.stdout}${symbolsOracle.stderr}`
     );
 
-    // S3, pass 1: signatures. `self/dump_checked.ts` prints what the pass
-    // collected in exactly the format `--emit-checked` prints it, so what is
-    // compared over the whole corpus is every struct's layout — field indices
-    // and byte offsets included — every signature, every symbol, every folded
-    // constant, and the order they come out in.
+    // S3, the checker. `self/dump_checked.ts` prints what it collected in
+    // exactly the format `--emit-checked` prints it, so what is compared over
+    // the whole corpus is every struct's layout — field indices and byte
+    // offsets included — every signature, every symbol, every folded constant,
+    // and the order they come out in. A program that imports is loaded whole
+    // through the S5 driver and every module of it is dumped, so the binding
+    // of each imported name is compared too.
     const checkedOracle = spawnSync("node", [path.join(root, "tests", "self", "checked_oracle.js")], {
       cwd: root,
       encoding: "utf8",
@@ -1933,9 +1935,10 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     );
 
     // The other half of milestone S3: refusing the same programs for the same
-    // reason. A dump comparison cannot see that, so every `reject_*` case is
-    // run through stage1 and its own `.err` fragments are required of the
-    // output — the same assertion the suite already makes of stage0.
+    // reason. A dump comparison cannot see that, so every `reject_*` case and
+    // every `tests/link/` negative is run through stage1 and its own expected
+    // fragments are required of the output — the same assertion the suite
+    // already makes of stage0.
     const rejectOracle = spawnSync("node", [path.join(root, "tests", "self", "reject_oracle.js")], {
       cwd: root,
       encoding: "utf8",
@@ -1949,11 +1952,11 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     );
 
     // S4: the emitter. `IR(stage0, p) == IR(stage1, p)` byte for byte over
-    // every import-free program in the corpus — not a golden a human wrote,
-    // and not a summary either: every attribute, every block label and every
-    // SSA number has to match, which is the half of the output a golden test
-    // reads past. The skips are the programs that need the S5 module driver
-    // and the flags stage1 does not have (`-g`, the dumps).
+    // every whole program in the corpus — not a golden a human wrote, and not
+    // a summary either: every attribute, every block label and every SSA
+    // number has to match, which is the half of the output a golden test reads
+    // past. The skips are the flags stage1 does not have (`-g`, the dumps) and
+    // the one parser fixture no checker accepts.
     const irOracle = spawnSync("node", [path.join(root, "tests", "self", "ir_oracle.js")], {
       cwd: root,
       encoding: "utf8",

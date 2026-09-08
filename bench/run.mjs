@@ -30,20 +30,30 @@ const cli = path.join(root, "dist", "index.js");
 // ---- Benchmarks -------------------------------------------------------------------
 
 /**
- * `mode` is the `--number-mode` the AmritScript source needs; `integer` marks the
- * benchmarks whose hot loop is integer arithmetic, where `--nsw` gets a column.
- * `extraC` lists further C sources that print the same checksum (the naive
- * malloc/free string builder).
+ * `integer` marks the benchmarks whose hot loop is integer arithmetic, where
+ * `--nsw` gets a column. `extraC` lists further C sources that print the same
+ * checksum (the naive malloc/free string builder).
+ *
+ * The compiler flags a benchmark needs are not listed here: they live in
+ * `bench/<name>.args`, the sidecar `tests/cases` uses, so that the stage1
+ * oracles compile the same source the same way (`tests/self/corpus.js`).
  */
 const BENCHMARKS = [
-  { name: "fib", what: "fib(40), recursive calls", mode: "i32", integer: true },
-  { name: "nbody", what: "n-body, 5 bodies, 2e7 steps (class + array, f64)", mode: "f64", integer: false },
-  { name: "spectral", what: "spectral norm, n = 3000 (number[] + f64)", mode: "f64", integer: false },
-  { name: "sieve", what: "sieve of Eratosthenes, n = 1e7, 20 passes (boolean[])", mode: "i32", integer: true },
-  { name: "strbuild", what: "string building, 131072 template pieces joined into 806 KB", mode: "i32", integer: true, extraC: ["strbuild_naive"] },
-  { name: "vec3", what: "Vec3 class with methods, 5e7 iterations (f64)", mode: "f64", integer: false },
-  { name: "result", what: "Result<number, number> returned and passed, 2e8 calls (WP17 packing)", mode: "i32", integer: true },
+  { name: "fib", what: "fib(40), recursive calls", integer: true },
+  { name: "nbody", what: "n-body, 5 bodies, 2e7 steps (class + array, f64)", integer: false },
+  { name: "spectral", what: "spectral norm, n = 3000 (number[] + f64)", integer: false },
+  { name: "sieve", what: "sieve of Eratosthenes, n = 1e7, 20 passes (boolean[])", integer: true },
+  { name: "strbuild", what: "string building, 131072 template pieces joined into 806 KB", integer: true, extraC: ["strbuild_naive"] },
+  { name: "vec3", what: "Vec3 class with methods, 5e7 iterations (f64)", integer: false },
+  { name: "result", what: "Result<number, number> returned and passed, 2e8 calls (WP17 packing)", integer: true },
 ];
+
+/** The compiler flags `bench/<name>.ts` is built with, from its `.args` sidecar. */
+function sourceArgs(name) {
+  const file = path.join(benchDir, `${name}.args`);
+  if (!fs.existsSync(file)) return [];
+  return fs.readFileSync(file, "utf8").trim().split(/\s+/).filter(Boolean);
+}
 
 // ---- Options ------------------------------------------------------------------------
 
@@ -150,7 +160,7 @@ function build(bench) {
   const rs = fs.existsSync(path.join(benchDir, `${bench.name}.rs`)) ? prepare(`${bench.name}.rs`, size) : null;
   const rel = (p) => path.relative(root, p);
   const variants = [];
-  const modeFlags = bench.mode === "f64" ? ["--number-mode", "f64"] : [];
+  const modeFlags = sourceArgs(bench.name);
 
   const sts = (id, label, extra, profile, timed) => {
     const exe = path.join(outDir, `${bench.name}-${id}`);

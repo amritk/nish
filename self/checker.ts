@@ -126,7 +126,13 @@ export class Checker {
     if (sig.exported) {
       this.program.exports.set(name, this.program.functions.length - 1);
     }
-    if (name === "main" && sig.exported && this.program.isEntry) {
+    if (name === "main" && sig.exported) {
+      // Reported, not returned: stage0 marks the entry anyway, so a module that
+      // wrongly declares `main` is still checked as one that has it and the
+      // reader gets every follow-on error at once (`tests/link/main_in_import`).
+      if (!this.program.isEntry) {
+        this.ctx.error(stmt.children[0], "Only the entry module may declare `export function main`");
+      }
       markEntryMain(this.ctx, sig);
     }
   }
@@ -354,6 +360,27 @@ export class Checker {
       this.ctx.error(
         imp.node,
         `\`${imp.localName}\` is a function imported from \`${imp.specifier}\`, not a type`
+      );
+    }
+    // Two imports of one local name are two symbols under one spelling. Naming
+    // the module the name came from first is what makes the second `import`
+    // readable (`tests/link/duplicate_import`); a name the module declares
+    // itself has no such origin to name.
+    const clashAt = this.ctx.sigs.get(imp.localName, -1);
+    if (clashAt >= 0) {
+      const clash = this.program.functions[clashAt];
+      let origin = "";
+      for (const other of this.program.imports) {
+        const bound = other.sig;
+        if (bound !== null && bound === clash && origin.length === 0) {
+          origin = other.specifier;
+        }
+      }
+      this.ctx.error(
+        imp.node,
+        origin.length > 0
+          ? `\`${imp.localName}\` is already imported from \`${origin}\``
+          : `\`${imp.localName}\` is already declared in this module`
       );
     }
     imp.sig = sig;
