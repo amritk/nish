@@ -959,3 +959,17 @@ search are in `scripts/build.sh` and always were, for both compilers alike.
 `--emit-ast` still is for the reason §7 gives — refused by name now by the
 compiler itself rather than by a wrapper, so a build that asks for it is told
 rather than quietly given nothing.
+
+**What is left, in full, so nobody has to rediscover it.** Four things, none of
+them about compiling:
+
+| | Why | What it would cost |
+| --- | --- | --- |
+| `--emit-ast` | §7: the dump prints the `typescript` package's node names, and this compiler's tree is its own. Refused by name | a mirror of `ts.SyntaxKind` inside the self-hosted compiler, which is the opposite of what §1 means |
+| `--target host` | it asks the machine what it is, and nothing in the language does. Refused by name, with the triples it does take | `process.platform` and `process.arch` as builtins, which `self/target.ts` would compose exactly as `src/codegen/target.ts` does: **8 bytes of `.text`** measured, and the whole of rule 1's checklist |
+| exit **70** for an internal error, and `AMRITC_DEBUG` | a broken invariant reaches `panic(msg)`, which the language defines as the message and exit 1. `self/` is an AmritScript program and answers the way one does | either a second `panic` that exits 70, or `process.exit(70)` at 40 sites where the definite-return analysis currently reads `panic` as a terminator |
+| `-o <dir>` for an existing directory **without** the trailing slash | stage0 `stat`s the path; the trailing slash is the only spelling here | a `stat` builtin. `-o <dir>/` is unambiguous and is what every caller in the tree writes |
+
+The first two are refusals with a message. The third is a different exit code
+for the same failure, and the fourth is a spelling. None of them is a program
+one compiler can build and the other cannot, which is the line §1 drew.
