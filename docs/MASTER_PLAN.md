@@ -532,7 +532,7 @@ unsigned types; the fast slice beside JavaScript's `substring`; ranged integer
 types and length narrowing, so a proven index emits no bounds check;
 contiguous struct arrays with the checker rule that makes the dangling
 interior pointer a compile error; and generics by monomorphisation with
-discriminated unions, which turns `Result<T, E>` into library code. §9 has the
+discriminated unions. §9 has the
 order with the reason for each position, and
 [wp15-performance.md](wp15-performance.md) has the design.
 
@@ -702,7 +702,7 @@ document does not need a second one open beside it to be current:
 | 5 | The fast slice beside JavaScript's `substring` | |
 | 6 | Ranged types and length narrowing | a real flow-sensitive analysis; the surviving-check warning from 2 is its acceptance test |
 | 7 | Contiguous struct arrays | the layout change, the escape rule that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI |
-| 8 | Generics by monomorphisation, discriminated unions, `Result<T, E>` as library code | the largest, and the one self-hosting most depends on |
+| 8 | Generics by monomorphisation; discriminated unions deferred to their own note | the largest. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code |
 
 An explicit bounds-check opt-out is deferred until 6 has landed and the checks
 that survive it have been counted. What each item is worth is a measurement
