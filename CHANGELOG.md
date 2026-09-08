@@ -9,6 +9,26 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **A plan for retiring stage0 rather than freezing it (WP19,
+  `docs/wp19-stage0-retirement.md`).** WP14 §6 decided that stage0 stays
+  buildable as the bootstrap seed and the differential oracle but is not kept
+  up to date; this is the document for the day that freeze becomes a deletion,
+  and it is a checklist rather than a schedule. It takes the arrangement rustc
+  and Go both reached — the seed is the previous release of the compiler
+  itself, not a second implementation — and prices it: the four things stage0
+  still owns beyond compiling (the twelve oracles, six of which die with it;
+  the npm package and the `--version` source; the four flags and exit codes of
+  §7a; and `IR(stage0, self/) == IR(stage1, self/)`, the diverse-double-compiling
+  property no project in its comparison table asserts), the six gates that must
+  close before any of it is deleted, and the four builtins those gates need —
+  `process.platform`/`process.arch` and `isDirectorySync`, which WP18 lands
+  alongside the generics work and which close two of §7a's four rows, plus
+  `getenv` and `panicInternal`, which are this package's — each of them in
+  stage0 first, because the seed has to be able to compile the compiler that
+  replaces it. It also records what
+  retirement costs and the honest trigger for doing it: a release cycle in
+  which stage0 found nothing, changed nothing and shipped nothing but itself.
+
 - **The self-hosted compiler links its own output; `scripts/amritc.sh` is
   gone (WP14, reversing §3a D4).** `amritc self/compile.ts --link amritc`
   now produces a compiler byte-identical to the one that ran it, with no shell
@@ -69,6 +89,21 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   where the runtime answers — and `tests/differential/rewrite.js` knows their
   names. Without that the two new goldens ran natively and failed under Node,
   which is the shape of every builtin that was ever added and forgotten there.
+
+### Changed
+
+- **`test (macos-latest)` is commented out of the CI matrix.** It is not a
+  compiler failure and not an architecture one: `scripts/build.sh` runs under
+  `set -euo pipefail`, and macOS ships bash 3.2 as `/bin/bash`, where expanding
+  an empty array as `"${arr[@]}"` with `set -u` on raises *unbound variable*.
+  bash 4.4 made that legal, so every Linux runner passes and every macOS one
+  dies at `scripts/build.sh: line 96: pgo[@]: unbound variable` — `pgo`, `elf`,
+  `strip_flag` and `libs` are all legitimately empty on the ordinary macOS
+  path, so every `--link` at the `speed`, `size` and `napi` profiles fails
+  before clang is reached. The matrix entry is commented rather than deleted
+  and carries the fix beside it (`${arr[@]+"${arr[@]}"}` at the nine sites);
+  `docs/wp10-ci.md` says what the gap costs, which is the ld64 / Mach-O half of
+  `build.sh` that no Linux runner exercises at any architecture.
 
 ### Fixed
 

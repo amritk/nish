@@ -39,6 +39,7 @@ where they disagree with LANGUAGE.md, LANGUAGE.md wins.
 | [wp15-performance.md](wp15-performance.md) | The rule that speed decides a tie and that "faster" means measured: the data-oriented paradigm and how it is enforced, the language features the ordering requires, and the diagnostics that keep the decisions visible. |
 | [wp16-results.md](wp16-results.md) | Design note: `Result<T, E>`, the three rules that make a failure impossible to ignore, why the representation is a pointer rather than an LLVM aggregate, why `throw` was removed, and the ambient declarations that keep an AmritScript program type-checkable by `tsc`. |
 | [wp17-result-abi.md](wp17-result-abi.md) | Design note: returning a small `Result` in a register. Why a packed `i64` and not a by-value aggregate or `sret`, what "small" means and where the threshold comes from, the per-target lowering tables, the x86-64 and aarch64 assembly, and the measured 2× — plus the C header, N-API and wasm bridges that let a `Result` cross to a host. |
+| [wp19-stage0-retirement.md](wp19-stage0-retirement.md) | The plan for the day stage0 is deleted rather than frozen: how rustc, Go, GCC and Zig each answered "what compiles the compiler", the four things stage0 still owns, the six gates that must close first, the builtins they need, and what the retirement costs. |
 
 The remaining semantic changes after WP13 (checked integer division,
 ECMAScript `Math.pow`, numeric-only ordering, `?.`/`??` rejected,
