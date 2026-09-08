@@ -24,9 +24,11 @@
  * The default corpus is the one the WP8 section of `tests/run.js` drives the
  * generators over — the header, `.d.ts`, loader and N-API checks there all
  * read these programs — plus the layout program, whose header is the widest
- * struct declaration the generators ever write, and `interop_payloads.ts`,
- * which exists only because the narrow `Result` payloads have a reader and a
- * writer each and nothing else here mentions them. `--all` runs the same
+ * struct declaration the generators ever write, `interop_payloads.ts`, which
+ * exists only because the narrow `Result` payloads have a reader and a writer
+ * each and nothing else here mentions them, and `interop_unsigned.ts`, which
+ * carries the unsigned widths as bare parameters and results so the loader's
+ * masks are compared too. `--all` runs the same
  * comparison over every whole program the IR oracle reads, which is how a
  * shape nobody thought to put in the corpus gets found.
  */
@@ -61,6 +63,10 @@ const CORPUS = [
   // The narrow `Result` payloads nothing else in the corpus mentions: `f32`,
   // `u8`, `u16`, `u32`, and the loader's bit-view helpers they pull in.
   { file: "tests/self/interop_payloads.ts" },
+  // Every unsigned width as a bare parameter and result, which is where the
+  // loader's masks live; the WP8 section of tests/run.js builds this one to
+  // wasm and calls it.
+  { file: "tests/self/interop_unsigned.ts" },
   { file: "tests/layout/structs.ts", stem: "layout_structs" },
 ];
 
