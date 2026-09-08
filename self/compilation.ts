@@ -92,6 +92,13 @@ export class Compilation {
   modules: ModuleUnit[];
   /** Resolved path -> index into `modules`. */
   byPath: StringMap;
+  /**
+   * The root file `load` could not read, or `""`. A root has no importer to
+   * point at, so the failure is not a diagnostic with a span; the driver owns
+   * the wording and the stream, which is how it can answer `--json` with the
+   * object stage0 answers with (`self/compile.ts`).
+   */
+  unreadableRoot: string;
 
   constructor(opts: Options) {
     this.opts = opts;
@@ -100,6 +107,7 @@ export class Compilation {
     this.runtime = new RuntimeTable();
     this.modules = [];
     this.byPath = new StringMap();
+    this.unreadableRoot = "";
   }
 
   entry(): ModuleUnit {
@@ -108,7 +116,12 @@ export class Compilation {
 
   /**
    * Load `path` and everything it imports. Answers false when a file could not
-   * be read or a module failed to parse; the diagnostics are in the sink.
+   * be read or a module failed to parse. A module's own errors are in the
+   * sink; a *root* that could not be opened is in `unreadableRoot`, because it
+   * has no span and no importer to report it against.
+   *
+   * Call it once per root: the second and later ones are modules nothing
+   * imports, and a path already loaded answers true without reparsing.
    */
   load(path: string): boolean {
     const at = this.byPath.get(path, -1);
@@ -117,8 +130,11 @@ export class Compilation {
     }
     const text = readFileSyncOrNull(path);
     if (text === null) {
-      // The entry has no importer to point at, so the message stands alone.
-      console.error(`compile: cannot read ${path}`);
+      // A root has no importer to point at, so this is not a diagnostic with a
+      // span. Record it and let the driver report it in whichever shape was
+      // asked for; an *import* that cannot be read is reported below, against
+      // the specifier that named it.
+      this.unreadableRoot = path;
       return false;
     }
     const source = new SourceFile(path, text);

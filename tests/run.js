@@ -2294,7 +2294,163 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           selfHeader.includes("int32_t add(int32_t a, int32_t b);"),
         `${sidecars.status}: ${sidecars.stdout}${sidecars.stderr}wrote: ${wrote.join(",")}`
       );
+
+      // ---- The command line answers the way stage0's does, not merely close
+      // to it. Each of these was a silent divergence: a flag stage1 accepted
+      // and ignored, an input it dropped, a stream it wrote the wrong way
+      // down. None of them is a decision D4 or §7 records, which is what
+      // separates them from `--emit-ast`.
+
+      // An unknown `--number-mode` refused rather than quietly meaning i32:
+      // the failure mode is a program that compiles, in the other arithmetic.
+      const badMode = spawnSync(
+        "bash",
+        [wrapper, "examples/hello.ts", "--number-mode", "f32", "-o", path.join(shipDir, "unused.ll")],
+        { cwd: root, encoding: "utf8", env }
+      );
+      const badMode0 = spawnSync(
+        "node",
+        [cli, "examples/hello.ts", "--number-mode", "f32", "-o", path.join(shipDir, "unused0.ll")],
+        { cwd: root, encoding: "utf8" }
+      );
+      check(
+        "scripts/amritc.sh: an unknown --number-mode is refused, as stage0 refuses it",
+        badMode.status === 2 &&
+          badMode0.status === 2 &&
+          !fs.existsSync(path.join(shipDir, "unused.ll")),
+        `stage1 ${badMode.status}: ${badMode.stderr}stage0 ${badMode0.status}: ${badMode0.stderr}`
+      );
+
+      // Every positional is a root, as it is for stage0. Before this the last
+      // one won and the others were compiled into nothing.
+      const rootsDir = path.join(shipDir, "roots");
+      const roots = spawnSync(
+        "bash",
+        [wrapper, "examples/hello.ts", "examples/add.ts", "-o", `${rootsDir}/`],
+        { cwd: root, encoding: "utf8", env }
+      );
+      const rootsWrote = fs.existsSync(rootsDir) ? fs.readdirSync(rootsDir).sort() : [];
+      check(
+        "scripts/amritc.sh: every file named on the command line is a root",
+        roots.status === 0 && rootsWrote.join(",") === "add.ll,hello.ll",
+        `${roots.status}: ${roots.stdout}${roots.stderr}wrote: ${rootsWrote.join(",")}`
+      );
+
+      // stdout carries the IR and the `--json` diagnostics and nothing else,
+      // so `wrote <file>` goes to stderr where stage0 puts it. A build script
+      // that pipes the IR somewhere must not find chatter mixed into it.
+      const chatterDir = path.join(shipDir, "chatter");
+      const chatter = spawnSync(
+        "bash",
+        [wrapper, "examples/hello.ts", "-o", `${chatterDir}/`],
+        { cwd: root, encoding: "utf8", env }
+      );
+      const chatter0 = spawnSync(
+        "node",
+        [cli, "examples/hello.ts", "-o", `${path.join(shipDir, "chatter0")}/`],
+        { cwd: root, encoding: "utf8" }
+      );
+      check(
+        "scripts/amritc.sh: `wrote <file>` goes to stderr, as stage0 writes it",
+        chatter.status === 0 &&
+          chatter.stdout === "" &&
+          chatter.stderr.includes("wrote ") &&
+          chatter0.stdout === "" &&
+          chatter0.stderr.includes("wrote "),
+        `stage1 out=${JSON.stringify(chatter.stdout)} err=${JSON.stringify(chatter.stderr)}`
+      );
+
+      // A root that cannot be opened is a driver failure, not a diagnostic
+      // with a span: stage0 answers exit 1 with `error: ...` on stderr, and
+      // one flat object on stdout under `--json`. The errno itself stays
+      // stage0's — Node names it and the runtime's read does not.
+      const missing = spawnSync(
+        "bash",
+        [wrapper, path.join(shipDir, "no_such_file.ts"), "-o", path.join(shipDir, "nope.ll")],
+        { cwd: root, encoding: "utf8", env }
+      );
+      const missingJson = spawnSync(
+        "bash",
+        [wrapper, path.join(shipDir, "no_such_file.ts"), "--json", "-o", path.join(shipDir, "nope.ll")],
+        { cwd: root, encoding: "utf8", env }
+      );
+      let missingObject = null;
+      try {
+        missingObject = JSON.parse(missingJson.stdout.trim());
+      } catch {}
+      check(
+        "scripts/amritc.sh: an unreadable root exits 1 and --json makes it an object",
+        missing.status === 1 &&
+          missing.stderr.startsWith("error: cannot open ") &&
+          missingJson.status === 1 &&
+          missingObject !== null &&
+          missingObject.severity === "error" &&
+          missingObject.message.startsWith("cannot open "),
+        `${missing.status}: ${missing.stderr}json ${missingJson.status}: ${missingJson.stdout}`
+      );
+
+      // `--link` on a program with no entry point: stage0 refuses it before it
+      // emits anything, with exit 1 and a message naming what to declare.
+      // Reaching clang instead costs a link and answers `undefined reference
+      // to main` with exit 3.
+      const noMain = spawnSync(
+        "bash",
+        [wrapper, "tests/link/no_main/main.ts", "--link", path.join(shipDir, "no_main"), "--profile", "debug"],
+        { cwd: root, encoding: "utf8", env }
+      );
+      const noMain0 = spawnSync(
+        "node",
+        [cli, "tests/link/no_main/main.ts", "--link", path.join(shipDir, "no_main0")],
+        { cwd: root, encoding: "utf8" }
+      );
+      check(
+        "scripts/amritc.sh: --link without `export function main` is refused, as stage0 refuses it",
+        noMain.status === 1 &&
+          noMain.stderr.includes("export function main") &&
+          noMain0.status === 1 &&
+          noMain0.stderr.includes("export function main"),
+        `stage1 ${noMain.status}: ${noMain.stderr}stage0 ${noMain0.status}: ${noMain0.stderr}`
+      );
+
+      // An unknown profile refused before the compile rather than after it, as
+      // stage0 validates `PROFILES` before it reads a file.
+      const badProfile = spawnSync(
+        "bash",
+        [wrapper, "examples/hello.ts", "--link", path.join(shipDir, "bad"), "--profile", "turbo"],
+        { cwd: root, encoding: "utf8", env }
+      );
+      check(
+        "scripts/amritc.sh: an unknown --profile is refused before anything is compiled",
+        badProfile.status === 2 && badProfile.stderr.includes("unknown profile"),
+        `${badProfile.status}: ${badProfile.stdout}${badProfile.stderr}`
+      );
+
+      // `-o <dir>/` writes into the directory it was given; it does not empty
+      // it first. The wrapper used to `rm -rf` the caller's directory before
+      // the compile, which for `-o build/` took the rest of `build/` with it.
+      const keepDir = path.join(shipDir, "keep");
+      fs.mkdirSync(keepDir, { recursive: true });
+      fs.writeFileSync(path.join(keepDir, "keep.txt"), "not the compiler's\n");
+      const keep = spawnSync(
+        "bash",
+        [wrapper, "examples/hello.ts", "-o", `${keepDir}/`],
+        { cwd: root, encoding: "utf8", env }
+      );
+      check(
+        "scripts/amritc.sh: -o <dir>/ writes into the directory, it does not clear it",
+        keep.status === 0 &&
+          fs.existsSync(path.join(keepDir, "keep.txt")) &&
+          fs.existsSync(path.join(keepDir, "hello.ll")),
+        `${keep.status}: ${keep.stdout}${keep.stderr}`
+      );
     }
+  } else {
+    // Everything from the lexer oracle down links a stage1 binary, so without
+    // clang none of it runs. Say so: the WP14 block is the self-hosting proof,
+    // and a run that quietly leaves it out reports the 55 compile-gate passes
+    // above as though the fixed point had been checked. WP12 and WP13 print
+    // their skip for the same reason.
+    console.log("SKIP  clang not installed: the self-hosting oracles and the bootstrap are skipped");
   }
 }
 

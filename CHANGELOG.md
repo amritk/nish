@@ -7,6 +7,36 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ## [Unreleased]
 
+### Fixed
+
+- **stage1's command line answers the way stage0's does, in seven places where
+  it silently did not (WP14).** None of them was a decision D4 or §7 records,
+  which is what separates them from `--emit-ast`: they were drift, and each one
+  had a shape a build script could be wrong about without being told. An
+  unknown `--number-mode` is refused instead of quietly meaning `i32` — the
+  worst of the three outcomes, because the program compiles, in the other
+  arithmetic. Every positional is a root, as it is for stage0, instead of the
+  last one winning and the rest being compiled into nothing. `wrote <file>`
+  goes to stderr, where stage0 puts it, so a build script that pipes the IR or
+  reads `--json` finds no chatter mixed in. A root that cannot be opened is
+  reported by the driver — `error: cannot open <path>` on stderr, exit 1, and
+  one flat object under `--json` — rather than by the loader, which could
+  answer neither shape; the errno stays stage0's, since Node names it and
+  `readFileSyncOrNull` answers null without saying why. In `scripts/amritc.sh`:
+  `--link` on a program with no `export function main` is refused with
+  stage0's message and its exit 1, instead of reaching clang and coming back
+  with `undefined reference to main` and exit 3; an unknown `--profile` is
+  refused before the compile rather than after it, as stage0 validates
+  `PROFILES` before it reads a file; and `-o <dir>/` writes into the directory
+  it was given instead of clearing it first, which for `-o build/` took the
+  rest of `build/` with it. Seven checks in the WP14 section of
+  `tests/run.js` compare each answer against stage0's.
+
+- **The WP14 section says when it skipped itself.** Without clang the
+  self-hosting oracles and the bootstrap did not run and printed nothing, so a
+  run reported the 55 compile-gate passes above them and looked like a proof of
+  the fixed point. It now prints the `SKIP` line WP12 and WP13 print.
+
 ### Added
 
 - **The self-hosted compiler writes the interop sidecars (WP8 in `self/`).**

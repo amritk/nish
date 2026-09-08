@@ -1,8 +1,9 @@
 // `compile <entry.ts> [flags]`: stage1's compiler driver
 // (docs/wp14-selfhost.md milestones S4 and S5).
 //
-// It loads the entry module and everything it imports, checks the program as a
-// whole, and writes one `.ll` per module. With no `--out-dir` it writes the IR
+// It loads the entry module and everything it imports — and every other file
+// named on the command line, which is how a program names a module nothing
+// imports — checks the program as a whole, and writes one `.ll` per module. With no `--out-dir` it writes the IR
 // of a single-module program to stdout, which is what the S4 oracle compares;
 // with `--out-dir <dir>` it writes `<dir>/<stem>.ll` per module, which is what
 // the bootstrap links. The directory must already exist: `mkdir` would mean a
@@ -39,10 +40,11 @@ import { generateHeader } from "./interop_header";
 import { generateNapiShim } from "./interop_napi";
 import { generateWasmLoader, wasmLoaderPath } from "./interop_wasm";
 import { Options } from "./options";
+import { jsonQuote } from "./strings";
 import { resolveTarget, supportedTargets } from "./target";
 
 const USAGE: string =
-  "usage: compile <file.ts> [--out-dir <dir>] [--number-mode i32|f64] [--plain] [--strict-exports] [--unchecked-indexing] [--nsw] [--no-stack-alloc] [--runtime-decls] [--target <triple>] [-g] [--json] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile --version | --help";
+  "usage: compile <file.ts> [more.ts ...] [--out-dir <dir>] [--number-mode i32|f64] [--plain] [--strict-exports] [--unchecked-indexing] [--nsw] [--no-stack-alloc] [--runtime-decls] [--target <triple>] [-g] [--json] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile --version | --help";
 
 /**
  * The diagnostics of a failed compilation, in whichever of stage0's two shapes
@@ -60,13 +62,27 @@ function report(compilation: Compilation, json: boolean): void {
   }
 }
 
+/**
+ * A failure that belongs to the command line rather than to the program: it
+ * has no source span, so it cannot go through the sink. stage0 prints it with
+ * an `error:` prefix on stderr, or as one flat object on stdout under
+ * `--json`, and this answers in the same two shapes.
+ */
+function reportRootFailure(message: string, json: boolean): void {
+  if (json) {
+    console.log(`{"severity":"error","message":${jsonQuote(message)}}`);
+    return;
+  }
+  console.error(`error: ${message}`);
+}
+
 export function main(): number {
   if (process.argv.length < 2) {
     console.error(USAGE);
     return 2;
   }
   const opts = new Options();
-  let path = "";
+  const roots: string[] = [];
   let outDir = "";
   let json = false;
   let emitChecked = false;
@@ -79,7 +95,15 @@ export function main(): number {
         console.error("compile: --number-mode needs a value (i32 or f64)");
         return 2;
       }
-      opts.numberMode = process.argv[arg] === "f64" ? NUMBER_MODE_F64 : NUMBER_MODE_I32;
+      const mode = process.argv[arg];
+      if (mode !== "i32" && mode !== "f64") {
+        // stage0 refuses an unknown mode rather than falling back to i32
+        // (`src/index.ts`), and a silent fallback is the worst of the three
+        // outcomes: the program compiles, in the other arithmetic.
+        console.error(`compile: --number-mode must be i32 or f64, not \`${mode}\``);
+        return 2;
+      }
+      opts.numberMode = mode === "f64" ? NUMBER_MODE_F64 : NUMBER_MODE_I32;
     } else if (value === "--out-dir") {
       arg = arg + 1;
       if (arg >= process.argv.length) {
@@ -154,18 +178,34 @@ export function main(): number {
       console.error(`compile: unknown flag \`${value}\`\n${USAGE}`);
       return 2;
     } else {
-      path = value;
+      // Every positional is a root, as it is for stage0: a program whose
+      // modules do not all reach the entry by `import` is named by listing
+      // them. The first one is the entry.
+      roots.push(value);
     }
     arg = arg + 1;
   }
-  if (path.length === 0) {
+  if (roots.length === 0) {
     console.error(USAGE);
     return 2;
   }
 
   const compilation = new Compilation(opts);
-  if (!compilation.load(path)) {
-    if (compilation.sink.hasErrors()) {
+  let loaded = true;
+  for (const root of roots) {
+    if (!compilation.load(root)) {
+      loaded = false;
+      break;
+    }
+  }
+  if (!loaded) {
+    if (compilation.unreadableRoot.length > 0) {
+      // stage0 answers a root it cannot open with the syscall it failed at,
+      // on stderr with an `error:` prefix, or as one JSON object under
+      // `--json` (`src/index.ts`). The errno itself stays stage0's: Node names
+      // it, and `readFileSyncOrNull` answers null without saying why.
+      reportRootFailure(`cannot open ${compilation.unreadableRoot}`, json);
+    } else if (compilation.sink.hasErrors()) {
       report(compilation, json);
     }
     return 1;
@@ -184,7 +224,7 @@ export function main(): number {
   if (outDir.length === 0) {
     if (emitted.length > 1) {
       console.error(
-        `compile: ${path} imports ${emitted.length - 1} module(s); pass --out-dir <dir> so each one gets its own .ll`
+        `compile: ${roots[0]} imports ${emitted.length - 1} module(s); pass --out-dir <dir> so each one gets its own .ll`
       );
       return 2;
     }
@@ -195,7 +235,9 @@ export function main(): number {
   for (const module of emitted) {
     const file = `${outDir}/${module.stem}.ll`;
     writeFileSync(file, module.ir);
-    console.log(`wrote ${file}`);
+    // stderr, as stage0 writes it: stdout is where the IR goes when there is
+    // no `--out-dir`, and `--json` owns it outright.
+    console.error(`wrote ${file}`);
   }
   writeSidecars(compilation);
   return 0;
