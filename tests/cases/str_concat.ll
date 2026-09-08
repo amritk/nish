@@ -4,6 +4,7 @@
 
 declare noundef i64 @amrit_arena_mark() #0
 declare void @amrit_arena_release(i64 noundef) #0
+declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 
@@ -17,11 +18,13 @@ define noundef i32 @test() #0 {
 entry:
   %s.addr = alloca i8*, align 8
   %arena.mark = call i64 @amrit_arena_mark()
-  %0 = call i8* @join(i8* bitcast ({ i64, [4 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [4 x i8] }* @.str.1 to i8*))
-  %1 = call i8* @amrit_str_concat(i8* %0, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
-  store i8* %1, i8** %s.addr, align 8
-  %2 = load i8*, i8** %s.addr, align 8
-  call void @amrit_print(i8* %2)
+  %0 = call i64 @amrit_arena_mark()
+  %1 = call i8* @join(i8* bitcast ({ i64, [4 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [4 x i8] }* @.str.1 to i8*))
+  %2 = call i8* @amrit_arena_keep(i64 %0, i8* %1)
+  %3 = call i8* @amrit_str_concat(i8* %2, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  store i8* %3, i8** %s.addr, align 8
+  %4 = load i8*, i8** %s.addr, align 8
+  call void @amrit_print(i8* %4)
   call void @amrit_arena_release(i64 %arena.mark)
   ret i32 0
 }

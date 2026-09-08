@@ -16,6 +16,7 @@
 declare void @amrit_free_arena() #0
 declare noundef i64 @amrit_arena_mark() #0
 declare void @amrit_arena_release(i64 noundef) #0
+declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare zeroext i1 @amrit_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
@@ -124,14 +125,16 @@ land.end.1:
   call void @amrit_print(i8* %23)
   %24 = load i8*, i8** %platform.addr, align 8
   %25 = load i8*, i8** %arch.addr, align 8
-  %26 = call i8* @hostTriple(i8* %24, i8* %25)
-  %27 = bitcast i8* %26 to i64*
-  %28 = load i64, i64* %27, align 8
-  %29 = trunc i64 %28 to i32
-  %30 = icmp sgt i32 %29, 0
-  %31 = select i1 %30, i8* bitcast ({ i64, [5 x i8] }* @.str.10 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.11 to i8*)
-  %32 = call i8* @amrit_str_concat(i8* bitcast ({ i64, [9 x i8] }* @.str.13 to i8*), i8* %31)
-  call void @amrit_print(i8* %32)
+  %26 = call i64 @amrit_arena_mark()
+  %27 = call i8* @hostTriple(i8* %24, i8* %25)
+  %28 = call i8* @amrit_arena_keep(i64 %26, i8* %27)
+  %29 = bitcast i8* %28 to i64*
+  %30 = load i64, i64* %29, align 8
+  %31 = trunc i64 %30 to i32
+  %32 = icmp sgt i32 %31, 0
+  %33 = select i1 %32, i8* bitcast ({ i64, [5 x i8] }* @.str.10 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.11 to i8*)
+  %34 = call i8* @amrit_str_concat(i8* bitcast ({ i64, [9 x i8] }* @.str.13 to i8*), i8* %33)
+  call void @amrit_print(i8* %34)
   call void @amrit_arena_release(i64 %arena.mark)
   ret i32 0
 }

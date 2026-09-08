@@ -307,6 +307,9 @@ function emitCall(
     operands.push(`${emitter.llvmAbi(want)} ${value}`);
     i = i + 1;
   }
+  // WP9: after the receiver and the arguments, so the bracket holds only what
+  // the method itself allocates (`Emitter.beginReclaim`).
+  const mark = emitter.beginReclaim(callee);
   const call = `call ${emitter.llvmAbi(callee.returnType)} @${callee.name}(${operands.join(", ")})`;
   if (callee.returnType === T_VOID) {
     emitter.fn.emit(call);
@@ -317,7 +320,7 @@ function emitCall(
   if (emitter.table.resultByValue(callee.returnType)) {
     return emitResultReturningCall(emitter, call, callee.returnType, site);
   }
-  return emitter.fn.emitValue(call);
+  return emitter.endReclaim(mark, emitter.fn.emitValue(call));
 }
 
 /** `recv.m(args)` where `recv` is a value: a struct method, or a string or array method. */

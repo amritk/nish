@@ -3306,6 +3306,151 @@ attributes #0 = { nounwind willreturn }
 ```
 <!-- cookbook:end mem_arena_scope -->
 
+### Reclaiming a returned temporary at the call site
+
+The scope above stops where it is most wanted. `join` builds a string and
+returns it, so it can release nothing — the value has to outlive the call — and
+its 32 intermediates would stay in the arena for the life of the program. The
+*caller* is in a better position: a call hands back exactly one value, so
+whatever else the callee bumped is unreachable the moment it returns. Each call
+to `join` and to `piece` is therefore bracketed by `amrit_arena_mark` and
+`amrit_arena_keep(mark, s)`, which moves the returned string down onto the mark
+and releases everything underneath it. The mark is taken *after* the arguments,
+so nothing the caller allocated is inside the bracket.
+
+`fill` is the counter-example: it stores the string it built into an object its
+caller still holds, so `allocEscapes` is true and its call carries no bracket.
+The rule, its proof and what it measured are in
+[wp6-memory.md](wp6-memory.md) §2a and
+[wp9-optimisation.md](wp9-optimisation.md#the-call-site-reclaim).
+
+<!-- cookbook:begin mem_reclaim -->
+```ts
+// A string builder cannot reclaim its own temporaries: the string it returns
+// has to outlive it, so `join` gets no arena scope and every intermediate it
+// made would live for the whole program. Its *caller* can reclaim them,
+// because a call hands back exactly one value — so the call is bracketed by
+// `amrit_arena_mark` and `amrit_arena_keep`, which moves the returned string
+// down onto the mark and releases everything underneath it.
+function piece(i: number): string {
+  return `${i},`;
+}
+
+function join(n: number): string {
+  let s = "";
+  for (let i = 0; i < n; i++) {
+    s = s + piece(i);
+  }
+  return s;
+}
+
+class Box {
+  text: string;
+  constructor(text: string) {
+    this.text = text;
+  }
+}
+
+// `fill` hands the string it built to an object its caller still holds, so
+// what it allocated is not garbage and the call below carries no bracket.
+function fill(b: Box, i: number): string {
+  const s = `v${i}`;
+  b.text = s;
+  return s;
+}
+
+function report(b: Box, n: number): string {
+  return join(n) + fill(b, n);
+}
+```
+
+```llvm
+%struct.Box = type { i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c",\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"v\00" }, align 8
+
+declare noundef i64 @amrit_arena_mark() #0
+declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
+declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
+
+define noundef nonnull align 8 i8* @piece(i32 noundef %i) #0 {
+entry:
+  %0 = call i8* @amrit_str_from_i32(i32 %i)
+  %1 = call i8* @amrit_str_concat(i8* %0, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  ret i8* %1
+}
+
+define noundef nonnull align 8 i8* @join(i32 noundef %n) #0 {
+entry:
+  %s.addr = alloca i8*, align 8
+  %i.addr = alloca i32, align 4
+  store i8* bitcast ({ i64, [1 x i8] }* @.str.1 to i8*), i8** %s.addr, align 8
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %i.addr, align 4
+  %1 = icmp slt i32 %0, %n
+  br i1 %1, label %for.body, label %for.end
+
+for.body:
+  %2 = load i8*, i8** %s.addr, align 8
+  %3 = load i32, i32* %i.addr, align 4
+  %4 = call i64 @amrit_arena_mark()
+  %5 = call i8* @piece(i32 %3)
+  %6 = call i8* @amrit_arena_keep(i64 %4, i8* %5)
+  %7 = call i8* @amrit_str_concat(i8* %2, i8* %6)
+  store i8* %7, i8** %s.addr, align 8
+  br label %for.inc
+
+for.inc:
+  %8 = load i32, i32* %i.addr, align 4
+  %9 = add i32 %8, 1
+  store i32 %9, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %10 = load i8*, i8** %s.addr, align 8
+  ret i8* %10
+}
+
+define void @Box.constructor(%struct.Box* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.Box, %struct.Box* %this, i32 0, i32 0
+  store i8* %text, i8** %0, align 8
+  ret void
+}
+
+define noundef nonnull align 8 i8* @fill(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %b, i32 noundef %i) #0 {
+entry:
+  %s.addr = alloca i8*, align 8
+  %0 = call i8* @amrit_str_from_i32(i32 %i)
+  %1 = call i8* @amrit_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), i8* %0)
+  store i8* %1, i8** %s.addr, align 8
+  %2 = load i8*, i8** %s.addr, align 8
+  %3 = getelementptr inbounds %struct.Box, %struct.Box* %b, i32 0, i32 0
+  store i8* %2, i8** %3, align 8
+  %4 = load i8*, i8** %s.addr, align 8
+  ret i8* %4
+}
+
+define noundef nonnull align 8 i8* @report(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %b, i32 noundef %n) #0 {
+entry:
+  %0 = call i64 @amrit_arena_mark()
+  %1 = call i8* @join(i32 %n)
+  %2 = call i8* @amrit_arena_keep(i64 %0, i8* %1)
+  %3 = call i8* @fill(%struct.Box* %b, i32 %n)
+  %4 = call i8* @amrit_str_concat(i8* %2, i8* %3)
+  ret i8* %4
+}
+
+attributes #0 = { nounwind willreturn }
+```
+<!-- cookbook:end mem_reclaim -->
+
 ### `Arena.mark` / `release` / `used` / `reset`
 
 The explicit builtins lower to one runtime call each. `measure` calls
@@ -4172,6 +4317,7 @@ declare void @amrit_free_arena() #2
 declare noundef i64 @amrit_arena_mark() #2
 declare void @amrit_arena_release(i64 noundef) #2
 declare noundef i64 @amrit_arena_used() #2
+declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8) #2
 declare noalias noundef nonnull align 8 i8* @amrit_str_new(i8* noundef readonly nocapture, i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare zeroext i1 @amrit_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3

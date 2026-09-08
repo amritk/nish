@@ -60,6 +60,62 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   forbids in `self/`. It is reported rather than fixed here; the fix is a
   `StringBuilder`, as the rest of `self/` already uses.
 
+- **A caller reclaims the arena around a string-returning call (WP9, closing
+  the remaining item of the WP6 note in `docs/wp9-optimisation.md`).** A
+  function that returns a string can never have an automatic arena scope: the
+  string it hands back has to outlive it, so every intermediate it built lives
+  as long as the program. That is what made `bench/strbuild` touch 48 MB of
+  fresh pages to produce an 806 KB string. The caller is in a better position,
+  and for a reason that has nothing to do with how the value is used — a call
+  hands back exactly one value, so everything else the callee bumped is
+  unreachable the moment it returns. Calls now compile to
+
+  ```llvm
+  %mark = call i64 @amrit_arena_mark()
+  %t    = call i8* @join(i32 %lo, i32 %hi)
+  %kept = call i8* @amrit_arena_keep(i64 %mark, i8* %t)
+  ```
+
+  with `%kept` used everywhere `%t` would have been. **Peak resident set for
+  `bench/strbuild` falls from 48,676 KB to 16,420 KB** and its peak live arena
+  from 51.5 MB to 15.2 MB, for the same output and the same bytes bumped.
+
+  The bracket is emitted only when the callee returns a plain `string`, bumps
+  the arena at all, never touches `Arena.reset` / `Arena.release`, and — the
+  fact that needed building — never lets an allocation out of its frame other
+  than through its return value. `src/codegen/escape.ts` grew that fact,
+  `allocEscapes`, by refining what `allocLeaks` already knew: `leaks` merges a
+  value stored where the *caller* can reach it with one merely assigned to a
+  local of the frame (`s = s + piece(i)`, the shape of every string builder),
+  and only the first is a reason not to reclaim. Every `Outcome` now carries an
+  `escapes` bit computed in the same walk from the same `classifyUse`, and it
+  propagates over the call graph in the same fixpoint; `allocEscapes` implies
+  `allocLeaks` and never the reverse, and `flow` is untouched, so the stack
+  rule and the automatic scopes decide exactly what they decided before.
+
+  The runtime gains `amrit_arena_keep(mark, p)`: it releases back to `mark`
+  while preserving the newest block, either by moving it down onto the mark and
+  freeing every newer chunk, or — when the mark sat at the end of a chunk the
+  callee filled exactly — by leaving it where it is and unlinking the chunks
+  between. Only a `string` may be kept, because only a string is one flat block
+  with no interior pointers; an array header names a separate data block and a
+  `Result` names its payload, so neither is ever moved. Anything the guards
+  cannot prove — a block that is not the arena's newest, a stale mark, a mark
+  newer than the block — answers the pointer unchanged, which reclaims less and
+  is always safe. `.text` in `runtime/runtime.c` goes from 2,561 to **2,775**
+  bytes at `-Oz` against the 4,096 budget.
+
+  `tests/cases/mem_reclaim_call.ts` is strbuild in miniature,
+  `mem_reclaim_argument.ts` shows the temporary being passed on and held across
+  a later call, `mem_reclaim_no_stack_alloc.ts` shows `--no-stack-alloc` moving
+  allocations without moving a bracket, and `mem_reclaim_guards.ts` is the
+  negative half: four calls of which exactly one is bracketed, the other three
+  refused for storing into the caller's object, for `Arena.reset`, and for
+  returning a `Result<string, number>`. `tests/runtime_test.c` covers both
+  outcomes of `amrit_arena_keep` and its three refusals. Both compilers emit
+  the bracket identically and the bootstrap still reaches its fixed point;
+  `self/` is itself a heavy string builder, so its own IR carries it too.
+
 - **The self-hosted compiler links its own output; `scripts/amritc.sh` is
   gone (WP14, reversing §3a D4).** `amritc self/compile.ts --link amritc`
   now produces a compiler byte-identical to the one that ran it, with no shell

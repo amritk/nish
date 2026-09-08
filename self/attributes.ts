@@ -145,10 +145,13 @@ export class PointerParamFacts {
 export class CallSite {
   callee: string;
   flow: i32;
+  /** WP9: the result is reachable after this function returns, other than through its return value. */
+  escapes: boolean;
 
-  constructor(callee: string, flow: i32) {
+  constructor(callee: string, flow: i32, escapes: boolean) {
     this.callee = callee;
     this.flow = flow;
+    this.escapes = escapes;
   }
 }
 
@@ -191,6 +194,13 @@ export class FunctionFacts {
   directArena: boolean;
   /** An allocation may survive the call other than through the return value. */
   allocLeaks: boolean;
+  /**
+   * WP9: an allocation is reachable *by the caller* after the call, other than
+   * through the return value (fixpoint over callees). Refines `allocLeaks`,
+   * which also counts a value assigned to a local of the frame; see the header
+   * of escape.ts. `allocEscapes` implies `allocLeaks`, never the reverse.
+   */
+  allocEscapes: boolean;
   /** An allocation of this function is returned: the caller owns it, so no scope here. */
   returnsAllocation: boolean;
   /** Calls `Arena.reset` / `Arena.release`, directly or through a callee. */
@@ -219,6 +229,7 @@ export class FunctionFacts {
     this.allocates = false;
     this.directArena = false;
     this.allocLeaks = false;
+    this.allocEscapes = false;
     this.returnsAllocation = false;
     this.usesArenaControl = false;
     this.callSites = [];
@@ -1072,6 +1083,7 @@ export function collectFacts(
     facts.directArena = memory.directArena;
     facts.allocates = memory.directArena;
     facts.allocLeaks = memory.allocLeaks;
+    facts.allocEscapes = memory.allocEscapes;
     facts.returnsAllocation = memory.returnsAllocation;
     facts.usesArenaControl = memory.usesArenaControl;
     facts.callSites = memory.callSites;
@@ -1230,6 +1242,11 @@ function propagate(facts: FactsTable, runtime: RuntimeTable): void {
         if (callee === null || !callee.allocates) {
           continue;
         }
+        if (site.escapes && !f.allocEscapes) {
+          // WP9: this function stored the callee's result where its own caller can reach it.
+          f.allocEscapes = true;
+          changed = true;
+        }
         if (site.flow === FLOW_LOCAL && !f.directArena) {
           f.directArena = true;
           changed = true;
@@ -1317,6 +1334,11 @@ function propagateCallee(facts: FactsTable, runtime: RuntimeTable, f: FunctionFa
     }
     if (calleeFacts.allocLeaks && !f.allocLeaks) {
       f.allocLeaks = true;
+      changed = true;
+    }
+    // WP9: whatever a callee lets out of its own frame is out of this one too.
+    if (calleeFacts.allocEscapes && !f.allocEscapes) {
+      f.allocEscapes = true;
       changed = true;
     }
     if (calleeFacts.usesArenaControl && !f.usesArenaControl) {

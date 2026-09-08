@@ -39,6 +39,7 @@ import {
   FunctionFacts,
 } from "./attributes";
 import { DebugInfo } from "./debug";
+import { reclaimsReturnedString } from "./escape";
 import { emitArrayLiteral, emitElementAccess, emitForOf } from "./emit_arrays";
 import { emitBuiltinCall, emitIdentifierBuiltinCall, emitNamespaceProperty, isIdentifierBuiltinCall } from "./emit_builtins";
 import {
@@ -332,6 +333,34 @@ export class Emitter {
 
   isStackSite(node: Node): boolean {
     return this.current.isStackSite(node);
+  }
+
+  /**
+   * WP9 call-site reclaim: the bump position before a call whose returned
+   * string the caller may keep, or the empty string when the call does not
+   * qualify. It is emitted *after* the arguments, so nothing but what the
+   * callee itself allocates falls inside the bracket, and the caller's own
+   * temporaries are never at risk. `reclaimsReturnedString` in escape.ts
+   * carries the proof.
+   */
+  beginReclaim(callee: FunctionSig): string {
+    if (!reclaimsReturnedString(callee, this.facts)) {
+      return "";
+    }
+    return this.fn.emitValue(`call i64 ${this.useRuntime("amrit_arena_mark")}()`);
+  }
+
+  /**
+   * Reclaim back to `mark`, keeping the returned string, which moves down to
+   * the mark. The call's value is replaced by the string's new address, so no
+   * later instruction can name the old one, and every temporary the callee
+   * bumped underneath it is released.
+   */
+  endReclaim(mark: string, value: string): string {
+    if (mark.length === 0) {
+      return value;
+    }
+    return this.fn.emitValue(`call i8* ${this.useRuntime("amrit_arena_keep")}(i64 ${mark}, i8* ${value})`);
   }
 
   emitScopeExit(): void {
@@ -789,6 +818,9 @@ export class Emitter {
       operands.push(`${this.llvmAbi(want)} ${value}`);
       i = i + 1;
     }
+    // WP9: the mark goes after the arguments, so only the callee's own bumps
+    // are inside the bracket (`beginReclaim`).
+    const mark = this.beginReclaim(sig);
     const call = `call ${this.llvmAbi(sig.returnType)} @${sig.name}(${operands.join(", ")})`;
     if (sig.returnType === T_VOID) {
       this.fn.emit(call);
@@ -799,7 +831,7 @@ export class Emitter {
     if (this.table.resultByValue(sig.returnType)) {
       return emitResultReturningCall(this, call, sig.returnType, expr);
     }
-    return this.fn.emitValue(call);
+    return this.endReclaim(mark, this.fn.emitValue(call));
   }
 
   // ---- Context helpers ----------------------------------------------------

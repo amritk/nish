@@ -83,6 +83,12 @@ export interface EmitContext {
    */
   paramObject(name: string): string | undefined;
   /**
+   * WP9: whether a call to `callee` may be bracketed by the call-site reclaim
+   * (`beginReclaim` / `endReclaim` in emit/arena.ts). The whole-program facts
+   * decide it; `reclaimsReturnedString` in escape.ts carries the proof.
+   */
+  reclaimsCall(callee: FunctionSig): boolean;
+  /**
    * WP6: emit the arena release of the function's automatic scope, if it has
    * one. Called right before every `ret`, after the return value is computed.
    */

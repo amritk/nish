@@ -104,6 +104,19 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     effect: "write",
   },
   {
+    // WP9 call-site reclaim: rewinds to a mark while keeping the newest block,
+    // which it moves down to the mark and answers at its new address. Neither
+    // `noalias` nor `nocapture` is claimed: the guards in runtime.c answer the
+    // argument itself whenever the move cannot be proved safe, and a returned
+    // pointer is a captured one. The chunk walk is over a finite acyclic list,
+    // so `willreturn` holds.
+    name: "amrit_arena_keep",
+    signature:
+      "declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8)",
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
     name: "amrit_str_new",
     signature: `declare noalias noundef nonnull align 8 i8* @amrit_str_new(i8* noundef readonly nocapture, i64 noundef)`,
     attrs: ["nounwind", "willreturn"],

@@ -16,6 +16,7 @@ void amrit_free_arena(void);
 uint64_t amrit_arena_mark(void);
 void amrit_arena_release(uint64_t);
 uint64_t amrit_arena_used(void);
+void *amrit_arena_keep(uint64_t, void *);
 amrit_str *amrit_str_new(const char *, uint64_t);
 amrit_str *amrit_str_concat(const amrit_str *, const amrit_str *);
 _Bool amrit_str_eq(const amrit_str *, const amrit_str *);
@@ -99,6 +100,61 @@ int main(void) {
     amrit_arena_release(mk);
   }
   assert(amrit_arena_used() == 0 && amrit_arena.chunks == before);
+
+  /* WP9 call-site reclaim: `amrit_arena_keep(mark, p)` releases back to `mark`
+   * while preserving the newest block. Five behaviours, and the four refusals
+   * matter more than the move, because each of them is a case where relocating
+   * would corrupt live memory. */
+  amrit_free_arena();
+  amrit_alloc_struct(8); /* something below the mark, which must not move */
+  uint64_t k = amrit_arena_mark();
+  char *garbage = amrit_alloc_struct(400);
+  amrit_str *kept = amrit_str_new("keepme", 6);
+  amrit_str *moved = amrit_arena_keep(k, kept);
+  assert((uint64_t)(uintptr_t)moved == k);                  /* moved down onto the mark */
+  assert(moved->len == 6 && memcmp(moved->data, "keepme", 6) == 0 && moved->data[6] == 0);
+  assert(amrit_arena_used() == 8 + 16 && garbage != NULL);   /* the 400 bytes are gone */
+
+  /* Across chunks, with room below the mark: the newer chunk is freed. */
+  void *one = amrit_arena.chunks;
+  k = amrit_arena_mark();
+  amrit_alloc_struct(1 << 20); /* pushes a second chunk */
+  kept = amrit_str_new("across", 6);
+  assert(amrit_arena.chunks != one);
+  moved = amrit_arena_keep(k, kept);
+  assert((uint64_t)(uintptr_t)moved == k && amrit_arena.chunks == one);
+  assert(memcmp(moved->data, "across", 6) == 0);
+
+  /* Across chunks with a *full* chunk below: `p` stays where it is and only the
+   * chunks between it and the mark's chunk are freed. */
+  amrit_free_arena();
+  amrit_alloc_struct(1 << 20); /* chunk A, filled exactly, so the mark sits at its end */
+  void *chunk_a = amrit_arena.chunks;
+  k = amrit_arena_mark();
+  amrit_alloc_struct(1 << 20); /* chunk B: pure garbage */
+  amrit_alloc_struct(1 << 20); /* chunk C: pure garbage */
+  kept = amrit_str_new("stay", 4); /* chunk D */
+  void *chunk_d = amrit_arena.chunks;
+  moved = amrit_arena_keep(k, kept);
+  assert(moved == kept && amrit_arena.chunks == chunk_d); /* not relocated: A has no room */
+  assert(memcmp(moved->data, "stay", 4) == 0);
+  assert(*(void **)chunk_d == chunk_a); /* B and C were freed out of the middle */
+
+  /* Refusals. A pointer that is not the newest arena block — a string literal
+   * in read-only data, or anything older than the mark — is answered unchanged
+   * and nothing is released. */
+  amrit_free_arena();
+  amrit_str *older = amrit_str_new("old", 3);
+  k = amrit_arena_mark();
+  amrit_alloc_struct(64);
+  size_t held = amrit_arena_used();
+  assert(amrit_arena_keep(k, older) == older && amrit_arena_used() == held);
+  static const struct { uint64_t len; char data[4]; } literal = { 3, "lit" };
+  assert(amrit_arena_keep(k, (void *)&literal) == (void *)&literal);
+  assert(amrit_arena_used() == held);
+  /* A stale mark (no live chunk holds it) is refused too. */
+  kept = amrit_str_new("fresh", 5);
+  assert(amrit_arena_keep(1, kept) == kept);
 
   /* Strings. */
   amrit_str *hello = amrit_str_new("hello", 5);

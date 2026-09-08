@@ -52,6 +52,22 @@
  * the caller still holds. `push` on an array that is not a local allocation
  * site leaks (the growth belongs to an array someone else owns), and so does
  * any call to `Arena.reset` / `Arena.release` (`usesArenaControl`).
+ *
+ * Call-site reclaim (WP9): `leaks` is two different facts in one bucket. A
+ * value stored into a field, an element or a callee that keeps it is reachable
+ * from the *caller* after the call; a value merely assigned to a local
+ * (`s = s + piece(i)`) is not — that local dies with the frame, and the only
+ * reason such a site is not `local` is that the stack rule needs a fixed
+ * binding. So every outcome also carries `escapes`, which is true only in the
+ * first case and follows the value into the local in the second, exactly as
+ * `flow` already follows `const y = x`. `EscapeResult.allocEscapes` is the
+ * per-function union, and `reclaimsReturnedString` is what it buys: at a call
+ * whose callee never lets an allocation out other than through its return
+ * value, the caller may mark the arena before the call and hand the returned
+ * string to `amrit_arena_keep`, which moves it down to the mark and reclaims
+ * every temporary the callee left behind it. `allocEscapes` implies
+ * `allocLeaks` but not the reverse, and only the new fact is refined: the
+ * automatic scopes still read `allocLeaks` and decide exactly what they did.
  */
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
@@ -72,6 +88,8 @@ export type Flow = "local" | "returned" | "leaks";
 export interface CallSite {
   callee: string;
   flow: Flow;
+  /** WP9: the result is reachable after this function returns, other than through its return value. */
+  escapes: boolean;
 }
 
 export interface EscapeResult {
@@ -92,6 +110,12 @@ export interface EscapeResult {
   directArena: boolean;
   /** Some direct allocation `leaks`. */
   allocLeaks: boolean;
+  /**
+   * WP9: some direct allocation is reachable after this function returns other
+   * than through its return value. Refines `allocLeaks`, which also counts a
+   * value assigned to a local of this frame; see the header.
+   */
+  allocEscapes: boolean;
   /** Some direct allocation is `returned`. */
   returnsAllocation: boolean;
   /** Calls `Arena.reset` / `Arena.release` directly. */
@@ -151,6 +175,33 @@ function isPointerResult(t: StaticType): boolean {
 const worse = (a: Flow, b: Flow): Flow =>
   a === "leaks" || b === "leaks" ? "leaks" : a === "returned" || b === "returned" ? "returned" : "local";
 
+/**
+ * WP9: may the caller reclaim the arena around a call to `callee`?
+ *
+ * The proof has three parts, and all three are needed:
+ *
+ *  - **The callee's garbage is garbage.** `allocEscapes` is false, so nothing
+ *    the callee allocated is reachable from anywhere the caller can see except
+ *    through the value it returned. The caller holds no other pointer into the
+ *    call, because a return value is the only thing a call hands back.
+ *  - **The arena did not move under the mark.** `usesArenaControl` is false, so
+ *    neither the callee nor anything it calls reset or released the arena
+ *    between the mark and the reclaim.
+ *  - **The kept value can be moved.** Only a plain `string` qualifies: it is one
+ *    flat block with no interior pointers, so relocating its bytes relocates the
+ *    whole value. An array header points at a separate data block, a struct or a
+ *    `Result` may hold pointers into other blocks, and `string | null` may be
+ *    null, so none of them is moved.
+ *
+ * `allocates` is not part of the proof, only of the profit: a callee that never
+ * bumps the arena has nothing to reclaim, so the pair of calls is skipped.
+ */
+export function reclaimsReturnedString(callee: FunctionSig, facts: Map<string, FunctionFacts>): boolean {
+  if (callee.returnType.kind !== "string") return false;
+  const g = facts.get(callee.name);
+  return g !== undefined && g.allocates && !g.allocEscapes && !g.usesArenaControl;
+}
+
 export function analyzeEscapes(
   program: CheckedProgram,
   sig: FunctionSig,
@@ -163,6 +214,7 @@ export function analyzeEscapes(
     stackParams: new Set(),
     directArena: false,
     allocLeaks: false,
+    allocEscapes: false,
     returnsAllocation: false,
     usesArenaControl: false,
     callSites: [],
@@ -311,23 +363,67 @@ export function analyzeEscapes(
     flow: Flow;
     /** No local on the path is ever reassigned (required for the stack). */
     stable: boolean;
+    /**
+     * WP9: the value is reachable after this function returns, other than
+     * through its return value. Always false for a `local` or `returned` flow;
+     * false for a `leaks` flow whose only cause is an assignment to a local of
+     * this frame, whose own outcome it takes instead.
+     */
+    escapes: boolean;
   }
 
-  const useOutcome = (expr: ts.Expression): Outcome => {
+  /**
+   * `x = <expr>`: the local of this function the value is assigned to. It is
+   * still `leaks` for the stack rule — the binding is not fixed, so the slot
+   * may not be reused — but the value has not left the frame, so `escapes`
+   * follows it into `x` the way `flow` already follows `const x = <expr>`.
+   * A store through anything else (`o.f = v`, `a[i] = v`) or into a parameter
+   * is not a local of this frame and keeps the conservative answer.
+   */
+  const assignedLocal = (expr: ts.Expression): LocalVar | undefined => {
+    let node: ts.Expression = expr;
+    for (;;) {
+      const parent = node.parent;
+      if (
+        ts.isParenthesizedExpression(parent) ||
+        (ts.isConditionalExpression(parent) && parent.condition !== node)
+      ) {
+        node = parent;
+        continue;
+      }
+      if (
+        !ts.isBinaryExpression(parent) ||
+        parent.right !== node ||
+        !isAssignmentOperator(parent.operatorToken.kind) ||
+        !ts.isIdentifier(parent.left)
+      ) {
+        return undefined;
+      }
+      const target = program.bindings.get(parent.left);
+      return target?.storage === "local" ? target : undefined;
+    }
+  };
+
+  const useOutcome = (expr: ts.Expression, visiting: Set<LocalVar>): Outcome => {
     const use = classifyUse(program, expr);
     switch (use.kind) {
       case "none":
       case "read":
       case "write":
-        return { flow: "local", stable: true };
-      case "argument":
+        return { flow: "local", stable: true, escapes: false };
+      case "argument": {
         // WP17: a by-value `Result` argument is packed into a register, so the
         // callee gets a copy and never sees this object at all.
         if (resultByValue(use.callee.params[use.index]?.type ?? { kind: "void" }))
-          return { flow: "local", stable: true };
-        return { flow: calleeCaptures(use.callee, use.index) ? "leaks" : "local", stable: true };
-      default:
-        return { flow: "leaks", stable: true };
+          return { flow: "local", stable: true, escapes: false };
+        const captured = calleeCaptures(use.callee, use.index);
+        return { flow: captured ? "leaks" : "local", stable: true, escapes: captured };
+      }
+      default: {
+        const target = assignedLocal(expr);
+        const escapes = target ? localOutcome(target, visiting).escapes : true;
+        return { flow: "leaks", stable: true, escapes };
+      }
     }
   };
 
@@ -335,16 +431,24 @@ export function analyzeEscapes(
   const localOutcome = (v: LocalVar, visiting: Set<LocalVar>): Outcome => {
     const known = localOutcomes.get(v);
     if (known) return known;
-    if (visiting.has(v)) return { flow: "local", stable: true }; // `const y = x; const x2 = y` chains are acyclic; guard anyway
+    // `const y = x; const x2 = y` chains are acyclic, but `escapes` also
+    // follows `y = x`, and two locals assigned to each other do cycle. The
+    // re-entry is therefore pessimistic about escaping and optimistic about
+    // the flow, which is what the existing decisions were computed with.
+    if (visiting.has(v)) return { flow: "local", stable: true, escapes: true };
     visiting.add(v);
-    let out: Outcome = { flow: "local", stable: true };
+    let out: Outcome = { flow: "local", stable: true, escapes: false };
     for (const ref of refs.get(v) ?? []) {
       if (isAssignmentTarget(ref)) {
         out = { ...out, stable: false }; // `x = other`: the object is no longer named by `x` (the stack rule wants a fixed binding)
         continue;
       }
       const step = valueOutcome(ref, visiting);
-      out = { flow: worse(out.flow, step.flow), stable: out.stable && step.stable };
+      out = {
+        flow: worse(out.flow, step.flow),
+        stable: out.stable && step.stable,
+        escapes: out.escapes || step.escapes,
+      };
     }
     localOutcomes.set(v, out);
     return out;
@@ -356,25 +460,29 @@ export function analyzeEscapes(
     // the return register; the object itself does not leave the frame, so it
     // is as local as one that is never returned at all.
     if (target === "return")
-      return { flow: returnsByValueResult ? "local" : "returned", stable: true };
+      return { flow: returnsByValueResult ? "local" : "returned", stable: true, escapes: false };
     if (target) return localOutcome(target, visiting);
-    return useOutcome(expr);
+    return useOutcome(expr, visiting);
   };
 
   // ---- Decisions -----------------------------------------------------------------
 
   for (const site of sites) {
-    let { flow, stable } = valueOutcome(site.node, new Set());
+    let { flow, stable, escapes } = valueOutcome(site.node, new Set());
     // A `new` object is also handed to its constructor as `this` (the own or
     // the inherited one, WP2b); a constructor that captures it (`r.last =
     // this`) makes the object escape however the local is used afterwards.
     if (ts.isNewExpression(site.node)) {
       const t = intrinsicType(program, site.node);
       const ctor = t?.kind === "struct" ? effectiveConstructor(program.structs.get(t.name)!) : undefined;
-      if (ctor && calleeCaptures(ctor, 0)) flow = "leaks";
+      if (ctor && calleeCaptures(ctor, 0)) {
+        flow = "leaks";
+        escapes = true; // the constructor stored `this` somewhere the caller may reach
+      }
     }
+    if (escapes) result.allocEscapes = true;
     if (site.callee !== undefined) {
-      result.callSites.push({ callee: site.callee, flow });
+      result.callSites.push({ callee: site.callee, flow, escapes });
       continue;
     }
     if (site.stackable && opts.stackAlloc && flow === "local" && stable) {
@@ -392,7 +500,10 @@ export function analyzeEscapes(
   for (const p of sig.params) {
     if (!resultByValue(p.type)) continue;
     const v = byValueParams.get(p.name);
-    const outcome = v ? localOutcome(v, new Set()) : { flow: "local" as Flow, stable: true };
+    const outcome = v
+      ? localOutcome(v, new Set())
+      : { flow: "local" as Flow, stable: true, escapes: false };
+    if (outcome.escapes) result.allocEscapes = true;
     if (opts.stackAlloc && outcome.flow === "local" && outcome.stable) result.stackParams.add(p.name);
     else if (outcome.flow === "local") result.directArena = true;
     else result.allocLeaks = true;
@@ -416,8 +527,12 @@ export function analyzeEscapes(
   for (const push of pushes) {
     const receiver = unwrapParens((push.expression as ts.PropertyAccessExpression).expression);
     const v = ts.isIdentifier(receiver) ? program.bindings.get(receiver) : undefined;
-    const owned = v?.storage === "local" && ownsSite(v) && localOutcome(v, new Set()).flow === "local";
-    if (owned) result.directArena = true;
+    const outcome = v?.storage === "local" && ownsSite(v) ? localOutcome(v, new Set()) : undefined;
+    // WP9: the growth is reachable exactly where the array it belongs to is.
+    // An array this function allocated and only keeps or returns takes its
+    // growth with it; anyone else's array leaves it reachable by the caller.
+    if (!outcome || outcome.escapes) result.allocEscapes = true;
+    if (outcome && outcome.flow === "local") result.directArena = true;
     else result.allocLeaks = true;
   }
   if (logsNumbers) result.directArena = true;

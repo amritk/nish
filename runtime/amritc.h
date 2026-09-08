@@ -74,6 +74,14 @@ void amrit_free_arena(void);
  * body with these two calls; `Arena.mark/release/used` expose them. */
 uint64_t amrit_arena_mark(void);
 void amrit_arena_release(uint64_t mark);
+/* Call-site reclaim (WP9): release back to `mark` but keep the newest block,
+ * moving it down to `mark` and answering its new address. Only a string may be
+ * kept, because a string is one flat block with no interior pointers; `p` must
+ * be the last allocation the arena handed out. Anything the guards cannot
+ * prove (a `p` outside the current chunk, a stale or newer mark, no room below
+ * it) leaves the arena untouched and answers `p`. Compiled callers use it to
+ * reclaim the temporaries a string-returning callee left behind. */
+void *amrit_arena_keep(uint64_t mark, void *p);
 /* Bytes bumped in the current chunk (`Arena.used()`); a steady-state loop keeps it flat. */
 uint64_t amrit_arena_used(void);
 

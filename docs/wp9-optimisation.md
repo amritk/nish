@@ -15,6 +15,14 @@ described in [bench/README.md](../bench/README.md).
 > 1.9x: `join` returns every intermediate string, so it escapes and no arena scope can
 > reclaim it. Reclaiming a returned temporary at the call site (the caller knows the
 > value is consumed immediately by another concat) is the remaining item.
+>
+> **Closed.** [The call-site reclaim](#the-call-site-reclaim) below is what
+> shipped: the caller brackets a string-returning call with
+> `amrit_arena_mark` / `amrit_arena_keep`, which releases everything the callee
+> bumped and moves the returned string down onto the mark. strbuild's peak
+> resident set falls from **48,676 KB to 16,420 KB** and its peak live arena
+> from 51.5 MB to 15.2 MB, with the emitted code unchanged for every call the
+> analysis cannot prove.
 
 ## Summary
 
@@ -55,7 +63,7 @@ outside it**:
 | --- | ---: | --- |
 | nbody | 1.14x | not at this ratio. "nbody: 1.24x" below is the last diagnosis, and the WP6 note at the top of this file measured the gap at 1.11x after stack allocation closed most of it |
 | spectral | 1.18x | nowhere. It met the target in both rows above, so nothing here explains the ratio; see [BENCHMARKS.md](BENCHMARKS.md) for the run |
-| strbuild | 1.64x | "String building: 1.54x" below, and the remaining item in the WP6 note: `join` returns every intermediate string, so it escapes and no arena scope can reclaim it |
+| strbuild | 1.64x | "String building: 1.54x" below. The memory half of that diagnosis is now fixed by ["The call-site reclaim"](#the-call-site-reclaim); the ratio here predates it |
 | result | 2.59x | "result" below, and [wp17-result-abi.md](wp17-result-abi.md) §4 for the four-way table: the ok arm and the error arm are never separate SSA values once they are halves of one packed word |
 
 That column says where to look, not what the cause is: the diagnosis
@@ -265,6 +273,9 @@ a release or reset has emptied before calling `malloc` for a new one, so the
 steady state stops touching new pages at all. Neither changes the emitted
 code for programs that do not opt in.
 
+That fix shipped, at the call site rather than inside `join`: see
+["The call-site reclaim"](#the-call-site-reclaim).
+
 Two caveats for reading this row: the run is short (25 ms) because the
 quadratic memory of the arena model bounds the size, so a millisecond of
 noise is 4 %; and the Rust twin deliberately allocates a fresh `String` per
@@ -314,6 +325,256 @@ ABI of two scalars — rustc's `ScalarPair` — and pack only where a host can
 see the signature. That makes `--strict-exports` load-bearing rather than
 advisory, which is already one of the two open questions below.
 `docs/wp17-result-abi.md` §4 has the four-way table.
+
+## The call-site reclaim
+
+The remaining item of the WP6 note at the top of this file, and the fix the
+strbuild diagnosis proposed. It is one paragraph of idea and one page of proof,
+so the proof comes first.
+
+### The problem, restated
+
+`join` is a string builder that returns what it built. WP6's automatic arena
+scope cannot help it: a scope releases everything the function bumped, and the
+one thing `join` must *not* release is the string it hands back. So
+`returnsAllocation` disables the scope, and all 31 dead intermediates of a
+32-way concatenation stay in the arena for the life of the program. Nesting
+that four deep is the 48 MB.
+
+The caller is in a better position than the callee, and for a reason that has
+nothing to do with how the value is used: **a call hands back exactly one
+value.** Whatever else the callee bumped is unreachable the instant it returns —
+unless the callee put it somewhere the caller can still see. So the caller can
+mark the arena before the call, and afterwards release back to that mark while
+keeping the returned string.
+
+### The rule
+
+At a call `f(a…)`, the emitter emits
+
+```llvm
+%mark = call i64 @amrit_arena_mark()
+%t    = call i8* @f(…)
+%kept = call i8* @amrit_arena_keep(i64 %mark, i8* %t)
+```
+
+and uses `%kept` everywhere `%t` would have been used, when all of the
+following hold (`reclaimsReturnedString`, `src/codegen/escape.ts`):
+
+1. **`f` returns a plain `string`.** Only a string may be relocated, because
+   only a string is one flat block with no interior pointers: moving its bytes
+   moves the whole value. An array header names a separate data block; a struct,
+   a `Result` or a `string | null` may name other blocks or nothing at all.
+2. **`f.allocEscapes` is false** — nothing `f` allocated is reachable, after the
+   call, from anywhere the caller can see other than through the return value.
+3. **`f.usesArenaControl` is false** — neither `f` nor anything it calls reset or
+   released the arena, so the mark still means what it meant.
+4. **`f.allocates` is true.** Not part of the proof, only of the profit: a callee
+   that never bumps the arena has nothing to reclaim, so the pair is skipped.
+
+The mark is emitted **after the arguments**, so the bracket contains what the
+callee bumped and nothing the caller did.
+
+### Why it is sound
+
+The obligation is that every byte `amrit_arena_keep` releases is unreachable.
+Three things could be in that window:
+
+- **What `f` allocated and returned.** It is not released: it is *kept*, moved
+  down onto the mark, and the caller is handed its new address. No pointer to
+  the old one survives, because the only holder was the call's own SSA value.
+- **What `f` allocated and dropped** — the intermediates. Unreachable by
+  condition 2.
+- **What `f` allocated and stored somewhere the caller can reach** — a field of
+  a parameter, an element of a parameter's array, growth from a `push` on one,
+  an object a capturing constructor kept. Condition 2 is exactly the absence of
+  this, and it is transitive over the call graph, so a callee of a callee cannot
+  smuggle one in.
+
+There is no fourth case: AmritScript has no globals, no closures and no function
+values, so the return value is the only channel out of a frame that is not
+reachable from the arguments.
+
+Notice what the rule does *not* need: any claim about how the caller uses the
+result. The temporary is preserved, so passing it to another function, storing
+it in a field, returning it or ignoring it are all equally fine
+(`tests/cases/mem_reclaim_argument.ts` covers three of those). This is a stronger
+rule than the note at the top of this file proposed — "the caller knows the value
+is consumed immediately by another concat" — and a much easier one to be sure of,
+because it never has to reason about the temporary's lifetime at all.
+
+### `allocEscapes`, and how it relates to the WP6 facts
+
+Condition 2 needed a fact `escape.ts` did not have. WP6's `allocLeaks` merges
+two different situations into one `leaks` flow:
+
+```ts
+out.text = s;          // reachable from the caller: really a leak
+s = s + piece(i);      // assigned to a local of this frame: not a leak at all
+```
+
+The second is the shape of every string builder, `join` included, and it is why
+`join` measured `allocLeaks = true` before this change. `leaks` is right for the
+*stack* rule it was written for — an alloca slot needs a fixed binding, and a
+reassigned local does not have one — but wrong for "can the caller still reach
+it", because a local dies with the frame.
+
+So every `Outcome` in `escape.ts` now carries a third bit, `escapes`, computed in
+the same walk from the same `classifyUse`:
+
+| Use of the value | `flow` | `escapes` |
+| --- | --- | --- |
+| operand, condition, field or element read, `.length`, `for…of`, `===` | `local` | false |
+| argument to a callee that does not capture the parameter | `local` | false |
+| argument to a callee that captures it | `leaks` | true |
+| `return` | `returned` | false |
+| `x = <value>` where `x` is a **local of this function** | `leaks` | the outcome of `x` |
+| stored into a field, an element, a literal, `push`ed, anything else | `leaks` | true |
+
+`EscapeResult.allocEscapes` is the union over the function's sites, and
+`FunctionFacts.allocEscapes` propagates it over the call graph in the same
+fixpoint as `allocLeaks`. The relation is `allocEscapes` implies `allocLeaks`,
+never the reverse: every escaping use is also a leaking one, and the assignment
+row is the gap between them.
+
+Two deliberate limits on the new bit:
+
+- **`flow` is unchanged.** The stack rule, the automatic arena scopes and every
+  existing golden decide exactly what they decided before; only the new fact is
+  refined. Lifting `allocLeaks` to the same precision would give more functions
+  automatic scopes and is a separate change with its own risk, so it is left out
+  (see below).
+- **The recursion guard is pessimistic for `escapes`.** Following `y = x` into
+  `y`'s outcome can cycle (`a = b; b = a`), which the `const y = x` chains `flow`
+  follows never could. Re-entering a local that is already being computed answers
+  `escapes: true`, so a cycle can only cost a reclaim, never permit a wrong one.
+
+### The runtime primitive, and why it is not `mark`/`release`
+
+`amrit_arena_release(mark)` cannot be used here: the value to keep sits *above*
+the mark, so rewinding to the mark would free it. Three shapes were considered
+against what a chunked arena can actually promise (`runtime/runtime.c`):
+
+| Shape | Verdict |
+| --- | --- |
+| Rewind the bump pointer past the temporary only | Impossible: the value to keep is the newest block, so there is nothing above it to rewind past, and the garbage is *below* it. |
+| A targeted free of the callee's blocks | The arena has no block headers and no free list; adding either is the allocator this project exists to avoid. |
+| Release to the mark, moving the kept block down onto it | What shipped. |
+
+`amrit_arena_keep(mark, p)` is fifteen lines. It never scans, never allocates,
+and answers `p` unchanged whenever it cannot prove the move safe — refusing costs
+memory, which is the direction to fail in:
+
+- `p` must be the arena's newest block, that is, inside the current chunk below
+  the bump pointer. That is what makes its size computable (`buf + off - p`) and
+  it is also the guard that catches a **pass-through return**: `return "literal"`
+  or `return s` for a parameter answers a pointer that is not in the current
+  chunk, and nothing is moved.
+- The mark must lie in a live chunk. A stale mark, or the `0` a mark taken while
+  the arena was empty answers, is refused.
+- If the mark's chunk has room below it for the block, the block is `memmove`d
+  down (`dst <= src`, so overlap within one chunk is fine) and every newer chunk
+  is freed.
+- If it does not — the mark sat at the end of a chunk the callee filled exactly,
+  which is the common case once the strings are bigger than a chunk — the block
+  stays where it is and only the chunks strictly between it and the mark's chunk
+  are unlinked and freed. Without this second arm the reclaim does nothing at all
+  for strings above 64 KB, which is where strbuild's memory is: it was worth
+  13 MB of peak RSS on its own (see the table below).
+
+### What it measured
+
+`bench/strbuild` at its usual size (131,072 pieces, an 806 KB result), built with
+`scripts/build.sh --profile speed`, run under `bench/rss.c`. The arena counters
+come from a copy of `runtime.c` instrumented to report chunk pushes, chunk frees
+and bytes bumped; they are not in the shipped runtime.
+
+| | Before | After |
+| --- | ---: | ---: |
+| Peak resident set | 48,676 KB | **16,420 KB** |
+| Peak live arena bytes | 51,503,624 | **15,196,680** |
+| Arena chunks pushed | 622 | 628 |
+| Arena chunks freed | 622 (all at exit) | 628 (620 of them during the run) |
+| Bytes bumped | 51,503,624 | 51,896,840 |
+| Output | 806394 | 806394 |
+
+Bytes bumped is unchanged by design: the reclaim frees memory, it does not stop
+the algorithm copying. What changes is the high-water mark, and with it the page
+faults the strbuild diagnosis above blames for the row. The first arm alone
+(move-down only, no chunk unlinking) reached 29,580 KB; the second arm takes it
+to 16,420 KB.
+
+The machine these were taken on was shared with other work, so the table above
+is peak RSS and arena counters, which are insensitive to load, and
+`docs/BENCHMARKS.md` is left for a quiet run to regenerate rather than edited
+here. Wall time was taken anyway and is worth one line, **with the caveat that
+it was measured under contention and is not a benchmark figure**: five runs each
+of the same two binaries, 43-81 ms before and 21 ms every single time after. The
+*stability* is the part that is not noise — a run dominated by page faults on
+fresh pages is exactly a run whose time moves with whatever else the machine is
+doing, and this one no longer does.
+
+What is left in the remaining 16 MB is not the callee's garbage any more; it is
+the caller's own accumulator. `s = s + t` leaves the previous `s` in the arena,
+32 times per level, and no call-site rule can see that: it would need a loop rule
+that reclaims an accumulator across iterations. That is the next item, not this
+one.
+
+### Runtime budget
+
+`clang -Oz -c runtime/runtime.c && size -A runtime.o`, the `.text` row:
+
+| | Before | After | Budget |
+| --- | ---: | ---: | ---: |
+| `.text` | 2,561 | 2,775 | 4,096 |
+
+### Tests
+
+- `tests/cases/mem_reclaim_call.ts` — the strbuild shape in miniature: `piece`
+  returns a template, `join` concatenates several of them, and the golden pins
+  the mark/keep bracket in both frames.
+- `tests/cases/mem_reclaim_argument.ts` — the temporary is passed to a function,
+  returned, and held in a `const` across a later call. All three are bracketed,
+  and the `.out` proves the earlier kept value is not clobbered.
+- `tests/cases/mem_reclaim_guards.ts` — the negative half, and the one to read
+  first: four calls side by side of which exactly one is bracketed. `fill` stores
+  its string into an object the caller holds (`allocEscapes`), `sweep` calls
+  `Arena.reset` (`usesArenaControl`), `label` returns a `Result<string, number>`
+  whose payload was bumped before it, and `plain` qualifies.
+- `tests/cases/mem_reclaim_no_stack_alloc.ts` (`--no-stack-alloc`) — the reclaim
+  is in the arena layer, not the stack layer, so the flag moves the `Point` into
+  the arena and leaves the bracket exactly where it was.
+- `tests/runtime_test.c` — `amrit_arena_keep` directly: the move-down case, the
+  cross-chunk move, the full-chunk fallback that unlinks the middle chunks, and
+  three refusals (a block older than the mark, a read-only literal, a stale
+  mark).
+- `docs/cookbook/mem_reclaim.ts` — the cookbook entry, so the IR is in
+  `docs/IR_COOKBOOK.md`.
+
+There is no `reject_*` case, and deliberately so: the reclaim adds no surface
+syntax, no flag and no diagnostic, so there is nothing a program can spell
+wrongly. Its negative tests are the guard goldens, which fail if a bracket
+appears where the proof does not reach.
+
+### Left out
+
+- **Freeing the temporary itself.** Keeping the *concatenation's* result instead
+  of the call's would also reclaim the returned string once it has been copied.
+  Measured on strbuild it is worth about 0.8 MB of 16, and it costs a `memmove`
+  of the (much larger) concatenation result instead of the (small) temporary, so
+  it was not taken.
+- **Reclaiming a loop accumulator.** What the remaining 16 MB is, as above.
+- **Lifting `allocLeaks` to the `escapes` rule**, which would give an automatic
+  arena scope to every string builder that only assigns to a local. It is
+  probably right and it is certainly a bigger blast radius than this change: it
+  changes when memory is *freed* in existing programs, where this change only
+  adds a bracket the analysis can prove.
+- **Nullable, array and struct returns.** All three would need the runtime to
+  relocate a value with interior pointers, which is a copying collector, not a
+  bump arena.
+- **A mark of 0** (the arena was empty when the call was made) is refused rather
+  than treated as "reclaim everything but the result". It happens at most once
+  per program in practice, and the extra arm is not worth the runtime bytes.
 
 ## Left out, and why
 

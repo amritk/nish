@@ -53,6 +53,7 @@ import ts from "typescript";
 import { CheckedProgram, FieldInfo, FunctionSig, ImportBinding, StructInfo } from "../../checker";
 import { effectiveConstructor, explicitSuperCall, intrinsicType, isAssignmentOperator, ownFields } from "../../checker/classes";
 import { ResultType, StaticType, isFloat, llvmAbiType, llvmType, resultByValue } from "../../types";
+import { beginReclaim, endReclaim } from "./arena";
 import { emitIntBinary } from "./arithmetic";
 import { emitBitwiseCombine, isBitwiseCompoundOperator } from "./bitwise";
 import { emitPackedResult, emitResultReturningCall, resultTypeDecl } from "./result";
@@ -249,6 +250,9 @@ function emitMethodCall(
       : ctx.emitExpression(arg);
     operands.push(`${llvmAbiType(want)} ${value}`);
   });
+  // WP9: after the receiver and the arguments, so the bracket holds only what
+  // the method itself allocates (emit/arena.ts, `beginReclaim`).
+  const mark = beginReclaim(ctx, callee);
   const call = `call ${llvmAbiType(callee.returnType)} @${callee.name}(${operands.join(", ")})`;
   if (callee.returnType.kind === "void") {
     ctx.fn.emit(call);
@@ -257,7 +261,7 @@ function emitMethodCall(
   // WP17: a small `Result` comes back in a register, exactly as it does from a
   // plain function; the unpacked object belongs to this caller.
   if (resultByValue(callee.returnType)) return emitResultReturningCall(ctx, call, callee.returnType, site);
-  return ctx.fn.emitValue(call);
+  return endReclaim(ctx, mark, ctx.fn.emitValue(call));
 }
 
 methodCallEmitters.struct = (ctx, expr, receiverType) => {

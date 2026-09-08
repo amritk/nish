@@ -42,6 +42,7 @@ import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
 import { CompilerOptions, ResultType, StaticType, alignOf, llvmAbiType, llvmType, resultByValue } from "../types";
 import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, returnAttributes } from "./attributes";
 import { DebugInfo } from "./debug";
+import { reclaimsReturnedString } from "./escape";
 import { emitConstructorPrologue, importedStructFunctions, structFunctions, structTypeDeclarations } from "./emit/classes";
 import { unpackResult } from "./emit/result";
 import { EmitContext, LoopTarget } from "./emit/context";
@@ -188,6 +189,11 @@ export class Emitter implements EmitContext {
 
   paramObject(name: string): string | undefined {
     return this.paramObjects.get(name);
+  }
+
+  /** WP9: the call-site reclaim needs the callee's *program-wide* facts, which only the emitter holds. */
+  reclaimsCall(callee: FunctionSig): boolean {
+    return reclaimsReturnedString(callee, this.facts);
   }
 
   emitScopeExit(): void {

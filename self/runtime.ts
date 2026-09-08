@@ -158,6 +158,19 @@ export class RuntimeTable {
     // Rewinds to a mark: same chunk -> reset the offset; an older chunk -> free the newer ones first.
     this.add(plain("amrit_arena_release", "declare void @amrit_arena_release(i64 noundef)", EFFECT_WRITE));
     this.add(plain("amrit_arena_used", "declare noundef i64 @amrit_arena_used()", EFFECT_WRITE));
+    // WP9 call-site reclaim: rewinds to a mark while keeping the newest block,
+    // which it moves down to the mark and answers at its new address. Neither
+    // `noalias` nor `nocapture` is claimed: the guards in runtime.c answer the
+    // argument itself whenever the move cannot be proved safe, and a returned
+    // pointer is a captured one. The chunk walk is over a finite acyclic list,
+    // so `willreturn` holds.
+    this.add(
+      plain(
+        "amrit_arena_keep",
+        "declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8)",
+        EFFECT_WRITE
+      )
+    );
     this.add(
       plain(
         "amrit_str_new",

@@ -1570,7 +1570,7 @@ compiler's own marks are never invalidated by user resets.
 ### Memory model
 
 There is no garbage collector. Every object, array, and runtime string is
-placed by one of three mechanisms, all decided at compile time
+placed by one of four mechanisms, all decided at compile time
 ([wp6-memory.md](wp6-memory.md)); none changes what a program computes, only
 where its memory lives and when it is reused.
 
@@ -1598,7 +1598,22 @@ where its memory lives and when it is reused.
    before every `ret` (`tests/cases/mem_scope_dynamic_array`,
    `mem_scope_string_temp`: 100000 calls leave `Arena.used()` unchanged).
    Scopes are per function, not per loop iteration.
-3. **Explicit control** with the [`Arena`](#arena) builtins, and
+3. **A reclaim at the call site.** A function that *returns* a string can have
+   no scope of its own — the string has to outlive it — so its caller takes the
+   mark instead: `amrit_arena_mark` after the arguments, then
+   `amrit_arena_keep(mark, s)`, which moves the returned string down onto the
+   mark and releases every temporary the callee bumped underneath it. Emitted
+   only when the callee returns a plain `string`, allocates, never calls
+   `Arena.reset` / `Arena.release`, and never lets an allocation out of its
+   frame other than through its return value — so a callee that stores what it
+   built into an object its caller holds gets no bracket, and neither does one
+   returning an array, a struct or a `Result`, whose values name memory outside
+   themselves (`tests/cases/mem_reclaim_call`, `mem_reclaim_argument`,
+   `mem_reclaim_guards`). Independent of `--no-stack-alloc`
+   (`tests/cases/mem_reclaim_no_stack_alloc`), and invisible to a program: it
+   changes when memory is reused, never what it holds
+   ([wp6-memory.md](wp6-memory.md) §2a).
+4. **Explicit control** with the [`Arena`](#arena) builtins, and
    `amrit_reset_arena()` / `amrit_arena_mark()` / `amrit_arena_release()` for a C
    or Node host ([wp8-interop.md](wp8-interop.md)).
 
