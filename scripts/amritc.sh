@@ -18,10 +18,12 @@
 #                   then scripts/build.sh with runtime/runtime.c
 #   --profile <p>   the link profile (default: speed)
 #
-# Every other flag goes straight to the compiler. The flags that are stage0's
-# rather than missing — the interop sidecars, `-g`, the dumps — are refused by
-# name with what to run instead, because a flag that is quietly ignored is how
-# a build ends up not carrying the thing it asked for.
+# Every other flag goes straight to the compiler, the interop sidecars
+# (`--emit-header`, `--emit-dts`, `--emit-napi`) included: stage1 writes those
+# itself now, to the path it was given. The flags that are still stage0's
+# rather than missing — `-g`, the dumps — are refused by name with what to run
+# instead, because a flag that is quietly ignored is how a build ends up not
+# carrying the thing it asked for.
 #
 # AMRITC=<binary> picks the compiler (default: build/amritc).
 # Exit codes match stage0's: 0 ok, 1 compile error, 2 usage, 3 toolchain.
@@ -34,6 +36,7 @@ output=""
 link=""
 profile=speed
 flags=()
+sidecars=()
 
 usage() {
   cat <<'EOF'
@@ -42,7 +45,8 @@ usage: scripts/amritc.sh <entry.ts> [-o <out.ll>|<dir>/] [--link <exe>]
 Drives the self-hosted compiler (build/amritc, or $AMRITC) and adds the
 directory creation and the link step it does not do itself (wp14 D4).
 Compiler flags: --number-mode i32|f64, --plain, --strict-exports, --nsw,
---no-stack-alloc, --unchecked-indexing, --runtime-decls, --target <triple>.
+--no-stack-alloc, --unchecked-indexing, --runtime-decls, --target <triple>,
+--emit-header <file.h>, --emit-dts <file.d.ts>, --emit-napi <shim.c>.
 EOF
   exit "${1:-2}"
 }
@@ -58,8 +62,11 @@ while [ $# -gt 0 ]; do
     --link) link="${2:-}"; [ -n "$link" ] || usage; shift 2 ;;
     --profile) profile="${2:-}"; [ -n "$profile" ] || usage; shift 2 ;;
     -h|--help) usage 0 ;;
-    -g|--emit-header|--emit-dts|--emit-napi|--emit-ast|--emit-checked|--json|-v|--version)
+    -g|--emit-ast|--emit-checked|--json|-v|--version)
       stage0_only "$1" ;;
+    --emit-header|--emit-dts|--emit-napi)
+      [ -n "${2:-}" ] || usage
+      flags+=("$1" "$2"); sidecars+=("$2"); shift 2 ;;
     --number-mode|--target) flags+=("$1" "${2:-}"); [ -n "${2:-}" ] || usage; shift 2 ;;
     -*) flags+=("$1"); shift ;;
     *) entry="$1"; shift ;;
@@ -75,6 +82,13 @@ if [ -n "$link" ] && [ -n "$output" ]; then
   echo "amritc.sh: --link picks where the IR goes; pass one of -o and --link" >&2
   exit 2
 fi
+
+# A sidecar is written where it was asked for, and the compiler makes no more
+# of a directory for it than it does for the IR (D4). `--emit-dts` writes its
+# companion loader beside the declarations, so one directory covers both.
+for file in ${sidecars[@]+"${sidecars[@]}"}; do
+  mkdir -p "$(dirname "$file")"
+done
 
 # Where the IR goes. `--link` and a trailing `/` both mean a directory; a plain
 # -o is one module's text, which the compiler writes to stdout.

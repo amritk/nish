@@ -33,6 +33,19 @@ export class Options {
   target: string;
   /** Emit `nsw` / `nuw` on user-level integer `add`/`sub`/`mul` (WP9). */
   nsw: boolean;
+  /**
+   * The WP8 interop sidecars, each the path `--emit-header` / `--emit-dts` /
+   * `--emit-napi` was given, or the empty string when it was not passed.
+   * `--emit-dts` writes two files: the declarations, and the loader that
+   * implements them beside it (`wasmLoaderPath`).
+   *
+   * They change no byte of the IR — they are derived from the same checked
+   * program after it — so they live here only because this is where a flag
+   * that reaches the driver's second half is kept.
+   */
+  emitHeader: string;
+  emitDts: string;
+  emitNapi: string;
 
   constructor() {
     this.numberMode = NUMBER_MODE_I32;
@@ -43,5 +56,8 @@ export class Options {
     this.uncheckedIndexing = false;
     this.target = "";
     this.nsw = false;
+    this.emitHeader = "";
+    this.emitDts = "";
+    this.emitNapi = "";
   }
 }

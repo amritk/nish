@@ -583,9 +583,12 @@ object, and whether that object may be an `alloca` is the same `localOutcome`
 walk a local holding an allocation gets — and the oracle is what said the two
 walks agreed, over 274 of 274 programs, before the bootstrap was allowed to
 close.
-`-g` and the interop sidecars stayed stage0's, as D4 said they would: the
-DWARF and the C header for a `Result` are stage0-only changes, and the driver
-still reports those flags by name rather than ignoring them.
+`-g` and the interop sidecars stayed stage0's while WP17 landed, as D4 said
+they would: the DWARF and the C header for a `Result` were stage0-only changes,
+and the driver reported those flags by name rather than ignoring them. (The
+sidecars have since been ported — §7 — so what a `Result` is spelled as in a
+generated header is now a two-sided change like every other; the DWARF is
+still stage0's.)
 
 ---
 
@@ -678,10 +681,25 @@ lines of `bash` with no runtime growth at all. It mirrors stage0's spelling
 exactly — `-o <file.ll>`, `-o <dir>/`, `--link <exe>` writing `<exe>.ll` for a
 single module and `<exe>.modules/` for a program with imports — so the two
 compilers leave the same files behind and a build script can be pointed at
-either. The flags that are stage0's rather than missing (`-g`, the interop
-sidecars, the dumps) are refused **by name**, with what to run instead: a flag
-that is silently ignored is how a build ends up not carrying the thing it
-asked for.
+either. The flags that are stage0's rather than missing (`-g`, the dumps) are
+refused **by name**, with what to run instead: a flag that is silently ignored
+is how a build ends up not carrying the thing it asked for.
+
+**The interop sidecars are stage1's too.** `--emit-header`, `--emit-dts` (which
+writes its companion `.mjs` loader beside the declarations) and `--emit-napi`
+are ~1,500 lines of `self/` ported from `src/interop/`, module for module, and
+they cost the runtime nothing: a sidecar is derived from the checked program
+after the IR and written with the `writeFileSync` stage1 already had, to the
+path it was given. D4 is untouched — stage1 still makes no directory, spawns
+no linker — so the wrapper creates the sidecar's directory the way it creates
+the IR's, and passes the three flags straight through.
+`tests/self/interop_oracle.js` is the oracle: both compilers over the WP8
+corpus, all four generated files compared byte for byte, and `--all` runs the
+same comparison over every whole program in the tree (281 programs, 15 MB of
+generated C, TypeScript and JavaScript, no difference). The one host-shaped
+generator was the N-API shim, whose readers and boxers are records of closures
+in `src/`; here they are records with a kind tag and a `switch` that writes
+the same lines, which is the same trade D2 made for the dispatch tables.
 
 What the wrapper is not is a second implementation of the driver. It plans no
 output, resolves no module and reads no source; it makes a directory, runs the
@@ -700,6 +718,6 @@ and this one would only pay for the same two links again.
 **stage0 stays the published package.** `npm install -g amritc` still ships
 `dist/`, and it has to: it is the seed every bootstrap starts from, the oracle
 every `self/` phase is compared against, and the only one of the two that emits
-DWARF and the interop sidecars. What changed is that a checkout can now produce
+DWARF. What changed is that a checkout can now produce
 the self-hosted compiler in one command, and that compiler compiles the same
 programs about eight times faster (§4, D5).

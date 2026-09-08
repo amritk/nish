@@ -43,10 +43,12 @@ scripts/amritc.sh hello.ts --link hello   # its command line: -o, --link, --prof
 
 `scripts/amritc.sh` is the wrapper D4 promised: it makes the output
 directory and runs `scripts/build.sh`, which is the half of the driver stage1
-does not have. It refuses `-g`, the dumps and the interop sidecars **by name**
-— they are stage0's, not missing — and mirrors stage0's file layout exactly, so
-either compiler can be dropped into a build script. See
-`docs/wp14-selfhost.md` §7.
+does not have. It refuses `-g` and the dumps **by name** — they are stage0's,
+not missing — and mirrors stage0's file layout exactly, so either compiler can
+be dropped into a build script. The interop sidecars are stage1's too now
+(`--emit-header`, `--emit-dts`, `--emit-napi`, and the loader `--emit-dts`
+writes beside its declarations); the wrapper passes them through and makes
+their directory. See `docs/wp14-selfhost.md` §7.
 
 ## The rules that are specific to this work
 
@@ -107,6 +109,7 @@ No generics, arrow functions, closures, nested functions or function values; no
 | `escape.ts` `attributes.ts` | `src/codegen/escape.ts` and `attributes.ts` |
 | `emit.ts` `emit_util.ts` `emit_ops.ts` `emit_control.ts` `emit_strings.ts` `emit_arrays.ts` `emit_classes.ts` `emit_builtins.ts` | `src/codegen/emitter.ts` and `emit/*.ts` |
 | `compilation.ts` | `src/compilation.ts`: the whole-program driver |
+| `interop_abi.ts` `interop_header.ts` `interop_dts.ts` `interop_wasm.ts` `interop_napi.ts` | `src/interop/*.ts`: the WP8 sidecars, one module per file so the two stay diffable |
 | `dump_tokens.ts` `dump_ast.ts` `dump_checked.ts` `compile.ts` | the `--emit-*` dumps in `src/dump.ts`, and the CLI |
 
 Cyclic imports between family modules are fine and already used
@@ -130,6 +133,7 @@ wired into the WP14 section of `tests/run.js` and skipped without clang.
 | `tests/self/checked_oracle.js` | the `--emit-checked` dump, over every positive program in the corpus |
 | `tests/self/reject_oracle.js` | every `reject_*` case, against its own `.err` fragments |
 | `tests/self/ir_oracle.js` | the emitted IR, byte for byte, over every whole program in the corpus |
+| `tests/self/interop_oracle.js` | the WP8 sidecars — `.h`, `.d.ts`, its `.mjs` loader, `.napi.c` — byte for byte over the interop corpus (`--all` for the whole one) |
 | `tests/self/bootstrap.js` | the stages: `IR(stage0) == IR(stage1) == IR(stage2)`, and stage3 byte-identical to stage2 |
 
 The corpus is `tests/cases/`, `examples/`, `self/`, `docs/cookbook/`, `bench/`,
