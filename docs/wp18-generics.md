@@ -52,7 +52,7 @@ using them. §10 is the argument.
 | **Discovery** | Whole-program, on a worklist owned by the `Compilation`, seeded from every annotation and every call the checker resolves. |
 | **Definition** | One, in the module that declares the template. Other modules `declare` it. Never `linkonce_odr`. |
 | **Inference** | From the argument types, at a call site. Type arguments are written out in an annotation (`Box<i32>`) and after `new` (`new Box<i32>(v)`), never at a call. |
-| **Termination** | A static rule — no expanding cycle in the template graph — plus a hard instantiation cap as a backstop. |
+| **Termination** | A static rule — no edge on a cycle in the template graph may put a type parameter under a constructor — plus a hard instantiation cap as a backstop. |
 | **`Result<T, E>` and `Array<T>`** | Stay built-in. They are not retired into library code. |
 | **Discriminated unions** | Out of scope; deferred with an argument (§7). |
 
@@ -405,56 +405,112 @@ number rather than about the program.
 
 **The answer here is a static rule, with a cap as a backstop.**
 
-### The rule: no expanding cycle
+### The rule: no expanding edge on a cycle
 
 Build the **template dependency graph** once, over templates rather than
 instantiations, so it is a property of the source and needs no enumeration:
 
 - A node is a generic template — a function, a class or an interface.
-- An edge `f → g` exists for each place `f`'s body or `f`'s fields mention an
-  instantiation of `g`, and it is labelled with the type arguments *as written*,
-  in terms of `f`'s own parameters.
-- An edge is **non-expanding** when every one of its type arguments is exactly
-  a type parameter of `f` — a bare variable, `T`, never `Box<T>`, `T[]`,
-  `Result<T, E>` or a nullable of one.
+- An edge `f → g` exists for each place `f`'s body or `f`'s fields ask for an
+  instantiation of `g`, and it is labelled with the type arguments *as the
+  checker resolved them*, in terms of `f`'s own parameters. "As the checker
+  resolved them" rather than "as written", because inference produces edges
+  nobody spelled: `grow([x], n - 1)` below asks for `grow<T[]>` with no type
+  argument in the source at all.
+- Each type argument on an edge is one of three things, and only the third is
+  a problem:
 
-> **A cycle in the template graph is legal only if every edge on it is
-> non-expanding.**
+  | The argument | Example, in `f<T>` | Verdict |
+  | --- | --- | --- |
+  | **a bare parameter of `f`** | `T` | non-expanding: it passes the caller's tuple on unchanged |
+  | **ground** — mentions no parameter of `f` | `i32`, `string`, `Box<i32>`, `Point[]` | non-expanding: it names one fixed instantiation, and re-entering the cycle from there asks for that same one again |
+  | **a constructor applied to a parameter of `f`** | `T[]`, `Box<T>`, `Result<T, E>`, `T \| null` | **expanding**: it builds a type strictly larger than the one it started from |
 
-Soundness: on a non-expanding cycle, every type argument passed around is
-drawn from the tuple the cycle was entered with, so the set of tuples reachable
-from one seed is a subset of the tuples over that seed's own arguments —
-finite, and bounded by `arity^arity` per template. The worklist therefore
-drains. Completeness: it accepts every monomorphic recursion, which is what
-real code writes —
+- An edge is **expanding** when one of its type arguments mentions a parameter
+  of the source template without being exactly that parameter.
+
+> **A cycle in the template dependency graph is legal only if no edge on it is
+> expanding.**
+
+**A self-edge is a cycle.** `grow → grow` is the shape this rule exists for and
+it is a path of length one, so a cycle detector that only looks for paths of
+length two or more misses every case that matters. Say it in the code, and test
+it: `reject_generic_polymorphic_recursion` is a self-edge and nothing else.
+
+**Soundness.** Let `S` be the set of all *subterms* of every type expression
+the program mentions: every annotation, and every type inference reads off a
+concrete argument. `S` is finite, and it is fixed before monomorphisation
+starts, because unification only *selects* subterms — `unify(T[], i32[])`
+yields `i32`, which is already a subterm of `i32[]` — and never builds a type
+that was not there.
+
+Now walk a legal cycle. Every type argument on it is either a bare parameter,
+and so copied from the tuple the cycle was entered with, or ground, and so
+written in the source and therefore in `S`. **Nothing on a legal cycle
+constructs a type.** Every instantiation's tuple therefore lies in `S^arity`:
+at most `|S|^arity` per template, visited once each by the worklist, which
+drains. An expanding edge is exactly the one that constructs — `Box<T>` leaves
+`S` as soon as `T` ranges past what is written — which is why it is the one
+case refused.
+
+The bound is over `S` rather than over the seed's own arguments, and that is
+the correction the ground case forces: a cycle can introduce a type the seed
+never mentioned (`countDown$str` introduces `countDown$i32`), so a bound of
+`arity^arity` over the seed tuple alone would be wrong. It cannot introduce a
+type the *program* never mentioned, which is what keeps the set finite.
+
+**Completeness**, in the sense that matters: it accepts every shape real code
+writes. Parameter-propagating recursion —
 
 ```ts
 function sumTree<T>(node: Node<T>): i32 {
-  return sumTree(node.left) + sumTree(node.right);   // Node<T> -> Node<T>: fine
+  return sumTree(node.left) + sumTree(node.right);   // Node<T> -> Node<T>
 }
 ```
 
-— and refuses exactly the shapes that cannot terminate:
+— and ground recursion, where the recursive call binds the parameter to a
+concrete type:
+
+```ts
+function countDown<T>(x: T, n: i32): i32 {
+  if (n === 0) { return 0; }
+  return countDown(1, n - 1);       // inference binds T := i32: ground, accepted
+}
+```
+
+`countDown("hi", 3)` gives exactly two instantiations. `countDown$str`'s edge
+asks for `countDown$i32`; `countDown$i32`'s edge asks for `countDown$i32`,
+which is already in the set; the worklist drains after one step. The same
+argument covers mutual recursion where a generic helper bottoms out at a
+concrete type, which is the other shape that would have been refused by a rule
+that only admitted bare parameters.
+
+What is refused is the shape that grows:
 
 ```ts
 function grow<T>(x: T, n: i32): i32 {
   if (n === 0) { return 0; }
-  return grow<T[]>([x], n - 1);       // refused: T[] is not a bare T
+  return grow([x], n - 1);          // refused: `[x]` is `T[]`, so this asks for grow<T[]>
 }
 
 class Nest<T> {
-  inner: Nest<T[]> | null;            // refused: the field expands
+  inner: Nest<T[]> | null;          // refused: the field expands
 }
 ```
+
+Nobody wrote a type argument in `grow`. Inference produced the expansion from
+`[x]`, which is why the rule is stated over the graph the checker builds rather
+than over the syntax the user typed.
 
 The same rule covers classes and functions because it is stated over
 "templates", and a class's *fields* are edges exactly as a function's *calls*
 are. That is why the graph is built once, in one place, and why the struct half
 of it lands with generic classes rather than as a second mechanism.
 
-The diagnostic names the chain, not a number (§8, message 5). That is the
-whole reason to prefer a rule over a limit: a user who wrote `grow<T[]>` is
-told which type argument grows and that the fix is to pass `T`.
+The diagnostic names the chain, not a number (§8, message 5). That is the whole
+reason to prefer a rule over a limit: a user is told which type argument is
+under a constructor, and that the fix is to pass the parameter itself or a type
+that does not mention it.
 
 ### The backstop: a cap
 
@@ -868,22 +924,29 @@ then a `;` and the fix, phrased as the code the programmer should write.
    annotation (`const b: Box<i32>`) and after `new` (`new Box<i32>(v)`)
    ```
 
-5. **Non-terminating monomorphisation** — the important one, and it names the
-   chain rather than a number
+5. **Non-terminating monomorphisation** — the important one. It names the type
+   argument that is under a constructor and the chain that follows from it,
+   never a number, and it must not fire on a ground argument (§4): the fix
+   clause therefore offers both of the shapes the rule accepts.
 
    ```
-   Monomorphising `grow` would not terminate: `grow<T>` instantiates `grow<T[]>`,
-   which is larger than the type it started from, so `grow<i32>` -> `grow<i32[]>` ->
-   `grow<i32[][]>` has no end; make the recursive call pass `T` itself
+   Monomorphising `grow` would not terminate: `grow<T>` asks for `grow<T[]>`, which
+   puts `T` under a constructor instead of passing it on, so `grow<i32>` ->
+   `grow<i32[]>` -> `grow<i32[][]>` has no end; pass `T` itself, or a type that does
+   not mention `T`
    ```
 
    and its field form
 
    ```
-   `Nest<T>` would not terminate: the field `inner` is `Nest<T[]>`, so laying out
-   `Nest<i32>` needs `Nest<i32[]>`, which needs `Nest<i32[][]>`; a generic class may
-   only mention itself at its own type parameters
+   `Nest<T>` would not terminate: the field `inner` is `Nest<T[]>`, which puts `T`
+   under a constructor, so laying out `Nest<i32>` needs `Nest<i32[]>`, which needs
+   `Nest<i32[][]>`; mention `Nest` at `T` itself, or at a type that does not mention
+   `T`
    ```
+
+   The type argument the message quotes is the offending one, so a template
+   with several arguments names the one that grows rather than the whole list.
 
 6. **Instantiation cap** — says it is a limit, not a rule
 
@@ -1026,7 +1089,7 @@ each row says what proves it.
 | **G1** | The side-table accessor refactor, and nothing else. Every node-keyed table (`types`, `bindings`, `locals`, `callees`, `coercions`, `caseValues`) moves behind a getter/setter; the parser records each top-level declaration's node-id span. No behaviour change. | `src/checker/program.ts`, `index.ts`, every `checker/<family>.ts`, `codegen/emit/*`, `codegen/escape.ts`, `codegen/attributes.ts` | `self/program.ts`, `self/checker.ts`, `self/parser.ts`, `self/emit*.ts`, `self/escape.ts`, `self/attributes.ts` | Every golden byte-identical; every oracle unchanged; the bootstrap green. A milestone whose diff is large and whose test output is empty. |
 | **G2** | The template surface. Phase 0 stops rejecting type parameters on functions, classes and interfaces; pass 1 collects templates; **every use is still refused** (`` `Box` is generic and this compiler cannot instantiate it yet ``). `mangleType` gains the instantiation encoding; the `$`-in-a-declared-name rule lands. | `src/validator.ts`, `src/types.ts`, `src/checker/declarations.ts`, `classes.ts`, `program.ts` | `self/validator.ts`, `self/types.ts`, `self/parser.ts` (type-parameter lists), `self/nodes.ts`, `self/declarations.ts`, `self/structs.ts` | `tests/self/types_oracle.js` over the new mangled strings; `reject_generic_dollar_name`; the two old cases `reject_generic_function` / `reject_generic_class` are re-pointed at the new message rather than deleted. |
 | **G3** | Generic **functions**: the instantiation set on the `Compilation`, the FIFO worklist, the overlay, inference from arguments, the mangled symbol, one `define` per instantiation. Single module only. | `src/checker/generics.ts` (new), `src/checker/index.ts`, `src/compilation.ts`, `src/codegen/emitter.ts` | `self/generics.ts` (new), `self/checker.ts`, `self/compilation.ts`, `self/emit.ts` | `gen_identity`, `gen_eq_purity`, `gen_infer_two`; the byte-identity check against the hand-written twin; `ir_oracle.js` and `checked_oracle.js` over the new cases. |
-| **G4** | **Termination**, for functions. The template graph, the non-expanding-cycle rule, the two caps, messages 5 and 6. Lands immediately after G3 because G3 can already diverge. | `src/checker/generics.ts` | `self/generics.ts` | `reject_generic_polymorphic_recursion`, `reject_generic_instantiation_limit`, and a positive `gen_recursive_same_type`; `reject_oracle.js` on both messages. |
+| **G4** | **Termination**, for functions. The template graph (self-edges included), the no-expanding-edge rule with its three argument cases, the two caps, messages 5 and 6. Lands immediately after G3 because G3 can already diverge. | `src/checker/generics.ts` | `self/generics.ts` | `reject_generic_polymorphic_recursion`, `reject_generic_instantiation_limit`, and the two positives `gen_recursive_same_type` and `gen_recursive_ground`; `reject_oracle.js` on both messages. |
 | **G5** | Generic **classes and interfaces**: a `StructInfo` per instantiation, methods, constructor, `new Box<i32>(v)`, fields, layout, the struct half of the template graph, `implements` at the template, `extends` including a generic base. | `src/checker/classes.ts`, `generics.ts`, `src/codegen/emit/classes.ts` | `self/structs.ts`, `self/generics.ts`, `self/emit_classes.ts` | `gen_box_i32`, `gen_box_string`, `gen_box_struct`, `gen_nested`, `gen_extends`, `gen_implements`, `gen_stack`; `reject_generic_expanding_field`, `reject_generic_extends_type_param`; `tests/layout/` offsets against clang. |
 | **G6** | **Constraints** (`<T extends Shape>`): member access admitted at the template, satisfaction checked at each instantiation. | `src/checker/generics.ts`, `classes.ts` | `self/generics.ts`, `self/structs.ts` | `gen_constraint`, `gen_constraint_method`; `reject_generic_unsatisfied_constraint`, `reject_generic_member_unconstrained`. |
 | **G7** | **Whole-program**: a generic exported from one module and instantiated in two others; one definition in the defining module; `declare`s elsewhere; linkage; `--strict-exports`. | `src/compilation.ts`, `src/codegen/emitter.ts` | `self/compilation.ts`, `self/emit.ts` | `tests/link/generic_import/`, `tests/link/generic_two_importers/` (asserting exactly one `define` across the program's modules); `reject_oracle.js` reads the link negatives already. |
@@ -1058,7 +1121,8 @@ each with a `.out` native round trip:
 | `gen_constraint`, `gen_constraint_method` | A constrained parameter, and a static call to the concrete method. |
 | `gen_stack` | WP6: an alloca at one instantiation and an arena bump at another, from one source line. |
 | `gen_result_payload`, `gen_array_payload` | `Box<Result<i32, string>>` and `Box<i32[]>` — the built-ins as type arguments. |
-| `gen_recursive_same_type` | Monomorphic recursion, which must be *accepted*. |
+| `gen_recursive_same_type` | Parameter-propagating recursion, which must be *accepted*: the self-edge is labelled `T`. |
+| `gen_recursive_ground` | Ground recursion — `countDown(1, n - 1)` inside `countDown<T>` — which must also be *accepted*, and whose instantiation set is exactly two entries. The other half of §4's boundary, and the case a rule that only admitted bare parameters would have refused. |
 | `dbg_generic` | Two `DISubprogram`s, distinct `linkageName`, shared `line`, `name: "identity<i32>"`. |
 
 **Negatives** (`tests/cases/reject_generic_*`), one per message in §8:
@@ -1068,6 +1132,12 @@ each with a `.out` native round trip:
 `export_uninstantiated` (with an `.args` naming a sidecar flag). Each names the
 rule it breaks in a one-line comment, so that a case which also fails for a
 second, accidental reason is caught in review.
+
+`reject_generic_polymorphic_recursion` is `grow` from §4 — one expanding
+self-edge and nothing else, so it also pins that a self-edge counts as a cycle.
+It and `reject_generic_expanding_field` are the negatives that
+`gen_recursive_same_type` and `gen_recursive_ground` sit opposite: between the
+four, both sides of §4's boundary are pinned by a test rather than by prose.
 
 **A structural check in `tests/run.js`**, because a golden cannot express it:
 compile a source that declares `function identity<T>(x: T): T` used at `i32`
