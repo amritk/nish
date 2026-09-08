@@ -357,7 +357,10 @@ rule of its own.
 `-g` and the interop sidecars were stage0's when this package landed, as they
 had been since WP14 §4: stage1 had no DWARF builder and no header generator,
 and the driver reported those flags by name rather than ignoring them. (3) was
-therefore a stage0-only change, and the IR oracle skips the `-g` corpus exactly
-as it did before. The sidecars have since been ported to `self/`
-(`docs/wp14-selfhost.md` §7), so the two compilers now write the C shapes
-above byte for byte alike; the DWARF is still stage0's.
+therefore a stage0-only change, and the IR oracle skipped the `-g` corpus
+exactly as it had before. Both have since been ported to `self/` — the
+sidecars in [wp14-selfhost.md](wp14-selfhost.md) §7, the DWARF in
+`self/debug.ts` ([§`-g` on both sides](wp14-selfhost.md#-g-on-both-sides)) —
+so the two compilers now write the C shapes above byte for byte alike, and
+`tests/cases/dbg_result` is compared between them rather than skipped: how a
+packed `Result` is described in DWARF is a two-sided change like every other.

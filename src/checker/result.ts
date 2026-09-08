@@ -44,18 +44,32 @@
  * pass cannot prove purity, termination or escape through an unknown callee.
  * Narrowing plus `orReturn()` covers what those combinators are for.
  *
- * Representation: one monomorphised `%struct.amrit_result.<T>.<E>` per distinct
- * pair of payload types, laid out exactly as `class` structs are, and held by
- * pointer. That is deliberate rather than a compromise — it means a `Result`
- * costs what a small object costs, the WP6 escape analysis turns the ones
- * that do not outlive their function into entry-block allocas, and every
- * existing pointer attribute (`align 8`, `nonnull`, `dereferenceable`) stays
- * true of it. The lowering is in `src/codegen/emit/result.ts`.
+ * Representation in memory: one monomorphised `%struct.amrit_result.<T>.<E>`
+ * per distinct pair of payload types, laid out exactly as `class` structs are,
+ * and held by pointer. That is deliberate rather than a compromise — it means
+ * a `Result` costs what a small object costs, the WP6 escape analysis turns
+ * the ones that do not outlive their function into entry-block allocas, and
+ * every existing pointer attribute (`align 8`, `nonnull`, `dereferenceable`)
+ * stays true of it. The lowering is in `src/codegen/emit/result.ts`.
  *
- * TODO(WP17): return small `Result`s by value in an LLVM aggregate, so an ok
- * path that is inlined away costs no allocation at all. That needs the C ABI
- * lowering the frontend does not do yet, which is also why a `Result` may not
- * cross the interop boundary (`--emit-header`, `--emit-napi`).
+ * At a call boundary a small one travels in a register instead (WP17). A
+ * `Result` whose two payloads are each a scalar of at most four bytes is
+ * returned *and* passed packed into one `i64`: the discriminant in bits 0..31,
+ * the live arm's payload in bits 32..63, and the dead arm not represented at
+ * all, which is what makes a twelve-byte struct fit in a word. `resultByValue`
+ * in `../types` is the one place that decides and `llvmAbiType` is what the
+ * emitter asks; everything wider keeps the pointer above, and so does a
+ * `Result` stored in a field or an array element, because that one has to
+ * outlive the frame which built it. The eight bytes are not a tuning knob:
+ * `i64` is the only return width whose C-ABI lowering is the same LLVM type on
+ * all six supported triples.
+ *
+ * That is also why a `Result` now crosses to a host. `--emit-header` declares
+ * the packed word as a C struct with a static assertion on its size, so the
+ * header is the declaration clang itself produces rather than a description of
+ * one, and `--emit-dts` / `--emit-napi` hand JavaScript the tagged object it
+ * already models. The measurements, and the two alternatives that were
+ * rejected, are in `docs/wp17-result-abi.md`.
  */
 import ts from "typescript";
 import { CompileError } from "../diagnostics";
