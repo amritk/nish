@@ -9,7 +9,7 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #1
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #2
 
-define void @insertionSort(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs) #0 {
+define internal void @insertionSort(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs) #0 {
 entry:
   %i.addr = alloca i32, align 4
   %key.addr = alloca i32, align 4
@@ -45,7 +45,7 @@ bounds.ok:
   %14 = load i32, i32* %13, align 4
   store i32 %14, i32* %key.addr, align 4
   %15 = load i32, i32* %i.addr, align 4
-  %16 = sub i32 %15, 1
+  %16 = sub nsw i32 %15, 1
   store i32 %16, i32* %j.addr, align 4
   br label %while.cond
 
@@ -82,7 +82,7 @@ land.end:
 
 while.body:
   %32 = load i32, i32* %j.addr, align 4
-  %33 = add i32 %32, 1
+  %33 = add nsw i32 %32, 1
   %34 = sext i32 %33 to i64
   %35 = load i32, i32* %j.addr, align 4
   %36 = sext i32 %35 to i64
@@ -117,13 +117,13 @@ bounds.ok.3:
   %51 = getelementptr inbounds i32, i32* %50, i64 %34
   store i32 %44, i32* %51, align 4
   %52 = load i32, i32* %j.addr, align 4
-  %53 = sub i32 %52, 1
+  %53 = sub nsw i32 %52, 1
   store i32 %53, i32* %j.addr, align 4
   br label %while.cond
 
 while.end:
   %54 = load i32, i32* %j.addr, align 4
-  %55 = add i32 %54, 1
+  %55 = add nsw i32 %54, 1
   %56 = sext i32 %55 to i64
   %57 = load i32, i32* %key.addr, align 4
   %58 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
@@ -145,7 +145,7 @@ bounds.ok.4:
 
 for.inc:
   %65 = load i32, i32* %i.addr, align 4
-  %66 = add i32 %65, 1
+  %66 = add nsw i32 %65, 1
   store i32 %66, i32* %i.addr, align 4
   br label %for.cond
 
@@ -161,8 +161,8 @@ entry:
   %line.addr = alloca i8*, align 8
   %x.addr = alloca i32, align 4
   %forof.idx = alloca i64, align 8
-  %0 = sub i32 0, 4
-  %1 = sub i32 0, 12
+  %0 = sub nsw i32 0, 4
+  %1 = sub nsw i32 0, 12
   %2 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0
   store i64 20, i64* %2, align 8
   %3 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1

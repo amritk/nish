@@ -5,6 +5,7 @@
  */
 import ts from "typescript";
 import { ResultType, StaticType, isFloat, isInteger, llvmAbiType, llvmType, resultByValue } from "../../types";
+import { beginReclaim, endReclaim } from "./arena";
 import { emitIntBinary } from "./arithmetic";
 import { arrayExpressionEmitters, installArrayAssignmentEmitters } from "./arrays";
 import { bitwiseBinaryEmitters, bitwiseUnaryEmitters } from "./bitwise";
@@ -217,6 +218,9 @@ const emitCall: ExpressionEmitter = (ctx, node) => {
       return `${llvmAbiType(want)} ${value}`;
     })
     .join(", ");
+  // WP9: the mark goes after the arguments, so only the callee's own bumps
+  // are inside the bracket (emit/arena.ts, `beginReclaim`).
+  const mark = beginReclaim(ctx, callee);
   const call = `call ${llvmAbiType(callee.returnType)} @${callee.name}(${args})`;
   if (callee.returnType.kind === "void") {
     ctx.fn.emit(call);
@@ -226,7 +230,7 @@ const emitCall: ExpressionEmitter = (ctx, node) => {
   // caller's own object, which is what every other construct reads.
   if (resultByValue(callee.returnType))
     return emitResultReturningCall(ctx, call, callee.returnType, expr);
-  return ctx.fn.emitValue(call);
+  return endReclaim(ctx, mark, ctx.fn.emitValue(call));
 };
 
 export const expressionEmitters: EmitterTable<ExpressionEmitter> = {

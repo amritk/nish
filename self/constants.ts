@@ -13,10 +13,12 @@
 // against the *declaring* module's source even when an importer triggered the
 // fold, so a bad constant is named where it was written.
 //
-// Integer arithmetic here wraps at the declared width exactly as the emitted
-// `add`/`sub`/`mul` do, so folding never changes what a program computes.
-// stage0 needs `bigint` and an explicit `wrap` for that; the language's `i64`
-// arithmetic already wraps, and the i32 case is one `toI32` round trip.
+// Integer folding follows the language's own arithmetic, whichever it is
+// today (`narrowConstant` below): by default an overflowing constant is refused,
+// because the instruction it replaces carries `nsw`; under `--wrapping` it
+// wraps at the declared width, because the instruction wraps. The arithmetic
+// that computes the fold is done in `u64`, whose wrapping *is* defined, so
+// this module never overflows a signed value of its own to describe one.
 
 import { CheckContext } from "./context";
 import {
@@ -107,7 +109,10 @@ export function parseIntegerLiteral(text: string): i64 {
         digit = c - 55;
       }
       if (digit >= 0) {
-        value = value * radix + toI64(digit);
+        // A literal too large for `i64` keeps the bits it has rather than
+        // overflowing a signed value; the range check that follows the fold is
+        // what refuses it. `u64` is where that wrap is defined.
+        value = toI64(toU64(value) * toU64(radix) + toU64(digit));
       }
     }
     i = i + 1;
@@ -274,7 +279,9 @@ function foldUnary(ctx: CheckContext, info: ConstInfo, expr: Node, expected: i32
   }
   if (expr.text === "-") {
     if (operand.type === T_I32 || operand.type === T_I64) {
-      return intValue(operand.type, -operand.intValue);
+      // Negation is `0 - x`, which is the only unary form that can overflow:
+      // `-MIN` is the value the width has no room for.
+      return narrowConstant(ctx, info, expr, operand.type, subOverflows(toI64(0), operand.intValue), wrapSub(toI64(0), operand.intValue));
     }
     if (operand.type === T_F64) {
       return floatValue(-operand.floatValue);
@@ -414,15 +421,117 @@ function foldInt(
     return intValue(a.type, op === "/" ? a.intValue / b.intValue : a.intValue % b.intValue);
   }
   if (op === "+") {
-    return intValue(a.type, a.intValue + b.intValue);
+    return narrowConstant(ctx, info, expr, a.type, addOverflows(a.intValue, b.intValue), wrapAdd(a.intValue, b.intValue));
   }
   if (op === "-") {
-    return intValue(a.type, a.intValue - b.intValue);
+    return narrowConstant(ctx, info, expr, a.type, subOverflows(a.intValue, b.intValue), wrapSub(a.intValue, b.intValue));
   }
   if (op === "*") {
-    return intValue(a.type, a.intValue * b.intValue);
+    return narrowConstant(ctx, info, expr, a.type, mulOverflows(a.intValue, b.intValue), wrapMul(a.intValue, b.intValue));
   }
   return reject(ctx, info, expr, `Unsupported operator \`${op}\` in a constant`);
+}
+
+/**
+ * Bring a 64-bit result back into `type`, the way the instruction it replaces
+ * would.
+ *
+ * Under `--wrapping` that instruction wraps, so the fold wraps. By default it
+ * carries `nsw`, so signed overflow at run time is undefined — and a compiler
+ * that quietly folded `2147483647 + 1` to `-2147483648` would be handing back
+ * the one answer the optimiser is entitled to assume cannot happen. It is
+ * refused instead, which is the treatment the two divisor failures already
+ * get: what traps at run time is a compile error once the operands are known.
+ *
+ * `wide` is the 64-bit two's-complement result and `over` whether it overflowed
+ * 64 bits; an `i32` constant overflows when either is true of the narrower
+ * width, which is why the `toI32` round trip is tested here rather than in
+ * `intValue`.
+ */
+function narrowConstant(
+  ctx: CheckContext,
+  info: ConstInfo,
+  expr: Node,
+  type: i32,
+  over: boolean,
+  wide: i64
+): ConstValue {
+  const value = type === T_I64 ? wide : toI64(toI32(wide));
+  const overflowed = over || value !== wide;
+  if (overflowed && !ctx.wrapping) {
+    const spelled = ctx.table.typeName(type);
+    return reject(
+      ctx,
+      info,
+      expr,
+      `attempt to compute with overflow in a constant: the result does not fit in ${spelled} (use --wrapping for two's-complement arithmetic)`
+    );
+  }
+  return intValue(type, value);
+}
+
+// Two's-complement 64-bit arithmetic. `u64` is defined as wrapping whether or
+// not `nsw` is on, so these are the wrap the flagged signed instructions no
+// longer perform, written without overflowing a signed value.
+
+function wrapAdd(a: i64, b: i64): i64 {
+  return toI64(toU64(a) + toU64(b));
+}
+
+function wrapSub(a: i64, b: i64): i64 {
+  return toI64(toU64(a) - toU64(b));
+}
+
+function wrapMul(a: i64, b: i64): i64 {
+  return toI64(toU64(a) * toU64(b));
+}
+
+/** `a + b` leaves the 64-bit range only when both operands share a sign and the sum does not. */
+function addOverflows(a: i64, b: i64): boolean {
+  const zero = toI64(0);
+  const sum = wrapAdd(a, b);
+  if (a > zero && b > zero) {
+    return sum < zero;
+  }
+  if (a < zero && b < zero) {
+    return sum >= zero;
+  }
+  return false;
+}
+
+/** `a - b`, by the same sign argument: only a mixed pair can leave the range. */
+function subOverflows(a: i64, b: i64): boolean {
+  const zero = toI64(0);
+  const difference = wrapSub(a, b);
+  if (a >= zero && b < zero) {
+    return difference < zero;
+  }
+  if (a < zero && b > zero) {
+    return difference >= zero;
+  }
+  return false;
+}
+
+/**
+ * `a * b` overflowed 64 bits exactly when dividing the wrapped product back by
+ * one factor does not answer the other: a wrap moves the product by at least
+ * 2^64, which is more than any divisor can absorb. `-1` is taken out first
+ * because it is the one divisor that would trip the `MIN / -1` check.
+ */
+function mulOverflows(a: i64, b: i64): boolean {
+  const zero = toI64(0);
+  const minusOne = toI64(-1);
+  const min = toI64(1) << toI64(63);
+  if (a === zero || b === zero) {
+    return false;
+  }
+  if (a === minusOne) {
+    return b === min;
+  }
+  if (b === minusOne) {
+    return a === min;
+  }
+  return wrapMul(a, b) / a !== b;
 }
 
 function foldFloat(ctx: CheckContext, info: ConstInfo, op: string, expr: Node, x: f64, y: f64): ConstValue {

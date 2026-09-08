@@ -11,7 +11,10 @@
  *   appendFileSync(path, data)  call void @amrit_append_file(i8* path, i8* data)
  *   mkdirSync(path)             call zeroext i1 @amrit_mkdir(i8* path)
  *   spawnSync(argv)             call i32 @amrit_spawn(%struct.amrit_array* argv)
+ *   isDirectorySync(path)       call zeroext i1 @amrit_is_dir(i8* path)
  *   process.argv                load %struct.amrit_array*, %struct.amrit_array** @amrit_argv
+ *   process.platform            call i8* @amrit_platform()
+ *   process.arch                call i8* @amrit_arch()
  *
  * `@amrit_argv` is a runtime global that the entry wrapper fills with
  * `amrit_argv_init(argc, argv)` before `amrit_main` runs (emitter.ts), so a
@@ -43,7 +46,12 @@ import { ARRAY_STRUCT } from "../../types";
 import { ARGV_GLOBAL, ARRAY_TYPE } from "../runtime";
 import { BuiltinCall } from "./builtins";
 import { EmitContext } from "./context";
-import { factCollectors, isValueReceiver, namespacePropertyEmitters } from "./members";
+import {
+  NamespacePropertyEmitter,
+  factCollectors,
+  isValueReceiver,
+  namespacePropertyEmitters,
+} from "./members";
 
 function stringArgs(ctx: EmitContext, expr: ts.CallExpression): string {
   return expr.arguments.map((arg) => `i8* ${ctx.emitExpression(arg)}`).join(", ");
@@ -118,6 +126,13 @@ const mkdirSync: BuiltinCall = {
   callees: () => ["amrit_mkdir"],
 };
 
+/** `isDirectorySync(path)` (WP14 §7a): one `stat`, and a `boolean` out of it. */
+const isDirectorySync: BuiltinCall = {
+  emit: (ctx, expr) =>
+    ctx.fn.emitValue(`call zeroext i1 ${ctx.useRuntime("amrit_is_dir")}(${stringArgs(ctx, expr)})`),
+  callees: () => ["amrit_is_dir"],
+};
+
 /**
  * `spawnSync(argv)`: the array header goes straight to the runtime, which
  * builds the C vector from it. The status is an `i32`, so `--number-mode f64`
@@ -161,6 +176,7 @@ export const ioFunctionEmitters: Record<string, BuiltinCall> = {
   panic,
   mkdirSync,
   spawnSync,
+  isDirectorySync,
 };
 
 // ---- process.argv -------------------------------------------------------------------
@@ -179,4 +195,33 @@ const isArgvRead = (node: ts.Node): node is ts.PropertyAccessExpression =>
 /** The load of `@amrit_argv` reads memory the function does not own: at most `readonly`. */
 factCollectors.push((program, node, facts) => {
   if (isArgvRead(node) && !isValueReceiver(program, node.expression)) facts.readsMemory = true;
+});
+
+// ---- process.platform and process.arch ------------------------------------------------
+
+/**
+ * `process.platform` / `process.arch` (WP14 §7a): one call to the runtime,
+ * which answers the address of a string in its own constant data. Nothing is
+ * read and nothing is allocated, so unlike `process.argv` this leaves a
+ * function `readnone`, and two reads of the same property in one function are
+ * one call after CSE.
+ */
+function machineProperty(symbol: string): NamespacePropertyEmitter {
+  return (ctx) => ctx.fn.emitValue(`call i8* ${ctx.useRuntime(symbol)}()`);
+}
+
+namespacePropertyEmitters["process.platform"] = machineProperty("amrit_platform");
+namespacePropertyEmitters["process.arch"] = machineProperty("amrit_arch");
+
+/**
+ * The other half of the pair above. The call itself is `readnone willreturn`,
+ * so naming it here changes no attribute today; it is named anyway because the
+ * rule is that what a construct emits and what the analysis is told it emits
+ * never drift apart, and a future change to either would otherwise be silent.
+ */
+factCollectors.push((program, node, facts) => {
+  if (!ts.isPropertyAccessExpression(node) || isValueReceiver(program, node.expression)) return;
+  const dotted = dottedName(node);
+  if (dotted === "process.platform") facts.callees.add("amrit_platform");
+  else if (dotted === "process.arch") facts.callees.add("amrit_arch");
 });

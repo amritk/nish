@@ -17,14 +17,28 @@ import { CheckContext } from "./context";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations";
 import {
+  N_BINARY,
   N_BLOCK,
   N_CLASS,
   N_CONSTRUCTOR,
+  N_DO,
   N_EMPTY,
+  N_FOR,
+  N_FOR_OF,
   N_FUNCTION,
+  N_IDENT,
   N_IMPORT,
+  N_INDEX,
   N_INTERFACE,
+  N_MEMBER,
   N_MODULE_CONST,
+  N_NEW,
+  N_NUMBER,
+  N_PAREN,
+  N_TEMPLATE,
+  N_TEMPLATE_TEXT,
+  N_VAR_DECL,
+  N_WHILE,
   Node,
 } from "./nodes";
 import { StringSet } from "./map";
@@ -60,10 +74,11 @@ export class Checker {
     isEntry: boolean,
     nodeCount: i32,
     sink: DiagnosticSink,
-    numberMode: i32
+    numberMode: i32,
+    wrapping: boolean
   ) {
     this.program = new CheckedProgram(source, file, isEntry, nodeCount);
-    this.ctx = new CheckContext(table, this.program, sink, numberMode);
+    this.ctx = new CheckContext(table, this.program, sink, numberMode, wrapping);
   }
 
   /**
@@ -225,6 +240,11 @@ export class Checker {
       // WP16: a `Result` local nobody reads is an unhandled failure. Reported
       // after the body so the diagnostic names a variable whose type is known.
       checkResultLocalsHandled(this.ctx, sig, body);
+      // WP15 §8: the performance warnings, over the same body and the same
+      // side tables. Only for a body that checked cleanly — advice about code
+      // that does not compile is noise, and a poisoned body has incomplete
+      // side tables anyway.
+      checkPerformance(this.ctx, body);
     }
     // A body with a rejected statement may have lost its `return`; reporting
     // a missing one on top of that is a cascade, not a second bug.
@@ -449,4 +469,305 @@ export class Checker {
 /** The node a "must return on every path" diagnostic points at: the name, or the declaration. */
 function nameOf(sig: FunctionSig): Node {
   return sig.decl.kind === N_CONSTRUCTOR ? sig.decl : sig.decl.children[0];
+}
+
+// ---- WP15 §8: the `performance` diagnostic class --------------------------------
+//
+// The stage1 half of `src/checker/performance.ts`; every rule, every guard and
+// every word of both messages is that file's, because `tests/run.js` and the
+// stage1 oracles compare the two compilers byte for byte.
+//
+// Two warnings ship, the two that need no analysis the checker does not have:
+//
+//   1. **Quadratic string building** — `s = <something built from s>` where
+//      `s` is a string local declared outside the loop the assignment sits in.
+//      Every pass copies the whole accumulator into a fresh arena string, so
+//      the loop is quadratic in time *and* in arena bytes: 88 KB of output
+//      measured 180 MB of peak RSS (WP15 §1). The rewrite is `StringBuilder`
+//      or a `string[]` and one `join`, which is what this compiler's own
+//      subset rules already require of `self/`.
+//   2. **Allocation in a loop** — a `new Array<T>(n)` with a non-constant `n`,
+//      declared inside a loop, whose value is only ever read through in that
+//      iteration. A dynamically sized array can never be an entry-block
+//      alloca (`docs/wp6-memory.md` §1), so it comes out of the arena once per
+//      pass and stays there until the function returns.
+//
+// Everything WP6 already handles is deliberately silent: a `new C(...)`, an
+// object literal, an array literal and a `new Array<T>(<literal>)` in a loop
+// are stackable, so when their flow is local they become one entry-block
+// alloca whose slot is reused every pass and there is nothing to hoist; and an
+// allocation that escapes the iteration is memory the program asked for. A
+// warning that fires where the compiler already did the right thing is exactly
+// the un-actionable kind §8 forbids.
+
+/**
+ * The state the walk carries. `loops` is the enclosing loop *statements*,
+ * innermost last, so a candidate allocation knows which subtree to scan for
+ * the uses of its local. `declared` and `declaredDepth` are parallel: the
+ * local a declaration introduced and the loop depth it was introduced at,
+ * which is how "the accumulator is reset every pass" is told from "the
+ * accumulator outlives the pass". Entries are never popped — locals are
+ * compared by identity, so a sibling loop's local can never be mistaken for
+ * this one's.
+ */
+class PerfWalk {
+  ctx: CheckContext;
+  loops: Node[];
+  declared: Local[];
+  declaredDepth: i32[];
+
+  constructor(ctx: CheckContext) {
+    this.ctx = ctx;
+    this.loops = [];
+    this.declared = [];
+    this.declaredDepth = [];
+  }
+
+  /** The loop depth `local` was declared at, or -1 when it was not declared inside a loop. */
+  depthOf(local: Local): i32 {
+    let i = 0;
+    while (i < this.declared.length) {
+      if (this.declared[i] === local) {
+        return this.declaredDepth[i];
+      }
+      i = i + 1;
+    }
+    return -1;
+  }
+}
+
+/**
+ * Report the performance warnings of one checked function body. Called after
+ * the body has been checked so every type and binding it reads is recorded,
+ * and only for a body that checked cleanly — advice about code that does not
+ * compile is noise, and a poisoned body has incomplete side tables anyway.
+ */
+export function checkPerformance(ctx: CheckContext, body: Node): void {
+  walkPerformance(new PerfWalk(ctx), body);
+}
+
+/**
+ * Walk one function body. The loop stack is pushed around the parts of a loop
+ * that run once per iteration and *not* around a `for` initializer, which runs
+ * once: `for (let s = ""; ...) { s = s + t; }` accumulates across the whole
+ * loop and must warn, while `for (const x of xs) { ... }` gives `x` a fresh
+ * binding every pass and must not.
+ */
+function walkPerformance(walk: PerfWalk, node: Node): void {
+  if (node.kind === N_FOR) {
+    walkPerformance(walk, node.children[0]);
+    walk.loops.push(node);
+    walkPerformance(walk, node.children[1]);
+    walkPerformance(walk, node.children[2]);
+    walkPerformance(walk, node.children[3]);
+    walk.loops.pop();
+    return;
+  }
+  if (node.kind === N_FOR_OF) {
+    walkPerformance(walk, node.children[1]);
+    walk.loops.push(node);
+    walkPerformance(walk, node.children[0]);
+    walkPerformance(walk, node.children[2]);
+    walk.loops.pop();
+    return;
+  }
+  // `while` and `do` differ only in which of the two children comes first, and
+  // both are walked in source order — which is the order the warnings come out
+  // in, and stage0 walks the same tree in the same direction.
+  if (node.kind === N_WHILE || node.kind === N_DO) {
+    walk.loops.push(node);
+    walkPerformance(walk, node.children[0]);
+    walkPerformance(walk, node.children[1]);
+    walk.loops.pop();
+    return;
+  }
+  if (node.kind === N_VAR_DECL) {
+    const local = walk.ctx.program.nodeLocals[node.id];
+    if (local !== null) {
+      walk.declared.push(local);
+      walk.declaredDepth.push(walk.loops.length);
+    }
+    checkLoopAllocation(walk, node);
+  } else if (node.kind === N_BINARY && node.text === "=") {
+    checkStringAccumulation(walk, node);
+  }
+  for (const child of node.children) {
+    walkPerformance(walk, child);
+  }
+}
+
+/** `s = <something built from s>` inside a loop that does not own `s`. */
+function checkStringAccumulation(walk: PerfWalk, expr: Node): void {
+  if (walk.loops.length === 0) {
+    return;
+  }
+  const left = expr.children[0];
+  if (left.kind !== N_IDENT) {
+    return;
+  }
+  const target = walk.ctx.program.nodeLocals[left.id];
+  if (target === null || target.type !== T_STRING) {
+    return;
+  }
+  // Declared inside the loop it is assigned in: the string is rebuilt from
+  // empty every pass, so it is bounded by one iteration, not by the loop.
+  if (walk.depthOf(target) === walk.loops.length) {
+    return;
+  }
+  if (!accumulates(walk.ctx, expr.children[1], target)) {
+    return;
+  }
+  walk.ctx.performance(
+    left,
+    `\`${target.name}\` is rebuilt from its own value on every iteration of this loop, so every pass copies all ` +
+      `of it (quadratic in time and in arena bytes): collect the pieces in a \`string[]\` and \`join\` them after the loop`
+  );
+}
+
+/** A dynamically sized array allocated per iteration and dead by the end of it. */
+function checkLoopAllocation(walk: PerfWalk, decl: Node): void {
+  if (walk.loops.length === 0) {
+    return;
+  }
+  const local = walk.ctx.program.nodeLocals[decl.id];
+  const name = decl.children[0];
+  if (local === null || name.kind !== N_IDENT) {
+    return;
+  }
+  if (!isDynamicArrayAllocation(walk.ctx, decl.children[2])) {
+    return;
+  }
+  const loop = walk.loops[walk.loops.length - 1];
+  if (!usedOnlyWithinIteration(walk.ctx, loop, local, decl)) {
+    return;
+  }
+  walk.ctx.performance(
+    name,
+    `\`${local.name}\` allocates a dynamically sized array on every iteration of this loop and nothing keeps it ` +
+      `past the iteration, so the arena grows once per pass: hoist the allocation above the loop and reuse it, ` +
+      `or bracket the loop body with \`Arena.mark()\` and \`Arena.release(m)\``
+  );
+}
+
+/** Strip parentheses; every shape test here is about the expression inside them. */
+function unwrapPerfParens(expr: Node): Node {
+  let inner = expr;
+  while (inner.kind === N_PAREN) {
+    inner = inner.children[0];
+  }
+  return inner;
+}
+
+/**
+ * The value of `expr` is `target`'s own contents plus something. Only `+`
+ * chains and template holes are followed, because those are the two forms
+ * that copy the accumulator; `s = f(s)` or `s = cond ? s : t` may do anything
+ * or nothing, and guessing would break the "name a concrete rewrite" bar.
+ */
+function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean {
+  const e = unwrapPerfParens(expr);
+  if (e.kind === N_IDENT) {
+    const bound = ctx.program.nodeLocals[e.id];
+    return bound !== null && bound === target;
+  }
+  if (e.kind === N_BINARY && e.text === "+") {
+    return accumulates(ctx, e.children[0], target) || accumulates(ctx, e.children[1], target);
+  }
+  if (e.kind === N_TEMPLATE) {
+    for (const part of e.children) {
+      if (part.kind !== N_TEMPLATE_TEXT && accumulates(ctx, part, target)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * `expr` allocates an array whose size is not a compile-time constant, so WP6
+ * cannot turn it into an entry-block alloca and it comes out of the arena
+ * every time it runs. `new Array<T>(4)`, `[a, b]` and `new C(...)` are all
+ * stackable and therefore not this.
+ *
+ * The literal test is deliberately the syntactic one `self/escape.ts` uses to
+ * decide the stack slot, because the warning must fire exactly where that
+ * decision goes the other way: a `const n = 8` is a local, not a literal, and
+ * both sides agree it is dynamic.
+ */
+function isDynamicArrayAllocation(ctx: CheckContext, expr: Node): boolean {
+  const e = unwrapPerfParens(expr);
+  if (e.kind !== N_NEW || !ctx.table.isArray(ctx.program.nodeTypes[e.id])) {
+    return false;
+  }
+  const args = e.children[2];
+  // The checker already requires exactly one argument; anything else is a
+  // rejected program the walk never reaches.
+  if (args.children.length !== 1) {
+    return false;
+  }
+  const length = unwrapPerfParens(args.children[0]);
+  return length.kind !== N_NUMBER || !isNonNegativeInteger(length.text);
+}
+
+/** The literal is a non-negative integer as written: no sign, no dot, no exponent. */
+function isNonNegativeInteger(text: string): boolean {
+  if (text.length === 0) {
+    return false;
+  }
+  let i = 0;
+  while (i < text.length) {
+    const c = text.charCodeAt(i);
+    if (c < 48 || c > 57) {
+      return false;
+    }
+    i = i + 1;
+  }
+  return true;
+}
+
+/**
+ * Every reference to `local` inside `root` is consumed where it stands: an
+ * element read or write, a `.length`, or a `for...of` source. Anything else —
+ * a `push`, an argument, a store, a `return`, a reassignment, a bare mention —
+ * may keep the value past the iteration, and then the allocation is not
+ * redundant and hoisting it would be wrong.
+ *
+ * `own` is the declaration that introduced `local`; its own name is not a use.
+ */
+function usedOnlyWithinIteration(ctx: CheckContext, root: Node, local: Local, own: Node): boolean {
+  if (root === own) {
+    return usedOnlyWithinIteration(ctx, own.children[2], local, own);
+  }
+  if (root.kind === N_INDEX && isLocalRef(ctx, root.children[0], local)) {
+    return usedOnlyWithinIteration(ctx, root.children[1], local, own);
+  }
+  if (root.kind === N_MEMBER && root.text === "length" && isLocalRef(ctx, root.children[0], local)) {
+    return true;
+  }
+  if (root.kind === N_FOR_OF && isLocalRef(ctx, root.children[1], local)) {
+    return (
+      usedOnlyWithinIteration(ctx, root.children[0], local, own) &&
+      usedOnlyWithinIteration(ctx, root.children[2], local, own)
+    );
+  }
+  if (root.kind === N_IDENT) {
+    const bound = ctx.program.nodeLocals[root.id];
+    return bound === null || bound !== local;
+  }
+  for (const child of root.children) {
+    if (!usedOnlyWithinIteration(ctx, child, local, own)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** `expr` is a direct reference to `local` (through parentheses only). */
+function isLocalRef(ctx: CheckContext, expr: Node, local: Local): boolean {
+  const e = unwrapPerfParens(expr);
+  if (e.kind !== N_IDENT) {
+    return false;
+  }
+  const bound = ctx.program.nodeLocals[e.id];
+  return bound !== null && bound === local;
 }

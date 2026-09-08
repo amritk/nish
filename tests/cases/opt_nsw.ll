@@ -4,14 +4,14 @@
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #3
 declare void @amrit_panic_div(i1 noundef zeroext) #3
 
-define void @Acc.constructor(%struct.Acc* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this) #0 {
+define internal void @Acc.constructor(%struct.Acc* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Acc, %struct.Acc* %this, i32 0, i32 0
   store i32 0, i32* %0, align 4
   ret void
 }
 
-define noundef i32 @poly(i32 noundef %x, i32 noundef %y) #1 {
+define internal noundef i32 @poly(i32 noundef %x, i32 noundef %y) #1 {
 entry:
   %0 = mul nsw i32 %x, %x
   %1 = mul nsw i32 3, %y
@@ -21,7 +21,7 @@ entry:
   ret i32 %4
 }
 
-define noundef i32 @sum(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, %struct.Acc* noundef nonnull align 8 dereferenceable(4) nocapture %acc) #2 {
+define internal noundef i32 @sum(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, %struct.Acc* noundef nonnull align 8 dereferenceable(4) nocapture %acc) #2 {
 entry:
   %s.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -137,6 +137,22 @@ div.ok.1:
   ret i32 %55
 }
 
+define internal noundef i32 @mix(i32 noundef %a, i32 noundef %b) #1 {
+entry:
+  %m.addr = alloca i32, align 4
+  %0 = mul i32 %a, %b
+  store i32 %0, i32* %m.addr, align 4
+  %1 = load i32, i32* %m.addr, align 4
+  %2 = sub i32 %a, %b
+  %3 = add i32 %1, %2
+  store i32 %3, i32* %m.addr, align 4
+  %4 = load i32, i32* %m.addr, align 4
+  %5 = sub i32 %4, 1
+  store i32 %5, i32* %m.addr, align 4
+  %6 = load i32, i32* %m.addr, align 4
+  ret i32 %6
+}
+
 define noundef i32 @test() #2 {
 entry:
   %acc.addr = alloca %struct.Acc*, align 8
@@ -181,7 +197,9 @@ entry:
   %20 = getelementptr inbounds %struct.Acc, %struct.Acc* %19, i32 0, i32 0
   %21 = load i32, i32* %20, align 4
   %22 = add nsw i32 %18, %21
-  ret i32 %22
+  %23 = call i32 @mix(i32 3, i32 2)
+  %24 = add nsw i32 %22, %23
+  ret i32 %24
 }
 
 attributes #0 = { nounwind willreturn }

@@ -8,6 +8,6 @@ function sumDigits(n: number): number {
   return sum;
 }
 
-function test(): number {
+export function test(): number {
   return sumDigits(0) + sumDigits(9876);
 }

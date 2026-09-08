@@ -48,6 +48,12 @@ export interface CheckContext {
    * marked `poisoned` so follow-on checks that assume a valid body are skipped.
    */
   report(err: CompileError): void;
+  /**
+   * Record a WP15 §8 performance warning at `node`. It never throws, never
+   * poisons anything and never reaches the exit code: the compilation carries
+   * on exactly as if the warning had not been found.
+   */
+  reportPerformance(message: string, node: ts.Node): void;
 
   /** Check a statement; returns true when it definitely terminates (returns). */
   checkStatement(stmt: ts.Statement, scope: Scope): boolean;

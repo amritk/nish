@@ -18,6 +18,7 @@
 // over-wide shift poison and JavaScript wraps the count. A literal count is
 // masked here at compile time, so the common `x << 3` stays one instruction.
 
+import { internalError } from "./ice";
 import { parseIntegerLiteral } from "./constants";
 import { Emitter } from "./emit";
 import { emitCompoundAssignment, emitIncDec, emitLogical } from "./emit_control";
@@ -72,19 +73,25 @@ export function constantText(emitter: Emitter, info: ConstInfo): string {
 // ---- Integer arithmetic -----------------------------------------------------------
 
 /**
- * The instruction for `add` / `sub` / `mul` under `--nsw`: overflow becomes
- * poison (C semantics) instead of wrapping. The flag has to match the type's
- * signedness — an unsigned value that passes 2^31 has not overflowed, so
- * `nuw` is the claim that is true there.
+ * The instruction for `add` / `sub` / `mul`, which carries `nsw` by default
+ * (WP15 §3): signed overflow becomes poison (C semantics) instead of
+ * wrapping, and `--wrapping` turns that back off.
+ *
+ * An unsigned type never gets a flag in either mode. `u8`/`u16`/`u32`/`u64`
+ * are defined as wrapping, which is what hashing and bit-packing are written
+ * against, so `nuw` would be a claim the language does not make; and `nsw` on
+ * an unsigned value that has merely passed 2^31 would poison an ordinary
+ * result. The proof under the attribute is "the checker recorded a signed
+ * type", and `isUnsigned` is where that proof is read.
  */
 export function intOpcode(emitter: Emitter, opcode: string, type: i32): string {
-  if (!emitter.opts.nsw) {
+  if (!emitter.opts.nsw || isUnsigned(type)) {
     return opcode;
   }
   if (opcode !== "add" && opcode !== "sub" && opcode !== "mul") {
     return opcode;
   }
-  return `${opcode} ${isUnsigned(type) ? "nuw" : "nsw"}`;
+  return `${opcode} nsw`;
 }
 
 /**
@@ -198,7 +205,7 @@ function integerOpcode(op: string): string {
   if (op === "!==") {
     return "icmp ne";
   }
-  panic(`emitter: unexpected binary operator \`${op}\``);
+  process.exit(internalError(`emitter: unexpected binary operator \`${op}\``));
 }
 
 /** The floating-point opcode for the same operator. */
@@ -236,7 +243,7 @@ export function floatOpcode(op: string): string {
   if (op === "!==") {
     return "fcmp une";
   }
-  panic(`emitter: unexpected binary operator \`${op}\``);
+  process.exit(internalError(`emitter: unexpected binary operator \`${op}\``));
 }
 
 /** The bitwise opcode for `& | ^ << >> >>>` and their compound forms. */
@@ -393,7 +400,7 @@ export function emitUnary(emitter: Emitter, expr: Node): string {
     const ty = emitter.llvm(emitter.typeOf(operand));
     return emitter.fn.emitValue(`xor ${ty} ${emitter.emitExpression(operand)}, -1`);
   }
-  panic(`emitter: unexpected unary operator \`${op}\``);
+  process.exit(internalError(`emitter: unexpected unary operator \`${op}\``));
 }
 
 // ---- Locals ------------------------------------------------------------------------
@@ -416,7 +423,7 @@ export function targetLocal(emitter: Emitter, target: Node): Local {
   if (local !== null) {
     return local;
   }
-  panic(`emitter: no binding for the assignment target \`${target.text}\``);
+  process.exit(internalError(`emitter: no binding for the assignment target \`${target.text}\``));
 }
 
 // ---- Assignment ---------------------------------------------------------------------
@@ -445,14 +452,29 @@ export function emitAssignment(emitter: Emitter, expr: Node): string {
   return emitCompoundAssignment(emitter, expr);
 }
 
+/** Whether `op` is one of `&= |= ^= <<= >>= >>>=`, which the field and element emitters ask too. */
+export function isBitwiseAssignment(op: string): boolean {
+  return op.length > 1 && op.endsWith("=") && bitwiseOpcode(op).length > 0;
+}
+
+/**
+ * The right-hand half of `t op= e` once `old` — whatever the target held — is
+ * in hand: evaluate `e` (masked when the opcode is a shift) and apply the
+ * operator. A local, a field and an element differ only in how they read `old`
+ * and where they store the result, so all three come here and the shift-count
+ * mask cannot go missing on one of them.
+ */
+export function emitBitwiseCombine(emitter: Emitter, op: string, type: i32, old: string, right: Node): string {
+  const opcode = shiftOpcodeFor(bitwiseOpcode(op), type);
+  const rhs = emitRightOperand(emitter, opcode, type, right);
+  return emitter.fn.emitValue(`${opcode} ${emitter.llvm(type)} ${old}, ${rhs}`);
+}
+
 /** `x &= e`: JS reads `x` before evaluating `e`; the expression's value is what was stored. */
 function emitBitwiseAssignment(emitter: Emitter, expr: Node): string {
   const local = targetLocal(emitter, expr.children[0]);
-  const ty = emitter.llvm(local.type);
-  const opcode = shiftOpcodeFor(bitwiseOpcode(expr.text), local.type);
   const old = loadLocal(emitter, local);
-  const rhs = emitRightOperand(emitter, opcode, local.type, expr.children[1]);
-  const value = emitter.fn.emitValue(`${opcode} ${ty} ${old}, ${rhs}`);
+  const value = emitBitwiseCombine(emitter, expr.text, local.type, old, expr.children[1]);
   storeLocal(emitter, local, value);
   return value;
 }

@@ -8,6 +8,6 @@ function checkedDiv(a: number, b: number): number {
   return a / b;
 }
 
-function test(): number {
+export function test(): number {
   return checkedDiv(84, 2);
 }

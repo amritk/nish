@@ -106,7 +106,11 @@ async function runProgram(prog) {
 
   let js;
   try {
-    js = rewriteProgram(prog.entry, { numberMode: numberModeOf(prog.args) }, path.join(work, "js"));
+    js = rewriteProgram(
+      prog.entry,
+      { numberMode: numberModeOf(prog.args), nsw: !prog.args.includes("--wrapping") },
+      path.join(work, "js")
+    );
   } catch (e) {
     return { prog, verdict: "rewrite-error", detail: e.stack ?? String(e), native, ms: Date.now() - t0 };
   }

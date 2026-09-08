@@ -8,7 +8,7 @@ declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnul
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_f64(double noundef) #1
 
-define noundef double @len(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
+define internal noundef double @len(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
 entry:
   %0 = bitcast i8* %s to i64*
   %1 = load i64, i64* %0, align 8

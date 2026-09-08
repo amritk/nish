@@ -18,6 +18,6 @@ function firstPowerOver(limit: number): number {
   }
 }
 
-function test(): number {
+export function test(): number {
   return countDigits(12345) * 1000 + firstPowerOver(100);
 }

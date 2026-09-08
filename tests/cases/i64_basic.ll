@@ -9,7 +9,7 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i64(i64 noundef) #2
 declare void @amrit_panic_div(i1 noundef zeroext) #3
 
-define noundef i64 @square(i64 noundef %x) #0 {
+define internal noundef i64 @square(i64 noundef %x) #0 {
 entry:
   %0 = mul i64 %x, %x
   ret i64 %0

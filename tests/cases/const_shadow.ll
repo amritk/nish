@@ -1,4 +1,4 @@
-define noundef i32 @inner() #0 {
+define internal noundef i32 @inner() #0 {
 entry:
   ret i32 1
 }
@@ -8,9 +8,9 @@ entry:
   %N.addr = alloca i32, align 4
   store i32 2, i32* %N.addr, align 4
   %0 = load i32, i32* %N.addr, align 4
-  %1 = mul i32 %0, 10
+  %1 = mul nsw i32 %0, 10
   %2 = call i32 @inner()
-  %3 = add i32 %1, %2
+  %3 = add nsw i32 %1, %2
   ret i32 %3
 }
 

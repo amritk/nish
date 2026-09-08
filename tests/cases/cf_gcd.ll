@@ -1,6 +1,6 @@
 declare void @amrit_panic_div(i1 noundef zeroext) #1
 
-define noundef i32 @gcd(i32 noundef %a, i32 noundef %b) #0 {
+define internal noundef i32 @gcd(i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %x.addr = alloca i32, align 4
   %y.addr = alloca i32, align 4

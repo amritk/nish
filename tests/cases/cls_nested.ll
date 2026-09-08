@@ -34,7 +34,7 @@ slow:
   ret i8* %grown
 }
 
-define void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
+define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
   store i32 %x, i32* %0, align 4
@@ -43,7 +43,7 @@ entry:
   ret void
 }
 
-define void @Segment.constructor(%struct.Segment* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, %struct.Point* noundef nonnull align 8 dereferenceable(8) %from, %struct.Point* noundef nonnull align 8 dereferenceable(8) %to, i8* noundef nonnull noalias readonly align 8 %label) #0 {
+define internal void @Segment.constructor(%struct.Segment* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, %struct.Point* noundef nonnull align 8 dereferenceable(8) %from, %struct.Point* noundef nonnull align 8 dereferenceable(8) %to, i8* noundef nonnull noalias readonly align 8 %label) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Segment, %struct.Segment* %this, i32 0, i32 0
   store %struct.Point* %from, %struct.Point** %0, align 8
@@ -54,7 +54,7 @@ entry:
   ret void
 }
 
-define noundef i32 @Segment.dx(%struct.Segment* noundef nonnull readonly align 8 dereferenceable(24) nocapture %this) #1 {
+define internal noundef i32 @Segment.dx(%struct.Segment* noundef nonnull readonly align 8 dereferenceable(24) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Segment, %struct.Segment* %this, i32 0, i32 1
   %1 = load %struct.Point*, %struct.Point** %0, align 8
@@ -64,11 +64,11 @@ entry:
   %5 = load %struct.Point*, %struct.Point** %4, align 8
   %6 = getelementptr inbounds %struct.Point, %struct.Point* %5, i32 0, i32 0
   %7 = load i32, i32* %6, align 4
-  %8 = sub i32 %3, %7
+  %8 = sub nsw i32 %3, %7
   ret i32 %8
 }
 
-define noundef nonnull align 8 dereferenceable(8) %struct.Point* @endpoint(%struct.Segment* noundef nonnull readonly align 8 dereferenceable(24) nocapture %s) #1 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Point* @endpoint(%struct.Segment* noundef nonnull readonly align 8 dereferenceable(24) nocapture %s) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Segment, %struct.Segment* %s, i32 0, i32 1
   %1 = load %struct.Point*, %struct.Point** %0, align 8

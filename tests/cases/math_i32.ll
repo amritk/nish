@@ -7,7 +7,7 @@ declare i32 @llvm.abs.i32(i32, i1) #0
 declare i32 @llvm.smin.i32(i32, i32) #0
 declare i32 @llvm.smax.i32(i32, i32) #0
 
-define noundef i32 @clamp(i32 noundef %x, i32 noundef %lo, i32 noundef %hi) #0 {
+define internal noundef i32 @clamp(i32 noundef %x, i32 noundef %lo, i32 noundef %hi) #0 {
 entry:
   %0 = call i32 @llvm.smax.i32(i32 %x, i32 %lo)
   %1 = call i32 @llvm.smin.i32(i32 %0, i32 %hi)
@@ -18,18 +18,18 @@ define noundef i32 @test() #1 {
 entry:
   %tau.addr = alloca double, align 8
   %arena.mark = call i64 @amrit_arena_mark()
-  %0 = sub i32 0, 7
+  %0 = sub nsw i32 0, 7
   %1 = call i32 @llvm.abs.i32(i32 %0, i1 false)
   %2 = call i8* @amrit_str_from_i32(i32 %1)
   call void @amrit_print(i8* %2)
-  %3 = sub i32 3, 10
+  %3 = sub nsw i32 3, 10
   %4 = call i32 @llvm.abs.i32(i32 %3, i1 false)
   %5 = call i8* @amrit_str_from_i32(i32 %4)
   call void @amrit_print(i8* %5)
   %6 = call i32 @clamp(i32 15, i32 0, i32 10)
   %7 = call i8* @amrit_str_from_i32(i32 %6)
   call void @amrit_print(i8* %7)
-  %8 = sub i32 0, 3
+  %8 = sub nsw i32 0, 3
   %9 = call i32 @clamp(i32 %8, i32 0, i32 10)
   %10 = call i8* @amrit_str_from_i32(i32 %9)
   call void @amrit_print(i8* %10)

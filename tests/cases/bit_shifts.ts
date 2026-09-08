@@ -14,6 +14,6 @@ function shiftRightUnsigned(a: i32, n: i32): i32 {
   return a >>> n;
 }
 
-function test(): number {
+export function test(): number {
   return shiftLeft(1, 4) + shiftRight(-16, 2) + shiftRightUnsigned(-1, 28) + shiftLeft(7, 32);
 }

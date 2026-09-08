@@ -14,7 +14,7 @@ import { checkBuiltinArity, checkNamespaceProperty, isNamespace } from "./builti
 import { checkResultMethod, checkResultProperty } from "./result";
 import { fieldOwner } from "./structs";
 import { CheckContext } from "./context";
-import { assignInto, checkExpression, isBitwiseCompound } from "./expressions";
+import { assignInto, checkExpression } from "./expressions";
 import { N_IDENT, N_INDEX, N_MEMBER, N_PROPERTY, N_SUPER, N_THIS, Node } from "./nodes";
 import { FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program";
 import { Scope } from "./symbols";
@@ -317,13 +317,6 @@ export function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scop
       target,
       `Cannot assign to readonly field \`${field.name}\` of \`${owner.name}\`${where}`
     );
-  }
-  const op = expr.text;
-  if (op !== "=" && isBitwiseCompound(op)) {
-    // The right-hand side is checked first, as stage0 checks it before it
-    // reaches the operator test, so a bad value is still reported.
-    checkExpression(ctx, expr.children[1], scope, field.type);
-    return ctx.errorType(expr, `Unsupported assignment operator \`${op}\``);
   }
   return assignInto(ctx, expr, scope, null, field.type, field.name, "field");
 }

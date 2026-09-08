@@ -3,7 +3,7 @@ interface Pair {
   second: number;
 }
 
-function test(): number {
+export function test(): number {
   const p = new Pair();
   return p.first;
 }

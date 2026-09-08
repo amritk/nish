@@ -11,7 +11,7 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #2
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #3
 
-define noundef i32 @len(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+define internal noundef i32 @len(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %0 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
   %1 = load i64, i64* %0, align 8
@@ -19,12 +19,12 @@ entry:
   ret i32 %2
 }
 
-define noundef nonnull align 8 i8* @last(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #1 {
+define internal noundef nonnull align 8 i8* @last(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #1 {
 entry:
   %0 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
   %1 = load i64, i64* %0, align 8
   %2 = trunc i64 %1 to i32
-  %3 = sub i32 %2, 1
+  %3 = sub nsw i32 %2, 1
   %4 = sext i32 %3 to i64
   %5 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
   %6 = load i64, i64* %5, align 8

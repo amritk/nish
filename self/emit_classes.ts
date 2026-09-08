@@ -23,10 +23,18 @@ import { ownFields } from "./attributes";
 import { Emitter } from "./emit";
 import { emitPackedResult, emitResultReturningCall, resultTypeDecl } from "./emit_result";
 import { emitArrayLength, emitArrayMethodCall, emitNewArray } from "./emit_arrays";
-import { compoundFloatOpcode, compoundIntegerOpcode, emitIntBinary, floatText } from "./emit_ops";
+import {
+  compoundFloatOpcode,
+  compoundIntegerOpcode,
+  emitBitwiseCombine,
+  emitIntBinary,
+  floatText,
+  isBitwiseAssignment,
+} from "./emit_ops";
 import { parseIntegerLiteral } from "./constants";
 import { emitStringLength, emitStringMethodCall } from "./emit_strings";
 import { intrinsicType } from "./emit_util";
+import { internalError } from "./ice";
 import {
   N_FALSE,
   N_NULL,
@@ -48,7 +56,7 @@ export function structInfoOf(emitter: Emitter, type: i32): StructInfo {
   if (info !== null) {
     return info;
   }
-  panic(`emitter: unknown struct \`${emitter.table.nameOf(type)}\``);
+  process.exit(internalError(`emitter: unknown struct \`${emitter.table.nameOf(type)}\``));
 }
 
 /** `%struct.<name>` without the trailing `*`. */
@@ -106,7 +114,7 @@ function allocate(emitter: Emitter, info: StructInfo, site: Node): string {
 function initializerConstant(emitter: Emitter, field: FieldInfo): string {
   const init = field.initializer;
   if (init === null) {
-    panic("emitter: a field initializer that is not there");
+    process.exit(internalError("emitter: a field initializer that is not there"));
   }
   const negated = init.kind === N_UNARY;
   const literal = negated ? init.children[0] : init;
@@ -190,7 +198,7 @@ function constructObject(
 export function emitConstructorPrologue(emitter: Emitter, sig: FunctionSig): void {
   const info = sig.owner;
   if (info === null) {
-    panic("emitter: a constructor with no owning class");
+    process.exit(internalError("emitter: a constructor with no owning class"));
   }
   emitFieldInitializers(emitter, info, "%this");
   const base = info.base;
@@ -204,7 +212,7 @@ export function emitSuperCall(emitter: Emitter, expr: Node): string {
   const self = selfStruct(emitter);
   const base = self.base;
   if (base === null) {
-    panic(`emitter: \`super(...)\` in \`${self.name}\`, which has no base class`);
+    process.exit(internalError(`emitter: \`super(...)\` in \`${self.name}\`, which has no base class`));
   }
   constructObject(emitter, base, upcast(emitter, "%this", self, base), expr.children[1].children, expr);
   return "void";
@@ -230,7 +238,7 @@ function selfStruct(emitter: Emitter): StructInfo {
       return owner;
     }
   }
-  panic("emitter: `super` outside a method or constructor");
+  process.exit(internalError("emitter: `super` outside a method or constructor"));
 }
 
 // ---- Expressions ----------------------------------------------------------------------
@@ -241,7 +249,7 @@ export function emitObjectLiteral(emitter: Emitter, expr: Node): string {
   for (const prop of expr.children) {
     const field = info.field(prop.text);
     if (field === null) {
-      panic(`emitter: unknown field \`${prop.text}\` on \`${info.name}\``);
+      process.exit(internalError(`emitter: unknown field \`${prop.text}\` on \`${info.name}\``));
     } else {
       storeField(emitter, info, obj, field, emitter.emitExpression(prop.children[0]));
     }
@@ -277,7 +285,7 @@ export function emitPropertyAccess(emitter: Emitter, expr: Node): string {
   if (field !== null) {
     return loadField(emitter, info, emitter.emitExpression(expr.children[0]), field);
   }
-  panic(`emitter: unknown field \`${expr.text}\` on \`${info.name}\``);
+  process.exit(internalError(`emitter: unknown field \`${expr.text}\` on \`${info.name}\``));
 }
 
 /** `call <ret> @Sym(<this>, args...)` for a method or constructor. */
@@ -299,6 +307,9 @@ function emitCall(
     operands.push(`${emitter.llvmAbi(want)} ${value}`);
     i = i + 1;
   }
+  // WP9: after the receiver and the arguments, so the bracket holds only what
+  // the method itself allocates (`Emitter.beginReclaim`).
+  const mark = emitter.beginReclaim(callee);
   const call = `call ${emitter.llvmAbi(callee.returnType)} @${callee.name}(${operands.join(", ")})`;
   if (callee.returnType === T_VOID) {
     emitter.fn.emit(call);
@@ -309,7 +320,7 @@ function emitCall(
   if (emitter.table.resultByValue(callee.returnType)) {
     return emitResultReturningCall(emitter, call, callee.returnType, site);
   }
-  return emitter.fn.emitValue(call);
+  return emitter.endReclaim(mark, emitter.fn.emitValue(call));
 }
 
 /** `recv.m(args)` where `recv` is a value: a struct method, or a string or array method. */
@@ -324,7 +335,7 @@ export function emitMethodCall(emitter: Emitter, expr: Node): string {
   }
   const callee = emitter.program.nodeCallees[expr.id];
   if (callee === null) {
-    panic(`emitter: no method recorded for \`${access.text}\``);
+    process.exit(internalError(`emitter: no method recorded for \`${access.text}\``));
   }
   let receiver = emitter.emitExpression(access.children[0]);
   // An inherited method takes `this` as its declaring class.
@@ -342,7 +353,7 @@ export function emitFieldAssignment(emitter: Emitter, expr: Node): string {
   const info = structInfoOf(emitter, emitter.typeOf(target.children[0]));
   const field = info.field(target.text);
   if (field === null) {
-    panic(`emitter: unknown field \`${target.text}\` on \`${info.name}\``);
+    process.exit(internalError(`emitter: unknown field \`${target.text}\` on \`${info.name}\``));
   }
   const receiver = emitter.emitExpression(target.children[0]);
   if (expr.text === "=") {
@@ -350,13 +361,20 @@ export function emitFieldAssignment(emitter: Emitter, expr: Node): string {
     storeField(emitter, info, receiver, field, value);
     return value;
   }
+  // One GEP for both halves of the read-modify-write, so `p.f op= e` addresses
+  // the field once however the receiver was spelled.
   const ptr = structFieldPointer(emitter, info, receiver, field);
   const ty = emitter.llvm(field.type);
   const old = emitter.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}`);
-  const rhs = emitter.emitExpression(expr.children[1]);
-  const value = isFloat(field.type)
-    ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text)} ${ty} ${old}, ${rhs}`)
-    : emitIntBinary(emitter, compoundIntegerOpcode(expr.text), field.type, old, rhs);
+  let value = "";
+  if (isBitwiseAssignment(expr.text)) {
+    value = emitBitwiseCombine(emitter, expr.text, field.type, old, expr.children[1]);
+  } else {
+    const rhs = emitter.emitExpression(expr.children[1]);
+    value = isFloat(field.type)
+      ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text)} ${ty} ${old}, ${rhs}`)
+      : emitIntBinary(emitter, compoundIntegerOpcode(expr.text), field.type, old, rhs);
+  }
   emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}`);
   return value;
 }

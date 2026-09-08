@@ -12,7 +12,7 @@ entry:
   %lo.addr = alloca i32, align 4
   %hi.addr = alloca i32, align 4
   %arena.mark = call i64 @amrit_arena_mark()
-  %0 = sub i32 0, -2147483648
+  %0 = sub nsw i32 0, -2147483648
   store i32 %0, i32* %lo.addr, align 4
   store i32 2147483647, i32* %hi.addr, align 4
   %1 = load i32, i32* %lo.addr, align 4
@@ -24,7 +24,7 @@ entry:
   %7 = call i8* @amrit_str_concat(i8* %6, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
   %8 = load i32, i32* %lo.addr, align 4
   %9 = load i32, i32* %hi.addr, align 4
-  %10 = add i32 %8, %9
+  %10 = add nsw i32 %8, %9
   %11 = call i8* @amrit_str_from_i32(i32 %10)
   %12 = call i8* @amrit_str_concat(i8* %7, i8* %11)
   call void @amrit_print(i8* %12)

@@ -10,9 +10,9 @@ entry:
   %m.addr = alloca i32, align 4
   %d.addr = alloca i32, align 4
   %arena.mark = call i64 @amrit_arena_mark()
-  %0 = sub i32 0, -2147483648
+  %0 = sub nsw i32 0, -2147483648
   store i32 %0, i32* %m.addr, align 4
-  %1 = sub i32 0, 1
+  %1 = sub nsw i32 0, 1
   store i32 %1, i32* %d.addr, align 4
   %2 = load i32, i32* %m.addr, align 4
   %3 = load i32, i32* %d.addr, align 4

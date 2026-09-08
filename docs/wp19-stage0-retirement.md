@@ -64,18 +64,19 @@ finished and is not.
 ### A. Compiler behaviour stage1 does not have
 
 `wp14-selfhost.md` §7a lists these in full; they are reproduced here as work
-rather than as trivia, because each is a gate. **Two of the four are already
-moving**: WP18 lands `process.platform`, `process.arch` and `isDirectorySync`
-alongside the generics work, which closes `--target host` and the `-o <dir>`
-spelling. Those rows are struck from this package's bill and left in the table
-so the count stays honest.
+rather than as trivia, because each is a gate. **Three of the four have since
+closed**, as WP14 §7a work rather than alongside the generics of WP18 as this
+package first expected: `process.platform` and `process.arch` closed
+`--target host`, `isDirectorySync` closed the `-o <dir>` spelling, and
+`process.exit(internalError(...))` closed exit 70. They are struck from this
+package's bill and left in the table so the count stays honest.
 
 | | State today | What closing it needs |
 | --- | --- | --- |
 | `--emit-ast` | refused by name | stage1's own dump over `self/nodes.ts`'s vocabulary, with checked-in goldens. **Not** a mirror of `ts.SyntaxKind` — §7 was right about that, and the answer is a different dump, not the same one |
-| `--target host` | **closing in WP18** (`docs/wp18-generics.md`) | `process.platform` / `process.arch`, composed exactly as `src/codegen/target.ts` composes them — landing there with `io_host`, at the 8 bytes of `.text` §7a measured |
-| exit **70** on an internal error, and `AMRITC_DEBUG` | a broken invariant reaches `panic(msg)`: the message, exit 1 | a terminator that exits 70, at ~40 sites the definite-return analysis currently reads through `panic` |
-| `-o <dir>` without the trailing slash | **closing in WP18** | `isDirectorySync(path: string): boolean`, the `stat` beside `mkdirSync`, landing there with `io_is_directory` |
+| `--target host` | **closed** | `process.platform` / `process.arch`, composed exactly as `src/codegen/target.ts` composes them (`tests/cases/io_host`), at the 8 bytes of `.text` §7a predicted and measured |
+| exit **70** on an internal error, and `AMRITC_DEBUG` | **closed** | `process.exit(internalError(...))` at each of the 35 sites, with the report in `self/ice.ts`; no second `panic` builtin, so the language did not grow for it. stage1 has no stack to print, and says so rather than promising one |
+| `-o <dir>` without the trailing slash | **closed** | `isDirectorySync(path: string): boolean`, the `stat` beside `mkdirSync` (`tests/cases/io_is_directory`) |
 
 ### B. The oracles
 
@@ -231,14 +232,15 @@ retirement exactly as it applied to the port. The seed has to be able to
 compile the compiler that replaces it, so the last thing stage0 ever does is
 grow the features that make it unnecessary.
 
-Two of the four are WP18's and are counted here only so the gate is complete:
+Three of the four have landed since this table was written — as WP14 §7a work
+rather than with WP18 — and are kept here so the gate reads complete:
 
 | Builtin | Signature | Gate | Where |
 | --- | --- | --- | --- |
-| host platform | `process.platform: string`, `process.arch: string` | G1 (`--target host`) | **WP18.** Read-only members, like `process.argv`. `self/target.ts` composes the triple exactly as `src/codegen/target.ts` does. 8 bytes of `.text`, measured in §7a |
-| directory test | `isDirectorySync(path: string): boolean` | G1 (`-o <dir>`) | **WP18.** A value, not an exit, for the reason `mkdirSync` answers a boolean and `readFileSyncOrNull` answers `null`: there are no exceptions, so the driver phrases its own diagnostic. It is a `stat`, so a plain file answers `false` |
+| host platform | `process.platform: string`, `process.arch: string` | G1 (`--target host`) | **Landed (WP14 §7a).** Read-only members, like `process.argv`. `self/target.ts` composes the triple exactly as `src/codegen/target.ts` does. 8 bytes of `.text`, measured in §7a |
+| directory test | `isDirectorySync(path: string): boolean` | G1 (`-o <dir>`) | **Landed (WP14 §7a).** A value, not an exit, for the reason `mkdirSync` answers a boolean and `readFileSyncOrNull` answers `null`: there are no exceptions, so the driver phrases its own diagnostic. It is a `stat`, so a plain file answers `false` |
 | environment | `getenv(name: string): string \| null` | G1 (`AMRITC_DEBUG`), G5 (`CC`) | **this package.** A call and not `process.env.X`, because member access on a dynamic key is exactly what Phase 0 forbids. Nullable, narrowed like any other `T \| null` |
-| internal error | `panicInternal(message: string): void` | G1 (exit 70) | **this package.** `panic`'s wording and exit 70 instead of 1. A second terminator rather than 40 rewrites, so the definite-return analysis needs one new name and no new rule |
+| internal error | none: `process.exit(internalError(msg))` | G1 (exit 70) | **Landed (WP14 §7a), by the other design.** This row proposed a second terminator builtin rather than 40 rewrites, to spare the definite-return analysis. What shipped is the rewrite: `panic(m)` already means "this message, then exit 1" and `process.exit(n)` already means "this code, now", so the status a compiler wants for its own bugs needs no new construct, and a second panic would put one compiler's reporting policy — the version line, the issue tracker, the word "internal" — inside the language that compiles it. The report is `self/ice.ts`; the cost was 35 statements, and they are `self/`'s own |
 
 `--emit-ast` needs no builtin — it needs `self/dump_ast.ts` promoted from an
 oracle entry point to a CLI flag, with its own goldens. That is the one item in
@@ -255,7 +257,7 @@ gate nobody has opened is how a runtime budget dies.
 
 | | Milestone | Done when |
 | --- | --- | --- |
-| **R1** | Parity | §4's four builtins land in both compilers — two of them with WP18, `getenv` and `panicInternal` here; the four rows of §2A close; `--parity` is green with an empty difference set |
+| **R1** | Parity | §4's builtins land in both compilers — three landed with WP14 §7a, `getenv` remains this package's; the four rows of §2A close; `--parity` is green with an empty difference set |
 | **R2** | The seed protocol | `AMRITC_BOOTSTRAP` in `scripts/bootstrap.sh`; CI builds `self/` with the last release on both operating systems; the policy sentence is in `wp12-release.md` (G3, G4) |
 | **R3** | Oracle succession | `amritc-cmp` green over the corpus; `fuzz.js --stage1` repointed; the four survivors repointed to the seed; the lost coverage recovered as goldens, with the numbers written into §2B (G2) |
 | **R4** | Distribution | four binaries per release; the npm package installs one; `--version` has a new source; INSTALL.md and wp12 rewritten (G5) |

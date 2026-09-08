@@ -44,6 +44,7 @@ import {
   LoopInfo,
   StatementChecker,
 } from "./context";
+import { checkBitwiseAssignOperands, isBitwiseCompoundOperator } from "./bitwise";
 import { checkArgumentType, checkArity } from "./builtins";
 import { structOf } from "./classes";
 import { isValueReceiver, methodCallCheckers, newCheckers, propertyCheckers } from "./members";
@@ -51,7 +52,7 @@ import { invalidateNarrowings } from "./narrowing";
 import { LocalVar } from "./program";
 import { Scope } from "./scope";
 
-/** Assignment operators that may target an element: `=` and the numeric compound forms. */
+/** Assignment operators that may target an element: `=` and the compound forms, numeric and bitwise. */
 export const ELEMENT_ASSIGNMENT_OPERATORS: readonly ts.SyntaxKind[] = [
   ts.SyntaxKind.EqualsToken,
   ts.SyntaxKind.PlusEqualsToken,
@@ -59,6 +60,12 @@ export const ELEMENT_ASSIGNMENT_OPERATORS: readonly ts.SyntaxKind[] = [
   ts.SyntaxKind.AsteriskEqualsToken,
   ts.SyntaxKind.SlashEqualsToken,
   ts.SyntaxKind.PercentEqualsToken,
+  ts.SyntaxKind.AmpersandEqualsToken,
+  ts.SyntaxKind.BarEqualsToken,
+  ts.SyntaxKind.CaretEqualsToken,
+  ts.SyntaxKind.LessThanLessThanEqualsToken,
+  ts.SyntaxKind.GreaterThanGreaterThanEqualsToken,
+  ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
 ];
 
 function numberType(ctx: CheckContext): StaticType {
@@ -289,19 +296,33 @@ function checkNewArray(
 
 // ---- Element assignment `a[i] = v`, `a[i] op= v` ---------------------------------------
 
-function checkElementAssignment(ctx: CheckContext, expr: ts.BinaryExpression, scope: Scope): StaticType {
-  const elem = ctx.checkExpression(expr.left, scope); // records the base and index types
+/**
+ * `target` is `expr.left` with any parentheses peeled off; `expr` itself stays
+ * the real binary node, because a diagnostic needs a node with a source span
+ * and a synthesised stand-in has none.
+ */
+function checkElementAssignment(
+  ctx: CheckContext,
+  expr: ts.BinaryExpression,
+  target: ts.ElementAccessExpression,
+  scope: Scope
+): StaticType {
+  const elem = ctx.checkExpression(target, scope); // records the base and index types
   const rhs = ctx.checkExpression(expr.right, scope);
   const op = expr.operatorToken.kind;
   if (op === ts.SyntaxKind.EqualsToken) {
     if (!assignable(rhs, elem)) {
       throw ctx.error(
-        `Cannot assign ${typeToString(rhs)} to an element of ${typeToString(ctx.program.types.get((expr.left as ts.ElementAccessExpression).expression)!)}`,
+        `Cannot assign ${typeToString(rhs)} to an element of ${typeToString(ctx.program.types.get(target.expression)!)}`,
         expr.right
       );
     }
     return elem;
   }
+  // `a[i] &= e` and the rest of the bitwise family: the element is the target,
+  // so the operand rule is `&`'s and the message comes from the same place a
+  // local's does.
+  if (isBitwiseCompoundOperator(op)) return checkBitwiseAssignOperands(ctx, expr, elem, rhs);
   if (!isNumeric(elem) || !sameType(rhs, elem)) {
     throw ctx.error(
       `Operator \`${ts.tokenToString(op)}\` requires two operands of the same numeric type, got ${typeToString(elem)} and ${typeToString(rhs)}`,
@@ -335,12 +356,9 @@ export function installArrayAssignmentCheckers(table: CheckerTable<BinaryChecker
     const previous = table[op];
     if (!previous) continue;
     table[op] = (ctx, expr, scope) => {
-      if (ts.isElementAccessExpression(unwrapParens(expr.left))) {
-        return checkElementAssignment(
-          ctx,
-          { ...expr, left: unwrapParens(expr.left) } as ts.BinaryExpression,
-          scope
-        );
+      const target = unwrapParens(expr.left);
+      if (ts.isElementAccessExpression(target)) {
+        return checkElementAssignment(ctx, expr, target, scope);
       }
       rejectLengthAssignment(ctx, expr, scope);
       return previous(ctx, expr, scope);

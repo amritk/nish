@@ -10,11 +10,12 @@ declare void @amrit_free_arena() #0
 declare noundef i64 @amrit_arena_mark() #0
 declare void @amrit_arena_release(i64 noundef) #0
 declare noundef i64 @amrit_arena_used() #0
+declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define noundef nonnull align 8 i8* @label(i32 noundef %i, i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
+define internal noundef nonnull align 8 i8* @label(i32 noundef %i, i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
 entry:
   %0 = call i8* @amrit_str_concat(i8* %name, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
   %1 = call i8* @amrit_str_from_i32(i32 %i)
@@ -22,7 +23,7 @@ entry:
   ret i8* %2
 }
 
-define void @greet(i8* noundef nonnull noalias readonly align 8 %name, i32 noundef %times) #0 {
+define internal void @greet(i8* noundef nonnull noalias readonly align 8 %name, i32 noundef %times) #0 {
 entry:
   %i.addr = alloca i32, align 4
   %line.addr = alloca i8*, align 8
@@ -37,27 +38,29 @@ for.cond:
 
 for.body:
   %2 = load i32, i32* %i.addr, align 4
-  %3 = call i8* @label(i32 %2, i8* %name)
-  %4 = call i8* @amrit_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.1 to i8*), i8* %3)
-  %5 = call i8* @amrit_str_concat(i8* %4, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
-  store i8* %5, i8** %line.addr, align 8
-  %6 = load i32, i32* %i.addr, align 4
-  %7 = sub i32 %times, 1
-  %8 = icmp eq i32 %6, %7
-  br i1 %8, label %if.then, label %if.end
+  %3 = call i64 @amrit_arena_mark()
+  %4 = call i8* @label(i32 %2, i8* %name)
+  %5 = call i8* @amrit_arena_keep(i64 %3, i8* %4)
+  %6 = call i8* @amrit_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.1 to i8*), i8* %5)
+  %7 = call i8* @amrit_str_concat(i8* %6, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  store i8* %7, i8** %line.addr, align 8
+  %8 = load i32, i32* %i.addr, align 4
+  %9 = sub nsw i32 %times, 1
+  %10 = icmp eq i32 %8, %9
+  br i1 %10, label %if.then, label %if.end
 
 if.then:
-  %9 = load i8*, i8** %line.addr, align 8
-  call void @amrit_print(i8* %9)
+  %11 = load i8*, i8** %line.addr, align 8
+  call void @amrit_print(i8* %11)
   br label %if.end
 
 if.end:
   br label %for.inc
 
 for.inc:
-  %10 = load i32, i32* %i.addr, align 4
-  %11 = add i32 %10, 1
-  store i32 %11, i32* %i.addr, align 4
+  %12 = load i32, i32* %i.addr, align 4
+  %13 = add nsw i32 %12, 1
+  store i32 %13, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:

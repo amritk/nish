@@ -6,6 +6,6 @@ function hashStep(h: i32, byte: i32): i32 {
   return ((h ^ byte) << 5) | (h >>> 27);
 }
 
-function test(): number {
+export function test(): number {
   return hashStep(7, 3) & 1023;
 }

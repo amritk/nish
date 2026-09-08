@@ -83,6 +83,12 @@ export interface EmitContext {
    */
   paramObject(name: string): string | undefined;
   /**
+   * WP9: whether a call to `callee` may be bracketed by the call-site reclaim
+   * (`beginReclaim` / `endReclaim` in emit/arena.ts). The whole-program facts
+   * decide it; `reclaimsReturnedString` in escape.ts carries the proof.
+   */
+  reclaimsCall(callee: FunctionSig): boolean;
+  /**
    * WP6: emit the arena release of the function's automatic scope, if it has
    * one. Called right before every `ret`, after the return value is computed.
    */
@@ -104,22 +110,28 @@ export type UnaryEmitter = (ctx: EmitContext, expr: ts.PrefixUnaryExpression) =>
 export type EmitterTable<H> = Partial<Record<ts.SyntaxKind, H>>;
 
 /**
- * The integer opcode to emit for `add` / `sub` / `mul` (WP9). Under `--nsw`
- * the instruction carries a no-wrap flag, which makes overflow poison (C
- * semantics) instead of wrapping; every site that lowers user-level integer
- * arithmetic (binary operators, unary minus, `op=`, `++`/`--`, on locals,
- * fields and elements alike) goes through here so the flag is applied
+ * The integer opcode to emit for `add` / `sub` / `mul` (WP9, on by default
+ * since WP15 §3). The instruction carries `nsw`, which makes signed overflow
+ * poison (C semantics) instead of wrapping; every site that lowers user-level
+ * integer arithmetic (binary operators, unary minus, `op=`, `++`/`--`, on
+ * locals, fields and elements alike) goes through here so the flag is applied
  * uniformly. Division, remainder, shifts, and the compiler's own address and
  * length arithmetic are never flagged: they have no such form, and the
  * internal `i64` counters cannot overflow.
  *
- * The flag has to match the *type's* signedness (WP15). An unsigned value that
- * passes 2^31 has not overflowed, so `nsw` on a `u32` add would make a
- * perfectly ordinary result poison; `nuw` is the claim that is true there.
- * Without `--nsw` both widths keep the documented wrapping semantics.
+ * `--wrapping` turns the flag off and restores two's-complement wrapping for
+ * the signed widths.
+ *
+ * **Unsigned types never get a flag, in either mode.** `u8`/`u16`/`u32`/`u64`
+ * are defined as wrapping (`docs/LANGUAGE.md`, "Unsigned integers"), which is
+ * exactly what hashing and bit-packing are written against, so `nuw` would be
+ * a claim the language does not make; and `nsw` on an unsigned value that has
+ * merely passed 2^31 would poison a perfectly ordinary result. The proof this
+ * attribute rests on is therefore "the checker recorded a *signed* type", and
+ * `isUnsigned` is where that proof is read.
  */
 export function intOpcode(ctx: EmitContext, opcode: string, type: StaticType): string {
-  if (!ctx.opts.nsw) return opcode;
+  if (!ctx.opts.nsw || isUnsigned(type)) return opcode;
   if (opcode !== "add" && opcode !== "sub" && opcode !== "mul") return opcode;
-  return `${opcode} ${isUnsigned(type) ? "nuw" : "nsw"}`;
+  return `${opcode} nsw`;
 }

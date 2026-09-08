@@ -11,7 +11,7 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 declare void @amrit_panic_div(i1 noundef zeroext) #3
 
-define void @Vec.constructor(%struct.Vec* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
+define internal void @Vec.constructor(%struct.Vec* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Vec, %struct.Vec* %this, i32 0, i32 0
   store i32 %x, i32* %0, align 4
@@ -20,23 +20,23 @@ entry:
   ret void
 }
 
-define noundef i32 @Vec.dot(%struct.Vec* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, %struct.Vec* noundef nonnull readonly align 8 dereferenceable(8) nocapture %o) #1 {
+define internal noundef i32 @Vec.dot(%struct.Vec* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, %struct.Vec* noundef nonnull readonly align 8 dereferenceable(8) nocapture %o) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Vec, %struct.Vec* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
   %2 = getelementptr inbounds %struct.Vec, %struct.Vec* %o, i32 0, i32 0
   %3 = load i32, i32* %2, align 4
-  %4 = mul i32 %1, %3
+  %4 = mul nsw i32 %1, %3
   %5 = getelementptr inbounds %struct.Vec, %struct.Vec* %this, i32 0, i32 1
   %6 = load i32, i32* %5, align 4
   %7 = getelementptr inbounds %struct.Vec, %struct.Vec* %o, i32 0, i32 1
   %8 = load i32, i32* %7, align 4
-  %9 = mul i32 %6, %8
-  %10 = add i32 %4, %9
+  %9 = mul nsw i32 %6, %8
+  %10 = add nsw i32 %4, %9
   ret i32 %10
 }
 
-define noundef i32 @accumulate(i32 noundef %n) #2 {
+define internal noundef i32 @accumulate(i32 noundef %n) #2 {
 entry:
   %total.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -77,13 +77,13 @@ div.fail:
 
 div.ok:
   %13 = srem i32 %7, 7
-  %14 = add i32 %4, %13
+  %14 = add nsw i32 %4, %13
   store i32 %14, i32* %total.addr, align 4
   br label %for.inc
 
 for.inc:
   %15 = load i32, i32* %i.addr, align 4
-  %16 = add i32 %15, 1
+  %16 = add nsw i32 %15, 1
   store i32 %16, i32* %i.addr, align 4
   br label %for.cond
 

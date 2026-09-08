@@ -5,7 +5,7 @@ function report(parts: string[]): string {
   return parts.join(", ");
 }
 
-function test(): number {
+export function test(): number {
   const parts: string[] = [];
   parts.push("alpha");
   parts.push("beta");

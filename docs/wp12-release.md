@@ -126,15 +126,55 @@ Releases are tag-driven; nothing is published from a developer machine.
 If a release is wrong, delete the GitHub release and the tag, fix, and tag
 again with a *new* patch version; never move a tag that CI has already built.
 
+## Open decision: which compiler the package ships
+
+The position this project is run on: **the compiled native binary is what
+should reach a user.** `build/amritc` — stage2, the self-hosted compiler built
+by the compiler stage0 built — compiles the same programs about eight times
+faster than the Node one and needs no Node at all
+([wp14-selfhost.md](wp14-selfhost.md) §4, D5). That does not retire stage0 and
+cannot: it is the bootstrap seed every stage starts from, and it is the
+differential oracle every phase of `self/` is compared against
+(`tests/self/`). Its job is to build the binary and to keep it honest, not to
+be the thing installed.
+
+The package does neither cleanly today. `package.json#files` ships `dist/`,
+`runtime/` and `scripts/`, and `self/` is not on the list — so
+`scripts/bootstrap.sh` travels in the tarball without the source it compiles.
+It checks for `self/compile.ts` before anything else and exits 3 with `run this
+from a checkout of the repository`, which means an installed package carries a
+bootstrap script that can never bootstrap. That is not a fault in the script:
+the guard exists so the failure names the missing file instead of happening
+inside the compiler. It is the packaging decision showing through.
+
+Three ways to close it, and what each costs:
+
+| | What ships | What it costs |
+| --- | --- | --- |
+| **(a) ship `self/`** | the 54 modules of the self-hosted compiler, 791,835 bytes of TypeScript, so an installed package can run `scripts/bootstrap.sh` | the user builds the compiler: clang on `PATH`, and `self/` compiled twice for the default stage2 (three times under `--verify`). The unpacked package grows from 1.3 MB to about 2.1 MB, and `self/` becomes a published surface rather than a checkout-only one |
+| **(b) per-platform prebuilt binaries** | `amritc-<os>-<arch>` packages declared as `optionalDependencies` with `os`/`cpu` — the esbuild pattern — with the main package resolving whichever one npm installed | a release build matrix that does not exist. `release.yml` runs one `ubuntu-latest` job and attaches one tarball; every supported triple would need its own runner and its own artefact, macOS needs an answer for both architectures, and each release publishes N+1 packages instead of one. It also needs a fallback for a platform with no binary, and that fallback is (a) |
+| **(c) make stage2 the compiler, stage0 the seed** | `bin.amritc` runs the native binary; `dist/` stays, as the seed and the oracle | the four things [wp14-selfhost.md](wp14-selfhost.md) §7a lists as still stage0's, two of them user-visible: `--emit-ast` and `--target host` are refused by name rather than answered, and an internal error exits 1 through `panic` rather than 70. Until those close, (c) ships a compiler that is not the one INSTALL.md and the exit-code table above describe. It is also not a delivery mechanism on its own — the binary still arrives by (a) or (b) |
+
+The options are not exclusive: (c) is about which binary is `amritc`, and (a)
+or (b) is about how it gets onto the machine. What is not open is stage0's
+role — it is the seed and the oracle in all three.
+
+Nothing here has been implemented, and this note is deliberately not a plan:
+`package.json` is unchanged, and the numbers above are what a decision would
+cost rather than what one did.
+
 ## Not in this work package
 
 - Windows native support (`build.sh` is bash; WSL is documented instead).
 - Prebuilt binaries of the compiler itself: it is a Node program, and the
-  tarball is the release artefact.
+  tarball is the release artefact. **Superseded** by the decision above: that
+  was true when WP12 shipped and it is why `files` looks the way it does, but
+  the compiler is no longer only a Node program. The bullet stays because it is
+  the position the package was built under.
 
 Multi-error reporting and `--json` diagnostics were listed here as a WP10
 follow-up and have since landed in WP10 itself: every phase that can recover
 hands its errors to one `DiagnosticSink` and the driver prints the first 20 in
 source order, and `--json` writes one object per error on stdout
 (`docs/wp10-ci.md`, "Multi-error reporting" and "`--json`"). stage1 answers
-`--json` too (`self/compile.ts`), so the wrapper passes it straight through.
+`--json` itself (`self/compile.ts`), as it does every other flag it owns.

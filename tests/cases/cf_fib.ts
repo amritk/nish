@@ -14,6 +14,6 @@ function fibRec(n: number): number {
   return fibRec(n - 1) + fibRec(n - 2);
 }
 
-function test(): number {
+export function test(): number {
   return fibIter(20) + fibRec(15);
 }

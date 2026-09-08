@@ -2,12 +2,13 @@
 
 declare noundef i64 @amrit_arena_mark() #1
 declare void @amrit_arena_release(i64 noundef) #1
+declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
 declare noalias noundef nonnull align 8 i8* @amrit_str_new(i8* noundef readonly nocapture, i64 noundef) #1
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #2
 declare i64 @llvm.smin.i64(i64, i64) #3
 declare i64 @llvm.smax.i64(i64, i64) #3
 
-define noundef i32 @firstByte(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
+define internal noundef i32 @firstByte(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
 entry:
   %0 = bitcast i8* %s to i64*
   %1 = load i64, i64* %0, align 8
@@ -26,7 +27,7 @@ bounds.ok:
   ret i32 %6
 }
 
-define noundef nonnull align 8 i8* @head(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %n) #1 {
+define internal noundef nonnull align 8 i8* @head(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %n) #1 {
 entry:
   %0 = bitcast i8* %s to i64*
   %1 = load i64, i64* %0, align 8
@@ -51,32 +52,38 @@ entry:
   %arena.mark = call i64 @amrit_arena_mark()
   store i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8** %s.addr, align 8
   %0 = load i8*, i8** %s.addr, align 8
-  %1 = call i8* @head(i8* %0, i32 2)
-  store i8* %1, i8** %h.addr, align 8
-  %2 = load i8*, i8** %s.addr, align 8
-  %3 = call i32 @firstByte(i8* %2)
-  %4 = load i8*, i8** %h.addr, align 8
-  %5 = bitcast i8* %4 to i64*
-  %6 = load i64, i64* %5, align 8
-  %7 = trunc i64 %6 to i32
-  %8 = mul i32 %7, 1000
-  %9 = add i32 %3, %8
-  %10 = load i8*, i8** %s.addr, align 8
-  %11 = call i8* @head(i8* %10, i32 99)
-  %12 = bitcast i8* %11 to i64*
-  %13 = load i64, i64* %12, align 8
-  %14 = trunc i64 %13 to i32
-  %15 = mul i32 %14, 100000
-  %16 = add i32 %9, %15
-  %17 = load i8*, i8** %s.addr, align 8
-  %18 = sub i32 0, 4
-  %19 = call i8* @head(i8* %17, i32 %18)
-  %20 = bitcast i8* %19 to i64*
-  %21 = load i64, i64* %20, align 8
-  %22 = trunc i64 %21 to i32
-  %23 = add i32 %16, %22
+  %1 = call i64 @amrit_arena_mark()
+  %2 = call i8* @head(i8* %0, i32 2)
+  %3 = call i8* @amrit_arena_keep(i64 %1, i8* %2)
+  store i8* %3, i8** %h.addr, align 8
+  %4 = load i8*, i8** %s.addr, align 8
+  %5 = call i32 @firstByte(i8* %4)
+  %6 = load i8*, i8** %h.addr, align 8
+  %7 = bitcast i8* %6 to i64*
+  %8 = load i64, i64* %7, align 8
+  %9 = trunc i64 %8 to i32
+  %10 = mul nsw i32 %9, 1000
+  %11 = add nsw i32 %5, %10
+  %12 = load i8*, i8** %s.addr, align 8
+  %13 = call i64 @amrit_arena_mark()
+  %14 = call i8* @head(i8* %12, i32 99)
+  %15 = call i8* @amrit_arena_keep(i64 %13, i8* %14)
+  %16 = bitcast i8* %15 to i64*
+  %17 = load i64, i64* %16, align 8
+  %18 = trunc i64 %17 to i32
+  %19 = mul nsw i32 %18, 100000
+  %20 = add nsw i32 %11, %19
+  %21 = load i8*, i8** %s.addr, align 8
+  %22 = sub nsw i32 0, 4
+  %23 = call i64 @amrit_arena_mark()
+  %24 = call i8* @head(i8* %21, i32 %22)
+  %25 = call i8* @amrit_arena_keep(i64 %23, i8* %24)
+  %26 = bitcast i8* %25 to i64*
+  %27 = load i64, i64* %26, align 8
+  %28 = trunc i64 %27 to i32
+  %29 = add nsw i32 %20, %28
   call void @amrit_arena_release(i64 %arena.mark)
-  ret i32 %23
+  ret i32 %29
 }
 
 attributes #0 = { nounwind willreturn readonly }

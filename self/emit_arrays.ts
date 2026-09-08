@@ -19,8 +19,15 @@
 
 import { parseIntegerLiteral } from "./constants";
 import { Emitter, LoopTarget } from "./emit";
-import { compoundFloatOpcode, compoundIntegerOpcode, emitIntBinary } from "./emit_ops";
+import {
+  compoundFloatOpcode,
+  compoundIntegerOpcode,
+  emitBitwiseCombine,
+  emitIntBinary,
+  isBitwiseAssignment,
+} from "./emit_ops";
 import { unwrapParens } from "./emit_util";
+import { internalError } from "./ice";
 import { N_NUMBER, Node } from "./nodes";
 import { ARRAY_TYPE } from "./runtime";
 import { ARRAY_STRUCT, isFloat, isUnsigned, T_F64, T_I32, T_STRING } from "./types";
@@ -238,13 +245,21 @@ export function emitElementAssignment(emitter: Emitter, expr: Node): string {
     );
     return value;
   }
+  // The array and the index were evaluated once, above; the check and the GEP
+  // happen once here, and the load and the store share the address. That is
+  // what keeps `xs[next()] |= 1` to one call and one bounds check.
   emitBoundsCheck(emitter, arr, idx);
   const slot = elementPointer(emitter, arr, elem, idx);
   const old = emitter.fn.emitValue(`load ${ty}, ${ty}* ${slot}${emitter.alignSuffix(elem)}`);
-  const rhs = emitter.emitExpression(expr.children[1]);
-  const value = isFloat(elem)
-    ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text)} ${ty} ${old}, ${rhs}`)
-    : emitIntBinary(emitter, compoundIntegerOpcode(expr.text), elem, old, rhs);
+  let value = "";
+  if (isBitwiseAssignment(expr.text)) {
+    value = emitBitwiseCombine(emitter, expr.text, elem, old, expr.children[1]);
+  } else {
+    const rhs = emitter.emitExpression(expr.children[1]);
+    value = isFloat(elem)
+      ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text)} ${ty} ${old}, ${rhs}`)
+      : emitIntBinary(emitter, compoundIntegerOpcode(expr.text), elem, old, rhs);
+  }
   emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}`);
   return value;
 }
@@ -503,7 +518,7 @@ export function emitForOf(emitter: Emitter, stmt: Node): void {
   const decl = stmt.children[0].children[0].children[0];
   const local = emitter.program.nodeLocals[decl.id];
   if (local === null) {
-    panic("emitter: a `for...of` variable with no local recorded");
+    process.exit(internalError("emitter: a `for...of` variable with no local recorded"));
   }
   const elem = local.type;
   const ty = emitter.llvm(elem);

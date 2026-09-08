@@ -15,6 +15,6 @@ function pick(flag: boolean, a: number, b: number): number {
   return r;
 }
 
-function test(): number {
+export function test(): number {
   return abs(-4) + pick(true, 10, 20);
 }

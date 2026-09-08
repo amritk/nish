@@ -8,13 +8,13 @@
 declare zeroext i1 @amrit_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 
-define noundef zeroext i1 @same(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #0 {
+define internal noundef zeroext i1 @same(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #0 {
 entry:
   %0 = call zeroext i1 @amrit_str_eq(i8* %a, i8* %b)
   ret i1 %0
 }
 
-define noundef zeroext i1 @differ(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #0 {
+define internal noundef zeroext i1 @differ(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #0 {
 entry:
   %0 = call zeroext i1 @amrit_str_eq(i8* %a, i8* %b)
   %1 = xor i1 %0, true

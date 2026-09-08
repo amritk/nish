@@ -39,6 +39,7 @@ import {
   FunctionFacts,
 } from "./attributes";
 import { DebugInfo } from "./debug";
+import { reclaimsReturnedString } from "./escape";
 import { emitArrayLiteral, emitElementAccess, emitForOf } from "./emit_arrays";
 import { emitBuiltinCall, emitIdentifierBuiltinCall, emitNamespaceProperty, isIdentifierBuiltinCall } from "./emit_builtins";
 import {
@@ -76,6 +77,7 @@ import {
 } from "./emit_result";
 import { addStringConstant, emitTemplate } from "./emit_strings";
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit_util";
+import { internalError } from "./ice";
 import { IRBlock, IRFunction, IRModule, IRParam } from "./ir";
 import { StringMap, StringSet } from "./map";
 import {
@@ -208,7 +210,7 @@ export class Emitter {
       // The driver validated the spec; an unknown one here is a programming error.
       const target = resolveTarget(opts.target);
       if (target === null) {
-        panic(`emitter: unsupported target \`${opts.target}\``);
+        process.exit(internalError(`emitter: unsupported target \`${opts.target}\``));
       } else {
         this.module.targetHeader = targetHeader(target);
       }
@@ -241,7 +243,7 @@ export class Emitter {
     if (facts !== null) {
       return facts;
     }
-    panic(`emitter: no attribute facts for \`${sig.name}\` (was the whole program analysed?)`);
+    process.exit(internalError(`emitter: no attribute facts for \`${sig.name}\` (was the whole program analysed?)`));
   }
 
   /** Named types a signature mentions must be declared in the module (the array header). */
@@ -276,7 +278,7 @@ export class Emitter {
     }
     this.fn = new IRFunction(sig.name, params, this.llvmAbi(sig.returnType));
     // Linkage: exported functions are always external (they are the module's
-    // ABI). Others are external too unless --strict-exports hides them.
+    // ABI). Every other function is `internal` unless --no-strict-exports.
     if (this.opts.strictExports && !sig.exported) {
       this.fn.linkage = "internal";
     }
@@ -331,6 +333,34 @@ export class Emitter {
 
   isStackSite(node: Node): boolean {
     return this.current.isStackSite(node);
+  }
+
+  /**
+   * WP9 call-site reclaim: the bump position before a call whose returned
+   * string the caller may keep, or the empty string when the call does not
+   * qualify. It is emitted *after* the arguments, so nothing but what the
+   * callee itself allocates falls inside the bracket, and the caller's own
+   * temporaries are never at risk. `reclaimsReturnedString` in escape.ts
+   * carries the proof.
+   */
+  beginReclaim(callee: FunctionSig): string {
+    if (!reclaimsReturnedString(callee, this.facts)) {
+      return "";
+    }
+    return this.fn.emitValue(`call i64 ${this.useRuntime("amrit_arena_mark")}()`);
+  }
+
+  /**
+   * Reclaim back to `mark`, keeping the returned string, which moves down to
+   * the mark. The call's value is replaced by the string's new address, so no
+   * later instruction can name the old one, and every temporary the callee
+   * bumped underneath it is released.
+   */
+  endReclaim(mark: string, value: string): string {
+    if (mark.length === 0) {
+      return value;
+    }
+    return this.fn.emitValue(`call i8* ${this.useRuntime("amrit_arena_keep")}(i64 ${mark}, i8* ${value})`);
   }
 
   emitScopeExit(): void {
@@ -409,7 +439,7 @@ export class Emitter {
         one.push(sig);
         this.declareAll(one, seen);
       } else {
-        panic(`emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``);
+        process.exit(internalError(`emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``));
       }
     }
     // A struct this module never named but can hold values of: its methods and
@@ -581,7 +611,7 @@ export class Emitter {
         emitThrow(this, stmt);
         return;
       default:
-        panic(`emitter: unexpected statement ${nodeName(stmt.kind)}`);
+        process.exit(internalError(`emitter: unexpected statement ${nodeName(stmt.kind)}`));
     }
   }
 
@@ -595,7 +625,7 @@ export class Emitter {
     }
     const sig = this.currentSig;
     if (sig === null) {
-      panic("emitter: `return` outside a function");
+      process.exit(internalError("emitter: `return` outside a function"));
     }
     // WP17: a small `Result` leaves in a register. The word is built before the
     // scope release, because the object it may be read out of is arena memory
@@ -621,7 +651,7 @@ export class Emitter {
     for (const decl of list.children) {
       const local = this.program.nodeLocals[decl.id];
       if (local === null) {
-        panic("emitter: a variable declaration with no local recorded");
+        process.exit(internalError("emitter: a variable declaration with no local recorded"));
       } else {
         const ty = this.llvm(local.type);
         const slot = this.fn.emitAlloca(`${local.name}.addr`, ty, this.align(local.type));
@@ -708,7 +738,7 @@ export class Emitter {
       case N_OBJECT:
         return emitObjectLiteral(this, expr);
       default:
-        panic(`emitter: unexpected expression ${nodeName(expr.kind)}`);
+        process.exit(internalError(`emitter: unexpected expression ${nodeName(expr.kind)}`));
     }
   }
 
@@ -733,7 +763,7 @@ export class Emitter {
       const ty = this.llvm(local.type);
       return this.fn.emitValue(`load ${ty}, ${ty}* ${this.slotOf(local)}${this.alignSuffix(local.type)}`);
     }
-    panic(`emitter: no binding for \`${expr.text}\``);
+    process.exit(internalError(`emitter: no binding for \`${expr.text}\``));
   }
 
   emitBinaryExpression(expr: Node): string {
@@ -773,7 +803,7 @@ export class Emitter {
     }
     const sig = this.program.nodeCallees[expr.id];
     if (sig === null) {
-      panic(`emitter: no callee recorded for \`${callee.text}\``);
+      process.exit(internalError(`emitter: no callee recorded for \`${callee.text}\``));
     }
     const args = expr.children[1];
     const operands: string[] = [];
@@ -788,6 +818,9 @@ export class Emitter {
       operands.push(`${this.llvmAbi(want)} ${value}`);
       i = i + 1;
     }
+    // WP9: the mark goes after the arguments, so only the callee's own bumps
+    // are inside the bracket (`beginReclaim`).
+    const mark = this.beginReclaim(sig);
     const call = `call ${this.llvmAbi(sig.returnType)} @${sig.name}(${operands.join(", ")})`;
     if (sig.returnType === T_VOID) {
       this.fn.emit(call);
@@ -798,7 +831,7 @@ export class Emitter {
     if (this.table.resultByValue(sig.returnType)) {
       return emitResultReturningCall(this, call, sig.returnType, expr);
     }
-    return this.fn.emitValue(call);
+    return this.endReclaim(mark, this.fn.emitValue(call));
   }
 
   // ---- Context helpers ----------------------------------------------------
@@ -811,7 +844,7 @@ export class Emitter {
       }
       i = i - 1;
     }
-    panic(`emitter: no slot for local \`${local.name}\``);
+    process.exit(internalError(`emitter: no slot for local \`${local.name}\``));
   }
 
   setSlot(local: Local, slot: string): void {
@@ -822,7 +855,7 @@ export class Emitter {
   typeOf(expr: Node): i32 {
     const type = this.program.nodeTypes[expr.id];
     if (type < 0) {
-      panic(`emitter: no type recorded for ${nodeName(expr.kind)}`);
+      process.exit(internalError(`emitter: no type recorded for ${nodeName(expr.kind)}`));
     }
     return type;
   }

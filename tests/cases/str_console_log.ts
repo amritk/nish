@@ -1,4 +1,4 @@
-function test(): number {
+export function test(): number {
   console.log("text");
   console.log(7);
   console.log(-3);

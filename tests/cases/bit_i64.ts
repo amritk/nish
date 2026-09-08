@@ -9,6 +9,6 @@ function shift(a: i64, n: i64): i64 {
   return (a << n) + (a >> 4) + (a >>> 1);
 }
 
-function test(): number {
+export function test(): number {
   return toI32(mask(255, 15)) + toI32(shift(1024, 3));
 }

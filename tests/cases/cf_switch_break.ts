@@ -32,6 +32,6 @@ function widen(w: i64): i64 {
   return out;
 }
 
-function test(): number {
+export function test(): number {
   return score(6) + toI32(widen(2));
 }

@@ -20,6 +20,22 @@ import ts from "typescript";
  * `additional`, so a caller that only knows about single errors still sees
  * exactly the message it always saw, and one that knows about the list
  * (`src/index.ts`) prints them all (`formatErrorReport`, `diagnosticJson`).
+ *
+ * Performance warnings (WP15 §8) are the second kind of diagnostic and the
+ * only one that is not an error. They share the summary/excerpt shape and the
+ * sink, and differ in three ways that are the whole of their contract:
+ *
+ *   - the word in the summary line is `performance`, not `error`, so nothing
+ *     that greps `: error: ` picks one up, and `--json` says
+ *     `"severity":"performance"` for a tool to filter on;
+ *   - they never throw and never touch the exit code, so a program that trips
+ *     one still compiles and still exits 0;
+ *   - they are *dropped* when the compilation failed. An error report is never
+ *     diluted with advice about code that is about to change anyway, which is
+ *     also what keeps the single-error output byte-identical to what it was.
+ *
+ * They need no sort: the analysis meets them in module load order and then in
+ * source order, which is exactly the order `DiagnosticSink` sorts errors into.
  */
 
 /** A half-open character range `[start, end)` into a source file's text. */
@@ -128,6 +144,48 @@ export class CompileError extends Error {
 }
 
 /**
+ * One performance warning (WP15 §8): the same anchored, excerpted shape a
+ * `CompileError` has, without being an `Error`. It is deliberately not a
+ * subclass: a warning must never be throwable, because every `catch` in the
+ * driver treats a `CompileError` as a failed compilation.
+ *
+ * `kind` is always `performance`, so the summary line reads
+ * `file:line:col: performance: <text>` and `diagnosticJson` can answer the
+ * severity from the diagnostic itself.
+ */
+export class PerformanceWarning {
+  readonly file: string;
+  readonly line: number;
+  readonly column: number;
+  readonly endLine: number;
+  readonly endColumn: number;
+  /** The advice alone, without location prefix or excerpt. */
+  readonly text: string;
+  readonly kind = "performance";
+  /** First line only: `file:line:col: performance: <text>`. */
+  readonly summary: string;
+  /** The source line and the caret line, without the summary. */
+  readonly excerpt: string;
+  /** Summary and excerpt, as `CompileError.message` holds them. */
+  readonly message: string;
+
+  constructor(message: string, where: ts.Node | SourceSpan, sourceFile: ts.SourceFile) {
+    const span = spanOf(where, sourceFile);
+    const d = formatDiagnostic(sourceFile, span, "performance", message);
+    this.file = sourceFile.fileName;
+    this.line = d.line;
+    this.column = d.column;
+    const end = sourceFile.getLineAndCharacterOfPosition(span.end);
+    this.endLine = end.line + 1;
+    this.endColumn = end.character + 1;
+    this.text = message;
+    this.summary = d.summary;
+    this.excerpt = d.excerpt;
+    this.message = `${d.summary}\n${d.excerpt}`;
+  }
+}
+
+/**
  * Collects the errors of one compilation so a phase can keep going after the
  * first one. `throwIfErrors` ends the phase: it sorts what was collected by
  * file (in the order files were first mentioned) and position, throws the
@@ -136,6 +194,12 @@ export class CompileError extends Error {
 export class DiagnosticSink {
   private readonly errors: CompileError[] = [];
   private readonly fileOrder = new Map<string, number>();
+  /**
+   * Performance warnings (WP15 §8), in the order the analysis found them.
+   * They are never thrown and never cleared between phases: the driver reads
+   * them once, after the whole compilation has succeeded.
+   */
+  private readonly warnings: PerformanceWarning[] = [];
 
   /** Record an error. One that already carries `additional` errors (thrown by a nested sink) is flattened. */
   report(err: CompileError): void {
@@ -144,6 +208,21 @@ export class DiagnosticSink {
       this.errors.push(e);
     }
     err.additional.length = 0;
+  }
+
+  /** Record a performance warning. Nothing else about the compilation changes. */
+  reportPerformance(warning: PerformanceWarning): void {
+    this.warnings.push(warning);
+  }
+
+  /**
+   * The warnings collected so far, in the order they were reported. The
+   * checker walks modules in load order and functions in source order, which
+   * is the order `throwIfErrors` sorts errors into, so there is nothing to
+   * sort here and no second file-order table to keep in step.
+   */
+  get performanceWarnings(): PerformanceWarning[] {
+    return this.warnings;
   }
 
   get hasErrors(): boolean {
@@ -202,19 +281,43 @@ export function formatErrorReport(err: CompileError, max = MAX_REPORTED_ERRORS):
 }
 
 /**
- * The machine-readable form of one error (`--json`): one flat object, no
- * excerpt. `severity` is always `"error"` (the compiler has no warnings);
- * `code` is reserved for stable diagnostic codes and absent for now.
+ * The human-readable report for the performance warnings of one compilation
+ * (WP15 §8), shaped exactly like `formatErrorReport` so there is one format
+ * to read and one to port: each warning's summary and excerpt, at most `max`
+ * of them, then `...and N more performance warnings` and a count line. A lone
+ * warning prints exactly its message, and no warnings print nothing at all.
  */
-export function diagnosticJson(err: CompileError): string {
+export function formatWarningReport(
+  warnings: PerformanceWarning[],
+  max = MAX_REPORTED_ERRORS
+): string {
+  if (warnings.length === 0) return "";
+  if (warnings.length === 1) return warnings[0].message;
+  const lines = warnings.slice(0, max).map((w) => w.message);
+  const hidden = warnings.length - max;
+  if (hidden > 0) lines.push(`...and ${hidden} more performance warning${hidden === 1 ? "" : "s"}`);
+  lines.push(`${warnings.length} performance warnings`);
+  return lines.join("\n");
+}
+
+/**
+ * The machine-readable form of one diagnostic (`--json`): one flat object, no
+ * excerpt. `severity` is `"error"` for every `CompileError` and
+ * `"performance"` for a WP15 §8 warning, which is the field a tool filters
+ * on; `code` is reserved for stable diagnostic codes and absent for now. The
+ * `syntax error: ` prefix stays in `message` because the severity of a syntax
+ * error is still `error`.
+ */
+export function diagnosticJson(err: CompileError | PerformanceWarning): string {
+  const severity = err.kind === "performance" ? "performance" : "error";
   return JSON.stringify({
     file: err.file,
     line: err.line,
     column: err.column,
     endLine: err.endLine,
     endColumn: err.endColumn,
-    severity: "error",
-    message: err.kind === "error" ? err.text : `${err.kind}: ${err.text}`,
+    severity,
+    message: err.kind === "error" || err.kind === "performance" ? err.text : `${err.kind}: ${err.text}`,
   });
 }
 

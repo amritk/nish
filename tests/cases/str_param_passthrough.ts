@@ -11,7 +11,7 @@ function printed(s: string): string {
   return "done";
 }
 
-function test(): number {
+export function test(): number {
   console.log(wrapped(passthrough("pass")));
   console.log(printed("printed"));
   return 0;

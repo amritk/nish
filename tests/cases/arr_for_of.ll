@@ -10,7 +10,7 @@ declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnul
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #1
 
-define noundef i32 @total(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+define internal noundef i32 @total(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %sum.addr = alloca i32, align 4
   %x.addr = alloca i32, align 4
@@ -51,7 +51,7 @@ if.then.1:
 if.end.1:
   %13 = load i32, i32* %sum.addr, align 4
   %14 = load i32, i32* %x.addr, align 4
-  %15 = add i32 %13, %14
+  %15 = add nsw i32 %13, %14
   store i32 %15, i32* %sum.addr, align 4
   br label %forof.inc
 
@@ -74,7 +74,7 @@ entry:
   %forof.idx = alloca i64, align 8
   %arr.hdr.1 = alloca %struct.amrit_array, align 8
   %arr.data.1 = alloca [2 x i8*], align 8
-  %0 = sub i32 0, 2
+  %0 = sub nsw i32 0, 2
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0
   store i64 5, i64* %1, align 8
   %2 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1

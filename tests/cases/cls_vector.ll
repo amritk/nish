@@ -34,7 +34,7 @@ slow:
   ret i8* %grown
 }
 
-define void @Vec3.constructor(%struct.Vec3* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, double noundef %x, double noundef %y, double noundef %z) #0 {
+define internal void @Vec3.constructor(%struct.Vec3* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, double noundef %x, double noundef %y, double noundef %z) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Vec3, %struct.Vec3* %this, i32 0, i32 0
   store double %x, double* %0, align 8
@@ -45,7 +45,7 @@ entry:
   ret void
 }
 
-define noundef double @Vec3.dot(%struct.Vec3* noundef nonnull readonly align 8 dereferenceable(24) nocapture %this, %struct.Vec3* noundef nonnull readonly align 8 dereferenceable(24) nocapture %o) #1 {
+define internal noundef double @Vec3.dot(%struct.Vec3* noundef nonnull readonly align 8 dereferenceable(24) nocapture %this, %struct.Vec3* noundef nonnull readonly align 8 dereferenceable(24) nocapture %o) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Vec3, %struct.Vec3* %this, i32 0, i32 0
   %1 = load double, double* %0, align 8
@@ -67,7 +67,7 @@ entry:
   ret double %16
 }
 
-define noundef nonnull align 8 dereferenceable(24) %struct.Vec3* @Vec3.scaled(%struct.Vec3* noundef nonnull readonly align 8 dereferenceable(24) nocapture %this, double noundef %k) #0 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.Vec3* @Vec3.scaled(%struct.Vec3* noundef nonnull readonly align 8 dereferenceable(24) nocapture %this, double noundef %k) #0 {
 entry:
   %0 = call i8* @amrit_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.Vec3*
@@ -84,7 +84,7 @@ entry:
   ret %struct.Vec3* %1
 }
 
-define void @Vec3.addInPlace(%struct.Vec3* noundef nonnull align 8 dereferenceable(24) nocapture %this, %struct.Vec3* noundef nonnull readonly align 8 dereferenceable(24) nocapture %o) #0 {
+define internal void @Vec3.addInPlace(%struct.Vec3* noundef nonnull align 8 dereferenceable(24) nocapture %this, %struct.Vec3* noundef nonnull readonly align 8 dereferenceable(24) nocapture %o) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Vec3, %struct.Vec3* %this, i32 0, i32 0
   %1 = load double, double* %0, align 8
@@ -107,7 +107,7 @@ entry:
   ret void
 }
 
-define noundef nonnull align 8 dereferenceable(24) %struct.Vec3* @centroid(double noundef %count) #2 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.Vec3* @centroid(double noundef %count) #2 {
 entry:
   %acc.addr = alloca %struct.Vec3*, align 8
   %i.addr = alloca double, align 8

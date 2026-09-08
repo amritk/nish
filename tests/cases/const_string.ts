@@ -2,7 +2,7 @@
 // though it is used twice.
 const GREETING: string = "hello, " + "world";
 
-function test(): number {
+export function test(): number {
   console.log(GREETING);
   console.log(GREETING);
   return 0;

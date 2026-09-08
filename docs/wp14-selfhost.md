@@ -334,6 +334,28 @@ bought a factor of 8.6 in time and half the memory, which is §5's northern star
 pointing at the compiler itself. The arena never being released was the worry;
 at this size it does not matter.
 
+That number is the measurement S5 closed with, over the 41 modules `self/` had
+then. Today's tree is the 51 modules above, and stage1 costs **128.9 MB of
+peak RSS and about 214 ms** for it, against stage0's 204 MB and 2.1 s: the
+factor in time has gone *up* rather than down as the port grew. The peak RSS
+is the figure to compare across machines; the times were taken on a shared one
+and are indicative.
+
+**§2.3 caught `self/` breaking its own rule, and the compiler is what caught
+it.** The `performance` diagnostic class (WP15 §8) warned about `self/lexer.ts`
+itself: `scanString` and `scanTemplate` appended `text = text + <one byte>`
+inside their scan loop, so every byte of every literal copied the whole
+accumulator — the quadratic §2.3 exists to forbid, in the loop that reads every
+file the compiler compiles. Both scans now keep a `chunk` cursor and move whole
+runs, and share one `StringBuilder` held by the lexer: a literal with no escape
+in it costs one `substring` of its whole span and never touches the builder,
+which is the case nearly every literal is. Before the fix the same run cost
+131.8 MB and about 226 ms, so this is where 2.9 MB of the figure above went;
+the token streams are byte-identical either way, over 678 files including the
+malformed ones the lexer oracle cannot judge. On a source whose literals are
+long rather than short the quadratic shows its real size: 400 KB of literal
+text cost 408 MB and 392 ms to lex, and now cost 2.4 MB and 10 ms.
+
 **D3's hazard did not fire.** Module identity is the specifier resolved against
 the name the importer was given, so it stays relative and needs no working
 directory (`self/paths.ts`'s `resolveModule`, and `relativePath` for the output
@@ -685,11 +707,10 @@ the same `DISubprogram` per function, the same `DILocation` on every
 instruction, the same `llvm.dbg.value` / `llvm.dbg.declare`, and the same type
 mapping down to the packed `Result` word a call boundary carries (WP17).
 `self/ir.ts` grew the metadata list the builder writes into, `-g` is a flag of
-`self/compile.ts` and of `scripts/amritc.sh` — which hands it to
-`scripts/build.sh` as well, so the DWARF survives the link — and
-`tests/cases/dbg_locals` and `tests/cases/dbg_result` are compared by
-`tests/self/ir_oracle.js` byte for byte, metadata numbering included, rather
-than skipped.
+`self/compile.ts` — which hands it to `scripts/build.sh` as well, so the DWARF
+survives the link — and `tests/cases/dbg_locals` and `tests/cases/dbg_result`
+are compared by `tests/self/ir_oracle.js` byte for byte, metadata numbering
+included, rather than skipped.
 
 **One thing had to change on stage0's side, and it is the same shape as §4's
 module-header problem.** A `DIFile` carries a filename and a directory, and
@@ -753,11 +774,12 @@ Self-hosting serves this star directly rather than competing with it: stage1 is
 a native binary with no Node process to start and no TypeScript parser to load,
 so the compiler's own speed is one of the things self-hosting buys.
 
-Two performance questions are open and want the `bench/` harness rather than an
-opinion: whether `--strict-exports` (internal linkage for non-exported
-functions, which unlocks inlining and specialisation) should become the
-default, and what `--nsw` is actually worth on the benchmark suite now that
-there is more than arithmetic to measure.
+Both of the performance questions this section used to leave open have since
+been answered by WP15 §3: `--strict-exports` (internal linkage for non-exported
+functions, which unlocks inlining and specialisation) and `--nsw` are both on
+by default, with `--no-strict-exports` and `--wrapping` as the opt-outs. What
+each is worth on the benchmark suite is still a `bench/` question rather than
+an opinion.
 
 ## 6. Rules for this work package
 
@@ -804,7 +826,7 @@ is not a test, and the command line D4 said a wrapper would supply.
 
 ```bash
 npm run bootstrap                         # build/amritc, stage2, speed profile
-scripts/amritc.sh hello.ts --link hello && ./hello
+scripts/amritc.sh hello.ts --link hello && ./hello   # the wrapper; deleted in §7a
 ```
 
 **`scripts/bootstrap.sh` builds the chain.** stage0 (`dist/index.js`) builds
@@ -965,21 +987,99 @@ gone.
 Nothing about the *platform* came in with any of this, which is the part D4
 overestimated: the `uname -s`, the profile flag sets and the wasi sysroot
 search are in `scripts/build.sh` and always were, for both compilers alike.
-`--target host` is still stage0's for the reason `self/target.ts` gives, and
-`--emit-ast` still is for the reason §7 gives — refused by name now by the
-compiler itself rather than by a wrapper, so a build that asks for it is told
-rather than quietly given nothing.
+`--target host` was still stage0's when this was written, and is stage1's now
+(see below): the machine is asked once, through two builtins, and the triple is
+composed the way `src/codegen/target.ts` composes it. `--emit-ast` is still
+stage0's for the reason §7 gives — refused by name now by the compiler itself
+rather than by a wrapper, so a build that asks for it is told rather than
+quietly given nothing.
 
-**What is left, in full, so nobody has to rediscover it.** Four things, none of
-them about compiling:
+**What was left, and what closed it.** Four things were listed here, none of
+them about compiling. Three are closed; the first is closed *as a decision*,
+which is not the same thing:
 
-| | Why | What it would cost |
+| | Why | What it cost |
 | --- | --- | --- |
-| `--emit-ast` | §7: the dump prints the `typescript` package's node names, and this compiler's tree is its own. Refused by name | a mirror of `ts.SyntaxKind` inside the self-hosted compiler, which is the opposite of what §1 means |
-| `--target host` | it asks the machine what it is, and nothing in the language does. Refused by name, with the triples it does take | `process.platform` and `process.arch` as builtins, which `self/target.ts` would compose exactly as `src/codegen/target.ts` does: **8 bytes of `.text`** measured, and the whole of rule 1's checklist |
-| exit **70** for an internal error, and `AMRITC_DEBUG` | a broken invariant reaches `panic(msg)`, which the language defines as the message and exit 1. `self/` is an AmritScript program and answers the way one does | either a second `panic` that exits 70, or `process.exit(70)` at 40 sites where the definite-return analysis currently reads `panic` as a terminator |
-| `-o <dir>` for an existing directory **without** the trailing slash | stage0 `stat`s the path; the trailing slash is the only spelling here | a `stat` builtin. `-o <dir>/` is unambiguous and is what every caller in the tree writes |
+| `--emit-ast` | §7: the dump prints the `typescript` package's node names, and this compiler's tree is its own. **Still refused by name**, and this one is a decision rather than a to-do | a mirror of `ts.SyntaxKind` inside the self-hosted compiler, which is the opposite of what §1 means |
+| `--target host` | it asked the machine what it is, and nothing in the language did. **Done** | `process.platform` and `process.arch` as builtins, **8 bytes of `.text` each** as costed; `self/target.ts` composes the triple exactly as `src/codegen/target.ts` does |
+| exit **70** for an internal error, and `AMRITC_DEBUG` | a broken invariant reached `panic(msg)`, which the language defines as the message and exit 1. **Done**, with `process.exit(internalError(...))` and `self/ice.ts` | 28 sites edited and no language change; the two the design costed are weighed below |
+| `-o <dir>` for an existing directory **without** the trailing slash | stage0 `stat`s the path; the trailing slash was the only spelling here. **Done** | `isDirectorySync(path)`, the smallest `stat` that answers the question, and one byte of `.text` net once `amrit_mkdir` was rewritten to call it |
 
-The first two are refusals with a message. The third is a different exit code
-for the same failure, and the fourth is a spelling. None of them is a program
-one compiler can build and the other cannot, which is the line §1 drew.
+### The three builtins, and the runtime they cost
+
+Rule 1 of §6 applies to all three: each entered the language and `src/` first,
+with a golden, a native round trip, negatives, a `docs/LANGUAGE.md` rule and a
+cookbook entry, and only then `self/`.
+
+| | Answer | Why a value and not an exit, or a call and not a constant |
+| --- | --- | --- |
+| `process.platform: string` | `"linux"`, `"darwin"`, or `"unknown"` — Node's spellings | a *runtime* call, not a compile-time constant: the `.ll` is target-neutral unless `--target` says otherwise, so only the machine the program runs on can answer, and a cross build compiles `runtime.c` for the target, which is what makes the answer the target's |
+| `process.arch: string` | `"x64"`, `"arm64"`, or `"unknown"` | as above |
+| `isDirectorySync(path: string): boolean` | whether a directory is at `path` right now | the same reason `mkdirSync` and `readFileSyncOrNull` answer values (§3 B3): there are no exceptions, so the driver phrases its own diagnostic. It answers *one* question rather than handing back a `stat` struct, because one question is what `-o <dir>` asks |
+
+Both machine properties answer the address of a string in the runtime's own
+constant data, so nothing is allocated and nothing is loaded: the declarations
+carry `readnone willreturn`, a function built only from them stays pure, and
+two reads in one function fold into one. Deliberately **not** `noalias` — every
+call answers the same pointer, and `noalias` promises the opposite.
+`amrit_is_dir` is `nounwind willreturn` and `effect: "write"`, the same as
+`amrit_mkdir` and for the reason `amrit_parse_number` is not `readonly`: a
+failed `stat` stores `errno`, and the file system is not memory LLVM may
+reason about, so a caller must not be hoisted across anything that could change
+it.
+
+**The bill, measured.** `clang -Oz -c runtime/runtime.c`:
+
+| | Before | After | Budget |
+| --- | ---: | ---: | ---: |
+| `.text` | 2,544 | 2,561 | 4,096 |
+| source bytes | 12,707 | 14,797 | — |
+
+Eight bytes each for `amrit_platform` and `amrit_arch` (a `lea` and a `ret`),
+and one byte net for `amrit_is_dir`, because `amrit_mkdir` lost its own copy of
+the `stat` to it.
+
+### Exit 70: which design costs the language less
+
+§7a costed two: a second `panic` that exits 70, or `process.exit(70)` at the
+sites where the definite-return analysis reads `panic` as a terminator. The
+second is much the cheaper **for the language**, which is the budget that
+decides it, and by a wide margin:
+
+- `panic(m)` already means "this message, then exit 1", and `process.exit(n)`
+  already means "this code, now". The status one program wants for its own bugs
+  needs no new construct: the language is already complete for it, and every
+  other AmritScript program would carry a builtin it has no use for.
+- A second panic would have to bake this compiler's *reporting policy* — the
+  version line, the issue tracker, the word "internal" — into the language that
+  compiles it, or else print a bare message and lose the report.
+- The cost of the other side of the trade is 28 statements in `self/`, and they
+  are `self/`'s own. `self/ice.ts` holds the report and answers the status, so
+  every site is the single statement `process.exit(internalError("..."))`
+  rather than a report call followed by an exit: the pair could be
+  half-written, and this cannot, because `process.exit(...)` is what the
+  definite-return analysis reads as a terminator and a site that dropped it
+  would not compile.
+
+**What stage1 honestly cannot say.** stage0 catches the failure in one
+`try`/`catch` at the top of its driver, where the command line is still in hand
+and the exception carries a stack, and prints both — the stack only under
+`AMRITC_DEBUG=1`. stage1 has neither, for one reason: with no exceptions the
+report is made *at the site* instead of at the top. There is no stack to
+unwind, and no `process.argv` to read either, because that builtin requires an
+entry `main` and the modules that report internal errors (`self/types.ts`,
+`self/emit.ts`, ...) are compiled on their own as well, as whole programs of
+the corpus. So the report names the compiler and its version, the invariant
+that broke, and `AMRITC_DEBUG` — saying there is nothing behind it here rather
+than promising a stack a rerun would not produce — and then asks, in stage0's
+own words, for the input file and the command line, which is the half stage0
+was echoing anyway. `tests/self/ice.ts` and the WP14 block of `tests/run.js`
+pin the lines and the 70.
+
+Seven sites still call `panic` and still exit 1: the four in `self/emit_ops.ts`
+and the three in `self/interop_napi.ts`. The conversion there is the same one
+line for one line, and it is the only thing between this and every internal
+error in stage1 answering 70.
+
+`--emit-ast` is the one that stays. It is a refusal with a message, not a
+program one compiler can build and the other cannot, which is the line §1 drew.

@@ -7,29 +7,29 @@ declare void @amrit_arena_release(i64 noundef) #0
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define void @Shape.constructor(%struct.Shape* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %x) #0 {
+define internal void @Shape.constructor(%struct.Shape* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %x) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Shape, %struct.Shape* %this, i32 0, i32 0
   store i32 %x, i32* %0, align 4
   ret void
 }
 
-define noundef i32 @Shape.area(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #1 {
+define internal noundef i32 @Shape.area(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #1 {
 entry:
   ret i32 0
 }
 
-define noundef i32 @Shape.report(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #2 {
+define internal noundef i32 @Shape.report(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #2 {
 entry:
   %0 = call i32 @Shape.area(%struct.Shape* %this)
-  %1 = mul i32 %0, 10
+  %1 = mul nsw i32 %0, 10
   %2 = getelementptr inbounds %struct.Shape, %struct.Shape* %this, i32 0, i32 0
   %3 = load i32, i32* %2, align 4
-  %4 = add i32 %1, %3
+  %4 = add nsw i32 %1, %3
   ret i32 %4
 }
 
-define void @Square.constructor(%struct.Square* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %side) #0 {
+define internal void @Square.constructor(%struct.Square* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %side) #0 {
 entry:
   %0 = bitcast %struct.Square* %this to %struct.Shape*
   call void @Shape.constructor(%struct.Shape* %0, i32 %x)
@@ -38,26 +38,26 @@ entry:
   ret void
 }
 
-define noundef i32 @Square.area(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #2 {
+define internal noundef i32 @Square.area(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 1
   %1 = load i32, i32* %0, align 4
   %2 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 1
   %3 = load i32, i32* %2, align 4
-  %4 = mul i32 %1, %3
+  %4 = mul nsw i32 %1, %3
   ret i32 %4
 }
 
-define noundef i32 @Square.report(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #2 {
+define internal noundef i32 @Square.report(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #2 {
 entry:
   %0 = bitcast %struct.Square* %this to %struct.Shape*
   %1 = call i32 @Shape.report(%struct.Shape* %0)
   %2 = call i32 @Square.area(%struct.Square* %this)
-  %3 = add i32 %1, %2
+  %3 = add nsw i32 %1, %2
   ret i32 %3
 }
 
-define noundef i32 @areaOf(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %s) #1 {
+define internal noundef i32 @areaOf(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %s) #1 {
 entry:
   %0 = call i32 @Shape.area(%struct.Shape* %s)
   ret i32 %0

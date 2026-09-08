@@ -145,10 +145,13 @@ export class PointerParamFacts {
 export class CallSite {
   callee: string;
   flow: i32;
+  /** WP9: the result is reachable after this function returns, other than through its return value. */
+  escapes: boolean;
 
-  constructor(callee: string, flow: i32) {
+  constructor(callee: string, flow: i32, escapes: boolean) {
     this.callee = callee;
     this.flow = flow;
+    this.escapes = escapes;
   }
 }
 
@@ -191,6 +194,13 @@ export class FunctionFacts {
   directArena: boolean;
   /** An allocation may survive the call other than through the return value. */
   allocLeaks: boolean;
+  /**
+   * WP9: an allocation is reachable *by the caller* after the call, other than
+   * through the return value (fixpoint over callees). Refines `allocLeaks`,
+   * which also counts a value assigned to a local of the frame; see the header
+   * of escape.ts. `allocEscapes` implies `allocLeaks`, never the reverse.
+   */
+  allocEscapes: boolean;
   /** An allocation of this function is returned: the caller owns it, so no scope here. */
   returnsAllocation: boolean;
   /** Calls `Arena.reset` / `Arena.release`, directly or through a callee. */
@@ -219,6 +229,7 @@ export class FunctionFacts {
     this.allocates = false;
     this.directArena = false;
     this.allocLeaks = false;
+    this.allocEscapes = false;
     this.returnsAllocation = false;
     this.usesArenaControl = false;
     this.callSites = [];
@@ -744,7 +755,7 @@ class FactCollector {
     this.collectResultFacts(node);
     this.collectArrayFacts(node);
     this.collectDivisionFacts(node);
-    this.collectArgvFacts(node);
+    this.collectNamespacePropertyFacts(node);
     this.collectIdentifierBuiltinFacts(node);
     for (const child of node.children) {
       this.visit(child);
@@ -1011,13 +1022,28 @@ class FactCollector {
     }
   }
 
-  /** The load of `@amrit_argv` reads memory the function does not own: at most `readonly`. */
-  collectArgvFacts(node: Node): void {
-    if (node.kind !== N_MEMBER || dottedName(node) !== "process.argv") {
+  /**
+   * The namespace properties that are not constants. The load of `@amrit_argv`
+   * reads memory the function does not own, so the caller is at most
+   * `readonly`; `process.platform` and `process.arch` are one `readnone`
+   * runtime call each (WP14 §7a), which changes no attribute today. The call
+   * is named anyway, because the rule is that what a construct emits and what
+   * the analysis is told it emits never drift apart.
+   */
+  collectNamespacePropertyFacts(node: Node): void {
+    if (node.kind !== N_MEMBER) {
       return;
     }
-    if (!receiverIsValue(this.unit.program, node.children[0])) {
+    const name = dottedName(node);
+    if (receiverIsValue(this.unit.program, node.children[0])) {
+      return;
+    }
+    if (name === "process.argv") {
       this.facts.readsMemory = true;
+    } else if (name === "process.platform") {
+      this.facts.callees.add("amrit_platform");
+    } else if (name === "process.arch") {
+      this.facts.callees.add("amrit_arch");
     }
   }
 
@@ -1057,6 +1083,7 @@ export function collectFacts(
     facts.directArena = memory.directArena;
     facts.allocates = memory.directArena;
     facts.allocLeaks = memory.allocLeaks;
+    facts.allocEscapes = memory.allocEscapes;
     facts.returnsAllocation = memory.returnsAllocation;
     facts.usesArenaControl = memory.usesArenaControl;
     facts.callSites = memory.callSites;
@@ -1215,6 +1242,11 @@ function propagate(facts: FactsTable, runtime: RuntimeTable): void {
         if (callee === null || !callee.allocates) {
           continue;
         }
+        if (site.escapes && !f.allocEscapes) {
+          // WP9: this function stored the callee's result where its own caller can reach it.
+          f.allocEscapes = true;
+          changed = true;
+        }
         if (site.flow === FLOW_LOCAL && !f.directArena) {
           f.directArena = true;
           changed = true;
@@ -1302,6 +1334,11 @@ function propagateCallee(facts: FactsTable, runtime: RuntimeTable, f: FunctionFa
     }
     if (calleeFacts.allocLeaks && !f.allocLeaks) {
       f.allocLeaks = true;
+      changed = true;
+    }
+    // WP9: whatever a callee lets out of its own frame is out of this one too.
+    if (calleeFacts.allocEscapes && !f.allocEscapes) {
+      f.allocEscapes = true;
       changed = true;
     }
     if (calleeFacts.usesArenaControl && !f.usesArenaControl) {

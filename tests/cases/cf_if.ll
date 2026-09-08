@@ -1,17 +1,17 @@
-define noundef i32 @abs(i32 noundef %x) #0 {
+define internal noundef i32 @abs(i32 noundef %x) #0 {
 entry:
   %0 = icmp slt i32 %x, 0
   br i1 %0, label %if.then, label %if.end
 
 if.then:
-  %1 = sub i32 0, %x
+  %1 = sub nsw i32 0, %x
   ret i32 %1
 
 if.end:
   ret i32 %x
 }
 
-define noundef i32 @pick(i1 noundef zeroext %flag, i32 noundef %a, i32 noundef %b) #0 {
+define internal noundef i32 @pick(i1 noundef zeroext %flag, i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %r.addr = alloca i32, align 4
   store i32 0, i32* %r.addr, align 4
@@ -32,10 +32,10 @@ if.end:
 
 define noundef i32 @test() #0 {
 entry:
-  %0 = sub i32 0, 4
+  %0 = sub nsw i32 0, 4
   %1 = call i32 @abs(i32 %0)
   %2 = call i32 @pick(i1 true, i32 10, i32 20)
-  %3 = add i32 %1, %2
+  %3 = add nsw i32 %1, %2
   ret i32 %3
 }
 

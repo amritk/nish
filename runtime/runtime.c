@@ -101,6 +101,42 @@ void amrit_arena_release(uint64_t mark) {
   amrit_arena = (struct amrit_arena){ (char *)(c + 1), mark - (uintptr_t)(c + 1), c->cap, c };
 }
 
+/* Release back to `mark` while keeping the newest allocation; returns where it
+   ended up. `p` must be the last block the arena handed out, which is why only
+   a *string* may be kept: it is one flat block with no interior pointers, so
+   moving its bytes moves the whole value. Two outcomes, both reclaiming only
+   memory bumped after `mark` and before `p`:
+     - the mark's chunk has room below it: `p` moves down to `mark` and every
+       newer chunk is freed;
+     - it does not (the mark sat at the end of a full chunk): `p` stays where
+       it is and the chunks strictly between the two are freed.
+   The guards refuse instead, which only means less is reclaimed: `p` outside
+   the current chunk (a literal, or a value older than the mark), a mark in no
+   live chunk (a stale one, or 0 for an arena that was empty), or a mark newer
+   than `p`. */
+void *amrit_arena_keep(uint64_t mark, void *p) {
+  uintptr_t base = (uintptr_t)amrit_arena.buf, q = (uintptr_t)p, top = base + amrit_arena.off;
+  if (q < base || q >= top || mark == q) return p;
+  size_t size = top - q;
+  amrit_chunk *pc = amrit_arena.chunks, *c = pc; /* pc holds `p`: it is the current chunk */
+  for (; c; c = c->next) {
+    uintptr_t cb = (uintptr_t)(c + 1);
+    if (mark >= cb && mark <= cb + c->cap) break;
+  }
+  if (!c || (c == pc && mark > q)) return p;
+  /* mark <= q inside one chunk implies mark + size <= q + size <= its end, so
+     the second arm is only ever reached with `c` older than `pc`. */
+  if (mark + size <= (uintptr_t)(c + 1) + c->cap) {
+    memmove((void *)mark, p, size);
+    amrit_free_until(pc, c);
+    amrit_arena = (struct amrit_arena){ (char *)(c + 1), mark + size - (uintptr_t)(c + 1), c->cap, c };
+    return (void *)mark;
+  }
+  amrit_free_until(pc->next, c);
+  pc->next = c;
+  return p;
+}
+
 /* ---- Strings: { i64 len, bytes[len], '\0' }, immutable; 8 = the len header */
 typedef struct { uint64_t len; char data[]; } amrit_str;
 
@@ -266,15 +302,24 @@ void amrit_argv_init(int32_t argc, char **argv) {
 /* ---- Directories and subprocesses (WP14 D4): what a driver needs to create
    its own output directory and shell out for `--link`. Both answer a value
    instead of exiting, as `amrit_read_file_or_null` does — there are no
-   exceptions, so the caller owns the diagnostic. Contracts: amritc.h. */
+   exceptions, so the caller owns the diagnostic — and so does the `stat`
+   beside them (WP14 §7a), which is what tells `-o <dir>` from `-o <file>`.
+   Contracts: amritc.h. */
 
-/* One directory, not recursive. The retry is a `stat` rather than
+/* `isDirectorySync(path)` (WP14 §7a): the one question a driver asks of a path
+   it was handed — is there a directory here? A missing path, a plain file and
+   a parent it cannot search are the same false, because they are the same
+   answer to that question. */
+_Bool amrit_is_dir(const amrit_str *path) {
+  struct stat st;
+  return stat(path->data, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+/* One directory, not recursive. The retry is the `stat` above rather than
    `errno == EEXIST` so that a plain file at the path answers false, which is
    what the promise "a directory is there afterwards" means. */
 _Bool amrit_mkdir(const amrit_str *path) {
-  struct stat st;
-  if (mkdir(path->data, 0777) == 0) return 1;
-  return stat(path->data, &st) == 0 && S_ISDIR(st.st_mode);
+  return mkdir(path->data, 0777) == 0 || amrit_is_dir(path);
 }
 
 /* `posix_spawnp` is one libc call where fork/execvp/waitpid would be three,
@@ -300,6 +345,42 @@ int32_t amrit_spawn(const amrit_array *argv) {
   return WIFSIGNALED(status) ? 128 + WTERMSIG(status) : WEXITSTATUS(status);
 #endif
 }
+
+/* ---- What machine this is (WP14 §7a): `process.platform` and `process.arch`,
+   the two halves `--target host` composes a triple from. Both are settled when
+   this file is compiled — a cross build compiles the runtime for the target,
+   so the answer is the target's — which is why each is a string in constant
+   data handed back by address: no allocation and no load, and `readnone` on
+   the declaration (src/codegen/runtime.ts) is a fact rather than a hope. The
+   spellings are Node's, so a program reads the same answer from this runtime
+   and from `runtime/shim.mjs`; anything neither branch names is "unknown",
+   which is what `--target host` then refuses. Contracts: amritc.h.
+
+   The static object is spelled with a sized array because a flexible array
+   member cannot be initialised, and handed out as an `amrit_str *`: the two
+   layouts are the same bytes, and nothing anywhere writes through either
+   pointer, so there is no aliasing question to answer. */
+#define AMRIT_TEXT(name, s) \
+  static const struct { uint64_t len; char data[sizeof s]; } name = { sizeof s - 1, s }
+
+#if defined(__APPLE__)
+AMRIT_TEXT(amrit_platform_text, "darwin");
+#elif defined(__linux__)
+AMRIT_TEXT(amrit_platform_text, "linux");
+#else
+AMRIT_TEXT(amrit_platform_text, "unknown");
+#endif
+
+#if defined(__x86_64__)
+AMRIT_TEXT(amrit_arch_text, "x64");
+#elif defined(__aarch64__)
+AMRIT_TEXT(amrit_arch_text, "arm64");
+#else
+AMRIT_TEXT(amrit_arch_text, "unknown");
+#endif
+
+const amrit_str *amrit_platform(void) { return (const amrit_str *)&amrit_platform_text; }
+const amrit_str *amrit_arch(void) { return (const amrit_str *)&amrit_arch_text; }
 
 /* ---- String to number: mode 0 parseFloat, 1 Number, 2 parseInt (contract: amritc.h). ASCII
  * whitespace only; strtod parses once the inf/nan spellings JS rejects are ruled out, and its `0x`

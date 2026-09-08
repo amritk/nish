@@ -35,7 +35,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef i32 @trace(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %m) #0 {
+define internal noundef i32 @trace(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %m) #0 {
 entry:
   %t.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -87,13 +87,13 @@ bounds.ok.1:
   %23 = bitcast i8* %22 to i32*
   %24 = getelementptr inbounds i32, i32* %23, i64 %17
   %25 = load i32, i32* %24, align 4
-  %26 = add i32 %5, %25
+  %26 = add nsw i32 %5, %25
   store i32 %26, i32* %t.addr, align 4
   br label %for.inc
 
 for.inc:
   %27 = load i32, i32* %i.addr, align 4
-  %28 = add i32 %27, 1
+  %28 = add nsw i32 %27, 1
   store i32 %28, i32* %i.addr, align 4
   br label %for.cond
 
@@ -155,9 +155,9 @@ for.body.1:
   %15 = load i32, i32* %j.addr, align 4
   %16 = sext i32 %15 to i64
   %17 = load i32, i32* %i.addr, align 4
-  %18 = mul i32 %17, 3
+  %18 = mul nsw i32 %17, 3
   %19 = load i32, i32* %j.addr, align 4
-  %20 = add i32 %18, %19
+  %20 = add nsw i32 %18, %19
   %21 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %14, i64 0, i32 0
   %22 = load i64, i64* %21, align 8
   %23 = icmp ult i64 %16, %22
@@ -177,7 +177,7 @@ bounds.ok:
 
 for.inc.1:
   %28 = load i32, i32* %j.addr, align 4
-  %29 = add i32 %28, 1
+  %29 = add nsw i32 %28, 1
   store i32 %29, i32* %j.addr, align 4
   br label %for.cond.1
 
@@ -208,7 +208,7 @@ push.store:
 
 for.inc:
   %43 = load i32, i32* %i.addr, align 4
-  %44 = add i32 %43, 1
+  %44 = add nsw i32 %43, 1
   store i32 %44, i32* %i.addr, align 4
   br label %for.cond
 

@@ -63,7 +63,11 @@ and the interop sidecars (`--emit-header`, `--emit-dts`, `--emit-napi`, and the
 loader `--emit-dts` writes beside its declarations) it answers itself. It
 refuses `--emit-ast` **by name** — that one is stage0's, not missing — and
 mirrors stage0's file layout exactly, so either compiler can be dropped into a
-build script. `--target host` is the other spelling stage0 keeps.
+build script. `--target host` is stage1's too (§7a): `process.platform` and
+`process.arch` are builtins, and `self/target.ts` composes the triple the way
+`src/codegen/target.ts` does, so `--emit-ast` is the only spelling stage0
+keeps. A broken invariant exits **70** with stage0's report, less the stack and
+the input names a compiler with no exceptions cannot reach (`self/ice.ts`).
 
 `--emit-ast` is the one flag that is stage0's *by design* rather than for now:
 stage0's dump prints the `typescript` package's node names and line:column
@@ -116,6 +120,7 @@ No generics, arrow functions, closures, nested functions or function values; no
 | --- | --- |
 | `strings.ts` `map.ts` `paths.ts` | the standard library `src/` gets from Node |
 | `branding.ts` | `src/branding.ts`: the language name every diagnostic reads |
+| `ice.ts` | `reportInternalError` in `src/index.ts`: the exit-70 report a broken invariant prints, which the language's `panic` (exit 1) is not |
 | `tokens.ts` `lexer.ts` | the `typescript` scanner |
 | `nodes.ts` `parser.ts` | the `typescript` parser |
 | `diagnostics.ts` | `src/diagnostics.ts` |

@@ -12,7 +12,7 @@ declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 declare void @amrit_exit(i32 noundef) #2
 declare void @amrit_panic_div(i1 noundef zeroext) #3
 
-define noundef i64 @checkPort(i32 noundef %port) #0 {
+define internal noundef i64 @checkPort(i32 noundef %port) #0 {
 entry:
   %0 = icmp sle i32 %port, 0
   br i1 %0, label %if.then, label %if.end
@@ -26,7 +26,7 @@ if.end:
   ret i64 1
 }
 
-define noundef i64 @firstHalf(i32 noundef %n) #1 {
+define internal noundef i64 @firstHalf(i32 noundef %n) #1 {
 entry:
   %0 = icmp eq i32 2, 0
   %1 = icmp eq i32 %n, -2147483648
@@ -69,7 +69,7 @@ div.ok.1:
   ret i64 %17
 }
 
-define noundef i64 @quarter(i32 noundef %n) #1 {
+define internal noundef i64 @quarter(i32 noundef %n) #1 {
 entry:
   %h.addr = alloca i32, align 4
   %amrit_result.i32.i32.obj = alloca %struct.amrit_result.i32.i32, align 8
@@ -125,7 +125,7 @@ res.ok:
   ret i64 %34
 }
 
-define noundef i64 @again(i32 noundef %n) #1 {
+define internal noundef i64 @again(i32 noundef %n) #1 {
 entry:
   %r.addr = alloca %struct.amrit_result.i32.i32*, align 8
   %amrit_result.i32.i32.obj = alloca %struct.amrit_result.i32.i32, align 8
@@ -228,7 +228,7 @@ res.ok.1:
   br label %res.end
 
 res.alt:
-  %33 = sub i32 0, 1
+  %33 = sub nsw i32 0, 1
   br label %res.end
 
 res.end:
@@ -255,7 +255,7 @@ res.ok.2:
   br label %res.end.1
 
 res.alt.1:
-  %47 = sub i32 0, 1
+  %47 = sub nsw i32 0, 1
   br label %res.end.1
 
 res.end.1:
@@ -282,7 +282,7 @@ res.ok.3:
   br label %res.end.2
 
 res.alt.2:
-  %61 = sub i32 0, 1
+  %61 = sub nsw i32 0, 1
   br label %res.end.2
 
 res.end.2:
@@ -309,7 +309,7 @@ res.ok.4:
   br label %res.end.3
 
 res.alt.3:
-  %75 = sub i32 0, 1
+  %75 = sub nsw i32 0, 1
   br label %res.end.3
 
 res.end.3:

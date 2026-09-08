@@ -73,7 +73,7 @@ pop.ok:
   %27 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %26, i64 0, i32 0
   %28 = load i64, i64* %27, align 8
   %29 = trunc i64 %28 to i32
-  %30 = mul i32 %29, 100000
+  %30 = mul nsw i32 %29, 100000
   %31 = load %struct.amrit_array*, %struct.amrit_array** %names.addr, align 8
   %32 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %31, i64 0, i32 0
   %33 = load i64, i64* %32, align 8
@@ -105,8 +105,8 @@ idx.miss:
 idx.found:
   %43 = phi i64 [ %34, %idx.test ], [ -1, %idx.miss ]
   %44 = trunc i64 %43 to i32
-  %45 = mul i32 %44, 10000
-  %46 = add i32 %30, %45
+  %45 = mul nsw i32 %44, 10000
+  %46 = add nsw i32 %30, %45
   %47 = load i8*, i8** %last.addr, align 8
   %48 = call zeroext i1 @amrit_str_eq(i8* %47, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
   br i1 %48, label %cond.true, label %cond.false
@@ -119,7 +119,7 @@ cond.false:
 
 cond.end:
   %49 = phi i32 [ 1000, %cond.true ], [ 0, %cond.false ]
-  %50 = add i32 %46, %49
+  %50 = add nsw i32 %46, %49
   %51 = load %struct.amrit_array*, %struct.amrit_array** %nums.addr, align 8
   %52 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %51, i64 0, i32 0
   %53 = load i64, i64* %52, align 8
@@ -151,9 +151,9 @@ idx.miss.1:
 idx.found.1:
   %63 = phi i64 [ %54, %idx.test.1 ], [ -1, %idx.miss.1 ]
   %64 = trunc i64 %63 to i32
-  %65 = add i32 %64, 1
-  %66 = mul i32 %65, 100
-  %67 = add i32 %50, %66
+  %65 = add nsw i32 %64, 1
+  %66 = mul nsw i32 %65, 100
+  %67 = add nsw i32 %50, %66
   %68 = load %struct.amrit_array*, %struct.amrit_array** %nums.addr, align 8
   %69 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %68, i64 0, i32 0
   %70 = load i64, i64* %69, align 8
@@ -185,9 +185,9 @@ idx.miss.2:
 idx.found.2:
   %80 = phi i64 [ %71, %idx.test.2 ], [ -1, %idx.miss.2 ]
   %81 = trunc i64 %80 to i32
-  %82 = add i32 %81, 1
-  %83 = mul i32 %82, 10
-  %84 = add i32 %67, %83
+  %82 = add nsw i32 %81, 1
+  %83 = mul nsw i32 %82, 10
+  %84 = add nsw i32 %67, %83
   %85 = load %struct.amrit_array*, %struct.amrit_array** %names.addr, align 8
   %86 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %85, i64 0, i32 0
   %87 = load i64, i64* %86, align 8
@@ -219,8 +219,8 @@ idx.miss.3:
 idx.found.3:
   %97 = phi i64 [ %88, %idx.test.3 ], [ -1, %idx.miss.3 ]
   %98 = trunc i64 %97 to i32
-  %99 = add i32 %98, 1
-  %100 = add i32 %84, %99
+  %99 = add nsw i32 %98, 1
+  %100 = add nsw i32 %84, %99
   ret i32 %100
 }
 

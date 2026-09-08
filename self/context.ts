@@ -27,6 +27,13 @@ export class CheckContext {
   sink: DiagnosticSink;
   source: SourceFile;
   numberMode: i32;
+  /**
+   * `--wrapping` was given, so constant folding wraps at the declared width
+   * instead of refusing an overflow (`self/constants.ts`). The only compiler
+   * option pass 2 reads apart from the number mode, and for the same reason:
+   * the fold has to agree with the instruction it replaces.
+   */
+  wrapping: boolean;
   /** Function source name -> index into `program.functions`, for clash checks. */
   sigs: StringMap;
   /** The program has an entry point, so `process.argv` may be read. */
@@ -48,12 +55,19 @@ export class CheckContext {
    */
   statementExpression: Node | null;
 
-  constructor(table: TypeTable, program: CheckedProgram, sink: DiagnosticSink, numberMode: i32) {
+  constructor(
+    table: TypeTable,
+    program: CheckedProgram,
+    sink: DiagnosticSink,
+    numberMode: i32,
+    wrapping: boolean
+  ) {
     this.table = table;
     this.program = program;
     this.sink = sink;
     this.source = program.source;
     this.numberMode = numberMode;
+    this.wrapping = wrapping;
     this.sigs = new StringMap();
     this.entryHasMain = false;
     this.current = null;
@@ -65,6 +79,15 @@ export class CheckContext {
   /** Report against a node's own span. Nothing is thrown; the caller decides. */
   error(node: Node, message: string): void {
     this.sink.report(this.source, node.start, node.end, message);
+  }
+
+  /**
+   * Report a WP15 §8 performance warning against a node's own span. It never
+   * poisons anything and never reaches the exit code: the compilation goes on
+   * exactly as it would have without it.
+   */
+  performance(node: Node, message: string): void {
+    this.sink.reportPerformance(this.source, node.start, node.end, message);
   }
 
   /** Report and answer the sentinel type, for the many callers that want both. */

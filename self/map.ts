@@ -20,16 +20,22 @@
 // scopes are popped whole — and leaving it out keeps the probe loop free of
 // tombstones.
 
-/** FNV-1a over the bytes of `key`, as an i32 with the usual wrapping multiply. */
+/**
+ * FNV-1a over the bytes of `key`. The round is a multiply that is *supposed*
+ * to overflow, so it is done in `u32`, whose arithmetic is defined as wrapping
+ * whatever `--wrapping` says; on a signed accumulator the same multiply would
+ * be undefined under the default `nsw` (WP15 §3). Same instructions, same
+ * bits, same hash — `u32` is only where the claim is true.
+ */
 export function hashString(key: string): i32 {
-  let hash = -2128831035; // 2166136261, read as a signed i32
+  let hash: u32 = 2166136261;
   let i = 0;
   while (i < key.length) {
-    hash = hash ^ key.charCodeAt(i);
+    hash = hash ^ toU32(key.charCodeAt(i));
     hash = hash * 16777619;
     i = i + 1;
   }
-  return hash;
+  return toI32(hash);
 }
 
 /** The initial bucket count. Small: most scopes hold a handful of names. */

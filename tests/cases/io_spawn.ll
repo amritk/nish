@@ -45,13 +45,13 @@ slow:
   ret i8* %grown
 }
 
-define noundef i32 @run(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) %argv) #0 {
+define internal noundef i32 @run(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) %argv) #0 {
 entry:
   %0 = call i32 @amrit_spawn(%struct.amrit_array* %argv)
   ret i32 %0
 }
 
-define noundef i32 @shell(i8* noundef nonnull noalias readonly align 8 %script) #0 {
+define internal noundef i32 @shell(i8* noundef nonnull noalias readonly align 8 %script) #0 {
 entry:
   %0 = call i8* @amrit_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.amrit_array*

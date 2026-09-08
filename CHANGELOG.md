@@ -7,7 +7,178 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ## [Unreleased]
 
+### Changed — BREAKING
+
+- **Signed integer overflow is now undefined behaviour. The documented
+  guarantee that "integers wrap" is withdrawn (WP15 §3).** `--nsw` is on by
+  default: every user-level signed `i32`/`i64` `add`, `sub` and `mul` — binary
+  operators, unary minus, `op=` on locals, fields and elements, `++`/`--` —
+  carries `nsw`, so a program that overflows one of them has undefined
+  behaviour, exactly as in C. LLVM may now widen `i32` induction variables to
+  64 bits and strength-reduce the loops around them.
+
+  **A program that relies on wrapping keeps compiling and stops being
+  correct.** There are two remedies and no others. Compile it with the new
+  **`--wrapping`**, which turns the flag off everywhere and restores
+  two's-complement wrapping, so `2147483647 + 1` is `-2147483648` again; or
+  write the deliberately-overflowing arithmetic in an unsigned type, because
+  `u8`, `u16`, `u32` and `u64` are *defined* to wrap and are the reason those
+  types exist.
+
+  Three things this does **not** change: unsigned arithmetic never carries a
+  no-wrap flag in either mode (`--nsw` used to put `nuw` on it; it no longer
+  does, since `nuw` would withdraw the unsigned wrapping guarantee too),
+  division, remainder and shifts are never flagged because they have no such
+  form, and `Math.abs(-2147483648)` still wraps to itself because `llvm.abs`
+  is emitted with its poison flag off.
+
+  Constant folding follows the emitter rather than diverging from it: by
+  default a module constant whose arithmetic leaves its width is
+  `` attempt to compute with overflow in a constant `` instead of a silently
+  wrapped value — the same treatment `1 / 0` and `MIN / -1` already got in a
+  constant — and under `--wrapping` it wraps as before.
+  `tests/cases/opt_nsw` pins which operations carry the flag,
+  `opt_wrapping` the same program without it, `reject_const_overflow_arith`
+  the refused fold and `const_wrap` the folded one under `--wrapping`.
+
+- **Only `export`ed functions are C-ABI symbols: `--strict-exports` is now the
+  default (WP15 §3).** Every other top-level function gets `internal` linkage,
+  so LLVM may inline it, specialise it for its call sites, or drop it
+  altogether — a win on speed *and* on size. The visible consequence is that a
+  non-exported function is no longer callable from C and no longer appears in
+  `--emit-header`, `--emit-dts` or `--emit-napi`.
+
+  **`--no-strict-exports`** restores the old behaviour
+  (`tests/cases/export_no_strict`). A C driver that calls a function the module
+  does not export needs either that flag or an `export` on the function; the
+  test corpus took the second route, so `tests/driver.c`'s `test()` is now
+  `export function test()` in every case that links it, as are
+  `tests/cases/add.ts`, `tests/layout/structs.ts`, `examples/add.ts` and
+  `examples/strings.ts`.
+
+- `--nsw` and `--strict-exports` are still accepted and now spell out what the
+  compiler does anyway, so a build script written before the flip still runs.
+
+### Fixed — soundness
+
+- **A duplicate function name is refused whether or not `--strict-exports` is
+  in play.** The check used to be skipped under that flag, on the reasoning
+  that an `internal` symbol never reaches the linker. It does reach
+  `analyzeFunctions`, which keys the whole-program attribute fixpoint by
+  `FunctionSig.name`: two functions sharing a name shared one set of facts and
+  each was emitted with the other's attributes — a miscompile, not a link
+  error. Making the flag the default made it easy to hit; the bootstrap did,
+  as an out-of-bounds inside stage1 the moment two modules of `self/` both
+  declared a `narrow` (`tests/link/duplicate_internal`).
+
 ### Added
+
+- **The `performance` diagnostic class, with its first two warnings (WP15
+  §8).** The compiler now says something when it had to take a slow path and
+  a faster one was available. A warning is the same anchored, excerpted
+  diagnostic an error is, with `performance` where the word `error` would be
+  (`file:line:col: performance: <text>`), so nothing that greps `: error: `
+  picks one up; in `--json` it carries `"severity":"performance"`, the field a
+  tool filters on. Warnings are **on by default**, print on stderr, and
+  **never change the exit code** — a program that trips one still compiles and
+  still exits 0. A compilation that failed prints its errors and none of its
+  warnings, so no error report is diluted with advice about code that is about
+  to change; more than one warning is capped at 20 like the error report, with
+  `...and N more performance warnings` and an `N performance warnings` line.
+  `--no-warn-performance` silences the class and changes nothing else: the IR
+  is byte-identical either way, because the flag never reaches
+  `CompilerOptions` and only the driver reads it. Both compilers print the
+  same bytes.
+
+  The two warnings, each of which names the rewrite in the user's own terms,
+  because a warning nobody can act on trains people to ignore the whole class:
+
+  - **quadratic string building** — `s = <something built from s>`, through
+    `+` operands or a template hole, where `s` is a string local declared
+    outside the loop the assignment sits in. Every pass copies the whole
+    accumulator, which §1 measures at 180 MB of peak RSS for 88 KB of output;
+    the hint is a `string[]` and one `join`.
+  - **allocation in a loop** — a `new Array<T>(n)` with a non-constant `n`
+    declared inside a loop whose value never leaves the iteration. A
+    dynamically sized array can never be an entry-block alloca, so the arena
+    grows once per pass and is only released when the function returns; the
+    hint is to hoist it above the loop or bracket the loop body with
+    `Arena.mark()` / `Arena.release(m)`.
+
+  The analysis is a per-function pass in the checker after the body is checked
+  (`src/checker/performance.ts`, and the WP15 section of `self/checker.ts`):
+  both facts are syntax plus the types and bindings pass 2 already wrote, and
+  the emitter may not report user-facing diagnostics at all. The guards are the
+  point of the design — everything WP6's escape analysis already handles stays
+  silent, so a `new C(...)`, an object or array literal and a
+  `new Array<T>(<literal>)` in a loop are never reported (each is one
+  entry-block alloca whose slot is reused every pass), nor is an allocation
+  that is pushed, stored, returned or passed on, nor a concatenation in a loop
+  that does not accumulate into its own target. `tests/cases/perf_*` covers
+  both halves and the `WP15 §8` block of `tests/run.js` pins the exact text,
+  the flag, the `--json` shape and the cap.
+
+  Run over the corpus, the warnings found one real bug: `self/lexer.ts` builds
+  the text of a string and of a template literal one character at a time with
+  `text = text + ...` inside a `while` loop, the shape `.claude/selfhost.md`
+  forbids in `self/`. It is reported rather than fixed here; the fix is a
+  `StringBuilder`, as the rest of `self/` already uses.
+
+- **A caller reclaims the arena around a string-returning call (WP9, closing
+  the remaining item of the WP6 note in `docs/wp9-optimisation.md`).** A
+  function that returns a string can never have an automatic arena scope: the
+  string it hands back has to outlive it, so every intermediate it built lives
+  as long as the program. That is what made `bench/strbuild` touch 48 MB of
+  fresh pages to produce an 806 KB string. The caller is in a better position,
+  and for a reason that has nothing to do with how the value is used — a call
+  hands back exactly one value, so everything else the callee bumped is
+  unreachable the moment it returns. Calls now compile to
+
+  ```llvm
+  %mark = call i64 @amrit_arena_mark()
+  %t    = call i8* @join(i32 %lo, i32 %hi)
+  %kept = call i8* @amrit_arena_keep(i64 %mark, i8* %t)
+  ```
+
+  with `%kept` used everywhere `%t` would have been. **Peak resident set for
+  `bench/strbuild` falls from 48,676 KB to 16,420 KB** and its peak live arena
+  from 51.5 MB to 15.2 MB, for the same output and the same bytes bumped.
+
+  The bracket is emitted only when the callee returns a plain `string`, bumps
+  the arena at all, never touches `Arena.reset` / `Arena.release`, and — the
+  fact that needed building — never lets an allocation out of its frame other
+  than through its return value. `src/codegen/escape.ts` grew that fact,
+  `allocEscapes`, by refining what `allocLeaks` already knew: `leaks` merges a
+  value stored where the *caller* can reach it with one merely assigned to a
+  local of the frame (`s = s + piece(i)`, the shape of every string builder),
+  and only the first is a reason not to reclaim. Every `Outcome` now carries an
+  `escapes` bit computed in the same walk from the same `classifyUse`, and it
+  propagates over the call graph in the same fixpoint; `allocEscapes` implies
+  `allocLeaks` and never the reverse, and `flow` is untouched, so the stack
+  rule and the automatic scopes decide exactly what they decided before.
+
+  The runtime gains `amrit_arena_keep(mark, p)`: it releases back to `mark`
+  while preserving the newest block, either by moving it down onto the mark and
+  freeing every newer chunk, or — when the mark sat at the end of a chunk the
+  callee filled exactly — by leaving it where it is and unlinking the chunks
+  between. Only a `string` may be kept, because only a string is one flat block
+  with no interior pointers; an array header names a separate data block and a
+  `Result` names its payload, so neither is ever moved. Anything the guards
+  cannot prove — a block that is not the arena's newest, a stale mark, a mark
+  newer than the block — answers the pointer unchanged, which reclaims less and
+  is always safe. `.text` in `runtime/runtime.c` goes from 2,561 to **2,775**
+  bytes at `-Oz` against the 4,096 budget.
+
+  `tests/cases/mem_reclaim_call.ts` is strbuild in miniature,
+  `mem_reclaim_argument.ts` shows the temporary being passed on and held across
+  a later call, `mem_reclaim_no_stack_alloc.ts` shows `--no-stack-alloc` moving
+  allocations without moving a bracket, and `mem_reclaim_guards.ts` is the
+  negative half: four calls of which exactly one is bracketed, the other three
+  refused for storing into the caller's object, for `Arena.reset`, and for
+  returning a `Result<string, number>`. `tests/runtime_test.c` covers both
+  outcomes of `amrit_arena_keep` and its three refusals. Both compilers emit
+  the bracket identically and the bootstrap still reaches its fixed point;
+  `self/` is itself a heavy string builder, so its own IR carries it too.
 
 - **A plan for retiring stage0 rather than freezing it (WP19,
   `docs/wp19-stage0-retirement.md`).** WP14 §6 decided that stage0 stays
@@ -90,6 +261,54 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   names. Without that the two new goldens ran natively and failed under Node,
   which is the shape of every builtin that was ever added and forgotten there.
 
+- **Three of the four things stage1 still left to stage0 are closed (WP14
+  §7a).** Each of the new constructs entered the language and `src/` first,
+  with a golden `.ll`, a native round trip, negatives, a `docs/LANGUAGE.md`
+  rule and a cookbook entry, and only then `self/`:
+
+  - `process.platform` and `process.arch` (`io_host`;
+    `reject_platform_assign`, `reject_arch_call`) answer what machine the
+    *program* runs on, spelled as Node spells it: `"linux"` / `"darwin"` and
+    `"x64"` / `"arm64"`, and `"unknown"` for anything this compiler has no
+    triple for. Each is one call that answers the address of a string in the
+    runtime's own constant data — settled when `runtime.c` was compiled, so a
+    cross build reports the target — which means nothing is allocated and
+    nothing is loaded, the declarations carry `readnone willreturn`, and two
+    reads in one function fold into one. Not `noalias`: every call answers the
+    same pointer. With them `self/target.ts` composes the host triple exactly
+    as `src/codegen/target.ts` does, so **`--target host` is stage1's** and the
+    two compilers emit the same module for it.
+  - `isDirectorySync(path: string): boolean` (`io_is_directory`;
+    `reject_is_directory_arity`, `reject_is_directory_type`) is one `stat`
+    answering the one question `-o <dir>` asks of a path, and a value rather
+    than an exit for the reason `mkdirSync` and `readFileSyncOrNull` answer
+    values. `amrit_mkdir` is rewritten to call it, so the `stat` exists once.
+    With it **`-o <dir>` without the trailing slash** names an existing
+    directory in stage1, as it always has in stage0.
+  - **An internal compiler error in stage1 exits 70** (`EX_SOFTWARE`) with
+    stage0's report, where a broken invariant used to reach `panic(msg)` and
+    exit 1. This needed *no* language change, which is why it was chosen over
+    the second `panic` §7a also costed: `process.exit(n)` already means "this
+    code, now", so the status one program wants for its own bugs is not the
+    language's business, and the report's wording is the compiler's policy
+    rather than a builtin's. `self/ice.ts` holds it and answers the status, so
+    every one of the 28 sites is the single statement
+    `process.exit(internalError("..."))` — a pair could be half-written and
+    this cannot. stage1 names `AMRITC_DEBUG` and says there is nothing behind
+    it here rather than promising a stack trace: with no exceptions the report
+    is made at the site, so there is no stack to unwind and no `process.argv`
+    to read either. Seven sites in `self/emit_ops.ts` and
+    `self/interop_napi.ts` still exit 1.
+
+  `.text` in `runtime/runtime.c` goes from 2,544 to **2,561** bytes at `-Oz`
+  against the 4,096 budget: eight bytes each for `amrit_platform` and
+  `amrit_arch`, exactly as §7a costed them, and one byte net for
+  `amrit_is_dir`. `runtime/shim.mjs` and `tests/differential/rewrite.js` know
+  all three, so the new goldens are in the WP13 comparison like every other
+  builtin, and `runtime/amritc.d.ts` declares them — along with `mkdirSync` and
+  `spawnSync`, which it had never been told about, so an editor typed them as
+  unknown names. `--emit-ast` is the one thing that stays stage0's, by design.
+
 ### Changed
 
 - **`test (macos-latest)` is commented out of the CI matrix.** It is not a
@@ -106,6 +325,129 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `build.sh` that no Linux runner exercises at any architecture.
 
 ### Fixed
+
+- **`self/lexer.ts` no longer builds a literal one byte at a time (WP14
+  §2.3).** The `performance` class above found it in the compiler's own
+  source, and it was a true positive: `scanString` and `scanTemplate` both did
+  `text = text + <one byte>` inside their scan loop, so every byte of every
+  string and template literal copied the whole accumulator into a fresh arena
+  string — quadratic in time and in arena bytes, in the loop that reads every
+  file the compiler compiles. Both scans now keep a `chunk` cursor and move
+  whole runs: an escape flushes the run before it and the terminator flushes
+  the rest, so a literal with no escape in it — nearly every one — costs
+  exactly one `substring` of its whole span and never touches a builder at
+  all. The escape path shares one `StringBuilder`, held by the lexer and reset
+  per literal rather than allocated per literal, through the two helpers
+  (`takeEscape`, `literalText`) the two scans now have in common.
+
+  Nothing the lexer *produces* changed: the token streams of 678 files agree
+  byte for byte with the old lexer's, the malformed ones included, and
+  `tests/lexer_oracle.js` still agrees with the `typescript` scanner over
+  588 files and 176,304 tokens. stage1 compiling the whole of `self/` goes
+  from **131.8 MB of peak RSS to 128.9 MB** (about 226 ms to 214 ms, on a
+  shared machine, so the memory is the number to trust). On a source whose
+  literals are long rather than short the quadratic shows its real shape:
+  400 KB of literal text cost **408 MB and 392 ms** to lex and now cost
+  **2.4 MB and 10 ms**.
+
+- **`--emit-napi` bridges `u8`, `u16`, `u32`, `u64` and `f32` instead of
+  dropping the function that mentions one (WP8).** The shim kept its own
+  reader and boxer tables, and they had rows for `i32`, `f64`, `bool` and
+  `i64` only, so a signature carrying any other width fell out of `plan()` and
+  the addon simply did not export it — a `Result<f32, u8>` included, since its
+  arms go through the same tables. Each width now has both halves. On the way
+  in, `napi_get_value_uint32` reads the unsigned ones and `u8` / `u16` take the
+  width's own modulus from it, which is the conversion JavaScript itself
+  performs storing a number into a typed array: 300 reaches a `u8` as 44, `-1`
+  reaches a `u32` as 4294967295, and nothing throws, matching the `i32` reader
+  that has always applied ToInt32. `f32` is read as a double and converted by a
+  generated `amrit_napi_f32`, because C leaves a double-to-float conversion
+  undefined out of range: anything at or past `0x1.ffffffp127` becomes an
+  infinity of that sign, where round-to-nearest-even sends it. On the way out
+  `napi_create_uint32` keeps a `u32` above 2^31 positive, an `f32`
+  widens to a double exactly, and `u64` crosses as a bigint like `i64`. A
+  packed `Result` narrows each arm through its own temporary.
+
+  And the reason the hole survived: a function the shim cannot carry was
+  omitted under one fixed sentence that named neither the function's types nor
+  the position that stopped it. It is now named with both — `not bridged:
+  parameter 1 (p) is Point`, `not bridged: it returns Result<number, IoError>`
+  — under a heading listing what does cross, so the next gap reads as a gap.
+  `tests/self/interop_widths.ts` is built into a real addon and called by
+  `tests/run.js` at every boundary; `self/interop_napi.ts` carries the same
+  change and `tests/self/interop_oracle.js` compares the two shims byte for
+  byte. Bare unsigned widths still do not cross the *wasm* loader, which is
+  now written down in `docs/wp8-interop.md` rather than left to be discovered.
+
+- **`&= |= ^= <<= >>= >>>=` reach a field and an element.** `this.flags |= MASK`
+  and `xs[i] &= 0xff` used to be refused (`` Unsupported assignment operator
+  `|=` `` for a field, `Only simple variables can be assigned` for an element)
+  while the arithmetic compound operators had taken both targets since WP2 and
+  WP4. There was nothing behind the refusal but a missing row: the lowering is
+  the one `+=` already had — address the target once, load, apply one
+  instruction, store — so the three targets now share one operand rule
+  (`checkBitwiseAssignOperands`) and one apply step (`emitBitwiseCombine`), in
+  both compilers. That sharing is what makes the guarantees hold everywhere at
+  once: the shift count is masked to the operand width on a field and an element
+  exactly as on a local (`f.bits <<= 33` is a shift by one), `>>` still reads the
+  target's signedness (`ashr` on `i32`, `lshr` on a `u32`, where `>>>` is always
+  `lshr`), and the target expression is evaluated exactly once — one call and one
+  bounds check for `a[next()] |= 1`, because the check and the `getelementptr`
+  happen once and the load and the store share the address.
+
+  `readonly` is unaffected: a compound assignment is a write, so `this.mask |=
+  bit` is refused for an inherited `readonly` field like any other write
+  (`reject_cls_field_bitwise_readonly`), and the operand rule is still `&`'s, so
+  an `f64` element is refused naming the compound token
+  (`reject_arr_element_bitwise_f64`). Those two cases are the repointed
+  `reject_cls_field_bitwise_assign` and `reject_arr_element_bitwise_assign`,
+  which described behaviour that is now legal. New: `cls_field_bitwise_assign`,
+  `arr_element_bitwise_assign` (whose `.out` proves the single evaluation),
+  `tests/differential/corpus/bit_compound_target`, and the
+  `expr_compound_target` cookbook entry.
+
+### Fixed
+
+- **An element assignment reported its type errors through a synthesised node.**
+  `installArrayAssignmentCheckers` handed `checkElementAssignment` a spread copy
+  of the binary expression so that the parentheses around `(a[i]) += v` were
+  already peeled; a spread copy is a plain object with no `getStart`, so the
+  moment that handler reported on the expression itself — a compound assignment
+  whose operands disagree — the compiler died with exit 70 instead of printing
+  the error. The unwrapped target is passed alongside the real node now, and
+  `reject_arr_element_bitwise_f64` is the case that would have caught it.
+
+- **`--emit-dts` no longer declares a wasm export its loader omits (WP8/WP15).**
+  The declarations and the loader each had their own idea of what crosses the
+  wasm boundary, and they drifted: `wasmType` spelled `u8`/`u16`/`u32` as
+  `number` and `u64` as `bigint`, so the `.d.ts` declared such a function,
+  while the loader's crossing test had never learnt the unsigned widths and
+  wrote no entry for it. `load()` handed back an object missing a function its
+  own typings promised — a `TypeError` at the call with no diagnostic
+  anywhere, reproducible today with `port(p: u16)`. There is one predicate
+  now, `wasmSkipReason`, and both files ask it; a function that cannot cross
+  is a comment naming the position and the type that stopped it —
+  `` argument 2 (a) is `string` `` — rather than the blanket sentence it was.
+
+  The unsigned widths cross for real, which needs the loader to put each value
+  back in its range: the wasm ABI has only `i32`/`i64`/`f32`/`f64`, so `u8`,
+  `u16` and `u32` share a value type with `i32` and `u64` shares one with
+  `i64`. A `u32` result above 2^31 was reaching JavaScript *negative*
+  (`idU32(4294967295)` as `-1`) and a `u64` above 2^63 as a negative bigint;
+  both are read unsigned now (`>>> 0`, `BigInt.asUintN(64, x)`). A `u8` or
+  `u16` result is masked because the callee does not narrow it — `add i8` is
+  congruent modulo 256, so the wasm backend adds in a 32-bit register and
+  `addU8(200, 100)` answered 300 — and a narrow *argument* is masked because
+  the emitter writes the parameter as a bare `i8` with no `zeroext`, which
+  leaves zero-extending it the caller's job under the wasm C ABI. The
+  spellings are `runtime/shim.mjs`'s, so the wasm build and the differential
+  rewrite agree on what a `u32` above 2^31 is. `f32` needs nothing in either
+  direction and now says so. Both compilers changed together
+  (`src/interop/{wasm,dts}.ts`, `self/interop_{wasm,dts}.ts`);
+  `tests/self/interop_unsigned.ts` is the new corpus fixture, built to wasm
+  and called at every boundary by the WP8 section of `tests/run.js`, which
+  also checks that every function a `.d.ts` declares has an entry in its
+  `.mjs`.
 
 - **A builtin's argument is checked down to its element type.**
   `checkArgumentType` compared type *kinds*, which was enough while every

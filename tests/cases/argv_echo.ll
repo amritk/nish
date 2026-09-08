@@ -18,17 +18,17 @@ declare noundef double @amrit_parse_number(i8* noundef nonnull readonly align 8 
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #3
 declare i32 @llvm.fptosi.sat.i32.f64(double) #4
 
-define noundef i32 @count() #0 {
+define internal noundef i32 @count() #0 {
 entry:
   %0 = load %struct.amrit_array*, %struct.amrit_array** @amrit_argv, align 8
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %0, i64 0, i32 0
   %2 = load i64, i64* %1, align 8
   %3 = trunc i64 %2 to i32
-  %4 = sub i32 %3, 1
+  %4 = sub nsw i32 %3, 1
   ret i32 %4
 }
 
-define noundef nonnull align 8 i8* @argument(i32 noundef %i) #1 {
+define internal noundef nonnull align 8 i8* @argument(i32 noundef %i) #1 {
 entry:
   %0 = load %struct.amrit_array*, %struct.amrit_array** @amrit_argv, align 8
   %1 = sext i32 %i to i64
@@ -113,7 +113,7 @@ bounds.ok:
 
 for.inc:
   %34 = load i32, i32* %i.addr, align 4
-  %35 = add i32 %34, 1
+  %35 = add nsw i32 %34, 1
   store i32 %35, i32* %i.addr, align 4
   br label %for.cond
 
@@ -141,7 +141,7 @@ forof.body:
   %47 = load i8*, i8** %arg.addr, align 8
   %48 = call double @amrit_parse_number(i8* %47, i32 2)
   %49 = call i32 @llvm.fptosi.sat.i32.f64(double %48)
-  %50 = add i32 %46, %49
+  %50 = add nsw i32 %46, %49
   store i32 %50, i32* %sum.addr, align 4
   br label %forof.inc
 

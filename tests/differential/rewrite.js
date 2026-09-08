@@ -230,6 +230,7 @@ const IDENTIFIER_BUILTINS = new Map([
   ["appendFileSync", "appendFileSync"],
   ["mkdirSync", "mkdirSync"],
   ["spawnSync", "spawnSync"],
+  ["isDirectorySync", "isDirectorySync"],
   // WP16: natively these bump a struct out of the arena; in JavaScript they
   // build the object with the same three field names (`runtime/shim.mjs`).
   ["Ok", "Ok"],
@@ -463,8 +464,11 @@ function makeTransformer(unit, stems) {
             );
             return shimCall("updIdx", [a, i, fn]);
           }
-          // x op= v  ->  x = wrap(x op v)  (targets are always simple mutable locals)
-          return f.createAssignment(node.left, apply(kind, binop, node.left, r));
+          // x op= v  ->  x = wrap(x op v), for a local and for a field alike.
+          // The target is rewritten once and reused on both sides, so a
+          // receiver that itself needs rewriting is not visited twice.
+          const l = ts.visitNode(node.left, visit);
+          return f.createAssignment(l, apply(kind, binop, l, r));
         }
         if (op === ts.SyntaxKind.EqualsToken && ts.isElementAccessExpression(node.left)) {
           const a = ts.visitNode(node.left.expression, visit);
@@ -494,6 +498,14 @@ function makeTransformer(unit, stems) {
       // ---- process.argv -> the script and its arguments (argv[0] is the program, as natively) ----
       if (dottedName(node) === "process.argv" && !bindings.has(node.expression)) {
         return shimCall("argv", []);
+      }
+
+      // ---- process.platform / process.arch -> Node's own, which is what the runtime answers ----
+      if (dottedName(node) === "process.platform" && !bindings.has(node.expression)) {
+        return shimCall("platform", []);
+      }
+      if (dottedName(node) === "process.arch" && !bindings.has(node.expression)) {
+        return shimCall("arch", []);
       }
 
       // ---- new Array<T>(n) (and the Int32Array/Float64Array/BigInt64Array aliases) -> zero-filled ----
@@ -605,6 +617,12 @@ function rewriteProgram(entry, opts, outDir) {
   const compilation = new Compilation({
     numberMode: opts.numberMode ?? "i32",
     uncheckedIndexing: opts.uncheckedIndexing ?? false,
+    // The rewrite only needs the checker's types, but the checker also folds
+    // module constants, and folding follows the compilation's overflow mode: a
+    // program compiled with `--wrapping` may hold a constant that the default
+    // refuses. Pass the flag through or the JavaScript side would fail to build
+    // for a program the native side compiled happily.
+    nsw: opts.nsw ?? true,
   });
   compilation.addRoot(entry);
   compilation.check();
@@ -652,18 +670,20 @@ function rewriteProgram(entry, opts, outDir) {
 module.exports = { rewriteProgram, SHIM };
 
 if (require.main === module) {
-  // node tests/differential/rewrite.js <file.ts> [--number-mode f64] [-o <dir>]
+  // node tests/differential/rewrite.js <file.ts> [--number-mode f64] [--wrapping] [-o <dir>]
   const argv = process.argv.slice(2);
   let numberMode = "i32";
+  let nsw = true;
   let out = path.join(root, "build", "test", "differential", "rewrite");
   const inputs = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--number-mode") numberMode = argv[++i];
+    else if (argv[i] === "--wrapping") nsw = false;
     else if (argv[i] === "-o") out = argv[++i];
     else if (argv[i] === "--unchecked-indexing") {
       /* no effect on the rewrite */
     } else inputs.push(argv[i]);
   }
-  const r = rewriteProgram(inputs[0], { numberMode }, out);
+  const r = rewriteProgram(inputs[0], { numberMode, nsw }, out);
   for (const m of r.modules) process.stdout.write(`// ${m}\n${fs.readFileSync(m, "utf8")}\n`);
 }

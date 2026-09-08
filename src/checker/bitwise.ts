@@ -1,6 +1,9 @@
 /**
  * Bitwise operators: `& | ^ << >> >>>`, unary `~`, and the compound forms
- * `&= |= ^= <<= >>= >>>=` on a mutable local.
+ * `&= |= ^= <<= >>= >>>=` on a mutable local, a field or an element. The three
+ * targets share `checkBitwiseAssignOperands` below, so they are accepted and
+ * refused in the same words; only resolving the target differs, and that is
+ * `classes.ts`'s and `arrays.ts`'s job.
  *
  * Both operands are integers of the same width (two `i32` or two `i64`), and
  * `~` takes one. There are two deliberate rejections:
@@ -64,19 +67,49 @@ const checkBitwise: BinaryChecker = (ctx, expr, scope) => {
   return lhs;
 };
 
-/** `x &= e` and friends: the `+=` rule with the integer operand types of `&`. */
-const checkBitwiseAssignment: BinaryChecker = (ctx, expr, scope) => {
+/** The six compound forms, which a field or element target shares with a local. */
+const COMPOUND_OPERATORS = new Set<ts.SyntaxKind>([
+  ts.SyntaxKind.AmpersandEqualsToken,
+  ts.SyntaxKind.BarEqualsToken,
+  ts.SyntaxKind.CaretEqualsToken,
+  ts.SyntaxKind.LessThanLessThanEqualsToken,
+  ts.SyntaxKind.GreaterThanGreaterThanEqualsToken,
+  ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
+]);
+
+/** `&= |= ^= <<= >>= >>>=`, told apart from the arithmetic compound forms by the field and element paths. */
+export const isBitwiseCompoundOperator = (op: ts.SyntaxKind): boolean => COMPOUND_OPERATORS.has(op);
+
+/**
+ * The operand rule behind every `x op= e` in this family, wherever `x` lives:
+ * both sides are integers of one type, and the refusal names the compound
+ * token that was written rather than the operator it decomposes into.
+ * `classes.ts` and `arrays.ts` call this once they have resolved the field or
+ * element the target denotes, so a local, a field and an element are refused
+ * in exactly the same words.
+ */
+export const checkBitwiseAssignOperands = (
+  ctx: CheckContext,
+  expr: ts.BinaryExpression,
+  target: StaticType,
+  rhs: StaticType
+): StaticType => {
   const op = expr.operatorToken.kind;
-  const target = resolveMutableTarget(ctx, expr.left, scope);
-  const rhs = ctx.checkExpression(expr.right, scope);
-  if (target.type.kind === "bool" || rhs.kind === "bool") throw ctx.error(booleanMessage(op), expr);
-  if (!isInteger(target.type) || !sameType(rhs, target.type)) {
+  if (target.kind === "bool" || rhs.kind === "bool") throw ctx.error(booleanMessage(op), expr);
+  if (!isInteger(target) || !sameType(rhs, target)) {
     throw ctx.error(
-      `Operator \`${ts.tokenToString(op)}\` requires two operands of the same integer type, got ${typeToString(target.type)} and ${typeToString(rhs)}${f64Hint(ctx, target.type, rhs)}`,
+      `Operator \`${ts.tokenToString(op)}\` requires two operands of the same integer type, got ${typeToString(target)} and ${typeToString(rhs)}${f64Hint(ctx, target, rhs)}`,
       expr
     );
   }
-  return target.type;
+  return target;
+};
+
+/** `x &= e` and friends: the `+=` rule with the integer operand types of `&`. */
+const checkBitwiseAssignment: BinaryChecker = (ctx, expr, scope) => {
+  const target = resolveMutableTarget(ctx, expr.left, scope);
+  const rhs = ctx.checkExpression(expr.right, scope);
+  return checkBitwiseAssignOperands(ctx, expr, target.type, rhs);
 };
 
 const checkBitwiseNot: UnaryChecker = (ctx, expr, scope) => {

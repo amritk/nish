@@ -14,6 +14,6 @@ function classify(n: number): number {
   }
 }
 
-function test(): number {
+export function test(): number {
   return classify(0) + classify(1) * 2 + classify(2) * 3 + classify(-1) * 4 + classify(9) * 5;
 }

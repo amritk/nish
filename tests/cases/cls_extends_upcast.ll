@@ -36,22 +36,22 @@ slow:
   ret i8* %grown
 }
 
-define void @Base.constructor(%struct.Base* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %id) #0 {
+define internal void @Base.constructor(%struct.Base* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %id) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Base, %struct.Base* %this, i32 0, i32 0
   store i32 %id, i32* %0, align 4
   ret void
 }
 
-define noundef i32 @Base.tag(%struct.Base* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #1 {
+define internal noundef i32 @Base.tag(%struct.Base* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Base, %struct.Base* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
-  %2 = mul i32 %1, 2
+  %2 = mul nsw i32 %1, 2
   ret i32 %2
 }
 
-define void @Derived.constructor(%struct.Derived* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %id, i32 noundef %extra) #0 {
+define internal void @Derived.constructor(%struct.Derived* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %id, i32 noundef %extra) #0 {
 entry:
   %0 = bitcast %struct.Derived* %this to %struct.Base*
   call void @Base.constructor(%struct.Base* %0, i32 %id)
@@ -60,7 +60,7 @@ entry:
   ret void
 }
 
-define noundef i32 @sumIds(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %items) #1 {
+define internal noundef i32 @sumIds(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %items) #1 {
 entry:
   %total.addr = alloca i32, align 4
   %b.addr = alloca %struct.Base*, align 8
@@ -87,7 +87,7 @@ forof.body:
   %10 = load %struct.Base*, %struct.Base** %b.addr, align 8
   %11 = getelementptr inbounds %struct.Base, %struct.Base* %10, i32 0, i32 0
   %12 = load i32, i32* %11, align 4
-  %13 = add i32 %9, %12
+  %13 = add nsw i32 %9, %12
   store i32 %13, i32* %total.addr, align 4
   br label %forof.inc
 
@@ -102,7 +102,7 @@ forof.end:
   ret i32 %16
 }
 
-define noundef nonnull align 8 dereferenceable(4) %struct.Base* @lower(%struct.Base* noundef nonnull align 8 dereferenceable(4) %a, %struct.Base* noundef nonnull align 8 dereferenceable(4) %b) #1 {
+define internal noundef nonnull align 8 dereferenceable(4) %struct.Base* @lower(%struct.Base* noundef nonnull align 8 dereferenceable(4) %a, %struct.Base* noundef nonnull align 8 dereferenceable(4) %b) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Base, %struct.Base* %a, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
@@ -122,7 +122,7 @@ cond.end:
   ret %struct.Base* %5
 }
 
-define noundef align 8 %struct.Base* @maybe(i1 noundef zeroext %flag, %struct.Derived* noundef nonnull align 8 dereferenceable(8) %d) #2 {
+define internal noundef align 8 %struct.Base* @maybe(i1 noundef zeroext %flag, %struct.Derived* noundef nonnull align 8 dereferenceable(8) %d) #2 {
 entry:
   br i1 %flag, label %cond.true, label %cond.false
 
@@ -138,7 +138,7 @@ cond.end:
   ret %struct.Base* %1
 }
 
-define noundef nonnull align 8 dereferenceable(4) %struct.Base* @widen(%struct.Derived* noundef nonnull align 8 dereferenceable(8) %d) #2 {
+define internal noundef nonnull align 8 dereferenceable(4) %struct.Base* @widen(%struct.Derived* noundef nonnull align 8 dereferenceable(8) %d) #2 {
 entry:
   %0 = bitcast %struct.Derived* %d to %struct.Base*
   ret %struct.Base* %0

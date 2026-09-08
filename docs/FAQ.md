@@ -23,8 +23,8 @@ and `i32` is what C and Rust use for it: one machine word, exact, vectorisable,
 and the natural type for array indices and exit codes. Treating every
 `number` as a double would make `i % 2`, `a[i]`, and `for (let i ...)`
 carry conversions and lose exactness above 2^53. The cost is that `number`
-does not behave like JavaScript's number: integer arithmetic wraps and `1.5`
-is rejected in i32 mode
+does not behave like JavaScript's number: signed integer overflow is
+undefined behaviour rather than a wrap, and `1.5` is rejected in i32 mode
 ([LANGUAGE.md: Semantics decisions](LANGUAGE.md#semantics-decisions)). The
 explicit types `i32`, `i64`, and `f64` are always available whatever the
 mode.
@@ -87,12 +87,26 @@ branch to a cold block, and LLVM folds it away for constant divisors
 
 ### Do integers overflow?
 
-They wrap, like Rust release builds: `2147483647 + 1` is `-2147483648`,
-and the IR carries no `nsw`. Pass `--nsw` to make signed overflow
-undefined as in C; LLVM then widens `i32` loop counters instead of
-sign-extending them every iteration, worth about 8 % on the sieve
-benchmark and nothing on the others. Use it only for code that has its
-own overflow argument ([wp9-optimisation.md](wp9-optimisation.md)).
+Signed overflow is **undefined behaviour** by default: every user-level
+`i32`/`i64` `add`, `sub` and `mul` carries `nsw`, exactly as in C, so LLVM may
+widen `i32` loop counters instead of sign-extending them every iteration and
+strength-reduce the loops around them.
+
+Code that overflows on purpose — a hash, a linear congruential generator, a
+wrap-around counter — must say so, in one of two ways:
+
+- **`--wrapping`** turns the flag off for the whole compilation and restores
+  two's-complement wrapping, like a Rust release build: `2147483647 + 1` is
+  `-2147483648` again.
+- **Write it in an unsigned type.** `u8`, `u16`, `u32` and `u64` are *defined*
+  to wrap and never carry a no-wrap flag in either mode, which is what they are
+  for; an FNV-1a round in `u32` needs no compiler flag at all.
+
+This is a guarantee earlier versions made and this one withdraws, so it is
+worth being blunt: a program that quietly relied on wrapping keeps compiling
+and stops being correct. `--wrapping` is the whole remedy
+([LANGUAGE.md: Semantics decisions](LANGUAGE.md#semantics-decisions),
+[wp15-performance.md](wp15-performance.md)).
 
 ### How do I know the compiled program behaves like Node?
 

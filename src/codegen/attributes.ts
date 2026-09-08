@@ -184,6 +184,13 @@ export interface FunctionFacts {
   directArena: boolean;
   /** An allocation may survive the call other than through the return value (fixpoint over callees). */
   allocLeaks: boolean;
+  /**
+   * WP9: an allocation is reachable *by the caller* after the call, other than
+   * through the return value (fixpoint over callees). Refines `allocLeaks`,
+   * which also counts a value assigned to a local of the frame; see the header
+   * of escape.ts. `allocEscapes` implies `allocLeaks`, never the reverse.
+   */
+  allocEscapes: boolean;
   /** An allocation of this function is returned: the caller owns it, so no scope here. */
   returnsAllocation: boolean;
   /** Calls `Arena.reset` / `Arena.release`, directly or through a callee (fixpoint). */
@@ -295,6 +302,11 @@ function propagate(facts: Map<string, FunctionFacts>): void {
           f.allocLeaks = true;
           changed = true;
         }
+        // WP9: whatever a callee lets out of its own frame is out of this one too.
+        if (calleeFacts?.allocEscapes && !f.allocEscapes) {
+          f.allocEscapes = true;
+          changed = true;
+        }
         if (calleeFacts?.usesArenaControl && !f.usesArenaControl) {
           f.usesArenaControl = true;
           changed = true;
@@ -303,6 +315,10 @@ function propagate(facts: Map<string, FunctionFacts>): void {
       // A pointer-returning callee that allocates makes its result an allocation of this function.
       for (const site of f.callSites) {
         if (!facts.get(site.callee)?.allocates) continue;
+        if (site.escapes && !f.allocEscapes) {
+          f.allocEscapes = true; // WP9: this function stored the callee's result where its own caller can reach it
+          changed = true;
+        }
         if (site.flow === "local" && !f.directArena) {
           f.directArena = true;
           changed = true;
@@ -547,6 +563,7 @@ function collectFacts(
     allocates: memory?.directArena ?? false,
     directArena: memory?.directArena ?? false,
     allocLeaks: memory?.allocLeaks ?? false,
+    allocEscapes: memory?.allocEscapes ?? false,
     returnsAllocation: memory?.returnsAllocation ?? false,
     usesArenaControl: memory?.usesArenaControl ?? false,
     callSites: memory?.callSites ?? [],

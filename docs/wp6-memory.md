@@ -1,6 +1,6 @@
 # WP6: Memory strategy
 
-The zero-GC model in three layers, each a proven guarantee rather than a
+The zero-GC model in four layers, each a proven guarantee rather than a
 heuristic, plus `T | null`:
 
 1. **Escape-analysed stack allocation.** A `new C(...)`, object literal,
@@ -10,9 +10,14 @@ heuristic, plus `T | null`:
 2. **Automatic arena scopes.** A function whose arena temporaries all die
    with it brackets its body with `amrit_arena_mark` / `amrit_arena_release`, so
    calling it a million times keeps the arena flat.
-3. **Explicit control.** `Arena.reset()`, `Arena.mark()`, `Arena.release(m)`,
+3. **The call-site reclaim** (WP9, section 2a). A function that *returns* a
+   string cannot have a scope, because the string has to outlive it — so its
+   caller brackets the call instead, with `amrit_arena_mark` /
+   `amrit_arena_keep`, and reclaims everything the callee bumped underneath the
+   value it handed back.
+4. **Explicit control.** `Arena.reset()`, `Arena.mark()`, `Arena.release(m)`,
    `Arena.used()` for programs that manage batches themselves.
-4. **`T | null`** for pointer types, with narrowing enforced by the checker.
+5. **`T | null`** for pointer types, with narrowing enforced by the checker.
 
 Reference counting is not in this package (see "Left out").
 
@@ -20,7 +25,9 @@ Files: `src/codegen/escape.ts` (the analysis), `src/codegen/attributes.ts`
 (integration into the fact fixpoint), `src/codegen/emit/{classes,arrays}.ts`
 (allocas), `src/codegen/emitter.ts` and `emit/statements.ts` (scopes),
 `src/checker/nullable.ts`, `src/checker/arena.ts`, `src/codegen/emit/arena.ts`,
-`runtime/runtime.c`, `runtime/amritc.h`. Tests: `tests/cases/mem_*`,
+`runtime/runtime.c`, `runtime/amritc.h`; the call-site reclaim adds
+`src/codegen/emit/{expressions,classes}.ts` (the bracket) and
+`amrit_arena_keep`. Tests: `tests/cases/mem_*`,
 `tests/cases/reject_null_*`, `reject_nullable_scalar`,
 `reject_arena_release_type`, the `WP6: memory` block in `tests/run.js`, and
 the scope checks in `tests/runtime_test.c`.
@@ -299,6 +306,88 @@ offset in one `i64`. `amrit_arena_release(mark)`:
 Scopes nest LIFO with the call stack, so a scoped function calling another
 scoped function is always released innermost first. `tests/runtime_test.c`
 exercises all four cases and a 100000-iteration mark/release loop.
+
+## 2a. The call-site reclaim (WP9)
+
+Section 2's scopes stop at the one function that most needs them. A string
+builder returns what it built, so `returnsAllocation` is set and it gets no
+scope: every intermediate it made lives as long as the program. That is the
+whole of strbuild's 48 MB, and the full account — the rule, the soundness
+argument, the runtime primitive and the measurements — is in
+[wp9-optimisation.md](wp9-optimisation.md#the-call-site-reclaim). What belongs
+here is how it fits beside the two mechanisms above.
+
+### Rule
+
+A call to a user function `f` is bracketed by
+
+```llvm
+%mark = call i64 @amrit_arena_mark()
+%t    = call i8* @f(…)
+%kept = call i8* @amrit_arena_keep(i64 %mark, i8* %t)
+```
+
+when `f` returns a plain `string`, `f.allocates` is true, and neither
+`f.allocEscapes` nor `f.usesArenaControl` is. The mark is taken *after* the
+arguments, so the bracket contains only what the callee bumped, and `%kept`
+replaces `%t` at every later use.
+
+The value is not freed — it is *moved* down onto the mark, and only the bytes
+underneath it are released. That is why the rule needs no claim at all about how
+the caller uses the result, and why only a `string` qualifies: a string is one
+flat block with no interior pointers, so relocating its bytes relocates the whole
+value. An array header names a separate data block, a struct or a `Result` may
+name other blocks, and a `T | null` may be null; none of them may be moved.
+
+### How the facts relate
+
+`allocLeaks` (section 2) answers "may an allocation survive this call at all",
+and it counts `s = s + t` — an assignment to a local of the frame — as a leak,
+because the *stack* rule needs a fixed binding. `allocEscapes` is the same walk
+asking the narrower question the reclaim needs: "may an allocation be reached by
+the **caller** after the call, other than through the return value". An
+assignment to a local is not that; a store into a field, an element, a literal, a
+`push` or a capturing callee is. So `allocEscapes` implies `allocLeaks` and never
+the reverse, and the automatic scopes still read `allocLeaks` and decide exactly
+what they decided before.
+
+### Interactions
+
+| With | What happens |
+| --- | --- |
+| an automatic scope in the *caller* | Nested LIFO, like any two scopes: the caller's mark is older, so a reclaim only ever frees chunks newer than it. `tests/cases/mem_reclaim_argument.ts` has both. |
+| an automatic scope in the *callee* | Cannot arise. A callee with a scope releases its own temporaries and does not return an allocation, so `allocates` is false at the boundary that matters and no bracket is emitted. |
+| `Arena.mark()` / `Arena.release(m)` in the caller | Safe: a user mark taken before the call is older than the reclaim's, so nothing it names is released. A callee that touches `Arena.reset` / `Arena.release` itself is excluded by `usesArenaControl`. |
+| `--no-stack-alloc` | No effect. The reclaim is in this layer, not layer 1: the flag moves allocations into the arena and leaves every bracket where it was (`tests/cases/mem_reclaim_no_stack_alloc.ts`). |
+| a `Result` carrying a string payload | No bracket. `Ok(s)` bumps the payload *before* the `Result` object that names it, so relocating the object would release its own payload. Only a plain `string` return qualifies (`tests/cases/mem_reclaim_guards.ts`). |
+| a temporary passed on rather than concatenated | Bracketed like any other, and the callee is handed `%kept`. Nothing about the rule depends on the temporary dying soon. |
+
+### Runtime ABI
+
+```c
+void *amrit_arena_keep(uint64_t mark, void *p);
+```
+
+`p` must be the newest block the arena handed out; the call is emitted directly
+after the allocation it keeps, which is what makes that true. Two outcomes and
+three refusals:
+
+- the mark's chunk has room below it: `p` moves down onto `mark` and every newer
+  chunk is freed;
+- it does not (the mark sat at the end of a full chunk): `p` stays put and the
+  chunks strictly between it and the mark's chunk are unlinked and freed;
+- `p` is not in the current chunk (a literal, a parameter, anything older than
+  the mark), the mark is in no live chunk (stale, or `0` for an arena that was
+  empty), or the mark is newer than `p`: nothing happens and `p` is answered
+  unchanged.
+
+Refusing is always safe — it reclaims less — which is why every uncertain case
+takes that branch. `tests/runtime_test.c` exercises both outcomes and all three
+refusals.
+
+`runtime/runtime_wasm.c` does not provide it, and does not need to: the
+freestanding wasm profile has no strings at all (WP8), and the bracket is only
+ever emitted around a call that returns one.
 
 ## 3. Explicit control
 

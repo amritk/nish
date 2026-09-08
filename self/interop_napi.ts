@@ -7,11 +7,15 @@
 //   1. reads the arguments (`napi_get_cb_info`) and checks the count,
 //   2. type-checks and converts each one:
 //        number   a JS number; ToInt32 semantics in i32 mode (like `x | 0`)
+//        u8 u16 u32  a JS number through ToUint32 (`napi_get_value_uint32`),
+//                 then the width's own modulus, so 300 reaches a `u8` as 44
+//                 exactly as `new Uint8Array([300])[0]` does
+//        f32      a JS number rounded to nearest through `amrit_napi_f32`
 //        boolean  a JS boolean
-//        i64      a JS bigint (`napi_get_value_bigint_int64`)
+//        i64 u64  a JS bigint (`napi_get_value_bigint_{int,uint}64`)
 //        string   a JS string, copied into an arena `amrit_str`
 //                 (`napi_get_value_string_utf8`, measured first, then copied)
-//        Int32Array / Float64Array / BigInt64Array (i32[] / f64[] / i64[])
+//        Int32Array / Float32Array / Float64Array / BigInt64Array
 //                 a JS typed array of exactly that kind, *borrowed*: the
 //                 `amrit_array` header is built on the C stack over the typed
 //                 array's own bytes (`napi_get_typedarray_info`), so nothing
@@ -20,9 +24,10 @@
 //                 beyond the call (the arena does not own it), and a `push`
 //                 that grows the array moves it into the arena, invisibly to JS.
 //   3. calls the compiled function through its C ABI,
-//   4. boxes the result: `napi_create_int32` / `napi_create_double` /
-//      `napi_get_boolean` / `napi_create_bigint_int64`, `undefined` for void,
-//      `napi_create_string_utf8` for a string, and a fresh typed array
+//   4. boxes the result: `napi_create_int32` / `napi_create_uint32` (so a `u32`
+//      above 2^31 arrives positive) / `napi_create_double` /
+//      `napi_get_boolean` / `napi_create_bigint_{int,uint}64`, `undefined` for
+//      void, `napi_create_string_utf8` for a string, and a fresh typed array
 //      (`napi_create_arraybuffer` + memcpy + `napi_create_typedarray`) for an
 //      array, so the JS value never aliases the arena.
 // A violated check throws a TypeError naming the function and parameter.
@@ -42,6 +47,7 @@
 //
 // Build: scripts/build.sh <modules.ll> runtime/runtime.c <shim.c> -o x.node --profile napi
 
+import { internalError } from "./ice";
 import { CLI, LANGUAGE, RUNTIME_HEADER } from "./branding";
 import { Compilation } from "./compilation";
 import {
@@ -57,11 +63,26 @@ import {
   pushAll,
   resultDefinitions,
   spaceAfter,
+  tsKeyword,
   tsSignature,
   TypedView,
   typedView,
 } from "./interop_abi";
-import { K_RESULT, T_BOOL, T_F64, T_I32, T_I64, T_STRING, T_VOID, TypeTable } from "./types";
+import {
+  K_RESULT,
+  T_BOOL,
+  T_F32,
+  T_F64,
+  T_I32,
+  T_I64,
+  T_STRING,
+  T_U16,
+  T_U32,
+  T_U64,
+  T_U8,
+  T_VOID,
+  TypeTable,
+} from "./types";
 
 /** `a Float64Array`, `an Int32Array`. */
 export function withArticle(noun: string): string {
@@ -95,39 +116,117 @@ const READ_STRING: i32 = 1;
 const READ_RESULT: i32 = 2;
 const READ_VIEW: i32 = 3;
 
-/** The four scalars N-API reads directly: the JS type, its tag, its getter, its C type. */
+/** The double-to-float conversion: a call rather than a cast, defined by the shim itself. */
+const F32_HELPER: string = "amrit_napi_f32";
+
+/**
+ * How N-API reads one scalar, and how what it wrote becomes a C variable of
+ * the parameter's own type.
+ *
+ * `raw` is the type the getter writes, and it differs from `c` exactly where
+ * N-API has no getter of that width: `napi_get_value_uint32` is the only
+ * unsigned getter for a JS number, so `u8` and `u16` are read as a `uint32_t`
+ * and then narrowed by `open` / `close`, and `f32` is read as a `double`. An
+ * empty `open` means the getter already writes `c`.
+ *
+ * Out-of-range JS numbers truncate, they do not throw: 300 reaches a `u8`
+ * parameter as 44 and -1 reaches a `u32` as 4294967295, which is what
+ * JavaScript itself does storing a number into a typed array. The reasoning is
+ * written out over `ScalarReader` in `src/interop/napi.ts`.
+ */
 export class ScalarReader {
   jsType: string;
   tag: string;
   getter: string;
+  /** C type of the parameter itself. */
   c: string;
+  /** C type the getter writes; the same as `c` when nothing is narrowed. */
+  raw: string;
+  /** `open` + the raw temporary + `close` is the value as a `c`; empty `open` means no temporary. */
+  open: string;
+  close: string;
+  /** The bigint getters take a trailing `bool *lossless`. */
+  lossless: boolean;
 
-  constructor(jsType: string, tag: string, getter: string, c: string) {
+  constructor(
+    jsType: string,
+    tag: string,
+    getter: string,
+    c: string,
+    raw: string,
+    open: string,
+    close: string,
+    lossless: boolean
+  ) {
     this.jsType = jsType;
     this.tag = tag;
     this.getter = getter;
     this.c = c;
+    this.raw = raw;
+    this.open = open;
+    this.close = close;
+    this.lossless = lossless;
   }
 }
 
+/** A getter that writes the parameter's own type: no temporary, no narrowing. */
+function napiDirectReader(jsType: string, tag: string, getter: string, c: string, lossless: boolean): ScalarReader {
+  return new ScalarReader(jsType, tag, getter, c, c, "", "", lossless);
+}
+
+/** `napi_get_value_uint32` writes a `uint32_t`; `u8` and `u16` are one cast away from it. */
+function napiUnsignedReader(c: string): ScalarReader {
+  const open = c === "uint32_t" ? "" : `(${c})`;
+  return new ScalarReader("number", "napi_number", "napi_get_value_uint32", c, "uint32_t", open, "", false);
+}
+
 /**
- * `SCALAR_READERS` in `src/`, which is a record keyed by type kind. `null`
- * for every other type, which is what keeps an unsigned or `f32` parameter
- * out of this shim (the `TODO(WP8)` in `src/interop/abi.ts`).
+ * `SCALAR_READERS` in `src/`, which is a record keyed by type kind. `null` for
+ * a type N-API has no getter for at all — a class, an array, a nullable — and
+ * that is what keeps such a parameter out of this shim.
  */
 function napiScalarReader(table: TypeTable, t: i32): ScalarReader | null {
   switch (table.kindOf(t)) {
     case T_I32:
-      return new ScalarReader("number", "napi_number", "napi_get_value_int32", "int32_t");
+      return napiDirectReader("number", "napi_number", "napi_get_value_int32", "int32_t", false);
     case T_F64:
-      return new ScalarReader("number", "napi_number", "napi_get_value_double", "double");
+      return napiDirectReader("number", "napi_number", "napi_get_value_double", "double", false);
     case T_BOOL:
-      return new ScalarReader("boolean", "napi_boolean", "napi_get_value_bool", "bool");
+      return napiDirectReader("boolean", "napi_boolean", "napi_get_value_bool", "bool", false);
     case T_I64:
-      return new ScalarReader("bigint", "napi_bigint", "napi_get_value_bigint_int64", "int64_t");
+      return napiDirectReader("bigint", "napi_bigint", "napi_get_value_bigint_int64", "int64_t", true);
+    case T_U64:
+      return napiDirectReader("bigint", "napi_bigint", "napi_get_value_bigint_uint64", "uint64_t", true);
+    case T_U8:
+      return napiUnsignedReader("uint8_t");
+    case T_U16:
+      return napiUnsignedReader("uint16_t");
+    case T_U32:
+      return napiUnsignedReader("uint32_t");
+    case T_F32:
+      // C leaves a double-to-float conversion undefined when the value is out
+      // of range, so `f32` goes through the helper rather than a bare cast.
+      return new ScalarReader(
+        "number",
+        "napi_number",
+        "napi_get_value_double",
+        "float",
+        "double",
+        `${F32_HELPER}(`,
+        ")",
+        false
+      );
     default:
       return null;
   }
+}
+
+/** `napi_get_value_int32(env, <value>, <dest>)`, plus the `&lossless` the bigint getters take. */
+function napiScalarGet(s: ScalarReader, value: string, dest: string): string {
+  if (s.lossless) {
+    return `${s.getter}(env, ${value}, ${dest}, &lossless)`;
+  }
+  return `${s.getter}(env, ${value}, ${dest})`;
 }
 
 export class Reader {
@@ -138,30 +237,30 @@ export class Reader {
   usesTypeof: boolean;
   /** Allocates in the arena or borrows JS memory: the call is arena-scoped. */
   arena: boolean;
+  /** Reads an `f32` somewhere, so the shim needs the `amrit_napi_f32` helper. */
+  usesF32: boolean;
   /** `READ_SCALAR`: the getter and the C declaration. */
   scalar: ScalarReader | null;
-  /** `READ_SCALAR` for `i64`: the getter takes a `&lossless` out-parameter. */
-  lossless: boolean;
   /** `READ_VIEW`: the typed array, and the `const amrit_array *` the callee takes. */
   view: TypedView | null;
   cDecl: string;
-  /** `READ_RESULT`: the packed word, and the getter for each arm. */
+  /** `READ_RESULT`: the packed word, and the reader for each arm (`null` ok arm = `Result<void, E>`). */
   word: string;
-  okGetter: string;
-  errGetter: string;
+  okScalar: ScalarReader | null;
+  errScalar: ScalarReader | null;
 
   constructor(kind: i32, jsType: string, usesTypeof: boolean, arena: boolean) {
     this.kind = kind;
     this.jsType = jsType;
     this.usesTypeof = usesTypeof;
     this.arena = arena;
+    this.usesF32 = false;
     this.scalar = null;
-    this.lossless = false;
     this.view = null;
     this.cDecl = "";
     this.word = "";
-    this.okGetter = "";
-    this.errGetter = "";
+    this.okScalar = null;
+    this.errScalar = null;
   }
 }
 
@@ -170,7 +269,7 @@ function napiReader(table: TypeTable, t: i32, written: boolean): Reader | null {
   if (scalar !== null) {
     const out = new Reader(READ_SCALAR, scalar.jsType, true, false);
     out.scalar = scalar;
-    out.lossless = table.kindOf(t) === T_I64;
+    out.usesF32 = table.kindOf(t) === T_F32;
     return out;
   }
   if (table.kindOf(t) === T_STRING) {
@@ -193,6 +292,12 @@ function napiReader(table: TypeTable, t: i32, written: boolean): Reader | null {
   return null;
 }
 
+/**
+ * The reader for a packed `Result` argument. Each arm is read with its own
+ * scalar getter, straight into the union member when the getter writes that
+ * member's type and through a temporary when it does not — a `u8` error or an
+ * `f32` value narrows exactly as the same payload does at a plain parameter.
+ */
 function napiResultReader(table: TypeTable, t: i32): Reader | null {
   const ok = table.okOf(t);
   const err = table.errOf(t);
@@ -208,16 +313,20 @@ function napiResultReader(table: TypeTable, t: i32): Reader | null {
       return null;
     }
   }
-  if (table.kindOf(err) === T_I64 || (!isVoidOk && table.kindOf(ok) === T_I64)) {
-    return null; // needs `lossless`
+  // A bigint payload would need the `lossless` out-parameter, and a 64-bit
+  // payload is too wide for the packed word to begin with.
+  if (error.lossless) {
+    return null;
+  }
+  if (value !== null && value.lossless) {
+    return null;
   }
   const out = new Reader(READ_RESULT, "Result object", false, false);
   out.word = cResultWord(table, t);
-  // `napi_ok` is the no-op arm for `Result<void, E>`: there is nothing to read.
-  if (value !== null) {
-    out.okGetter = value.getter;
-  }
-  out.errGetter = error.getter;
+  // A `null` ok arm is the no-op of `Result<void, E>`: there is nothing to read.
+  out.okScalar = value;
+  out.errScalar = error;
+  out.usesF32 = table.kindOf(ok) === T_F32 || table.kindOf(err) === T_F32;
   return out;
 }
 
@@ -236,16 +345,20 @@ function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boo
     case READ_SCALAR: {
       const scalar = r.scalar;
       if (scalar === null) {
-        panic("internal error: scalar reader without a scalar");
+        process.exit(internalError("napi: scalar reader without a scalar"));
       }
-      const convert = r.lossless
-        ? `${scalar.getter}(env, argv[${i}], &${c}, &lossless)`
-        : `${scalar.getter}(env, argv[${i}], &${c})`;
-      lines.push(`${scalar.c} ${c};`);
+      // The getter writes the parameter itself unless its width is not one
+      // N-API has a getter for, and then a temporary carries the raw value.
+      const narrows = scalar.open.length > 0;
+      const dest = narrows ? `${c}_raw` : c;
+      lines.push(`${scalar.raw} ${dest};`);
       lines.push(`if (napi_typeof(env, argv[${i}], &type) != napi_ok || type != ${scalar.tag})`);
       lines.push(`  return ${napiFailCall(scoped, `${what} must be a ${scalar.jsType}`)};`);
-      lines.push(`if (${convert} != napi_ok)`);
+      lines.push(`if (${napiScalarGet(scalar, `argv[${i}]`, `&${dest}`)} != napi_ok)`);
       lines.push(`  return ${napiFailCall(scoped, `${what} could not be converted`)};`);
+      if (narrows) {
+        lines.push(`${scalar.c} ${c} = ${scalar.open}${dest}${scalar.close};`);
+      }
       return lines;
     }
     case READ_STRING: {
@@ -258,7 +371,33 @@ function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boo
     }
     case READ_RESULT: {
       const shape = `${what} must be { ok: true, value } or { ok: false, error }`;
-      const readArm = `${c}_flag ? ${r.okGetter.length > 0 ? `${r.okGetter}(env, ${c}_arm, &${c}.as.value)` : "napi_ok"} : ${r.errGetter}(env, ${c}_arm, &${c}.as.error)`;
+      const errScalar = r.errScalar;
+      if (errScalar === null) {
+        process.exit(internalError("napi: result reader without an error arm"));
+      }
+      // Each arm reads into its union member, or into a temporary the
+      // narrowing below turns into that member's own type.
+      const okScalar = r.okScalar;
+      let readOk = "napi_ok";
+      let okTemp = "";
+      let okAssign = "";
+      if (okScalar !== null) {
+        if (okScalar.open.length > 0) {
+          readOk = napiScalarGet(okScalar, `${c}_arm`, `&${c}_value_raw`);
+          okTemp = `${okScalar.raw} ${c}_value_raw = 0;`;
+          okAssign = `if (${c}_flag) ${c}.as.value = ${okScalar.open}${c}_value_raw${okScalar.close};`;
+        } else {
+          readOk = napiScalarGet(okScalar, `${c}_arm`, `&${c}.as.value`);
+        }
+      }
+      let readErr = napiScalarGet(errScalar, `${c}_arm`, `&${c}.as.error`);
+      let errTemp = "";
+      let errAssign = "";
+      if (errScalar.open.length > 0) {
+        readErr = napiScalarGet(errScalar, `${c}_arm`, `&${c}_error_raw`);
+        errTemp = `${errScalar.raw} ${c}_error_raw = 0;`;
+        errAssign = `if (!${c}_flag) ${c}.as.error = ${errScalar.open}${c}_error_raw${errScalar.close};`;
+      }
       lines.push(`napi_value ${c}_ok, ${c}_arm;`);
       lines.push(`bool ${c}_flag;`);
       lines.push(`if (napi_get_named_property(env, argv[${i}], "ok", &${c}_ok) != napi_ok ||`);
@@ -270,14 +409,28 @@ function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boo
         `if (napi_get_named_property(env, argv[${i}], ${c}_flag ? "value" : "error", &${c}_arm) != napi_ok)`
       );
       lines.push(`  return ${napiFailCall(scoped, shape)};`);
-      lines.push(`if ((${readArm}) != napi_ok)`);
+      // Only the arm the discriminant selects is read, so the temporary of the
+      // other one is never written: give both a value so neither is read cold.
+      if (okTemp.length > 0) {
+        lines.push(okTemp);
+      }
+      if (errTemp.length > 0) {
+        lines.push(errTemp);
+      }
+      lines.push(`if ((${c}_flag ? ${readOk} : ${readErr}) != napi_ok)`);
       lines.push(`  return ${napiFailCall(scoped, `${what} could not be converted`)};`);
+      if (okAssign.length > 0) {
+        lines.push(okAssign);
+      }
+      if (errAssign.length > 0) {
+        lines.push(errAssign);
+      }
       return lines;
     }
     default: {
       const view = r.view;
       if (view === null) {
-        panic("internal error: view reader without a view");
+        process.exit(internalError("napi: view reader without a view"));
       }
       lines.push(`amrit_array ${c}_hdr; /* borrowed: the ${view.ctor}'s own bytes, for this call only */`);
       lines.push(`if (!amrit_napi_array_arg(env, argv[${i}], ${view.napiType}, &${c}_hdr))`);
@@ -329,6 +482,23 @@ function napiScalarBox(table: TypeTable, t: i32): string {
       return "napi_get_boolean";
     case T_I64:
       return "napi_create_bigint_int64";
+    // WP15: every unsigned width below 64 bits fits a JS number exactly, so it
+    // goes back as one. `napi_create_uint32` is what keeps a `u32` above 2^31
+    // positive; `napi_create_int32` would hand JS the negative twin of the same
+    // bits. A `uint8_t` / `uint16_t` widens to the `uint32_t` it takes without
+    // changing value, so one constructor serves all three.
+    case T_U8:
+      return "napi_create_uint32";
+    case T_U16:
+      return "napi_create_uint32";
+    case T_U32:
+      return "napi_create_uint32";
+    case T_U64:
+      return "napi_create_bigint_uint64";
+    // An `f32` widens to a double exactly, so JS sees the value the module
+    // holds rather than a rounded one.
+    case T_F32:
+      return "napi_create_double";
     case T_VOID:
       return "napi_get_undefined";
     default:
@@ -371,8 +541,8 @@ function napiBoxer(table: TypeTable, t: i32): Boxer | null {
 /**
  * `{ ok: true, value }` / `{ ok: false, error }`: box the arm the discriminant
  * selects into `payload`, then wrap it with `amrit_napi_result`. `null` when
- * either payload has no scalar constructor — the same gap that keeps an
- * unsigned or `f32` parameter out of this shim.
+ * either payload has no scalar constructor, which now means only a payload
+ * that is not a scalar at all: every numeric width has one.
  */
 function napiResultBoxer(table: TypeTable, t: i32): Boxer | null {
   const isVoidOk = table.kindOf(table.okOf(t)) === T_VOID;
@@ -399,7 +569,7 @@ function napiBoxerCall(box: Boxer, value: string): string {
     default: {
       const view = box.view;
       if (view === null) {
-        panic("internal error: view boxer without a view");
+        process.exit(internalError("napi: view boxer without a view"));
       }
       return `amrit_napi_array_result(env, ${value}, ${view.napiType}, ${view.elemSize}, &out)`;
     }
@@ -463,6 +633,30 @@ function napiPlan(table: TypeTable, fn: ExternalFunction): Plan | null {
   return new Plan(fn, readers, box, scoped);
 }
 
+/**
+ * Why `napiPlan` refused this function, naming the position and the type that
+ * did it. The shim writes this next to the signature instead of dropping the
+ * function without a word: an omission a reader cannot see is exactly how the
+ * unsigned widths sat unbridged behind a reader table nobody had extended.
+ */
+function napiSkipReason(table: TypeTable, fn: ExternalFunction): string {
+  let i = 0;
+  while (i < fn.sig.paramTypes.length) {
+    const r = napiReader(table, fn.sig.paramTypes[i], fn.writtenParams.has(fn.sig.paramNames[i]));
+    if (r === null) {
+      const shown = tsKeyword(table, fn.sig.paramTypes[i]);
+      return `parameter ${i + 1} (${fn.sig.paramNames[i]}) is ${shown}`;
+    }
+    i = i + 1;
+  }
+  if (napiBoxer(table, fn.sig.returnType) === null) {
+    return `it returns ${tsKeyword(table, fn.sig.returnType)}`;
+  }
+  // Unreachable while `napiPlan` refuses only for a parameter or the result,
+  // and still better than a comment that names nothing if that ever changes.
+  return "one of its types does not cross";
+}
+
 function napiWrapper(table: TypeTable, p: Plan): string[] {
   const sig = p.fn.sig;
   const name = sig.name;
@@ -491,7 +685,8 @@ function napiWrapper(table: TypeTable, p: Plan): string[] {
     let usesLossless = false;
     let i = 0;
     while (i < sig.paramTypes.length) {
-      if (table.kindOf(sig.paramTypes[i]) === T_I64) {
+      const s = napiScalarReader(table, sig.paramTypes[i]);
+      if (s !== null && s.lossless) {
         usesLossless = true;
       }
       i = i + 1;
@@ -560,9 +755,7 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
     if (p !== null) {
       plans.push(p);
     } else {
-      skipped.push(
-        `${source} -- not bridged: only numbers, booleans, i64, strings, Int32Array/Float64Array/BigInt64Array and a Result returned by value over those cross this shim`
-      );
+      skipped.push(`${source} -- not bridged: ${napiSkipReason(table, fn)}`);
     }
   }
   const planned: ExternalFunction[] = [];
@@ -571,6 +764,7 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
   let needsArrayResult = false;
   let needsScoped = false;
   let needsResult = false;
+  let needsF32 = false;
   for (const p of plans) {
     planned.push(p.fn);
     for (const r of p.readers) {
@@ -579,6 +773,9 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
       }
       if (r.jsType.endsWith("Array")) {
         needsArrayArg = true;
+      }
+      if (r.usesF32) {
+        needsF32 = true;
       }
     }
     if (typedView(table, p.fn.sig.returnType) !== null) {
@@ -605,6 +802,9 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
   lines.push(" * strings and array results are copied, and the arena is released per call.");
   lines.push(" */");
   lines.push("#include <node_api.h>");
+  if (needsF32) {
+    lines.push("#include <math.h>");
+  }
   lines.push("#include <stdbool.h>");
   lines.push("#include <stddef.h>");
   lines.push("#include <stdint.h>");
@@ -622,10 +822,18 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
     lines.push(`${cPrototype(table, p.fn.sig, p.fn.writtenParams)};`);
   }
   lines.push("");
-  for (const s of skipped) {
-    lines.push(`/* ${s} */`);
-  }
+  // Every external function is either wrapped below or named here with the
+  // reason. A function that simply vanished from the addon would be a bug a
+  // host could only find by calling it.
   if (skipped.length > 0) {
+    lines.push("/* Not bridged, and why. This shim carries numbers (i32, u8, u16, u32, f32,");
+    lines.push(" * f64), booleans, i64 and u64 as bigints, strings, Int32Array /");
+    lines.push(" * Float32Array / Float64Array / BigInt64Array, and a `Result` passed or");
+    lines.push(" * returned by value over those; anything else needs a host that can follow");
+    lines.push(" * an arena pointer, which JavaScript is not. */");
+    for (const s of skipped) {
+      lines.push(`/* ${s} */`);
+    }
     lines.push("");
   }
 
@@ -644,6 +852,20 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
     lines.push("static napi_value amrit_napi_fail_at(napi_env env, uint64_t mark, const char *message) {");
     lines.push("  amrit_arena_release(mark);");
     lines.push("  return amrit_napi_fail(env, message);");
+    lines.push("}");
+    lines.push("");
+  }
+  if (needsF32) {
+    lines.push("/* A JS number as an f32, rounded to nearest as `toF32` rounds it.");
+    lines.push(" * C leaves a double-to-float conversion undefined when the value is out of");
+    lines.push(" * the float range, so the two overflow cases are decided here rather than");
+    lines.push(" * left to the compiler: 0x1.ffffffp127 is the midpoint between FLT_MAX and");
+    lines.push(" * 2^128, and round-to-nearest-even sends everything from there upwards to");
+    lines.push(" * an infinity. NaN and the infinities themselves convert directly. */");
+    lines.push(`static float ${F32_HELPER}(double value) {`);
+    lines.push("  if (value >= 0x1.ffffffp127) return INFINITY;");
+    lines.push("  if (value <= -0x1.ffffffp127) return -INFINITY;");
+    lines.push("  return (float)value;");
     lines.push("}");
     lines.push("");
   }

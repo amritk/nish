@@ -15,11 +15,14 @@
 // (docs/wp14-selfhost.md §5). There are six triples and ten aliases and the
 // lookup happens once per compilation, so the chain is the honest shape.
 //
-// One spelling is deliberately missing: `--target host`. Answering it means
-// asking the operating system what machine this is, and stage1 has no
-// `process.platform` (docs/wp14-selfhost.md §3a D4 drops the host-dependent
-// half of the driver for the same reason). The driver reports it rather than
-// guessing.
+// `--target host` is here too (docs/wp14-selfhost.md §7a). It was the one
+// spelling stage1 refused, because answering it means asking the machine what
+// it is and nothing in the language did; `process.platform` and `process.arch`
+// are two builtins and eight bytes of runtime `.text`, and `hostTriple` below
+// composes the triple from them exactly as `hostTriple` in
+// `src/codegen/target.ts` composes it from Node's two strings of the same
+// names. A machine neither of them has a triple for is still refused, with the
+// list — the answer is "this compiler has no triple for you", not a guess.
 
 export class Target {
   /** The triple written to `target triple`; aliases are normalised to this. */
@@ -93,8 +96,48 @@ function aliasOf(spec: string): string {
   return "";
 }
 
-/** Resolve a `--target` argument: a supported triple or one of its aliases. */
+/**
+ * The triple of the machine the compiler is running on, from what the runtime
+ * says the platform and the architecture are (WP14 §7a). The empty string when
+ * this is not a machine the compiler has a triple for — a 32-bit host, a BSD,
+ * a WASI build of the compiler itself — which `resolveTarget` turns into the
+ * same refusal an unknown triple gets.
+ *
+ * The two spellings are Node's, which is what `runtime.c` answers with, so
+ * this is the same mapping `hostTriple` makes in `src/codegen/target.ts` and
+ * the two compilers resolve `--target host` to the same triple on the same
+ * machine (`tests/run.js`, the WP14 block).
+ */
+export function hostTriple(): string {
+  const arch = process.arch;
+  let cpu = "";
+  if (arch === "x64") {
+    cpu = "x86_64";
+  } else if (arch === "arm64") {
+    cpu = "aarch64";
+  }
+  if (cpu.length === 0) {
+    return "";
+  }
+  const platform = process.platform;
+  if (platform === "linux") {
+    return `${cpu}-unknown-linux-gnu`;
+  }
+  if (platform === "darwin") {
+    return `${cpu}-apple-darwin`;
+  }
+  return "";
+}
+
+/**
+ * Resolve a `--target` argument: a supported triple, one of its aliases, or
+ * `host`. Null for anything else, so the driver can list what it accepts.
+ */
 export function resolveTarget(spec: string): Target | null {
+  if (spec === "host") {
+    const triple = hostTriple();
+    return triple.length === 0 ? null : new Target(triple, layoutOf(triple));
+  }
   const direct = layoutOf(spec);
   if (direct.length > 0) {
     return new Target(spec, direct);

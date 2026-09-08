@@ -147,7 +147,16 @@ export class Compilation {
       return false;
     }
     const isEntry = this.modules.length === 0;
-    const checker = new Checker(this.table, source, file, isEntry, parser.nodeCount, this.sink, this.opts.numberMode);
+    const checker = new Checker(
+      this.table,
+      source,
+      file,
+      isEntry,
+      parser.nodeCount,
+      this.sink,
+      this.opts.numberMode,
+      !this.opts.nsw
+    );
     const unit = new ModuleUnit(path, source, file, parser.nodeCount, isEntry, checker);
     this.byPath.set(path, this.modules.length);
     this.modules.push(unit);
@@ -242,10 +251,12 @@ export class Compilation {
   }
 
   /**
-   * Every function that is not `internal` is one external symbol in the final
-   * link, so its name must be unique across the program. Exported names are
-   * always external; the others only without `--strict-exports`. The entry
-   * wrapper reserves `main` as well.
+   * A function name must be unique across the program whether or not it is
+   * exported, and the entry wrapper reserves `main` as well. An external symbol
+   * is global to the link, and even an `internal` one reaches
+   * `analyzeFunctions`, which keys the whole-program fact fixpoint by symbol
+   * name: a duplicate would make two functions share one set of attributes, so
+   * this check does not consult `--strict-exports`.
    */
   rejectSymbolClashes(): void {
     const owners = new StringMap();
@@ -262,9 +273,6 @@ export class Compilation {
         if (!sig.definedIn(unit.source)) {
           continue; // an imported signature is the exporter's symbol, not a second one
         }
-        if (!sig.exported && this.opts.strictExports) {
-          continue; // `internal` linkage: the name never reaches the linker
-        }
         const at = owners.get(sig.name, -1);
         if (at < 0) {
           owners.set(sig.name, ownerSigs.length);
@@ -277,11 +285,11 @@ export class Compilation {
         const where = `\`${sig.sourceName}\` is also defined in ${previousModule.path}`;
         let message = "";
         if (previousSig === null) {
-          message = `Function \`main\` in ${unit.path} collides with the entry wrapper \`@main\` that ${previousModule.path} needs; rename it or use --strict-exports`;
+          message = `Function \`main\` in ${unit.path} collides with the entry wrapper \`@main\` that ${previousModule.path} needs; rename it`;
         } else if (sig.exported && previousSig.exported) {
           message = `Exported function ${where}; exported names must be unique across the program`;
         } else {
-          message = `Function ${where}; without --strict-exports every function is an external symbol, so names must be unique across the program (or export exactly one of them)`;
+          message = `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`;
         }
         // Reported, not thrown: every clash is listed.
         const at2 = nameNode(sig);

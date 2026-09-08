@@ -1,15 +1,15 @@
 declare void @amrit_free_arena() #2
 
-define noundef i32 @compute() #0 {
+define internal noundef i32 @compute() #0 {
 entry:
-  %0 = add i32 20, 22
+  %0 = add nsw i32 20, 22
   ret i32 %0
 }
 
 define noundef i32 @amrit_main() #0 {
 entry:
   %0 = call i32 @compute()
-  %1 = sub i32 %0, 42
+  %1 = sub nsw i32 %0, 42
   ret i32 %1
 }
 

@@ -9,6 +9,6 @@ function polynomial(x: number, k: number): number {
   return acc - bias;
 }
 
-function test(): number {
+export function test(): number {
   return polynomial(4, 5);
 }

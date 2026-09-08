@@ -7,7 +7,7 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 declare void @amrit_panic_div(i1 noundef zeroext) #2
 
-define void @Stats.constructor(%struct.Stats* noundef nonnull noalias align 8 dereferenceable(12) nocapture %this) #0 {
+define internal void @Stats.constructor(%struct.Stats* noundef nonnull noalias align 8 dereferenceable(12) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Stats, %struct.Stats* %this, i32 0, i32 2
   store i32 0, i32* %0, align 4
@@ -18,22 +18,22 @@ entry:
   ret void
 }
 
-define noundef i32 @Stats.add(%struct.Stats* noundef nonnull align 8 dereferenceable(12) nocapture %this, i32 noundef %v) #0 {
+define internal noundef i32 @Stats.add(%struct.Stats* noundef nonnull align 8 dereferenceable(12) nocapture %this, i32 noundef %v) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Stats, %struct.Stats* %this, i32 0, i32 2
   %1 = load i32, i32* %0, align 4
-  %2 = add i32 %1, 1
+  %2 = add nsw i32 %1, 1
   store i32 %2, i32* %0, align 4
   %3 = getelementptr inbounds %struct.Stats, %struct.Stats* %this, i32 0, i32 0
   %4 = load i32, i32* %3, align 4
-  %5 = add i32 %4, %v
+  %5 = add nsw i32 %4, %v
   store i32 %5, i32* %3, align 4
   %6 = getelementptr inbounds %struct.Stats, %struct.Stats* %this, i32 0, i32 0
   %7 = load i32, i32* %6, align 4
   ret i32 %7
 }
 
-define void @halve(%struct.Stats* noundef nonnull align 8 dereferenceable(12) nocapture %s) #1 {
+define internal void @halve(%struct.Stats* noundef nonnull align 8 dereferenceable(12) nocapture %s) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 1
   %1 = load i32, i32* %0, align 4
@@ -68,7 +68,7 @@ div.fail.1:
 
 div.ok.1:
   %17 = srem i32 %11, 2
-  %18 = sub i32 %9, %17
+  %18 = sub nsw i32 %9, %17
   store i32 %18, i32* %8, align 4
   ret void
 }
@@ -87,7 +87,7 @@ entry:
   %4 = load %struct.Stats*, %struct.Stats** %s.addr, align 8
   %5 = getelementptr inbounds %struct.Stats, %struct.Stats* %4, i32 0, i32 0
   %6 = load i32, i32* %5, align 4
-  %7 = mul i32 %6, 3
+  %7 = mul nsw i32 %6, 3
   store i32 %7, i32* %5, align 4
   %8 = load %struct.Stats*, %struct.Stats** %s.addr, align 8
   call void @halve(%struct.Stats* %8)

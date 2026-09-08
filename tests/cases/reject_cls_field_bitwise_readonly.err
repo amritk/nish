@@ -1,0 +1,1 @@
+Cannot assign to readonly field `mask` of `Base` outside its constructor

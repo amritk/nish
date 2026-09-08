@@ -42,17 +42,17 @@ slow:
   ret i8* %grown
 }
 
-define void @Blob.constructor(%struct.Blob* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %a) #0 {
+define internal void @Blob.constructor(%struct.Blob* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %a) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Blob, %struct.Blob* %this, i32 0, i32 0
   store i32 %a, i32* %0, align 4
-  %1 = mul i32 %a, 2
+  %1 = mul nsw i32 %a, 2
   %2 = getelementptr inbounds %struct.Blob, %struct.Blob* %this, i32 0, i32 1
   store i32 %1, i32* %2, align 4
   ret void
 }
 
-define noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @fill(i32 noundef %n) #0 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @fill(i32 noundef %n) #0 {
 entry:
   %xs.addr = alloca %struct.amrit_array*, align 8
   %i.addr = alloca i32, align 4
@@ -103,7 +103,7 @@ push.store:
 
 for.inc:
   %22 = load i32, i32* %i.addr, align 4
-  %23 = add i32 %22, 1
+  %23 = add nsw i32 %22, 1
   store i32 %23, i32* %i.addr, align 4
   br label %for.cond
 

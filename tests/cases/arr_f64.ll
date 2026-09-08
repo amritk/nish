@@ -7,7 +7,7 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_f64(double noundef) #2
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #3
 
-define noundef double @mean(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+define internal noundef double @mean(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %total.addr = alloca double, align 8
   %x.addr = alloca double, align 8

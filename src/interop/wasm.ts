@@ -18,11 +18,23 @@
  *      agree (N-API borrows the buffer, so writes land directly);
  *   5. `amrit_arena_release(mark)`, in a `finally`, so a trap leaks nothing.
  * `memory.buffer` is re-read after every module call because `memory.grow`
- * detaches the previous ArrayBuffer. Scalar-only exports are passed through
- * untouched; string functions are omitted (no WASI runtime).
+ * detaches the previous ArrayBuffer. String functions are omitted (no WASI
+ * runtime).
+ *
+ * A scalar-only export is passed through untouched unless one of its types is
+ * narrower or wider than the wasm value type carrying it. The wasm ABI has
+ * only i32 / i64 / f32 / f64, so `u8`, `u16`, `u32` and `u64` all share a
+ * value type with a signed one and the loader is the only place their range
+ * can be restored: it masks a narrow unsigned argument on the way in and every
+ * unsigned result on the way out (`unsignedIn` / `unsignedOut` say why each).
+ * `f32` needs neither — the JS-to-wasm call rounds an argument to f32 exactly
+ * as an `f32` parameter means, and every f32 is exactly representable in the
+ * double a result comes back as.
  */
 import path from "node:path";
 import { Compilation } from "../compilation";
+import { LANGUAGE } from "../branding";
+import { FunctionSig } from "../checker";
 import { ResultType, StaticType, resultByValue } from "../types";
 import { banner, ExternalFunction, externalFunctions, kindOf, tsKeyword, tsSignature, typedView } from "./abi";
 
@@ -38,14 +50,144 @@ export interface WasmBridge {
   needsRuntime: boolean;
 }
 
+/**
+ * JS-visible type of a wasm export value; `undefined` when the value cannot
+ * cross. This one table decides *both* what `--emit-dts` declares and what the
+ * loader implements: `crossesWasm` is `wasmType(...) !== undefined` and
+ * `generateDts` asks `wasmSkipReason`, which asks the same function. They
+ * lived apart once and drifted — the declarations grew the unsigned widths
+ * while the loader did not, so a `.d.ts` promised a `port(p: number)` the
+ * `.mjs` had no entry for — and one table is what makes that unrepresentable.
+ *
+ * The wasm ABI has four value types, so several source types share one:
+ *   i32 / u8 / u16 / u32 / f32 / f64  -> number
+ *   i64 / u64                         -> bigint
+ *   i1                                -> `WasmBool` (0 | 1) out, `boolean` in
+ * The narrowing that share implies is the loader's job, not the declaration's
+ * (see `unsignedIn` / `unsignedOut`).
+ */
+export function wasmType(t: StaticType, position: "param" | "return"): string | undefined {
+  switch (kindOf(t)) {
+    // WP15: an unsigned width crosses as the wasm value type of its LLVM type,
+    // so u8/u16/u32 are a `number` like i32 and u64 is a `bigint` like i64.
+    case "i32":
+    case "u8":
+    case "u16":
+    case "u32":
+    case "f32":
+    case "f64":
+      return "number";
+    case "i64":
+    case "u64":
+      return "bigint";
+    case "bool":
+      return position === "param" ? "boolean" : "WasmBool";
+    // Only a result can be `void`; a parameter of that type does not exist,
+    // and spelling one `void` would be a declaration the loader cannot honour.
+    case "void":
+      return position === "return" ? "void" : undefined;
+    case "array":
+      return typedView(t)?.ctor;
+    // WP17: the packed shape, in either direction. The loader is what turns
+    // the bigint the export answers into this object, and an argument back.
+    case "result":
+      return resultByValue(t) ? wasmResultType(t as ResultType) : undefined;
+    default:
+      return undefined;
+  }
+}
+
 function crossesWasm(t: StaticType, position: "param" | "return"): boolean {
+  return wasmType(t, position) !== undefined;
+}
+
+/**
+ * Why this function is not on the bridge, or `undefined` when it is. Naming the
+ * position and the type is the whole point: a reader of the `.d.ts` sees which
+ * argument stopped it rather than the blanket sentence this used to be (and
+ * that the N-API shim still writes for its own skips). `--emit-dts` writes it
+ * as a comment and the loader omits exactly the same functions, because both
+ * ask this.
+ */
+export function wasmSkipReason(sig: FunctionSig): string | undefined {
+  if (sig.name === "main") return "`main` is reserved for a process entry";
+  const tail = ` runtime the freestanding wasm profile does not include`;
+  const cannot = (what: string, t: StaticType) =>
+    `${what} is \`${tsKeyword(t)}\`, which needs the ${LANGUAGE}${tail}`;
+  for (let i = 0; i < sig.params.length; i++) {
+    const p = sig.params[i];
+    if (!crossesWasm(p.type, "param")) return cannot(`argument ${i + 1} (${p.name})`, p.type);
+  }
+  if (!crossesWasm(sig.returnType, "return")) return cannot("the result", sig.returnType);
+  return undefined;
+}
+
+/**
+ * The mask a narrow unsigned *argument* needs on the way in, or `undefined`
+ * when the value crosses as it stands.
+ *
+ * The emitter gives a `u8` parameter the bare LLVM type `i8` with no `zeroext`
+ * (`define noundef i8 @idU8(i8 noundef %x)`), so the wasm C ABI's rule — a
+ * narrow unsigned argument arrives in an i32 already zero-extended — is the
+ * *caller's* obligation, and JavaScript is the caller here. Today's backend
+ * happens to insert the `i32.and` itself wherever the narrow value is
+ * observable inside the callee (before an `icmp ugt i8`, a `udiv i8`, a
+ * `zext`), so an unmasked argument survives by luck; it is luck that the day
+ * the emitter adds the `zeroext` the ABI asks for would take away, silently.
+ * Masking here also makes the boundary behave the way JavaScript already
+ * behaves for these widths — `f(300)` on a `u8` sees 44, exactly as
+ * `new Uint8Array([300])[0]` is 44, and `-1` sees 255 — which is the rule
+ * `runtime/shim.mjs` follows for the same four types.
+ *
+ * `u32` and `u64` need nothing: ToInt32 and ToBigInt64 hand the wasm call the
+ * bits an unsigned value of that width has, wrapping exactly as the language
+ * wraps.
+ */
+function unsignedIn(t: StaticType): string | undefined {
+  switch (kindOf(t)) {
+    case "u8":
+      return "0xff";
+    case "u16":
+      return "0xffff";
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * How an unsigned *result* is read back; `value` unchanged when the raw value
+ * is already the number JS should see.
+ *
+ * All four widths need it, for two different reasons. `u8` and `u16` come back
+ * in an i32 the callee never narrowed — `add i16` is congruent modulo 2^16, so
+ * the wasm backend adds in 32 bits and returns the sum, and `addU16(65535, 2)`
+ * answers 65537 where the language says 1. `u32` and `u64` are the full width
+ * but *signed* on the way out, so anything at or above 2^31 (2^63 for `u64`)
+ * reaches JavaScript negative: a `u32` of 4294967295 arrives as -1.
+ *
+ * The spellings are the ones `runtime/shim.mjs` uses to hold an unsigned value
+ * in a JavaScript one, so the wasm build, the differential rewrite and the
+ * language agree on what a `u32` above 2^31 is.
+ */
+function unsignedOut(t: StaticType, value: string): string {
+  switch (kindOf(t)) {
+    case "u8":
+      return `${value} & 0xff`;
+    case "u16":
+      return `${value} & 0xffff`;
+    case "u32":
+      return `${value} >>> 0`;
+    case "u64":
+      return `BigInt.asUintN(64, ${value})`;
+    default:
+      return value;
+  }
+}
+
+/** Whether `unsignedOut` has anything to do, which decides if the export needs a wrapper at all. */
+function unsignedResult(t: StaticType): boolean {
   const k = kindOf(t);
-  if (k === "i32" || k === "f32" || k === "f64" || k === "i64" || k === "bool") return true;
-  if (k === "void") return position === "return";
-  // WP17: a packed `Result` crosses as one i64 in either direction — the
-  // loader unpacks a returned one and packs an argument.
-  if (k === "result") return resultByValue(t) && wasmResultType(t as ResultType) !== undefined;
-  return typedView(t) !== undefined;
+  return k === "u8" || k === "u16" || k === "u32" || k === "u64";
 }
 
 /** The JS type of one packed `Result` payload, or undefined when it cannot cross. */
@@ -149,9 +291,7 @@ function hasPackedResult(fns: readonly ExternalFunction[]): boolean {
 }
 
 export function wasmBridged(fns: ExternalFunction[]): WasmBridge {
-  const bridged = fns.filter(
-    (fn) => fn.sig.name !== "main" && crossesWasm(fn.sig.returnType, "return") && fn.sig.params.every((p) => crossesWasm(p.type, "param"))
-  );
+  const bridged = fns.filter((fn) => wasmSkipReason(fn.sig) === undefined);
   const needsRuntime = bridged.some((fn) => typedView(fn.sig.returnType) || fn.sig.params.some((p) => typedView(p.type)));
   return { bridged, needsRuntime };
 }
@@ -164,18 +304,30 @@ function wrapper(fn: ExternalFunction): string[] {
   const { sig } = fn;
   const ret = typedView(sig.returnType);
   const views = sig.params.map((p) => typedView(p.type));
+  const masks = sig.params.map((p) => unsignedIn(p.type));
+  const out = unsignedResult(sig.returnType);
   const packed = resultByValue(sig.returnType) || sig.params.some((p) => resultByValue(p.type));
+  const params = sig.params.map((p) => jsParam(p.name));
+  /** One non-array argument: packed, masked to its unsigned width, or as it came. */
+  const operand = (i: number): string => {
+    const p = sig.params[i];
+    if (resultByValue(p.type)) return resultPack(params[i], p.type as ResultType);
+    return masks[i] ? `${params[i]} & ${masks[i]}` : params[i];
+  };
+  /** The call's value as JS should see it. The three cases are mutually exclusive. */
+  const returned = (call: string): string => {
+    if (ret) return `arrayOut(${call}, ${ret.ctor})`;
+    if (resultByValue(sig.returnType)) return resultUnpack(call, sig.returnType as ResultType);
+    return unsignedOut(sig.returnType, call);
+  };
+
   if (!ret && views.every((v) => v === undefined)) {
-    // WP17: a packed `Result` needs packing or unpacking but no arena scope —
-    // nothing was copied into the module for the call, so nothing to release.
-    if (packed) {
-      const params = sig.params.map((p) => jsParam(p.name));
-      const operands = sig.params.map((p, i) =>
-        resultByValue(p.type) ? resultPack(params[i], p.type as ResultType) : params[i]
-      );
-      const call = `raw.${sig.name}(${operands.join(", ")})`;
-      const body = resultByValue(sig.returnType) ? resultUnpack(call, sig.returnType as ResultType) : call;
-      return [`${sig.name}: (${params.join(", ")}) => ${body},`];
+    // WP17/WP15: a packed `Result` and an unsigned width both need converting
+    // but no arena scope — nothing was copied into the module for the call, so
+    // there is nothing to release.
+    if (packed || out || masks.some((m) => m !== undefined)) {
+      const call = `raw.${sig.name}(${sig.params.map((_, i) => operand(i)).join(", ")})`;
+      return [`${sig.name}: (${params.join(", ")}) => ${returned(call)},`];
     }
     return [`${sig.name}: raw.${sig.name},`];
   }
@@ -183,21 +335,16 @@ function wrapper(fn: ExternalFunction): string[] {
   const body: string[] = [];
   const args = sig.params.map((p, i) => {
     const v = views[i];
-    if (!v) return resultByValue(p.type) ? resultPack(jsParam(p.name), p.type as ResultType) : jsParam(p.name);
+    if (!v) return operand(i);
     body.push(`const ${p.name}$ = arrayIn(${jsParam(p.name)}, ${v.ctor}, ${v.elemSize}, "${sig.sourceName}: argument ${i + 1} (${p.name})");`);
     return `${p.name}$`;
   });
-  const call = `raw.${sig.name}(${args.join(", ")})`;
   const isVoid = kindOf(sig.returnType) === "void";
-  const value = ret
-    ? `arrayOut(${call}, ${ret.ctor})`
-    : resultByValue(sig.returnType)
-      ? resultUnpack(call, sig.returnType as ResultType)
-      : call;
+  const value = returned(`raw.${sig.name}(${args.join(", ")})`);
   const copyBacks = sig.params.filter((p, i) => views[i] && fn.writtenParams.has(p.name)).map((p) => `copyBack(${p.name}$, ${jsParam(p.name)});`);
   if (copyBacks.length === 0) body.push(isVoid ? `${value};` : `return ${value};`);
   else body.push(isVoid ? `${value};` : `const result = ${value};`, ...copyBacks, ...(isVoid ? [] : ["return result;"]));
-  return [`${sig.name}: (${sig.params.map((p) => jsParam(p.name)).join(", ")}) => scoped(() => {`, ...body.map((l) => `  ${l}`), "}),"];
+  return [`${sig.name}: (${params.join(", ")}) => scoped(() => {`, ...body.map((l) => `  ${l}`), "}),"];
 }
 
 /**

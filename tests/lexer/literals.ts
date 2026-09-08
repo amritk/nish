@@ -15,5 +15,13 @@ const s1 = "plain";
 const s2 = 'single';
 const s3 = "esc \n \t \\ \" \0 \x41 A \u{1F600}";
 const s4 = "";
+// The scan takes the plain bytes between escapes in whole runs, so the cases
+// that matter are the ones where a run is empty: an escape at the very start,
+// two escapes with nothing between them, and a literal that is only an escape.
+const s5 = "\nfirst";
+const s6 = "\x41\x42Cadjacent";
+const s7 = "\n";
+const s8 = "line \
+continuation";
 const div = 1 / 2 / 3;
 const notRegex = a / b / c;

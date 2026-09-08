@@ -104,6 +104,19 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     effect: "write",
   },
   {
+    // WP9 call-site reclaim: rewinds to a mark while keeping the newest block,
+    // which it moves down to the mark and answers at its new address. Neither
+    // `noalias` nor `nocapture` is claimed: the guards in runtime.c answer the
+    // argument itself whenever the move cannot be proved safe, and a returned
+    // pointer is a captured one. The chunk walk is over a finite acyclic list,
+    // so `willreturn` holds.
+    name: "amrit_arena_keep",
+    signature:
+      "declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8)",
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
     name: "amrit_str_new",
     signature: `declare noalias noundef nonnull align 8 i8* @amrit_str_new(i8* noundef readonly nocapture, i64 noundef)`,
     attrs: ["nounwind", "willreturn"],
@@ -229,12 +242,25 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     effect: "write",
   },
   // ---- WP14 D4: the directory and subprocess calls a self-hosted driver needs
-  // to link its own output. Both answer a value rather than exiting.
+  // to link its own output, and the WP14 §7a `stat` beside them. Each answers a
+  // value rather than exiting.
   {
-    // `mkdir`, then a `stat` when it failed: it changes the file system, so
-    // `write`, and the path is only read and never retained (`STR_NOCAP`).
+    // `mkdir`, then `amrit_is_dir` when it failed: it changes the file system,
+    // so `write`, and the path is only read and never retained (`STR_NOCAP`).
     name: "amrit_mkdir",
     signature: `declare zeroext i1 @amrit_mkdir(${STR_NOCAP})`,
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
+    // WP14 §7a. One `stat`, answering only "is there a directory here?", which
+    // is the question `-o <dir>` asks. `effect: "write"` rather than "read"
+    // for the reason `amrit_parse_number` is not readonly: a failed `stat`
+    // stores `errno`, and the file system is not memory LLVM may reason about,
+    // so a caller must not be hoisted across anything that could change it.
+    // The path is read and never retained (`STR_NOCAP`).
+    name: "amrit_is_dir",
+    signature: `declare zeroext i1 @amrit_is_dir(${STR_NOCAP})`,
     attrs: ["nounwind", "willreturn"],
     effect: "write",
   },
@@ -256,6 +282,21 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     attrs: ["nounwind"],
     effect: "write",
   },
+  // ---- WP14 §7a: what machine this is. `--target host` composes its triple
+  // from the two, and so does any program that wants to know where it is.
+  ...["amrit_platform", "amrit_arch"].map((name) => ({
+    // Each answers the address of a string in the runtime's own constant data,
+    // decided when `runtime.c` was compiled — a cross build compiles the
+    // runtime for the target, so the answer is the target's. Nothing is
+    // allocated and nothing is read, which is what makes `readnone` a fact and
+    // lets two reads in one function fold into one. Deliberately *not*
+    // `noalias`: every call answers the same pointer, and `noalias` promises
+    // the opposite.
+    name,
+    signature: `declare noundef nonnull align 8 i8* @${name}()`,
+    attrs: ["nounwind", "willreturn", "readnone"],
+    effect: "none" as MemoryEffect,
+  })),
   // ---- WP4: arrays --------------------------------------------------------
   {
     name: "amrit_array_grow",

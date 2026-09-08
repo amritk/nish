@@ -377,6 +377,144 @@ if (!only || "diagnostics".includes(only)) {
   }
 }
 
+// ---- WP15 §8: the `performance` diagnostic class -----------------------------------
+// Warnings, not errors: a program that trips one still compiles and still exits 0.
+// They print `file:line:col: performance: <text>` with the same excerpt an error
+// gets, carry `"severity":"performance"` in `--json`, and `--no-warn-performance`
+// silences the class without changing one byte of the IR. The guard cases matter
+// most: a warning that fires where the compiler already did the right thing is what
+// teaches people to ignore a whole diagnostic class.
+if (!only || "performance".includes(only)) {
+  /** Compile one case to its own output file and hand back the whole result. */
+  const compile = (name, out, extra = []) =>
+    spawnSync("node", [cli, path.join(casesDir, `${name}.ts`), "-o", path.join(buildDir, out), ...extra], {
+      cwd: root,
+      encoding: "utf8",
+    });
+  const summaries = (text) => text.split("\n").filter((l) => /:\d+:\d+: performance: /.test(l));
+
+  const str = compile("perf_str_concat_loop", "perf_str.ll");
+  const strLines = summaries(str.stderr);
+  // `for`, `while`, a nested loop whose accumulator is declared one level out,
+  // and `do` — each is a loop, and a template hole copies as much as `+` does.
+  check(
+    "performance: every self-accumulating string assignment in a loop warns, naming the variable and the `string[]` + `join` rewrite",
+    str.status === 0 &&
+      strLines.length === 4 &&
+      strLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") ===
+        "7:5,14:5,24:7,33:5" &&
+      strLines[0].includes("performance: `out` is rebuilt from its own value on every iteration of this loop") &&
+      strLines[1].includes("performance: `tagged` is rebuilt from its own value") &&
+      strLines[2].includes("performance: `row` is rebuilt from its own value") &&
+      strLines[3].includes("performance: `tail` is rebuilt from its own value") &&
+      strLines.every((l) => l.includes("collect the pieces in a `string[]` and `join` them after the loop")) &&
+      str.stderr.includes("\n4 performance warnings\n"),
+    str.stderr
+  );
+  check(
+    "performance: a warning carries the same caret excerpt an error does",
+    str.stderr.includes('  7 |     out = out + "ab";\n    |     ^~~\n'),
+    str.stderr
+  );
+
+  const alloc = compile("perf_alloc_loop", "perf_alloc.ll");
+  const allocLines = summaries(alloc.stderr);
+  check(
+    "performance: a dynamically sized `new Array<T>(n)` in a loop warns and names the hoist and the arena scope",
+    alloc.status === 0 &&
+      allocLines.length === 1 &&
+      allocLines[0].includes(
+        ":10:11: performance: `row` allocates a dynamically sized array on every iteration of this loop"
+      ) &&
+      allocLines[0].includes(
+        "hoist the allocation above the loop and reuse it, or bracket the loop body with `Arena.mark()` and `Arena.release(m)`"
+      ),
+    alloc.stderr
+  );
+
+  // The false-positive guards. Each of these compiles loops that concatenate or
+  // allocate where the faster form is already what the compiler emits, or where the
+  // program genuinely asked for the memory, so it must say nothing at all.
+  for (const name of ["perf_str_concat_quiet", "perf_alloc_quiet"]) {
+    const quiet = compile(name, `${name}.ll`);
+    check(
+      `performance: ${name} takes no slow path with a faster form to name, so nothing is reported`,
+      quiet.status === 0 && summaries(quiet.stderr).length === 0,
+      quiet.stderr
+    );
+  }
+
+  // The flag decides what is printed and nothing else.
+  const off = compile("perf_str_concat_loop", "perf_str_off.ll", ["--no-warn-performance"]);
+  check(
+    "performance: --no-warn-performance silences the class and leaves the IR byte-identical",
+    off.status === 0 &&
+      summaries(off.stderr).length === 0 &&
+      stripHeader(fs.readFileSync(path.join(buildDir, "perf_str_off.ll"), "utf8")) ===
+        stripHeader(fs.readFileSync(path.join(buildDir, "perf_str.ll"), "utf8")),
+    off.stderr
+  );
+
+  // --json: one object per warning on stdout, with a severity a tool can filter on.
+  const js = compile("perf_alloc_loop", "perf_alloc_json.ll", ["--json"]);
+  const jsLines = js.stdout.trim().length > 0 ? js.stdout.trim().split("\n") : [];
+  let jsObj = null;
+  try {
+    jsObj = JSON.parse(jsLines[0]);
+  } catch {
+    jsObj = null;
+  }
+  check(
+    'performance: --json prints one object per warning on stdout with "severity":"performance", and exits 0',
+    js.status === 0 &&
+      jsLines.length === 1 &&
+      jsObj !== null &&
+      jsObj.severity === "performance" &&
+      jsObj.line === 10 &&
+      jsObj.column === 11 &&
+      !jsObj.message.includes("|"),
+    js.stdout + js.stderr
+  );
+
+  // An error report is never diluted with advice about code that is about to change.
+  const mixedSrc = path.join(buildDir, "perf_mixed.ts");
+  fs.writeFileSync(
+    mixedSrc,
+    'export function test(): number {\n  let s = "";\n  for (let i = 0; i < 2; i = i + 1) {\n    s = s + "x";\n  }\n  return s;\n}\n'
+  );
+  const mixed = spawnSync("node", [cli, mixedSrc, "-o", path.join(buildDir, "perf_mixed.ll")], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  check(
+    "performance: a compilation that failed prints its errors and none of its warnings",
+    mixed.status === 1 && mixed.stderr.includes(": error: ") && summaries(mixed.stderr).length === 0,
+    mixed.stderr
+  );
+
+  // The report is capped exactly where the error report is.
+  const manySrc = path.join(buildDir, "perf_many.ts");
+  fs.writeFileSync(
+    manySrc,
+    Array.from(
+      { length: 25 },
+      (_, i) =>
+        `export function f${i}(): number {\n  let s = "";\n  for (let j = 0; j < 2; j = j + 1) {\n    s = s + "x";\n  }\n  return s.length;\n}`
+    ).join("\n") + "\n"
+  );
+  const many = spawnSync("node", [cli, manySrc, "-o", path.join(buildDir, "perf_many.ll")], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  check(
+    "performance: 25 warnings print 20, then `...and 5 more performance warnings` and `25 performance warnings`",
+    many.status === 0 &&
+      summaries(many.stderr).length === 20 &&
+      many.stderr.includes("\n...and 5 more performance warnings\n25 performance warnings"),
+    many.stderr
+  );
+}
+
 // ---- WP5: link -------------------------------------------------------------------
 // Multi-module programs in tests/link/<name>/. `main.ts` is the entry; the program is
 // compiled with `-o <dir>/` (one .ll per module) and `--link` (scripts/build.sh, speed
@@ -1066,7 +1204,14 @@ if (!only || "interop".includes(only)) {
   check(
     'a function named `double` is declared as double_ bound with AMRIT_SYMBOL("double")',
     keywordHeader.includes('int32_t double_(int32_t n) AMRIT_SYMBOL("double");') &&
-      keywordHeader.includes("int32_t helper(int32_t n);"),
+      keywordHeader.includes("int32_t next(int32_t n);"),
+    keywordHeader || keyword.stderr
+  );
+  // WP15 §3: `internal` linkage is the default, so a non-exported function is
+  // not a C-ABI symbol and must not be promised by the header either.
+  check(
+    "the header leaves the non-exported `helper` out by default",
+    keyword.status === 0 && !keywordHeader.includes("helper"),
     keywordHeader || keyword.stderr
   );
 
@@ -1077,9 +1222,23 @@ if (!only || "interop".includes(only)) {
   );
   const strictHeader = strict.status === 0 ? fs.readFileSync(sidecar("export_strict", "h"), "utf8") : "";
   check(
-    "--strict-exports keeps internal functions out of the header",
+    "--strict-exports (the default, spelled out) keeps internal functions out of the header",
     strictHeader.includes("int32_t next(int32_t n);") && !strictHeader.includes("helper"),
     strictHeader || strict.stderr
+  );
+
+  // The other direction: --no-strict-exports puts every function back on the ABI,
+  // so the header has to declare the ones it hid.
+  const loose = emit(
+    "tests/cases/export_strict.ts",
+    ["--no-strict-exports", "--emit-header", sidecar("export_loose", "h")],
+    "export_loose"
+  );
+  const looseHeader = loose.status === 0 ? fs.readFileSync(sidecar("export_loose", "h"), "utf8") : "";
+  check(
+    "--no-strict-exports puts the non-exported function back in the header",
+    looseHeader.includes("int32_t next(int32_t n);") && looseHeader.includes("int32_t helper(int32_t n);"),
+    looseHeader || loose.stderr
   );
 
   const entry = emit("examples/multi/main.ts", ["--emit-header", sidecar("multi", "h")], "multi", true);
@@ -1133,7 +1292,7 @@ if (!only || "interop".includes(only)) {
       String(wasmRt.stderr)
     );
 
-    for (const stem of ["add", "strings", "export_fn", "export_strict", "multi"]) {
+    for (const stem of ["add", "strings", "export_fn", "export_strict", "export_loose", "multi"]) {
       if (!fs.existsSync(sidecar(stem, "h"))) continue;
       const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar(stem, "h")]);
       check(`${stem}.h compiles under -std=c11 -Wall -Wextra -Werror`, r.status === 0, String(r.stderr));
@@ -1404,7 +1563,9 @@ if (!only || "interop".includes(only)) {
       resShim.includes('{"half", amrit_napi_half},') &&
       resShim.includes('{"describe", amrit_napi_describe},') &&
       resShim.includes('napi_get_named_property(env, argv[0], r_flag ? "value" : "error", &r_arm)') &&
-      resShim.includes("openFile(path: string): Result<number, IoError> -- not bridged"),
+      resShim.includes(
+        "openFile(path: string): Result<number, IoError> -- not bridged: it returns Result<number, IoError>"
+      ),
     resShim
   );
   if (HAS_CLANG && res.status === 0) {
@@ -1493,6 +1654,268 @@ if (!only || "interop".includes(only)) {
         String(w.stderr) + (r ? String(r.stdout) + String(r.stderr) : "")
       );
     }
+  }
+
+  // ---- WP15/WP8: the numeric widths across the N-API boundary ---------------------
+  // The shim's reader and boxer tables knew i32 / f64 / bool / i64 and nothing else, so
+  // a function mentioning u8, u16, u32, u64 or f32 was dropped from the addon instead of
+  // bridged. Checks:
+  //   - each width is read with the getter of its own family, and the two that N-API has
+  //     no getter for (u8 / u16 from ToUint32, f32 from a double) are narrowed explicitly
+  //   - the shim still compiles under -std=c11 -Wall -Wextra -Werror
+  //   - the built addon truncates an out-of-range JS number exactly as a typed array
+  //     store does, hands back a u32 above 2^31 as a positive number, round-trips an f32
+  //     through the f64 JS holds it in, and takes both arms of a narrow packed `Result`
+  //   - a function that genuinely cannot cross is named in the shim with the position and
+  //     the type that stopped it, which is what a silent omission hid
+  const widths = emit("tests/self/interop_widths.ts", [
+    "--emit-header",
+    sidecar("interop_widths", "h"),
+    "--emit-napi",
+    sidecar("interop_widths", "napi.c"),
+  ]);
+  const widthsShim =
+    widths.status === 0 ? fs.readFileSync(sidecar("interop_widths", "napi.c"), "utf8") : "";
+  check(
+    "interop_widths.napi.c bridges u8/u16/u32/u64/f32 instead of skipping them",
+    // u8: ToUint32 into a temporary, then the width's own modulus.
+    widthsShim.includes("if (napi_get_value_uint32(env, argv[0], &x_raw) != napi_ok)") &&
+      widthsShim.includes("uint8_t x = (uint8_t)x_raw;") &&
+      widthsShim.includes("uint16_t x = (uint16_t)x_raw;") &&
+      // u32 needs no temporary: the getter already writes its type.
+      widthsShim.includes("uint32_t x;\n  if (napi_typeof(env, argv[0], &type)") &&
+      widthsShim.includes("napi_get_value_bigint_uint64(env, argv[0], &x, &lossless)") &&
+      widthsShim.includes("float x = amrit_napi_f32(x_raw);") &&
+      widthsShim.includes("static float amrit_napi_f32(double value) {") &&
+      // The boxers: unsigned goes back through napi_create_uint32, f32 as a double.
+      widthsShim.includes("uint32_t result = highBit();") &&
+      widthsShim.includes("napi_create_uint32(env, result, &out)") &&
+      widthsShim.includes("napi_create_bigint_uint64(env, result, &out)") &&
+      // Both arms of Result<f32, u8> narrow, each through its own temporary.
+      widthsShim.includes("if (r_flag) r.as.value = amrit_napi_f32(r_value_raw);") &&
+      widthsShim.includes("if (!r_flag) r.as.error = (uint8_t)r_error_raw;") &&
+      !widthsShim.includes("not bridged"),
+    widthsShim || widths.stderr
+  );
+
+  // A module whose functions cannot cross at all: the shim must name each one
+  // and say which position and which type stopped it.
+  const skipsSrc = path.join(interopDir, "napi_skips.ts");
+  fs.writeFileSync(
+    skipsSrc,
+    [
+      "export class Point {",
+      "  x: number = 0;",
+      "}",
+      "",
+      "export function move(p: Point, dx: number): Point {",
+      "  p.x = p.x + dx;",
+      "  return p;",
+      "}",
+      "",
+      "export function origin(): Point {",
+      "  return new Point();",
+      "}",
+      "",
+    ].join("\n")
+  );
+  const skips = emit(skipsSrc, ["--emit-napi", sidecar("napi_skips", "napi.c")]);
+  const skipsShim =
+    skips.status === 0 ? fs.readFileSync(sidecar("napi_skips", "napi.c"), "utf8") : "";
+  check(
+    "an unbridgeable function is named in the shim with the position and type that stopped it",
+    skipsShim.includes("move(p: Point, dx: number): Point -- not bridged: parameter 1 (p) is Point") &&
+      skipsShim.includes("origin(): Point -- not bridged: it returns Point") &&
+      skipsShim.includes("/* Not bridged, and why."),
+    skipsShim || skips.stderr
+  );
+
+  if (HAS_CLANG && widths.status === 0) {
+    const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar("interop_widths", "h")]);
+    check("interop_widths.h compiles under -std=c11 -Wall -Wextra -Werror", r.status === 0, String(r.stderr));
+  }
+  // The shim needs node_api.h to compile at all, so this is the same skip the
+  // other addon checks take when the Node headers are not installed.
+  if (HAS_CLANG && hasNodeHeaders && widths.status === 0 && skips.status === 0) {
+    for (const stem of ["interop_widths", "napi_skips"]) {
+      const r = spawnSync("clang", [...strictC, `-I${nodeInclude}`, "-fsyntax-only", sidecar(stem, "napi.c")]);
+      check(`${stem}.napi.c compiles under -std=c11 -Wall -Wextra -Werror`, r.status === 0, String(r.stderr));
+    }
+  }
+  if (HAS_CLANG && widths.status === 0 && hasNodeHeaders) {
+    const addon = path.join(interopDir, "interop_widths.node");
+    const b = spawnSync(
+      "bash",
+      [
+        "scripts/build.sh",
+        sidecar("interop_widths", "ll"),
+        "runtime/runtime.c",
+        sidecar("interop_widths", "napi.c"),
+        "-o",
+        addon,
+        "--profile",
+        "napi",
+      ],
+      { cwd: root }
+    );
+    const script = [
+      'import { createRequire } from "node:module";',
+      `const a = createRequire(import.meta.url)(${JSON.stringify(addon)});`,
+      "const out = [];",
+      // Boundaries, and the two out-of-range values whose behaviour is the decision:
+      // ToUint32 then the width's modulus, exactly as a typed-array store.
+      "out.push(a.echoU8(0), a.echoU8(255), a.echoU8(300), a.echoU8(-1));",
+      "out.push(a.echoU16(0), a.echoU16(65535), a.echoU16(65536), a.echoU16(-1));",
+      "out.push(a.echoU32(0), a.echoU32(4294967295), a.echoU32(-1));",
+      "out.push(String(a.echoU64(0n)), String(a.echoU64((1n << 64n) - 1n)));",
+      // 0.1 has no f32, so the round trip must come back as Math.fround(0.1) and not as 0.1.
+      "out.push(a.echoF32(0.1) === Math.fround(0.1), a.echoF32(0.1) === 0.1);",
+      // A double past the float range must be an infinity, not undefined behaviour.
+      "out.push(a.echoF32(1e39), a.echoF32(-1e39), Number.isNaN(a.echoF32(NaN)));",
+      "out.push(a.mixWidths(255, 65535, 4294967295, 0.5), a.highBit());",
+      "out.push(JSON.stringify(a.halve(9)), JSON.stringify(a.halve(-1)));",
+      "out.push(a.orError({ ok: true, value: 0.25 }), a.orError({ ok: false, error: 200 }), a.orError(a.halve(-1)));",
+      'try { a.echoU8("x"); } catch (e) { out.push(e.message); }',
+      "console.log(out.join(' | '));",
+    ].join("\n");
+    const r = b.status === 0 ? spawnSync("node", ["--input-type=module", "-e", script], { cwd: root }) : null;
+    const expected = [
+      "0 | 255 | 44 | 255",
+      "0 | 65535 | 0 | 65535",
+      "0 | 4294967295 | 4294967295",
+      "0 | 18446744073709551615",
+      "true | false",
+      "Infinity | -Infinity | true",
+      "4295033085.5 | 4294967295",
+      '{"ok":true,"value":4.5} | {"ok":false,"error":255}',
+      "0.25 | 200 | 255",
+      "echoU8: argument 1 (x) must be a number",
+    ].join(" | ");
+    check(
+      "N-API: u8/u16/u32 truncate as a typed-array store, u64 is a bigint, f32 round-trips, and a u32 above 2^31 stays positive",
+      r !== null && String(r.stdout).trim() === expected,
+      String(b.stderr) + (r ? String(r.stdout) + String(r.stderr) : "")
+    );
+  }
+
+  // ---- WP8/WP15: the unsigned widths across the wasm boundary ---------------------
+  // The wasm ABI has four value types, so `u8` / `u16` / `u32` share one with `i32` and
+  // `u64` shares one with `i64`, and the generated loader is the only place the range
+  // can be restored. `--emit-dts` used to declare these signatures while the loader
+  // wrote no entry for them at all, so `load()` handed back an object missing the
+  // function the `.d.ts` promised. Checks:
+  //   - every function the `.d.ts` declares has an entry in the companion `.mjs`
+  //     (the two files are generated from one predicate, and this says so)
+  //   - the loader masks a narrow argument on the way in, narrows a `u8` / `u16`
+  //     result the callee never narrowed, and hands back a `u32` above 2^31 and a
+  //     `u64` above 2^63 *positive* rather than as the signed value wasm returns
+  const unsignedSrc = "tests/self/interop_unsigned.ts";
+  const unsigned = emit(unsignedSrc, ["--emit-dts", sidecar("interop_unsigned", "d.ts")]);
+  const unsignedDts =
+    unsigned.status === 0 ? fs.readFileSync(sidecar("interop_unsigned", "d.ts"), "utf8") : "";
+  const unsignedMjs =
+    unsigned.status === 0 ? fs.readFileSync(sidecar("interop_unsigned", "mjs"), "utf8") : "";
+  check(
+    "interop_unsigned.d.ts declares the unsigned widths as `number` / `bigint`",
+    unsignedDts.includes("  idU8(x: number): number;") &&
+      unsignedDts.includes("  idU32(x: number): number;") &&
+      unsignedDts.includes("  idU64(x: bigint): bigint;"),
+    unsignedDts
+  );
+  // The regression guard, and the general one: a `.d.ts` may not promise a function
+  // its loader omits. Before the fix `interop_unsigned.mjs` had none of these ten.
+  // The expected count is spelled out so a generator that started declaring nothing
+  // could not pass this by having nothing to miss (strings.d.ts really declares none:
+  // every one of its functions is commented out).
+  for (const [stem, declares] of [
+    ["add", 1],
+    ["strings", 0],
+    ["arrays", 9],
+    ["res_wasm", 3],
+    ["interop_unsigned", 10],
+  ]) {
+    if (!fs.existsSync(sidecar(stem, "d.ts")) || !fs.existsSync(sidecar(stem, "mjs"))) continue;
+    const dts = fs.readFileSync(sidecar(stem, "d.ts"), "utf8");
+    const mjs = fs.readFileSync(sidecar(stem, "mjs"), "utf8");
+    const exports_ = dts.slice(dts.indexOf("export interface Exports {"), dts.indexOf("\n}\n"));
+    const declared = [...exports_.matchAll(/^ {2}(\w+)\(/gm)].map((m) => m[1]);
+    const missing = declared.filter((name) => !new RegExp(`^ {4}${name}: `, "m").test(mjs));
+    check(
+      `${stem}.mjs implements every function ${stem}.d.ts declares (${declares})`,
+      declared.length === declares && missing.length === 0,
+      `declared ${declared.length}, expected ${declares}; declared but not loaded: ${missing.join(", ")}`
+    );
+  }
+  // Both halves of the skip message. No corpus program has a function whose
+  // arguments all cross and whose *result* does not, so that one is written here.
+  const skipSrc = path.join(interopDir, "skip_reasons.ts");
+  fs.writeFileSync(
+    skipSrc,
+    ["export function spell(n: i32): string {", "  return `${n}`;", "}", ""].join("\n")
+  );
+  const skipped = emit(skipSrc, ["--emit-dts", sidecar("skip_reasons", "d.ts")]);
+  const skipDts = skipped.status === 0 ? fs.readFileSync(sidecar("skip_reasons", "d.ts"), "utf8") : "";
+  check(
+    "a skipped function names the argument or the result, and the type, that stopped it",
+    stringsDts.includes(
+      "  // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: argument 2 (a) is `string`,"
+    ) && skipDts.includes("  // spell(n: number): string  -- not exported to JS: the result is `string`,"),
+    stringsDts + skipDts
+  );
+  check(
+    "interop_unsigned.mjs masks a narrow argument in, narrows a narrow result out, and reads u32/u64 unsigned",
+    unsignedMjs.includes("idU8: (x) => raw.idU8(x & 0xff) & 0xff,") &&
+      unsignedMjs.includes("idU16: (x) => raw.idU16(x & 0xffff) & 0xffff,") &&
+      unsignedMjs.includes("idU32: (x) => raw.idU32(x) >>> 0,") &&
+      unsignedMjs.includes("idU64: (x) => BigInt.asUintN(64, raw.idU64(x)),") &&
+      unsignedMjs.includes("scaleF32: raw.scaleF32,"),
+    unsignedMjs
+  );
+  if (unsigned.status === 0) {
+    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("interop_unsigned", "d.ts")], {
+      cwd: root,
+    });
+    check(
+      "interop_unsigned.d.ts passes tsc --noEmit --strict",
+      r.status === 0,
+      String(r.stdout) + String(r.stderr)
+    );
+  }
+  if (HAS_CLANG && has("wasm-ld")) {
+    const wasm = path.join(interopDir, "interop_unsigned.wasm");
+    const w =
+      unsigned.status === 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", sidecar("interop_unsigned", "ll"), "-o", wasm, "--profile", "wasm"],
+            { cwd: root }
+          )
+        : { status: 1, stderr: unsigned.stderr };
+    // Boundaries on both sides of every width, the truncations on the way in, and the
+    // two results a signed read would get wrong: 4294967295 and 2^64 - 1.
+    const script = [
+      'import { readFileSync } from "node:fs";',
+      `const { load } = await import(${JSON.stringify(sidecar("interop_unsigned", "mjs"))});`,
+      `const api = await load(readFileSync(${JSON.stringify(wasm)}));`,
+      "const out = [];",
+      "out.push(api.idU8(0), api.idU8(255), api.idU8(256), api.idU8(300), api.idU8(-1));",
+      "out.push(api.addU8(200, 100), api.addU8(255, 1));",
+      "out.push(api.idU16(0), api.idU16(65535), api.idU16(65536), api.idU16(-1));",
+      "out.push(api.addU16(65535, 2), api.widen(300));",
+      "out.push(api.idU32(0), api.idU32(2147483648), api.idU32(4294967295), api.addU32(4294967295, 2));",
+      "out.push(api.idU64(0n), api.idU64(2n ** 63n), api.idU64(2n ** 64n - 1n), api.addU64(2n ** 64n - 1n, 1n));",
+      "out.push(api.scaleF32(0.5), api.scaleF32(Math.fround(0.1)) === Math.fround(0.2));",
+      "console.log(out.join(' '));",
+    ].join("\n");
+    const r = w.status === 0 ? spawnSync("node", ["--input-type=module", "-e", script], { cwd: root }) : null;
+    check(
+      "wasm: the loader puts every unsigned width back in range (a u32 above 2^31 arrives positive)",
+      r !== null &&
+        String(r.stdout).trim() ===
+          "0 255 0 44 255 44 0 0 65535 0 65535 1 44 0 2147483648 4294967295 1 " +
+            "0 9223372036854775808 18446744073709551615 0 1 true",
+      String(w.stderr) + (r ? String(r.stdout) + String(r.stderr) : "")
+    );
   }
 
   // ---- WP4/WP8: arrays and strings across the boundary ----------------------------
@@ -2440,6 +2863,86 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           fs.existsSync(path.join(keepDir, "hello.ll")),
         `${keep.status}: ${keep.stdout}${keep.stderr}`
       );
+
+      // ---- The three things §7a listed as still stage0's, closed. -----------
+
+      // `-o <dir>` for a directory that is already there, without the trailing
+      // slash: stage0 stats the path, and so does this now (`isDirectorySync`,
+      // WP14 §7a). The slash still names a directory that does not exist yet,
+      // so both spellings are checked, and a name that is *not* a directory
+      // must still be taken as a file.
+      const statDir = path.join(shipDir, "stat");
+      fs.mkdirSync(statDir, { recursive: true });
+      const intoDir = spawnSync(compiler, ["examples/hello.ts", "-o", statDir], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      const asFile = path.join(shipDir, "stat_file.ll");
+      const intoFile = spawnSync(compiler, ["examples/hello.ts", "-o", asFile], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      check(
+        "the self-hosted compiler: -o <existing dir> without the slash is the directory, as stage0 stats it",
+        intoDir.status === 0 &&
+          fs.existsSync(path.join(statDir, "hello.ll")) &&
+          intoFile.status === 0 &&
+          fs.existsSync(asFile),
+        `dir ${intoDir.status}: ${intoDir.stderr}file ${intoFile.status}: ${intoFile.stderr}`
+      );
+
+      // `--target host`: the machine answers, through `process.platform` and
+      // `process.arch`, and `self/target.ts` composes the triple the way
+      // `src/codegen/target.ts` does — so the two compilers must land on the
+      // same one. Comparing the whole module rather than the triple line keeps
+      // the check honest about the layout string too.
+      const ourHost = path.join(shipDir, "host1.ll");
+      const theirHost = path.join(shipDir, "host0.ll");
+      const hostOurs = spawnSync(compiler, ["examples/hello.ts", "--target", "host", "-o", ourHost], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      const hostTheirs = spawnSync("node", [cli, "examples/hello.ts", "--target", "host", "-o", theirHost], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      const supportedHost = hostTheirs.status === 0;
+      check(
+        supportedHost
+          ? "the self-hosted compiler: --target host resolves to the triple stage0 resolves it to"
+          : "the self-hosted compiler: --target host is refused here exactly as stage0 refuses it",
+        supportedHost
+          ? hostOurs.status === 0 &&
+              stripHeader(fs.readFileSync(ourHost, "utf8")) === stripHeader(fs.readFileSync(theirHost, "utf8"))
+          : hostOurs.status === 2 && hostOurs.stderr.includes("supported: host,"),
+        `stage1 ${hostOurs.status}: ${hostOurs.stderr}stage0 ${hostTheirs.status}: ${hostTheirs.stderr}`
+      );
+
+      // A broken invariant answers 70 (`EX_SOFTWARE`) and stage0's report,
+      // less the two halves a self-hosted compiler honestly has not got: the
+      // input files, which live in a `process.argv` that only a program with
+      // an entry `main` may read, and the stack, which needs the `try`/`catch`
+      // the language does not have. `tests/self/ice.ts` calls the report
+      // directly, because an invariant nothing reaches cannot be provoked from
+      // a command line, and stage1 builds it, so what prints this is stage1's
+      // code compiled by stage1.
+      const iceVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
+      const iceExe = path.join(shipDir, "ice");
+      const iceBuild = spawnSync(compiler, ["tests/self/ice.ts", "--link", iceExe, "--profile", "debug"], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      const ice = iceBuild.status === 0 ? spawnSync(iceExe, [], { cwd: root, encoding: "utf8" }) : null;
+      check(
+        "the self-hosted compiler: an internal error exits 70 and says what it cannot show",
+        ice !== null &&
+          ice.status === 70 &&
+          ice.stderr.startsWith(`amritc ${iceVersion}: internal compiler error\n`) &&
+          ice.stderr.includes("  emitter: no callee recorded for `f`\n") &&
+          ice.stderr.includes("AMRITC_DEBUG=1 adds nothing") &&
+          ice.stderr.includes("This is a bug in amritc, not in your program."),
+        `${iceBuild.status}: ${iceBuild.stderr}${ice ? `ran ${ice.status}: ${ice.stderr}` : ""}`
+      );
     }
   } else {
     // Everything from the lexer oracle down links a stage1 binary, so without
@@ -2540,22 +3043,46 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
       bad.stderr.includes("x86_64-unknown-linux-gnu"),
     bad.stderr
   );
+  // WP15 §3: `nsw` is the default, and `opt_nsw.ll` pins exactly which operations
+  // carry it. Signedness is not in the LLVM type — a `u32` is an `i32` — so the
+  // check is per function: `mix` is the case's unsigned one and must be clean.
   const nswLl = path.join(buildDir, "opt_nsw.ll");
   if (fs.existsSync(nswLl)) {
     const ir = fs.readFileSync(nswLl, "utf8");
-    // User-level i32 arithmetic: flagged. Compiler-internal i64 index/length arithmetic and the allocator: never.
-    const userOps = [...ir.matchAll(/= (add|sub|mul)( nsw)? i32 /g)];
+    /** The body of `@<name>`, so an op can be attributed to the function that wrote it. */
+    const bodyOf = (text, name) => {
+      const m = new RegExp(`^define [^\n]*@${name}\\(.*?\\n\\}$`, "ms").exec(text);
+      return m ? m[0] : "";
+    };
+    const signed = ["poly", "sum", "test"].map((n) => bodyOf(ir, n)).join("\n");
+    const unsigned = bodyOf(ir, "mix");
+    const userOps = [...signed.matchAll(/= (add|sub|mul)( nsw)? i32 /g)];
+    const unsignedOps = [...unsigned.matchAll(/= (add|sub|mul)( nsw| nuw)? i32 /g)];
     const internalOps = [...ir.matchAll(/= (add|sub|mul)( nsw)? i64 /g)];
     check(
-      `opt_nsw: every user-level i32 add/sub/mul carries nsw (${userOps.length} ops) and no internal i64 op does (${internalOps.length} ops)`,
+      `opt_nsw: every user-level signed i32 add/sub/mul carries nsw (${userOps.length} ops), no unsigned one does (${unsignedOps.length} ops), and no internal i64 op does (${internalOps.length} ops)`,
       // Since WP6 stack-allocates the case's arrays there may be no internal i64 arithmetic at all.
       userOps.length >= 10 &&
         userOps.every((m) => m[2] === " nsw") &&
+        unsignedOps.length >= 3 &&
+        unsignedOps.every((m) => m[2] === undefined) &&
         internalOps.every((m) => m[2] === undefined),
       ir
     );
-    const plainIr = fs.readFileSync(path.join(buildDir, "cf_fib.ll"), "utf8");
-    check("without --nsw no instruction carries nsw (cf_fib)", !plainIr.includes("nsw"), plainIr);
+    // The opt-out: the same source under --wrapping, which must differ in the
+    // flags and in nothing else at all.
+    const wrapLl = path.join(buildDir, "opt_wrapping.ll");
+    if (fs.existsSync(wrapLl)) {
+      // The module header names the source file, which is the one thing the two
+      // cases legitimately differ in, so compare the stripped bodies.
+      const wrapIr = stripHeader(fs.readFileSync(wrapLl, "utf8"));
+      const nswIr = stripHeader(ir);
+      check(
+        "--wrapping removes every nsw and changes nothing else (opt_wrapping vs opt_nsw)",
+        !wrapIr.includes("nsw") && !wrapIr.includes("nuw") && wrapIr === nswIr.split(" nsw").join(""),
+        wrapIr
+      );
+    }
   }
 }
 

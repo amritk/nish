@@ -17,7 +17,7 @@ function bad1000(): number {
   return bad100() + bad100() + bad100() + bad100() + bad100() + bad100() + bad100() + bad100() + bad100() + bad100();
 }
 
-function test(): number {
+export function test(): number {
   console.log(bad1000());
   console.log(Math.random() !== Math.random());
   return 0;

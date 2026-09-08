@@ -1,6 +1,6 @@
 declare void @amrit_panic_div(i1 noundef zeroext) #1
 
-define noundef i32 @collatzSteps(i32 noundef %n) #0 {
+define internal noundef i32 @collatzSteps(i32 noundef %n) #0 {
 entry:
   %steps.addr = alloca i32, align 4
   %x.addr = alloca i32, align 4
@@ -51,14 +51,14 @@ div.ok.1:
 
 if.else:
   %17 = load i32, i32* %x.addr, align 4
-  %18 = mul i32 3, %17
-  %19 = add i32 %18, 1
+  %18 = mul nsw i32 3, %17
+  %19 = add nsw i32 %18, 1
   store i32 %19, i32* %x.addr, align 4
   br label %if.end
 
 if.end:
   %20 = load i32, i32* %steps.addr, align 4
-  %21 = add i32 %20, 1
+  %21 = add nsw i32 %20, 1
   store i32 %21, i32* %steps.addr, align 4
   br label %while.cond
 

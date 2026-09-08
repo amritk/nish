@@ -105,7 +105,7 @@ bounds.ok:
 
 for.inc:
   %32 = load i32, i32* %i.addr, align 4
-  %33 = add i32 %32, 1
+  %33 = add nsw i32 %32, 1
   store i32 %33, i32* %i.addr, align 4
   br label %for.cond
 

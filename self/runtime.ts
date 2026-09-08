@@ -158,6 +158,19 @@ export class RuntimeTable {
     // Rewinds to a mark: same chunk -> reset the offset; an older chunk -> free the newer ones first.
     this.add(plain("amrit_arena_release", "declare void @amrit_arena_release(i64 noundef)", EFFECT_WRITE));
     this.add(plain("amrit_arena_used", "declare noundef i64 @amrit_arena_used()", EFFECT_WRITE));
+    // WP9 call-site reclaim: rewinds to a mark while keeping the newest block,
+    // which it moves down to the mark and answers at its new address. Neither
+    // `noalias` nor `nocapture` is claimed: the guards in runtime.c answer the
+    // argument itself whenever the move cannot be proved safe, and a returned
+    // pointer is a captured one. The chunk walk is over a finite acyclic list,
+    // so `willreturn` holds.
+    this.add(
+      plain(
+        "amrit_arena_keep",
+        "declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8)",
+        EFFECT_WRITE
+      )
+    );
     this.add(
       plain(
         "amrit_str_new",
@@ -270,10 +283,17 @@ export class RuntimeTable {
       plain("amrit_parse_number", `declare noundef double @amrit_parse_number(${STR_NOCAP}, i32 noundef)`, EFFECT_WRITE)
     );
     // WP14 D4: the directory and subprocess calls a self-hosted driver needs
-    // to link its own output. Both answer a value rather than exiting.
-    // `mkdir`, then a `stat` when it failed: it changes the file system, so
-    // `write`, and the path is only read and never retained (`STR_NOCAP`).
+    // to link its own output, and the WP14 §7a `stat` beside them. Each
+    // answers a value rather than exiting.
+    // `mkdir`, then `amrit_is_dir` when it failed: it changes the file system,
+    // so `write`, and the path is only read and never retained (`STR_NOCAP`).
     this.add(plain("amrit_mkdir", `declare zeroext i1 @amrit_mkdir(${STR_NOCAP})`, EFFECT_WRITE));
+    // WP14 §7a. One `stat`, answering only "is there a directory here?", which
+    // is the question `-o <dir>` asks. `EFFECT_WRITE` rather than read for the
+    // reason `amrit_parse_number` is not readonly: a failed `stat` stores
+    // `errno`, and the file system is not memory LLVM may reason about, so a
+    // caller must not be hoisted across anything that could change it.
+    this.add(plain("amrit_is_dir", `declare zeroext i1 @amrit_is_dir(${STR_NOCAP})`, EFFECT_WRITE));
     // Runs an arbitrary program, so the honest answer to every question is the
     // conservative one:
     //   - no `memory(...)` and `EFFECT_WRITE`: the child reads and writes
@@ -292,6 +312,29 @@ export class RuntimeTable {
         "declare noundef i32 @amrit_spawn(%struct.amrit_array* noundef nonnull align 8)",
         attrs1("nounwind"),
         EFFECT_WRITE
+      )
+    );
+    // WP14 §7a: what machine this is. `--target host` composes its triple from
+    // the two. Each answers the address of a string in the runtime's own
+    // constant data, decided when `runtime.c` was compiled — a cross build
+    // compiles the runtime for the target — so nothing is allocated and
+    // nothing is read, which is what makes `readnone` a fact and lets two
+    // reads in one function fold into one. Deliberately *not* `noalias`: every
+    // call answers the same pointer, and `noalias` promises the opposite.
+    this.add(
+      new RuntimeFunction(
+        "amrit_platform",
+        "declare noundef nonnull align 8 i8* @amrit_platform()",
+        attrs3("nounwind", "willreturn", "readnone"),
+        EFFECT_NONE
+      )
+    );
+    this.add(
+      new RuntimeFunction(
+        "amrit_arch",
+        "declare noundef nonnull align 8 i8* @amrit_arch()",
+        attrs3("nounwind", "willreturn", "readnone"),
+        EFFECT_NONE
       )
     );
     // WP4: arrays. `amrit_array_grow` doubles `cap` (4 when 0) and moves the

@@ -10,13 +10,15 @@
 @.str.7 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"goodbye\00" }, align 8
 
 declare void @amrit_free_arena() #0
+declare noundef i64 @amrit_arena_mark() #0
+declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare zeroext i1 @amrit_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @amrit_array_grow(%struct.amrit_array* noundef nonnull align 8 nocapture, i64 noundef) #0
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #3
 
-define noundef nonnull align 8 i8* @join(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %words) #0 {
+define internal noundef nonnull align 8 i8* @join(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %words) #0 {
 entry:
   %out.addr = alloca i8*, align 8
   %w.addr = alloca i8*, align 8
@@ -98,60 +100,62 @@ push.store:
   store i64 %18, i64* %9, align 8
   %19 = trunc i64 %18 to i32
   %20 = load %struct.amrit_array*, %struct.amrit_array** %words.addr, align 8
-  %21 = call i8* @join(%struct.amrit_array* %20)
-  call void @amrit_print(i8* %21)
-  %22 = load %struct.amrit_array*, %struct.amrit_array** %words.addr, align 8
-  %23 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %22, i64 0, i32 0
-  %24 = load i64, i64* %23, align 8
-  %25 = icmp ult i64 3, %24
-  br i1 %25, label %bounds.ok, label %bounds.fail
+  %21 = call i64 @amrit_arena_mark()
+  %22 = call i8* @join(%struct.amrit_array* %20)
+  %23 = call i8* @amrit_arena_keep(i64 %21, i8* %22)
+  call void @amrit_print(i8* %23)
+  %24 = load %struct.amrit_array*, %struct.amrit_array** %words.addr, align 8
+  %25 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %24, i64 0, i32 0
+  %26 = load i64, i64* %25, align 8
+  %27 = icmp ult i64 3, %26
+  br i1 %27, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @amrit_panic_index(i64 3, i64 %24)
+  call void @amrit_panic_index(i64 3, i64 %26)
   unreachable
 
 bounds.ok:
-  %26 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %22, i64 0, i32 2
-  %27 = load i8*, i8** %26, align 8
-  %28 = bitcast i8* %27 to i8**
-  %29 = getelementptr inbounds i8*, i8** %28, i64 3
-  %30 = load i8*, i8** %29, align 8
-  %31 = call zeroext i1 @amrit_str_eq(i8* %30, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
-  %32 = select i1 %31, i8* bitcast ({ i64, [5 x i8] }* @.str.5 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.6 to i8*)
-  call void @amrit_print(i8* %32)
-  %33 = load %struct.amrit_array*, %struct.amrit_array** %words.addr, align 8
-  %34 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %33, i64 0, i32 0
-  %35 = load i64, i64* %34, align 8
-  %36 = icmp ult i64 0, %35
-  br i1 %36, label %bounds.ok.1, label %bounds.fail.1
+  %28 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %24, i64 0, i32 2
+  %29 = load i8*, i8** %28, align 8
+  %30 = bitcast i8* %29 to i8**
+  %31 = getelementptr inbounds i8*, i8** %30, i64 3
+  %32 = load i8*, i8** %31, align 8
+  %33 = call zeroext i1 @amrit_str_eq(i8* %32, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %34 = select i1 %33, i8* bitcast ({ i64, [5 x i8] }* @.str.5 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.6 to i8*)
+  call void @amrit_print(i8* %34)
+  %35 = load %struct.amrit_array*, %struct.amrit_array** %words.addr, align 8
+  %36 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %35, i64 0, i32 0
+  %37 = load i64, i64* %36, align 8
+  %38 = icmp ult i64 0, %37
+  br i1 %38, label %bounds.ok.1, label %bounds.fail.1
 
 bounds.fail.1:
-  call void @amrit_panic_index(i64 0, i64 %35)
+  call void @amrit_panic_index(i64 0, i64 %37)
   unreachable
 
 bounds.ok.1:
-  %37 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %33, i64 0, i32 2
-  %38 = load i8*, i8** %37, align 8
-  %39 = bitcast i8* %38 to i8**
-  %40 = getelementptr inbounds i8*, i8** %39, i64 0
-  store i8* bitcast ({ i64, [8 x i8] }* @.str.7 to i8*), i8** %40, align 8
-  %41 = load %struct.amrit_array*, %struct.amrit_array** %words.addr, align 8
-  %42 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %41, i64 0, i32 0
-  %43 = load i64, i64* %42, align 8
-  %44 = icmp ult i64 0, %43
-  br i1 %44, label %bounds.ok.2, label %bounds.fail.2
+  %39 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %35, i64 0, i32 2
+  %40 = load i8*, i8** %39, align 8
+  %41 = bitcast i8* %40 to i8**
+  %42 = getelementptr inbounds i8*, i8** %41, i64 0
+  store i8* bitcast ({ i64, [8 x i8] }* @.str.7 to i8*), i8** %42, align 8
+  %43 = load %struct.amrit_array*, %struct.amrit_array** %words.addr, align 8
+  %44 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %43, i64 0, i32 0
+  %45 = load i64, i64* %44, align 8
+  %46 = icmp ult i64 0, %45
+  br i1 %46, label %bounds.ok.2, label %bounds.fail.2
 
 bounds.fail.2:
-  call void @amrit_panic_index(i64 0, i64 %43)
+  call void @amrit_panic_index(i64 0, i64 %45)
   unreachable
 
 bounds.ok.2:
-  %45 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %41, i64 0, i32 2
-  %46 = load i8*, i8** %45, align 8
-  %47 = bitcast i8* %46 to i8**
-  %48 = getelementptr inbounds i8*, i8** %47, i64 0
-  %49 = load i8*, i8** %48, align 8
-  call void @amrit_print(i8* %49)
+  %47 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %43, i64 0, i32 2
+  %48 = load i8*, i8** %47, align 8
+  %49 = bitcast i8* %48 to i8**
+  %50 = getelementptr inbounds i8*, i8** %49, i64 0
+  %51 = load i8*, i8** %50, align 8
+  call void @amrit_print(i8* %51)
   ret i32 0
 }
 

@@ -74,6 +74,14 @@ void amrit_free_arena(void);
  * body with these two calls; `Arena.mark/release/used` expose them. */
 uint64_t amrit_arena_mark(void);
 void amrit_arena_release(uint64_t mark);
+/* Call-site reclaim (WP9): release back to `mark` but keep the newest block,
+ * moving it down to `mark` and answering its new address. Only a string may be
+ * kept, because a string is one flat block with no interior pointers; `p` must
+ * be the last allocation the arena handed out. Anything the guards cannot
+ * prove (a `p` outside the current chunk, a stale or newer mark, no room below
+ * it) leaves the arena untouched and answers `p`. Compiled callers use it to
+ * reclaim the temporaries a string-returning callee left behind. */
+void *amrit_arena_keep(uint64_t mark, void *p);
 /* Bytes bumped in the current chunk (`Arena.used()`); a steady-state loop keeps it flat. */
 uint64_t amrit_arena_used(void);
 
@@ -151,6 +159,11 @@ void amrit_argv_init(int32_t argc, char **argv);
  * exists at `path` afterwards, whether this call created it or it was already
  * there; false for every other failure, a plain file at `path` included. */
 bool amrit_mkdir(const amrit_str *path);
+/* `isDirectorySync(path)` (WP14 §7a): true when a directory exists at `path`
+   as this call runs, false for everything else — a missing path, a plain file,
+   a parent that cannot be searched. One `stat`, no allocation, no exit; it is
+   the `stat` half of `amrit_mkdir`, which calls it. */
+bool amrit_is_dir(const amrit_str *path);
 /* `spawnSync(argv)`: run element 0 of `argv` (searched on `PATH`) with `argv`
  * as its argument vector, wait for it, and answer its exit status, or
  * `128 + n` when signal `n` killed it. -1 when `argv` is empty, when the
@@ -158,6 +171,16 @@ bool amrit_mkdir(const amrit_str *path);
  * processes. The elements are `amrit_str *`; the child receives their bytes,
  * so an argument containing a NUL is truncated at it. */
 int32_t amrit_spawn(const amrit_array *argv);
+
+/* ---- What machine this is (WP14 §7a) ------------------------------------
+ * `process.platform` and `process.arch`, spelled as Node spells them:
+ * "linux" or "darwin", "x64" or "arm64", and "unknown" for anything this
+ * compiler has no target triple for, a WASI build included. Both answer a
+ * pointer into this library's own constant data, settled when it was compiled
+ * (a cross build compiles it for the target), so the strings survive every
+ * arena reset, never change, and must not be freed. */
+const amrit_str *amrit_platform(void);
+const amrit_str *amrit_arch(void);
 
 /* String to number (WP7), ASCII whitespace only. mode 0 is `parseFloat`
  * (longest JS decimal literal or `Infinity`, else NaN), mode 1 is `Number`

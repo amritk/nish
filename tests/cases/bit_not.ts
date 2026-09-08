@@ -8,6 +8,6 @@ function invert64(a: i64): i64 {
   return ~a;
 }
 
-function test(): number {
+export function test(): number {
   return invert32(0) + invert32(5) + toI32(invert64(-1));
 }

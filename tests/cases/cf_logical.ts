@@ -14,7 +14,7 @@ function inRange(x: number, lo: number, hi: number): boolean {
   return lo <= x && x <= hi;
 }
 
-function test(): number {
+export function test(): number {
   let n = 0;
   if (bigQuotient(0)) n += 1;
   if (bigQuotient(10)) n += 2;

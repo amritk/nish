@@ -1,6 +1,6 @@
 declare void @amrit_panic_div(i1 noundef zeroext) #1
 
-define noundef i32 @sumDigits(i32 noundef %n) #0 {
+define internal noundef i32 @sumDigits(i32 noundef %n) #0 {
 entry:
   %sum.addr = alloca i32, align 4
   %rest.addr = alloca i32, align 4
@@ -24,7 +24,7 @@ div.fail:
 
 div.ok:
   %7 = srem i32 %1, 10
-  %8 = add i32 %0, %7
+  %8 = add nsw i32 %0, %7
   store i32 %8, i32* %sum.addr, align 4
   %9 = load i32, i32* %rest.addr, align 4
   %10 = icmp eq i32 10, 0
@@ -57,7 +57,7 @@ define noundef i32 @test() #0 {
 entry:
   %0 = call i32 @sumDigits(i32 0)
   %1 = call i32 @sumDigits(i32 9876)
-  %2 = add i32 %0, %1
+  %2 = add nsw i32 %0, %1
   ret i32 %2
 }
 

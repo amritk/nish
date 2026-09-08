@@ -5,12 +5,12 @@
 declare zeroext i1 @amrit_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 
-define noundef nonnull align 8 i8* @first() #0 {
+define internal noundef nonnull align 8 i8* @first() #0 {
 entry:
   ret i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*)
 }
 
-define noundef nonnull align 8 i8* @second() #0 {
+define internal noundef nonnull align 8 i8* @second() #0 {
 entry:
   ret i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*)
 }

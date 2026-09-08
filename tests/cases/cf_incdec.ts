@@ -5,7 +5,7 @@ function bump(v: f64): f64 {
   return ++x;
 }
 
-function test(): number {
+export function test(): number {
   let i = 5;
   const a = i++;
   const b = ++i;

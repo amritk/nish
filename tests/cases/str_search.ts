@@ -5,7 +5,7 @@ function find(s: string, needle: string): number {
   return s.indexOf(needle);
 }
 
-function test(): number {
+export function test(): number {
   const s = "one,two";
   let flags = 0;
   if (s.startsWith("one")) flags += 1;

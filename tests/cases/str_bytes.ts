@@ -8,7 +8,7 @@ function head(s: string, n: number): string {
   return s.substring(0, n);
 }
 
-function test(): number {
+export function test(): number {
   const s = "hello";
   const h = head(s, 2);
   return firstByte(s) + h.length * 1000 + head(s, 99).length * 100000 + head(s, -4).length;

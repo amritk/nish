@@ -8,6 +8,10 @@
 //   i1             -> a number 0 or 1 on the way out (`WasmBool`); `true`/`false`
 //                     are accepted on the way in because ToInt32 maps them to 1/0
 //   i64            -> bigint (wasm i64 <-> JS BigInt)
+//   u8 u16 u32     -> number, and u64 -> bigint: an unsigned width shares a
+//                     wasm value type with the signed one of its size, so the
+//                     loader is what puts each value back in range — see
+//                     `wasmUnsignedIn` / `wasmUnsignedOut` in interop_wasm.ts.
 //   i32[] f64[] i64[] (Int32Array / Float64Array / BigInt64Array) -> that typed
 //                     array. The raw export takes a pointer to an arena header;
 //                     the loader copies the typed array into the arena, passes
@@ -26,63 +30,9 @@
 //                     held by pointer does not cross, for the same reason a
 //                     string does not.
 
-import { LANGUAGE } from "./branding";
 import { Compilation } from "./compilation";
-import { banner, ExternalFunction, POS_PARAM, POS_RETURN, tsSignature, typedView } from "./interop_abi";
-import { wasmBridged, wasmResultType } from "./interop_wasm";
-import {
-  K_ARRAY,
-  K_RESULT,
-  T_BOOL,
-  T_F32,
-  T_F64,
-  T_I32,
-  T_I64,
-  T_U16,
-  T_U32,
-  T_U64,
-  T_U8,
-  T_VOID,
-  TypeTable,
-} from "./types";
-
-/** JS-visible type of a wasm export value; `""` when the value cannot cross. */
-export function wasmType(table: TypeTable, t: i32, position: i32): string {
-  switch (table.kindOf(t)) {
-    // WP15: an unsigned width crosses as the wasm value type of its LLVM type,
-    // so u8/u16/u32 are a `number` like i32 and u64 is a `bigint` like i64.
-    case T_I32:
-      return "number";
-    case T_U8:
-      return "number";
-    case T_U16:
-      return "number";
-    case T_U32:
-      return "number";
-    case T_F32:
-      return "number";
-    case T_F64:
-      return "number";
-    case T_I64:
-      return "bigint";
-    case T_U64:
-      return "bigint";
-    case T_BOOL:
-      return position === POS_PARAM ? "boolean" : "WasmBool";
-    case T_VOID:
-      return "void";
-    case K_ARRAY: {
-      const view = typedView(table, t);
-      return view === null ? "" : view.ctor;
-    }
-    // WP17: the packed shape, in either direction. The loader is what turns
-    // the bigint the export answers into this object, and an argument back.
-    case K_RESULT:
-      return table.resultByValue(t) ? wasmResultType(table, t) : "";
-    default:
-      return "";
-  }
-}
+import { banner, ExternalFunction, POS_PARAM, POS_RETURN, tsSignature } from "./interop_abi";
+import { wasmBridged, wasmSkipReason, wasmType } from "./interop_wasm";
 
 export function generateDts(compilation: Compilation, fns: ExternalFunction[]): string {
   const table = compilation.table;
@@ -92,7 +42,10 @@ export function generateDts(compilation: Compilation, fns: ExternalFunction[]): 
   lines.push("// Typings for the wasm build (scripts/build.sh --profile wasm), implemented by");
   lines.push("// the companion loader written next to this file. Values cross with the wasm");
   lines.push("// C ABI: `number` is i32 or f64 exactly as compiled, `boolean` comes back as");
-  lines.push("// 0 | 1, `i64` is a bigint. Int32Array / Float64Array / BigInt64Array");
+  lines.push("// 0 | 1, `i64` is a bigint. An unsigned width shares a wasm value type with");
+  lines.push("// the signed one of its size, so the loader masks a u8 / u16 argument into");
+  lines.push("// range on the way in and every u8 / u16 / u32 / u64 result on the way out,");
+  lines.push("// the way a typed-array store would. Int32Array / Float64Array / BigInt64Array");
   lines.push("// arguments are copied into the module's arena for the call (link");
   lines.push("// runtime/runtime_wasm.c), written-through arguments are copied back, and");
   lines.push("// an array result is copied out, so the typed arrays you see are your own.");
@@ -116,30 +69,29 @@ export function generateDts(compilation: Compilation, fns: ExternalFunction[]): 
     lines.push("  amrit_free_arena(): void;");
   }
 
+  // One question decides both files: a function is declared here exactly when
+  // `wasmSkipReason` lets it onto the bridge, which is what interop_wasm.ts
+  // filters the loader's entries by. Deciding it twice is what let the
+  // declarations get ahead of the loader once already.
   let count = 0;
   for (const fn of fns) {
     const source = tsSignature(table, fn.sig);
-    const ret = wasmType(table, fn.sig.returnType, POS_RETURN);
+    const skip = wasmSkipReason(table, fn.sig);
+    if (skip.length > 0) {
+      lines.push(`  // ${source}  -- not exported to JS: ${skip}`);
+      continue;
+    }
     const params: string[] = [];
-    let ok = ret.length > 0;
     let i = 0;
     while (i < fn.sig.paramNames.length) {
-      const t = wasmType(table, fn.sig.paramTypes[i], POS_PARAM);
-      if (t.length === 0) {
-        ok = false;
-      }
-      params.push(`${fn.sig.paramNames[i]}: ${t.length > 0 ? t : "never"}`);
+      params.push(`${fn.sig.paramNames[i]}: ${wasmType(table, fn.sig.paramTypes[i], POS_PARAM)}`);
       i = i + 1;
-    }
-    if (!ok) {
-      lines.push(
-        `  // ${source}  -- not exported to JS: string values, and a \`Result\` held by pointer, need the ${LANGUAGE} runtime, which the freestanding wasm profile does not include`
-      );
-      continue;
     }
     count = count + 1;
     lines.push(`  /** ${fn.unit.path}: ${source} */`);
-    lines.push(`  ${fn.sig.name}(${params.join(", ")}): ${ret};`);
+    lines.push(
+      `  ${fn.sig.name}(${params.join(", ")}): ${wasmType(table, fn.sig.returnType, POS_RETURN)};`
+    );
   }
   if (count === 0) {
     lines.push("  // No scalar functions are exported.");

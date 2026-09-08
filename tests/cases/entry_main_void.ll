@@ -1,6 +1,6 @@
 declare void @amrit_free_arena() #2
 
-define void @side() #0 {
+define internal void @side() #0 {
 entry:
   ret void
 }

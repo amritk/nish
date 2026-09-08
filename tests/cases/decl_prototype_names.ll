@@ -6,28 +6,28 @@ declare void @amrit_arena_release(i64 noundef) #0
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define void @toString.constructor(%struct.toString* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %n) #0 {
+define internal void @toString.constructor(%struct.toString* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %n) #0 {
 entry:
   %0 = getelementptr inbounds %struct.toString, %struct.toString* %this, i32 0, i32 0
   store i32 %n, i32* %0, align 4
   ret void
 }
 
-define noundef i32 @valueOf(i32 noundef %x) #1 {
+define internal noundef i32 @valueOf(i32 noundef %x) #1 {
 entry:
-  %0 = mul i32 %x, 2
+  %0 = mul nsw i32 %x, 2
   ret i32 %0
 }
 
-define noundef i32 @hasOwnProperty(i32 noundef %x) #1 {
+define internal noundef i32 @hasOwnProperty(i32 noundef %x) #1 {
 entry:
-  %0 = add i32 %x, 1
+  %0 = add nsw i32 %x, 1
   ret i32 %0
 }
 
-define noundef i32 @isPrototypeOf(i32 noundef %x) #1 {
+define internal noundef i32 @isPrototypeOf(i32 noundef %x) #1 {
 entry:
-  %0 = sub i32 %x, 1
+  %0 = sub nsw i32 %x, 1
   ret i32 %0
 }
 

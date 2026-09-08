@@ -4,7 +4,7 @@ function clamp(x: number, lo: number, hi: number): number {
   return Math.min(Math.max(x, lo), hi);
 }
 
-function test(): number {
+export function test(): number {
   console.log(Math.abs(-7));
   console.log(Math.abs(3 - 10));
   console.log(clamp(15, 0, 10));

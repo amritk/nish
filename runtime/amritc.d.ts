@@ -106,6 +106,10 @@ interface Process {
   exit(code: i32): void;
   /** The command line; `argv[0]` is the program path, as in C. Read-only. */
   readonly argv: string[];
+  /** The operating system the program runs on: `"linux"`, `"darwin"`, or `"unknown"`. */
+  readonly platform: string;
+  /** The architecture: `"x64"`, `"arm64"`, or `"unknown"`. */
+  readonly arch: string;
 }
 declare var process: Process;
 
@@ -137,6 +141,12 @@ declare function readFileSync(path: string): string;
 declare function readFileSyncOrNull(path: string): string | null;
 declare function writeFileSync(path: string, data: string): void;
 declare function appendFileSync(path: string, data: string): void;
+/** One directory, not recursive; whether a directory is there afterwards. */
+declare function mkdirSync(path: string): boolean;
+/** Whether a directory is at `path` right now. One `stat`, and never an exit. */
+declare function isDirectorySync(path: string): boolean;
+/** Run `argv[0]` through `PATH` and wait: the exit status, `128 + n` for a signal, `-1` for a failure. */
+declare function spawnSync(argv: string[]): number;
 
 // ---- Arena (docs/LANGUAGE.md -> Arena) ---------------------------------------
 

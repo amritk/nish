@@ -8,7 +8,7 @@ function trig(x: number): number {
   return Math.sin(x) + Math.cos(x);
 }
 
-function test(): i32 {
+export function test(): i32 {
   console.log(hypot(3, 4));
   console.log(Math.floor(2.7));
   console.log(Math.ceil(2.1));

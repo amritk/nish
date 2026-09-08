@@ -11,6 +11,12 @@
 // all flow `local` brackets its body with `amrit_arena_mark` /
 // `amrit_arena_release`.
 //
+// The call-site reclaim (WP9) is stated there too: `leaks` merges a value the
+// caller can still reach with one merely assigned to a local of this frame, so
+// every outcome also carries `escapes`, true only in the first case and
+// following the value into the local in the second. `allocEscapes` is the
+// per-function union; `reclaimsReturnedString` is what it buys.
+//
 // What is different here is only the bookkeeping. `Set`/`Map` keyed by node or
 // by local become a `boolean[]` indexed by `Node.id` and short lists scanned
 // by identity — a function has a handful of locals, and `===` on a class value
@@ -83,6 +89,12 @@ export class EscapeResult {
   directArena: boolean;
   /** Some direct allocation `leaks`. */
   allocLeaks: boolean;
+  /**
+   * WP9: some direct allocation is reachable after this function returns other
+   * than through its return value. Refines `allocLeaks`, which also counts a
+   * value assigned to a local of this frame; see the header.
+   */
+  allocEscapes: boolean;
   /** Some direct allocation is `returned`. */
   returnsAllocation: boolean;
   /** Calls `Arena.reset` / `Arena.release` directly. */
@@ -105,6 +117,7 @@ export class EscapeResult {
     this.stackParams = new StringSet();
     this.directArena = false;
     this.allocLeaks = false;
+    this.allocEscapes = false;
     this.returnsAllocation = false;
     this.usesArenaControl = false;
     this.callSites = [];
@@ -131,10 +144,18 @@ class Outcome {
   flow: i32;
   /** No local on the path is ever reassigned (required for the stack). */
   stable: boolean;
+  /**
+   * WP9: the value is reachable after this function returns, other than
+   * through its return value. Always false for a `local` or `returned` flow;
+   * false for a `leaks` flow whose only cause is an assignment to a local of
+   * this frame, whose own outcome it takes instead.
+   */
+  escapes: boolean;
 
-  constructor(flow: i32, stable: boolean) {
+  constructor(flow: i32, stable: boolean, escapes: boolean) {
     this.flow = flow;
     this.stable = stable;
+    this.escapes = escapes;
   }
 }
 
@@ -430,10 +451,46 @@ class EscapeAnalysis {
     return pointer !== null ? pointer.captured : g.escaping.has(name);
   }
 
-  useOutcome(expr: Node): Outcome {
+  /**
+   * `x = <expr>`: the local of this function the value is assigned to, or
+   * null. It is still `leaks` for the stack rule — the binding is not fixed,
+   * so the slot may not be reused — but the value has not left the frame, so
+   * `escapes` follows it into `x` the way `flow` already follows
+   * `const x = <expr>`. A store through anything else (`o.f = v`, `a[i] = v`)
+   * or into a parameter is not a local of this frame and keeps the
+   * conservative answer.
+   */
+  assignedLocal(expr: Node): Local | null {
+    let node = expr;
+    for (;;) {
+      const parent = this.unit.parents.parentOf(node);
+      if (parent === null) {
+        return null;
+      }
+      if (parent.kind === N_PAREN || (parent.kind === N_CONDITIONAL && parent.children[0] !== node)) {
+        node = parent;
+        continue;
+      }
+      if (
+        parent.kind !== N_BINARY ||
+        parent.children[1] !== node ||
+        !isAssignmentOperator(parent.text) ||
+        parent.children[0].kind !== N_IDENT
+      ) {
+        return null;
+      }
+      const target = this.unit.program.nodeLocals[parent.children[0].id];
+      if (target === null || target.storage !== STORAGE_LOCAL) {
+        return null;
+      }
+      return target;
+    }
+  }
+
+  useOutcome(expr: Node, visiting: Local[]): Outcome {
     const found = classifyUse(this.unit, this.table, expr);
     if (found.kind === USE_NONE || found.kind === USE_READ || found.kind === USE_WRITE) {
-      return new Outcome(FLOW_LOCAL, true);
+      return new Outcome(FLOW_LOCAL, true, false);
     }
     if (found.kind === USE_ARGUMENT) {
       const callee = found.callee;
@@ -444,12 +501,14 @@ class EscapeAnalysis {
         found.index < callee.paramTypes.length &&
         this.table.resultByValue(callee.paramTypes[found.index])
       ) {
-        return new Outcome(FLOW_LOCAL, true);
+        return new Outcome(FLOW_LOCAL, true, false);
       }
       const captures = callee === null ? true : this.calleeCaptures(callee, found.index);
-      return new Outcome(captures ? FLOW_LEAKS : FLOW_LOCAL, true);
+      return new Outcome(captures ? FLOW_LEAKS : FLOW_LOCAL, true, captures);
     }
-    return new Outcome(FLOW_LEAKS, true);
+    const target = this.assignedLocal(expr);
+    const escapes = target === null ? true : this.localOutcome(target, visiting).escapes;
+    return new Outcome(FLOW_LEAKS, true, escapes);
   }
 
   memoised(v: Local): Outcome | null {
@@ -470,13 +529,17 @@ class EscapeAnalysis {
     }
     for (const seen of visiting) {
       if (seen === v) {
-        // `const y = x; const x2 = y` chains are acyclic; guard anyway.
-        return new Outcome(FLOW_LOCAL, true);
+        // `const y = x; const x2 = y` chains are acyclic, but `escapes` also
+        // follows `y = x`, and two locals assigned to each other do cycle. The
+        // re-entry is therefore pessimistic about escaping and optimistic about
+        // the flow, which is what the existing decisions were computed with.
+        return new Outcome(FLOW_LOCAL, true, true);
       }
     }
     visiting.push(v);
     let flow = FLOW_LOCAL;
     let stable = true;
+    let escapes = false;
     for (const ref of this.refsOf(v)) {
       const parent = this.unit.parents.parentOf(ref);
       if (parent !== null && parent.kind === N_BINARY && parent.children[0] === ref && isAssignmentOperator(parent.text)) {
@@ -488,8 +551,9 @@ class EscapeAnalysis {
       const step = this.valueOutcome(ref, visiting);
       flow = worse(flow, step.flow);
       stable = stable && step.stable;
+      escapes = escapes || step.escapes;
     }
-    const outcome = new Outcome(flow, stable);
+    const outcome = new Outcome(flow, stable, escapes);
     this.outcomeLocals.push(v);
     this.outcomeValues.push(outcome);
     return outcome;
@@ -501,13 +565,13 @@ class EscapeAnalysis {
       // WP17: `return r` on a by-value `Result` copies the two live words into
       // the return register; the object itself does not leave the frame, so it
       // is as local as one that is never returned at all.
-      return new Outcome(this.returnsByValueResult ? FLOW_LOCAL : FLOW_RETURNED, true);
+      return new Outcome(this.returnsByValueResult ? FLOW_LOCAL : FLOW_RETURNED, true, false);
     }
     const local = target.local;
     if (local !== null) {
       return this.localOutcome(local, visiting);
     }
-    return this.useOutcome(expr);
+    return this.useOutcome(expr, visiting);
   }
 
   // ---- Decisions ----------------------------------------------------------------------
@@ -517,6 +581,7 @@ class EscapeAnalysis {
       const fresh: Local[] = [];
       const outcome = this.valueOutcome(site.node, fresh);
       let flow = outcome.flow;
+      let escapes = outcome.escapes;
       // A `new` object is also handed to its constructor as `this` (the own or
       // the inherited one); a constructor that captures it makes the object
       // escape however the local is used afterwards.
@@ -524,10 +589,15 @@ class EscapeAnalysis {
         const ctor = constructorOf(this.unit.program, this.table, intrinsicType(this.unit.program, site.node));
         if (ctor !== null && this.calleeCaptures(ctor, 0)) {
           flow = FLOW_LEAKS;
+          // The constructor stored `this` somewhere the caller may reach.
+          escapes = true;
         }
       }
+      if (escapes) {
+        this.result.allocEscapes = true;
+      }
       if (site.callee.length > 0) {
-        this.result.callSites.push(new CallSite(site.callee, flow));
+        this.result.callSites.push(new CallSite(site.callee, flow, escapes));
         continue;
       }
       if (site.stackable && this.opts.stackAlloc && flow === FLOW_LOCAL && outcome.stable) {
@@ -559,6 +629,9 @@ class EscapeAnalysis {
           const outcome = this.localOutcome(v, fresh);
           flow = outcome.flow;
           stable = outcome.stable;
+          if (outcome.escapes) {
+            this.result.allocEscapes = true;
+          }
         }
         if (this.opts.stackAlloc && flow === FLOW_LOCAL && stable) {
           this.result.stackParams.add(name);
@@ -601,9 +674,18 @@ class EscapeAnalysis {
         v = this.unit.program.nodeLocals[receiver.id];
       }
       let owned = false;
+      // WP9: the growth is reachable exactly where the array it belongs to is.
+      // An array this function allocated and only keeps or returns takes its
+      // growth with it; anyone else's array leaves it reachable by the caller.
+      let escapes = true;
       if (v !== null && v.storage === STORAGE_LOCAL && this.ownsSite(v)) {
         const visiting: Local[] = [];
-        owned = this.localOutcome(v, visiting).flow === FLOW_LOCAL;
+        const outcome = this.localOutcome(v, visiting);
+        owned = outcome.flow === FLOW_LOCAL;
+        escapes = outcome.escapes;
+      }
+      if (escapes) {
+        this.result.allocEscapes = true;
       }
       if (owned) {
         this.result.directArena = true;
@@ -653,6 +735,35 @@ class EscapeAnalysis {
     }
     return null;
   }
+}
+
+/**
+ * WP9: may the caller reclaim the arena around a call to `callee`?
+ *
+ * The proof has three parts, and all three are needed:
+ *
+ *  - **The callee's garbage is garbage.** `allocEscapes` is false, so nothing
+ *    the callee allocated is reachable from anywhere the caller can see except
+ *    through the value it returned. The caller holds no other pointer into the
+ *    call, because a return value is the only thing a call hands back.
+ *  - **The arena did not move under the mark.** `usesArenaControl` is false, so
+ *    neither the callee nor anything it calls reset or released the arena
+ *    between the mark and the reclaim.
+ *  - **The kept value can be moved.** Only a plain `string` qualifies: it is one
+ *    flat block with no interior pointers, so relocating its bytes relocates the
+ *    whole value. An array header points at a separate data block, a struct or a
+ *    `Result` may hold pointers into other blocks, and `string | null` may be
+ *    null, so none of them is moved.
+ *
+ * `allocates` is not part of the proof, only of the profit: a callee that never
+ * bumps the arena has nothing to reclaim, so the pair of calls is skipped.
+ */
+export function reclaimsReturnedString(callee: FunctionSig, facts: FactsTable): boolean {
+  if (callee.returnType !== T_STRING) {
+    return false;
+  }
+  const g = facts.get(callee.name);
+  return g !== null && g.allocates && !g.allocEscapes && !g.usesArenaControl;
 }
 
 export function analyzeEscapes(

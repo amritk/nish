@@ -10,6 +10,6 @@ function grade(score: number): number {
   }
 }
 
-function test(): number {
+export function test(): number {
   return grade(95) * 1000 + grade(85) * 100 + grade(75) * 10 + grade(10);
 }

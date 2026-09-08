@@ -10,6 +10,6 @@ function area(s: Shape): number {
   return s.width;
 }
 
-function test(): number {
+export function test(): number {
   return area(new Rect());
 }

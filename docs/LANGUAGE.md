@@ -78,10 +78,10 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 
 | AmritScript | LLVM | Size / align | C ABI (`--emit-header`) | Notes |
 | --- | --- | --- | --- | --- |
-| `number` (i32 mode), `i32` | `i32` | 4 / 4 | `int32_t` | Wrapping two's-complement arithmetic. |
+| `number` (i32 mode), `i32` | `i32` | 4 / 4 | `int32_t` | Two's-complement; signed overflow is undefined (`--wrapping` wraps). |
 | `number` (f64 mode), `f64` | `double` | 8 / 8 | `double` | IEEE-754; `f64` is always available, in both modes. |
 | `f32` | `float` | 4 / 4 | `float` | 32-bit IEEE-754 ([`f32`](#f32)). Half the footprint of an `f64` and twice the SIMD lane count; never the lowering of `number`, and `f32 + f64` is a type error. |
-| `i64` | `i64` | 8 / 8 | `int64_t` | Never the lowering of `number`; wrapping arithmetic; literals only by context. |
+| `i64` | `i64` | 8 / 8 | `int64_t` | Never the lowering of `number`; signed overflow is undefined (`--wrapping` wraps); literals only by context. |
 | `u8` | `i8` | 1 / 1 | `uint8_t` | [Unsigned integers](#unsigned-integers): the same LLVM type as a signed byte, with unsigned operations. Wrapping arithmetic. |
 | `u16` | `i16` | 2 / 2 | `uint16_t` | As `u8`. |
 | `u32` | `i32` | 4 / 4 | `uint32_t` | Shares `i32`'s LLVM type; `u32 + i32` is still a type error. |
@@ -195,7 +195,7 @@ tightly as a C `uint8_t` does.
 
 | Operation | On `i32` / `i64` | On `u8` / `u16` / `u32` / `u64` |
 | --- | --- | --- |
-| `+ - *`, unary `-`, `++`/`--` | `add` `sub` `mul` | identical, and wrapping for both |
+| `+ - *`, unary `-`, `++`/`--` | `add nsw` `sub nsw` `mul nsw`; plain under `--wrapping` | the same instructions, never flagged: unsigned overflow wraps in both modes |
 | `/ %` | `sdiv` / `srem` after a two-part divisor check | `udiv` / `urem` after a single compare ([Checked integer division](#checked-integer-division)) |
 | `< <= > >=` | `icmp slt sle sgt sge` | `icmp ult ule ugt uge` |
 | `>>` | `ashr` | `lshr` |
@@ -207,7 +207,7 @@ tightly as a C `uint8_t` does.
 | `Math.abs` | `llvm.abs` | nothing: the value is already its own magnitude |
 | `Math.min` / `Math.max` | `llvm.smin` / `llvm.smax` | `llvm.umin` / `llvm.umax` |
 | `console.log(x)`, `` `${x}` `` | `amrit_str_from_i32` / `_i64` | `zext` to i64, then `amrit_str_from_u64` |
-| `--nsw` (WP9) | `add nsw` … | `add nuw` … — an unsigned value passing 2^31 has not overflowed |
+| overflow (WP9, WP15 §3) | `add nsw` … unless `--wrapping` | nothing, in either mode: unsigned overflow is defined as wrapping |
 
 The consequences worth knowing:
 
@@ -218,10 +218,12 @@ The consequences worth knowing:
 - **Division is cheaper.** Unsigned division has no overflow case, so its
   check is one compare instead of three plus an `and` and an `or`
   (`tests/cases/u_div_one_check`).
-- **Overflow wraps**, as it does for the signed types: `(255: u8) + 1` is `0`
-  and `(0: u8) - 1` is `255` (`tests/cases/u_arith_wrap`,
-  `tests/differential/corpus/u_wrap`). No `nuw` is emitted unless `--nsw` is
-  given, exactly as no `nsw` is emitted for signed arithmetic.
+- **Overflow wraps**, and unlike the signed types it wraps in *every* mode:
+  `(255: u8) + 1` is `0` and `(0: u8) - 1` is `255` (`tests/cases/u_arith_wrap`,
+  `tests/differential/corpus/u_wrap`). No `nuw` is ever emitted, and neither is
+  `nsw`: wrapping is what hashing and bit-packing are written against, and it
+  is half the reason the unsigned widths exist. `--wrapping` therefore changes
+  nothing for them (`tests/cases/opt_wrapping`).
 - **Mixing is an error.** `u32` and `i32` are different types even though both
   are `i32` in the IR, and so are `u8` and `u32`; there is no implicit
   conversion anywhere in this language
@@ -626,11 +628,19 @@ having no top-level code and therefore no initialisation order.
   (`tests/cases/reject_const_not_constant`, `reject_const_unknown_name`).
   There is deliberately no second, larger language inside `const`: a constant
   can compute exactly what a runtime expression can.
-- **Folding follows the language's own arithmetic.** Integer arithmetic wraps
-  at the declared width, so `const WRAPPED: i32 = 2147483647 + 1` is
-  `-2147483648`, the same value the emitted `add` would produce
-  (`tests/cases/const_wrap`). A bare integer literal takes the width of the
-  constant it initialises, so `const BIG: i64 = 1000000000 * 10` is computed in
+- **Folding follows the language's own arithmetic**, whichever mode the
+  compiler is in, because a constant must compute what the instruction it
+  replaces computes. By default that instruction carries `nsw`, so a fold that
+  overflows is
+  `` attempt to compute with overflow in a constant `` — the compiler will not
+  hand back the one value the optimiser is entitled to assume cannot happen
+  (`tests/cases/reject_const_overflow_arith`). Under `--wrapping` the
+  instruction wraps, so the fold wraps:
+  `const WRAPPED: i32 = 2147483647 + 1` is `-2147483648`
+  (`tests/cases/const_wrap`, whose `.args` is `--wrapping` for exactly this
+  reason). Negation is arithmetic too, so `-2147483648` is fine in both modes
+  (its result fits) while `-(-2147483648)` is refused by default. A bare
+  integer literal takes the width of the constant it initialises, so `const BIG: i64 = 1000000000 * 10` is computed in
   64 bits (`const_i64`). Mixing widths is an error, as it is anywhere else
   (`reject_const_mixed_widths`). `f64` folds in IEEE-754 (`const_f64`), and
   `+` on two strings concatenates at compile time, interning the result once
@@ -708,11 +718,18 @@ having no top-level code and therefore no initialisation order.
   modules apart the declaration is (`tests/link/reachable_struct_chain`).
 - Import cycles are allowed (`tests/link/cycle`); a shared dependency is
   compiled once (`tests/link/diamond`).
-- **Linkage.** Every function is an external C-ABI symbol by default, so two
-  modules may not define the same function name, exported or not
-  (`tests/link/duplicate_export`). With `--strict-exports`, non-exported
-  functions get `internal` linkage (`tests/cases/export_strict`,
-  `tests/link/strict`) and may coexist across modules.
+- **Linkage.** An `export`ed function is an external C-ABI symbol; every other
+  function gets `internal` linkage by default, so LLVM may inline, specialise
+  or drop it (`tests/cases/export_fn`, `tests/link/strict`).
+  `--no-strict-exports` makes every function external again, which is what a C
+  driver calling a non-exported function needs (`tests/cases/export_no_strict`).
+- **A function name is unique across the whole program**, exported or not, in
+  either mode (`tests/link/duplicate_export`, `duplicate_internal`).
+  `internal` linkage keeps a name out of the linker's way but it does not buy a
+  second namespace: the whole-program attribute analysis is keyed by symbol
+  name, so two functions sharing one would be emitted with each other's
+  attributes — a miscompile rather than a link error, which is why the rule
+  does not depend on the flag.
 
 ### `main`
 
@@ -788,16 +805,21 @@ class Point {
   `tests/cases/reject_cls_this_outside`) and may be aliased or passed on
   (`const self = this` *(CLI only)*; `tests/cases/cls_this_method_call`).
   Methods may call each other and free functions, recursively.
-- **Field access**: `p.x` reads, `p.x = v` and `p.x op= v` write
-  (`tests/cases/cls_field_write`, `cls_compound_field`); `++`/`--` on
-  fields is not supported (`Only simple variables can be assigned`).
+- **Field access**: `p.x` reads, `p.x = v` and `p.x op= v` write, for the
+  arithmetic and the bitwise compound operators alike
+  (`tests/cases/cls_field_write`, `cls_compound_field`,
+  `cls_field_bitwise_assign`); `++`/`--` on fields is not supported
+  (`Only simple variables can be assigned`).
   Unknown fields: `` Unknown field `z` on class `Point` ``
   (`tests/cases/reject_cls_unknown_field`, `reject_cls_assign_unknown_field`).
 - **`readonly`** fields may be assigned only as `this.f = v` in their own
   class's constructor (`tests/cases/cls_readonly_ok`;
   `` Cannot assign to readonly field `value` of `Id` outside its constructor ``,
-  `reject_cls_readonly_write`). `public`, `private`, `protected` are
-  accepted and ignored.
+  `reject_cls_readonly_write`). A compound assignment is a write like any
+  other, so `this.f |= bit` is refused too, in the declaring class's own
+  constructor as much as anywhere else
+  (`reject_cls_field_bitwise_readonly`). `public`, `private`, `protected`
+  are accepted and ignored.
 - **Equality**: `===` / `!==` on two values of the same class compare
   identity (pointer equality) (`tests/cases/cls_this_method_call`, `Account.same`);
   `<` and friends are rejected (`tests/cases/reject_cls_ordering`). Both
@@ -1095,7 +1117,7 @@ under [Semantics decisions](#semantics-decisions).
 
 | Operator | Operand types | Result | Lowering | Test |
 | --- | --- | --- | --- | --- |
-| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); no `nsw`/`nuw` unless `--nsw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `amrit_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
+| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); `nsw` on the signed integer widths unless `--wrapping`, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `amrit_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
 | `+` | two `string` | `string` | `amrit_str_concat` | `str_concat`; `reject_str_plus_number` (`no implicit string conversion`) |
 | unary `-` | any numeric type | same | `sub <T> 0, x` for an integer, `fneg float` / `fneg double` for a float | `cf_if` (`-x`), `i64_basic`, `f32_arith`; `f64` *(CLI only)* |
 | unary `!` | `boolean` | `boolean` | `xor i1 x, true` | `cf_logical`; `!s` on a string is `` Unsupported unary operator `!` on string `` *(CLI only)* |
@@ -1109,7 +1131,7 @@ under [Semantics decisions](#semantics-decisions).
 | `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch` |
 | `x = e` | mutable local, field, or element; `e` of the target's type | the target's type | `store` | `locals`, `cls_field_write`, `arr_index_read_write` |
 | `x op= e` (`+= -= *= /= %=`) | numeric mutable local, numeric field, or numeric element; same type | the target's type | load, op, store | `cf_compound_assign`, `cls_compound_field`, `arr_index_read_write`; `reject_cf_compound_const` |
-| `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask | `bit_compound`; a field or element target is not supported yet (`reject_cls_field_bitwise_assign`, `reject_arr_element_bitwise_assign`) |
+| `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local, field, or element of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask; a field is addressed by one GEP and an element bounds-checked once, so the target expression is evaluated exactly once | `bit_compound`, `cls_field_bitwise_assign`, `arr_element_bitwise_assign`; `reject_cls_field_bitwise_readonly`, `reject_arr_element_bitwise_f64`; `tests/differential/corpus/bit_compound_target` |
 | `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec` |
 | `,` | – | – | forbidden | `reject_comma_expression` |
 | `?? ?. in instanceof typeof delete void` | – | – | forbidden by the validator | `reject_nullish`, `reject_optional_chain`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression` |
@@ -1198,8 +1220,9 @@ divide with overflow` is simply unreachable on an unsigned type.
 - `a.length` on an array: read-only (`tests/cases/arr_length`;
   `` Cannot assign to `length` of i32[] ``, `reject_arr_length_assign`).
 - `p.f` on a class or interface value (`tests/cases/cls_point`).
-- `Math.PI`, `Math.E` (`tests/cases/math_i32`); `process.argv` (see
-  [`process`](#process)); `Arena.*` (see [`Arena`](#arena)). Any other bare
+- `Math.PI`, `Math.E` (`tests/cases/math_i32`); `process.argv`,
+  `process.platform`, `process.arch` (see [`process`](#process));
+  `Arena.*` (see [`Arena`](#arena)). Any other bare
   identifier before a dot is `` Unknown identifier `os` `` *(CLI only)*.
 - Member access on a `T | null` value requires narrowing first
   ([Nullable types](#nullable-types)); `?.` is forbidden
@@ -1313,6 +1336,19 @@ never `readonly` ([wp7-runtime.md](wp7-runtime.md#string-to-number)).
 | --- | --- | --- | --- |
 | `process.exit(code: i32): void` | `amrit_exit` -> libc `exit(code)` (stdio buffers of linked C code are flushed; the arena is abandoned); statement position; a terminator | write, `noreturn` | `process_exit`, `reject_exit_unreachable` |
 | `process.argv: string[]` | the command line: `process.argv[0]` is the program path (C's `argv[0]`, one index earlier than Node, whose `argv[0]` is the `node` binary and `argv[1]` the script) and the rest are the arguments as UTF-8 byte strings; read-only | read | `argv_echo` (run with `argv_echo.argv`), `link/argv_import`; `reject_argv_assign`, `reject_argv_push` (`` `process.argv` is read-only ``) |
+| `process.platform: string` | the operating system the **program** is running on, spelled as Node spells it: `"linux"`, `"darwin"`, or `"unknown"` for anything this compiler has no target triple for (every WASI build included) | none | `io_host`; `reject_platform_assign` (`` Cannot assign to `process.platform` ``) |
+| `process.arch: string` | the architecture, likewise: `"x64"`, `"arm64"`, or `"unknown"` | none | `io_host`; `reject_arch_call` (`` Unknown builtin `process.arch` ``) |
+
+`process.platform` and `process.arch` are what `--target host` asks the
+machine (WP14 §7a): the pair maps to `x86_64`/`aarch64` plus
+`-unknown-linux-gnu`/`-apple-darwin`, and anything else means this compiler has
+no triple for the host and says so. Each is one call to the runtime, which
+answers the address of a string in its own constant data — settled when
+`runtime.c` was compiled, so a cross build reports the *target*, and nothing is
+allocated or loaded, which is why the declarations are `readnone` and a
+function built only from these stays pure. They carry no rule about the entry
+point, unlike `process.argv` below: there is nothing for a wrapper to build, so
+a wasm or N-API library may read them too. Neither can be assigned to.
 
 `process.argv` is an ordinary `string[]` value (`length`, `a[i]`, `for...of`,
 passing it to functions, aliasing it with `const args = process.argv`) that
@@ -1346,15 +1382,23 @@ wins, as it does for every identifier builtin.
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `mkdirSync(path: string): boolean` | create **one** directory, mode `0777 & ~umask` — not recursive, exactly like Node's `fs.mkdirSync(p)` with no options, so a missing parent is a failure and not a reason to create it. `true` when a directory exists at `path` once the call returns, whether this call created it or it was already there; `false` for every other outcome, a plain file at `path` included | write | `io_mkdir`; `reject_mkdir_arity`, `reject_mkdir_type` |
+| `isDirectorySync(path: string): boolean` | one `stat`: `true` when a directory exists at `path` as the call runs, `false` for everything else — a missing path, a plain file, a device node, a parent that cannot be searched. It is the question `-o <dir>` asks of a path, and it is the `stat` half of `mkdirSync`, which calls it (WP14 §7a) | write | `io_is_directory`; `reject_is_directory_arity`, `reject_is_directory_type` |
 | `spawnSync(argv: string[]): number` | run `argv[0]`, searched on `PATH`, with `argv` as its argument vector; wait for it; answer its exit status, or `128 + n` when signal `n` killed it (the shell's convention). `-1` when the vector is **empty** — there is no `argv[0]` to run — and whenever the child cannot be started or cannot be waited for, which is also what a WASI build always answers, since WASI has no processes. The child inherits this process's environment, streams and working directory | write | `io_spawn`; `reject_spawn_arity`, `reject_spawn_element_type` |
 
-Both answer a value where they could have exited, for the reason
+All three answer a value where they could have exited, for the reason
 `readFileSyncOrNull` answers `null` (WP14 B3): the language has no exceptions,
 so a driver has to be able to turn the failure into its own diagnostic. They
-exist so that a compiler written in AmritScript can create its own `-o dir/`
-and shell out for `--link` — the two calls
+exist so that a compiler written in AmritScript can create its own `-o dir/`,
+tell `-o out` meaning a directory from `-o out` meaning a file, and shell out
+for `--link` — `mkdirSync` and `spawnSync` are the calls
 [wp14-selfhost.md](wp14-selfhost.md) §3a D4 named as the price of a
-self-hosted link step.
+self-hosted link step, and `isDirectorySync` is the one §7a named as the price
+of the last spelling of `-o` that was still stage0's.
+
+`isDirectorySync` is a question about the file system *now*: the answer can be
+stale by the time the caller acts on it, so `mkdirSync` is still the call that
+decides whether a directory was made, and `readFileSyncOrNull` is still the way
+to read a file without racing a check against it.
 
 `spawnSync` is the one builtin whose pointer argument the runtime keeps: it
 copies each element's bytes pointer into a vector that outlives the call, so
@@ -1425,19 +1469,32 @@ compiler's own marks are never invalidated by user resets.
 
 ## Semantics decisions
 
-- **Integers wrap.** `i32`, `i64` and the unsigned widths do two's-complement
-  wrapping arithmetic (no `nsw`, no `nuw`), like Rust release builds:
-  `2147483647 + 1` is `-2147483648` and `(255: u8) + 1` is `0`
-  (`tests/cases/i64_basic`, `int_min_literal`, `u_arith_wrap`;
-  `wp1-control-flow.md`). `Math.abs(-2147483648)` wraps to itself. With
-  `--nsw`, every user-level integer `add`/`sub`/`mul` (binary operators, unary
-  minus, `op=` on locals, fields, and elements, `++`/`--`) carries a no-wrap
-  flag and overflow becomes undefined behaviour, as in C: `nsw` on a signed
-  type and `nuw` on an unsigned one, because a `u32` passing 2^31 has not
-  overflowed and `nsw` there would poison an ordinary result. Division,
-  remainder, shifts, and the compiler's own index, length, and allocator
-  arithmetic are never flagged (`tests/cases/opt_nsw`;
-  [wp9-optimisation.md](wp9-optimisation.md#--nsw)).
+- **Signed integer overflow is undefined behaviour; `--wrapping` restores
+  two's-complement wrapping.** By default every user-level `i32`/`i64`
+  `add`/`sub`/`mul` (binary operators, unary minus, `op=` on locals, fields and
+  elements, `++`/`--`) carries `nsw`, as in C, so LLVM may widen induction
+  variables and strength-reduce loops. A program that overflows a signed
+  integer on purpose — a hash, an LCG, a wrap-around counter — must be compiled
+  with `--wrapping`, and then `2147483647 + 1` is `-2147483648` again, like a
+  Rust release build (`tests/cases/opt_nsw` for the default,
+  `tests/cases/opt_wrapping` and `i64_basic` for the opt-out;
+  `tests/differential/corpus/int_wrap`, `prng_lcg`, `bit_fnv1a`).
+  This withdraws a guarantee the language used to make, and it is the one place
+  where a correct program can become an incorrect one by upgrading; the flag is
+  the whole remedy.
+- **Unsigned integers never carry a no-wrap flag**, in either mode. `u8`,
+  `u16`, `u32` and `u64` are *defined* to wrap, so `(255: u8) + 1` is `0`
+  (`tests/cases/u_arith_wrap`): `nuw` would be a claim the language does not
+  make, and `nsw` on a value that has merely passed 2^31 would poison an
+  ordinary result. Write the deliberately-overflowing arithmetic in an unsigned
+  type and it needs no flag at all.
+- **What is never flagged**, whatever the mode: division, remainder and shifts
+  (they have no such form), `Math.abs(-2147483648)`, which still wraps to
+  itself because `llvm.abs` is emitted with its poison flag off, the
+  conversions, which `trunc` and therefore wrap by definition, and every piece
+  of the compiler's own index, length and allocator arithmetic
+  (`tests/cases/opt_nsw` pins exactly which operations carry `nsw` and which do
+  not).
 - **`f32` is a distinct type, not a rounding mode.** It never mixes with
   `f64` and is never what `number` means; every `f32` result is a real 32-bit
   float, so `0.1 + 0.1` is `0.20000000298023224` there and
@@ -1518,6 +1575,9 @@ compiler's own marks are never invalidated by user resets.
   `a`, `i`, `v`, then checks and stores; `a[i] op= v` evaluates `a`, `i`,
   checks, loads, evaluates `v`, stores (`tests/cases/arr_index_read_write`);
   `p.f op= v` reads the field before `v` (`tests/cases/cls_compound_field`);
+  the target expression is evaluated **once** whichever `op=` it is, so
+  `a[next()] |= 1` calls `next()` a single time and pays for a single bounds
+  check (`tests/cases/arr_element_bitwise_assign`);
   array literal elements are evaluated before the allocation
   (`tests/cases/arr_literal`); `push`'s argument is evaluated before the
   length is read (`tests/cases/arr_push`).
@@ -1535,12 +1595,13 @@ compiler's own marks are never invalidated by user resets.
   are never null unless typed `T | null`.
 - **Parameters are immutable** and used as SSA values; locals use
   `alloca`/`load`/`store` and are promoted by `mem2reg`.
-- **Every function is an external C symbol** unless `--strict-exports`.
+- **Only an `export`ed function is an external C symbol**; the rest are
+  `internal` unless `--no-strict-exports`.
 
 ### Memory model
 
 There is no garbage collector. Every object, array, and runtime string is
-placed by one of three mechanisms, all decided at compile time
+placed by one of four mechanisms, all decided at compile time
 ([wp6-memory.md](wp6-memory.md)); none changes what a program computes, only
 where its memory lives and when it is reused.
 
@@ -1568,7 +1629,22 @@ where its memory lives and when it is reused.
    before every `ret` (`tests/cases/mem_scope_dynamic_array`,
    `mem_scope_string_temp`: 100000 calls leave `Arena.used()` unchanged).
    Scopes are per function, not per loop iteration.
-3. **Explicit control** with the [`Arena`](#arena) builtins, and
+3. **A reclaim at the call site.** A function that *returns* a string can have
+   no scope of its own — the string has to outlive it — so its caller takes the
+   mark instead: `amrit_arena_mark` after the arguments, then
+   `amrit_arena_keep(mark, s)`, which moves the returned string down onto the
+   mark and releases every temporary the callee bumped underneath it. Emitted
+   only when the callee returns a plain `string`, allocates, never calls
+   `Arena.reset` / `Arena.release`, and never lets an allocation out of its
+   frame other than through its return value — so a callee that stores what it
+   built into an object its caller holds gets no bracket, and neither does one
+   returning an array, a struct or a `Result`, whose values name memory outside
+   themselves (`tests/cases/mem_reclaim_call`, `mem_reclaim_argument`,
+   `mem_reclaim_guards`). Independent of `--no-stack-alloc`
+   (`tests/cases/mem_reclaim_no_stack_alloc`), and invisible to a program: it
+   changes when memory is reused, never what it holds
+   ([wp6-memory.md](wp6-memory.md) §2a).
+4. **Explicit control** with the [`Arena`](#arena) builtins, and
    `amrit_reset_arena()` / `amrit_arena_mark()` / `amrit_arena_release()` for a C
    or Node host ([wp8-interop.md](wp8-interop.md)).
 
@@ -1577,7 +1653,7 @@ arena is released when `main` returns. Objects stored into fields or arrays
 never move to the stack, and a returned object is always arena memory owned
 by the caller.
 
-### Target and overflow flags
+### Target, overflow and linkage flags
 
 - **`--target <triple>`** / **`--target host`** writes `target datalayout`
   and `target triple` (the strings clang 18 emits for that triple) into every
@@ -1590,7 +1666,13 @@ by the caller.
   clang supplies them at link time; the flag matters when running `opt` or
   `llc` by hand, which otherwise assume a generic layout and never vectorise
   ([wp9-optimisation.md](wp9-optimisation.md#--target-triple-and---target-host)).
-- **`--nsw`**: see *Integers wrap* above (`tests/cases/opt_nsw`).
+- **`--wrapping`**: see *Signed integer overflow is undefined behaviour*
+  above (`tests/cases/opt_nsw`, `opt_wrapping`).
+- **`--no-strict-exports`**: see *Linkage* above
+  (`tests/cases/export_no_strict`).
+- **`--nsw`** and **`--strict-exports`** are still accepted and now say
+  explicitly what the compiler does anyway; they exist so a build script
+  written before the defaults changed still runs (`tests/cases/export_strict`).
 - **`--unchecked-indexing`**: see *Bounds checks* above.
 - **`--no-stack-alloc`**: see *Memory model* above.
 
@@ -1608,11 +1690,43 @@ by the caller.
   (`tests/cases/reject_multi_error`, `reject_multi_forbidden`,
   `reject_multi_decl`). A `let x: T = <rejected>` still declares `x` as `T`
   so later uses do not cascade.
+- **Performance warnings are the one diagnostic that is not an error**
+  (WP15 §8). The compiler reports one whenever it had to take a slow path and a
+  faster one was available, in the same anchored, excerpted shape an error has
+  but with `performance` where `error` would be:
+  `file:line:col: performance: <text>`. They are **on by default**, print on
+  stderr, and **never change the exit code**: a program that trips one still
+  compiles and still exits 0. `--no-warn-performance` silences the class and
+  changes nothing else — the IR is byte-identical either way. A compilation
+  that *failed* prints its errors and none of its warnings; a report of more
+  than one warning is capped at 20, like the error report, with
+  `...and N more performance warnings` and an `N performance warnings` line.
+  Two warnings exist today, and each names the rewrite:
+  - **quadratic string building** — `s = <something built from s>` where `s`
+    is a string local declared outside the loop the assignment sits in, so
+    every pass copies the whole accumulator. The hint is a `string[]` and one
+    `join` (`tests/cases/perf_str_concat_loop`). Not reported when the result
+    does not include the target (`line = part + "!"`), when the accumulator is
+    declared inside the loop and therefore reset every pass, or outside any
+    loop (`tests/cases/perf_str_concat_quiet`).
+  - **allocation in a loop** — a `new Array<T>(n)` with a non-constant `n`
+    declared inside a loop whose value never leaves the iteration. A
+    dynamically sized array cannot be a stack slot, so the arena grows once per
+    pass; the hint is to hoist it above the loop or to bracket the loop body
+    with `Arena.mark()` / `Arena.release(m)`
+    (`tests/cases/perf_alloc_loop`). Not reported for a `new C(...)`, an object
+    or array literal, or a `new Array<T>(<literal>)`, all of which the escape
+    analysis already turns into one entry-block alloca whose slot is reused
+    every pass, and not when the value is pushed, stored, returned or passed
+    on, because then the program asked for one object per iteration
+    (`tests/cases/perf_alloc_quiet`).
 - **`--json`** prints every error as one JSON object per line on stdout,
-  `{"file","line","column","endLine","endColumn","severity":"error","message"}`
+  `{"file","line","column","endLine","endColumn","severity","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in
   `message`; `code` is reserved), nothing else on stdout and nothing on
-  stderr, with the same exit code. A clean compile prints nothing.
+  stderr, with the same exit code. `severity` is `"error"` for every error and
+  `"performance"` for a WP15 §8 warning, which is the field a tool filters on.
+  A clean compile with no warnings prints nothing.
 - **`--emit-ast`** prints the syntax tree of every module after Phase 0 as an
   indented `<SyntaxKind> <line:col>-<line:col>` tree (identifier and literal
   text appended) and writes no IR (`tests/cases/dump_ast`).
@@ -1744,7 +1858,7 @@ messages are exact for the cases cited; other rows quote
 | wrong arity | `` `f` expects 1 argument(s), got 2 `` | `reject_arity` |
 | mixed operand types | `` Operator `+` requires two operands of the same numeric type, got i32 and boolean `` | `reject_type_mismatch`, `reject_i64_mixed` |
 | string `+` number | `` ... got string and i32 (no implicit string conversion; use a template literal) `` | `reject_str_plus_number` |
-| bitwise operator on a non-integer | `` Operator `&` requires two operands of the same integer type, got f64 and f64 `` (with `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) `` appended in that mode) / `` Operator `~` requires an integer operand, got f64 `` | `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not` |
+| bitwise operator on a non-integer | `` Operator `&` requires two operands of the same integer type, got f64 and f64 `` (with `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) `` appended in that mode) / `` Operator `~` requires an integer operand, got f64 ``; a compound form names itself, `` Operator `&=` requires two operands of the same integer type, got f64 and f64 ``, for a local, a field and an element alike | `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not`, `reject_arr_element_bitwise_f64` |
 | bitwise operator on booleans | `` Operator `&` is not available on boolean (use `&&`) `` (`\|` names `\|\|`, `^` names `!==`, `~` names `!`) | `reject_bit_boolean` |
 | ordering on booleans / strings / structs | `` Operator `<` requires two numeric operands, got string and i32 `` | `reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |
 | `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned` |

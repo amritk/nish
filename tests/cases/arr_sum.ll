@@ -36,7 +36,7 @@ slow:
   ret i8* %grown
 }
 
-define void @fill(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %n) #0 {
+define internal void @fill(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %n) #0 {
 entry:
   %i.addr = alloca i32, align 4
   store i32 0, i32* %i.addr, align 4
@@ -70,7 +70,7 @@ bounds.ok:
 
 for.inc:
   %12 = load i32, i32* %i.addr, align 4
-  %13 = add i32 %12, 1
+  %13 = add nsw i32 %12, 1
   store i32 %13, i32* %i.addr, align 4
   br label %for.cond
 
@@ -78,7 +78,7 @@ for.end:
   ret void
 }
 
-define noundef i32 @sum(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i32 noundef %n) #0 {
+define internal noundef i32 @sum(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i32 noundef %n) #0 {
 entry:
   %total.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -110,13 +110,13 @@ bounds.ok:
   %10 = bitcast i8* %9 to i32*
   %11 = getelementptr inbounds i32, i32* %10, i64 %4
   %12 = load i32, i32* %11, align 4
-  %13 = add i32 %2, %12
+  %13 = add nsw i32 %2, %12
   store i32 %13, i32* %total.addr, align 4
   br label %for.inc
 
 for.inc:
   %14 = load i32, i32* %i.addr, align 4
-  %15 = add i32 %14, 1
+  %15 = add nsw i32 %14, 1
   store i32 %15, i32* %i.addr, align 4
   br label %for.cond
 

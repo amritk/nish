@@ -443,6 +443,32 @@ export function mkdirSync(path) {
 }
 
 /**
+ * `isDirectorySync(path)` (WP14 §7a): one stat, and a boolean out of it rather
+ * than an exception, which is what the runtime's `stat` answers too.
+ */
+export function isDirectorySync(path) {
+  try {
+    return fs.statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `process.platform` / `process.arch` (WP14 §7a). Node's spellings are the
+ * ones `runtime.c` answers with, so on any machine this compiler has a triple
+ * for the two runtimes give the same string; elsewhere the native build says
+ * `unknown` where Node names the platform, which is the one place they part.
+ */
+export function platform() {
+  return process.platform;
+}
+
+export function arch() {
+  return process.arch;
+}
+
+/**
  * `spawnSync(argv)` (WP14 D4): the child's exit status, 128 + n when signal n
  * killed it, -1 for an empty vector or a program that would not start. The
  * child inherits this process's streams, as it does natively.

@@ -25,6 +25,7 @@
 // Telling that `}` from the one that closes a block is what `braceDepth` is
 // for: one entry per open substitution, counting the blocks inside it.
 
+import { StringBuilder } from "./strings";
 import {
   TOK_AMP,
   TOK_AMP_ASSIGN,
@@ -312,6 +313,14 @@ export class Lexer {
    */
   escapeEnd: i32;
 
+  /**
+   * The pieces of the literal being scanned, for the literals that have an
+   * escape in them. One builder for the whole lexer rather than one per
+   * literal: `scanString` and `scanTemplate` never overlap, and a literal
+   * with no escape never touches it at all.
+   */
+  literal: StringBuilder;
+
   constructor(source: string) {
     this.source = source;
     this.pos = 0;
@@ -321,6 +330,7 @@ export class Lexer {
     this.value = "";
     this.braceDepth = [];
     this.escapeEnd = 0;
+    this.literal = new StringBuilder();
   }
 
   /** The byte at `i`, or -1 past the end. Every read goes through here. */
@@ -479,10 +489,16 @@ export class Lexer {
    * program means, so the parser interns it and the emitter writes it out
    * without a second pass. A newline inside is an error, as it is in
    * TypeScript.
+   *
+   * `chunk` is where the run of bytes not yet taken begins: an escape flushes
+   * the run before it in one `substring` and the closing quote flushes the
+   * rest, so a literal with no escape costs one `substring` and nothing else.
+   * See `literalText` for why that matters.
    */
   scanString(quote: i32): void {
     let at = this.pos + 1;
-    let text = "";
+    let chunk = at;
+    this.literal.reset();
     while (true) {
       if (at >= this.source.length) {
         this.error("unterminated string literal", at);
@@ -490,7 +506,7 @@ export class Lexer {
       }
       const c = this.at(at);
       if (c === quote) {
-        this.emit(TOK_STRING, at + 1, text);
+        this.emit(TOK_STRING, at + 1, this.literalText(chunk, at));
         return;
       }
       if (c === CH_LF) {
@@ -498,18 +514,49 @@ export class Lexer {
         return;
       }
       if (c === CH_BACKSLASH) {
-        const decoded = this.scanEscape(at + 1);
-        if (this.escapeEnd < 0) {
-          this.error("invalid escape sequence", at + 2);
-          return;
-        }
-        text = text + decoded;
-        at = this.escapeEnd;
+        at = this.takeEscape(chunk, at);
+        if (at < 0) return;
+        chunk = at;
       } else {
-        text = text + this.source.substring(at, at + 1);
         at = at + 1;
       }
     }
+  }
+
+  /**
+   * Take the escape whose backslash is at `at`, together with the plain bytes
+   * waiting since `chunk`, and answer where the escape ends — or -1, with the
+   * malformed-escape error already reported. Shared by the two literal scans,
+   * which differ only in what ends them.
+   */
+  takeEscape(chunk: i32, at: i32): i32 {
+    const decoded = this.scanEscape(at + 1);
+    if (this.escapeEnd < 0) {
+      this.error("invalid escape sequence", at + 2);
+      return -1;
+    }
+    if (at > chunk) this.literal.add(this.source.substring(chunk, at));
+    this.literal.add(decoded);
+    return this.escapeEnd;
+  }
+
+  /**
+   * The decoded text of a literal that ends at `at` with the bytes since
+   * `chunk` still to take.
+   *
+   * A literal with no escape in it — nearly every one — never touched the
+   * builder, so it costs exactly one `substring` of the whole span. That is
+   * the point of `chunk`: the old shape appended one byte at a time, and
+   * `text = text + one byte` copies the whole accumulator on every pass, which
+   * is quadratic in time *and* in arena bytes because the arena never
+   * reclaims (.claude/selfhost.md, "String building goes through
+   * `StringBuilder`"). This loop reads every byte of every file the compiler
+   * compiles, so it is the one place in `self/` where that shape cost the most.
+   */
+  literalText(chunk: i32, at: i32): string {
+    if (this.literal.isEmpty()) return this.source.substring(chunk, at);
+    if (at > chunk) this.literal.add(this.source.substring(chunk, at));
+    return this.literal.toText();
   }
 
   scanEscape(at: i32): string {
@@ -579,11 +626,13 @@ export class Lexer {
   /**
    * A template part, from `at` (just past the backtick or the `}`) to the
    * closing backtick — `whole` when there is no substitution before it — or to
-   * a `${`, which is `opening` and pushes a substitution.
+   * a `${`, which is `opening` and pushes a substitution. `chunk` works as it
+   * does in `scanString`, and through the same two helpers.
    */
   scanTemplate(at: i32, whole: i32, opening: i32): void {
     let i = at;
-    let text = "";
+    let chunk = at;
+    this.literal.reset();
     while (true) {
       if (i >= this.source.length) {
         this.error("unterminated template literal", i);
@@ -591,24 +640,19 @@ export class Lexer {
       }
       const c = this.at(i);
       if (c === CH_BACKTICK) {
-        this.emit(whole, i + 1, text);
+        this.emit(whole, i + 1, this.literalText(chunk, i));
         return;
       }
       if (c === CH_DOLLAR && this.at(i + 1) === CH_LBRACE) {
         this.braceDepth.push(0);
-        this.emit(opening, i + 2, text);
+        this.emit(opening, i + 2, this.literalText(chunk, i));
         return;
       }
       if (c === CH_BACKSLASH) {
-        const decoded = this.scanEscape(i + 1);
-        if (this.escapeEnd < 0) {
-          this.error("invalid escape sequence", i + 2);
-          return;
-        }
-        text = text + decoded;
-        i = this.escapeEnd;
+        i = this.takeEscape(chunk, i);
+        if (i < 0) return;
+        chunk = i;
       } else {
-        text = text + this.source.substring(i, i + 1);
         i = i + 1;
       }
     }

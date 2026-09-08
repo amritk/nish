@@ -157,25 +157,117 @@ and their tests move with it.
 
 ---
 
-## 3. Fast defaults
+## 3. Fast defaults — **done**
 
-| Flag | New default | What it buys | What it costs |
+| Flag | Default | What it buys | What it costs |
 | --- | --- | --- | --- |
 | `--strict-exports` | **on** | Non-exported functions get `internal` linkage: inlining, argument specialisation, dead-stripping. Wins on speed *and* size. | A non-exported function is no longer a C-ABI symbol, so the default ABI surface shrinks. `--no-strict-exports` restores it. |
-| `--nsw` | **on**, with `--wrapping` to opt out | Signed overflow becomes undefined, so LLVM may widen induction variables and strength-reduce loops. | **Withdraws the documented wrapping guarantee.** Overflow is UB unless `--wrapping` is given. |
+| `--nsw` | **on**, with `--wrapping` to opt out | Signed overflow is undefined, so LLVM may widen induction variables and strength-reduce loops. | **Withdrew the documented wrapping guarantee.** Signed overflow is UB unless `--wrapping` is given. |
 
-The `--nsw` change is the largest semantic change in this note and it must be
-handled honestly rather than quietly:
+Both flags are still accepted by name and now say explicitly what the compiler
+does anyway, so a build script written before the flip still runs.
 
-- `docs/LANGUAGE.md`'s "integer overflow wraps" becomes "integer overflow is
-  undefined by default; `--wrapping` restores two's-complement wrapping".
-- Every differential corpus program that relies on wrapping is run with
-  `--wrapping`, so the Node oracle keeps testing something real rather than
-  comparing against undefined behaviour.
-- The `.out` and golden cases that pin wrapping (`const_wrap`, the i32
-  overflow cases) either move to `--wrapping` via their `.args` or are
-  re-stated as UB and removed. Deleting a test to get green is forbidden; each
-  one is re-pointed deliberately and the reason recorded.
+The `--nsw` change was the largest semantic change in this note, and it was
+handled in the open rather than quietly:
+
+- `docs/LANGUAGE.md`'s "integer overflow wraps" became "signed integer overflow
+  is undefined behaviour; `--wrapping` restores two's-complement wrapping", and
+  the same sentence was re-pointed in the README, the FAQ, the cookbook,
+  `docs/ARCHITECTURE.md`, `docs/MASTER_PLAN.md` §3.3 and §3.4, and
+  `docs/wp13-differential.md`.
+- Every differential corpus program that relies on wrapping carries
+  `--wrapping` in its `.args`, so the Node oracle keeps testing something real
+  rather than comparing against undefined behaviour: `int_wrap`,
+  `int_literal_edges`, `int_incdec`, `int_compound`, `i64_arith`,
+  `conversions_roundtrip`, `digits`, `recursion`, `bool_logic`, `bit_fnv1a`,
+  `prng_lcg` and `const_module`.
+- The golden cases that pin wrapping moved to `--wrapping` via their `.args`
+  rather than being deleted: `tests/cases/const_wrap` (the folded
+  `2147483647 + 1`) and `tests/cases/i64_basic` (`sq * 2` past 2^63).
+  `tests/cases/u_arith_wrap` needed nothing, because unsigned overflow is still
+  defined.
+
+`--strict-exports` needed re-pointing of its own, and in the other direction:
+the golden corpus links `tests/driver.c`, which calls `test()` from C, so every
+case that does now says `export function test()` rather than opting out of the
+default. Their helpers stay non-exported and the goldens show them `internal`,
+which is the point. The same reasoning applies to `examples/add.ts` and
+`examples/strings.ts`, whose whole purpose is to be called from C, and to the
+interop tests: `--emit-header` no longer promises a non-exported function, and
+`tests/run.js` checks both that it is left out by default and that
+`--no-strict-exports` puts it back.
+`tests/differential/rewrite.js` also learned `--wrapping`, because the checker
+it borrows folds constants and would otherwise refuse a program the native side
+had just compiled.
+
+Four decisions the flip forced, each recorded here because none of them is
+obvious from the flag names:
+
+1. **Unsigned arithmetic never carries a no-wrap flag, in either mode.**
+   `--nsw` used to put `nuw` on unsigned `add`/`sub`/`mul`. That was defensible
+   while the flag was opt-in and is not defensible as a default: §6 defines
+   `u8`/`u16`/`u32`/`u64` as wrapping precisely so that hashing and bit-packing
+   have somewhere to live, and `nuw` would withdraw that too. So the flag is
+   read as its name says — *no signed wrap* — and the proof under it is "the
+   checker recorded a signed type".
+2. **Constant folding mirrors the emitter.** A module constant must compute
+   what the instruction it replaces computes, so by default an initialiser
+   whose `+`/`-`/`*`/unary `-` overflows its width is a compile error
+   (`attempt to compute with overflow in a constant`) rather than a silently
+   wrapped value the optimiser is entitled to assume impossible; under
+   `--wrapping` it wraps, as it always did. This is the same treatment the two
+   divisor failures already had: what traps at run time is refused at compile
+   time once the operands are known. `-2147483648` is unaffected — its result
+   fits.
+3. **`self/` had two places that relied on wrapping**, and both were fixed
+   rather than exempted: the FNV-1a round in `self/map.ts`, which now
+   accumulates in `u32`, and `parseIntegerLiteral` in `self/constants.ts`,
+   which now multiplies through `u64`. The folder's own overflow detection is
+   written the same way, so the compiler never overflows a signed value of its
+   own in order to describe one.
+4. **A function name stays unique across the program, exported or not.** The
+   obvious reading of `internal` linkage is that two modules may now share a
+   non-exported name, and `rejectSymbolClashes` used to skip its check under
+   `--strict-exports` on exactly that reasoning. It is wrong:
+   `analyzeFunctions` keys the whole-program fact fixpoint by
+   `FunctionSig.name`, so two functions sharing a name share one set of facts
+   and each is emitted with the other's attributes. Making the flag the default
+   turned a rare hazard into a common one — the bootstrap found it within the
+   hour, as an out-of-bounds inside stage1 after two modules of `self/` both
+   declared a `narrow` — so the check no longer consults the flag
+   (`tests/link/duplicate_internal`). `internal` linkage buys inlining,
+   specialisation and dead-stripping; it does not buy a second namespace.
+
+### What the defaults measured, and one thing they did not
+
+The benchmark table was regenerated after the flip (`docs/BENCHMARKS.md`), on
+an idle machine with the same `--runs 15 --warmup 3` the previous table used —
+matching the parameters matters, because the defaults are 5 and 1 and a table
+built with those is not comparable to one built with these.
+
+The unambiguous wins are size and string building. `bench/nbody` links to
+**10,856 bytes against 12,000** before the flip, which is dead-stripping doing
+what §3 said it would, and `strbuild` went from 1.64x C-naive to **0.82x** —
+though that one belongs to the call-site reclaim (`wp9-optimisation.md`), not
+to these flags.
+
+**`fib` appeared to regress by about 4 % and did not.** The two binaries were
+disassembled, their addresses normalised and their instruction streams sorted:
+the multisets are **identical**. The same instructions in a different order,
+because `internal` linkage changed where the linker placed the function. That
+is a code-layout effect — the phenomenon that makes a 4 % swing reproducible
+without any change in code quality — and it is recorded here so that the next
+person to see `fib` move does not go looking for a miscompilation. The
+attribution was checked flag by flag on one machine: `--nsw` alone is neutral
+on `fib` (439 ms against 436), which is what a recursive function with no
+induction variable should show.
+
+**`nbody` is a real difference and a small one**: 1,296 instructions against
+1,497, and about 2.6 % slower. Fewer instructions and more time is the
+signature of an inlining or scheduling trade rather than of lost work, and at
+that size it is not worth an investigation on its own — but it is the one row
+where the defaults changed the generated code and did not pay, so it is named
+rather than averaged away.
 
 ---
 
@@ -300,9 +392,9 @@ and the hint column above is part of the specification rather than a nicety.
 Roughly dependency order; each row ships with the full construct checklist from
 `docs/ARCHITECTURE.md`.
 
-1. **Fast defaults** (§3) — flag flips plus the honest re-pointing of every
-   affected test and doc. Small, and it moves the baseline everything else is
-   measured against.
+1. **Fast defaults** (§3) — **done**. Flag flips plus the honest re-pointing
+   of every affected test and doc. Small, and it moves the baseline everything
+   else is measured against.
 2. **`performance` diagnostics** (§8) — the framework plus the two warnings that
    need no new analysis (quadratic string building, allocation in a loop).
 3. **Slice iterators** (§2.3) — the biggest speed win per line of emitter code,
