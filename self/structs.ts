@@ -94,8 +94,8 @@ export function declareStruct(ctx: CheckContext, decl: Node, kind: i32): StructI
     ctx.error(decl, `${what} must be named`);
     return null;
   }
-  if (name.startsWith("sts_")) {
-    ctx.error(decl.children[0], "Names starting with `sts_` are reserved for the runtime");
+  if (name.startsWith("amrit_")) {
+    ctx.error(decl.children[0], "Names starting with `amrit_` are reserved for the runtime");
     return null;
   }
   if (ctx.program.structs.has(name)) {

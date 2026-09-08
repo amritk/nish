@@ -1,5 +1,5 @@
 // parseInt / parseFloat / Number (WP7): string-to-number parsing in the
-// runtime (sts_parse_number) with JavaScript semantics for the decimal forms,
+// runtime (amrit_parse_number) with JavaScript semantics for the decimal forms,
 // plus the documented deviations: parseInt has no NaN (0 without digits) and
 // saturates into i32; parseFloat reads a `0x` prefix as hex like strtod.
 function show(label: string, v: f64): void {

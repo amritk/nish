@@ -1,10 +1,10 @@
 %struct.toString = type { i32 }
 
-declare void @sts_free_arena() #0
-declare noundef i64 @sts_arena_mark() #0
-declare void @sts_arena_release(i64 noundef) #0
-declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
+declare void @amrit_free_arena() #0
+declare noundef i64 @amrit_arena_mark() #0
+declare void @amrit_arena_release(i64 noundef) #0
+declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
 define void @toString.constructor(%struct.toString* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %n) #0 {
 entry:
@@ -31,37 +31,37 @@ entry:
   ret i32 %0
 }
 
-define noundef i32 @sts_main() #0 {
+define noundef i32 @amrit_main() #0 {
 entry:
   %constructor.addr = alloca i32, align 4
   %toString.obj = alloca %struct.toString, align 8
-  %arena.mark = call i64 @sts_arena_mark()
+  %arena.mark = call i64 @amrit_arena_mark()
   store i32 3, i32* %constructor.addr, align 4
   %0 = call i32 @valueOf(i32 21)
-  %1 = call i8* @sts_str_from_i32(i32 %0)
-  call void @sts_print(i8* %1)
+  %1 = call i8* @amrit_str_from_i32(i32 %0)
+  call void @amrit_print(i8* %1)
   %2 = call i32 @hasOwnProperty(i32 41)
-  %3 = call i8* @sts_str_from_i32(i32 %2)
-  call void @sts_print(i8* %3)
+  %3 = call i8* @amrit_str_from_i32(i32 %2)
+  call void @amrit_print(i8* %3)
   %4 = call i32 @isPrototypeOf(i32 11)
-  %5 = call i8* @sts_str_from_i32(i32 %4)
-  call void @sts_print(i8* %5)
+  %5 = call i8* @amrit_str_from_i32(i32 %4)
+  call void @amrit_print(i8* %5)
   call void @toString.constructor(%struct.toString* %toString.obj, i32 7)
   %6 = getelementptr inbounds %struct.toString, %struct.toString* %toString.obj, i32 0, i32 0
   %7 = load i32, i32* %6, align 4
-  %8 = call i8* @sts_str_from_i32(i32 %7)
-  call void @sts_print(i8* %8)
+  %8 = call i8* @amrit_str_from_i32(i32 %7)
+  call void @amrit_print(i8* %8)
   %9 = load i32, i32* %constructor.addr, align 4
-  %10 = call i8* @sts_str_from_i32(i32 %9)
-  call void @sts_print(i8* %10)
-  call void @sts_arena_release(i64 %arena.mark)
+  %10 = call i8* @amrit_str_from_i32(i32 %9)
+  call void @amrit_print(i8* %10)
+  call void @amrit_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
 entry:
-  %0 = call i32 @sts_main()
-  call void @sts_free_arena()
+  %0 = call i32 @amrit_main()
+  call void @amrit_free_arena()
   ret i32 %0
 }
 

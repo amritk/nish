@@ -1,4 +1,4 @@
-declare void @sts_panic_div(i1 noundef zeroext) #2
+declare void @amrit_panic_div(i1 noundef zeroext) #2
 
 define noundef zeroext i1 @quotientOver(i32 noundef %x, i32 noundef %k) #0 {
 entry:
@@ -10,7 +10,7 @@ entry:
   br i1 %4, label %div.fail, label %div.ok
 
 div.fail:
-  call void @sts_panic_div(i1 zeroext %0)
+  call void @amrit_panic_div(i1 zeroext %0)
   unreachable
 
 div.ok:
@@ -47,7 +47,7 @@ lor.rhs:
   br i1 %5, label %div.fail, label %div.ok
 
 div.fail:
-  call void @sts_panic_div(i1 zeroext %1)
+  call void @amrit_panic_div(i1 zeroext %1)
   unreachable
 
 div.ok:

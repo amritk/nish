@@ -49,7 +49,7 @@ ahead of time is to avoid that. AmritScript uses one bump-allocated arena
 (`runtime/runtime.c`, about 3 KB of machine code): allocation is a load, an
 add, a compare and a store inlined into the caller; nothing is freed
 individually; the entry wrapper frees everything when `main` returns, and a
-C or Node host can call `sts_reset_arena()` between batches to recycle
+C or Node host can call `amrit_reset_arena()` between batches to recycle
 memory in O(1). Objects, arrays, and strings built at run time live there;
 string literals are constant data. On top of that the compiler places
 memory statically ([LANGUAGE.md: Memory model](LANGUAGE.md#memory-model),

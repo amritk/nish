@@ -18,7 +18,7 @@ static void *arena_alloc(size_t size) {
   size = (size + 7) & ~(size_t)7;
   if (arena_off + size > arena_cap) {
     arena_cap = size > 65536 ? size : 65536;
-    arena_buf = malloc(arena_cap); /* old chunks are abandoned, as sts_arena_grow does */
+    arena_buf = malloc(arena_cap); /* old chunks are abandoned, as amrit_arena_grow does */
     arena_off = 0;
   }
   void *p = arena_buf + arena_off;

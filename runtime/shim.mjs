@@ -3,7 +3,7 @@
  *
  * The differential runner (tests/differential/run.js) rewrites an AmritScript
  * program into plain JavaScript and runs it under Node with this module as
- * `__sts`. Every helper here reproduces the *runtime* semantics the compiled
+ * `__amrit`. Every helper here reproduces the *runtime* semantics the compiled
  * binary has (runtime/runtime.c plus the intrinsics in docs/wp7-runtime.md)
  * where JavaScript's own semantics differ:
  *
@@ -226,7 +226,7 @@ export function indexOf(s, sub) {
   return bytesOf(s).indexOf(bytesOf(sub));
 }
 
-/** `sts_str_at`: whether `sub`'s bytes sit at byte offset `at`. */
+/** `amrit_str_at`: whether `sub`'s bytes sit at byte offset `at`. */
 function occursAt(s, at, sub) {
   const bytes = bytesOf(s);
   const needle = bytesOf(sub);
@@ -286,7 +286,7 @@ class Propagate {
   }
 }
 
-class StsResult {
+class AmritResult {
   constructor(ok, value, error) {
     this.ok = ok;
     if (ok) this.value = value;
@@ -313,22 +313,22 @@ class StsResult {
 
 /** `Ok(v)`; `Ok()` on a `Result<void, E>` carries nothing. */
 export function Ok(value) {
-  return new StsResult(true, value, undefined);
+  return new AmritResult(true, value, undefined);
 }
 
 /** `Err(e)`. */
 export function Err(error) {
-  return new StsResult(false, undefined, error);
+  return new AmritResult(false, undefined, error);
 }
 
 /**
  * The `catch` half of `orReturn`: re-raise anything that is not a propagation,
  * and answer the `Err` the enclosing function should return otherwise. The
- * rewriter emits `return __sts.caught(e)` and nothing else, so a genuine
+ * rewriter emits `return __amrit.caught(e)` and nothing else, so a genuine
  * runtime error still reaches Node unchanged.
  */
 export function caught(thrown) {
-  if (thrown instanceof Propagate) return new StsResult(false, undefined, thrown.error);
+  if (thrown instanceof Propagate) return new AmritResult(false, undefined, thrown.error);
   throw thrown;
 }
 
@@ -427,7 +427,7 @@ export function argv() {
 }
 
 const SPACES = "[ \\t\\n\\v\\f\\r]*";
-/** What `sts_parse_number` recognises: strtod's decimal and hex-integer forms, or an exact `Infinity`. */
+/** What `amrit_parse_number` recognises: strtod's decimal and hex-integer forms, or an exact `Infinity`. */
 const LITERAL = new RegExp(`^${SPACES}([+-]?)(Infinity|0[xX][0-9a-fA-F]+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?)`);
 const BLANK = new RegExp(`^${SPACES}$`);
 const WHOLE = new RegExp(`${LITERAL.source}${SPACES}$`);

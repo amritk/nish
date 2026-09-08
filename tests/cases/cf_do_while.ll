@@ -1,4 +1,4 @@
-declare void @sts_panic_div(i1 noundef zeroext) #1
+declare void @amrit_panic_div(i1 noundef zeroext) #1
 
 define noundef i32 @sumDigits(i32 noundef %n) #0 {
 entry:
@@ -19,7 +19,7 @@ do.body:
   br i1 %6, label %div.fail, label %div.ok
 
 div.fail:
-  call void @sts_panic_div(i1 zeroext %2)
+  call void @amrit_panic_div(i1 zeroext %2)
   unreachable
 
 div.ok:
@@ -35,7 +35,7 @@ div.ok:
   br i1 %14, label %div.fail.1, label %div.ok.1
 
 div.fail.1:
-  call void @sts_panic_div(i1 zeroext %10)
+  call void @amrit_panic_div(i1 zeroext %10)
   unreachable
 
 div.ok.1:

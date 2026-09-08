@@ -11,12 +11,12 @@
 @.str.2 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"slime\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"dragon\00" }, align 8
 
-declare void @sts_free_arena() #0
-declare noundef i64 @sts_arena_mark() #0
-declare void @sts_arena_release(i64 noundef) #0
-declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
+declare void @amrit_free_arena() #0
+declare noundef i64 @amrit_arena_mark() #0
+declare void @amrit_arena_release(i64 noundef) #0
+declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
 define void @Entity.constructor(%struct.Entity* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i8* noundef nonnull noalias readonly align 8 %name) #0 {
 entry:
@@ -101,20 +101,20 @@ define noundef nonnull align 8 i8* @describe(%struct.Stats* noundef nonnull read
 entry:
   %0 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 0
   %1 = load i8*, i8** %0, align 8
-  %2 = call i8* @sts_str_concat(i8* %1, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %2 = call i8* @amrit_str_concat(i8* %1, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
   %3 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 1
   %4 = load i32, i32* %3, align 4
-  %5 = call i8* @sts_str_from_i32(i32 %4)
-  %6 = call i8* @sts_str_concat(i8* %2, i8* %5)
-  %7 = call i8* @sts_str_concat(i8* %6, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  %5 = call i8* @amrit_str_from_i32(i32 %4)
+  %6 = call i8* @amrit_str_concat(i8* %2, i8* %5)
+  %7 = call i8* @amrit_str_concat(i8* %6, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
   %8 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 2
   %9 = load i32, i32* %8, align 4
-  %10 = call i8* @sts_str_from_i32(i32 %9)
-  %11 = call i8* @sts_str_concat(i8* %7, i8* %10)
+  %10 = call i8* @amrit_str_from_i32(i32 %9)
+  %11 = call i8* @amrit_str_concat(i8* %7, i8* %10)
   ret i8* %11
 }
 
-define noundef i32 @sts_main() #0 {
+define noundef i32 @amrit_main() #0 {
 entry:
   %m.addr = alloca %struct.Mob*, align 8
   %Mob.obj = alloca %struct.Mob, align 8
@@ -124,7 +124,7 @@ entry:
   %Ghost.obj = alloca %struct.Ghost, align 8
   %w.addr = alloca %struct.Wisp*, align 8
   %Wisp.obj = alloca %struct.Wisp, align 8
-  %arena.mark = call i64 @sts_arena_mark()
+  %arena.mark = call i64 @amrit_arena_mark()
   %0 = getelementptr inbounds %struct.Mob, %struct.Mob* %Mob.obj, i32 0, i32 2
   store i32 10, i32* %0, align 4
   %1 = bitcast %struct.Mob* %Mob.obj to %struct.Entity*
@@ -133,16 +133,16 @@ entry:
   %2 = load %struct.Mob*, %struct.Mob** %m.addr, align 8
   %3 = bitcast %struct.Mob* %2 to %struct.Entity*
   %4 = call i32 @Entity.hit(%struct.Entity* %3)
-  %5 = call i8* @sts_str_from_i32(i32 %4)
-  call void @sts_print(i8* %5)
+  %5 = call i8* @amrit_str_from_i32(i32 %4)
+  call void @amrit_print(i8* %5)
   %6 = load %struct.Mob*, %struct.Mob** %m.addr, align 8
   %7 = call i32 @Mob.damage(%struct.Mob* %6, i32 3)
-  %8 = call i8* @sts_str_from_i32(i32 %7)
-  call void @sts_print(i8* %8)
+  %8 = call i8* @amrit_str_from_i32(i32 %7)
+  call void @amrit_print(i8* %8)
   %9 = load %struct.Mob*, %struct.Mob** %m.addr, align 8
   %10 = bitcast %struct.Mob* %9 to %struct.Stats*
   %11 = call i8* @describe(%struct.Stats* %10)
-  call void @sts_print(i8* %11)
+  call void @amrit_print(i8* %11)
   call void @Boss.constructor(%struct.Boss* %Boss.obj, i8* bitcast ({ i64, [7 x i8] }* @.str.3 to i8*), i32 1)
   store %struct.Boss* %Boss.obj, %struct.Boss** %b.addr, align 8
   %12 = load %struct.Boss*, %struct.Boss** %b.addr, align 8
@@ -153,12 +153,12 @@ entry:
   %17 = call i32 @Entity.hit(%struct.Entity* %16)
   %18 = load %struct.Boss*, %struct.Boss** %b.addr, align 8
   %19 = call i32 @Boss.enrage(%struct.Boss* %18)
-  %20 = call i8* @sts_str_from_i32(i32 %19)
-  call void @sts_print(i8* %20)
+  %20 = call i8* @amrit_str_from_i32(i32 %19)
+  call void @amrit_print(i8* %20)
   %21 = load %struct.Boss*, %struct.Boss** %b.addr, align 8
   %22 = bitcast %struct.Boss* %21 to %struct.Stats*
   %23 = call i8* @describe(%struct.Stats* %22)
-  call void @sts_print(i8* %23)
+  call void @amrit_print(i8* %23)
   %24 = getelementptr inbounds %struct.Ghost, %struct.Ghost* %Ghost.obj, i32 0, i32 3
   store i1 false, i1* %24, align 1
   %25 = bitcast %struct.Ghost* %Ghost.obj to %struct.Minion*
@@ -167,7 +167,7 @@ entry:
   %26 = load %struct.Ghost*, %struct.Ghost** %g.addr, align 8
   %27 = bitcast %struct.Ghost* %26 to %struct.Stats*
   %28 = call i8* @describe(%struct.Stats* %27)
-  call void @sts_print(i8* %28)
+  call void @amrit_print(i8* %28)
   %29 = load %struct.Ghost*, %struct.Ghost** %g.addr, align 8
   %30 = getelementptr inbounds %struct.Ghost, %struct.Ghost* %29, i32 0, i32 3
   %31 = load i1, i1* %30, align 1
@@ -181,32 +181,32 @@ cond.false:
 
 cond.end:
   %32 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
-  %33 = call i8* @sts_str_from_i32(i32 %32)
-  call void @sts_print(i8* %33)
+  %33 = call i8* @amrit_str_from_i32(i32 %32)
+  call void @amrit_print(i8* %33)
   %34 = load %struct.Ghost*, %struct.Ghost** %g.addr, align 8
   %35 = bitcast %struct.Ghost* %34 to %struct.Entity*
   %36 = call i32 @Entity.hit(%struct.Entity* %35)
-  %37 = call i8* @sts_str_from_i32(i32 %36)
-  call void @sts_print(i8* %37)
+  %37 = call i8* @amrit_str_from_i32(i32 %36)
+  call void @amrit_print(i8* %37)
   call void @Wisp.constructor(%struct.Wisp* %Wisp.obj, i32 9)
   store %struct.Wisp* %Wisp.obj, %struct.Wisp** %w.addr, align 8
   %38 = load %struct.Wisp*, %struct.Wisp** %w.addr, align 8
   %39 = bitcast %struct.Wisp* %38 to %struct.Stats*
   %40 = call i8* @describe(%struct.Stats* %39)
-  call void @sts_print(i8* %40)
+  call void @amrit_print(i8* %40)
   %41 = load %struct.Wisp*, %struct.Wisp** %w.addr, align 8
   %42 = getelementptr inbounds %struct.Wisp, %struct.Wisp* %41, i32 0, i32 4
   %43 = load i32, i32* %42, align 4
-  %44 = call i8* @sts_str_from_i32(i32 %43)
-  call void @sts_print(i8* %44)
-  call void @sts_arena_release(i64 %arena.mark)
+  %44 = call i8* @amrit_str_from_i32(i32 %43)
+  call void @amrit_print(i8* %44)
+  call void @amrit_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
-  %0 = call i32 @sts_main()
-  call void @sts_free_arena()
+  %0 = call i32 @amrit_main()
+  call void @amrit_free_arena()
   ret i32 %0
 }
 

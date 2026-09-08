@@ -1,4 +1,4 @@
-declare void @sts_panic_div(i1 noundef zeroext) #1
+declare void @amrit_panic_div(i1 noundef zeroext) #1
 
 define noundef i32 @collatzSteps(i32 noundef %n) #0 {
 entry:
@@ -23,7 +23,7 @@ while.body:
   br i1 %7, label %div.fail, label %div.ok
 
 div.fail:
-  call void @sts_panic_div(i1 zeroext %3)
+  call void @amrit_panic_div(i1 zeroext %3)
   unreachable
 
 div.ok:
@@ -41,7 +41,7 @@ if.then:
   br i1 %15, label %div.fail.1, label %div.ok.1
 
 div.fail.1:
-  call void @sts_panic_div(i1 zeroext %11)
+  call void @amrit_panic_div(i1 zeroext %11)
   unreachable
 
 div.ok.1:

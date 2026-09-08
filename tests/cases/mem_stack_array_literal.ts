@@ -1,5 +1,5 @@
 // Array literals and `new Array<T>(<literal>)` that do not outlive the function
-// live on the stack: `%arr.hdr = alloca %struct.sts_array` plus
+// live on the stack: `%arr.hdr = alloca %struct.amrit_array` plus
 // `%arr.data = alloca [n x T]`. A `push` moves the data into the arena but
 // the header stays valid; a returned array stays in the arena.
 function weights(): number {

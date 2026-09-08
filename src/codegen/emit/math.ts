@@ -13,16 +13,16 @@
  *   Math.min/max     f64: @llvm.minnum/maxnum.f64   i32/i64: @llvm.smin/smax.<T>
  *                    unsigned: @llvm.umin/umax.<T>
  *   Math.round(x)    f = floor(x); f + 1 when x - f >= 0.5 else f  (see below)
- *   Math.random()    call double @sts_random()   (write effect: RNG state)
+ *   Math.random()    call double @amrit_random()   (write effect: RNG state)
  *   Math.PI, Math.E  f64 constants
  *   toI32/toI64/toF64(x)   sext / trunc / sitofp / @llvm.fptosi.sat.<T>.f64
  *   toU8/toU16/toU32/toU64(x)  zext / trunc / uitofp / @llvm.fptoui.sat.<T>.f64,
  *                    and *nothing* between two integers of the same width that
  *                    differ only in signedness (WP15)
- *   parseFloat(s)          call double @sts_parse_number(i8* s, i32 0)
- *   Number(s)              call double @sts_parse_number(i8* s, i32 1)   (string)
+ *   parseFloat(s)          call double @amrit_parse_number(i8* s, i32 0)
+ *   Number(s)              call double @amrit_parse_number(i8* s, i32 1)   (string)
  *   Number(x)              sitofp / `uitofp i1` / nothing                (i32, i64, boolean, f64)
- *   parseInt(s)            @sts_parse_number(s, i32 2) then @llvm.fptosi.sat.i32.f64
+ *   parseInt(s)            @amrit_parse_number(s, i32 2) then @llvm.fptosi.sat.i32.f64
  *
  * The parsing runtime call takes a mode instead of being three symbols to
  * keep runtime.c within its size budget. parseInt comes back as the exact
@@ -159,8 +159,8 @@ function mathMinMax(which: "min" | "max"): BuiltinCall {
 }
 
 const mathRandom: BuiltinCall = {
-  emit: (ctx) => ctx.fn.emitValue(`call double ${ctx.useRuntime("sts_random")}()`),
-  callees: () => ["sts_random"],
+  emit: (ctx) => ctx.fn.emitValue(`call double ${ctx.useRuntime("amrit_random")}()`),
+  callees: () => ["amrit_random"],
 };
 
 const F64_UNARY: Record<string, string> = {
@@ -277,10 +277,10 @@ export const conversionEmitters: Record<string, BuiltinCall> = {
 
 // ---- String to number (WP7) ---------------------------------------------------------
 
-const PARSE_RUNTIME = "sts_parse_number";
+const PARSE_RUNTIME = "amrit_parse_number";
 const SAT_I32 = "llvm.fptosi.sat.i32.f64";
 
-/** `call double @sts_parse_number(i8* s, i32 mode)`: 0 parseFloat, 1 Number, 2 parseInt. */
+/** `call double @amrit_parse_number(i8* s, i32 mode)`: 0 parseFloat, 1 Number, 2 parseInt. */
 function parseCall(ctx: EmitContext, s: string, mode: 0 | 1 | 2): string {
   return ctx.fn.emitValue(`call double ${ctx.useRuntime(PARSE_RUNTIME)}(i8* ${s}, i32 ${mode})`);
 }

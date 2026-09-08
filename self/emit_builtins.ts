@@ -44,7 +44,7 @@ import {
   TypeTable,
 } from "./types";
 
-const PARSE_RUNTIME: string = "sts_parse_number";
+const PARSE_RUNTIME: string = "amrit_parse_number";
 const SAT_I32: string = "llvm.fptosi.sat.i32.f64";
 
 function callIntrinsic(emitter: Emitter, name: string, ret: string, args: string): string {
@@ -243,25 +243,25 @@ function stringArgs(emitter: Emitter, expr: Node): string {
 /** `write` / `writeError`: the bytes as they are, on fd 1 or 2. */
 function emitStreamWrite(emitter: Emitter, expr: Node, fd: i32): string {
   const text = emitter.emitExpression(firstArgument(expr));
-  emitter.fn.emit(`call void ${emitter.useRuntime("sts_write")}(i8* ${text}, i32 ${fd}, i1 false)`);
+  emitter.fn.emit(`call void ${emitter.useRuntime("amrit_write")}(i8* ${text}, i32 ${fd}, i1 false)`);
   return "void";
 }
 
 /**
  * `panic(message)`: the message and a newline on stderr, then exit 1 — the
  * same observable ending as the index panic, so a program has one failure mode
- * rather than two. `sts_exit` is `noreturn`, which is what makes the
+ * rather than two. `amrit_exit` is `noreturn`, which is what makes the
  * `unreachable` legal and lets a non-void function end with a panic.
  */
 function emitPanic(emitter: Emitter, expr: Node): string {
   const message = emitter.emitExpression(firstArgument(expr));
-  emitter.fn.emit(`call void ${emitter.useRuntime("sts_write")}(i8* ${message}, i32 2, i1 true)`);
-  emitter.fn.emit(`call void ${emitter.useRuntime("sts_exit")}(i32 1)`);
+  emitter.fn.emit(`call void ${emitter.useRuntime("amrit_write")}(i8* ${message}, i32 2, i1 true)`);
+  emitter.fn.emit(`call void ${emitter.useRuntime("amrit_exit")}(i32 1)`);
   emitter.fn.emit("unreachable");
   return "void";
 }
 
-/** `call double @sts_parse_number(i8* s, i32 mode)`: 0 parseFloat, 1 Number, 2 parseInt. */
+/** `call double @amrit_parse_number(i8* s, i32 mode)`: 0 parseFloat, 1 Number, 2 parseInt. */
 function emitParseCall(emitter: Emitter, s: string, mode: i32): string {
   return emitter.fn.emitValue(
     `call double ${emitter.useRuntime(PARSE_RUNTIME)}(i8* ${s}, i32 ${mode})`
@@ -297,7 +297,7 @@ export function emitBuiltinCall(emitter: Emitter, expr: Node, name: string): str
     return emitMathMinMax(emitter, expr, "max");
   }
   if (name === "Math.random") {
-    return emitter.fn.emitValue(`call double ${emitter.useRuntime("sts_random")}()`);
+    return emitter.fn.emitValue(`call double ${emitter.useRuntime("amrit_random")}()`);
   }
   if (name.startsWith("Math.")) {
     const intrinsic = f64UnaryIntrinsic(name.substring(5, name.length));
@@ -307,24 +307,24 @@ export function emitBuiltinCall(emitter: Emitter, expr: Node, name: string): str
   }
   if (name === "process.exit") {
     const code = emitter.emitExpression(firstArgument(expr));
-    emitter.fn.emit(`call void ${emitter.useRuntime("sts_exit")}(i32 ${code})`);
+    emitter.fn.emit(`call void ${emitter.useRuntime("amrit_exit")}(i32 ${code})`);
     emitter.fn.emit("unreachable");
     return "void";
   }
   if (name === "Arena.reset") {
-    emitter.fn.emit(`call void ${emitter.useRuntime("sts_reset_arena")}()`);
+    emitter.fn.emit(`call void ${emitter.useRuntime("amrit_reset_arena")}()`);
     return "void";
   }
   if (name === "Arena.release") {
     const mark = emitter.emitExpression(firstArgument(expr));
-    emitter.fn.emit(`call void ${emitter.useRuntime("sts_arena_release")}(i64 ${mark})`);
+    emitter.fn.emit(`call void ${emitter.useRuntime("amrit_arena_release")}(i64 ${mark})`);
     return "void";
   }
   if (name === "Arena.mark") {
-    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("sts_arena_mark")}()`);
+    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("amrit_arena_mark")}()`);
   }
   if (name === "Arena.used") {
-    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("sts_arena_used")}()`);
+    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("amrit_arena_used")}()`);
   }
   panic(`emitter: unexpected builtin \`${name}\``);
 }
@@ -340,7 +340,7 @@ export function builtinCallees(program: CheckedProgram, table: TypeTable, call: 
   const args = call.children[1];
   const firstType = args.children.length > 0 ? program.nodeTypes[args.children[0].id] : -1;
   if (name === "console.log" || name === "console.error") {
-    out.push(name === "console.log" ? "sts_print" : "sts_write");
+    out.push(name === "console.log" ? "amrit_print" : "amrit_write");
     const callee = firstType >= 0 ? stringifyCallee(firstType) : "";
     if (callee.length > 0) {
       out.push(callee);
@@ -348,7 +348,7 @@ export function builtinCallees(program: CheckedProgram, table: TypeTable, call: 
     return out;
   }
   if (name === "String.fromCharCode") {
-    out.push("sts_str_new");
+    out.push("amrit_str_new");
     return out;
   }
   if (name === "Math.pow") {
@@ -376,7 +376,7 @@ export function builtinCallees(program: CheckedProgram, table: TypeTable, call: 
     return out;
   }
   if (name === "Math.random") {
-    out.push("sts_random");
+    out.push("amrit_random");
     return out;
   }
   if (name.startsWith("Math.")) {
@@ -387,23 +387,23 @@ export function builtinCallees(program: CheckedProgram, table: TypeTable, call: 
     return out;
   }
   if (name === "process.exit") {
-    out.push("sts_exit");
+    out.push("amrit_exit");
     return out;
   }
   if (name === "Arena.reset") {
-    out.push("sts_reset_arena");
+    out.push("amrit_reset_arena");
     return out;
   }
   if (name === "Arena.release") {
-    out.push("sts_arena_release");
+    out.push("amrit_arena_release");
     return out;
   }
   if (name === "Arena.mark") {
-    out.push("sts_arena_mark");
+    out.push("amrit_arena_mark");
     return out;
   }
   if (name === "Arena.used") {
-    out.push("sts_arena_used");
+    out.push("amrit_arena_used");
     return out;
   }
   return out;
@@ -452,20 +452,20 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
   }
   if (name === "readFileSync") {
     return emitter.fn.emitValue(
-      `call i8* ${emitter.useRuntime("sts_read_file")}(${stringArgs(emitter, expr)})`
+      `call i8* ${emitter.useRuntime("amrit_read_file")}(${stringArgs(emitter, expr)})`
     );
   }
   if (name === "readFileSyncOrNull") {
     return emitter.fn.emitValue(
-      `call i8* ${emitter.useRuntime("sts_read_file_or_null")}(${stringArgs(emitter, expr)})`
+      `call i8* ${emitter.useRuntime("amrit_read_file_or_null")}(${stringArgs(emitter, expr)})`
     );
   }
   if (name === "writeFileSync") {
-    emitter.fn.emit(`call void ${emitter.useRuntime("sts_write_file")}(${stringArgs(emitter, expr)})`);
+    emitter.fn.emit(`call void ${emitter.useRuntime("amrit_write_file")}(${stringArgs(emitter, expr)})`);
     return "void";
   }
   if (name === "appendFileSync") {
-    emitter.fn.emit(`call void ${emitter.useRuntime("sts_append_file")}(${stringArgs(emitter, expr)})`);
+    emitter.fn.emit(`call void ${emitter.useRuntime("amrit_append_file")}(${stringArgs(emitter, expr)})`);
     return "void";
   }
   if (name === "write") {
@@ -513,28 +513,28 @@ export function identifierBuiltinCallees(program: CheckedProgram, table: TypeTab
     return out;
   }
   if (name === "readFileSync") {
-    out.push("sts_read_file");
+    out.push("amrit_read_file");
     return out;
   }
   if (name === "readFileSyncOrNull") {
-    out.push("sts_read_file_or_null");
+    out.push("amrit_read_file_or_null");
     return out;
   }
   if (name === "writeFileSync") {
-    out.push("sts_write_file");
+    out.push("amrit_write_file");
     return out;
   }
   if (name === "appendFileSync") {
-    out.push("sts_append_file");
+    out.push("amrit_append_file");
     return out;
   }
   if (name === "write" || name === "writeError") {
-    out.push("sts_write");
+    out.push("amrit_write");
     return out;
   }
   if (name === "panic") {
-    out.push("sts_write");
-    out.push("sts_exit");
+    out.push("amrit_write");
+    out.push("amrit_exit");
     return out;
   }
   return out; // f64ToBits / bitsToF64: one bitcast, no call
@@ -551,11 +551,11 @@ export function emitNamespaceProperty(emitter: Emitter, expr: Node, name: string
     return f64Hex(Math.E);
   }
   if (name === "process.argv") {
-    // The array pointer the entry wrapper stored in `@sts_argv`.
+    // The array pointer the entry wrapper stored in `@amrit_argv`.
     emitter.declareType(ARRAY_TYPE);
     emitter.declareGlobal(ARGV_GLOBAL);
     const align = emitter.opts.optimizeAttributes ? ", align 8" : "";
-    return emitter.fn.emitValue(`load ${ARRAY_STRUCT}*, ${ARRAY_STRUCT}** @sts_argv${align}`);
+    return emitter.fn.emitValue(`load ${ARRAY_STRUCT}*, ${ARRAY_STRUCT}** @amrit_argv${align}`);
   }
   panic(`emitter: unexpected builtin property \`${name}\``);
 }

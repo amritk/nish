@@ -92,7 +92,7 @@ function allocate(emitter: Emitter, info: StructInfo, site: Node): string {
     return emitter.fn.emitAlloca(`${info.name}.obj`, structTypeName(info), 8);
   }
   const raw = emitter.fn.emitValue(
-    `call i8* ${emitter.useRuntime("sts_alloc_struct")}(i64 ${info.size})`
+    `call i8* ${emitter.useRuntime("amrit_alloc_struct")}(i64 ${info.size})`
   );
   return emitter.fn.emitValue(`bitcast i8* ${raw} to ${structTypeName(info)}*`);
 }

@@ -1,36 +1,36 @@
 %struct.Point = type { i32, i32 }
 %struct.Segment = type { %struct.Point*, %struct.Point*, i8* }
-%struct.sts_arena = type { i8*, i64, i64, i8* }
+%struct.amrit_arena = type { i8*, i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"diag\00" }, align 8
-@sts_arena = external global %struct.sts_arena, align 8
+@amrit_arena = external global %struct.amrit_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #3
-declare void @sts_free_arena() #0
-declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
+declare noalias noundef nonnull align 8 i8* @amrit_arena_grow(i64 noundef) #3
+declare void @amrit_free_arena() #0
+declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define internal noalias noundef nonnull align 8 i8* @sts_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @amrit_alloc_struct(i64 noundef %size) #4 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
-  %off.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 1
+  %off.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 1
   %off = load i64, i64* %off.ptr, align 8
   %new.off = add i64 %off, %size.aligned
-  %cap.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 2
+  %cap.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
   %fits = icmp ule i64 %new.off, %cap
   br i1 %fits, label %fast, label %slow
 
 fast:
   store i64 %new.off, i64* %off.ptr, align 8
-  %buf.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 0
+  %buf.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 0
   %buf = load i8*, i8** %buf.ptr, align 8
   %obj = getelementptr inbounds i8, i8* %buf, i64 %off
   ret i8* %obj
 
 slow:
-  %grown = call i8* @sts_arena_grow(i64 %size.aligned)
+  %grown = call i8* @amrit_arena_grow(i64 %size.aligned)
   ret i8* %grown
 }
 
@@ -75,28 +75,28 @@ entry:
   ret %struct.Point* %1
 }
 
-define noundef i32 @sts_main() #0 {
+define noundef i32 @amrit_main() #0 {
 entry:
   %s.addr = alloca %struct.Segment*, align 8
   %Segment.obj = alloca %struct.Segment, align 8
-  %0 = call i8* @sts_alloc_struct(i64 8)
+  %0 = call i8* @amrit_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Point*
   call void @Point.constructor(%struct.Point* %1, i32 1, i32 2)
-  %2 = call i8* @sts_alloc_struct(i64 8)
+  %2 = call i8* @amrit_alloc_struct(i64 8)
   %3 = bitcast i8* %2 to %struct.Point*
   call void @Point.constructor(%struct.Point* %3, i32 11, i32 22)
   call void @Segment.constructor(%struct.Segment* %Segment.obj, %struct.Point* %1, %struct.Point* %3, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
   store %struct.Segment* %Segment.obj, %struct.Segment** %s.addr, align 8
   %4 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
   %5 = call i32 @Segment.dx(%struct.Segment* %4)
-  %6 = call i8* @sts_str_from_i32(i32 %5)
-  call void @sts_print(i8* %6)
+  %6 = call i8* @amrit_str_from_i32(i32 %5)
+  call void @amrit_print(i8* %6)
   %7 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
   %8 = call %struct.Point* @endpoint(%struct.Segment* %7)
   %9 = getelementptr inbounds %struct.Point, %struct.Point* %8, i32 0, i32 1
   %10 = load i32, i32* %9, align 4
-  %11 = call i8* @sts_str_from_i32(i32 %10)
-  call void @sts_print(i8* %11)
+  %11 = call i8* @amrit_str_from_i32(i32 %10)
+  call void @amrit_print(i8* %11)
   %12 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
   %13 = getelementptr inbounds %struct.Segment, %struct.Segment* %12, i32 0, i32 0
   %14 = load %struct.Point*, %struct.Point** %13, align 8
@@ -107,19 +107,19 @@ entry:
   %18 = load %struct.Point*, %struct.Point** %17, align 8
   %19 = getelementptr inbounds %struct.Point, %struct.Point* %18, i32 0, i32 0
   %20 = load i32, i32* %19, align 4
-  %21 = call i8* @sts_str_from_i32(i32 %20)
-  call void @sts_print(i8* %21)
+  %21 = call i8* @amrit_str_from_i32(i32 %20)
+  call void @amrit_print(i8* %21)
   %22 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
   %23 = getelementptr inbounds %struct.Segment, %struct.Segment* %22, i32 0, i32 2
   %24 = load i8*, i8** %23, align 8
-  call void @sts_print(i8* %24)
+  call void @amrit_print(i8* %24)
   ret i32 0
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
 entry:
-  %0 = call i32 @sts_main()
-  call void @sts_free_arena()
+  %0 = call i32 @amrit_main()
+  call void @amrit_free_arena()
   ret i32 %0
 }
 

@@ -1,5 +1,5 @@
 // Printing an `f32` widens to double with `fpext` and reuses
-// `sts_str_from_f64`, so the digits are what JavaScript prints for the same
+// `amrit_str_from_f64`, so the digits are what JavaScript prints for the same
 // value and the runtime needs no second formatter. 0.1 is not representable
 // in a float, so this is exactly where a missing rounding step would show.
 function test(): number {

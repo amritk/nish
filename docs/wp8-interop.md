@@ -24,29 +24,29 @@ the user side.
 | `number` (f64 mode), `f64` | `double` | `double` | `number` | `number` |
 | `i64` | `i64` | `int64_t` | `bigint` | `bigint` |
 | `boolean` | `i1` (`zeroext`) | `bool` | `boolean` | in: `boolean`; out: `0 \| 1` |
-| `string` | `i8*` | `const sts_str *` in, `sts_str *` out | `string`, copied into the arena in, copied out | not available (no WASI runtime) |
-| `i32[]` / `Int32Array`, `f64[]` / `Float64Array`, `i64[]` / `BigInt64Array` | `%struct.sts_array*` | `const sts_array *` in (read-only), `sts_array *` in (written through) and out | that typed array; borrowed in (zero-copy), fresh typed array out | that typed array; copied into the arena in, copied out |
-| other arrays (`string[]`, `boolean[]`, `T[][]`, `C[]`), classes, `T \| null` | pointers | `sts_array *` for arrays; classes not declared | skipped | skipped |
+| `string` | `i8*` | `const amrit_str *` in, `amrit_str *` out | `string`, copied into the arena in, copied out | not available (no WASI runtime) |
+| `i32[]` / `Int32Array`, `f64[]` / `Float64Array`, `i64[]` / `BigInt64Array` | `%struct.amrit_array*` | `const amrit_array *` in (read-only), `amrit_array *` in (written through) and out | that typed array; borrowed in (zero-copy), fresh typed array out | that typed array; copied into the arena in, copied out |
+| other arrays (`string[]`, `boolean[]`, `T[][]`, `C[]`), classes, `T \| null` | pointers | `amrit_array *` for arrays; classes not declared | skipped | skipped |
 | `void` | `void` | `void` | `undefined` | `void` |
 
-`sts_str` is `{ uint64_t len; char data[]; }`: `len` is the UTF-8 byte
+`amrit_str` is `{ uint64_t len; char data[]; }`: `len` is the UTF-8 byte
 length, `data` is NUL-terminated so it doubles as a C string. Strings are
 immutable and live in the arena: a string an AmritScript function returns stays
-valid until `sts_reset_arena()` or `sts_free_arena()`, and a host never frees
+valid until `amrit_reset_arena()` or `amrit_free_arena()`, and a host never frees
 one. Literals live in the module's constant data and outlive resets.
 
-`sts_array` is `{ uint64_t len; uint64_t cap; char *data; }`
+`amrit_array` is `{ uint64_t len; uint64_t cap; char *data; }`
 ([wp4-arrays.md](wp4-arrays.md#layout-abi)): `data` holds `cap` elements of
 one fixed size (the header comment names the C element type). A C host
 passes its own buffer by building the header on the stack,
-`sts_array a = { n, n, (char *)buf };`, and reads a returned array's `len`
-elements out of `data` before recycling the arena. `sts_alloc_array(elemSize,
+`amrit_array a = { n, n, (char *)buf };`, and reads a returned array's `len`
+elements out of `data` before recycling the arena. `amrit_alloc_array(elemSize,
 len)` makes a fresh arena array for hosts that want the runtime to own the
-storage; it is what the wasm loader calls. A parameter is `const sts_array *`
+storage; it is what the wasm loader calls. A parameter is `const amrit_array *`
 when the function provably never stores through it, the same whole-program
-proof that gives the IR parameter `readonly`, and `sts_array *` otherwise.
+proof that gives the IR parameter `readonly`, and `amrit_array *` otherwise.
 
-`runtime/amritc.h` also declares `struct sts_arena` with its global
+`runtime/amritc.h` also declares `struct amrit_arena` with its global
 (the compiled fast path bumps it directly, so the layout is ABI) and every
 runtime function from `src/codegen/runtime.ts`; `tests/run.js` fails if the
 two drift apart. The header is C11 and C++ clean under `-Wall -Wextra
@@ -86,11 +86,11 @@ int32_t add(int32_t a, int32_t b);
   functions plus, without `--strict-exports`, the non-exported ones too.
   Modules imported by the entry appear under their own `/* file.ts */`
   heading. The entry `export function main` is omitted: it is the process
-  entry (`@sts_main` behind the C `main` wrapper), not a library call, and a
+  entry (`@amrit_main` behind the C `main` wrapper), not a library call, and a
   C host owns `main`.
 - Keyword-named functions: `export function double(n: number)` is a fine
   LLVM symbol but C cannot spell it. The header declares
-  `int32_t double_(int32_t n) STS_SYMBOL("double");`, an asm label from
+  `int32_t double_(int32_t n) AMRIT_SYMBOL("double");`, an asm label from
   `amritc.h` that binds the C name to the real symbol (`__USER_LABEL_PREFIX__`
   supplies the `_` Mach-O prepends). Parameters named after C keywords or
   `<stdbool.h>` macros get a trailing underscore; their names are documentation
@@ -99,11 +99,11 @@ int32_t add(int32_t a, int32_t b);
 
   ```c
   /* sumF64(xs: number[]): number -- xs: double elements */
-  double sumF64(const sts_array *xs);
+  double sumF64(const amrit_array *xs);
   /* fill(xs: number[], v: number): void -- xs: int32_t elements */
-  void fill(sts_array *xs, int32_t v);
+  void fill(amrit_array *xs, int32_t v);
   /* scale(xs: number[], k: number): number[] -- xs: double elements, returns double elements */
-  sts_array *scale(const sts_array *xs, double k);
+  amrit_array *scale(const amrit_array *xs, double k);
   ```
 
   `tests/run.js` links a `-Werror` driver that hands `sumI32` and `fill` a
@@ -115,11 +115,11 @@ int32_t add(int32_t a, int32_t b);
   out), after forward declarations of all of them so fields may point at
   structs defined later. A class without fields stays an incomplete type.
   Field types are spelled `int32_t`, `int64_t`, `double`, `bool`,
-  `sts_str *`, `struct X *` (also for `X | null`, which may be NULL) and
-  `sts_array *` for `T[]` (with the element type in a comment). Functions
+  `amrit_str *`, `struct X *` (also for `X | null`, which may be NULL) and
+  `amrit_array *` for `T[]` (with the element type in a comment). Functions
   taking or returning objects are declared with `struct X *` parameters, and
   methods and constructors are declared too, as
-  `void Point_constructor(struct Point *this_, int32_t x, int32_t y) STS_SYMBOL("Point.constructor");`:
+  `void Point_constructor(struct Point *this_, int32_t x, int32_t y) AMRIT_SYMBOL("Point.constructor");`:
   the object pointer first, bound to the dotted symbol by the same asm-label
   mechanism. `tests/run.js` (`layout`) compiles the header for
   `tests/layout/structs.ts` and static-asserts every struct's size against
@@ -153,8 +153,8 @@ export interface Exports {
   /** Linear memory of the instance (the arena and string constants live here). */
   readonly memory: WebAssembly.Memory;
   /** runtime_wasm.c: recycle everything the module allocated (arrays passed and returned are already copies). */
-  sts_reset_arena(): void;
-  sts_free_arena(): void;
+  amrit_reset_arena(): void;
+  amrit_free_arena(): void;
   // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: string values need the AmritScript runtime, ...
   /** examples/arrays.ts: scale(xs: number[], k: number): number[] */
   scale(xs: Float64Array, k: number): Float64Array;
@@ -178,12 +178,12 @@ scale: (xs, k) => scoped(() => {
 }),
 ```
 
-1. `scoped` takes `sts_arena_mark()` first and calls `sts_arena_release(mark)`
+1. `scoped` takes `amrit_arena_mark()` first and calls `amrit_arena_release(mark)`
    in a `finally`, so every arena byte the call used is recycled even when
    the module traps.
 2. `arrayIn` checks `xs instanceof Float64Array` (a `TypeError` naming the
    function and parameter otherwise), asks the module for
-   `sts_alloc_array(8n, len)`, reads the header's `data` pointer (offset 16;
+   `amrit_alloc_array(8n, len)`, reads the header's `data` pointer (offset 16;
    `len` is the `i64` at offset 0, `cap` at 8), and `.set(xs)` through a
    `Float64Array` view on `memory.buffer`. The copy costs one `memcpy`
    (`bench/ffi.mjs`: about 0.6 ns per element on top of the loop).
@@ -192,16 +192,16 @@ scale: (xs, k) => scoped(() => {
    next `memory.grow` would detach a view and the release in step 1 would
    let the module overwrite it.
 4. A parameter the function writes through (`fill(xs, 7)`; the same fact
-   that makes it `sts_array *` in the header) is copied back into the
+   that makes it `amrit_array *` in the header) is copied back into the
    caller's typed array after the call, so the wasm and N-API builds agree
    on what the caller observes.
 
 `memory.buffer` is re-read after every call into the module because
 `memory.grow` replaces the `ArrayBuffer`. The runtime the loader calls,
-`sts_alloc_array` / `sts_arena_mark` / `sts_arena_release`, comes from
+`amrit_alloc_array` / `amrit_arena_mark` / `amrit_arena_release`, comes from
 `runtime/runtime_wasm.c`, a freestanding subset of the runtime: linear
 memory past `__heap_base` is one arena chunk that grows with `memory.grow`,
-`sts_array_grow` and the panics are there (`sts_panic_index` is
+`amrit_array_grow` and the panics are there (`amrit_panic_index` is
 `unreachable`, which the host sees as a `RuntimeError`), and there are no
 strings or I/O. The wasm profile now passes `-mbulk-memory` so the
 `llvm.memset` of `new Array<T>(n)` and the `memcpy` of a `push` lower to
@@ -253,29 +253,29 @@ AmritScript function through its C ABI, and boxes the result:
 
 ```c
 /* examples/add.ts: add(a: number, b: number): number */
-static napi_value sts_napi_add(napi_env env, napi_callback_info info) {
+static napi_value amrit_napi_add(napi_env env, napi_callback_info info) {
   size_t argc = 2;
   napi_value argv[2];
   if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok)
-    return sts_napi_fail(env, "add: cannot read arguments");
+    return amrit_napi_fail(env, "add: cannot read arguments");
   if (argc < 2)
-    return sts_napi_fail(env, "add expects 2 arguments");
+    return amrit_napi_fail(env, "add expects 2 arguments");
   napi_valuetype type;
   int32_t a;
   if (napi_typeof(env, argv[0], &type) != napi_ok || type != napi_number)
-    return sts_napi_fail(env, "add: argument 1 (a) must be a number");
+    return amrit_napi_fail(env, "add: argument 1 (a) must be a number");
   if (napi_get_value_int32(env, argv[0], &a) != napi_ok)
-    return sts_napi_fail(env, "add: argument 1 (a) could not be converted");
+    return amrit_napi_fail(env, "add: argument 1 (a) could not be converted");
   ...
   napi_value out;
   int32_t result = add(a, b);
   if (napi_create_int32(env, result, &out) != napi_ok)
-    return sts_napi_fail(env, "add: cannot create the result");
+    return amrit_napi_fail(env, "add: cannot create the result");
   return out;
 }
 
 NAPI_MODULE_INIT() {
-  for (size_t i = 0; i < sizeof sts_napi_exports / sizeof sts_napi_exports[0]; i++) { ... }
+  for (size_t i = 0; i < sizeof amrit_napi_exports / sizeof amrit_napi_exports[0]; i++) { ... }
   return exports;
 }
 ```
@@ -286,21 +286,21 @@ A typed-array argument is **borrowed, not copied**. The shim asks
 `napi_get_typedarray_info` for the element kind, length and data pointer,
 checks the kind against the parameter (`Float64Array` for `f64[]`,
 `Int32Array` for `i32[]`, `BigInt64Array` for `i64[]`), and builds the
-`sts_array` header on the C stack over the typed array's own bytes:
+`amrit_array` header on the C stack over the typed array's own bytes:
 
 ```c
 /* examples/arrays.ts: fill(xs: number[], v: number): void */
-static napi_value sts_napi_fill(napi_env env, napi_callback_info info) {
+static napi_value amrit_napi_fill(napi_env env, napi_callback_info info) {
   ...
-  uint64_t mark = sts_arena_mark(); /* arena strings/arrays made for this call are released on return */
-  sts_array xs_hdr; /* borrowed: the Int32Array's own bytes, for this call only */
-  if (!sts_napi_array_arg(env, argv[0], napi_int32_array, &xs_hdr))
-    return sts_napi_fail_at(env, mark, "fill: argument 1 (xs) must be an Int32Array");
-  sts_array *xs = &xs_hdr;
+  uint64_t mark = amrit_arena_mark(); /* arena strings/arrays made for this call are released on return */
+  amrit_array xs_hdr; /* borrowed: the Int32Array's own bytes, for this call only */
+  if (!amrit_napi_array_arg(env, argv[0], napi_int32_array, &xs_hdr))
+    return amrit_napi_fail_at(env, mark, "fill: argument 1 (xs) must be an Int32Array");
+  amrit_array *xs = &xs_hdr;
   ...
   fill(xs, v);
   ...
-  sts_arena_release(mark);
+  amrit_arena_release(mark);
   return out;
 }
 ```
@@ -317,13 +317,13 @@ A returned array is copied into a fresh typed array
 (`napi_create_arraybuffer`, `memcpy`, `napi_create_typedarray`), and a
 returned string into a JS string (`napi_create_string_utf8`), so no JS value
 ever aliases the arena. A string argument is measured and copied into an
-arena `sts_str` (`napi_get_value_string_utf8` twice: NUL-terminated, `len`
+arena `amrit_str` (`napi_get_value_string_utf8` twice: NUL-terminated, `len`
 the UTF-8 byte count, as `s.length` in AmritScript). Every function that
-touches the arena brackets the call with `sts_arena_mark` /
-`sts_arena_release`, on the failure paths too (`sts_napi_fail_at`), so the
+touches the arena brackets the call with `amrit_arena_mark` /
+`amrit_arena_release`, on the failure paths too (`amrit_napi_fail_at`), so the
 arena is back where it was when the wrapper returns and a host never has to
 reset it for bridged calls. Two housekeeping exports remain for hosts that
-call `sts_reset_arena()` between batches anyway, and `sts_free_arena()`
+call `amrit_reset_arena()` between batches anyway, and `amrit_free_arena()`
 releases the chunks. Functions with a class, `T | null`, nested-array,
 `string[]` or `boolean[]` parameter or result are skipped with a comment.
 
@@ -421,7 +421,7 @@ real pass over the buffer on top of the crossing.
 
 | File | Role |
 | --- | --- |
-| `runtime/amritc.h` | Public C header: `sts_str`, `sts_array`, `struct sts_arena`, runtime prototypes (`sts_alloc_array` included), `STS_SYMBOL`. |
+| `runtime/amritc.h` | Public C header: `amrit_str`, `amrit_array`, `struct amrit_arena`, runtime prototypes (`amrit_alloc_array` included), `AMRIT_SYMBOL`. |
 | `runtime/runtime_wasm.c` | Freestanding runtime for the wasm profile: arena over linear memory, arrays, trapping panics. |
 | `src/interop/abi.ts` | Which functions are external, C spelling of every type, `const` from the written-parameter facts, the typed-view table (`Int32Array` / `Float64Array` / `BigInt64Array`), keyword escaping. |
 | `src/interop/header.ts`, `dts.ts`, `wasm.ts`, `napi.ts` | The generators: header, `.d.ts`, its companion loader, the shim. |
@@ -429,17 +429,17 @@ real pass over the buffer on top of the crossing.
 | `scripts/build.sh` | `--profile napi`; `-mbulk-memory` in `--profile wasm`. |
 | `examples/arrays.ts`, `examples/node-addon.mjs`, `examples/node-host.mjs` | The typed-array module, loading the `.node` addon and the `.wasm` module. |
 | `bench/sum.ts`, `bench/ffi.mjs` | The batching benchmark. |
-| `tests/run.js` (`WP8: interop`) | Header/runtime.ts agreement, `-Werror` header compiles and C drivers (a stack-built `sts_array` included), `tsc` on the `.d.ts`, addon builds, loads, type-check errors, `.node` versus `.wasm` agreement on scalars and on typed arrays, in-place `fill`, the wasm trap path, strings through the addon. |
+| `tests/run.js` (`WP8: interop`) | Header/runtime.ts agreement, `-Werror` header compiles and C drivers (a stack-built `amrit_array` included), `tsc` on the `.d.ts`, addon builds, loads, type-check errors, `.node` versus `.wasm` agreement on scalars and on typed arrays, in-place `fill`, the wasm trap path, strings through the addon. |
 
 ## Not in this package
 
-- Strings and I/O from wasm: `runtime_wasm.c` has no `sts_str_*`, `sts_print`
+- Strings and I/O from wasm: `runtime_wasm.c` has no `amrit_str_*`, `amrit_print`
   or files, so string functions stay commented out in the `.d.ts`; a WASI
   build of `runtime.c` would lift that.
 - Zero-copy arrays in wasm: a JS buffer cannot be aliased from linear
   memory, so the loader copies; a host that wants to skip the copy can keep
   its data in `memory.buffer` and call the raw export with a header it
-  builds itself (`sts_alloc_array` is exported for that).
+  builds itself (`amrit_alloc_array` is exported for that).
 - Classes, `T | null`, `string[]`, `boolean[]` and nested arrays across
   either boundary: the generators report those functions as skipped rather
   than silently omitting them.

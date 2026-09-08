@@ -562,16 +562,16 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     );
     // The unchecked module must not declare the panic symbol at all.
     check(
-      "arr_sum with --unchecked-indexing references no sts_panic_index",
-      c.status === 0 && !fs.readFileSync(uncheckedLl, "utf8").includes("sts_panic_index"),
+      "arr_sum with --unchecked-indexing references no amrit_panic_index",
+      c.status === 0 && !fs.readFileSync(uncheckedLl, "utf8").includes("amrit_panic_index"),
       String(c.stderr)
     );
     const checkedLl = path.join(buildDir, "arr_sum.ll");
     if (fs.existsSync(checkedLl)) {
       const oc = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", checkedLl]);
       const outc = String(oc.stdout);
-      // The vector body lives in @sts_main (inlined sum, constant length); @sum itself stays scalar.
-      const mainBody = outc.slice(outc.indexOf("@sts_main("));
+      // The vector body lives in @amrit_main (inlined sum, constant length); @sum itself stays scalar.
+      const mainBody = outc.slice(outc.indexOf("@amrit_main("));
       check(
         "opt -O2 vectorises the checked arr_sum loop once inlined into main (bounds check folded)",
         oc.status === 0 && /<(4|8) x i32>/.test(mainBody),
@@ -584,14 +584,14 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
 // ---- WP6: memory --------------------------------------------------------------------
 // 1. Every mem_ module passes the IR verifier (allocas, scope calls, null compares).
 // 2. mem_stack_struct.ts has no arena allocation left: every object is an alloca, so the
-//    module never references sts_alloc_struct (and therefore emits no arena prelude).
+//    module never references amrit_alloc_struct (and therefore emits no arena prelude).
 // 3. mem_scope_dynamic_array.ts builds a `new Array<number>(n)` per call and is called
 //    100000 times: the function's automatic arena scope releases each one, so the two
 //    `Arena.used()` lines (before and after the loop) must be identical, with no
 //    OS-specific RSS tooling involved. mem_stack_loop / mem_scope_string_temp print
 //    their own `true` for the same property (checked by their .out files).
 // 4. --no-stack-alloc keeps every object in the arena: the same source then does
-//    reference sts_alloc_struct, and still runs to the same output.
+//    reference amrit_alloc_struct, and still runs to the same output.
 if (!only || "memory".includes(only) || only.startsWith("mem")) {
   if (HAS_OPT) {
     for (const name of cases.filter((c) => c.startsWith("mem_") && (!only || c.includes(only)))) {
@@ -605,9 +605,9 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
   if (fs.existsSync(stackLl)) {
     const ir = fs.readFileSync(stackLl, "utf8");
     check(
-      "mem_stack_struct: no sts_alloc_struct and no arena prelude, five `alloca %struct.` objects",
-      !ir.includes("sts_alloc_struct") &&
-        !ir.includes("@sts_arena =") &&
+      "mem_stack_struct: no amrit_alloc_struct and no arena prelude, five `alloca %struct.` objects",
+      !ir.includes("amrit_alloc_struct") &&
+        !ir.includes("@amrit_arena =") &&
         (ir.match(/= alloca %struct\.(Pair|Point|Counter), align 8/g) ?? []).length === 5,
       ir
     );
@@ -622,7 +622,7 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
   check(
     "--no-stack-alloc puts mem_stack_struct's objects back in the arena",
     ns.status === 0 &&
-      nsIr.includes("call i8* @sts_alloc_struct(i64 8)") &&
+      nsIr.includes("call i8* @amrit_alloc_struct(i64 8)") &&
       !/alloca %struct\.(Pair|Point|Counter), align/.test(nsIr),
     String(ns.stderr) || nsIr
   );
@@ -656,7 +656,7 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
 // tests/layout/structs.ts declares ten classes plus three derived ones (WP2b, whose
 // layout is the base's fields followed by their own); tests/layout/structs.c declares
 // the same C structs (flattened) with `_Static_assert(sizeof(struct X) == N)`. The
-// compiler's size for each class is read from the `sts_alloc_struct(i64 N)` in its
+// compiler's size for each class is read from the `amrit_alloc_struct(i64 N)` in its
 // `make<X>` function and must equal the C file's N; then the C program (built with
 // -std=c11 -Wall -Wextra -Werror, which validates the asserts against clang's own
 // layout) fills every struct through the C definition and reads each field back
@@ -674,7 +674,7 @@ if (!only || "layout".includes(only)) {
     const ir = fs.readFileSync(layoutLl, "utf8");
     const fromIr = new Map();
     for (const m of ir.matchAll(/^define [^\n]*@make(\w+)\([^\n]*\{\n([\s\S]*?)^\}/gm)) {
-      const alloc = m[2].match(/@sts_alloc_struct\(i64 (\d+)\)/);
+      const alloc = m[2].match(/@amrit_alloc_struct\(i64 (\d+)\)/);
       if (alloc) fromIr.set(m[1], Number(alloc[1]));
     }
     const fromC = new Map();
@@ -931,7 +931,7 @@ if (!only && HAS_CLANG) {
 //   - every function in src/codegen/runtime.ts has a prototype in amritc.h, and the
 //     header is clean under -Wall -Wextra -Werror as C11 and as C++
 //   - generated headers compile under the same flags and link a C driver (including a
-//     function named `double`, bound through STS_SYMBOL), strings map to sts_str, and
+//     function named `double`, bound through AMRIT_SYMBOL), strings map to amrit_str, and
 //     --strict-exports hides internal functions
 //   - the generated .d.ts type-checks with tsc; string functions are commented out
 //   - the N-API shim compiles warning-free, builds into a .node addon with the napi
@@ -945,12 +945,12 @@ if (!only || "interop".includes(only)) {
   const { RUNTIME_FUNCTIONS } = require(path.join(root, "dist", "codegen", "runtime.js"));
   const runtimeNames = [
     ...RUNTIME_FUNCTIONS.filter((f) => !f.intrinsic).map((f) => f.name),
-    "sts_alloc_struct",
+    "amrit_alloc_struct",
   ];
   const undeclared = runtimeNames.filter((n) => !new RegExp(`\\b${n}\\s*\\(`).test(publicHeader));
   check(
     `amritc.h declares every runtime.ts function (${runtimeNames.length}) and the arena global`,
-    undeclared.length === 0 && publicHeader.includes("extern struct sts_arena sts_arena;"),
+    undeclared.length === 0 && publicHeader.includes("extern struct amrit_arena amrit_arena;"),
     `missing: ${undeclared.join(", ")}`
   );
 
@@ -1010,9 +1010,9 @@ if (!only || "interop".includes(only)) {
   ]);
   const stringsHeader = strings.status === 0 ? fs.readFileSync(sidecar("strings", "h"), "utf8") : "";
   check(
-    "strings.h maps string to `sts_str *` (const parameters) and boolean to bool",
-    stringsHeader.includes("sts_str *pick(bool flag, const sts_str *a, const sts_str *b);") &&
-      stringsHeader.includes("int32_t len2(const sts_str *s);"),
+    "strings.h maps string to `amrit_str *` (const parameters) and boolean to bool",
+    stringsHeader.includes("amrit_str *pick(bool flag, const amrit_str *a, const amrit_str *b);") &&
+      stringsHeader.includes("int32_t len2(const amrit_str *s);"),
     stringsHeader || strings.stderr
   );
 
@@ -1033,8 +1033,8 @@ if (!only || "interop".includes(only)) {
   const keyword = emit("tests/cases/export_fn.ts", ["--emit-header", sidecar("export_fn", "h")]);
   const keywordHeader = keyword.status === 0 ? fs.readFileSync(sidecar("export_fn", "h"), "utf8") : "";
   check(
-    'a function named `double` is declared as double_ bound with STS_SYMBOL("double")',
-    keywordHeader.includes('int32_t double_(int32_t n) STS_SYMBOL("double");') &&
+    'a function named `double` is declared as double_ bound with AMRIT_SYMBOL("double")',
+    keywordHeader.includes('int32_t double_(int32_t n) AMRIT_SYMBOL("double");') &&
       keywordHeader.includes("int32_t helper(int32_t n);"),
     keywordHeader || keyword.stderr
   );
@@ -1117,9 +1117,9 @@ if (!only || "interop".includes(only)) {
         '#include "add.h"',
         '#include "export_fn.h"',
         "int main(void) {",
-        "  sts_str *s = sts_str_from_i32(add(40, 2));",
+        "  amrit_str *s = amrit_str_from_i32(add(40, 2));",
         '  printf("add(40, 2) = %s; double_(21) = %d; next(20) = %d\\n", s->data, double_(21), next(20));',
-        "  sts_free_arena();",
+        "  amrit_free_arena();",
         "  return 0;",
         "}",
         "",
@@ -1183,18 +1183,18 @@ if (!only || "interop".includes(only)) {
     : "";
   check(
     "add.napi.c registers `add` with type checks and a NAPI_MODULE_INIT",
-    shim.includes('{"add", sts_napi_add},') &&
+    shim.includes('{"add", amrit_napi_add},') &&
       shim.includes("type != napi_number") &&
       shim.includes("NAPI_MODULE_INIT()"),
     shim
   );
   check(
-    "strings.napi.c bridges string functions (arena strings in, napi_create_string_utf8 out, released per call) and exposes sts_reset_arena",
-    stringsShim.includes('{"pick", sts_napi_pick},') &&
-      stringsShim.includes("sts_napi_string_arg(env, argv[1])") &&
+    "strings.napi.c bridges string functions (arena strings in, napi_create_string_utf8 out, released per call) and exposes amrit_reset_arena",
+    stringsShim.includes('{"pick", amrit_napi_pick},') &&
+      stringsShim.includes("amrit_napi_string_arg(env, argv[1])") &&
       stringsShim.includes("napi_create_string_utf8(env, result->data, result->len, &out)") &&
-      stringsShim.includes("uint64_t mark = sts_arena_mark();") &&
-      stringsShim.includes('{"sts_reset_arena", sts_napi_reset_arena},'),
+      stringsShim.includes("uint64_t mark = amrit_arena_mark();") &&
+      stringsShim.includes('{"amrit_reset_arena", amrit_napi_reset_arena},'),
     stringsShim
   );
   if (!HAS_CLANG) {
@@ -1292,13 +1292,13 @@ if (!only || "interop".includes(only)) {
   const resHeader = res.status === 0 ? fs.readFileSync(sidecar("res_export", "h"), "utf8") : "";
   check(
     "res_export.h declares the packed word a small Result travels in both ways, the arena object for the rest, and asserts the word is 8 bytes",
-    resHeader.includes("typedef struct sts_result_i32_i32_word {") &&
+    resHeader.includes("typedef struct amrit_result_i32_i32_word {") &&
       resHeader.includes("union { int32_t value; int32_t error; } as;") &&
-      resHeader.includes("STS_RESULT_ASSERT(sizeof(sts_result_i32_i32_word) == 8,") &&
-      resHeader.includes("sts_result_i32_i32_word half(int32_t n);") &&
-      resHeader.includes("sts_result_void_i32_word checkPort(int32_t port);") &&
-      resHeader.includes("struct sts_result_i32__IoError *openFile(const sts_str *path);") &&
-      resHeader.includes("int32_t describe(sts_result_i32_i32_word r);"),
+      resHeader.includes("AMRIT_RESULT_ASSERT(sizeof(amrit_result_i32_i32_word) == 8,") &&
+      resHeader.includes("amrit_result_i32_i32_word half(int32_t n);") &&
+      resHeader.includes("amrit_result_void_i32_word checkPort(int32_t port);") &&
+      resHeader.includes("struct amrit_result_i32__IoError *openFile(const amrit_str *path);") &&
+      resHeader.includes("int32_t describe(amrit_result_i32_i32_word r);"),
     resHeader
   );
   const resDts = res.status === 0 ? fs.readFileSync(sidecar("res_export", "d.ts"), "utf8") : "";
@@ -1331,20 +1331,20 @@ if (!only || "interop".includes(only)) {
         '#include "res_export.h"',
         "int main(void) {",
         "  for (int32_t n = 8; n <= 9; n++) {",
-        "    sts_result_i32_i32_word r = half(n);",
+        "    amrit_result_i32_i32_word r = half(n);",
         '    printf("half(%d) %s %d via %d\\n", n, r.ok ? "ok" : "err",',
         "           r.ok ? r.as.value : r.as.error, describe(r));",
         "  }",
         "  /* a Result the C side builds itself, handed to AmritScript by value */",
-        "  sts_result_i32_i32_word made = { 1, { 41 } };",
+        "  amrit_result_i32_i32_word made = { 1, { 41 } };",
         '  printf("C-built %d ", describe(made));',
         "  made.ok = 0; made.as.error = 5;",
         '  printf("%d\\n", describe(made));',
-        "  sts_result_void_i32_word v = checkPort(0), w = checkPort(443);",
+        "  amrit_result_void_i32_word v = checkPort(0), w = checkPort(443);",
         '  printf("checkPort %d %d %d\\n", v.ok, v.as.error, w.ok);',
-        "  struct sts_result_i32__IoError *o = openFile(sts_str_new(\"\", 0));",
+        "  struct amrit_result_i32__IoError *o = openFile(amrit_str_new(\"\", 0));",
         '  printf("openFile %d %d\\n", o->ok, o->error->code);',
-        "  sts_free_arena();",
+        "  amrit_free_arena();",
         "  return 0;",
         "}",
         "",
@@ -1368,10 +1368,10 @@ if (!only || "interop".includes(only)) {
   const resShim = res.status === 0 ? fs.readFileSync(sidecar("res_export", "napi.c"), "utf8") : "";
   check(
     "res_export.napi.c boxes a by-value Result as { ok, value } / { ok, error } and skips the pointer ones",
-    resShim.includes("static napi_status sts_napi_result(napi_env env, bool ok, napi_value payload, napi_value *out)") &&
+    resShim.includes("static napi_status amrit_napi_result(napi_env env, bool ok, napi_value payload, napi_value *out)") &&
       resShim.includes('napi_set_named_property(env, obj, ok ? "value" : "error", payload)') &&
-      resShim.includes('{"half", sts_napi_half},') &&
-      resShim.includes('{"describe", sts_napi_describe},') &&
+      resShim.includes('{"half", amrit_napi_half},') &&
+      resShim.includes('{"describe", amrit_napi_describe},') &&
       resShim.includes('napi_get_named_property(env, argv[0], r_flag ? "value" : "error", &r_arm)') &&
       resShim.includes("openFile(path: string): Result<number, IoError> -- not bridged"),
     resShim
@@ -1466,8 +1466,8 @@ if (!only || "interop".includes(only)) {
 
   // ---- WP4/WP8: arrays and strings across the boundary ----------------------------
   // examples/arrays.ts takes and returns Int32Array / Float64Array / BigInt64Array. Checks:
-  //   - the header spells a read-only array parameter `const sts_array *` and a written one
-  //     `sts_array *`, compiles under -Werror, and a C driver passes a stack-built header
+  //   - the header spells a read-only array parameter `const amrit_array *` and a written one
+  //     `amrit_array *`, compiles under -Werror, and a C driver passes a stack-built header
   //   - the .d.ts declares typed-array signatures, type-checks, and its companion .mjs loader
   //     marshals typed arrays into the wasm build (linked with runtime/runtime_wasm.c),
   //     copies results out, copies written parameters back, and survives a trap
@@ -1475,10 +1475,10 @@ if (!only || "interop".includes(only)) {
   //     fresh typed arrays, bridges strings, and agrees with the wasm build value for value
   const arraysHeader = arrays.status === 0 ? fs.readFileSync(sidecar("arrays", "h"), "utf8") : "";
   check(
-    "arrays.h: read-only array parameters are `const sts_array *`, written ones `sts_array *`, results `sts_array *`",
-    arraysHeader.includes("double sumF64(const sts_array *xs);") &&
-      arraysHeader.includes("void fill(sts_array *xs, int32_t v);") &&
-      arraysHeader.includes("sts_array *scale(const sts_array *xs, double k);") &&
+    "arrays.h: read-only array parameters are `const amrit_array *`, written ones `amrit_array *`, results `amrit_array *`",
+    arraysHeader.includes("double sumF64(const amrit_array *xs);") &&
+      arraysHeader.includes("void fill(amrit_array *xs, int32_t v);") &&
+      arraysHeader.includes("amrit_array *scale(const amrit_array *xs, double k);") &&
       arraysHeader.includes("-- xs: int32_t elements, returns int64_t elements"),
     arraysHeader || arrays.stderr
   );
@@ -1488,7 +1488,7 @@ if (!only || "interop".includes(only)) {
     arraysDts.includes("  scale(xs: Float64Array, k: number): Float64Array;") &&
       arraysDts.includes("  sumI64(xs: BigInt64Array): bigint;") &&
       arraysDts.includes("  fill(xs: Int32Array, v: number): void;") &&
-      arraysDts.includes("  sts_reset_arena(): void;"),
+      arraysDts.includes("  amrit_reset_arena(): void;"),
     arraysDts || arrays.stderr
   );
   check(
@@ -1496,7 +1496,7 @@ if (!only || "interop".includes(only)) {
     fs.existsSync(sidecar("arrays", "mjs")) &&
       fs
         .readFileSync(sidecar("arrays", "mjs"), "utf8")
-        .includes("raw.sts_alloc_array(BigInt(elemSize), BigInt(value.length))"),
+        .includes("raw.amrit_alloc_array(BigInt(elemSize), BigInt(value.length))"),
     arrays.stderr
   );
   if (fs.existsSync(sidecar("arrays", "d.ts"))) {
@@ -1514,12 +1514,12 @@ if (!only || "interop".includes(only)) {
         '#include "arrays.h"',
         "int main(void) {",
         "  int32_t buf[4] = {1, 2, 3, 4};",
-        "  sts_array xs = {4, 4, (char *)buf}; /* a host buffer, borrowed for the calls */",
+        "  amrit_array xs = {4, 4, (char *)buf}; /* a host buffer, borrowed for the calls */",
         "  int32_t before = sumI32(&xs);",
         "  fill(&xs, 5);",
-        "  sts_array *sq = squares(4); /* arena-owned */",
+        "  amrit_array *sq = squares(4); /* arena-owned */",
         '  printf("sumI32 = %d; after fill buf[3] = %d, sum %d; squares len %llu last %d\\n", before, buf[3], sumI32(&xs), (unsigned long long)sq->len, ((int32_t *)sq->data)[3]);',
-        "  sts_free_arena();",
+        "  amrit_free_arena();",
         "  return 0;",
         "}",
         "",
@@ -1533,7 +1533,7 @@ if (!only || "interop".includes(only)) {
     );
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
-      "a -Werror C driver passes a stack-built sts_array through arrays.h and reads a returned one",
+      "a -Werror C driver passes a stack-built amrit_array through arrays.h and reads a returned one",
       run !== null &&
         String(run.stdout).trim() === "sumI32 = 10; after fill buf[3] = 5, sum 20; squares len 4 last 9",
       String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")

@@ -1,5 +1,5 @@
 // Escape-analysed stack allocation (WP6): objects that provably do not outlive
-// their function become entry-block allocas. No `sts_alloc_struct` anywhere
+// their function become entry-block allocas. No `amrit_alloc_struct` anywhere
 // in this module.
 interface Pair {
   first: number;

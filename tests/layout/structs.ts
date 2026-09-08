@@ -112,7 +112,7 @@ class J {
   }
 }
 
-// One allocation per class: tests/run.js reads `sts_alloc_struct(i64 N)` from each body.
+// One allocation per class: tests/run.js reads `amrit_alloc_struct(i64 N)` from each body.
 // (f64 and struct arguments arrive as parameters: in i32 mode a literal is an i32.)
 function makeA(): A {
   return new A(1);

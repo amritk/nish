@@ -17,7 +17,7 @@ import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program";
 import { T_ERROR, T_I32, T_VOID } from "./types";
 
 /** Symbol the entry module's `export function main` is emitted under. */
-export const ENTRY_MAIN_SYMBOL: string = "sts_main";
+export const ENTRY_MAIN_SYMBOL: string = "amrit_main";
 
 export function isExported(node: Node): boolean {
   return (node.flags & FLAG_EXPORTED) !== 0;
@@ -63,8 +63,8 @@ export function collectFunctionSignature(ctx: CheckContext, decl: Node): Functio
   sig.origin = ctx.source;
   sig.exported = isExported(decl);
   sig.role = ROLE_FUNCTION;
-  if (name.startsWith("sts_")) {
-    ctx.error(decl.children[0], "Function names starting with `sts_` are reserved for the runtime");
+  if (name.startsWith("amrit_")) {
+    ctx.error(decl.children[0], "Function names starting with `amrit_` are reserved for the runtime");
   }
   collectParams(ctx, sig, decl.children[1], -1);
   const returnAnnotation = decl.children[2];
@@ -78,7 +78,7 @@ export function collectFunctionSignature(ctx: CheckContext, decl: Node): Functio
 }
 
 /**
- * The entry module's `export function main`, renamed to `@sts_main` so the
+ * The entry module's `export function main`, renamed to `@amrit_main` so the
  * emitter's C-ABI wrapper can own `@main`. The wrapper hands an `i32` to the
  * OS, so `main` returns `void` or an `i32`-lowered number.
  */

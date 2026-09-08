@@ -5,11 +5,11 @@
 @.str.4 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c",\00" }, align 8
 @.str.5 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c"zzz\00" }, align 8
 
-declare noundef i64 @sts_arena_mark() #1
-declare void @sts_arena_release(i64 noundef) #1
-declare noalias noundef nonnull align 8 i8* @sts_str_new(i8* noundef readonly nocapture, i64 noundef) #1
-declare zeroext i1 @sts_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
-declare zeroext i1 @sts_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #2
+declare noundef i64 @amrit_arena_mark() #1
+declare void @amrit_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @amrit_str_new(i8* noundef readonly nocapture, i64 noundef) #1
+declare zeroext i1 @amrit_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare zeroext i1 @amrit_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #2
 
 define noundef i32 @find(i8* noundef nonnull noalias readonly align 8 nocapture %s, i8* noundef nonnull noalias readonly align 8 nocapture %needle) #0 {
 entry:
@@ -28,7 +28,7 @@ str.find:
   br i1 %6, label %str.probe, label %str.miss
 
 str.probe:
-  %7 = call zeroext i1 @sts_str_at(i8* %s, i64 %4, i8* %needle)
+  %7 = call zeroext i1 @amrit_str_at(i8* %s, i64 %4, i8* %needle)
   br i1 %7, label %str.found, label %str.next
 
 str.next:
@@ -50,11 +50,11 @@ entry:
   %s.addr = alloca i8*, align 8
   %flags.addr = alloca i32, align 4
   %chr = alloca i8, align 1
-  %arena.mark = call i64 @sts_arena_mark()
+  %arena.mark = call i64 @amrit_arena_mark()
   store i8* bitcast ({ i64, [8 x i8] }* @.str.0 to i8*), i8** %s.addr, align 8
   store i32 0, i32* %flags.addr, align 4
   %0 = load i8*, i8** %s.addr, align 8
-  %1 = call zeroext i1 @sts_str_at(i8* %0, i64 0, i8* bitcast ({ i64, [4 x i8] }* @.str.1 to i8*))
+  %1 = call zeroext i1 @amrit_str_at(i8* %0, i64 0, i8* bitcast ({ i64, [4 x i8] }* @.str.1 to i8*))
   br i1 %1, label %if.then, label %if.end
 
 if.then:
@@ -70,7 +70,7 @@ if.end:
   %7 = bitcast i8* bitcast ({ i64, [4 x i8] }* @.str.2 to i8*) to i64*
   %8 = load i64, i64* %7, align 8
   %9 = sub i64 %6, %8
-  %10 = call zeroext i1 @sts_str_at(i8* %4, i64 %9, i8* bitcast ({ i64, [4 x i8] }* @.str.2 to i8*))
+  %10 = call zeroext i1 @amrit_str_at(i8* %4, i64 %9, i8* bitcast ({ i64, [4 x i8] }* @.str.2 to i8*))
   br i1 %10, label %if.then.1, label %if.end.1
 
 if.then.1:
@@ -86,7 +86,7 @@ if.end.1:
   %16 = bitcast i8* bitcast ({ i64, [14 x i8] }* @.str.3 to i8*) to i64*
   %17 = load i64, i64* %16, align 8
   %18 = sub i64 %15, %17
-  %19 = call zeroext i1 @sts_str_at(i8* %13, i64 %18, i8* bitcast ({ i64, [14 x i8] }* @.str.3 to i8*))
+  %19 = call zeroext i1 @amrit_str_at(i8* %13, i64 %18, i8* bitcast ({ i64, [14 x i8] }* @.str.3 to i8*))
   br i1 %19, label %if.then.2, label %if.end.2
 
 if.then.2:
@@ -98,8 +98,8 @@ if.then.2:
 if.end.2:
   %22 = trunc i64 44 to i8
   store i8 %22, i8* %chr, align 1
-  %23 = call i8* @sts_str_new(i8* %chr, i64 1)
-  %24 = call zeroext i1 @sts_str_eq(i8* %23, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %23 = call i8* @amrit_str_new(i8* %chr, i64 1)
+  %24 = call zeroext i1 @amrit_str_eq(i8* %23, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
   br i1 %24, label %if.then.3, label %if.end.3
 
 if.then.3:
@@ -117,7 +117,7 @@ if.end.3:
   %32 = add i32 %29, %31
   %33 = load i32, i32* %flags.addr, align 4
   %34 = add i32 %32, %33
-  call void @sts_arena_release(i64 %arena.mark)
+  call void @amrit_arena_release(i64 %arena.mark)
   ret i32 %34
 }
 

@@ -13,10 +13,14 @@
  * Prose is exempt: comments and `docs/` are written for humans and read badly
  * full of constants. The rule is only about strings the program itself prints.
  *
- * What deliberately does not live here is the `sts_` prefix on the runtime's C
- * symbols. That prefix is ABI — it is in every golden `.ll`, in `runtime.c`,
- * and in binaries users have already linked — and it was never derived from
- * the product name. Treat it as opaque; a rename does not follow it.
+ * What deliberately does not live here is the `amrit_` prefix on the runtime's
+ * C symbols. That prefix is ABI — it is in every golden `.ll`, in `runtime.c`,
+ * and in every binary linked against the runtime. Treat it as opaque: it is
+ * frozen, and a rename does not follow it. (It was `sts_` before the
+ * AmritScript rename. Rewriting it was the last step of that rename, done
+ * while nothing had been released and every golden could be regenerated, and
+ * "Where the name lives" in `docs/ARCHITECTURE.md` says why that does not
+ * happen again.)
  */
 
 /** The language, as a diagnostic names it: "`eval` is forbidden in AmritScript". */

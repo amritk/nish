@@ -58,7 +58,7 @@ export const R_ERR: i32 = 2;
 export const RESULT_PAYLOAD_SHIFT: i32 = 32;
 
 /** The one header type every array shares; `ARRAY_TYPE` in `src/codegen/runtime.ts`. */
-export const ARRAY_STRUCT: string = "%struct.sts_array";
+export const ARRAY_STRUCT: string = "%struct.amrit_array";
 
 /**
  * IEEE-754 types. Every float lowering is the same instruction at both
@@ -276,7 +276,7 @@ export class TypeTable {
 
   /** The LLVM struct name (without the `%struct.` prefix) backing a `Result`. */
   resultStructName(type: i32): string {
-    return `sts_result.${this.mangle(this.refs[type])}.${this.mangle(this.errs[type])}`;
+    return `amrit_result.${this.mangle(this.refs[type])}.${this.mangle(this.errs[type])}`;
   }
 
   /** The types that may be nullable: every value that is an LLVM pointer. */

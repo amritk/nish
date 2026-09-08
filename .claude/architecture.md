@@ -58,8 +58,9 @@ Compilation                                                            src/compi
 - **The name lives in two files.** `src/branding.ts` and `self/branding.ts` are
   the only source files that spell the project's name. Every string the
   compiler prints builds it from `LANGUAGE` / `CLI` there; prose is exempt, and
-  the `sts_` prefix on the runtime's C symbols is ABI rather than branding and
-  never follows a rename. See "Where the name lives" in `docs/ARCHITECTURE.md`.
+  the `amrit_` prefix on the runtime's C symbols is ABI rather than branding:
+  it is frozen and a rename does not follow it. See "Where the name lives" in
+  `docs/ARCHITECTURE.md`.
 - **The language is the reference.** `docs/LANGUAGE.md` is normative and every
   rule there cites the test case that proves it; the `docs/wp*.md` notes are
   historical, and where they disagree LANGUAGE.md wins.

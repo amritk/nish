@@ -87,9 +87,9 @@ export function generateDts(compilation: Compilation): string {
   if (bridged.needsRuntime) {
     lines.push(
       "  /** runtime_wasm.c: recycle everything the module allocated (arrays passed and returned are already copies). */",
-      "  sts_reset_arena(): void;",
-      "  /** runtime_wasm.c: same as sts_reset_arena; wasm memory is never returned to the host. */",
-      "  sts_free_arena(): void;"
+      "  amrit_reset_arena(): void;",
+      "  /** runtime_wasm.c: same as amrit_reset_arena; wasm memory is never returned to the host. */",
+      "  amrit_free_arena(): void;"
     );
   }
 
