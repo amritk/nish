@@ -376,9 +376,10 @@ Four things are worth carrying into S5:
    `tests/cases/`. Three S3 leftovers came out too — `p.f++`, `p.f |= 1` and
    `a[i] &= 1` were accepted by stage1 and refused by stage0 — and they are
    fixed with `reject_*` cases that now pin both compilers.
-4. **stage1 emits no debug info.** `-g` is stage0's, for the same reason D4
-   drops `--link`: a DWARF metadata builder is not on the path to the bootstrap
-   proof. The driver reports the flag rather than ignoring it.
+4. **stage1 emitted no debug info yet.** `-g` was left to stage0 at S4, for
+   the same reason D4 drops `--link`: a DWARF metadata builder was not on the
+   path to the bootstrap proof, and the driver reported the flag rather than
+   ignoring it. *That gap is now closed — see "`-g` on both sides" below.*
 
 ### What S3 cost
 
@@ -583,9 +584,55 @@ object, and whether that object may be an `alloca` is the same `localOutcome`
 walk a local holding an allocation gets — and the oracle is what said the two
 walks agreed, over 274 of 274 programs, before the bootstrap was allowed to
 close.
-`-g` and the interop sidecars stayed stage0's, as D4 said they would: the
-DWARF and the C header for a `Result` are stage0-only changes, and the driver
-still reports those flags by name rather than ignoring them.
+The interop sidecars stayed stage0's, as D4 said they would: the C header for
+a `Result` is a stage0-only change and the driver still reports those flags by
+name rather than ignoring them. `-g` was stage0's here too, and is no longer —
+see the section below.
+
+### `-g` on both sides
+
+`self/debug.ts` is the port of `src/codegen/debug.ts`: the same compile unit,
+the same `DISubprogram` per function, the same `DILocation` on every
+instruction, the same `llvm.dbg.value` / `llvm.dbg.declare`, and the same type
+mapping down to the packed `Result` word a call boundary carries (WP17).
+`self/ir.ts` grew the metadata list the builder writes into, `-g` is a flag of
+`self/compile.ts` and of `scripts/amritc.sh` — which hands it to
+`scripts/build.sh` as well, so the DWARF survives the link — and
+`tests/cases/dbg_locals` and `tests/cases/dbg_result` are compared by
+`tests/self/ir_oracle.js` byte for byte, metadata numbering included, rather
+than skipped.
+
+**One thing had to change on stage0's side, and it is the same shape as §4's
+module-header problem.** A `DIFile` carries a filename and a directory, and
+stage0 spelled the directory `process.cwd()`. stage1 has no working directory
+to ask for, and D4 will not grow the runtime for one string, so *both*
+compilers now write `.` — which is what clang's `-fdebug-compilation-dir=.`
+writes, and which makes a `-g` build depend only on the command line rather
+than on where it ran. For a relatively-spelled entry the two agree on the whole
+`DIFile`, exactly as they already agreed on the module header.
+
+Writing the port also found a stage0 bug of the kind §4 said the oracle is for.
+A class reached through an import — `tests/link/reachable_struct`, where
+`Entry` is never named by the importer — was described with the *importer's*
+`DIFile` and with its declaration offset looked up in the *importer's* line
+table, so a debugger was pointed at a line in the wrong file. Both compilers
+now describe a struct against the file that declares it, which is why a program
+with imports has more than one `DIFile`.
+
+The two disagreed on one more thing, and it was stage1's: `IRBlock.terminated`
+spelled `src/`'s `^(ret|br|switch|unreachable)\b` as "the word, then a space or
+the end", which is not `\b`. With `-g` an `unreachable` is written
+`unreachable, !dbg !9`, the test said "not a terminator", and the emitter added
+a second one. It is a word-boundary test now.
+
+All three came out of the same one-off experiment, which is worth recording
+because the suite does not run it: the oracle's own corpus compiled by both
+compilers with `-g` **forced on every file**, rather than only on the two cases
+whose `.args` ask for it. That is 278 programs and `self/` itself, and it is
+what turned "the two `-g` goldens match" into "the two compilers agree about
+DWARF". The suite compares the two cases that ask for `-g`, because forcing the
+flag over the whole corpus would double the oracle's four minutes for a
+property the port is not going to lose quietly.
 
 ---
 
@@ -678,10 +725,12 @@ lines of `bash` with no runtime growth at all. It mirrors stage0's spelling
 exactly — `-o <file.ll>`, `-o <dir>/`, `--link <exe>` writing `<exe>.ll` for a
 single module and `<exe>.modules/` for a program with imports — so the two
 compilers leave the same files behind and a build script can be pointed at
-either. The flags that are stage0's rather than missing (`-g`, the interop
-sidecars, the dumps) are refused **by name**, with what to run instead: a flag
-that is silently ignored is how a build ends up not carrying the thing it
-asked for.
+either, `-g` included: the wrapper passes it to stage1, which puts the DWARF
+in the `.ll`, and on to `scripts/build.sh`, which compiles `runtime.c` with it
+and skips the strip step. The flags that are stage0's rather than missing (the
+interop sidecars, the dumps) are refused **by name**, with what to run instead:
+a flag that is silently ignored is how a build ends up not carrying the thing
+it asked for.
 
 What the wrapper is not is a second implementation of the driver. It plans no
 output, resolves no module and reads no source; it makes a directory, runs the
@@ -700,6 +749,6 @@ and this one would only pay for the same two links again.
 **stage0 stays the published package.** `npm install -g amritc` still ships
 `dist/`, and it has to: it is the seed every bootstrap starts from, the oracle
 every `self/` phase is compared against, and the only one of the two that emits
-DWARF and the interop sidecars. What changed is that a checkout can now produce
+the interop sidecars. What changed is that a checkout can now produce
 the self-hosted compiler in one command, and that compiler compiles the same
 programs about eight times faster (§4, D5).

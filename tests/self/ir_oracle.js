@@ -18,8 +18,8 @@
  * are skipped, and each skip is a fact rather than a file that is allowed to
  * disagree:
  *
- *   - its `.args` ask for something stage1 does not do (`-g`, the dump flags):
- *     debug info is stage0's, as `--link` is (docs/wp14-selfhost.md §3a D4);
+ *   - its `.args` ask for something stage1 does not do (the dump flags), which
+ *     is stage0's the way `--link` is (docs/wp14-selfhost.md §3a D4);
  *   - stage0 itself rejects it, so there is no IR to compare against.
  */
 const fs = require("node:fs");
@@ -38,6 +38,10 @@ const SHARED_FLAGS = new Set([
   "--nsw",
   "--no-stack-alloc",
   "--runtime-decls",
+  // `-g` is compared like any other flag, metadata and all: the `DIFile` both
+  // compilers write names the entry as it was spelled and `.` for the
+  // directory, so nothing here depends on the working directory.
+  "-g",
 ]);
 const VALUE_FLAGS = new Set(["--number-mode", "--target"]);
 

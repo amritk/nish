@@ -17,11 +17,15 @@
 #   --link <exe>    <exe>.ll (or <exe>.modules/ for a program with imports),
 #                   then scripts/build.sh with runtime/runtime.c
 #   --profile <p>   the link profile (default: speed)
+#   -g              DWARF: stage1 puts it in the .ll, and this hands it to
+#                   scripts/build.sh as well so runtime.c is compiled with it
+#                   and the binary is not stripped, exactly as stage0's
+#                   `--link -g` does
 #
 # Every other flag goes straight to the compiler. The flags that are stage0's
-# rather than missing — the interop sidecars, `-g`, the dumps — are refused by
-# name with what to run instead, because a flag that is quietly ignored is how
-# a build ends up not carrying the thing it asked for.
+# rather than missing — the interop sidecars, the dumps — are refused by name
+# with what to run instead, because a flag that is quietly ignored is how a
+# build ends up not carrying the thing it asked for.
 #
 # AMRITC=<binary> picks the compiler (default: build/amritc).
 # Exit codes match stage0's: 0 ok, 1 compile error, 2 usage, 3 toolchain.
@@ -33,6 +37,7 @@ entry=""
 output=""
 link=""
 profile=speed
+debug=0
 flags=()
 
 usage() {
@@ -42,7 +47,7 @@ usage: scripts/amritc.sh <entry.ts> [-o <out.ll>|<dir>/] [--link <exe>]
 Drives the self-hosted compiler (build/amritc, or $AMRITC) and adds the
 directory creation and the link step it does not do itself (wp14 D4).
 Compiler flags: --number-mode i32|f64, --plain, --strict-exports, --nsw,
---no-stack-alloc, --unchecked-indexing, --runtime-decls, --target <triple>.
+--no-stack-alloc, --unchecked-indexing, --runtime-decls, --target <triple>, -g.
 EOF
   exit "${1:-2}"
 }
@@ -58,7 +63,8 @@ while [ $# -gt 0 ]; do
     --link) link="${2:-}"; [ -n "$link" ] || usage; shift 2 ;;
     --profile) profile="${2:-}"; [ -n "$profile" ] || usage; shift 2 ;;
     -h|--help) usage 0 ;;
-    -g|--emit-header|--emit-dts|--emit-napi|--emit-ast|--emit-checked|--json|-v|--version)
+    -g) debug=1; flags+=("-g"); shift ;;
+    --emit-header|--emit-dts|--emit-napi|--emit-ast|--emit-checked|--json|-v|--version)
       stage0_only "$1" ;;
     --number-mode|--target) flags+=("$1" "${2:-}"); [ -n "${2:-}" ] || usage; shift 2 ;;
     -*) flags+=("$1"); shift ;;
@@ -133,7 +139,12 @@ if [ "${#modules[@]}" -eq 1 ]; then
   modules=("$link.ll")
 fi
 
-if ! bash scripts/build.sh "${modules[@]}" runtime/runtime.c -o "$link" --profile "$profile"; then
+# `-g` reaches the linker too: runtime.c is compiled with debug info and the
+# profile's strip step is skipped, so the DWARF stage1 emitted survives.
+link_flags=()
+if [ "$debug" = 1 ]; then link_flags+=(-g); fi
+if ! bash scripts/build.sh "${modules[@]}" runtime/runtime.c -o "$link" --profile "$profile" \
+  "${link_flags[@]+"${link_flags[@]}"}"; then
   echo "amritc.sh: --link: scripts/build.sh failed; the IR is in ${modules[*]}" >&2
   exit 3
 fi

@@ -9,6 +9,13 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Changed
 
+- **A `DIFile`'s directory is `.`, not the working directory.** `-g` metadata
+  now depends only on the command line, so a debug build is reproducible across
+  machines — which is what clang's `-fdebug-compilation-dir=.` is for — and the
+  self-hosted compiler, which has no `process.cwd()` to ask for and no runtime
+  budget to grow one (WP14 D4), emits the same bytes for a relatively-spelled
+  entry, exactly as it already did for the module header.
+
 - **Renamed to AmritScript, and the name moved into two files.** The language
   is **AmritScript** and the compiler is **`amritc`** (npm package, `bin`
   entry, `runtime/amritc.h`, `runtime/amritc.d.ts`, `scripts/amritc.sh`,
@@ -25,6 +32,22 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   now says so.
 
 ### Added
+
+- **The self-hosted compiler emits DWARF (`-g`).** `self/debug.ts` is the port
+  of `src/codegen/debug.ts`: one `DICompileUnit`, a `DISubprogram` per
+  function, a `DILocation` on every instruction, `llvm.dbg.value` for
+  parameters and `llvm.dbg.declare` for `let`/`const` and `for (const x of a)`
+  slots, and the same type mapping down to the packed `Result` word a call
+  boundary carries (WP17). `self/ir.ts` grew the metadata list it builds into,
+  `-g` is a flag of `self/compile.ts`, and `scripts/amritc.sh` takes it and
+  hands it to `scripts/build.sh` as well, so the DWARF survives the link
+  instead of being stripped with the profile. `tests/cases/dbg_locals` and
+  `tests/cases/dbg_result` are no longer skipped by `tests/self/ir_oracle.js`:
+  the two compilers' output is compared byte for byte, metadata numbering
+  included, and the runner check that used to prove `-g` was refused by name
+  now links `examples/hello.ts` through the wrapper and finds `.debug_info` in
+  the binary. `--emit-header` keeps that refusal for the flags that are still
+  stage0's.
 
 - **`Result` across the ABI (WP17).** A `Result<T, E>` whose two payloads are
   each a scalar of at most four bytes — `void`, `boolean`, `u8`, `u16`,
@@ -617,6 +640,14 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   keeps its own rejection for the same reason.
 
 ### Fixed
+
+- **`-g` described an imported class against the wrong file.** A class reached
+  through an import — one the importing module never names, as in
+  `tests/link/reachable_struct` — was given the importer's `DIFile` and a line
+  number looked up in the importer's line table, so a debugger was sent to a
+  line in the wrong source. A struct is now described against the file that
+  declares it, which is why a program with imports carries more than one
+  `DIFile`.
 
 - **A compound integer division contributes its panic callee.** `x /= k`,
   `p.f %= k` and their `/=` twins can call the noreturn `sts_panic_div` exactly

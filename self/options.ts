@@ -33,6 +33,12 @@ export class Options {
   target: string;
   /** Emit `nsw` / `nuw` on user-level integer `add`/`sub`/`mul` (WP9). */
   nsw: boolean;
+  /**
+   * Emit DWARF debug metadata (`-g`, WP10): a compile unit, a `DISubprogram`
+   * per function, a `!dbg` location per instruction and the local variables
+   * (`self/debug.ts`). Off leaves the IR byte for byte what it was.
+   */
+  debugInfo: boolean;
 
   constructor() {
     this.numberMode = NUMBER_MODE_I32;
@@ -43,5 +49,6 @@ export class Options {
     this.uncheckedIndexing = false;
     this.target = "";
     this.nsw = false;
+    this.debugInfo = false;
   }
 }

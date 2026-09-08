@@ -22,10 +22,13 @@
 //   - **The emitter is a class the families are given**, not an interface with
 //     a table of closures. `Emitter` is `EmitContext` and `Emitter` at once,
 //     because the language has no function values to separate them with.
-//   - **No debug info.** `-g` is stage0's; stage1 emits no `DISubprogram`, no
-//     `DILocation` and no `llvm.dbg.declare`, for the same reason D4 drops
-//     `--link`: it is not on the path to the bootstrap proof and it would cost
-//     a metadata builder to get there. `--emit-debug` is reported, not ignored.
+//   - **Debug info is a field, not a table of hooks.** `-g` builds the DWARF
+//     metadata in `self/debug.ts`, which stage0 reaches through an optional
+//     `DebugInfo` and this emitter through a `DebugInfo | null` that every
+//     call site narrows with `!== null`, because the language has no `?.`.
+//     Where it attaches is the same three places: the `DISubprogram` and the
+//     parameters at `emitFunction`, the `!dbg` location around every statement
+//     and expression, and an `llvm.dbg.declare` beside each local's alloca.
 
 import {
   functionAttributes,
@@ -35,6 +38,7 @@ import {
   FactsTable,
   FunctionFacts,
 } from "./attributes";
+import { DebugInfo } from "./debug";
 import { emitArrayLiteral, emitElementAccess, emitForOf } from "./emit_arrays";
 import { emitBuiltinCall, emitIdentifierBuiltinCall, emitNamespaceProperty, isIdentifierBuiltinCall } from "./emit_builtins";
 import {
@@ -173,6 +177,8 @@ export class Emitter {
   /** Interned string literals: text -> index into `stringRefs`. */
   strings: StringMap;
   stringRefs: string[];
+  /** DWARF metadata builder (`-g`); `null` without debug info, and then nothing is attached. */
+  debug: DebugInfo | null;
 
   constructor(unit: AnalysisUnit, table: TypeTable, opts: Options, runtime: RuntimeTable, facts: FactsTable) {
     this.program = unit.program;
@@ -194,6 +200,10 @@ export class Emitter {
     this.usedRuntime = new StringSet();
     this.strings = new StringMap();
     this.stringRefs = [];
+    this.debug = null;
+    if (opts.debugInfo) {
+      this.debug = new DebugInfo(this.module, this.program, table);
+    }
     if (opts.target.length > 0) {
       // The driver validated the spec; an unknown one here is a programming error.
       const target = resolveTarget(opts.target);
@@ -279,6 +289,11 @@ export class Emitter {
     this.loops = [];
     this.current = facts;
     this.currentSig = sig;
+    // `-g`: the DISubprogram, the function's default location, and the parameters' dbg.value calls.
+    const debug = this.debug;
+    if (debug !== null) {
+      debug.beginFunction(this.fn, sig, false, "");
+    }
 
     // WP6: an automatic arena scope remembers the bump position before anything is allocated.
     if (facts.arenaScope) {
@@ -349,6 +364,11 @@ export class Emitter {
       const group: string[] = [];
       group.push("nounwind");
       fn.attrGroup = this.module.attrGroupFor(group);
+    }
+    // `-g`: an artificial subprogram at the user's `main`, so `break main` lands somewhere sensible.
+    const debug = this.debug;
+    if (debug !== null) {
+      debug.beginFunction(fn, userMain, true, "main");
     }
     const freeArena = this.useRuntime("sts_free_arena");
     if (this.program.usesArgv) {
@@ -508,7 +528,18 @@ export class Emitter {
     }
   }
 
+  /**
+   * Lower one statement, under its own `-g` location. The dispatch is split out
+   * so the location is restored on every path: the `switch` below returns from
+   * each arm, and `src/` gets the same shape for free from its handler table.
+   */
   emitStatement(stmt: Node): void {
+    const saved = this.enterLocation(stmt);
+    this.emitStatementKind(stmt);
+    this.fn.setLocation(saved);
+  }
+
+  emitStatementKind(stmt: Node): void {
     switch (stmt.kind) {
       case N_RETURN:
         this.emitReturn(stmt);
@@ -597,20 +628,43 @@ export class Emitter {
         this.setSlot(local, slot);
         const init = this.emitExpression(decl.children[2]);
         this.fn.emit(`store ${ty} ${init}, ${ty}* ${slot}${this.alignSuffix(local.type)}`);
+        const debug = this.debug;
+        if (debug !== null) {
+          debug.declareLocal(this.fn, local, slot, decl); // `-g`: llvm.dbg.declare on the slot
+        }
       }
     }
   }
 
   /** Lower an expression and answer the LLVM value holding its result. */
   emitExpression(expr: Node): string {
+    const saved = this.enterLocation(expr);
     const value = this.emitRawExpression(expr);
     // A class value used as an interface it implements, or as a base class:
     // same layout, so the conversion the checker recorded is a pointer bitcast.
     const from = this.program.nodeCoercions[expr.id];
-    if (from < 0) {
-      return value;
+    let result = value;
+    if (from >= 0) {
+      result = this.fn.emitValue(`bitcast ${this.llvm(from)} ${value} to ${this.llvm(this.typeOf(expr))}`);
     }
-    return this.fn.emitValue(`bitcast ${this.llvm(from)} ${value} to ${this.llvm(this.typeOf(expr))}`);
+    this.fn.setLocation(saved);
+    return result;
+  }
+
+  /**
+   * `-g`: make `node`'s start the debug location of the instructions emitted
+   * for it, and answer the location to restore afterwards so the enclosing
+   * construct's own instructions (a loop's back edge, a `store` after its
+   * initializer) point at the enclosing node again. Without `-g` this is a
+   * no-op and the location stays empty.
+   */
+  enterLocation(node: Node): string {
+    const saved = this.fn.location();
+    const debug = this.debug;
+    if (debug !== null) {
+      this.fn.setLocation(debug.locationOf(node));
+    }
+    return saved;
   }
 
   emitRawExpression(expr: Node): string {

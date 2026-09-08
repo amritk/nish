@@ -170,13 +170,27 @@ Goldens: `tests/cases/dump_ast.stdout`, `tests/cases/dump_checked.stdout`
 appends as `, !dbg !N`, set by the emitter around every statement and
 expression and restored afterwards. Emitted: `!llvm.dbg.cu`, the
 `Dwarf Version`/`Debug Info Version` module flags, a `DICompileUnit`
-(`DW_LANG_C99`, producer `amritc <version>`), a `DIFile` (name as given,
-directory = cwd), one `distinct DISubprogram` per function (methods are
+(`DW_LANG_C99`, producer `amritc <version>`), a `DIFile` per source file a
+declaration comes from (name as given, directory `.`), one `distinct
+DISubprogram` per function (methods are
 `Owner.method`; the `@main` wrapper is an artificial `main` at the user's
 `main`), `DILocation`s, `llvm.dbg.value` for parameters, `llvm.dbg.declare`
 for `let`/`const` and `for (const x of a)` slots. Types: `int`, `long`,
 `double`, `bool`, `char*`, struct pointers to `DICompositeType`s with the
 checker's offsets, array pointers to `{ long len; long cap; T* data; }`.
+
+The directory is `.` rather than the working directory, which is what clang's
+`-fdebug-compilation-dir=.` writes: a `-g` build then depends only on the
+command line, so it is reproducible across machines, and stage1 — which has no
+`process.cwd()` to ask for and no runtime budget to grow one (WP14 D4) — emits
+the same bytes. A class reached through an import is described against *its
+own* `DIFile` and line numbers rather than the importing module's, which is why
+there is more than one `DIFile` in a program with imports
+(`tests/link/reachable_struct`).
+
+**Both compilers emit it.** `self/debug.ts` is the stage1 port, `-g` is a flag
+of `self/compile.ts` and of `scripts/amritc.sh`, and `tests/self/ir_oracle.js`
+compares the two byte for byte, metadata numbering included.
 
 `--link -g` passes `-g` to `scripts/build.sh`, which adds `-g` for every
 input (so `runtime.c` has symbols too) and drops the strip flag of the

@@ -516,6 +516,10 @@ export function emitForOf(emitter: Emitter, stmt: Node): void {
   const endBlock = fn.newBlock("forof.end");
   const slot = fn.emitAlloca(`${local.name}.addr`, ty, emitter.align(elem));
   emitter.setSlot(local, slot);
+  const debug = emitter.debug;
+  if (debug !== null) {
+    debug.declareLocal(fn, local, slot, decl); // `-g`
+  }
   const idxSlot = fn.emitAlloca("forof.idx", "i64", emitter.opts.optimizeAttributes ? 8 : 0);
 
   const arr = emitter.emitExpression(stmt.children[1]);

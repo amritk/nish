@@ -484,14 +484,15 @@ it is an edit to those two rather than a sweep over the tree:
 | File | Holds |
 | --- | --- |
 | `src/branding.ts` | `LANGUAGE` (the language, as a diagnostic names it), `CLI` (the npm package, the `bin` entry, the word a message uses for itself), and the names derived from `CLI`: `ENV_DEBUG`, `ENV_SIMULATE_ICE`, `RUNTIME_HEADER`, `HEADER_GUARD_PREFIX` |
-| `self/branding.ts` | `LANGUAGE` only — stage1's driver calls itself `compile`, so the language name is the only one it prints |
+| `self/branding.ts` | `LANGUAGE`, plus `CLI` and `VERSION` for the DWARF producer string `-g` writes — stage1's driver still calls itself `compile`, and it has no `package.json` to read the version out of, so `tests/run.js` fails when `VERSION` and `package.json` disagree |
 
 Every string the compiler *prints or writes* builds its name from those
 constants: the Phase 0 messages, `--help`, the banner and include guard on a
 generated header, the `#include` a generated header emits, the DWARF producer
 string, the internal-error report. The two files must agree on `LANGUAGE`,
 because `tests/self/reject_oracle.js` compares the two compilers' messages byte
-for byte.
+for byte, and on `CLI` and the version, because `tests/self/ir_oracle.js`
+compares the `-g` metadata the same way.
 
 Prose is deliberately exempt. Comments and these documents name the language
 where that reads better than a constant would; what they must not do is put a

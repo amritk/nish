@@ -45,6 +45,8 @@ function check(name, ok, detail) {
 const has = (tool) => spawnSync("which", [tool]).status === 0;
 const HAS_LLVM_AS = has("llvm-as");
 const HAS_CLANG = has("clang");
+/** `-g` end to end: the linked binary is read with the dumper when there is one. */
+const HAS_LLVM_DWARFDUMP = has("llvm-dwarfdump");
 
 /** Module body with the `; ModuleID` / `source_filename` header removed. */
 function stripHeader(ir) {
@@ -290,6 +292,35 @@ if (!only || "diagnostics".includes(only)) {
     const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(buildDir, "dbg_locals.ll")]);
     check("dbg_locals: opt -passes=verify accepts the -g IR", v.status === 0, String(v.stderr));
   }
+  // A class reached only through an imported class's signatures is described
+  // against the file that *declares* it, not against the importer: two
+  // `DIFile`s in one module, and the composite naming the second. Before this,
+  // `Entry`'s declaration offset was looked up in main.ts's line table and a
+  // debugger was sent to a line in the wrong source.
+  const reachDir = path.join(buildDir, "dbg_reachable") + path.sep;
+  fs.rmSync(reachDir, { recursive: true, force: true });
+  const reach = spawnSync(
+    "node",
+    [cli, path.join(root, "tests", "link", "reachable_struct", "main.ts"), "-o", reachDir, "-g"],
+    { cwd: root, encoding: "utf8" }
+  );
+  const reachIr =
+    reach.status === 0 && fs.existsSync(path.join(reachDir, "main.ll"))
+      ? fs.readFileSync(path.join(reachDir, "main.ll"), "utf8")
+      : "";
+  const libFile = /^(![0-9]+) = !DIFile\(filename: "[^"]*reachable_struct[/\\]lib\.ts", directory: "\."\)$/m.exec(
+    reachIr
+  );
+  check(
+    "-g: a class reached through an import is described against the file that declares it",
+    libFile !== null && reachIr.includes(`name: "Entry", file: ${libFile[1]}, line: 4,`),
+    reach.stderr +
+      reachIr
+        .split("\n")
+        .filter((l) => l.includes("DIFile") || l.includes('name: "Entry"'))
+        .join("\n")
+  );
+
   if (HAS_CLANG) {
     const dbgSrc = path.join(buildDir, "dbg_main.ts");
     fs.writeFileSync(
@@ -1780,6 +1811,26 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     );
   }
 
+  // The DWARF `producer` string is "amritc <version>" on both sides, and stage1
+  // cannot read package.json to find the version, so it is a constant in
+  // `self/branding.ts`. This is what stops that constant going stale: a
+  // disagreement here is a byte of every `-g` module the two compilers would
+  // then emit differently.
+  const brandingTs = path.join(root, "self", "branding.ts");
+  if (fs.existsSync(brandingTs)) {
+    const branding = fs.readFileSync(brandingTs, "utf8");
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+    check(
+      `self/branding.ts names the CLI and version stage0 does (amritc ${pkg.version})`,
+      branding.includes(`export const CLI: string = "amritc";`) &&
+        branding.includes(`export const VERSION: string = "${pkg.version}";`),
+      branding
+        .split("\n")
+        .filter((l) => l.startsWith("export const"))
+        .join(" | ")
+    );
+  }
+
   // S1: the lexer built by stage0 runs natively, and its token stream agrees
   // with the `typescript` scanner's over the whole corpus. The oracle links a
   // binary, so it needs clang; without one this is skipped like every other
@@ -2056,15 +2107,44 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         `${many.stdout}${many.stderr}modules: ${emitted.join(",")}${ranMulti ? ` exit ${ranMulti.status}` : ""}`
       );
 
-      // A flag that is stage0's is refused by name rather than ignored: a
-      // build that asked for debug info must not quietly come out without it.
-      const refused = spawnSync("bash", [wrapper, "examples/hello.ts", "-g", "-o", path.join(shipDir, "g.ll")], {
-        cwd: root,
-        encoding: "utf8",
-        env,
-      });
+      // `-g` is stage1's now: the wrapper hands it to the compiler *and* to
+      // scripts/build.sh, so the DWARF in the .ll survives the link instead of
+      // being stripped with the profile. A `.debug_info` section in the linked
+      // binary is the end-to-end proof; the metadata in the IR is what the
+      // oracle compares byte for byte.
+      const dbgExe = path.join(shipDir, "hello-g");
+      const withG = spawnSync(
+        "bash",
+        [wrapper, "examples/hello.ts", "--link", dbgExe, "--profile", "debug", "-g"],
+        { cwd: root, encoding: "utf8", env }
+      );
+      const dbgIr = fs.existsSync(`${dbgExe}.ll`) ? fs.readFileSync(`${dbgExe}.ll`, "utf8") : "";
+      const dwarf = withG.status === 0 && HAS_LLVM_DWARFDUMP
+        ? spawnSync("llvm-dwarfdump", ["--debug-info", dbgExe], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
+        : null;
+      // Without llvm-dwarfdump, read the section table clang already wrote.
+      const hasDwarf = dwarf
+        ? dwarf.status === 0 && dwarf.stdout.includes("DW_TAG_compile_unit")
+        : withG.status === 0 && fs.readFileSync(dbgExe).includes("debug_info");
       check(
-        "scripts/amritc.sh: -g is refused by name, not ignored (D4)",
+        "scripts/amritc.sh: -g reaches the compiler and the linked program carries DWARF",
+        withG.status === 0 &&
+          dbgIr.includes("!llvm.dbg.cu") &&
+          dbgIr.includes("distinct !DISubprogram(name: \"main\"") &&
+          hasDwarf,
+        `${withG.status}: ${withG.stdout}${withG.stderr}${dwarf ? dwarf.stdout.slice(0, 400) : ""}`
+      );
+
+      // The mechanism is still there for the flags that *are* stage0's: one of
+      // them refused by name rather than quietly ignored, because a build that
+      // asked for a sidecar must not come out without it.
+      const refused = spawnSync(
+        "bash",
+        [wrapper, "examples/hello.ts", "--emit-header", path.join(shipDir, "hello.h")],
+        { cwd: root, encoding: "utf8", env }
+      );
+      check(
+        "scripts/amritc.sh: --emit-header is refused by name, not ignored (D4)",
         refused.status === 2 && refused.stderr.includes("is stage0's"),
         `${refused.status}: ${refused.stdout}${refused.stderr}`
       );

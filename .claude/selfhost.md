@@ -43,10 +43,10 @@ scripts/amritc.sh hello.ts --link hello   # its command line: -o, --link, --prof
 
 `scripts/amritc.sh` is the wrapper D4 promised: it makes the output
 directory and runs `scripts/build.sh`, which is the half of the driver stage1
-does not have. It refuses `-g`, the dumps and the interop sidecars **by name**
-— they are stage0's, not missing — and mirrors stage0's file layout exactly, so
-either compiler can be dropped into a build script. See
-`docs/wp14-selfhost.md` §7.
+does not have. It takes `-g` and passes it on to both halves; it refuses the
+dumps and the interop sidecars **by name** — they are stage0's, not missing —
+and mirrors stage0's file layout exactly, so either compiler can be dropped
+into a build script. See `docs/wp14-selfhost.md` §7.
 
 ## The rules that are specific to this work
 
@@ -105,6 +105,7 @@ No generics, arrow functions, closures, nested functions or function values; no
 | `ir.ts` `runtime.ts` `target.ts` `options.ts` | `src/codegen/ir.ts`, `runtime.ts`, `target.ts`, `CompilerOptions` |
 | `parents.ts` | `node.parent`, which this tree does not have |
 | `escape.ts` `attributes.ts` | `src/codegen/escape.ts` and `attributes.ts` |
+| `debug.ts` | `src/codegen/debug.ts`: the DWARF metadata `-g` emits |
 | `emit.ts` `emit_util.ts` `emit_ops.ts` `emit_control.ts` `emit_strings.ts` `emit_arrays.ts` `emit_classes.ts` `emit_builtins.ts` | `src/codegen/emitter.ts` and `emit/*.ts` |
 | `compilation.ts` | `src/compilation.ts`: the whole-program driver |
 | `dump_tokens.ts` `dump_ast.ts` `dump_checked.ts` `compile.ts` | the `--emit-*` dumps in `src/dump.ts`, and the CLI |

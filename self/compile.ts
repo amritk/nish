@@ -9,9 +9,10 @@
 // runtime call stage1 does not have, and D4 keeps the host-dependent half of
 // the driver in stage0.
 //
-// The flags are the subset of stage0's that change the IR. Everything else —
-// `--link`, `--profile`, the interop sidecars, `-g` — is stage0's for the same
-// reason.
+// The flags are the subset of stage0's that change the IR, `-g` included:
+// DWARF is metadata in the `.ll` and costs the driver nothing. Everything else
+// — `--link`, `--profile`, the interop sidecars, the dumps — is stage0's for
+// the same reason.
 
 import { Compilation } from "./compilation";
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context";
@@ -19,7 +20,7 @@ import { Options } from "./options";
 import { resolveTarget, supportedTargets } from "./target";
 
 const USAGE: string =
-  "usage: compile <file.ts> [--out-dir <dir>] [--number-mode i32|f64] [--plain] [--strict-exports] [--unchecked-indexing] [--nsw] [--no-stack-alloc] [--runtime-decls] [--target <triple>]";
+  "usage: compile <file.ts> [--out-dir <dir>] [--number-mode i32|f64] [--plain] [--strict-exports] [--unchecked-indexing] [--nsw] [--no-stack-alloc] [--runtime-decls] [--target <triple>] [-g]";
 
 export function main(): number {
   if (process.argv.length < 2) {
@@ -71,6 +72,8 @@ export function main(): number {
       opts.stackAlloc = false;
     } else if (value === "--runtime-decls") {
       opts.runtimeDecls = true;
+    } else if (value === "-g") {
+      opts.debugInfo = true;
     } else if (value.startsWith("-")) {
       console.error(`compile: unknown flag \`${value}\`\n${USAGE}`);
       return 2;
