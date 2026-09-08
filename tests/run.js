@@ -2061,6 +2061,24 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       `${stage1Fuzz.stdout}${stage1Fuzz.stderr}`
     );
 
+    // WP8 from stage1: the interop sidecars. `--emit-header`, `--emit-dts`
+    // (which also writes its companion loader) and `--emit-napi` are derived
+    // from the same checked program the IR came from, so the oracle is the
+    // same one: run both compilers over the corpus the WP8 section above
+    // drives the generators over, and compare all four files byte for byte.
+    // Only the link step and the directory creation are still stage0's (D4).
+    const interopOracle = spawnSync("node", [path.join(root, "tests", "self", "interop_oracle.js")], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const interopSummary = interopOracle.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/ writes the interop sidecars stage0 writes (${interopSummary})`,
+      interopOracle.status === 0,
+      `${interopOracle.stdout}${interopOracle.stderr}`
+    );
+
     // S5, and the claim the work package exists for: `self/` compiles `self/`.
     // stage1 is `self/` built by stage0, stage2 is `self/` built by stage1,
     // stage3 is `self/` built by stage2. `IR(stage1) == IR(stage2)` is the
@@ -2246,6 +2264,35 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         "scripts/amritc.sh: --emit-ast is refused by name, not ignored (D4)",
         refused.status === 2 && refused.stderr.includes("is stage0's"),
         `${refused.status}: ${refused.stdout}${refused.stderr}`
+      );
+
+      // The interop sidecars are stage1's, so the wrapper passes them through
+      // and supplies for them the one thing D4 kept out of the compiler: the
+      // directory. The bytes themselves are the interop oracle's business.
+      const sidecarDir = path.join(shipDir, "interop");
+      const sidecarFiles = ["add.h", "add.d.ts", "add.mjs", "add.napi.c"];
+      const sidecars = spawnSync(
+        "bash",
+        [
+          wrapper,
+          "examples/add.ts",
+          "-o", path.join(shipDir, "add.ll"),
+          "--emit-header", path.join(sidecarDir, "add.h"),
+          "--emit-dts", path.join(sidecarDir, "add.d.ts"),
+          "--emit-napi", path.join(sidecarDir, "add.napi.c"),
+        ],
+        { cwd: root, encoding: "utf8", env }
+      );
+      const wrote = sidecarFiles.filter((f) => fs.existsSync(path.join(sidecarDir, f)));
+      const selfHeader = wrote.includes("add.h")
+        ? fs.readFileSync(path.join(sidecarDir, "add.h"), "utf8")
+        : "";
+      check(
+        "scripts/amritc.sh: the interop sidecars are passed through and their directory made",
+        sidecars.status === 0 &&
+          wrote.length === sidecarFiles.length &&
+          selfHeader.includes("int32_t add(int32_t a, int32_t b);"),
+        `${sidecars.status}: ${sidecars.stdout}${sidecars.stderr}wrote: ${wrote.join(",")}`
       );
     }
   }

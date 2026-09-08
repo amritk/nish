@@ -639,10 +639,12 @@ object, and whether that object may be an `alloca` is the same `localOutcome`
 walk a local holding an allocation gets — and the oracle is what said the two
 walks agreed, over 274 of 274 programs, before the bootstrap was allowed to
 close.
-The interop sidecars stayed stage0's, as D4 said they would: the C header for
-a `Result` is a stage0-only change and the driver still reports those flags by
-name rather than ignoring them. `-g` was stage0's here too, and is no longer —
-see the section below.
+The interop sidecars and `-g` stayed stage0's while WP17 landed, as D4 said
+they would: the DWARF and the C header for a `Result` were stage0-only changes,
+and the driver reported those flags by name rather than ignoring them. Both
+have since been ported — the sidecars in §7, `-g` in the section below — so
+what a `Result` is spelled as in a generated header, and how it is described in
+DWARF, are two-sided changes like every other.
 
 ### `-g` on both sides
 
@@ -784,10 +786,26 @@ either, `-g` included: the wrapper passes it to stage1, which puts the DWARF
 in the `.ll`, and on to `scripts/build.sh`, which compiles `runtime.c` with it
 and skips the strip step. `--json`, `--emit-checked` and `--version` go
 straight through: stage1 answers them itself, and the two that print text
-rather than IR skip the output planning and the link entirely. The flags that
-are stage0's rather than missing (the interop sidecars, `--emit-ast`) are
-refused **by name**, with what to run instead: a flag that is silently ignored
-is how a build ends up not carrying the thing it asked for.
+rather than IR skip the output planning and the link entirely. The one flag
+that is stage0's rather than missing, `--emit-ast`, is refused **by name**,
+with what to run instead: a flag that is silently ignored is how a build ends
+up not carrying the thing it asked for.
+
+**The interop sidecars are stage1's too.** `--emit-header`, `--emit-dts` (which
+writes its companion `.mjs` loader beside the declarations) and `--emit-napi`
+are ~1,900 lines of `self/` ported from `src/interop/`, module for module, and
+they cost the runtime nothing: a sidecar is derived from the checked program
+after the IR and written with the `writeFileSync` stage1 already had, to the
+path it was given. D4 is untouched — stage1 still makes no directory, spawns
+no linker — so the wrapper creates the sidecar's directory the way it creates
+the IR's, and passes the three flags straight through.
+`tests/self/interop_oracle.js` is the oracle: both compilers over the WP8
+corpus, all four generated files compared byte for byte, and `--all` runs the
+same comparison over every whole program in the tree (281 programs, 15 MB of
+generated C, TypeScript and JavaScript, no difference). The one host-shaped
+generator was the N-API shim, whose readers and boxers are records of closures
+in `src/`; here they are records with a kind tag and a `switch` that writes
+the same lines, which is the same trade D2 made for the dispatch tables.
 
 **`--emit-ast` is stage0's by design, not by backlog.** Its dump prints the
 `typescript` package's node names and line:column spans; stage1's tree is the
@@ -799,7 +817,7 @@ detail of the seed — the opposite of what §1 means by the two being the same
 compiler. `self/dump_ast.ts` keeps the shape its own oracle compares.
 `--emit-checked` is the other way about, and that is why it *is* stage1's: the
 dump is the compiler's own tables, and `tests/self/checked_oracle.js` already
-proves stage1 writes them byte for byte as stage0 does over 272 whole
+proves stage1 writes them byte for byte as stage0 does over 274 whole
 programs.
 
 What the wrapper is not is a second implementation of the driver. It plans no
@@ -817,8 +835,10 @@ deployment path and not the fixed point — the bootstrap check above owns that,
 and this one would only pay for the same two links again.
 
 **stage0 stays the published package.** `npm install -g amritc` still ships
-`dist/`, and it has to: it is the seed every bootstrap starts from, the oracle
-every `self/` phase is compared against, and the only one of the two that emits
-the interop sidecars. What changed is that a checkout can now produce
+`dist/`, and it has to: it is the seed every bootstrap starts from and the
+oracle every `self/` phase is compared against. What it is no longer is the
+only one that emits DWARF or the interop sidecars; what is still only stage0's
+is the link step, the directory creation and the AST dump. What changed is that
+a checkout can now produce
 the self-hosted compiler in one command, and that compiler compiles the same
 programs about eight times faster (§4, D5).

@@ -11,6 +11,10 @@ amritc x.ts -o x.ll --emit-header x.h --emit-dts x.d.ts --emit-napi x_napi.c
                           C hosts          wasm hosts        Node addon
 ```
 
+Both compilers write them. The self-hosted compiler carries its own port of
+the generators (`self/interop_*.ts`, WP14 §7) and answers the same three flags
+with the same bytes; `tests/self/interop_oracle.js` is what says so.
+
 ## The C ABI
 
 An AmritScript function is an ordinary C function: parameters by value, in
@@ -426,6 +430,8 @@ real pass over the buffer on top of the crossing.
 | `src/interop/abi.ts` | Which functions are external, C spelling of every type, `const` from the written-parameter facts, the typed-view table (`Int32Array` / `Float64Array` / `BigInt64Array`), keyword escaping. |
 | `src/interop/header.ts`, `dts.ts`, `wasm.ts`, `napi.ts` | The generators: header, `.d.ts`, its companion loader, the shim. |
 | `src/index.ts` | `--emit-header`, `--emit-dts` (writes the `.mjs` next to it), `--emit-napi`. |
+| `self/interop_abi.ts`, `interop_header.ts`, `interop_dts.ts`, `interop_wasm.ts`, `interop_napi.ts` | The same five, in AmritScript, for the self-hosted compiler (WP14 §7); `self/compile.ts` takes the same three flags and writes the same files. |
+| `tests/self/interop_oracle.js` | Both compilers over the corpus below, all four generated files compared byte for byte. |
 | `scripts/build.sh` | `--profile napi`; `-mbulk-memory` in `--profile wasm`. |
 | `examples/arrays.ts`, `examples/node-addon.mjs`, `examples/node-host.mjs` | The typed-array module, loading the `.node` addon and the `.wasm` module. |
 | `bench/sum.ts`, `bench/ffi.mjs` | The batching benchmark. |

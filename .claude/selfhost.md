@@ -44,11 +44,13 @@ scripts/amritc.sh hello.ts --link hello   # its command line: -o, --link, --prof
 `scripts/amritc.sh` is the wrapper D4 promised: it makes the output
 directory and runs `scripts/build.sh`, which is the half of the driver stage1
 does not have. It takes `-g` and passes it on to both halves, and passes
-`--json`, `--emit-checked` and `--version` through to the compiler, which
-answers them itself. It refuses the interop sidecars and `--emit-ast` **by
-name** — they are stage0's, not missing — and mirrors stage0's file layout
-exactly, so either compiler can be dropped into a build script. See
-`docs/wp14-selfhost.md` §7.
+`--json`, `--emit-checked`, `--version` and the interop sidecars
+(`--emit-header`, `--emit-dts`, `--emit-napi`, and the loader `--emit-dts`
+writes beside its declarations) through to the compiler, which answers them
+itself; it makes the sidecars' directory as it makes the IR's. It refuses
+`--emit-ast` **by name** — that one is stage0's, not missing — and mirrors
+stage0's file layout exactly, so either compiler can be dropped into a build
+script. See `docs/wp14-selfhost.md` §7.
 
 `--emit-ast` is the one flag that is stage0's *by design* rather than for now:
 stage0's dump prints the `typescript` package's node names and line:column
@@ -117,6 +119,7 @@ No generics, arrow functions, closures, nested functions or function values; no
 | `debug.ts` | `src/codegen/debug.ts`: the DWARF metadata `-g` emits |
 | `emit.ts` `emit_util.ts` `emit_ops.ts` `emit_control.ts` `emit_strings.ts` `emit_arrays.ts` `emit_classes.ts` `emit_builtins.ts` | `src/codegen/emitter.ts` and `emit/*.ts` |
 | `compilation.ts` | `src/compilation.ts`: the whole-program driver |
+| `interop_abi.ts` `interop_header.ts` `interop_dts.ts` `interop_wasm.ts` `interop_napi.ts` | `src/interop/*.ts`: the WP8 sidecars, one module per file so the two stay diffable |
 | `dump.ts` | `src/dump.ts`'s `--emit-checked` text, printed by both the driver and the dump entry |
 | `dump_tokens.ts` `dump_ast.ts` `dump_checked.ts` `compile.ts` | the dump entry points the oracles spawn, and the CLI |
 
@@ -141,6 +144,7 @@ wired into the WP14 section of `tests/run.js` and skipped without clang.
 | `tests/self/checked_oracle.js` | the `--emit-checked` dump of every positive program in the corpus, whole program by whole program |
 | `tests/self/reject_oracle.js` | every `reject_*` case and every `tests/link/` negative, against its own expected fragments |
 | `tests/self/ir_oracle.js` | the emitted IR, byte for byte, over every whole program in the corpus |
+| `tests/self/interop_oracle.js` | the WP8 sidecars — `.h`, `.d.ts`, its `.mjs` loader, `.napi.c` — byte for byte over the interop corpus (`--all` for the whole one) |
 | `tests/self/bootstrap.js` | the stages: `IR(stage0) == IR(stage1) == IR(stage2)`, and stage3 byte-identical to stage2 |
 | `tests/differential/fuzz.js --stage1` | the emitted IR, byte for byte, over random programs the WP13 generator invents — the same comparison as the IR oracle, on a corpus that is not checked in |
 

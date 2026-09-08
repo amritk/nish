@@ -22,13 +22,15 @@
 #                   and the binary is not stripped, exactly as stage0's
 #                   `--link -g` does
 #
-# Every other flag goes straight to the compiler. `--emit-checked` and
-# `--version` are answered by the compiler itself and print text rather than
-# writing IR, so they skip the output planning and the link entirely.
+# Every other flag goes straight to the compiler, the interop sidecars
+# (`--emit-header`, `--emit-dts`, `--emit-napi`) included: stage1 writes those
+# itself now, to the path it was given. `--emit-checked` and `--version` it
+# answers too, and because they print text rather than writing IR they skip the
+# output planning and the link entirely.
 #
-# The flags that are stage0's rather than missing — the interop sidecars and
-# `--emit-ast`, whose dump prints the `typescript` package's node names that
-# stage1's own tree does not use — are refused by name with what to run
+# One flag is still stage0's rather than missing — `--emit-ast`, whose dump
+# prints the `typescript` package's node names that stage1's own tree does not
+# use — and it is refused by name with what to run
 # instead, because a flag that is quietly ignored is how a build ends up not
 # carrying the thing it asked for.
 #
@@ -46,6 +48,7 @@ debug=0
 dump=0
 version=0
 flags=()
+sidecars=()
 
 usage() {
   cat <<'EOF'
@@ -55,7 +58,8 @@ Drives the self-hosted compiler (build/amritc, or $AMRITC) and adds the
 directory creation and the link step it does not do itself (wp14 D4).
 Compiler flags: --number-mode i32|f64, --plain, --strict-exports, --nsw,
 --no-stack-alloc, --unchecked-indexing, --runtime-decls, --target <triple>, -g,
---json, --emit-checked, --version.
+--json, --emit-checked, --version, --emit-header <file.h>,
+--emit-dts <file.d.ts>, --emit-napi <shim.c>.
 EOF
   exit "${1:-2}"
 }
@@ -75,8 +79,11 @@ while [ $# -gt 0 ]; do
     -v|--version) version=1; shift ;;
     --emit-checked) dump=1; flags+=("$1"); shift ;;
     --json) flags+=("$1"); shift ;;
-    --emit-header|--emit-dts|--emit-napi|--emit-ast)
+    --emit-ast)
       stage0_only "$1" ;;
+    --emit-header|--emit-dts|--emit-napi)
+      [ -n "${2:-}" ] || usage
+      flags+=("$1" "$2"); sidecars+=("$2"); shift 2 ;;
     --number-mode|--target) flags+=("$1" "${2:-}"); [ -n "${2:-}" ] || usage; shift 2 ;;
     -*) flags+=("$1"); shift ;;
     *) entry="$1"; shift ;;
@@ -104,6 +111,13 @@ fi
 if [ "$dump" -eq 1 ]; then
   exec "$compiler" "$entry" "${flags[@]+"${flags[@]}"}"
 fi
+
+# A sidecar is written where it was asked for, and the compiler makes no more
+# of a directory for it than it does for the IR (D4). `--emit-dts` writes its
+# companion loader beside the declarations, so one directory covers both.
+for file in ${sidecars[@]+"${sidecars[@]}"}; do
+  mkdir -p "$(dirname "$file")"
+done
 
 # Where the IR goes. `--link` and a trailing `/` both mean a directory; a plain
 # -o is one module's text, which the compiler writes to stdout.

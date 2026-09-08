@@ -233,9 +233,11 @@ scripts/amritc.sh hello.ts --link hello   # its command line: -o, --link, --prof
 ```
 
 `npm install -g amritc` still ships the Node compiler: it is the seed every
-bootstrap starts from, the oracle every `self/` phase is compared against, and
-the one that emits the interop sidecars. Details, and the
-subset `self/` is written in, are in
+bootstrap starts from and the oracle every `self/` phase is compared against.
+What it is no longer is the only one that can emit DWARF or the interop
+sidecars — the self-hosted compiler writes both, byte for byte the same, and
+what stays stage0's is the link step, the directory creation and the AST dump.
+Details, and the subset `self/` is written in, are in
 [docs/wp14-selfhost.md](docs/wp14-selfhost.md).
 
 ## Project status
