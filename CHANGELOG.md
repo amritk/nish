@@ -57,6 +57,12 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   the `size` profile strips, and rather than source bytes, which have been over
   since WP4 because comments are not code.
 
+  `scripts/bootstrap.sh` runs on it: every stage is one `--link` by the stage
+  before it, where stages 2 and 3 used to be compiled with `--out-dir` and then
+  linked by the script itself, and the three equalities read the
+  `<exe>.modules/` directory `--link` already writes. The chain that proves the
+  fixed point is now the same command a user runs.
+
   Both builtins are in the WP13 differential comparison like every other one:
   `runtime/shim.mjs` implements them for the Node side — `mkdirSync` decides
   with `statSync` rather than with the exception Node throws, so it answers

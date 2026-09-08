@@ -297,9 +297,12 @@ compiler compiles itself.
 ### The bootstrap, and what it says
 
 `tests/self/bootstrap.js` runs the stages and compares them. All three
-equalities hold over the whole of `self/` — 51 modules, 5,963,202 bytes of IR
+equalities hold over the whole of `self/` — 51 modules, 6,049,827 bytes of IR
 (41 modules and 4,095,128 bytes when S5 first closed; the port has since taken
-on DWARF and the interop sidecars):
+on DWARF, the interop sidecars and its own link step). 51 rather than the 54
+files in `self/`, because `dump_tokens.ts`, `dump_ast.ts` and
+`dump_checked.ts` are the oracles' own entry points and reach the same
+modules from their own roots:
 
 ```
 IR(stage0, self/) == IR(stage1, self/)     the two implementations agree
@@ -940,6 +943,14 @@ rather than after the linker. It finds `scripts/build.sh` and `runtime.c` from
 the path it was invoked by (`<prefix>/bin/amritc` and `build/amritc` both put
 the root one level up), falling back to the working directory, and says which
 two it looked in when neither has them.
+
+**The bootstrap chain runs on it.** `scripts/bootstrap.sh` used to compile each
+stage with `--out-dir` and then call `scripts/build.sh` itself, which made it a
+second driver with its own opinion about where the IR goes. Every stage is one
+`--link` now, by the stage before it, and the equalities read the
+`<exe>.modules/` directory that `--link` already writes — so the chain that
+proves the fixed point is the same command a user runs, and `link_stage` is
+gone.
 
 Nothing about the *platform* came in with any of this, which is the part D4
 overestimated: the `uname -s`, the profile flag sets and the wasi sysroot
