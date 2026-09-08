@@ -804,8 +804,9 @@ no linker — so the wrapper creates the sidecar's directory the way it creates
 the IR's, and passes the three flags straight through.
 `tests/self/interop_oracle.js` is the oracle: both compilers over the WP8
 corpus, all four generated files compared byte for byte, and `--all` runs the
-same comparison over every whole program in the tree (281 programs, 15 MB of
-generated C, TypeScript and JavaScript, no difference). The one host-shaped
+same comparison over every whole program in the tree (287 programs, 1,148
+sidecars, 16.9 MB of generated C, TypeScript and JavaScript, no difference;
+18 skipped, every one of them a program stage0 itself rejects). The one host-shaped
 generator was the N-API shim, whose readers and boxers are records of closures
 in `src/`; here they are records with a kind tag and a `switch` that writes
 the same lines, which is the same trade D2 made for the dispatch tables.
