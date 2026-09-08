@@ -72,6 +72,35 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Fixed
 
+- **`--emit-napi` bridges `u8`, `u16`, `u32`, `u64` and `f32` instead of
+  dropping the function that mentions one (WP8).** The shim kept its own
+  reader and boxer tables, and they had rows for `i32`, `f64`, `bool` and
+  `i64` only, so a signature carrying any other width fell out of `plan()` and
+  the addon simply did not export it — a `Result<f32, u8>` included, since its
+  arms go through the same tables. Each width now has both halves. On the way
+  in, `napi_get_value_uint32` reads the unsigned ones and `u8` / `u16` take the
+  width's own modulus from it, which is the conversion JavaScript itself
+  performs storing a number into a typed array: 300 reaches a `u8` as 44, `-1`
+  reaches a `u32` as 4294967295, and nothing throws, matching the `i32` reader
+  that has always applied ToInt32. `f32` is read as a double and converted by a
+  generated `amrit_napi_f32`, because C leaves a double-to-float conversion
+  undefined out of range: anything at or past `0x1.ffffffp127` becomes an
+  infinity of that sign, where round-to-nearest-even sends it. On the way out
+  `napi_create_uint32` keeps a `u32` above 2^31 positive, an `f32`
+  widens to a double exactly, and `u64` crosses as a bigint like `i64`. A
+  packed `Result` narrows each arm through its own temporary.
+
+  And the reason the hole survived: a function the shim cannot carry was
+  omitted under one fixed sentence that named neither the function's types nor
+  the position that stopped it. It is now named with both — `not bridged:
+  parameter 1 (p) is Point`, `not bridged: it returns Result<number, IoError>`
+  — under a heading listing what does cross, so the next gap reads as a gap.
+  `tests/self/interop_widths.ts` is built into a real addon and called by
+  `tests/run.js` at every boundary; `self/interop_napi.ts` carries the same
+  change and `tests/self/interop_oracle.js` compares the two shims byte for
+  byte. Bare unsigned widths still do not cross the *wasm* loader, which is
+  now written down in `docs/wp8-interop.md` rather than left to be discovered.
+
 - **A builtin's argument is checked down to its element type.**
   `checkArgumentType` compared type *kinds*, which was enough while every
   builtin wanted a scalar or a string; `spawnSync` wants a `string[]`, and an

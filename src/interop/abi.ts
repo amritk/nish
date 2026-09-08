@@ -227,15 +227,15 @@ export function resultTypesUsed(
 }
 
 /**
- * True for the types the scalar-only bridges (N-API shim, wasm typings) can
- * pass without marshalling. `u8`/`u16`/`u32` and `f32` join `i32` and `f64`
- * because they all fit a JavaScript `number`; `i64` and `u64` do not, and stay
- * out exactly as `i64` always has.
+ * True for the types that reach JavaScript as a plain `number`, with no
+ * marshalling and no other JS type standing in for them. `u8`/`u16`/`u32` and
+ * `f32` join `i32` and `f64` because they all fit a `number` exactly; `i64`
+ * and `u64` do not, and cross as a `bigint` instead, which is why they are
+ * false here even though the bridges carry them.
  *
- * TODO(WP8): the N-API shim keeps its own reader table and has no unsigned
- * row yet, so a function with an unsigned parameter is skipped by the addon
- * generator rather than bridged. The C header and the wasm `.d.ts` do carry
- * the unsigned widths.
+ * This is a question about the JS *type*, not about what a bridge supports:
+ * the N-API shim has a reader and a boxer for every one of these widths (and
+ * for the two bigint ones), and `--emit-dts` spells them all `number` too.
  */
 export function isScalar(t: StaticType): boolean {
   const k = kindOf(t);

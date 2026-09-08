@@ -128,8 +128,13 @@ The checklist every work package has followed (MASTER_PLAN.md §7):
    also touches `isNumeric` plus `isInteger` (and `isUnsigned`/`intBits` for
    an integer width) or `isFloat` (and `floatConstant` in
    `codegen/emit/builtins.ts` for the constant encoding), `wasmType` in
-   `interop/dts.ts`, `crossesWasm` in `interop/wasm.ts`, and
-   `BASIC_TYPES`/`bitsOf` in `codegen/debug.ts`.
+   `interop/dts.ts`, `crossesWasm` in `interop/wasm.ts`,
+   `SCALAR_READERS`/`scalarBox` in `interop/napi.ts`, and
+   `BASIC_TYPES`/`bitsOf` in `codegen/debug.ts`. The two N-API tables are the
+   ones to remember: a type with no row there does not make the shim refuse a
+   signature that mentions it, it makes the shim leave that function out of
+   the addon, which is how `u8`, `u16`, `u32`, `u64` and `f32` were unbridged
+   for as long as they were.
 4. **Checker.** Write a handler in the matching family module (or a new
    one), register it in the table, record every type/binding the emitter
    will need in `CheckedProgram`, and give every rejection a message that
