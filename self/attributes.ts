@@ -744,7 +744,7 @@ class FactCollector {
     this.collectResultFacts(node);
     this.collectArrayFacts(node);
     this.collectDivisionFacts(node);
-    this.collectArgvFacts(node);
+    this.collectNamespacePropertyFacts(node);
     this.collectIdentifierBuiltinFacts(node);
     for (const child of node.children) {
       this.visit(child);
@@ -1011,13 +1011,28 @@ class FactCollector {
     }
   }
 
-  /** The load of `@amrit_argv` reads memory the function does not own: at most `readonly`. */
-  collectArgvFacts(node: Node): void {
-    if (node.kind !== N_MEMBER || dottedName(node) !== "process.argv") {
+  /**
+   * The namespace properties that are not constants. The load of `@amrit_argv`
+   * reads memory the function does not own, so the caller is at most
+   * `readonly`; `process.platform` and `process.arch` are one `readnone`
+   * runtime call each (WP14 §7a), which changes no attribute today. The call
+   * is named anyway, because the rule is that what a construct emits and what
+   * the analysis is told it emits never drift apart.
+   */
+  collectNamespacePropertyFacts(node: Node): void {
+    if (node.kind !== N_MEMBER) {
       return;
     }
-    if (!receiverIsValue(this.unit.program, node.children[0])) {
+    const name = dottedName(node);
+    if (receiverIsValue(this.unit.program, node.children[0])) {
+      return;
+    }
+    if (name === "process.argv") {
       this.facts.readsMemory = true;
+    } else if (name === "process.platform") {
+      this.facts.callees.add("amrit_platform");
+    } else if (name === "process.arch") {
+      this.facts.callees.add("amrit_arch");
     }
   }
 

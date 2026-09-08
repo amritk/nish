@@ -40,6 +40,7 @@
 // analysis are WP16's, unchanged.
 
 import { Emitter } from "./emit";
+import { internalError } from "./ice";
 import { ResultLayout, resultLayout } from "./result";
 import { N_CALL, N_MEMBER, Node } from "./nodes";
 import { CheckedProgram } from "./program";
@@ -362,7 +363,7 @@ export function emitResultProperty(emitter: Emitter, expr: Node, receiver: i32):
 function emitOrReturn(emitter: Emitter, expr: Node, receiver: i32): string {
   const sig = emitter.currentSig;
   if (sig === null) {
-    panic("emitter: `orReturn()` outside a function");
+    process.exit(internalError("emitter: `orReturn()` outside a function"));
   }
   const returnType = sig.returnType;
   declareResultTypes(emitter, receiver);

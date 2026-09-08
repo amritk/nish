@@ -3903,6 +3903,97 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end builtin_process -->
 
+### What machine this is
+
+`process.platform` and `process.arch` are one call each into the runtime,
+which answers the address of a string in its own constant data — no
+allocation, no load, and `readnone` on both declarations, so a function built
+from them alone stays pure and two reads of one property fold into one.
+`isDirectorySync` is the `stat` beside them: the question `-o <dir>` asks, as a
+`boolean`, which is why the snippet below can ask it before it asks for the
+directory to be made. `--target host` maps the same pair of strings to a triple
+(`hostTriple` in `src/codegen/target.ts` and in `self/target.ts`).
+
+<!-- cookbook:begin builtin_host -->
+```ts
+export function main(): number {
+  const out = "build/out";
+  if (!isDirectorySync(out) && !mkdirSync(out)) {
+    panic(`cannot create ${out}`);
+  }
+  console.log(`${process.platform} ${process.arch}`);
+  return 0;
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"build/out\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [15 x i8] } { i64 14, [15 x i8] c"cannot create \00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
+
+declare void @amrit_free_arena() #1
+declare noundef i64 @amrit_arena_mark() #1
+declare void @amrit_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @amrit_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #1
+declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @amrit_exit(i32 noundef) #2
+declare zeroext i1 @amrit_mkdir(i8* noundef nonnull readonly align 8 nocapture) #1
+declare zeroext i1 @amrit_is_dir(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noundef nonnull align 8 i8* @amrit_platform() #3
+declare noundef nonnull align 8 i8* @amrit_arch() #3
+
+define noundef i32 @amrit_main() #0 {
+entry:
+  %out.addr = alloca i8*, align 8
+  %arena.mark = call i64 @amrit_arena_mark()
+  store i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*), i8** %out.addr, align 8
+  %0 = load i8*, i8** %out.addr, align 8
+  %1 = call zeroext i1 @amrit_is_dir(i8* %0)
+  %2 = xor i1 %1, true
+  br i1 %2, label %land.rhs, label %land.end
+
+land.rhs:
+  %3 = load i8*, i8** %out.addr, align 8
+  %4 = call zeroext i1 @amrit_mkdir(i8* %3)
+  %5 = xor i1 %4, true
+  br label %land.end
+
+land.end:
+  %6 = phi i1 [ false, %entry ], [ %5, %land.rhs ]
+  br i1 %6, label %if.then, label %if.end
+
+if.then:
+  %7 = load i8*, i8** %out.addr, align 8
+  %8 = call i8* @amrit_str_concat(i8* bitcast ({ i64, [15 x i8] }* @.str.1 to i8*), i8* %7)
+  call void @amrit_write(i8* %8, i32 2, i1 true)
+  call void @amrit_exit(i32 1)
+  unreachable
+
+if.end:
+  %9 = call i8* @amrit_platform()
+  %10 = call i8* @amrit_str_concat(i8* %9, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  %11 = call i8* @amrit_arch()
+  %12 = call i8* @amrit_str_concat(i8* %10, i8* %11)
+  call void @amrit_print(i8* %12)
+  call void @amrit_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @amrit_main()
+  call void @amrit_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { noreturn nounwind }
+attributes #3 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end builtin_host -->
+
 ## Optimisation flags
 
 ### `--nsw`
@@ -4018,7 +4109,10 @@ declare void @amrit_append_file(i8* noundef nonnull readonly align 8 nocapture, 
 declare void @amrit_argv_init(i32 noundef, i8** noundef nocapture readonly) #2
 declare noundef double @amrit_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2
 declare zeroext i1 @amrit_mkdir(i8* noundef nonnull readonly align 8 nocapture) #2
+declare zeroext i1 @amrit_is_dir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noundef i32 @amrit_spawn(%struct.amrit_array* noundef nonnull align 8) #5
+declare noundef nonnull align 8 i8* @amrit_platform() #0
+declare noundef nonnull align 8 i8* @amrit_arch() #0
 declare void @amrit_array_grow(%struct.amrit_array* noundef nonnull align 8 nocapture, i64 noundef) #2
 declare noalias noundef nonnull align 8 %struct.amrit_array* @amrit_alloc_array(i64 noundef, i64 noundef) #2
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #6
