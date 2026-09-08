@@ -10,3 +10,9 @@ const f = `esc \` \${ \n \\ done`;
 const g = `${ (() => { const q = 1; return q; })() }`;
 const h = ``;
 const i = `${1}`;
+// The same empty-run cases as `literals.ts`, on the template side: a part that
+// starts with an escape, a part that is only escapes, and one whose escape
+// runs straight into the `${` that ends it.
+const j = `\tfirst${1}\n`;
+const k = `${1}\n\t${2}`;
+const l = `tail\n${1}`;

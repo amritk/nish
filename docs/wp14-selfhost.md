@@ -334,6 +334,28 @@ bought a factor of 8.6 in time and half the memory, which is §5's northern star
 pointing at the compiler itself. The arena never being released was the worry;
 at this size it does not matter.
 
+That number is the measurement S5 closed with, over the 41 modules `self/` had
+then. Today's tree is the 51 modules above, and stage1 costs **128.9 MB of
+peak RSS and about 214 ms** for it, against stage0's 204 MB and 2.1 s: the
+factor in time has gone *up* rather than down as the port grew. The peak RSS
+is the figure to compare across machines; the times were taken on a shared one
+and are indicative.
+
+**§2.3 caught `self/` breaking its own rule, and the compiler is what caught
+it.** The `performance` diagnostic class (WP15 §8) warned about `self/lexer.ts`
+itself: `scanString` and `scanTemplate` appended `text = text + <one byte>`
+inside their scan loop, so every byte of every literal copied the whole
+accumulator — the quadratic §2.3 exists to forbid, in the loop that reads every
+file the compiler compiles. Both scans now keep a `chunk` cursor and move whole
+runs, and share one `StringBuilder` held by the lexer: a literal with no escape
+in it costs one `substring` of its whole span and never touches the builder,
+which is the case nearly every literal is. Before the fix the same run cost
+131.8 MB and about 226 ms, so this is where 2.9 MB of the figure above went;
+the token streams are byte-identical either way, over 678 files including the
+malformed ones the lexer oracle cannot judge. On a source whose literals are
+long rather than short the quadratic shows its real size: 400 KB of literal
+text cost 408 MB and 392 ms to lex, and now cost 2.4 MB and 10 ms.
+
 **D3's hazard did not fire.** Module identity is the specifier resolved against
 the name the importer was given, so it stays relative and needs no working
 directory (`self/paths.ts`'s `resolveModule`, and `relativePath` for the output

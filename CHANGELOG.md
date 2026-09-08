@@ -262,6 +262,30 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Fixed
 
+- **`self/lexer.ts` no longer builds a literal one byte at a time (WP14
+  §2.3).** The `performance` class above found it in the compiler's own
+  source, and it was a true positive: `scanString` and `scanTemplate` both did
+  `text = text + <one byte>` inside their scan loop, so every byte of every
+  string and template literal copied the whole accumulator into a fresh arena
+  string — quadratic in time and in arena bytes, in the loop that reads every
+  file the compiler compiles. Both scans now keep a `chunk` cursor and move
+  whole runs: an escape flushes the run before it and the terminator flushes
+  the rest, so a literal with no escape in it — nearly every one — costs
+  exactly one `substring` of its whole span and never touches a builder at
+  all. The escape path shares one `StringBuilder`, held by the lexer and reset
+  per literal rather than allocated per literal, through the two helpers
+  (`takeEscape`, `literalText`) the two scans now have in common.
+
+  Nothing the lexer *produces* changed: the token streams of 678 files agree
+  byte for byte with the old lexer's, the malformed ones included, and
+  `tests/lexer_oracle.js` still agrees with the `typescript` scanner over
+  588 files and 176,304 tokens. stage1 compiling the whole of `self/` goes
+  from **131.8 MB of peak RSS to 128.9 MB** (about 226 ms to 214 ms, on a
+  shared machine, so the memory is the number to trust). On a source whose
+  literals are long rather than short the quadratic shows its real shape:
+  400 KB of literal text cost **408 MB and 392 ms** to lex and now cost
+  **2.4 MB and 10 ms**.
+
 - **`--emit-napi` bridges `u8`, `u16`, `u32`, `u64` and `f32` instead of
   dropping the function that mentions one (WP8).** The shim kept its own
   reader and boxer tables, and they had rows for `i32`, `f64`, `bool` and
