@@ -782,10 +782,25 @@ single module and `<exe>.modules/` for a program with imports — so the two
 compilers leave the same files behind and a build script can be pointed at
 either, `-g` included: the wrapper passes it to stage1, which puts the DWARF
 in the `.ll`, and on to `scripts/build.sh`, which compiles `runtime.c` with it
-and skips the strip step. The flags that are stage0's rather than missing (the
-interop sidecars, the dumps) are refused **by name**, with what to run instead:
-a flag that is silently ignored is how a build ends up not carrying the thing
-it asked for.
+and skips the strip step. `--json`, `--emit-checked` and `--version` go
+straight through: stage1 answers them itself, and the two that print text
+rather than IR skip the output planning and the link entirely. The flags that
+are stage0's rather than missing (the interop sidecars, `--emit-ast`) are
+refused **by name**, with what to run instead: a flag that is silently ignored
+is how a build ends up not carrying the thing it asked for.
+
+**`--emit-ast` is stage0's by design, not by backlog.** Its dump prints the
+`typescript` package's node names and line:column spans; stage1's tree is the
+flattened single-`Node` one of §2.1, with its own vocabulary and byte offsets,
+and `tests/parser_oracle.js` translates TypeScript *into* that vocabulary
+rather than the reverse. Matching stage0's dump would mean carrying a mirror of
+`ts.SyntaxKind` inside the self-hosted compiler to imitate an implementation
+detail of the seed — the opposite of what §1 means by the two being the same
+compiler. `self/dump_ast.ts` keeps the shape its own oracle compares.
+`--emit-checked` is the other way about, and that is why it *is* stage1's: the
+dump is the compiler's own tables, and `tests/self/checked_oracle.js` already
+proves stage1 writes them byte for byte as stage0 does over 272 whole
+programs.
 
 What the wrapper is not is a second implementation of the driver. It plans no
 output, resolves no module and reads no source; it makes a directory, runs the

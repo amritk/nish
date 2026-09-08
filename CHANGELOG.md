@@ -9,6 +9,30 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Changed
 
+- **stage1's command line answers `--emit-checked`, `--json`, `--help` and
+  `--version` (WP14).** The four flags that are not about linking are stage1's
+  now, spelled and behaving as stage0 spells them: `--json` writes one flat
+  diagnostic object per line to stdout, uncapped, in the same order and with
+  the same spans; `--emit-checked` writes the checked program's tables, for a
+  whole program with its imports; `--help` goes to stderr with exit 2; and
+  `--version` prints `amritc <version>` from `self/branding.ts`, which
+  `tests/run.js` fails if it drifts from `package.json`. The dump itself moved
+  to `self/dump.ts` so the driver and the `dump_checked` entry the oracle
+  spawns cannot grow two spellings of one format. `scripts/amritc.sh` passes
+  all four through — `--emit-checked` and `--version` skip the output planning
+  and the link, since they print text rather than writing IR — and it no longer
+  swallows the compiler's stdout on a failed compile, which is where `--json`
+  puts the diagnostics.
+
+  **`--emit-ast` stays stage0's**, and by design rather than for now: stage0's
+  AST dump prints the `typescript` package's node names and line:column spans,
+  and stage1's tree is the flattened single-`Node` one `self/nodes.ts` defines,
+  with its own vocabulary and byte offsets — the parser oracle translates
+  TypeScript *into* that vocabulary, not the other way about. Matching the dump
+  would mean carrying someone else's SyntaxKind naming inside the self-hosted
+  compiler, which is imitation rather than parity, so the wrapper keeps
+  refusing it by name and `self/dump_ast.ts` keeps the shape its oracle reads.
+
 - **A `DIFile`'s directory is `.`, not the working directory.** `-g` metadata
   now depends only on the command line, so a debug build is reproducible across
   machines — which is what clang's `-fdebug-compilation-dir=.` is for — and the

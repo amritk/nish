@@ -54,6 +54,11 @@ const SHARED_FLAGS = new Set([
   "-g",
 ]);
 const VALUE_FLAGS = new Set(["--number-mode", "--target"]);
+/**
+ * Flags stage1 has that do not produce IR, so they land in `compare`'s dump
+ * branch rather than in the "stage1 has no ..." skip they used to.
+ */
+const DUMP_FLAGS = new Set(["--emit-ast", "--emit-checked"]);
 
 /** The flags a program is compiled with, split into what both compilers take and what stage1 cannot. */
 function argsFor(file) {
@@ -81,6 +86,17 @@ function llFiles(dir) {
 // defaults to empty rather than making every such caller build a set.
 function compare(binary, work, file, negatives = new Set()) {
   const { flags, unsupported } = argsFor(file);
+  // A program compiled with a dump flag writes no IR on either side, so this
+  // oracle has nothing to compare and is not the one that should say so.
+  // `--emit-checked` is compared over the whole corpus by
+  // `tests/self/checked_oracle.js`; `--emit-ast` is stage0's, because stage0's
+  // AST dump prints the `typescript` package's node names and stage1's tree is
+  // the flattened one `self/nodes.ts` defines (`self/compile.ts`'s header).
+  const dump = unsupported.find((f) => DUMP_FLAGS.has(f));
+  if (dump !== undefined) {
+    const owner = dump === "--emit-checked" ? "tests/self/checked_oracle.js compares it" : "stage0's AST dump";
+    return { dumped: `${dump}: ${owner}` };
+  }
   if (unsupported.length > 0) return { skipped: `stage1 has no ${unsupported.join(" ")}` };
   // A `tests/link` program that carries an `expected.err` may be a compile-time
   // rejection — no IR on either side — or one only `--link` refuses, which
@@ -194,10 +210,12 @@ function main(argv) {
   const rejected = [];
   const failed = [];
   const refused = [];
+  const dumps = [];
   for (const file of inputs) {
     const result = compare(binary, work, file, negatives);
     const name = path.relative(root, file);
-    if (result.negative !== undefined) refused.push(name);
+    if (result.dumped !== undefined) dumps.push(`${name}: ${result.dumped}`);
+    else if (result.negative !== undefined) refused.push(name);
     else if (result.skipped !== undefined) skipped.push(`${name}: ${result.skipped}`);
     else if (result.rejected !== undefined) rejected.push(`${name}: ${result.rejected}`);
     else if (result.failed !== undefined) failed.push(`${name}: ${result.failed}`);
@@ -215,8 +233,9 @@ function main(argv) {
   if (verbose) {
     for (const s of skipped) process.stdout.write(`  skip ${s}\n`);
     for (const r of refused) process.stdout.write(`  negative ${r}\n`);
+    for (const d of dumps) process.stdout.write(`  dump ${d}\n`);
   }
-  const compared = inputs.length - skipped.length - rejected.length - refused.length;
+  const compared = inputs.length - skipped.length - rejected.length - refused.length - dumps.length;
   // Each of these is counted apart from the others and named in the summary. A
   // file stage0 accepts and stage1 does not is the remaining work of this
   // milestone and must not be able to hide inside a skip count; a program that
@@ -224,10 +243,11 @@ function main(argv) {
   // a gap at all.
   const negativeNote =
     refused.length > 0 ? `, ${refused.length} negatives (tests/self/reject_oracle.js compares them)` : "";
+  const dumpNote = dumps.length > 0 ? `, ${dumps.length} dumps (no IR to compare)` : "";
   const note = rejected.length > 0 ? `, ${rejected.length} rejected by stage1` : "";
   process.stdout.write(
     `${agreed}/${compared} programs agree (${modules} modules, ${lines} IR lines), ` +
-      `${skipped.length} skipped${negativeNote}${note}\n`
+      `${skipped.length} skipped${negativeNote}${dumpNote}${note}\n`
   );
   return failed.length === 0 && rejected.length === 0 ? 0 : 1;
 }

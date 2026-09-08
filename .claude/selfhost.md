@@ -43,10 +43,19 @@ scripts/amritc.sh hello.ts --link hello   # its command line: -o, --link, --prof
 
 `scripts/amritc.sh` is the wrapper D4 promised: it makes the output
 directory and runs `scripts/build.sh`, which is the half of the driver stage1
-does not have. It takes `-g` and passes it on to both halves; it refuses the
-dumps and the interop sidecars **by name** — they are stage0's, not missing —
-and mirrors stage0's file layout exactly, so either compiler can be dropped
-into a build script. See `docs/wp14-selfhost.md` §7.
+does not have. It takes `-g` and passes it on to both halves, and passes
+`--json`, `--emit-checked` and `--version` through to the compiler, which
+answers them itself. It refuses the interop sidecars and `--emit-ast` **by
+name** — they are stage0's, not missing — and mirrors stage0's file layout
+exactly, so either compiler can be dropped into a build script. See
+`docs/wp14-selfhost.md` §7.
+
+`--emit-ast` is the one flag that is stage0's *by design* rather than for now:
+stage0's dump prints the `typescript` package's node names and line:column
+spans, and stage1's tree is the flattened one `self/nodes.ts` defines. The
+parser oracle translates TypeScript into stage1's vocabulary; going the other
+way would put someone else's SyntaxKind naming inside the self-hosted
+compiler.
 
 ## The rules that are specific to this work
 
@@ -108,7 +117,8 @@ No generics, arrow functions, closures, nested functions or function values; no
 | `debug.ts` | `src/codegen/debug.ts`: the DWARF metadata `-g` emits |
 | `emit.ts` `emit_util.ts` `emit_ops.ts` `emit_control.ts` `emit_strings.ts` `emit_arrays.ts` `emit_classes.ts` `emit_builtins.ts` | `src/codegen/emitter.ts` and `emit/*.ts` |
 | `compilation.ts` | `src/compilation.ts`: the whole-program driver |
-| `dump_tokens.ts` `dump_ast.ts` `dump_checked.ts` `compile.ts` | the `--emit-*` dumps in `src/dump.ts`, and the CLI |
+| `dump.ts` | `src/dump.ts`'s `--emit-checked` text, printed by both the driver and the dump entry |
+| `dump_tokens.ts` `dump_ast.ts` `dump_checked.ts` `compile.ts` | the dump entry points the oracles spawn, and the CLI |
 
 Cyclic imports between family modules are fine and already used
 (`expressions.ts` ↔ `members.ts`), because the dispatch entry point and its

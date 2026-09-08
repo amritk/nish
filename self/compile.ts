@@ -10,17 +10,44 @@
 // the driver in stage0.
 //
 // The flags are the subset of stage0's that change the IR, `-g` included:
-// DWARF is metadata in the `.ll` and costs the driver nothing. Everything else
-// — `--link`, `--profile`, the interop sidecars, the dumps — is stage0's for
-// the same reason.
+// DWARF is metadata in the `.ll` and costs the driver nothing. `--emit-checked`
+// is here too, because the dump is this compiler's own tables and stage1
+// already writes them byte for byte as stage0 does
+// (`tests/self/checked_oracle.js`).
+//
+// `--link` and `--profile` stay stage0's, and so does `--emit-ast`. The last
+// one is not an omission: stage0's AST dump prints the *`typescript` package's*
+// node names and line:column spans, and stage1's tree is the flattened one
+// `self/nodes.ts` defines, with its own vocabulary and byte offsets. Printing
+// someone else's node names would be imitation rather than parity, so stage1
+// keeps `self/dump_ast.ts` in the shape its parser oracle compares and the
+// wrapper refuses `--emit-ast` by name.
 
+import { CLI, VERSION } from "./branding";
 import { Compilation } from "./compilation";
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context";
+import { checkedText } from "./dump";
 import { Options } from "./options";
 import { resolveTarget, supportedTargets } from "./target";
 
 const USAGE: string =
-  "usage: compile <file.ts> [--out-dir <dir>] [--number-mode i32|f64] [--plain] [--strict-exports] [--unchecked-indexing] [--nsw] [--no-stack-alloc] [--runtime-decls] [--target <triple>] [-g]";
+  "usage: compile <file.ts> [--out-dir <dir>] [--number-mode i32|f64] [--plain] [--strict-exports] [--unchecked-indexing] [--nsw] [--no-stack-alloc] [--runtime-decls] [--target <triple>] [-g] [--json] [--emit-checked]\n       compile --version | --help";
+
+/**
+ * The diagnostics of a failed compilation, in whichever of stage0's two shapes
+ * was asked for: `--json` is one flat object per line on **stdout**, every
+ * error and no excerpt, for an editor to read; the default is the human report
+ * on stderr, capped where stage0 caps it.
+ */
+function report(compilation: Compilation, json: boolean): void {
+  if (!json) {
+    writeError(`${compilation.sink.format(20)}\n`);
+    return;
+  }
+  for (const diagnostic of compilation.sink.sorted()) {
+    console.log(diagnostic.json());
+  }
+}
 
 export function main(): number {
   if (process.argv.length < 2) {
@@ -30,6 +57,8 @@ export function main(): number {
   const opts = new Options();
   let path = "";
   let outDir = "";
+  let json = false;
+  let emitChecked = false;
   let arg = 1;
   while (arg < process.argv.length) {
     const value = process.argv[arg];
@@ -74,6 +103,21 @@ export function main(): number {
       opts.runtimeDecls = true;
     } else if (value === "-g") {
       opts.debugInfo = true;
+    } else if (value === "--json") {
+      json = true;
+    } else if (value === "--emit-checked") {
+      emitChecked = true;
+    } else if (value === "-h" || value === "--help") {
+      // stage0 answers `--help` on stderr and exits 2, so a script that asks
+      // either compiler for its help sees the same shape.
+      console.error(USAGE);
+      return 2;
+    } else if (value === "-v" || value === "--version") {
+      // The line stage0 prints. stage1 cannot read `package.json`, so the
+      // version is a constant in `self/branding.ts` and a check in
+      // `tests/run.js` fails if the two ever disagree.
+      console.log(`${CLI} ${VERSION}`);
+      return 0;
     } else if (value.startsWith("-")) {
       console.error(`compile: unknown flag \`${value}\`\n${USAGE}`);
       return 2;
@@ -90,13 +134,19 @@ export function main(): number {
   const compilation = new Compilation(opts);
   if (!compilation.load(path)) {
     if (compilation.sink.hasErrors()) {
-      writeError(`${compilation.sink.format(20)}\n`);
+      report(compilation, json);
     }
     return 1;
   }
   if (!compilation.check()) {
-    writeError(`${compilation.sink.format(20)}\n`);
+    report(compilation, json);
     return 1;
+  }
+  // The checked dump is what pass 2 leaves behind, so it is written here
+  // rather than after `emit`: nothing about the IR changes it.
+  if (emitChecked) {
+    write(checkedText(compilation));
+    return 0;
   }
   const emitted = compilation.emit();
   if (outDir.length === 0) {

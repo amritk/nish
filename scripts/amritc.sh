@@ -22,10 +22,15 @@
 #                   and the binary is not stripped, exactly as stage0's
 #                   `--link -g` does
 #
-# Every other flag goes straight to the compiler. The flags that are stage0's
-# rather than missing — the interop sidecars, the dumps — are refused by name
-# with what to run instead, because a flag that is quietly ignored is how a
-# build ends up not carrying the thing it asked for.
+# Every other flag goes straight to the compiler. `--emit-checked` and
+# `--version` are answered by the compiler itself and print text rather than
+# writing IR, so they skip the output planning and the link entirely.
+#
+# The flags that are stage0's rather than missing — the interop sidecars and
+# `--emit-ast`, whose dump prints the `typescript` package's node names that
+# stage1's own tree does not use — are refused by name with what to run
+# instead, because a flag that is quietly ignored is how a build ends up not
+# carrying the thing it asked for.
 #
 # AMRITC=<binary> picks the compiler (default: build/amritc).
 # Exit codes match stage0's: 0 ok, 1 compile error, 2 usage, 3 toolchain.
@@ -38,6 +43,8 @@ output=""
 link=""
 profile=speed
 debug=0
+dump=0
+version=0
 flags=()
 
 usage() {
@@ -47,7 +54,8 @@ usage: scripts/amritc.sh <entry.ts> [-o <out.ll>|<dir>/] [--link <exe>]
 Drives the self-hosted compiler (build/amritc, or $AMRITC) and adds the
 directory creation and the link step it does not do itself (wp14 D4).
 Compiler flags: --number-mode i32|f64, --plain, --strict-exports, --nsw,
---no-stack-alloc, --unchecked-indexing, --runtime-decls, --target <triple>, -g.
+--no-stack-alloc, --unchecked-indexing, --runtime-decls, --target <triple>, -g,
+--json, --emit-checked, --version.
 EOF
   exit "${1:-2}"
 }
@@ -64,7 +72,10 @@ while [ $# -gt 0 ]; do
     --profile) profile="${2:-}"; [ -n "$profile" ] || usage; shift 2 ;;
     -h|--help) usage 0 ;;
     -g) debug=1; flags+=("-g"); shift ;;
-    --emit-header|--emit-dts|--emit-napi|--emit-ast|--emit-checked|--json|-v|--version)
+    -v|--version) version=1; shift ;;
+    --emit-checked) dump=1; flags+=("$1"); shift ;;
+    --json) flags+=("$1"); shift ;;
+    --emit-header|--emit-dts|--emit-napi|--emit-ast)
       stage0_only "$1" ;;
     --number-mode|--target) flags+=("$1" "${2:-}"); [ -n "${2:-}" ] || usage; shift 2 ;;
     -*) flags+=("$1"); shift ;;
@@ -72,14 +83,26 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-[ -n "$entry" ] || usage
 if [ ! -x "$compiler" ]; then
   echo "amritc.sh: no compiler at \`$compiler\`; run \`npm run bootstrap\` (or set AMRITC)" >&2
   exit 3
 fi
+# `--version` is the compiler's answer, not this script's, and it needs no
+# entry: ask the binary so the version can never be this file's stale copy.
+if [ "$version" -eq 1 ]; then
+  exec "$compiler" --version
+fi
+[ -n "$entry" ] || usage
 if [ -n "$link" ] && [ -n "$output" ]; then
   echo "amritc.sh: --link picks where the IR goes; pass one of -o and --link" >&2
   exit 2
+fi
+
+# A dump asks the compiler for text on stdout rather than for IR, so there is
+# no directory to make, nothing to move into place and nothing to link: hand the
+# arguments straight over and let its exit status be ours.
+if [ "$dump" -eq 1 ]; then
+  exec "$compiler" "$entry" "${flags[@]+"${flags[@]}"}"
 fi
 
 # Where the IR goes. `--link` and a trailing `/` both mean a directory; a plain
@@ -108,8 +131,16 @@ if [ -z "$dir" ]; then
 fi
 rm -rf "$dir"
 mkdir -p "$dir"
-"$compiler" "$entry" "${flags[@]+"${flags[@]}"}" --out-dir "$dir" >/dev/null
+# The compiler's stdout is its `wrote <file>` chatter, which this script
+# replaces with its own — except when the compile fails, where `--json` puts
+# the diagnostics there. So capture it and print it only on failure: without
+# `--json` there is nothing on stdout to print, and with it the JSON reaches
+# the caller instead of /dev/null.
+compiler_out=$("$compiler" "$entry" "${flags[@]+"${flags[@]}"}" --out-dir "$dir")
 status=$?
+if [ "$status" -ne 0 ] && [ -n "$compiler_out" ]; then
+  printf '%s\n' "$compiler_out"
+fi
 if [ "$status" -ne 0 ]; then
   rm -rf "$dir"
   exit "$status"

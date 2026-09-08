@@ -2179,16 +2179,71 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         `${withG.status}: ${withG.stdout}${withG.stderr}${dwarf ? dwarf.stdout.slice(0, 400) : ""}`
       );
 
+      // stage1 answers `--version` itself, and the answer has to be the same
+      // string stage0 prints: `self/branding.ts` carries the version as a
+      // constant because stage1 cannot read `package.json`, so this is what
+      // catches the two drifting apart at the next release bump.
+      const ourVersion = spawnSync("bash", [wrapper, "--version"], { cwd: root, encoding: "utf8", env });
+      const theirVersion = spawnSync("node", [cli, "--version"], { cwd: root, encoding: "utf8" });
+      check(
+        "scripts/amritc.sh: --version is the line stage0 prints",
+        ourVersion.status === 0 &&
+          ourVersion.stdout === theirVersion.stdout &&
+          ourVersion.stdout.trim() ===
+            `amritc ${JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version}`,
+        `ours ${JSON.stringify(ourVersion.stdout)} theirs ${JSON.stringify(theirVersion.stdout)}`
+      );
+
+      // `--json` is the editor-facing diagnostic shape, and an editor pointed
+      // at either compiler must get the same bytes: same objects, same order,
+      // same spans. A multi-error program is the case worth pinning, because
+      // it is also the one that proves stage1 collected every error rather
+      // than stopping at the first.
+      const jsonCase = path.join("tests", "cases", "reject_multi_error.ts");
+      const ourJson = spawnSync("bash", [wrapper, jsonCase, "--json"], { cwd: root, encoding: "utf8", env });
+      const theirJson = spawnSync("node", [cli, jsonCase, "--json"], { cwd: root, encoding: "utf8" });
+      check(
+        "scripts/amritc.sh: --json diagnostics are byte-identical to stage0's",
+        ourJson.status === 1 &&
+          theirJson.status === 1 &&
+          ourJson.stdout === theirJson.stdout &&
+          ourJson.stdout.split("\n").filter(Boolean).length === 3,
+        `ours:\n${ourJson.stdout}${ourJson.stderr}\ntheirs:\n${theirJson.stdout}`
+      );
+
+      // `--emit-checked` through the driver, rather than through the
+      // `dump_checked` entry the oracle spawns: the same text has to come out
+      // of both, which is why one `self/dump.ts` writes it for both. The
+      // attribute pass's lines are dropped on stage0's side exactly as
+      // `tests/self/checked_oracle.js` drops them.
+      const laterPhases = /^ {2}(facts:|escaping:|calls:|pointer |stackSites)/;
+      const checkerLines = (text) => text.split("\n").filter((l) => l.length > 0 && !laterPhases.test(l));
+      const dumpCase = path.join("examples", "multi", "main.ts");
+      const ourDump = spawnSync("bash", [wrapper, dumpCase, "--emit-checked"], { cwd: root, encoding: "utf8", env });
+      const theirDump = spawnSync("node", [cli, dumpCase, "--emit-checked"], { cwd: root, encoding: "utf8" });
+      check(
+        "scripts/amritc.sh: --emit-checked dumps a whole program as stage0 dumps it",
+        ourDump.status === 0 &&
+          theirDump.status === 0 &&
+          checkerLines(ourDump.stdout).join("\n") === checkerLines(theirDump.stdout).join("\n") &&
+          ourDump.stdout.includes("module examples/multi/main.ts (entry)"),
+        `ours:\n${ourDump.stdout}${ourDump.stderr}\ntheirs:\n${theirDump.stdout}`
+      );
+
       // The mechanism is still there for the flags that *are* stage0's: one of
       // them refused by name rather than quietly ignored, because a build that
-      // asked for a sidecar must not come out without it.
+      // asked for a sidecar must not come out without it. `--emit-ast` is the
+      // one that stays stage0's on purpose rather than for now: its dump
+      // prints the `typescript` package's node names and line:column spans,
+      // and stage1's tree is the flattened one `self/nodes.ts` defines, so
+      // matching it would be imitation rather than parity.
       const refused = spawnSync(
         "bash",
-        [wrapper, "examples/hello.ts", "--emit-header", path.join(shipDir, "hello.h")],
+        [wrapper, "examples/hello.ts", "--emit-ast"],
         { cwd: root, encoding: "utf8", env }
       );
       check(
-        "scripts/amritc.sh: --emit-header is refused by name, not ignored (D4)",
+        "scripts/amritc.sh: --emit-ast is refused by name, not ignored (D4)",
         refused.status === 2 && refused.stderr.includes("is stage0's"),
         `${refused.status}: ${refused.stdout}${refused.stderr}`
       );
