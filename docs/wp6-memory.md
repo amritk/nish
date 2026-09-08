@@ -20,7 +20,7 @@ Files: `src/codegen/escape.ts` (the analysis), `src/codegen/attributes.ts`
 (integration into the fact fixpoint), `src/codegen/emit/{classes,arrays}.ts`
 (allocas), `src/codegen/emitter.ts` and `emit/statements.ts` (scopes),
 `src/checker/nullable.ts`, `src/checker/arena.ts`, `src/codegen/emit/arena.ts`,
-`runtime/runtime.c`, `runtime/statictsc.h`. Tests: `tests/cases/mem_*`,
+`runtime/runtime.c`, `runtime/amritc.h`. Tests: `tests/cases/mem_*`,
 `tests/cases/reject_null_*`, `reject_nullable_scalar`,
 `reject_arena_release_type`, the `WP6: memory` block in `tests/run.js`, and
 the scope checks in `tests/runtime_test.c`.

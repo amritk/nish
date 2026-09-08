@@ -156,13 +156,13 @@ both `finish` (calls it) and `main` (calls `finish`) are emitted with just
 | `writeFileSync(path: string, data: string): void` | `call void @sts_write_file(i8* path, i8* data)` | `nounwind`; params as above | write |
 | `appendFileSync(path: string, data: string): void` | `call void @sts_append_file(i8* path, i8* data)` | same | write |
 
-These are globals, not `import { readFileSync } from "fs"`: StaticTS has no
+These are globals, not `import { readFileSync } from "fs"`: AmritScript has no
 package resolution and rejects bare specifiers. Paths are relative to the
 working directory. `sts_read_file` opens the file, sizes it with `lseek`,
 allocates one arena string, and fills it with `pread`; the writers open with
 `O_CREAT | O_TRUNC` (or `O_APPEND`) and mode `0644` and loop over `write`.
 No stdio. A failure (missing file, permission denied, short write) prints
-`statictsc: cannot read <path>` / `cannot write <path>` to stderr and exits
+`amritc: cannot read <path>` / `cannot write <path>` to stderr and exits
 with status 1; there are no exceptions to throw. The string parameters are
 `nocapture` in the declaration, so passing a parameter to them does not make
 it escape (it keeps `nocapture` in the caller's signature).
@@ -291,7 +291,7 @@ effect write), which is also what `sts_str_from_i32` now delegates to.
 
 ## The `i64` type
 
-| StaticTS | LLVM | Align |
+| AmritScript | LLVM | Align |
 | --- | --- | --- |
 | `i64` | `i64` | 8 |
 
@@ -481,7 +481,7 @@ under wasm needs the runtime compiled against a libc, which the freestanding
 `scripts/build.sh` builds a command module:
 
 ```
-statictsc examples/argv.ts --link build/argv.wasm --profile wasi
+amritc examples/argv.ts --link build/argv.wasm --profile wasi
 node examples/wasi-host.mjs build/argv.wasm 3 4 five      # or wasmtime build/argv.wasm 3 4 five
 ```
 

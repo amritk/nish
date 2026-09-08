@@ -1,6 +1,6 @@
 # WP5: Modules, entry point, linkage
 
-StaticTS programs can span several files. Each file is one module and becomes
+AmritScript programs can span several files. Each file is one module and becomes
 one LLVM IR module (`.ll`); `scripts/build.sh` links them with the C runtime
 into a native binary. This document is the reference for how modules resolve,
 how the process entry is produced, which functions are visible to the linker,
@@ -33,7 +33,7 @@ import { square, cube as pow3 } from "./math";
 ```
 
 - The specifier must start with `./` or `../`. Bare specifiers (`"math"`,
-  `"lodash"`) are rejected: StaticTS has no package resolution.
+  `"lodash"`) are rejected: AmritScript has no package resolution.
 - The `.ts` extension is optional. `./math.js` is also accepted and mapped to
   `./math.ts`, matching the TypeScript convention for ESM-style sources.
 - The path is resolved relative to the *importing* file, not the working
@@ -167,7 +167,7 @@ name clashes up front:
 ## CLI
 
 ```
-statictsc <entry.ts> [more.ts ...] [options]
+amritc <entry.ts> [more.ts ...] [options]
   -o, --output <file.ll>     output path for a single module (default: <input>.ll)
   -o, --output <dir>/        output directory: one <dir>/<module>.ll per module
   --link <exe>               build a native binary from every module + runtime/runtime.c

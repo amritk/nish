@@ -30,7 +30,7 @@ export interface EmitContext {
   readonly fn: IRFunction;
   /**
    * Its checked signature. `orReturn` (WP16) needs the enclosing function's
-   * *StaticTS* return type to build the `Result` it returns early, which the
+   * *source* return type to build the `Result` it returns early, which the
    * LLVM type on `fn` cannot give back.
    */
   readonly currentSig: FunctionSig;

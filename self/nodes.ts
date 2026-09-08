@@ -1,7 +1,7 @@
-// The syntax tree of StaticTS-0 (docs/wp14-selfhost.md §2.1, milestone S2).
+// The syntax tree of the subset (docs/wp14-selfhost.md §2.1, milestone S2).
 //
 // **One `Node` class**, with a `kind` discriminant and the union of the fields
-// any node needs. StaticTS has single inheritance but no downcast, and adding
+// any node needs. The language has single inheritance but no downcast, and adding
 // one would mean a runtime tag check, a `T | null` result and a new rule in
 // the checker for a cast that can fail; a bootstrap compiler needs none of
 // that. Field access is unchecked by the type system and guarded by `kind`
@@ -115,7 +115,7 @@ export class Node {
   /**
    * Dense index into the side tables the checker fills (`self/program.ts`),
    * assigned by the parser as it builds the tree. `src/` keys those tables by
-   * `WeakMap<ts.Node, ...>`; StaticTS has no `WeakMap` and this is the faster
+   * `WeakMap<ts.Node, ...>`; the language has no `WeakMap` and this is the faster
    * shape anyway — an array index rather than a hash of a pointer — and it
    * keeps the rule that the checker records and the emitter reads, with the
    * AST itself holding nothing but syntax. -1 until a parser assigns one.

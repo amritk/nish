@@ -21,7 +21,7 @@
 //     `emit_classes.ts`, `emit_builtins.ts`) hold the lowerings.
 //   - **The emitter is a class the families are given**, not an interface with
 //     a table of closures. `Emitter` is `EmitContext` and `Emitter` at once,
-//     because StaticTS has no function values to separate them with.
+//     because the language has no function values to separate them with.
 //   - **No debug info.** `-g` is stage0's; stage1 emits no `DISubprogram`, no
 //     `DILocation` and no `llvm.dbg.declare`, for the same reason D4 drops
 //     `--link`: it is not on the path to the bootstrap proof and it would cost

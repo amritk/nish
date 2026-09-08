@@ -1,7 +1,7 @@
-# The StaticTS language
+# The AmritScript language
 
-This is the normative reference for StaticTS, the subset of TypeScript that
-`statictsc` compiles to LLVM IR. It describes what the compiler accepts today,
+This is the normative reference for AmritScript, the subset of TypeScript that
+`amritc` compiles to LLVM IR. It describes what the compiler accepts today,
 what each construct means, and how every rejection is worded. The design
 notes (`docs/wp*.md`) explain *why*; this page says *what*.
 
@@ -32,7 +32,7 @@ Contents: [Lexical rules](#lexical-rules) · [Types](#types) ·
 
 ## Lexical rules
 
-StaticTS source is TypeScript syntax, parsed by the official TypeScript
+AmritScript source is TypeScript syntax, parsed by the official TypeScript
 parser (`ts.createSourceFile`), so tokens, comments, and ASI behave exactly as
 in TypeScript. Syntax errors are reported as `syntax error:` in the same
 `file:line:col` shape (`tests/run.js`, WP10 block).
@@ -58,7 +58,7 @@ in TypeScript. Syntax errors are reported as `syntax error:` in the same
 - **`null`** is a value only where a `T | null` type is expected (see
   [Nullable types](#nullable-types)); with no contextual type it is
   `` `null` needs a contextual `T | null` type `` *(CLI only)*.
-  **`undefined`** is forbidden (`` `undefined` is forbidden in StaticTS; use `null` with a `T | null` type ``,
+  **`undefined`** is forbidden (`` `undefined` is forbidden in AmritScript; use `null` with a `T | null` type ``,
   `tests/cases/reject_undefined_value`).
 - **Bigint** literals (`10n`) and regex literals are forbidden
   (`tests/cases/reject_bigint_literal`, `reject_regex`).
@@ -71,12 +71,12 @@ in TypeScript. Syntax errors are reported as `syntax error:` in the same
 
 ## Types
 
-Every StaticTS type maps 1:1 onto one LLVM first-class type. There is no
+Every AmritScript type maps 1:1 onto one LLVM first-class type. There is no
 boxing, no runtime type tag, no structural subtyping (except
 `implements`, below), and no implicit conversion of any kind: two values are
 compatible only when their types are identical (`src/types.ts`, `sameType`).
 
-| StaticTS | LLVM | Size / align | C ABI (`--emit-header`) | Notes |
+| AmritScript | LLVM | Size / align | C ABI (`--emit-header`) | Notes |
 | --- | --- | --- | --- | --- |
 | `number` (i32 mode), `i32` | `i32` | 4 / 4 | `int32_t` | Wrapping two's-complement arithmetic. |
 | `number` (f64 mode), `f64` | `double` | 8 / 8 | `double` | IEEE-754; `f64` is always available, in both modes. |
@@ -374,7 +374,7 @@ export function main(): i32 {
 ### The type
 
 `Result<T, E>` is a built-in type constructor with exactly two arguments — the
-same kind of thing `Array<T>` is, not a user generic, which StaticTS still does
+same kind of thing `Array<T>` is, not a user generic, which AmritScript still does
 not have (`` `Result` needs exactly two type arguments, e.g. `Result<number, string>` ``,
 `tests/cases/reject_result_type_args`).
 
@@ -440,7 +440,7 @@ still costs something against C and Rust, are in
 
 There is deliberately no `unwrap()`: `expect(message)` says the same thing and
 insists on a reason. There is no `map` / `andThen` / `orElse` either — they
-need function values, which StaticTS forbids because the whole-program pass
+need function values, which AmritScript forbids because the whole-program pass
 cannot prove purity, termination or escape through an unknown callee.
 Narrowing plus `orReturn()` covers what those combinators are for.
 
@@ -483,14 +483,14 @@ function that itself returns a `Result` whose error arm accepts `E`
 (it returns i32) ``, and `` `orReturn()` would propagate IoError but `read`
 returns Result<i32, string> ``). A function that propagates a callee's failure
 therefore has to admit it in its own signature. There is no implicit error
-conversion — Rust's `From<E>` needs a trait and StaticTS has none — so a
+conversion — Rust's `From<E>` needs a trait and AmritScript has none — so a
 mismatch is named rather than papered over; convert it by hand with
 `if (r.isErr()) { return Err(...); }`.
 
 ### It is still TypeScript
 
 Every line above parses as TypeScript, and with
-[`runtime/statictsc.d.ts`](../runtime/statictsc.d.ts) on the include path it
+[`runtime/amritc.d.ts`](../runtime/amritc.d.ts) on the include path it
 type-checks under plain `tsc --strict` and in an editor too. The declarations
 model `Result` as the tagged union TypeScript would use anyway, intersected
 with the method surface, so `if (r.ok)` and `if (r.isOk())` narrow `r` in
@@ -498,7 +498,7 @@ with the method surface, so `if (r.ok)` and `if (r.isOk())` narrow `r` in
 refuses `r.value` before the test just as this compiler does (`tests/run.js`,
 "WP16: the ambient declarations").
 
-`statictsc` remains the authority: `tsc` cannot see that a `Result` may not be
+`amritc` remains the authority: `tsc` cannot see that a `Result` may not be
 dropped, that `orReturn()` returns early, or that the enclosing function has
 to return a `Result` for it to be legal at all. A program `tsc` accepts may
 still be rejected here; the reverse is a bug in the declarations.
@@ -617,7 +617,7 @@ having no top-level code and therefore no initialisation order.
   An array, class, or interface constant would need an allocation, and there is
   no code to run it (`` must be a number, boolean, or string ``,
   `tests/cases/reject_const_array`).
-- **The initialiser is an ordinary StaticTS expression restricted to literals
+- **The initialiser is an ordinary AmritScript expression restricted to literals
   and other constants**: the operators of [Operators](#operators) over numeric,
   boolean, and string literals, other module constants (declared anywhere in
   the module, or imported), and parentheses. Anything else — a call, a `new`, a
@@ -847,7 +847,7 @@ class Point {
     `areaOf(s: Shape)` and `const s: Shape = sq; s.area()` call `Shape.area`
     on the same object, and `Shape.report()` calling `this.area()` always
     reaches `Shape.area` (`tests/cases/cls_extends_override`). There is no
-    vtable and no virtual dispatch; this is the one place StaticTS knowingly
+    vtable and no virtual dispatch; this is the one place AmritScript knowingly
     differs from JavaScript. `super.m(args)` inside a derived class calls the
     base implementation; `super` has no other use (`` `super.x` is not supported ``,
     `reject_cls_super_field`; `reject_cls_super_outside`, `reject_cls_super_in_method`).
@@ -948,7 +948,7 @@ The expression's type must equal the declared return type
 ### `if` / `else`
 
 The condition must be `boolean`: there is no truthiness
-(`Condition must be boolean, got i32 (StaticTS has no truthiness)`,
+(`Condition must be boolean, got i32 (AmritScript has no truthiness)`,
 `tests/cases/reject_cf_nonbool_cond`). `else if` chains are nested `if`s
 (`tests/cases/cf_if`, `cf_if_else_chain`).
 
@@ -1331,7 +1331,7 @@ supplies the arguments (`examples/wasi-host.mjs`).
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `readFileSync(path: string): string` | whole file as one arena string; failure prints `statictsc: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects string, got i32 ``) |
+| `readFileSync(path: string): string` | whole file as one arena string; failure prints `amritc: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects string, got i32 ``) |
 | `readFileSyncOrNull(path: string): string \| null` | the same read, `null` where the other exits, so a program can report the missing file itself and carry on with the rest (WP14 B3). It subsumes an `existsSync` and has no time-of-check race. The result is narrowed with `if (text !== null)` like any other nullable | write | `io_streams`; `reject_readfile_or_null_unchecked` |
 | `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position | write | `io_files` |
 | `appendFileSync(path: string, data: string): void` | create/append and write; statement position | write | `io_files` |
@@ -1621,77 +1621,77 @@ fragment `tests/run.js` matches and the case that proves it.
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| `any` anywhere, including nested type arguments | `` `any` is forbidden in StaticTS `` | `reject_any_param`, `reject_any_nested` |
-| `unknown` | `` `unknown` is forbidden in StaticTS `` | `reject_unknown_param`, `reject_unknown_nested` |
-| `symbol` type | `` `symbol` type is forbidden in StaticTS (no symbol type) `` | `reject_symbol_type` |
-| `bigint` type | `` `bigint` type is forbidden in StaticTS (use number, i32, or f64) `` | `reject_bigint_type` |
-| `undefined` type | `` `undefined` is forbidden in StaticTS; use `null` with a `T \| null` type `` | `reject_union_undefined` (via the union rule) |
-| union types other than `T \| null` / `null \| T` | `` Union types other than `T \| null` are forbidden in StaticTS (values have one fixed layout) `` | `reject_union_type`, `reject_union_undefined` |
-| `Function`, `Symbol`, `Proxy` as type names | `` `Function` type is forbidden in StaticTS (no dynamic function values) `` (and analogous) | `reject_function_type` |
-| `import("x").T` | `` Dynamic `import()` is forbidden in StaticTS (modules are resolved at compile time) `` | `reject_dynamic_import` |
-| `x as any`, `<any>x` | `` Type assertion to `any` is forbidden in StaticTS `` | `reject_as_any` |
-| `x as unknown`, `<unknown>x` | `` Type assertion to `unknown` is forbidden in StaticTS `` | `reject_as_unknown` |
+| `any` anywhere, including nested type arguments | `` `any` is forbidden in AmritScript `` | `reject_any_param`, `reject_any_nested` |
+| `unknown` | `` `unknown` is forbidden in AmritScript `` | `reject_unknown_param`, `reject_unknown_nested` |
+| `symbol` type | `` `symbol` type is forbidden in AmritScript (no symbol type) `` | `reject_symbol_type` |
+| `bigint` type | `` `bigint` type is forbidden in AmritScript (use number, i32, or f64) `` | `reject_bigint_type` |
+| `undefined` type | `` `undefined` is forbidden in AmritScript; use `null` with a `T \| null` type `` | `reject_union_undefined` (via the union rule) |
+| union types other than `T \| null` / `null \| T` | `` Union types other than `T \| null` are forbidden in AmritScript (values have one fixed layout) `` | `reject_union_type`, `reject_union_undefined` |
+| `Function`, `Symbol`, `Proxy` as type names | `` `Function` type is forbidden in AmritScript (no dynamic function values) `` (and analogous) | `reject_function_type` |
+| `import("x").T` | `` Dynamic `import()` is forbidden in AmritScript (modules are resolved at compile time) `` | `reject_dynamic_import` |
+| `x as any`, `<any>x` | `` Type assertion to `any` is forbidden in AmritScript `` | `reject_as_any` |
+| `x as unknown`, `<unknown>x` | `` Type assertion to `unknown` is forbidden in AmritScript `` | `reject_as_unknown` |
 
 ### Declarations
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| type parameters on functions, methods, arrows, classes, interfaces, type aliases | `` Generic type parameters are forbidden in StaticTS (no monomorphisation yet) `` | `reject_generic_function`, `reject_generic_class` |
-| generators (`function*`) | `` Generators are forbidden in StaticTS (no coroutine runtime) `` | `reject_generator` |
-| `async` functions, methods, arrows | `` `async` functions are forbidden in StaticTS (no event loop or promises) `` | `reject_async_function` |
+| type parameters on functions, methods, arrows, classes, interfaces, type aliases | `` Generic type parameters are forbidden in AmritScript (no monomorphisation yet) `` | `reject_generic_function`, `reject_generic_class` |
+| generators (`function*`) | `` Generators are forbidden in AmritScript (no coroutine runtime) `` | `reject_generator` |
+| `async` functions, methods, arrows | `` `async` functions are forbidden in AmritScript (no event loop or promises) `` | `reject_async_function` |
 | `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |
-| enum members that are not numeric literals | `` Enum members must be numeric literals in StaticTS (enums lower to plain integers) `` | `reject_enum_string`, `reject_enum_computed` (numeric enums then fail in the checker as top-level statements) |
-| `namespace` / `module` blocks | `` `namespace` and `module` blocks are forbidden in StaticTS (use ES module files) `` | `reject_namespace` |
-| `declare global` | `` `declare global` is forbidden in StaticTS (no global object to augment) `` | `reject_declare_global` |
-| decorators | `` Decorators are forbidden in StaticTS (no runtime metadata or class rewriting) `` | `reject_decorator` |
-| computed property names | `` Computed property names are forbidden in StaticTS (object layout is fixed at compile time) `` | `reject_computed_property` |
+| enum members that are not numeric literals | `` Enum members must be numeric literals in AmritScript (enums lower to plain integers) `` | `reject_enum_string`, `reject_enum_computed` (numeric enums then fail in the checker as top-level statements) |
+| `namespace` / `module` blocks | `` `namespace` and `module` blocks are forbidden in AmritScript (use ES module files) `` | `reject_namespace` |
+| `declare global` | `` `declare global` is forbidden in AmritScript (no global object to augment) `` | `reject_declare_global` |
+| decorators | `` Decorators are forbidden in AmritScript (no runtime metadata or class rewriting) `` | `reject_decorator` |
+| computed property names | `` Computed property names are forbidden in AmritScript (object layout is fixed at compile time) `` | `reject_computed_property` |
 
 ### Statements
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| `with` | `` `with` is forbidden in StaticTS (no dynamic scope) `` | `reject_with_statement` |
-| `try` / `catch` / `finally` | `` `try`/`catch`/`finally` is forbidden in StaticTS (no unwinding; use `Result<T, E>`) `` | `reject_try_catch` |
-| `throw` | `` `throw` is forbidden in StaticTS (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process `` | `reject_throw` |
-| `debugger` | `` `debugger` is forbidden in StaticTS (no debugger hook) `` | `reject_debugger` |
-| labeled statements | `` Labeled statements are forbidden in StaticTS (use structured loops) `` | `reject_labeled_statement` |
+| `with` | `` `with` is forbidden in AmritScript (no dynamic scope) `` | `reject_with_statement` |
+| `try` / `catch` / `finally` | `` `try`/`catch`/`finally` is forbidden in AmritScript (no unwinding; use `Result<T, E>`) `` | `reject_try_catch` |
+| `throw` | `` `throw` is forbidden in AmritScript (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process `` | `reject_throw` |
+| `debugger` | `` `debugger` is forbidden in AmritScript (no debugger hook) `` | `reject_debugger` |
+| labeled statements | `` Labeled statements are forbidden in AmritScript (use structured loops) `` | `reject_labeled_statement` |
 
 ### Expressions
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| `eval(...)`, `eval` as a value | `` `eval` is forbidden in StaticTS (no interpreter at runtime) `` | `reject_eval` |
-| `Function(...)` | `` `Function` constructor is forbidden in StaticTS (no interpreter at runtime) `` | (validator; no case) |
-| `new Function(...)` | `` `new Function` is forbidden in StaticTS (no interpreter at runtime) `` | `reject_new_function` |
-| `Function` as a value | `` `Function` is forbidden in StaticTS (no interpreter at runtime) `` | (validator; no case) |
-| `new Proxy(...)` | `` `new Proxy` is forbidden in StaticTS (no dynamic property interception) `` | `reject_proxy` |
-| `Proxy` as a value | `` `Proxy` is forbidden in StaticTS (no dynamic property interception) `` | (validator; no case) |
-| `Reflect` | `` `Reflect` is forbidden in StaticTS (no runtime reflection) `` | `reject_reflect` |
-| `Symbol(...)`, `Symbol` as a value | `` `Symbol` is forbidden in StaticTS (no symbol type) `` | `reject_symbol_value` |
-| `globalThis` | `` `globalThis` is forbidden in StaticTS (no global object) `` | `reject_globalthis` |
-| `arguments` | `` `arguments` is forbidden in StaticTS (functions have fixed arity) `` | `reject_arguments` |
-| `undefined` as a value | `` `undefined` is forbidden in StaticTS; use `null` with a `T \| null` type `` | `reject_undefined_value` |
-| `void expr` | `` `void` expressions are forbidden in StaticTS (no `undefined` value) `` | `reject_void_expression` |
+| `eval(...)`, `eval` as a value | `` `eval` is forbidden in AmritScript (no interpreter at runtime) `` | `reject_eval` |
+| `Function(...)` | `` `Function` constructor is forbidden in AmritScript (no interpreter at runtime) `` | (validator; no case) |
+| `new Function(...)` | `` `new Function` is forbidden in AmritScript (no interpreter at runtime) `` | `reject_new_function` |
+| `Function` as a value | `` `Function` is forbidden in AmritScript (no interpreter at runtime) `` | (validator; no case) |
+| `new Proxy(...)` | `` `new Proxy` is forbidden in AmritScript (no dynamic property interception) `` | `reject_proxy` |
+| `Proxy` as a value | `` `Proxy` is forbidden in AmritScript (no dynamic property interception) `` | (validator; no case) |
+| `Reflect` | `` `Reflect` is forbidden in AmritScript (no runtime reflection) `` | `reject_reflect` |
+| `Symbol(...)`, `Symbol` as a value | `` `Symbol` is forbidden in AmritScript (no symbol type) `` | `reject_symbol_value` |
+| `globalThis` | `` `globalThis` is forbidden in AmritScript (no global object) `` | `reject_globalthis` |
+| `arguments` | `` `arguments` is forbidden in AmritScript (functions have fixed arity) `` | `reject_arguments` |
+| `undefined` as a value | `` `undefined` is forbidden in AmritScript; use `null` with a `T \| null` type `` | `reject_undefined_value` |
+| `void expr` | `` `void` expressions are forbidden in AmritScript (no `undefined` value) `` | `reject_void_expression` |
 | `==`, `!=` | `Loose equality is forbidden; use === / !==` | `reject_loose_equality`, `reject_loose_inequality` |
-| `in` | `` `in` operator is forbidden in StaticTS (no dynamic property lookup) `` | `reject_in_operator` |
-| `a?.b`, `a?.[i]`, `f?.()` | `` Optional chaining `?.` is forbidden in StaticTS (narrow with `!== null` instead) `` | `reject_optional_chain` |
-| `a ?? b` | `` Nullish coalescing `??` is forbidden in StaticTS (narrow with `!== null` instead) `` | `reject_nullish` |
-| `instanceof` | `` `instanceof` is forbidden in StaticTS (no prototype chain) `` | `reject_instanceof` |
-| comma expressions | `Comma expressions are forbidden in StaticTS (write separate statements)` | `reject_comma_expression` |
-| `typeof x` | `` `typeof` is forbidden in StaticTS (no runtime type tags) `` | `reject_typeof_operator` |
-| `delete x.y` | `` `delete` is forbidden in StaticTS (object layout is fixed) `` | `reject_delete` |
-| `await` | `` `await` is forbidden in StaticTS (no event loop or promises) `` | `reject_await` |
-| `yield` | `` `yield` is forbidden in StaticTS (no coroutine runtime) `` | (validator; generators are rejected first, `reject_generator`) |
-| regex literals | `Regular expression literals are forbidden in StaticTS (no regex engine in the runtime)` | `reject_regex` |
-| `bigint` literals (`10n`) | `` `bigint` literals are forbidden in StaticTS (use number, i32, or f64) `` | `reject_bigint_literal` |
-| object spread `{ ...a }` | `Object spread is forbidden in StaticTS (object layout is fixed at compile time)` | `reject_object_spread` |
-| `{ __proto__: x }` | `` `__proto__` is forbidden in StaticTS (no prototype chain) `` | `reject_proto_literal` |
-| `x.__proto__` | `` `__proto__` access is forbidden in StaticTS (no prototype chain) `` | `reject_proto_access` |
-| `x.prototype` | `` `.prototype` access is forbidden in StaticTS (no prototype chain) `` | `reject_prototype_access` |
-| `Object.assign/create/defineProperty/defineProperties/setPrototypeOf/getPrototypeOf` | `` `Object.assign` is forbidden in StaticTS (object layout is fixed at compile time) `` (and analogous) | `reject_object_assign`, `reject_object_define_property`, `reject_object_set_prototype` |
-| `o["x"]`, `` o[`x`] `` | `` String-keyed element access is forbidden in StaticTS; use `obj.name` (no dynamic property lookup) `` | `reject_string_key_access` |
-| `o[true]`, `o[{}]`, ... (non-numeric-shaped key) | `Element access requires a numeric index in StaticTS (no dynamic property lookup)` | `reject_non_numeric_index` |
-| dynamic `import(...)` | `` Dynamic `import()` is forbidden in StaticTS (modules are resolved at compile time) `` | `reject_dynamic_import` |
+| `in` | `` `in` operator is forbidden in AmritScript (no dynamic property lookup) `` | `reject_in_operator` |
+| `a?.b`, `a?.[i]`, `f?.()` | `` Optional chaining `?.` is forbidden in AmritScript (narrow with `!== null` instead) `` | `reject_optional_chain` |
+| `a ?? b` | `` Nullish coalescing `??` is forbidden in AmritScript (narrow with `!== null` instead) `` | `reject_nullish` |
+| `instanceof` | `` `instanceof` is forbidden in AmritScript (no prototype chain) `` | `reject_instanceof` |
+| comma expressions | `Comma expressions are forbidden in AmritScript (write separate statements)` | `reject_comma_expression` |
+| `typeof x` | `` `typeof` is forbidden in AmritScript (no runtime type tags) `` | `reject_typeof_operator` |
+| `delete x.y` | `` `delete` is forbidden in AmritScript (object layout is fixed) `` | `reject_delete` |
+| `await` | `` `await` is forbidden in AmritScript (no event loop or promises) `` | `reject_await` |
+| `yield` | `` `yield` is forbidden in AmritScript (no coroutine runtime) `` | (validator; generators are rejected first, `reject_generator`) |
+| regex literals | `Regular expression literals are forbidden in AmritScript (no regex engine in the runtime)` | `reject_regex` |
+| `bigint` literals (`10n`) | `` `bigint` literals are forbidden in AmritScript (use number, i32, or f64) `` | `reject_bigint_literal` |
+| object spread `{ ...a }` | `Object spread is forbidden in AmritScript (object layout is fixed at compile time)` | `reject_object_spread` |
+| `{ __proto__: x }` | `` `__proto__` is forbidden in AmritScript (no prototype chain) `` | `reject_proto_literal` |
+| `x.__proto__` | `` `__proto__` access is forbidden in AmritScript (no prototype chain) `` | `reject_proto_access` |
+| `x.prototype` | `` `.prototype` access is forbidden in AmritScript (no prototype chain) `` | `reject_prototype_access` |
+| `Object.assign/create/defineProperty/defineProperties/setPrototypeOf/getPrototypeOf` | `` `Object.assign` is forbidden in AmritScript (object layout is fixed at compile time) `` (and analogous) | `reject_object_assign`, `reject_object_define_property`, `reject_object_set_prototype` |
+| `o["x"]`, `` o[`x`] `` | `` String-keyed element access is forbidden in AmritScript; use `obj.name` (no dynamic property lookup) `` | `reject_string_key_access` |
+| `o[true]`, `o[{}]`, ... (non-numeric-shaped key) | `Element access requires a numeric index in AmritScript (no dynamic property lookup)` | `reject_non_numeric_index` |
+| dynamic `import(...)` | `` Dynamic `import()` is forbidden in AmritScript (modules are resolved at compile time) `` | `reject_dynamic_import` |
 
 "Numeric-shaped" index keys pass the validator (identifiers, numeric
 literals, parentheses, unary `+`/`-`, `+ - * / %` over those, calls,
@@ -1721,7 +1721,7 @@ messages are exact for the cases cited; other rows quote
 | `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned` |
 | `Arena.release` with a non-`i64` argument | `` `Arena.release` expects i64, got i32 `` | `reject_arena_release_type` |
 | non-integer literal in i32 mode | `` Non-integer literal `1.5` in i32 number mode (use --number-mode f64) `` | `reject_float_in_i32` |
-| non-boolean condition | `Condition must be boolean, got i32 (StaticTS has no truthiness)` | `reject_cf_nonbool_cond` |
+| non-boolean condition | `Condition must be boolean, got i32 (AmritScript has no truthiness)` | `reject_cf_nonbool_cond` |
 | `&&`/`\|\|` on numbers | `` Operator `&&` requires boolean operands, got i32 and i32 `` | `reject_cf_logical_numbers` |
 | ternary arm mismatch | `Ternary branches must have the same type, got i32 and boolean` | `reject_cf_ternary_mismatch` |
 | assignment to `const` / parameter | `` Cannot assign to `x` because it is a const `` / `... a parameter` | `reject_assign_const`, `reject_assign_param`, `reject_cf_compound_const`, `reject_cf_incdec_param` |
@@ -1750,7 +1750,7 @@ listed: inverted boolean ordering, silently accepted `?.`, the rejected
 `Math.pow(1, NaN)`.)
 
 All four discrepancies found by the documentation audit (the `main`
-parameter message, the `%.17g` comment in `statictsc.h`, the exclusive
+parameter message, the `%.17g` comment in `amritc.h`, the exclusive
 `i64` literal bound, and the generic message for comparing `T | null` with
 `T`) are fixed; `2^53` is accepted as an `i64` literal and the nullable
 comparison names the nullable side.

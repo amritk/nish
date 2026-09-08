@@ -4,7 +4,7 @@
 // Two changes of shape, both forced and both improvements:
 //
 //   - **Side tables are arrays indexed by `Node.id`**, not `WeakMap`s keyed by
-//     node. StaticTS has no `WeakMap`; a dense array is also one index rather
+//     node. the language has no `WeakMap`; a dense array is also one index rather
 //     than a hash of a pointer, and the parser hands out the ids as it builds
 //     the tree, so the size is known before the checker starts. The rule the
 //     `WeakMap`s exist for still holds: the AST carries syntax only, the

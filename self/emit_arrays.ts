@@ -31,7 +31,7 @@ const HEADER_BYTES: i32 = 24;
 const MEMSET: string = "llvm.memset.p0i8.i64";
 const MEMCPY: string = "llvm.memcpy.p0i8.p0i8.i64";
 
-/** Bytes per element. Every StaticTS value is a scalar or a pointer, so its size is its alignment. */
+/** Bytes per element. Every value is a scalar or a pointer, so its size is its alignment. */
 function elementSize(emitter: Emitter, elem: i32): i32 {
   return emitter.table.alignOf(elem);
 }

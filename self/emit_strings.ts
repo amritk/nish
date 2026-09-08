@@ -27,7 +27,7 @@ import { isFloat, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } fro
  * expression that points at its header (what every `sts_str_*` expects).
  */
 export function addStringConstant(module: IRModule, index: i32, text: string): string {
-  // A StaticTS string is bytes, so `length` is already the byte length the
+  // A string is bytes, so `length` is already the byte length the
   // header needs; `src/` gets the same number from `Buffer.byteLength`.
   const array = `[${text.length + 1} x i8]`;
   const type = `{ i64, ${array} }`;

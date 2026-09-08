@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
- * statictsc: StaticTS -> LLVM IR command line driver.
+ * The command line driver: source in, LLVM IR out. The name in the usage line
+ * below is spelled out because a usage line is read, not printed; every name
+ * this file *prints* comes from `./branding`.
  *
- *   statictsc <entry.ts> [more.ts ...] [-o <out.ll | out-dir/>] [--link <exe>] [options]
+ *   amritc <entry.ts> [more.ts ...] [-o <out.ll | out-dir/>] [--link <exe>] [options]
  *
  * The first input is the entry module. Files it imports are compiled too, so
  * a program that spans several modules needs `-o <dir>/` (one `.ll` per
@@ -19,6 +21,7 @@ import { dumpAst, dumpChecked } from "./dump";
 import { generateDts, generateHeader, generateNapiShim, generateWasmLoader, wasmLoaderPath } from "./interop";
 import { NumberMode } from "./types";
 import { SUPPORTED_TARGETS, resolveTarget } from "./codegen/target";
+import { CLI, ENV_DEBUG, ENV_SIMULATE_ICE } from "./branding";
 import { PKG_ROOT, packageVersion } from "./version";
 
 const PROFILES = ["speed", "size", "debug", "wasi"] as const;
@@ -73,17 +76,17 @@ function missingToolchain(): string | null {
   const why = probe.error ? `${cc}: ${probe.error.message}` : `\`${cc} --version\` exited with ${probe.status}`;
   return [
     `--link: no usable C compiler found (${why}).`,
-    "statictsc needs clang (LLVM 18 recommended) on PATH, or CC=<compiler>, to build a binary. Install it with:",
+    `${CLI} needs clang (LLVM 18 recommended) on PATH, or CC=<compiler>, to build a binary. Install it with:`,
     toolchainInstallHint(),
-    "See docs/INSTALL.md. Without --link, statictsc still writes the LLVM IR (.ll) for you to build yourself.",
+    `See docs/INSTALL.md. Without --link, ${CLI} still writes the LLVM IR (.ll) for you to build yourself.`,
   ].join("\n");
 }
 
 function usage(): never {
   console.error(
     [
-      "usage: statictsc <entry.ts> [more.ts ...] [options]",
-      "       statictsc --version | --help",
+      `usage: ${CLI} <entry.ts> [more.ts ...] [options]`,
+      `       ${CLI} --version | --help`,
       "  -o, --output <file.ll>     output path for a single module (default: <input>.ll)",
       "  -o, --output <dir>/        output directory: one <dir>/<module>.ll per module",
       "  --link <exe>               build a native binary from every module + runtime/runtime.c",
@@ -107,7 +110,7 @@ function usage(): never {
       "  --json                     print diagnostics as one JSON object per line on stdout (no excerpt)",
       "  --emit-ast                 print the syntax tree of every module to stdout instead of IR",
       "  --emit-checked             print the checker's tables (signatures, locals, structs, facts) instead of IR",
-      "  -v, --version              print the statictsc version and exit",
+      `  -v, --version              print the ${CLI} version and exit`,
       "exit codes: 0 ok, 1 compile error, 2 usage, 3 toolchain (clang / build.sh), 70 internal error",
     ].join("\n")
   );
@@ -228,7 +231,7 @@ function main(argv: string[]): number {
     } else if (arg === "-h" || arg === "--help") {
       usage();
     } else if (arg === "-v" || arg === "--version") {
-      console.log(`statictsc ${packageVersion()}`);
+      console.log(`${CLI} ${packageVersion()}`);
       return EXIT_OK;
     } else if (arg.startsWith("-")) {
       console.error(`unknown option: ${arg}`);
@@ -263,7 +266,7 @@ function main(argv: string[]): number {
   });
   try {
     // Test hook for the internal-error path (tests/run.js, WP12 block); not a user feature.
-    if (process.env.STATICTSC_SIMULATE_ICE) throw new TypeError("simulated internal compiler error");
+    if (process.env[ENV_SIMULATE_ICE]) throw new TypeError("simulated internal compiler error");
     for (const input of inputs) compilation.addRoot(input);
     // `--emit-ast` needs only the parsed (and Phase 0 validated) modules; nothing is checked or written.
     if (dump === "ast") {
@@ -350,7 +353,7 @@ function main(argv: string[]): number {
 }
 
 /**
- * Anything that escapes `main` is a bug in statictsc, not in the user's
+ * Anything that escapes `main` is a bug in amritc, not in the user's
  * program: report it as such (EX_SOFTWARE, 70) naming the input files, and
  * show the stack only on request so users are not buried in frames.
  */
@@ -359,14 +362,14 @@ function reportInternalError(err: unknown, argv: string[]): number {
   const inputs = argv.filter((a, i) => !a.startsWith("-") && !takesValue.test(argv[i - 1] ?? ""));
   const where = inputs.length > 0 ? ` while compiling ${inputs.join(", ")}` : "";
   const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-  console.error(`statictsc ${packageVersion()}: internal compiler error${where}`);
+  console.error(`${CLI} ${packageVersion()}: internal compiler error${where}`);
   console.error(`  ${message}`);
-  if (process.env.STATICTSC_DEBUG && err instanceof Error && err.stack) {
+  if (process.env[ENV_DEBUG] && err instanceof Error && err.stack) {
     console.error(err.stack);
   } else {
-    console.error("  (re-run with STATICTSC_DEBUG=1 for the stack trace)");
+    console.error(`  (re-run with ${ENV_DEBUG}=1 for the stack trace)`);
   }
-  console.error("This is a bug in statictsc, not in your program. Please report it with the input file and");
+  console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`);
   console.error("the command line at https://github.com/amritk/compiler/issues");
   return EXIT_INTERNAL;
 }

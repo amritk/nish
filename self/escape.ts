@@ -239,7 +239,7 @@ class EscapeAnalysis {
     return [];
   }
 
-  /** Bytes per element: every StaticTS value is a scalar or a pointer, so its size is its alignment. */
+  /** Bytes per element: every value is a scalar or a pointer, so its size is its alignment. */
   elementSize(elem: i32): i32 {
     return this.table.alignOf(elem);
   }

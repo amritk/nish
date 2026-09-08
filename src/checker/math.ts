@@ -7,7 +7,7 @@
  *     `Math.pow(x: f64, y: f64): f64` are f64-only. Applying them to an
  *     `i32`/`i64` (for example `number` in the default i32 mode) is an error
  *     that points at `--number-mode f64` or `toF64(x)`; there is no implicit
- *     widening anywhere in StaticTS.
+ *     widening anywhere in the language.
  *   - `Math.abs(x: T): T`, `Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T`
  *     work for every numeric T (i32, i64, f64); both operands must agree.
  *   - `Math.random(): f64`.

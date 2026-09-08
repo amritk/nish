@@ -7,7 +7,7 @@
  *
  * Shift counts are masked to the operand width, because LLVM and JavaScript
  * disagree about what an over-wide shift means: LLVM makes `shl i32 %x, 33`
- * poison, while JavaScript computes `x << 1`. StaticTS follows JavaScript, so
+ * poison, while JavaScript computes `x << 1`. The language follows JavaScript, so
  * `a << b` on `i32` is `shl i32 %a, (%b and 31)` and on `i64` `shl i64 %a,
  * (%b and 63)`. The narrow unsigned widths mask to their own width rather than
  * to 31: JavaScript has no `u8`, so there is no compatibility to keep, and

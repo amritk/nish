@@ -1,4 +1,4 @@
-// The StaticTS runtime ABI as seen from LLVM IR, for stage1
+// The runtime ABI as seen from LLVM IR, for stage1
 // (`src/codegen/runtime.ts`, docs/wp14-selfhost.md milestone S4).
 //
 // `runtime/runtime.c` implements these symbols. Everything here is a
@@ -108,7 +108,7 @@ function plain(name: string, signature: string, effect: i32): RuntimeFunction {
  * The runtime ABI as one ordered table, with a name index beside it.
  *
  * Built once per compilation rather than being a module constant, because a
- * StaticTS module constant is a scalar or a string; the cost is one pass over
+ * module constant is a scalar or a string; the cost is one pass over
  * seventy entries at start-up, which does not appear in a profile.
  */
 export class RuntimeTable {
@@ -274,7 +274,7 @@ export class RuntimeTable {
     );
     // Host entry (WP8): header + `len` uninitialised elements, `len == cap`. Compiled code
     // never calls it (literals and `new Array` use the inline allocator); the wasm loader and
-    // C hosts do, so it is part of the declared ABI and of statictsc.h.
+    // C hosts do, so it is part of the declared ABI and of amritc.h.
     this.add(
       plain(
         "sts_alloc_array",

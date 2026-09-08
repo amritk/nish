@@ -7,7 +7,7 @@
 // `checkExpression` must name every construct. The reasons it still wins are
 // that a `switch` on a node kind lowers to an LLVM `switch` and therefore a
 // jump table, and that a table of function values needs function pointers,
-// which StaticTS does not have.
+// which the language does not have.
 //
 // **The contextual type is threaded down, not walked up.** stage0 asks
 // `expr.parent` what type a bare literal should take; the tree here has no
@@ -15,6 +15,7 @@
 // is being checked *into*, or -1 for none. It is a hint and never a coercion:
 // the result is still checked against what the sink expects.
 
+import { LANGUAGE } from "./branding";
 import { CheckContext } from "./context";
 import { checkArrayLiteral, checkIndex, checkIndexAssignment } from "./arrays";
 import { checkBuiltinCall, checkBuiltinFunction, isBuiltinFunction } from "./builtins";
@@ -100,7 +101,7 @@ function computeType(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     case N_NUMBER:
       return checkNumericLiteral(ctx, expr, want, false);
     case N_BIGINT:
-      return ctx.errorType(expr, "Bigint literals are forbidden in StaticTS; use the `i64` type");
+      return ctx.errorType(expr, "Bigint literals are forbidden in " + LANGUAGE + "; use the `i64` type");
     case N_STRING:
       return T_STRING;
     case N_TEMPLATE:
@@ -309,7 +310,10 @@ function checkUnary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32
     return type;
   }
   if (op === "+") {
-    return ctx.errorType(expr, "Unary `+` is forbidden; it converts, and StaticTS has no conversions");
+    return ctx.errorType(
+      expr,
+      "Unary `+` is forbidden; it converts, and " + LANGUAGE + " has no conversions"
+    );
   }
   return ctx.errorType(expr, `Unsupported unary operator \`${op}\``);
 }
@@ -590,7 +594,7 @@ function checkConditional(ctx: CheckContext, expr: Node, scope: Scope, want: i32
   return ctx.errorType(expr, `Ternary branches must have the same type, got ${a} and ${b}`);
 }
 
-/** A condition is a boolean: StaticTS has no truthiness. */
+/** A condition is a boolean: the language has no truthiness. */
 export function checkCondition(ctx: CheckContext, expr: Node, scope: Scope): void {
   const type = checkExpression(ctx, expr, scope, T_BOOL);
   if (type !== T_BOOL && type !== T_ERROR) {

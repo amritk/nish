@@ -1,4 +1,4 @@
-// The StaticTS type model for stage1 (docs/wp14-selfhost.md, milestone S3),
+// The type model for stage1 (docs/wp14-selfhost.md, milestone S3),
 // ported from `src/types.ts`.
 //
 // **A type is an `i32`.** `src/` writes a `StaticType` as a discriminated
@@ -279,7 +279,7 @@ export class TypeTable {
     return `sts_result.${this.mangle(this.refs[type])}.${this.mangle(this.errs[type])}`;
   }
 
-  /** The types that may be nullable: every StaticTS value that is an LLVM pointer. */
+  /** The types that may be nullable: every value that is an LLVM pointer. */
   isPointer(type: i32): boolean {
     const kind = this.kinds[type];
     return kind === K_STRUCT || kind === K_ARRAY || type === T_STRING;

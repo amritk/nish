@@ -1,4 +1,4 @@
-// --number-mode f64: Math.min/max with a NaN operand return NaN in JavaScript; StaticTS uses
+// --number-mode f64: Math.min/max with a NaN operand return NaN in JavaScript; AmritScript uses
 // llvm.minnum/maxnum, which return the other operand (documented in docs/wp7-runtime.md).
 export function main(): void {
   const z = 0;

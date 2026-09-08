@@ -1,4 +1,4 @@
-/* StaticTS runtime: arena + strings + cold paths. Layouts are ABI (runtime.ts, statictsc.h). */
+/* AmritScript runtime: arena + strings + cold paths. Layouts are ABI (runtime.ts, amritc.h). */
 #define _POSIX_C_SOURCE 200809L
 #include <fcntl.h>
 #include <inttypes.h>
@@ -31,7 +31,7 @@ static STS_COLD void sts_die(const char *msg) {
   (void)!write(2, msg, strlen(msg));
   _exit(1);
 }
-#define sts_oom() sts_die("statictsc: out of memory\n")
+#define sts_oom() sts_die("amritc: out of memory\n")
 
 /* Slow path (size 8-byte rounded): push a chunk (>= 64 KB), bump from it. */
 void *sts_arena_grow(size_t size) {
@@ -188,7 +188,7 @@ double sts_random(void) {
 /* ---- Process and files */
 void sts_exit(int32_t code) { exit(code); }
 static STS_COLD void sts_io_fail(const char *what, const sts_str *path) {
-  dprintf(2, "statictsc: cannot %s%.*s\n", what, (int)path->len, path->data);
+  dprintf(2, "amritc: cannot %s%.*s\n", what, (int)path->len, path->data);
   _exit(1);
 }
 
@@ -256,7 +256,7 @@ void sts_argv_init(int32_t argc, char **argv) {
   }
 }
 
-/* ---- String to number: mode 0 parseFloat, 1 Number, 2 parseInt (contract: statictsc.h). ASCII
+/* ---- String to number: mode 0 parseFloat, 1 Number, 2 parseInt (contract: amritc.h). ASCII
  * whitespace only; strtod parses once the inf/nan spellings JS rejects are ruled out, and its `0x`
  * hex stays accepted (documented). */
 #define STS_SPACES " \t\n\v\f\r"

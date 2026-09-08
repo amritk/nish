@@ -1,4 +1,4 @@
-// Numeric and string literal shapes, including the ones StaticTS rejects.
+// Numeric and string literal shapes, including the ones AmritScript rejects.
 const dec = 1234;
 const sep = 1_000_000;
 const hex = 0xdeadBEEF;

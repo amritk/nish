@@ -302,7 +302,7 @@ export function emitContinue(emitter: Emitter): void {
   }
 }
 
-/** `throw e`: evaluate `e` for its effects, then trap. There is no unwinding in StaticTS. */
+/** `throw e`: evaluate `e` for its effects, then trap. There is no unwinding. */
 export function emitThrow(emitter: Emitter, stmt: Node): void {
   emitter.emitExpression(stmt.children[0]);
   emitter.declare("declare void @llvm.trap()");

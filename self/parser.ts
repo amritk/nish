@@ -1,8 +1,8 @@
-// The StaticTS-0 parser (docs/wp14-selfhost.md, milestone S2): recursive
+// The parser for the subset (docs/wp14-selfhost.md, milestone S2): recursive
 // descent over `self/lexer.ts`, producing the one-class tree of
 // `self/nodes.ts`.
 //
-// **No exceptions.** StaticTS `throw` traps and discards its value, so error
+// **No exceptions.** A `throw` traps and discards its value, so error
 // recovery is the error-value threading of §3a D1, in its first real use: a
 // failed parse returns an `N_ERROR` node, the message goes on
 // `Parser.diagnostics`, and the caller decides whether to skip to a
@@ -17,7 +17,7 @@
 // TypeScript is genuinely ambiguous to one token (`(` after an identifier is a
 // call, and `<` after a type name is a type argument list).
 //
-// **What it accepts is wider than StaticTS.** The parser reads `??`, `?.`,
+// **What it accepts is wider than the language.** The parser reads `??`, `?.`,
 // `==`, `**` and the rest, and turns them down by name, because a message
 // about the operator the programmer wrote beats one about a token they did
 // not. Anything it cannot make a node of is an `N_ERROR` with the reason.
@@ -197,7 +197,7 @@ export function binaryPrecedence(kind: i32): i32 {
   return 0;
 }
 
-/** Whether the token assigns: `=` and the compound forms StaticTS has. */
+/** Whether the token assigns: `=` and the compound forms the language has. */
 export function isAssignment(kind: i32): boolean {
   return (
     kind === TOK_ASSIGN ||
@@ -378,7 +378,7 @@ export class Parser {
     return false;
   }
 
-  /** A semicolon, which this grammar requires: StaticTS has no insertion rule. */
+  /** A semicolon, which this grammar requires: the language has no insertion rule. */
   expectSemicolon(): void {
     this.expect(TOK_SEMICOLON);
   }

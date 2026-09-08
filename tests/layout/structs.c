@@ -4,14 +4,14 @@
  *    (tests/run.js cross-checks them against `sts_alloc_struct(i64 N)` in the
  *    IR), so both agree with clang's layout of the same fields.
  * 2. main() fills every struct through the C definition and reads each field
- *    back through the StaticTS getters, so every field offset is verified at
+ *    back through the AmritScript getters, so every field offset is verified at
  *    run time as well. Any mismatch prints the field name and exits 1.
  */
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 
-/* StaticTS strings are `{ uint64_t len; char data[]; }`; getters return the pointer. */
+/* AmritScript strings are `{ uint64_t len; char data[]; }`; getters return the pointer. */
 typedef const void *sts_string;
 static const struct { uint64_t len; char data[4]; } str_abc = { 3, "abc" };
 static const struct { uint64_t len; char data[6]; } str_hello = { 5, "hello" };

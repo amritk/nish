@@ -1,4 +1,4 @@
-/* StaticTS runtime for the freestanding wasm profile (WP8): the arena and the
+/* AmritScript runtime for the freestanding wasm profile (WP8): the arena and the
  * array cold paths, without libc. Link it next to the module when a function
  * takes or returns an array:
  *   scripts/build.sh x.ll runtime/runtime_wasm.c -o x.wasm --profile wasm

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The self-hosted compiler's command line.
 #
-#   scripts/statictsc.sh <entry.ts> [-o <out.ll> | -o <dir>/] [--link <exe>]
+#   scripts/amritc.sh <entry.ts> [-o <out.ll> | -o <dir>/] [--link <exe>]
 #                        [--profile speed|size|debug|wasi] [compiler flags...]
 #
 # The compiler this drives is `self/` compiled by `self/`
@@ -23,12 +23,12 @@
 # name with what to run instead, because a flag that is quietly ignored is how
 # a build ends up not carrying the thing it asked for.
 #
-# STATICTSC=<binary> picks the compiler (default: build/statictsc).
+# AMRITC=<binary> picks the compiler (default: build/amritc).
 # Exit codes match stage0's: 0 ok, 1 compile error, 2 usage, 3 toolchain.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-compiler=${STATICTSC:-build/statictsc}
+compiler=${AMRITC:-build/amritc}
 entry=""
 output=""
 link=""
@@ -37,9 +37,9 @@ flags=()
 
 usage() {
   cat <<'EOF'
-usage: scripts/statictsc.sh <entry.ts> [-o <out.ll>|<dir>/] [--link <exe>]
+usage: scripts/amritc.sh <entry.ts> [-o <out.ll>|<dir>/] [--link <exe>]
                             [--profile speed|size|debug|wasi] [compiler flags...]
-Drives the self-hosted compiler (build/statictsc, or $STATICTSC) and adds the
+Drives the self-hosted compiler (build/amritc, or $AMRITC) and adds the
 directory creation and the link step it does not do itself (wp14 D4).
 Compiler flags: --number-mode i32|f64, --plain, --strict-exports, --nsw,
 --no-stack-alloc, --unchecked-indexing, --runtime-decls, --target <triple>.
@@ -48,7 +48,7 @@ EOF
 }
 
 stage0_only() {
-  echo "statictsc.sh: \`$1\` is stage0's (docs/wp14-selfhost.md D4); run \`node dist/index.js\` for it" >&2
+  echo "amritc.sh: \`$1\` is stage0's (docs/wp14-selfhost.md D4); run \`node dist/index.js\` for it" >&2
   exit 2
 }
 
@@ -68,11 +68,11 @@ done
 
 [ -n "$entry" ] || usage
 if [ ! -x "$compiler" ]; then
-  echo "statictsc.sh: no compiler at \`$compiler\`; run \`npm run bootstrap\` (or set STATICTSC)" >&2
+  echo "amritc.sh: no compiler at \`$compiler\`; run \`npm run bootstrap\` (or set AMRITC)" >&2
   exit 3
 fi
 if [ -n "$link" ] && [ -n "$output" ]; then
-  echo "statictsc.sh: --link picks where the IR goes; pass one of -o and --link" >&2
+  echo "amritc.sh: --link picks where the IR goes; pass one of -o and --link" >&2
   exit 2
 fi
 
@@ -114,7 +114,7 @@ if [ -n "$single" ]; then
   # stage0 refuses this layout rather than picking a module, and says so with
   # the names; mirror both the wording and its exit code.
   if [ "${#modules[@]}" -ne 1 ]; then
-    echo "statictsc.sh: ${#modules[@]} modules would be written; pass \`-o <dir>/\` to write one .ll per module" >&2
+    echo "amritc.sh: ${#modules[@]} modules would be written; pass \`-o <dir>/\` to write one .ll per module" >&2
     rm -rf "$dir"
     exit 1
   fi
@@ -134,6 +134,6 @@ if [ "${#modules[@]}" -eq 1 ]; then
 fi
 
 if ! bash scripts/build.sh "${modules[@]}" runtime/runtime.c -o "$link" --profile "$profile"; then
-  echo "statictsc.sh: --link: scripts/build.sh failed; the IR is in ${modules[*]}" >&2
+  echo "amritc.sh: --link: scripts/build.sh failed; the IR is in ${modules[*]}" >&2
   exit 3
 fi

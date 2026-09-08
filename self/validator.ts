@@ -1,5 +1,5 @@
 // Phase 0 for stage1 (`src/validator.ts`, docs/wp14-selfhost.md milestone S3):
-// a syntax-only sweep that refuses every construct StaticTS can *never*
+// a syntax-only sweep that refuses every construct the language can *never*
 // compile, before the checker runs.
 //
 // The distinction Phase 0 draws is the one `docs/LANGUAGE.md` draws: what is
@@ -10,10 +10,11 @@
 //
 // It is smaller than stage0's, and for the same reason `self/declarations.ts`
 // is: the S2 parser refuses most of this syntax where it stands, by name.
-// What is left is what parses as ordinary StaticTS and is forbidden anyway —
+// What is left is what parses as ordinary source and is forbidden anyway —
 // a banned identifier, a `__proto__` or `.prototype` member, an `Object.*`
 // shape mutation, a string-keyed element access.
 
+import { LANGUAGE } from "./branding";
 import { CheckContext } from "./context";
 import {
   N_BIGINT,
@@ -39,33 +40,33 @@ import {
 /** The message for an identifier that may never appear as a value, or "". */
 function forbiddenValue(name: string): string {
   if (name === "eval") {
-    return "`eval` is forbidden in StaticTS (no interpreter at runtime)";
+    return "`eval` is forbidden in " + LANGUAGE + " (no interpreter at runtime)";
   }
   if (name === "Function") {
-    return "`Function` is forbidden in StaticTS (no interpreter at runtime)";
+    return "`Function` is forbidden in " + LANGUAGE + " (no interpreter at runtime)";
   }
   if (name === "Proxy") {
-    return "`Proxy` is forbidden in StaticTS (no dynamic property interception)";
+    return "`Proxy` is forbidden in " + LANGUAGE + " (no dynamic property interception)";
   }
   if (name === "Reflect") {
-    return "`Reflect` is forbidden in StaticTS (no runtime reflection)";
+    return "`Reflect` is forbidden in " + LANGUAGE + " (no runtime reflection)";
   }
   if (name === "Symbol") {
-    return "`Symbol` is forbidden in StaticTS (no symbol type)";
+    return "`Symbol` is forbidden in " + LANGUAGE + " (no symbol type)";
   }
   if (name === "globalThis") {
-    return "`globalThis` is forbidden in StaticTS (no global object)";
+    return "`globalThis` is forbidden in " + LANGUAGE + " (no global object)";
   }
   if (name === "arguments") {
-    return "`arguments` is forbidden in StaticTS (functions have fixed arity)";
+    return "`arguments` is forbidden in " + LANGUAGE + " (functions have fixed arity)";
   }
   if (name === "undefined") {
-    return "`undefined` is forbidden in StaticTS; use `null` with a `T | null` type";
+    return "`undefined` is forbidden in " + LANGUAGE + "; use `null` with a `T | null` type";
   }
   if (name === "debugger") {
     // `debugger;` parses as an expression statement naming an identifier, so
     // this is where it lands rather than in the parser.
-    return "`debugger` is forbidden in StaticTS (no debugger hook)";
+    return "`debugger` is forbidden in " + LANGUAGE + " (no debugger hook)";
   }
   return "";
 }
@@ -73,28 +74,28 @@ function forbiddenValue(name: string): string {
 /** The message for a type name that may never be referenced, or "". */
 function forbiddenType(name: string): string {
   if (name === "Function") {
-    return "`Function` type is forbidden in StaticTS (no dynamic function values)";
+    return "`Function` type is forbidden in " + LANGUAGE + " (no dynamic function values)";
   }
   if (name === "Symbol") {
-    return "`Symbol` type is forbidden in StaticTS (no symbol type)";
+    return "`Symbol` type is forbidden in " + LANGUAGE + " (no symbol type)";
   }
   if (name === "Proxy") {
-    return "`Proxy` type is forbidden in StaticTS (no dynamic property interception)";
+    return "`Proxy` type is forbidden in " + LANGUAGE + " (no dynamic property interception)";
   }
   if (name === "symbol") {
-    return "`symbol` type is forbidden in StaticTS (no symbol type)";
+    return "`symbol` type is forbidden in " + LANGUAGE + " (no symbol type)";
   }
   if (name === "bigint") {
-    return "`bigint` type is forbidden in StaticTS (use number, i32, or f64)";
+    return "`bigint` type is forbidden in " + LANGUAGE + " (use number, i32, or f64)";
   }
   if (name === "undefined") {
-    return "`undefined` is forbidden in StaticTS; use `null` with a `T | null` type";
+    return "`undefined` is forbidden in " + LANGUAGE + "; use `null` with a `T | null` type";
   }
   if (name === "any") {
-    return "`any` is forbidden in StaticTS";
+    return "`any` is forbidden in " + LANGUAGE;
   }
   if (name === "unknown") {
-    return "`unknown` is forbidden in StaticTS";
+    return "`unknown` is forbidden in " + LANGUAGE;
   }
   return "";
 }
@@ -181,7 +182,7 @@ function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void {
       rejectForbiddenIndex(ctx, node);
       break;
     case N_BIGINT:
-      ctx.error(node, "`bigint` literals are forbidden in StaticTS; use the `i64` type");
+      ctx.error(node, "`bigint` literals are forbidden in " + LANGUAGE + "; use the `i64` type");
       break;
     case N_TYPE_UNION:
       // Everything but `T | null` is refused here, before the checker reports
@@ -190,7 +191,7 @@ function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void {
       break;
     case N_PROPERTY:
       if (node.text === "__proto__") {
-        ctx.error(node, "`__proto__` is forbidden in StaticTS (no prototype chain)");
+        ctx.error(node, "`__proto__` is forbidden in " + LANGUAGE + " (no prototype chain)");
       }
       break;
     case N_NEW:
@@ -206,7 +207,7 @@ function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void {
       // refuses it, exactly as stage0 does.
       ctx.error(
         node,
-        "`throw` is forbidden in StaticTS (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process"
+        "`throw` is forbidden in " + LANGUAGE + " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process"
       );
       break;
     default:
@@ -219,18 +220,18 @@ function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void {
 
 function rejectForbiddenMember(ctx: CheckContext, node: Node): void {
   if (node.text === "__proto__") {
-    ctx.error(node, "`__proto__` access is forbidden in StaticTS (no prototype chain)");
+    ctx.error(node, "`__proto__` access is forbidden in " + LANGUAGE + " (no prototype chain)");
     return;
   }
   if (node.text === "prototype") {
-    ctx.error(node, "`.prototype` access is forbidden in StaticTS (no prototype chain)");
+    ctx.error(node, "`.prototype` access is forbidden in " + LANGUAGE + " (no prototype chain)");
     return;
   }
   const receiver = node.children[0];
   if (receiver.kind === N_IDENT && receiver.text === "Object" && isShapeMutation(node.text)) {
     ctx.error(
       node,
-      `\`Object.${node.text}\` is forbidden in StaticTS (object layout is fixed at compile time)`
+      "`Object." + node.text + "` is forbidden in " + LANGUAGE + " (object layout is fixed at compile time)"
     );
   }
 }
@@ -240,12 +241,17 @@ function rejectForbiddenIndex(ctx: CheckContext, node: Node): void {
   if (key.kind === N_STRING || key.kind === N_TEMPLATE) {
     ctx.error(
       key,
-      "String-keyed element access is forbidden in StaticTS; use `obj.name` (no dynamic property lookup)"
+      "String-keyed element access is forbidden in " +
+        LANGUAGE +
+        "; use `obj.name` (no dynamic property lookup)"
     );
     return;
   }
   if (!isNumericIndexShape(key)) {
-    ctx.error(key, "Element access requires a numeric index in StaticTS (no dynamic property lookup)");
+    ctx.error(
+      key,
+      "Element access requires a numeric index in " + LANGUAGE + " (no dynamic property lookup)"
+    );
   }
 }
 
@@ -255,9 +261,9 @@ function rejectForbiddenNew(ctx: CheckContext, node: Node): void {
     return;
   }
   if (callee.text === "Function") {
-    ctx.error(node, "`new Function` is forbidden in StaticTS (no interpreter at runtime)");
+    ctx.error(node, "`new Function` is forbidden in " + LANGUAGE + " (no interpreter at runtime)");
   } else if (callee.text === "Proxy") {
-    ctx.error(node, "`new Proxy` is forbidden in StaticTS (no dynamic property interception)");
+    ctx.error(node, "`new Proxy` is forbidden in " + LANGUAGE + " (no dynamic property interception)");
   }
 }
 
@@ -267,9 +273,9 @@ function rejectForbiddenCall(ctx: CheckContext, node: Node): void {
     return;
   }
   if (callee.text === "eval") {
-    ctx.error(node, "`eval` is forbidden in StaticTS (no interpreter at runtime)");
+    ctx.error(node, "`eval` is forbidden in " + LANGUAGE + " (no interpreter at runtime)");
   } else if (callee.text === "Function") {
-    ctx.error(node, "`Function` constructor is forbidden in StaticTS (no interpreter at runtime)");
+    ctx.error(node, "`Function` constructor is forbidden in " + LANGUAGE + " (no interpreter at runtime)");
   }
 }
 
@@ -282,6 +288,6 @@ function checkNullUnion(ctx: CheckContext, node: Node): void {
     }
   }
   if (nulls !== 1 || node.children.length !== 2) {
-    ctx.error(node, "Union types other than `T | null` are forbidden in StaticTS");
+    ctx.error(node, "Union types other than `T | null` are forbidden in " + LANGUAGE);
   }
 }

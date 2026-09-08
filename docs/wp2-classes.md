@@ -38,7 +38,7 @@ no vtable, no header). Field sizes and alignments are the natural ones:
 Each field starts at the next multiple of its alignment; the struct's
 alignment is the largest field alignment; `sizeof` rounds the end up to it.
 This is exactly clang's layout for the C struct with the same fields, so a C
-program can read StaticTS objects through a matching `struct` (see the layout
+program can read AmritScript objects through a matching `struct` (see the layout
 test below). `sts_alloc_struct` rounds the allocation up to 8 bytes and
 returns 8-aligned memory, so every object satisfies every field's alignment.
 

@@ -1,7 +1,7 @@
 # WP14 — Self-hosting
 
-The goal that closes the project: **a compiler for StaticTS, written in
-StaticTS, that compiles its own source.** Everything below is the definition
+The goal that closes the project: **a compiler for AmritScript, written in
+AmritScript, that compiles its own source.** Everything below is the definition
 of that claim, the proof we will accept for it, and the ordered list of what
 is missing today.
 
@@ -18,12 +18,12 @@ Two compilers exist by the end, and only the second one is self-hosted.
 | | Source | Written in | Built by |
 | --- | --- | --- | --- |
 | **stage0** | `src/` | TypeScript on Node, parsing with the `typescript` package | `tsc` |
-| **stage1** | `self/` | StaticTS | stage0 |
-| **stage2** | `self/` | StaticTS | stage1 |
-| **stage3** | `self/` | StaticTS | stage2 |
+| **stage1** | `self/` | AmritScript | stage0 |
+| **stage2** | `self/` | AmritScript | stage1 |
+| **stage3** | `self/` | AmritScript | stage2 |
 
 stage0 is not going away. It is the bootstrap seed, it is what `npm install
--g statictsc` ships today, and it stays the reference implementation: a
+-g amritc` ships today, and it stays the reference implementation: a
 program that stage0 and stage1 disagree about is a bug in one of them, and
 saying which is a diff.
 
@@ -47,7 +47,7 @@ on:
 IR(stage0, self/)  ==  IR(stage1, self/)
 ```
 
-That says the TypeScript implementation and the StaticTS implementation agree
+That says the TypeScript implementation and the AmritScript implementation agree
 on the IR for the self-hosted compiler's own source. It only holds while
 `self/` uses no construct the two lower differently, so it was a check to
 enable per file as the port landed rather than a milestone. **It holds for
@@ -67,14 +67,14 @@ which is rule 1 of §5 enforced by the suite rather than by good intentions.
 
 ---
 
-## 2. StaticTS-0: the subset `self/` is written in
+## 2. AmritScript-0: the subset `self/` is written in
 
 The trap in every bootstrap is writing the compiler in more language than the
-compiler implements. **StaticTS-0** is the fixed, deliberately small subset
-that `self/` may use, and the closure condition is that StaticTS-0 is a subset
+compiler implements. **AmritScript-0** is the fixed, deliberately small subset
+that `self/` may use, and the closure condition is that AmritScript-0 is a subset
 of what `self/` compiles. Every line of `self/` is checked against that.
 
-StaticTS-0 is today's language plus §3, minus everything `self/` does not need.
+AmritScript-0 is today's language plus §3, minus everything `self/` does not need.
 Notably `self/` is written **without**:
 
 - generics, arrow functions, closures, nested functions, function values;
@@ -86,7 +86,7 @@ Notably `self/` is written **without**:
 
 ### 2.1 One `Node` class, not a class hierarchy
 
-StaticTS has single inheritance (WP2b) but no downcast, and adding one would
+AmritScript has single inheritance (WP2b) but no downcast, and adding one would
 mean a runtime tag check, a `T | null` result, and a new rule in the checker
 for a cast that can fail. A bootstrap compiler does not need any of that.
 
@@ -131,7 +131,7 @@ golden `.ll`, an `llvm-as` pass, a native round trip, a `reject_*` case, a
 **Every row below is now done**, and so is the `panic(msg)` of D1. The
 language gap is closed, and wave C below has landed too, so what remains
 between here and S5 is the port itself and the four decisions of §3a, which
-are about how `self/` is written rather than about what StaticTS can
+are about how `self/` is written rather than about what AmritScript can
 express.
 
 ### Wave A — the front end cannot be written without these
@@ -155,17 +155,17 @@ one allocation, one `memcpy` per part.
 
 | # | Addition | Evidence |
 | --- | --- | --- |
-| B1 | `f64ToBits(x: f64): i64` (and `bitsToF64`) **Done.** | **A blocker, and the least obvious one.** LLVM only accepts decimal float literals that round-trip exactly, so the emitter writes `double 0x400921FB54442D18` — today via `Buffer.writeDoubleBE`. StaticTS has no way to see a double's bits, so without this the self-hosted emitter cannot emit any `f64` constant. One `bitcast` in the IR: zero instructions, zero runtime. |
+| B1 | `f64ToBits(x: f64): i64` (and `bitsToF64`) **Done.** | **A blocker, and the least obvious one.** LLVM only accepts decimal float literals that round-trip exactly, so the emitter writes `double 0x400921FB54442D18` — today via `Buffer.writeDoubleBE`. AmritScript has no way to see a double's bits, so without this the self-hosted emitter cannot emit any `f64` constant. One `bitcast` in the IR: zero instructions, zero runtime. |
 | B2 | `console.error(x)` and a newline-free write **Done.** | Every one of the 16 diagnostic writes goes to **stderr**, and two dumps write without a trailing newline. `console.log` is stdout-and-newline only. Without these, every `.err` golden and the runner's stream expectations have to be re-baselined — a worse outcome than two five-line runtime functions. |
 | B3 | A file read that can fail **Done.** | `readFileSync` **exits the process** on a missing file, so a compiler cannot turn it into its own `` Cannot find module `./x` `` diagnostic and carry on loading the other imports. Smallest fix: `readFileSyncOrNull(path): string \| null` — it subsumes `existsSync`, has no time-of-check race, and needs no new type. |
 | B4 | Contextual `[]` in a field assignment | **Done.** `this.children = []` in a constructor did not take its element type from the field, which every container class hits on its first line. |
 
 ### Wave C — library code in `self/`, no language change
 
-Written once in StaticTS and then just there. Listed so nobody mistakes them
+Written once in AmritScript and then just there. Listed so nobody mistakes them
 for language work: `StringMap` / `StringSet` (~200 `Map`/`Set` sites),
 `StringBuilder` (§2.3), a **stable** sort (the diagnostic order is
-golden-compared) and a byte-wise `compareStrings` (StaticTS has no `<` on
+golden-compared) and a byte-wise `compareStrings` (AmritScript has no `<` on
 strings, deliberately), `jsonQuote` matching JSON escaping exactly, hex
 formatting for B1, and a `resolvePath` that normalises `.` and `..` the way
 Node does — see D3.
@@ -223,7 +223,7 @@ and caught in six, every one load-bearing: `DiagnosticSink.recover` (10 call
 sites, per-declaration recovery), per-statement recovery in `checkStatements`,
 and `checkVariableDeclarationList`, which catches, *declares the variable with
 its annotated type anyway*, and rethrows so later statements do not cascade
-`Unknown identifier`. StaticTS `throw` traps and discards the value.
+`Unknown identifier`. AmritScript `throw` traps and discards the value.
 
 The plan is error-value threading: a diagnostic array, an `ERROR` sentinel type,
 and status returns. Be honest that this is **genuinely worse** than
@@ -247,7 +247,7 @@ the absolute resolved path; a hand-written `resolve` that normalises `..`
 differently from Node makes one file load twice, cycles stop terminating, and
 bogus duplicate-symbol errors appear. Separately, `src/` imports *directories*
 (`from "../checker"` at 15 sites) and re-exports (`export * from`) — neither of
-which StaticTS resolves, so the barrels must go.
+which AmritScript resolves, so the barrels must go.
 
 **D4. stage1 should not link.** `--link` shells out to `bash scripts/build.sh`
 and `-o dir/` creates directories, which would mean `spawnSync` and `mkdirSync`
@@ -270,8 +270,8 @@ this size.*
 
 | | Deliverable | Proof |
 | --- | --- | --- |
-| **S1 Lexer** | `self/lexer.ts` tokenises StaticTS-0 **Done.** | Its token stream agrees with the `typescript` scanner's over every `tests/cases/*.ts`; the lexer built by stage0 runs natively |
-| **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 **Done.** | Its tree matches the `typescript` parser's, span for span, for every program in the corpus that StaticTS-0's grammar covers |
+| **S1 Lexer** | `self/lexer.ts` tokenises AmritScript-0 **Done.** | Its token stream agrees with the `typescript` scanner's over every `tests/cases/*.ts`; the lexer built by stage0 runs natively |
+| **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 **Done.** | Its tree matches the `typescript` parser's, span for span, for every program in the corpus that AmritScript-0's grammar covers |
 | **S3 Checker** | `self/checker.ts` — types, scopes, the side tables **Done.** | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
 | **S4 Emitter** | `self/emit.ts` — IR text **Done.** | `IR(stage0, p) == IR(stage1, p)`; it holds for the whole corpus rather than a whitelist |
 | **S5 Bootstrap** | `self/` compiles `self/` **Done.** | `IR(stage1, self/) == IR(stage2, self/)`, and stage3 is byte-identical to stage2 |
@@ -293,11 +293,11 @@ stage3            == stage2                byte for byte, as files
 
 The middle line is the proof §1 defined. The first is the stronger equality §1
 said was worth aiming at and not worth blocking on: it holds for every module,
-so the TypeScript implementation and the StaticTS one are the same compiler and
+so the TypeScript implementation and the AmritScript one are the same compiler and
 not merely two compilers that agree about the tests. The third compares the
 binaries rather than the text.
 
-**S5 needed one addition to StaticTS-0, and it was grammar rather than
+**S5 needed one addition to AmritScript-0, and it was grammar rather than
 semantics: the parenthesised type.** `self/program.ts` writes
 `(Local | null)[]`, and it has to, because `Local | null[]` groups the other
 way. stage0 has always accepted it (`ParenthesizedType` in `src/types.ts`);
@@ -332,7 +332,7 @@ modules, 1,074,371 lines of IR.
 
 ### What S4 cost
 
-`self/` is 16,496 lines of StaticTS, and the emitter half of it — the IR
+`self/` is 16,496 lines of AmritScript, and the emitter half of it — the IR
 builder, the runtime ABI table, the targets, the escape analysis, the
 attribute fixpoint, the six construct families, the module assembly and the
 driver — is 6,761 of them, against the 5,686 lines of `src/codegen/` it
@@ -351,7 +351,7 @@ a dump flag stage1 does not have.
 
 Four things are worth carrying into S5:
 
-1. **StaticTS-0 held for the fourth time.** Nothing was added to the language
+1. **AmritScript-0 held for the fourth time.** Nothing was added to the language
    for the emitter either. The one place the subset genuinely pushed back was
    `src/`'s `factCollectors` array — a list of *functions* each `emit/*.ts`
    registers into — which became one collector class in `self/attributes.ts`.
@@ -382,7 +382,7 @@ Four things are worth carrying into S5:
 
 ### What S3 cost
 
-`self/` is 9,702 lines of StaticTS, and the checker half of it — types,
+`self/` is 9,702 lines of AmritScript, and the checker half of it — types,
 diagnostics, scopes, the side tables, annotations, declarations, structs,
 constants, expressions, statements, members, arrays, builtins, definite
 assignment and Phase 0 — is about 5,000 of them, against the ~5,100 lines of
@@ -408,7 +408,7 @@ half a dump cannot see:
 
 Three decisions are worth carrying into S4:
 
-1. **StaticTS-0 still held.** Nothing was added to the language for the
+1. **AmritScript-0 still held.** Nothing was added to the language for the
    checker either. Two stage0 bugs and one contextual-typing gap came out of
    writing it — an imported class's or function's layouts not reaching the
    importer, a reachability closure that depended on module order, and a
@@ -425,9 +425,9 @@ Three decisions are worth carrying into S4:
 ### What S1 cost, and what it says
 
 `self/tokens.ts`, `self/lexer.ts` and `self/dump_tokens.ts` are **1,222 lines
-of StaticTS**, and the four numbers the gate wants are already forming:
+of AmritScript**, and the four numbers the gate wants are already forming:
 
-- **StaticTS-0 held.** The lexer needed no language addition beyond the ones
+- **AmritScript-0 held.** The lexer needed no language addition beyond the ones
   §3 already lists. It is written with `switch`, `charCodeAt`, `substring`,
   `push`/`pop`, `join`, the bitwise operators and module constants — that is,
   with wave A, which is the first evidence that the census measured the right
@@ -448,7 +448,7 @@ of StaticTS**, and the four numbers the gate wants are already forming:
   forbidden; narrow with `!== null`" rather than a complaint about a stray
   `?`). One divergence stands by design: the scanner hands back a bare `>` so
   the parser can close nested type arguments one at a time, and this lexer
-  merges `>>` and `>>>` because StaticTS-0 has no nested type argument list —
+  merges `>>` and `>>>` because AmritScript-0 has no nested type argument list —
   the oracle asks for `reScanGreaterToken` to match, and the parser will have
   to split a `>>` where it wants two closers.
 - **It is not slow.** Over 129 KB of the compiler's own source, the native
@@ -459,7 +459,7 @@ of StaticTS**, and the four numbers the gate wants are already forming:
 ### What S2 cost, and the gate's four numbers
 
 `self/nodes.ts`, `self/parser.ts` and `self/dump_ast.ts` bring `self/` to
-**2,817 lines of StaticTS**. `tests/parser_oracle.js` is the lexer oracle one
+**2,817 lines of AmritScript**. `tests/parser_oracle.js` is the lexer oracle one
 level up: it walks the `typescript` tree, prints it in `dump_ast`'s format and
 diffs, so what is compared is not "did it parse" but "is it the same tree, out
 of the same pieces, with the same spans".
@@ -471,7 +471,7 @@ is a `reject_*` case.** Every positive program in `tests/cases/`, `examples/`,
 
 So the gate's questions have answers:
 
-1. **Did StaticTS-0 hold?** Yes, again, and this time under more pressure: a
+1. **Did AmritScript-0 hold?** Yes, again, and this time under more pressure: a
    recursive-descent parser with no exceptions, no closures, no generics and
    no `Map`. The one-`Node`-class decision of §2.1 paid for itself — a fixed
    child layout per kind with `N_LIST` for the variable-length groups and
@@ -498,7 +498,7 @@ So the gate's questions have answers:
    the 258 ms it costs to load.
 
 The 43 skips are the honest remainder, and they are all one thing: **grammar
-for constructs StaticTS forbids**. Stage0 rejects those by name in its
+for constructs AmritScript forbids**. Stage0 rejects those by name in its
 Phase 0 validator, *after* the `typescript` package has parsed them, so for
 stage1 to produce the same message this parser must read them and turn them
 down itself. The tally, largest first: `try` (1), `enum` (2), `namespace` (2),
@@ -516,7 +516,7 @@ about how much of TypeScript `self/` ends up parsing.
 S1 and S2 are done first and the project is re-decided there, because they
 carry the risk the other three do not. S3, S4 and S5 are a *port*: `src/`
 already contains a checker and an emitter, and the question is only whether
-StaticTS-0 can express them. S1 and S2 are **new code** — `src/` has no lexer
+AmritScript-0 can express them. S1 and S2 are **new code** — `src/` has no lexer
 and no parser, because the `typescript` package is the parser, and 1,558 of
 the references in `src/` are calls into it. That code has to be written from
 nothing and then made to agree with a 60,000-line scanner well enough for the
@@ -524,13 +524,13 @@ IR equality of §1 to mean anything.
 
 So the sequencing puts the unknown first, and both artifacts are worth having
 whichever way the gate goes: a lexer and a recursive-descent parser are the
-largest StaticTS program in existence, which is the dogfooding evidence the
+largest AmritScript program in existence, which is the dogfooding evidence the
 language wants, and they belong in `bench/` as a workload that is neither
 numeric nor synthetic.
 
 At the gate, three things decide it:
 
-1. **Did StaticTS-0 hold?** If S1 and S2 needed language additions beyond §3,
+1. **Did AmritScript-0 hold?** If S1 and S2 needed language additions beyond §3,
    S3–S5 will need more, and each one is something stage1 must then implement
    in order to compile itself.
 2. **How far off was the line count?** `src/` is 13,757 lines. If the lexer and
@@ -572,7 +572,7 @@ a register ([wp17-result-abi.md](wp17-result-abi.md)) — is an *ABI* change
 rather than a construct, and that turned out to be the cheaper kind to
 mirror. It touched the same five files on each side (`types.ts`,
 `result.ts`/`emit_result.ts`, `emit.ts`/`emitter.ts`, `escape.ts`,
-`attributes.ts`), added nothing to StaticTS-0 — rule 5 of §6 did not fire, and
+`attributes.ts`), added nothing to AmritScript-0 — rule 5 of §6 did not fire, and
 `self/` is written in exactly the subset it was written in before — and the
 IR oracle caught the divergences the same way: the two sides have to agree on
 every SSA number of the pack and the unpack, so a shift emitted in a
@@ -629,8 +629,8 @@ These are in addition to `docs/MASTER_PLAN.md` §7, not instead of it.
 1. **A construct enters the language before it enters `self/`.** Wanting it
    for the port is not a reason to skip its `reject_*` case or its cookbook
    entry. `self/` is the customer, not the exception.
-2. **`self/` is a StaticTS program.** It follows `docs/LANGUAGE.md` and the
-   StaticTS half of `.claude/typescript.md` — `function` declarations,
+2. **`self/` is an AmritScript program.** It follows `docs/LANGUAGE.md` and the
+   AmritScript half of `.claude/typescript.md` — `function` declarations,
    `interface` for structs, no arrow functions, no `type` aliases. The house
    rules for `src/` do not apply to it, and `biome.json` must exempt it the
    way it already exempts `examples/` and `bench/`.
@@ -639,7 +639,7 @@ These are in addition to `docs/MASTER_PLAN.md` §7, not instead of it.
    written by hand. A disagreement is triaged before the next phase starts.
 4. **The runtime budget still holds.** Self-hosting is not a licence to grow
    `runtime.c` past §2 of the master plan. Lower inline instead.
-5. **StaticTS-0 does not grow quietly.** Adding a construct to the subset in
+5. **AmritScript-0 does not grow quietly.** Adding a construct to the subset in
    §2 is an edit to this file and a line in `CHANGELOG.md`, because every
    addition is something stage1 must then implement in order to compile
    itself.
@@ -658,8 +658,8 @@ holds" and "the self-hosted compiler is the one you run" is a build recipe that
 is not a test, and the command line D4 said a wrapper would supply.
 
 ```bash
-npm run bootstrap                         # build/statictsc, stage2, speed profile
-scripts/statictsc.sh hello.ts --link hello && ./hello
+npm run bootstrap                         # build/amritc, stage2, speed profile
+scripts/amritc.sh hello.ts --link hello && ./hello
 ```
 
 **`scripts/bootstrap.sh` builds the chain.** stage0 (`dist/index.js`) builds
@@ -671,7 +671,7 @@ sooner — and `--verify` runs the three equalities of §1 with `cmp` rather tha
 with the suite's reporting, which makes the script self-checking for anyone
 building it outside a checkout of the tests.
 
-**`scripts/statictsc.sh` is the command line.** D4 kept `--link`, `--profile`
+**`scripts/amritc.sh` is the command line.** D4 kept `--link`, `--profile`
 and directory creation out of stage1, on the grounds that a wrapper could
 supply them for nothing; this is that wrapper, and D4's bet is settled at 120
 lines of `bash` with no runtime growth at all. It mirrors stage0's spelling
@@ -697,7 +697,7 @@ One stage rather than three, because what is being tested here is the
 deployment path and not the fixed point — the bootstrap check above owns that,
 and this one would only pay for the same two links again.
 
-**stage0 stays the published package.** `npm install -g statictsc` still ships
+**stage0 stays the published package.** `npm install -g amritc` still ships
 `dist/`, and it has to: it is the seed every bootstrap starts from, the oracle
 every `self/` phase is compared against, and the only one of the two that emits
 DWARF and the interop sidecars. What changed is that a checkout can now produce

@@ -1,12 +1,12 @@
 {
-  "name": "statictsc",
+  "name": "amritc",
   "version": "0.1.0",
-  "description": "StaticTS: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
+  "description": "AmritScript: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
   "license": "MIT",
   "type": "commonjs",
   "main": "dist/index.js",
   "bin": {
-    "statictsc": "dist/index.js"
+    "amritc": "dist/index.js"
   },
   "files": [
     "dist",
@@ -52,8 +52,8 @@
     "native",
     "wasm",
     "webassembly",
-    "statictsc",
-    "statics"
+    "amritc",
+    "amritscript"
   ],
   "dependencies": {
     "typescript": "^5.6.0"

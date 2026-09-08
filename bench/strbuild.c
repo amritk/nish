@@ -1,4 +1,4 @@
-/* C twin of strbuild.ts with the StaticTS memory model: length-prefixed
+/* C twin of strbuild.ts with the AmritScript memory model: length-prefixed
  * immutable strings, every one a fresh bump-arena allocation (64 KB chunks,
  * never freed), the same 32-way join tree. */
 #include <stdint.h>

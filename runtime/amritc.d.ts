@@ -1,38 +1,38 @@
 /**
- * Ambient declarations for the StaticTS global surface.
+ * Ambient declarations for the AmritScript global surface.
  *
- * Every StaticTS program is legal TypeScript syntax — the compiler parses it
+ * Every AmritScript program is legal TypeScript syntax — the compiler parses it
  * with the official TypeScript parser and nothing else. This file is what
  * makes it legal TypeScript *semantics* too: reference it from a `tsconfig.json`
  * (or with `/// <reference path="..." />`) and `tsc --noEmit`, your editor and
  * your language server all accept `Result<T, E>`, `Ok(...)`, `i32` and the rest
  * without a red squiggle.
  *
- *   { "include": ["src/**\/*.ts", "node_modules/statictsc/runtime/statictsc.d.ts"] }
+ *   { "include": ["src/**\/*.ts", "node_modules/amritc/runtime/amritc.d.ts"] }
  *
- * **`statictsc` is still the authority.** TypeScript's structural checker is
- * weaker than this compiler's in the places where StaticTS is deliberately
+ * **`amritc` is still the authority.** TypeScript's structural checker is
+ * weaker than this compiler's in the places where AmritScript is deliberately
  * stricter, and it cannot see the flow rules at all:
  *
  *   - the integer and float widths are aliases of `number` here, so `tsc`
- *     lets an `i32` and an `f64` mix where `statictsc` refuses;
+ *     lets an `i32` and an `f64` mix where `amritc` refuses;
  *   - `tsc` does not know that a `Result` may not be dropped, that
  *     `orReturn()` returns early, or that the enclosing function has to
  *     return a `Result` of its own for it to be legal at all;
  *   - everything Phase 0 forbids (`any`, `throw`, `try`, prototypes,
  *     arrow functions, ...) is ordinary TypeScript and passes `tsc` happily.
  *
- * So a program that `tsc` accepts may still be rejected by `statictsc`; the
+ * So a program that `tsc` accepts may still be rejected by `amritc`; the
  * reverse should never happen, and a case where it does is a bug in this file.
  * `docs/LANGUAGE.md` is the normative description.
  */
 
 // ---- Numeric widths (docs/LANGUAGE.md -> Types) ------------------------------
 //
-// StaticTS treats these as distinct types that never mix implicitly. There is
+// AmritScript treats these as distinct types that never mix implicitly. There is
 // no way to say that in TypeScript without branding them, and a brand would
 // break the literal syntax the language relies on (`let x: i32 = 5`), so they
-// are aliases and the width check is left to `statictsc`.
+// are aliases and the width check is left to `amritc`.
 
 type i32 = number;
 type i64 = number;
@@ -48,7 +48,7 @@ type f64 = number;
 // Modelled as the tagged union TypeScript would use anyway, intersected with
 // the method surface. That is what lets `if (r.ok)` and `if (r.isOk())` narrow
 // `r` in `tsc` for the same reason and in the same places they narrow in
-// `statictsc`.
+// `amritc`.
 
 /** The success arm of a `Result`, as the discriminant proves it. */
 type ResultOk<T> = { readonly ok: true; readonly value: T };
@@ -62,7 +62,7 @@ interface ResultMethods<T, E> {
   isErr(): this is ResultErr<E> & ResultMethods<T, E>;
   /**
    * The success payload, or an early `return Err(error)` from the enclosing
-   * function — Rust's `?`. `statictsc` additionally requires that function to
+   * function — Rust's `?`. `amritc` additionally requires that function to
    * return a `Result` whose error arm accepts `E`; `tsc` cannot check that.
    */
   orReturn(): T;
@@ -86,7 +86,7 @@ declare function Err<T, E>(error: E): Result<T, E>;
 
 // ---- console and process -----------------------------------------------------
 //
-// Declared here with *StaticTS's* signatures — one argument, no format string,
+// Declared here with *AmritScript's* signatures — one argument, no format string,
 // statement position — rather than borrowed from `lib.dom` or `@types/node`,
 // which describe something much wider. `Console` is an interface so that a
 // project which does pull `lib.dom` in merges with it instead of colliding;
@@ -109,7 +109,7 @@ interface Process {
 }
 declare var process: Process;
 
-// ---- Numeric conversions (there is no cast in StaticTS) ----------------------
+// ---- Numeric conversions (there is no cast in AmritScript) ----------------------
 
 declare function toI32(x: number | boolean): i32;
 declare function toI64(x: number | boolean): i64;
@@ -123,7 +123,7 @@ declare function toF64(x: number | boolean): f64;
 declare function f64ToBits(x: f64): i64;
 declare function bitsToF64(bits: i64): f64;
 
-// ---- Streams and files (globals: StaticTS has no package resolution) ---------
+// ---- Streams and files (globals: AmritScript has no package resolution) ---------
 
 /** `s` to stdout with no trailing newline and no conversion. */
 declare function write(s: string): void;
@@ -154,7 +154,7 @@ declare const Arena: {
 // ---- What this file cannot say ----------------------------------------------
 //
 // The typed-array aliases (`Int32Array`, `Float32Array`, `Float64Array`,
-// `BigInt64Array`) are *not* declared here. In StaticTS each one names the
+// `BigInt64Array`) are *not* declared here. In AmritScript each one names the
 // element-typed array itself — `Int32Array` is `i32[]` — but redeclaring them
 // would collide with `lib.es5.d.ts` and break every other type in the standard
 // library. So `tsc` reads them as the JavaScript views it knows, which accept

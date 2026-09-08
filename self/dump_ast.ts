@@ -9,7 +9,7 @@
 //
 // Offsets are bytes, as everywhere in `self/`. A parse error prints as an
 // `ERROR` node with its message and the exit status is 1, which is how the
-// oracle knows the file needs grammar StaticTS-0 does not have yet rather than
+// oracle knows the file needs grammar the subset does not have yet rather than
 // that the two disagree.
 
 import { SourceFile } from "./diagnostics";

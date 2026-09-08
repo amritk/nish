@@ -1,7 +1,7 @@
-# StaticTS IR cookbook
+# AmritScript IR cookbook
 
 For every construct in [LANGUAGE.md](LANGUAGE.md): the smallest TypeScript
-snippet that exercises it and the exact LLVM IR `statictsc` emits for it today.
+snippet that exercises it and the exact LLVM IR `amritc` emits for it today.
 The sections follow the same order as the language reference, so each heading
 here has a counterpart there.
 
@@ -31,7 +31,7 @@ sentence each:
 
 | Attribute | Meaning |
 | --- | --- |
-| `nounwind` | The function never unwinds: StaticTS has no exceptions, no `throw`, and no landing pads. A failure a caller should handle is a `Result<T, E>`. |
+| `nounwind` | The function never unwinds: AmritScript has no exceptions, no `throw`, and no landing pads. A failure a caller should handle is a `Result<T, E>`. |
 | `willreturn` | The function always returns to its caller: every loop is a counted loop, nothing reachable calls `process.exit`, `panic`, `expect` on a failed `Result`, a checked `a[i]`, or an integer `/` / `%` (whose divisor check can panic), and every callee is `willreturn` too. |
 | `readnone` | The function touches no memory except its own stack slots and calls only `readnone` callees (LLVM 16+ reads it as `memory(none)`). |
 | `readonly` (function) | As `readnone`, except the body reads memory it does not own: a string or array header, a field, an element, or a reading callee such as `sts_str_eq`. |
@@ -41,7 +41,7 @@ sentence each:
 | `noinline` | Never inline the callee (`sts_arena_grow`), so the slow path stays out of the caller. |
 | `alwaysinline` | Always inline the callee: the arena fast path `@sts_alloc_struct` becomes a few instructions in every caller. |
 | `allocsize(0)` | The first argument is the size in bytes of the allocation the function returns, so LLVM can reason about the object's extent. |
-| `noundef` | The value is never `undef` or `poison`: every StaticTS value is initialised. |
+| `noundef` | The value is never `undef` or `poison`: every AmritScript value is initialised. |
 | `zeroext` | An `i1` (`boolean`) is zero-extended in a register, matching the C ABI for `bool`. |
 | `nonnull` | The pointer is never null: only a `T \| null` parameter or return can be, and those do not carry it. |
 | `align 8` (param/return) | The pointee is 8-byte aligned: string literals, arena strings, array headers and objects all are. |
@@ -362,13 +362,13 @@ calls it, releases the arena, and returns the exit code.
 <!-- cookbook:begin decl_main -->
 ```ts
 export function main(): number {
-  console.log("hello from StaticTS");
+  console.log("hello from AmritScript");
   return 0;
 }
 ```
 
 ```llvm
-@.str.0 = private unnamed_addr constant { i64, [20 x i8] } { i64 19, [20 x i8] c"hello from StaticTS\00" }, align 8
+@.str.0 = private unnamed_addr constant { i64, [20 x i8] } { i64 19, [20 x i8] c"hello from AmritScript\00" }, align 8
 
 declare void @sts_free_arena() #0
 declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
@@ -747,7 +747,7 @@ attributes #0 = { nounwind willreturn readnone }
 One `switch` instruction: a constant-to-label table and a default edge, which
 the backend turns into a jump table once the labels are dense enough. Empty
 clauses have no block of their own — `case 1:` points at the body of `case 2:`,
-which is the whole of StaticTS's fallthrough. A label that names a module
+which is the whole of AmritScript's fallthrough. A label that names a module
 constant is folded before the table is written, so `KIND_CALL` is a `4` here.
 
 <!-- cookbook:begin stmt_switch -->
@@ -1541,7 +1541,7 @@ attributes #0 = { nounwind willreturn readnone }
 `<<` is `shl`, `>>` is `ashr` (sign-filling) and `>>>` is `lshr`
 (zero-filling). The count is masked to the operand width — 31 for `i32`, 63
 for `i64` — because LLVM makes a wider shift poison while JavaScript wraps the
-count; StaticTS follows JavaScript. A constant count is masked at compile time
+count; AmritScript follows JavaScript. A constant count is masked at compile time
 and no `and` appears (`a >> 3` below); a variable one costs the `and`.
 
 <!-- cookbook:begin expr_shifts -->

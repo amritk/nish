@@ -1,4 +1,4 @@
-# StaticTS
+# AmritScript
 
 An ahead-of-time compiler for a strictly static subset of TypeScript. It
 parses source with the official TypeScript compiler API, rejects everything
@@ -20,22 +20,22 @@ Requirements: Node.js 18+ and, to produce binaries, clang (LLVM 18) + lld;
 per-OS install commands are in [docs/INSTALL.md](docs/INSTALL.md).
 
 ```bash
-npm install -g statictsc          # or: git clone, npm install, npm run build, node dist/index.js ...
+npm install -g amritc          # or: git clone, npm install, npm run build, node dist/index.js ...
 ```
 
 `hello.ts`:
 
 ```ts
 export function main(): number {
-  console.log("hello from StaticTS");
+  console.log("hello from AmritScript");
   return 0;                          // the process exit code
 }
 ```
 
 ```bash
-statictsc hello.ts --link hello    # writes hello.ll, then builds hello with clang -O3 -flto
-./hello                            # hello from StaticTS
-statictsc hello.ts -o hello.ll     # IR only
+amritc hello.ts --link hello    # writes hello.ll, then builds hello with clang -O3 -flto
+./hello                            # hello from AmritScript
+amritc hello.ts -o hello.ll     # IR only
 ```
 
 The IR is readable as is. `examples/add.ts` compiles to:
@@ -85,8 +85,8 @@ Node.
 ## Command line
 
 ```
-statictsc <entry.ts> [more.ts ...] [options]
-       statictsc --version | --help
+amritc <entry.ts> [more.ts ...] [options]
+       amritc --version | --help
   -o, --output <file.ll>     output path for a single module (default: <input>.ll)
   -o, --output <dir>/        output directory: one <dir>/<module>.ll per module
   --link <exe>               build a native binary from every module + runtime/runtime.c
@@ -110,12 +110,12 @@ statictsc <entry.ts> [more.ts ...] [options]
   --json                     print diagnostics as one JSON object per line on stdout (no excerpt)
   --emit-ast                 print the syntax tree of every module to stdout instead of IR
   --emit-checked             print the checker's tables (signatures, locals, structs, facts) instead of IR
-  -v, --version              print the statictsc version and exit
+  -v, --version              print the amritc version and exit
 ```
 
 Exit codes: `0` success, `1` compile error (`file:line:col: error: ...` plus
 a caret excerpt), `2` usage error, `3` toolchain error, `70` internal
-compiler error (please report it; `STATICTSC_DEBUG=1` adds the stack trace).
+compiler error (please report it; `AMRITC_DEBUG=1` adds the stack trace).
 A compile that fails reports every error it found (statement by statement,
 declaration by declaration), in source order, up to 20 before `...and N more
 errors`; `--json` gives editors the same list as
@@ -123,7 +123,7 @@ errors`; `--json` gives editors the same list as
 one per line. `-g` adds a DWARF line table and variables to the IR so
 `gdb`/`lldb` step through the `.ts` source of a `--link`ed binary
 ([docs/wp10-ci.md](docs/wp10-ci.md)).
-Multi-file programs: `statictsc examples/multi/main.ts --link build/multi && ./build/multi; echo $?`
+Multi-file programs: `amritc examples/multi/main.ts --link build/multi && ./build/multi; echo $?`
 prints `49`.
 
 Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c -o app`
@@ -171,7 +171,7 @@ flat. Every LLVM attribute the compiler emits (`nounwind`, `willreturn`,
 rules are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#attribute-soundness-rules).
 
 The benchmark suite (`bench/`: fib, n-body, spectral norm, sieve, string
-building, a `Vec3` method loop, each in StaticTS, C and Rust with identical
+building, a `Vec3` method loop, each in AmritScript, C and Rust with identical
 algorithms and a shared checksum) is run by `node bench/run.mjs`, which
 writes [docs/BENCHMARKS.md](docs/BENCHMARKS.md): wall time, binary size and
 peak memory per column, plus the exact build commands. The analysis of every
@@ -181,11 +181,11 @@ the rules of the game are in [bench/README.md](bench/README.md).
 
 ## Interop: export, do not embed
 
-StaticTS never embeds a JavaScript engine (see the [FAQ](docs/FAQ.md#why-not-embed-a-javascript-engine-for-npm-packages)).
-The supported direction is Node importing StaticTS:
+AmritScript never embeds a JavaScript engine (see the [FAQ](docs/FAQ.md#why-not-embed-a-javascript-engine-for-npm-packages)).
+The supported direction is Node importing AmritScript:
 
 ```
-[ Node / Bun process ]  imports  [ StaticTS .wasm or .node addon ]
+[ Node / Bun process ]  imports  [ AmritScript .wasm or .node addon ]
   I/O, HTTP, npm packages          math, parsing, data transforms, hot loops
                  cross the boundary once per batch, not once per element
 ```
@@ -196,14 +196,14 @@ The supported direction is Node importing StaticTS:
   takes or returns an array.
 - `--emit-napi` + `scripts/build.sh --profile napi` build a `.node` addon
   with argument type checks (`examples/node-addon.mjs`).
-- Buffers cross as typed arrays: a StaticTS `Int32Array` / `Float64Array` /
+- Buffers cross as typed arrays: an AmritScript `Int32Array` / `Float64Array` /
   `BigInt64Array` parameter (the spellings of `i32[]` / `f64[]` / `i64[]`,
   one layout) is a JS typed array on both paths. The addon borrows it
   (zero-copy; writes are visible in JS), the wasm loader that `--emit-dts`
   writes next to the `.d.ts` copies it into the module's memory and results
   back out; strings cross the addon as copies (`examples/arrays.ts`).
 - `--emit-header` writes C prototypes (`int32_t add(int32_t a, int32_t b);`,
-  `double sumF64(const sts_array *xs);`) next to `runtime/statictsc.h`, the
+  `double sumF64(const sts_array *xs);`) next to `runtime/amritc.h`, the
   public runtime ABI (arena, strings, arrays, `sts_reset_arena`,
   `sts_arena_mark` / `sts_arena_release` for a host that manages batches).
 - An N-API call costs about 30 ns and a wasm call about 2 ns before any work
@@ -214,7 +214,7 @@ Details: [docs/wp8-interop.md](docs/wp8-interop.md).
 
 ## Self-hosting
 
-`self/` is the same compiler written in StaticTS — lexer, parser, checker and
+`self/` is the same compiler written in AmritScript — lexer, parser, checker and
 emitter, 43 modules, no `typescript` package underneath — and it compiles its
 own source to a fixed point:
 
@@ -228,11 +228,11 @@ byte-identical to stage2) on every run. Compiling the whole compiler costs the
 native one **91 ms and 86 MB** against the Node one's 786 ms and 178 MB.
 
 ```bash
-npm run bootstrap                            # build/statictsc, built by itself
-scripts/statictsc.sh hello.ts --link hello   # its command line: -o, --link, --profile
+npm run bootstrap                            # build/amritc, built by itself
+scripts/amritc.sh hello.ts --link hello   # its command line: -o, --link, --profile
 ```
 
-`npm install -g statictsc` still ships the Node compiler: it is the seed every
+`npm install -g amritc` still ships the Node compiler: it is the seed every
 bootstrap starts from, the oracle every `self/` phase is compared against, and
 the one that emits debug info and the interop sidecars. Details, and the
 subset `self/` is written in, are in
@@ -246,7 +246,7 @@ subset `self/` is written in, are in
 | M2 "Data" | classes and interfaces, arrays, runtime and intrinsics | done |
 | M3 "Rust parity" | interop, memory strategy (stack allocation, arena scopes, `T \| null`), benchmarks with `--target`/`--nsw`/PGO, differential testing against Node | done |
 | M4 "1.0" | frozen language reference, tagged release | next |
-| M5 "Self-hosting" | `self/`: the compiler, written in StaticTS, compiling itself | done |
+| M5 "Self-hosting" | `self/`: the compiler, written in AmritScript, compiling itself | done |
 
 Not in the language yet, in the order they are likely to land: optional
 reference counting for objects that must outlive an arena reset, and virtual
@@ -271,7 +271,7 @@ node tests/differential/fuzz.js --count 200   # random integer programs against 
 npm run check            # tsc --noEmit
 npm run lint             # Biome style lint (advisory, never a compile gate)
 npm run smoke            # build and run every example with a main
-npm run bootstrap        # build the self-hosted compiler into build/statictsc
+npm run bootstrap        # build the self-hosted compiler into build/amritc
 node bench/run.mjs       # the benchmark suite; rewrites docs/BENCHMARKS.md (about 3 minutes)
 docs/cookbook/regen.sh   # refresh docs/IR_COOKBOOK.md; node docs/check-links.mjs checks the links
 ```

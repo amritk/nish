@@ -10,7 +10,7 @@
 //
 // `src/` pairs each lowering with a `callees` function inside one
 // `BuiltinCall` object, so that what a builtin *emits* and what the attribute
-// analysis is *told* it emits cannot drift apart. StaticTS has no function
+// analysis is *told* it emits cannot drift apart. The language has no function
 // values, so the pair is kept by locality instead: `emitBuiltinCall` and
 // `builtinCallees` are the same `if` chain in the same order, and so are
 // `emitIdentifierBuiltinCall` and `identifierBuiltinCallees`. An omission in

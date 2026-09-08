@@ -7,17 +7,17 @@ without over-engineering.
 Two kinds of TypeScript live in this repo, and the rules differ because the
 compiler that runs them differs:
 
-- **StaticTS programs** — `examples/`, `tests/cases/`, `tests/link/`,
+- **AmritScript programs** — `examples/`, `tests/cases/`, `tests/link/`,
   `tests/layout/`, `tests/differential/corpus/`, `docs/cookbook/`, `bench/*.ts`,
   and every snippet in `docs/` and `README.md`. These are compiled by
-  `statictsc`, and the language reference (`docs/LANGUAGE.md`) is the style
+  `amritc`, and the language reference (`docs/LANGUAGE.md`) is the style
   guide: a construct the compiler refuses is not a style choice, it is a
   compile error. **The two house rules below cannot apply here** — the
-  language has no arrow functions and no `type` aliases, so a StaticTS
+  language has no arrow functions and no `type` aliases, so an AmritScript
   program declares functions with `function` and structs with `interface`.
 - **The compiler's own source** — `src/`, plus the JavaScript in `tests/`,
   `bench/` and `docs/`. This runs under Node through `tsc`, so the full
-  language is available; the rule here is to write it *as if* StaticTS were
+  language is available; the rule here is to write it *as if* AmritScript were
   the target wherever that costs nothing, so that the code reads like the
   language it compiles and the dynamic corners are the ones a reader can
   point at.
@@ -30,14 +30,14 @@ compiler that runs them differs:
   function should take and return exactly what its signature says.
 - Explicit over inferred at every boundary; inference is for locals.
 
-## Writing StaticTS programs
+## Writing AmritScript programs
 
 Everything the validator and checker refuse is listed in `docs/LANGUAGE.md`
 ("Forbidden constructs", "Rejected by the checker") with the exact message and
 the `reject_*` case that pins it.
 
 Those two lists mean different things, and it matters when you read a
-rejection. **Phase 0, the validator, is what StaticTS can never compile** —
+rejection. **Phase 0, the validator, is what AmritScript can never compile** —
 `any`, `eval`, prototypes, `try`, dynamic property access. **The checker's
 `Unsupported ... in Phase 1` fallback is what nobody has implemented yet**,
 and the validator's own header says a later work package makes those compile
@@ -57,7 +57,7 @@ cannot afford either. So flat structs in contiguous memory, top-level
 functions that LLVM inlines, explicit mutation, and functional idioms only
 where they remove runtime work. The reasoning and the enforcement table are in
 [docs/wp15-performance.md](../docs/wp15-performance.md) §1a; the practical
-consequence for a StaticTS program is that a loop over an array of structs is
+consequence for an AmritScript program is that a loop over an array of structs is
 the fast shape and a chain of small objects linked by pointers is not.
 
 The shape of the language, as a style guide:
@@ -107,7 +107,7 @@ test than it looks.
 
 The full language is available, and the `typescript` compiler API it walks is
 thoroughly dynamic. The rule is to keep the dynamic parts at that boundary and
-write the rest the way StaticTS would have it:
+write the rest the way AmritScript would have it:
 
 - **Explicit return types** on every exported function, and on any function
   whose return type is not obvious from a one-line body. Annotate the
@@ -213,14 +213,14 @@ compiler's own source, and are linted. Three things still differ:
   holds every class-related handler because they share the dispatch table they
   register into and the side tables they write. Splitting them one per file
   would scatter a table across a directory.
-- **StaticTS programs cannot follow the first two at all.** The language has
+- **AmritScript programs cannot follow the first two at all.** The language has
   neither arrow functions nor `type` aliases, so `examples/`, `docs/cookbook/`
   and `bench/*.ts` are exempt in `biome.json`, and the plugin does not run on
   them.
 
 `satisfies` is welcome in `src/` wherever it helps — a dispatch table checked
 against its key type while keeping its literal value types is the obvious case.
-It is only a StaticTS program that cannot use it.
+It is only an AmritScript program that cannot use it.
 
 ## Naming Conventions
 
@@ -231,5 +231,5 @@ It is only a StaticTS program that cannot use it.
 - Basic blocks are named `kind.role` (`if.then`, `loop.cond`, `arr.oob`) so
   an IR diff reads as prose. Runtime symbols are `sts_*` on both sides of
   the ABI.
-- In StaticTS programs, name the function after what it computes and the
+- In AmritScript programs, name the function after what it computes and the
   test case after the rule it proves (`cf_while_break`, `reject_null_field_access`).

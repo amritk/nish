@@ -1,4 +1,4 @@
-/* Native driver that links against the compiled StaticTS module. */
+/* Native driver that links against the compiled AmritScript module. */
 #include <stdint.h>
 #include <stdio.h>
 

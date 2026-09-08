@@ -1,6 +1,6 @@
 // Single inheritance without overrides: layout prefix, super(...), inherited
 // fields, methods and constructors, implicit super(), upcasts into parameters,
-// variables and arrays. (Overrides are excluded on purpose: StaticTS resolves
+// variables and arrays. (Overrides are excluded on purpose: AmritScript resolves
 // methods by the receiver's static type, JavaScript by the runtime class.)
 class Account {
   owner: string;

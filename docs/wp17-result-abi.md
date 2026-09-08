@@ -275,7 +275,7 @@ about half of it.
 
 `bench/result` is the same program as a benchmark, against C and Rust twins
 that use the shape each language would use anyway — a two-word C struct (the
-one `--emit-header` declares) and Rust's own `Result<i32, i32>`. StaticTS is
+one `--emit-header` declares) and Rust's own `Result<i32, i32>`. AmritScript is
 **1.46x behind C and 2.6x behind Rust** there, and the reason is not the
 encoding but *how the two halves reach the optimiser*:
 
@@ -284,9 +284,9 @@ encoding but *how the two halves reach the optimiser*:
 | Rust `Result<i32, i32>` (two SSA values throughout) | 251 ms |
 | C, an eight-byte struct clang coerces at the boundary | 444 ms |
 | C, the word assembled by hand with `<< 32` and `\|` | 653 ms |
-| **StaticTS** | **650 ms** |
+| **AmritScript** | **650 ms** |
 
-The third row is the important one: C written the way `statictsc` emits is
+The third row is the important one: C written the way `amritc` emits is
 *exactly* our number, so this is not a code-generation defect on our side.
 What separates the first two rows from the last two is whether the ok arm and
 the error arm are ever separate SSA values. When they are, instcombine folds
@@ -345,11 +345,11 @@ point: **274 of 274 programs, 941 modules, 1,286,495 lines of IR**, with
 `IR(stage1) == IR(stage2)` and stage3 byte-identical to stage2 still holding
 over the 43 modules of `self/`.
 
-**StaticTS-0 did not grow.** Rule 5 of [wp14-selfhost.md](wp14-selfhost.md)
+**AmritScript-0 did not grow.** Rule 5 of [wp14-selfhost.md](wp14-selfhost.md)
 §6 — the subset `self/` is written in does not grow quietly — did not fire:
 the packing is shifts, `zext`, `trunc`, `select` and one `bitcast`, all of
 which `self/` could already express, and no construct entered the language
-either. What this package adds to StaticTS is a *lowering* of a type that was
+either. What this package adds to AmritScript is a *lowering* of a type that was
 already there, which is why it ships no new surface syntax and its `reject_*`
 case pins that the WP16 rules still hold on the new shape rather than a new
 rule of its own.

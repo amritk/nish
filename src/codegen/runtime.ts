@@ -1,5 +1,5 @@
 /**
- * StaticTS runtime ABI as seen from LLVM IR.
+ * The runtime ABI as seen from LLVM IR.
  *
  * `runtime/runtime.c` implements these symbols. Everything here is a
  * *contract*: struct layouts and signatures must match the C side exactly.
@@ -239,7 +239,7 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
   {
     // Host entry (WP8): header + `len` uninitialised elements, `len == cap`. Compiled code
     // never calls it (literals and `new Array` use the inline allocator); the wasm loader and
-    // C hosts do, so it is part of the declared ABI and of statictsc.h.
+    // C hosts do, so it is part of the declared ABI and of amritc.h.
     name: "sts_alloc_array",
     signature: "declare noalias noundef nonnull align 8 %struct.sts_array* @sts_alloc_array(i64 noundef, i64 noundef)",
     attrs: ["nounwind", "willreturn"],

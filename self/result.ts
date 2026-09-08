@@ -216,7 +216,7 @@ function requireStatement(ctx: CheckContext, call: Node, method: string, receive
  * `r.orReturn()`: the propagation rule. The enclosing function has to return a
  * `Result` whose error arm accepts this one's, which is exactly the contagion
  * Rust's `?` enforces through `From<E>` — without the conversion, because
- * StaticTS has no trait to hang one on.
+ * The language has no trait to hang one on.
  */
 function checkOrReturn(ctx: CheckContext, call: Node, receiver: i32): i32 {
   const current = ctx.current;
@@ -271,7 +271,7 @@ function checkUnwrapOr(ctx: CheckContext, call: Node, args: Node, receiver: i32,
  * unmet invariant should. It is the only unwrap here, and unlike Rust's
  * `unwrap()` it insists on a message, because a program that gives up should
  * say why. `message` is a plain string rather than a rendering of the error:
- * `E` is any type and StaticTS has no way to format one.
+ * `E` is any type and the language has no way to format one.
  */
 function checkExpect(ctx: CheckContext, call: Node, args: Node, receiver: i32, scope: Scope): i32 {
   const ok = ctx.table.okOf(receiver);

@@ -1,10 +1,10 @@
 /**
  * `--emit-header <file.h>`: a C header for every function a host can call.
  *
- * The C ABI of a StaticTS function is the LLVM signature the emitter wrote:
+ * The C ABI of a compiled function is the LLVM signature the emitter wrote:
  *   number   -> int32_t (i32 mode) or double (f64 mode)
  *   boolean  -> bool (i1, zero-extended in a register, as clang does)
- *   string   -> sts_str * (const-qualified as a parameter; see statictsc.h)
+ *   string   -> sts_str * (const-qualified as a parameter; see amritc.h)
  *   T[]      -> sts_array * (WP4 header; `const` when the function provably
  *               never stores through it, the same proof that gives the IR
  *               parameter `readonly`); the element type is in the comment
@@ -17,6 +17,7 @@
  * file that includes this header therefore link with a plain `clang a.ll b.c`.
  */
 import { StructInfo } from "../checker";
+import { HEADER_GUARD_PREFIX, LANGUAGE, RUNTIME_HEADER } from "../branding";
 import { Compilation } from "../compilation";
 import { StaticType } from "../types";
 import {
@@ -106,12 +107,12 @@ function structFieldTypes(compilation: Compilation): StaticType[] {
 }
 
 export function generateHeader(compilation: Compilation, outFile: string): string {
-  const guard = `STATICTSC_${guardStem(outFile)}_H`;
+  const guard = `${HEADER_GUARD_PREFIX}_${guardStem(outFile)}_H`;
   const lines: string[] = [
     banner(compilation, "--emit-header", (t) => `/* ${t}`),
     " *",
-    " * C ABI of the StaticTS modules listed below. Link the .ll module(s) and",
-    " * runtime/runtime.c next to your C code; include runtime/statictsc.h's",
+    ` * C ABI of the ${LANGUAGE} modules listed below. Link the .ll module(s) and`,
+    ` * runtime/runtime.c next to your C code; include runtime/${RUNTIME_HEADER}'s`,
     " * directory with -I. Strings (sts_str) and arrays (sts_array, { len, cap,",
     " * data }) live in the arena: a returned value is valid until",
     " * sts_reset_arena() / sts_arena_release(). A `const sts_array *` parameter",
@@ -122,7 +123,7 @@ export function generateHeader(compilation: Compilation, outFile: string): strin
     "",
     "#include <stdbool.h>",
     "#include <stdint.h>",
-    '#include "statictsc.h"',
+    `#include "${RUNTIME_HEADER}"`,
     "",
     "#ifdef __cplusplus",
     'extern "C" {',

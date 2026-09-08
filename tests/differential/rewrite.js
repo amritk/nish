@@ -1,7 +1,7 @@
 /**
- * StaticTS -> JavaScript rewrite for differential testing (WP13).
+ * AmritScript -> JavaScript rewrite for differential testing (WP13).
  *
- * A StaticTS program is valid TypeScript, but its *semantics* are not
+ * An AmritScript program is valid TypeScript, but its *semantics* are not
  * JavaScript's: `number` is a wrapping 32-bit integer in the default mode,
  * `i64` is a wrapping 64-bit integer, `u8`/`u16`/`u32`/`u64` are unsigned and
  * JavaScript has no unsigned integers at all, `f32` is a 32-bit float and
@@ -137,7 +137,7 @@ const SHIFT_OPS = new Set([
  * `& | ^` are JavaScript's own once the result is wrapped back into the width.
  * The shifts need two adjustments:
  *
- *   - **The count.** StaticTS masks it to the operand width. JavaScript's
+ *   - **The count.** AmritScript masks it to the operand width. JavaScript's
  *     number shifts already mask to 31, which is that rule at 32 bits, so only
  *     `u8` and `u16` need the mask spelled out.
  *   - **The opcode.** `>>` is arithmetic on a signed type and logical on an
@@ -191,7 +191,7 @@ const BITWISE = new Set([
   ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
 ]);
 
-/** `a op b` with the StaticTS semantics of `kind`, whichever family `op` belongs to. */
+/** `a op b` with the AmritScript semantics of `kind`, whichever family `op` belongs to. */
 const apply = (kind, op, a, b) => (BITWISE.has(op) ? bitwise(kind, op, a, b) : arith(kind, op, a, b));
 
 /**
@@ -285,7 +285,7 @@ function zeroOf(elem) {
 }
 
 /**
- * The JavaScript literal for a folded module constant (WP14). A StaticTS
+ * The JavaScript literal for a folded module constant (WP14). An AmritScript
  * module constant *is* its folded value — the compiler emits no global and no
  * initialiser — so substituting the value is the faithful rewrite, and it
  * carries the wrapping, the i64 width and the constant-folded string concat
@@ -341,7 +341,7 @@ function makeTransformer(unit, stems) {
       }
 
       // ---- implicit super() (WP2b) ----
-      // StaticTS lets a derived constructor omit `super()` when no ancestor
+      // AmritScript lets a derived constructor omit `super()` when no ancestor
       // constructor takes parameters and calls it before the body; JavaScript
       // throws on the first `this` instead, so the call is made explicit.
       if (ts.isConstructorDeclaration(node) && node.body && ts.isClassDeclaration(node.parent)) {

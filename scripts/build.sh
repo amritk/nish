@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a StaticTS .ll module (plus optional C sources) into a native binary.
+# Build an AmritScript .ll module (plus optional C sources) into a native binary.
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm]
 #
@@ -22,7 +22,7 @@
 #   napi   Node addon (<out>.node): the speed flags plus -shared -fPIC, built
 #          against the Node headers next to `node` (override: NODE_INCLUDE=<dir
 #          containing node_api.h>). Inputs: <modules.ll> runtime/runtime.c and
-#          the shim from `statictsc --emit-napi`.
+#          the shim from `amritc --emit-napi`.
 #
 # Profile-guided optimisation (WP9), for the speed, size and napi profiles:
 #   --pgo-generate         instrumented build (-fprofile-generate); running the
@@ -39,8 +39,8 @@
 # docs/wp9-optimisation.md reports what PGO buys on the benchmark suite.
 #
 # Debug info (WP10): `-g` compiles every input with -g and skips the strip
-# step of the speed/size/napi profiles, so the DWARF that `statictsc -g`
-# put in the .ll (line table, variables) reaches the binary. `statictsc
+# step of the speed/size/napi profiles, so the DWARF that `amritc -g`
+# put in the .ll (line table, variables) reaches the binary. `amritc
 # --link -g` passes it through automatically.
 #
 # Works on Linux (clang + lld preferred, GNU ld tolerated) and macOS (Apple ld64
@@ -51,7 +51,7 @@ profile=speed
 out=""
 inputs=()
 pgo=()                                 # -fprofile-generate / -fprofile-use=<file>
-debug=0                                # -g: keep DWARF (statictsc -g emits it in the IR; runtime.c gets it here)
+debug=0                                # -g: keep DWARF (amritc -g emits it in the IR; runtime.c gets it here)
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
@@ -86,7 +86,7 @@ case "$(uname -s)" in
 esac
 
 # -g: compile everything with debug info and never strip, whatever the profile,
-# so the line table statictsc emitted survives into the binary.
+# so the line table amritc emitted survives into the binary.
 if [ "$debug" = 1 ]; then common+=(-g); strip_flag=(); fi
 
 case "$profile" in
@@ -173,7 +173,7 @@ case "$profile" in
     # macOS: the napi_* symbols come from the node binary at load time, so the
     # linker must not insist on resolving them. ELF shared objects allow this.
     case "$(uname -s)" in Darwin) shared+=(-Wl,-undefined,dynamic_lookup) ;; esac
-    # runtime/statictsc.h is the public ABI header the generated shim includes.
+    # runtime/amritc.h is the public ABI header the generated shim includes.
     runtime_inc="$(cd "$(dirname "$0")/../runtime" && pwd)"
     "$CC" "${common[@]}" -O3 -flto -DNDEBUG "${pgo[@]}" -I"$node_inc" -I"$runtime_inc" \
       -ffunction-sections -fdata-sections -fomit-frame-pointer \

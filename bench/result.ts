@@ -6,7 +6,7 @@
 // The twins are result.c, whose `Result` is the eight-byte struct
 // `--emit-header` declares for this type, and result.rs, whose `Result` Rust
 // returns in a register for the same reason. All three should therefore be the
-// same code; a StaticTS column well behind them means a `Result` went back to
+// same code; an AmritScript column well behind them means a `Result` went back to
 // being a pointer into the arena.
 //
 // The accumulator feeds the next input, so the loop has a carried dependency

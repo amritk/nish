@@ -202,7 +202,7 @@ methodCallCheckers.array = (ctx, expr, receiver, scope) => {
       return numberType(ctx);
     }
     case "pop":
-      // No `undefined` in StaticTS, so an empty array is a panic rather than
+      // There is no `undefined`, so an empty array is a panic rather than
       // a second return type; the check is the one `a[i]` already pays for.
       checkArity(ctx, expr, "pop", 0);
       return receiver.elem;
@@ -271,7 +271,7 @@ function checkNewArray(
   if (elem.kind === "void") throw ctx.error("Array elements cannot be void", expr.typeArguments?.[0] ?? expr);
   // Zero-filling is only a valid value for scalars and for `T | null` (a zero
   // pointer *is* `null`, WP6); a zeroed plain string / array would be a null
-  // value StaticTS has no way to represent or check for.
+  // value the language has no way to represent or check for.
   if (llvmType(elem).endsWith("*") && elem.kind !== "nullable") {
     throw ctx.error(
       `\`new Array<${typeToString(elem)}>(n)\` would zero-fill with null ${typeToString(elem)} values; build it with \`[]\` and \`push\` instead`,

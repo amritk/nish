@@ -12,6 +12,7 @@
 // carry on instead (D1). The cost is visible — every caller of a checker that
 // can fail has to decide what to do next rather than being unwound past.
 
+import { LANGUAGE } from "./branding";
 import { checkCondition, checkExpression, clearNarrowingsAssignedIn, narrow } from "./expressions";
 import { CheckContext, LOOP_ITERATION, LOOP_SWITCH } from "./context";
 import { resolveType } from "./annotations";
@@ -352,7 +353,7 @@ function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
     if (body.children.length > 0 && !terminates && i < clauses.length - 1) {
       ctx.error(
         body.children[body.children.length - 1],
-        "A `case` clause with statements must end in `break`, `return`, `continue` or `process.exit` (StaticTS has no implicit fallthrough; leave a clause empty to give several labels one body)"
+        "A `case` clause with statements must end in `break`, `return`, `continue` or `process.exit` (" + LANGUAGE + " has no implicit fallthrough; leave a clause empty to give several labels one body)"
       );
     }
     lastTerminates = terminates;

@@ -1,6 +1,6 @@
-# Installing statictsc
+# Installing amritc
 
-`statictsc` compiles a static subset of TypeScript to LLVM IR and, with
+`amritc` compiles a static subset of TypeScript to LLVM IR and, with
 `--link`, to a native binary. The compiler itself only needs Node.js; the
 `--link` step (and anything else that turns `.ll` into machine code) needs an
 LLVM toolchain.
@@ -9,7 +9,7 @@ LLVM toolchain.
 
 - **Node.js 18 or newer** (22 is what CI uses).
 - **clang** (LLVM 18 recommended) and **lld**, for `--link`. Without them
-  `statictsc` still writes the `.ll` files and exits 3 with the install
+  `amritc` still writes the `.ll` files and exits 3 with the install
   command for your platform when you ask for `--link`.
 
 ### Ubuntu / Debian
@@ -20,7 +20,7 @@ sudo apt-get install -y clang-18 lld-18 llvm-18
 ```
 
 Debian ships versioned binaries (`clang-18`, `ld.lld-18`, ...). Either point
-`statictsc` at the versioned compiler with `CC=clang-18`, or expose the plain
+`amritc` at the versioned compiler with `CC=clang-18`, or expose the plain
 names on `PATH`:
 
 ```bash
@@ -73,7 +73,7 @@ resource directory, next to the sysroot (as the tarball above unpacks it),
 in `<sysroot>/lib/wasm32-wasi/`, or at `WASI_BUILTINS=<file>`. Then:
 
 ```bash
-statictsc examples/argv.ts --link build/argv.wasm --profile wasi
+amritc examples/argv.ts --link build/argv.wasm --profile wasi
 node examples/wasi-host.mjs build/argv.wasm 3 4 five     # or: wasmtime build/argv.wasm 3 4 five
 ```
 
@@ -93,15 +93,15 @@ the Ubuntu steps inside it.
 From npm (once published; see [docs/wp12-release.md](wp12-release.md)):
 
 ```bash
-npm install -g statictsc
-statictsc --version
+npm install -g amritc
+amritc --version
 ```
 
 From a release tarball on GitHub (the `Release` workflow attaches
-`statictsc-<version>.tgz` to every `v*` tag):
+`amritc-<version>.tgz` to every `v*` tag):
 
 ```bash
-npm install -g ./statictsc-0.1.0.tgz
+npm install -g ./amritc-0.1.0.tgz
 ```
 
 From a checkout:
@@ -111,38 +111,38 @@ git clone https://github.com/amritk/compiler.git
 cd compiler
 npm install
 npm run build       # src/ -> dist/
-npm link            # optional: puts `statictsc` on PATH
+npm link            # optional: puts `amritc` on PATH
 # or run it in place: node dist/index.js ...
 ```
 
 The package ships `dist/` (the compiler), `runtime/` (the C runtime and its
-header), and `scripts/build.sh` (the link pipeline). `statictsc` locates the
+header), and `scripts/build.sh` (the link pipeline). `amritc` locates the
 runtime and the script relative to its own install directory, so a global
 install works from any working directory.
 
 ## 2a. Building the self-hosted compiler (optional)
 
-`self/` is the same compiler written in StaticTS, and it compiles itself
+`self/` is the same compiler written in AmritScript, and it compiles itself
 ([docs/wp14-selfhost.md](wp14-selfhost.md)). From a checkout, with clang on
 `PATH`:
 
 ```bash
-npm run bootstrap                  # dist/ -> stage1 -> build/statictsc
-scripts/statictsc.sh hello.ts --link hello
+npm run bootstrap                  # dist/ -> stage1 -> build/amritc
+scripts/amritc.sh hello.ts --link hello
 ./hello
 ```
 
 `scripts/bootstrap.sh` builds stage1 with the Node compiler, then stage2 with
-stage1, and installs stage2 as `build/statictsc`. `--verify` also builds stage3
+stage1, and installs stage2 as `build/amritc`. `--verify` also builds stage3
 and compares the IR and the binaries byte for byte; `--stages 1` stops one link
-sooner. `scripts/statictsc.sh` is that compiler's command line: it adds the
+sooner. `scripts/amritc.sh` is that compiler's command line: it adds the
 directory creation and the `--link` step the self-hosted compiler deliberately
 does not do itself, and takes the same `-o`, `--link` and `--profile` spellings
-as `statictsc`.
+as `amritc`.
 
 The native compiler is about eight times faster than the Node one and needs no
 Node at all, but it does not emit debug info (`-g`) or the interop sidecars
-(`--emit-header`, `--emit-dts`, `--emit-napi`) — those stay with `statictsc`,
+(`--emit-header`, `--emit-dts`, `--emit-napi`) — those stay with `amritc`,
 which is also what the npm package installs.
 
 ## 3. Hello world
@@ -151,7 +151,7 @@ Create `hello.ts`:
 
 ```ts
 export function main(): number {
-  console.log("hello from StaticTS");
+  console.log("hello from AmritScript");
   return 0;
 }
 ```
@@ -160,21 +160,21 @@ export function main(): number {
 (`main(): void` exits 0). Compile and link it:
 
 ```bash
-statictsc hello.ts --link hello
+amritc hello.ts --link hello
 # wrote hello.ll
 # linked hello: 5104 bytes (speed)
 ./hello
-# hello from StaticTS
+# hello from AmritScript
 ```
 
 `hello.ll` is the LLVM IR, kept next to the binary. To only get the IR:
 
 ```bash
-statictsc hello.ts -o hello.ll
+amritc hello.ts -o hello.ll
 ```
 
 Other build profiles: `--profile size` (smallest binary), `--profile debug`
-(no optimisation, symbols kept). Run `statictsc --help` for every flag, and
+(no optimisation, symbols kept). Run `amritc --help` for every flag, and
 see the [README](../README.md) for the language subset.
 
 ## 4. Exit codes
@@ -185,7 +185,7 @@ see the [README](../README.md) for the language subset.
 | 1 | the program was rejected: compile error (`file:line:col: error: ...`), missing input file, or an `-o` layout that does not fit the module count |
 | 2 | usage error: unknown flag, missing argument, no input files |
 | 3 | toolchain error: `--link` found no `clang` (`CC` overrides), or `scripts/build.sh` failed (its output is shown; the `.ll` files are still written) |
-| 70 | internal compiler error: an unexpected exception. Please report it at <https://github.com/amritk/compiler/issues> with the input and command line; `STATICTSC_DEBUG=1` prints the stack trace |
+| 70 | internal compiler error: an unexpected exception. Please report it at <https://github.com/amritk/compiler/issues> with the input and command line; `AMRITC_DEBUG=1` prints the stack trace |
 
 ## Troubleshooting
 

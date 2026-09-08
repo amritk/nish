@@ -44,7 +44,7 @@ existing dispatch tables with a spread. `src/codegen/attributes.ts` owns the
   emitted for loop-carried values. `opt -mem2reg` (part of `-O1`) rebuilds
   the SSA form, so the pattern below optimises exactly like clang's output.
 - **Integer arithmetic stays plain** (no `nsw`): compound assignment and
-  `++`/`--` wrap like every other StaticTS integer operation.
+  `++`/`--` wrap like every other AmritScript integer operation.
 
 ## `if` / `else`
 
@@ -676,5 +676,5 @@ scripts/build.sh bench/fib.c -o build/bench/fib_c --profile speed
 
 | | run 1 | run 2 | run 3 | binary |
 | --- | ---: | ---: | ---: | ---: |
-| StaticTS | 0.030 s | 0.031 s | 0.030 s | 4592 B |
+| AmritScript | 0.030 s | 0.031 s | 0.030 s | 4592 B |
 | C | 0.030 s | 0.031 s | 0.033 s | 4592 B |

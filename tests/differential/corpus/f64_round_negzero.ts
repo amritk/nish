@@ -1,4 +1,4 @@
-// --number-mode f64: Math.round(-0.3) is -0 in JavaScript and +0 in StaticTS (documented in
+// --number-mode f64: Math.round(-0.3) is -0 in JavaScript and +0 in AmritScript (documented in
 // docs/wp7-runtime.md). Both print "0"; dividing by the result exposes the sign.
 export function main(): void {
   const x = -0.3;

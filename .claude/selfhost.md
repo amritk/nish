@@ -12,7 +12,7 @@ IR(stage1, self/)  ==  IR(stage2, self/)      byte for byte
 
 stage1 is `self/` built by stage0, stage2 is `self/` built by stage1, stage3 is
 `self/` built by stage2 and must be byte-identical to stage2. All of that holds
-today over the 43 modules of `self/`, and so does the stronger
+today over the modules of `self/`, and so does the stronger
 `IR(stage0, self/) == IR(stage1, self/)`: the two implementations are the same
 compiler, not two compilers that agree about the tests.
 
@@ -24,7 +24,7 @@ construct still enters the language (and `src/`) before it enters `self/`, and
 
 | | Deliverable | State |
 | --- | --- | --- |
-| S1 | `self/lexer.ts` tokenises StaticTS-0 | **done** — `tests/lexer_oracle.js`, 482/482 files |
+| S1 | `self/lexer.ts` tokenises AmritScript-0 | **done** — `tests/lexer_oracle.js`, 482/482 files |
 | S2 | `self/parser.ts` builds the tree | **done** — `tests/parser_oracle.js`, 447/447 files |
 | S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js` and `reject_oracle.js` |
 | S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 206/206 files byte for byte |
@@ -36,12 +36,12 @@ The oracles build compilers into temporary directories and delete them. To get
 one you can keep:
 
 ```bash
-npm run bootstrap                            # build/statictsc (stage2, speed)
+npm run bootstrap                            # build/amritc (stage2, speed)
 scripts/bootstrap.sh --verify                # the three equalities, with cmp
-scripts/statictsc.sh hello.ts --link hello   # its command line: -o, --link, --profile
+scripts/amritc.sh hello.ts --link hello   # its command line: -o, --link, --profile
 ```
 
-`scripts/statictsc.sh` is the wrapper D4 promised: it makes the output
+`scripts/amritc.sh` is the wrapper D4 promised: it makes the output
 directory and runs `scripts/build.sh`, which is the half of the driver stage1
 does not have. It refuses `-g`, the dumps and the interop sidecars **by name**
 — they are stage0's, not missing — and mirrors stage0's file layout exactly, so
@@ -52,17 +52,17 @@ either compiler can be dropped into a build script. See
 
 1. **A construct enters the language before it enters `self/`.** Wanting it for
    the port is not a reason to skip its `reject_*` case or its cookbook entry.
-2. **`self/` is a StaticTS program.** `function` declarations, `interface` for
+2. **`self/` is an AmritScript program.** `function` declarations, `interface` for
    structs, no arrow functions, no `type` aliases — the opposite of the house
    rules for `src/`, because the language has neither. `biome.json` exempts it.
 3. **stage0 is the oracle.** Every phase is tested by comparing it with the
    corresponding stage0 output over the corpus, never by a hand-written golden.
 4. **The runtime budget still holds.** Lower inline rather than growing
    `runtime.c`.
-5. **StaticTS-0 does not grow quietly.** Adding a construct to the subset is an
+5. **AmritScript-0 does not grow quietly.** Adding a construct to the subset is an
    edit to `docs/wp14-selfhost.md` and a line in `CHANGELOG.md`.
 
-## StaticTS-0, the subset `self/` is written in
+## AmritScript-0, the subset `self/` is written in
 
 No generics, arrow functions, closures, nested functions or function values; no
 `type` aliases, `enum`, `namespace`, `static` members, getters or setters; no
@@ -91,6 +91,7 @@ No generics, arrow functions, closures, nested functions or function values; no
 | `self/` | replaces in `src/` |
 | --- | --- |
 | `strings.ts` `map.ts` `paths.ts` | the standard library `src/` gets from Node |
+| `branding.ts` | `src/branding.ts`: the language name every diagnostic reads |
 | `tokens.ts` `lexer.ts` | the `typescript` scanner |
 | `nodes.ts` `parser.ts` | the `typescript` parser |
 | `diagnostics.ts` | `src/diagnostics.ts` |

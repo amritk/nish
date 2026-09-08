@@ -75,7 +75,7 @@ const HEADER_BYTES = 24;
 const MEMSET = "llvm.memset.p0i8.i64";
 const MEMCPY = "llvm.memcpy.p0i8.p0i8.i64";
 
-/** Bytes per element. Every StaticTS value is a scalar or a pointer, so its size is its natural alignment. */
+/** Bytes per element. Every value is a scalar or a pointer, so its size is its natural alignment. */
 function elementSize(elem: StaticType): number {
   return alignOf(elem);
 }

@@ -19,7 +19,7 @@
  *                 caller's buffer. The callee must not retain the pointer
  *                 beyond the call (the arena does not own it), and a `push`
  *                 that grows the array moves it into the arena, invisibly to JS.
- *   3. calls the StaticTS function through its C ABI,
+ *   3. calls the compiled function through its C ABI,
  *   4. boxes the result: `napi_create_int32` / `napi_create_double` /
  *      `napi_get_boolean` / `napi_create_bigint_int64`, `undefined` for void,
  *      `napi_create_string_utf8` for a string, and a fresh typed array
@@ -35,6 +35,7 @@
  *
  * Build: scripts/build.sh <modules.ll> runtime/runtime.c <shim.c> -o x.node --profile napi
  */
+import { CLI, LANGUAGE, RUNTIME_HEADER } from "../branding";
 import { Compilation } from "../compilation";
 import { ResultType, StaticType, resultByValue } from "../types";
 import {
@@ -328,12 +329,12 @@ export function generateNapiShim(compilation: Compilation): string {
     "#include <stddef.h>",
     "#include <stdint.h>",
     ...(needs.arrayResult ? ["#include <string.h>"] : []),
-    '#include "statictsc.h" /* runtime/; the napi profile adds it to the include path */',
+    `#include "${RUNTIME_HEADER}" /* runtime/; the napi profile adds it to the include path */`,
     // WP17: the `Result` types the bridged signatures mention, spelled exactly
     // as --emit-header spells them, since this file declares its own prototypes.
     ...resultDefinitions(plans.map((p) => p.fn)),
     "",
-    "/* C ABI of the bridged StaticTS functions (identical to --emit-header). */",
+    `/* C ABI of the bridged ${LANGUAGE} functions (identical to --emit-header). */`,
   ];
   for (const p of plans) lines.push(`${cPrototype(p.fn.sig, p.fn.writtenParams)!};`);
   lines.push("");
@@ -465,7 +466,7 @@ export function generateNapiShim(compilation: Compilation): string {
     "    napi_value fn;",
     "    if (napi_create_function(env, sts_napi_exports[i].name, NAPI_AUTO_LENGTH, sts_napi_exports[i].callback, NULL, &fn) != napi_ok ||",
     "        napi_set_named_property(env, exports, sts_napi_exports[i].name, fn) != napi_ok) {",
-    '      napi_throw_error(env, NULL, "statictsc: cannot register the addon exports");',
+    `      napi_throw_error(env, NULL, "${CLI}: cannot register the addon exports");`,
     "      return NULL;",
     "    }",
     "  }",

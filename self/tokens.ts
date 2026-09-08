@@ -1,4 +1,4 @@
-// The token kinds of StaticTS-0, the subset the self-hosted compiler is
+// The token kinds of the subset the self-hosted compiler is
 // written in (docs/wp14-selfhost.md §2). They live here as module constants so
 // that the lexer, the parser and the diagnostics all name the same numbers;
 // the language has no `enum`, and a magic number repeated at forty use sites
@@ -115,7 +115,7 @@ export const TOK_SHL_ASSIGN: i32 = 82;
 export const TOK_SHR_ASSIGN: i32 = 83;
 export const TOK_USHR_ASSIGN: i32 = 84;
 
-// Tokens StaticTS-0 has no use for, lexed anyway. The lexer's job is to say
+// Tokens the subset has no use for, lexed anyway. The lexer's job is to say
 // what is written, not what is allowed: `a ?? b` is one `??`, and the parser
 // refuses it by name ("`??` is forbidden; narrow with `!== null`") instead of
 // complaining about a stray `?`. It is also what lets the lexer be diffed

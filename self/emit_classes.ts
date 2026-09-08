@@ -16,7 +16,7 @@
 // The member dispatch that `src/` spreads over three tables keyed by the
 // receiver's type kind is the `if` chain in `emitPropertyAccess` and
 // `emitMethodCall` here, which is D2 again: the tables needed a registration
-// per family and StaticTS has no function values to register.
+// per family and the language has no function values to register.
 
 import { explicitSuperCall } from "./assignment";
 import { ownFields } from "./attributes";

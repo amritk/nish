@@ -1,7 +1,7 @@
 /**
  * `Result<T, E>` and the rules that make an error impossible to ignore (WP16).
  *
- * StaticTS has no exceptions and, since this work package, no `throw` either:
+ * The language has no exceptions and, since this work package, no `throw` either:
  * a function that can fail says so in its return type and hands the caller a
  * `Result<T, E>`. The three rules below are what "Rust-style" means here, and
  * each is a checker error rather than a lint:
@@ -20,7 +20,7 @@
  *      therefore has to admit it in its own signature.
  *
  * The surface is Rust's, in the spelling TypeScript already has — every line
- * below parses as TypeScript and type-checks against `runtime/statictsc.d.ts`:
+ * below parses as TypeScript and type-checks against `runtime/amritc.d.ts`:
  *
  *   Result<T, E>       the type; `T` may be `void`, `E` may not
  *   Ok(v) / Ok()       the success value; takes its type from the context,
@@ -40,7 +40,7 @@
  *
  * What is deliberately missing: Rust's `unwrap()` (`expect` says the same
  * thing and insists on a message), and `map` / `and_then` / `or_else`, which
- * need function values — forbidden in StaticTS, because the whole-program
+ * need function values — forbidden here, because the whole-program
  * pass cannot prove purity, termination or escape through an unknown callee.
  * Narrowing plus `orReturn()` covers what those combinators are for.
  *
@@ -286,7 +286,7 @@ const requireStatement = (
  * `r.orReturn()`: the propagation rule (3). The enclosing function has to
  * return a `Result` whose error arm accepts this one's, which is exactly the
  * contagion Rust's `?` enforces through `From<E>` — without the conversion,
- * because StaticTS has no trait to hang one on.
+ * because the language has no trait to hang one on.
  */
 const checkOrReturn = (ctx: CheckContext, expr: ts.CallExpression, receiver: ResultType): StaticType => {
   checkArity(ctx, expr, "orReturn", 0);
@@ -336,7 +336,7 @@ const checkUnwrapOr = (
  * unmet invariant should. It is the only unwrap here, and unlike Rust's
  * `unwrap()` it insists on a message, because a program that gives up should
  * say why. `message` is a plain string rather than a rendering of the error:
- * `E` is any type and StaticTS has no way to format one, so a program that
+ * `E` is any type and the language has no way to format one, so a program that
  * wants the error in the text writes the branch out and calls
  * ``panic(`...${r.error}`)``.
  */

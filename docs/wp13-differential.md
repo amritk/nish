@@ -1,6 +1,6 @@
 # WP13: Differential testing against Node
 
-A compiled StaticTS program must behave exactly like the same TypeScript run
+A compiled AmritScript program must behave exactly like the same TypeScript run
 under Node, up to the handful of semantic decisions this compiler documents
 (32-bit `number`, byte-length strings, ...). This package proves that on a
 corpus of whole programs plus a random-program fuzzer: every program is built
@@ -24,7 +24,7 @@ a fixed seed as two checks in the WP13 block of `tests/run.js` (about 10 s).
 | --- | --- |
 | `tests/differential/run.js` | The runner: discovers programs, builds and runs both sides in a process pool, prints the table, applies `known-failures.txt`. |
 | `tests/differential/lib.js` | Shared pieces: discovery, `runProgram` (build, run, rewrite, run, compare), the pool, known-failure parsing, mismatch description. |
-| `tests/differential/rewrite.js` | StaticTS -> JavaScript. Checks the program with the compiler's own checker and rewrites the AST from the recorded types. |
+| `tests/differential/rewrite.js` | AmritScript -> JavaScript. Checks the program with the compiler's own checker and rewrites the AST from the recorded types. |
 | `runtime/shim.mjs` | The Node side of the runtime: `toI32`/`toI64`/`toF64`, wrapping helpers, byte length, bounds-checked indexing, `console.log`, file I/O, `process.exit`, trap. |
 | `tests/differential/fuzz.js` | Random integer/boolean program generator and driver. |
 | `tests/differential/corpus/` | 50 hand-written programs (`<name>.ts` + optional `<name>.args`; multi-module ones as `<name>/main.ts` + `args`). |
@@ -100,7 +100,7 @@ round/sqrt/sin/cos/exp/log/pow`, `Math.PI/E`, `Math.random`.
 | `a & b`, `a \| b`, `a ^ b` | i64 / u64 | `__sts.wrapI64/wrapU64(a op b)` | BigInt already agrees; the wrap is the uniform rule and cannot change an in-range result |
 | `~a` | any integer | `wrap(~a)` | JS `~` on an int32 and BigInt `~` are both the `xor x, -1` we emit |
 | `a << b`, `a >> b` | i32 | `((a op b) \| 0)` | JS masks the count to 31 exactly as the emitter does, and `>>` is `ashr` |
-| `a >>> b` | i32 | `((a >>> b) \| 0)` | JS `>>>` yields the *unsigned* 32-bit value in a double; `\| 0` reads those bits back as the signed `i32` StaticTS has ([LANGUAGE.md, Semantics decisions](LANGUAGE.md#semantics-decisions)) |
+| `a >>> b` | i32 | `((a >>> b) \| 0)` | JS `>>>` yields the *unsigned* 32-bit value in a double; `\| 0` reads those bits back as the signed `i32` AmritScript has ([LANGUAGE.md, Semantics decisions](LANGUAGE.md#semantics-decisions)) |
 | `a << b` | u8 / u16 / u32 | `((a << (b & w)) & mask)` | the count mask is spelled out below 32 bits, where JavaScript's own mask of 31 is too wide |
 | `a >> b`, `a >>> b` | u8 / u16 / u32 | `((a >>> (b & w)) & mask)` | `>>` is `lshr` on an unsigned type, which is JavaScript's `>>>` |
 | `a << b`, `a >> b`, `a >>> b` | i64 | `__sts.shlI64/ashrI64/lshrI64(a, b)` | BigInt shifts do not mask the count and BigInt has no `>>>` at all |
@@ -126,8 +126,8 @@ round/sqrt/sin/cos/exp/log/pow`, `Math.PI/E`, `Math.random`.
 | `toI64(x)` | | `__sts.toI64(x)` | int32: exact (`sext`); double: truncate and saturate |
 | `toF64(x)` | | `__sts.toF64(x)` | `Number(bigint)` rounds to nearest like `sitofp` |
 | any `toX(y)` with an unsigned type or an `f32` on either side | | `__sts.convert(y, "<from>", "<to>")` | one helper for the whole matrix: the value becomes an exact BigInt, then `BigInt.asIntN`/`asUintN` at the target's width performs the `sext`, `zext` or `trunc`. From a float it saturates like `llvm.fpto{s,u}i.sat`; to an `f32` it is `Math.fround` |
-| `readFileSync`, `writeFileSync`, `appendFileSync` | | `__sts.*` over `node:fs` with UTF-8 | a failure prints `statictsc: cannot read <path>` and exits 1 |
-| derived-class constructor without `super(...)` | | `super();` prepended to the body | StaticTS calls the (parameterless) ancestor constructor implicitly (WP2b); JavaScript throws at the first `this` without an explicit call |
+| `readFileSync`, `writeFileSync`, `appendFileSync` | | `__sts.*` over `node:fs` with UTF-8 | a failure prints `amritc: cannot read <path>` and exits 1 |
+| derived-class constructor without `super(...)` | | `super();` prepended to the body | AmritScript calls the (parameterless) ancestor constructor implicitly (WP2b); JavaScript throws at the first `this` without an explicit call |
 | `process.argv` | | `__sts.argv()` = `process.argv.slice(1)` | index 0 is the program on both sides (the executable natively, the rewritten entry script under Node); the arguments come from `<name>.argv` next to the program and are passed to both runs |
 | `parseInt(s)` | | `__sts.parseInt(s)` | base-10 `strtoll` semantics (ASCII whitespace, sign, digits; no `0x`) then `toI32` saturation, 0 without digits |
 | `parseFloat(s)` | | `__sts.parseFloat(s)` | longest decimal literal or `Infinity` after ASCII whitespace; a `0x` prefix is read as hex like `strtod` (JS gives 0) |
@@ -339,7 +339,7 @@ A generated program is parsed with the TypeScript parser before it is used,
 and the seed is re-rolled while the text has a syntax error. Only one shape
 triggers this: the `a < b > (c)` ambiguity, where TypeScript reads the `<`
 of a comparison as the start of a type-argument list. `tsc` rejects such a
-program at exactly the positions `statictsc` reports, so it compares nothing
+program at exactly the positions `amritc` reports, so it compares nothing
 (seed 4277 produced one before the re-roll existed). Re-rolling is
 deterministic per seed, so a saved failure still reproduces.
 

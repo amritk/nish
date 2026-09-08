@@ -86,7 +86,7 @@ function compare(binary, file) {
   return { lines: want.length };
 }
 
-/** Every positive StaticTS program the other oracles read, plus `self/` itself. */
+/** Every positive AmritScript program the other oracles read, plus `self/` itself. */
 function corpus() {
   const dirs = [
     path.join(root, "tests", "cases"),

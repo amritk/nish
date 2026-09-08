@@ -1,5 +1,5 @@
 // Rust twin of nbody.ts: same struct, same expression order. The bodies live
-// in a Vec<Body> indexed by i32-as-usize, as the StaticTS array is; the
+// in a Vec<Body> indexed by i32-as-usize, as the AmritScript array is; the
 // idiomatic `[Body; 5]` would let LLVM drop every bounds check up front.
 const N: i32 = 20000000; // bench:n
 

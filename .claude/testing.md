@@ -75,7 +75,7 @@ accepting whatever `test:update` wrote. A golden that changes for an unrelated
 construct is a regression until proven otherwise.
 
 Structural guards (`runtime.c` size budget, the runtime symbol table agreeing
-across `runtime.ts`, `runtime.c` and `statictsc.h`, `opt -O2` vectorising
+across `runtime.ts`, `runtime.c` and `amritc.h`, `opt -O2` vectorising
 `cf_sum_loop`) pin properties that have been broken before. When one fails, the
 change is what is wrong, not the test. Do not raise a budget or delete a guard
 to get green.

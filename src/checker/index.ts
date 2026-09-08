@@ -1,5 +1,5 @@
 /**
- * Phase B: Static-TS validation and type checking.
+ * Phase B: validation and type checking.
  *
  * The core walks top-level declarations and function bodies, dispatching
  * every statement and expression to the handler tables in `statements.ts`
