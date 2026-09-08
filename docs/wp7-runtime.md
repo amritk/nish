@@ -414,11 +414,23 @@ with `clang -Oz -c runtime/runtime.c && size runtime.o` (the `text` column
 of `size`, which also counts the read-only constants and the `.eh_frame`
 unwind entries that the `size` build profile strips):
 
-| | Before WP7 | After WP7 | After argv + parsing | Budget |
-| --- | ---: | ---: | ---: | ---: |
-| source bytes | 4,039 | 7,402 | 11,131 (arrays and WP6 in between) | 8,192 (exceeded since WP4; comments) |
-| `size` text at `-Oz` | 1,118 | 2,688 | 4,093 (was 3,498) | 4,096 |
-| `.text` section alone | | | 2,583 (was 2,172) | |
+| | Before WP7 | After WP7 | After argv + parsing | After WP14 D4 | Budget |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| source bytes | 4,039 | 7,402 | 11,131 (arrays and WP6 in between) | 13,091 | — (was 8,192; exceeded since WP4, comments) |
+| `size` text at `-Oz` | 1,118 | 2,688 | 4,093 (was 3,498) | 4,297 | — (was 4,096; counts `.eh_frame`, which the size profile strips) |
+| `.text` section alone | | | 2,583 (was 2,172) | 2,544 (2,287 before D4) | 4,096 |
+
+The WP14 column is measured on today's tree, where the work between WP7 and it
+had already brought `.text` back down to 2,287; the 2,583 beside it is the WP7
+figure and is not the number D4 grew.
+
+The budget is `.text` now, and the two rows above it are history rather than
+limits (`docs/MASTER_PLAN.md` §2): `.text` is what a linked binary pays, the
+other two measure comments and unwind tables that never reach one. WP14 D4's
+`amrit_mkdir` and `amrit_spawn` cost 257 bytes of it, and cost a program that
+calls neither exactly nothing — `examples/hello.ts` at the `size` profile is
+4,696 bytes with them and 4,696 without, because `-ffunction-sections
+-Wl,--gc-sections` drops both.
 
 The 595 bytes of the second round are `amrit_argv_init` (162 bytes),
 `amrit_parse_number` (249), their two unwind entries and the constants

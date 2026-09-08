@@ -35,7 +35,7 @@
 //   - **Parent links come from a side table** (`self/parents.ts`), since the
 //     tree has none. The walks are otherwise the same walks.
 
-import { builtinCallees, identifierBuiltinCallees } from "./emit_builtins";
+import { builtinCallees, identifierBuiltinCallees, isSpawnCall } from "./emit_builtins";
 import { stringifyCallee, stringConstructCallees } from "./emit_strings";
 import { analyzeEscapes, EscapeResult, FLOW_LEAKS, FLOW_LOCAL, FLOW_RETURNED } from "./escape";
 import {
@@ -457,10 +457,16 @@ function classifyArgumentUse(unit: AnalysisUnit, table: TypeTable, list: Node, n
       return argumentUse(callee, index + (callee.owner !== null ? 1 : 0));
     }
     // `xs.push(p)` stores `p` into the array, `Ok(p)` / `Err(p)` store it into
-    // the `Result` they build (WP16), and `r.unwrapOr(p)` hands it back as the
-    // expression's value; every other builtin lowers to runtime functions
-    // whose pointer params are all declared `nocapture`.
-    if (isPushCall(program, table, owner) || isResultConstructorCall(program, table, owner)) {
+    // the `Result` they build (WP16), `r.unwrapOr(p)` hands it back as the
+    // expression's value, and `spawnSync(p)` leaves the runtime holding an
+    // arena vector of pointers into `p`'s strings (WP14 D4); every other
+    // builtin lowers to runtime functions whose pointer params are all
+    // declared `nocapture`.
+    if (
+      isPushCall(program, table, owner) ||
+      isResultConstructorCall(program, table, owner) ||
+      isSpawnCall(program, owner)
+    ) {
       return use(USE_ESCAPE);
     }
     return use(resultMethodName(program, table, owner) === "unwrapOr" ? USE_ESCAPE : USE_NONE);

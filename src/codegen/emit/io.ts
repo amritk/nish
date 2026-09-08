@@ -9,6 +9,8 @@
  *                               then @amrit_exit(i32 1) and `unreachable`
  *   writeFileSync(path, data)   call void @amrit_write_file(i8* path, i8* data)
  *   appendFileSync(path, data)  call void @amrit_append_file(i8* path, i8* data)
+ *   mkdirSync(path)             call zeroext i1 @amrit_mkdir(i8* path)
+ *   spawnSync(argv)             call i32 @amrit_spawn(%struct.amrit_array* argv)
  *   process.argv                load %struct.amrit_array*, %struct.amrit_array** @amrit_argv
  *
  * `@amrit_argv` is a runtime global that the entry wrapper fills with
@@ -26,8 +28,16 @@
  * All four write memory or perform I/O, so callers are neither `readnone`
  * nor `readonly`. Their string arguments are `nocapture` in runtime.ts, so
  * passing a parameter to them does not make it escape.
+ *
+ * `spawnSync` is the exception to that last sentence, and the only builtin
+ * whose pointer argument the runtime keeps: `amrit_spawn` copies each
+ * element's bytes pointer into an arena vector that outlives the call, so the
+ * array escapes. `isSpawnCall` below is what tells `classifyUse` in
+ * attributes.ts, which would otherwise hand the caller a `nocapture` it cannot
+ * back up.
  */
 import ts from "typescript";
+import { CheckedProgram } from "../../checker";
 import { dottedName } from "../../checker/builtins";
 import { ARRAY_STRUCT } from "../../types";
 import { ARGV_GLOBAL, ARRAY_TYPE } from "../runtime";
@@ -101,6 +111,40 @@ function fileWriter(symbol: string): BuiltinCall {
   };
 }
 
+/** `mkdirSync(path)`: the C answer is already the language's `boolean`. */
+const mkdirSync: BuiltinCall = {
+  emit: (ctx, expr) =>
+    ctx.fn.emitValue(`call zeroext i1 ${ctx.useRuntime("amrit_mkdir")}(${stringArgs(ctx, expr)})`),
+  callees: () => ["amrit_mkdir"],
+};
+
+/**
+ * `spawnSync(argv)`: the array header goes straight to the runtime, which
+ * builds the C vector from it. The status is an `i32`, so `--number-mode f64`
+ * widens it the way `a.length` is widened.
+ */
+const spawnSync: BuiltinCall = {
+  emit: (ctx, expr) => {
+    ctx.declareType(ARRAY_TYPE);
+    const argv = ctx.emitExpression(expr.arguments[0]);
+    const status = ctx.fn.emitValue(
+      `call i32 ${ctx.useRuntime("amrit_spawn")}(${ARRAY_STRUCT}* ${argv})`
+    );
+    return ctx.typeOf(expr).kind === "f64"
+      ? ctx.fn.emitValue(`sitofp i32 ${status} to double`)
+      : status;
+  },
+  callees: () => ["amrit_spawn"],
+};
+
+/**
+ * A call of the `spawnSync` builtin (not of a user function that happens to be
+ * called `spawnSync`, which wins the name as every identifier builtin loses
+ * it). `attributes.ts` asks, because the argument escapes into the runtime.
+ */
+export const isSpawnCall = (program: CheckedProgram, call: ts.CallExpression): boolean =>
+  ts.isIdentifier(call.expression) && call.expression.text === "spawnSync" && !program.callees.has(call);
+
 /** Dotted callees, spread into `builtinCallEmitters`; mirrors `ioBuiltinCalls`. */
 export const ioBuiltinCallEmitters: Record<string, BuiltinCall> = {
   "process.exit": processExit,
@@ -115,6 +159,8 @@ export const ioFunctionEmitters: Record<string, BuiltinCall> = {
   write: streamWriter(1),
   writeError: streamWriter(2),
   panic,
+  mkdirSync,
+  spawnSync,
 };
 
 // ---- process.argv -------------------------------------------------------------------

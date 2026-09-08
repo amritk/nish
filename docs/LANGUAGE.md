@@ -1341,6 +1341,30 @@ Paths are relative to the working directory. These are globals, not
 `write`, `writeError` and `panic` above. A user function of the same name
 wins, as it does for every identifier builtin.
 
+### Directories and subprocesses
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `mkdirSync(path: string): boolean` | create **one** directory, mode `0777 & ~umask` — not recursive, exactly like Node's `fs.mkdirSync(p)` with no options, so a missing parent is a failure and not a reason to create it. `true` when a directory exists at `path` once the call returns, whether this call created it or it was already there; `false` for every other outcome, a plain file at `path` included | write | `io_mkdir`; `reject_mkdir_arity`, `reject_mkdir_type` |
+| `spawnSync(argv: string[]): number` | run `argv[0]`, searched on `PATH`, with `argv` as its argument vector; wait for it; answer its exit status, or `128 + n` when signal `n` killed it (the shell's convention). `-1` when the vector is **empty** — there is no `argv[0]` to run — and whenever the child cannot be started or cannot be waited for, which is also what a WASI build always answers, since WASI has no processes. The child inherits this process's environment, streams and working directory | write | `io_spawn`; `reject_spawn_arity`, `reject_spawn_element_type` |
+
+Both answer a value where they could have exited, for the reason
+`readFileSyncOrNull` answers `null` (WP14 B3): the language has no exceptions,
+so a driver has to be able to turn the failure into its own diagnostic. They
+exist so that a compiler written in AmritScript can create its own `-o dir/`
+and shell out for `--link` — the two calls
+[wp14-selfhost.md](wp14-selfhost.md) §3a D4 named as the price of a
+self-hosted link step.
+
+`spawnSync` is the one builtin whose pointer argument the runtime keeps: it
+copies each element's bytes pointer into a vector that outlives the call, so
+the array escapes, a parameter passed to it is never `nocapture`, and an array
+literal handed to it is never stack-allocated (`io_spawn` pins all three).
+Nothing that can reach `spawnSync` is `willreturn` either, because the child
+may never exit. The argument is checked down to its element type: an `i32[]`
+is an array but not a command line (`reject_spawn_element_type`). Arguments
+are passed as bytes, so an embedded NUL truncates one.
+
 ### Arrays and strings as receivers
 
 | Member | Semantics | Test |

@@ -68,8 +68,16 @@ Design rules that every WP must respect:
   (see `tests/ir/alloc_smoke.ll`).
 - **Every construct ships with a golden test** (`.ts` in, `.ll` out) and a
   native round trip (link with clang, run, compare stdout).
-- **Runtime stays tiny.** Budget: `runtime.c` under 8 KB source, under 4 KB
-  compiled at `-Oz`. No stdio on hot paths.
+- **Runtime stays tiny.** Budget: `runtime.c` under 4 KB of `.text` compiled
+  at `-Oz` (`clang -Oz -c runtime/runtime.c && size -A runtime.o`). No stdio on
+  hot paths. The two figures this replaces were the *source* bytes, over
+  budget since WP4 and left there because comments are not code, and the `text`
+  column of `size`, which counts the `.eh_frame` unwind entries the `size`
+  build profile strips — measuring the bytes that never ship. `.text` is what
+  a linked binary pays, and `-ffunction-sections -Wl,--gc-sections` means it
+  pays only for the functions it calls: adding WP14's `amrit_mkdir` and
+  `amrit_spawn` left `examples/hello.ts` at 4,696 bytes, the same number to the
+  byte. Today: 2,544 of 4,096 (`size` text 4,297, source 13,091).
 
 ## 3. Consolidated language specification (AmritScript)
 

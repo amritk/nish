@@ -124,6 +124,7 @@ import { CallSite, EscapeResult, analyzeEscapes } from "./escape";
 import { collectBuiltinFacts } from "./emit/expressions";
 import { factCollectors } from "./emit/members";
 import { resultLayout } from "../checker/result";
+import { isSpawnCall } from "./emit/io";
 import { isResultConstructorCall, resultMethodName } from "./emit/result";
 import { collectStringFacts, isStringMethodCall, unwrapStringPassthrough } from "./emit/strings";
 import { INLINE_ALLOCATOR_ATTRS, MemoryEffect, RUNTIME_BY_NAME } from "./runtime";
@@ -419,10 +420,18 @@ export function classifyUse(program: CheckedProgram, ref: ts.Expression): ParamU
       const callee = program.callees.get(parent);
       if (callee) return { kind: "argument", callee, index: index + (callee.struct ? 1 : 0) };
       // `xs.push(p)` stores `p` into the array, `ok(p)` / `err(p)` store it
-      // into the `Result` they build (WP16), and `r.unwrapOr(p)` hands it back
-      // as the expression's value; every other builtin lowers to runtime
-      // functions whose pointer params are all declared `nocapture`.
-      if (isPushCall(program, parent) || isResultConstructorCall(program, parent)) return USE_ESCAPE;
+      // into the `Result` they build (WP16), `r.unwrapOr(p)` hands it back as
+      // the expression's value, and `spawnSync(p)` leaves the runtime holding
+      // an arena vector of pointers into `p`'s strings (WP14 D4); every other
+      // builtin lowers to runtime functions whose pointer params are all
+      // declared `nocapture`.
+      if (
+        isPushCall(program, parent) ||
+        isResultConstructorCall(program, parent) ||
+        isSpawnCall(program, parent)
+      ) {
+        return USE_ESCAPE;
+      }
       return resultMethodName(program, parent) === "unwrapOr" ? USE_ESCAPE : USE_NONE;
     }
     if (ts.isNewExpression(parent)) {

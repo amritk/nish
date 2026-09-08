@@ -255,6 +255,20 @@ builtins and real runtime growth against §5 rule 4. Drop `--link`, `--profile`
 and directory creation from stage1: it emits `.ll`, and a wrapper script links.
 Costs nothing for the bootstrap proof, which compares IR.
 
+*Reversed, deliberately and with the bill in §7a below.* D4 was right about the
+proof and about the order of the work — the fixed point never needed a linker,
+and the wrapper carried the deployment path through four milestones for 195
+lines of `bash`. What it was measuring was the wrong thing at the end: the
+cost of the two builtins is 249 bytes of runtime, and what they buy is the last
+sentence of §1. A compiler that cannot produce an executable without a shell
+script beside it is self-hosting in the IR and not in the artifact, and
+"`self/` compiles `self/`" then means a `.ll` a third program has to finish.
+It now means `amritc self/compile.ts --link amritc`. The two builtins are
+`mkdirSync` and `spawnSync`, exactly the two D4 named, and they are ordinary
+language now rather than compiler plumbing: rule 1 of §6 applies to them like
+anything else, with their goldens, their negatives, their `docs/LANGUAGE.md`
+rules and their cookbook entries.
+
 **D5. Measure peak memory before S5, not after.** `self/` allocates every node,
 type, string and array from the bump arena and never releases it — an
 `Arena.reset` is unsafe while the AST lives. Add to that `IRModule.toString()`
@@ -761,6 +775,14 @@ These are in addition to `docs/MASTER_PLAN.md` §7, not instead of it.
 
 ## 7. Shipping it: the bootstrap script and the wrapper
 
+> **Superseded in part by §7a.** The wrapper this section describes is gone:
+> the compiler answers `-o`, `--link` and `--profile` itself now, and makes its
+> own directories. What still holds is the file layout it describes — the two
+> compilers leave the same files in the same places — and the reasoning about
+> `--emit-ast`, which is still stage0's. Read this for how the deployment path
+> was reached and §7a for what it is.
+
+
 S5 proved the fixed point inside the test harness. It did not leave a compiler
 behind: `tests/self/bootstrap.js` builds four of them in a temporary directory,
 compares them and deletes the lot. So the last step between "self-hosting
@@ -849,3 +871,80 @@ is the link step, the directory creation and the AST dump. What changed is that
 a checkout can now produce
 the self-hosted compiler in one command, and that compiler compiles the same
 programs about eight times faster (§4, D5).
+
+---
+
+## 7a. D4 reversed: the compiler links its own output
+
+`scripts/amritc.sh` is deleted. `mkdirSync` and `spawnSync` — the two builtins
+§3a D4 named as the reason not to do this — are in the language, and with them
+`self/compile.ts` plans its output, makes every directory in the way and runs
+`bash scripts/build.sh` for `--link`, which is the same script `src/index.ts`
+spawns and has always been.
+
+```bash
+npm run bootstrap                       # build/amritc, stage2, no wrapper after it
+build/amritc self/compile.ts --link amritc
+cmp amritc build/amritc                 # the fixed point, reached by the artifact
+```
+
+**What D4 got right, and what it was measuring.** Dropping the link step was
+the correct order of work: the proof of §1 compares IR and never needed a
+linker, and 195 lines of `bash` carried the deployment path from S5 through
+four landings for nothing. What it costed wrongly was the end state. "`self/`
+compiles `self/`" with a wrapper in the way means the compiler produces a `.ll`
+that a third program has to finish — self-hosting in the IR and not in the
+artifact. The bill for closing that is 257 bytes of `.text`.
+
+**The two builtins are language, not plumbing.** Rule 1 of §6 applies: each
+entered `src/` first with a golden, a native round trip, two negatives, a
+`docs/LANGUAGE.md` rule and a cookbook entry, and only then `self/`.
+
+| | Answer | Why a value and not an exit |
+| --- | --- | --- |
+| `mkdirSync(path: string): boolean` | one directory, not recursive (Node's `fs.mkdirSync(p)` with no options); true when a directory is there afterwards, whoever made it | the same reason `readFileSyncOrNull` answers `null` (§3 B3): there are no exceptions, so the driver has to phrase its own diagnostic |
+| `spawnSync(argv: string[]): number` | `argv[0]` run through `PATH` with `argv` as its vector, waited for; the exit status, `128 + n` for a signal, `-1` for an empty vector or a program that would not start | as above; a linker that is not installed is a message, not a crash |
+
+`spawnSync` is the first builtin whose pointer argument the runtime keeps:
+`amrit_spawn` copies each element's bytes pointer into an arena vector that
+outlives the call, so `classifyUse` in `attributes.ts` reports `USE_ESCAPE` for
+it and the declaration carries no `nocapture`. It is also the first that is
+*not* `willreturn` — the child may never exit, and `waitpid` waits — which is a
+fact about the world rather than a conservative guess.
+
+**The bill, measured.** `clang -Oz -c runtime/runtime.c`:
+
+| | Before | After | Budget |
+| --- | ---: | ---: | ---: |
+| `.text` | 2,287 | 2,544 | 4,096 |
+| `size` text (counts `.eh_frame`) | 3,944 | 4,297 | — |
+| source bytes | 10,928 | 13,091 | — |
+
+§5 rule 4 said self-hosting is not a licence to grow `runtime.c`, and it is
+still the rule. What changed with it is the metric, in `docs/MASTER_PLAN.md`
+§2: the budget is `.text` at `-Oz`, because that is the half a linked binary
+pays for and because `-ffunction-sections -Wl,--gc-sections` means it pays only
+for what it calls. The check on that claim is a number rather than an argument:
+`examples/hello.ts` at the `size` profile is **4,696 bytes with these two
+functions in the runtime and 4,696 bytes without**, the same to the byte.
+
+**What the compiler now does that it did not.** `-o <file.ll>` and `-o <dir>/`
+with stage0's rules and stage0's refusal when two modules would go to one file;
+`--link <exe>`, writing `<exe>.ll` for one module and `<exe>.modules/` for a
+program with imports; `--profile speed|size|debug|wasi`, validated before
+anything is compiled; every directory in the way of the IR, of a sidecar, or of
+the binary; `<module>.ll` beside the source when nothing is named, which is
+stage0's default and replaces stage1's older "one module to stdout"; and the
+`--link` refusal for a program with no `export function main`, before the emit
+rather than after the linker. It finds `scripts/build.sh` and `runtime.c` from
+the path it was invoked by (`<prefix>/bin/amritc` and `build/amritc` both put
+the root one level up), falling back to the working directory, and says which
+two it looked in when neither has them.
+
+Nothing about the *platform* came in with any of this, which is the part D4
+overestimated: the `uname -s`, the profile flag sets and the wasi sysroot
+search are in `scripts/build.sh` and always were, for both compilers alike.
+`--target host` is still stage0's for the reason `self/target.ts` gives, and
+`--emit-ast` still is for the reason §7 gives — refused by name now by the
+compiler itself rather than by a wrapper, so a build that asks for it is told
+rather than quietly given nothing.

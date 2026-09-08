@@ -98,7 +98,9 @@ export function isBuiltinFunction(name: string): boolean {
     name === "appendFileSync" ||
     name === "write" ||
     name === "writeError" ||
-    name === "panic"
+    name === "panic" ||
+    name === "mkdirSync" ||
+    name === "spawnSync"
   );
 }
 
@@ -425,6 +427,24 @@ export function checkBuiltinFunction(ctx: CheckContext, call: Node, scope: Scope
     }
     requireStatementPosition(ctx, call, name);
     return T_VOID;
+  }
+  // WP14 D4. `mkdirSync` answers a boolean rather than exiting, for the reason
+  // `readFileSyncOrNull` answers null: there are no exceptions, so the driver
+  // has to be able to phrase its own diagnostic.
+  if (name === "mkdirSync") {
+    if (checkBuiltinArity(ctx, call, name, args, 1)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING);
+    }
+    return T_BOOL;
+  }
+  // `spawnSync` is checked down to the element type — a `number[]` is not a
+  // command line — which an interned type id gives for nothing here and cost
+  // `src/checker/builtins.ts` a change from comparing kinds to `sameType`.
+  if (name === "spawnSync") {
+    if (checkBuiltinArity(ctx, call, name, args, 1)) {
+      checkArgumentType(ctx, args.children[0], scope, name, ctx.table.arrayOf(T_STRING));
+    }
+    return ctx.numberType();
   }
   return ctx.errorType(call.children[0], `Unknown function \`${name}\``);
 }

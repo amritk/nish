@@ -18,6 +18,18 @@
  *                                       its message, which `throw` discards).
  *   writeFileSync(path: string, data: string): void   create/truncate + write
  *   appendFileSync(path: string, data: string): void  create/append + write
+ *   mkdirSync(path: string): boolean    create one directory, not recursive;
+ *                                       `true` when a directory is there
+ *                                       afterwards, `false` otherwise. It
+ *                                       answers rather than exits for the
+ *                                       same reason `readFileSyncOrNull`
+ *                                       does (WP14 B3).
+ *   spawnSync(argv: string[]): number   run `argv[0]` through `PATH` with
+ *                                       `argv` as its vector, wait, and
+ *                                       answer its exit status (`128 + n`
+ *                                       for a signal, `-1` when `argv` is
+ *                                       empty or the child cannot be started
+ *                                       or waited for).
  *
  *   process.argv: string[]              the command line, index 0 the program
  *                                       path (like C's argv[0]); read-only,
@@ -26,9 +38,14 @@
  *
  * The file functions are globals rather than `import { readFileSync } from
  * "fs"`: the language has no package resolution and bare specifiers are rejected.
+ *
+ * `mkdirSync` and `spawnSync` exist so that a self-hosted driver can create
+ * `-o dir/` and run `bash scripts/build.sh` for `--link` itself; wp14-selfhost.md
+ * §3a D4 named exactly these two as what stage1 would need before it could
+ * stop leaning on `scripts/amritc.sh`.
  */
 import ts from "typescript";
-import { I32, STRING, VOID, arrayOf, nullableOf } from "../types";
+import { BOOL, F64, I32, STRING, VOID, arrayOf, nullableOf } from "../types";
 import {
   BuiltinCallChecker,
   checkArgumentType,
@@ -90,6 +107,30 @@ function fileWriter(name: string): BuiltinCallChecker {
     return VOID;
   };
 }
+
+/**
+ * `mkdirSync(path)` (WP14 D4): one directory, never recursive, answering
+ * whether a directory is there afterwards. A `boolean` rather than a `void`
+ * that exits, for the reason `readFileSyncOrNull` answers `null`: there are
+ * no exceptions, so the driver has to be able to phrase its own diagnostic.
+ */
+const checkMkdirSync: BuiltinCallChecker = (ctx, expr, scope) => {
+  checkArity(ctx, expr, "mkdirSync", 1);
+  checkArgumentType(ctx, expr.arguments[0], scope, "mkdirSync", STRING);
+  return BOOL;
+};
+
+/**
+ * `spawnSync(argv)` (WP14 D4): the child's exit status, a `number` like
+ * `a.length` is, so `f64` under `--number-mode f64`. The argument is checked
+ * down to its element type — a `number[]` is not a command line — which is
+ * why `checkArgumentType` compares with `sameType` rather than by kind.
+ */
+const checkSpawnSync: BuiltinCallChecker = (ctx, expr, scope) => {
+  checkArity(ctx, expr, "spawnSync", 1);
+  checkArgumentType(ctx, expr.arguments[0], scope, "spawnSync", arrayOf(STRING));
+  return ctx.opts.numberMode === "f64" ? F64 : I32;
+};
 
 /** Dotted callees, spread into `builtinCalls`. */
 export const ioBuiltinCalls: Record<string, BuiltinCallChecker> = {
@@ -154,6 +195,8 @@ export const ioBuiltinFunctions: Record<string, BuiltinCallChecker> = {
   write: streamWriter("write"),
   writeError: streamWriter("writeError"),
   panic: checkPanic,
+  mkdirSync: checkMkdirSync,
+  spawnSync: checkSpawnSync,
 };
 
 /**

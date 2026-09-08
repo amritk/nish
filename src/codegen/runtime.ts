@@ -228,6 +228,34 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     attrs: ["nounwind", "willreturn"],
     effect: "write",
   },
+  // ---- WP14 D4: the directory and subprocess calls a self-hosted driver needs
+  // to link its own output. Both answer a value rather than exiting.
+  {
+    // `mkdir`, then a `stat` when it failed: it changes the file system, so
+    // `write`, and the path is only read and never retained (`STR_NOCAP`).
+    name: "amrit_mkdir",
+    signature: `declare zeroext i1 @amrit_mkdir(${STR_NOCAP})`,
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
+    // Runs an arbitrary program, so the honest answer to every question is the
+    // conservative one:
+    //   - no `memory(...)` and `effect: "write"`: the child reads and writes
+    //     files, the terminal and anything else it likes, and the caller must
+    //     not be hoisted across that;
+    //   - no `nocapture` on the vector: the runtime copies each element's bytes
+    //     pointer into an arena block that outlives the call, which is a
+    //     capture (`classifyUse` in attributes.ts says the same on the checker
+    //     side, so a parameter handed to `spawnSync` never gets `nocapture`);
+    //   - no `willreturn`: the child may never exit, and `waitpid` waits.
+    // `nounwind` is still a fact: the language has no exceptions and neither
+    // does the C that implements this.
+    name: "amrit_spawn",
+    signature: "declare noundef i32 @amrit_spawn(%struct.amrit_array* noundef nonnull align 8)",
+    attrs: ["nounwind"],
+    effect: "write",
+  },
   // ---- WP4: arrays --------------------------------------------------------
   {
     name: "amrit_array_grow",

@@ -25,8 +25,9 @@
 # `node tests/self/bootstrap.js` is the same check with the suite's reporting,
 # and is what CI runs; this script is how the compiler gets built for use.
 #
-# The result emits `.ll` and nothing else (D4): `scripts/amritc.sh` is its
-# command line, and adds the directory creation and the link step.
+# The result is a complete compiler: it plans its own output, makes the
+# directories and links through `scripts/build.sh` itself, so nothing has to
+# stand between it and a build (docs/wp14-selfhost.md §7a).
 #
 # Needs Node and a built dist/ for stage0, and clang + lld on PATH for the
 # links (docs/INSTALL.md).
@@ -48,7 +49,7 @@ usage: scripts/bootstrap.sh [-o <exe>] [--stages 1|2|3] [--profile speed|size|de
 Builds the self-hosted compiler. stage0 (dist/index.js) builds stage1, stage1
 builds stage2 (the default output), stage2 builds stage3. --verify compares the
 IR each stage emits for self/ and the stage2/stage3 binaries, byte for byte.
-scripts/amritc.sh is the resulting compiler's command line.
+The result is the command line itself: -o, --link, --profile and the rest.
 EOF
   exit "${1:-2}"
 }
@@ -154,4 +155,4 @@ fi
 
 cp "$work/stage$install" "$out"
 say "bootstrap: wrote $out ($(wc -c < "$out" | tr -d ' ') bytes, stage$install, $profile profile)"
-say "           run it through scripts/amritc.sh, which adds --link and -o <dir>/"
+say "           it takes -o <file.ll>, -o <dir>/, --link <exe> and --profile"
