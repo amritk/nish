@@ -141,14 +141,14 @@ export function cType(t: StaticType, position: "param" | "return", written = fal
       return `struct ${(t as { name: string }).name} *`;
     case "nullable":
       return cType((t as { inner: StaticType }).inner, position);
-    // WP17: a `Result` small enough to pack comes back *by value* as the
-    // one-word struct `cResultWord` declares — which is the declaration clang
-    // itself lowers to `i64` on every native target, so the header is the ABI
-    // rather than a description of it. Every other `Result` is the arena
-    // pointer WP16 has always returned, and a `Result` parameter is that
-    // pointer whatever its size (`docs/wp17-result-abi.md` §5).
+    // WP17: a `Result` small enough to pack travels *by value* — in either
+    // direction — as the one-word struct `cResultWord` declares, which is the
+    // declaration clang itself lowers to `i64` on every native target, so the
+    // header is the ABI rather than a description of it. Every other `Result`
+    // is the arena pointer WP16 has always used
+    // (`docs/wp17-result-abi.md` §3).
     case "result":
-      return position === "return" && resultByValue(t) ? cResultWord(t) : `struct ${cResultName(t)} *`;
+      return resultByValue(t) ? cResultWord(t) : `struct ${cResultName(t)} *`;
     default:
       return undefined;
   }
@@ -185,9 +185,10 @@ export function cFieldType(t: StaticType): string {
 /**
  * Which C definitions the `Result` types of these signatures need, in the
  * order a header can emit them (a payload before the `Result` that carries
- * it). `word` is set for a type that is returned by value somewhere, `object`
- * for one that appears as a pointer — a parameter, a large return, or a
- * payload of another `Result`. Both can be true of one type.
+ * it). `word` is set for a type that travels by value somewhere — a return or
+ * a parameter — `object` for one that appears as a pointer: a large `Result`
+ * either way, a class field, or a payload of another `Result`. Both can be
+ * true of one type.
  */
 export interface ResultUse {
   type: ResultType;
@@ -215,7 +216,7 @@ export function resultTypesUsed(
   for (const fn of fns) {
     if (fn.sig.name === "main") continue;
     note(fn.sig.returnType, resultByValue(fn.sig.returnType));
-    for (const p of fn.sig.params) note(p.type, false);
+    for (const p of fn.sig.params) note(p.type, resultByValue(p.type));
   }
   // A class field holding a `Result` is the pointer too, and the header
   // declares its struct so a host can follow it rather than being left with an
@@ -343,9 +344,9 @@ export function banner(compilation: Compilation, flag: string, comment: (text: s
  *                                    `{ ok, value, error }` at the offsets the
  *                                    checker derived, which is exactly what
  *                                    clang lays this same declaration out as
- *   `sts_result_<T>_<E>_word`        the packed by-value return: a 32-bit
- *                                    discriminant and the arm it selects,
- *                                    one 64-bit word
+ *   `sts_result_<T>_<E>_word`        the packed by-value form, in either
+ *                                    direction: a 32-bit discriminant and the
+ *                                    arm it selects, one 64-bit word
  *
  * The word is not a description of the ABI, it *is* the ABI: clang lowers a
  * function returning this type to `i64` on every supported native target, so
@@ -362,10 +363,11 @@ export function resultDefinitions(
   if (uses.length === 0) return [];
   const lines = [
     "",
-    "/* `Result<T, E>` (WP16/WP17). A returned `Result` small enough to travel in",
-    " * a register is the `_word` struct: read `ok`, then `as.value` or `as.error`.",
-    " * Every other `Result` is a pointer to the arena object, valid until",
-    " * sts_reset_arena() / sts_arena_release() like every other arena value. */",
+    "/* `Result<T, E>` (WP16/WP17). A `Result` small enough to travel in a",
+    " * register — returned or passed — is the `_word` struct: read `ok`, then",
+    " * `as.value` or `as.error`. Every other `Result` is a pointer to the arena",
+    " * object, valid until sts_reset_arena() / sts_arena_release() like every",
+    " * other arena value. */",
     "#if defined(__cplusplus)",
     "#define STS_RESULT_ASSERT(c, m) static_assert(c, m)",
     "#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L",
@@ -397,7 +399,7 @@ function resultDefinition(use: ResultUse): string[] {
       "  int32_t ok; /* 1 = value, 0 = error */",
       `  union { ${arms} } as; /* the arm \`ok\` selects; the other is not written */`,
       `} ${name};`,
-      `STS_RESULT_ASSERT(sizeof(${name}) == 8, "${tsKeyword(type)} is returned in one 64-bit register");`
+      `STS_RESULT_ASSERT(sizeof(${name}) == 8, "${tsKeyword(type)} travels in one 64-bit register");`
     );
   }
   return lines;

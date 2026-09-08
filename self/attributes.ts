@@ -181,6 +181,8 @@ export class FunctionFacts {
   stackSites: boolean[];
   /** Locals that only ever hold a stack object: accesses through them are own memory. */
   stackLocals: Local[];
+  /** WP17: by-value `Result` parameters whose unpacked object is an entry-block alloca. */
+  stackParams: StringSet;
   /** Bracket the body with `sts_arena_mark` / `sts_arena_release`. Decided after the fixpoint. */
   arenaScope: boolean;
   /** Performs an arena allocation, directly or through a callee (fixpoint). */
@@ -212,6 +214,7 @@ export class FunctionFacts {
     this.returnDeref = 0;
     this.stackSites = new Array<boolean>(nodeCount);
     this.stackLocals = [];
+    this.stackParams = new StringSet();
     this.arenaScope = false;
     this.allocates = false;
     this.directArena = false;
@@ -242,6 +245,11 @@ export class FunctionFacts {
   /** WP6: the allocation at `node` was proved not to outlive the function. */
   isStackSite(node: Node): boolean {
     return this.stackSites[node.id];
+  }
+
+  /** WP17: the object the by-value `Result` parameter `name` unpacks into is an alloca. */
+  isStackParam(name: string): boolean {
+    return this.stackParams.has(name);
   }
 
   holdsStackObject(local: Local): boolean {
@@ -570,9 +578,17 @@ function structSize(program: CheckedProgram, table: TypeTable, type: i32): i32 {
 }
 
 /** Struct, array and `Result` params, plain or `T | null`, get pointer facts. */
+/**
+ * Struct, array and `Result` params get pointer facts — except a `Result` the
+ * ABI packs into a register (WP17), which is not a pointer at all, so there is
+ * nothing for the fixpoint to say about it.
+ */
 function isPointerParam(table: TypeTable, type: i32): boolean {
   const inner = table.stripNull(type);
-  return table.isStruct(inner) || table.isArray(inner) || table.isResult(inner);
+  if (table.isResult(inner)) {
+    return !table.resultByValue(inner);
+  }
+  return table.isStruct(inner) || table.isArray(inner);
 }
 
 /** The fields `info` declares itself: everything after the inherited prefix. */
@@ -1031,6 +1047,7 @@ export function collectFacts(
   if (memory !== null) {
     facts.stackSites = memory.stackSites;
     facts.stackLocals = memory.stackLocals;
+    facts.stackParams = memory.stackParams;
     facts.directArena = memory.directArena;
     facts.allocates = memory.directArena;
     facts.allocLeaks = memory.allocLeaks;
@@ -1524,6 +1541,11 @@ export function paramAttributes(table: TypeTable, name: string, type: i32, f: Fu
     if (pointer !== null && !pointer.captured) {
       attrs.push("nocapture");
     }
+    return attrs;
+  }
+  if (kind === K_RESULT && table.resultByValue(type)) {
+    // WP17: a small `Result` arrives packed in an `i64`, so none of the
+    // pointer facts are about it; `noundef` alone, as for any scalar.
     return attrs;
   }
   if (kind === K_RESULT) {

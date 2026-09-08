@@ -125,23 +125,33 @@ if.end:
   ret %struct.sts_result.i32.$IoError* %11
 }
 
-define noundef i32 @describe(%struct.sts_result.i32.i32* noundef nonnull align 8 dereferenceable(12) readonly nocapture %r) #2 {
+define noundef i32 @describe(i64 noundef %r) #2 {
 entry:
-  %0 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %r, i32 0, i32 0
-  %1 = load i1, i1* %0, align 1
-  %2 = xor i1 %1, true
-  br i1 %2, label %if.then, label %if.end
+  %sts_result.i32.i32.obj = alloca %struct.sts_result.i32.i32, align 8
+  %0 = trunc i64 %r to i1
+  %1 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 0
+  store i1 %0, i1* %1, align 1
+  %2 = lshr i64 %r, 32
+  %3 = trunc i64 %2 to i32
+  %4 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 1
+  store i32 %3, i32* %4, align 4
+  %5 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 2
+  store i32 %3, i32* %5, align 4
+  %6 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 0
+  %7 = load i1, i1* %6, align 1
+  %8 = xor i1 %7, true
+  br i1 %8, label %if.then, label %if.end
 
 if.then:
-  %3 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %r, i32 0, i32 2
-  %4 = load i32, i32* %3, align 4
-  %5 = sub i32 0, %4
-  ret i32 %5
+  %9 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 2
+  %10 = load i32, i32* %9, align 4
+  %11 = sub i32 0, %10
+  ret i32 %11
 
 if.end:
-  %6 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %r, i32 0, i32 1
-  %7 = load i32, i32* %6, align 4
-  ret i32 %7
+  %12 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 1
+  %13 = load i32, i32* %12, align 4
+  ret i32 %13
 }
 
 attributes #0 = { nounwind }

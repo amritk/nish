@@ -265,6 +265,25 @@ site is inlined and its recursion partially unrolled by clang; StaticTS's
 (352 ms). PGO does (288 ms), so the difference is block layout and unrolling
 depth, not the IR the compiler emits.
 
+**result** (650 ms; C 444 ms; Rust 251 ms) — added with WP17, and the first
+miss whose cause is the *ABI* rather than the memory model.
+`Result<number, number>` travels in one `i64`: the discriminant in the low
+half, the live payload in the high half. The same program written in C the
+same way — `uint64_t`, `<< 32`, `|` — times at 653 ms, i.e. exactly the
+StaticTS column, so the emitted IR is not at fault. What the faster two
+columns have is the ok arm and the error arm as *separate SSA values*: then
+instcombine folds `odd ? n : n >> 1` into one variable shift, where a
+`select` on the combined word leaves the shift in the loop. Loop unrolling
+and the checked-division blocks were both ruled out by measurement, and
+respelling the pack as clang's two-word coercion (store the halves, `load
+i64`) produced byte-identical assembly, so it was not taken.
+
+Proposed fix, and it is not a peephole: give an internal function a private
+ABI of two scalars — rustc's `ScalarPair` — and pack only where a host can
+see the signature. That makes `--strict-exports` load-bearing rather than
+advisory, which is already one of the two open questions below.
+`docs/wp17-result-abi.md` §4 has the four-way table.
+
 ## Left out, and why
 
 - `noalias` on struct parameters under an aliasing rule, and `dso_local` /

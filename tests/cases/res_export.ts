@@ -1,8 +1,8 @@
 // The four `Result` shapes the interop generators have to spell (WP17).
 // `half` and `checkPort` are small enough to travel in a register, so the C
-// header returns them by value as `sts_result_..._word`; `openFile` carries a
-// struct in its error arm and stays the arena pointer WP16 has always used;
-// `describe` takes one as a *parameter*, which is a pointer whatever its size.
+// header returns them by value as `sts_result_..._word`; `describe` takes one
+// the same way, because the packing is symmetric; `openFile` carries a struct
+// in its error arm and stays the arena pointer WP16 has always used.
 // This case is compiled with `--emit-header`, `--emit-napi` and `--emit-dts` in
 // the WP17 interop block of tests/run.js, and a C driver calls all four.
 interface IoError {

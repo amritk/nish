@@ -79,6 +79,15 @@ export interface EscapeResult {
   stackSites: Set<ts.Node>;
   /** Locals that only ever hold a stack object (for the effect analysis: their fields are own memory). */
   stackLocals: Set<LocalVar>;
+  /**
+   * WP17: names of the by-value `Result` parameters whose unpacked object may
+   * be an entry-block alloca. The word arrives in a register, so the object
+   * the body reads is built here; it is this function's own memory unless a
+   * use of the parameter stores the pointer somewhere that outlives the frame
+   * (an object literal, `push`), which is exactly what `localOutcome` decides
+   * for a local holding an allocation.
+   */
+  stackParams: Set<string>;
   /** The body performs an arena allocation whose flow is `local` (there is something to release). */
   directArena: boolean;
   /** Some direct allocation `leaks`. */
@@ -151,6 +160,7 @@ export function analyzeEscapes(
   const result: EscapeResult = {
     stackSites: new Set(),
     stackLocals: new Set(),
+    stackParams: new Set(),
     directArena: false,
     allocLeaks: false,
     returnsAllocation: false,
@@ -167,10 +177,15 @@ export function analyzeEscapes(
   const pushes: ts.CallExpression[] = [];
   let logsNumbers = false;
 
+  /** WP17: the `LocalVar` of each by-value `Result` parameter, by name. */
+  const byValueParams = new Map<string, LocalVar>();
   const visit = (node: ts.Node): void => {
     if (ts.isIdentifier(node)) {
       const v = program.bindings.get(node);
-      if (v?.storage === "local") {
+      // A by-value `Result` parameter owns its object, so its uses are walked
+      // like a local's: the same alias chain decides alloca or arena.
+      if (v?.storage === "param" && resultByValue(v.type)) byValueParams.set(v.name, v);
+      if (v?.storage === "local" || (v?.storage === "param" && resultByValue(v.type))) {
         const list = refs.get(v) ?? [];
         list.push(node);
         refs.set(v, list);
@@ -306,6 +321,10 @@ export function analyzeEscapes(
       case "write":
         return { flow: "local", stable: true };
       case "argument":
+        // WP17: a by-value `Result` argument is packed into a register, so the
+        // callee gets a copy and never sees this object at all.
+        if (resultByValue(use.callee.params[use.index]?.type ?? { kind: "void" }))
+          return { flow: "local", stable: true };
         return { flow: calleeCaptures(use.callee, use.index) ? "leaks" : "local", stable: true };
       default:
         return { flow: "leaks", stable: true };
@@ -364,6 +383,18 @@ export function analyzeEscapes(
     }
     if (flow === "local") result.directArena = true;
     else if (flow === "returned") result.returnsAllocation = true;
+    else result.allocLeaks = true;
+  }
+
+  // WP17: the same decision for each by-value `Result` parameter. A parameter
+  // never referenced has no refs and therefore no way to escape, so its object
+  // stays an alloca (and the unpack is dead code the optimiser removes).
+  for (const p of sig.params) {
+    if (!resultByValue(p.type)) continue;
+    const v = byValueParams.get(p.name);
+    const outcome = v ? localOutcome(v, new Set()) : { flow: "local" as Flow, stable: true };
+    if (opts.stackAlloc && outcome.flow === "local" && outcome.stable) result.stackParams.add(p.name);
+    else if (outcome.flow === "local") result.directArena = true;
     else result.allocLeaks = true;
   }
 

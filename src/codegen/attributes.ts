@@ -173,6 +173,8 @@ export interface FunctionFacts {
   stackSites: Set<ts.Node>;
   /** Locals that only ever hold a stack object: accesses through them are own memory. */
   stackLocals: Set<LocalVar>;
+  /** WP17: by-value `Result` parameters whose unpacked object is an entry-block alloca. */
+  stackParams: Set<string>;
   /** Bracket the body with `sts_arena_mark` / `sts_arena_release`. Decided after the fixpoint. */
   arenaScope: boolean;
   /** Performs an arena allocation, directly or through a callee (fixpoint). */
@@ -490,10 +492,18 @@ function structSize(program: CheckedProgram, t: StaticType): number | undefined 
   return t.kind === "struct" ? program.structs.get(t.name)?.size : undefined;
 }
 
-/** Struct, array and `Result` params, plain or `T | null` (WP6), get pointer facts. */
+/**
+ * Struct, array and `Result` params, plain or `T | null` (WP6), get pointer
+ * facts — except a `Result` the ABI packs into a register (WP17), which is
+ * not a pointer at all, so there is nothing for the fixpoint to say about it.
+ */
 function isPointerParam(t: StaticType): boolean {
   const inner = stripNull(t);
-  return inner.kind === "struct" || inner.kind === "array" || inner.kind === "result";
+  return (
+    inner.kind === "struct" ||
+    inner.kind === "array" ||
+    (inner.kind === "result" && !resultByValue(inner))
+  );
 }
 
 /**
@@ -523,6 +533,7 @@ function collectFacts(
     returnDeref: structSize(program, sig.returnType),
     stackSites: memory?.stackSites ?? new Set(),
     stackLocals: memory?.stackLocals ?? new Set(),
+    stackParams: memory?.stackParams ?? new Set(),
     arenaScope: false,
     allocates: memory?.directArena ?? false,
     directArena: memory?.directArena ?? false,
@@ -806,6 +817,9 @@ export function paramAttributes(p: Param, f: FunctionFacts): string[] {
       if (pointer && !pointer.captured) attrs.push("nocapture");
       break;
     case "result":
+      // WP17: a small `Result` arrives packed in an `i64`, so none of the
+      // pointer facts are about it; `noundef` alone, as for any scalar.
+      if (resultByValue(p.type)) break;
       // WP16: every `Result` comes from `ok(...)` / `err(...)`, so the object
       // is whole and never null, and nothing in the language can store through
       // one — `readonly` here needs no more than the absence of a write, which

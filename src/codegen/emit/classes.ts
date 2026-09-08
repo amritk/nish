@@ -52,9 +52,9 @@
 import ts from "typescript";
 import { CheckedProgram, FieldInfo, FunctionSig, ImportBinding, StructInfo } from "../../checker";
 import { effectiveConstructor, explicitSuperCall, intrinsicType, isAssignmentOperator, ownFields } from "../../checker/classes";
-import { StaticType, isFloat, llvmReturnType, llvmType, resultByValue } from "../../types";
+import { ResultType, StaticType, isFloat, llvmAbiType, llvmType, resultByValue } from "../../types";
 import { emitIntBinary } from "./arithmetic";
-import { emitResultReturningCall, resultTypeDecl } from "./result";
+import { emitPackedResult, emitResultReturningCall, resultTypeDecl } from "./result";
 import { floatConstant } from "./builtins";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
 import {
@@ -241,9 +241,14 @@ function emitMethodCall(
 ): string {
   const operands = [`${llvmType(callee.params[0].type)} ${receiver}`];
   args.forEach((arg, i) => {
-    operands.push(`${llvmType(callee.params[i + 1].type)} ${ctx.emitExpression(arg)}`);
+    // WP17: as in `emitCall`, a `Result` argument the ABI packs travels as the word.
+    const want = callee.params[i + 1].type;
+    const value = resultByValue(want)
+      ? emitPackedResult(ctx, arg, want as ResultType)
+      : ctx.emitExpression(arg);
+    operands.push(`${llvmAbiType(want)} ${value}`);
   });
-  const call = `call ${llvmReturnType(callee.returnType)} @${callee.name}(${operands.join(", ")})`;
+  const call = `call ${llvmAbiType(callee.returnType)} @${callee.name}(${operands.join(", ")})`;
   if (callee.returnType.kind === "void") {
     ctx.fn.emit(call);
     return "void";

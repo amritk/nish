@@ -40,6 +40,7 @@ import { ResultType, StaticType, resultByValue } from "../types";
 import {
   banner,
   cFunctionName,
+  cResultWord,
   cParamName,
   cPrototype,
   cType,
@@ -108,6 +109,11 @@ function reader(t: StaticType, written: boolean): Reader | undefined {
       ],
     };
   }
+  // WP17: a `Result` the ABI packs is read from the object JS models it with,
+  // `{ ok: true, value }` / `{ ok: false, error }` — the same shape the shim
+  // hands back. Only the arm `ok` selects is read, because only that one is
+  // meaningful; the other stays whatever the initialiser left.
+  if (kindOf(t) === "result" && resultByValue(t)) return resultReader(t as ResultType);
   const view = typedView(t);
   if (view) {
     return {
@@ -188,6 +194,34 @@ function resultBoxer(t: ResultType): Boxer | undefined {
       `if ((${v}.ok ? ${okArm(v)} : ${error(`${v}.as.error`, "&payload")}) != napi_ok)`,
     ],
     call: (v) => `sts_napi_result(env, ${v}.ok != 0, payload, &out)`,
+  };
+}
+
+function resultReader(t: ResultType): Reader | undefined {
+  const value = t.ok.kind === "void" ? undefined : SCALAR_READERS[kindOf(t.ok)];
+  const error = SCALAR_READERS[kindOf(t.err)];
+  if (error === undefined || (t.ok.kind !== "void" && value === undefined)) return undefined;
+  if (kindOf(t.err) === "i64" || (value && kindOf(t.ok) === "i64")) return undefined; // needs `lossless`
+  // `napi_ok` is the no-op arm for `Result<void, E>`: there is nothing to read.
+  const readArm = (c: string) =>
+    `${c}_flag ? ${value ? `${value.getter}(env, ${c}_arm, &${c}.as.value)` : "napi_ok"} : ${error.getter}(env, ${c}_arm, &${c}.as.error)`;
+  return {
+    jsType: "Result object",
+    usesTypeof: false,
+    arena: false,
+    lines: (c, i, fail) => [
+      `napi_value ${c}_ok, ${c}_arm;`,
+      `bool ${c}_flag;`,
+      `if (napi_get_named_property(env, argv[${i}], "ok", &${c}_ok) != napi_ok ||`,
+      `    napi_get_value_bool(env, ${c}_ok, &${c}_flag) != napi_ok)`,
+      `  return ${fail("must be { ok: true, value } or { ok: false, error }")};`,
+      `${cResultWord(t)} ${c};`,
+      `${c}.ok = ${c}_flag;`,
+      `if (napi_get_named_property(env, argv[${i}], ${c}_flag ? "value" : "error", &${c}_arm) != napi_ok)`,
+      `  return ${fail("must be { ok: true, value } or { ok: false, error }")};`,
+      `if ((${readArm(c)}) != napi_ok)`,
+      `  return ${fail("could not be converted")};`,
+    ],
   };
 }
 

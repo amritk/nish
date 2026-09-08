@@ -42,9 +42,9 @@ function crossesWasm(t: StaticType, position: "param" | "return"): boolean {
   const k = kindOf(t);
   if (k === "i32" || k === "f32" || k === "f64" || k === "i64" || k === "bool") return true;
   if (k === "void") return position === "return";
-  // WP17: the packed `Result` arrives as one i64, which the loader unpacks.
-  if (k === "result")
-    return position === "return" && resultByValue(t) && wasmResultType(t as ResultType) !== undefined;
+  // WP17: a packed `Result` crosses as one i64 in either direction — the
+  // loader unpacks a returned one and packs an argument.
+  if (k === "result") return resultByValue(t) && wasmResultType(t as ResultType) !== undefined;
   return typedView(t) !== undefined;
 }
 
@@ -107,12 +107,45 @@ function resultUnpack(call: string, t: ResultType): string {
   return `resultOut(${call}, ${ok}, ${payloadReader(t.err)!})`;
 }
 
-/** True when some bridged function unpacks an f32 payload, so the loader needs the bit view. */
+/**
+ * The inverse of `payloadReader`: how the loader puts one payload into the
+ * high half of the word. A signed width is masked to 32 bits, `f32` goes
+ * through the same bit view as on the way out, and `boolean` is one bit.
+ */
+function payloadWriter(t: StaticType): string | undefined {
+  switch (kindOf(t)) {
+    case "i32":
+    case "u8":
+    case "u16":
+    case "u32":
+      return "(v) => BigInt.asUintN(32, BigInt(v))";
+    case "f32":
+      return "f32Word";
+    case "bool":
+      return "(v) => (v ? 1n : 0n)";
+    default:
+      return undefined;
+  }
+}
+
+/** `resultIn(<arg>, <ok writer or null>, <err writer>)` for a by-value `Result` argument. */
+function resultPack(arg: string, t: ResultType): string {
+  const ok = t.ok.kind === "void" ? "null" : payloadWriter(t.ok)!;
+  return `resultIn(${arg}, ${ok}, ${payloadWriter(t.err)!})`;
+}
+
+/** True when some bridged signature carries an f32 payload, so the loader needs the bit view. */
 function needsF32(fns: readonly ExternalFunction[]): boolean {
-  return fns.some((fn) => {
-    const t = fn.sig.returnType;
-    return t.kind === "result" && (kindOf(t.ok) === "f32" || kindOf(t.err) === "f32");
-  });
+  const carriesF32 = (t: StaticType): boolean =>
+    t.kind === "result" && (kindOf(t.ok) === "f32" || kindOf(t.err) === "f32");
+  return fns.some((fn) => carriesF32(fn.sig.returnType) || fn.sig.params.some((p) => carriesF32(p.type)));
+}
+
+/** True when some bridged signature takes or returns a packed `Result`. */
+function hasPackedResult(fns: readonly ExternalFunction[]): boolean {
+  return fns.some(
+    (fn) => resultByValue(fn.sig.returnType) || fn.sig.params.some((p) => resultByValue(p.type))
+  );
 }
 
 export function wasmBridged(fns: ExternalFunction[]): WasmBridge {
@@ -131,13 +164,18 @@ function wrapper(fn: ExternalFunction): string[] {
   const { sig } = fn;
   const ret = typedView(sig.returnType);
   const views = sig.params.map((p) => typedView(p.type));
+  const packed = resultByValue(sig.returnType) || sig.params.some((p) => resultByValue(p.type));
   if (!ret && views.every((v) => v === undefined)) {
-    // WP17: a packed `Result` needs unpacking but no arena scope — nothing was
-    // copied into the module for the call, so there is nothing to release.
-    if (resultByValue(sig.returnType)) {
+    // WP17: a packed `Result` needs packing or unpacking but no arena scope —
+    // nothing was copied into the module for the call, so nothing to release.
+    if (packed) {
       const params = sig.params.map((p) => jsParam(p.name));
-      const call = `raw.${sig.name}(${params.join(", ")})`;
-      return [`${sig.name}: (${params.join(", ")}) => ${resultUnpack(call, sig.returnType as ResultType)},`];
+      const operands = sig.params.map((p, i) =>
+        resultByValue(p.type) ? resultPack(params[i], p.type as ResultType) : params[i]
+      );
+      const call = `raw.${sig.name}(${operands.join(", ")})`;
+      const body = resultByValue(sig.returnType) ? resultUnpack(call, sig.returnType as ResultType) : call;
+      return [`${sig.name}: (${params.join(", ")}) => ${body},`];
     }
     return [`${sig.name}: raw.${sig.name},`];
   }
@@ -145,7 +183,7 @@ function wrapper(fn: ExternalFunction): string[] {
   const body: string[] = [];
   const args = sig.params.map((p, i) => {
     const v = views[i];
-    if (!v) return jsParam(p.name);
+    if (!v) return resultByValue(p.type) ? resultPack(jsParam(p.name), p.type as ResultType) : jsParam(p.name);
     body.push(`const ${p.name}$ = arrayIn(${jsParam(p.name)}, ${v.ctor}, ${v.elemSize}, "${sig.sourceName}: argument ${i + 1} (${p.name})");`);
     return `${p.name}$`;
   });
@@ -169,13 +207,19 @@ function wrapper(fn: ExternalFunction): string[] {
  * a caller never sees the encoding.
  */
 function resultHelpers(bridged: readonly ExternalFunction[]): string[] {
-  if (!bridged.some((fn) => resultByValue(fn.sig.returnType))) return [];
+  if (!hasPackedResult(bridged)) return [];
   const lines = [
-    "  /** A Result returned in one i64 (WP17): bit 0 is the tag, bits 32..63 the payload. */",
+    "  /** A Result in one i64 (WP17): bit 0 is the tag, bits 32..63 the payload. */",
     "  const resultOut = (word, readValue, readError) => {",
     "    const payload = BigInt.asUintN(32, word >> 32n);",
     "    if ((word & 1n) === 0n) return { ok: false, error: readError(payload) };",
     "    return readValue === null ? { ok: true } : { ok: true, value: readValue(payload) };",
+    "  };",
+    "  const resultIn = (r, writeValue, writeError) => {",
+    '    if (r === null || typeof r !== "object" || typeof r.ok !== "boolean")',
+    '      throw new TypeError("expected { ok: true, value } or { ok: false, error }");',
+    "    const payload = r.ok ? (writeValue === null ? 0n : writeValue(r.value)) : writeError(r.error);",
+    "    return (payload << 32n) | (r.ok ? 1n : 0n);",
     "  };",
   ];
   if (needsF32(bridged)) {
@@ -186,6 +230,10 @@ function resultHelpers(bridged: readonly ExternalFunction[]): string[] {
       "  const f32Bits = (p) => {",
       "    f32Words[0] = Number(p);",
       "    return f32View[0];",
+      "  };",
+      "  const f32Word = (v) => {",
+      "    f32View[0] = v;",
+      "    return BigInt(f32Words[0]);",
       "  };"
     );
   }

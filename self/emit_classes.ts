@@ -21,7 +21,7 @@
 import { explicitSuperCall } from "./assignment";
 import { ownFields } from "./attributes";
 import { Emitter } from "./emit";
-import { emitResultReturningCall, resultTypeDecl } from "./emit_result";
+import { emitPackedResult, emitResultReturningCall, resultTypeDecl } from "./emit_result";
 import { emitArrayLength, emitArrayMethodCall, emitNewArray } from "./emit_arrays";
 import { compoundFloatOpcode, compoundIntegerOpcode, emitIntBinary, floatText } from "./emit_ops";
 import { parseIntegerLiteral } from "./constants";
@@ -291,10 +291,15 @@ function emitCall(
   const operands: string[] = [`${emitter.llvm(callee.paramTypes[0])} ${receiver}`];
   let i = 0;
   while (i < args.length) {
-    operands.push(`${emitter.llvm(callee.paramTypes[i + 1])} ${emitter.emitExpression(args[i])}`);
+    // WP17: as in the plain call, a `Result` argument the ABI packs travels as the word.
+    const want = callee.paramTypes[i + 1];
+    const value = emitter.table.resultByValue(want)
+      ? emitPackedResult(emitter, args[i], want)
+      : emitter.emitExpression(args[i]);
+    operands.push(`${emitter.llvmAbi(want)} ${value}`);
     i = i + 1;
   }
-  const call = `call ${emitter.llvmReturn(callee.returnType)} @${callee.name}(${operands.join(", ")})`;
+  const call = `call ${emitter.llvmAbi(callee.returnType)} @${callee.name}(${operands.join(", ")})`;
   if (callee.returnType === T_VOID) {
     emitter.fn.emit(call);
     return "void";

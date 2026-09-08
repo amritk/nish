@@ -56,9 +56,10 @@ import {
   Node,
 } from "./nodes";
 import { isResultConstructorCall, resultMethodName } from "./emit_result";
+import { StringSet } from "./map";
 import { Options } from "./options";
 import { CheckedProgram, FunctionSig } from "./program";
-import { Local, STORAGE_LOCAL } from "./symbols";
+import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols";
 import { isNumeric, T_STRING, TypeTable } from "./types";
 
 /** Largest array data block (`[n x T]`) placed on the stack, in bytes. */
@@ -88,10 +89,20 @@ export class EscapeResult {
   usesArenaControl: boolean;
   /** Calls to pointer-returning user functions, with the flow of each result. */
   callSites: CallSite[];
+  /**
+   * WP17: names of the by-value `Result` parameters whose unpacked object may
+   * be an entry-block alloca. The word arrives in a register, so the object
+   * the body reads is built by the callee; it is this function's own memory
+   * unless a use of the parameter stores the pointer somewhere that outlives
+   * the frame (an object literal, `push`), which is exactly what
+   * `localOutcome` decides for a local holding an allocation.
+   */
+  stackParams: StringSet;
 
   constructor(nodeCount: i32) {
     this.stackSites = new Array<boolean>(nodeCount);
     this.stackLocals = [];
+    this.stackParams = new StringSet();
     this.directArena = false;
     this.allocLeaks = false;
     this.returnsAllocation = false;
@@ -158,6 +169,8 @@ class EscapeAnalysis {
   /** Memoised outcomes, keyed by local identity. */
   outcomeLocals: Local[];
   outcomeValues: Outcome[];
+  /** The signature being analysed; WP17 reads its parameter list. */
+  sig: FunctionSig;
 
   constructor(
     unit: AnalysisUnit,
@@ -165,12 +178,14 @@ class EscapeAnalysis {
     facts: FactsTable,
     opts: Options,
     nodeCount: i32,
+    sig: FunctionSig,
     returnsByValueResult: boolean
   ) {
     this.unit = unit;
     this.table = table;
     this.facts = facts;
     this.opts = opts;
+    this.sig = sig;
     this.returnsByValueResult = returnsByValueResult;
     this.result = new EscapeResult(nodeCount);
     this.sites = [];
@@ -184,6 +199,19 @@ class EscapeAnalysis {
   }
 
   // ---- Collection -------------------------------------------------------------------
+
+  /** The `Local` of the parameter called `name`, from the refs collected, or null. */
+  paramLocal(name: string): Local | null {
+    let i = 0;
+    while (i < this.refLocals.length) {
+      const v = this.refLocals[i];
+      if (v.storage === STORAGE_PARAM && v.name === name) {
+        return v;
+      }
+      i = i + 1;
+    }
+    return null;
+  }
 
   addRef(local: Local, node: Node): void {
     let i = 0;
@@ -233,7 +261,13 @@ class EscapeAnalysis {
     const program = this.unit.program;
     if (node.kind === N_IDENT) {
       const local = program.nodeLocals[node.id];
-      if (local !== null && local.storage === STORAGE_LOCAL) {
+      // WP17: a by-value `Result` parameter owns its object, so its uses are
+      // walked like a local's: the same alias chain decides alloca or arena.
+      if (
+        local !== null &&
+        (local.storage === STORAGE_LOCAL ||
+          (local.storage === STORAGE_PARAM && this.table.resultByValue(local.type)))
+      ) {
         this.addRef(local, node);
       }
     } else if (node.kind === N_VAR_DECL) {
@@ -403,6 +437,15 @@ class EscapeAnalysis {
     }
     if (found.kind === USE_ARGUMENT) {
       const callee = found.callee;
+      // WP17: a by-value `Result` argument is packed into a register, so the
+      // callee gets a copy and never sees this object at all.
+      if (
+        callee !== null &&
+        found.index < callee.paramTypes.length &&
+        this.table.resultByValue(callee.paramTypes[found.index])
+      ) {
+        return new Outcome(FLOW_LOCAL, true);
+      }
       const captures = callee === null ? true : this.calleeCaptures(callee, found.index);
       return new Outcome(captures ? FLOW_LEAKS : FLOW_LOCAL, true);
     }
@@ -498,6 +541,34 @@ class EscapeAnalysis {
       } else {
         this.result.allocLeaks = true;
       }
+    }
+
+    // WP17: the same decision for each by-value `Result` parameter. A
+    // parameter never referenced has no refs and therefore no way to escape,
+    // so its object stays an alloca (and the unpack is dead code the optimiser
+    // removes).
+    let p = 0;
+    while (p < this.sig.paramNames.length) {
+      if (this.table.resultByValue(this.sig.paramTypes[p])) {
+        const name = this.sig.paramNames[p];
+        const v = this.paramLocal(name);
+        let flow = FLOW_LOCAL;
+        let stable = true;
+        if (v !== null) {
+          const fresh: Local[] = [];
+          const outcome = this.localOutcome(v, fresh);
+          flow = outcome.flow;
+          stable = outcome.stable;
+        }
+        if (this.opts.stackAlloc && flow === FLOW_LOCAL && stable) {
+          this.result.stackParams.add(name);
+        } else if (flow === FLOW_LOCAL) {
+          this.result.directArena = true;
+        } else {
+          this.result.allocLeaks = true;
+        }
+      }
+      p = p + 1;
     }
 
     // Locals that hold nothing but a stack object: their initializer is a
@@ -597,6 +668,7 @@ export function analyzeEscapes(
     facts,
     opts,
     unit.program.nodeTypes.length,
+    sig,
     table.resultByValue(sig.returnType)
   );
   const body = sig.body();

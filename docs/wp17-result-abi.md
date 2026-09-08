@@ -14,18 +14,18 @@ The normative rules are in [LANGUAGE.md](LANGUAGE.md#result-and-error-handling);
 the IR is in [IR_COOKBOOK.md](IR_COOKBOOK.md).
 
 Tests: `tests/cases/res_by_value`, `res_by_value_propagate`,
-`res_by_value_payloads`, `res_export`,
-`dbg_result`, `reject_result_by_value_unchecked`, the "WP17: a `Result` across
-the host boundary" block in `tests/run.js`, and the S3/S4 oracles and the
-bootstrap in `tests/self/`.
+`res_by_value_payloads`, `res_by_value_param`, `res_export`, `dbg_result`,
+`reject_result_by_value_unchecked`, the "WP17: a `Result` across the host
+boundary" block in `tests/run.js`, `bench/result`, and the S3/S4 oracles and
+the bootstrap in `tests/self/`.
 
 ## 1. The decision
 
-**A `Result` whose two payloads are each a scalar of at most four bytes is
-returned by value, packed into a single `i64`.** Everything else keeps WP16's
-pointer. That is option (a) of the three the package was framed with, and the
-threshold is not a tuning knob: eight bytes is the largest return the six
-supported targets agree about.
+**A `Result` whose two payloads are each a scalar of at most four bytes
+travels by value, packed into a single `i64`** — returned *and* passed.
+Everything else keeps WP16's pointer. That is option (a) of the three the
+package was framed with, and the threshold is not a tuning knob: eight bytes
+is the largest value the six supported targets agree about.
 
 ```
 bits  0..31   the discriminant: 1 for Ok, 0 for Err
@@ -69,7 +69,10 @@ command. `struct R { bool ok; int32_t value; int32_t error; }` returned from
 | `wasm32-unknown-unknown` | `define void @agg_12(ptr sret(%struct.R), i32)` |
 | `wasm32-wasi` | `define void @agg_12(ptr sret(%struct.R), i32)` |
 
-Three different signatures for one C type. `src/codegen/target.ts` emits
+Three different signatures for one C type, and the same split in argument
+position — `int32_t describe(struct R)` is `i32 @describe(i64)` on the four
+native triples and `i32 @describe(ptr byval(%struct.R))` on both wasm32 ones.
+`src/codegen/target.ts` emits
 target-neutral IR by default — no `target triple`, no `target datalayout` —
 precisely so one `.ll` links against a C host built for any of them, and
 `--target` exists to pin the *layout*, not to change what the module means.
@@ -268,17 +271,54 @@ Identical checksums. So the win survives contact with the ABI even where the
 call is not inlined away, and `sret` — the only other uniform option — gets
 about half of it.
 
+### Where the packing still costs something
+
+`bench/result` is the same program as a benchmark, against C and Rust twins
+that use the shape each language would use anyway — a two-word C struct (the
+one `--emit-header` declares) and Rust's own `Result<i32, i32>`. StaticTS is
+**1.46x behind C and 2.6x behind Rust** there, and the reason is not the
+encoding but *how the two halves reach the optimiser*:
+
+| the same program, written three ways | time |
+| --- | --- |
+| Rust `Result<i32, i32>` (two SSA values throughout) | 251 ms |
+| C, an eight-byte struct clang coerces at the boundary | 444 ms |
+| C, the word assembled by hand with `<< 32` and `\|` | 653 ms |
+| **StaticTS** | **650 ms** |
+
+The third row is the important one: C written the way `statictsc` emits is
+*exactly* our number, so this is not a code-generation defect on our side.
+What separates the first two rows from the last two is whether the ok arm and
+the error arm are ever separate SSA values. When they are, instcombine folds
+`odd ? n : n >> 1` into a single variable shift; when they are halves of one
+64-bit word, the `select` happens on the word and the simplification never
+fires. Neither loop unrolling nor the checked-division blocks explain any of
+it — both were ruled out by measurement.
+
+**The obvious fix was tried and did not work.** Emitting the pack the way
+clang does — store the tag and the payload into a two-word alloca, `load i64`
+out of it, and the reverse on the way in — produces byte-identical assembly
+to the `shl`/`or` form in *our* IR, on this program. So the shorter IR stays.
+What would actually close the gap is not respelling the word but not forming
+it at all inside a module: give an internal (non-exported) function a private
+ABI of two scalars, the way rustc's `ScalarPair` does, and pack only where a
+host can see. That needs `--strict-exports` to be more than advisory and is
+the natural next step rather than something to bolt on here.
+
 ## 5. What is *not* by value
 
-- **Parameters.** A `Result` argument stays a pointer to the in-memory
-  struct. The rule the package set out to fix is about returns — a returned
-  `Result` was the one that could not avoid the arena — and a `Result`
-  parameter is rare enough that the symmetry is not worth a second lowering.
-  The header spells it `struct sts_result_<mangled> *`, which is the same
-  thing a class parameter gets.
-- **Large `Result`s**, by the rule in §1. They still return the arena
+- **Large `Result`s**, by the rule in §1. They still travel as the arena
   pointer, and they now have a C spelling too: `--emit-header` declares the
-  in-memory struct and the function returns a pointer to it.
+  in-memory struct and the signature uses a pointer to it.
+- **A `Result` in a field or an array element.** Those are the in-memory
+  object, because they have to outlive the frame that built them. This is
+  what makes a by-value *parameter* interesting rather than trivial: the
+  callee unpacks the word into an object, and if any use of the parameter
+  stores that pointer somewhere longer-lived — an object literal, `push` —
+  the object has to be an arena bump rather than an entry-block `alloca`.
+  `EscapeResult.stackParams` is that decision, and it is the same
+  `localOutcome` walk WP6 already used for a local holding an allocation
+  (`tests/cases/res_by_value_param` pins both halves in one golden).
 - **The in-memory layout.** `%struct.sts_result.<T>.<E>` is unchanged from
   WP16, and so is every construct that reads it. The packed word exists only
   at the return boundary: the callee packs where it would have allocated, and
@@ -296,13 +336,14 @@ list. So this lands in `src/` and `self/` together — `src/types.ts` /
 `src/codegen/emit/result.ts` / `self/emit_result.ts` (the pack and the
 unpack), `src/codegen/emitter.ts`, `emit/statements.ts`, `emit/expressions.ts`
 and `emit/classes.ts` / `self/emit.ts` and `self/emit_classes.ts` (the
-`define`, the `declare`, the `ret` and the two call sites), plus `escape.ts`
-and `attributes.ts` on each side (the allocation moved from the callee to the
-caller, so both the sites and the reported allocator call move with it) — and
-the oracle is what says the two agree, byte for byte, before the bootstrap is
-allowed to reach its fixed point: **271 of 271 programs, 938 modules,
-1,276,912 lines of IR**, with `IR(stage1) == IR(stage2)` and stage3
-byte-identical to stage2 still holding over the 43 modules of `self/`.
+`define`, the `declare`, the `ret`, the prologue and the two call sites), plus
+`escape.ts` and `attributes.ts` on each side (the allocation moved to whichever
+side unpacks, so the sites, the reported allocator call and the new
+`stackParams` decision move with it) — and the oracle is what says the two
+agree, byte for byte, before the bootstrap is allowed to reach its fixed
+point: **274 of 274 programs, 941 modules, 1,286,495 lines of IR**, with
+`IR(stage1) == IR(stage2)` and stage3 byte-identical to stage2 still holding
+over the 43 modules of `self/`.
 
 **StaticTS-0 did not grow.** Rule 5 of [wp14-selfhost.md](wp14-selfhost.md)
 §6 — the subset `self/` is written in does not grow quietly — did not fire:

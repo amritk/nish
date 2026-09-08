@@ -209,9 +209,9 @@ reverse would be a bug in the declarations.
   bytes is returned in a register as a packed `i64`; `--emit-header` declares
   both C shapes and a C host calls across with no glue; `--emit-napi` and
   `--emit-dts` bridge a by-value `Result` as `{ ok, value }` / `{ ok, error }`.
-  What is still left out is by-value *parameters* — a `Result` argument stays
-  the pointer, because the rule this package set out to fix was about returns —
-  and any `Result` whose payloads do not fit the word.
+  The packing is symmetric: a `Result` argument travels the same way, so what
+  is still left out is only a `Result` whose payloads do not fit the word, and
+  one held in a field or an array element, which has to outlive the frame.
 - ~~**DWARF members for a `Result`.**~~ Also WP17: `resultLayout` is enough to
   build a `DW_TAG_structure_type`, so `-g` now describes `ok`, `value` and
   `error` at their offsets, and a return slot the ABI packs is described as the

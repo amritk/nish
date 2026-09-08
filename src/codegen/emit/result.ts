@@ -104,12 +104,15 @@ const storeSlot = (
  * the `Result` that `orReturn` builds, which is returned by construction and
  * therefore always arena memory.
  */
-const allocate = (ctx: EmitContext, layout: ResultLayout, site?: ts.Node): string => {
+const allocateIn = (ctx: EmitContext, layout: ResultLayout, stack: boolean): string => {
   const ty = typeName(layout);
-  if (site && ctx.isStackSite(site)) return ctx.fn.emitAlloca(`${layout.name}.obj`, ty, 8);
+  if (stack) return ctx.fn.emitAlloca(`${layout.name}.obj`, ty, 8);
   const raw = ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_alloc_struct")}(i64 ${layout.size})`);
   return ctx.fn.emitValue(`bitcast i8* ${raw} to ${ty}*`);
 };
+
+const allocate = (ctx: EmitContext, layout: ResultLayout, site?: ts.Node): string =>
+  allocateIn(ctx, layout, site !== undefined && ctx.isStackSite(site));
 
 // ---- `ok(...)` and `err(...)` -------------------------------------------------------
 
@@ -157,6 +160,11 @@ export const resultFunctionEmitters: Record<string, BuiltinCall> = {
  * Widen one payload to the high half of the word. `f32` goes through a
  * bitcast rather than a conversion: the word carries the bits the caller
  * stored, not a number the ABI is free to round.
+ *
+ * The word is assembled with `shl`/`or` rather than coerced through a
+ * two-word alloca the way clang lowers an eight-byte struct return. Both were
+ * measured on `bench/result` and `llc` produces the same instructions from
+ * either, so the shorter IR wins (`docs/wp17-result-abi.md` §4).
  */
 const payloadToWord = (ctx: EmitContext, type: StaticType, value: string): string => {
   if (type.kind === "void") return "0";
@@ -214,12 +222,14 @@ const packObject = (ctx: EmitContext, type: ResultType, object: string): string 
 };
 
 /**
- * The word a `Result`-returning function should `ret`. A construction is
- * packed without ever being built (`packArm`); anything else is emitted as
- * WP16's pointer and read back out of it. Called before the arena scope is
- * released, because the object may be arena memory the release reclaims.
+ * The word to hand across a call boundary — what a `Result`-returning
+ * function `ret`s, and what a by-value `Result` argument is passed as. A
+ * construction is packed without ever being built (`packArm`); anything else
+ * is emitted as WP16's pointer and read back out of it. At a `return` this
+ * runs before the arena scope is released, because the object it may be read
+ * out of is arena memory the release reclaims.
  */
-export const emitPackedReturn = (ctx: EmitContext, expr: ts.Expression, type: ResultType): string => {
+export const emitPackedResult = (ctx: EmitContext, expr: ts.Expression, type: ResultType): string => {
   declareResultTypes(ctx, type);
   const arm = constructedArm(ctx.program, expr);
   if (arm !== undefined) {
@@ -246,16 +256,20 @@ const constructedArm = (program: CheckedProgram, expr: ts.Expression): string | 
  * Both payload slots get the same bits. Only the arm the discriminant selects
  * may be read (the checker proves it), so the copy in the dead slot is never
  * observed, and writing it unconditionally costs less than a branch.
+ *
+ * The same function serves a `Result` *parameter* (WP17): the word arrives in
+ * a register and the callee builds the object once, in its prologue, with
+ * `stack` from `EscapeResult.stackParams` rather than from a call site.
  */
 export const unpackResult = (
   ctx: EmitContext,
   type: ResultType,
   word: string,
-  site: ts.Node
+  stack: boolean
 ): string => {
   declareResultTypes(ctx, type);
   const layout = resultLayout(type);
-  const object = allocate(ctx, layout, site);
+  const object = allocateIn(ctx, layout, stack);
   const ok = ctx.fn.emitValue(`trunc i64 ${word} to i1`);
   storeSlot(ctx, layout, object, layout.ok, ok);
   const high = ctx.fn.emitValue(`lshr i64 ${word}, ${RESULT_PAYLOAD_SHIFT}`);
@@ -283,8 +297,10 @@ export const emitResultReturningCall = (
   site: ts.Node
 ): string => {
   const word = ctx.fn.emitValue(call);
-  return unpackResult(ctx, type as ResultType, word, site);
+  return unpackResult(ctx, type as ResultType, word, ctx.isStackSite(site));
 };
+
+
 
 // ---- `r.ok` / `r.value` / `r.error` -------------------------------------------------
 

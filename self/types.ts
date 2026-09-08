@@ -338,11 +338,12 @@ export class TypeTable {
   }
 
   /**
-   * The LLVM type of a function's return slot. It differs from `llvmType` for
-   * exactly one shape: a `Result` small enough to pack comes back in a
-   * register as an `i64`, never as a pointer to arena memory.
+   * The LLVM type at a call boundary — a parameter or a return slot. It
+   * differs from `llvmType` for exactly one shape: a `Result` small enough to
+   * pack travels in a register as an `i64`, never as a pointer to arena
+   * memory.
    */
-  llvmReturnType(type: i32): string {
+  llvmAbiType(type: i32): string {
     if (this.resultByValue(type)) {
       return "i64";
     }

@@ -18,12 +18,13 @@
  *                     profile is freestanding. Those functions are listed as
  *                     comments so the reader knows what is missing.
  *   Result<T, E>   -> `{ ok: true, value: T } | { ok: false, error: E }`, when
- *                     it is one the ABI returns in a register (WP17). The raw
- *                     export hands JS the packed `i64` as a bigint; the loader
- *                     unpacks it, so `ok` is a real boolean here and a payload
- *                     `boolean` is a real boolean too, unlike a bare `bool`
- *                     return. A `Result` that comes back as an arena pointer
- *                     does not cross, for the same reason a string does not.
+ *                     it is one the ABI packs into a register (WP17), taken or
+ *                     returned. The raw export speaks the packed `i64` as a
+ *                     bigint; the loader packs and unpacks it, so `ok` is a
+ *                     real boolean here and a payload `boolean` is a real
+ *                     boolean too, unlike a bare `bool` return. A `Result`
+ *                     held by pointer does not cross, for the same reason a
+ *                     string does not.
  */
 import { Compilation } from "../compilation";
 import { ResultType, StaticType, resultByValue } from "../types";
@@ -51,10 +52,10 @@ export function wasmType(t: StaticType, position: "param" | "return"): string | 
       return "void";
     case "array":
       return typedView(t)?.ctor;
-    // WP17: only in return position, and only the packed shape; the loader is
-    // what turns the bigint the export answers into this object.
+    // WP17: the packed shape, in either direction. The loader is what turns
+    // the bigint the export answers into this object, and an argument back.
     case "result":
-      return position === "return" && resultByValue(t) ? wasmResultType(t as ResultType) : undefined;
+      return resultByValue(t) ? wasmResultType(t as ResultType) : undefined;
     default:
       return undefined;
   }

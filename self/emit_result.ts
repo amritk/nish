@@ -127,13 +127,17 @@ function loadOk(emitter: Emitter, layout: ResultLayout, receiver: string): strin
  * of -1 is the `Result` that `orReturn` builds, which is returned by
  * construction and therefore always arena memory.
  */
-function allocateResult(emitter: Emitter, layout: ResultLayout, site: Node | null): string {
+function allocateResultIn(emitter: Emitter, layout: ResultLayout, stack: boolean): string {
   const ty = resultTypeName(layout);
-  if (site !== null && emitter.isStackSite(site)) {
+  if (stack) {
     return emitter.fn.emitAlloca(`${layout.name}.obj`, ty, 8);
   }
   const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("sts_alloc_struct")}(i64 ${layout.size})`);
   return emitter.fn.emitValue(`bitcast i8* ${raw} to ${ty}*`);
+}
+
+function allocateResult(emitter: Emitter, layout: ResultLayout, site: Node | null): string {
+  return allocateResultIn(emitter, layout, site !== null && emitter.isStackSite(site));
 }
 
 function construct(
@@ -186,6 +190,11 @@ export function emitResultConstructor(emitter: Emitter, expr: Node, name: string
  * Widen one payload to the high half of the word. `f32` goes through a
  * bitcast rather than a conversion: the word carries the bits the caller
  * stored, not a number the ABI is free to round.
+ *
+ * The word is assembled with `shl`/`or` rather than coerced through a two-word
+ * alloca the way clang lowers an eight-byte struct return. Both were measured
+ * on `bench/result` and `llc` produces the same instructions from either, so
+ * the shorter IR wins (`docs/wp17-result-abi.md` §4).
  */
 function payloadToWord(emitter: Emitter, type: i32, value: string): string {
   if (emitter.table.kindOf(type) === T_VOID) {
@@ -261,13 +270,14 @@ function packObject(emitter: Emitter, type: i32, object: string): string {
 }
 
 /**
- * The word a `Result`-returning function should `ret`. A construction is
- * packed without ever being built (`packArm`); anything else is emitted as
- * WP16's pointer and read back out of it. Called before the arena scope is
- * released, because the object it may be read out of is arena memory the
- * release reclaims.
+ * The word to hand across a call boundary — what a `Result`-returning
+ * function `ret`s, and what a by-value `Result` argument is passed as. A
+ * construction is packed without ever being built (`packArm`); anything else
+ * is emitted as WP16's pointer and read back out of it. At a `return` this
+ * runs before the arena scope is released, because the object it may be read
+ * out of is arena memory the release reclaims.
  */
-export function emitPackedReturn(emitter: Emitter, expr: Node, type: i32): string {
+export function emitPackedResult(emitter: Emitter, expr: Node, type: i32): string {
   declareResultTypes(emitter, type);
   if (expr.kind === N_CALL && isResultConstructorCall(emitter.program, emitter.table, expr)) {
     const args = expr.children[1];
@@ -288,11 +298,15 @@ export function emitPackedReturn(emitter: Emitter, expr: Node, type: i32): strin
  * Both payload slots get the same bits. Only the arm the discriminant selects
  * may be read (the checker proves it), so the copy in the dead slot is never
  * observed, and writing it unconditionally costs less than a branch.
+ *
+ * The same function serves a `Result` *parameter* (WP17): the word arrives in
+ * a register and the callee builds the object once, in its prologue, with
+ * `stack` from `stackParams` rather than from a call site.
  */
-export function unpackResult(emitter: Emitter, type: i32, word: string, site: Node): string {
+export function unpackResult(emitter: Emitter, type: i32, word: string, stack: boolean): string {
   declareResultTypes(emitter, type);
   const layout = resultLayout(emitter.table, type);
-  const object = allocateResult(emitter, layout, site);
+  const object = allocateResultIn(emitter, layout, stack);
   const ok = emitter.fn.emitValue(`trunc i64 ${word} to i1`);
   storeSlot(emitter, layout, object, layout.okIndex, T_BOOL, ok);
   const high = emitter.fn.emitValue(`lshr i64 ${word}, ${RESULT_PAYLOAD_SHIFT}`);
@@ -317,7 +331,7 @@ export function unpackResult(emitter: Emitter, type: i32, word: string, site: No
  */
 export function emitResultReturningCall(emitter: Emitter, call: string, type: i32, site: Node): string {
   const word = emitter.fn.emitValue(call);
-  return unpackResult(emitter, type, word, site);
+  return unpackResult(emitter, type, word, emitter.isStackSite(site));
 }
 
 // ---- `r.ok` / `r.value` / `r.error` ---------------------------------------

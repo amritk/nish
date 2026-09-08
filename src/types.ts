@@ -310,12 +310,12 @@ export function llvmType(t: StaticType): string {
 }
 
 /**
- * LLVM type of a function's return slot. It differs from `llvmType` for
- * exactly one shape: a `Result` small enough to pack comes back in a register
- * as an `i64` (WP17), never as a pointer to arena memory. Every other type
- * returns what it is.
+ * LLVM type at a call boundary — a parameter or a return slot. It differs
+ * from `llvmType` for exactly one shape: a `Result` small enough to pack
+ * travels in a register as an `i64` (WP17), never as a pointer to arena
+ * memory. Every other type is what it is.
  */
-export function llvmReturnType(t: StaticType): string {
+export function llvmAbiType(t: StaticType): string {
   return resultByValue(t) ? "i64" : llvmType(t);
 }
 

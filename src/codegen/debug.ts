@@ -24,7 +24,7 @@
  * offsets the checker computed, and `T[]` a pointer to the array header with
  * `data` typed as `T*` so `p a->data[i]` works. A `Result<T, E>` (WP17) is a
  * pointer to a composite built from `resultLayout` — `ok`, `value`, `error`
- * at their computed offsets — except in a return slot the ABI packs into a
+ * at their computed offsets — except at a call boundary the ABI packs into a
  * register, where it is the packed `{ int32_t ok; union { T; E; }; }` the C
  * header declares (`docs/wp17-result-abi.md` §3).
  *
@@ -33,7 +33,7 @@
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar, StructInfo } from "../checker";
 import { ResultLayout, ResultSlot, resultLayout } from "../checker/result";
-import { StaticType, intBits, isInteger, llvmType, resultByValue, typeToString } from "../types";
+import { StaticType, intBits, isInteger, llvmAbiType, llvmType, resultByValue, typeToString } from "../types";
 import { packageVersion } from "../version";
 import { IRFunction, IRModule } from "./ir";
 
@@ -186,9 +186,9 @@ export class DebugInfo {
    * WP17: the *packed* shape of a `Result` that is returned in a register —
    * `struct { int32_t ok; union { T value; E error; }; }`, which is the C type
    * `--emit-header` writes and the one the ABI actually carries. A debugger
-   * told the in-memory layout instead would read a return value that is not
-   * there, so the subroutine type uses this in return position and the
-   * in-memory composite everywhere else.
+   * told the in-memory layout instead would read a register that does not
+   * hold a pointer, so the subroutine type and the parameter variables use
+   * this; the in-memory composite is what a local, a field and `p *r` see.
    */
   private resultWord(t: StaticType): string {
     const key = `${typeToString(t)}.word`;
@@ -219,8 +219,8 @@ export class DebugInfo {
     return ref;
   }
 
-  /** The type a signature's return slot really carries (WP17: packed, for a small `Result`). */
-  private returnTypeRef(t: StaticType): string {
+  /** The type a call boundary really carries (WP17: packed, for a small `Result`). */
+  private abiTypeRef(t: StaticType): string {
     return resultByValue(t) ? this.resultWord(t) : this.typeRef(t);
   }
 
@@ -237,7 +237,7 @@ export class DebugInfo {
     // The artificial entry wrapper is `int main(int, char**)`; its parameters are not described.
     const types = options.artificial
       ? [this.typeRef({ kind: "i32" })]
-      : [this.returnTypeRef(sig.returnType), ...sig.params.map((p) => this.typeRef(p.type))];
+      : [this.abiTypeRef(sig.returnType), ...sig.params.map((p) => this.abiTypeRef(p.type))];
     const signature = this.module.addMetadata(`!DISubroutineType(types: ${this.module.addMetadata(`!{${types.join(", ")}}`)})`);
     const name = options.name ?? sig.sourceName; // methods' `sourceName` already reads `Owner.method`
     const flags = ["DIFlagPrototyped", ...(options.artificial ? ["DIFlagArtificial"] : [])].join(" | ");
@@ -254,9 +254,9 @@ export class DebugInfo {
       const isThis = sig.struct !== undefined && i === 0;
       const flags = isThis ? ", flags: DIFlagArtificial | DIFlagObjectPointer" : "";
       const variable = this.module.addMetadata(
-        `!DILocalVariable(name: ${quote(p.name)}, arg: ${i + 1}, scope: ${this.subprogram}, file: ${this.file}, line: ${line}, type: ${this.typeRef(p.type)}${flags})`
+        `!DILocalVariable(name: ${quote(p.name)}, arg: ${i + 1}, scope: ${this.subprogram}, file: ${this.file}, line: ${line}, type: ${this.abiTypeRef(p.type)}${flags})`
       );
-      fn.emit(`call void @llvm.dbg.value(metadata ${llvmType(p.type)} %${p.name}, metadata ${variable}, metadata !DIExpression())`);
+      fn.emit(`call void @llvm.dbg.value(metadata ${llvmAbiType(p.type)} %${p.name}, metadata ${variable}, metadata !DIExpression())`);
     });
   }
 

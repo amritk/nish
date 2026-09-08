@@ -344,14 +344,17 @@ ignores because the LLVM value is the same pointer either way.
 `orReturn()` returns memory, which is what disqualifies its function from an
 automatic arena scope.
 
-A `Result` whose two payloads are each a scalar of at most four bytes is
-**returned in a register** (WP17): `resultByValue` in `types.ts` decides,
-`llvmReturnType` gives the `define` its `i64`, and `emit/result.ts` packs at
-every `ret` and unpacks at every call site into an object the caller owns —
-so nothing else in the lowering changed, and the allocation moved from the
-callee to the caller (which is why `collectResultFacts` reports the
-allocator on a call and `escape.ts` records the call as a site of *this*
-function). Design, the six-target tables, the assembly and the measurement:
+A `Result` whose two payloads are each a scalar of at most four bytes
+**travels in a register** (WP17), returned and passed: `resultByValue` in
+`types.ts` decides, `llvmAbiType` gives the `define` and its parameters their
+`i64`, and `emit/result.ts` packs at every `ret` and every argument and
+unpacks at every call site and in the callee prologue, into an object the
+receiving function owns — so nothing else in the lowering changed, and the
+allocation moved to whichever side unpacks (which is why
+`collectResultFacts` reports the allocator on a call, `escape.ts` records
+the call as a site of *this* function, and `EscapeResult.stackParams` decides
+alloca or arena for an unpacked parameter). Design, the six-target tables,
+the assembly, the measurement and the one gap the packing does not close:
 [wp17-result-abi.md](wp17-result-abi.md); why the in-memory representation
 is still a pointer: [wp16-results.md](wp16-results.md).
 

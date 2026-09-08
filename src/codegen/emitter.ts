@@ -39,10 +39,11 @@
  */
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
-import { CompilerOptions, StaticType, alignOf, llvmReturnType, llvmType } from "../types";
+import { CompilerOptions, ResultType, StaticType, alignOf, llvmAbiType, llvmType, resultByValue } from "../types";
 import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, returnAttributes } from "./attributes";
 import { DebugInfo } from "./debug";
 import { emitConstructorPrologue, importedStructFunctions, structFunctions, structTypeDeclarations } from "./emit/classes";
+import { unpackResult } from "./emit/result";
 import { EmitContext, LoopTarget } from "./emit/context";
 import { expressionEmitters } from "./emit/expressions";
 import { declareResultTypes } from "./emit/result";
@@ -67,6 +68,8 @@ export class Emitter implements EmitContext {
   currentSig!: FunctionSig;
   readonly loops: LoopTarget[] = [];
   private slots = new WeakMap<LocalVar, string>();
+  /** WP17: the unpacked object of each by-value `Result` parameter, by name. */
+  private paramObjects = new Map<string, string>();
   /** Facts of the function being emitted (stack sites, arena scope). */
   private current!: FunctionFacts;
   /** Runtime symbols referenced by this module; drives which declarations are emitted. */
@@ -135,10 +138,10 @@ export class Emitter implements EmitContext {
       sig.name,
       sig.params.map((p) => ({
         name: p.name,
-        type: llvmType(p.type),
+        type: llvmAbiType(p.type),
         attrs: optimize ? paramAttributes(p, facts) : [],
       })),
-      llvmReturnType(sig.returnType)
+      llvmAbiType(sig.returnType)
     );
     // Linkage: exported functions are always external (they are the module's
     // ABI). Others are external too unless --strict-exports hides them.
@@ -154,6 +157,14 @@ export class Emitter implements EmitContext {
 
     // WP6: an automatic arena scope remembers the bump position before anything is allocated.
     if (facts.arenaScope) this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("sts_arena_mark")}()`);
+    // WP17: a `Result` parameter small enough to pack arrives as an `i64`.
+    // Unpack it once, before the body, into the object every construct reads.
+    this.paramObjects = new Map();
+    for (const p of sig.params) {
+      if (!resultByValue(p.type)) continue;
+      const object = unpackResult(this, p.type as ResultType, `%${p.name}`, this.isStackParam(p.name));
+      this.paramObjects.set(p.name, object);
+    }
     // A constructor stores the field initializers before its body runs (WP2),
     // and a derived one without an explicit `super(...)` constructs its base part (WP2b).
     if (sig.role === "constructor") emitConstructorPrologue(this, sig);
@@ -169,6 +180,14 @@ export class Emitter implements EmitContext {
 
   isStackSite(node: ts.Node): boolean {
     return this.current.stackSites.has(node);
+  }
+
+  isStackParam(name: string): boolean {
+    return this.current.stackParams.has(name);
+  }
+
+  paramObject(name: string): string | undefined {
+    return this.paramObjects.get(name);
   }
 
   emitScopeExit(): void {
@@ -251,9 +270,9 @@ export class Emitter implements EmitContext {
     this.declareSignatureTypes(sig);
     const optimize = this.opts.optimizeAttributes;
     const params = sig.params
-      .map((p) => [llvmType(p.type), ...(optimize ? paramAttributes(p, facts) : [])].join(" "))
+      .map((p) => [llvmAbiType(p.type), ...(optimize ? paramAttributes(p, facts) : [])].join(" "))
       .join(", ");
-    const ret = [...(optimize ? returnAttributes(sig.returnType, facts.returnDeref) : []), llvmReturnType(sig.returnType)].join(" ");
+    const ret = [...(optimize ? returnAttributes(sig.returnType, facts.returnDeref) : []), llvmAbiType(sig.returnType)].join(" ");
     const group = optimize ? ` ${this.module.attrGroup(functionAttributes(facts))}` : "";
     return `declare ${ret} @${sig.name}(${params})${group}`;
   }

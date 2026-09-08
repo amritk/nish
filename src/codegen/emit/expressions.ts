@@ -4,7 +4,7 @@
  * value (temp, parameter, or constant) that holds the expression's result.
  */
 import ts from "typescript";
-import { StaticType, isFloat, isInteger, llvmReturnType, llvmType, resultByValue } from "../../types";
+import { ResultType, StaticType, isFloat, isInteger, llvmAbiType, llvmType, resultByValue } from "../../types";
 import { emitIntBinary } from "./arithmetic";
 import { arrayExpressionEmitters, installArrayAssignmentEmitters } from "./arrays";
 import { bitwiseBinaryEmitters, bitwiseUnaryEmitters } from "./bitwise";
@@ -13,7 +13,7 @@ import { ConstValue, constValue } from "../../checker/constants";
 import { BuiltinCall, f64Constant, floatConstant } from "./builtins";
 import { ioFunctionEmitters } from "./io";
 import { conversionEmitters, parseEmitters } from "./math";
-import { emitResultReturningCall, resultFunctionEmitters } from "./result";
+import { emitPackedResult, emitResultReturningCall, resultFunctionEmitters } from "./result";
 import { isAssignmentOperator } from "../../checker/classes";
 import { classExpressionEmitters, emitSuperCall } from "./classes";
 import { assignmentTargetEmitters, emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members";
@@ -70,7 +70,7 @@ const emitIdentifier: ExpressionEmitter = (ctx, expr) => {
   const constant = ctx.program.constRefs.get(expr as ts.Identifier);
   if (constant) return constantValue(ctx, constValue(constant));
   const local = ctx.program.bindings.get(expr as ts.Identifier)!;
-  if (local.storage === "param") return `%${local.name}`;
+  if (local.storage === "param") return ctx.paramObject(local.name) ?? `%${local.name}`;
   const ty = llvmType(local.type);
   return ctx.fn.emitValue(`load ${ty}, ${ty}* ${ctx.slotOf(local)}${ctx.alignSuffix(local.type)}`);
 };
@@ -206,10 +206,18 @@ const emitCall: ExpressionEmitter = (ctx, node) => {
   const builtin = builtinFunctionOf(ctx.program, expr);
   if (builtin) return builtin.emit(ctx, expr);
   const callee = ctx.program.callees.get(expr)!;
+  // WP17: an argument feeding a `Result` parameter the ABI packs is passed as
+  // the word, exactly as a `return` of one is.
   const args = expr.arguments
-    .map((arg, i) => `${llvmType(callee.params[i].type)} ${ctx.emitExpression(arg)}`)
+    .map((arg, i) => {
+      const want = callee.params[i].type;
+      const value = resultByValue(want)
+        ? emitPackedResult(ctx, arg, want as ResultType)
+        : ctx.emitExpression(arg);
+      return `${llvmAbiType(want)} ${value}`;
+    })
     .join(", ");
-  const call = `call ${llvmReturnType(callee.returnType)} @${callee.name}(${args})`;
+  const call = `call ${llvmAbiType(callee.returnType)} @${callee.name}(${args})`;
   if (callee.returnType.kind === "void") {
     ctx.fn.emit(call);
     return "void";
