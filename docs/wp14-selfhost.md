@@ -632,7 +632,7 @@ tax finite, and it is why §1's "stage0 is not going away" means *kept*, not
 freeze becomes a deletion — `src/`, the `typescript` dependency and Node out of
 the compiler, the bootstrap seed moved from a second implementation to the
 previous released `amritc`, which is rustc's arrangement and Go's — is
-[WP18](wp18-stage0-retirement.md). It lists what stage0 still owns beyond
+[WP19](wp19-stage0-retirement.md). It lists what stage0 still owns beyond
 compiling (the oracles, the npm package, the diverse-double-compiling
 property), the six gates that must close before any of it is deleted, and the
 four builtins §7a's leftovers need. Nothing there is scheduled: it is the price

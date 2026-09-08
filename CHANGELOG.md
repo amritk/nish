@@ -9,8 +9,8 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
-- **A plan for retiring stage0 rather than freezing it (WP18,
-  `docs/wp18-stage0-retirement.md`).** WP14 §6 decided that stage0 stays
+- **A plan for retiring stage0 rather than freezing it (WP19,
+  `docs/wp19-stage0-retirement.md`).** WP14 §6 decided that stage0 stays
   buildable as the bootstrap seed and the differential oracle but is not kept
   up to date; this is the document for the day that freeze becomes a deletion,
   and it is a checklist rather than a schedule. It takes the arrangement rustc
@@ -21,9 +21,11 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   §7a; and `IR(stage0, self/) == IR(stage1, self/)`, the diverse-double-compiling
   property no project in its comparison table asserts), the six gates that must
   close before any of it is deleted, and the four builtins those gates need —
-  `process.platform`/`process.arch`, `isDirectorySync`, `getenv` and
-  `panicInternal` — each of which lands in stage0 first, because the seed has
-  to be able to compile the compiler that replaces it. It also records what
+  `process.platform`/`process.arch` and `isDirectorySync`, which WP18 lands
+  alongside the generics work and which close two of §7a's four rows, plus
+  `getenv` and `panicInternal`, which are this package's — each of them in
+  stage0 first, because the seed has to be able to compile the compiler that
+  replaces it. It also records what
   retirement costs and the honest trigger for doing it: a release cycle in
   which stage0 found nothing, changed nothing and shipped nothing but itself.
 

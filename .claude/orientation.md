@@ -91,7 +91,7 @@ negative test, its `docs/LANGUAGE.md` rule and cookbook entry, and a
 | Question | Document |
 | --- | --- |
 | I am working on `self/` | [`selfhost.md`](./selfhost.md) |
-| When does stage0 go away? | `docs/wp18-stage0-retirement.md` |
+| When does stage0 go away? | `docs/wp19-stage0-retirement.md` |
 | How do I add a construct? | `docs/ARCHITECTURE.md` → "How to add a construct" |
 | What does the language allow? | `docs/LANGUAGE.md` |
 | What IR does X compile to? | `docs/IR_COOKBOOK.md` |
