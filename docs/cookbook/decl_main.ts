@@ -1,4 +1,4 @@
 export function main(): number {
-  console.log("hello from StaticTS");
+  console.log("hello from AmritScript");
   return 0;
 }

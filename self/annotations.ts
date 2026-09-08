@@ -14,6 +14,7 @@
 // `resolveTypeNode`'s signature unchanged for recursive callers; here the
 // context is one argument that is already being threaded.
 
+import { LANGUAGE } from "./branding";
 import { CheckContext, NUMBER_MODE_I32 } from "./context";
 import { N_LIST, N_TYPE_ARRAY, N_TYPE_NULL, N_TYPE_PAREN, N_TYPE_REF, N_TYPE_UNION, Node } from "./nodes";
 import {
@@ -56,7 +57,7 @@ export function typedArrayElement(name: string): i32 {
 
 /**
  * The scalar type a bare name spells, or -1 when it is not a scalar keyword.
- * A chain of `===` rather than a `switch`, because StaticTS's `switch` is
+ * A chain of `===` rather than a `switch`, because the language's `switch` is
  * integer-only by design (docs/wp14-selfhost.md §5) and string equality
  * compares the lengths first anyway.
  */
@@ -102,7 +103,7 @@ function scalarNamed(name: string, numberMode: i32): i32 {
 
 /**
  * Resolve one annotation into a type id. Anything outside the rigid set is a
- * rejection: StaticTS has no `any`, no `unknown`, no union but `T | null`, no
+ * rejection: the language has no `any`, no `unknown`, no union but `T | null`, no
  * generics beyond `Array<T>`, and no structural object types.
  */
 export function resolveType(node: Node, ctx: CheckContext): i32 {
@@ -151,10 +152,10 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
   }
 
   if (name === "any") {
-    return ctx.errorType(node, "`any` is forbidden in StaticTS");
+    return ctx.errorType(node, "`any` is forbidden in " + LANGUAGE);
   }
   if (name === "unknown") {
-    return ctx.errorType(node, "`unknown` is forbidden in StaticTS");
+    return ctx.errorType(node, "`unknown` is forbidden in " + LANGUAGE);
   }
 
   const scalar = scalarNamed(name, ctx.numberMode);
@@ -182,7 +183,7 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
 
 /**
  * `Result<T, E>` (WP16). Written like a generic, but there are no user
- * generics in StaticTS: this is one built-in type constructor whose two
+ * generics in the language: this is one built-in type constructor whose two
  * arguments pick a monomorphised layout, exactly as `Array<T>` does.
  *
  * `T` may be `void` — `Result<void, E>` is the fallible operation that has
@@ -225,7 +226,7 @@ function resolveNullableUnion(node: Node, ctx: CheckContext): i32 {
     }
   }
   if (inner < 0 || nulls !== 1 || node.children.length !== 2) {
-    return ctx.errorType(node, "Union types other than `T | null` are forbidden in StaticTS");
+    return ctx.errorType(node, "Union types other than `T | null` are forbidden in " + LANGUAGE);
   }
   if (inner === T_ERROR) {
     return T_ERROR;

@@ -2,7 +2,7 @@
 /**
  * Random-program fuzzer for the differential harness (WP13).
  *
- * Generates straight-line StaticTS programs over 32-bit integers and
+ * Generates straight-line AmritScript programs over 32-bit integers and
  * booleans: locals, `+ - * / %` (divisors go through `nz(x)`, which maps any
  * value into [2, 1001], so no division by zero and no INT_MIN / -1), unary
  * minus, `Math.abs/min/max`, comparisons, `&&`/`||`/`!`, ternaries, `++`/`--`
@@ -247,7 +247,7 @@ function buildProgram(seed, label, opts = {}) {
 /**
  * A generated comparison can hit TypeScript's `a < b > (c)` ambiguity, where
  * the parser reads `<` as the start of a type-argument list: `tsc` rejects
- * such a program exactly as `statictsc` does, so it tests nothing. Rather
+ * such a program exactly as `amritc` does, so it tests nothing. Rather
  * than teach every expression rule about it, re-roll the seed until the text
  * parses. Deterministic per seed, so a saved failure still reproduces with
  * `--seed <S> --count 1`.

@@ -1,6 +1,6 @@
 // `StringMap` and `StringSet`: the name lookup every phase of a compiler is
 // made of (docs/wp14-selfhost.md §2.2). `src/` reaches for `Map` and `Set` at
-// about 200 sites; StaticTS has neither, and adding one would drag in
+// about 200 sites; the language has neither, and adding one would drag in
 // generics, which is a work package of its own and is not on the path. So
 // this is library code over the arrays and the bitwise operators the language
 // already has.

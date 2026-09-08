@@ -1,6 +1,6 @@
 // Nested and adjacent templates: the brace-depth stack is the only thing that
 // tells a substitution's `}` from a block's, and this is where it earns its
-// keep. Nothing here has to be valid StaticTS — the lexer has no opinions.
+// keep. Nothing here has to be valid AmritScript — the lexer has no opinions.
 const a = `plain`;
 const b = `head${1}tail`;
 const c = `x${`inner${2}`}y`;

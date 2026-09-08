@@ -7,14 +7,14 @@
 // repeated here; what follows is only what is different about this
 // implementation, because the rules themselves must not drift.
 //
-//   nounwind    StaticTS has no exceptions.
+//   nounwind    The language has no exceptions.
 //   willreturn  Every loop is counted (`isCountedLoop`), the body has no
 //               `throw`, it cannot reach a `noreturn` runtime call, and every
 //               callee is itself willreturn (fixpoint over the call graph).
 //   readnone / readonly
 //               The body touches no memory it does not own, or only reads it,
 //               and every callee agrees (the same fixpoint).
-//   noundef     Every StaticTS value is initialised.
+//   noundef     Every value is initialised.
 //   Pointer parameters carry `nonnull align 8 dereferenceable(N)` from the
 //               allocator's guarantees, and `readonly` / `nocapture` from the
 //               `pointerParams` fixpoint.

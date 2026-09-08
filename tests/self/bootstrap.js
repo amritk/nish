@@ -130,7 +130,7 @@ function main(argv) {
   if (e1 !== null) return fail(e1);
 
   // The stronger equality of §1: the TypeScript implementation and the
-  // StaticTS one emit the same module for the same source.
+  // AmritScript one emit the same module for the same source.
   const agree01 = compareIR(stage0Dir, stage1Dir, "stage0", "stage1", verbose);
   if (agree01.error !== undefined) return fail(`IR(stage0) != IR(stage1): ${agree01.error}`);
 

@@ -11,7 +11,7 @@
  * so no existing negative test changes.
  *
  * Decisions:
- *   - `"a" + 1` is rejected. StaticTS has no implicit string conversion; a
+ *   - `"a" + 1` is rejected. the language has no implicit string conversion; a
  *     template literal is the explicit spelling.
  *   - `<`, `<=`, `>`, `>=` on strings stay rejected (no collation semantics).
  *   - `s.length` is the UTF-8 *byte* length (see docs/wp3-strings.md), and

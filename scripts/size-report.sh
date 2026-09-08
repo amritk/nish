@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Before/after binary size report for a StaticTS module + driver + runtime.
+# Before/after binary size report for an AmritScript module + driver + runtime.
 #   scripts/size-report.sh [--markdown] [module.ll] [driver.c]
 #
 # Prints the runtime.c budget row (its -Oz text size) and one row per build

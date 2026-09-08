@@ -106,7 +106,7 @@ recover hands its `CompileError`s to one `DiagnosticSink`
 | Phase | Recovery unit | Where |
 | --- | --- | --- |
 | Parser | every parse diagnostic of the file | `parseSource` |
-| Phase 0 validator | every forbidden construct (a rejected node's subtree is skipped, so `Array<any>` is one error) | `validateStaticTS` |
+| Phase 0 validator | every forbidden construct (a rejected node's subtree is skipped, so `Array<any>` is one error) | `validateAmritScript` |
 | Pass 1 (signatures) | per declaration: class/interface (marked `poisoned`, its layout checks skipped), import, function signature, module resolution | `Checker.collectSignatures`, `Compilation.load` |
 | Pass 1b/1c | per import binding; every symbol clash | `Checker.bindImports`, `Compilation.rejectSymbolClashes` |
 | Pass 2 (bodies) | per statement, at the innermost statement list; the enclosing function is marked `poisoned` and its definite-return check is skipped | `checkStatements` |
@@ -130,7 +130,7 @@ Tests: `tests/cases/reject_multi_error` (three body errors), `reject_multi_forbi
 
 ## `--json`
 
-`statictsc --json file.ts` prints one JSON object per error on stdout, nothing
+`amritc --json file.ts` prints one JSON object per error on stdout, nothing
 else on stdout and nothing on stderr, with the same exit code:
 
 ```
@@ -170,7 +170,7 @@ Goldens: `tests/cases/dump_ast.stdout`, `tests/cases/dump_checked.stdout`
 appends as `, !dbg !N`, set by the emitter around every statement and
 expression and restored afterwards. Emitted: `!llvm.dbg.cu`, the
 `Dwarf Version`/`Debug Info Version` module flags, a `DICompileUnit`
-(`DW_LANG_C99`, producer `statictsc <version>`), a `DIFile` (name as given,
+(`DW_LANG_C99`, producer `amritc <version>`), a `DIFile` (name as given,
 directory = cwd), one `distinct DISubprogram` per function (methods are
 `Owner.method`; the `@main` wrapper is an artificial `main` at the user's
 `main`), `DILocation`s, `llvm.dbg.value` for parameters, `llvm.dbg.declare`

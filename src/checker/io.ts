@@ -25,7 +25,7 @@
  *                                       entry, whose wrapper builds it once.
  *
  * The file functions are globals rather than `import { readFileSync } from
- * "fs"`: StaticTS has no package resolution and bare specifiers are rejected.
+ * "fs"`: the language has no package resolution and bare specifiers are rejected.
  */
 import ts from "typescript";
 import { I32, STRING, VOID, arrayOf, nullableOf } from "../types";

@@ -1,5 +1,5 @@
 // `dump_checked <file>`: the signatures stage1's pass 1 collected, in exactly
-// the format `statictsc --emit-checked` prints them (`src/dump.ts`).
+// the format `amritc --emit-checked` prints them (`src/dump.ts`).
 //
 // This is how S3 is tested (docs/wp14-selfhost.md §6 rule 3):
 // `tests/self/checked_oracle.js` runs stage0 with `--emit-checked` over the

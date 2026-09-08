@@ -29,7 +29,7 @@ import { FunctionFacts, analyzeFunctions } from "./codegen/attributes";
 import { emitProgram } from "./codegen/emitter";
 import { CompileError, DiagnosticSink } from "./diagnostics";
 import { parseSource } from "./parser";
-import { validateStaticTS } from "./validator";
+import { validateSyntax } from "./validator";
 import { CompilerOptions, DEFAULT_OPTIONS } from "./types";
 
 export interface ModuleUnit {
@@ -59,7 +59,7 @@ export interface EmittedModule {
  */
 export function parseModule(fileName: string, sourceText: string, sink?: DiagnosticSink): ts.SourceFile {
   const ast = parseSource(fileName, sourceText, sink); // Phase A
-  validateStaticTS(ast, sink); // Phase 0: forbidden-syntax sweep, hard fail
+  validateSyntax(ast, sink); // Phase 0: forbidden-syntax sweep, hard fail
   sink?.throwIfErrors();
   return ast;
 }

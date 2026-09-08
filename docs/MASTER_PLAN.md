@@ -1,6 +1,6 @@
-# StaticTS Master Plan
+# AmritScript Master Plan
 
-The single source of truth for what StaticTS is, what exists, what remains,
+The single source of truth for what AmritScript is, what exists, what remains,
 and how the remaining work is cut into packages that independent agents can
 build in parallel. Every work package (WP) below is self-contained: goal,
 scope, files, dependencies, acceptance tests, and a ready-to-use agent brief.
@@ -11,7 +11,7 @@ Repo: `amritk/compiler`, branch `claude/llvm-ir-typescript-compiler-hf5pxr`.
 
 ## 1. Vision
 
-StaticTS is an ahead-of-time compiler for a strictly static subset of
+AmritScript is an ahead-of-time compiler for a strictly static subset of
 TypeScript. It parses source with the official TypeScript compiler API, hard
 fails on anything dynamic, and emits LLVM IR that clang/LLVM turn into native
 binaries for x86_64, ARM64, and WebAssembly.
@@ -24,8 +24,8 @@ Targets, in priority order:
    `-O3` loop/math speed, zero-cost abstractions, LTO and dead-stripping.
 3. **Zero-GC memory.** Arena/bump allocation by default, explicit reset,
    optional reference counting only for objects that must outlive an arena.
-4. **Node/npm interop in one direction only.** StaticTS exports `.wasm` /
-   native addons that Node imports. StaticTS never embeds a JS engine.
+4. **Node/npm interop in one direction only.** AmritScript exports `.wasm` /
+   native addons that Node imports. AmritScript never embeds a JS engine.
 
 Non-goals: running arbitrary TypeScript, JS semantics for `number` overflow,
 prototypes, `eval`, reflection, exceptions as control flow.
@@ -43,7 +43,7 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │ 2. Compiler frontend (this repo, src/)                           │
 │    Phase 0  validator.ts   forbidden-syntax sweep, hard fail     │
 │    Phase A  parser.ts      ts.createSourceFile                   │
-│    Phase B  checker.ts     StaticTS types, scopes, side tables   │
+│    Phase B  checker.ts     AmritScript types, scopes, side tables   │
 └───────────────────────────────┬──────────────────────────────────┘
                                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
@@ -71,11 +71,11 @@ Design rules that every WP must respect:
 - **Runtime stays tiny.** Budget: `runtime.c` under 8 KB source, under 4 KB
   compiled at `-Oz`. No stdio on hot paths.
 
-## 3. Consolidated language specification (Static-TS)
+## 3. Consolidated language specification (AmritScript)
 
 ### 3.1 Types
 
-| StaticTS | LLVM | Notes |
+| AmritScript | LLVM | Notes |
 | --- | --- | --- |
 | `number` | `i32` (default) or `double` (`--number-mode f64`) | Wrapping integer arithmetic, no `nsw`. |
 | `i32`, `f64` | `i32`, `double` | Explicit, always available. |
@@ -167,7 +167,7 @@ Acceptance: `npm test` unchanged and green; existing goldens byte-identical.
 Goal: a dedicated, un-bypassable forbidden-syntax sweep that runs before the
 checker, plus Biome configured purely as a formatter/linter for humans.
 
-- `src/validator.ts`: `validateStaticTS(sourceFile)` walks the whole tree
+- `src/validator.ts`: `validateAmritScript(sourceFile)` walks the whole tree
   with `ts.forEachChild` and throws `CompileError` for everything in §3.2.
   It must catch things the checker never reaches (e.g. `any` nested in a
   type argument, `delete` inside an unreachable branch).
@@ -278,7 +278,7 @@ Goal: `number[]`, `string[]`, `User[]` with fixed element type.
   layout so Node can pass buffers (WP8).
 
 Acceptance: goldens; native round trip summing an array and sorting one
-(insertion sort in StaticTS); bounds failure exits non-zero with message;
+(insertion sort in AmritScript); bounds failure exits non-zero with message;
 `opt -O2` vectorises the sum loop with checks hoisted or removed.
 
 ### WP5: Modules, entry point, linkage (M, parallel-safe)
@@ -295,10 +295,10 @@ Goal: multi-file programs and runnable binaries without a hand-written C driver.
   `@main` wrapper that initialises nothing (arena is lazy), calls user
   `main`, calls `sts_free_arena`, returns the code. Process args exposed
   later (WP7).
-- CLI: `statictsc a.ts b.ts -o out/` and `statictsc --link a.ts b.ts -o app`
+- CLI: `amritc a.ts b.ts -o out/` and `amritc --link a.ts b.ts -o app`
   which shells out to `scripts/build.sh`.
 
-Acceptance: two-file example builds and runs with `statictsc --link`;
+Acceptance: two-file example builds and runs with `amritc --link`;
 attributes on imported declarations match the exporter's definitions
 (test compares the sidecar with the `.ll`).
 
@@ -343,9 +343,9 @@ with the `size` profile.
 
 ### WP8: Interop: wasm, N-API, headers (M, depends on WP5)
 
-- `statictsc --emit-header` writes a C header for exported functions and
+- `amritc --emit-header` writes a C header for exported functions and
   structs from the same signature data the emitter uses.
-- `statictsc --emit-dts` writes `.d.ts` for the wasm exports (scalars now,
+- `amritc --emit-dts` writes `.d.ts` for the wasm exports (scalars now,
   arrays via `Int32Array` views over wasm memory after WP4).
 - `scripts/build.sh --profile napi` builds a `.node` addon: generated C
   shim registers each exported scalar function; `examples/node-addon.mjs`
@@ -360,7 +360,7 @@ same module and gets identical results; header compiles with `-Wall
 ### WP9: Optimisation and benchmarking (M, after WP1/WP2/WP4)
 
 - Benchmark suite `bench/`: fib, nbody, spectral-norm, string building,
-  struct-heavy loop; each in StaticTS, C, and Rust; `hyperfine` runner and
+  struct-heavy loop; each in AmritScript, C, and Rust; `hyperfine` runner and
   a table in `docs/BENCHMARKS.md`. Target: within 10 % of Rust `-O3` for
   loop/math, sizes within the Rust range.
 - Attribute phase 2: `nsw` under an opt-in flag; `noalias` on struct
@@ -390,7 +390,7 @@ three; `lldb` shows a `.ts` line on a breakpoint in the fib example.
 
 ### WP11: Documentation (S, continuous)
 
-- `docs/LANGUAGE.md`: the normative StaticTS reference (from §3, kept in
+- `docs/LANGUAGE.md`: the normative AmritScript reference (from §3, kept in
   sync by every WP that adds a construct).
 - `docs/IR_COOKBOOK.md`: for each construct, the `.ts` and the exact `.ll`.
 - README stays the tour; deep material moves to `docs/`.
@@ -440,7 +440,7 @@ then WP1. Each agent rebases on the branch head before pushing.
 ## 8. Agent brief template
 
 ```
-You are implementing <WP-N: title> for StaticTS, a TypeScript-to-LLVM-IR AOT
+You are implementing <WP-N: title> for AmritScript, a TypeScript-to-LLVM-IR AOT
 compiler. Read docs/MASTER_PLAN.md (§2 design rules, §3 spec, §5 your WP,
 §7 conventions) and README.md first. Run `npm test` before changing anything.
 
@@ -462,7 +462,7 @@ Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 
 | Milestone | Contents | Proof |
 | --- | --- | --- |
-| M1 "Programs" | WP-P, WP0, WP1, WP3, WP5, WP10 | fib/gcd/string CLI builds with `statictsc --link`, under 20 KB. |
+| M1 "Programs" | WP-P, WP0, WP1, WP3, WP5, WP10 | fib/gcd/string CLI builds with `amritc --link`, under 20 KB. |
 | M2 "Data" | WP2, WP4, WP7 | nbody with structs and arrays, matches C output bit for bit. |
 | M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. |
 | M4 "1.0" | WP2b, remaining docs, stabilised spec | tagged release, language reference frozen. |

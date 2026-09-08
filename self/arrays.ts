@@ -137,7 +137,7 @@ export function checkArrayMethod(
     return ctx.numberType();
   }
   if (name === "pop") {
-    // No `undefined` in StaticTS, so an empty array panics rather than adding
+    // There is no `undefined`, so an empty array panics rather than adding
     // a second return type; the check is the one `a[i]` already pays for.
     checkBuiltinArity(ctx, call, "pop", args, 0);
     return elem;
@@ -211,7 +211,7 @@ export function checkNewArray(ctx: CheckContext, expr: Node, name: string, scope
   }
   // Zero-filling is a valid value for scalars and for `T | null` — a zero
   // pointer *is* `null` — but a zeroed plain string or array would be a null
-  // value StaticTS has no way to represent or to check for.
+  // value the language has no way to represent or to check for.
   if (ctx.table.isPointer(elem)) {
     const spelled = ctx.table.typeName(elem);
     return ctx.errorType(

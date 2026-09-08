@@ -1,5 +1,5 @@
 // Wave C of the self-hosting plan (docs/wp14-selfhost.md §3): the library
-// `self/` is written over. None of it needs a construct StaticTS does not
+// `self/` is written over. None of it needs a construct the language does not
 // already have — it is listed in the plan only so that nobody mistakes it for
 // language work.
 //
@@ -62,7 +62,7 @@ export class StringBuilder {
 
 /**
  * Byte-wise lexicographic order: negative, zero or positive as `a` sorts
- * before, with, or after `b`. StaticTS has no `<` on strings deliberately
+ * before, with, or after `b`. The language has no `<` on strings deliberately
  * (docs/LANGUAGE.md, Operators), so every ordering in `self/` — sorted
  * diagnostics, a deterministic symbol dump — goes through this.
  *
@@ -117,7 +117,7 @@ export function hexOfI64(value: i64, digits: i32): string {
  * An `f64` as LLVM writes it: `0x` and the 16 uppercase hex digits of the
  * IEEE-754 bit pattern. LLVM only accepts decimal float literals that
  * round-trip exactly, so the hex form is the only one always valid, and
- * `f64ToBits` (WP14 B1) is what makes it reachable from StaticTS at all.
+ * `f64ToBits` (WP14 B1) is what makes it reachable from the language at all.
  */
 export function f64Hex(value: f64): string {
   return `0x${hexOfI64(f64ToBits(value), 16)}`;

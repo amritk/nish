@@ -1,7 +1,7 @@
 # WP9: Optimisation and benchmarking
 
 What this package added, what each flag does and buys, the measured standing
-of StaticTS against C and Rust, and a diagnosis with a proposed fix for every
+of AmritScript against C and Rust, and a diagnosis with a proposed fix for every
 benchmark that misses the target. The numbers quoted here are from
 [BENCHMARKS.md](BENCHMARKS.md), which `node bench/run.mjs` regenerates; the
 programs and the measurement rules are described in
@@ -16,7 +16,7 @@ programs and the measurement rules are described in
 
 ## Summary
 
-| Benchmark | StaticTS / Rust `-O3` | StaticTS / C `-O3` | Target (1.10x) |
+| Benchmark | AmritScript / Rust `-O3` | AmritScript / C `-O3` | Target (1.10x) |
 | --- | ---: | ---: | --- |
 | fib(40) | 0.93x | 1.20x | met against Rust; PGO closes the gap to C (see below) |
 | spectral norm | 1.03x | 1.00x | met |
@@ -25,7 +25,7 @@ programs and the measurement rules are described in
 | vec3 | 2.02x | 2.25x | **missed**: same cause, every field lives in memory |
 | string building | 1.54x | 0.93x vs arena C, 1.48x vs naive C | **missed**: the arena never frees, so it page-faults |
 
-Binary sizes are 5-12 KB for StaticTS against 14.5 KB for C and 350-380 KB
+Binary sizes are 5-12 KB for AmritScript against 14.5 KB for C and 350-380 KB
 for Rust (which links `std` statically). Peak memory is 1.3-1.8 MB for the
 compute benchmarks, below both C and Rust.
 
@@ -86,7 +86,7 @@ helper, `intOpcode` in `src/codegen/emit/context.ts`, is the only place the
 decision is made.
 
 Semantics: signed overflow becomes undefined behaviour, exactly as in C (Rust
-release builds wrap instead, like the StaticTS default). What LLVM gains is
+release builds wrap instead, like the AmritScript default). What LLVM gains is
 the right to assume that an `i32` induction variable never wraps, so it can
 widen it to the native 64-bit width once instead of sign-extending it on every
 iteration, and to fold `(a + 1) - 1` and friends.
@@ -183,7 +183,7 @@ assigned to the other, which the checker can see).
 
 ### nbody: 1.24x (1186 ms against Rust 960 ms, C 984 ms)
 
-Same cause, one level up. The inner pair loop in StaticTS's `advance` runs
+Same cause, one level up. The inner pair loop in AmritScript's `advance` runs
 **58 instructions with 12 loads and 6 stores**; C's is **46 instructions with 3
 loads and 4 stores**. `bodies[i]`, `bi.x`, `bi.y`, `bi.z` and `bi.mass` are
 reloaded on every `j` iteration because the stores to `bj.vx`, `bj.vy`,
@@ -218,7 +218,7 @@ regardless of provenance.
 
 ### String building: 1.54x (22.9 ms against Rust 14.9 ms)
 
-Here the StaticTS binary matches its arena twin in C (24.7 ms) and loses to
+Here the AmritScript binary matches its arena twin in C (24.7 ms) and loses to
 the *naive* C that `malloc`s and `free`s every string (15.5 ms) and to Rust
 (14.9 ms), which does the same. The peak-RSS column explains it: 48.7 MB for
 the arena versions, 3.6 MB for the others. The arena never frees, so building
@@ -246,7 +246,7 @@ Both meet the target against Rust and miss it against C, for reasons worth
 recording.
 
 **sieve** (793 ms; Rust 1005 ms; C 642 ms). Rust pays the same bounds checks
-as StaticTS and is slower still. Against C the costs are: the marking loop's
+as AmritScript and is slower still. Against C the costs are: the marking loop's
 `sext` per iteration (fixed by `--nsw`, -8 %) and the bounds check in all
 three loops. With checks the clearing and counting loops do not vectorise at
 all (zero vector instructions in `sieve`); with `--unchecked-indexing` both
@@ -260,7 +260,7 @@ which the per-element check folds; and, for loops that only read, the
 `for...of` form, which carries no check.
 
 **fib** (355 ms; Rust 381 ms; C 297 ms). C's `static` function with one call
-site is inlined and its recursion partially unrolled by clang; StaticTS's
+site is inlined and its recursion partially unrolled by clang; AmritScript's
 `fib` has external linkage and `--strict-exports` did not change the result
 (352 ms). PGO does (288 ms), so the difference is block layout and unrolling
 depth, not the IR the compiler emits.
@@ -270,7 +270,7 @@ miss whose cause is the *ABI* rather than the memory model.
 `Result<number, number>` travels in one `i64`: the discriminant in the low
 half, the live payload in the high half. The same program written in C the
 same way — `uint64_t`, `<< 32`, `|` — times at 653 ms, i.e. exactly the
-StaticTS column, so the emitted IR is not at fault. What the faster two
+AmritScript column, so the emitted IR is not at fault. What the faster two
 columns have is the ok arm and the error arm as *separate SSA values*: then
 instcombine folds `odd ? n : n >> 1` into one variable shift, where a
 `select` on the combined word leaves the shift in the loop. Loop unrolling
@@ -375,7 +375,7 @@ that did move code generation were reverted: a compound-literal store in
 (+4 / +7). The source target of 9,000 bytes is missed by 392: what is left is
 one comment per function stating its contract (the two `%struct` layout
 lines, the string layout, the scope semantics, the `malloc`-not-arena rule
-for `process.argv`, the parse modes by reference to `statictsc.h`) and the
+for `process.argv`, the parse modes by reference to `amritc.h`) and the
 WASI entry-point bridge; getting under 9,000 means deleting those.
 
 Ideas measured to be neutral or worse and not taken: `__attribute__((cold))`

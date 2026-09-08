@@ -16,11 +16,11 @@
  *
  * Two translations are needed to make the streams comparable:
  *
- *   - **Offsets.** The scanner counts UTF-16 code units; StaticTS strings are
+ *   - **Offsets.** The scanner counts UTF-16 code units; AmritScript strings are
  *     UTF-8 bytes and so is `charCodeAt`. Every position is mapped through the
  *     byte prefix of the source, which is also the reason a file with a
  *     multi-byte character is worth having in the corpus.
- *   - **Keywords.** TypeScript has ~60 more keywords than StaticTS-0. A word
+ *   - **Keywords.** TypeScript has ~60 more keywords than AmritScript-0. A word
  *     that is a keyword there and not here is an `IDENT`, which is what it is
  *     to this lexer: the parser refuses `try` as a statement, not as a token.
  */
@@ -103,7 +103,7 @@ const NAMES = new Map([
   [ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken, ">>>="],
 ]);
 
-/** The keywords StaticTS-0 knows; every other TypeScript keyword is an identifier here. */
+/** The keywords AmritScript-0 knows; every other TypeScript keyword is an identifier here. */
 const KEYWORDS = new Set([
   "function",
   "return",
@@ -174,7 +174,7 @@ function scanWithTypeScript(source) {
     if (error !== undefined) return { error };
     // The scanner hands back a bare `>` so that the parser can close nested
     // type arguments one at a time; it merges `>>` / `>=` / `>>>=` only when
-    // asked. `self/lexer.ts` always merges, because StaticTS-0 has no generic
+    // asked. `self/lexer.ts` always merges, because AmritScript-0 has no generic
     // type argument list to close, so ask here too.
     if (kind === ts.SyntaxKind.GreaterThanToken) kind = scanner.reScanGreaterToken();
     if (kind === ts.SyntaxKind.CloseBraceToken && braces.length > 0) {
@@ -195,7 +195,7 @@ function scanWithTypeScript(source) {
     let name = NAMES.get(kind);
     if (name === undefined) {
       const text = source.slice(scanner.getTokenStart(), scanner.getTokenEnd());
-      // A keyword: ours if StaticTS-0 has it, an identifier if not.
+      // A keyword: ours if AmritScript-0 has it, an identifier if not.
       if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(text)) name = KEYWORDS.has(text) ? text : "IDENT";
       else return { error: `unmapped token ${ts.SyntaxKind[kind]} at ${start}` };
     }

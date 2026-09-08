@@ -1,11 +1,28 @@
 # Changelog
 
-All notable changes to `statictsc` are recorded here. The format follows
+All notable changes to `amritc` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/). The release procedure (bump,
 changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ## [Unreleased]
+
+### Changed
+
+- **Renamed to AmritScript, and the name moved into two files.** The language
+  is **AmritScript** and the compiler is **`amritc`** (npm package, `bin`
+  entry, `runtime/amritc.h`, `runtime/amritc.d.ts`, `scripts/amritc.sh`,
+  `AMRITC_DEBUG` / `AMRITC_SIMULATE_ICE`, and the `AMRITC_<STEM>_H` guard on a
+  generated header); the previous name collided with an unrelated project. Every
+  string the compiler prints now builds its name from `src/branding.ts`
+  (stage0) or `self/branding.ts` (stage1) instead of spelling it, so the next
+  rename is an edit to two files: the Phase 0 messages, `--help`, the banner,
+  include guard and `#include` of a generated header, the DWARF producer
+  string, and the internal-error report all read `LANGUAGE` / `CLI` from there.
+  Phase 0's entry point is `validateSyntax`, named after its job rather than
+  the language. The `sts_` prefix on the runtime's C symbols is **unchanged**:
+  it is ABI, not branding, and `docs/ARCHITECTURE.md` ("Where the name lives")
+  now says so.
 
 ### Added
 
@@ -54,10 +71,10 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   using the two-word struct `--emit-header` declares and a Rust twin using
   Rust's own `Result<i32, i32>`. It is the regression guard for the packing —
   and it immediately earned its keep by naming a gap the packing does *not*
-  close: StaticTS is 1.47x behind C and 2.6x behind Rust there, because
+  close: AmritScript is 1.47x behind C and 2.6x behind Rust there, because
   instcombine simplifies the ok/err `select` only when the two arms are
   separate SSA values rather than halves of one word. C written the way
-  `statictsc` emits times identically to `statictsc`, so it is not a
+  `amritc` emits times identically to `amritc`, so it is not a
   code-generation defect; respelling the pack as clang's two-word coercion was
   measured and produced byte-identical assembly, so it was not taken. The
   diagnosis and the proposed fix (a private two-scalar ABI for internal
@@ -67,14 +84,14 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 - **Shipping the self-hosted compiler.** `scripts/bootstrap.sh` builds it from
   a checkout — stage0 builds stage1, stage1 builds stage2, and `--verify` also
   builds stage3 and compares every stage's IR for `self/` and the two binaries
-  byte for byte — and `scripts/statictsc.sh` is its command line, adding the
+  byte for byte — and `scripts/amritc.sh` is its command line, adding the
   directory creation and the `--link` step that `docs/wp14-selfhost.md` D4
   deliberately kept out of the compiler (D4's bet, settled: 120 lines of bash
-  and no runtime growth). `npm run bootstrap` writes `build/statictsc`. The
+  and no runtime growth). `npm run bootstrap` writes `build/amritc`. The
   suite now builds a compiler with the script and uses it through the wrapper
   to compile, link and run a one-module and a two-module program, so what is
   checked is the artifact and not only the fixed point. `npm install -g
-  statictsc` still ships stage0: it is the bootstrap seed, the oracle every
+  amritc` still ships stage0: it is the bootstrap seed, the oracle every
   `self/` phase is compared against, and the only one of the two that emits
   DWARF and the interop sidecars.
 - **Self-hosting S5: the compiler compiles itself.** `self/compilation.ts` is
@@ -90,10 +107,10 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 - **Parenthesised types.** `(T | null)[]` needs its parentheses — `T | null[]`
   groups the other way — and stage0 always accepted them; the `self/` parser now
   does too (`tests/cases/cls_parenthesized_type`, `reject_paren_union_type`).
-- **Self-hosting S4: the StaticTS emitter.** `self/` now carries the whole back
+- **Self-hosting S4: the AmritScript emitter.** `self/` now carries the whole back
   end — the IR builder, the runtime ABI table, the target layouts, the escape
   analysis, the whole-program attribute fixpoint, the six construct families,
-  the module assembly and a one-module driver — in 6,761 lines of StaticTS
+  the module assembly and a one-module driver — in 6,761 lines of AmritScript
   against the 5,686 of `src/codegen/` they replace. `tests/self/ir_oracle.js`
   compares the two compilers' entire output byte for byte over every
   import-free program in the corpus: 206 of 206 files agree over 19,452 lines
@@ -110,7 +127,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   pipeline with `debug` / `speed` / `size` profiles (LTO, section GC, strip).
   `scripts/size-report.sh` prints before/after binary sizes.
 - **Phase 0 validator** (`src/validator.ts`). A single syntax-only pass that
-  rejects every construct StaticTS can never compile (`any`, `eval`, `with`,
+  rejects every construct AmritScript can never compile (`any`, `eval`, `with`,
   dynamic property access, ...) in about 2 ms per 1,000 lines, before the
   checker runs. Biome lint/format configuration, with a rule set that mirrors
   the validator (`noVar`, `noParameterAssign`, `useExplicitLengthCheck`, ...)
@@ -160,15 +177,15 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 - **Self-hosting, milestone S3: the body pass and Phase 0**
   (`docs/wp14-selfhost.md` §4). `self/expressions.ts`, `statements.ts`,
   `members.ts`, `arrays.ts`, `builtins.ts` and `validator.ts` are stage0's
-  pass 2 and its forbidden-syntax sweep in StaticTS. Two shape decisions
+  pass 2 and its forbidden-syntax sweep in AmritScript. Two shape decisions
   carry their reasons: the dispatch is **one central `switch`** (D2 of §3a) —
-  a table of function values would need function pointers, which StaticTS does
+  a table of function values would need function pointers, which AmritScript does
   not have, and a `switch` on a node kind lowers to a jump table — and the
   **contextual type is threaded down** rather than walked up, because the tree
   has no parent pointers; the one place that shows is `console.log` and the
   other `void` builtins, where "must be a statement" is answered by the
   statement checker recording the expression it is about to check.
-  `self/` is now **9,702 lines** of StaticTS.
+  `self/` is now **9,702 lines** of AmritScript.
   The proof is both halves of what a checker does. On what it *accepts*,
   `tests/self/checked_oracle.js` compares the `--emit-checked` dump over the
   whole corpus: **207 of 207 files agree over 2,079 lines**, and those lines
@@ -195,7 +212,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 - **Self-hosting, milestone S3: the signature pass** (`docs/wp14-selfhost.md`
   §4). `self/checker.ts` and the five modules around it — `program.ts` (the
   side tables), `context.ts`, `annotations.ts`, `declarations.ts`,
-  `structs.ts`, `constants.ts` — are stage0's pass 1 in StaticTS: imports and
+  `structs.ts`, `constants.ts` — are stage0's pass 1 in AmritScript: imports and
   class names first so any annotation resolves, then members, layouts and
   function signatures, then `implements`. **206 of 206 corpus files agree with
   stage0 over 1,255 signature lines**, compared through the `--emit-checked`
@@ -206,11 +223,11 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   facts, the per-body locals and callees — are filtered rather than left out of
   the format, so they start being compared the moment those phases land.
   Three shape changes carry their reasons: side tables are arrays indexed by a
-  dense `Node.id` the parser hands out rather than `WeakMap`s (StaticTS has no
+  dense `Node.id` the parser hands out rather than `WeakMap`s (AmritScript has no
   `WeakMap`, and an index beats hashing a pointer); an annotation's names come
   from a `typeNames` set narrower than the layout registry, which is what keeps
   a reachable layout from becoming a spellable type; and constant folding needs
-  no `bigint`, because StaticTS `i64` arithmetic already wraps where stage0 has
+  no `bigint`, because AmritScript `i64` arithmetic already wraps where stage0 has
   to wrap by hand. The parser now reports into the shared `Diagnostic` of
   `self/diagnostics.ts` rather than a class of its own, so a syntax error and a
   checker error land in one report — and print `file:line:col: syntax error:`
@@ -268,7 +285,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   (`tests/link/reachable_struct_return`).
 - **Self-hosting, wave C: the support library** (`docs/wp14-selfhost.md` §3).
   `self/strings.ts`, `self/map.ts` and `self/paths.ts` are the 598 lines of
-  StaticTS the checker and the emitter are written over, and no language
+  AmritScript the checker and the emitter are written over, and no language
   change came with them. `StringBuilder` is a `string[]` and one `join`,
   because `s = s + t` in a loop is quadratic in both time and memory — 88 KB
   of IR built that way costs 180 MB of peak RSS. `StringMap` / `StringSet`
@@ -293,21 +310,21 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   one-`Node`-class tree of `self/nodes.ts` — a `kind` discriminant, a fixed
   child layout per kind, `N_LIST` for the variable-length groups and `N_EMPTY`
   for the absent ones, so nothing ever downcasts. It has no exceptions,
-  because StaticTS `throw` discards its value: a failed parse is an `N_ERROR`
+  because AmritScript `throw` discards its value: a failed parse is an `N_ERROR`
   node plus a diagnostic on the parser, and the declaration after it still
   parses. `tests/parser_oracle.js` walks the `typescript` tree, prints it in
   `self/dump_ast.ts`'s format and diffs: **447 files, 53,673 nodes, no
   disagreement**, span for span, with the 43 skipped files all `reject_*`
-  cases whose forbidden constructs StaticTS-0 has no grammar for yet. Four
+  cases whose forbidden constructs AmritScript-0 has no grammar for yet. Four
   front-end bugs came out of the two oracles, all the same shape — a lexer or
   parser having an opinion the scanner does not: `==` and `?.` refused rather
   than read, `super` missing from the model although the language has
   inheritance, and `from` and `of` made hard keywords when they are contextual
   (`tests/cases/cls_nested.ts` has a field called `from`). `self/` is 2,817
-  lines of StaticTS and parses 84 KB of its own source in 7 ms, against
+  lines of AmritScript and parses 84 KB of its own source in 7 ms, against
   14.5 ms for the `typescript` parser warm in a Node process.
 - **Self-hosting, milestone S1: the lexer** (`docs/wp14-selfhost.md` §4).
-  `self/lexer.ts` tokenises StaticTS-0 and is written in it — 1,222 lines with
+  `self/lexer.ts` tokenises AmritScript-0 and is written in it — 1,222 lines with
   `self/tokens.ts` and `self/dump_tokens.ts`, using nothing the language did
   not already have. It is new code rather than a port: `src/` has no lexer,
   because the `typescript` package is the scanner there. Byte offsets
@@ -320,7 +337,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   same format and diffs it — **482 files, 50,968 tokens, no disagreement**,
   with the scanner's UTF-16 offsets mapped through the source's byte prefix.
   The lexer has no opinions: `==`, `?.`, `??`, `**`, `...`, `@` and `#name`
-  are all tokenised as written, and the parser is where StaticTS refuses them.
+  are all tokenised as written, and the parser is where AmritScript refuses them.
 - **`switch` / `case` / `default`** (`docs/wp14-selfhost.md` A1). An integer
   discriminant and constant labels — a literal, its negation, or a module
   constant — lower to one LLVM `switch`, so the backend builds a jump table
@@ -387,7 +404,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 - **Bitwise operators.** `& | ^` (`and` / `or` / `xor`), `~` (`xor x, -1`),
   `<< >> >>>` (`shl` / `ashr` / `lshr`), and the compound forms
   `&= |= ^= <<= >>= >>>=` on a mutable local. Two `i32` or two `i64` of the
-  same type; `f64` is refused because StaticTS never converts implicitly, and
+  same type; `f64` is refused because AmritScript never converts implicitly, and
   `boolean` is refused with the operator that does the job named in the
   message (`&&`, `||`, `!==`, `!`). Shift counts are masked to the operand
   width, as in JavaScript, so `x << 33` is `x << 1` instead of the poison LLVM
@@ -454,7 +471,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   undefined for extra optimisation; array parameters carry
   `dereferenceable(24)`; `scripts/build.sh --pgo-generate` / `--pgo-use`.
   `bench/` holds fib, nbody, spectral-norm, sieve, string building and a
-  struct-heavy loop in StaticTS, C and Rust with a checksum-validated runner
+  struct-heavy loop in AmritScript, C and Rust with a checksum-validated runner
   (`node bench/run.mjs`) that writes `docs/BENCHMARKS.md`.
 - **CI and diagnostics.** GitHub Actions matrix (Ubuntu + macOS, LLVM 18) with
   a size table in the job summary; every error is
@@ -473,9 +490,9 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   every profile. Without `-g` the IR is byte-identical.
 - **Release engineering.** `--version`; documented exit codes (0 ok, 1 compile
   error, 2 usage, 3 toolchain, 70 internal compiler error, stack trace with
-  `STATICTSC_DEBUG=1`); a clear per-platform install hint when `--link` cannot
+  `AMRITC_DEBUG=1`); a clear per-platform install hint when `--link` cannot
   find `clang`; `scripts/build.sh` and `runtime/runtime.c` resolved from the
-  package root so a global `npm install -g statictsc` works from any
+  package root so a global `npm install -g amritc` works from any
   directory; npm `files` whitelist, `prepublishOnly`, `LICENSE` (MIT);
   `npm run smoke` (`scripts/smoke.sh`) builds and runs every example with a
   `main`; `.github/workflows/release.yml` attaches the npm tarball to a GitHub
@@ -535,7 +552,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   constant is a name for a value, not a global: the checker folds the
   initialiser and every use site carries the value, so no symbol, no
   initialiser and no relocation is emitted, and a module still has no
-  top-level code. The initialiser is an ordinary StaticTS expression
+  top-level code. The initialiser is an ordinary AmritScript expression
   restricted to literals and other constants, so a constant can compute
   exactly what a runtime expression can — integer arithmetic wraps at the
   declared width, `1 / 0` is refused at compile time rather than at run time,
@@ -546,8 +563,8 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   [docs/wp14-selfhost.md](docs/wp14-selfhost.md).
 - **Self-hosting plan.** [docs/wp14-selfhost.md](docs/wp14-selfhost.md): what
   "the compiler compiles itself" means here (a `self/` compiler written in
-  StaticTS, and the `IR(stage1) == IR(stage2)` fixed point that proves it),
-  the StaticTS-0 subset it is written in, and the ordered list of what the
+  AmritScript, and the `IR(stage1) == IR(stage2)` fixed point that proves it),
+  the AmritScript-0 subset it is written in, and the ordered list of what the
   language is still missing.
 - **`Result<T, E>` and Rust-style error handling (WP16).** A function that can
   fail says so in its return type and hands the caller a `Result`, and the
@@ -573,16 +590,16 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   and S4 oracles hold it to stage0's exact messages and byte-identical IR.
   Design and the reason the representation is a pointer rather than an LLVM
   aggregate: [docs/wp16-results.md](docs/wp16-results.md).
-- **Ambient declarations (`runtime/statictsc.d.ts`).** A StaticTS program has
+- **Ambient declarations (`runtime/amritc.d.ts`).** An AmritScript program has
   always *parsed* as TypeScript; with this file on the include path a `Result`
   program also **type-checks** under plain `tsc --strict`, and an editor stops
   underlining `Result`, `Ok`, `i32`, `panic` and the rest. `Result` is
   declared as the tagged union TypeScript would use anyway, intersected with
   the method surface, so `if (r.ok)` and `if (r.isOk())` narrow in `tsc` for
-  the same reason and in the same places they narrow in `statictsc` — the
+  the same reason and in the same places they narrow in `amritc` — the
   suite asserts both that every `res_*` case type-checks and that `tsc`
   refuses `r.value` before the test, which is what proves the declarations
-  model the narrowing and not just the names. `statictsc` remains the
+  model the narrowing and not just the names. `amritc` remains the
   authority: the widths are aliases of `number` there, and `tsc` cannot see
   the three rules above.
 

@@ -4,7 +4,7 @@
  * Everything emitted here must be a *guarantee*, never a hope: a wrong
  * attribute is undefined behaviour, not a missed optimisation. The rules:
  *
- *   nounwind    StaticTS has no exceptions; nothing can unwind.
+ *   nounwind    The language has no exceptions; nothing can unwind.
  *   willreturn  The function cannot fail to return: every loop is a counted
  *               loop with a finite trip count (`isCountedLoop`), the body
  *               has no `throw` (which traps and never returns), it cannot
@@ -25,11 +25,11 @@
  *               `.length` load through a string or array pointer, a field or
  *               element read, or a call to a reading callee (e.g.
  *               `sts_str_eq`). Never with `readnone`.
- *   noundef     Every StaticTS value is initialised, so no param or return
+ *   noundef     Every value is initialised, so no param or return
  *               value is ever undef/poison.
  *   zeroext     `boolean` is i1; the C ABI wants it zero-extended in a register.
  *   String params (`i8*`):
- *     nonnull   StaticTS has no null.
+ *     nonnull   The language has no null.
  *     readonly  Strings are immutable.
  *     align 8   Literals and arena strings are 8-byte aligned.
  *     noalias   Valid because nothing writes through string pointers: the
@@ -64,7 +64,7 @@
  *               callee that captures its parameter captures it here too.
  *   Array params (`%struct.sts_array*`, WP4): the same `pointerParams` model
  *   as structs, with the array constructs classified as follows:
- *     nonnull   StaticTS has no null.
+ *     nonnull   The language has no null.
  *     align 8   Headers come from the arena (8-byte rounded) only.
  *     dereferenceable(24)
  *               The header `{ i64 len, i64 cap, i8* data }` is always

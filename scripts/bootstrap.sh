@@ -25,7 +25,7 @@
 # `node tests/self/bootstrap.js` is the same check with the suite's reporting,
 # and is what CI runs; this script is how the compiler gets built for use.
 #
-# The result emits `.ll` and nothing else (D4): `scripts/statictsc.sh` is its
+# The result emits `.ll` and nothing else (D4): `scripts/amritc.sh` is its
 # command line, and adds the directory creation and the link step.
 #
 # Needs Node and a built dist/ for stage0, and clang + lld on PATH for the
@@ -33,7 +33,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-out=build/statictsc
+out=build/amritc
 work=build/selfhost
 profile=speed
 stages=2
@@ -48,7 +48,7 @@ usage: scripts/bootstrap.sh [-o <exe>] [--stages 1|2|3] [--profile speed|size|de
 Builds the self-hosted compiler. stage0 (dist/index.js) builds stage1, stage1
 builds stage2 (the default output), stage2 builds stage3. --verify compares the
 IR each stage emits for self/ and the stage2/stage3 binaries, byte for byte.
-scripts/statictsc.sh is the resulting compiler's command line.
+scripts/amritc.sh is the resulting compiler's command line.
 EOF
   exit "${1:-2}"
 }
@@ -154,4 +154,4 @@ fi
 
 cp "$work/stage$install" "$out"
 say "bootstrap: wrote $out ($(wc -c < "$out" | tr -d ' ') bytes, stage$install, $profile profile)"
-say "           run it through scripts/statictsc.sh, which adds --link and -o <dir>/"
+say "           run it through scripts/amritc.sh, which adds --link and -o <dir>/"

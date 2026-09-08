@@ -2,7 +2,7 @@
  * Control flow: `if`, `while`, `do`, `for`, `switch`, `break`/`continue`,
  * the ternary and short-circuit operators, compound assignment, `++`/`--`.
  *
- * Conditions must be `boolean`. StaticTS has no truthiness coercion, so
+ * Conditions must be `boolean`. The language has no truthiness coercion, so
  * `if (n)` on a number is an error rather than an implicit `n !== 0`.
  *
  * Termination ("definitely does not fall through") drives the missing-return
@@ -34,6 +34,7 @@ import {
   StatementChecker,
   UnaryChecker,
 } from "./context";
+import { LANGUAGE } from "../branding";
 import {
   Narrowing,
   applyNarrowings,
@@ -64,7 +65,10 @@ export function isAlwaysTrue(cond: ts.Expression | undefined): boolean {
 function checkCondition(ctx: CheckContext, expr: ts.Expression, scope: Scope): void {
   const t = ctx.checkExpression(expr, scope);
   if (t.kind !== "bool") {
-    throw ctx.error(`Condition must be boolean, got ${typeToString(t)} (StaticTS has no truthiness)`, expr);
+    throw ctx.error(
+      `Condition must be boolean, got ${typeToString(t)} (${LANGUAGE} has no truthiness)`,
+      expr
+    );
   }
 }
 
@@ -199,7 +203,7 @@ const caseValue = (ctx: CheckContext, expr: ts.Expression): bigint | undefined =
  * A clause declares a variable directly, without a block of its own. Every
  * clause shares one scope in TypeScript, so `case 1: const x = 1; break;`
  * would leave `x` visible but unassigned in the clauses below it — reachable
- * in StaticTS, a temporal-dead-zone throw under Node. Requiring the braces
+ * in the language, a temporal-dead-zone throw under Node. Requiring the braces
  * removes the difference rather than documenting it, and it is what
  * ESLint's `no-case-declarations` asks for anyway.
  */
@@ -274,7 +278,7 @@ const checkSwitch: StatementChecker = (ctx, node, scope) => {
       clause.statements.length > 0 ? ctx.checkStatementList(clause.statements, scope.child()) : false;
     if (clause.statements.length > 0 && !terminates && i < clauses.length - 1) {
       throw ctx.error(
-        "A `case` clause with statements must end in `break`, `return`, `continue` or `process.exit` (StaticTS has no implicit fallthrough; leave a clause empty to give several labels one body)",
+        `A \`case\` clause with statements must end in \`break\`, \`return\`, \`continue\` or \`process.exit\` (${LANGUAGE} has no implicit fallthrough; leave a clause empty to give several labels one body)`,
         clause.statements[clause.statements.length - 1]
       );
     }

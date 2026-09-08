@@ -1,5 +1,5 @@
 // Arrays across the host boundary (docs/wp8-interop.md). `Int32Array`,
-// `Float64Array` and `BigInt64Array` are the StaticTS spellings of i32[],
+// `Float64Array` and `BigInt64Array` are the AmritScript spellings of i32[],
 // f64[] and i64[]: one layout, and the name a Node host sees in the typings.
 //
 //   node dist/index.js examples/arrays.ts -o build/arrays.ll \

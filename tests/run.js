@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * StaticTS test runner.
+ * AmritScript test runner.
  *
  *  A. Golden cases in tests/cases/  (one .ts per case, discovered automatically)
  *       <name>.ts    source
@@ -926,9 +926,9 @@ if (!only && HAS_CLANG) {
 }
 
 // ---- WP8: interop ------------------------------------------------------------------
-// runtime/statictsc.h is the public C ABI; --emit-header / --emit-dts / --emit-napi derive
+// runtime/amritc.h is the public C ABI; --emit-header / --emit-dts / --emit-napi derive
 // host-side declarations from the same checked program the IR came from. Checks:
-//   - every function in src/codegen/runtime.ts has a prototype in statictsc.h, and the
+//   - every function in src/codegen/runtime.ts has a prototype in amritc.h, and the
 //     header is clean under -Wall -Wextra -Werror as C11 and as C++
 //   - generated headers compile under the same flags and link a C driver (including a
 //     function named `double`, bound through STS_SYMBOL), strings map to sts_str, and
@@ -941,7 +941,7 @@ if (!only || "interop".includes(only)) {
   const interopDir = path.join(buildDir, "interop");
   fs.mkdirSync(interopDir, { recursive: true });
   const runtimeDir = path.join(root, "runtime");
-  const publicHeader = fs.readFileSync(path.join(runtimeDir, "statictsc.h"), "utf8");
+  const publicHeader = fs.readFileSync(path.join(runtimeDir, "amritc.h"), "utf8");
   const { RUNTIME_FUNCTIONS } = require(path.join(root, "dist", "codegen", "runtime.js"));
   const runtimeNames = [
     ...RUNTIME_FUNCTIONS.filter((f) => !f.intrinsic).map((f) => f.name),
@@ -949,7 +949,7 @@ if (!only || "interop".includes(only)) {
   ];
   const undeclared = runtimeNames.filter((n) => !new RegExp(`\\b${n}\\s*\\(`).test(publicHeader));
   check(
-    `statictsc.h declares every runtime.ts function (${runtimeNames.length}) and the arena global`,
+    `amritc.h declares every runtime.ts function (${runtimeNames.length}) and the arena global`,
     undeclared.length === 0 && publicHeader.includes("extern struct sts_arena sts_arena;"),
     `missing: ${undeclared.join(", ")}`
   );
@@ -992,10 +992,10 @@ if (!only || "interop".includes(only)) {
   );
   const addHeader = fs.existsSync(sidecar("add", "h")) ? fs.readFileSync(sidecar("add", "h"), "utf8") : "";
   check(
-    "add.h declares `int32_t add(int32_t a, int32_t b);` with guards and statictsc.h",
+    "add.h declares `int32_t add(int32_t a, int32_t b);` with guards and amritc.h",
     addHeader.includes("int32_t add(int32_t a, int32_t b);") &&
-      addHeader.includes("#ifndef STATICTSC_ADD_H") &&
-      addHeader.includes('#include "statictsc.h"') &&
+      addHeader.includes("#ifndef AMRITC_ADD_H") &&
+      addHeader.includes('#include "amritc.h"') &&
       addHeader.includes('extern "C"'),
     addHeader
   );
@@ -1056,7 +1056,7 @@ if (!only || "interop".includes(only)) {
       "-Wextra",
       "-Werror",
       "-fsyntax-only",
-      path.join(runtimeDir, "statictsc.h"),
+      path.join(runtimeDir, "amritc.h"),
     ]);
     const c11 = spawnSync("clang", [
       ...strictC,
@@ -1064,10 +1064,10 @@ if (!only || "interop".includes(only)) {
       "-fsyntax-only",
       "-x",
       "c",
-      path.join(runtimeDir, "statictsc.h"),
+      path.join(runtimeDir, "amritc.h"),
     ]);
     check(
-      "statictsc.h compiles under -Wall -Wextra -Werror as C11 (-pedantic) and as C++17",
+      "amritc.h compiles under -Wall -Wextra -Werror as C11 (-pedantic) and as C++17",
       cxx.status === 0 && c11.status === 0,
       String(cxx.stderr) + String(c11.stderr)
     );
@@ -1317,7 +1317,7 @@ if (!only || "interop".includes(only)) {
         '    printf("half(%d) %s %d via %d\\n", n, r.ok ? "ok" : "err",',
         "           r.ok ? r.as.value : r.as.error, describe(r));",
         "  }",
-        "  /* a Result the C side builds itself, handed to StaticTS by value */",
+        "  /* a Result the C side builds itself, handed to AmritScript by value */",
         "  sts_result_i32_i32_word made = { 1, { 41 } };",
         '  printf("C-built %d ", describe(made));',
         "  made.ok = 0; made.as.error = 5;",
@@ -1693,7 +1693,7 @@ if (!only || "interop".includes(only)) {
 // validator is timed. Budget in docs/MASTER_PLAN.md is 5 ms; the gate is 50 ms for CI headroom.
 if (!only) {
   const ts = require("typescript");
-  const { validateStaticTS } = require(path.join(root, "dist", "validator.js"));
+  const { validateSyntax } = require(path.join(root, "dist", "validator.js"));
   const lines = [];
   for (let i = 0; lines.length < 1000; i++) {
     const callee = i === 0 ? "fn0" : `fn${i - 1}`;
@@ -1717,7 +1717,7 @@ if (!only) {
   let error = null;
   const t0 = process.hrtime.bigint();
   try {
-    validateStaticTS(sf);
+    validateSyntax(sf);
   } catch (e) {
     error = e;
   }
@@ -1731,7 +1731,7 @@ if (!only) {
 }
 
 // ---- WP14: self-hosting ---------------------------------------------------------------
-// `self/` is the compiler being written in StaticTS (docs/wp14-selfhost.md). It is
+// `self/` is the compiler being written in AmritScript (docs/wp14-selfhost.md). It is
 // checked here rather than in tests/cases because it is a program, not a construct:
 // the property is that stage0 compiles every module of it cleanly, which is the
 // floor the staged bootstrap stands on. As phases land this section grows into the
@@ -1807,7 +1807,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 
     // S2: the same shape one level up. Every positive program in the corpus
     // must parse to the tree the `typescript` parser builds, span for span;
-    // the files the oracle skips are the forbidden constructs StaticTS-0 has
+    // the files the oracle skips are the forbidden constructs AmritScript-0 has
     // no grammar for yet, and that count is the S2 gate's own measurement.
     const parserOracle = spawnSync("node", [path.join(root, "tests", "parser_oracle.js")], {
       cwd: root,
@@ -1977,13 +1977,13 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // The deployment path (docs/wp14-selfhost.md §7). The check above proves
     // the fixed point and then deletes every compiler it built; this one
     // proves the artifact: `scripts/bootstrap.sh` builds a compiler you can
-    // keep, and `scripts/statictsc.sh` is the command line D4 said a wrapper
+    // keep, and `scripts/amritc.sh` is the command line D4 said a wrapper
     // would supply — the directory creation and the link step stage1 does not
     // do itself. One stage rather than three, because what is under test here
     // is the recipe and the wrapper, not the equalities.
     const shipDir = path.join(buildDir, "selfhost");
     fs.rmSync(shipDir, { recursive: true, force: true });
-    const compiler = path.join(shipDir, "statictsc");
+    const compiler = path.join(shipDir, "amritc");
     const shipped = spawnSync(
       "bash",
       [
@@ -2003,8 +2003,8 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         `${shipped.stdout}${shipped.stderr}`
       )
     ) {
-      const env = { ...process.env, STATICTSC: compiler };
-      const wrapper = path.join(root, "scripts", "statictsc.sh");
+      const env = { ...process.env, AMRITC: compiler };
+      const wrapper = path.join(root, "scripts", "amritc.sh");
 
       // One module: the IR lands next to the binary as `<exe>.ll`, which is
       // where stage0's `--link` puts it too.
@@ -2016,12 +2016,12 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       );
       const ranHello = one.status === 0 ? spawnSync(hello, [], { encoding: "utf8" }) : null;
       check(
-        "scripts/statictsc.sh: the self-hosted compiler links and runs examples/hello.ts",
+        "scripts/amritc.sh: the self-hosted compiler links and runs examples/hello.ts",
         one.status === 0 &&
           fs.existsSync(`${hello}.ll`) &&
           ranHello !== null &&
           ranHello.status === 0 &&
-          ranHello.stdout === "hello from StaticTS\n",
+          ranHello.stdout === "hello from AmritScript\n",
         `${one.stdout}${one.stderr}${ranHello ? `ran: ${ranHello.status} ${JSON.stringify(ranHello.stdout)}` : ""}`
       );
 
@@ -2038,7 +2038,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         ? fs.readdirSync(`${multi}.modules`).filter((f) => f.endsWith(".ll")).sort()
         : [];
       check(
-        "scripts/statictsc.sh: a program with imports links from <exe>.modules/ and exits 49",
+        "scripts/amritc.sh: a program with imports links from <exe>.modules/ and exits 49",
         many.status === 0 &&
           emitted.join(",") === "main.ll,math.ll" &&
           ranMulti !== null &&
@@ -2054,7 +2054,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         env,
       });
       check(
-        "scripts/statictsc.sh: -g is refused by name, not ignored (D4)",
+        "scripts/amritc.sh: -g is refused by name, not ignored (D4)",
         refused.status === 2 && refused.stderr.includes("is stage0's"),
         `${refused.status}: ${refused.stdout}${refused.stderr}`
       );
@@ -2064,7 +2064,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 
 // ---- WP9: bench --------------------------------------------------------------------
 // The benchmark programs in bench/ must keep printing identical checksums across
-// StaticTS, C and (when rustc is installed) Rust. `bench/run.mjs --validate` builds
+// AmritScript, C and (when rustc is installed) Rust. `bench/run.mjs --validate` builds
 // every variant (speed, --nsw, size profile, C, Rust, Rust native) at a small size and
 // compares the outputs; nothing is timed. Also: `--target host` pins a module to a
 // data layout, so `opt -O2` vectorises it without `-mtriple`, and `--nsw` flags
@@ -2084,7 +2084,7 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
       { cwd: root, encoding: "utf8" }
     );
     check(
-      "bench: fib(25) and sieve(1e5) print the same checksum from StaticTS, C and Rust (Rust skipped without rustc)",
+      "bench: fib(25) and sieve(1e5) print the same checksum from AmritScript, C and Rust (Rust skipped without rustc)",
       v.status === 0 &&
         v.stdout.includes("checksums agree") &&
         v.stdout.includes("fib: 75025") &&
@@ -2173,7 +2173,7 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
 // ---- WP12: exit codes --------------------------------------------------------------
 // The CLI's contract (docs/wp12-release.md): 0 ok, 1 compile error, 2 usage, 3 toolchain,
 // 70 internal compiler error. Each failure mode is driven from outside the compiler:
-// STATICTSC_SIMULATE_ICE=1 is the test hook for the ICE path, an empty PATH stands in
+// AMRITC_SIMULATE_ICE=1 is the test hook for the ICE path, an empty PATH stands in
 // for a machine without clang, and CC=<stub> makes scripts/build.sh fail after the IR
 // was written.
 if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
@@ -2187,15 +2187,15 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
 
   const v = run(["--version"]);
   check(
-    `--version prints "statictsc ${pkgVersion}" and exits 0`,
-    v.status === 0 && v.stdout.trim() === `statictsc ${pkgVersion}`,
+    `--version prints "amritc ${pkgVersion}" and exits 0`,
+    v.status === 0 && v.stdout.trim() === `amritc ${pkgVersion}`,
     v.stdout + v.stderr
   );
 
   const noInputs = run([]);
   check(
     "no inputs: usage on stderr, exit 2",
-    noInputs.status === 2 && noInputs.stderr.includes("usage: statictsc"),
+    noInputs.status === 2 && noInputs.stderr.includes("usage: amritc"),
     noInputs.stderr
   );
   const badFlag = run(["--bogus", entry]);
@@ -2216,23 +2216,23 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     missing.stderr
   );
 
-  const ice = run([entry, "-o", path.join(wp12Dir, "ice.ll")], { STATICTSC_SIMULATE_ICE: "1" });
+  const ice = run([entry, "-o", path.join(wp12Dir, "ice.ll")], { AMRITC_SIMULATE_ICE: "1" });
   check(
     "internal error: exit 70, names the file, asks for a bug report, no stack trace",
     ice.status === 70 &&
       ice.stderr.includes("internal compiler error while compiling " + entry) &&
       ice.stderr.includes("TypeError: simulated internal compiler error") &&
       ice.stderr.includes("github.com/amritk/compiler/issues") &&
-      ice.stderr.includes("STATICTSC_DEBUG=1") &&
+      ice.stderr.includes("AMRITC_DEBUG=1") &&
       !/^\s+at /m.test(ice.stderr),
     ice.stderr
   );
   const iceDebug = run([entry, "-o", path.join(wp12Dir, "ice.ll")], {
-    STATICTSC_SIMULATE_ICE: "1",
-    STATICTSC_DEBUG: "1",
+    AMRITC_SIMULATE_ICE: "1",
+    AMRITC_DEBUG: "1",
   });
   check(
-    "internal error with STATICTSC_DEBUG=1: exit 70 and the stack trace is printed",
+    "internal error with AMRITC_DEBUG=1: exit 70 and the stack trace is printed",
     iceDebug.status === 70 && /^\s+at /m.test(iceDebug.stderr),
     iceDebug.stderr
   );
@@ -2275,7 +2275,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
 }
 
 // ---- WP16: the ambient declarations -------------------------------------------------
-// `runtime/statictsc.d.ts` is what makes a StaticTS program legal TypeScript to
+// `runtime/amritc.d.ts` is what makes an AmritScript program legal TypeScript to
 // `tsc` and to an editor, not just to this compiler's parser. The claim is only
 // worth what it is tested against, so:
 //   - the file itself type-checks under --strict;
@@ -2292,7 +2292,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   try {
     tscBin = require.resolve("typescript/bin/tsc");
   } catch {}
-  const declarations = path.join(root, "runtime", "statictsc.d.ts");
+  const declarations = path.join(root, "runtime", "amritc.d.ts");
   /** Type-check `files` against the ambient declarations with a project of their own. */
   const typeCheck = (name, files) => {
     const config = path.join(ambientDir, `tsconfig.${name}.json`);
@@ -2315,7 +2315,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   };
 
   const own = typeCheck("self", []);
-  check("runtime/statictsc.d.ts type-checks under tsc --strict", own.ok, own.output);
+  check("runtime/amritc.d.ts type-checks under tsc --strict", own.ok, own.output);
 
   const resultCases = fs
     .readdirSync(casesDir)
@@ -2331,7 +2331,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   const unchecked = path.join(casesDir, "reject_result_value_unchecked.ts");
   const refused = typeCheck("narrowing", [unchecked]);
   check(
-    "tsc refuses `r.value` before the discriminant test, exactly as statictsc does",
+    "tsc refuses `r.value` before the discriminant test, exactly as amritc does",
     !refused.ok && refused.output.includes("Property 'value' does not exist"),
     refused.output
   );
@@ -2339,8 +2339,8 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
 
 // ---- WP12: package ------------------------------------------------------------------
 // The npm tarball must be self-contained: `npm pack`, install it into a temporary prefix,
-// and drive the installed `statictsc` from an unrelated directory. That proves the `files`
-// whitelist ships runtime/runtime.c, runtime/statictsc.h and scripts/build.sh, and that the
+// and drive the installed `amritc` from an unrelated directory. That proves the `files`
+// whitelist ships runtime/runtime.c, runtime/amritc.h and scripts/build.sh, and that the
 // CLI resolves them from its own package root rather than from the cwd.
 if (!only || "package".includes(only) || "wp12".includes(only)) {
   const pkgDir = path.join(buildDir, "wp12-package");
@@ -2375,15 +2375,15 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "dist/index.js",
       "dist/version.js",
       "runtime/runtime.c",
-      "runtime/statictsc.h",
-      "runtime/statictsc.d.ts",
+      "runtime/amritc.h",
+      "runtime/amritc.d.ts",
       "scripts/build.sh",
       "LICENSE",
       "docs/INSTALL.md",
     ];
     const absent = required.filter((f) => !files.includes(f));
     check(
-      "npm pack includes everything --link needs (runtime.c, statictsc.h, statictsc.d.ts, build.sh) plus LICENSE/INSTALL.md",
+      "npm pack includes everything --link needs (runtime.c, amritc.h, amritc.d.ts, build.sh) plus LICENSE/INSTALL.md",
       absent.length === 0,
       absent.join("\n")
     );
@@ -2422,7 +2422,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
         install.stdout + install.stderr
       );
       if (install.status === 0) {
-        const bin = path.join(prefix, "node_modules", ".bin", "statictsc");
+        const bin = path.join(prefix, "node_modules", ".bin", "amritc");
         const work = path.join(pkgDir, "elsewhere");
         fs.mkdirSync(work, { recursive: true });
         fs.writeFileSync(
@@ -2431,13 +2431,13 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
         );
         const ver = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" });
         check(
-          "installed statictsc --version works from an unrelated cwd",
-          ver.status === 0 && ver.stdout.trim() === `statictsc ${info.version}`,
+          "installed amritc --version works from an unrelated cwd",
+          ver.status === 0 && ver.stdout.trim() === `amritc ${info.version}`,
           ver.stdout + ver.stderr
         );
         const link = spawnSync(bin, ["hello.ts", "--link", "hello"], { cwd: work, encoding: "utf8" });
         check(
-          "installed statictsc hello.ts --link works from an unrelated cwd",
+          "installed amritc hello.ts --link works from an unrelated cwd",
           link.status === 0 && fs.existsSync(path.join(work, "hello")),
           link.stderr
         );
@@ -2454,7 +2454,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
           encoding: "utf8",
         });
         check(
-          "installed statictsc compiles examples/add.ts to IR from an unrelated cwd",
+          "installed amritc compiles examples/add.ts to IR from an unrelated cwd",
           ir.status === 0 && fs.existsSync(path.join(work, "add.ll")),
           ir.stderr
         );

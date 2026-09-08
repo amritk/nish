@@ -214,7 +214,7 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}
-!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "statictsc 0.1.0", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
+!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "amritc 0.1.0", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
 !1 = !DIFile(filename: "<root>/tests/cases/dbg_result.ts", directory: "<root>")
 !2 = !{i32 7, !"Dwarf Version", i32 5}
 !3 = !{i32 2, !"Debug Info Version", i32 3}

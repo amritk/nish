@@ -2,7 +2,7 @@
 // validator, checker and emitter are all dispatch tables keyed by identifier,
 // and a plain object literal inherits from `Object.prototype` — so before
 // `src/lookup.ts` these compiled to `error: function valueOf() { [native code] }`.
-// StaticTS has no prototypes, so these are ordinary names and must stay so.
+// AmritScript has no prototypes, so these are ordinary names and must stay so.
 class toString {
   n: i32;
   constructor(n: i32) {

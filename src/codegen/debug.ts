@@ -17,7 +17,7 @@
  *   - `DILocalVariable`s: `llvm.dbg.value` for parameters (SSA values) and
  *     `llvm.dbg.declare` for `let`/`const` slots (entry-block allocas).
  *
- * Types map to what the C ABI header (`runtime/statictsc.h`) calls them:
+ * Types map to what the C ABI header (`runtime/amritc.h`) calls them:
  * `i32` is `int`, `i64` `long`, `f64` `double`, `boolean` `bool`, a string a
  * `char*` (the header precedes the bytes, so `p s` in gdb shows the text), a
  * class or interface a pointer to a `DICompositeType` with the exact field
@@ -31,6 +31,7 @@
  * Without `-g` nothing here runs and the IR is byte-for-byte what it was.
  */
 import ts from "typescript";
+import { CLI } from "../branding";
 import { CheckedProgram, FunctionSig, LocalVar, StructInfo } from "../checker";
 import { ResultLayout, ResultSlot, resultLayout } from "../checker/result";
 import { StaticType, intBits, isInteger, llvmAbiType, llvmType, resultByValue, typeToString } from "../types";
@@ -74,7 +75,7 @@ export class DebugInfo {
     );
     module.setMetadata(
       this.cu,
-      `distinct !DICompileUnit(language: DW_LANG_C99, file: ${this.file}, producer: ${quote(`statictsc ${packageVersion()}`)}, isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)`
+      `distinct !DICompileUnit(language: DW_LANG_C99, file: ${this.file}, producer: ${quote(`${CLI} ${packageVersion()}`)}, isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)`
     );
     module.addNamedMetadata(`!llvm.dbg.cu = !{${this.cu}}`);
     const dwarf = module.addMetadata('!{i32 7, !"Dwarf Version", i32 5}');

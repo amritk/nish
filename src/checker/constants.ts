@@ -8,7 +8,7 @@
  * initialisation order, while giving a program somewhere to put its token
  * kinds and its limits.
  *
- * The initialiser is an ordinary StaticTS expression restricted to literals
+ * The initialiser is an ordinary expression restricted to literals
  * and other constants: exactly the operators of `docs/LANGUAGE.md`, no more.
  * A constant that could compute something a runtime expression cannot would
  * be a second, larger language hiding inside the first.

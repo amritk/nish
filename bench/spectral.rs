@@ -1,5 +1,5 @@
 // Rust twin of spectral.ts: same loops and evaluation order, Vec<f64> indexed
-// by i32-as-usize (bounds-checked, as in StaticTS).
+// by i32-as-usize (bounds-checked, as in AmritScript).
 const N: i32 = 3000; // bench:n
 
 fn a(i: i32, j: i32) -> f64 {

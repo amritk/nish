@@ -2,7 +2,7 @@
  * Phase A: Parsing.
  *
  * Thin wrapper over the official TypeScript compiler API. We only need the
- * syntax tree; StaticTS performs its own (much stricter) type checking, so we
+ * syntax tree; this compiler performs its own (much stricter) type checking, so we
  * never create a full `ts.Program` or use the TS type checker here.
  */
 import ts from "typescript";

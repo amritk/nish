@@ -27,6 +27,7 @@
  *                     string does not.
  */
 import { Compilation } from "../compilation";
+import { LANGUAGE } from "../branding";
 import { ResultType, StaticType, resultByValue } from "../types";
 import { banner, externalFunctions, kindOf, tsKeyword, tsSignature, typedView } from "./abi";
 import { wasmBridged, wasmResultType } from "./wasm";
@@ -105,7 +106,7 @@ export function generateDts(compilation: Compilation): string {
     }
     if (!ok) {
       lines.push(
-        `  // ${source}  -- not exported to JS: string values, and a \`Result\` held by pointer, need the StaticTS runtime, which the freestanding wasm profile does not include`
+        `  // ${source}  -- not exported to JS: string values, and a \`Result\` held by pointer, need the ${LANGUAGE} runtime, which the freestanding wasm profile does not include`
       );
       continue;
     }

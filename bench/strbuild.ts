@@ -7,7 +7,7 @@
 // fresh arena allocation; strbuild.c does the same with a bump arena,
 // strbuild_naive.c with malloc/free per string, strbuild.rs with a fresh
 // String per concatenation. Prints the final length; a wrong join would change it.
-// (The fanout 32 is spelled inline: StaticTS has no top-level constants.)
+// (The fanout 32 is spelled inline: AmritScript has no top-level constants.)
 function piece(i: number): string {
   return `${i},`;
 }

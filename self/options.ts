@@ -1,7 +1,7 @@
 // The compiler options stage1 reads (`CompilerOptions` in `src/types.ts`),
 // for docs/wp14-selfhost.md milestone S4.
 //
-// A class rather than the object literal `src/` uses, because StaticTS has no
+// A class rather than the object literal `src/` uses, because the language has no
 // optional fields and no spread: every flag has a value at all times and the
 // constructor sets the defaults, so a caller changes only what it means to.
 // `target` is the empty string rather than `undefined` when the module is

@@ -9,8 +9,8 @@ User-facing install instructions are in [INSTALL.md](INSTALL.md).
 
 | Path | Why it ships |
 | --- | --- |
-| `dist/` | the compiled CLI (`dist/index.js` is the `statictsc` bin) |
-| `runtime/` | `runtime.c` (linked into every `--link` binary) and `statictsc.h` (included by the N-API shim) |
+| `dist/` | the compiled CLI (`dist/index.js` is the `amritc` bin) |
+| `runtime/` | `runtime.c` (linked into every `--link` binary) and `amritc.h` (included by the N-API shim) |
 | `scripts/` | `build.sh` (the `--link` pipeline), `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
 | `README.md`, `LICENSE`, `docs/INSTALL.md` | documentation |
 
@@ -21,10 +21,10 @@ the tarball. Check with `npm pack --dry-run`.
 
 `src/index.ts` resolves `scripts/build.sh` and `runtime/runtime.c` from the
 package root (`PKG_ROOT` in `src/version.ts`, i.e. `dist/..`), never from the
-working directory, so `npm install -g statictsc` works from anywhere. The
+working directory, so `npm install -g amritc` works from anywhere. The
 `// ---- WP12: package` block of `tests/run.js` proves it: it runs `npm pack`,
 installs the tarball into a temporary prefix, and links a hello-world from an
-unrelated directory with the installed `statictsc`.
+unrelated directory with the installed `amritc`.
 
 `--version` reads `version` from `package.json` at runtime
 (`src/version.ts`). There is no generated version file to keep in sync.
@@ -40,7 +40,7 @@ unrelated directory with the installed `statictsc`.
 | 1 | `CompileError` from the validator, parser or checker; a driver refusal (`--link` without `export function main`, several modules with a single `-o file.ll`); a Node system error on an input or output path | `file:line:col: error: ...` with caret excerpt, or one line |
 | 2 | usage: unknown flag, missing argument, no inputs, `--help` | `usage: ...` |
 | 3 | toolchain: `--link` requested but `clang` (or `$CC`) is not runnable; or `scripts/build.sh` exited non-zero / could not be spawned | the per-platform install hint; or build.sh's stderr verbatim followed by `--link: <build.sh> failed (exit N); the IR is in ...` |
-| 70 | internal compiler error: any other exception escaping `main` (`EX_SOFTWARE`) | `statictsc <version>: internal compiler error while compiling <inputs>`, the exception, a request to report it at the issue tracker; the stack trace only with `STATICTSC_DEBUG=1` |
+| 70 | internal compiler error: any other exception escaping `main` (`EX_SOFTWARE`) | `amritc <version>: internal compiler error while compiling <inputs>`, the exception, a request to report it at the issue tracker; the stack trace only with `AMRITC_DEBUG=1` |
 
 The toolchain check runs *before* compilation (`missingToolchain()` probes
 `$CC --version`), so a missing compiler is reported instantly, without
@@ -48,7 +48,7 @@ writing any IR. A `build.sh` failure happens *after* the IR is written and the
 message names the `.ll` files so the user can build them by hand.
 
 Every code is exercised by the `// ---- WP12: exit codes` block of
-`tests/run.js`: the internal-error path through the `STATICTSC_SIMULATE_ICE=1`
+`tests/run.js`: the internal-error path through the `AMRITC_SIMULATE_ICE=1`
 test hook (which throws a `TypeError` at the top of the compile step and
 exists only for that test), the missing-toolchain path by running with `PATH`
 set to an empty directory, and the build failure path with `CC` pointing at a
@@ -97,7 +97,7 @@ Releases are tag-driven; nothing is published from a developer machine.
 4. **Merge** the branch to `main`, then **tag and push the tag**:
 
    ```bash
-   git tag -a v0.2.0 -m "statictsc 0.2.0"
+   git tag -a v0.2.0 -m "amritc 0.2.0"
    git push origin v0.2.0
    ```
 
@@ -107,9 +107,9 @@ Releases are tag-driven; nothing is published from a developer machine.
      size report on Ubuntu and macOS, lint;
    - refuses to continue if the tag does not equal `package.json#version`;
    - `npm ci && npm run build && npm pack`, and checks the tarball contains
-     `dist/index.js`, `runtime/runtime.c`, `runtime/statictsc.h` and
+     `dist/index.js`, `runtime/runtime.c`, `runtime/amritc.h` and
      `scripts/build.sh`;
-   - `gh release create v0.2.0 statictsc-0.2.0.tgz` with the CHANGELOG
+   - `gh release create v0.2.0 amritc-0.2.0.tgz` with the CHANGELOG
      section as the notes.
 
 6. **npm publish is manual** for now. When ready:

@@ -1,7 +1,7 @@
-# StaticTS benchmark suite
+# AmritScript benchmark suite
 
 Six programs, each written three times with the same data layout and the same
-expression order (so the floating-point results agree bit for bit): StaticTS
+expression order (so the floating-point results agree bit for bit): AmritScript
 (`.ts`), C (`.c`, `clang -O3`) and Rust (`.rs`, `rustc -C opt-level=3
 -C panic=abort -C codegen-units=1`). `bench/run.mjs` builds them all, checks
 that every binary prints the same checksum, times them and writes
@@ -25,7 +25,7 @@ it and without one the Rust columns are skipped. `CC` picks the C compiler
 
 ## The programs
 
-| Name | What it measures | StaticTS flags | Size (`bench:n`) | Checksum |
+| Name | What it measures | AmritScript flags | Size (`bench:n`) | Checksum |
 | --- | --- | --- | --- | --- |
 | `fib` | recursive calls, integer add | | fib(40) | `102334155` |
 | `nbody` | a class with seven `f64` fields in an array, `Math.sqrt`, field read/write in a nested loop | `--number-mode f64` | 2e7 steps | energy before and after |
@@ -42,10 +42,10 @@ noise of a VM. The `bench:n` comment marks the one line the runner rewrites
 for `--n`; the twins carry the same marker.
 
 `result`'s twins are the shapes each language would use anyway: a C struct of
-two words — the one `statictsc --emit-header` declares for
+two words — the one `amritc --emit-header` declares for
 `Result<number, number>` — and Rust's own `Result<i32, i32>`. All three are
 returned and passed in one register, so the three columns should be the same
-code; a StaticTS column well behind them means a `Result` went back to being
+code; an AmritScript column well behind them means a `Result` went back to being
 a pointer into the arena. What the gap it currently shows is about, and the
 respelling that did *not* close it, is in
 [docs/wp17-result-abi.md](../docs/wp17-result-abi.md) §4.
@@ -53,7 +53,7 @@ respelling that did *not* close it, is in
 `strbuild` has a fourth version, `strbuild_naive.c`: the same immutable-string
 algorithm with a `malloc` per string and a `free` as soon as a string has been
 copied into its successor. Against `strbuild.c` (a bump arena that never
-frees, i.e. the StaticTS runtime's model) it isolates what the arena costs and
+frees, i.e. the AmritScript runtime's model) it isolates what the arena costs and
 saves. The Rust version allocates a fresh `String` per concatenation, the same
 work as the naive C.
 
@@ -65,12 +65,12 @@ work as the naive C.
   `-C target-cpu=native` column because that is what Rust programmers commonly
   ship with.
 - **Same memory model where the language allows it.** C and Rust objects are
-  heap allocated (`malloc`, `Box`) like the arena objects in StaticTS; arrays
+  heap allocated (`malloc`, `Box`) like the arena objects in AmritScript; arrays
   are indexed with a 32-bit index converted to the native width. Rust's
-  bounds checks stay on (`Vec` indexing), like StaticTS's.
+  bounds checks stay on (`Vec` indexing), like AmritScript's.
 - **One checksum per program.** Outputs are compared token by token; numeric
   tokens must agree to 1e-9 relative, which lets `%.17g`, Rust's `{}` and
-  StaticTS's JavaScript-style shortest round-trip formatting print the same
+  AmritScript's JavaScript-style shortest round-trip formatting print the same
   double differently. A mismatch fails the run, and the CI test in
   `tests/run.js` (`WP9: bench`) validates `fib` and `sieve` at small sizes on
   every push.
@@ -78,9 +78,9 @@ work as the naive C.
   around `spawnSync`, one warm-up run then five timed runs; the table shows
   minimum and median. Process start-up (about 1 ms) is included and identical
   for every column.
-- **Sizes.** Every binary is stripped: StaticTS through `scripts/build.sh`
+- **Sizes.** Every binary is stripped: AmritScript through `scripts/build.sh`
   (`-s`, section GC, LTO), C with `-s`, Rust with `-C strip=symbols`. The
-  StaticTS `size` profile (`-Oz`) gets its own column.
+  AmritScript `size` profile (`-Oz`) gets its own column.
 - **Memory.** Peak RSS of one run, from `wait4`'s `ru_maxrss` via
   `bench/rss.c`.
 
@@ -88,15 +88,15 @@ work as the naive C.
 
 | Column | Build |
 | --- | --- |
-| StaticTS | `statictsc <src> [--number-mode f64] --link <exe> --profile speed` |
-| StaticTS `--nsw` | as above plus `--nsw` (integer benchmarks only): signed overflow becomes undefined, as in C |
-| StaticTS (size profile) | `--profile size`, size table only |
+| AmritScript | `amritc <src> [--number-mode f64] --link <exe> --profile speed` |
+| AmritScript `--nsw` | as above plus `--nsw` (integer benchmarks only): signed overflow becomes undefined, as in C |
+| AmritScript (size profile) | `--profile size`, size table only |
 | C `-O3` | `clang -O3 -s <src> -lm` |
 | C `-O3` naive | `strbuild_naive.c` only |
 | Rust `-O3` | `rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols` |
 | Rust native | as above plus `-C target-cpu=native` |
 
-The `StaticTS / Rust` column divides the StaticTS minimum by the Rust `-O3`
+The `AmritScript / Rust` column divides the AmritScript minimum by the Rust `-O3`
 minimum. The WP9 target is 1.10x or better for loop and math code.
 
 ## Other files

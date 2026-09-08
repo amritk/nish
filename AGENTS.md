@@ -6,16 +6,16 @@ this repository**. For Claude Code the same rules live in
 [`.claude/`](./.claude/) — read the one that matches your task:
 
 - [`.claude/orientation.md`](./.claude/orientation.md) — **start here**: the two compilers, the code map, the commands, what is always true
-- [`.claude/selfhost.md`](./.claude/selfhost.md) — working in `self/`: StaticTS-0, the module map, the oracles, the milestones
+- [`.claude/selfhost.md`](./.claude/selfhost.md) — working in `self/`: AmritScript-0, the module map, the oracles, the milestones
 - [`.claude/architecture.md`](./.claude/architecture.md) — the pipeline, the rules that shape every change, where to read next
-- [`.claude/typescript.md`](./.claude/typescript.md) — TypeScript style: the StaticTS rules for every program in the repo, and the static-friendly rules for the compiler source
+- [`.claude/typescript.md`](./.claude/typescript.md) — TypeScript style: the AmritScript rules for every program in the repo, and the static-friendly rules for the compiler source
 - [`.claude/node.md`](./.claude/node.md) — Node runtime, npm scripts, the LLVM toolchain, Biome
 - [`.claude/testing.md`](./.claude/testing.md) — the golden-test harness, what every construct ships with
 - [`.claude/comments.md`](./.claude/comments.md) — comment and JSDoc guidelines
 
 ## What this is
 
-`statictsc` (**StaticTS**) is an ahead-of-time compiler from a strictly static
+`amritc` (**AmritScript**) is an ahead-of-time compiler from a strictly static
 subset of TypeScript to LLVM IR, published to npm as a single package. It is a
 **Node.js + npm** project with one runtime dependency (`typescript`); the
 sibling repos' Bun rules do not apply here. The reference documents are
@@ -61,7 +61,7 @@ steps per OS are in [`docs/INSTALL.md`](./docs/INSTALL.md).
 - **In the compiler's own source, declare types with `type` and functions as
   arrows bound to a `const`.** Both are linted at `warn` while the existing
   code is migrated, so the warning count is the backlog rather than a failure.
-  Class methods stay methods. A StaticTS program is exempt and must use
+  Class methods stay methods. An AmritScript program is exempt and must use
   `function` and `interface`, because the language has neither arrow functions
   nor `type` aliases.
 - Match the surrounding code's style, comment density, and naming. Biome

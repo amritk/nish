@@ -7,7 +7,7 @@
 //       |            ^~~~~~~~                   a caret at the start, ~ to the end
 //
 // **No exceptions.** `src/` throws a `CompileError` from 292 sites and catches
-// it in six; StaticTS `throw` traps and discards its value, so this is the
+// it in six; a `throw` traps and discards its value, so this is the
 // error-value threading of §3a D1: a phase reports into a sink and returns a
 // sentinel, and the sink is asked at the end of the phase whether to stop.
 // That is the classic recursive-descent recovery tax and it is worse than
@@ -237,7 +237,7 @@ export class DiagnosticSink {
    * comparison never falls back to the message text: two errors at one
    * position keep the order the phases produced them in, which is what makes
    * a multi-error golden reproducible. Bottom-up merge sort, because
-   * StaticTS has no `Array.sort` and an insertion sort is quadratic on the
+   * The language has no `Array.sort` and an insertion sort is quadratic on the
    * cascade a single bad declaration can produce.
    */
   sorted(): Diagnostic[] {

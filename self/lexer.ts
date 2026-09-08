@@ -1,5 +1,7 @@
-// The StaticTS-0 lexer (docs/wp14-selfhost.md, milestone S1), written in
-// StaticTS. It is the first piece of `self/` that is not a table: `src/` has
+// The lexer for the subset `self/` is written in, and itself written in that
+// subset (docs/wp14-selfhost.md, milestone S1).
+//
+// It is the first piece of `self/` that is not a table: `src/` has
 // no lexer at all, because the `typescript` package is the scanner there, so
 // this is new code rather than a port, and it is the half of the bootstrap
 // whose risk the S2 gate exists to measure.
@@ -221,7 +223,7 @@ export function hexValue(c: i32): i32 {
  * that fails does so on its first byte, which is what a hash would have bought
  * without the table.
  *
- * A word that is a keyword in TypeScript but not in StaticTS-0 (`try`, `var`,
+ * A word that is a keyword in TypeScript but not in the subset (`try`, `var`,
  * `typeof`, `any`, ...) is an identifier here, deliberately: the parser
  * refuses it where it stands, with a message about the construct rather than
  * about a token nobody wrote. So are the two *contextual* keywords, `from`
@@ -462,7 +464,7 @@ export class Lexer {
         while (end < this.source.length && isDigit(this.at(end))) end = end + 1;
       }
     }
-    // `123n` is one BigInt token, as it is in TypeScript; StaticTS has no
+    // `123n` is one BigInt token, as it is in TypeScript; the language has no
     // `bigint`, and the parser says so about the literal rather than about a
     // stray `n` after it.
     if (this.at(end) === CH_N_LOWER) {
@@ -742,7 +744,7 @@ export class Lexer {
       return;
     }
     if (c === CH_GT) {
-      // `>>` and `>>>` are one token: StaticTS has no generic type argument
+      // `>>` and `>>>` are one token: the language has no generic type argument
       // list, so nothing ever needs them split back apart.
       if (next1 === CH_GT && next2 === CH_GT && next3 === CH_ASSIGN) this.emitPlain(TOK_USHR_ASSIGN, 4);
       else if (next1 === CH_GT && next2 === CH_GT) this.emitPlain(TOK_USHR, 3);

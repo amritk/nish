@@ -6,11 +6,11 @@
  * `~` takes one. There are two deliberate rejections:
  *
  *   - `f64` has no bit operations. JavaScript's would convert the double
- *     through `ToInt32` first, and StaticTS never converts implicitly; under
+ *     through `ToInt32` first, and the language never converts implicitly; under
  *     `--number-mode f64` that makes plain `number` ineligible, so the
  *     message says which flag put it there.
  *   - `boolean` is rejected even though JavaScript accepts it, because
- *     `true & true` there is the *number* 1 and StaticTS has no truthiness to
+ *     `true & true` there is the *number* 1 and the language has no truthiness to
  *     turn that back into a boolean. The message names the operator that does
  *     the job instead (`&&`, `||`, `!==`, `!`).
  *

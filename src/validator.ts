@@ -2,7 +2,7 @@
  * Phase 0: forbidden-syntax sweep.
  *
  * Walks the entire syntax tree once (`ts.forEachChild`, pre-order) and
- * reports a `CompileError` for every construct that StaticTS can never
+ * reports a `CompileError` for every construct that the language can never
  * compile: anything that requires dynamic typing, prototype lookup,
  * reflection, unwinding, exceptions, or a garbage-collected heap. Every rule here is
  * decidable from syntax alone; nothing depends on types or scopes. With a
@@ -27,6 +27,7 @@
  * looks at `node.parent` to tell a value reference from a property name.
  */
 import ts from "typescript";
+import { LANGUAGE } from "./branding";
 import { CompileError, DiagnosticSink } from "./diagnostics";
 import { lookup } from "./lookup";
 
@@ -40,21 +41,21 @@ function fail(message: string, node: ts.Node, sf: ts.SourceFile): never {
 
 /** Identifiers that may never appear as a value (call target, operand, argument, ...). */
 const FORBIDDEN_VALUE_IDENTIFIERS: Record<string, string> = {
-  eval: "`eval` is forbidden in StaticTS (no interpreter at runtime)",
-  Function: "`Function` is forbidden in StaticTS (no interpreter at runtime)",
-  Proxy: "`Proxy` is forbidden in StaticTS (no dynamic property interception)",
-  Reflect: "`Reflect` is forbidden in StaticTS (no runtime reflection)",
-  Symbol: "`Symbol` is forbidden in StaticTS (no symbol type)",
-  globalThis: "`globalThis` is forbidden in StaticTS (no global object)",
-  arguments: "`arguments` is forbidden in StaticTS (functions have fixed arity)",
-  undefined: "`undefined` is forbidden in StaticTS; use `null` with a `T | null` type",
+  eval: `\`eval\` is forbidden in ${LANGUAGE} (no interpreter at runtime)`,
+  Function: `\`Function\` is forbidden in ${LANGUAGE} (no interpreter at runtime)`,
+  Proxy: `\`Proxy\` is forbidden in ${LANGUAGE} (no dynamic property interception)`,
+  Reflect: `\`Reflect\` is forbidden in ${LANGUAGE} (no runtime reflection)`,
+  Symbol: `\`Symbol\` is forbidden in ${LANGUAGE} (no symbol type)`,
+  globalThis: `\`globalThis\` is forbidden in ${LANGUAGE} (no global object)`,
+  arguments: `\`arguments\` is forbidden in ${LANGUAGE} (functions have fixed arity)`,
+  undefined: `\`undefined\` is forbidden in ${LANGUAGE}; use \`null\` with a \`T | null\` type`,
 };
 
 /** Type names that may never be referenced. */
 const FORBIDDEN_TYPE_NAMES: Record<string, string> = {
-  Function: "`Function` type is forbidden in StaticTS (no dynamic function values)",
-  Symbol: "`Symbol` type is forbidden in StaticTS (no symbol type)",
-  Proxy: "`Proxy` type is forbidden in StaticTS (no dynamic property interception)",
+  Function: `\`Function\` type is forbidden in ${LANGUAGE} (no dynamic function values)`,
+  Symbol: `\`Symbol\` type is forbidden in ${LANGUAGE} (no symbol type)`,
+  Proxy: `\`Proxy\` type is forbidden in ${LANGUAGE} (no dynamic property interception)`,
 };
 
 /** `Object.<member>` calls that mutate object shape or prototype chain. */
@@ -90,7 +91,7 @@ function isNullType(t: ts.TypeNode): boolean {
   return ts.isLiteralTypeNode(t) && t.literal.kind === ts.SyntaxKind.NullKeyword;
 }
 
-/** `T | null` and `null | T` are the only unions StaticTS accepts. */
+/** `T | null` and `null | T` are the only unions the language accepts. */
 function isNullableUnion(union: ts.UnionTypeNode): boolean {
   const members = union.types;
   return members.length === 2 && isNullType(members[0]) !== isNullType(members[1]);
@@ -151,19 +152,19 @@ function propertyNameText(name: ts.PropertyName): string | undefined {
 
 // ---- Rules: types ------------------------------------------------------------
 
-const rejectAny: Validator = (node, sf) => fail("`any` is forbidden in StaticTS", node, sf);
-const rejectUnknown: Validator = (node, sf) => fail("`unknown` is forbidden in StaticTS", node, sf);
+const rejectAny: Validator = (node, sf) => fail(`\`any\` is forbidden in ${LANGUAGE}`, node, sf);
+const rejectUnknown: Validator = (node, sf) => fail(`\`unknown\` is forbidden in ${LANGUAGE}`, node, sf);
 const rejectSymbolType: Validator = (node, sf) =>
-  fail("`symbol` type is forbidden in StaticTS (no symbol type)", node, sf);
+  fail(`\`symbol\` type is forbidden in ${LANGUAGE} (no symbol type)`, node, sf);
 const rejectBigIntType: Validator = (node, sf) =>
-  fail("`bigint` type is forbidden in StaticTS (use number, i32, or f64)", node, sf);
+  fail(`\`bigint\` type is forbidden in ${LANGUAGE} (use number, i32, or f64)`, node, sf);
 const rejectUndefinedType: Validator = (node, sf) =>
-  fail("`undefined` is forbidden in StaticTS; use `null` with a `T | null` type", node, sf);
+  fail(`\`undefined\` is forbidden in ${LANGUAGE}; use \`null\` with a \`T | null\` type`, node, sf);
 
 const checkUnionType: Validator = (node, sf) => {
   if (!isNullableUnion(node as ts.UnionTypeNode)) {
     fail(
-      "Union types other than `T | null` are forbidden in StaticTS (values have one fixed layout)",
+      `Union types other than \`T | null\` are forbidden in ${LANGUAGE} (values have one fixed layout)`,
       node,
       sf
     );
@@ -179,14 +180,14 @@ const checkTypeReference: Validator = (node, sf) => {
 };
 
 const rejectImportType: Validator = (node, sf) =>
-  fail("Dynamic `import()` is forbidden in StaticTS (modules are resolved at compile time)", node, sf);
+  fail(`Dynamic \`import()\` is forbidden in ${LANGUAGE} (modules are resolved at compile time)`, node, sf);
 
 const checkTypeAssertion: Validator = (node, sf) => {
   const type = (node as ts.AsExpression | ts.TypeAssertion).type;
   if (type.kind === ts.SyntaxKind.AnyKeyword)
-    fail("Type assertion to `any` is forbidden in StaticTS", type, sf);
+    fail(`Type assertion to \`any\` is forbidden in ${LANGUAGE}`, type, sf);
   if (type.kind === ts.SyntaxKind.UnknownKeyword) {
-    fail("Type assertion to `unknown` is forbidden in StaticTS", type, sf);
+    fail(`Type assertion to \`unknown\` is forbidden in ${LANGUAGE}`, type, sf);
   }
 };
 
@@ -196,24 +197,25 @@ const checkFunctionLike: Validator = (node, sf) => {
   const fn = node as ts.FunctionLikeDeclaration;
   if (fn.typeParameters && fn.typeParameters.length > 0) {
     fail(
-      "Generic type parameters are forbidden in StaticTS (no monomorphisation yet)",
+      `Generic type parameters are forbidden in ${LANGUAGE} (no monomorphisation yet)`,
       fn.typeParameters[0],
       sf
     );
   }
   if (fn.asteriskToken)
-    fail("Generators are forbidden in StaticTS (no coroutine runtime)", fn.asteriskToken, sf);
+    fail(`Generators are forbidden in ${LANGUAGE} (no coroutine runtime)`, fn.asteriskToken, sf);
   const asyncMod = ts.canHaveModifiers(fn)
     ? ts.getModifiers(fn)?.find((m) => m.kind === ts.SyntaxKind.AsyncKeyword)
     : undefined;
-  if (asyncMod) fail("`async` functions are forbidden in StaticTS (no event loop or promises)", asyncMod, sf);
+  if (asyncMod)
+    fail(`\`async\` functions are forbidden in ${LANGUAGE} (no event loop or promises)`, asyncMod, sf);
 };
 
 const checkGenericDeclaration: Validator = (node, sf) => {
   const decl = node as ts.ClassLikeDeclaration | ts.InterfaceDeclaration | ts.TypeAliasDeclaration;
   if (decl.typeParameters && decl.typeParameters.length > 0) {
     fail(
-      "Generic type parameters are forbidden in StaticTS (no monomorphisation yet)",
+      `Generic type parameters are forbidden in ${LANGUAGE} (no monomorphisation yet)`,
       decl.typeParameters[0],
       sf
     );
@@ -231,7 +233,7 @@ const checkEnum: Validator = (node, sf) => {
   for (const member of (node as ts.EnumDeclaration).members) {
     if (member.initializer && !isNumericLiteralShape(member.initializer)) {
       fail(
-        "Enum members must be numeric literals in StaticTS (enums lower to plain integers)",
+        `Enum members must be numeric literals in ${LANGUAGE} (enums lower to plain integers)`,
         member.initializer,
         sf
       );
@@ -241,17 +243,17 @@ const checkEnum: Validator = (node, sf) => {
 
 const checkModuleDeclaration: Validator = (node, sf) => {
   if (node.flags & ts.NodeFlags.GlobalAugmentation) {
-    fail("`declare global` is forbidden in StaticTS (no global object to augment)", node, sf);
+    fail(`\`declare global\` is forbidden in ${LANGUAGE} (no global object to augment)`, node, sf);
   }
-  fail("`namespace` and `module` blocks are forbidden in StaticTS (use ES module files)", node, sf);
+  fail(`\`namespace\` and \`module\` blocks are forbidden in ${LANGUAGE} (use ES module files)`, node, sf);
 };
 
 const rejectDecorator: Validator = (node, sf) =>
-  fail("Decorators are forbidden in StaticTS (no runtime metadata or class rewriting)", node, sf);
+  fail(`Decorators are forbidden in ${LANGUAGE} (no runtime metadata or class rewriting)`, node, sf);
 
 const rejectComputedPropertyName: Validator = (node, sf) =>
   fail(
-    "Computed property names are forbidden in StaticTS (object layout is fixed at compile time)",
+    `Computed property names are forbidden in ${LANGUAGE} (object layout is fixed at compile time)`,
     node,
     sf
   );
@@ -259,9 +261,13 @@ const rejectComputedPropertyName: Validator = (node, sf) =>
 // ---- Rules: statements ---------------------------------------------------------------
 
 const rejectWith: Validator = (node, sf) =>
-  fail("`with` is forbidden in StaticTS (no dynamic scope)", node, sf);
+  fail(`\`with\` is forbidden in ${LANGUAGE} (no dynamic scope)`, node, sf);
 const rejectTry: Validator = (node, sf) =>
-  fail("`try`/`catch`/`finally` is forbidden in StaticTS (no unwinding; use `Result<T, E>`)", node, sf);
+  fail(
+    `\`try\`/\`catch\`/\`finally\` is forbidden in ${LANGUAGE} (no unwinding; use \`Result<T, E>\`)`,
+    node,
+    sf
+  );
 /**
  * `throw` is gone as of WP16. It never unwound — it trapped and discarded its
  * value — so it was an abort wearing the syntax of error handling, and having
@@ -272,14 +278,14 @@ const rejectTry: Validator = (node, sf) =>
  */
 const rejectThrow: Validator = (node, sf) =>
   fail(
-    "`throw` is forbidden in StaticTS (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
+    `\`throw\` is forbidden in ${LANGUAGE} (it aborts rather than unwinding): return a \`Result<T, E>\` for a failure a caller should handle, or \`panic(message)\` to end the process`,
     node,
     sf
   );
 const rejectDebugger: Validator = (node, sf) =>
-  fail("`debugger` is forbidden in StaticTS (no debugger hook)", node, sf);
+  fail(`\`debugger\` is forbidden in ${LANGUAGE} (no debugger hook)`, node, sf);
 const rejectLabeled: Validator = (node, sf) =>
-  fail("Labeled statements are forbidden in StaticTS (use structured loops)", node, sf);
+  fail(`Labeled statements are forbidden in ${LANGUAGE} (use structured loops)`, node, sf);
 
 // ---- Rules: expressions ----------------------------------------------------------------
 
@@ -291,7 +297,11 @@ const checkIdentifier: Validator = (node, sf) => {
 
 const checkBinary: Validator = (node, sf) => {
   if ((node as ts.BinaryExpression).operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
-    fail("Nullish coalescing `??` is forbidden in StaticTS (narrow with `!== null` instead)", node, sf);
+    fail(
+      `Nullish coalescing \`??\` is forbidden in ${LANGUAGE} (narrow with \`!== null\` instead)`,
+      node,
+      sf
+    );
   }
   const bin = node as ts.BinaryExpression;
   switch (bin.operatorToken.kind) {
@@ -300,13 +310,13 @@ const checkBinary: Validator = (node, sf) => {
       fail("Loose equality is forbidden; use === / !==", bin, sf);
       break;
     case ts.SyntaxKind.InKeyword:
-      fail("`in` operator is forbidden in StaticTS (no dynamic property lookup)", bin.operatorToken, sf);
+      fail(`\`in\` operator is forbidden in ${LANGUAGE} (no dynamic property lookup)`, bin.operatorToken, sf);
       break;
     case ts.SyntaxKind.InstanceOfKeyword:
-      fail("`instanceof` is forbidden in StaticTS (no prototype chain)", bin.operatorToken, sf);
+      fail(`\`instanceof\` is forbidden in ${LANGUAGE} (no prototype chain)`, bin.operatorToken, sf);
       break;
     case ts.SyntaxKind.CommaToken:
-      fail("Comma expressions are forbidden in StaticTS (write separate statements)", bin, sf);
+      fail(`Comma expressions are forbidden in ${LANGUAGE} (write separate statements)`, bin, sf);
       break;
     default:
       break;
@@ -314,35 +324,35 @@ const checkBinary: Validator = (node, sf) => {
 };
 
 const rejectTypeOf: Validator = (node, sf) =>
-  fail("`typeof` is forbidden in StaticTS (no runtime type tags)", node, sf);
+  fail(`\`typeof\` is forbidden in ${LANGUAGE} (no runtime type tags)`, node, sf);
 const rejectDelete: Validator = (node, sf) =>
-  fail("`delete` is forbidden in StaticTS (object layout is fixed)", node, sf);
+  fail(`\`delete\` is forbidden in ${LANGUAGE} (object layout is fixed)`, node, sf);
 const rejectVoidExpression: Validator = (node, sf) =>
-  fail("`void` expressions are forbidden in StaticTS (no `undefined` value)", node, sf);
+  fail(`\`void\` expressions are forbidden in ${LANGUAGE} (no \`undefined\` value)`, node, sf);
 const rejectAwait: Validator = (node, sf) =>
-  fail("`await` is forbidden in StaticTS (no event loop or promises)", node, sf);
+  fail(`\`await\` is forbidden in ${LANGUAGE} (no event loop or promises)`, node, sf);
 const rejectYield: Validator = (node, sf) =>
-  fail("`yield` is forbidden in StaticTS (no coroutine runtime)", node, sf);
+  fail(`\`yield\` is forbidden in ${LANGUAGE} (no coroutine runtime)`, node, sf);
 const rejectRegex: Validator = (node, sf) =>
-  fail("Regular expression literals are forbidden in StaticTS (no regex engine in the runtime)", node, sf);
+  fail(`Regular expression literals are forbidden in ${LANGUAGE} (no regex engine in the runtime)`, node, sf);
 const rejectBigIntLiteral: Validator = (node, sf) =>
-  fail("`bigint` literals are forbidden in StaticTS (use number, i32, or f64)", node, sf);
+  fail(`\`bigint\` literals are forbidden in ${LANGUAGE} (use number, i32, or f64)`, node, sf);
 const rejectSpreadAssignment: Validator = (node, sf) =>
-  fail("Object spread is forbidden in StaticTS (object layout is fixed at compile time)", node, sf);
+  fail(`Object spread is forbidden in ${LANGUAGE} (object layout is fixed at compile time)`, node, sf);
 
 const checkCall: Validator = (node, sf) => {
   if ((node as ts.CallExpression).questionDotToken) {
-    fail("Optional chaining `?.` is forbidden in StaticTS (narrow with `!== null` instead)", node, sf);
+    fail(`Optional chaining \`?.\` is forbidden in ${LANGUAGE} (narrow with \`!== null\` instead)`, node, sf);
   }
   const call = node as ts.CallExpression;
   if (call.expression.kind === ts.SyntaxKind.ImportKeyword) {
-    fail("Dynamic `import()` is forbidden in StaticTS (modules are resolved at compile time)", call, sf);
+    fail(`Dynamic \`import()\` is forbidden in ${LANGUAGE} (modules are resolved at compile time)`, call, sf);
   }
   if (ts.isIdentifier(call.expression)) {
     if (call.expression.text === "eval")
-      fail("`eval` is forbidden in StaticTS (no interpreter at runtime)", call, sf);
+      fail(`\`eval\` is forbidden in ${LANGUAGE} (no interpreter at runtime)`, call, sf);
     if (call.expression.text === "Function") {
-      fail("`Function` constructor is forbidden in StaticTS (no interpreter at runtime)", call, sf);
+      fail(`\`Function\` constructor is forbidden in ${LANGUAGE} (no interpreter at runtime)`, call, sf);
     }
   }
 };
@@ -351,53 +361,62 @@ const checkNew: Validator = (node, sf) => {
   const expr = (node as ts.NewExpression).expression;
   if (ts.isIdentifier(expr)) {
     if (expr.text === "Function") {
-      fail("`new Function` is forbidden in StaticTS (no interpreter at runtime)", node, sf);
+      fail(`\`new Function\` is forbidden in ${LANGUAGE} (no interpreter at runtime)`, node, sf);
     }
     if (expr.text === "Proxy") {
-      fail("`new Proxy` is forbidden in StaticTS (no dynamic property interception)", node, sf);
+      fail(`\`new Proxy\` is forbidden in ${LANGUAGE} (no dynamic property interception)`, node, sf);
     }
   }
 };
 
 const checkPropertyAccess: Validator = (node, sf) => {
   const access = node as ts.PropertyAccessExpression;
-  if (access.questionDotToken) fail("Optional chaining `?.` is forbidden in StaticTS (narrow with `!== null` instead)", access, sf);
+  if (access.questionDotToken)
+    fail(
+      `Optional chaining \`?.\` is forbidden in ${LANGUAGE} (narrow with \`!== null\` instead)`,
+      access,
+      sf
+    );
   const name = access.name.text;
   if (name === "__proto__")
-    fail("`__proto__` access is forbidden in StaticTS (no prototype chain)", access.name, sf);
+    fail(`\`__proto__\` access is forbidden in ${LANGUAGE} (no prototype chain)`, access.name, sf);
   if (name === "prototype")
-    fail("`.prototype` access is forbidden in StaticTS (no prototype chain)", access.name, sf);
+    fail(`\`.prototype\` access is forbidden in ${LANGUAGE} (no prototype chain)`, access.name, sf);
   if (
     ts.isIdentifier(access.expression) &&
     access.expression.text === "Object" &&
     FORBIDDEN_OBJECT_MEMBERS.has(name)
   ) {
-    fail(`\`Object.${name}\` is forbidden in StaticTS (object layout is fixed at compile time)`, access, sf);
+    fail(
+      `\`Object.${name}\` is forbidden in ${LANGUAGE} (object layout is fixed at compile time)`,
+      access,
+      sf
+    );
   }
 };
 
 const checkElementAccess: Validator = (node, sf) => {
   if ((node as ts.ElementAccessExpression).questionDotToken) {
-    fail("Optional chaining `?.` is forbidden in StaticTS (narrow with `!== null` instead)", node, sf);
+    fail(`Optional chaining \`?.\` is forbidden in ${LANGUAGE} (narrow with \`!== null\` instead)`, node, sf);
   }
   const access = node as ts.ElementAccessExpression;
   const key = access.argumentExpression;
   if (ts.isStringLiteralLike(key) || ts.isTemplateExpression(key)) {
     fail(
-      "String-keyed element access is forbidden in StaticTS; use `obj.name` (no dynamic property lookup)",
+      `String-keyed element access is forbidden in ${LANGUAGE}; use \`obj.name\` (no dynamic property lookup)`,
       key,
       sf
     );
   }
   if (!isNumericIndexShape(key)) {
-    fail("Element access requires a numeric index in StaticTS (no dynamic property lookup)", key, sf);
+    fail(`Element access requires a numeric index in ${LANGUAGE} (no dynamic property lookup)`, key, sf);
   }
 };
 
 const checkPropertyAssignment: Validator = (node, sf) => {
   const prop = node as ts.PropertyAssignment | ts.ShorthandPropertyAssignment;
   if (propertyNameText(prop.name) === "__proto__") {
-    fail("`__proto__` is forbidden in StaticTS (no prototype chain)", prop.name, sf);
+    fail(`\`__proto__\` is forbidden in ${LANGUAGE} (no prototype chain)`, prop.name, sf);
   }
 };
 
@@ -461,7 +480,7 @@ const validators: Partial<Record<ts.SyntaxKind, Validator>> = {
  * descended into) and the caller decides when to stop. Returns normally
  * when the tree is clean.
  */
-export function validateStaticTS(sourceFile: ts.SourceFile, sink?: DiagnosticSink): void {
+export function validateSyntax(sourceFile: ts.SourceFile, sink?: DiagnosticSink): void {
   const visit = (node: ts.Node): void => {
     const rule = validators[node.kind];
     if (rule) {

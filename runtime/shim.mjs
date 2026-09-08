@@ -1,7 +1,7 @@
 /**
- * StaticTS builtins for Node (WP13 differential testing).
+ * AmritScript builtins for Node (WP13 differential testing).
  *
- * The differential runner (tests/differential/run.js) rewrites a StaticTS
+ * The differential runner (tests/differential/run.js) rewrites an AmritScript
  * program into plain JavaScript and runs it under Node with this module as
  * `__sts`. Every helper here reproduces the *runtime* semantics the compiled
  * binary has (runtime/runtime.c plus the intrinsics in docs/wp7-runtime.md)
@@ -26,7 +26,7 @@
  *   - `toI32/toI64` from f64 saturate (NaN -> 0), integer conversions wrap.
  *   - `console.log(x)` never prints the `n` suffix of an i64 and writes
  *     synchronously so `process.exit` cannot lose output.
- *   - file I/O errors print `statictsc: cannot read <path>` and exit 1.
+ *   - file I/O errors print `amritc: cannot read <path>` and exit 1.
  *   - `process.argv[0]` is the program (the script here, the executable
  *     natively); `parseInt` is base 10 only and saturates into i32 (0 for no
  *     digits); `parseFloat`/`Number` accept ASCII whitespace, decimal forms,
@@ -199,7 +199,7 @@ export function strLen(x) {
   return typeof x === "string" ? Buffer.byteLength(x, "utf8") : x.length;
 }
 
-/** The UTF-8 bytes of `s`, which is what a StaticTS string holds. */
+/** The UTF-8 bytes of `s`, which is what an AmritScript string holds. */
 function bytesOf(s) {
   return Buffer.from(s, "utf8");
 }
@@ -349,7 +349,7 @@ export function idx(a, i) {
   return a[k];
 }
 
-/** `a.pop()`: the last element, or the bounds panic — StaticTS has no `undefined` to return. */
+/** `a.pop()`: the last element, or the bounds panic — AmritScript has no `undefined` to return. */
 export function pop(a) {
   if (a.length === 0) panicIndex(0, 0);
   return a.pop();
@@ -384,7 +384,7 @@ export function exit(code) {
 
 
 function ioFail(verb, path) {
-  fs.writeSync(2, `statictsc: cannot ${verb} ${path}\n`);
+  fs.writeSync(2, `amritc: cannot ${verb} ${path}\n`);
   process.exit(1);
 }
 

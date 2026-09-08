@@ -1,4 +1,4 @@
-// Every operator, including the ones StaticTS refuses. The lexer says what is
+// Every operator, including the ones AmritScript refuses. The lexer says what is
 // written; the parser is where `??`, `?.`, `**` and `==` are turned down.
 a ?? b;
 a ?.b;

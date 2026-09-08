@@ -127,5 +127,5 @@ when you touch the code next to them:
   not look at, and which document holds the full rule list. A new phase or
   family module gets the same.
 - **Runtime ABI comments live on both sides.** A layout described in
-  `src/codegen/runtime.ts` is described the same way in `runtime/statictsc.h`;
+  `src/codegen/runtime.ts` is described the same way in `runtime/amritc.h`;
   a change to one without the other is what `tests/run.js` exists to catch.

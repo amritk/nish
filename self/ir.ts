@@ -3,7 +3,7 @@
 //
 // Responsible only for the *shape* of the output: module header, type and
 // global declarations, function definitions, basic blocks, attribute groups
-// and SSA temporary numbering. It knows nothing about StaticTS; every
+// and SSA temporary numbering. It knows nothing about the language; every
 // instruction is a string the emitter decided on.
 //
 // SSA numbering follows LLVM's rules: unnamed values (`%0`, `%1`, ...) are

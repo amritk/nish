@@ -74,10 +74,10 @@ and 1, which an `i1` load may not see.
   work; a bare `const xs = []` is an error. Nothing is inferred from later
   pushes.
 - **`new Array<T>(n)` zero-fills, and only for scalar `T`.** JavaScript
-  would create `n` holes; StaticTS has no holes, so `number` elements start
+  would create `n` holes; AmritScript has no holes, so `number` elements start
   at `0` and `boolean` elements at `false`. For pointer element types
   (`string`, nested arrays, and structs once WP2 lands) a zeroed element
-  would be a null pointer, which no StaticTS value may be (`nonnull` is
+  would be a null pointer, which no AmritScript value may be (`nonnull` is
   emitted everywhere), so `new Array<string>(n)` is rejected with a pointer
   to `[]` + `push`. The type argument is required: `new Array(3)` is an
   error.
@@ -213,7 +213,7 @@ const xs = new Array<number>(n);
 with `declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)`
 added to the module. The `mul` is skipped for 1-byte elements (`boolean[]`).
 A negative `n` sign-extends to a huge size and aborts inside the arena
-(`statictsc: out of memory`) rather than corrupting memory.
+(`amritc: out of memory`) rather than corrupting memory.
 
 ### Read `a[i]`
 

@@ -1,11 +1,12 @@
 /**
- * StaticTS type model.
+ * The type model.
  *
- * Every StaticTS type maps 1:1 onto an LLVM first-class type. There is no
+ * Every type maps 1:1 onto an LLVM first-class type. There is no
  * boxing, no runtime type tags, and no structural subtyping: two values are
  * compatible only if their StaticType kinds are identical.
  */
 import ts from "typescript";
+import { LANGUAGE } from "./branding";
 import { CompileError } from "./diagnostics";
 
 export type NumberMode = "i32" | "f64";
@@ -49,7 +50,7 @@ export interface CompilerOptions {
    * Emit `nsw` on i32/i64 `add`/`sub`/`mul` (WP9): signed overflow becomes
    * undefined behaviour, as in C (Rust release builds wrap instead), so LLVM
    * may assume induction variables and address arithmetic never wrap.
-   * Default: false (wrapping, the documented StaticTS semantics).
+   * Default: false (wrapping, the documented semantics).
    */
   nsw: boolean;
   /**
@@ -110,7 +111,7 @@ export type StaticType =
    */
   | { kind: "nullable"; inner: StaticType }
   /**
-   * `Result<T, E>` (WP16): the one way a StaticTS function reports failure.
+   * `Result<T, E>` (WP16): the one way a function reports failure.
    * A pointer to a monomorphised `%struct.sts_result.<T>.<E>` holding the
    * `ok` discriminant, the success payload and the error payload, so a
    * `Result` costs exactly what a class costs and the escape analysis stack-
@@ -169,7 +170,7 @@ export const TYPED_ARRAY_ALIASES: Readonly<Record<string, StaticType>> = {
   BigInt64Array: I64,
 };
 
-/** True for the types that may be nullable: every StaticTS value that is an LLVM pointer. */
+/** True for the types that may be nullable: every value that is an LLVM pointer. */
 export function isPointerType(t: StaticType): boolean {
   return t.kind === "struct" || t.kind === "array" || t.kind === "string";
 }
@@ -461,7 +462,7 @@ export function registerNamedTypes(sourceFile: ts.SourceFile, resolver: NamedTyp
 
 /**
  * Resolve a TypeScript type annotation node into a StaticType.
- * Anything outside the rigid primitive set is a hard error: StaticTS refuses
+ * Anything outside the rigid primitive set is a hard error: the language refuses
  * `any`, `unknown`, unions, generics, object literals, etc.
  */
 export function resolveTypeNode(
@@ -479,9 +480,9 @@ export function resolveTypeNode(
     case ts.SyntaxKind.VoidKeyword:
       return VOID;
     case ts.SyntaxKind.AnyKeyword:
-      throw new CompileError("`any` is forbidden in StaticTS", node, sourceFile);
+      throw new CompileError(`\`any\` is forbidden in ${LANGUAGE}`, node, sourceFile);
     case ts.SyntaxKind.UnknownKeyword:
-      throw new CompileError("`unknown` is forbidden in StaticTS", node, sourceFile);
+      throw new CompileError(`\`unknown\` is forbidden in ${LANGUAGE}`, node, sourceFile);
     case ts.SyntaxKind.ArrayType:
       return arrayOf(resolveTypeNode((node as ts.ArrayTypeNode).elementType, sourceFile, opts));
     case ts.SyntaxKind.ParenthesizedType:
@@ -547,7 +548,7 @@ export function resolveTypeNode(
 
 /**
  * `Result<T, E>` (WP16). Written like a generic, but there are no user
- * generics in StaticTS: this is one built-in type constructor whose two
+ * generics in the language: this is one built-in type constructor whose two
  * arguments pick a monomorphised layout, exactly as `Array<T>` does.
  *
  * `T` may be `void` — `Result<void, E>` is the fallible operation that has
@@ -585,7 +586,11 @@ function isNullTypeNode(t: ts.TypeNode): boolean {
 function resolveNullableUnion(node: ts.UnionTypeNode, sourceFile: ts.SourceFile, opts: CompilerOptions): StaticType {
   const members = node.types.filter((t) => !isNullTypeNode(t));
   if (members.length !== 1 || node.types.length !== 2) {
-    throw new CompileError("Union types other than `T | null` are forbidden in StaticTS", node, sourceFile);
+    throw new CompileError(
+      `Union types other than \`T | null\` are forbidden in ${LANGUAGE}`,
+      node,
+      sourceFile
+    );
   }
   const inner = resolveTypeNode(members[0], sourceFile, opts);
   if (inner.kind === "result") {

@@ -80,7 +80,7 @@ export function normalizePath(p: string): string {
  * absolute `spec` wins outright, otherwise it is taken relative to `base`.
  *
  * Unlike Node's there is no fall back to the working directory, because
- * StaticTS has no `process.cwd()` — stage1 keys module identity on the
+ * The language has no `process.cwd()` — stage1 keys module identity on the
  * normalised path as written, which agrees with stage0's absolute paths for
  * every program whose inputs are named the same way (D4: stage1 emits `.ll`
  * and a wrapper links).

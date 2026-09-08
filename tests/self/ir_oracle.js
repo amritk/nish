@@ -124,7 +124,7 @@ function fresh(dir) {
   return dir;
 }
 
-/** Every positive StaticTS program the other oracles read, plus `self/` itself. */
+/** Every positive AmritScript program the other oracles read, plus `self/` itself. */
 function corpus() {
   const dirs = [
     path.join(root, "tests", "cases"),

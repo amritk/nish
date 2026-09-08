@@ -15,7 +15,7 @@
 //
 // Integer arithmetic here wraps at the declared width exactly as the emitted
 // `add`/`sub`/`mul` do, so folding never changes what a program computes.
-// stage0 needs `bigint` and an explicit `wrap` for that; StaticTS `i64`
+// stage0 needs `bigint` and an explicit `wrap` for that; the language's `i64`
 // arithmetic already wraps, and the i32 case is one `toI32` round trip.
 
 import { CheckContext } from "./context";
@@ -405,7 +405,7 @@ function foldInt(
     if (b.intValue === toI64(0)) {
       return reject(ctx, info, expr, "attempt to divide by zero in a constant");
     }
-    // i64's minimum as bits: StaticTS has no literal for it, and shifting
+    // i64's minimum as bits: the language has no literal for it, and shifting
     // one into the sign bit is exact where a decimal literal would round.
     const min = a.type === T_I64 ? toI64(1) << toI64(63) : toI64(-2147483648);
     if (a.intValue === min && b.intValue === toI64(-1)) {

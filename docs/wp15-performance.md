@@ -50,7 +50,7 @@ mutation, and functional idioms only where they remove runtime work** — the
 value-based `Result<T, E>` of §5 being the example, since it replaces unwinding
 tables with one `i1` and a branch.
 
-Most of this is already what StaticTS is, which is why it is written down here
+Most of this is already what AmritScript is, which is why it is written down here
 as a frame rather than a change:
 
 | Feature | Status | Why |
@@ -108,7 +108,7 @@ region was considered and deferred: it is the escape hatch, and every check
 mechanisms 1-3 eliminate is one nobody needs to escape. Build the proofs first,
 measure how many checks actually survive them, and only then decide whether an
 opt-out earns its keep. (For the record, `#trusted { }` could not have been the
-spelling: StaticTS parses with the TypeScript parser, which rejects it. A
+spelling: AmritScript parses with the TypeScript parser, which rejects it. A
 labelled block `trusted: { ... }` or a `/* @trusted */` pragma would be the
 candidates.)
 
@@ -197,7 +197,7 @@ all where they can.
 
 ## 5. Error handling: `Result<T, E>`, not exceptions
 
-StaticTS has no `try`/`catch` and `throw` aborts, but the answer is not to
+AmritScript has no `try`/`catch` and `throw` aborts, but the answer is not to
 thread sentinels by hand. It is a discriminated union:
 
 ```ts

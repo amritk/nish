@@ -1,6 +1,6 @@
 # Architecture
 
-`statictsc` is an ahead-of-time compiler from a strictly static subset of
+`amritc` is an ahead-of-time compiler from a strictly static subset of
 TypeScript to textual LLVM IR. It parses with the official TypeScript compiler
 API, rejects everything dynamic (`any`, prototypes, `eval`, exceptions, a
 garbage collector), and emits `.ll` files that clang / llc turn into native
@@ -14,7 +14,7 @@ and is not duplicated here. This file is the map of where to look.
 ## The pipeline in one screen
 
 ```
-statictsc a.ts b.ts [-o out/] [--link exe]                             src/index.ts
+amritc a.ts b.ts [-o out/] [--link exe]                             src/index.ts
    │
    ▼
 Compilation                                                            src/compilation.ts
@@ -50,11 +50,16 @@ Compilation                                                            src/compi
   written next to the code. See "Attribute soundness rules" in
   `docs/ARCHITECTURE.md`.
 - **Layout changes are two-sided.** A struct layout lives in
-  `src/codegen/runtime.ts` and `runtime/runtime.c` / `runtime/statictsc.h`;
+  `src/codegen/runtime.ts` and `runtime/runtime.c` / `runtime/amritc.h`;
   they change in the same commit and a layout test grows with them.
   `tests/run.js` fails when the runtime symbol table disagrees between them.
 - **The runtime has a budget.** `runtime/runtime.c` stays around 8 KB of source
   and 4 KB of `.text` at `-Oz`; report its size in a PR that touches it.
+- **The name lives in two files.** `src/branding.ts` and `self/branding.ts` are
+  the only source files that spell the project's name. Every string the
+  compiler prints builds it from `LANGUAGE` / `CLI` there; prose is exempt, and
+  the `sts_` prefix on the runtime's C symbols is ABI rather than branding and
+  never follows a rename. See "Where the name lives" in `docs/ARCHITECTURE.md`.
 - **The language is the reference.** `docs/LANGUAGE.md` is normative and every
   rule there cites the test case that proves it; the `docs/wp*.md` notes are
   historical, and where they disagree LANGUAGE.md wins.
@@ -82,11 +87,11 @@ src/                 the compiler (tsc → dist/)
   checker/           pass 1 signatures, pass 1b imports, pass 2 bodies; side tables in program.ts
   codegen/           attributes, escape analysis, target table, ir builder, runtime ABI, emit/*
   interop/           C header, wasm .d.ts and N-API shim generators
-runtime/             runtime.c, statictsc.h, runtime_wasm.c, shim.mjs (the Node twin)
+runtime/             runtime.c, amritc.h, runtime_wasm.c, shim.mjs (the Node twin)
 scripts/             build.sh (clang/LTO profiles), size-report.sh, smoke.sh, changelog-section.sh
 tests/               run.js + cases/ (goldens), link/, ir/, layout/, differential/, driver.c, runtime_test.c
-examples/            StaticTS inputs used by the README, smoke test and size report
-bench/               StaticTS / C / Rust suite that writes docs/BENCHMARKS.md
+examples/            AmritScript inputs used by the README, smoke test and size report
+bench/               AmritScript / C / Rust suite that writes docs/BENCHMARKS.md
 docs/                LANGUAGE, ARCHITECTURE, IR_COOKBOOK, FAQ, INSTALL, MASTER_PLAN, wp*.md design notes
 .claude/             these guidelines
 ```

@@ -1,5 +1,5 @@
 /**
- * Package version for `statictsc --version`.
+ * Package version for `amritc --version`.
  *
  * Read from package.json at runtime rather than baked in at build time: the
  * file always ships in the npm tarball (npm includes it unconditionally), it
