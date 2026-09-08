@@ -297,7 +297,7 @@ export class Emitter {
 
     // WP6: an automatic arena scope remembers the bump position before anything is allocated.
     if (facts.arenaScope) {
-      this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("sts_arena_mark")}()`);
+      this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("amrit_arena_mark")}()`);
     }
     // WP17: a `Result` parameter small enough to pack arrives as an `i64`.
     // Unpack it once, before the body, into the object every construct reads.
@@ -337,12 +337,12 @@ export class Emitter {
     if (!this.current.arenaScope) {
       return;
     }
-    this.fn.emit(`call void ${this.useRuntime("sts_arena_release")}(i64 %arena.mark)`);
+    this.fn.emit(`call void ${this.useRuntime("amrit_arena_release")}(i64 %arena.mark)`);
   }
 
   /**
    * The C-ABI process entry, with the signature every libc start-up expects.
-   * When the program reads `process.argv`, `sts_argv_init(argc, argv)` builds
+   * When the program reads `process.argv`, `amrit_argv_init(argc, argv)` builds
    * the string array before the user's `main` runs. The attributes are
    * deliberately minimal: the wrapper calls the runtime, so it is neither pure
    * nor provably returning.
@@ -370,9 +370,9 @@ export class Emitter {
     if (debug !== null) {
       debug.beginFunction(fn, userMain, true, "main");
     }
-    const freeArena = this.useRuntime("sts_free_arena");
+    const freeArena = this.useRuntime("amrit_free_arena");
     if (this.program.usesArgv) {
-      fn.emit(`call void ${this.useRuntime("sts_argv_init")}(i32 %argc, i8** %argv)`);
+      fn.emit(`call void ${this.useRuntime("amrit_argv_init")}(i32 %argc, i8** %argv)`);
     }
     let code = "0";
     if (userMain.returnType === T_VOID) {
@@ -493,17 +493,17 @@ export class Emitter {
 
   emitRuntimePrelude(): void {
     const all = this.opts.runtimeDecls;
-    const wantsAlloc = all || this.usedRuntime.has("sts_alloc_struct");
+    const wantsAlloc = all || this.usedRuntime.has("amrit_alloc_struct");
     if (wantsAlloc) {
-      this.usedRuntime.add("sts_arena_grow");
+      this.usedRuntime.add("amrit_arena_grow");
       this.module.addTypeDecl(ARENA_TYPE);
       this.module.addGlobal(ARENA_GLOBAL);
     }
-    // The array header type is referenced by `sts_array_grow`'s declaration.
-    if (all || this.usedRuntime.has("sts_array_grow")) {
+    // The array header type is referenced by `amrit_array_grow`'s declaration.
+    if (all || this.usedRuntime.has("amrit_array_grow")) {
       this.module.addTypeDecl(ARRAY_TYPE);
     }
-    // `@sts_argv` is part of the C ABI too; modules that read `process.argv` declared it already.
+    // `@amrit_argv` is part of the C ABI too; modules that read `process.argv` declared it already.
     if (all) {
       this.module.addGlobal(ARGV_GLOBAL);
     }

@@ -319,7 +319,7 @@ export class DebugInfo {
     return ref;
   }
 
-  /** The `%struct.sts_array` header `{ i64 len, i64 cap, T* data }`, specialised per element type for the debugger's sake. */
+  /** The `%struct.amrit_array` header `{ i64 len, i64 cap, T* data }`, specialised per element type for the debugger's sake. */
   arrayHeader(elem: i32, name: string): string {
     const ref = this.module.reserveMetadata();
     const long = this.typeRef(T_I64);
@@ -336,7 +336,7 @@ export class DebugInfo {
   }
 
   /**
-   * `%struct.sts_result.<T>.<E>` with the layout the checker derived: the
+   * `%struct.amrit_result.<T>.<E>` with the layout the checker derived: the
    * discriminant, the success payload (absent for `Result<void, E>`) and the
    * error payload, each at its computed byte offset. There is no declaration
    * to take a source line from, so the members carry none.

@@ -5,8 +5,8 @@
 // A raw wasm export sees an array as an `i32` pointer to the arena header
 // `{ i64 len, i64 cap, i8* data }` (24 bytes on wasm32 too: the 4-byte data
 // pointer sits at offset 16). Per call the wrapper:
-//   1. `sts_arena_mark()`, so everything below can be released afterwards;
-//   2. for each typed-array argument: `sts_alloc_array(elemSize, len)` in the
+//   1. `amrit_arena_mark()`, so everything below can be released afterwards;
+//   2. for each typed-array argument: `amrit_alloc_array(elemSize, len)` in the
 //      module (runtime/runtime_wasm.c), a typed-array view on `memory.buffer`
 //      at the header's data pointer, `.set(argument)`;
 //   3. the call;
@@ -15,7 +15,7 @@
 //      an argument the callee writes through (`fill(xs)`): copy the arena
 //      bytes back into the caller's typed array, so the wasm and N-API builds
 //      agree (N-API borrows the buffer, so writes land directly);
-//   5. `sts_arena_release(mark)`, in a `finally`, so a trap leaks nothing.
+//   5. `amrit_arena_release(mark)`, in a `finally`, so a trap leaks nothing.
 // `memory.buffer` is re-read after every module call because `memory.grow`
 // detaches the previous ArrayBuffer. Scalar-only exports are passed through
 // untouched; string functions are omitted (no WASI runtime).
@@ -451,7 +451,7 @@ export function generateWasmLoader(
     lines.push(
       '    if (!(value instanceof Ctor)) throw new TypeError(what + " must be " + (/^[AEIOU]/.test(Ctor.name) ? "an " : "a ") + Ctor.name);'
     );
-    lines.push("    const hdr = raw.sts_alloc_array(BigInt(elemSize), BigInt(value.length));");
+    lines.push("    const hdr = raw.amrit_alloc_array(BigInt(elemSize), BigInt(value.length));");
     lines.push("    new Ctor(memory.buffer, header(hdr).data, value.length).set(value);");
     lines.push("    return hdr;");
     lines.push("  };");
@@ -467,18 +467,18 @@ export function generateWasmLoader(
     lines.push("  };");
     lines.push("  /** Run `fn`, then release everything it allocated in the arena, even when it traps. */");
     lines.push("  const scoped = (fn) => {");
-    lines.push("    const mark = raw.sts_arena_mark();");
+    lines.push("    const mark = raw.amrit_arena_mark();");
     lines.push("    try {");
     lines.push("      return fn();");
     lines.push("    } finally {");
-    lines.push("      raw.sts_arena_release(mark);");
+    lines.push("      raw.amrit_arena_release(mark);");
     lines.push("    }");
     lines.push("  };");
     pushAll(lines, wasmResultHelpers(table, bridge.bridged));
     lines.push("  return {");
     lines.push("    memory,");
-    lines.push("    sts_reset_arena: raw.sts_reset_arena,");
-    lines.push("    sts_free_arena: raw.sts_free_arena,");
+    lines.push("    amrit_reset_arena: raw.amrit_reset_arena,");
+    lines.push("    amrit_free_arena: raw.amrit_free_arena,");
   } else {
     pushAll(lines, wasmResultHelpers(table, bridge.bridged));
     lines.push("  return {");

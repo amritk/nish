@@ -1,4 +1,4 @@
-declare void @sts_panic_div(i1 noundef zeroext) #2
+declare void @amrit_panic_div(i1 noundef zeroext) #2
 
 define noundef i32 @firstMultipleOver(i32 noundef %n, i32 noundef %limit) #0 {
 entry:
@@ -52,7 +52,7 @@ for.body:
   br i1 %7, label %div.fail, label %div.ok
 
 div.fail:
-  call void @sts_panic_div(i1 zeroext %3)
+  call void @amrit_panic_div(i1 zeroext %3)
   unreachable
 
 div.ok:

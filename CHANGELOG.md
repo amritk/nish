@@ -101,9 +101,20 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   include guard and `#include` of a generated header, the DWARF producer
   string, and the internal-error report all read `LANGUAGE` / `CLI` from there.
   Phase 0's entry point is `validateSyntax`, named after its job rather than
-  the language. The `sts_` prefix on the runtime's C symbols is **unchanged**:
-  it is ABI, not branding, and `docs/ARCHITECTURE.md` ("Where the name lives")
-  now says so.
+  the language.
+
+  The `amrit_` prefix on the runtime's C symbols was rewritten as the last step
+  of the rename, so the tree carries no trace of the old name: `sts_str_concat`
+  → `amrit_str_concat` and its 72 siblings, `STS_SYMBOL` / `STS_COLD` /
+  `STS_RESULT_ASSERT` → `AMRIT_*`, the `%struct.sts_arena` / `sts_array` /
+  `sts_str` / `sts_result_*` layouts, the Node shim's `__sts` namespace →
+  `__amrit`, and the benchmark variant ids. **This is a C ABI break**: a host
+  that links `runtime/runtime.c` or includes `runtime/amritc.h` must use the new
+  names. Nothing has been released, so nothing linked the old ones. That prefix
+  is ABI rather than branding and is **frozen** from here — it was affordable to
+  change exactly once, before a first release, while every golden `.ll` that
+  carries it could be regenerated; `docs/ARCHITECTURE.md` ("Where the name
+  lives") says why it does not move again.
 
 ### Added
 
@@ -149,8 +160,8 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `res_by_value_propagate`, `reject_result_by_value_unchecked`.
 - **A `Result` crosses the host boundary (WP17).** `--emit-header` no longer
   skips a function whose signature mentions one: it declares
-  `struct sts_result_<T>_<E>` for the arena object and a
-  `sts_result_<T>_<E>_word` typedef for the packed form, with a `sizeof`
+  `struct amrit_result_<T>_<E>` for the arena object and a
+  `amrit_result_<T>_<E>_word` typedef for the packed form, with a `sizeof`
   assertion, and clang lowers a function returning *or taking* that typedef to
   exactly the `i64` the module defines — so a C host includes the header and
   calls across with no glue, in both directions. `--emit-napi` bridges a
@@ -246,10 +257,10 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   explicit numeric conversions, `process.exit`, synchronous file I/O, and
   JavaScript-accurate number formatting in the runtime.
 - **Command line, string parsing, WASI.** `process.argv: string[]` (built
-  once by the `@main` wrapper with `sts_argv_init`; `argv[0]` is the program
+  once by the `@main` wrapper with `amrit_argv_init`; `argv[0]` is the program
   path; read-only; a compile error in a program without `main`),
   `parseInt(s): i32`, `parseFloat(s): f64` and `Number(x): f64` (JavaScript
-  semantics for the decimal forms via one runtime call `sts_parse_number`;
+  semantics for the decimal forms via one runtime call `amrit_parse_number`;
   `parseInt` has no NaN and saturates like `toI32`), and a `wasi` build
   profile (`--link app.wasm --profile wasi`) that links the runtime against
   wasi-libc so whole programs run under any WASI host, including Node's
@@ -262,14 +273,14 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   they are the same type as `i32[]` / `f64[]` / `i64[]` (one layout). Exported
   functions taking or returning them cross to Node: the N-API shim borrows a
   JS typed array zero-copy (`napi_get_typedarray_info` under a stack
-  `sts_array` header) and returns a fresh typed array, and also bridges
+  `amrit_array` header) and returns a fresh typed array, and also bridges
   `string` and `i64` (bigint) arguments and results, releasing the arena per
   call; `--emit-dts` now also writes `<file>.mjs`, a loader that copies typed
-  arrays into wasm memory through the new `sts_alloc_array` runtime entry and
+  arrays into wasm memory through the new `amrit_alloc_array` runtime entry and
   copies results (and written-through arguments) back. `runtime/runtime_wasm.c`
   is a freestanding arena + arrays runtime for the wasm profile (which now
   passes `-mbulk-memory`). `--emit-header` spells read-only array parameters
-  `const sts_array *` and written ones `sts_array *`. `examples/arrays.ts`,
+  `const amrit_array *` and written ones `amrit_array *`. `examples/arrays.ts`,
   `bench/ffi.mjs` gains the batched `Float64Array` rows.
 - **Self-hosting, milestone S3: the body pass and Phase 0**
   (`docs/wp14-selfhost.md` §4). `self/expressions.ts`, `statements.ts`,
@@ -439,7 +450,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   discriminant and constant labels — a literal, its negation, or a module
   constant — lower to one LLVM `switch`, so the backend builds a jump table
   (`llc -O2` emits `jmpq *.LJTI0_0(,%rax,8)` for twelve dense labels). Only an
-  integer switches: a string one would have been a chain of `sts_str_eq` calls
+  integer switches: a string one would have been a chain of `amrit_str_eq` calls
   wearing a switch's clothes. There is no implicit fallthrough — a clause with
   statements ends in `break`, `return`, `continue` or `throw` unless it is the
   last, while an *empty* clause falls through, which is how `case 1: case 2:`
@@ -456,8 +467,8 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   inline rather than to runtime calls: `charCodeAt` is the array bounds check
   and a `load i8`, `substring` is JavaScript's clamp — `llvm.smin`/`llvm.smax`
   into `[0, len]`, then the pair in order, which `opt -O2` folds to one
-  `max(0, min(n, len))` — plus one `sts_str_new`, and `indexOf` is a scan in
-  the emitted code. The one new runtime symbol is `sts_str_at(s, at, sub)`,
+  `max(0, min(n, len))` — plus one `amrit_str_new`, and `indexOf` is a scan in
+  the emitted code. The one new runtime symbol is `amrit_str_at(s, at, sub)`,
   which `startsWith`, `endsWith` and the `indexOf` scan share; `runtime.c` is
   3,842 bytes of `.text` at `-Oz`, inside the 4,096-byte budget.
   `charCodeAt` bounds-checks and exits 1 where JavaScript answers `NaN`, which
@@ -467,11 +478,11 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `tests/differential/corpus/str_methods.ts`).
 - **Array `pop`, `indexOf` and `join`** (`docs/wp14-selfhost.md` A4). `pop`
   hands back the last element and stores the shortened length; an empty array
-  panics through the same `sts_panic_index` an index does, because there is no
+  panics through the same `amrit_panic_index` an index does, because there is no
   `undefined` to return. `indexOf` scans with the `===` of the element type —
   content for strings, identity for classes and arrays, `fcmp oeq` for floats,
   so a `NaN` element is never found. `join` is `string[]` only and is the fast
-  shape the port needs: one pass summing the lengths, one `sts_alloc_struct`,
+  shape the port needs: one pass summing the lengths, one `amrit_alloc_struct`,
   one `llvm.memcpy` per part and per separator, with the separator before the
   first part skipped by selecting a length of zero rather than by branching.
   Building the same text with `+` in a loop copies everything again per part
@@ -487,7 +498,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   of which `console.log` can do: `console.error(x)` takes what `console.log`
   takes and writes it to stderr, and `write(s)` / `writeError(s)` write a
   string as it is, on fd 1 or 2. All three share one runtime entry point,
-  `sts_write(s, fd, newline)`, which `sts_print` now delegates to, so no
+  `amrit_write(s, fd, newline)`, which `amrit_print` now delegates to, so no
   existing golden moved. `readFileSyncOrNull(path): string | null` is the same
   read as `readFileSync` but answers `null` where that one exits, which is
   what lets a program turn a missing import into its own diagnostic and carry
@@ -539,7 +550,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   does not outlive its function becomes an entry-block `alloca`
   (`--no-stack-alloc` disables it). Automatic arena scopes: a function whose
   arena temporaries all die with it brackets its body with the new
-  `sts_arena_mark` / `sts_arena_release` runtime calls, so hot loops keep the
+  `amrit_arena_mark` / `amrit_arena_release` runtime calls, so hot loops keep the
   arena flat. `Arena.reset` / `mark` / `release` / `used` builtins, and
   `T | null` for class, interface, array and string types with checker-
   enforced narrowing (`if (p !== null)`, early return, `while`, `&&`, `?:`).
@@ -608,7 +619,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   builtins; a literal in an unsigned context must be non-negative and fit the
   width; mixing signednesses or widths is a type error, as `i32` and `i64`
   already were. `console.log` and template holes print unsigned values
-  unsigned through the new `sts_str_from_u64` (the narrow widths `zext` into
+  unsigned through the new `amrit_str_from_u64` (the narrow widths `zext` into
   it, so one runtime symbol serves all four). `--emit-header` spells them
   `uint8_t` … `uint64_t` and `--emit-dts` `number` / `bigint`.
 - **32-bit floats: `f32`.** LLVM's `float`, with the same instructions `f64`
@@ -624,7 +635,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   equals, rounded so that double is exactly a float — `0.1` is
   `float 0x3FB99999A0000000`, not the `f64` spelling `0x3FB999999999999A`.
   `console.log` and template holes widen with `fpext` and reuse
-  `sts_str_from_f64`, adding no runtime code, so an `f32` prints
+  `amrit_str_from_f64`, adding no runtime code, so an `f32` prints
   JavaScript's digits for the float's value (`0.10000000149011612` for `0.1`).
   `Math.abs`/`min`/`max` work through the `.f32` intrinsics; the f64-only
   `Math` functions stay f64-only. `Float32Array` is one more typed-array alias
@@ -677,7 +688,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   inside a function that itself returns a compatible `Result` — so propagating
   a callee's failure is contagious through the signatures. `Result<T, E>` is a
   built-in type constructor, not a user generic: each pair of payload types
-  gets one monomorphised `%struct.sts_result.<T>.<E>`, laid out and allocated
+  gets one monomorphised `%struct.amrit_result.<T>.<E>`, laid out and allocated
   exactly as a class is, so the WP6 escape analysis turns a `Result` that does
   not outlive its function into an entry-block `alloca` with no allocator call
   at all. `Result<void, E>` is the fallible operation with nothing to hand
@@ -762,7 +773,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `tests/self/reject_oracle.js` now runs against stage1.
 
 - **A compound integer division contributes its panic callee.** `x /= k`,
-  `p.f %= k` and their `/=` twins can call the noreturn `sts_panic_div` exactly
+  `p.f %= k` and their `/=` twins can call the noreturn `amrit_panic_div` exactly
   as `a / b` can, but the checker resolves the target as an *assignment target*
   and records no type for it, so the fact went missing and the enclosing
   function kept `willreturn` and `readnone` over a call that writes and never
@@ -771,7 +782,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 - **`readFileSyncOrNull` is an allocation site.** Its result is bumped out of
   the arena exactly as `readFileSync`'s is, but the escape analysis only knew
   about the second name, so a function that returned the bytes could still be
-  given an automatic arena scope — and its `sts_arena_release` rewound past the
+  given an automatic arena scope — and its `amrit_arena_release` rewound past the
   string the caller was about to read. Found by porting the analysis to `self/`
   for milestone S4 (`tests/cases/mem_read_or_null_scope`).
 - **Dispatch tables no longer see `Object.prototype`.** The validator, checker
@@ -800,11 +811,11 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `docs/MASTER_PLAN.md` budget without any observable change: `text` at `-Oz`
   4,195 -> 3,714 bytes (`.text` 2,637 -> 2,245, `.eh_frame` 1,344 -> 1,240),
   source 11,432 -> 9,392 bytes; the plain-message panics share one cold
-  `sts_die` and the two formatted ones (index, file path) are a single
+  `amrit_die` and the two formatted ones (index, file path) are a single
   `dprintf` each instead of hand-written digit loops, the JS `Number#toString`
   formatter indexes the `%.*e` buffer directly and emits all four layouts from
-  one digit loop, and the three chunk-freeing loops share `sts_free_until`.
-  Adding `sts_str_from_u64` for the unsigned widths took it to 3,765 bytes,
+  one digit loop, and the three chunk-freeing loops share `amrit_free_until`.
+  Adding `amrit_str_from_u64` for the unsigned widths took it to 3,765 bytes,
   still inside the 4,096-byte budget: it shares the signed formatter's digit
   loop through a static `str_from_digits(value, negative)` helper.
   `scripts/size-report.sh` now prints a `runtime` row (the budget number) above

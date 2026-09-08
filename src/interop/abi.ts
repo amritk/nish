@@ -29,7 +29,7 @@ export interface ExternalFunction {
  * Every function that is an external symbol of the final link, in module and
  * source order: exported functions always, non-exported ones unless
  * `--strict-exports` made them `internal`. The entry `export function main`
- * is excluded: it is emitted as `@sts_main` behind the process entry
+ * is excluded: it is emitted as `@amrit_main` behind the process entry
  * wrapper and is not a library call.
  */
 export function externalFunctions(compilation: Compilation): ExternalFunction[] {
@@ -128,11 +128,11 @@ export function cType(t: StaticType, position: "param" | "return", written = fal
     case "string":
       // Strings are immutable, so a callee can promise not to write through
       // a parameter; a returned string is arena-owned and not const.
-      return position === "param" ? "const sts_str *" : "sts_str *";
+      return position === "param" ? "const amrit_str *" : "amrit_str *";
     case "array":
       // One header type for every element type (the comment above the
       // prototype names it). `const` is the `readonly` proof from attributes.ts.
-      return position === "param" && !written ? "const sts_array *" : "sts_array *";
+      return position === "param" && !written ? "const amrit_array *" : "amrit_array *";
     case "void":
       return "void";
     case "struct":
@@ -156,8 +156,8 @@ export function cType(t: StaticType, position: "param" | "return", written = fal
 }
 
 /**
- * The LLVM struct name as a C identifier: `sts_result.i32.$IoError` becomes
- * `sts_result_i32__IoError`. Both `.` and `$` become `_`, and that stays
+ * The LLVM struct name as a C identifier: `amrit_result.i32.$IoError` becomes
+ * `amrit_result_i32__IoError`. Both `.` and `$` become `_`, and that stays
  * unambiguous because `mangleType` only ever writes `$` straight after a
  * separator: `Result<i32, string>` is `..._i32_str` and a `Result` over a
  * class called `str` is `..._i32__str`, since its `.$` collapses to two.
@@ -173,11 +173,11 @@ export function cResultWord(t: StaticType): string {
 
 /**
  * C spelling of a struct field. Everything a field can hold has one: the
- * scalars, `sts_str *`, a pointer to another struct, and `sts_array *` for
+ * scalars, `amrit_str *`, a pointer to another struct, and `amrit_array *` for
  * `T[]` (the header type from amritc.h; the element type is a comment).
  */
 export function cFieldType(t: StaticType): string {
-  if (kindOf(t) === "array") return "sts_array *";
+  if (kindOf(t) === "array") return "amrit_array *";
   // A field holds the in-memory `Result`, never the packed return word.
   if (kindOf(t) === "result") return `struct ${cResultName(t)} *`;
   return cType(t, "return") ?? "void *";
@@ -288,7 +288,7 @@ const C_RESERVED = new Set([
   "short", "signed", "sizeof", "static", "struct", "switch", "true", "typedef", "union", "unsigned", "void",
   "volatile", "while", "_Bool", "alignas", "alignof", "and", "asm", "catch", "class", "delete", "explicit",
   "export", "friend", "mutable", "namespace", "new", "not", "operator", "or", "private", "protected", "public",
-  "template", "this", "throw", "try", "typename", "using", "virtual", "xor", "sts_str", "sts_arena", "sts_array",
+  "template", "this", "throw", "try", "typename", "using", "virtual", "xor", "amrit_str", "amrit_arena", "amrit_array",
   "env", "info", "argv", "argc", "type", "out", "result", "mark",
 ]);
 
@@ -300,15 +300,15 @@ export function cParamName(name: string): string {
  * C identifier for a compiled function. A name that is a C keyword (`double`,
  * `int`, ...) is a perfectly good LLVM symbol but cannot be spelled in C, so
  * it is declared as `name_` bound to the real symbol with an asm label
- * (`STS_SYMBOL`, from amritc.h; it adds the `_` prefix Mach-O needs).
+ * (`AMRIT_SYMBOL`, from amritc.h; it adds the `_` prefix Mach-O needs).
  * Methods and constructors (`Point.shifted`, `Point.constructor`, WP2) are
  * declared the same way as `Point_shifted` / `Point_constructor`, taking the
  * object pointer first: a C host may call them on objects it holds.
  */
 export function cFunctionName(symbol: string): { ident: string; label: string } {
-  if (symbol.includes(".")) return { ident: symbol.replace(/\./g, "_"), label: ` STS_SYMBOL("${symbol}")` };
+  if (symbol.includes(".")) return { ident: symbol.replace(/\./g, "_"), label: ` AMRIT_SYMBOL("${symbol}")` };
   if (!C_RESERVED.has(symbol)) return { ident: symbol, label: "" };
-  return { ident: `${symbol}_`, label: ` STS_SYMBOL("${symbol}")` };
+  return { ident: `${symbol}_`, label: ` AMRIT_SYMBOL("${symbol}")` };
 }
 
 /** `int32_t add(int32_t a, int32_t b)` for a signature, or `undefined` when a type has no C spelling. */
@@ -341,11 +341,11 @@ export function banner(compilation: Compilation, flag: string, comment: (text: s
  * `Result` definitions (WP17). Two shapes, and a signature uses whichever its
  * position calls for:
  *
- *   `struct sts_result_<T>_<E>`      the arena object WP16 has always had —
+ *   `struct amrit_result_<T>_<E>`      the arena object WP16 has always had —
  *                                    `{ ok, value, error }` at the offsets the
  *                                    checker derived, which is exactly what
  *                                    clang lays this same declaration out as
- *   `sts_result_<T>_<E>_word`        the packed by-value form, in either
+ *   `amrit_result_<T>_<E>_word`        the packed by-value form, in either
  *                                    direction: a 32-bit discriminant and the
  *                                    arm it selects, one 64-bit word
  *
@@ -367,14 +367,14 @@ export function resultDefinitions(
     "/* `Result<T, E>` (WP16/WP17). A `Result` small enough to travel in a",
     " * register — returned or passed — is the `_word` struct: read `ok`, then",
     " * `as.value` or `as.error`. Every other `Result` is a pointer to the arena",
-    " * object, valid until sts_reset_arena() / sts_arena_release() like every",
+    " * object, valid until amrit_reset_arena() / amrit_arena_release() like every",
     " * other arena value. */",
     "#if defined(__cplusplus)",
-    "#define STS_RESULT_ASSERT(c, m) static_assert(c, m)",
+    "#define AMRIT_RESULT_ASSERT(c, m) static_assert(c, m)",
     "#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L",
-    "#define STS_RESULT_ASSERT(c, m) _Static_assert(c, m)",
+    "#define AMRIT_RESULT_ASSERT(c, m) _Static_assert(c, m)",
     "#else",
-    "#define STS_RESULT_ASSERT(c, m) /* pre-C11: no static assertion available */",
+    "#define AMRIT_RESULT_ASSERT(c, m) /* pre-C11: no static assertion available */",
     "#endif",
   ];
   for (const use of uses) lines.push("", ...resultDefinition(use));
@@ -400,7 +400,7 @@ function resultDefinition(use: ResultUse): string[] {
       "  int32_t ok; /* 1 = value, 0 = error */",
       `  union { ${arms} } as; /* the arm \`ok\` selects; the other is not written */`,
       `} ${name};`,
-      `STS_RESULT_ASSERT(sizeof(${name}) == 8, "${tsKeyword(type)} travels in one 64-bit register");`
+      `AMRIT_RESULT_ASSERT(sizeof(${name}) == 8, "${tsKeyword(type)} travels in one 64-bit register");`
     );
   }
   return lines;

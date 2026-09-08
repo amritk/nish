@@ -200,7 +200,7 @@ function main(argv) {
   const named = argv.filter((a) => !a.startsWith("--"));
   const binary = build();
   if (binary === null) return 1;
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), "sts-ir-"));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "amrit-ir-"));
   const inputs = named.length > 0 ? named.map((f) => path.resolve(f)) : corpus();
   const negatives = negativePrograms();
   let agreed = 0;

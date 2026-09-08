@@ -9,11 +9,11 @@
 //        number   a JS number; ToInt32 semantics in i32 mode (like `x | 0`)
 //        boolean  a JS boolean
 //        i64      a JS bigint (`napi_get_value_bigint_int64`)
-//        string   a JS string, copied into an arena `sts_str`
+//        string   a JS string, copied into an arena `amrit_str`
 //                 (`napi_get_value_string_utf8`, measured first, then copied)
 //        Int32Array / Float64Array / BigInt64Array (i32[] / f64[] / i64[])
 //                 a JS typed array of exactly that kind, *borrowed*: the
-//                 `sts_array` header is built on the C stack over the typed
+//                 `amrit_array` header is built on the C stack over the typed
 //                 array's own bytes (`napi_get_typedarray_info`), so nothing
 //                 is copied and writes through the parameter land in the
 //                 caller's buffer. The callee must not retain the pointer
@@ -28,10 +28,10 @@
 // A violated check throws a TypeError naming the function and parameter.
 //
 // Functions that touch the arena (a string or array parameter or result)
-// bracket the call with `sts_arena_mark` / `sts_arena_release`: every arena
+// bracket the call with `amrit_arena_mark` / `amrit_arena_release`: every arena
 // string or array made for the call is recycled before the wrapper returns,
-// so a host never has to reset the arena for bridged calls. `sts_reset_arena`
-// / `sts_free_arena` are still exported for hosts that want to.
+// so a host never has to reset the arena for bridged calls. `amrit_reset_arena`
+// / `amrit_free_arena` are still exported for hosts that want to.
 //
 // This is the most host-shaped of the five generators, because `src/` models
 // a reader and a boxer as records of closures. Closures are what the language
@@ -142,7 +142,7 @@ export class Reader {
   scalar: ScalarReader | null;
   /** `READ_SCALAR` for `i64`: the getter takes a `&lossless` out-parameter. */
   lossless: boolean;
-  /** `READ_VIEW`: the typed array, and the `const sts_array *` the callee takes. */
+  /** `READ_VIEW`: the typed array, and the `const amrit_array *` the callee takes. */
   view: TypedView | null;
   cDecl: string;
   /** `READ_RESULT`: the packed word, and the getter for each arm. */
@@ -223,7 +223,7 @@ function napiResultReader(table: TypeTable, t: i32): Reader | null {
 
 /** The failing return of one wrapper: an arena-scoped call releases first. */
 function napiFailCall(scoped: boolean, message: string): string {
-  return scoped ? `sts_napi_fail_at(env, mark, "${message}")` : `sts_napi_fail(env, "${message}")`;
+  return scoped ? `amrit_napi_fail_at(env, mark, "${message}")` : `amrit_napi_fail(env, "${message}")`;
 }
 
 /**
@@ -249,10 +249,10 @@ function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boo
       return lines;
     }
     case READ_STRING: {
-      lines.push(`const sts_str *${c};`);
+      lines.push(`const amrit_str *${c};`);
       lines.push(`if (napi_typeof(env, argv[${i}], &type) != napi_ok || type != napi_string)`);
       lines.push(`  return ${napiFailCall(scoped, `${what} must be a string`)};`);
-      lines.push(`if ((${c} = sts_napi_string_arg(env, argv[${i}])) == NULL)`);
+      lines.push(`if ((${c} = amrit_napi_string_arg(env, argv[${i}])) == NULL)`);
       lines.push(`  return ${napiFailCall(scoped, `${what} could not be converted`)};`);
       return lines;
     }
@@ -279,8 +279,8 @@ function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boo
       if (view === null) {
         panic("internal error: view reader without a view");
       }
-      lines.push(`sts_array ${c}_hdr; /* borrowed: the ${view.ctor}'s own bytes, for this call only */`);
-      lines.push(`if (!sts_napi_array_arg(env, argv[${i}], ${view.napiType}, &${c}_hdr))`);
+      lines.push(`amrit_array ${c}_hdr; /* borrowed: the ${view.ctor}'s own bytes, for this call only */`);
+      lines.push(`if (!amrit_napi_array_arg(env, argv[${i}], ${view.napiType}, &${c}_hdr))`);
       lines.push(`  return ${napiFailCall(scoped, `${what} must be ${withArticle(view.ctor)}`)};`);
       lines.push(`${r.cDecl}${c} = &${c}_hdr;`);
       return lines;
@@ -370,7 +370,7 @@ function napiBoxer(table: TypeTable, t: i32): Boxer | null {
 
 /**
  * `{ ok: true, value }` / `{ ok: false, error }`: box the arm the discriminant
- * selects into `payload`, then wrap it with `sts_napi_result`. `null` when
+ * selects into `payload`, then wrap it with `amrit_napi_result`. `null` when
  * either payload has no scalar constructor — the same gap that keeps an
  * unsigned or `f32` parameter out of this shim.
  */
@@ -395,13 +395,13 @@ function napiBoxerCall(box: Boxer, value: string): string {
     case BOX_STRING:
       return `napi_create_string_utf8(env, ${value}->data, ${value}->len, &out)`;
     case BOX_RESULT:
-      return `sts_napi_result(env, ${value}.ok != 0, payload, &out)`;
+      return `amrit_napi_result(env, ${value}.ok != 0, payload, &out)`;
     default: {
       const view = box.view;
       if (view === null) {
         panic("internal error: view boxer without a view");
       }
-      return `sts_napi_array_result(env, ${value}, ${view.napiType}, ${view.elemSize}, &out)`;
+      return `amrit_napi_array_result(env, ${value}, ${view.napiType}, ${view.elemSize}, &out)`;
     }
   }
 }
@@ -469,16 +469,16 @@ function napiWrapper(table: TypeTable, p: Plan): string[] {
   const n = sig.paramNames.length;
   const scoped = p.scoped;
   const lines: string[] = [];
-  lines.push(`static napi_value sts_napi_${name}(napi_env env, napi_callback_info info) {`);
+  lines.push(`static napi_value amrit_napi_${name}(napi_env env, napi_callback_info info) {`);
   if (n === 0) {
     lines.push("  (void)info;");
   } else {
     lines.push(`  size_t argc = ${n};`);
     lines.push(`  napi_value argv[${n}];`);
     lines.push("  if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok)");
-    lines.push(`    return sts_napi_fail(env, "${name}: cannot read arguments");`);
+    lines.push(`    return amrit_napi_fail(env, "${name}: cannot read arguments");`);
     lines.push(`  if (argc < ${n})`);
-    lines.push(`    return sts_napi_fail(env, "${name} expects ${n} argument${n === 1 ? "" : "s"}");`);
+    lines.push(`    return amrit_napi_fail(env, "${name} expects ${n} argument${n === 1 ? "" : "s"}");`);
     let usesTypeof = false;
     for (const r of p.readers) {
       if (r.usesTypeof) {
@@ -502,7 +502,7 @@ function napiWrapper(table: TypeTable, p: Plan): string[] {
   }
   if (scoped) {
     lines.push(
-      "  uint64_t mark = sts_arena_mark(); /* arena strings/arrays made for this call are released on return */"
+      "  uint64_t mark = amrit_arena_mark(); /* arena strings/arrays made for this call are released on return */"
     );
   }
   let i = 0;
@@ -538,7 +538,7 @@ function napiWrapper(table: TypeTable, p: Plan): string[] {
   lines.push(`  if (${napiBoxerCall(p.box, "result")} != napi_ok)`);
   lines.push(`    return ${napiFailCall(scoped, `${name}: cannot create the result`)};`);
   if (scoped) {
-    lines.push("  sts_arena_release(mark);");
+    lines.push("  amrit_arena_release(mark);");
   }
   lines.push("  return out;");
   lines.push("}");
@@ -633,7 +633,7 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
     lines.push(
       "/* Throw a TypeError; returning NULL hands `undefined` back while the exception is pending. */"
     );
-    lines.push("static napi_value sts_napi_fail(napi_env env, const char *message) {");
+    lines.push("static napi_value amrit_napi_fail(napi_env env, const char *message) {");
     lines.push("  napi_throw_type_error(env, NULL, message);");
     lines.push("  return NULL;");
     lines.push("}");
@@ -641,9 +641,9 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
   }
   if (needsScoped) {
     lines.push("/* The same, from a call that already marked the arena: release first. */");
-    lines.push("static napi_value sts_napi_fail_at(napi_env env, uint64_t mark, const char *message) {");
-    lines.push("  sts_arena_release(mark);");
-    lines.push("  return sts_napi_fail(env, message);");
+    lines.push("static napi_value amrit_napi_fail_at(napi_env env, uint64_t mark, const char *message) {");
+    lines.push("  amrit_arena_release(mark);");
+    lines.push("  return amrit_napi_fail(env, message);");
     lines.push("}");
     lines.push("");
   }
@@ -651,10 +651,10 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
     lines.push(
       "/* A JS string as an arena string: the first call measures, the second copies (NUL included). */"
     );
-    lines.push("static sts_str *sts_napi_string_arg(napi_env env, napi_value value) {");
+    lines.push("static amrit_str *amrit_napi_string_arg(napi_env env, napi_value value) {");
     lines.push("  size_t len;");
     lines.push("  if (napi_get_value_string_utf8(env, value, NULL, 0, &len) != napi_ok) return NULL;");
-    lines.push("  sts_str *s = (sts_str *)sts_alloc_struct(sizeof(uint64_t) + len + 1);");
+    lines.push("  amrit_str *s = (amrit_str *)amrit_alloc_struct(sizeof(uint64_t) + len + 1);");
     lines.push(
       "  if (napi_get_value_string_utf8(env, value, s->data, len + 1, &len) != napi_ok) return NULL;"
     );
@@ -664,9 +664,9 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
     lines.push("");
   }
   if (needsArrayArg) {
-    lines.push("/* A typed array of the expected kind as a borrowed sts_array header over its own bytes. */");
+    lines.push("/* A typed array of the expected kind as a borrowed amrit_array header over its own bytes. */");
     lines.push(
-      "static bool sts_napi_array_arg(napi_env env, napi_value value, napi_typedarray_type want, sts_array *out) {"
+      "static bool amrit_napi_array_arg(napi_env env, napi_value value, napi_typedarray_type want, amrit_array *out) {"
     );
     lines.push("  bool is_typedarray;");
     lines.push("  napi_typedarray_type type;");
@@ -689,7 +689,7 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
       "/* An arena array as a fresh typed array: copied, because the arena is released when the call returns. */"
     );
     lines.push(
-      "static napi_status sts_napi_array_result(napi_env env, const sts_array *a, napi_typedarray_type type, size_t elem_size, napi_value *out) {"
+      "static napi_status amrit_napi_array_result(napi_env env, const amrit_array *a, napi_typedarray_type type, size_t elem_size, napi_value *out) {"
     );
     lines.push("  void *data;");
     lines.push("  napi_value buffer;");
@@ -704,7 +704,7 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
     lines.push("/* WP17: a `Result` as the object JS models it with — `{ ok, value }` or");
     lines.push(" * `{ ok, error }`. The dead arm is never written, so it is never read. */");
     lines.push(
-      "static napi_status sts_napi_result(napi_env env, bool ok, napi_value payload, napi_value *out) {"
+      "static napi_status amrit_napi_result(napi_env env, bool ok, napi_value payload, napi_value *out) {"
     );
     lines.push("  napi_value obj, flag;");
     lines.push("  napi_status status = napi_create_object(env, &obj);");
@@ -720,25 +720,25 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
     lines.push("}");
     lines.push("");
   }
-  lines.push("static napi_value sts_napi_undefined(napi_env env) {");
+  lines.push("static napi_value amrit_napi_undefined(napi_env env) {");
   lines.push("  napi_value out;");
   lines.push("  return napi_get_undefined(env, &out) == napi_ok ? out : NULL;");
   lines.push("}");
   lines.push("");
   lines.push(
-    "/* sts_reset_arena(): recycle every string/object the module allocated since the last reset. */"
+    "/* amrit_reset_arena(): recycle every string/object the module allocated since the last reset. */"
   );
-  lines.push("static napi_value sts_napi_reset_arena(napi_env env, napi_callback_info info) {");
+  lines.push("static napi_value amrit_napi_reset_arena(napi_env env, napi_callback_info info) {");
   lines.push("  (void)info;");
-  lines.push("  sts_reset_arena();");
-  lines.push("  return sts_napi_undefined(env);");
+  lines.push("  amrit_reset_arena();");
+  lines.push("  return amrit_napi_undefined(env);");
   lines.push("}");
   lines.push("");
-  lines.push("/* sts_free_arena(): release every arena chunk back to the OS. */");
-  lines.push("static napi_value sts_napi_free_arena(napi_env env, napi_callback_info info) {");
+  lines.push("/* amrit_free_arena(): release every arena chunk back to the OS. */");
+  lines.push("static napi_value amrit_napi_free_arena(napi_env env, napi_callback_info info) {");
   lines.push("  (void)info;");
-  lines.push("  sts_free_arena();");
-  lines.push("  return sts_napi_undefined(env);");
+  lines.push("  amrit_free_arena();");
+  lines.push("  return amrit_napi_undefined(env);");
   lines.push("}");
   lines.push("");
   for (const p of plans) {
@@ -749,21 +749,21 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
   lines.push("static const struct {");
   lines.push("  const char *name;");
   lines.push("  napi_callback callback;");
-  lines.push("} sts_napi_exports[] = {");
+  lines.push("} amrit_napi_exports[] = {");
   for (const p of plans) {
-    lines.push(`  {"${p.fn.sig.sourceName}", sts_napi_${p.fn.sig.name}},`);
+    lines.push(`  {"${p.fn.sig.sourceName}", amrit_napi_${p.fn.sig.name}},`);
   }
-  lines.push('  {"sts_reset_arena", sts_napi_reset_arena},');
-  lines.push('  {"sts_free_arena", sts_napi_free_arena},');
+  lines.push('  {"amrit_reset_arena", amrit_napi_reset_arena},');
+  lines.push('  {"amrit_free_arena", amrit_napi_free_arena},');
   lines.push("};");
   lines.push("");
   lines.push("NAPI_MODULE_INIT() {");
-  lines.push("  for (size_t i = 0; i < sizeof sts_napi_exports / sizeof sts_napi_exports[0]; i++) {");
+  lines.push("  for (size_t i = 0; i < sizeof amrit_napi_exports / sizeof amrit_napi_exports[0]; i++) {");
   lines.push("    napi_value fn;");
   lines.push(
-    "    if (napi_create_function(env, sts_napi_exports[i].name, NAPI_AUTO_LENGTH, sts_napi_exports[i].callback, NULL, &fn) != napi_ok ||"
+    "    if (napi_create_function(env, amrit_napi_exports[i].name, NAPI_AUTO_LENGTH, amrit_napi_exports[i].callback, NULL, &fn) != napi_ok ||"
   );
-  lines.push("        napi_set_named_property(env, exports, sts_napi_exports[i].name, fn) != napi_ok) {");
+  lines.push("        napi_set_named_property(env, exports, amrit_napi_exports[i].name, fn) != napi_ok) {");
   lines.push(`      napi_throw_error(env, NULL, "${CLI}: cannot register the addon exports");`);
   lines.push("      return NULL;");
   lines.push("    }");

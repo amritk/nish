@@ -1,4 +1,4 @@
-declare void @sts_panic_div(i1 noundef zeroext) #1
+declare void @amrit_panic_div(i1 noundef zeroext) #1
 
 define noundef i32 @countPairs(i32 noundef %n) #0 {
 entry:
@@ -37,7 +37,7 @@ for.body.1:
   br i1 %13, label %div.fail, label %div.ok
 
 div.fail:
-  call void @sts_panic_div(i1 zeroext %9)
+  call void @amrit_panic_div(i1 zeroext %9)
   unreachable
 
 div.ok:
@@ -101,7 +101,7 @@ while.body:
   br i1 %9, label %div.fail, label %div.ok
 
 div.fail:
-  call void @sts_panic_div(i1 zeroext %5)
+  call void @amrit_panic_div(i1 zeroext %5)
   unreachable
 
 div.ok:

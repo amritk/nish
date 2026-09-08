@@ -216,7 +216,7 @@ const declaresDirectly = (clause: ts.CaseOrDefaultClause): ts.Statement | undefi
  * The discriminant is an integer and every label a compile-time integer
  * constant, so the whole statement lowers to LLVM's `switch` and the backend
  * builds a jump table. A `string` switch would have been a chain of
- * `sts_str_eq` calls wearing a switch's clothes, and `if`/`else` says that
+ * `amrit_str_eq` calls wearing a switch's clothes, and `if`/`else` says that
  * honestly (docs/wp14-selfhost.md §5).
  *
  * There is no implicit fallthrough: a clause with statements ends in `break`,

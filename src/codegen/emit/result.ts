@@ -1,12 +1,12 @@
 /**
  * `Result<T, E>` lowering (WP16), checked by `checker/result.ts`.
  *
- * Layout: `%struct.sts_result.<T>.<E> = type { i1, <T>, <E> }`, one
+ * Layout: `%struct.amrit_result.<T>.<E> = type { i1, <T>, <E> }`, one
  * monomorphisation per pair of payload types, laid out and allocated exactly
  * as a class is. `Result<void, E>` has no `value` field at all.
  *
- *   Ok(v)            `%0 = call i8* @sts_alloc_struct(i64 <size>)`
- *                    `%1 = bitcast i8* %0 to %struct.sts_result.<T>.<E>*`
+ *   Ok(v)            `%0 = call i8* @amrit_alloc_struct(i64 <size>)`
+ *                    `%1 = bitcast i8* %0 to %struct.amrit_result.<T>.<E>*`
  *                    `store i1 true, ...` then the payload store. Under WP6,
  *                    a `Result` that does not outlive its function is an
  *                    entry-block `alloca` and there is no call at all.
@@ -58,7 +58,7 @@ import { MemoryFacts, factCollectors, isStackOwned, methodCallEmitters, property
 
 const typeName = (layout: ResultLayout): string => `%struct.${layout.name}`;
 
-/** `%struct.sts_result.i32.str = type { i1, i32, i8* }`. */
+/** `%struct.amrit_result.i32.str = type { i1, i32, i8* }`. */
 export const resultTypeDecl = (t: StaticType): string => {
   const layout = resultLayout(t);
   const slots = [layout.ok, layout.value, layout.error].filter((s): s is ResultSlot => s !== undefined);
@@ -107,7 +107,7 @@ const storeSlot = (
 const allocateIn = (ctx: EmitContext, layout: ResultLayout, stack: boolean): string => {
   const ty = typeName(layout);
   if (stack) return ctx.fn.emitAlloca(`${layout.name}.obj`, ty, 8);
-  const raw = ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_alloc_struct")}(i64 ${layout.size})`);
+  const raw = ctx.fn.emitValue(`call i8* ${ctx.useRuntime("amrit_alloc_struct")}(i64 ${layout.size})`);
   return ctx.fn.emitValue(`bitcast i8* ${raw} to ${ty}*`);
 };
 
@@ -392,7 +392,7 @@ const emitUnwrapOr = (ctx: EmitContext, expr: ts.CallExpression, receiver: Resul
 
 /**
  * `r.expect(message)`: the message on stderr and exit 1, the same ending
- * `panic(message)` and an out-of-range index have. `sts_exit` is `noreturn`,
+ * `panic(message)` and an out-of-range index have. `amrit_exit` is `noreturn`,
  * which is what makes the `unreachable` legal.
  */
 const emitExpect = (ctx: EmitContext, expr: ts.CallExpression, receiver: ResultType): string => {
@@ -404,8 +404,8 @@ const emitExpect = (ctx: EmitContext, expr: ts.CallExpression, receiver: ResultT
 
   ctx.fn.placeBlock(errBlock);
   const message = ctx.emitExpression(expr.arguments[0]);
-  ctx.fn.emit(`call void ${ctx.useRuntime("sts_write")}(i8* ${message}, i32 2, i1 true)`);
-  ctx.fn.emit(`call void ${ctx.useRuntime("sts_exit")}(i32 1)`);
+  ctx.fn.emit(`call void ${ctx.useRuntime("amrit_write")}(i8* ${message}, i32 2, i1 true)`);
+  ctx.fn.emit(`call void ${ctx.useRuntime("amrit_exit")}(i32 1)`);
   ctx.fn.emit("unreachable");
 
   ctx.fn.placeBlock(okBlock);
@@ -479,7 +479,7 @@ export const collectResultFacts = (program: CheckedProgram, node: ts.Node, facts
     const callee = program.callees.get(node);
     if (callee !== undefined) {
       if (resultByValue(callee.returnType)) {
-        if (!facts.stackSites.has(node)) facts.callees.add("sts_alloc_struct");
+        if (!facts.stackSites.has(node)) facts.callees.add("amrit_alloc_struct");
         facts.effect = "write";
       }
       return;
@@ -491,10 +491,10 @@ export const collectResultFacts = (program: CheckedProgram, node: ts.Node, facts
       facts.readsMemory = true;
       if (method === "orReturn") {
         facts.effect = "write";
-        facts.callees.add("sts_alloc_struct");
+        facts.callees.add("amrit_alloc_struct");
       } else if (method === "expect") {
-        facts.callees.add("sts_write");
-        facts.callees.add("sts_exit");
+        facts.callees.add("amrit_write");
+        facts.callees.add("amrit_exit");
       }
       return;
     }
@@ -502,7 +502,7 @@ export const collectResultFacts = (program: CheckedProgram, node: ts.Node, facts
     // is reported through the call graph instead.
     if (!isResultConstructorCall(program, node)) return;
     if (!facts.stackSites.has(node)) {
-      facts.callees.add("sts_alloc_struct");
+      facts.callees.add("amrit_alloc_struct");
     }
     facts.effect = "write";
     return;

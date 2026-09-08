@@ -74,9 +74,9 @@ Sources are copied to `build/bench/src/` (with the size substituted when `--n` i
 ### fib
 
 ```
-amritc build/bench/src/fib.ts --link build/bench/fib-sts --profile speed
-amritc build/bench/src/fib.ts --nsw --link build/bench/fib-sts-nsw --profile speed
-amritc build/bench/src/fib.ts --link build/bench/fib-sts-size --profile size
+amritc build/bench/src/fib.ts --link build/bench/fib-amrit --profile speed
+amritc build/bench/src/fib.ts --nsw --link build/bench/fib-amrit-nsw --profile speed
+amritc build/bench/src/fib.ts --link build/bench/fib-amrit-size --profile size
 clang -O3 -s build/bench/src/fib.c -lm -o build/bench/fib-c
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols build/bench/src/fib.rs -o build/bench/fib-rust
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols -C target-cpu=native build/bench/src/fib.rs -o build/bench/fib-rust-native
@@ -85,8 +85,8 @@ rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols -C targe
 ### nbody
 
 ```
-amritc build/bench/src/nbody.ts --number-mode f64 --link build/bench/nbody-sts --profile speed
-amritc build/bench/src/nbody.ts --number-mode f64 --link build/bench/nbody-sts-size --profile size
+amritc build/bench/src/nbody.ts --number-mode f64 --link build/bench/nbody-amrit --profile speed
+amritc build/bench/src/nbody.ts --number-mode f64 --link build/bench/nbody-amrit-size --profile size
 clang -O3 -s build/bench/src/nbody.c -lm -o build/bench/nbody-c
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols build/bench/src/nbody.rs -o build/bench/nbody-rust
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols -C target-cpu=native build/bench/src/nbody.rs -o build/bench/nbody-rust-native
@@ -95,8 +95,8 @@ rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols -C targe
 ### spectral
 
 ```
-amritc build/bench/src/spectral.ts --number-mode f64 --link build/bench/spectral-sts --profile speed
-amritc build/bench/src/spectral.ts --number-mode f64 --link build/bench/spectral-sts-size --profile size
+amritc build/bench/src/spectral.ts --number-mode f64 --link build/bench/spectral-amrit --profile speed
+amritc build/bench/src/spectral.ts --number-mode f64 --link build/bench/spectral-amrit-size --profile size
 clang -O3 -s build/bench/src/spectral.c -lm -o build/bench/spectral-c
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols build/bench/src/spectral.rs -o build/bench/spectral-rust
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols -C target-cpu=native build/bench/src/spectral.rs -o build/bench/spectral-rust-native
@@ -105,9 +105,9 @@ rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols -C targe
 ### sieve
 
 ```
-amritc build/bench/src/sieve.ts --link build/bench/sieve-sts --profile speed
-amritc build/bench/src/sieve.ts --nsw --link build/bench/sieve-sts-nsw --profile speed
-amritc build/bench/src/sieve.ts --link build/bench/sieve-sts-size --profile size
+amritc build/bench/src/sieve.ts --link build/bench/sieve-amrit --profile speed
+amritc build/bench/src/sieve.ts --nsw --link build/bench/sieve-amrit-nsw --profile speed
+amritc build/bench/src/sieve.ts --link build/bench/sieve-amrit-size --profile size
 clang -O3 -s build/bench/src/sieve.c -lm -o build/bench/sieve-c
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols build/bench/src/sieve.rs -o build/bench/sieve-rust
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols -C target-cpu=native build/bench/src/sieve.rs -o build/bench/sieve-rust-native
@@ -116,9 +116,9 @@ rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols -C targe
 ### strbuild
 
 ```
-amritc build/bench/src/strbuild.ts --link build/bench/strbuild-sts --profile speed
-amritc build/bench/src/strbuild.ts --nsw --link build/bench/strbuild-sts-nsw --profile speed
-amritc build/bench/src/strbuild.ts --link build/bench/strbuild-sts-size --profile size
+amritc build/bench/src/strbuild.ts --link build/bench/strbuild-amrit --profile speed
+amritc build/bench/src/strbuild.ts --nsw --link build/bench/strbuild-amrit-nsw --profile speed
+amritc build/bench/src/strbuild.ts --link build/bench/strbuild-amrit-size --profile size
 clang -O3 -s build/bench/src/strbuild.c -lm -o build/bench/strbuild-c
 clang -O3 -s build/bench/src/strbuild_naive.c -lm -o build/bench/strbuild-c-naive
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols build/bench/src/strbuild.rs -o build/bench/strbuild-rust
@@ -128,8 +128,8 @@ rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols -C targe
 ### vec3
 
 ```
-amritc build/bench/src/vec3.ts --number-mode f64 --link build/bench/vec3-sts --profile speed
-amritc build/bench/src/vec3.ts --number-mode f64 --link build/bench/vec3-sts-size --profile size
+amritc build/bench/src/vec3.ts --number-mode f64 --link build/bench/vec3-amrit --profile speed
+amritc build/bench/src/vec3.ts --number-mode f64 --link build/bench/vec3-amrit-size --profile size
 clang -O3 -s build/bench/src/vec3.c -lm -o build/bench/vec3-c
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols build/bench/src/vec3.rs -o build/bench/vec3-rust
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols -C target-cpu=native build/bench/src/vec3.rs -o build/bench/vec3-rust-native
@@ -138,9 +138,9 @@ rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols -C targe
 ### result
 
 ```
-amritc build/bench/src/result.ts --link build/bench/result-sts --profile speed
-amritc build/bench/src/result.ts --nsw --link build/bench/result-sts-nsw --profile speed
-amritc build/bench/src/result.ts --link build/bench/result-sts-size --profile size
+amritc build/bench/src/result.ts --link build/bench/result-amrit --profile speed
+amritc build/bench/src/result.ts --nsw --link build/bench/result-amrit-nsw --profile speed
+amritc build/bench/src/result.ts --link build/bench/result-amrit-size --profile size
 clang -O3 -s build/bench/src/result.c -lm -o build/bench/result-c
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols build/bench/src/result.rs -o build/bench/result-rust
 rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols -C target-cpu=native build/bench/src/result.rs -o build/bench/result-rust-native

@@ -200,7 +200,7 @@ ternary `?:`, short-circuit `&&`/`||`, compound assignment `+= -= *= /= %=`,
   trip count (`for (let i = 0; i < n; i++)` with `n` unmodified in body)
   may keep `willreturn`; otherwise drop it. Add `mustprogress` never (JS
   allows infinite loops).
-- Runtime: `sts_abort(msg)` for `throw`.
+- Runtime: `amrit_abort(msg)` for `throw`.
 
 Acceptance: goldens for each construct; native round trips for fib, gcd,
 collatz, nested loops; `opt -O2` output vectorises a simple sum loop
@@ -214,7 +214,7 @@ Goal: `class` and `interface` as LLVM struct types with fixed fields.
 
 - `%struct.User = type { i32, double }`; field order as declared; natural
   alignment; `align 8` on allocations.
-- `new User(...)` lowers to the inline `sts_alloc_struct` (size from
+- `new User(...)` lowers to the inline `amrit_alloc_struct` (size from
   datalayout-independent constant computed by the compiler) then a
   constructor call. Constructors and methods become functions with `this`
   as the first parameter: `@User.greet(%struct.User* noalias nonnull align 8 %this, ...)`.
@@ -246,15 +246,15 @@ literals, `console.log`, number-to-string.
 - Literals: `@.str.N = private unnamed_addr constant { i64, [N x i8] } { i64 len, c"...\00" }, align 8`,
   referenced as `i8*` via `getelementptr`. Deduplicate identical literals.
   UTF-8 bytes, escaped for LLVM (`\XX` hex).
-- `a + b` on strings lowers to `sts_str_concat`; `a === b` to `sts_str_eq`;
+- `a + b` on strings lowers to `amrit_str_concat`; `a === b` to `amrit_str_eq`;
   `s.length` to a direct `load i64` from the header (no call).
-- Template literals: fold constant parts, `sts_str_from_i32/f64` for holes,
-  chain concat (or a `sts_str_concat_n` runtime addition).
-- `console.log(x)` accepts string, number, boolean; lowers to `sts_print`.
-- Number to string: `sts_str_from_f64` must match JS `Number.prototype.toString`
+- Template literals: fold constant parts, `amrit_str_from_i32/f64` for holes,
+  chain concat (or a `amrit_str_concat_n` runtime addition).
+- `console.log(x)` accepts string, number, boolean; lowers to `amrit_print`.
+- Number to string: `amrit_str_from_f64` must match JS `Number.prototype.toString`
   (shortest round-trip). Port Ryu or Grisu-style shortest formatting to
   `runtime.c` within budget, or accept `%.17g` and document until WP7.
-- Mark functions that only call `sts_str_len` as `readonly` (already
+- Mark functions that only call `amrit_str_len` as `readonly` (already
   handled by the effect fixpoint; verify with a test).
 
 Acceptance: goldens; native round trip printing concatenations and
@@ -270,7 +270,7 @@ Goal: `number[]`, `string[]`, `User[]` with fixed element type.
   header + pointer so slices are cheap later.
 - Array literals allocate in the arena; `new Array<T>(n)` zero-initialises.
 - `a[i]` with numeric index only; bounds check emits `br` to a cold
-  `sts_abort("index out of range")` block; `--unchecked-indexing` flag
+  `amrit_abort("index out of range")` block; `--unchecked-indexing` flag
   removes it for benchmarks.
 - `.length`, `for (const x of arr)`, `for` with index; `push` deferred
   (needs growth strategy; arena realloc doubling is fine).
@@ -289,11 +289,11 @@ Goal: multi-file programs and runnable binaries without a hand-written C driver.
   `internal` under `--strict-exports` (default stays external for now).
 - `import { f } from "./other"`: compile each file to its own `.ll`, emit
   `declare` for imported symbols with the same attributes the exporter
-  computed (write a `.d.sts.json` sidecar with signatures and attributes),
+  computed (write a `.d.amrit.json` sidecar with signatures and attributes),
   link them with `build.sh`. Cycles are allowed at link time.
 - `export function main(): number` becomes the process entry: emit
   `@main` wrapper that initialises nothing (arena is lazy), calls user
-  `main`, calls `sts_free_arena`, returns the code. Process args exposed
+  `main`, calls `amrit_free_arena`, returns the code. Process args exposed
   later (WP7).
 - CLI: `amritc a.ts b.ts -o out/` and `amritc --link a.ts b.ts -o app`
   which shells out to `scripts/build.sh`.
@@ -313,9 +313,9 @@ Goal: make the zero-GC model ergonomic and fast.
 - Arena scopes in the language: `arena.scope(() => { ... })` or a block
   pragma; compiles to save-offset / restore-offset around the block, so
   temporary objects are reclaimed without a full reset. Runtime gets
-  `sts_arena_mark()` / `sts_arena_release(mark)`.
+  `amrit_arena_mark()` / `amrit_arena_release(mark)`.
 - Optional reference counting per class (`@refcounted` decorator or
-  `class X extends Rc`): 8-byte header, `sts_rc_retain/release`, release
+  `class X extends Rc`): 8-byte header, `amrit_rc_retain/release`, release
   on scope exit, no cycles collection (documented). Only for objects that
   must outlive resets. Off by default.
 - `T | null` for pointer types with `null` checks required before use

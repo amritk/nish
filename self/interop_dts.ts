@@ -109,11 +109,11 @@ export function generateDts(compilation: Compilation, fns: ExternalFunction[]): 
     lines.push(
       "  /** runtime_wasm.c: recycle everything the module allocated (arrays passed and returned are already copies). */"
     );
-    lines.push("  sts_reset_arena(): void;");
+    lines.push("  amrit_reset_arena(): void;");
     lines.push(
-      "  /** runtime_wasm.c: same as sts_reset_arena; wasm memory is never returned to the host. */"
+      "  /** runtime_wasm.c: same as amrit_reset_arena; wasm memory is never returned to the host. */"
     );
-    lines.push("  sts_free_arena(): void;");
+    lines.push("  amrit_free_arena(): void;");
   }
 
   let count = 0;

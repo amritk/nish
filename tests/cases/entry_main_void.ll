@@ -1,11 +1,11 @@
-declare void @sts_free_arena() #2
+declare void @amrit_free_arena() #2
 
 define void @side() #0 {
 entry:
   ret void
 }
 
-define void @sts_main() #0 {
+define void @amrit_main() #0 {
 entry:
   call void @side()
   ret void
@@ -13,8 +13,8 @@ entry:
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
-  call void @sts_main()
-  call void @sts_free_arena()
+  call void @amrit_main()
+  call void @amrit_free_arena()
   ret i32 0
 }
 

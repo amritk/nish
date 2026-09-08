@@ -8,27 +8,27 @@
  *                  { i64 len, [len+1 x i8] c"...\00" }, align 8`, interned per
  *                  module and referenced as `bitcast ({...}* @.str.N to i8*)`.
  *                  Bytes are UTF-8; anything outside printable ASCII is `\XX`.
- *   a + b          `call i8* @sts_str_concat(i8* a, i8* b)`
- *   a === b        `call zeroext i1 @sts_str_eq(i8* a, i8* b)` (`!==` adds `xor i1 .., true`)
+ *   a + b          `call i8* @amrit_str_concat(i8* a, i8* b)`
+ *   a === b        `call zeroext i1 @amrit_str_eq(i8* a, i8* b)` (`!==` adds `xor i1 .., true`)
  *   s.length       `bitcast i8* s to i64*` + `load i64, align 8`, then `trunc`
  *                  to i32 (i32 mode) or `sitofp` to double (f64 mode). No call.
  *   s.charCodeAt(i)  the array bounds check against the byte length, then
  *                  `getelementptr` past the 8-byte header and `load i8`. No call.
  *   s.substring(a, b)  the JavaScript clamp (`llvm.smin` / `llvm.smax` into
  *                  `[0, len]`, then the two in order), one `getelementptr`
- *                  and one `sts_str_new`: one allocation, one `memcpy`.
- *   s.startsWith(p)  `sts_str_at(s, 0, p)`; `endsWith` passes `len - p.len`,
+ *                  and one `amrit_str_new`: one allocation, one `memcpy`.
+ *   s.startsWith(p)  `amrit_str_at(s, 0, p)`; `endsWith` passes `len - p.len`,
  *                  which is negative, and so false, when `p` is the longer.
- *   s.indexOf(p)   a loop over `sts_str_at` (`str.find` blocks), inline
+ *   s.indexOf(p)   a loop over `amrit_str_at` (`str.find` blocks), inline
  *                  rather than a runtime function so `runtime.c` stays inside
  *                  its budget (docs/wp14-selfhost.md §6 rule 4).
- *   String.fromCharCode(c)  a one-byte `alloca`, `store i8`, `sts_str_new`.
+ *   String.fromCharCode(c)  a one-byte `alloca`, `store i8`, `amrit_str_new`.
  *   `a${x}b`       constant parts are literals; holes are converted with
- *                  `sts_str_from_i32` / `sts_str_from_f64` / `sts_str_from_u64`
+ *                  `amrit_str_from_i32` / `amrit_str_from_f64` / `amrit_str_from_u64`
  *                  (an unsigned hole narrower than 64 bits is `zext`ed first)
  *                  or, for booleans, a `select` between the literals "true" /
- *                  "false"; parts are joined left to right with `sts_str_concat`.
- *   console.log(x) convert as above, then `call void @sts_print(i8* s)`.
+ *                  "false"; parts are joined left to right with `amrit_str_concat`.
+ *   console.log(x) convert as above, then `call void @amrit_print(i8* s)`.
  *
  * `collectStringFacts` tells `attributes.ts` which runtime symbols these
  * constructs call (for the purity fixpoint) and that `.length` reads memory.
@@ -60,7 +60,7 @@ export function escapeBytes(bytes: Buffer): string {
 
 /**
  * Add `@.str.<index>` for `text` to the module and return the `i8*` constant
- * expression that points at its header (what every `sts_str_*` expects).
+ * expression that points at its header (what every `amrit_str_*` expects).
  */
 export function addStringConstant(module: IRModule, index: number, text: string): string {
   const bytes = Buffer.from(text, "utf8");
@@ -79,15 +79,15 @@ const emitStringLiteral: ExpressionEmitter = (ctx, expr) =>
 
 /**
  * Runtime symbol that converts `t` to a string, or undefined when no call is
- * needed. Every unsigned width shares `sts_str_from_u64`: the value is `zext`ed
+ * needed. Every unsigned width shares `amrit_str_from_u64`: the value is `zext`ed
  * to i64 first, which is one instruction the optimiser usually folds away and
  * is much cheaper than four formatters in a runtime with a size budget (WP15).
  */
 function conversionCallee(t: StaticType): string | undefined {
-  if (isUnsigned(t)) return "sts_str_from_u64";
-  if (t.kind === "i32") return "sts_str_from_i32";
-  if (t.kind === "i64") return "sts_str_from_i64";
-  if (isFloat(t)) return "sts_str_from_f64";
+  if (isUnsigned(t)) return "amrit_str_from_u64";
+  if (t.kind === "i32") return "amrit_str_from_i32";
+  if (t.kind === "i64") return "amrit_str_from_i64";
+  if (isFloat(t)) return "amrit_str_from_f64";
   return undefined; // string: identity; bool: select between two literals
 }
 
@@ -119,7 +119,7 @@ function emitToString(ctx: EmitContext, expr: ts.Expression): string {
 }
 
 function emitConcat(ctx: EmitContext, lhs: string, rhs: string): string {
-  return ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_str_concat")}(i8* ${lhs}, i8* ${rhs})`);
+  return ctx.fn.emitValue(`call i8* ${ctx.useRuntime("amrit_str_concat")}(i8* ${lhs}, i8* ${rhs})`);
 }
 
 // ---- Template literals ----------------------------------------------------------------
@@ -209,7 +209,7 @@ function clampToLength(ctx: EmitContext, value: string, len: string): string {
 
 /** A fresh arena string holding `n` bytes copied from `bytes`. */
 function newString(ctx: EmitContext, bytes: string, n: string): string {
-  return ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_str_new")}(i8* ${bytes}, i64 ${n})`);
+  return ctx.fn.emitValue(`call i8* ${ctx.useRuntime("amrit_str_new")}(i8* ${bytes}, i64 ${n})`);
 }
 
 /** `s.charCodeAt(i)`: the byte at `i`, bounds-checked exactly as `a[i]` is. */
@@ -239,10 +239,10 @@ function emitSubstring(ctx: EmitContext, expr: ts.CallExpression, str: string): 
   return newString(ctx, at, n);
 }
 
-/** `sts_str_at(s, at, sub)`: whether `sub`'s bytes sit at offset `at`. */
+/** `amrit_str_at(s, at, sub)`: whether `sub`'s bytes sit at offset `at`. */
 function emitOccursAt(ctx: EmitContext, str: string, at: string, sub: string): string {
   return ctx.fn.emitValue(
-    `call zeroext i1 ${ctx.useRuntime("sts_str_at")}(i8* ${str}, i64 ${at}, i8* ${sub})`
+    `call zeroext i1 ${ctx.useRuntime("amrit_str_at")}(i8* ${str}, i64 ${at}, i8* ${sub})`
   );
 }
 
@@ -308,7 +308,7 @@ methodCallEmitters.string = (ctx, expr) => {
       return emitOccursAt(ctx, str, "0", ctx.emitExpression(expr.arguments[0]));
     default: {
       // `endsWith`: the suffix sits at `len - sub.len`, which is negative when
-      // the suffix is the longer string and `sts_str_at` then answers false.
+      // the suffix is the longer string and `amrit_str_at` then answers false.
       const sub = ctx.emitExpression(expr.arguments[0]);
       const at = ctx.fn.emitValue(`sub i64 ${loadStringLength(ctx, str)}, ${loadStringLength(ctx, sub)}`);
       return emitOccursAt(ctx, str, at, sub);
@@ -325,13 +325,13 @@ const fromCharCode: BuiltinCall = {
     ctx.fn.emit(`store i8 ${byte}, i8* ${slot}, align 1`);
     return newString(ctx, slot, "1");
   },
-  callees: () => ["sts_str_new"],
+  callees: () => ["amrit_str_new"],
 };
 
 /** Runtime symbols a string method calls, for the attribute fixpoint. */
 function methodCallees(name: string): string[] {
-  if (name === "substring") return ["sts_str_new"];
-  return name === "charCodeAt" ? [] : ["sts_str_at"];
+  if (name === "substring") return ["amrit_str_new"];
+  return name === "charCodeAt" ? [] : ["amrit_str_at"];
 }
 
 /** `expr` is a call of one of the byte methods on a string receiver. */
@@ -372,7 +372,7 @@ const emitStrictEquality: BinaryEmitter = (ctx, expr) => {
   const lhs = ctx.emitExpression(expr.left);
   const rhs = ctx.emitExpression(expr.right);
   if (type.kind === "string") {
-    const eq = ctx.fn.emitValue(`call zeroext i1 ${ctx.useRuntime("sts_str_eq")}(i8* ${lhs}, i8* ${rhs})`);
+    const eq = ctx.fn.emitValue(`call zeroext i1 ${ctx.useRuntime("amrit_str_eq")}(i8* ${lhs}, i8* ${rhs})`);
     return negate ? ctx.fn.emitValue(`xor i1 ${eq}, true`) : eq;
   }
   // `T | null` (WP6) compares against the literal `null` by pointer; the checker allows nothing else.
@@ -383,25 +383,25 @@ const emitStrictEquality: BinaryEmitter = (ctx, expr) => {
 // ---- Builtin calls ------------------------------------------------------------------------
 
 /**
- * `console.log` keeps `sts_print`, its own one-argument entry point;
- * `console.error` goes through the general `sts_write(s, fd, newline)`.
+ * `console.log` keeps `amrit_print`, its own one-argument entry point;
+ * `console.error` goes through the general `amrit_write(s, fd, newline)`.
  */
 const consoleLog: BuiltinCall = {
   emit: (ctx, expr) => {
     const text = emitToString(ctx, expr.arguments[0]);
-    ctx.fn.emit(`call void ${ctx.useRuntime("sts_print")}(i8* ${text})`);
+    ctx.fn.emit(`call void ${ctx.useRuntime("amrit_print")}(i8* ${text})`);
     return "void";
   },
-  callees: (program, expr) => ["sts_print", ...conversionCallees(program, expr.arguments[0])],
+  callees: (program, expr) => ["amrit_print", ...conversionCallees(program, expr.arguments[0])],
 };
 
 const consoleError: BuiltinCall = {
   emit: (ctx, expr) => {
     const text = emitToString(ctx, expr.arguments[0]);
-    ctx.fn.emit(`call void ${ctx.useRuntime("sts_write")}(i8* ${text}, i32 2, i1 true)`);
+    ctx.fn.emit(`call void ${ctx.useRuntime("amrit_write")}(i8* ${text}, i32 2, i1 true)`);
     return "void";
   },
-  callees: (program, expr) => ["sts_write", ...conversionCallees(program, expr.arguments[0])],
+  callees: (program, expr) => ["amrit_write", ...conversionCallees(program, expr.arguments[0])],
 };
 
 /** Builtins keyed by dotted callee name; mirrors `builtinCalls` in the checker. */
@@ -445,12 +445,12 @@ export function collectStringFacts(
       facts.callees.add(c);
   } else if (ts.isBinaryExpression(node) && program.types.get(node.left)?.kind === "string") {
     const op = node.operatorToken.kind;
-    if (op === ts.SyntaxKind.PlusToken) facts.callees.add("sts_str_concat");
+    if (op === ts.SyntaxKind.PlusToken) facts.callees.add("amrit_str_concat");
     else if (
       op === ts.SyntaxKind.EqualsEqualsEqualsToken ||
       op === ts.SyntaxKind.ExclamationEqualsEqualsToken
     ) {
-      facts.callees.add("sts_str_eq");
+      facts.callees.add("amrit_str_eq");
     }
   } else if (ts.isCallExpression(node) && isStringMethodCall(program, node)) {
     // The byte methods all read the string's bytes; `substring` also allocates.
@@ -461,7 +461,7 @@ export function collectStringFacts(
     facts.readsMemory = true; // `.length` loads the header through the string pointer (Math.PI has no typed target)
   } else if (ts.isTemplateExpression(node)) {
     const parts = templateParts(node);
-    if (parts.length > 1) facts.callees.add("sts_str_concat");
+    if (parts.length > 1) facts.callees.add("amrit_str_concat");
     for (const part of parts) {
       if ("hole" in part) for (const c of conversionCallees(program, part.hole)) facts.callees.add(c);
     }

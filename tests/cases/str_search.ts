@@ -1,6 +1,6 @@
-// `indexOf` scans with `sts_str_at` (no runtime search function, so
+// `indexOf` scans with `amrit_str_at` (no runtime search function, so
 // `runtime.c` stays inside its budget); `startsWith` / `endsWith` are one
-// `sts_str_at` each.
+// `amrit_str_at` each.
 function find(s: string, needle: string): number {
   return s.indexOf(needle);
 }

@@ -111,11 +111,11 @@ The point of (a) is that the header does not have to explain a private
 convention. `--emit-header` writes the encoding as a C type:
 
 ```c
-typedef struct sts_result_i32_i32_word {
+typedef struct amrit_result_i32_i32_word {
   int32_t ok;                                   /* 1 = value, 0 = error */
   union { int32_t value; int32_t error; } as;   /* the arm `ok` selects */
-} sts_result_i32_i32_word;
-STS_RESULT_ASSERT(sizeof(sts_result_i32_i32_word) == 8, "...");
+} amrit_result_i32_i32_word;
+AMRIT_RESULT_ASSERT(sizeof(amrit_result_i32_i32_word) == 8, "...");
 ```
 
 and clang, told to return that type, produces the declaration the module
@@ -135,7 +135,7 @@ the same declaration. The WP17 block of `tests/run.js` proves it end to end: a
 calls `half` (by value), `openFile` (an arena pointer, because its error arm
 carries a struct) and `describe` (a `Result` *parameter*, which is a pointer
 whatever its size) against the compiled `tests/cases/res_export.ts`.
-`STS_RESULT_ASSERT` — `_Static_assert` where the host compiler has it — pins
+`AMRIT_RESULT_ASSERT` — `_Static_assert` where the host compiler has it — pins
 `sizeof(...) == 8` in the header itself, so a compiler that disagreed would
 fail to build rather than mis-read a register.
 
@@ -182,15 +182,15 @@ use:  pushq  %r14
       pushq  %rbx
       pushq  %rax
       movl   %edi, %ebx
-      callq  sts_arena_mark@PLT       ; the scope
+      callq  amrit_arena_mark@PLT       ; the scope
       testb  $1, %bl
       jne    .LBB1_1
       sarl   %ebx
-      movq   sts_arena@GOTPCREL(%rip), %rdx
+      movq   amrit_arena@GOTPCREL(%rip), %rdx
       movq   8(%rdx), %rcx            ; arena.off
       leaq   16(%rcx), %rsi
       cmpq   16(%rdx), %rsi           ; arena.cap
-      ja     .LBB1_8                  ; -> callq sts_arena_grow
+      ja     .LBB1_8                  ; -> callq amrit_arena_grow
       movq   %rsi, 8(%rdx)            ; publish the new bump
       addq   (%rdx), %rcx
 .LBB1_9:
@@ -220,8 +220,8 @@ use:  movq   %rdi, %rax
       retq                            ; 14 instructions, 1 block, no calls
 ```
 
-**aarch64, before** (50 instructions, 8 blocks, 3 calls — `bl sts_arena_mark`,
-`bl sts_arena_release`, and the cold `bl sts_arena_grow`) **and after:**
+**aarch64, before** (50 instructions, 8 blocks, 3 calls — `bl amrit_arena_mark`,
+`bl amrit_arena_release`, and the cold `bl amrit_arena_grow`) **and after:**
 
 ```asm
 use:  asr  w9, w0, #1
@@ -259,7 +259,7 @@ The compiler does not implement (c), so this last comparison is three
 hand-written `.ll` files that mimic exactly what each lowering emits, with
 `half` marked `noinline` so the call boundary is real (2 × 10^8 calls, x86-64,
 `clang -O3`, three runs; the arena stub is `runtime.c`'s bump and the pointer
-version carries the caller's `sts_arena_mark` / `sts_arena_release`):
+version carries the caller's `amrit_arena_mark` / `amrit_arena_release`):
 
 | lowering | time | vs. WP16 |
 | --- | --- | --- |
@@ -319,7 +319,7 @@ the natural next step rather than something to bolt on here.
   `EscapeResult.stackParams` is that decision, and it is the same
   `localOutcome` walk WP6 already used for a local holding an allocation
   (`tests/cases/res_by_value_param` pins both halves in one golden).
-- **The in-memory layout.** `%struct.sts_result.<T>.<E>` is unchanged from
+- **The in-memory layout.** `%struct.amrit_result.<T>.<E>` is unchanged from
   WP16, and so is every construct that reads it. The packed word exists only
   at the return boundary: the callee packs where it would have allocated, and
   the caller unpacks into the entry-block object the rest of the lowering

@@ -8,8 +8,8 @@
 // is stored in, and the flow is `local`, `returned` or `leaks`. A stackable
 // site whose flow is `local` and whose holding locals are never reassigned
 // becomes an entry-block `alloca`; a function whose direct arena allocations
-// all flow `local` brackets its body with `sts_arena_mark` /
-// `sts_arena_release`.
+// all flow `local` brackets its body with `amrit_arena_mark` /
+// `amrit_arena_release`.
 //
 // What is different here is only the bookkeeping. `Set`/`Map` keyed by node or
 // by local become a `boolean[]` indexed by `Node.id` and short lists scanned
@@ -375,7 +375,7 @@ class EscapeAnalysis {
       const args = call.children[1];
       const type = args.children.length > 0 ? program.nodeTypes[args.children[0].id] : -1;
       if (type >= 0 && isNumeric(type)) {
-        // `sts_str_from_*` allocates the text; `sts_print` does not retain it.
+        // `amrit_str_from_*` allocates the text; `amrit_print` does not retain it.
         this.logsNumbers = true;
       }
     }

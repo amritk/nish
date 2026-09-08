@@ -12,11 +12,11 @@ An array value is a pointer to an arena-allocated header. Every element type
 shares one header type:
 
 ```llvm
-%struct.sts_array = type { i64, i64, i8* }     ; { len, cap, data }
+%struct.amrit_array = type { i64, i64, i8* }     ; { len, cap, data }
 ```
 
 ```c
-struct sts_array { uint64_t len; uint64_t cap; char *data; };   /* runtime/runtime.c */
+struct amrit_array { uint64_t len; uint64_t cap; char *data; };   /* runtime/runtime.c */
 ```
 
 `data` points at `cap` elements of `sizeof(T)` bytes (`i32` 4, `double` 8,
@@ -26,7 +26,7 @@ bytes; header and data are separate allocations so a future slice can share
 storage. `data` is `null` only for a `[]` literal (`cap = 0`); nothing reads
 through it before the first `push` grows the array.
 
-The type is `%struct.sts_array*` in every signature, alloca, and load, so
+The type is `%struct.amrit_array*` in every signature, alloca, and load, so
 `number[]`, `string[]`, `boolean[]`, `number[][]` and (once WP2 lands)
 `User[]` all use the same header; only the element size and the `T*` cast
 differ. `T[]` and `Array<T>` are the same type.
@@ -36,15 +36,15 @@ Three runtime functions belong to arrays (`src/codegen/runtime.ts`,
 
 | Symbol | Purpose | Attributes |
 | --- | --- | --- |
-| `sts_array_grow(hdr, elemSize)` | `push` when `len == cap`: doubles `cap` (4 from 0), moves the elements to fresh arena storage. `len` untouched. | `nounwind willreturn`, param `nonnull align 8 nocapture` |
-| `sts_panic_index(idx, len)` | Failed bounds check: writes `index out of range: <idx> >= <len>` to stderr, `_exit(1)` (`unreachable` in wasm). | `nounwind noreturn cold` |
-| `sts_alloc_array(elemSize, len)` | Host entry (WP8): header plus `len` uninitialised elements, `len == cap`. Compiled code never calls it; the wasm loader and C hosts do. | `nounwind willreturn`, returns `noalias nonnull align 8` |
+| `amrit_array_grow(hdr, elemSize)` | `push` when `len == cap`: doubles `cap` (4 from 0), moves the elements to fresh arena storage. `len` untouched. | `nounwind willreturn`, param `nonnull align 8 nocapture` |
+| `amrit_panic_index(idx, len)` | Failed bounds check: writes `index out of range: <idx> >= <len>` to stderr, `_exit(1)` (`unreachable` in wasm). | `nounwind noreturn cold` |
+| `amrit_alloc_array(elemSize, len)` | Host entry (WP8): header plus `len` uninitialised elements, `len == cap`. Compiled code never calls it; the wasm loader and C hosts do. | `nounwind willreturn`, returns `noalias nonnull align 8` |
 
 Header and element storage come from the compiler's inline
-`sts_alloc_struct` (`call i8* @sts_alloc_struct(i64 bytes)`), not from C.
-`tests/runtime_test.c` checks `sts_array_grow` and `sts_alloc_array`;
+`amrit_alloc_struct` (`call i8* @amrit_alloc_struct(i64 bytes)`), not from C.
+`tests/runtime_test.c` checks `amrit_array_grow` and `amrit_alloc_array`;
 `runtime.c` is 8,594 bytes of source and 3,600 bytes of `.text` at `-Oz`
-(budget: 8 KB / 4 KB; `sts_alloc_array` added 102 bytes of `.text`).
+(budget: 8 KB / 4 KB; `amrit_alloc_array` added 102 bytes of `.text`).
 
 ### Typed-array aliases
 
@@ -108,7 +108,7 @@ check) lowers to
   br i1 %ok, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @sts_panic_index(i64 %idx, i64 %len)
+  call void @amrit_panic_index(i64 %idx, i64 %len)
   unreachable
 
 bounds.ok:
@@ -116,7 +116,7 @@ bounds.ok:
 ```
 
 The compare is unsigned, so `-1` (sign-extended to `0xFFFF...`) fails like
-any other out-of-range index. `sts_panic_index` is declared `noreturn cold`:
+any other out-of-range index. `amrit_panic_index` is declared `noreturn cold`:
 the block is laid out as cold code and nothing after the call is reachable,
 so the check costs one compare and one predicted-not-taken branch. The
 message is `index out of range: <idx> >= <len>` and the exit code is 1
@@ -165,14 +165,14 @@ export function main(): number {
 ```
 
 ```llvm
-  %0 = call i8* @sts_alloc_struct(i64 24)
-  %1 = bitcast i8* %0 to %struct.sts_array*
-  %2 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %1, i64 0, i32 0
+  %0 = call i8* @amrit_alloc_struct(i64 24)
+  %1 = bitcast i8* %0 to %struct.amrit_array*
+  %2 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %1, i64 0, i32 0
   store i64 3, i64* %2, align 8
-  %3 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %1, i64 0, i32 1
+  %3 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %1, i64 0, i32 1
   store i64 3, i64* %3, align 8
-  %4 = call i8* @sts_alloc_struct(i64 12)
-  %5 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %1, i64 0, i32 2
+  %4 = call i8* @amrit_alloc_struct(i64 12)
+  %5 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %1, i64 0, i32 2
   store i8* %4, i8** %5, align 8
   %6 = bitcast i8* %4 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 0
@@ -181,7 +181,7 @@ export function main(): number {
   store i32 20, i32* %8, align 4
   %9 = getelementptr inbounds i32, i32* %6, i64 2
   store i32 30, i32* %9, align 4
-  store %struct.sts_array* %1, %struct.sts_array** %xs.addr, align 8
+  store %struct.amrit_array* %1, %struct.amrit_array** %xs.addr, align 8
 ```
 
 Elements are evaluated first, left to right, then the header (24 bytes,
@@ -197,16 +197,16 @@ const xs = new Array<number>(n);
 
 ```llvm
   %1 = sext i32 %0 to i64
-  %2 = call i8* @sts_alloc_struct(i64 24)
-  %3 = bitcast i8* %2 to %struct.sts_array*
-  %4 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %3, i64 0, i32 0
+  %2 = call i8* @amrit_alloc_struct(i64 24)
+  %3 = bitcast i8* %2 to %struct.amrit_array*
+  %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %3, i64 0, i32 0
   store i64 %1, i64* %4, align 8
-  %5 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %3, i64 0, i32 1
+  %5 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %3, i64 0, i32 1
   store i64 %1, i64* %5, align 8
   %6 = mul i64 %1, 4
-  %7 = call i8* @sts_alloc_struct(i64 %6)
+  %7 = call i8* @amrit_alloc_struct(i64 %6)
   call void @llvm.memset.p0i8.i64(i8* align 8 %7, i8 0, i64 %6, i1 false)
-  %8 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %3, i64 0, i32 2
+  %8 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %3, i64 0, i32 2
   store i8* %7, i8** %8, align 8
 ```
 
@@ -224,20 +224,20 @@ function get(a: number[], i: number): number {
 ```
 
 ```llvm
-define noundef i32 @get(%struct.sts_array* noundef nonnull align 8 readonly nocapture %a, i32 noundef %i) #0 {
+define noundef i32 @get(%struct.amrit_array* noundef nonnull align 8 readonly nocapture %a, i32 noundef %i) #0 {
 entry:
   %0 = sext i32 %i to i64
-  %1 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %a, i64 0, i32 0
+  %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %a, i64 0, i32 0
   %2 = load i64, i64* %1, align 8
   %3 = icmp ult i64 %0, %2
   br i1 %3, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @sts_panic_index(i64 %0, i64 %2)
+  call void @amrit_panic_index(i64 %0, i64 %2)
   unreachable
 
 bounds.ok:
-  %4 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %a, i64 0, i32 2
+  %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %a, i64 0, i32 2
   %5 = load i8*, i8** %4, align 8
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
@@ -261,20 +261,20 @@ function set(a: number[], i: number, v: number): void {
 ```
 
 ```llvm
-define void @set(%struct.sts_array* noundef nonnull align 8 nocapture %a, i32 noundef %i, i32 noundef %v) #0 {
+define void @set(%struct.amrit_array* noundef nonnull align 8 nocapture %a, i32 noundef %i, i32 noundef %v) #0 {
 entry:
   %0 = sext i32 %i to i64
-  %1 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %a, i64 0, i32 0
+  %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %a, i64 0, i32 0
   %2 = load i64, i64* %1, align 8
   %3 = icmp ult i64 %0, %2
   br i1 %3, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @sts_panic_index(i64 %0, i64 %2)
+  call void @amrit_panic_index(i64 %0, i64 %2)
   unreachable
 
 bounds.ok:
-  %4 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %a, i64 0, i32 2
+  %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %a, i64 0, i32 2
   %5 = load i8*, i8** %4, align 8
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
@@ -290,7 +290,7 @@ through the same element pointer:
 
 ```llvm
 bounds.ok:
-  %15 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %11, i64 0, i32 2
+  %15 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %11, i64 0, i32 2
   %16 = load i8*, i8** %15, align 8
   %17 = bitcast i8* %16 to i32*
   %18 = getelementptr inbounds i32, i32* %17, i64 0
@@ -315,9 +315,9 @@ function len(xs: number[]): number {
 ```
 
 ```llvm
-define noundef i32 @len(%struct.sts_array* noundef nonnull align 8 readonly nocapture %xs) #0 {
+define noundef i32 @len(%struct.amrit_array* noundef nonnull align 8 readonly nocapture %xs) #0 {
 entry:
-  %0 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %xs, i64 0, i32 0
+  %0 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
   %1 = load i64, i64* %0, align 8
   %2 = trunc i64 %1 to i32
   ret i32 %2
@@ -337,19 +337,19 @@ xs.push(i * i);
 ```
 
 ```llvm
-  %11 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %7, i64 0, i32 0
+  %11 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %7, i64 0, i32 0
   %12 = load i64, i64* %11, align 8
-  %13 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %7, i64 0, i32 1
+  %13 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %7, i64 0, i32 1
   %14 = load i64, i64* %13, align 8
   %15 = icmp eq i64 %12, %14
   br i1 %15, label %push.grow, label %push.store
 
 push.grow:
-  call void @sts_array_grow(%struct.sts_array* %7, i64 4)
+  call void @amrit_array_grow(%struct.amrit_array* %7, i64 4)
   br label %push.store
 
 push.store:
-  %16 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %7, i64 0, i32 2
+  %16 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %7, i64 0, i32 2
   %17 = load i8*, i8** %16, align 8
   %18 = bitcast i8* %17 to i32*
   %19 = getelementptr inbounds i32, i32* %18, i64 %12
@@ -360,7 +360,7 @@ push.store:
 ```
 
 The value (`%10`) is evaluated before the length is read. `push.grow` is
-taken only when `len == cap`; `sts_array_grow` doubles the capacity (4 from
+taken only when `len == cap`; `amrit_array_grow` doubles the capacity (4 from
 an empty array), so `n` pushes cost `O(log n)` grow calls. The data pointer
 is re-read after the possible grow. The expression's value is the new length
 as a `number`, which is dead in statement position and dropped by LLVM.
@@ -384,7 +384,7 @@ function total(xs: number[]): number {
 ```
 
 ```llvm
-define noundef i32 @total(%struct.sts_array* noundef nonnull align 8 readonly nocapture %xs) #0 {
+define noundef i32 @total(%struct.amrit_array* noundef nonnull align 8 readonly nocapture %xs) #0 {
 entry:
   %sum.addr = alloca i32, align 4
   %x.addr = alloca i32, align 4
@@ -395,13 +395,13 @@ entry:
 
 forof.cond:
   %0 = load i64, i64* %forof.idx, align 8
-  %1 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %xs, i64 0, i32 0
+  %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
   %2 = load i64, i64* %1, align 8
   %3 = icmp ult i64 %0, %2
   br i1 %3, label %forof.body, label %forof.end
 
 forof.body:
-  %4 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %xs, i64 0, i32 2
+  %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
   %5 = load i8*, i8** %4, align 8
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
@@ -464,9 +464,9 @@ guarantee the checker or the emitter proves.
 | `readonly` on a param | array params | The body never stores through the param: no `p[i] = v`, `p[i] op= v`, `p.push(v)`, and none of those through anything indexed from `p` (`p[i][j] = v` counts, conservatively); the param is never aliased (`let q = p`, `[p]`, `xs.push(p)`, `return p`, `c ? p : q`: an alias could be written through, and LLVM may fold the alias back into `p`); and it is only passed to callees whose matching parameter is itself `readonly`. |
 | `nocapture` on a param | array params | Every use is an indexing base, a `.length` or `push` receiver, a `for...of` source, an `===` / `!==` operand, or a direct argument to a callee that does not capture its matching parameter. |
 | no `noalias` | array params | Two array params may be the same array, and arrays are mutable. |
-| `readonly` on the function | any | Element reads, `.length`, and `for...of` set `readsMemory`; a checked `a[i]` adds the callee `sts_panic_index` (effect `write`), so only unchecked or `for...of`-only readers stay `readonly`. |
-| `willreturn` | any | Lost by a checked `a[i]` (`sts_panic_index` is `noreturn`) and by any loop that is not counted. A `for...of` is counted when its body has no `push` (on any array, since the source may be aliased), no call to a user function (which could push through an alias), and no `throw`. |
-| effect `write` | any | Literals, `new Array`, element writes, and `push` (which may call `sts_array_grow`). The inline allocator is `willreturn`, so it is folded into the effect rather than listed as a callee. |
+| `readonly` on the function | any | Element reads, `.length`, and `for...of` set `readsMemory`; a checked `a[i]` adds the callee `amrit_panic_index` (effect `write`), so only unchecked or `for...of`-only readers stay `readonly`. |
+| `willreturn` | any | Lost by a checked `a[i]` (`amrit_panic_index` is `noreturn`) and by any loop that is not counted. A `for...of` is counted when its body has no `push` (on any array, since the source may be aliased), no call to a user function (which could push through an alias), and no `throw`. |
+| effect `write` | any | Literals, `new Array`, element writes, and `push` (which may call `amrit_array_grow`). The inline allocator is `willreturn`, so it is folded into the effect rather than listed as a callee. |
 
 The param rules run as a fixpoint over the whole program's call graph
 (`paramPasses` in `FunctionFacts`): a parameter handed to a callee inherits

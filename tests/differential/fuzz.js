@@ -322,7 +322,7 @@ function stage1Run({ count = 20, seed = 1, depth = 3, log = () => {} } = {}) {
   if (binary === null) return { seed, count, binary, agreed: 0, modules: 0, lines: 0, disagreements: [] };
   const dir = path.join(lib.buildDir, "fuzz");
   fs.mkdirSync(dir, { recursive: true });
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), "sts-fuzz-ir-"));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "amrit-fuzz-ir-"));
   const disagreements = [];
   let agreed = 0;
   let modules = 0;

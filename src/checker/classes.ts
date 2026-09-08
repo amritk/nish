@@ -291,7 +291,7 @@ export function declareStruct(ctx: CheckContext, decl: ts.ClassDeclaration | ts.
   const kind = ts.isClassDeclaration(decl) ? "class" : "interface";
   if (!decl.name) throw ctx.error(`${kind === "class" ? "Classes" : "Interfaces"} must be named`, decl);
   const name = decl.name.text;
-  if (name.startsWith("sts_")) throw ctx.error("Names starting with `sts_` are reserved for the runtime", decl.name);
+  if (name.startsWith("amrit_")) throw ctx.error("Names starting with `amrit_` are reserved for the runtime", decl.name);
   if (ctx.program.structs.has(name)) throw ctx.error(`Duplicate declaration of \`${name}\``, decl.name);
   if (ctx.sigs.has(name)) throw ctx.error(`\`${name}\` is already declared as a function`, decl.name);
   for (const m of modifierKinds(decl)) {

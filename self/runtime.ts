@@ -8,9 +8,9 @@
 // convenient one.
 //
 // The arena bump allocation fast path is not a call into C at all: it is
-// emitted as an `alwaysinline` IR function that bumps `@sts_arena` directly,
+// emitted as an `alwaysinline` IR function that bumps `@amrit_arena` directly,
 // so after inlining an allocation is a load, an add, a compare and a store.
-// Only the overflow path calls `@sts_arena_grow` in runtime.c.
+// Only the overflow path calls `@amrit_arena_grow` in runtime.c.
 //
 // `src/` keeps the table as an array of object literals and a `Map` beside it.
 // Here it is a class built once per compilation: the same array, with a
@@ -19,17 +19,17 @@
 
 import { StringMap } from "./map";
 
-/** Global arena state; must match `struct sts_arena` in runtime.c. */
-export const ARENA_TYPE: string = "%struct.sts_arena = type { i8*, i64, i64, i8* }";
-/** Array header (WP4); must match `struct sts_array` in runtime.c: { len, cap, data }. */
-export const ARRAY_TYPE: string = "%struct.sts_array = type { i64, i64, i8* }";
+/** Global arena state; must match `struct amrit_arena` in runtime.c. */
+export const ARENA_TYPE: string = "%struct.amrit_arena = type { i8*, i64, i64, i8* }";
+/** Array header (WP4); must match `struct amrit_array` in runtime.c: { len, cap, data }. */
+export const ARRAY_TYPE: string = "%struct.amrit_array = type { i64, i64, i8* }";
 
-export const ARENA_GLOBAL: string = "@sts_arena = external global %struct.sts_arena, align 8";
+export const ARENA_GLOBAL: string = "@amrit_arena = external global %struct.amrit_arena, align 8";
 /**
  * `process.argv` (WP7): the `string[]` the entry wrapper builds once with
- * `sts_argv_init(argc, argv)`; every module that reads it loads this global.
+ * `amrit_argv_init(argc, argv)`; every module that reads it loads this global.
  */
-export const ARGV_GLOBAL: string = "@sts_argv = external global %struct.sts_array*, align 8";
+export const ARGV_GLOBAL: string = "@amrit_argv = external global %struct.amrit_array*, align 8";
 
 /** What calling a function does to memory; the rank is the order they merge in. */
 export const EFFECT_NONE: i32 = 0;
@@ -54,7 +54,7 @@ export class RuntimeFunction {
    * prelude documents the C ABI and intrinsics are not part of it.
    */
   intrinsic: boolean;
-  /** Never returns to the caller (`sts_exit`); callers lose `willreturn`. */
+  /** Never returns to the caller (`amrit_exit`); callers lose `willreturn`. */
   noreturn: boolean;
 
   constructor(name: string, signature: string, attrs: string[], effect: i32) {
@@ -139,80 +139,80 @@ export class RuntimeTable {
 
   build(): void {
     const grow = new RuntimeFunction(
-      "sts_arena_grow",
-      "declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef)",
+      "amrit_arena_grow",
+      "declare noalias noundef nonnull align 8 i8* @amrit_arena_grow(i64 noundef)",
       ["nounwind", "willreturn", "cold", "noinline", "allocsize(0)"],
       EFFECT_WRITE
     );
     this.add(grow);
-    this.add(plain("sts_reset_arena", "declare void @sts_reset_arena()", EFFECT_WRITE));
-    this.add(plain("sts_free_arena", "declare void @sts_free_arena()", EFFECT_WRITE));
+    this.add(plain("amrit_reset_arena", "declare void @amrit_reset_arena()", EFFECT_WRITE));
+    this.add(plain("amrit_free_arena", "declare void @amrit_free_arena()", EFFECT_WRITE));
     // WP6, arena scopes. A mark is the absolute bump address (`buf + off`), 0 while the arena is empty.
-    this.add(plain("sts_arena_mark", "declare noundef i64 @sts_arena_mark()", EFFECT_WRITE));
+    this.add(plain("amrit_arena_mark", "declare noundef i64 @amrit_arena_mark()", EFFECT_WRITE));
     // Rewinds to a mark: same chunk -> reset the offset; an older chunk -> free the newer ones first.
-    this.add(plain("sts_arena_release", "declare void @sts_arena_release(i64 noundef)", EFFECT_WRITE));
-    this.add(plain("sts_arena_used", "declare noundef i64 @sts_arena_used()", EFFECT_WRITE));
+    this.add(plain("amrit_arena_release", "declare void @amrit_arena_release(i64 noundef)", EFFECT_WRITE));
+    this.add(plain("amrit_arena_used", "declare noundef i64 @amrit_arena_used()", EFFECT_WRITE));
     this.add(
       plain(
-        "sts_str_new",
-        "declare noalias noundef nonnull align 8 i8* @sts_str_new(i8* noundef readonly nocapture, i64 noundef)",
+        "amrit_str_new",
+        "declare noalias noundef nonnull align 8 i8* @amrit_str_new(i8* noundef readonly nocapture, i64 noundef)",
         EFFECT_WRITE
       )
     );
     this.add(
       plain(
-        "sts_str_concat",
-        `declare noalias noundef nonnull align 8 i8* @sts_str_concat(${STR_NOCAP}, ${STR_NOCAP})`,
+        "amrit_str_concat",
+        `declare noalias noundef nonnull align 8 i8* @amrit_str_concat(${STR_NOCAP}, ${STR_NOCAP})`,
         EFFECT_WRITE
       )
     );
     this.add(
       new RuntimeFunction(
-        "sts_str_eq",
-        `declare zeroext i1 @sts_str_eq(${STR_NOCAP}, ${STR_NOCAP})`,
+        "amrit_str_eq",
+        `declare zeroext i1 @amrit_str_eq(${STR_NOCAP}, ${STR_NOCAP})`,
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),
         EFFECT_READ
       )
     );
     this.add(
       new RuntimeFunction(
-        "sts_str_at",
-        `declare zeroext i1 @sts_str_at(${STR_NOCAP}, i64 noundef, ${STR_NOCAP})`,
+        "amrit_str_at",
+        `declare zeroext i1 @amrit_str_at(${STR_NOCAP}, i64 noundef, ${STR_NOCAP})`,
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),
         EFFECT_READ
       )
     );
     this.add(
       new RuntimeFunction(
-        "sts_str_len",
-        `declare i64 @sts_str_len(${STR_NOCAP})`,
+        "amrit_str_len",
+        `declare i64 @amrit_str_len(${STR_NOCAP})`,
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),
         EFFECT_READ
       )
     );
     this.add(
-      plain("sts_write", `declare void @sts_write(${STR_NOCAP}, i32 noundef, i1 noundef zeroext)`, EFFECT_WRITE)
+      plain("amrit_write", `declare void @amrit_write(${STR_NOCAP}, i32 noundef, i1 noundef zeroext)`, EFFECT_WRITE)
     );
-    this.add(plain("sts_print", `declare void @sts_print(${STR_NOCAP})`, EFFECT_WRITE));
+    this.add(plain("amrit_print", `declare void @amrit_print(${STR_NOCAP})`, EFFECT_WRITE));
     this.add(
       plain(
-        "sts_str_from_i32",
-        "declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef)",
+        "amrit_str_from_i32",
+        "declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef)",
         EFFECT_WRITE
       )
     );
     this.add(
       plain(
-        "sts_str_from_f64",
-        "declare noalias noundef nonnull align 8 i8* @sts_str_from_f64(double noundef)",
+        "amrit_str_from_f64",
+        "declare noalias noundef nonnull align 8 i8* @amrit_str_from_f64(double noundef)",
         EFFECT_WRITE
       )
     );
     // WP7: i64 strings, Math.random, process, files.
     this.add(
       plain(
-        "sts_str_from_i64",
-        "declare noalias noundef nonnull align 8 i8* @sts_str_from_i64(i64 noundef)",
+        "amrit_str_from_i64",
+        "declare noalias noundef nonnull align 8 i8* @amrit_str_from_i64(i64 noundef)",
         EFFECT_WRITE
       )
     );
@@ -221,16 +221,16 @@ export class RuntimeTable {
     // is what keeps `runtime.c` inside its `.text` budget.
     this.add(
       plain(
-        "sts_str_from_u64",
-        "declare noalias noundef nonnull align 8 i8* @sts_str_from_u64(i64 noundef)",
+        "amrit_str_from_u64",
+        "declare noalias noundef nonnull align 8 i8* @amrit_str_from_u64(i64 noundef)",
         EFFECT_WRITE
       )
     );
     // xorshift64* over a global state word: reads and writes memory.
-    this.add(plain("sts_random", "declare noundef double @sts_random()", EFFECT_WRITE));
+    this.add(plain("amrit_random", "declare noundef double @amrit_random()", EFFECT_WRITE));
     const exit = new RuntimeFunction(
-      "sts_exit",
-      "declare void @sts_exit(i32 noundef)",
+      "amrit_exit",
+      "declare void @amrit_exit(i32 noundef)",
       attrs2("noreturn", "nounwind"),
       EFFECT_WRITE
     );
@@ -238,37 +238,37 @@ export class RuntimeTable {
     this.add(exit);
     this.add(
       plain(
-        "sts_read_file",
-        `declare noalias noundef nonnull align 8 i8* @sts_read_file(${STR_NOCAP})`,
+        "amrit_read_file",
+        `declare noalias noundef nonnull align 8 i8* @amrit_read_file(${STR_NOCAP})`,
         EFFECT_WRITE
       )
     );
     this.add(
       plain(
-        "sts_read_file_or_null",
-        `declare noalias noundef align 8 i8* @sts_read_file_or_null(${STR_NOCAP})`,
+        "amrit_read_file_or_null",
+        `declare noalias noundef align 8 i8* @amrit_read_file_or_null(${STR_NOCAP})`,
         EFFECT_WRITE
       )
     );
-    this.add(plain("sts_write_file", `declare void @sts_write_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE));
-    this.add(plain("sts_append_file", `declare void @sts_append_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE));
+    this.add(plain("amrit_write_file", `declare void @amrit_write_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE));
+    this.add(plain("amrit_append_file", `declare void @amrit_append_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE));
     // WP7: process.argv and string-to-number parsing.
     // Called once by the entry wrapper: mallocs the array and copies every argument.
     this.add(
-      plain("sts_argv_init", "declare void @sts_argv_init(i32 noundef, i8** noundef nocapture readonly)", EFFECT_WRITE)
+      plain("amrit_argv_init", "declare void @amrit_argv_init(i32 noundef, i8** noundef nocapture readonly)", EFFECT_WRITE)
     );
     // mode 0 parseFloat, 1 Number, 2 parseInt (as a double; the caller saturates it).
     // The string is only read and never retained (`readonly nocapture`), but the
     // function itself is not `readonly`: strtod/strtoll may store errno on overflow.
     this.add(
-      plain("sts_parse_number", `declare noundef double @sts_parse_number(${STR_NOCAP}, i32 noundef)`, EFFECT_WRITE)
+      plain("amrit_parse_number", `declare noundef double @amrit_parse_number(${STR_NOCAP}, i32 noundef)`, EFFECT_WRITE)
     );
-    // WP4: arrays. `sts_array_grow` doubles `cap` (4 when 0) and moves the
+    // WP4: arrays. `amrit_array_grow` doubles `cap` (4 when 0) and moves the
     // elements into fresh arena storage; `len` is untouched.
     this.add(
       plain(
-        "sts_array_grow",
-        "declare void @sts_array_grow(%struct.sts_array* noundef nonnull align 8 nocapture, i64 noundef)",
+        "amrit_array_grow",
+        "declare void @amrit_array_grow(%struct.amrit_array* noundef nonnull align 8 nocapture, i64 noundef)",
         EFFECT_WRITE
       )
     );
@@ -277,15 +277,15 @@ export class RuntimeTable {
     // C hosts do, so it is part of the declared ABI and of amritc.h.
     this.add(
       plain(
-        "sts_alloc_array",
-        "declare noalias noundef nonnull align 8 %struct.sts_array* @sts_alloc_array(i64 noundef, i64 noundef)",
+        "amrit_alloc_array",
+        "declare noalias noundef nonnull align 8 %struct.amrit_array* @amrit_alloc_array(i64 noundef, i64 noundef)",
         EFFECT_WRITE
       )
     );
     // Bounds-check failure: prints "index out of range: <idx> >= <len>" and exits 1.
     const panicIndex = new RuntimeFunction(
-      "sts_panic_index",
-      "declare void @sts_panic_index(i64 noundef, i64 noundef)",
+      "amrit_panic_index",
+      "declare void @amrit_panic_index(i64 noundef, i64 noundef)",
       attrs3("nounwind", "noreturn", "cold"),
       EFFECT_WRITE
     );
@@ -293,8 +293,8 @@ export class RuntimeTable {
     this.add(panicIndex);
     // Division failure: "attempt to divide by zero" (true) or "... with overflow" (false), exit 1.
     const panicDiv = new RuntimeFunction(
-      "sts_panic_div",
-      "declare void @sts_panic_div(i1 noundef zeroext)",
+      "amrit_panic_div",
+      "declare void @amrit_panic_div(i1 noundef zeroext)",
       attrs3("nounwind", "noreturn", "cold"),
       EFFECT_WRITE
     );
@@ -354,27 +354,27 @@ export function inlineAllocatorAttrs(): string[] {
  */
 export function inlineAllocator(attrGroup: string): string {
   const lines: string[] = [];
-  lines.push(`define internal noalias noundef nonnull align 8 i8* @sts_alloc_struct(i64 noundef %size) ${attrGroup} {`);
+  lines.push(`define internal noalias noundef nonnull align 8 i8* @amrit_alloc_struct(i64 noundef %size) ${attrGroup} {`);
   lines.push("entry:");
   lines.push("  %size.p7 = add i64 %size, 7");
   lines.push("  %size.aligned = and i64 %size.p7, -8");
-  lines.push("  %off.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 1");
+  lines.push("  %off.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 1");
   lines.push("  %off = load i64, i64* %off.ptr, align 8");
   lines.push("  %new.off = add i64 %off, %size.aligned");
-  lines.push("  %cap.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 2");
+  lines.push("  %cap.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 2");
   lines.push("  %cap = load i64, i64* %cap.ptr, align 8");
   lines.push("  %fits = icmp ule i64 %new.off, %cap");
   lines.push("  br i1 %fits, label %fast, label %slow");
   lines.push("");
   lines.push("fast:");
   lines.push("  store i64 %new.off, i64* %off.ptr, align 8");
-  lines.push("  %buf.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 0");
+  lines.push("  %buf.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 0");
   lines.push("  %buf = load i8*, i8** %buf.ptr, align 8");
   lines.push("  %obj = getelementptr inbounds i8, i8* %buf, i64 %off");
   lines.push("  ret i8* %obj");
   lines.push("");
   lines.push("slow:");
-  lines.push("  %grown = call i8* @sts_arena_grow(i64 %size.aligned)");
+  lines.push("  %grown = call i8* @amrit_arena_grow(i64 %size.aligned)");
   lines.push("  ret i8* %grown");
   lines.push("}");
   return lines.join("\n");

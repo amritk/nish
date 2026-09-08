@@ -45,7 +45,7 @@
  *
  * Arena scopes: a function whose direct arena allocations all flow `local`
  * (and whose callees do not leak allocations, see the fixpoint) reclaims them
- * with `sts_arena_mark` at entry and `sts_arena_release` before every `ret`.
+ * with `amrit_arena_mark` at entry and `amrit_arena_release` before every `ret`.
  * A `returned` site disables the scope (the caller owns that memory); a
  * `leaks` site marks the function `allocLeaks`, which disables the scope of
  * every caller too, since the leaked memory may be reachable from an object
@@ -273,7 +273,7 @@ export function analyzeEscapes(
     const name = dottedName(call.expression);
     if (name === "Arena.reset" || name === "Arena.release") result.usesArenaControl = true;
     else if (name === "console.log" && isNumeric(program.types.get(call.arguments[0]) ?? { kind: "void" })) {
-      logsNumbers = true; // `sts_str_from_*` allocates the text; `sts_print` does not retain it
+      logsNumbers = true; // `amrit_str_from_*` allocates the text; `amrit_print` does not retain it
     }
   };
   visit(sig.decl.body!);

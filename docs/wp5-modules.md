@@ -102,28 +102,28 @@ export function main(): number { ... }   // or  export function main(): void
 
 gets a C-ABI entry. The chosen scheme is **rename + wrapper**:
 
-- The user's function is emitted under the symbol `@sts_main`
+- The user's function is emitted under the symbol `@amrit_main`
   (`FunctionSig.name`; the source name stays `main` for diagnostics).
 - The emitter adds
 
   ```llvm
   define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
   entry:
-    %0 = call i32 @sts_main()
-    call void @sts_free_arena()
+    %0 = call i32 @amrit_main()
+    call void @amrit_free_arena()
     ret i32 %0
   }
   attributes #1 = { nounwind }
   ```
 
   For a `void` main the wrapper returns `0`. The arena is lazy, so nothing is
-  initialised; `sts_free_arena` releases every chunk on the way out.
+  initialised; `amrit_free_arena` releases every chunk on the way out.
 
 Why rename rather than keep `@main` and skip the wrapper? One scheme covers
 both return types, the arena is always released, the wrapper's signature is
 the one every libc start-up code expects (`argc`/`argv` are accepted now and
 exposed in WP7), and an importer that does `import { main } from "./main"`
-simply calls `@sts_main` like any other symbol.
+simply calls `@amrit_main` like any other symbol.
 
 Rules:
 
@@ -135,7 +135,7 @@ Rules:
 - A non-exported `function main` is not an entry: it is emitted as `@main`
   with its own signature, exactly as before WP5 (so C drivers such as
   `tests/driver.c` keep working with library-style modules).
-- `sts_` is a reserved prefix for function names.
+- `amrit_` is a reserved prefix for function names.
 
 `--link` requires the entry module to declare `export function main`.
 
@@ -145,7 +145,7 @@ Rules:
 | --- | --- | --- |
 | `export function f` | external (`define ... @f`) | external |
 | `function f` | external | `define internal ... @f` |
-| entry `export function main` | external `@sts_main` + external `@main` wrapper | same |
+| entry `export function main` | external `@amrit_main` + external `@main` wrapper | same |
 | inline arena allocator | `internal` | `internal` |
 
 Default linkage stays external so C drivers and the wasm profile
@@ -193,7 +193,7 @@ Output rules:
 `--link` runs `bash scripts/build.sh <every .ll> runtime/runtime.c -o <exe>
 --profile <profile>` and prints the binary path and size that the script
 reports. The runtime is always linked because the entry wrapper calls
-`sts_free_arena`.
+`amrit_free_arena`.
 
 Example (`examples/multi/`):
 
@@ -226,7 +226,7 @@ node dist/index.js examples/multi/main.ts --link build/multi && ./build/multi; e
 
 ## Not in this package
 
-- `.d.sts.json` sidecars from the master plan are unnecessary: the
+- `.d.amrit.json` sidecars from the master plan are unnecessary: the
   Compilation has every module in memory, so the importer's `declare` is
   rendered from the exporter's actual signature and facts. Separate
   compilation of a library against a sidecar can be added when a use case

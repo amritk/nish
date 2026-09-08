@@ -162,15 +162,15 @@ function build(bench) {
   const variants = [];
   const modeFlags = sourceArgs(bench.name);
 
-  const sts = (id, label, extra, profile, timed) => {
+  const amrit = (id, label, extra, profile, timed) => {
     const exe = path.join(outDir, `${bench.name}-${id}`);
     const args = [rel(ts), ...modeFlags, ...extra, "--link", rel(exe), "--profile", profile];
     run("node", [cli, ...args], `${bench.name}/${id}`);
     variants.push({ id, label, exe, timed, cmd: `amritc ${args.join(" ")}` });
   };
-  sts("sts", "AmritScript", [], "speed", true);
-  if (bench.integer) sts("sts-nsw", "AmritScript --nsw", ["--nsw"], "speed", true);
-  sts("sts-size", "AmritScript (size profile)", [], "size", false);
+  amrit("amrit", "AmritScript", [], "speed", true);
+  if (bench.integer) amrit("amrit-nsw", "AmritScript --nsw", ["--nsw"], "speed", true);
+  amrit("amrit-size", "AmritScript (size profile)", [], "size", false);
 
   const cc = (id, label, source) => {
     const exe = path.join(outDir, `${bench.name}-${id}`);
@@ -294,8 +294,8 @@ if (opts.validate) {
 
 const fmt = (ms) => (ms >= 100 ? ms.toFixed(0) : ms >= 10 ? ms.toFixed(1) : ms.toFixed(2));
 const columns = [
-  ["sts", "AmritScript"],
-  ["sts-nsw", "AmritScript `--nsw`"],
+  ["amrit", "AmritScript"],
+  ["amrit-nsw", "AmritScript `--nsw`"],
   ["c", "C `-O3`"],
   ["c-naive", "C `-O3` naive"],
   ["rust", "Rust `-O3`"],
@@ -340,9 +340,9 @@ for (const r of results) {
     const v = r.variants.find((x) => x.id === id);
     return v ? `${fmt(v.min)} / ${fmt(v.median)}` : "";
   };
-  const sts = r.variants.find((v) => v.id === "sts");
+  const amrit = r.variants.find((v) => v.id === "amrit");
   const rust = r.variants.find((v) => v.id === "rust");
-  const ratio = sts && rust ? `${(sts.min / rust.min).toFixed(2)}x` : "";
+  const ratio = amrit && rust ? `${(amrit.min / rust.min).toFixed(2)}x` : "";
   lines.push(`| ${r.bench.name} | ${columns.map(([id]) => cell(id)).join(" | ")} | ${ratio} |`);
 }
 lines.push("", "The last column divides the AmritScript minimum by the Rust `-O3` minimum: 1.00x is parity, above 1.10x misses the WP9 target. Rust native is `-C target-cpu=native`; C is plain `-O3` without `-march`.", "");
@@ -351,7 +351,7 @@ lines.push("## Binary size (bytes, stripped)", "");
 lines.push("| Benchmark | AmritScript speed | AmritScript size | C `-O3` | Rust `-O3` |", "| --- | ---: | ---: | ---: | ---: |");
 for (const r of results) {
   const b = (id) => r.variants.find((v) => v.id === id)?.bytes.toLocaleString("en-US") ?? "";
-  lines.push(`| ${r.bench.name} | ${b("sts")} | ${b("sts-size")} | ${b("c")} | ${b("rust")} |`);
+  lines.push(`| ${r.bench.name} | ${b("amrit")} | ${b("amrit-size")} | ${b("c")} | ${b("rust")} |`);
 }
 lines.push("", "AmritScript binaries link `runtime/runtime.c` statically and glibc dynamically; the Rust binaries carry `std` statically (`panic=abort`, `strip=symbols`).", "");
 
@@ -387,15 +387,15 @@ fs.mkdirSync(path.dirname(opts.out), { recursive: true });
 fs.writeFileSync(opts.out, lines.join("\n"));
 
 // Console summary.
-console.log(`\n${"benchmark".padEnd(10)} ${columns.map(([, l]) => l.replace(/`/g, "").padStart(18)).join("")}   sts/rust`);
+console.log(`\n${"benchmark".padEnd(10)} ${columns.map(([, l]) => l.replace(/`/g, "").padStart(18)).join("")}   amrit/rust`);
 for (const r of results) {
   const cell = (id) => {
     const v = r.variants.find((x) => x.id === id);
     return (v ? `${fmt(v.min)}/${fmt(v.median)}` : "-").padStart(18);
   };
-  const sts = r.variants.find((v) => v.id === "sts");
+  const amrit = r.variants.find((v) => v.id === "amrit");
   const rust = r.variants.find((v) => v.id === "rust");
-  console.log(`${r.bench.name.padEnd(10)} ${columns.map(([id]) => cell(id)).join("")}   ${sts && rust ? (sts.min / rust.min).toFixed(2) + "x" : "-"}`);
+  console.log(`${r.bench.name.padEnd(10)} ${columns.map(([id]) => cell(id)).join("")}   ${amrit && rust ? (amrit.min / rust.min).toFixed(2) + "x" : "-"}`);
 }
 console.log(`\nwrote ${path.relative(root, opts.out)}`);
 if (mismatches) {

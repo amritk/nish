@@ -79,7 +79,7 @@ export function emitIntBinary(
   const okBlock = fn.newBlock("div.ok");
   fn.emit(`br i1 ${bad}, label %${failBlock.label}, label %${okBlock.label}`);
   fn.placeBlock(failBlock);
-  fn.emit(`call void ${ctx.useRuntime("sts_panic_div")}(i1 zeroext ${byZero})`);
+  fn.emit(`call void ${ctx.useRuntime("amrit_panic_div")}(i1 zeroext ${byZero})`);
   fn.emit("unreachable");
   fn.placeBlock(okBlock);
   return fn.emitValue(`${op} ${ty} ${lhs}, ${rhs}`);
@@ -109,5 +109,5 @@ factCollectors.push((program, node, facts) => {
   const op = node.operatorToken.kind;
   const compound = op !== ts.SyntaxKind.SlashToken && op !== ts.SyntaxKind.PercentToken;
   const type = compound ? program.types.get(node) : program.types.get(node.left);
-  if (type && isInteger(type)) facts.callees.add("sts_panic_div");
+  if (type && isInteger(type)) facts.callees.add("amrit_panic_div");
 });

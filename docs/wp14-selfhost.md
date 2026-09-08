@@ -426,7 +426,7 @@ Four things are worth carrying into S5:
    at catching: `readFileSyncOrNull` was not an allocation site, so a function
    returning the bytes could still get an arena scope that released them; and a
    compound integer division (`x /= k`, `p.f %= k`) contributed no
-   `sts_panic_div` callee, so its caller kept `willreturn` and `readnone` over
+   `amrit_panic_div` callee, so its caller kept `willreturn` and `readnone` over
    a call that writes and never returns. Both are fixed with cases in
    `tests/cases/`. Three S3 leftovers came out too — `p.f++`, `p.f |= 1` and
    `a[i] &= 1` were accepted by stage1 and refused by stage0 — and they are
@@ -708,7 +708,7 @@ rule is only worth stating if it changes something:
   mask in hardware and the backend drops the `and`. Free, so it stays.
 - **`switch` is integer-only**, so it lowers to LLVM's `switch` instruction and
   the backend builds a jump table. A string `switch` would have been a chain of
-  `sts_str_eq` calls wearing a `switch`'s clothes; `if`/`else` says that
+  `amrit_str_eq` calls wearing a `switch`'s clothes; `if`/`else` says that
   honestly.
 - **String methods lower inline, not to calls.** `charCodeAt` is a bounds check
   and a `load i8`; `substring` is a length computation, a bump allocation and a

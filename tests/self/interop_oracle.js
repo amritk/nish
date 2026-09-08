@@ -221,7 +221,7 @@ const main = (argv) => {
   const named = argv.filter((a) => !a.startsWith("--"));
   const binary = build();
   if (binary === null) return 1;
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), "sts-interop-"));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "amrit-interop-"));
   let inputs = CORPUS;
   if (argv.includes("--all")) inputs = wideCorpus();
   if (named.length > 0)

@@ -4,13 +4,13 @@
 // The C ABI of a compiled function is the LLVM signature the emitter wrote:
 //   number   -> int32_t (i32 mode) or double (f64 mode)
 //   boolean  -> bool (i1, zero-extended in a register, as clang does)
-//   string   -> sts_str * (const-qualified as a parameter; see amritc.h)
-//   T[]      -> sts_array * (WP4 header; `const` when the function provably
+//   string   -> amrit_str * (const-qualified as a parameter; see amritc.h)
+//   T[]      -> amrit_array * (WP4 header; `const` when the function provably
 //               never stores through it, the same proof that gives the IR
 //               parameter `readonly`); the element type is in the comment
 //   void     -> void
-//   Result<T,E> -> the one-word `sts_result_<T>_<E>_word` when it is returned
-//               by value (WP17), otherwise `struct sts_result_<T>_<E> *`; both
+//   Result<T,E> -> the one-word `amrit_result_<T>_<E>_word` when it is returned
+//               by value (WP17), otherwise `struct amrit_result_<T>_<E> *`; both
 //               are defined below and the word carries a `sizeof` assertion
 // Parameters are passed by value, in order; there is no hidden context
 // argument, no return-slot pointer, no name mangling. A `.ll` module and a C
@@ -37,7 +37,7 @@ import {
 import { StructInfo, STRUCT_CLASS } from "./program";
 import { K_ARRAY, TypeTable } from "./types";
 
-/** ` -- xs: double elements, returns int32_t elements`: what an `sts_array` holds, per array in the signature. */
+/** ` -- xs: double elements, returns int32_t elements`: what an `amrit_array` holds, per array in the signature. */
 function elementNotes(table: TypeTable, fn: ExternalFunction): string {
   const notes: string[] = [];
   let i = 0;
@@ -61,7 +61,7 @@ function elementType(table: TypeTable, t: i32): string {
     return "";
   }
   const c = cType(table, table.refOf(t), POS_RETURN, false);
-  return c.length > 0 ? c : "sts_array *";
+  return c.length > 0 ? c : "amrit_array *";
 }
 
 /**
@@ -149,11 +149,11 @@ export function generateHeader(compilation: Compilation, fns: ExternalFunction[]
   lines.push(" *");
   lines.push(` * C ABI of the ${LANGUAGE} modules listed below. Link the .ll module(s) and`);
   lines.push(` * runtime/runtime.c next to your C code; include runtime/${RUNTIME_HEADER}'s`);
-  lines.push(" * directory with -I. Strings (sts_str) and arrays (sts_array, { len, cap,");
+  lines.push(" * directory with -I. Strings (amrit_str) and arrays (amrit_array, { len, cap,");
   lines.push(" * data }) live in the arena: a returned value is valid until");
-  lines.push(" * sts_reset_arena() / sts_arena_release(). A `const sts_array *` parameter");
-  lines.push(" * is only read; an `sts_array *` one is written through. To pass your own");
-  lines.push(" * buffer build a header on the stack: sts_array a = { n, n, (char *)buf }. */");
+  lines.push(" * amrit_reset_arena() / amrit_arena_release(). A `const amrit_array *` parameter");
+  lines.push(" * is only read; an `amrit_array *` one is written through. To pass your own");
+  lines.push(" * buffer build a header on the stack: amrit_array a = { n, n, (char *)buf }. */");
   lines.push(`#ifndef ${guard}`);
   lines.push(`#define ${guard}`);
   lines.push("");

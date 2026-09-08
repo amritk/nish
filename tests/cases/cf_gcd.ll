@@ -1,4 +1,4 @@
-declare void @sts_panic_div(i1 noundef zeroext) #1
+declare void @amrit_panic_div(i1 noundef zeroext) #1
 
 define noundef i32 @gcd(i32 noundef %a, i32 noundef %b) #0 {
 entry:
@@ -27,7 +27,7 @@ while.body:
   br i1 %9, label %div.fail, label %div.ok
 
 div.fail:
-  call void @sts_panic_div(i1 zeroext %5)
+  call void @amrit_panic_div(i1 zeroext %5)
   unreachable
 
 div.ok:

@@ -17,9 +17,10 @@
 // less to work with than stage0's does: `CLI.toUpperCase()` is how `src/`
 // spells the guard prefix, and there is no `toUpperCase` in the language.
 //
-// The `sts_` prefix on the runtime's C symbols is deliberately not here: it is
-// ABI rather than branding, it is in every golden `.ll`, and it was never
-// derived from the product name.
+// The `amrit_` prefix on the runtime's C symbols is deliberately not here: it
+// is ABI rather than branding, it is in every golden `.ll`, and it is frozen —
+// a rename does not follow it. See "Where the name lives" in
+// `docs/ARCHITECTURE.md`.
 
 /** The language, as a diagnostic names it: "`eval` is forbidden in AmritScript". */
 export const LANGUAGE: string = "AmritScript";

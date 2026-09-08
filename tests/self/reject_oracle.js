@@ -101,7 +101,7 @@ function compare(binary, entry) {
 
 /** Whether stage0 compiles the program at all, IR written to a directory it then forgets. */
 function compiles(named, flags) {
-  const out = fs.mkdtempSync(path.join(os.tmpdir(), "sts-reject-"));
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "amrit-reject-"));
   const r = spawnSync("node", [cli, named, "-o", `${out}${path.sep}`, ...flags], {
     cwd: root,
     encoding: "utf8",

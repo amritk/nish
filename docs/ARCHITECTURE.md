@@ -45,8 +45,8 @@ Compilation                                                            src/compi
 | Target | `src/codegen/target.ts` | The `--target` table: canonical triples, their aliases, `host` resolution from `process.platform`/`arch`, and the clang 18 data-layout string written into the module header (WP9). |
 | Emitter | `src/codegen/emitter.ts` + `codegen/emit/*.ts` | Lowers the checked program to IR text: module assembly, function setup, `declare`s for imports, the `@main` wrapper, the runtime prelude, and dispatch to per-construct emitters. Contains no user-facing error handling. |
 | IR builder | `src/codegen/ir.ts` | `IRModule`, `IRFunction`, `IRBlock`: named blocks, hoisted allocas, SSA temp numbering (`%0` is always the first temp because every block and parameter is named), attribute-group interning. |
-| Runtime ABI | `src/codegen/runtime.ts` | The `declare` lines, attributes, and memory effects of every runtime symbol and intrinsic; the IR text of the inline arena allocator; the `%struct.sts_arena` / `%struct.sts_array` layouts. |
-| Runtime | `runtime/runtime.c`, `runtime/amritc.h`, `runtime/runtime_wasm.c` | The C implementation: chunked bump arena with marks (`sts_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, exit, files, array growth and `sts_alloc_array` (the host entry the wasm loader uses), the bounds-check and division panics. The header is the public C ABI. `runtime_wasm.c` is the freestanding subset (arena over linear memory, arrays, trapping panics) for the wasm profile. `runtime/shim.mjs` is the Node-side twin used by the differential tests. |
+| Runtime ABI | `src/codegen/runtime.ts` | The `declare` lines, attributes, and memory effects of every runtime symbol and intrinsic; the IR text of the inline arena allocator; the `%struct.amrit_arena` / `%struct.amrit_array` layouts. |
+| Runtime | `runtime/runtime.c`, `runtime/amritc.h`, `runtime/runtime_wasm.c` | The C implementation: chunked bump arena with marks (`amrit_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, exit, files, array growth and `amrit_alloc_array` (the host entry the wasm loader uses), the bounds-check and division panics. The header is the public C ABI. `runtime_wasm.c` is the freestanding subset (arena over linear memory, arrays, trapping panics) for the wasm profile. `runtime/shim.mjs` is the Node-side twin used by the differential tests. |
 | Interop | `src/interop/{abi,header,dts,napi}.ts` | C header, wasm `.d.ts`, and N-API shim generators, all derived from the same checked signatures the IR was emitted from. |
 | Build | `scripts/build.sh`, `size-report.sh`, `smoke.sh` | The clang/LTO profiles, the size table, the example smoke test. |
 | Tests | `tests/run.js` + `tests/{cases,link,ir,layout}`, `tests/runtime_test.c`, `tests/driver.c` | Goldens, native round trips, link tests, ABI guards, memory checks, interop, exit codes, packaging, benchmark checksums. |
@@ -167,11 +167,11 @@ host is a contract that a test enforces:
 
 | Contract | Defined in | Guarded by |
 | --- | --- | --- |
-| Arena state `%struct.sts_arena = { i8* buf, i64 off, i64 cap, i8* chunks }`, bumped directly by the inlined fast path | `codegen/runtime.ts` (`ARENA_TYPE`, `inlineAllocator`), `runtime.c` (`struct sts_arena`), `amritc.h` | **alloc smoke** (`tests/ir/alloc_smoke.ll` + `alloc_smoke_main.c`): the `--runtime-decls` prelude plus an IR function that allocates twice is linked against `runtime.c` with LTO and must observe a 16-byte bump for two 12-byte objects (`tests/run.js`, section B) |
-| String `{ i64 len, i8 data[len], i8 0 }`, 8-aligned, immutable | `codegen/emit/strings.ts`, `runtime.c` (`sts_str`), `amritc.h` | `tests/runtime_test.c` (concat, eq, formatting), every `str_*` golden and native round trip |
-| Array header `%struct.sts_array = { i64 len, i64 cap, i8* data }` | `codegen/runtime.ts` (`ARRAY_TYPE`), `runtime.c`, `runtime_wasm.c`, `amritc.h`, `interop/wasm.ts` (offsets 0 / 16 on wasm32) | `tests/runtime_test.c` (`sts_array_grow`, `sts_alloc_array`), `arr_*` native round trips, `arr_bounds_panic` (exit 1 and message), the WP4/WP8 block of `tests/run.js` (a C driver's stack-built header, the wasm loader and the N-API addon agreeing on `examples/arrays.ts`) |
-| Class/interface layout = clang's layout of the same C struct | `checker/classes.ts` (offsets, size, align) | **layout test** (`tests/layout/structs.ts` + `structs.c`): the runner reads each `sts_alloc_struct(i64 N)` from the IR and compares it with `_Static_assert(sizeof(struct X) == N)`; the C program is built with `-Wall -Wextra -Werror`, fills every struct through the C definition, and reads each field back through compiled getters |
-| Every runtime function has a prototype in the public header | `codegen/runtime.ts`, `runtime/amritc.h` | **header test** (`tests/run.js`, WP8 section): every name in `RUNTIME_FUNCTIONS` (minus intrinsics) plus `sts_arena` must appear in `amritc.h`, which must compile as C11 `-pedantic` and as C++17 under `-Wall -Wextra -Werror` |
+| Arena state `%struct.amrit_arena = { i8* buf, i64 off, i64 cap, i8* chunks }`, bumped directly by the inlined fast path | `codegen/runtime.ts` (`ARENA_TYPE`, `inlineAllocator`), `runtime.c` (`struct amrit_arena`), `amritc.h` | **alloc smoke** (`tests/ir/alloc_smoke.ll` + `alloc_smoke_main.c`): the `--runtime-decls` prelude plus an IR function that allocates twice is linked against `runtime.c` with LTO and must observe a 16-byte bump for two 12-byte objects (`tests/run.js`, section B) |
+| String `{ i64 len, i8 data[len], i8 0 }`, 8-aligned, immutable | `codegen/emit/strings.ts`, `runtime.c` (`amrit_str`), `amritc.h` | `tests/runtime_test.c` (concat, eq, formatting), every `str_*` golden and native round trip |
+| Array header `%struct.amrit_array = { i64 len, i64 cap, i8* data }` | `codegen/runtime.ts` (`ARRAY_TYPE`), `runtime.c`, `runtime_wasm.c`, `amritc.h`, `interop/wasm.ts` (offsets 0 / 16 on wasm32) | `tests/runtime_test.c` (`amrit_array_grow`, `amrit_alloc_array`), `arr_*` native round trips, `arr_bounds_panic` (exit 1 and message), the WP4/WP8 block of `tests/run.js` (a C driver's stack-built header, the wasm loader and the N-API addon agreeing on `examples/arrays.ts`) |
+| Class/interface layout = clang's layout of the same C struct | `checker/classes.ts` (offsets, size, align) | **layout test** (`tests/layout/structs.ts` + `structs.c`): the runner reads each `amrit_alloc_struct(i64 N)` from the IR and compares it with `_Static_assert(sizeof(struct X) == N)`; the C program is built with `-Wall -Wextra -Werror`, fills every struct through the C definition, and reads each field back through compiled getters |
+| Every runtime function has a prototype in the public header | `codegen/runtime.ts`, `runtime/amritc.h` | **header test** (`tests/run.js`, WP8 section): every name in `RUNTIME_FUNCTIONS` (minus intrinsics) plus `amrit_arena` must appear in `amritc.h`, which must compile as C11 `-pedantic` and as C++17 under `-Wall -Wextra -Werror` |
 | Generated C header matches the IR's signatures | `interop/header.ts` | `add.h` content check; a C driver compiled against it with `-Werror` and run |
 | Generated `.d.ts` is valid TypeScript | `interop/dts.ts` | `tsc` over the generated file |
 | N-API shim and wasm build agree | `interop/napi.ts`, `build.sh --profile napi/wasm` | addon build, load, type-check errors, `.node` vs `.wasm` results |
@@ -193,20 +193,20 @@ of `RUNTIME_FUNCTIONS`:
 
 | Symbol | Purpose |
 | --- | --- |
-| `sts_alloc_struct(size)` | Bump allocation, 8-byte rounded and aligned, uninitialised. The compiler never calls the C version: it emits its own `alwaysinline` copy of the fast path into every module that allocates (`--runtime-decls` shows it), and only the overflow path calls `sts_arena_grow`. |
-| `sts_arena_grow(size)` | Slow path (`cold noinline`): push a new chunk (at least 64 KB) and bump from it; out of memory prints `amritc: out of memory` and exits. |
-| `sts_reset_arena()` | Recycle everything in O(1): keeps the newest chunk, frees the rest, so a steady-state program stops calling `malloc` at all. |
-| `sts_free_arena()` | Release all chunks; the entry wrapper calls it when `main` returns. The arena is lazy, so it can be used again afterwards. |
-| `sts_arena_mark()` | The current bump address `buf + off` as one `i64` (`0` while the arena is empty), which identifies both the chunk and the offset. Emitted at the top of every function with an automatic arena scope; `Arena.mark()` (WP6). |
-| `sts_arena_release(mark)` | Rewind to a mark: `mark == 0` acts like `sts_reset_arena`; a mark in the current chunk resets `off`; a mark in an older chunk frees every newer chunk first; a mark in no live chunk (stale, undefined behaviour by the language rule) is ignored. Emitted before every `ret` of a scoped function; `Arena.release(m)`. |
-| `sts_arena_used()` | Bytes bumped in the current chunk; `Arena.used()`, the number the `mem_*` tests watch. |
-| `sts_str_new(bytes, len)`, `sts_str_concat`, `sts_str_eq`, `sts_str_len`, `sts_print`, `sts_str_from_i32 / i64 / u64 / f64` | Length-prefixed, NUL-terminated, immutable UTF-8 strings in the arena; `from_f64` prints exactly what JavaScript's `String(x)` prints (shortest round-trip digits). `from_u64` is the one unsigned formatter: `u8`/`u16`/`u32` are `zext`ed to i64 at the call site, so four widths need one symbol and one shared digit loop (WP15). `sts_str_len` exists for C hosts; compiled code loads the header directly. |
-| `sts_random()` | `Math.random`: xorshift64\*, seeded lazily from time and pid, 53 random bits in `[0, 1)`. |
-| `sts_exit(code)` | `process.exit`, via libc `exit`. |
-| `sts_read_file / sts_write_file / sts_append_file` | `readFileSync` / `writeFileSync` / `appendFileSync`: `open`/`pread`/`write` syscalls, the whole file in one arena string; a failure prints `amritc: cannot read <path>` (or `cannot write`) and exits 1. |
-| `sts_array_grow(hdr, elemSize)` | `push` when `len == cap`: doubles `cap` (4 from 0) and moves the elements to fresh arena storage. |
-| `sts_panic_index(idx, len)` | Failed bounds check: `index out of range: <idx> >= <len>` on stderr, `_exit(1)`. |
-| `sts_panic_div(by_zero)` | Failed integer-division check (`cold noreturn`): `attempt to divide by zero` or `attempt to divide with overflow` on stderr, `_exit(1)`. |
+| `amrit_alloc_struct(size)` | Bump allocation, 8-byte rounded and aligned, uninitialised. The compiler never calls the C version: it emits its own `alwaysinline` copy of the fast path into every module that allocates (`--runtime-decls` shows it), and only the overflow path calls `amrit_arena_grow`. |
+| `amrit_arena_grow(size)` | Slow path (`cold noinline`): push a new chunk (at least 64 KB) and bump from it; out of memory prints `amritc: out of memory` and exits. |
+| `amrit_reset_arena()` | Recycle everything in O(1): keeps the newest chunk, frees the rest, so a steady-state program stops calling `malloc` at all. |
+| `amrit_free_arena()` | Release all chunks; the entry wrapper calls it when `main` returns. The arena is lazy, so it can be used again afterwards. |
+| `amrit_arena_mark()` | The current bump address `buf + off` as one `i64` (`0` while the arena is empty), which identifies both the chunk and the offset. Emitted at the top of every function with an automatic arena scope; `Arena.mark()` (WP6). |
+| `amrit_arena_release(mark)` | Rewind to a mark: `mark == 0` acts like `amrit_reset_arena`; a mark in the current chunk resets `off`; a mark in an older chunk frees every newer chunk first; a mark in no live chunk (stale, undefined behaviour by the language rule) is ignored. Emitted before every `ret` of a scoped function; `Arena.release(m)`. |
+| `amrit_arena_used()` | Bytes bumped in the current chunk; `Arena.used()`, the number the `mem_*` tests watch. |
+| `amrit_str_new(bytes, len)`, `amrit_str_concat`, `amrit_str_eq`, `amrit_str_len`, `amrit_print`, `amrit_str_from_i32 / i64 / u64 / f64` | Length-prefixed, NUL-terminated, immutable UTF-8 strings in the arena; `from_f64` prints exactly what JavaScript's `String(x)` prints (shortest round-trip digits). `from_u64` is the one unsigned formatter: `u8`/`u16`/`u32` are `zext`ed to i64 at the call site, so four widths need one symbol and one shared digit loop (WP15). `amrit_str_len` exists for C hosts; compiled code loads the header directly. |
+| `amrit_random()` | `Math.random`: xorshift64\*, seeded lazily from time and pid, 53 random bits in `[0, 1)`. |
+| `amrit_exit(code)` | `process.exit`, via libc `exit`. |
+| `amrit_read_file / amrit_write_file / amrit_append_file` | `readFileSync` / `writeFileSync` / `appendFileSync`: `open`/`pread`/`write` syscalls, the whole file in one arena string; a failure prints `amritc: cannot read <path>` (or `cannot write`) and exits 1. |
+| `amrit_array_grow(hdr, elemSize)` | `push` when `len == cap`: doubles `cap` (4 from 0) and moves the elements to fresh arena storage. |
+| `amrit_panic_index(idx, len)` | Failed bounds check: `index out of range: <idx> >= <len>` on stderr, `_exit(1)`. |
+| `amrit_panic_div(by_zero)` | Failed integer-division check (`cold noreturn`): `attempt to divide by zero` or `attempt to divide with overflow` on stderr, `_exit(1)`. |
 
 `Math.sqrt`, `Math.floor`, `Math.abs`, `Math.min`, ... are not runtime calls
 at all: they lower to LLVM intrinsics (`llvm.sqrt.f64`, `llvm.smin.i32`,
@@ -220,8 +220,8 @@ allocation of a fixed-size struct is two loads, an add, a compare, and a
 store:
 
 ```llvm
-%struct.sts_arena = type { i8*, i64, i64, i8* }   ; { buf, offset, capacity, chunk list }
-@sts_arena = external global %struct.sts_arena, align 8
+%struct.amrit_arena = type { i8*, i64, i64, i8* }   ; { buf, offset, capacity, chunk list }
+@amrit_arena = external global %struct.amrit_arena, align 8
 ```
 
 ```asm
@@ -229,7 +229,7 @@ movq  8(%r14), %rbx      ; offset
 movq  16(%r14), %rcx     ; capacity
 leaq  16(%rbx), %rax     ; offset + sizeof(struct)
 cmpq  %rcx, %rax
-ja    .slow              ; cold: call sts_arena_grow
+ja    .slow              ; cold: call amrit_arena_grow
 movq  %rax, 8(%r14)      ; commit
 addq  (%r14), %rbx       ; object = buf + old offset
 ```
@@ -250,9 +250,9 @@ it.
 | Attribute | Emitted when | Proof |
 | --- | --- | --- |
 | `nounwind` | always | No exceptions exist and there is no `throw`; a failure a caller should handle is a `Result<T, E>` (WP16). |
-| `willreturn` | `loopsBounded && !hasTrap && !callsNoReturn` and every callee `willreturn` | Counted loops only (`isCountedLoop`: `for (let i = init; i CMP bound; STEP)` over `i32`, bound an identifier or non-negative literal, step toward the bound, no wrap possible, body assigns neither `i` nor `bound`; `for...of` whose body cannot extend the array); `process.exit`, `panic`, a checked `a[i]` (`sts_panic_index` is `noreturn`), and an integer `/` or `%` (`sts_panic_div`) clear it. Unbounded recursion is allowed by LangRef. `mustprogress` is never emitted. |
+| `willreturn` | `loopsBounded && !hasTrap && !callsNoReturn` and every callee `willreturn` | Counted loops only (`isCountedLoop`: `for (let i = init; i CMP bound; STEP)` over `i32`, bound an identifier or non-negative literal, step toward the bound, no wrap possible, body assigns neither `i` nor `bound`; `for...of` whose body cannot extend the array); `process.exit`, `panic`, a checked `a[i]` (`amrit_panic_index` is `noreturn`), and an integer `/` or `%` (`amrit_panic_div`) clear it. Unbounded recursion is allowed by LangRef. `mustprogress` is never emitted. |
 | `readnone` | effect `none` | The body touches no memory but its own allocas and calls only `readnone` callees (LLVM's own FunctionAttrs would infer it). |
-| `readonly` (function) | effect `read` | The body reads memory it does not own (`.length`, field/element reads, a `Result` payload, `sts_str_eq`) and nothing writes; building a `Result`, a checked `a[i]`, and an integer division force `write` (the allocator and the panic callees are `write`). Field access through a local that only ever holds a stack object (`stackLocals`) is the function's own memory and counts as neither (WP6). |
+| `readonly` (function) | effect `read` | The body reads memory it does not own (`.length`, field/element reads, a `Result` payload, `amrit_str_eq`) and nothing writes; building a `Result`, a checked `a[i]`, and an integer division force `write` (the allocator and the panic callees are `write`). Field access through a local that only ever holds a stack object (`stackLocals`) is the function's own memory and counts as neither (WP6). |
 | `noundef` (params, returns) | always | Every AmritScript value is initialised. |
 | `zeroext` | `boolean` | C ABI for `bool`. |
 | `nonnull align 8` | non-nullable strings, arrays, structs | No null value in those types; literals, arena objects, and stack objects are 8-aligned. A `T \| null` parameter or return keeps `align 8` (null is aligned) and loses `nonnull` and `dereferenceable` (WP6). |
@@ -263,7 +263,7 @@ it.
 | `readonly` (struct/array param) | `!writesThrough` after the fixpoint | No store through the pointer, no escape, only passed to `readonly` parameters. Array element stores through nested indexing count as writes, conservatively. |
 | `nocapture` | strings: `!escaping`; pointers: `!captured` after the fixpoint | `classifyUse`: a use is harmless when consumed on the spot (operator operand, condition, `.length` receiver, template hole that concatenates, runtime builtin argument, all declared `nocapture`); it escapes when returned, stored, aliased, pushed, or passed to a capturing user function. Strings passed to a user function always escape (no fixpoint for strings). |
 | runtime `declare` attributes | from `RUNTIME_FUNCTIONS` | Written next to each symbol in `runtime.ts`; intrinsics carry a subset of what LLVM itself attaches (`nounwind willreturn readnone`). |
-| `alwaysinline allocsize(0)` / `cold noinline allocsize(0)` | the inline allocator / `sts_arena_grow` | The fast path must inline; the slow path must not. |
+| `alwaysinline allocsize(0)` / `cold noinline allocsize(0)` | the inline allocator / `amrit_arena_grow` | The fast path must inline; the slow path must not. |
 
 `--plain` turns all of this off (and the alignment hints) and produces the
 bare Phase 1 IR, which is useful when comparing against hand-written IR.
@@ -289,12 +289,12 @@ a local declared at or below the site's block, so nothing can name it once
 the function returns, and the initializer or constructor re-runs on every
 loop pass, so a reused slot never holds a stale object that is still
 observable. Stack arrays are capped at `STACK_ARRAY_BYTES` (4096) of data;
-`push` on one moves the elements to the arena through `sts_array_grow` and
+`push` on one moves the elements to the arena through `amrit_array_grow` and
 the stack header stays valid. Every stack object is `align 8`, so the
 pointer attributes above remain true for it.
 
 A function gets an **automatic arena scope** (`%arena.mark = call i64
-@sts_arena_mark()` after the allocas, `call void @sts_arena_release(i64
+@amrit_arena_mark()` after the allocas, `call void @amrit_arena_release(i64
 %arena.mark)` before every `ret`) when it has a direct arena allocation
 with `local` flow, none of its sites is `returned` or `leaks`, no callee
 leaks an allocation (`allocLeaks` in `FunctionFacts`), and neither it nor a
@@ -403,7 +403,7 @@ Platform notes: on macOS the script uses ld64's `-dead_strip` / `-x` instead
 of `--gc-sections` / `-s`, skips `-fuse-ld=lld` and `-fno-plt`; on Linux it
 prefers `lld` because GNU `ld` needs the gold plugin for LTO. `-flto`
 matters more here than for C: LLVM sees the AmritScript module and the runtime
-as one unit, so `sts_str_len` inlines into a load and unreferenced runtime
+as one unit, so `amrit_str_len` inlines into a load and unreferenced runtime
 functions vanish. `CC` overrides the compiler; `NODE_INCLUDE` overrides the
 Node header directory for `napi`.
 
@@ -446,7 +446,7 @@ toolchain-dependent steps when LLVM is not installed:
   **packaging** (WP12).
 - **Memory** (WP6): every `mem_*` module passes `opt -passes=verify`;
   `mem_stack_struct.ll` contains five `alloca %struct.*` objects and no
-  `sts_alloc_struct` or arena prelude; the same source with
+  `amrit_alloc_struct` or arena prelude; the same source with
   `--no-stack-alloc` is back in the arena and prints the same output;
   `mem_scope_dynamic_array` prints identical `Arena.used()` values before
   and after 100000 scoped calls.
@@ -464,7 +464,7 @@ toolchain-dependent steps when LLVM is not installed:
   `--link`, runs the binary, rewrites the same program to JavaScript with
   `tests/differential/rewrite.js` (the checker's recorded types choose the
   rewrite: `(a + b) | 0` and `Math.imul` for `i32`, `BigInt.asIntN(64, ...)`
-  for `i64`, `__sts.idx` for bounds checks, byte lengths, saturating
+  for `i64`, `__amrit.idx` for bounds checks, byte lengths, saturating
   conversions), runs it under Node with `runtime/shim.mjs`, and compares
   stdout, exit status, and signal byte for byte. Programs listed in
   `tests/differential/known-failures.txt` (libm 1-ulp differences,
@@ -478,8 +478,10 @@ toolchain-dependent steps when LLVM is not installed:
 
 ## Where the name lives
 
-The project's own name is written out in exactly two source files, so renaming
-it is an edit to those two rather than a sweep over the tree:
+AmritScript is a working title and is expected to change, so this is a live
+concern rather than a hypothetical one. The project's own name is written out
+in exactly two source files, so renaming it is an edit to those two rather than
+a sweep over the tree:
 
 | File | Holds |
 | --- | --- |
@@ -498,11 +500,18 @@ Prose is deliberately exempt. Comments and these documents name the language
 where that reads better than a constant would; what they must not do is put a
 name into a string the program emits.
 
-**`sts_` is not branding.** The prefix on every runtime C symbol (`sts_arena`,
-`sts_str_concat`, `sts_main`, `STS_SYMBOL`) is ABI: it is in every golden `.ll`,
-in `runtime.c` and `amritc.h`, and in binaries users have already linked, and it
-was never derived from the product name. It is opaque and permanent, and a
-rename does not follow it.
+**`amrit_` is not branding.** The prefix on every runtime C symbol
+(`amrit_arena`, `amrit_str_concat`, `amrit_main`, `AMRIT_SYMBOL`) is ABI: it is
+in every golden `.ll`, in `runtime.c` and `amritc.h`, and in every binary
+linked against the runtime. The constants above are the only place a new name
+gets written; the prefix is opaque, and a rename does not follow it.
+
+It was `sts_` — the initials of the old product name — until the AmritScript
+rename, and rewriting it was the last step of that rename rather than a
+precedent. It was affordable exactly once: nothing had been released, so no
+binary anywhere linked `sts_`, and the ~200 goldens that carry the prefix are
+generated (`npm run test:update`) rather than written. Neither is true a second
+time. From here the prefix is frozen.
 
 ## Repository layout
 

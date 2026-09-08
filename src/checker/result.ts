@@ -44,7 +44,7 @@
  * pass cannot prove purity, termination or escape through an unknown callee.
  * Narrowing plus `orReturn()` covers what those combinators are for.
  *
- * Representation: one monomorphised `%struct.sts_result.<T>.<E>` per distinct
+ * Representation: one monomorphised `%struct.amrit_result.<T>.<E>` per distinct
  * pair of payload types, laid out exactly as `class` structs are, and held by
  * pointer. That is deliberate rather than a compromise — it means a `Result`
  * costs what a small object costs, the WP6 escape analysis turns the ones

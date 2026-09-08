@@ -1,5 +1,5 @@
 // The byte methods (WP14 A2): `charCodeAt` is a bounds check and a `load i8`,
-// `substring` is the JavaScript clamp plus one `sts_str_new`.
+// `substring` is the JavaScript clamp plus one `amrit_str_new`.
 function firstByte(s: string): number {
   return s.charCodeAt(0);
 }

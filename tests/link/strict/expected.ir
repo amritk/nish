@@ -1,3 +1,3 @@
 define internal noundef i32 @add(i32 noundef %a, i32 noundef %b)
 define noundef i32 @twice(i32 noundef %n)
-define noundef i32 @sts_main()
+define noundef i32 @amrit_main()

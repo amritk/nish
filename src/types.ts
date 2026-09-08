@@ -112,7 +112,7 @@ export type StaticType =
   | { kind: "nullable"; inner: StaticType }
   /**
    * `Result<T, E>` (WP16): the one way a function reports failure.
-   * A pointer to a monomorphised `%struct.sts_result.<T>.<E>` holding the
+   * A pointer to a monomorphised `%struct.amrit_result.<T>.<E>` holding the
    * `ok` discriminant, the success payload and the error payload, so a
    * `Result` costs exactly what a class costs and the escape analysis stack-
    * allocates the ones that do not outlive their function.
@@ -150,7 +150,7 @@ export const STRING: StaticType = { kind: "string" };
 export const VOID: StaticType = { kind: "void" };
 
 /** The one header type every array shares; see `ARRAY_TYPE` in codegen/runtime.ts. */
-export const ARRAY_STRUCT = "%struct.sts_array";
+export const ARRAY_STRUCT = "%struct.amrit_array";
 
 export function arrayOf(elem: StaticType): StaticType {
   return { kind: "array", elem };
@@ -228,7 +228,7 @@ export function mangleType(t: StaticType): string {
 /** The LLVM struct name (without the `%struct.` prefix) backing a `Result` type. */
 export function resultStructName(t: StaticType): string {
   if (t.kind !== "result") throw new Error(`resultStructName: not a Result type (${t.kind})`);
-  return `sts_result.${mangleType(t.ok)}.${mangleType(t.err)}`;
+  return `amrit_result.${mangleType(t.ok)}.${mangleType(t.err)}`;
 }
 
 /**

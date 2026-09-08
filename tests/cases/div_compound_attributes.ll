@@ -1,6 +1,6 @@
 %struct.Box = type { i32 }
 
-declare void @sts_panic_div(i1 noundef zeroext) #1
+declare void @amrit_panic_div(i1 noundef zeroext) #1
 
 define noundef i32 @localDiv(i32 noundef %k) #0 {
 entry:
@@ -15,7 +15,7 @@ entry:
   br i1 %5, label %div.fail, label %div.ok
 
 div.fail:
-  call void @sts_panic_div(i1 zeroext %1)
+  call void @amrit_panic_div(i1 zeroext %1)
   unreachable
 
 div.ok:
@@ -37,7 +37,7 @@ entry:
   br i1 %6, label %div.fail, label %div.ok
 
 div.fail:
-  call void @sts_panic_div(i1 zeroext %2)
+  call void @amrit_panic_div(i1 zeroext %2)
   unreachable
 
 div.ok:
@@ -58,7 +58,7 @@ entry:
   br i1 %4, label %div.fail, label %div.ok
 
 div.fail:
-  call void @sts_panic_div(i1 zeroext %0)
+  call void @amrit_panic_div(i1 zeroext %0)
   unreachable
 
 div.ok:
