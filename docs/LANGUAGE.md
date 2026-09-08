@@ -78,10 +78,10 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 
 | AmritScript | LLVM | Size / align | C ABI (`--emit-header`) | Notes |
 | --- | --- | --- | --- | --- |
-| `number` (i32 mode), `i32` | `i32` | 4 / 4 | `int32_t` | Wrapping two's-complement arithmetic. |
+| `number` (i32 mode), `i32` | `i32` | 4 / 4 | `int32_t` | Two's-complement; signed overflow is undefined (`--wrapping` wraps). |
 | `number` (f64 mode), `f64` | `double` | 8 / 8 | `double` | IEEE-754; `f64` is always available, in both modes. |
 | `f32` | `float` | 4 / 4 | `float` | 32-bit IEEE-754 ([`f32`](#f32)). Half the footprint of an `f64` and twice the SIMD lane count; never the lowering of `number`, and `f32 + f64` is a type error. |
-| `i64` | `i64` | 8 / 8 | `int64_t` | Never the lowering of `number`; wrapping arithmetic; literals only by context. |
+| `i64` | `i64` | 8 / 8 | `int64_t` | Never the lowering of `number`; signed overflow is undefined (`--wrapping` wraps); literals only by context. |
 | `u8` | `i8` | 1 / 1 | `uint8_t` | [Unsigned integers](#unsigned-integers): the same LLVM type as a signed byte, with unsigned operations. Wrapping arithmetic. |
 | `u16` | `i16` | 2 / 2 | `uint16_t` | As `u8`. |
 | `u32` | `i32` | 4 / 4 | `uint32_t` | Shares `i32`'s LLVM type; `u32 + i32` is still a type error. |
@@ -195,7 +195,7 @@ tightly as a C `uint8_t` does.
 
 | Operation | On `i32` / `i64` | On `u8` / `u16` / `u32` / `u64` |
 | --- | --- | --- |
-| `+ - *`, unary `-`, `++`/`--` | `add` `sub` `mul` | identical, and wrapping for both |
+| `+ - *`, unary `-`, `++`/`--` | `add nsw` `sub nsw` `mul nsw`; plain under `--wrapping` | the same instructions, never flagged: unsigned overflow wraps in both modes |
 | `/ %` | `sdiv` / `srem` after a two-part divisor check | `udiv` / `urem` after a single compare ([Checked integer division](#checked-integer-division)) |
 | `< <= > >=` | `icmp slt sle sgt sge` | `icmp ult ule ugt uge` |
 | `>>` | `ashr` | `lshr` |
@@ -207,7 +207,7 @@ tightly as a C `uint8_t` does.
 | `Math.abs` | `llvm.abs` | nothing: the value is already its own magnitude |
 | `Math.min` / `Math.max` | `llvm.smin` / `llvm.smax` | `llvm.umin` / `llvm.umax` |
 | `console.log(x)`, `` `${x}` `` | `amrit_str_from_i32` / `_i64` | `zext` to i64, then `amrit_str_from_u64` |
-| `--nsw` (WP9) | `add nsw` … | `add nuw` … — an unsigned value passing 2^31 has not overflowed |
+| overflow (WP9, WP15 §3) | `add nsw` … unless `--wrapping` | nothing, in either mode: unsigned overflow is defined as wrapping |
 
 The consequences worth knowing:
 
@@ -218,10 +218,12 @@ The consequences worth knowing:
 - **Division is cheaper.** Unsigned division has no overflow case, so its
   check is one compare instead of three plus an `and` and an `or`
   (`tests/cases/u_div_one_check`).
-- **Overflow wraps**, as it does for the signed types: `(255: u8) + 1` is `0`
-  and `(0: u8) - 1` is `255` (`tests/cases/u_arith_wrap`,
-  `tests/differential/corpus/u_wrap`). No `nuw` is emitted unless `--nsw` is
-  given, exactly as no `nsw` is emitted for signed arithmetic.
+- **Overflow wraps**, and unlike the signed types it wraps in *every* mode:
+  `(255: u8) + 1` is `0` and `(0: u8) - 1` is `255` (`tests/cases/u_arith_wrap`,
+  `tests/differential/corpus/u_wrap`). No `nuw` is ever emitted, and neither is
+  `nsw`: wrapping is what hashing and bit-packing are written against, and it
+  is half the reason the unsigned widths exist. `--wrapping` therefore changes
+  nothing for them (`tests/cases/opt_wrapping`).
 - **Mixing is an error.** `u32` and `i32` are different types even though both
   are `i32` in the IR, and so are `u8` and `u32`; there is no implicit
   conversion anywhere in this language
@@ -626,11 +628,19 @@ having no top-level code and therefore no initialisation order.
   (`tests/cases/reject_const_not_constant`, `reject_const_unknown_name`).
   There is deliberately no second, larger language inside `const`: a constant
   can compute exactly what a runtime expression can.
-- **Folding follows the language's own arithmetic.** Integer arithmetic wraps
-  at the declared width, so `const WRAPPED: i32 = 2147483647 + 1` is
-  `-2147483648`, the same value the emitted `add` would produce
-  (`tests/cases/const_wrap`). A bare integer literal takes the width of the
-  constant it initialises, so `const BIG: i64 = 1000000000 * 10` is computed in
+- **Folding follows the language's own arithmetic**, whichever mode the
+  compiler is in, because a constant must compute what the instruction it
+  replaces computes. By default that instruction carries `nsw`, so a fold that
+  overflows is
+  `` attempt to compute with overflow in a constant `` — the compiler will not
+  hand back the one value the optimiser is entitled to assume cannot happen
+  (`tests/cases/reject_const_overflow_arith`). Under `--wrapping` the
+  instruction wraps, so the fold wraps:
+  `const WRAPPED: i32 = 2147483647 + 1` is `-2147483648`
+  (`tests/cases/const_wrap`, whose `.args` is `--wrapping` for exactly this
+  reason). Negation is arithmetic too, so `-2147483648` is fine in both modes
+  (its result fits) while `-(-2147483648)` is refused by default. A bare
+  integer literal takes the width of the constant it initialises, so `const BIG: i64 = 1000000000 * 10` is computed in
   64 bits (`const_i64`). Mixing widths is an error, as it is anywhere else
   (`reject_const_mixed_widths`). `f64` folds in IEEE-754 (`const_f64`), and
   `+` on two strings concatenates at compile time, interning the result once
@@ -708,11 +718,18 @@ having no top-level code and therefore no initialisation order.
   modules apart the declaration is (`tests/link/reachable_struct_chain`).
 - Import cycles are allowed (`tests/link/cycle`); a shared dependency is
   compiled once (`tests/link/diamond`).
-- **Linkage.** Every function is an external C-ABI symbol by default, so two
-  modules may not define the same function name, exported or not
-  (`tests/link/duplicate_export`). With `--strict-exports`, non-exported
-  functions get `internal` linkage (`tests/cases/export_strict`,
-  `tests/link/strict`) and may coexist across modules.
+- **Linkage.** An `export`ed function is an external C-ABI symbol; every other
+  function gets `internal` linkage by default, so LLVM may inline, specialise
+  or drop it (`tests/cases/export_fn`, `tests/link/strict`).
+  `--no-strict-exports` makes every function external again, which is what a C
+  driver calling a non-exported function needs (`tests/cases/export_no_strict`).
+- **A function name is unique across the whole program**, exported or not, in
+  either mode (`tests/link/duplicate_export`, `duplicate_internal`).
+  `internal` linkage keeps a name out of the linker's way but it does not buy a
+  second namespace: the whole-program attribute analysis is keyed by symbol
+  name, so two functions sharing one would be emitted with each other's
+  attributes — a miscompile rather than a link error, which is why the rule
+  does not depend on the flag.
 
 ### `main`
 
@@ -1100,7 +1117,7 @@ under [Semantics decisions](#semantics-decisions).
 
 | Operator | Operand types | Result | Lowering | Test |
 | --- | --- | --- | --- | --- |
-| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); no `nsw`/`nuw` unless `--nsw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `amrit_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
+| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); `nsw` on the signed integer widths unless `--wrapping`, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `amrit_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
 | `+` | two `string` | `string` | `amrit_str_concat` | `str_concat`; `reject_str_plus_number` (`no implicit string conversion`) |
 | unary `-` | any numeric type | same | `sub <T> 0, x` for an integer, `fneg float` / `fneg double` for a float | `cf_if` (`-x`), `i64_basic`, `f32_arith`; `f64` *(CLI only)* |
 | unary `!` | `boolean` | `boolean` | `xor i1 x, true` | `cf_logical`; `!s` on a string is `` Unsupported unary operator `!` on string `` *(CLI only)* |
@@ -1452,19 +1469,32 @@ compiler's own marks are never invalidated by user resets.
 
 ## Semantics decisions
 
-- **Integers wrap.** `i32`, `i64` and the unsigned widths do two's-complement
-  wrapping arithmetic (no `nsw`, no `nuw`), like Rust release builds:
-  `2147483647 + 1` is `-2147483648` and `(255: u8) + 1` is `0`
-  (`tests/cases/i64_basic`, `int_min_literal`, `u_arith_wrap`;
-  `wp1-control-flow.md`). `Math.abs(-2147483648)` wraps to itself. With
-  `--nsw`, every user-level integer `add`/`sub`/`mul` (binary operators, unary
-  minus, `op=` on locals, fields, and elements, `++`/`--`) carries a no-wrap
-  flag and overflow becomes undefined behaviour, as in C: `nsw` on a signed
-  type and `nuw` on an unsigned one, because a `u32` passing 2^31 has not
-  overflowed and `nsw` there would poison an ordinary result. Division,
-  remainder, shifts, and the compiler's own index, length, and allocator
-  arithmetic are never flagged (`tests/cases/opt_nsw`;
-  [wp9-optimisation.md](wp9-optimisation.md#--nsw)).
+- **Signed integer overflow is undefined behaviour; `--wrapping` restores
+  two's-complement wrapping.** By default every user-level `i32`/`i64`
+  `add`/`sub`/`mul` (binary operators, unary minus, `op=` on locals, fields and
+  elements, `++`/`--`) carries `nsw`, as in C, so LLVM may widen induction
+  variables and strength-reduce loops. A program that overflows a signed
+  integer on purpose — a hash, an LCG, a wrap-around counter — must be compiled
+  with `--wrapping`, and then `2147483647 + 1` is `-2147483648` again, like a
+  Rust release build (`tests/cases/opt_nsw` for the default,
+  `tests/cases/opt_wrapping` and `i64_basic` for the opt-out;
+  `tests/differential/corpus/int_wrap`, `prng_lcg`, `bit_fnv1a`).
+  This withdraws a guarantee the language used to make, and it is the one place
+  where a correct program can become an incorrect one by upgrading; the flag is
+  the whole remedy.
+- **Unsigned integers never carry a no-wrap flag**, in either mode. `u8`,
+  `u16`, `u32` and `u64` are *defined* to wrap, so `(255: u8) + 1` is `0`
+  (`tests/cases/u_arith_wrap`): `nuw` would be a claim the language does not
+  make, and `nsw` on a value that has merely passed 2^31 would poison an
+  ordinary result. Write the deliberately-overflowing arithmetic in an unsigned
+  type and it needs no flag at all.
+- **What is never flagged**, whatever the mode: division, remainder and shifts
+  (they have no such form), `Math.abs(-2147483648)`, which still wraps to
+  itself because `llvm.abs` is emitted with its poison flag off, the
+  conversions, which `trunc` and therefore wrap by definition, and every piece
+  of the compiler's own index, length and allocator arithmetic
+  (`tests/cases/opt_nsw` pins exactly which operations carry `nsw` and which do
+  not).
 - **`f32` is a distinct type, not a rounding mode.** It never mixes with
   `f64` and is never what `number` means; every `f32` result is a real 32-bit
   float, so `0.1 + 0.1` is `0.20000000298023224` there and
@@ -1565,7 +1595,8 @@ compiler's own marks are never invalidated by user resets.
   are never null unless typed `T | null`.
 - **Parameters are immutable** and used as SSA values; locals use
   `alloca`/`load`/`store` and are promoted by `mem2reg`.
-- **Every function is an external C symbol** unless `--strict-exports`.
+- **Only an `export`ed function is an external C symbol**; the rest are
+  `internal` unless `--no-strict-exports`.
 
 ### Memory model
 
@@ -1622,7 +1653,7 @@ arena is released when `main` returns. Objects stored into fields or arrays
 never move to the stack, and a returned object is always arena memory owned
 by the caller.
 
-### Target and overflow flags
+### Target, overflow and linkage flags
 
 - **`--target <triple>`** / **`--target host`** writes `target datalayout`
   and `target triple` (the strings clang 18 emits for that triple) into every
@@ -1635,7 +1666,13 @@ by the caller.
   clang supplies them at link time; the flag matters when running `opt` or
   `llc` by hand, which otherwise assume a generic layout and never vectorise
   ([wp9-optimisation.md](wp9-optimisation.md#--target-triple-and---target-host)).
-- **`--nsw`**: see *Integers wrap* above (`tests/cases/opt_nsw`).
+- **`--wrapping`**: see *Signed integer overflow is undefined behaviour*
+  above (`tests/cases/opt_nsw`, `opt_wrapping`).
+- **`--no-strict-exports`**: see *Linkage* above
+  (`tests/cases/export_no_strict`).
+- **`--nsw`** and **`--strict-exports`** are still accepted and now say
+  explicitly what the compiler does anyway; they exist so a build script
+  written before the defaults changed still runs (`tests/cases/export_strict`).
 - **`--unchecked-indexing`**: see *Bounds checks* above.
 - **`--no-stack-alloc`**: see *Memory model* above.
 

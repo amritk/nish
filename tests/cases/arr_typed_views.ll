@@ -38,7 +38,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef i32 @sumI32(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+define internal noundef i32 @sumI32(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %total.addr = alloca i32, align 4
   %x.addr = alloca i32, align 4
@@ -63,7 +63,7 @@ forof.body:
   store i32 %8, i32* %x.addr, align 4
   %9 = load i32, i32* %total.addr, align 4
   %10 = load i32, i32* %x.addr, align 4
-  %11 = add i32 %9, %10
+  %11 = add nsw i32 %9, %10
   store i32 %11, i32* %total.addr, align 4
   br label %forof.inc
 
@@ -78,7 +78,7 @@ forof.end:
   ret i32 %14
 }
 
-define noundef double @sumF64(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+define internal noundef double @sumF64(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %total.addr = alloca double, align 8
   %x.addr = alloca double, align 8
@@ -118,7 +118,7 @@ forof.end:
   ret double %14
 }
 
-define noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @squares(i32 noundef %n) #1 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @squares(i32 noundef %n) #1 {
 entry:
   %out.addr = alloca %struct.amrit_array*, align 8
   %i.addr = alloca i32, align 4
@@ -149,7 +149,7 @@ for.body:
   %12 = sext i32 %11 to i64
   %13 = load i32, i32* %i.addr, align 4
   %14 = load i32, i32* %i.addr, align 4
-  %15 = mul i32 %13, %14
+  %15 = mul nsw i32 %13, %14
   %16 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %10, i64 0, i32 0
   %17 = load i64, i64* %16, align 8
   %18 = icmp ult i64 %12, %17
@@ -169,7 +169,7 @@ bounds.ok:
 
 for.inc:
   %23 = load i32, i32* %i.addr, align 4
-  %24 = add i32 %23, 1
+  %24 = add nsw i32 %23, 1
   store i32 %24, i32* %i.addr, align 4
   br label %for.cond
 
@@ -178,7 +178,7 @@ for.end:
   ret %struct.amrit_array* %25
 }
 
-define noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @scale(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, double noundef %k) #1 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @scale(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, double noundef %k) #1 {
 entry:
   %out.addr = alloca %struct.amrit_array*, align 8
   %i.addr = alloca i32, align 4
@@ -250,7 +250,7 @@ bounds.ok.1:
 
 for.inc:
   %37 = load i32, i32* %i.addr, align 4
-  %38 = add i32 %37, 1
+  %38 = add nsw i32 %37, 1
   store i32 %38, i32* %i.addr, align 4
   br label %for.cond
 
@@ -259,7 +259,7 @@ for.end:
   ret %struct.amrit_array* %39
 }
 
-define noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @widen(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #1 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @widen(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #1 {
 entry:
   %out.addr = alloca %struct.amrit_array*, align 8
   %i.addr = alloca i32, align 4
@@ -331,7 +331,7 @@ bounds.ok.1:
 
 for.inc:
   %37 = load i32, i32* %i.addr, align 4
-  %38 = add i32 %37, 1
+  %38 = add nsw i32 %37, 1
   store i32 %38, i32* %i.addr, align 4
   br label %for.cond
 
@@ -439,7 +439,7 @@ bounds.ok.3:
   %46 = bitcast i8* %45 to i64*
   %47 = getelementptr inbounds i64, i64* %46, i64 4
   %48 = load i64, i64* %47, align 8
-  %49 = mul i64 %48, 1000000000000
+  %49 = mul nsw i64 %48, 1000000000000
   %50 = call i8* @amrit_str_from_i64(i64 %49)
   call void @amrit_print(i8* %50)
   %51 = load %struct.amrit_array*, %struct.amrit_array** %sq.addr, align 8

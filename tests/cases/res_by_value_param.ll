@@ -34,7 +34,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef i32 @describe(i64 noundef %r) #0 {
+define internal noundef i32 @describe(i64 noundef %r) #0 {
 entry:
   %amrit_result.i32.i32.obj = alloca %struct.amrit_result.i32.i32, align 8
   %0 = trunc i64 %r to i1
@@ -54,7 +54,7 @@ entry:
 if.then:
   %9 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 2
   %10 = load i32, i32* %9, align 4
-  %11 = sub i32 0, %10
+  %11 = sub nsw i32 0, %10
   ret i32 %11
 
 if.end:
@@ -63,7 +63,7 @@ if.end:
   ret i32 %13
 }
 
-define noundef nonnull align 8 dereferenceable(8) %struct.Box* @boxed(i64 noundef %r) #1 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Box* @boxed(i64 noundef %r) #1 {
 entry:
   %0 = call i8* @amrit_alloc_struct(i64 12)
   %1 = bitcast i8* %0 to %struct.amrit_result.i32.i32*
@@ -83,7 +83,7 @@ entry:
   ret %struct.Box* %9
 }
 
-define noundef i64 @half(i32 noundef %n) #2 {
+define internal noundef i64 @half(i32 noundef %n) #2 {
 entry:
   %0 = icmp eq i32 2, 0
   %1 = icmp eq i32 %n, -2147483648

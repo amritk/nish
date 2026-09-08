@@ -145,7 +145,7 @@ entry:
 if.then:
   %9 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 2
   %10 = load i32, i32* %9, align 4
-  %11 = sub i32 0, %10
+  %11 = sub nsw i32 0, %10
   ret i32 %11
 
 if.end:

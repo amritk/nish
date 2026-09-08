@@ -32,13 +32,13 @@ div.fail:
 
 div.ok:
   %9 = srem i32 %3, 1000
-  %10 = add i32 %2, %9
+  %10 = add nsw i32 %2, %9
   store i32 %10, i32* %sum.addr, align 4
   br label %for.inc
 
 for.inc:
   %11 = load i32, i32* %i.addr, align 4
-  %12 = add i32 %11, 1
+  %12 = add nsw i32 %11, 1
   store i32 %12, i32* %i.addr, align 4
   br label %for.cond
 

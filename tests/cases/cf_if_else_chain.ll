@@ -1,4 +1,4 @@
-define noundef i32 @grade(i32 noundef %score) #0 {
+define internal noundef i32 @grade(i32 noundef %score) #0 {
 entry:
   %0 = icmp sge i32 %score, 90
   br i1 %0, label %if.then, label %if.else
@@ -27,15 +27,15 @@ if.else.2:
 define noundef i32 @test() #0 {
 entry:
   %0 = call i32 @grade(i32 95)
-  %1 = mul i32 %0, 1000
+  %1 = mul nsw i32 %0, 1000
   %2 = call i32 @grade(i32 85)
-  %3 = mul i32 %2, 100
-  %4 = add i32 %1, %3
+  %3 = mul nsw i32 %2, 100
+  %4 = add nsw i32 %1, %3
   %5 = call i32 @grade(i32 75)
-  %6 = mul i32 %5, 10
-  %7 = add i32 %4, %6
+  %6 = mul nsw i32 %5, 10
+  %7 = add nsw i32 %4, %6
   %8 = call i32 @grade(i32 10)
-  %9 = add i32 %7, %8
+  %9 = add nsw i32 %7, %8
   ret i32 %9
 }
 

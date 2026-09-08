@@ -1204,7 +1204,14 @@ if (!only || "interop".includes(only)) {
   check(
     'a function named `double` is declared as double_ bound with AMRIT_SYMBOL("double")',
     keywordHeader.includes('int32_t double_(int32_t n) AMRIT_SYMBOL("double");') &&
-      keywordHeader.includes("int32_t helper(int32_t n);"),
+      keywordHeader.includes("int32_t next(int32_t n);"),
+    keywordHeader || keyword.stderr
+  );
+  // WP15 §3: `internal` linkage is the default, so a non-exported function is
+  // not a C-ABI symbol and must not be promised by the header either.
+  check(
+    "the header leaves the non-exported `helper` out by default",
+    keyword.status === 0 && !keywordHeader.includes("helper"),
     keywordHeader || keyword.stderr
   );
 
@@ -1215,9 +1222,23 @@ if (!only || "interop".includes(only)) {
   );
   const strictHeader = strict.status === 0 ? fs.readFileSync(sidecar("export_strict", "h"), "utf8") : "";
   check(
-    "--strict-exports keeps internal functions out of the header",
+    "--strict-exports (the default, spelled out) keeps internal functions out of the header",
     strictHeader.includes("int32_t next(int32_t n);") && !strictHeader.includes("helper"),
     strictHeader || strict.stderr
+  );
+
+  // The other direction: --no-strict-exports puts every function back on the ABI,
+  // so the header has to declare the ones it hid.
+  const loose = emit(
+    "tests/cases/export_strict.ts",
+    ["--no-strict-exports", "--emit-header", sidecar("export_loose", "h")],
+    "export_loose"
+  );
+  const looseHeader = loose.status === 0 ? fs.readFileSync(sidecar("export_loose", "h"), "utf8") : "";
+  check(
+    "--no-strict-exports puts the non-exported function back in the header",
+    looseHeader.includes("int32_t next(int32_t n);") && looseHeader.includes("int32_t helper(int32_t n);"),
+    looseHeader || loose.stderr
   );
 
   const entry = emit("examples/multi/main.ts", ["--emit-header", sidecar("multi", "h")], "multi", true);
@@ -1271,7 +1292,7 @@ if (!only || "interop".includes(only)) {
       String(wasmRt.stderr)
     );
 
-    for (const stem of ["add", "strings", "export_fn", "export_strict", "multi"]) {
+    for (const stem of ["add", "strings", "export_fn", "export_strict", "export_loose", "multi"]) {
       if (!fs.existsSync(sidecar(stem, "h"))) continue;
       const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar(stem, "h")]);
       check(`${stem}.h compiles under -std=c11 -Wall -Wextra -Werror`, r.status === 0, String(r.stderr));
@@ -3022,22 +3043,46 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
       bad.stderr.includes("x86_64-unknown-linux-gnu"),
     bad.stderr
   );
+  // WP15 §3: `nsw` is the default, and `opt_nsw.ll` pins exactly which operations
+  // carry it. Signedness is not in the LLVM type — a `u32` is an `i32` — so the
+  // check is per function: `mix` is the case's unsigned one and must be clean.
   const nswLl = path.join(buildDir, "opt_nsw.ll");
   if (fs.existsSync(nswLl)) {
     const ir = fs.readFileSync(nswLl, "utf8");
-    // User-level i32 arithmetic: flagged. Compiler-internal i64 index/length arithmetic and the allocator: never.
-    const userOps = [...ir.matchAll(/= (add|sub|mul)( nsw)? i32 /g)];
+    /** The body of `@<name>`, so an op can be attributed to the function that wrote it. */
+    const bodyOf = (text, name) => {
+      const m = new RegExp(`^define [^\n]*@${name}\\(.*?\\n\\}$`, "ms").exec(text);
+      return m ? m[0] : "";
+    };
+    const signed = ["poly", "sum", "test"].map((n) => bodyOf(ir, n)).join("\n");
+    const unsigned = bodyOf(ir, "mix");
+    const userOps = [...signed.matchAll(/= (add|sub|mul)( nsw)? i32 /g)];
+    const unsignedOps = [...unsigned.matchAll(/= (add|sub|mul)( nsw| nuw)? i32 /g)];
     const internalOps = [...ir.matchAll(/= (add|sub|mul)( nsw)? i64 /g)];
     check(
-      `opt_nsw: every user-level i32 add/sub/mul carries nsw (${userOps.length} ops) and no internal i64 op does (${internalOps.length} ops)`,
+      `opt_nsw: every user-level signed i32 add/sub/mul carries nsw (${userOps.length} ops), no unsigned one does (${unsignedOps.length} ops), and no internal i64 op does (${internalOps.length} ops)`,
       // Since WP6 stack-allocates the case's arrays there may be no internal i64 arithmetic at all.
       userOps.length >= 10 &&
         userOps.every((m) => m[2] === " nsw") &&
+        unsignedOps.length >= 3 &&
+        unsignedOps.every((m) => m[2] === undefined) &&
         internalOps.every((m) => m[2] === undefined),
       ir
     );
-    const plainIr = fs.readFileSync(path.join(buildDir, "cf_fib.ll"), "utf8");
-    check("without --nsw no instruction carries nsw (cf_fib)", !plainIr.includes("nsw"), plainIr);
+    // The opt-out: the same source under --wrapping, which must differ in the
+    // flags and in nothing else at all.
+    const wrapLl = path.join(buildDir, "opt_wrapping.ll");
+    if (fs.existsSync(wrapLl)) {
+      // The module header names the source file, which is the one thing the two
+      // cases legitimately differ in, so compare the stripped bodies.
+      const wrapIr = stripHeader(fs.readFileSync(wrapLl, "utf8"));
+      const nswIr = stripHeader(ir);
+      check(
+        "--wrapping removes every nsw and changes nothing else (opt_wrapping vs opt_nsw)",
+        !wrapIr.includes("nsw") && !wrapIr.includes("nuw") && wrapIr === nswIr.split(" nsw").join(""),
+        wrapIr
+      );
+    }
   }
 }
 

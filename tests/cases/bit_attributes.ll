@@ -1,4 +1,4 @@
-define noundef i32 @hashStep(i32 noundef %h, i32 noundef %byte) #0 {
+define internal noundef i32 @hashStep(i32 noundef %h, i32 noundef %byte) #0 {
 entry:
   %0 = xor i32 %h, %byte
   %1 = shl i32 %0, 5

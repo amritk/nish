@@ -31,8 +31,9 @@ export interface CompilerOptions {
   stackAlloc: boolean;
   /**
    * Give non-`export`ed functions `internal` linkage so LLVM may inline,
-   * specialise, or drop them. Off keeps every function external (C ABI).
-   * Default: false.
+   * specialise, or drop them. Off (`--no-strict-exports`) keeps every function
+   * external (C ABI), which is what a program whose C driver calls a
+   * non-exported function needs. Default: true (WP15 §3).
    */
   strictExports: boolean;
   /**
@@ -47,10 +48,12 @@ export interface CompilerOptions {
    */
   target?: string;
   /**
-   * Emit `nsw` on i32/i64 `add`/`sub`/`mul` (WP9): signed overflow becomes
-   * undefined behaviour, as in C (Rust release builds wrap instead), so LLVM
-   * may assume induction variables and address arithmetic never wrap.
-   * Default: false (wrapping, the documented semantics).
+   * Emit `nsw` on signed `add`/`sub`/`mul` (WP9, defaulted on by WP15 §3):
+   * signed overflow becomes undefined behaviour, as in C, so LLVM may widen
+   * induction variables and strength-reduce loops. Off (`--wrapping`) restores
+   * two's-complement wrapping, which is what a program that counts on
+   * `2147483647 + 1 === -2147483648` needs. Unsigned arithmetic is defined as
+   * wrapping either way and never carries a no-wrap flag. Default: true.
    */
   nsw: boolean;
   /**
@@ -66,10 +69,10 @@ export const DEFAULT_OPTIONS: CompilerOptions = {
   numberMode: "i32",
   optimizeAttributes: true,
   runtimeDecls: false,
-  strictExports: false,
+  strictExports: true,
   uncheckedIndexing: false,
   target: undefined,
-  nsw: false,
+  nsw: true,
   stackAlloc: true,
   debugInfo: false,
 };

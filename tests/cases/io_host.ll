@@ -23,7 +23,7 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noundef nonnull align 8 i8* @amrit_platform() #3
 declare noundef nonnull align 8 i8* @amrit_arch() #3
 
-define noundef nonnull align 8 i8* @hostTriple(i8* noundef nonnull noalias readonly align 8 nocapture %platform, i8* noundef nonnull noalias readonly align 8 nocapture %arch) #0 {
+define internal noundef nonnull align 8 i8* @hostTriple(i8* noundef nonnull noalias readonly align 8 nocapture %platform, i8* noundef nonnull noalias readonly align 8 nocapture %arch) #0 {
 entry:
   %cpu.addr = alloca i8*, align 8
   store i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*), i8** %cpu.addr, align 8

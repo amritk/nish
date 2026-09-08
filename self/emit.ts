@@ -278,7 +278,7 @@ export class Emitter {
     }
     this.fn = new IRFunction(sig.name, params, this.llvmAbi(sig.returnType));
     // Linkage: exported functions are always external (they are the module's
-    // ABI). Others are external too unless --strict-exports hides them.
+    // ABI). Every other function is `internal` unless --no-strict-exports.
     if (this.opts.strictExports && !sig.exported) {
       this.fn.linkage = "internal";
     }

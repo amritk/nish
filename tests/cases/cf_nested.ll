@@ -1,6 +1,6 @@
 declare void @amrit_panic_div(i1 noundef zeroext) #1
 
-define noundef i32 @countPairs(i32 noundef %n) #0 {
+define internal noundef i32 @countPairs(i32 noundef %n) #0 {
 entry:
   %count.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -16,7 +16,7 @@ for.cond:
 
 for.body:
   %2 = load i32, i32* %i.addr, align 4
-  %3 = add i32 %2, 1
+  %3 = add nsw i32 %2, 1
   store i32 %3, i32* %j.addr, align 4
   br label %for.cond.1
 
@@ -28,7 +28,7 @@ for.cond.1:
 for.body.1:
   %6 = load i32, i32* %i.addr, align 4
   %7 = load i32, i32* %j.addr, align 4
-  %8 = add i32 %6, %7
+  %8 = add nsw i32 %6, %7
   %9 = icmp eq i32 3, 0
   %10 = icmp eq i32 %8, -2147483648
   %11 = icmp eq i32 3, -1
@@ -47,7 +47,7 @@ div.ok:
 
 if.then:
   %16 = load i32, i32* %count.addr, align 4
-  %17 = add i32 %16, 1
+  %17 = add nsw i32 %16, 1
   store i32 %17, i32* %count.addr, align 4
   br label %if.end
 
@@ -56,7 +56,7 @@ if.end:
 
 for.inc.1:
   %18 = load i32, i32* %j.addr, align 4
-  %19 = add i32 %18, 1
+  %19 = add nsw i32 %18, 1
   store i32 %19, i32* %j.addr, align 4
   br label %for.cond.1
 
@@ -65,7 +65,7 @@ for.end.1:
 
 for.inc:
   %20 = load i32, i32* %i.addr, align 4
-  %21 = add i32 %20, 1
+  %21 = add nsw i32 %20, 1
   store i32 %21, i32* %i.addr, align 4
   br label %for.cond
 
@@ -74,7 +74,7 @@ for.end:
   ret i32 %22
 }
 
-define noundef i32 @search(i32 noundef %limit) #0 {
+define internal noundef i32 @search(i32 noundef %limit) #0 {
 entry:
   %found.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -90,7 +90,7 @@ while.cond:
 
 while.body:
   %2 = load i32, i32* %i.addr, align 4
-  %3 = add i32 %2, 1
+  %3 = add nsw i32 %2, 1
   store i32 %3, i32* %i.addr, align 4
   %4 = load i32, i32* %i.addr, align 4
   %5 = icmp eq i32 2, 0
@@ -121,11 +121,11 @@ while.cond.1:
 
 while.body.1:
   %12 = load i32, i32* %j.addr, align 4
-  %13 = add i32 %12, 1
+  %13 = add nsw i32 %12, 1
   store i32 %13, i32* %j.addr, align 4
   %14 = load i32, i32* %j.addr, align 4
   %15 = load i32, i32* %j.addr, align 4
-  %16 = mul i32 %14, %15
+  %16 = mul nsw i32 %14, %15
   %17 = load i32, i32* %i.addr, align 4
   %18 = icmp sgt i32 %16, %17
   br i1 %18, label %if.then.1, label %if.end.1
@@ -139,7 +139,7 @@ if.end.1:
 while.end.1:
   %19 = load i32, i32* %found.addr, align 4
   %20 = load i32, i32* %j.addr, align 4
-  %21 = add i32 %19, %20
+  %21 = add nsw i32 %19, %20
   store i32 %21, i32* %found.addr, align 4
   br label %while.cond
 
@@ -151,9 +151,9 @@ while.end:
 define noundef i32 @test() #0 {
 entry:
   %0 = call i32 @countPairs(i32 6)
-  %1 = mul i32 %0, 100
+  %1 = mul nsw i32 %0, 100
   %2 = call i32 @search(i32 5)
-  %3 = add i32 %1, %2
+  %3 = add nsw i32 %1, %2
   ret i32 %3
 }
 

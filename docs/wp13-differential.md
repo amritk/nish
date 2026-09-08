@@ -151,11 +151,20 @@ These are language decisions, documented elsewhere, that the shim reproduces
 so they do not show up as mismatches (or, for the last three, that stay
 visible as known failures):
 
-- **`number` is a wrapping 32-bit integer** in the default mode
-  ([LANGUAGE.md, Semantics decisions](LANGUAGE.md#semantics-decisions)).
-  `2147483647 + 1` is `-2147483648`, `46341 * 46341` wraps,
-  `7 / 2` is `3`, `-7 / 2` is `-3`, `-7 % 3` is `-1`.
-- **`i64` wraps at 64 bits**; literals are typed by context (docs/wp7-runtime.md).
+- **`number` is a 32-bit integer** in the default mode
+  ([LANGUAGE.md, Semantics decisions](LANGUAGE.md#semantics-decisions)):
+  `7 / 2` is `3`, `-7 / 2` is `-3`, `-7 % 3` is `-1`. Since WP15 §3, signed
+  overflow is *undefined* rather than wrapping, and the shim has no way to
+  reproduce undefined behaviour, so **a corpus program that overflows on
+  purpose carries `--wrapping` in its `.args`** — only then does
+  `2147483647 + 1` mean `-2147483648` on both sides. Comparing a wrapping
+  JavaScript rewrite against a native binary that was allowed to assume the
+  overflow never happens would be testing nothing at all. The programs that
+  carry the flag are `int_wrap`, `int_literal_edges`, `int_incdec`,
+  `int_compound`, `i64_arith`, `conversions_roundtrip`, `digits`, `recursion`,
+  `bool_logic`, `bit_fnv1a`, `prng_lcg` and `const_module`.
+- **`i64` wraps at 64 bits under `--wrapping`**, and is undefined on overflow
+  without it; literals are typed by context (docs/wp7-runtime.md).
 - **Shift counts are masked** to the operand width — 31 at 32 bits and 63 at
   64, which is what JavaScript does too, so `x << 33` agrees on both sides; the
   rewrite spells the mask out only for `u8` and `u16`, whose widths JavaScript
@@ -166,7 +175,8 @@ visible as known failures):
 - **`f32` is a 32-bit float** and JavaScript has only doubles, so every `f32`
   result is rounded with `Math.fround`: `const tenth: f32 = 0.1` prints
   `0.10000000149011612` (`corpus/f32_round`).
-- **`u8`/`u16`/`u32`/`u64` are unsigned and wrap at their width**
+- **`u8`/`u16`/`u32`/`u64` are unsigned and wrap at their width**, in both
+  overflow modes, so an unsigned program needs no `--wrapping`
   ([LANGUAGE.md, Unsigned integers](LANGUAGE.md#unsigned-integers)):
   `(255: u8) + 1` is `0`, a `u32` above `INT_MAX` divides and compares as the
   positive value it is, and `>>` is a logical shift. JavaScript has no
@@ -279,8 +289,9 @@ the binary dies with SIGFPE after printing `d = -1`. When the operands are
 constants LLVM folds the poison instead: with `let d = 1; d -= 2;` the same
 program printed `-1` for both lines and exited 0. JavaScript (and the
 rewrite, `(min / d) | 0`) gives `-2147483648` and `0`. Rust in release mode
-panics here rather than wrapping; the README's "overflow wraps, exactly as in
-Rust release builds" does not cover division. The i64 case is identical.
+panics here rather than wrapping; the wrapping the README used to promise
+never covered division anyway, and since WP15 §3 it does not promise wrapping
+at all without `--wrapping`. The i64 case is identical.
 
 ### 3. Integer division by zero is undefined behaviour
 
@@ -411,7 +422,7 @@ one link), sized so `npm test` keeps its shape; see `docs/wp14-selfhost.md` §4.
 
 | Program | Exercises |
 | --- | --- |
-| `int_wrap`, `int_literal_edges`, `prng_lcg` | wrapping at 2^31 for `+ - *`, unary minus, factorials, an LCG |
+| `int_wrap`, `int_literal_edges`, `prng_lcg` | wrapping at 2^31 for `+ - *`, unary minus, factorials, an LCG (all three `--wrapping`) |
 | `int_divmod`, `int_div_overflow`, `int_div_zero` | truncating division and remainder with every sign combination; the two undefined cases |
 | `int_abs_minmax` | `Math.abs(INT_MIN)`, `min`/`max`, clamp |
 | `int_incdec`, `int_compound` | prefix/postfix `++`/`--` in expressions, `op=` on locals and elements |

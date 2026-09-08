@@ -74,10 +74,11 @@ export class Checker {
     isEntry: boolean,
     nodeCount: i32,
     sink: DiagnosticSink,
-    numberMode: i32
+    numberMode: i32,
+    wrapping: boolean
   ) {
     this.program = new CheckedProgram(source, file, isEntry, nodeCount);
-    this.ctx = new CheckContext(table, this.program, sink, numberMode);
+    this.ctx = new CheckContext(table, this.program, sink, numberMode, wrapping);
   }
 
   /**

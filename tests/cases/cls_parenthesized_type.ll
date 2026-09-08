@@ -96,7 +96,7 @@ bounds.ok.1:
   br i1 %29, label %cond.true, label %cond.false
 
 cond.true:
-  %30 = sub i32 0, 1
+  %30 = sub nsw i32 0, 1
   br label %cond.end
 
 cond.false:

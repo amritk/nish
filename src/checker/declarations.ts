@@ -213,5 +213,5 @@ export const collectConstant = (
       sf
     );
   }
-  return { name: decl.name.text, type, decl, exported: hasExportModifier(stmt), scope };
+  return { name: decl.name.text, type, decl, exported: hasExportModifier(stmt), scope, wrapping: !opts.nsw };
 };

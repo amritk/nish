@@ -89,8 +89,8 @@ int32_t add(int32_t a, int32_t b);
 #endif /* AMRITC_ADD_H */
 ```
 
-- Which functions: every external symbol of the link, i.e. exported
-  functions plus, without `--strict-exports`, the non-exported ones too.
+- Which functions: every external symbol of the link, i.e. the exported
+  functions — plus, with `--no-strict-exports`, the non-exported ones too.
   Modules imported by the entry appear under their own `/* file.ts */`
   heading. The entry `export function main` is omitted: it is the process
   entry (`@amrit_main` behind the C `main` wrapper), not a library call, and a

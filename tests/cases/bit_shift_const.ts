@@ -18,6 +18,6 @@ function byMinusOne(a: i32): i32 {
   return a << -1;
 }
 
-function test(): number {
+export function test(): number {
   return byThree(1) + byThirtyTwo(7) + byThirtyThree(1) + byMinusOne(1);
 }

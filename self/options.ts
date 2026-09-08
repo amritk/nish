@@ -25,13 +25,22 @@ export class Options {
   runtimeDecls: boolean;
   /** Lower allocations that provably do not outlive their function to allocas (WP6). */
   stackAlloc: boolean;
-  /** Give non-exported functions `internal` linkage so LLVM may inline or drop them. */
+  /**
+   * Give non-exported functions `internal` linkage so LLVM may inline or drop
+   * them. Off is `--no-strict-exports`, which keeps every function a C-ABI
+   * symbol. Default: on (WP15 §3).
+   */
   strictExports: boolean;
   /** Drop the bounds check on `a[i]`. Unsafe; for benchmarks only. */
   uncheckedIndexing: boolean;
   /** A triple for `--target`, or the empty string to keep the IR target-neutral. */
   target: string;
-  /** Emit `nsw` / `nuw` on user-level integer `add`/`sub`/`mul` (WP9). */
+  /**
+   * Emit `nsw` on signed user-level integer `add`/`sub`/`mul` (WP9). Off is
+   * `--wrapping`, which restores two's-complement wrapping. Unsigned
+   * arithmetic is defined as wrapping and never carries a flag either way.
+   * Default: on (WP15 §3).
+   */
   nsw: boolean;
   /**
    * Emit DWARF debug metadata (`-g`, WP10): a compile unit, a `DISubprogram`
@@ -58,10 +67,10 @@ export class Options {
     this.optimizeAttributes = true;
     this.runtimeDecls = false;
     this.stackAlloc = true;
-    this.strictExports = false;
+    this.strictExports = true;
     this.uncheckedIndexing = false;
     this.target = "";
-    this.nsw = false;
+    this.nsw = true;
     this.debugInfo = false;
     this.emitHeader = "";
     this.emitDts = "";

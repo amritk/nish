@@ -33,7 +33,7 @@ slow:
   ret i8* %grown
 }
 
-define void @Rect.constructor(%struct.Rect* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %width, i32 noundef %height) #0 {
+define internal void @Rect.constructor(%struct.Rect* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %width, i32 noundef %height) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Rect, %struct.Rect* %this, i32 0, i32 0
   store i32 %width, i32* %0, align 4
@@ -42,28 +42,28 @@ entry:
   ret void
 }
 
-define noundef i32 @Rect.area(%struct.Rect* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
+define internal noundef i32 @Rect.area(%struct.Rect* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Rect, %struct.Rect* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
   %2 = getelementptr inbounds %struct.Rect, %struct.Rect* %this, i32 0, i32 1
   %3 = load i32, i32* %2, align 4
-  %4 = mul i32 %1, %3
+  %4 = mul nsw i32 %1, %3
   ret i32 %4
 }
 
-define noundef i32 @perimeter(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #1 {
+define internal noundef i32 @perimeter(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Shape, %struct.Shape* %s, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
   %2 = getelementptr inbounds %struct.Shape, %struct.Shape* %s, i32 0, i32 1
   %3 = load i32, i32* %2, align 4
-  %4 = add i32 %1, %3
-  %5 = mul i32 2, %4
+  %4 = add nsw i32 %1, %3
+  %5 = mul nsw i32 2, %4
   ret i32 %5
 }
 
-define noundef nonnull align 8 dereferenceable(8) %struct.Shape* @widest(%struct.Shape* noundef nonnull align 8 dereferenceable(8) %a, %struct.Shape* noundef nonnull align 8 dereferenceable(8) %b) #1 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Shape* @widest(%struct.Shape* noundef nonnull align 8 dereferenceable(8) %a, %struct.Shape* noundef nonnull align 8 dereferenceable(8) %b) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Shape, %struct.Shape* %a, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
@@ -83,11 +83,11 @@ cond.end:
   ret %struct.Shape* %5
 }
 
-define noundef nonnull align 8 dereferenceable(8) %struct.Shape* @grow(%struct.Rect* noundef nonnull align 8 dereferenceable(8) %r, i32 noundef %by) #0 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Shape* @grow(%struct.Rect* noundef nonnull align 8 dereferenceable(8) %r, i32 noundef %by) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Rect, %struct.Rect* %r, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
-  %2 = add i32 %1, %by
+  %2 = add nsw i32 %1, %by
   store i32 %2, i32* %0, align 4
   %3 = bitcast %struct.Rect* %r to %struct.Shape*
   ret %struct.Shape* %3

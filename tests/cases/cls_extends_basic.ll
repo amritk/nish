@@ -13,7 +13,7 @@ declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnul
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define void @Animal.constructor(%struct.Animal* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %legs, i8* noundef nonnull noalias readonly align 8 %name) #0 {
+define internal void @Animal.constructor(%struct.Animal* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %legs, i8* noundef nonnull noalias readonly align 8 %name) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Animal, %struct.Animal* %this, i32 0, i32 0
   store i32 %legs, i32* %0, align 4
@@ -22,7 +22,7 @@ entry:
   ret void
 }
 
-define noundef nonnull align 8 i8* @Animal.describe(%struct.Animal* noundef nonnull readonly align 8 dereferenceable(16) nocapture %this) #0 {
+define internal noundef nonnull align 8 i8* @Animal.describe(%struct.Animal* noundef nonnull readonly align 8 dereferenceable(16) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Animal, %struct.Animal* %this, i32 0, i32 1
   %1 = load i8*, i8** %0, align 8
@@ -35,7 +35,7 @@ entry:
   ret i8* %7
 }
 
-define void @Dog.constructor(%struct.Dog* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, i8* noundef nonnull noalias readonly align 8 %name) #0 {
+define internal void @Dog.constructor(%struct.Dog* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, i8* noundef nonnull noalias readonly align 8 %name) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Dog, %struct.Dog* %this, i32 0, i32 2
   store i32 0, i32* %0, align 4
@@ -44,11 +44,11 @@ entry:
   ret void
 }
 
-define noundef i32 @Dog.learn(%struct.Dog* noundef nonnull align 8 dereferenceable(24) nocapture %this) #0 {
+define internal noundef i32 @Dog.learn(%struct.Dog* noundef nonnull align 8 dereferenceable(24) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Dog, %struct.Dog* %this, i32 0, i32 2
   %1 = load i32, i32* %0, align 4
-  %2 = add i32 %1, 1
+  %2 = add nsw i32 %1, 1
   store i32 %2, i32* %0, align 4
   %3 = getelementptr inbounds %struct.Dog, %struct.Dog* %this, i32 0, i32 2
   %4 = load i32, i32* %3, align 4

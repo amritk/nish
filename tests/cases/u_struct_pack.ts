@@ -10,7 +10,7 @@ class Pixel {
   code: u32 = 0;
 }
 
-function test(): number {
+export function test(): number {
   const p = new Pixel();
   p.r = 250;
   p.r += 10; // wraps at 8 bits

@@ -13,7 +13,7 @@ entry:
   call void @amrit_print(i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
   %0 = call i8* @amrit_str_from_i32(i32 7)
   call void @amrit_print(i8* %0)
-  %1 = sub i32 0, 3
+  %1 = sub nsw i32 0, 3
   %2 = call i8* @amrit_str_from_i32(i32 %1)
   call void @amrit_print(i8* %2)
   %3 = select i1 false, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)

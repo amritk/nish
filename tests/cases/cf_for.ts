@@ -12,6 +12,6 @@ function countEven(n: number): number {
   return c;
 }
 
-function test(): number {
+export function test(): number {
   return factorial(6) + countEven(9);
 }

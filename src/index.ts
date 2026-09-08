@@ -99,7 +99,8 @@ function usage(): never {
       "                             (entry module must declare `export function main`)",
       "  --profile speed|size|debug|wasi",
       "                             build profile for --link (default: speed); wasi needs a WASI sysroot",
-      "  --strict-exports           non-exported functions get `internal` linkage",
+      "  --no-strict-exports        every function is an external symbol (default: non-exported",
+      "                             functions get `internal` linkage)",
       "  --number-mode i32|f64      lowering of `number` (default: i32)",
       "  --plain                    no performance attributes or alignment hints",
       "  --runtime-decls            always emit the runtime ABI prelude (arena + strings)",
@@ -110,7 +111,8 @@ function usage(): never {
       "  --unchecked-indexing       drop array bounds checks (unsafe; for benchmarks)",
       "  --target <triple>|host     emit `target datalayout`/`target triple` for that machine",
       `                             (${SUPPORTED_TARGETS.join(", ")}); default: target-neutral IR`,
-      "  --nsw                      integer add/sub/mul carry `nsw`: signed overflow is undefined (like C)",
+      "  --wrapping                 signed integer add/sub/mul wrap two's-complement (default: they",
+      "                             carry `nsw`, so signed overflow is undefined, like C)",
       "  --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)",
       "  --no-warn-performance      do not report the `performance` diagnostics (WP15 §8; they are on by",
       "                             default, print on stderr, and never change the exit code)",
@@ -181,14 +183,15 @@ function main(argv: string[]): number {
   let numberMode: NumberMode = "i32";
   let optimizeAttributes = true;
   let runtimeDecls = false;
-  let strictExports = false;
+  // WP15 §3: both fast defaults are on; `--no-strict-exports` and `--wrapping` opt out.
+  let strictExports = true;
   // WP8 interop outputs: each is derived from the checked program after emit.
   let emitHeader: string | undefined;
   let emitDts: string | undefined;
   let emitNapi: string | undefined;
   let uncheckedIndexing = false;
   let target: string | undefined; // WP9: canonical triple, validated below
-  let nsw = false;
+  let nsw = true;
   let stackAlloc = true;
   // WP10 diagnostics and debugging.
   let debugInfo = false;
@@ -224,6 +227,8 @@ function main(argv: string[]): number {
       profile = p as Profile;
     } else if (arg === "--strict-exports") {
       strictExports = true;
+    } else if (arg === "--no-strict-exports") {
+      strictExports = false;
     } else if (arg === "--number-mode") {
       const mode = argv[++i];
       if (mode !== "i32" && mode !== "f64") usage();
@@ -246,6 +251,8 @@ function main(argv: string[]): number {
       target = resolved.triple;
     } else if (arg === "--nsw") {
       nsw = true;
+    } else if (arg === "--wrapping") {
+      nsw = false;
     } else if (arg === "--no-stack-alloc") {
       stackAlloc = false;
     } else if (arg === "--no-warn-performance") {

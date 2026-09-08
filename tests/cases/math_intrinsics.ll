@@ -15,7 +15,7 @@ declare double @llvm.pow.f64(double, double) #0
 declare double @llvm.minnum.f64(double, double) #0
 declare double @llvm.maxnum.f64(double, double) #0
 
-define noundef double @hypot(double noundef %a, double noundef %b) #0 {
+define internal noundef double @hypot(double noundef %a, double noundef %b) #0 {
 entry:
   %0 = fmul double %a, %a
   %1 = fmul double %b, %b
@@ -24,7 +24,7 @@ entry:
   ret double %3
 }
 
-define noundef double @trig(double noundef %x) #0 {
+define internal noundef double @trig(double noundef %x) #0 {
 entry:
   %0 = call double @llvm.sin.f64(double %x)
   %1 = call double @llvm.cos.f64(double %x)

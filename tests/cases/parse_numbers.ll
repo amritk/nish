@@ -82,7 +82,7 @@ declare noalias noundef nonnull align 8 i8* @amrit_str_from_f64(double noundef) 
 declare noundef double @amrit_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #0
 declare i32 @llvm.fptosi.sat.i32.f64(double) #2
 
-define void @show(i8* noundef nonnull noalias readonly align 8 nocapture %label, double noundef %v) #0 {
+define internal void @show(i8* noundef nonnull noalias readonly align 8 nocapture %label, double noundef %v) #0 {
 entry:
   %arena.mark = call i64 @amrit_arena_mark()
   %0 = call i8* @amrit_str_concat(i8* %label, i8* bitcast ({ i64, [4 x i8] }* @.str.0 to i8*))
@@ -202,7 +202,7 @@ entry:
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.65 to i8*), double %65)
   store i64 9007199254740992, i64* %big.addr, align 8
   %66 = load i64, i64* %big.addr, align 8
-  %67 = add i64 %66, 1
+  %67 = add nsw i64 %66, 1
   store i64 %67, i64* %big.addr, align 8
   %68 = uitofp i1 true to double
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.67 to i8*), double %68)

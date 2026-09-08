@@ -36,7 +36,7 @@ slow:
   ret i8* %grown
 }
 
-define void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
+define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
   store i32 %x, i32* %0, align 4
@@ -45,19 +45,19 @@ entry:
   ret void
 }
 
-define void @Box.constructor(%struct.Box* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %struct.Point* noundef nonnull align 8 dereferenceable(8) %item) #0 {
+define internal void @Box.constructor(%struct.Box* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, %struct.Point* noundef nonnull align 8 dereferenceable(8) %item) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Box, %struct.Box* %this, i32 0, i32 0
   store %struct.Point* %item, %struct.Point** %0, align 8
   ret void
 }
 
-define noundef nonnull align 8 dereferenceable(8) %struct.Point* @keep(%struct.Point* noundef nonnull align 8 dereferenceable(8) %p) #1 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Point* @keep(%struct.Point* noundef nonnull align 8 dereferenceable(8) %p) #1 {
 entry:
   ret %struct.Point* %p
 }
 
-define noundef nonnull align 8 dereferenceable(8) %struct.Point* @make() #0 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Point* @make() #0 {
 entry:
   %0 = call i8* @amrit_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Point*
@@ -65,7 +65,7 @@ entry:
   ret %struct.Point* %1
 }
 
-define noundef nonnull align 8 dereferenceable(8) %struct.Box* @boxed() #0 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Box* @boxed() #0 {
 entry:
   %0 = call i8* @amrit_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Box*
@@ -76,7 +76,7 @@ entry:
   ret %struct.Box* %1
 }
 
-define void @stash(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs) #0 {
+define internal void @stash(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs) #0 {
 entry:
   %0 = call i8* @amrit_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Point*
@@ -104,7 +104,7 @@ push.store:
   ret void
 }
 
-define void @field(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %b) #0 {
+define internal void @field(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %b) #0 {
 entry:
   %0 = call i8* @amrit_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Point*
@@ -114,7 +114,7 @@ entry:
   ret void
 }
 
-define noundef i32 @captured() #0 {
+define internal noundef i32 @captured() #0 {
 entry:
   %p.addr = alloca %struct.Point*, align 8
   %q.addr = alloca %struct.Point*, align 8
@@ -131,7 +131,7 @@ entry:
   ret i32 %6
 }
 
-define noundef i32 @reassigned(i1 noundef zeroext %flag) #0 {
+define internal noundef i32 @reassigned(i1 noundef zeroext %flag) #0 {
 entry:
   %p.addr = alloca %struct.Point*, align 8
   %0 = call i8* @amrit_alloc_struct(i64 8)
@@ -154,7 +154,7 @@ if.end:
   ret i32 %6
 }
 
-define noundef i32 @aliased() #0 {
+define internal noundef i32 @aliased() #0 {
 entry:
   %p.addr = alloca %struct.Point*, align 8
   %Point.obj = alloca %struct.Point, align 8
@@ -208,19 +208,19 @@ bounds.ok:
   %17 = load %struct.Point*, %struct.Point** %16, align 8
   %18 = getelementptr inbounds %struct.Point, %struct.Point* %17, i32 0, i32 1
   %19 = load i32, i32* %18, align 4
-  %20 = add i32 %8, %19
+  %20 = add nsw i32 %8, %19
   %21 = load %struct.Box*, %struct.Box** %b.addr, align 8
   %22 = getelementptr inbounds %struct.Box, %struct.Box* %21, i32 0, i32 0
   %23 = load %struct.Point*, %struct.Point** %22, align 8
   %24 = getelementptr inbounds %struct.Point, %struct.Point* %23, i32 0, i32 0
   %25 = load i32, i32* %24, align 4
-  %26 = add i32 %20, %25
+  %26 = add nsw i32 %20, %25
   %27 = call i32 @captured()
-  %28 = add i32 %26, %27
+  %28 = add nsw i32 %26, %27
   %29 = call i32 @reassigned(i1 true)
-  %30 = add i32 %28, %29
+  %30 = add nsw i32 %28, %29
   %31 = call i32 @aliased()
-  %32 = add i32 %30, %31
+  %32 = add nsw i32 %30, %31
   %33 = call i8* @amrit_str_from_i32(i32 %32)
   call void @amrit_print(i8* %33)
   ret i32 0

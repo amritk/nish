@@ -28,7 +28,7 @@ function score(r: Result<i32, i32>): i32 {
   return r.value;
 }
 
-function test(): number {
+export function test(): number {
   const r = half(8);
   const named = tag("abc");
   if (r.isErr() || named.isErr()) {

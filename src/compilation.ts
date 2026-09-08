@@ -180,10 +180,17 @@ export class Compilation {
   }
 
   /**
-   * Every function that is not `internal` is one external symbol in the
-   * final link, so its name must be unique across the program. Exported
-   * names are always external; non-exported ones only without
-   * --strict-exports. The entry wrapper reserves `main` as well.
+   * A function name must be unique across the whole program, exported or not,
+   * and the entry wrapper reserves `main` as well.
+   *
+   * Two reasons, and only the first goes away with `internal` linkage: an
+   * external symbol is global to the link, so a duplicate is a duplicate
+   * definition; and `analyzeFunctions` keys the whole-program fact fixpoint by
+   * `FunctionSig.name` (`src/codegen/attributes.ts`), so two functions sharing
+   * a name would share one set of facts and each would be emitted with the
+   * other's attributes. That is a miscompile, not a link error, which is why
+   * this check does not consult `--strict-exports`: `internal` linkage buys
+   * inlining and dead-stripping, not a second namespace.
    */
   private rejectSymbolClashes(): void {
     const owners = new Map<string, { unit: ModuleUnit; sig?: FunctionSig }>();
@@ -192,8 +199,6 @@ export class Compilation {
 
     for (const unit of this.modules) {
       for (const sig of unit.checker.program.functions) {
-        const external = sig.exported || !this.opts.strictExports;
-        if (!external) continue;
         const prev = owners.get(sig.name);
         if (!prev) {
           owners.set(sig.name, { unit, sig });
@@ -201,10 +206,10 @@ export class Compilation {
         }
         const where = `\`${sig.sourceName}\` is also defined in ${prev.unit.fileName}`;
         const message = !prev.sig
-          ? `Function \`main\` in ${unit.fileName} collides with the entry wrapper \`@main\` that ${prev.unit.fileName} needs; rename it or use --strict-exports`
+          ? `Function \`main\` in ${unit.fileName} collides with the entry wrapper \`@main\` that ${prev.unit.fileName} needs; rename it`
           : sig.exported && prev.sig.exported
             ? `Exported function ${where}; exported names must be unique across the program`
-            : `Function ${where}; without --strict-exports every function is an external symbol, so names must be unique across the program (or export exactly one of them)`;
+            : `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`;
         // Constructors have no name node. Reported, not thrown: every clash is listed.
         this.sink.report(new CompileError(message, sig.decl.name ?? sig.decl, unit.sourceFile));
       }

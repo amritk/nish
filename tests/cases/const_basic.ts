@@ -4,7 +4,7 @@ const LIMIT: i32 = 10;
 const READY: boolean = true;
 const LABEL: string = "limit";
 
-function test(): number {
+export function test(): number {
   console.log(LABEL);
   console.log(READY);
   return LIMIT;

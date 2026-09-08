@@ -8,7 +8,7 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #1
 declare void @amrit_panic_div(i1 noundef zeroext) #2
 
-define noundef i32 @div(i32 noundef %a, i32 noundef %b) #0 {
+define internal noundef i32 @div(i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %0 = icmp eq i32 %b, 0
   %1 = icmp eq i32 %a, -2147483648
@@ -61,16 +61,16 @@ div.fail.1:
 div.ok.1:
   %13 = srem i32 %7, 5
   store i32 %13, i32* %acc.addr, align 4
-  %14 = sub i32 0, 7
+  %14 = sub nsw i32 0, 7
   %15 = call i32 @div(i32 %14, i32 2)
   %16 = call i8* @amrit_str_from_i32(i32 %15)
   %17 = call i8* @amrit_str_concat(i8* %16, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %18 = sub i32 0, 2
+  %18 = sub nsw i32 0, 2
   %19 = call i32 @div(i32 7, i32 %18)
   %20 = call i8* @amrit_str_from_i32(i32 %19)
   %21 = call i8* @amrit_str_concat(i8* %17, i8* %20)
   %22 = call i8* @amrit_str_concat(i8* %21, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %23 = sub i32 0, 7
+  %23 = sub nsw i32 0, 7
   %24 = icmp eq i32 3, 0
   %25 = icmp eq i32 %23, -2147483648
   %26 = icmp eq i32 3, -1
@@ -91,7 +91,7 @@ div.ok.2:
   %34 = call i8* @amrit_str_from_i32(i32 %33)
   %35 = call i8* @amrit_str_concat(i8* %32, i8* %34)
   %36 = call i8* @amrit_str_concat(i8* %35, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %37 = sub i32 0, -2147483648
+  %37 = sub nsw i32 0, -2147483648
   %38 = call i32 @div(i32 %37, i32 1)
   %39 = call i8* @amrit_str_from_i32(i32 %38)
   %40 = call i8* @amrit_str_concat(i8* %36, i8* %39)

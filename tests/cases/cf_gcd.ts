@@ -9,6 +9,6 @@ function gcd(a: number, b: number): number {
   return x;
 }
 
-function test(): number {
+export function test(): number {
   return gcd(48, 18);
 }

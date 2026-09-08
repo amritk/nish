@@ -1,4 +1,4 @@
-define noundef double @pick(i1 noundef zeroext %flag) #0 {
+define internal noundef double @pick(i1 noundef zeroext %flag) #0 {
 entry:
   %scale.addr = alloca double, align 8
   br i1 %flag, label %cond.true, label %cond.false
@@ -16,7 +16,7 @@ cond.end:
   ret double %1
 }
 
-define noundef i64 @widen(i1 noundef zeroext %flag, i64 noundef %x) #0 {
+define internal noundef i64 @widen(i1 noundef zeroext %flag, i64 noundef %x) #0 {
 entry:
   br i1 %flag, label %cond.true, label %cond.false
 

@@ -42,7 +42,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.i32.str* @parsePort(i8* noundef nonnull noalias readonly align 8 nocapture %text) #0 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.i32.str* @parsePort(i8* noundef nonnull noalias readonly align 8 nocapture %text) #0 {
 entry:
   %n.addr = alloca i32, align 4
   %0 = call double @amrit_parse_number(i8* %text, i32 2)
@@ -86,7 +86,7 @@ res.ok:
   br label %res.end
 
 res.alt:
-  %5 = sub i32 0, 1
+  %5 = sub nsw i32 0, 1
   br label %res.end
 
 res.end:

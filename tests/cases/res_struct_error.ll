@@ -39,7 +39,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.i32.$IoError* @openFile(i8* noundef nonnull noalias readonly align 8 %path) #0 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.i32.$IoError* @openFile(i8* noundef nonnull noalias readonly align 8 %path) #0 {
 entry:
   %problem.addr = alloca %struct.IoError*, align 8
   %0 = call zeroext i1 @amrit_str_eq(i8* %path, i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*))
@@ -72,7 +72,7 @@ if.end:
   ret %struct.amrit_result.i32.$IoError* %11
 }
 
-define noundef nonnull align 8 i8* @describe(i8* noundef nonnull noalias readonly align 8 %path) #0 {
+define internal noundef nonnull align 8 i8* @describe(i8* noundef nonnull noalias readonly align 8 %path) #0 {
 entry:
   %opened.addr = alloca %struct.amrit_result.i32.$IoError*, align 8
   %failure.addr = alloca %struct.IoError*, align 8

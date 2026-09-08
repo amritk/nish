@@ -34,7 +34,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef nonnull align 8 dereferenceable(8) %struct.Pair* @swap(%struct.Pair* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #0 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Pair* @swap(%struct.Pair* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #0 {
 entry:
   %0 = call i8* @amrit_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Pair*
@@ -49,7 +49,7 @@ entry:
   ret %struct.Pair* %1
 }
 
-define noundef i32 @describe(%struct.Tagged* noundef nonnull readonly align 8 dereferenceable(24) nocapture %t) #0 {
+define internal noundef i32 @describe(%struct.Tagged* noundef nonnull readonly align 8 dereferenceable(24) nocapture %t) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %t, i32 0, i32 1
   %1 = load i1, i1* %0, align 1
@@ -66,12 +66,12 @@ if.end:
   %5 = load %struct.Pair*, %struct.Pair** %4, align 8
   %6 = getelementptr inbounds %struct.Pair, %struct.Pair* %5, i32 0, i32 0
   %7 = load i32, i32* %6, align 4
-  %8 = mul i32 %7, 10
+  %8 = mul nsw i32 %7, 10
   %9 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %t, i32 0, i32 2
   %10 = load %struct.Pair*, %struct.Pair** %9, align 8
   %11 = getelementptr inbounds %struct.Pair, %struct.Pair* %10, i32 0, i32 1
   %12 = load i32, i32* %11, align 4
-  %13 = add i32 %8, %12
+  %13 = add nsw i32 %8, %12
   ret i32 %13
 }
 

@@ -9,7 +9,7 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #2
 
-define noundef i32 @slot() #0 {
+define internal noundef i32 @slot() #0 {
 entry:
   call void @amrit_print(i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
   ret i32 1

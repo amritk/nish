@@ -6,7 +6,7 @@ function inner(): number {
   return N;
 }
 
-function test(): number {
+export function test(): number {
   const N: i32 = 2;
   return N * 10 + inner();
 }

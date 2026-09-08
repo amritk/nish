@@ -39,7 +39,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef i32 @histogram(i32 noundef %n, i32 noundef %seed) #0 {
+define internal noundef i32 @histogram(i32 noundef %n, i32 noundef %seed) #0 {
 entry:
   %counts.addr = alloca %struct.amrit_array*, align 8
   %x.addr = alloca i32, align 4
@@ -71,8 +71,8 @@ for.cond:
 
 for.body:
   %10 = load i32, i32* %x.addr, align 4
-  %11 = mul i32 %10, 31
-  %12 = add i32 %11, 7
+  %11 = mul nsw i32 %10, 31
+  %12 = add nsw i32 %11, 7
   %13 = icmp eq i32 1000003, 0
   %14 = icmp eq i32 %12, -2147483648
   %15 = icmp eq i32 1000003, -1
@@ -118,13 +118,13 @@ bounds.ok:
   %33 = bitcast i8* %32 to i32*
   %34 = getelementptr inbounds i32, i32* %33, i64 %27
   %35 = load i32, i32* %34, align 4
-  %36 = add i32 %35, 1
+  %36 = add nsw i32 %35, 1
   store i32 %36, i32* %34, align 4
   br label %for.inc
 
 for.inc:
   %37 = load i32, i32* %i.addr, align 4
-  %38 = add i32 %37, 1
+  %38 = add nsw i32 %37, 1
   store i32 %38, i32* %i.addr, align 4
   br label %for.cond
 
@@ -188,7 +188,7 @@ if.end:
 
 for.inc.1:
   %65 = load i32, i32* %i.addr.1, align 4
-  %66 = add i32 %65, 1
+  %66 = add nsw i32 %65, 1
   store i32 %66, i32* %i.addr.1, align 4
   br label %for.cond.1
 
@@ -235,16 +235,16 @@ div.fail:
 
 div.ok:
   %12 = srem i32 %6, 5
-  %13 = add i32 16, %12
+  %13 = add nsw i32 16, %12
   %14 = load i32, i32* %i.addr, align 4
   %15 = call i32 @histogram(i32 %13, i32 %14)
-  %16 = add i32 %5, %15
+  %16 = add nsw i32 %5, %15
   store i32 %16, i32* %acc.addr, align 4
   br label %for.inc
 
 for.inc:
   %17 = load i32, i32* %i.addr, align 4
-  %18 = add i32 %17, 1
+  %18 = add nsw i32 %17, 1
   store i32 %18, i32* %i.addr, align 4
   br label %for.cond
 

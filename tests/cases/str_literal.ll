@@ -2,7 +2,7 @@
 
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 
-define noundef nonnull align 8 i8* @greeting() #0 {
+define internal noundef nonnull align 8 i8* @greeting() #0 {
 entry:
   ret i8* bitcast ({ i64, [13 x i8] }* @.str.0 to i8*)
 }

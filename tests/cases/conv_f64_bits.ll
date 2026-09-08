@@ -8,13 +8,13 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_f64(double noundef) #1
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i64(i64 noundef) #1
 
-define noundef i64 @bitsOf(double noundef %x) #0 {
+define internal noundef i64 @bitsOf(double noundef %x) #0 {
 entry:
   %0 = bitcast double %x to i64
   ret i64 %0
 }
 
-define noundef double @valueOf(i64 noundef %b) #0 {
+define internal noundef double @valueOf(i64 noundef %b) #0 {
 entry:
   %0 = bitcast i64 %b to double
   ret double %0

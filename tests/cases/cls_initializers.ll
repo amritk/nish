@@ -13,7 +13,7 @@ declare void @amrit_arena_release(i64 noundef) #0
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define void @Mixed.constructor(%struct.Mixed* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %limit) #0 {
+define internal void @Mixed.constructor(%struct.Mixed* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %limit) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Mixed, %struct.Mixed* %this, i32 0, i32 0
   store i32 0, i32* %0, align 4
@@ -56,7 +56,7 @@ entry:
   %7 = load %struct.Defaults*, %struct.Defaults** %d.addr, align 8
   %8 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %7, i32 0, i32 1
   %9 = load i32, i32* %8, align 4
-  %10 = add i32 %6, %9
+  %10 = add nsw i32 %6, %9
   %11 = call i8* @amrit_str_from_i32(i32 %10)
   call void @amrit_print(i8* %11)
   %12 = load %struct.Defaults*, %struct.Defaults** %d.addr, align 8

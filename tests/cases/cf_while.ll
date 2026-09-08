@@ -1,6 +1,6 @@
 declare void @amrit_panic_div(i1 noundef zeroext) #2
 
-define noundef i32 @countDigits(i32 noundef %n) #0 {
+define internal noundef i32 @countDigits(i32 noundef %n) #0 {
 entry:
   %digits.addr = alloca i32, align 4
   %rest.addr = alloca i32, align 4
@@ -30,7 +30,7 @@ div.ok:
   %8 = sdiv i32 %2, 10
   store i32 %8, i32* %rest.addr, align 4
   %9 = load i32, i32* %digits.addr, align 4
-  %10 = add i32 %9, 1
+  %10 = add nsw i32 %9, 1
   store i32 %10, i32* %digits.addr, align 4
   br label %while.cond
 
@@ -39,7 +39,7 @@ while.end:
   ret i32 %11
 }
 
-define noundef i32 @firstPowerOver(i32 noundef %limit) #1 {
+define internal noundef i32 @firstPowerOver(i32 noundef %limit) #1 {
 entry:
   %x.addr = alloca i32, align 4
   store i32 1, i32* %x.addr, align 4
@@ -50,7 +50,7 @@ while.cond:
 
 while.body:
   %0 = load i32, i32* %x.addr, align 4
-  %1 = mul i32 %0, 2
+  %1 = mul nsw i32 %0, 2
   store i32 %1, i32* %x.addr, align 4
   %2 = load i32, i32* %x.addr, align 4
   %3 = icmp sgt i32 %2, %limit
@@ -70,9 +70,9 @@ while.end:
 define noundef i32 @test() #0 {
 entry:
   %0 = call i32 @countDigits(i32 12345)
-  %1 = mul i32 %0, 1000
+  %1 = mul nsw i32 %0, 1000
   %2 = call i32 @firstPowerOver(i32 100)
-  %3 = add i32 %1, %2
+  %3 = add nsw i32 %1, %2
   ret i32 %3
 }
 

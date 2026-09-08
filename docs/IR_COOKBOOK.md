@@ -50,12 +50,12 @@ sentence each:
 | `noalias` (param) | No other pointer the function can see modifies the same memory: always true for immutable strings, and for the fresh `%this` of a constructor. |
 | `noalias` (return) | The returned pointer aliases nothing the caller already holds: a fresh arena allocation. |
 | `nocapture` | The function does not retain the pointer beyond the call: it is not returned, stored, or handed to a capturing callee. |
-| `internal` | Linkage: the symbol is private to the module (`--strict-exports` for non-exported functions; always for the inline allocator). |
+| `internal` | Linkage: the symbol is private to the module. Every function without `export` gets it by default (`--no-strict-exports` opts out); the inline allocator always does. |
 | `private unnamed_addr constant` | A string literal: module-private constant data whose address is not significant, so identical literals may be merged. |
 | `align 4` / `align 8` on `alloca`, `load`, `store` | The natural alignment of the type, as clang and rustc emit. |
 | `inbounds` on `getelementptr` | The computed address stays inside the object (field or element access on a valid pointer). |
 | `immarg` | The operand must be a constant (the `isvolatile` flag of `llvm.memset`). |
-| `nsw` (flag on `add`/`sub`/`mul`) | Only with `--nsw`: signed overflow is undefined, so LLVM may assume it never happens. Never on the compiler's own index and length arithmetic. |
+| `nsw` (flag on `add`/`sub`/`mul`) | On every user-level **signed** integer add/sub/mul by default: signed overflow is undefined, so LLVM may assume it never happens. `--wrapping` removes it. Never on an unsigned type (those are defined to wrap) and never on the compiler's own index and length arithmetic. |
 
 `--plain` drops every attribute and alignment hint and produces the bare
 form shown under [Functions](#functions).
@@ -66,7 +66,9 @@ form shown under [Functions](#functions).
 
 Parameters are SSA values (`%a`, `%b`); the module is target-neutral (no
 `target triple`); the attribute group says the function is pure and always
-returns.
+returns. `add` is not `export`ed, so it is `internal` — that is the default
+([Linkage](#linkage-export-and---no-strict-exports)) — and the `nsw` on its
+`add` is the other default ([Integer overflow](#integer-overflow-nsw-by-default---wrapping-to-opt-out)).
 
 <!-- cookbook:begin fn_add -->
 ```ts
@@ -76,9 +78,9 @@ function add(a: number, b: number): number {
 ```
 
 ```llvm
-define noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
+define internal noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
 entry:
-  %0 = add i32 %a, %b
+  %0 = add nsw i32 %a, %b
   ret i32 %0
 }
 
@@ -98,9 +100,9 @@ function add(a: number, b: number): number {
 ```
 
 ```llvm
-define i32 @add(i32 %a, i32 %b) {
+define internal i32 @add(i32 %a, i32 %b) {
 entry:
-  %0 = add i32 %a, %b
+  %0 = add nsw i32 %a, %b
   ret i32 %0
 }
 ```
@@ -121,7 +123,7 @@ function halve(x: number): number {
 ```
 
 ```llvm
-define noundef double @halve(double noundef %x) #0 {
+define internal noundef double @halve(double noundef %x) #0 {
 entry:
   %0 = fdiv double %x, 0x4004000000000000
   ret double %0
@@ -135,7 +137,8 @@ attributes #0 = { nounwind willreturn readnone }
 
 ### `i64` and the explicit conversions
 
-`i64` arithmetic wraps like `i32`; `toI32` on an `i64` is a `trunc`.
+`i64` arithmetic overflows like `i32` — undefined by default, wrapping under
+`--wrapping`; `toI32` on an `i64` is a `trunc`, which wraps either way.
 
 <!-- cookbook:begin types_i64 -->
 ```ts
@@ -151,13 +154,13 @@ function low(x: i64): number {
 ```llvm
 declare void @amrit_panic_div(i1 noundef zeroext) #2
 
-define noundef i64 @square(i64 noundef %x) #0 {
+define internal noundef i64 @square(i64 noundef %x) #0 {
 entry:
-  %0 = mul i64 %x, %x
+  %0 = mul nsw i64 %x, %x
   ret i64 %0
 }
 
-define noundef i32 @low(i64 noundef %x) #1 {
+define internal noundef i32 @low(i64 noundef %x) #1 {
 entry:
   %0 = icmp eq i64 1000, 0
   %1 = icmp eq i64 %x, -9223372036854775808
@@ -199,13 +202,13 @@ function neither(a: boolean, b: boolean): boolean {
 ```
 
 ```llvm
-define noundef zeroext i1 @xor(i1 noundef zeroext %a, i1 noundef zeroext %b) #0 {
+define internal noundef zeroext i1 @xor(i1 noundef zeroext %a, i1 noundef zeroext %b) #0 {
 entry:
   %0 = icmp ne i1 %a, %b
   ret i1 %0
 }
 
-define noundef zeroext i1 @neither(i1 noundef zeroext %a, i1 noundef zeroext %b) #0 {
+define internal noundef zeroext i1 @neither(i1 noundef zeroext %a, i1 noundef zeroext %b) #0 {
 entry:
   %0 = xor i1 %a, true
   br i1 %0, label %land.rhs, label %land.end
@@ -239,7 +242,7 @@ function literals(): f64 {
 ```
 
 ```llvm
-define noundef double @literals() #0 {
+define internal noundef double @literals() #0 {
 entry:
   %big.addr = alloca i64, align 8
   %ratio.addr = alloca double, align 8
@@ -279,21 +282,21 @@ function polynomial(x: number, k: number): number {
 ```
 
 ```llvm
-define noundef i32 @polynomial(i32 noundef %x, i32 noundef %k) #0 {
+define internal noundef i32 @polynomial(i32 noundef %x, i32 noundef %k) #0 {
 entry:
   %acc.addr = alloca i32, align 4
   %bias.addr = alloca i32, align 4
-  %0 = mul i32 %x, %x
-  %1 = mul i32 %0, 3
+  %0 = mul nsw i32 %x, %x
+  %1 = mul nsw i32 %0, 3
   store i32 %1, i32* %acc.addr, align 4
   %2 = load i32, i32* %acc.addr, align 4
-  %3 = mul i32 %k, 2
-  %4 = add i32 %2, %3
+  %3 = mul nsw i32 %k, 2
+  %4 = add nsw i32 %2, %3
   store i32 %4, i32* %acc.addr, align 4
   store i32 7, i32* %bias.addr, align 4
   %5 = load i32, i32* %acc.addr, align 4
   %6 = load i32, i32* %bias.addr, align 4
-  %7 = sub i32 %5, %6
+  %7 = sub nsw i32 %5, %6
   ret i32 %7
 }
 
@@ -391,13 +394,47 @@ attributes #1 = { nounwind }
 ```
 <!-- cookbook:end decl_main -->
 
-### `--strict-exports`
+### Linkage: `export`, and `--no-strict-exports`
 
-Non-exported functions get `internal` linkage so LLVM may inline, specialise
-or drop them.
+A function without `export` gets `internal` linkage, so LLVM may inline it,
+specialise it for its call sites, or drop it; only an exported function is a
+C-ABI symbol. This is the default, so the snippet below is compiled with no
+flags at all.
 
 <!-- cookbook:begin decl_strict_exports -->
-Compiled with `--strict-exports`.
+```ts
+export function double(n: number): number {
+  return helper(n) * 2;
+}
+
+function helper(n: number): number {
+  return n + 1;
+}
+```
+
+```llvm
+define noundef i32 @double(i32 noundef %n) #0 {
+entry:
+  %0 = call i32 @helper(i32 %n)
+  %1 = mul nsw i32 %0, 2
+  ret i32 %1
+}
+
+define internal noundef i32 @helper(i32 noundef %n) #0 {
+entry:
+  %0 = add nsw i32 %n, 1
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end decl_strict_exports -->
+
+`--no-strict-exports` puts every function back on the C ABI, which is what a
+driver that calls a non-exported function needs. The same source:
+
+<!-- cookbook:begin decl_no_strict_exports -->
+Compiled with `--no-strict-exports`.
 
 ```ts
 export function double(n: number): number {
@@ -413,19 +450,19 @@ function helper(n: number): number {
 define noundef i32 @double(i32 noundef %n) #0 {
 entry:
   %0 = call i32 @helper(i32 %n)
-  %1 = mul i32 %0, 2
+  %1 = mul nsw i32 %0, 2
   ret i32 %1
 }
 
-define internal noundef i32 @helper(i32 noundef %n) #0 {
+define noundef i32 @helper(i32 noundef %n) #0 {
 entry:
-  %0 = add i32 %n, 1
+  %0 = add nsw i32 %n, 1
   ret i32 %0
 }
 
 attributes #0 = { nounwind willreturn readnone }
 ```
-<!-- cookbook:end decl_strict_exports -->
+<!-- cookbook:end decl_no_strict_exports -->
 
 ### Modules: the exporter
 
@@ -439,7 +476,7 @@ export function square(n: number): number {
 ```llvm
 define noundef i32 @square(i32 noundef %n) #0 {
 entry:
-  %0 = mul i32 %n, %n
+  %0 = mul nsw i32 %n, %n
   ret i32 %0
 }
 
@@ -513,20 +550,20 @@ function pick(flag: boolean, a: number, b: number): number {
 ```
 
 ```llvm
-define noundef i32 @abs(i32 noundef %x) #0 {
+define internal noundef i32 @abs(i32 noundef %x) #0 {
 entry:
   %0 = icmp slt i32 %x, 0
   br i1 %0, label %if.then, label %if.end
 
 if.then:
-  %1 = sub i32 0, %x
+  %1 = sub nsw i32 0, %x
   ret i32 %1
 
 if.end:
   ret i32 %x
 }
 
-define noundef i32 @pick(i1 noundef zeroext %flag, i32 noundef %a, i32 noundef %b) #0 {
+define internal noundef i32 @pick(i1 noundef zeroext %flag, i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %r.addr = alloca i32, align 4
   store i32 0, i32* %r.addr, align 4
@@ -570,7 +607,7 @@ function countDigits(n: number): number {
 ```llvm
 declare void @amrit_panic_div(i1 noundef zeroext) #1
 
-define noundef i32 @countDigits(i32 noundef %n) #0 {
+define internal noundef i32 @countDigits(i32 noundef %n) #0 {
 entry:
   %digits.addr = alloca i32, align 4
   %rest.addr = alloca i32, align 4
@@ -600,7 +637,7 @@ div.ok:
   %8 = sdiv i32 %2, 10
   store i32 %8, i32* %rest.addr, align 4
   %9 = load i32, i32* %digits.addr, align 4
-  %10 = add i32 %9, 1
+  %10 = add nsw i32 %9, 1
   store i32 %10, i32* %digits.addr, align 4
   br label %while.cond
 
@@ -632,7 +669,7 @@ function sumDigits(n: number): number {
 ```llvm
 declare void @amrit_panic_div(i1 noundef zeroext) #1
 
-define noundef i32 @sumDigits(i32 noundef %n) #0 {
+define internal noundef i32 @sumDigits(i32 noundef %n) #0 {
 entry:
   %sum.addr = alloca i32, align 4
   %rest.addr = alloca i32, align 4
@@ -656,7 +693,7 @@ div.fail:
 
 div.ok:
   %7 = srem i32 %1, 10
-  %8 = add i32 %0, %7
+  %8 = add nsw i32 %0, %7
   store i32 %8, i32* %sum.addr, align 4
   %9 = load i32, i32* %rest.addr, align 4
   %10 = icmp eq i32 10, 0
@@ -707,7 +744,7 @@ function sumTo(n: number): number {
 ```
 
 ```llvm
-define noundef i32 @sumTo(i32 noundef %n) #0 {
+define internal noundef i32 @sumTo(i32 noundef %n) #0 {
 entry:
   %sum.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -723,13 +760,13 @@ for.cond:
 for.body:
   %2 = load i32, i32* %sum.addr, align 4
   %3 = load i32, i32* %i.addr, align 4
-  %4 = add i32 %2, %3
+  %4 = add nsw i32 %2, %3
   store i32 %4, i32* %sum.addr, align 4
   br label %for.inc
 
 for.inc:
   %5 = load i32, i32* %i.addr, align 4
-  %6 = add i32 %5, 1
+  %6 = add nsw i32 %5, 1
   store i32 %6, i32* %i.addr, align 4
   br label %for.cond
 
@@ -770,7 +807,7 @@ function classify(kind: number): number {
 ```
 
 ```llvm
-define noundef i32 @classify(i32 noundef %kind) #0 {
+define internal noundef i32 @classify(i32 noundef %kind) #0 {
 entry:
   switch i32 %kind, label %sw.default [
     i32 0, label %sw.case
@@ -822,7 +859,7 @@ function sumOdd(n: number): number {
 ```llvm
 declare void @amrit_panic_div(i1 noundef zeroext) #1
 
-define noundef i32 @sumOdd(i32 noundef %n) #0 {
+define internal noundef i32 @sumOdd(i32 noundef %n) #0 {
 entry:
   %s.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -867,13 +904,13 @@ if.then.1:
 if.end.1:
   %12 = load i32, i32* %s.addr, align 4
   %13 = load i32, i32* %i.addr, align 4
-  %14 = add i32 %12, %13
+  %14 = add nsw i32 %12, %13
   store i32 %14, i32* %s.addr, align 4
   br label %for.inc
 
 for.inc:
   %15 = load i32, i32* %i.addr, align 4
-  %16 = add i32 %15, 1
+  %16 = add nsw i32 %15, 1
   store i32 %16, i32* %i.addr, align 4
   br label %for.cond
 
@@ -955,7 +992,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.i32.str* @half(i32 noundef %n) #0 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.i32.str* @half(i32 noundef %n) #0 {
 entry:
   %0 = icmp eq i32 2, 0
   %1 = icmp eq i32 %n, -2147483648
@@ -1005,7 +1042,7 @@ div.ok.1:
   ret %struct.amrit_result.i32.str* %18
 }
 
-define noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.i32.str* @quarter(i32 noundef %n) #0 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.i32.str* @quarter(i32 noundef %n) #0 {
 entry:
   %h.addr = alloca i32, align 4
   %0 = call %struct.amrit_result.i32.str* @half(i32 %n)
@@ -1033,7 +1070,7 @@ res.ok:
   ret %struct.amrit_result.i32.str* %12
 }
 
-define noundef nonnull align 8 i8* @describe(i32 noundef %n) #0 {
+define internal noundef nonnull align 8 i8* @describe(i32 noundef %n) #0 {
 entry:
   %outcome.addr = alloca %struct.amrit_result.i32.str*, align 8
   %0 = call %struct.amrit_result.i32.str* @quarter(i32 %n)
@@ -1110,7 +1147,7 @@ function describe(n: number): number {
 
 declare void @amrit_panic_div(i1 noundef zeroext) #1
 
-define noundef i64 @half(i32 noundef %n) #0 {
+define internal noundef i64 @half(i32 noundef %n) #0 {
 entry:
   %0 = icmp eq i32 2, 0
   %1 = icmp eq i32 %n, -2147483648
@@ -1153,7 +1190,7 @@ div.ok.1:
   ret i64 %17
 }
 
-define noundef i64 @quarter(i32 noundef %n) #0 {
+define internal noundef i64 @quarter(i32 noundef %n) #0 {
 entry:
   %h.addr = alloca i32, align 4
   %amrit_result.i32.i32.obj = alloca %struct.amrit_result.i32.i32, align 8
@@ -1209,7 +1246,7 @@ res.ok:
   ret i64 %34
 }
 
-define noundef i32 @describe(i32 noundef %n) #0 {
+define internal noundef i32 @describe(i32 noundef %n) #0 {
 entry:
   %outcome.addr = alloca %struct.amrit_result.i32.i32*, align 8
   %amrit_result.i32.i32.obj = alloca %struct.amrit_result.i32.i32, align 8
@@ -1234,7 +1271,7 @@ if.then:
   %11 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %outcome.addr, align 8
   %12 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %11, i32 0, i32 2
   %13 = load i32, i32* %12, align 4
-  %14 = sub i32 0, %13
+  %14 = sub nsw i32 0, %13
   ret i32 %14
 
 if.end:
@@ -1268,7 +1305,7 @@ function finish(code: number): number {
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @amrit_exit(i32 noundef) #2
 
-define noundef i32 @finish(i32 noundef %code) #0 {
+define internal noundef i32 @finish(i32 noundef %code) #0 {
 entry:
   call void @amrit_print(i8* bitcast ({ i64, [8 x i8] }* @.str.0 to i8*))
   call void @amrit_exit(i32 %code)
@@ -1300,7 +1337,7 @@ function total(xs: number[]): number {
 ```llvm
 %struct.amrit_array = type { i64, i64, i8* }
 
-define noundef i32 @total(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+define internal noundef i32 @total(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %sum.addr = alloca i32, align 4
   %x.addr = alloca i32, align 4
@@ -1325,7 +1362,7 @@ forof.body:
   store i32 %8, i32* %x.addr, align 4
   %9 = load i32, i32* %sum.addr, align 4
   %10 = load i32, i32* %x.addr, align 4
-  %11 = add i32 %9, %10
+  %11 = add nsw i32 %9, %10
   store i32 %11, i32* %sum.addr, align 4
   br label %forof.inc
 
@@ -1356,7 +1393,7 @@ function max(a: number, b: number): number {
 ```
 
 ```llvm
-define noundef i32 @max(i32 noundef %a, i32 noundef %b) #0 {
+define internal noundef i32 @max(i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %0 = icmp sgt i32 %a, %b
   br i1 %0, label %cond.true, label %cond.false
@@ -1395,7 +1432,7 @@ function zeroOrSmallQuotient(x: number): boolean {
 ```llvm
 declare void @amrit_panic_div(i1 noundef zeroext) #2
 
-define noundef zeroext i1 @inRange(i32 noundef %x, i32 noundef %lo, i32 noundef %hi) #0 {
+define internal noundef zeroext i1 @inRange(i32 noundef %x, i32 noundef %lo, i32 noundef %hi) #0 {
 entry:
   %0 = icmp sge i32 %x, %lo
   br i1 %0, label %land.rhs, label %land.end
@@ -1409,7 +1446,7 @@ land.end:
   ret i1 %2
 }
 
-define noundef zeroext i1 @zeroOrSmallQuotient(i32 noundef %x) #1 {
+define internal noundef zeroext i1 @zeroOrSmallQuotient(i32 noundef %x) #1 {
 entry:
   %0 = icmp eq i32 %x, 0
   br i1 %0, label %lor.end, label %lor.rhs
@@ -1459,29 +1496,29 @@ function step(): number {
 ```
 
 ```llvm
-define noundef i32 @step() #0 {
+define internal noundef i32 @step() #0 {
 entry:
   %x.addr = alloca i32, align 4
   %a.addr = alloca i32, align 4
   %b.addr = alloca i32, align 4
   store i32 10, i32* %x.addr, align 4
   %0 = load i32, i32* %x.addr, align 4
-  %1 = add i32 %0, 5
+  %1 = add nsw i32 %0, 5
   store i32 %1, i32* %x.addr, align 4
   %2 = load i32, i32* %x.addr, align 4
-  %3 = mul i32 %2, 2
+  %3 = mul nsw i32 %2, 2
   store i32 %3, i32* %x.addr, align 4
   %4 = load i32, i32* %x.addr, align 4
-  %5 = add i32 %4, 1
+  %5 = add nsw i32 %4, 1
   store i32 %5, i32* %x.addr, align 4
   store i32 %4, i32* %a.addr, align 4
   %6 = load i32, i32* %x.addr, align 4
-  %7 = sub i32 %6, 1
+  %7 = sub nsw i32 %6, 1
   store i32 %7, i32* %x.addr, align 4
   store i32 %7, i32* %b.addr, align 4
   %8 = load i32, i32* %a.addr, align 4
   %9 = load i32, i32* %b.addr, align 4
-  %10 = add i32 %8, %9
+  %10 = add nsw i32 %8, %9
   ret i32 %10
 }
 
@@ -1510,7 +1547,7 @@ function pack(hi: i32, lo: i32): i32 {
 ```
 
 ```llvm
-define noundef i32 @mix(i32 noundef %a, i32 noundef %b) #0 {
+define internal noundef i32 @mix(i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %0 = and i32 %a, %b
   %1 = xor i32 %a, %b
@@ -1518,13 +1555,13 @@ entry:
   ret i32 %2
 }
 
-define noundef i32 @invert(i32 noundef %a) #0 {
+define internal noundef i32 @invert(i32 noundef %a) #0 {
 entry:
   %0 = xor i32 %a, -1
   ret i32 %0
 }
 
-define noundef i32 @pack(i32 noundef %hi, i32 noundef %lo) #0 {
+define internal noundef i32 @pack(i32 noundef %hi, i32 noundef %lo) #0 {
 entry:
   %0 = shl i32 %hi, 16
   %1 = and i32 %lo, 65535
@@ -1571,7 +1608,7 @@ function shiftField(f: Flags, n: i32): void {
 
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #2
 
-define void @set(%struct.Flags* noundef nonnull align 8 dereferenceable(4) nocapture %f, i32 noundef %mask) #0 {
+define internal void @set(%struct.Flags* noundef nonnull align 8 dereferenceable(4) nocapture %f, i32 noundef %mask) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Flags, %struct.Flags* %f, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
@@ -1580,7 +1617,7 @@ entry:
   ret void
 }
 
-define void @clamp(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %bytes, i32 noundef %i) #1 {
+define internal void @clamp(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %bytes, i32 noundef %i) #1 {
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %bytes, i64 0, i32 0
@@ -1603,7 +1640,7 @@ bounds.ok:
   ret void
 }
 
-define void @shiftField(%struct.Flags* noundef nonnull align 8 dereferenceable(4) nocapture %f, i32 noundef %n) #0 {
+define internal void @shiftField(%struct.Flags* noundef nonnull align 8 dereferenceable(4) nocapture %f, i32 noundef %n) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Flags, %struct.Flags* %f, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
@@ -1647,30 +1684,30 @@ function wide(a: i64, n: i64): i64 {
 ```
 
 ```llvm
-define noundef i32 @constantCount(i32 noundef %a) #0 {
+define internal noundef i32 @constantCount(i32 noundef %a) #0 {
 entry:
   %0 = ashr i32 %a, 3
   ret i32 %0
 }
 
-define noundef i32 @variableCount(i32 noundef %a, i32 noundef %n) #0 {
+define internal noundef i32 @variableCount(i32 noundef %a, i32 noundef %n) #0 {
 entry:
   %0 = and i32 %n, 31
   %1 = shl i32 %a, %0
   ret i32 %1
 }
 
-define noundef i32 @fills(i32 noundef %a, i32 noundef %n) #0 {
+define internal noundef i32 @fills(i32 noundef %a, i32 noundef %n) #0 {
 entry:
   %0 = and i32 %n, 31
   %1 = ashr i32 %a, %0
   %2 = and i32 %n, 31
   %3 = lshr i32 %a, %2
-  %4 = add i32 %1, %3
+  %4 = add nsw i32 %1, %3
   ret i32 %4
 }
 
-define noundef i64 @wide(i64 noundef %a, i64 noundef %n) #0 {
+define internal noundef i64 @wide(i64 noundef %a, i64 noundef %n) #0 {
 entry:
   %0 = and i64 %n, 63
   %1 = shl i64 %a, %0
@@ -1701,7 +1738,7 @@ function div(a: number, b: number): number {
 ```llvm
 declare void @amrit_panic_div(i1 noundef zeroext) #1
 
-define noundef i32 @div(i32 noundef %a, i32 noundef %b) #0 {
+define internal noundef i32 @div(i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %0 = icmp eq i32 %b, 0
   %1 = icmp eq i32 %a, -2147483648
@@ -1765,7 +1802,7 @@ function reinterpret(a: i32): u32 {
 ```llvm
 declare void @amrit_panic_div(i1 noundef zeroext) #2
 
-define noundef i32 @divide(i32 noundef %a, i32 noundef %b) #0 {
+define internal noundef i32 @divide(i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %0 = icmp eq i32 %b, 0
   br i1 %0, label %div.fail, label %div.ok
@@ -1779,25 +1816,25 @@ div.ok:
   ret i32 %1
 }
 
-define noundef zeroext i1 @below(i32 noundef %a, i32 noundef %b) #1 {
+define internal noundef zeroext i1 @below(i32 noundef %a, i32 noundef %b) #1 {
 entry:
   %0 = icmp ult i32 %a, %b
   ret i1 %0
 }
 
-define noundef i32 @halve(i32 noundef %a) #1 {
+define internal noundef i32 @halve(i32 noundef %a) #1 {
 entry:
   %0 = lshr i32 %a, 1
   ret i32 %0
 }
 
-define noundef i64 @widen(i32 noundef %a) #1 {
+define internal noundef i64 @widen(i32 noundef %a) #1 {
 entry:
   %0 = zext i32 %a to i64
   ret i64 %0
 }
 
-define noundef i32 @reinterpret(i32 noundef %a) #1 {
+define internal noundef i32 @reinterpret(i32 noundef %a) #1 {
 entry:
   ret i32 %a
 }
@@ -1846,32 +1883,32 @@ function tenth(): f32 {
 ```llvm
 declare i32 @llvm.fptosi.sat.i32.f32(float) #0
 
-define noundef float @blend(float noundef %a, float noundef %b) #0 {
+define internal noundef float @blend(float noundef %a, float noundef %b) #0 {
 entry:
   %0 = fadd float %a, %b
   %1 = fdiv float %0, %b
   ret float %1
 }
 
-define noundef float @narrow(double noundef %x) #0 {
+define internal noundef float @narrow(double noundef %x) #0 {
 entry:
   %0 = fptrunc double %x to float
   ret float %0
 }
 
-define noundef double @widen(float noundef %x) #0 {
+define internal noundef double @widen(float noundef %x) #0 {
 entry:
   %0 = fpext float %x to double
   ret double %0
 }
 
-define noundef i32 @truncate(float noundef %x) #0 {
+define internal noundef i32 @truncate(float noundef %x) #0 {
 entry:
   %0 = call i32 @llvm.fptosi.sat.i32.f32(float %x)
   ret i32 %0
 }
 
-define noundef float @tenth() #0 {
+define internal noundef float @tenth() #0 {
 entry:
   ret float 0x3FB99999A0000000
 }
@@ -1902,12 +1939,12 @@ function same(): string {
 ```llvm
 @.str.0 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"hello, world\00" }, align 8
 
-define noundef nonnull align 8 i8* @greeting() #0 {
+define internal noundef nonnull align 8 i8* @greeting() #0 {
 entry:
   ret i8* bitcast ({ i64, [13 x i8] }* @.str.0 to i8*)
 }
 
-define noundef nonnull align 8 i8* @same() #0 {
+define internal noundef nonnull align 8 i8* @same() #0 {
 entry:
   ret i8* bitcast ({ i64, [13 x i8] }* @.str.0 to i8*)
 }
@@ -1941,19 +1978,19 @@ function len(s: string): number {
 declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare zeroext i1 @amrit_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 
-define noundef nonnull align 8 i8* @join(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #0 {
+define internal noundef nonnull align 8 i8* @join(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #0 {
 entry:
   %0 = call i8* @amrit_str_concat(i8* %a, i8* %b)
   ret i8* %0
 }
 
-define noundef zeroext i1 @same(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #1 {
+define internal noundef zeroext i1 @same(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #1 {
 entry:
   %0 = call zeroext i1 @amrit_str_eq(i8* %a, i8* %b)
   ret i1 %0
 }
 
-define noundef i32 @len(i8* noundef nonnull noalias readonly align 8 nocapture %s) #1 {
+define internal noundef i32 @len(i8* noundef nonnull noalias readonly align 8 nocapture %s) #1 {
 entry:
   %0 = bitcast i8* %s to i64*
   %1 = load i64, i64* %0, align 8
@@ -2002,7 +2039,7 @@ declare void @amrit_panic_index(i64 noundef, i64 noundef) #3
 declare i64 @llvm.smin.i64(i64, i64) #4
 declare i64 @llvm.smax.i64(i64, i64) #4
 
-define noundef i32 @firstByte(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
+define internal noundef i32 @firstByte(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
 entry:
   %0 = bitcast i8* %s to i64*
   %1 = load i64, i64* %0, align 8
@@ -2021,7 +2058,7 @@ bounds.ok:
   ret i32 %6
 }
 
-define noundef nonnull align 8 i8* @head(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %n) #1 {
+define internal noundef nonnull align 8 i8* @head(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %n) #1 {
 entry:
   %0 = bitcast i8* %s to i64*
   %1 = load i64, i64* %0, align 8
@@ -2039,7 +2076,7 @@ entry:
   ret i8* %12
 }
 
-define noundef zeroext i1 @has(i8* noundef nonnull noalias readonly align 8 nocapture %s, i8* noundef nonnull noalias readonly align 8 nocapture %sub) #0 {
+define internal noundef zeroext i1 @has(i8* noundef nonnull noalias readonly align 8 nocapture %s, i8* noundef nonnull noalias readonly align 8 nocapture %sub) #0 {
 entry:
   %0 = call zeroext i1 @amrit_str_at(i8* %s, i64 0, i8* %sub)
   br i1 %0, label %lor.end, label %lor.rhs
@@ -2088,7 +2125,7 @@ function describe(n: number, ok: boolean, name: string): string {
 declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define noundef nonnull align 8 i8* @describe(i32 noundef %n, i1 noundef zeroext %ok, i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
+define internal noundef nonnull align 8 i8* @describe(i32 noundef %n, i1 noundef zeroext %ok, i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
 entry:
   %0 = call i8* @amrit_str_concat(i8* %name, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
   %1 = call i8* @amrit_str_from_i32(i32 %n)
@@ -2124,7 +2161,7 @@ declare void @amrit_arena_release(i64 noundef) #0
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define void @report() #0 {
+define internal void @report() #0 {
 entry:
   %arena.mark = call i64 @amrit_arena_mark()
   call void @amrit_print(i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
@@ -2164,7 +2201,7 @@ function set(a: number[], i: number, v: number): void {
 
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #1
 
-define noundef i32 @get(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %i) #0 {
+define internal noundef i32 @get(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %i) #0 {
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %a, i64 0, i32 0
@@ -2185,7 +2222,7 @@ bounds.ok:
   ret i32 %8
 }
 
-define void @set(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %a, i32 noundef %i, i32 noundef %v) #0 {
+define internal void @set(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %a, i32 noundef %i, i32 noundef %v) #0 {
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %a, i64 0, i32 0
@@ -2229,7 +2266,7 @@ function get(a: number[], i: number): number {
 ```llvm
 %struct.amrit_array = type { i64, i64, i8* }
 
-define noundef i32 @get(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %i) #0 {
+define internal noundef i32 @get(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %i) #0 {
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %a, i64 0, i32 2
@@ -2298,7 +2335,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @squares(i32 noundef %n) #0 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @squares(i32 noundef %n) #0 {
 entry:
   %xs.addr = alloca %struct.amrit_array*, align 8
   %i.addr = alloca i32, align 4
@@ -2323,7 +2360,7 @@ for.body:
   %7 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
   %8 = load i32, i32* %i.addr, align 4
   %9 = load i32, i32* %i.addr, align 4
-  %10 = mul i32 %8, %9
+  %10 = mul nsw i32 %8, %9
   %11 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %7, i64 0, i32 0
   %12 = load i64, i64* %11, align 8
   %13 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %7, i64 0, i32 1
@@ -2348,7 +2385,7 @@ push.store:
 
 for.inc:
   %22 = load i32, i32* %i.addr, align 4
-  %23 = add i32 %22, 1
+  %23 = add nsw i32 %22, 1
   store i32 %23, i32* %i.addr, align 4
   br label %for.cond
 
@@ -2357,7 +2394,7 @@ for.end:
   ret %struct.amrit_array* %24
 }
 
-define noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @pair() #0 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @pair() #0 {
 entry:
   %0 = call i8* @amrit_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.amrit_array*
@@ -2438,7 +2475,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef nonnull align 8 i8* @report(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %parts) #0 {
+define internal noundef nonnull align 8 i8* @report(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %parts) #0 {
 entry:
   %join.total = alloca i64, align 8
   %join.at = alloca i64, align 8
@@ -2519,7 +2556,7 @@ join.end:
   ret i8* %22
 }
 
-define noundef i32 @firstAt(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %names, i8* noundef nonnull noalias readonly align 8 nocapture %name) #1 {
+define internal noundef i32 @firstAt(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %names, i8* noundef nonnull noalias readonly align 8 nocapture %name) #1 {
 entry:
   %idx.at = alloca i64, align 8
   %0 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %names, i64 0, i32 0
@@ -2612,7 +2649,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @zeros(i32 noundef %n) #0 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @zeros(i32 noundef %n) #0 {
 entry:
   %0 = sext i32 %n to i64
   %1 = call i8* @amrit_alloc_struct(i64 24)
@@ -2629,7 +2666,7 @@ entry:
   ret %struct.amrit_array* %2
 }
 
-define noundef i32 @len(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #1 {
+define internal noundef i32 @len(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #1 {
 entry:
   %0 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
   %1 = load i64, i64* %0, align 8
@@ -2678,7 +2715,7 @@ function origin(): number {
 ```llvm
 %struct.Point = type { i32, i32 }
 
-define void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
+define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
   store i32 %x, i32* %0, align 4
@@ -2687,17 +2724,17 @@ entry:
   ret void
 }
 
-define noundef i32 @Point.manhattan(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
+define internal noundef i32 @Point.manhattan(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
   %2 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
   %3 = load i32, i32* %2, align 4
-  %4 = add i32 %1, %3
+  %4 = add nsw i32 %1, %3
   ret i32 %4
 }
 
-define noundef i32 @origin() #0 {
+define internal noundef i32 @origin() #0 {
 entry:
   %p.addr = alloca %struct.Point*, align 8
   %Point.obj = alloca %struct.Point, align 8
@@ -2767,7 +2804,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef nonnull align 8 dereferenceable(16) %struct.Defaults* @make() #0 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.Defaults* @make() #0 {
 entry:
   %0 = call i8* @amrit_alloc_struct(i64 16)
   %1 = bitcast i8* %0 to %struct.Defaults*
@@ -2851,7 +2888,7 @@ slow:
   ret i8* %grown
 }
 
-define void @Ordered.constructor(%struct.Ordered* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %a, i32 noundef %b) #0 {
+define internal void @Ordered.constructor(%struct.Ordered* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Ordered, %struct.Ordered* %this, i32 0, i32 0
   store i32 %a, i32* %0, align 4
@@ -2860,7 +2897,7 @@ entry:
   ret void
 }
 
-define noundef nonnull align 8 dereferenceable(8) %struct.Pair* @swap(%struct.Pair* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #0 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Pair* @swap(%struct.Pair* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #0 {
 entry:
   %0 = call i8* @amrit_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Pair*
@@ -2875,7 +2912,7 @@ entry:
   ret %struct.Pair* %1
 }
 
-define noundef nonnull align 8 dereferenceable(8) %struct.Pair* @asPair(%struct.Ordered* noundef nonnull align 8 dereferenceable(8) %o) #1 {
+define internal noundef nonnull align 8 dereferenceable(8) %struct.Pair* @asPair(%struct.Ordered* noundef nonnull align 8 dereferenceable(8) %o) #1 {
 entry:
   %0 = bitcast %struct.Ordered* %o to %struct.Pair*
   ret %struct.Pair* %0
@@ -2942,19 +2979,19 @@ function squareArea(sq: Square): number {
 %struct.Shape = type { i32 }
 %struct.Square = type { i32, i32 }
 
-define void @Shape.constructor(%struct.Shape* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %x) #0 {
+define internal void @Shape.constructor(%struct.Shape* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %x) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Shape, %struct.Shape* %this, i32 0, i32 0
   store i32 %x, i32* %0, align 4
   ret void
 }
 
-define noundef i32 @Shape.area(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #1 {
+define internal noundef i32 @Shape.area(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #1 {
 entry:
   ret i32 0
 }
 
-define void @Square.constructor(%struct.Square* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %side) #0 {
+define internal void @Square.constructor(%struct.Square* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %side) #0 {
 entry:
   %0 = bitcast %struct.Square* %this to %struct.Shape*
   call void @Shape.constructor(%struct.Shape* %0, i32 %x)
@@ -2963,40 +3000,40 @@ entry:
   ret void
 }
 
-define noundef i32 @Square.area(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #2 {
+define internal noundef i32 @Square.area(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #2 {
 entry:
   %0 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 1
   %1 = load i32, i32* %0, align 4
   %2 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 1
   %3 = load i32, i32* %2, align 4
-  %4 = mul i32 %1, %3
+  %4 = mul nsw i32 %1, %3
   ret i32 %4
 }
 
-define noundef i32 @Square.baseArea(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
+define internal noundef i32 @Square.baseArea(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
 entry:
   %0 = bitcast %struct.Square* %this to %struct.Shape*
   %1 = call i32 @Shape.area(%struct.Shape* %0)
   ret i32 %1
 }
 
-define noundef i32 @areaOf(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %s) #2 {
+define internal noundef i32 @areaOf(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %s) #2 {
 entry:
   %0 = call i32 @Shape.area(%struct.Shape* %s)
   %1 = getelementptr inbounds %struct.Shape, %struct.Shape* %s, i32 0, i32 0
   %2 = load i32, i32* %1, align 4
-  %3 = add i32 %0, %2
+  %3 = add nsw i32 %0, %2
   ret i32 %3
 }
 
-define noundef i32 @squareArea(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %sq) #2 {
+define internal noundef i32 @squareArea(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %sq) #2 {
 entry:
   %0 = call i32 @Square.area(%struct.Square* %sq)
   %1 = bitcast %struct.Square* %sq to %struct.Shape*
   %2 = call i32 @areaOf(%struct.Shape* %1)
-  %3 = add i32 %0, %2
+  %3 = add nsw i32 %0, %2
   %4 = call i32 @Square.baseArea(%struct.Square* %sq)
-  %5 = add i32 %3, %4
+  %5 = add nsw i32 %3, %4
   ret i32 %5
 }
 
@@ -3055,7 +3092,7 @@ function nearest(x: number): number {
 %struct.Pair = type { i32, i32 }
 %struct.Point = type { i32, i32 }
 
-define void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
+define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
   store i32 %x, i32* %0, align 4
@@ -3064,17 +3101,17 @@ entry:
   ret void
 }
 
-define noundef i32 @Point.manhattan(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
+define internal noundef i32 @Point.manhattan(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
   %2 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
   %3 = load i32, i32* %2, align 4
-  %4 = add i32 %1, %3
+  %4 = add nsw i32 %1, %3
   ret i32 %4
 }
 
-define noundef i32 @swapped(i32 noundef %a, i32 noundef %b) #2 {
+define internal noundef i32 @swapped(i32 noundef %a, i32 noundef %b) #2 {
 entry:
   %p.addr = alloca %struct.Pair*, align 8
   %Pair.obj = alloca %struct.Pair, align 8
@@ -3086,15 +3123,15 @@ entry:
   %2 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
   %3 = getelementptr inbounds %struct.Pair, %struct.Pair* %2, i32 0, i32 0
   %4 = load i32, i32* %3, align 4
-  %5 = mul i32 %4, 10
+  %5 = mul nsw i32 %4, 10
   %6 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
   %7 = getelementptr inbounds %struct.Pair, %struct.Pair* %6, i32 0, i32 1
   %8 = load i32, i32* %7, align 4
-  %9 = add i32 %5, %8
+  %9 = add nsw i32 %5, %8
   ret i32 %9
 }
 
-define noundef i32 @nearest(i32 noundef %x) #0 {
+define internal noundef i32 @nearest(i32 noundef %x) #0 {
 entry:
   %p.addr = alloca %struct.Point*, align 8
   %Point.obj = alloca %struct.Point, align 8
@@ -3189,7 +3226,7 @@ slow:
   ret i8* %grown
 }
 
-define void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
+define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
   store i32 %x, i32* %0, align 4
@@ -3198,17 +3235,17 @@ entry:
   ret void
 }
 
-define noundef i32 @Point.manhattan(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
+define internal noundef i32 @Point.manhattan(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
   %2 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
   %3 = load i32, i32* %2, align 4
-  %4 = add i32 %1, %3
+  %4 = add nsw i32 %1, %3
   ret i32 %4
 }
 
-define noundef i32 @swapped(i32 noundef %a, i32 noundef %b) #0 {
+define internal noundef i32 @swapped(i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %p.addr = alloca %struct.Pair*, align 8
   %arena.mark = call i64 @amrit_arena_mark()
@@ -3222,16 +3259,16 @@ entry:
   %4 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
   %5 = getelementptr inbounds %struct.Pair, %struct.Pair* %4, i32 0, i32 0
   %6 = load i32, i32* %5, align 4
-  %7 = mul i32 %6, 10
+  %7 = mul nsw i32 %6, 10
   %8 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
   %9 = getelementptr inbounds %struct.Pair, %struct.Pair* %8, i32 0, i32 1
   %10 = load i32, i32* %9, align 4
-  %11 = add i32 %7, %10
+  %11 = add nsw i32 %7, %10
   call void @amrit_arena_release(i64 %arena.mark)
   ret i32 %11
 }
 
-define noundef i32 @nearest(i32 noundef %x) #0 {
+define internal noundef i32 @nearest(i32 noundef %x) #0 {
 entry:
   %p.addr = alloca %struct.Point*, align 8
   %arena.mark = call i64 @amrit_arena_mark()
@@ -3285,7 +3322,7 @@ declare void @amrit_arena_release(i64 noundef) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 
-define void @greet(i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
+define internal void @greet(i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
 entry:
   %arena.mark = call i64 @amrit_arena_mark()
   %0 = call i8* @amrit_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.0 to i8*), i8* %name)
@@ -3295,7 +3332,7 @@ entry:
   ret void
 }
 
-define noundef nonnull align 8 i8* @label(i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
+define internal noundef nonnull align 8 i8* @label(i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
 entry:
   %0 = call i8* @amrit_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), i8* %name)
   %1 = call i8* @amrit_str_concat(i8* %0, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
@@ -3511,7 +3548,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef i64 @measure() #0 {
+define internal noundef i64 @measure() #0 {
 entry:
   %m.addr = alloca i64, align 8
   %xs.addr = alloca %struct.amrit_array*, align 8
@@ -3540,11 +3577,11 @@ entry:
   %13 = load i64, i64* %12, align 8
   %14 = trunc i64 %13 to i32
   %15 = sext i32 %14 to i64
-  %16 = add i64 %10, %15
+  %16 = add nsw i64 %10, %15
   ret i64 %16
 }
 
-define void @recycle() #0 {
+define internal void @recycle() #0 {
 entry:
   call void @amrit_reset_arena()
   ret void
@@ -3607,7 +3644,7 @@ function firstValue(slots: (Node | null)[]): number {
 
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #4
 
-define void @Node.constructor(%struct.Node* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %value) #0 {
+define internal void @Node.constructor(%struct.Node* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %value) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Node, %struct.Node* %this, i32 0, i32 1
   store %struct.Node* null, %struct.Node** %0, align 8
@@ -3616,7 +3653,7 @@ entry:
   ret void
 }
 
-define noundef i32 @valueOr(%struct.Node* noundef readonly align 8 nocapture %n, i32 noundef %fallback) #1 {
+define internal noundef i32 @valueOr(%struct.Node* noundef readonly align 8 nocapture %n, i32 noundef %fallback) #1 {
 entry:
   %0 = icmp ne %struct.Node* %n, null
   br i1 %0, label %cond.true, label %cond.false
@@ -3634,7 +3671,7 @@ cond.end:
   ret i32 %3
 }
 
-define noundef i32 @sum(%struct.Node* noundef align 8 %head) #2 {
+define internal noundef i32 @sum(%struct.Node* noundef align 8 %head) #2 {
 entry:
   %total.addr = alloca i32, align 4
   %cur.addr = alloca %struct.Node*, align 8
@@ -3652,7 +3689,7 @@ while.body:
   %3 = load %struct.Node*, %struct.Node** %cur.addr, align 8
   %4 = getelementptr inbounds %struct.Node, %struct.Node* %3, i32 0, i32 0
   %5 = load i32, i32* %4, align 4
-  %6 = add i32 %2, %5
+  %6 = add nsw i32 %2, %5
   store i32 %6, i32* %total.addr, align 4
   %7 = load %struct.Node*, %struct.Node** %cur.addr, align 8
   %8 = getelementptr inbounds %struct.Node, %struct.Node* %7, i32 0, i32 1
@@ -3665,7 +3702,7 @@ while.end:
   ret i32 %10
 }
 
-define noundef i32 @firstValue(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %slots) #3 {
+define internal noundef i32 @firstValue(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %slots) #3 {
 entry:
   %head.addr = alloca %struct.Node*, align 8
   %0 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %slots, i64 0, i32 0
@@ -3742,7 +3779,7 @@ declare double @llvm.floor.f64(double) #0
 declare double @llvm.minnum.f64(double, double) #0
 declare double @llvm.maxnum.f64(double, double) #0
 
-define noundef double @hypot(double noundef %a, double noundef %b) #0 {
+define internal noundef double @hypot(double noundef %a, double noundef %b) #0 {
 entry:
   %0 = fmul double %a, %a
   %1 = fmul double %b, %b
@@ -3751,7 +3788,7 @@ entry:
   ret double %3
 }
 
-define noundef double @roundHalfUp(double noundef %x) #0 {
+define internal noundef double @roundHalfUp(double noundef %x) #0 {
 entry:
   %0 = call double @llvm.floor.f64(double %x)
   %1 = fsub double %x, %0
@@ -3761,7 +3798,7 @@ entry:
   ret double %4
 }
 
-define noundef double @clamp01(double noundef %x) #0 {
+define internal noundef double @clamp01(double noundef %x) #0 {
 entry:
   %0 = call double @llvm.maxnum.f64(double %x, double 0x0000000000000000)
   %1 = call double @llvm.minnum.f64(double %0, double 0x3FF0000000000000)
@@ -3794,20 +3831,20 @@ declare i32 @llvm.abs.i32(i32, i1) #0
 declare i32 @llvm.smin.i32(i32, i32) #0
 declare i32 @llvm.smax.i32(i32, i32) #0
 
-define noundef i32 @clamp(i32 noundef %x, i32 noundef %lo, i32 noundef %hi) #0 {
+define internal noundef i32 @clamp(i32 noundef %x, i32 noundef %lo, i32 noundef %hi) #0 {
 entry:
   %0 = call i32 @llvm.smax.i32(i32 %x, i32 %lo)
   %1 = call i32 @llvm.smin.i32(i32 %0, i32 %hi)
   ret i32 %1
 }
 
-define noundef i32 @magnitude(i32 noundef %x) #0 {
+define internal noundef i32 @magnitude(i32 noundef %x) #0 {
 entry:
   %0 = call i32 @llvm.abs.i32(i32 %x, i1 false)
   ret i32 %0
 }
 
-define noundef double @tau() #0 {
+define internal noundef double @tau() #0 {
 entry:
   %0 = fmul double 0x400921FB54442D18, 0x4000000000000000
   ret double %0
@@ -3839,19 +3876,19 @@ function toDouble(n: number): f64 {
 ```llvm
 declare i32 @llvm.fptosi.sat.i32.f64(double) #0
 
-define noundef i64 @widen(i32 noundef %n) #0 {
+define internal noundef i64 @widen(i32 noundef %n) #0 {
 entry:
   %0 = sext i32 %n to i64
   ret i64 %0
 }
 
-define noundef i32 @narrow(double noundef %x) #0 {
+define internal noundef i32 @narrow(double noundef %x) #0 {
 entry:
   %0 = call i32 @llvm.fptosi.sat.i32.f64(double %x)
   ret i32 %0
 }
 
-define noundef double @toDouble(i32 noundef %n) #0 {
+define internal noundef double @toDouble(i32 noundef %n) #0 {
 entry:
   %0 = sitofp i32 %n to double
   ret double %0
@@ -3875,7 +3912,7 @@ function coin(): boolean {
 ```llvm
 declare noundef double @amrit_random() #0
 
-define noundef zeroext i1 @coin() #0 {
+define internal noundef zeroext i1 @coin() #0 {
 entry:
   %0 = call double @amrit_random()
   %1 = fcmp olt double %0, 0x3FE0000000000000
@@ -3924,7 +3961,7 @@ declare void @amrit_write(i8* noundef nonnull readonly align 8 nocapture, i32 no
 declare void @amrit_exit(i32 noundef) #2
 declare noalias noundef align 8 i8* @amrit_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #0
 
-define void @report(i8* noundef nonnull noalias readonly align 8 nocapture %problem) #0 {
+define internal void @report(i8* noundef nonnull noalias readonly align 8 nocapture %problem) #0 {
 entry:
   call void @amrit_write(i8* %problem, i32 2, i1 true)
   call void @amrit_write(i8* bitcast ({ i64, [11 x i8] }* @.str.0 to i8*), i32 1, i1 false)
@@ -3932,7 +3969,7 @@ entry:
   ret void
 }
 
-define noundef i32 @load(i8* noundef nonnull noalias readonly align 8 nocapture %path) #1 {
+define internal noundef i32 @load(i8* noundef nonnull noalias readonly align 8 nocapture %path) #1 {
 entry:
   %text.addr = alloca i8*, align 8
   %arena.mark = call i64 @amrit_arena_mark()
@@ -4224,18 +4261,18 @@ attributes #3 = { nounwind willreturn readnone }
 
 ## Optimisation flags
 
-### `--nsw`
+### Integer overflow: `nsw` by default, `--wrapping` to opt out
 
-Every user-level integer `add`, `sub`, and `mul` (binary operators, unary
-minus, `op=`, `++`/`--`) carries `nsw`: signed overflow becomes undefined
+Every user-level **signed** integer `add`, `sub`, and `mul` (binary operators,
+unary minus, `op=`, `++`/`--`) carries `nsw`: signed overflow is undefined
 behaviour, as in C, and LLVM may widen induction variables and fold
-`(a + 1) - 1`. Division and remainder have no `nsw` form and the compiler's
-own index and length arithmetic is never flagged. The default emits no
-`nsw` at all (wrapping, as in Rust release builds).
+`(a + 1) - 1`. Division and remainder have no `nsw` form, the compiler's own
+index and length arithmetic is never flagged, and an **unsigned** type is never
+flagged at all — `u8`..`u64` are defined as wrapping, which is what hashing and
+bit-packing are written against. This is the default, so the snippet below is
+compiled with no flags.
 
 <!-- cookbook:begin opt_nsw -->
-Compiled with `--nsw`.
-
 ```ts
 function poly(x: number, y: number): number {
   return x * x - 3 * y + -x;
@@ -4243,7 +4280,7 @@ function poly(x: number, y: number): number {
 ```
 
 ```llvm
-define noundef i32 @poly(i32 noundef %x, i32 noundef %y) #0 {
+define internal noundef i32 @poly(i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = mul nsw i32 %x, %x
   %1 = mul nsw i32 3, %y
@@ -4256,6 +4293,40 @@ entry:
 attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end opt_nsw -->
+
+`--wrapping` turns the flag off for the whole compilation and gives back
+two's-complement wrapping, so `2147483647 + 1` is `-2147483648`. It is what a
+hash, a linear congruential generator or a wrap-around counter needs; the same
+source, one flag, and no `nsw` anywhere:
+
+<!-- cookbook:begin opt_wrapping -->
+Compiled with `--wrapping`.
+
+```ts
+function poly(x: number, y: number): number {
+  return x * x - 3 * y + -x;
+}
+```
+
+```llvm
+define internal noundef i32 @poly(i32 noundef %x, i32 noundef %y) #0 {
+entry:
+  %0 = mul i32 %x, %x
+  %1 = mul i32 3, %y
+  %2 = sub i32 %0, %1
+  %3 = sub i32 0, %x
+  %4 = add i32 %2, %3
+  ret i32 %4
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end opt_wrapping -->
+
+A module constant follows the same rule, because a fold has to agree with the
+instruction it replaces: `const OVER: i32 = 2147483647 + 1` is
+`` attempt to compute with overflow in a constant `` by default, and
+`-2147483648` under `--wrapping`.
 
 ### `--target`
 
@@ -4278,9 +4349,9 @@ function add(a: number, b: number): number {
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
-define noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
+define internal noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
 entry:
-  %0 = add i32 %a, %b
+  %0 = add nsw i32 %a, %b
   ret i32 %0
 }
 
@@ -4371,7 +4442,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef nonnull align 8 i8* @identity(i8* noundef nonnull noalias readonly align 8 %s) #0 {
+define internal noundef nonnull align 8 i8* @identity(i8* noundef nonnull noalias readonly align 8 %s) #0 {
 entry:
   ret i8* %s
 }

@@ -43,8 +43,11 @@ existing dispatch tables with a spread. `src/codegen/attributes.ts` owns the
 - **Mutable locals stay in allocas.** Loops load and store them; no phis are
   emitted for loop-carried values. `opt -mem2reg` (part of `-O1`) rebuilds
   the SSA form, so the pattern below optimises exactly like clang's output.
-- **Integer arithmetic stays plain** (no `nsw`): compound assignment and
-  `++`/`--` wrap like every other AmritScript integer operation.
+- **Integer arithmetic goes through one opcode helper**, so compound
+  assignment and `++`/`--` are flagged exactly like every other AmritScript
+  integer operation. When this was written that meant no `nsw` at all; since
+  WP15 §3 the signed widths carry `nsw` by default and `--wrapping` takes it
+  off (docs/LANGUAGE.md is normative).
 
 ## `if` / `else`
 
@@ -629,11 +632,14 @@ fail to return. A function keeps it when all of the following hold
    - the body assigns neither `i` nor `bound` (any assignment form, matched
      by name, so assigning a shadowing inner variable of the same name also
      disqualifies, conservatively) and contains no `throw`;
-   - the step cannot wrap. i32 arithmetic wraps, so `i <= n; i++` runs
-     forever when `n === 2147483647`. With an identifier bound only `<`
-     with step `+1` and `>` with step `-1` are wrap-free for every possible
-     bound value; with a literal bound any step is fine as long as the last
-     in-range value plus the step still fits in i32.
+   - the step cannot wrap. The analysis takes the wrapping reading, which is
+     the conservative one: `i <= n; i++` runs forever when `n === 2147483647`
+     if the arithmetic wraps, and is undefined if it does not, so a loop that
+     would only be counted because overflow is undefined is refused either
+     way. With an identifier bound only `<` with step `+1` and `>` with step
+     `-1` are wrap-free for every possible bound value; with a literal bound
+     any step is fine as long as the last in-range value plus the step still
+     fits in i32.
 
    `f64` induction variables never qualify (`i++` is a no-op once
    `|i| >= 2^53`), so `for (let i = 0; i < n; i++)` under `--number-mode f64`

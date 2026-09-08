@@ -8,11 +8,10 @@ declare void @llvm.dbg.value(metadata, metadata, metadata)
 declare void @llvm.dbg.declare(metadata, metadata, metadata)
 declare noundef i64 @amrit_arena_mark() #0
 declare void @amrit_arena_release(i64 noundef) #0
-declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 !dbg !12 {
+define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 !dbg !12 {
 entry:
   call void @llvm.dbg.value(metadata %struct.Point* %this, metadata !14, metadata !DIExpression()), !dbg !13
   call void @llvm.dbg.value(metadata i32 %x, metadata !15, metadata !DIExpression()), !dbg !13
@@ -24,18 +23,18 @@ entry:
   ret void, !dbg !13
 }
 
-define noundef i32 @Point.sum(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 !dbg !23 {
+define internal noundef i32 @Point.sum(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 !dbg !23 {
 entry:
   call void @llvm.dbg.value(metadata %struct.Point* %this, metadata !25, metadata !DIExpression()), !dbg !24
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0, !dbg !27
   %1 = load i32, i32* %0, align 4, !dbg !27
   %2 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1, !dbg !28
   %3 = load i32, i32* %2, align 4, !dbg !28
-  %4 = add i32 %1, %3, !dbg !27
+  %4 = add nsw i32 %1, %3, !dbg !27
   ret i32 %4, !dbg !26
 }
 
-define noundef nonnull align 8 i8* @label(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p, i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 !dbg !33 {
+define internal noundef nonnull align 8 i8* @label(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p, i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 !dbg !33 {
 entry:
   call void @llvm.dbg.value(metadata %struct.Point* %p, metadata !35, metadata !DIExpression()), !dbg !34
   call void @llvm.dbg.value(metadata i8* %name, metadata !36, metadata !DIExpression()), !dbg !34
@@ -46,7 +45,7 @@ entry:
   ret i8* %3, !dbg !37
 }
 
-define noundef i32 @total(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %values) #1 !dbg !51 {
+define internal noundef i32 @total(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %values) #1 !dbg !51 {
 entry:
   %acc.addr = alloca i32, align 4
   %v.addr = alloca i32, align 4
@@ -74,7 +73,7 @@ forof.body:
   store i32 %8, i32* %v.addr, align 4, !dbg !57
   %9 = load i32, i32* %acc.addr, align 4, !dbg !61
   %10 = load i32, i32* %v.addr, align 4, !dbg !62
-  %11 = add i32 %9, %10, !dbg !61
+  %11 = add nsw i32 %9, %10, !dbg !61
   store i32 %11, i32* %acc.addr, align 4, !dbg !61
   br label %forof.inc, !dbg !57
 
@@ -114,68 +113,66 @@ entry:
   store double 0x4004000000000000, double* %ratio.addr, align 8, !dbg !82
   call void @llvm.dbg.declare(metadata double* %ratio.addr, metadata !85, metadata !DIExpression()), !dbg !82
   %3 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !88
-  %4 = call i64 @amrit_arena_mark(), !dbg !87
-  %5 = call i8* @label(%struct.Point* %3, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*)), !dbg !87
-  %6 = call i8* @amrit_arena_keep(i64 %4, i8* %5), !dbg !87
-  store i8* %6, i8** %s.addr, align 8, !dbg !86
+  %4 = call i8* @label(%struct.Point* %3, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*)), !dbg !87
+  store i8* %4, i8** %s.addr, align 8, !dbg !86
   call void @llvm.dbg.declare(metadata i8** %s.addr, metadata !90, metadata !DIExpression()), !dbg !86
-  %7 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0, !dbg !93
-  store i64 3, i64* %7, align 8, !dbg !93
-  %8 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1, !dbg !93
-  store i64 3, i64* %8, align 8, !dbg !93
-  %9 = bitcast [3 x i32]* %arr.data to i8*, !dbg !93
-  %10 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 2, !dbg !93
-  store i8* %9, i8** %10, align 8, !dbg !93
-  %11 = bitcast i8* %9 to i32*, !dbg !93
-  %12 = getelementptr inbounds i32, i32* %11, i64 0, !dbg !93
-  store i32 1, i32* %12, align 4, !dbg !93
-  %13 = getelementptr inbounds i32, i32* %11, i64 1, !dbg !93
-  store i32 2, i32* %13, align 4, !dbg !93
-  %14 = getelementptr inbounds i32, i32* %11, i64 2, !dbg !93
-  store i32 3, i32* %14, align 4, !dbg !93
-  %15 = call i32 @total(%struct.amrit_array* %arr.hdr), !dbg !92
-  store i32 %15, i32* %t.addr, align 4, !dbg !91
+  %5 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0, !dbg !93
+  store i64 3, i64* %5, align 8, !dbg !93
+  %6 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1, !dbg !93
+  store i64 3, i64* %6, align 8, !dbg !93
+  %7 = bitcast [3 x i32]* %arr.data to i8*, !dbg !93
+  %8 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 2, !dbg !93
+  store i8* %7, i8** %8, align 8, !dbg !93
+  %9 = bitcast i8* %7 to i32*, !dbg !93
+  %10 = getelementptr inbounds i32, i32* %9, i64 0, !dbg !93
+  store i32 1, i32* %10, align 4, !dbg !93
+  %11 = getelementptr inbounds i32, i32* %9, i64 1, !dbg !93
+  store i32 2, i32* %11, align 4, !dbg !93
+  %12 = getelementptr inbounds i32, i32* %9, i64 2, !dbg !93
+  store i32 3, i32* %12, align 4, !dbg !93
+  %13 = call i32 @total(%struct.amrit_array* %arr.hdr), !dbg !92
+  store i32 %13, i32* %t.addr, align 4, !dbg !91
   call void @llvm.dbg.declare(metadata i32* %t.addr, metadata !97, metadata !DIExpression()), !dbg !91
-  %16 = load i1, i1* %ok.addr, align 1, !dbg !99
-  br i1 %16, label %land.rhs.2, label %land.end.2, !dbg !99
+  %14 = load i1, i1* %ok.addr, align 1, !dbg !99
+  br i1 %14, label %land.rhs.2, label %land.end.2, !dbg !99
 
 land.rhs.2:
-  %17 = load i64, i64* %big.addr, align 8, !dbg !100
-  %18 = icmp eq i64 %17, 1, !dbg !100
+  %15 = load i64, i64* %big.addr, align 8, !dbg !100
+  %16 = icmp eq i64 %15, 1, !dbg !100
   br label %land.end.2, !dbg !99
 
 land.end.2:
-  %19 = phi i1 [ false, %entry ], [ %18, %land.rhs.2 ], !dbg !99
-  br i1 %19, label %land.rhs.1, label %land.end.1, !dbg !99
+  %17 = phi i1 [ false, %entry ], [ %16, %land.rhs.2 ], !dbg !99
+  br i1 %17, label %land.rhs.1, label %land.end.1, !dbg !99
 
 land.rhs.1:
-  %20 = load double, double* %ratio.addr, align 8, !dbg !102
-  %21 = fcmp ogt double %20, 0x4000000000000000, !dbg !102
+  %18 = load double, double* %ratio.addr, align 8, !dbg !102
+  %19 = fcmp ogt double %18, 0x4000000000000000, !dbg !102
   br label %land.end.1, !dbg !99
 
 land.end.1:
-  %22 = phi i1 [ false, %land.end.2 ], [ %21, %land.rhs.1 ], !dbg !99
-  br i1 %22, label %land.rhs, label %land.end, !dbg !99
+  %20 = phi i1 [ false, %land.end.2 ], [ %19, %land.rhs.1 ], !dbg !99
+  br i1 %20, label %land.rhs, label %land.end, !dbg !99
 
 land.rhs:
-  %23 = load i8*, i8** %s.addr, align 8, !dbg !104
-  %24 = bitcast i8* %23 to i64*, !dbg !104
-  %25 = load i64, i64* %24, align 8, !dbg !104
-  %26 = trunc i64 %25 to i32, !dbg !104
-  %27 = icmp eq i32 %26, 4, !dbg !104
+  %21 = load i8*, i8** %s.addr, align 8, !dbg !104
+  %22 = bitcast i8* %21 to i64*, !dbg !104
+  %23 = load i64, i64* %22, align 8, !dbg !104
+  %24 = trunc i64 %23 to i32, !dbg !104
+  %25 = icmp eq i32 %24, 4, !dbg !104
   br label %land.end, !dbg !99
 
 land.end:
-  %28 = phi i1 [ false, %land.end.1 ], [ %27, %land.rhs ], !dbg !99
-  br i1 %28, label %if.then, label %if.end, !dbg !98
+  %26 = phi i1 [ false, %land.end.1 ], [ %25, %land.rhs ], !dbg !99
+  br i1 %26, label %if.then, label %if.end, !dbg !98
 
 if.then:
-  %29 = load i32, i32* %t.addr, align 4, !dbg !108
-  %30 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !109
-  %31 = call i32 @Point.sum(%struct.Point* %30), !dbg !109
-  %32 = add i32 %29, %31, !dbg !108
+  %27 = load i32, i32* %t.addr, align 4, !dbg !108
+  %28 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !109
+  %29 = call i32 @Point.sum(%struct.Point* %28), !dbg !109
+  %30 = add nsw i32 %27, %29, !dbg !108
   call void @amrit_arena_release(i64 %arena.mark), !dbg !107
-  ret i32 %32, !dbg !107
+  ret i32 %30, !dbg !107
 
 if.end:
   call void @amrit_arena_release(i64 %arena.mark), !dbg !110
@@ -199,7 +196,7 @@ attributes #1 = { nounwind willreturn readonly }
 !9 = !{!7, !8}
 !10 = !{null, !5, !6, !6}
 !11 = !DISubroutineType(types: !10)
-!12 = distinct !DISubprogram(name: "Point.constructor", linkageName: "Point.constructor", scope: !1, file: !1, line: 5, type: !11, scopeLine: 5, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+!12 = distinct !DISubprogram(name: "Point.constructor", linkageName: "Point.constructor", scope: !1, file: !1, line: 5, type: !11, scopeLine: 5, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
 !13 = !DILocation(line: 5, column: 3, scope: !12)
 !14 = !DILocalVariable(name: "this", arg: 1, scope: !12, file: !1, line: 5, type: !5, flags: DIFlagArtificial | DIFlagObjectPointer)
 !15 = !DILocalVariable(name: "x", arg: 2, scope: !12, file: !1, line: 5, type: !6)
@@ -210,7 +207,7 @@ attributes #1 = { nounwind willreturn readonly }
 !20 = !DILocation(line: 7, column: 14, scope: !12)
 !21 = !{!6, !5}
 !22 = !DISubroutineType(types: !21)
-!23 = distinct !DISubprogram(name: "Point.sum", linkageName: "Point.sum", scope: !1, file: !1, line: 10, type: !22, scopeLine: 10, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+!23 = distinct !DISubprogram(name: "Point.sum", linkageName: "Point.sum", scope: !1, file: !1, line: 10, type: !22, scopeLine: 10, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
 !24 = !DILocation(line: 10, column: 3, scope: !23)
 !25 = !DILocalVariable(name: "this", arg: 1, scope: !23, file: !1, line: 10, type: !5, flags: DIFlagArtificial | DIFlagObjectPointer)
 !26 = !DILocation(line: 11, column: 5, scope: !23)
@@ -220,7 +217,7 @@ attributes #1 = { nounwind willreturn readonly }
 !30 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !29, size: 64)
 !31 = !{!30, !5, !30}
 !32 = !DISubroutineType(types: !31)
-!33 = distinct !DISubprogram(name: "label", linkageName: "label", scope: !1, file: !1, line: 15, type: !32, scopeLine: 15, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+!33 = distinct !DISubprogram(name: "label", linkageName: "label", scope: !1, file: !1, line: 15, type: !32, scopeLine: 15, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
 !34 = !DILocation(line: 15, column: 1, scope: !33)
 !35 = !DILocalVariable(name: "p", arg: 1, scope: !33, file: !1, line: 15, type: !5)
 !36 = !DILocalVariable(name: "name", arg: 2, scope: !33, file: !1, line: 15, type: !30)
@@ -238,7 +235,7 @@ attributes #1 = { nounwind willreturn readonly }
 !48 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !41, size: 64)
 !49 = !{!6, !48}
 !50 = !DISubroutineType(types: !49)
-!51 = distinct !DISubprogram(name: "total", linkageName: "total", scope: !1, file: !1, line: 19, type: !50, scopeLine: 19, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+!51 = distinct !DISubprogram(name: "total", linkageName: "total", scope: !1, file: !1, line: 19, type: !50, scopeLine: 19, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
 !52 = !DILocation(line: 19, column: 1, scope: !51)
 !53 = !DILocalVariable(name: "values", arg: 1, scope: !51, file: !1, line: 19, type: !48)
 !54 = !DILocation(line: 20, column: 3, scope: !51)

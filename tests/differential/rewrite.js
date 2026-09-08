@@ -617,6 +617,12 @@ function rewriteProgram(entry, opts, outDir) {
   const compilation = new Compilation({
     numberMode: opts.numberMode ?? "i32",
     uncheckedIndexing: opts.uncheckedIndexing ?? false,
+    // The rewrite only needs the checker's types, but the checker also folds
+    // module constants, and folding follows the compilation's overflow mode: a
+    // program compiled with `--wrapping` may hold a constant that the default
+    // refuses. Pass the flag through or the JavaScript side would fail to build
+    // for a program the native side compiled happily.
+    nsw: opts.nsw ?? true,
   });
   compilation.addRoot(entry);
   compilation.check();
@@ -664,18 +670,20 @@ function rewriteProgram(entry, opts, outDir) {
 module.exports = { rewriteProgram, SHIM };
 
 if (require.main === module) {
-  // node tests/differential/rewrite.js <file.ts> [--number-mode f64] [-o <dir>]
+  // node tests/differential/rewrite.js <file.ts> [--number-mode f64] [--wrapping] [-o <dir>]
   const argv = process.argv.slice(2);
   let numberMode = "i32";
+  let nsw = true;
   let out = path.join(root, "build", "test", "differential", "rewrite");
   const inputs = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--number-mode") numberMode = argv[++i];
+    else if (argv[i] === "--wrapping") nsw = false;
     else if (argv[i] === "-o") out = argv[++i];
     else if (argv[i] === "--unchecked-indexing") {
       /* no effect on the rewrite */
     } else inputs.push(argv[i]);
   }
-  const r = rewriteProgram(inputs[0], { numberMode }, out);
+  const r = rewriteProgram(inputs[0], { numberMode, nsw }, out);
   for (const m of r.modules) process.stdout.write(`// ${m}\n${fs.readFileSync(m, "utf8")}\n`);
 }

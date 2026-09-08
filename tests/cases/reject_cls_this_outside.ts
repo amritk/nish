@@ -2,6 +2,6 @@ class Point {
   x: number = 0;
 }
 
-function test(): number {
+export function test(): number {
   return this.x;
 }

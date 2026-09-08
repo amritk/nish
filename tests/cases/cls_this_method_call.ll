@@ -9,7 +9,7 @@ declare void @amrit_arena_release(i64 noundef) #0
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define void @Account.constructor(%struct.Account* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %balance, i32 noundef %fee) #0 {
+define internal void @Account.constructor(%struct.Account* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %balance, i32 noundef %fee) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 0
   store i32 %balance, i32* %0, align 4
@@ -18,18 +18,18 @@ entry:
   ret void
 }
 
-define void @Account.charge(%struct.Account* noundef nonnull align 8 dereferenceable(8) nocapture %this) #0 {
+define internal void @Account.charge(%struct.Account* noundef nonnull align 8 dereferenceable(8) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
   %2 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 1
   %3 = load i32, i32* %2, align 4
-  %4 = sub i32 %1, %3
+  %4 = sub nsw i32 %1, %3
   store i32 %4, i32* %0, align 4
   ret void
 }
 
-define noundef zeroext i1 @Account.withdraw(%struct.Account* noundef nonnull align 8 dereferenceable(8) nocapture %this, i32 noundef %amount) #0 {
+define internal noundef zeroext i1 @Account.withdraw(%struct.Account* noundef nonnull align 8 dereferenceable(8) nocapture %this, i32 noundef %amount) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
@@ -42,13 +42,13 @@ if.then:
 if.end:
   %3 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 0
   %4 = load i32, i32* %3, align 4
-  %5 = sub i32 %4, %amount
+  %5 = sub nsw i32 %4, %amount
   store i32 %5, i32* %3, align 4
   call void @Account.charge(%struct.Account* %this)
   ret i1 true
 }
 
-define noundef i32 @Account.drain(%struct.Account* noundef nonnull align 8 dereferenceable(8) nocapture %this, i32 noundef %step) #0 {
+define internal noundef i32 @Account.drain(%struct.Account* noundef nonnull align 8 dereferenceable(8) nocapture %this, i32 noundef %step) #0 {
 entry:
   %0 = call i1 @Account.withdraw(%struct.Account* %this, i32 %step)
   %1 = xor i1 %0, true
@@ -64,7 +64,7 @@ if.end:
   ret i32 %4
 }
 
-define noundef zeroext i1 @Account.same(%struct.Account* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, %struct.Account* noundef nonnull readonly align 8 dereferenceable(8) nocapture %other) #1 {
+define internal noundef zeroext i1 @Account.same(%struct.Account* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this, %struct.Account* noundef nonnull readonly align 8 dereferenceable(8) nocapture %other) #1 {
 entry:
   %0 = icmp eq %struct.Account* %this, %other
   ret i1 %0

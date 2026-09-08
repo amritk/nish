@@ -9,7 +9,7 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #1
 declare void @amrit_panic_div(i1 noundef zeroext) #2
 
-define noundef i32 @tenth(i32 noundef %n) #0 {
+define internal noundef i32 @tenth(i32 noundef %n) #0 {
 entry:
   %r.addr = alloca %struct.amrit_result.i32.str*, align 8
   %amrit_result.i32.str.obj = alloca %struct.amrit_result.i32.str, align 8

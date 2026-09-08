@@ -61,7 +61,7 @@ The IR is readable as is. `examples/add.ts` compiles to:
 ```llvm
 define noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
 entry:
-  %0 = add i32 %a, %b
+  %0 = add nsw i32 %a, %b
   ret i32 %0
 }
 
@@ -80,7 +80,7 @@ there cites the test case that proves it.
 | Feature | Summary | Reference |
 | --- | --- | --- |
 | Types | `number` (`i32` by default, `double` with `--number-mode f64`), `i32`, `i64`, `f64`, `boolean`, `string`, `T[]`, classes, interfaces, `T \| null`, `void`; 1:1 LLVM mapping, no implicit conversions | [Types](docs/LANGUAGE.md#types) |
-| Functions and modules | annotated signatures, calls in any order, `export`/named relative `import`, whole-program attribute facts, `export function main` as the entry, `--strict-exports` | [Declarations](docs/LANGUAGE.md#declarations) |
+| Functions and modules | annotated signatures, calls in any order, `export`/named relative `import`, whole-program attribute facts, `export function main` as the entry, `internal` linkage for everything not exported | [Declarations](docs/LANGUAGE.md#declarations) |
 | Control flow | `if`/`else`, `while`, `do`, `for`, `for...of`, `break`/`continue`, boolean-only conditions, definite return, unreachable-code errors | [Statements](docs/LANGUAGE.md#statements) |
 | Expressions | `+ - * / %` (integer `/` and `%` checked: zero divisor or `MIN / -1` panics), numeric-only ordering, `=== !==` (strings by content), `&& \|\|`, `?:`, `op=`, `++`/`--`, template literals, contextual numeric literals | [Expressions](docs/LANGUAGE.md#expressions) |
 | Strings | immutable UTF-8 (`.length` is the byte length), literals as constant data, `+`, `===`, templates, `console.log` | [Builtins](docs/LANGUAGE.md#builtins), [Semantics](docs/LANGUAGE.md#semantics-decisions) |
@@ -92,10 +92,11 @@ there cites the test case that proves it.
 | Builtins | `console.log`, `Math.*` as LLVM intrinsics (ECMAScript `pow` corner cases included), `Math.random`, `toI32`/`toI64`/`toF64`, `process.exit`, `readFileSync`/`writeFileSync`/`appendFileSync` | [Builtins](docs/LANGUAGE.md#builtins) |
 | Rejected | `any`, `unknown`, `var`, `==`, `?.`, `??`, generics, `async`, `try`, `throw`, `typeof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
 
-Semantics that differ from JavaScript on purpose: integers wrap (no `nsw`
-unless you ask for it), integer division by zero panics instead of yielding
-`0`, `.length` counts bytes, there is no `throw` and no unwinding, `toI32`
-saturates, `Math.min`/`max` take two arguments. The reasons are in the
+Semantics that differ from JavaScript on purpose: signed integer overflow is
+undefined behaviour (`--wrapping` restores two's-complement wrapping; the
+unsigned widths wrap either way), integer division by zero panics instead of
+yielding `0`, `.length` counts bytes, there is no `throw` and no unwinding,
+`toI32` saturates, `Math.min`/`max` take two arguments. The reasons are in the
 [FAQ](docs/FAQ.md); [docs/wp13-differential.md](docs/wp13-differential.md)
 lists everything the differential test suite found that still differs from
 Node.
@@ -110,7 +111,8 @@ amritc <entry.ts> [more.ts ...] [options]
   --link <exe>               build a native binary from every module + runtime/runtime.c
                              (entry module must declare `export function main`)
   --profile speed|size|debug build profile for --link (default: speed)
-  --strict-exports           non-exported functions get `internal` linkage
+  --no-strict-exports        every function is an external symbol (default: non-exported
+                             functions get `internal` linkage)
   --number-mode i32|f64      lowering of `number` (default: i32)
   --plain                    no performance attributes or alignment hints
   --runtime-decls            always emit the runtime ABI prelude (arena + strings)
@@ -122,7 +124,8 @@ amritc <entry.ts> [more.ts ...] [options]
   --target <triple>|host     emit `target datalayout`/`target triple` for that machine
                              (x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin,
                              aarch64-apple-darwin, wasm32-unknown-unknown, wasm32-wasi); default: target-neutral IR
-  --nsw                      integer add/sub/mul carry `nsw`: signed overflow is undefined (like C)
+  --wrapping                 signed integer add/sub/mul wrap two's-complement (default: they
+                             carry `nsw`, so signed overflow is undefined, like C)
   --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)
   --no-warn-performance      do not report the `performance` diagnostics (they are on by default,
                              print on stderr, and never change the exit code)

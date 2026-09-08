@@ -6,7 +6,7 @@ function scale(v: f64, k: f64): f64 {
   return r;
 }
 
-function test(): number {
+export function test(): number {
   let x = 10;
   x += 5;
   x -= 3;

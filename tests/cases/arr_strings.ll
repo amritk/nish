@@ -18,7 +18,7 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @amrit_array_grow(%struct.amrit_array* noundef nonnull align 8 nocapture, i64 noundef) #0
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #3
 
-define noundef nonnull align 8 i8* @join(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %words) #0 {
+define internal noundef nonnull align 8 i8* @join(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %words) #0 {
 entry:
   %out.addr = alloca i8*, align 8
   %w.addr = alloca i8*, align 8

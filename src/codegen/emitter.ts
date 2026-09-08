@@ -23,7 +23,7 @@
  *     `define`d; functions imported from other modules are `declare`d with
  *     exactly the attributes their exporter's `define` carries, taken from
  *     the program-wide facts table handed in by the Compilation.
- *   - Non-exported functions get `internal` linkage under `--strict-exports`.
+ *   - Non-exported functions get `internal` linkage (`--no-strict-exports` opts out).
  *   - The entry module's `export function main` is emitted as `@amrit_main`
  *     and wrapped by `define i32 @main(i32 %argc, i8** %argv)`, which calls
  *     it, releases the arena, and returns the exit code (0 for a void main).
@@ -145,7 +145,7 @@ export class Emitter implements EmitContext {
       llvmAbiType(sig.returnType)
     );
     // Linkage: exported functions are always external (they are the module's
-    // ABI). Others are external too unless --strict-exports hides them.
+    // ABI). Every other function is `internal` unless --no-strict-exports.
     if (this.opts.strictExports && !sig.exported) this.fn.linkage = "internal";
     if (optimize) {
       this.fn.returnAttrs = returnAttributes(sig.returnType, facts.returnDeref);

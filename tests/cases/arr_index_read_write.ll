@@ -7,7 +7,7 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #1
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #2
 
-define void @set(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %a, i32 noundef %i, i32 noundef %v) #0 {
+define internal void @set(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %a, i32 noundef %i, i32 noundef %v) #0 {
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %a, i64 0, i32 0
@@ -28,7 +28,7 @@ bounds.ok:
   ret void
 }
 
-define noundef i32 @get(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %i) #0 {
+define internal noundef i32 @get(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %i) #0 {
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %a, i64 0, i32 0
@@ -88,7 +88,7 @@ bounds.ok:
   %15 = bitcast i8* %14 to i32*
   %16 = getelementptr inbounds i32, i32* %15, i64 0
   %17 = load i32, i32* %16, align 4
-  %18 = add i32 %17, 5
+  %18 = add nsw i32 %17, 5
   store i32 %18, i32* %16, align 4
   %19 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
   %20 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %19, i64 0, i32 0
@@ -106,7 +106,7 @@ bounds.ok.1:
   %25 = bitcast i8* %24 to i32*
   %26 = getelementptr inbounds i32, i32* %25, i64 2
   %27 = load i32, i32* %26, align 4
-  %28 = mul i32 %27, 10
+  %28 = mul nsw i32 %27, 10
   store i32 %28, i32* %26, align 4
   %29 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
   %30 = call i32 @get(%struct.amrit_array* %29, i32 0)

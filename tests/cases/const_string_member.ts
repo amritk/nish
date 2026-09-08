@@ -2,6 +2,6 @@
 // `.length` is the folded literal's byte length.
 const NAME: string = "static";
 
-function test(): number {
+export function test(): number {
   return NAME.length;
 }

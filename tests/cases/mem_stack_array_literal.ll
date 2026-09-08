@@ -37,7 +37,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef i32 @weights() #0 {
+define internal noundef i32 @weights() #0 {
 entry:
   %ws.addr = alloca %struct.amrit_array*, align 8
   %arr.hdr = alloca %struct.amrit_array, align 8
@@ -81,7 +81,7 @@ forof.body:
   store i32 %17, i32* %w.addr, align 4
   %18 = load i32, i32* %total.addr, align 4
   %19 = load i32, i32* %w.addr, align 4
-  %20 = add i32 %18, %19
+  %20 = add nsw i32 %18, %19
   store i32 %20, i32* %total.addr, align 4
   br label %forof.inc
 
@@ -97,11 +97,11 @@ forof.end:
   %25 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %24, i64 0, i32 0
   %26 = load i64, i64* %25, align 8
   %27 = trunc i64 %26 to i32
-  %28 = mul i32 %23, %27
+  %28 = mul nsw i32 %23, %27
   ret i32 %28
 }
 
-define noundef i32 @zeroed() #1 {
+define internal noundef i32 @zeroed() #1 {
 entry:
   %zs.addr = alloca %struct.amrit_array*, align 8
   %arr.hdr = alloca %struct.amrit_array, align 8
@@ -164,11 +164,11 @@ bounds.ok.2:
   %28 = bitcast i8* %27 to i32*
   %29 = getelementptr inbounds i32, i32* %28, i64 2
   %30 = load i32, i32* %29, align 4
-  %31 = add i32 %21, %30
+  %31 = add nsw i32 %21, %30
   ret i32 %31
 }
 
-define noundef i32 @grown() #1 {
+define internal noundef i32 @grown() #1 {
 entry:
   %xs.addr = alloca %struct.amrit_array*, align 8
   %arr.hdr = alloca %struct.amrit_array, align 8
@@ -270,12 +270,12 @@ bounds.ok:
   %53 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %52, i64 0, i32 0
   %54 = load i64, i64* %53, align 8
   %55 = trunc i64 %54 to i32
-  %56 = add i32 %51, %55
+  %56 = add nsw i32 %51, %55
   call void @amrit_arena_release(i64 %arena.mark)
   ret i32 %56
 }
 
-define noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @escaped() #2 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.amrit_array* @escaped() #2 {
 entry:
   %0 = call i8* @amrit_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.amrit_array*

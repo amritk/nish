@@ -6,7 +6,7 @@ declare void @amrit_arena_release(i64 noundef) #0
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define void @Counter.constructor(%struct.Counter* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %step) #0 {
+define internal void @Counter.constructor(%struct.Counter* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %step) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Counter, %struct.Counter* %this, i32 0, i32 0
   store i32 0, i32* %0, align 4
@@ -15,19 +15,19 @@ entry:
   ret void
 }
 
-define void @bump(%struct.Counter* noundef nonnull align 8 dereferenceable(8) nocapture %c) #0 {
+define internal void @bump(%struct.Counter* noundef nonnull align 8 dereferenceable(8) nocapture %c) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Counter, %struct.Counter* %c, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
   %2 = getelementptr inbounds %struct.Counter, %struct.Counter* %c, i32 0, i32 1
   %3 = load i32, i32* %2, align 4
-  %4 = add i32 %1, %3
+  %4 = add nsw i32 %1, %3
   %5 = getelementptr inbounds %struct.Counter, %struct.Counter* %c, i32 0, i32 0
   store i32 %4, i32* %5, align 4
   ret void
 }
 
-define noundef i32 @bumpTwice(%struct.Counter* noundef nonnull align 8 dereferenceable(8) nocapture %c) #0 {
+define internal noundef i32 @bumpTwice(%struct.Counter* noundef nonnull align 8 dereferenceable(8) nocapture %c) #0 {
 entry:
   call void @bump(%struct.Counter* %c)
   call void @bump(%struct.Counter* %c)

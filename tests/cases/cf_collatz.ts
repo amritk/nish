@@ -12,6 +12,6 @@ function collatzSteps(n: number): number {
   return steps;
 }
 
-function test(): number {
+export function test(): number {
   return collatzSteps(27);
 }

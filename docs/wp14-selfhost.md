@@ -774,11 +774,12 @@ Self-hosting serves this star directly rather than competing with it: stage1 is
 a native binary with no Node process to start and no TypeScript parser to load,
 so the compiler's own speed is one of the things self-hosting buys.
 
-Two performance questions are open and want the `bench/` harness rather than an
-opinion: whether `--strict-exports` (internal linkage for non-exported
-functions, which unlocks inlining and specialisation) should become the
-default, and what `--nsw` is actually worth on the benchmark suite now that
-there is more than arithmetic to measure.
+Both of the performance questions this section used to leave open have since
+been answered by WP15 §3: `--strict-exports` (internal linkage for non-exported
+functions, which unlocks inlining and specialisation) and `--nsw` are both on
+by default, with `--no-strict-exports` and `--wrapping` as the opt-outs. What
+each is worth on the benchmark suite is still a `bench/` question rather than
+an opinion.
 
 ## 6. Rules for this work package
 

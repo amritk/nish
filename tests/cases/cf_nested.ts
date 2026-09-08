@@ -26,6 +26,6 @@ function search(limit: number): number {
   return found;
 }
 
-function test(): number {
+export function test(): number {
   return countPairs(6) * 100 + search(5);
 }

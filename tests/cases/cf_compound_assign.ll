@@ -1,6 +1,6 @@
 declare void @amrit_panic_div(i1 noundef zeroext) #2
 
-define noundef double @scale(double noundef %v, double noundef %k) #0 {
+define internal noundef double @scale(double noundef %v, double noundef %k) #0 {
 entry:
   %r.addr = alloca double, align 8
   store double %v, double* %r.addr, align 8
@@ -23,13 +23,13 @@ entry:
   %y.addr = alloca i32, align 4
   store i32 10, i32* %x.addr, align 4
   %0 = load i32, i32* %x.addr, align 4
-  %1 = add i32 %0, 5
+  %1 = add nsw i32 %0, 5
   store i32 %1, i32* %x.addr, align 4
   %2 = load i32, i32* %x.addr, align 4
-  %3 = sub i32 %2, 3
+  %3 = sub nsw i32 %2, 3
   store i32 %3, i32* %x.addr, align 4
   %4 = load i32, i32* %x.addr, align 4
-  %5 = mul i32 %4, 4
+  %5 = mul nsw i32 %4, 4
   store i32 %5, i32* %x.addr, align 4
   %6 = load i32, i32* %x.addr, align 4
   %7 = icmp eq i32 5, 0
@@ -64,14 +64,14 @@ div.ok.1:
   store i32 2, i32* %y.addr, align 4
   %20 = load i32, i32* %y.addr, align 4
   %21 = load i32, i32* %x.addr, align 4
-  %22 = add i32 %21, 1
+  %22 = add nsw i32 %21, 1
   store i32 %22, i32* %x.addr, align 4
-  %23 = add i32 %20, %22
+  %23 = add nsw i32 %20, %22
   store i32 %23, i32* %y.addr, align 4
   %24 = load i32, i32* %x.addr, align 4
-  %25 = mul i32 %24, 100
+  %25 = mul nsw i32 %24, 100
   %26 = load i32, i32* %y.addr, align 4
-  %27 = add i32 %25, %26
+  %27 = add nsw i32 %25, %26
   ret i32 %27
 }
 

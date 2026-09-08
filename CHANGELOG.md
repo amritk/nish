@@ -7,6 +7,70 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ## [Unreleased]
 
+### Changed — BREAKING
+
+- **Signed integer overflow is now undefined behaviour. The documented
+  guarantee that "integers wrap" is withdrawn (WP15 §3).** `--nsw` is on by
+  default: every user-level signed `i32`/`i64` `add`, `sub` and `mul` — binary
+  operators, unary minus, `op=` on locals, fields and elements, `++`/`--` —
+  carries `nsw`, so a program that overflows one of them has undefined
+  behaviour, exactly as in C. LLVM may now widen `i32` induction variables to
+  64 bits and strength-reduce the loops around them.
+
+  **A program that relies on wrapping keeps compiling and stops being
+  correct.** There are two remedies and no others. Compile it with the new
+  **`--wrapping`**, which turns the flag off everywhere and restores
+  two's-complement wrapping, so `2147483647 + 1` is `-2147483648` again; or
+  write the deliberately-overflowing arithmetic in an unsigned type, because
+  `u8`, `u16`, `u32` and `u64` are *defined* to wrap and are the reason those
+  types exist.
+
+  Three things this does **not** change: unsigned arithmetic never carries a
+  no-wrap flag in either mode (`--nsw` used to put `nuw` on it; it no longer
+  does, since `nuw` would withdraw the unsigned wrapping guarantee too),
+  division, remainder and shifts are never flagged because they have no such
+  form, and `Math.abs(-2147483648)` still wraps to itself because `llvm.abs`
+  is emitted with its poison flag off.
+
+  Constant folding follows the emitter rather than diverging from it: by
+  default a module constant whose arithmetic leaves its width is
+  `` attempt to compute with overflow in a constant `` instead of a silently
+  wrapped value — the same treatment `1 / 0` and `MIN / -1` already got in a
+  constant — and under `--wrapping` it wraps as before.
+  `tests/cases/opt_nsw` pins which operations carry the flag,
+  `opt_wrapping` the same program without it, `reject_const_overflow_arith`
+  the refused fold and `const_wrap` the folded one under `--wrapping`.
+
+- **Only `export`ed functions are C-ABI symbols: `--strict-exports` is now the
+  default (WP15 §3).** Every other top-level function gets `internal` linkage,
+  so LLVM may inline it, specialise it for its call sites, or drop it
+  altogether — a win on speed *and* on size. The visible consequence is that a
+  non-exported function is no longer callable from C and no longer appears in
+  `--emit-header`, `--emit-dts` or `--emit-napi`.
+
+  **`--no-strict-exports`** restores the old behaviour
+  (`tests/cases/export_no_strict`). A C driver that calls a function the module
+  does not export needs either that flag or an `export` on the function; the
+  test corpus took the second route, so `tests/driver.c`'s `test()` is now
+  `export function test()` in every case that links it, as are
+  `tests/cases/add.ts`, `tests/layout/structs.ts`, `examples/add.ts` and
+  `examples/strings.ts`.
+
+- `--nsw` and `--strict-exports` are still accepted and now spell out what the
+  compiler does anyway, so a build script written before the flip still runs.
+
+### Fixed — soundness
+
+- **A duplicate function name is refused whether or not `--strict-exports` is
+  in play.** The check used to be skipped under that flag, on the reasoning
+  that an `internal` symbol never reaches the linker. It does reach
+  `analyzeFunctions`, which keys the whole-program attribute fixpoint by
+  `FunctionSig.name`: two functions sharing a name shared one set of facts and
+  each was emitted with the other's attributes — a miscompile, not a link
+  error. Making the flag the default made it easy to hit; the bootstrap did,
+  as an out-of-bounds inside stage1 the moment two modules of `self/` both
+  declared a `narrow` (`tests/link/duplicate_internal`).
+
 ### Added
 
 - **The `performance` diagnostic class, with its first two warnings (WP15

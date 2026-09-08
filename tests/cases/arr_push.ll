@@ -35,7 +35,7 @@ for.body:
   %5 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
   %6 = load i32, i32* %i.addr, align 4
   %7 = load i32, i32* %i.addr, align 4
-  %8 = mul i32 %6, %7
+  %8 = mul nsw i32 %6, %7
   %9 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %5, i64 0, i32 0
   %10 = load i64, i64* %9, align 8
   %11 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %5, i64 0, i32 1
@@ -60,7 +60,7 @@ push.store:
 
 for.inc:
   %20 = load i32, i32* %i.addr, align 4
-  %21 = add i32 %20, 1
+  %21 = add nsw i32 %20, 1
   store i32 %21, i32* %i.addr, align 4
   br label %for.cond
 
@@ -133,7 +133,7 @@ bounds.ok:
 
 for.inc.1:
   %59 = load i32, i32* %i.addr.1, align 4
-  %60 = add i32 %59, 1
+  %60 = add nsw i32 %59, 1
   store i32 %60, i32* %i.addr.1, align 4
   br label %for.cond.1
 

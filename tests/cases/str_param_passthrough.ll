@@ -4,17 +4,17 @@
 
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 
-define noundef nonnull align 8 i8* @passthrough(i8* noundef nonnull noalias readonly align 8 %s) #0 {
+define internal noundef nonnull align 8 i8* @passthrough(i8* noundef nonnull noalias readonly align 8 %s) #0 {
 entry:
   ret i8* %s
 }
 
-define noundef nonnull align 8 i8* @wrapped(i8* noundef nonnull noalias readonly align 8 %s) #0 {
+define internal noundef nonnull align 8 i8* @wrapped(i8* noundef nonnull noalias readonly align 8 %s) #0 {
 entry:
   ret i8* %s
 }
 
-define noundef nonnull align 8 i8* @printed(i8* noundef nonnull noalias readonly align 8 nocapture %s) #1 {
+define internal noundef nonnull align 8 i8* @printed(i8* noundef nonnull noalias readonly align 8 nocapture %s) #1 {
 entry:
   call void @amrit_print(i8* %s)
   ret i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*)

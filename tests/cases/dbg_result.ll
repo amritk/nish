@@ -39,7 +39,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef i64 @half(i32 noundef %n) #0 !dbg !15 {
+define internal noundef i64 @half(i32 noundef %n) #0 !dbg !15 {
 entry:
   call void @llvm.dbg.value(metadata i32 %n, metadata !17, metadata !DIExpression()), !dbg !16
   %0 = icmp eq i32 2, 0, !dbg !19
@@ -83,7 +83,7 @@ div.ok.1:
   ret i64 %17, !dbg !25
 }
 
-define noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.i32.str* @tag(i8* noundef nonnull noalias readonly align 8 nocapture %path) #1 !dbg !39 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.i32.str* @tag(i8* noundef nonnull noalias readonly align 8 nocapture %path) #1 !dbg !39 {
 entry:
   call void @llvm.dbg.value(metadata i8* %path, metadata !41, metadata !DIExpression()), !dbg !40
   %0 = call zeroext i1 @amrit_str_eq(i8* %path, i8* bitcast ({ i64, [1 x i8] }* @.str.0 to i8*)), !dbg !43
@@ -111,7 +111,7 @@ if.end:
   ret %struct.amrit_result.i32.str* %9, !dbg !49
 }
 
-define noundef i32 @score(i64 noundef %r) #2 !dbg !54 {
+define internal noundef i32 @score(i64 noundef %r) #2 !dbg !54 {
 entry:
   %amrit_result.i32.i32.obj = alloca %struct.amrit_result.i32.i32, align 8
   call void @llvm.dbg.value(metadata i64 %r, metadata !56, metadata !DIExpression()), !dbg !55
@@ -177,7 +177,7 @@ lor.end:
   br i1 %16, label %if.then, label %if.end, !dbg !82
 
 if.then:
-  %17 = sub i32 0, 1, !dbg !87
+  %17 = sub nsw i32 0, 1, !dbg !87
   call void @amrit_arena_release(i64 %arena.mark), !dbg !86
   ret i32 %17, !dbg !86
 
@@ -199,7 +199,7 @@ if.end:
   %32 = load %struct.amrit_result.i32.str*, %struct.amrit_result.i32.str** %named.addr, align 8, !dbg !92
   %33 = getelementptr inbounds %struct.amrit_result.i32.str, %struct.amrit_result.i32.str* %32, i32 0, i32 1, !dbg !92
   %34 = load i32, i32* %33, align 4, !dbg !92
-  %35 = add i32 %31, %34, !dbg !90
+  %35 = add nsw i32 %31, %34, !dbg !90
   call void @amrit_arena_release(i64 %arena.mark), !dbg !89
   ret i32 %35, !dbg !89
 }
@@ -229,7 +229,7 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!10, !11}
 !13 = !{!4, !6}
 !14 = !DISubroutineType(types: !13)
-!15 = distinct !DISubprogram(name: "half", linkageName: "half", scope: !1, file: !1, line: 8, type: !14, scopeLine: 8, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+!15 = distinct !DISubprogram(name: "half", linkageName: "half", scope: !1, file: !1, line: 8, type: !14, scopeLine: 8, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
 !16 = !DILocation(line: 8, column: 1, scope: !15)
 !17 = !DILocalVariable(name: "n", arg: 1, scope: !15, file: !1, line: 8, type: !6)
 !18 = !DILocation(line: 9, column: 3, scope: !15)
@@ -253,7 +253,7 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !36 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !28, size: 64)
 !37 = !{!36, !33}
 !38 = !DISubroutineType(types: !37)
-!39 = distinct !DISubprogram(name: "tag", linkageName: "tag", scope: !1, file: !1, line: 15, type: !38, scopeLine: 15, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+!39 = distinct !DISubprogram(name: "tag", linkageName: "tag", scope: !1, file: !1, line: 15, type: !38, scopeLine: 15, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
 !40 = !DILocation(line: 15, column: 1, scope: !39)
 !41 = !DILocalVariable(name: "path", arg: 1, scope: !39, file: !1, line: 15, type: !33)
 !42 = !DILocation(line: 16, column: 3, scope: !39)
@@ -268,7 +268,7 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !51 = !DILocation(line: 19, column: 13, scope: !39)
 !52 = !{!6, !4}
 !53 = !DISubroutineType(types: !52)
-!54 = distinct !DISubprogram(name: "score", linkageName: "score", scope: !1, file: !1, line: 24, type: !53, scopeLine: 24, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+!54 = distinct !DISubprogram(name: "score", linkageName: "score", scope: !1, file: !1, line: 24, type: !53, scopeLine: 24, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
 !55 = !DILocation(line: 24, column: 1, scope: !54)
 !56 = !DILocalVariable(name: "r", arg: 1, scope: !54, file: !1, line: 24, type: !4)
 !57 = !DILocation(line: 25, column: 3, scope: !54)

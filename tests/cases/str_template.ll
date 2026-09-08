@@ -8,12 +8,11 @@
 
 declare noundef i64 @amrit_arena_mark() #0
 declare void @amrit_arena_release(i64 noundef) #0
-declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define noundef nonnull align 8 i8* @describe(i32 noundef %n, i1 noundef zeroext %ok, i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
+define internal noundef nonnull align 8 i8* @describe(i32 noundef %n, i1 noundef zeroext %ok, i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
 entry:
   %0 = call i8* @amrit_str_concat(i8* %name, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
   %1 = call i8* @amrit_str_from_i32(i32 %n)
@@ -28,14 +27,12 @@ entry:
 define noundef i32 @test() #0 {
 entry:
   %arena.mark = call i64 @amrit_arena_mark()
-  %0 = call i64 @amrit_arena_mark()
-  %1 = call i8* @describe(i32 42, i1 true, i8* bitcast ({ i64, [7 x i8] }* @.str.5 to i8*))
-  %2 = call i8* @amrit_arena_keep(i64 %0, i8* %1)
-  call void @amrit_print(i8* %2)
+  %0 = call i8* @describe(i32 42, i1 true, i8* bitcast ({ i64, [7 x i8] }* @.str.5 to i8*))
+  call void @amrit_print(i8* %0)
   call void @amrit_print(i8* bitcast ({ i64, [5 x i8] }* @.str.6 to i8*))
-  %3 = add i32 1, 2
-  %4 = call i8* @amrit_str_from_i32(i32 %3)
-  call void @amrit_print(i8* %4)
+  %1 = add nsw i32 1, 2
+  %2 = call i8* @amrit_str_from_i32(i32 %1)
+  call void @amrit_print(i8* %2)
   call void @amrit_arena_release(i64 %arena.mark)
   ret i32 0
 }

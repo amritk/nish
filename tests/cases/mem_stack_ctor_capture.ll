@@ -33,7 +33,7 @@ slow:
   ret i8* %grown
 }
 
-define void @Item.constructor(%struct.Item* noundef nonnull noalias align 8 dereferenceable(4) %this, %struct.Registry* noundef nonnull align 8 dereferenceable(8) nocapture %reg, i32 noundef %value) #0 {
+define internal void @Item.constructor(%struct.Item* noundef nonnull noalias align 8 dereferenceable(4) %this, %struct.Registry* noundef nonnull align 8 dereferenceable(8) nocapture %reg, i32 noundef %value) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Item, %struct.Item* %this, i32 0, i32 0
   store i32 %value, i32* %0, align 4
@@ -42,7 +42,7 @@ entry:
   ret void
 }
 
-define noundef i32 @register(%struct.Registry* noundef nonnull align 8 dereferenceable(8) nocapture %reg, i32 noundef %value) #0 {
+define internal noundef i32 @register(%struct.Registry* noundef nonnull align 8 dereferenceable(8) nocapture %reg, i32 noundef %value) #0 {
 entry:
   %item.addr = alloca %struct.Item*, align 8
   %0 = call i8* @amrit_alloc_struct(i64 4)

@@ -7,7 +7,7 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #1
 declare void @amrit_panic_div(i1 noundef zeroext) #2
 
-define noundef i64 @half(i32 noundef %n) #0 {
+define internal noundef i64 @half(i32 noundef %n) #0 {
 entry:
   %0 = icmp eq i32 2, 0
   %1 = icmp eq i32 %n, -2147483648

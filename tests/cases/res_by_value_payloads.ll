@@ -8,7 +8,7 @@ declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_f64(double noundef) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_u64(i64 noundef) #0
 
-define noundef i64 @scale(float noundef %x) #0 {
+define internal noundef i64 @scale(float noundef %x) #0 {
 entry:
   %0 = fcmp olt float %x, 0x0000000000000000
   br i1 %0, label %if.then, label %if.end
@@ -27,7 +27,7 @@ if.end:
   ret i64 %7
 }
 
-define noundef i64 @narrow(i32 noundef %n) #0 {
+define internal noundef i64 @narrow(i32 noundef %n) #0 {
 entry:
   %0 = icmp sgt i32 %n, 255
   br i1 %0, label %if.then, label %if.end

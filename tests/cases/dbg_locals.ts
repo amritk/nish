@@ -24,7 +24,7 @@ function total(values: number[]): number {
   return acc;
 }
 
-function test(): number {
+export function test(): number {
   const p = new Point(3, 4);
   const ok: boolean = p.sum() === 7;
   const big: i64 = 1;

@@ -1,6 +1,6 @@
 declare void @amrit_panic_div(i1 noundef zeroext) #2
 
-define noundef zeroext i1 @quotientOver(i32 noundef %x, i32 noundef %k) #0 {
+define internal noundef zeroext i1 @quotientOver(i32 noundef %x, i32 noundef %k) #0 {
 entry:
   %0 = icmp eq i32 %x, 0
   %1 = icmp eq i32 100, -2147483648
@@ -19,7 +19,7 @@ div.ok:
   ret i1 %6
 }
 
-define noundef zeroext i1 @bigQuotient(i32 noundef %x) #0 {
+define internal noundef zeroext i1 @bigQuotient(i32 noundef %x) #0 {
 entry:
   %0 = icmp ne i32 %x, 0
   br i1 %0, label %land.rhs, label %land.end
@@ -33,7 +33,7 @@ land.end:
   ret i1 %2
 }
 
-define noundef zeroext i1 @zeroOrSmallQuotient(i32 noundef %x) #0 {
+define internal noundef zeroext i1 @zeroOrSmallQuotient(i32 noundef %x) #0 {
 entry:
   %0 = icmp eq i32 %x, 0
   br i1 %0, label %lor.end, label %lor.rhs
@@ -60,7 +60,7 @@ lor.end:
   ret i1 %8
 }
 
-define noundef zeroext i1 @inRange(i32 noundef %x, i32 noundef %lo, i32 noundef %hi) #1 {
+define internal noundef zeroext i1 @inRange(i32 noundef %x, i32 noundef %lo, i32 noundef %hi) #1 {
 entry:
   %0 = icmp sle i32 %lo, %x
   br i1 %0, label %land.rhs, label %land.end
@@ -83,7 +83,7 @@ entry:
 
 if.then:
   %1 = load i32, i32* %n.addr, align 4
-  %2 = add i32 %1, 1
+  %2 = add nsw i32 %1, 1
   store i32 %2, i32* %n.addr, align 4
   br label %if.end
 
@@ -93,7 +93,7 @@ if.end:
 
 if.then.1:
   %4 = load i32, i32* %n.addr, align 4
-  %5 = add i32 %4, 2
+  %5 = add nsw i32 %4, 2
   store i32 %5, i32* %n.addr, align 4
   br label %if.end.1
 
@@ -103,7 +103,7 @@ if.end.1:
 
 if.then.2:
   %7 = load i32, i32* %n.addr, align 4
-  %8 = add i32 %7, 4
+  %8 = add nsw i32 %7, 4
   store i32 %8, i32* %n.addr, align 4
   br label %if.end.2
 
@@ -113,7 +113,7 @@ if.end.2:
 
 if.then.3:
   %10 = load i32, i32* %n.addr, align 4
-  %11 = add i32 %10, 8
+  %11 = add nsw i32 %10, 8
   store i32 %11, i32* %n.addr, align 4
   br label %if.end.3
 
@@ -132,7 +132,7 @@ land.end:
 
 if.then.4:
   %16 = load i32, i32* %n.addr, align 4
-  %17 = add i32 %16, 16
+  %17 = add nsw i32 %16, 16
   store i32 %17, i32* %n.addr, align 4
   br label %if.end.4
 

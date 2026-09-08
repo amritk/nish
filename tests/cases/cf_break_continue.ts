@@ -29,6 +29,6 @@ function largestPowerOfTwo(limit: number): number {
   return p;
 }
 
-function test(): number {
+export function test(): number {
   return firstMultipleOver(7, 30) * 1000 + sumOdd(10) * 10 + largestPowerOfTwo(100);
 }

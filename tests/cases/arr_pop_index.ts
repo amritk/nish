@@ -1,6 +1,6 @@
 // `pop` shortens the array and hands back the last element; `indexOf`
 // compares with `===`, so strings match by content and numbers by value.
-function test(): number {
+export function test(): number {
   const names: string[] = ["a", "b", "c"];
   const last = names.pop();
   const nums: number[] = [4, 8, 15];

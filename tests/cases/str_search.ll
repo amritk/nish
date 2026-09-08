@@ -11,7 +11,7 @@ declare noalias noundef nonnull align 8 i8* @amrit_str_new(i8* noundef readonly 
 declare zeroext i1 @amrit_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare zeroext i1 @amrit_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #2
 
-define noundef i32 @find(i8* noundef nonnull noalias readonly align 8 nocapture %s, i8* noundef nonnull noalias readonly align 8 nocapture %needle) #0 {
+define internal noundef i32 @find(i8* noundef nonnull noalias readonly align 8 nocapture %s, i8* noundef nonnull noalias readonly align 8 nocapture %needle) #0 {
 entry:
   %str.at = alloca i64, align 8
   %0 = bitcast i8* %s to i64*
@@ -59,7 +59,7 @@ entry:
 
 if.then:
   %2 = load i32, i32* %flags.addr, align 4
-  %3 = add i32 %2, 1
+  %3 = add nsw i32 %2, 1
   store i32 %3, i32* %flags.addr, align 4
   br label %if.end
 
@@ -75,7 +75,7 @@ if.end:
 
 if.then.1:
   %11 = load i32, i32* %flags.addr, align 4
-  %12 = add i32 %11, 2
+  %12 = add nsw i32 %11, 2
   store i32 %12, i32* %flags.addr, align 4
   br label %if.end.1
 
@@ -91,7 +91,7 @@ if.end.1:
 
 if.then.2:
   %20 = load i32, i32* %flags.addr, align 4
-  %21 = add i32 %20, 4
+  %21 = add nsw i32 %20, 4
   store i32 %21, i32* %flags.addr, align 4
   br label %if.end.2
 
@@ -104,19 +104,19 @@ if.end.2:
 
 if.then.3:
   %25 = load i32, i32* %flags.addr, align 4
-  %26 = add i32 %25, 8
+  %26 = add nsw i32 %25, 8
   store i32 %26, i32* %flags.addr, align 4
   br label %if.end.3
 
 if.end.3:
   %27 = load i8*, i8** %s.addr, align 8
   %28 = call i32 @find(i8* %27, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
-  %29 = mul i32 %28, 1000
+  %29 = mul nsw i32 %28, 1000
   %30 = load i8*, i8** %s.addr, align 8
   %31 = call i32 @find(i8* %30, i8* bitcast ({ i64, [4 x i8] }* @.str.5 to i8*))
-  %32 = add i32 %29, %31
+  %32 = add nsw i32 %29, %31
   %33 = load i32, i32* %flags.addr, align 4
-  %34 = add i32 %32, %33
+  %34 = add nsw i32 %32, %33
   call void @amrit_arena_release(i64 %arena.mark)
   ret i32 %34
 }

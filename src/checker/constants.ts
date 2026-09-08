@@ -40,6 +40,12 @@ export type ConstInfo = {
    * with the declaring module's checker, and complete before anything folds.
    */
   scope: Map<string, ConstInfo>;
+  /**
+   * `--wrapping` was given, so integer folding wraps at the width instead of
+   * refusing an overflow. Recorded per constant because the fold happens long
+   * after the flags are parsed and `ConstInfo` is all the folder is handed.
+   */
+  wrapping: boolean;
   /** Memoised fold; `"folding"` while in progress, which is how a cycle is caught. */
   value?: ConstValue | "folding";
 };
@@ -68,7 +74,7 @@ export const constValue = (info: ConstInfo): ConstValue => {
   info.value = "folding";
   let folded: ConstValue;
   try {
-    folded = fold(info.decl.initializer!, info.type, info.scope, info.decl.getSourceFile());
+    folded = fold(info.decl.initializer!, info.type, info.scope, info.decl.getSourceFile(), info.wrapping);
   } catch (e) {
     info.value = undefined; // let a second reference report the same error rather than a stale `"folding"`
     throw e;
@@ -110,9 +116,10 @@ const fold = (
   expr: ts.Expression,
   expected: StaticType,
   scope: Map<string, ConstInfo>,
-  sf: ts.SourceFile
+  sf: ts.SourceFile,
+  wrapping: boolean
 ): ConstValue => {
-  if (ts.isParenthesizedExpression(expr)) return fold(expr.expression, expected, scope, sf);
+  if (ts.isParenthesizedExpression(expr)) return fold(expr.expression, expected, scope, sf, wrapping);
   if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) {
     return { kind: "string", value: expr.text };
   }
@@ -130,8 +137,8 @@ const fold = (
     }
     return constValue(target);
   }
-  if (ts.isPrefixUnaryExpression(expr)) return foldUnary(expr, expected, scope, sf);
-  if (ts.isBinaryExpression(expr)) return foldBinary(expr, expected, scope, sf);
+  if (ts.isPrefixUnaryExpression(expr)) return foldUnary(expr, expected, scope, sf, wrapping);
+  if (ts.isBinaryExpression(expr)) return foldBinary(expr, expected, scope, sf, wrapping);
   throw new CompileError(
     "A module constant's initialiser must be a literal, another constant, or arithmetic over them",
     expr,
@@ -157,12 +164,13 @@ const foldUnary = (
   expr: ts.PrefixUnaryExpression,
   expected: StaticType,
   scope: Map<string, ConstInfo>,
-  sf: ts.SourceFile
+  sf: ts.SourceFile,
+  wrapping: boolean
 ): ConstValue => {
-  const operand = fold(expr.operand, expected, scope, sf);
+  const operand = fold(expr.operand, expected, scope, sf, wrapping);
   if (expr.operator === ts.SyntaxKind.MinusToken) {
     if (operand.kind === "int")
-      return { kind: "int", type: operand.type, value: wrap(-operand.value, operand.type) };
+      return { kind: "int", type: operand.type, value: narrow(-operand.value, operand.type, expr, sf, wrapping) };
     if (operand.kind === "f64") return { kind: "f64", value: -operand.value };
   }
   if (expr.operator === ts.SyntaxKind.ExclamationToken && operand.kind === "bool") {
@@ -186,7 +194,8 @@ const foldBinary = (
   expr: ts.BinaryExpression,
   expected: StaticType,
   scope: Map<string, ConstInfo>,
-  sf: ts.SourceFile
+  sf: ts.SourceFile,
+  wrapping: boolean
 ): ConstValue => {
   const op = expr.operatorToken.kind;
   // Comparisons and `===` yield a boolean, so `expected` says nothing about
@@ -201,11 +210,11 @@ const foldBinary = (
   let a: ConstValue;
   let b: ConstValue;
   if (literalLeft) {
-    b = fold(expr.right, operandHint ?? I32, scope, sf);
-    a = fold(expr.left, operandHint ?? typeOfValue(b), scope, sf);
+    b = fold(expr.right, operandHint ?? I32, scope, sf, wrapping);
+    a = fold(expr.left, operandHint ?? typeOfValue(b), scope, sf, wrapping);
   } else {
-    a = fold(expr.left, operandHint ?? I32, scope, sf);
-    b = fold(expr.right, operandHint ?? typeOfValue(a), scope, sf);
+    a = fold(expr.left, operandHint ?? I32, scope, sf, wrapping);
+    b = fold(expr.right, operandHint ?? typeOfValue(a), scope, sf, wrapping);
   }
 
   if (op === ts.SyntaxKind.AmpersandAmpersandToken || op === ts.SyntaxKind.BarBarToken) {
@@ -238,7 +247,7 @@ const foldBinary = (
   if (compare) return { kind: "bool", value: compare(a.value, (b as typeof a).value) };
   if (a.kind === "f64")
     return { kind: "f64", value: foldFloat(op, a.value, (b as typeof a).value, expr, sf) };
-  return foldInt(op, a, b as typeof a, expr, sf);
+  return foldInt(op, a, b as typeof a, expr, sf, wrapping);
 };
 
 const foldInt = (
@@ -246,7 +255,8 @@ const foldInt = (
   a: ConstValue & { kind: "int" },
   b: ConstValue & { kind: "int" },
   expr: ts.Expression,
-  sf: ts.SourceFile
+  sf: ts.SourceFile,
+  wrapping: boolean
 ): ConstValue => {
   if (op === ts.SyntaxKind.SlashToken || op === ts.SyntaxKind.PercentToken) {
     // The same two failures the emitted divisor check catches at run time
@@ -269,9 +279,10 @@ const foldInt = (
           : undefined;
   if (!apply)
     throw new CompileError(`Unsupported operator \`${ts.tokenToString(op)}\` in a constant`, expr, sf);
-  // Integer arithmetic wraps at the declared width, exactly as the emitted
-  // `add`/`sub`/`mul` do, so folding never changes what a program computes.
-  return { kind: "int", type: a.type, value: wrap(apply(a.value, b.value), a.type) };
+  // Folding follows the language's own arithmetic, whichever it is today: the
+  // fold and the `add`/`sub`/`mul` it replaces must agree, or a constant would
+  // be a second, quieter semantics (`docs/LANGUAGE.md`, "Module constants").
+  return { kind: "int", type: a.type, value: narrow(apply(a.value, b.value), a.type, expr, sf, wrapping) };
 };
 
 const foldFloat = (
@@ -302,6 +313,37 @@ const requireSameType = (
     expr,
     sf
   );
+};
+
+/**
+ * Bring an exact `bigint` result back into the type, the way the instruction
+ * it replaces would.
+ *
+ * Under `--wrapping` that instruction wraps, so the fold wraps. By default it
+ * carries `nsw`, so signed overflow at run time is undefined — and a compiler
+ * that quietly folded `2147483647 + 1` to `-2147483648` would be handing back
+ * the one answer the optimiser is entitled to assume cannot happen. It is
+ * refused instead, which is the treatment the two divisor failures above
+ * already get: what traps at run time is a compile error once the operands are
+ * known.
+ */
+const narrow = (
+  value: bigint,
+  type: StaticType,
+  expr: ts.Expression,
+  sf: ts.SourceFile,
+  wrapping: boolean
+): bigint => {
+  if (wrapping) return wrap(value, type);
+  const range = INT_RANGE[type.kind];
+  if (value < range.min || value > range.max) {
+    throw new CompileError(
+      `attempt to compute with overflow in a constant: the result does not fit in ${typeToString(type)} (use --wrapping for two's-complement arithmetic)`,
+      expr,
+      sf
+    );
+  }
+  return value;
 };
 
 const wrap = (value: bigint, type: StaticType): bigint => {

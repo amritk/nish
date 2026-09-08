@@ -12,7 +12,7 @@ function dot(a: Vec3, b: Vec3): f32 {
   return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-function test(): number {
+export function test(): number {
   const v = new Vec3();
   v.x = 0.1;
   v.y = 0.25;

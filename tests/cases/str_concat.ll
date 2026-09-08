@@ -8,7 +8,7 @@ declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef n
 declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 
-define noundef nonnull align 8 i8* @join(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #0 {
+define internal noundef nonnull align 8 i8* @join(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #0 {
 entry:
   %0 = call i8* @amrit_str_concat(i8* %a, i8* %b)
   ret i8* %0

@@ -36,7 +36,7 @@ entry:
   %12 = call i8* @amrit_str_from_i32(i32 %11)
   call void @amrit_print(i8* %12)
   %13 = sext i32 7 to i64
-  %14 = mul i64 %13, 1000000000
+  %14 = mul nsw i64 %13, 1000000000
   %15 = call i8* @amrit_str_from_i64(i64 %14)
   call void @amrit_print(i8* %15)
   %16 = load i64, i64* %big.addr, align 8

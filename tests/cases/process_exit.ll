@@ -5,7 +5,7 @@ declare void @amrit_free_arena() #1
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @amrit_exit(i32 noundef) #2
 
-define noundef i32 @finish(i32 noundef %code) #0 {
+define internal noundef i32 @finish(i32 noundef %code) #0 {
 entry:
   call void @amrit_print(i8* bitcast ({ i64, [8 x i8] }* @.str.0 to i8*))
   call void @amrit_exit(i32 %code)

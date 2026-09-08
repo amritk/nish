@@ -73,19 +73,25 @@ export function constantText(emitter: Emitter, info: ConstInfo): string {
 // ---- Integer arithmetic -----------------------------------------------------------
 
 /**
- * The instruction for `add` / `sub` / `mul` under `--nsw`: overflow becomes
- * poison (C semantics) instead of wrapping. The flag has to match the type's
- * signedness — an unsigned value that passes 2^31 has not overflowed, so
- * `nuw` is the claim that is true there.
+ * The instruction for `add` / `sub` / `mul`, which carries `nsw` by default
+ * (WP15 §3): signed overflow becomes poison (C semantics) instead of
+ * wrapping, and `--wrapping` turns that back off.
+ *
+ * An unsigned type never gets a flag in either mode. `u8`/`u16`/`u32`/`u64`
+ * are defined as wrapping, which is what hashing and bit-packing are written
+ * against, so `nuw` would be a claim the language does not make; and `nsw` on
+ * an unsigned value that has merely passed 2^31 would poison an ordinary
+ * result. The proof under the attribute is "the checker recorded a signed
+ * type", and `isUnsigned` is where that proof is read.
  */
 export function intOpcode(emitter: Emitter, opcode: string, type: i32): string {
-  if (!emitter.opts.nsw) {
+  if (!emitter.opts.nsw || isUnsigned(type)) {
     return opcode;
   }
   if (opcode !== "add" && opcode !== "sub" && opcode !== "mul") {
     return opcode;
   }
-  return `${opcode} ${isUnsigned(type) ? "nuw" : "nsw"}`;
+  return `${opcode} nsw`;
 }
 
 /**

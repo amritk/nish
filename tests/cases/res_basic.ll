@@ -36,7 +36,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.i32.str* @half(i32 noundef %n) #0 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.i32.str* @half(i32 noundef %n) #0 {
 entry:
   %0 = icmp eq i32 2, 0
   %1 = icmp eq i32 %n, -2147483648

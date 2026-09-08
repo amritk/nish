@@ -19,7 +19,7 @@ declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnul
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define void @Entity.constructor(%struct.Entity* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i8* noundef nonnull noalias readonly align 8 %name) #0 {
+define internal void @Entity.constructor(%struct.Entity* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i8* noundef nonnull noalias readonly align 8 %name) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Entity, %struct.Entity* %this, i32 0, i32 1
   store i32 0, i32* %0, align 4
@@ -28,29 +28,29 @@ entry:
   ret void
 }
 
-define noundef i32 @Entity.hit(%struct.Entity* noundef nonnull align 8 dereferenceable(16) nocapture %this) #0 {
+define internal noundef i32 @Entity.hit(%struct.Entity* noundef nonnull align 8 dereferenceable(16) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Entity, %struct.Entity* %this, i32 0, i32 1
   %1 = load i32, i32* %0, align 4
-  %2 = add i32 %1, 1
+  %2 = add nsw i32 %1, 1
   store i32 %2, i32* %0, align 4
   %3 = getelementptr inbounds %struct.Entity, %struct.Entity* %this, i32 0, i32 1
   %4 = load i32, i32* %3, align 4
   ret i32 %4
 }
 
-define noundef i32 @Mob.damage(%struct.Mob* noundef nonnull align 8 dereferenceable(16) nocapture %this, i32 noundef %amount) #0 {
+define internal noundef i32 @Mob.damage(%struct.Mob* noundef nonnull align 8 dereferenceable(16) nocapture %this, i32 noundef %amount) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Mob, %struct.Mob* %this, i32 0, i32 2
   %1 = load i32, i32* %0, align 4
-  %2 = sub i32 %1, %amount
+  %2 = sub nsw i32 %1, %amount
   store i32 %2, i32* %0, align 4
   %3 = getelementptr inbounds %struct.Mob, %struct.Mob* %this, i32 0, i32 2
   %4 = load i32, i32* %3, align 4
   ret i32 %4
 }
 
-define void @Boss.constructor(%struct.Boss* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, i8* noundef nonnull noalias readonly align 8 %name, i32 noundef %phase) #0 {
+define internal void @Boss.constructor(%struct.Boss* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, i8* noundef nonnull noalias readonly align 8 %name, i32 noundef %phase) #0 {
 entry:
   %0 = bitcast %struct.Boss* %this to %struct.Mob*
   %1 = getelementptr inbounds %struct.Mob, %struct.Mob* %0, i32 0, i32 2
@@ -62,21 +62,21 @@ entry:
   ret void
 }
 
-define noundef i32 @Boss.enrage(%struct.Boss* noundef nonnull align 8 dereferenceable(24) nocapture %this) #0 {
+define internal noundef i32 @Boss.enrage(%struct.Boss* noundef nonnull align 8 dereferenceable(24) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Boss, %struct.Boss* %this, i32 0, i32 3
   %1 = load i32, i32* %0, align 4
-  %2 = add i32 %1, 1
+  %2 = add nsw i32 %1, 1
   store i32 %2, i32* %0, align 4
   %3 = bitcast %struct.Boss* %this to %struct.Mob*
   %4 = call i32 @Mob.damage(%struct.Mob* %3, i32 0)
   %5 = getelementptr inbounds %struct.Boss, %struct.Boss* %this, i32 0, i32 3
   %6 = load i32, i32* %5, align 4
-  %7 = add i32 %4, %6
+  %7 = add nsw i32 %4, %6
   ret i32 %7
 }
 
-define void @Minion.constructor(%struct.Minion* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this) #0 {
+define internal void @Minion.constructor(%struct.Minion* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this) #0 {
 entry:
   %0 = bitcast %struct.Minion* %this to %struct.Mob*
   %1 = getelementptr inbounds %struct.Mob, %struct.Mob* %0, i32 0, i32 2
@@ -86,7 +86,7 @@ entry:
   ret void
 }
 
-define void @Wisp.constructor(%struct.Wisp* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, i32 noundef %speed) #0 {
+define internal void @Wisp.constructor(%struct.Wisp* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, i32 noundef %speed) #0 {
 entry:
   %0 = bitcast %struct.Wisp* %this to %struct.Ghost*
   %1 = getelementptr inbounds %struct.Ghost, %struct.Ghost* %0, i32 0, i32 3
@@ -98,7 +98,7 @@ entry:
   ret void
 }
 
-define noundef nonnull align 8 i8* @describe(%struct.Stats* noundef nonnull readonly align 8 dereferenceable(16) nocapture %s) #0 {
+define internal noundef nonnull align 8 i8* @describe(%struct.Stats* noundef nonnull readonly align 8 dereferenceable(16) nocapture %s) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 0
   %1 = load i8*, i8** %0, align 8

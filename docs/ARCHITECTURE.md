@@ -364,17 +364,34 @@ the assembly, the measurement and the one gap the packing does not close:
 [wp17-result-abi.md](wp17-result-abi.md); why the in-memory representation
 is still a pointer: [wp16-results.md](wp16-results.md).
 
-### `--nsw` and `--target`
+### `nsw`, `--wrapping`, `--strict-exports` and `--target`
 
-- **`--nsw`** (WP9): `intOpcode` in `emit/context.ts` is the single place
-  that decides the flag; every user-level integer `add`/`sub`/`mul`
-  (including unary minus, `op=` on locals, fields, and elements, and
-  `++`/`--`) becomes `add nsw` etc., so signed overflow is undefined and
-  LLVM may widen `i32` induction variables to 64 bits and fold
-  `(a + 1) - 1`. Division and remainder have no `nsw` form, and the
-  compiler's own `i64` index, length, and allocator arithmetic is never
-  flagged (`opt_nsw.ll` is checked for both facts). The default stays
-  wrapping, which is the documented language semantics.
+- **`nsw`** (WP9, on by default since WP15 §3): `intOpcode` in
+  `emit/context.ts` is the single place that decides the flag; every
+  user-level **signed** integer `add`/`sub`/`mul` (including unary minus,
+  `op=` on locals, fields, and elements, and `++`/`--`) becomes `add nsw` etc.,
+  so signed overflow is undefined and LLVM may widen `i32` induction variables
+  to 64 bits and fold `(a + 1) - 1`. Division and remainder have no `nsw`
+  form, the compiler's own `i64` index, length, and allocator arithmetic is
+  never flagged, and an **unsigned** type is never flagged at all — `u8`..`u64`
+  are defined as wrapping, so neither `nsw` nor `nuw` is a claim the language
+  makes about them. `opt_nsw.ll` is the golden that pins all three facts, and
+  `opt_wrapping.ll` pins the same program with `--wrapping`, where no flag
+  appears anywhere.
+  The proof under the attribute is the checker's recorded type, read through
+  `isUnsigned`; there is no other input to the decision.
+- **Constant folding follows the same rule** (`checker/constants.ts`): by
+  default an initialiser that overflows its width is refused rather than
+  folded, because the fold must agree with the instruction it replaces;
+  `--wrapping` restores the wrap.
+- **`--strict-exports`** (WP5, on by default since WP15 §3): a function without
+  `export` gets `internal` linkage (`emitter.ts`) and is left out of the
+  `--emit-header` / `--emit-dts` / `--emit-napi` surface (`interop/abi.ts`,
+  `externalFunctions`); `--no-strict-exports` puts both back. What it does
+  *not* change is `rejectSymbolClashes` (`compilation.ts`): a function name is
+  unique across the program in either mode, because `analyzeFunctions` keys the
+  fact fixpoint by symbol name and two functions sharing one would be emitted
+  with each other's attributes.
 - **`--target`** (WP9): `targetHeader` writes `target datalayout` and
   `target triple` after `source_filename`, from the table in
   `codegen/target.ts` (strings copied from `clang --target=<triple> -S
@@ -459,9 +476,10 @@ toolchain-dependent steps when LLVM is not installed:
 - **Optimisation flags** (WP9): `opt -O2` vectorises `opt_target_triple.ll`
   *without* `-mtriple`; `--target host` resolves to this machine's triple and
   an unknown triple is a usage error listing the supported ones; every
-  user-level `i32` `add`/`sub`/`mul` in `opt_nsw.ll` carries `nsw` and no
-  internal `i64` arithmetic does, while a default build contains no `nsw`
-  at all; `bench/run.mjs --validate` builds `fib` and `sieve` at small sizes
+  user-level signed `i32` `add`/`sub`/`mul` in `opt_nsw.ll` carries `nsw`, no
+  internal `i64` arithmetic does, and no unsigned operation does, while
+  `opt_wrapping.ll` (the same program under `--wrapping`) contains no `nsw` at
+  all; `bench/run.mjs --validate` builds `fib` and `sieve` at small sizes
   in every variant (speed, `--nsw`, size, C, Rust) and requires identical
   checksums (Rust is skipped without `rustc`).
 - **Differential** (WP13, needs clang): `tests/differential/run.js --quick`

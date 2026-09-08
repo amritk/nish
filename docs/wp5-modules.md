@@ -141,28 +141,33 @@ Rules:
 
 ## Linkage
 
-| Function | default | `--strict-exports` |
+| Function | default | `--no-strict-exports` |
 | --- | --- | --- |
 | `export function f` | external (`define ... @f`) | external |
-| `function f` | external | `define internal ... @f` |
+| `function f` | `define internal ... @f` | external |
 | entry `export function main` | external `@amrit_main` + external `@main` wrapper | same |
 | inline arena allocator | `internal` | `internal` |
 
-Default linkage stays external so C drivers and the wasm profile
-(`--export-all`) keep seeing every function. `--strict-exports` is the
-Rust-like mode: non-exported functions become `internal`, which lets LLVM
-inline, specialise, or drop them and keeps them out of the binary's symbol
-table.
+This table was the other way round until WP15 §3: default linkage used to be
+external so C drivers and the wasm profile (`--export-all`) saw every
+function, and `--strict-exports` was the opt-in Rust-like mode. The Rust-like
+mode is now the default, because `internal` is what lets LLVM inline,
+specialise or drop a function and keeps it out of the symbol table — a win on
+speed and on size — and `--no-strict-exports` is the opt-out for a C driver
+that calls something the module does not export.
 
 Because an external symbol is global to the whole link, the compiler rejects
 name clashes up front:
 
 - Two modules exporting the same name is always an error.
-- Two modules defining the same non-exported name is an error *without*
-  `--strict-exports` (both would be external); with it they are `internal`
-  and coexist.
-- A module defining `main` while the entry has an entry wrapper is an error
-  unless `--strict-exports` makes it internal.
+- Two modules defining the same **non-exported** name is an error too, in
+  either mode. `internal` linkage keeps the name away from the linker, but
+  `analyzeFunctions` keys the whole-program fact fixpoint by symbol name, so a
+  duplicate would give each function the other's attributes. That is a
+  miscompile rather than a link error, so the rule does not consult the flag
+  (`tests/link/duplicate_internal`). This is also a bug fix: with
+  `--strict-exports` passed explicitly, the check used to be skipped.
+- A module defining `main` while the entry has an entry wrapper is an error.
 
 ## CLI
 
@@ -172,7 +177,8 @@ amritc <entry.ts> [more.ts ...] [options]
   -o, --output <dir>/        output directory: one <dir>/<module>.ll per module
   --link <exe>               build a native binary from every module + runtime/runtime.c
   --profile speed|size|debug build profile for --link (default: speed)
-  --strict-exports           non-exported functions get `internal` linkage
+  --no-strict-exports        every function is an external symbol (default: non-exported
+                             functions get `internal` linkage)
   --number-mode i32|f64      lowering of `number` (default: i32)
   --plain                    no performance attributes or alignment hints
   --runtime-decls            always emit the runtime ABI prelude (arena + strings)
@@ -205,8 +211,10 @@ node dist/index.js examples/multi/main.ts --link build/multi && ./build/multi; e
 
 ## Tests
 
-- `tests/cases/`: `export_fn`, `export_strict` (`--strict-exports` shows
-  `define internal`), `entry_main` and `entry_main_void` (wrapper goldens,
+- `tests/cases/`: `export_fn` (the default: `define internal @helper`),
+  `export_strict` (the same, with the flag spelled out), `export_no_strict`
+  (`--no-strict-exports`: every function external again), `entry_main` and
+  `entry_main_void` (wrapper goldens,
   linked without `tests/driver.c` because the source contains
   `export function main`), and `reject_*` cases for `main` with parameters,
   non-function exports, `export default`, default/namespace/side-effect/bare

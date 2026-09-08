@@ -111,21 +111,25 @@ and nullish coalescing on non-nullable types, union types other than
 
 ### 3.3 Semantics decisions already made
 
-- Integer overflow wraps (Rust release semantics). Revisit under WP9.
+- Signed integer overflow is undefined behaviour (`nsw`, C semantics);
+  `--wrapping` restores two's-complement wrapping (Rust release semantics).
+  Unsigned overflow is defined as wrapping in both modes. Was "overflow
+  wraps" until WP15 §3 flipped the default; see docs/LANGUAGE.md.
 - Strings are immutable and shared by pointer; equality is by content.
 - Functions are `nounwind`; there is no `throw` (WP16), and `panic(message)` prints and exits 1.
 - Parameters are immutable (`const` semantics) and used as SSA values.
 - Locals use `alloca`/`load`/`store` with natural alignment; `opt -mem2reg`
   promotes them, so this is free.
-- All top-level functions are exported with C ABI unless a future
-  `--strict-exports` makes non-`export` functions `internal`.
+- Only `export`ed functions carry the C ABI; every other top-level function is
+  `internal`, so LLVM may inline, specialise or drop it. `--no-strict-exports`
+  makes them all external again (WP15 §3).
 
 ### 3.4 Open decisions (need an owner, do not block Wave 1)
 
 | Question | Options | Recommendation |
 | --- | --- | --- |
 | Default `number` mode | `i32` (fast, current) vs `f64` (JS semantics) | Keep `i32` default; document loudly; `f64` via flag or per-file pragma. |
-| Overflow | wrap / trap / `nsw` UB | Wrap now; `--overflow-checks` trap mode later (WP9). |
+| Overflow | wrap / trap / `nsw` UB | **Decided (WP15 §3): `nsw` UB by default, `--wrapping` to opt out.** A trap mode is still open. |
 | Class inheritance | none / single with prefix layout / interfaces only | Single inheritance via struct prefix, no virtual dispatch until needed. |
 | Object lifetime | arena only / arena + RC / escape-analysed stack | Arena + escape-analysed `alloca` (WP6); RC opt-in per class. |
 | String encoding | UTF-8 bytes (current) vs UTF-16 (JS) | UTF-8; `.length` is byte length, documented. |
@@ -319,7 +323,8 @@ Acceptance: goldens; native round trip summing an array and sorting one
 Goal: multi-file programs and runnable binaries without a hand-written C driver.
 
 - `export function` keeps external linkage; non-exported functions become
-  `internal` under `--strict-exports` (default stays external for now).
+  `internal` under `--strict-exports`, which WP15 §3 later made the default
+  (`--no-strict-exports` is now the opt-out).
 - `import { f } from "./other"`: compile each file to its own `.ll`, emit
   `declare` for imported symbols with the same attributes the exporter
   computed (write a `.d.amrit.json` sidecar with signatures and attributes),
@@ -525,8 +530,9 @@ lowering wins, and that "faster" means measured rather than assumed.
 
 Scope, eight items in dependency order: fast defaults (`--strict-exports` and
 `--nsw` on, with the honest re-pointing of every test and document that
-depends on wrapping); the `performance` diagnostic class, a third severity
-that fires when the compiler had to take a slow path and a faster one existed;
+depends on wrapping — **done**); the `performance` diagnostic class, a third
+severity that fires when the compiler had to take a slow path and a faster one
+existed;
 slice iterators, so `for (const c of s)` lowers to pointer advancement;
 unsigned types; the fast slice beside JavaScript's `substring`; ranged integer
 types and length narrowing, so a proven index emits no bounds check;
@@ -697,7 +703,7 @@ document does not need a second one open beside it to be current:
 
 | | Item | Why in this position |
 | ---: | --- | --- |
-| 1 | Fast defaults: `--strict-exports` and `--nsw` on by default | small, and it moves the baseline everything after it is measured against. It is also what a private two-scalar ABI for `Result` needs (WP17 §4) |
+| 1 | Fast defaults: `--strict-exports` and `--nsw` on by default — **done** | small, and it moves the baseline everything after it is measured against. It is also what a private two-scalar ABI for `Result` needs (WP17 §4) |
 | 2 | The `performance` diagnostic class | the framework plus the two warnings that need no new analysis, so that every slow path the rest of the list attacks says so |
 | 3 | Slice iterators | the biggest speed win per line of emitter code, and no new syntax |
 | 4 | Unsigned types `u8`, `u16`, `u32`, `u64` | foundational for 6, and it touches every numeric path, so earlier is cheaper |

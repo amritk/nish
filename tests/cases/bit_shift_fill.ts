@@ -3,7 +3,7 @@
 // here and `4294967295` in JavaScript, because `i32` is signed and the raw
 // bits are read back as the type they are in. A count of 32 or 33 is masked to
 // 0 or 1, so neither is undefined behaviour.
-function test(): number {
+export function test(): number {
   const negative = -16;
   console.log(negative >> 2);
   console.log(negative >>> 28);

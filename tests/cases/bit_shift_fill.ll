@@ -7,7 +7,7 @@ define noundef i32 @test() #0 {
 entry:
   %negative.addr = alloca i32, align 4
   %arena.mark = call i64 @amrit_arena_mark()
-  %0 = sub i32 0, 16
+  %0 = sub nsw i32 0, 16
   store i32 %0, i32* %negative.addr, align 4
   %1 = load i32, i32* %negative.addr, align 4
   %2 = ashr i32 %1, 2
@@ -17,7 +17,7 @@ entry:
   %5 = lshr i32 %4, 28
   %6 = call i8* @amrit_str_from_i32(i32 %5)
   call void @amrit_print(i8* %6)
-  %7 = sub i32 0, 1
+  %7 = sub nsw i32 0, 1
   %8 = lshr i32 %7, 0
   %9 = call i8* @amrit_str_from_i32(i32 %8)
   call void @amrit_print(i8* %9)

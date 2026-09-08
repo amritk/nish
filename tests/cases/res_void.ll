@@ -38,7 +38,7 @@ slow:
   ret i8* %grown
 }
 
-define noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.void.str* @checkPort(i32 noundef %port) #0 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.void.str* @checkPort(i32 noundef %port) #0 {
 entry:
   %0 = icmp sle i32 %port, 0
   br i1 %0, label %if.then, label %if.end

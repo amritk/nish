@@ -296,8 +296,9 @@ effect write), which is also what `amrit_str_from_i32` now delegates to.
 | `i64` | `i64` | 8 |
 
 `i64` is a first-class integer type: arithmetic `+ - * / %` (`add`, `sub`,
-`mul`, `sdiv`, `srem`, wrapping like `i32`), unary `-` (`sub i64 0, x`),
-comparisons (`icmp`), parameters and returns (`noundef` like every scalar),
+`mul`, `sdiv`, `srem`, overflowing like `i32` — undefined by default, wrapping
+under `--wrapping`), unary `-` (`sub i64 0, x`), comparisons (`icmp`),
+parameters and returns (`noundef` like every scalar),
 locals (`alloca i64, align 8`), `===`/`!==`. It is never the lowering of
 `number`; `--number-mode` chooses between `i32` and `f64` only. There is no
 implicit widening: `x + n` with `x: i64` and `n: number` is rejected with the
@@ -307,7 +308,7 @@ usual same-type message; write `x + toI64(n)`.
 function square(x: i64): i64 { return x * x; }
 const big: i64 = 3000000000;   // does not fit i32; fine as an i64 literal
 console.log(square(big));      // 9000000000000000000
-console.log(square(big) * 2);  // -446744073709551616 (wraps, like i32)
+console.log(square(big) * 2);  // -446744073709551616 with --wrapping; overflow is UB without it
 ```
 
 ```llvm

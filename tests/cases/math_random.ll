@@ -9,7 +9,7 @@ declare noundef double @amrit_random() #0
 declare double @llvm.floor.f64(double) #1
 declare i32 @llvm.fptosi.sat.i32.f64(double) #1
 
-define noundef i32 @bad() #0 {
+define internal noundef i32 @bad() #0 {
 entry:
   %0 = call double @amrit_random()
   %1 = call double @llvm.floor.f64(double %0)
@@ -17,75 +17,75 @@ entry:
   ret i32 %2
 }
 
-define noundef i32 @bad10() #0 {
+define internal noundef i32 @bad10() #0 {
 entry:
   %0 = call i32 @bad()
   %1 = call i32 @bad()
-  %2 = add i32 %0, %1
+  %2 = add nsw i32 %0, %1
   %3 = call i32 @bad()
-  %4 = add i32 %2, %3
+  %4 = add nsw i32 %2, %3
   %5 = call i32 @bad()
-  %6 = add i32 %4, %5
+  %6 = add nsw i32 %4, %5
   %7 = call i32 @bad()
-  %8 = add i32 %6, %7
+  %8 = add nsw i32 %6, %7
   %9 = call i32 @bad()
-  %10 = add i32 %8, %9
+  %10 = add nsw i32 %8, %9
   %11 = call i32 @bad()
-  %12 = add i32 %10, %11
+  %12 = add nsw i32 %10, %11
   %13 = call i32 @bad()
-  %14 = add i32 %12, %13
+  %14 = add nsw i32 %12, %13
   %15 = call i32 @bad()
-  %16 = add i32 %14, %15
+  %16 = add nsw i32 %14, %15
   %17 = call i32 @bad()
-  %18 = add i32 %16, %17
+  %18 = add nsw i32 %16, %17
   ret i32 %18
 }
 
-define noundef i32 @bad100() #0 {
+define internal noundef i32 @bad100() #0 {
 entry:
   %0 = call i32 @bad10()
   %1 = call i32 @bad10()
-  %2 = add i32 %0, %1
+  %2 = add nsw i32 %0, %1
   %3 = call i32 @bad10()
-  %4 = add i32 %2, %3
+  %4 = add nsw i32 %2, %3
   %5 = call i32 @bad10()
-  %6 = add i32 %4, %5
+  %6 = add nsw i32 %4, %5
   %7 = call i32 @bad10()
-  %8 = add i32 %6, %7
+  %8 = add nsw i32 %6, %7
   %9 = call i32 @bad10()
-  %10 = add i32 %8, %9
+  %10 = add nsw i32 %8, %9
   %11 = call i32 @bad10()
-  %12 = add i32 %10, %11
+  %12 = add nsw i32 %10, %11
   %13 = call i32 @bad10()
-  %14 = add i32 %12, %13
+  %14 = add nsw i32 %12, %13
   %15 = call i32 @bad10()
-  %16 = add i32 %14, %15
+  %16 = add nsw i32 %14, %15
   %17 = call i32 @bad10()
-  %18 = add i32 %16, %17
+  %18 = add nsw i32 %16, %17
   ret i32 %18
 }
 
-define noundef i32 @bad1000() #0 {
+define internal noundef i32 @bad1000() #0 {
 entry:
   %0 = call i32 @bad100()
   %1 = call i32 @bad100()
-  %2 = add i32 %0, %1
+  %2 = add nsw i32 %0, %1
   %3 = call i32 @bad100()
-  %4 = add i32 %2, %3
+  %4 = add nsw i32 %2, %3
   %5 = call i32 @bad100()
-  %6 = add i32 %4, %5
+  %6 = add nsw i32 %4, %5
   %7 = call i32 @bad100()
-  %8 = add i32 %6, %7
+  %8 = add nsw i32 %6, %7
   %9 = call i32 @bad100()
-  %10 = add i32 %8, %9
+  %10 = add nsw i32 %8, %9
   %11 = call i32 @bad100()
-  %12 = add i32 %10, %11
+  %12 = add nsw i32 %10, %11
   %13 = call i32 @bad100()
-  %14 = add i32 %12, %13
+  %14 = add nsw i32 %12, %13
   %15 = call i32 @bad100()
-  %16 = add i32 %14, %15
+  %16 = add nsw i32 %14, %15
   %17 = call i32 @bad100()
-  %18 = add i32 %16, %17
+  %18 = add nsw i32 %16, %17
   ret i32 %18
 }
 

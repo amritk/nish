@@ -17,7 +17,7 @@ entry:
   %q.addr = alloca i64, align 8
   %f.addr = alloca double, align 8
   %arena.mark = call i64 @amrit_arena_mark()
-  %0 = sub i32 0, 1
+  %0 = sub nsw i32 0, 1
   store i32 %0, i32* %neg.addr, align 4
   %1 = load i32, i32* %neg.addr, align 4
   store i32 %1, i32* %w.addr, align 4

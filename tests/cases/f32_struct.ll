@@ -13,7 +13,7 @@ declare noalias noundef nonnull align 8 i8* @amrit_str_from_f64(double noundef) 
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_u64(i64 noundef) #2
 declare void @amrit_panic_index(i64 noundef, i64 noundef) #3
 
-define noundef float @dot(%struct.Vec3* noundef nonnull readonly align 8 dereferenceable(16) nocapture %a, %struct.Vec3* noundef nonnull readonly align 8 dereferenceable(16) nocapture %b) #0 {
+define internal noundef float @dot(%struct.Vec3* noundef nonnull readonly align 8 dereferenceable(16) nocapture %a, %struct.Vec3* noundef nonnull readonly align 8 dereferenceable(16) nocapture %b) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Vec3, %struct.Vec3* %a, i32 0, i32 0
   %1 = load float, float* %0, align 4
