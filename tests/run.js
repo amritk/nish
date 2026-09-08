@@ -1016,6 +1016,20 @@ if (!only || "interop".includes(only)) {
     stringsHeader || strings.stderr
   );
 
+  // The arrays sidecars are written here rather than beside their own checks
+  // (further down, "arrays and strings across the boundary") because the N-API
+  // compile loop below covers all three stems and only sees a file that already
+  // exists. Emitted late, `arrays.napi.c` was silently skipped on a clean
+  // build/ and compiled the *previous* run's copy on a dirty one.
+  const arrays = emit("examples/arrays.ts", [
+    "--emit-header",
+    sidecar("arrays", "h"),
+    "--emit-dts",
+    sidecar("arrays", "d.ts"),
+    "--emit-napi",
+    sidecar("arrays", "napi.c"),
+  ]);
+
   const keyword = emit("tests/cases/export_fn.ts", ["--emit-header", sidecar("export_fn", "h")]);
   const keywordHeader = keyword.status === 0 ? fs.readFileSync(sidecar("export_fn", "h"), "utf8") : "";
   check(
@@ -1191,7 +1205,11 @@ if (!only || "interop".includes(only)) {
     );
   } else {
     for (const stem of ["add", "strings", "arrays"]) {
-      if (!fs.existsSync(sidecar(stem, "napi.c"))) continue;
+      if (!fs.existsSync(sidecar(stem, "napi.c"))) {
+        const label = `${stem}.napi.c compiles under -std=c11 -Wall -Wextra -Werror`;
+        check(label, false, "--emit-napi wrote no file");
+        continue;
+      }
       const r = spawnSync("clang", [
         ...strictC,
         `-I${nodeInclude}`,
@@ -1455,14 +1473,6 @@ if (!only || "interop".includes(only)) {
   //     copies results out, copies written parameters back, and survives a trap
   //   - the N-API addon borrows typed arrays (zero-copy, `fill` mutates in place), returns
   //     fresh typed arrays, bridges strings, and agrees with the wasm build value for value
-  const arrays = emit("examples/arrays.ts", [
-    "--emit-header",
-    sidecar("arrays", "h"),
-    "--emit-dts",
-    sidecar("arrays", "d.ts"),
-    "--emit-napi",
-    sidecar("arrays", "napi.c"),
-  ]);
   const arraysHeader = arrays.status === 0 ? fs.readFileSync(sidecar("arrays", "h"), "utf8") : "";
   check(
     "arrays.h: read-only array parameters are `const sts_array *`, written ones `sts_array *`, results `sts_array *`",
