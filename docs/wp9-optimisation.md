@@ -55,23 +55,27 @@ has since gained a seventh program — `result`, added with WP17 — and been
 regenerated more than once; its header records the date, the machine and the
 toolchain versions of the run it holds.
 
-On the run recorded there, three of the seven programs are inside the 1.10x
-target against Rust `-O3` (sieve 0.79x, vec3 0.94x, fib 0.95x) and **four are
-outside it**:
+On the run recorded there — regenerated after WP15 §3 turned `--nsw` and
+`--strict-exports` on by default — **four of the seven programs are inside the
+1.10x target** against Rust `-O3` (sieve 0.85x, strbuild 0.90x, vec3 0.93x, and
+fib at 1.10x on the line) and **three are outside it**:
 
 | Benchmark | AmritScript / Rust `-O3` | Where it is diagnosed |
 | --- | ---: | --- |
-| nbody | 1.14x | not at this ratio. "nbody: 1.24x" below is the last diagnosis, and the WP6 note at the top of this file measured the gap at 1.11x after stack allocation closed most of it |
-| spectral | 1.18x | nowhere. It met the target in both rows above, so nothing here explains the ratio; see [BENCHMARKS.md](BENCHMARKS.md) for the run |
-| strbuild | 1.64x | "String building: 1.54x" below. The memory half of that diagnosis is now fixed by ["The call-site reclaim"](#the-call-site-reclaim); the ratio here predates it |
-| result | 2.59x | "result" below, and [wp17-result-abi.md](wp17-result-abi.md) §4 for the four-way table: the ok arm and the error arm are never separate SSA values once they are halves of one packed word |
+| result | 2.49x | "result" below, and [wp17-result-abi.md](wp17-result-abi.md) §4 for the four-way table: the ok arm and the error arm are never separate SSA values once they are halves of one packed word. The fix it names — a private two-scalar ABI for internal functions — is unblocked now that `--strict-exports` is the default |
+| nbody | 1.22x | not at this ratio. "nbody: 1.24x" below is the last diagnosis; the WP6 note at the top measured 1.11x after stack allocation, and [wp15-performance.md](wp15-performance.md) §3 records that the fast defaults left nbody with 13 % fewer instructions and about 2.6 % more time — the one row where they changed the code and did not pay |
+| spectral | 1.12x | nowhere. It met the target in both rows above, so nothing here explains the ratio; see [BENCHMARKS.md](BENCHMARKS.md) for the run |
+
+**strbuild left this table**: 1.64x to **0.90x**, which is
+["The call-site reclaim"](#the-call-site-reclaim) below. It is now faster than
+Rust's and than plain C's string building, and 0.82x against the naive C twin.
 
 That column says where to look, not what the cause is: the diagnosis
 experiments in this file have not been re-run against these numbers, and
-guessing a cause for the two that are undiagnosed would be worth less than
-saying they are. A good time to re-run them is after item 1 of
-[wp15-performance.md](wp15-performance.md) §9, which moves the baseline every
-row would be measured against.
+guessing a cause for the one that is undiagnosed would be worth less than
+saying it is. Item 1 of [wp15-performance.md](wp15-performance.md) §9 has since
+landed and moved that baseline, which is why these ratios are not the ones the
+table above holds.
 
 ## What shipped
 

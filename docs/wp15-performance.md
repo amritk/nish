@@ -238,6 +238,37 @@ obvious from the flag names:
    (`tests/link/duplicate_internal`). `internal` linkage buys inlining,
    specialisation and dead-stripping; it does not buy a second namespace.
 
+### What the defaults measured, and one thing they did not
+
+The benchmark table was regenerated after the flip (`docs/BENCHMARKS.md`), on
+an idle machine with the same `--runs 15 --warmup 3` the previous table used —
+matching the parameters matters, because the defaults are 5 and 1 and a table
+built with those is not comparable to one built with these.
+
+The unambiguous wins are size and string building. `bench/nbody` links to
+**10,856 bytes against 12,000** before the flip, which is dead-stripping doing
+what §3 said it would, and `strbuild` went from 1.64x C-naive to **0.82x** —
+though that one belongs to the call-site reclaim (`wp9-optimisation.md`), not
+to these flags.
+
+**`fib` appeared to regress by about 4 % and did not.** The two binaries were
+disassembled, their addresses normalised and their instruction streams sorted:
+the multisets are **identical**. The same instructions in a different order,
+because `internal` linkage changed where the linker placed the function. That
+is a code-layout effect — the phenomenon that makes a 4 % swing reproducible
+without any change in code quality — and it is recorded here so that the next
+person to see `fib` move does not go looking for a miscompilation. The
+attribution was checked flag by flag on one machine: `--nsw` alone is neutral
+on `fib` (439 ms against 436), which is what a recursive function with no
+induction variable should show.
+
+**`nbody` is a real difference and a small one**: 1,296 instructions against
+1,497, and about 2.6 % slower. Fewer instructions and more time is the
+signature of an inlining or scheduling trade rather than of lost work, and at
+that size it is not worth an investigation on its own — but it is the one row
+where the defaults changed the generated code and did not pay, so it is named
+rather than averaged away.
+
 ---
 
 ## 4. Two string slices, not one compromise
