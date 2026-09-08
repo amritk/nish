@@ -24,10 +24,10 @@ construct still enters the language (and `src/`) before it enters `self/`, and
 
 | | Deliverable | State |
 | --- | --- | --- |
-| S1 | `self/lexer.ts` tokenises AmritScript-0 | **done** — `tests/lexer_oracle.js`, 482/482 files |
-| S2 | `self/parser.ts` builds the tree | **done** — `tests/parser_oracle.js`, 447/447 files |
-| S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js`, 272/272 whole programs; `reject_oracle.js`, 194/194 cases |
-| S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 280/280 programs byte for byte |
+| S1 | `self/lexer.ts` tokenises AmritScript-0 | **done** — `tests/lexer_oracle.js`, 565/565 files |
+| S2 | `self/parser.ts` builds the tree | **done** — `tests/parser_oracle.js`, 528/528 files |
+| S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js`, 279/279 whole programs; `reject_oracle.js`, 194/194 cases |
+| S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 289/289 programs byte for byte, and `interop_oracle.js`, 52 sidecars |
 | S5 | `self/` compiles `self/` | **done** — `tests/self/bootstrap.js`: `IR(stage1) == IR(stage2)`, stage3 == stage2 |
 
 ## Building it for use

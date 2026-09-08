@@ -283,7 +283,9 @@ compiler compiles itself.
 ### The bootstrap, and what it says
 
 `tests/self/bootstrap.js` runs the stages and compares them. All three
-equalities hold over the whole of `self/` — 41 modules, 4,095,128 bytes of IR:
+equalities hold over the whole of `self/` — 51 modules, 5,963,202 bytes of IR
+(41 modules and 4,095,128 bytes when S5 first closed; the port has since taken
+on DWARF and the interop sidecars):
 
 ```
 IR(stage0, self/) == IR(stage1, self/)     the two implementations agree
@@ -685,7 +687,8 @@ a second one. It is a word-boundary test now.
 All three came out of the same one-off experiment, which is worth recording
 because the suite does not run it: the oracle's own corpus compiled by both
 compilers with `-g` **forced on every file**, rather than only on the two cases
-whose `.args` ask for it. That is 278 programs and `self/` itself, and it is
+whose `.args` ask for it. That is 278 programs — the corpus as it stood that
+day — and `self/` itself, and it is
 what turned "the two `-g` goldens match" into "the two compilers agree about
 DWARF". The suite compares the two cases that ask for `-g`, because forcing the
 flag over the whole corpus would double the oracle's four minutes for a
@@ -817,7 +820,7 @@ detail of the seed — the opposite of what §1 means by the two being the same
 compiler. `self/dump_ast.ts` keeps the shape its own oracle compares.
 `--emit-checked` is the other way about, and that is why it *is* stage1's: the
 dump is the compiler's own tables, and `tests/self/checked_oracle.js` already
-proves stage1 writes them byte for byte as stage0 does over 274 whole
+proves stage1 writes them byte for byte as stage0 does over 279 whole
 programs.
 
 What the wrapper is not is a second implementation of the driver. It plans no
