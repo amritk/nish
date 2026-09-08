@@ -52,6 +52,7 @@
  */
 import ts from "typescript";
 import { CheckedProgram } from "../../checker";
+import { ELEMENT_ASSIGNMENT_OPERATORS } from "../../checker/arrays";
 import {
   ARRAY_STRUCT,
   STRING,
@@ -64,6 +65,7 @@ import {
 } from "../../types";
 import { ARRAY_TYPE } from "../runtime";
 import { emitIntBinary } from "./arithmetic";
+import { emitBitwiseCombine, isBitwiseCompoundOperator } from "./bitwise";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, StatementEmitter } from "./context";
 import { FactCollector, factCollectors, methodCallEmitters, newEmitters, propertyEmitters } from "./members";
 
@@ -288,24 +290,32 @@ const emitElementAssignment: BinaryEmitter = (ctx, expr) => {
     );
     return value;
   }
+  // The array and the index were evaluated once, above; the check and the GEP
+  // are done once here, and the load and the store share the address. That is
+  // what keeps `xs[next()] |= 1` to one call and one bounds check.
   emitBoundsCheck(ctx, arr, idx);
   const slot = elementPointer(ctx, arr, elem, idx);
   const old = ctx.fn.emitValue(`load ${ty}, ${ty}* ${slot}${ctx.alignSuffix(elem)}`);
-  const rhs = ctx.emitExpression(expr.right);
-  const [intOp, floatOp] = COMPOUND_OPCODES[op]!;
-  const value = isFloat(elem)
-    ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`)
-    : emitIntBinary(ctx, intOp, elem, old, rhs);
+  let value: string;
+  if (isBitwiseCompoundOperator(op)) {
+    value = emitBitwiseCombine(ctx, op, elem, old, expr.right);
+  } else {
+    const rhs = ctx.emitExpression(expr.right);
+    const [intOp, floatOp] = COMPOUND_OPCODES[op]!;
+    value = isFloat(elem)
+      ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`)
+      : emitIntBinary(ctx, intOp, elem, old, rhs);
+  }
   ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${ctx.alignSuffix(elem)}`);
   return value;
 };
 
 /** Wrap the `=` / `op=` emitters already in `table`; element targets come here, the rest go to the previous handler. */
 export function installArrayAssignmentEmitters(table: EmitterTable<BinaryEmitter>): void {
-  for (const op of [ts.SyntaxKind.EqualsToken, ...Object.keys(COMPOUND_OPCODES).map(Number)]) {
-    const previous = table[op as ts.SyntaxKind];
+  for (const op of ELEMENT_ASSIGNMENT_OPERATORS) {
+    const previous = table[op];
     if (!previous) continue;
-    table[op as ts.SyntaxKind] = (ctx, expr) =>
+    table[op] = (ctx, expr) =>
       ts.isElementAccessExpression(unwrapParens(expr.left))
         ? emitElementAssignment(ctx, expr)
         : previous(ctx, expr);
@@ -625,9 +635,9 @@ export function isJoinCall(program: CheckedProgram, node: ts.Node): boolean {
 
 function isElementAssignment(node: ts.Node): node is ts.BinaryExpression {
   return (
-    ((ts.isBinaryExpression(node) && COMPOUND_OPCODES[node.operatorToken.kind] !== undefined) ||
-      (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken)) &&
-    ts.isElementAccessExpression(unwrapParens((node as ts.BinaryExpression).left))
+    ts.isBinaryExpression(node) &&
+    ELEMENT_ASSIGNMENT_OPERATORS.includes(node.operatorToken.kind) &&
+    ts.isElementAccessExpression(unwrapParens(node.left))
   );
 }
 

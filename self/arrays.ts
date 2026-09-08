@@ -5,7 +5,7 @@
 import { resolveType, typedArrayElement } from "./annotations";
 import { checkBuiltinArity, isArgvExpression } from "./builtins";
 import { CheckContext } from "./context";
-import { checkExpression } from "./expressions";
+import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound } from "./expressions";
 import { Node } from "./nodes";
 import { Scope } from "./symbols";
 import { isNumeric, T_ERROR, T_STRING, T_VOID } from "./types";
@@ -93,6 +93,11 @@ export function checkIndexAssignment(ctx: CheckContext, expr: Node, scope: Scope
       return ctx.errorType(value, `Cannot assign ${ctx.table.typeName(rhs)} to an element of ${spelled}`);
     }
     return elem;
+  }
+  // `a[i] &= v` and the rest of the bitwise family: the element is the target,
+  // so the operand rule is `&`'s and the words are a local's.
+  if (isBitwiseCompound(op)) {
+    return checkBitwiseAssignOperands(ctx, expr, elem, rhs);
   }
   if (!isNumeric(elem) || rhs !== elem) {
     const a = ctx.table.typeName(elem);

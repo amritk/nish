@@ -23,7 +23,14 @@ import { ownFields } from "./attributes";
 import { Emitter } from "./emit";
 import { emitPackedResult, emitResultReturningCall, resultTypeDecl } from "./emit_result";
 import { emitArrayLength, emitArrayMethodCall, emitNewArray } from "./emit_arrays";
-import { compoundFloatOpcode, compoundIntegerOpcode, emitIntBinary, floatText } from "./emit_ops";
+import {
+  compoundFloatOpcode,
+  compoundIntegerOpcode,
+  emitBitwiseCombine,
+  emitIntBinary,
+  floatText,
+  isBitwiseAssignment,
+} from "./emit_ops";
 import { parseIntegerLiteral } from "./constants";
 import { emitStringLength, emitStringMethodCall } from "./emit_strings";
 import { intrinsicType } from "./emit_util";
@@ -351,13 +358,20 @@ export function emitFieldAssignment(emitter: Emitter, expr: Node): string {
     storeField(emitter, info, receiver, field, value);
     return value;
   }
+  // One GEP for both halves of the read-modify-write, so `p.f op= e` addresses
+  // the field once however the receiver was spelled.
   const ptr = structFieldPointer(emitter, info, receiver, field);
   const ty = emitter.llvm(field.type);
   const old = emitter.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}`);
-  const rhs = emitter.emitExpression(expr.children[1]);
-  const value = isFloat(field.type)
-    ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text)} ${ty} ${old}, ${rhs}`)
-    : emitIntBinary(emitter, compoundIntegerOpcode(expr.text), field.type, old, rhs);
+  let value = "";
+  if (isBitwiseAssignment(expr.text)) {
+    value = emitBitwiseCombine(emitter, expr.text, field.type, old, expr.children[1]);
+  } else {
+    const rhs = emitter.emitExpression(expr.children[1]);
+    value = isFloat(field.type)
+      ? emitter.fn.emitValue(`${compoundFloatOpcode(expr.text)} ${ty} ${old}, ${rhs}`)
+      : emitIntBinary(emitter, compoundIntegerOpcode(expr.text), field.type, old, rhs);
+  }
   emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}`);
   return value;
 }

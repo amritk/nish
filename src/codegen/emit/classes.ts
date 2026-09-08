@@ -54,6 +54,7 @@ import { CheckedProgram, FieldInfo, FunctionSig, ImportBinding, StructInfo } fro
 import { effectiveConstructor, explicitSuperCall, intrinsicType, isAssignmentOperator, ownFields } from "../../checker/classes";
 import { ResultType, StaticType, isFloat, llvmAbiType, llvmType, resultByValue } from "../../types";
 import { emitIntBinary } from "./arithmetic";
+import { emitBitwiseCombine, isBitwiseCompoundOperator } from "./bitwise";
 import { emitPackedResult, emitResultReturningCall, resultTypeDecl } from "./result";
 import { floatConstant } from "./builtins";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
@@ -285,6 +286,20 @@ const COMPOUND_OPCODES: Partial<Record<ts.SyntaxKind, [string, string]>> = {
   [ts.SyntaxKind.PercentEqualsToken]: ["srem", "frem"],
 };
 
+/** `+= -= *= /= %=` once `old` is loaded and the right operand is evaluated. */
+const emitArithmeticCombine = (
+  ctx: EmitContext,
+  op: ts.SyntaxKind,
+  type: StaticType,
+  old: string,
+  rhs: string
+): string => {
+  const [intOp, floatOp] = COMPOUND_OPCODES[op]!;
+  return isFloat(type)
+    ? ctx.fn.emitValue(`${floatOp} ${llvmType(type)} ${old}, ${rhs}`)
+    : emitIntBinary(ctx, intOp, type, old, rhs);
+};
+
 /** `recv.f = v` stores `v`; `recv.f op= v` reads the field first, as JS does. */
 const emitFieldAssignment: BinaryEmitter = (ctx, expr) => {
   const target = expr.left as ts.PropertyAccessExpression;
@@ -296,15 +311,15 @@ const emitFieldAssignment: BinaryEmitter = (ctx, expr) => {
     storeField(ctx, info, receiver, field, value);
     return value;
   }
+  // One GEP for both halves of the read-modify-write, so `p.f op= e` addresses
+  // the field once however the receiver was spelled.
   const ptr = fieldPointer(ctx, info, receiver, field);
   const ty = llvmType(field.type);
+  const op = expr.operatorToken.kind;
   const old = ctx.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${ctx.alignSuffix(field.type)}`);
-  const rhs = ctx.emitExpression(expr.right);
-  const [intOp, floatOp] = COMPOUND_OPCODES[expr.operatorToken.kind]!;
-  const value =
-    isFloat(field.type)
-      ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`)
-      : emitIntBinary(ctx, intOp, field.type, old, rhs);
+  const value = isBitwiseCompoundOperator(op)
+    ? emitBitwiseCombine(ctx, op, field.type, old, expr.right)
+    : emitArithmeticCombine(ctx, op, field.type, old, ctx.emitExpression(expr.right));
   ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${ctx.alignSuffix(field.type)}`);
   return value;
 };

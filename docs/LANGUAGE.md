@@ -788,16 +788,21 @@ class Point {
   `tests/cases/reject_cls_this_outside`) and may be aliased or passed on
   (`const self = this` *(CLI only)*; `tests/cases/cls_this_method_call`).
   Methods may call each other and free functions, recursively.
-- **Field access**: `p.x` reads, `p.x = v` and `p.x op= v` write
-  (`tests/cases/cls_field_write`, `cls_compound_field`); `++`/`--` on
-  fields is not supported (`Only simple variables can be assigned`).
+- **Field access**: `p.x` reads, `p.x = v` and `p.x op= v` write, for the
+  arithmetic and the bitwise compound operators alike
+  (`tests/cases/cls_field_write`, `cls_compound_field`,
+  `cls_field_bitwise_assign`); `++`/`--` on fields is not supported
+  (`Only simple variables can be assigned`).
   Unknown fields: `` Unknown field `z` on class `Point` ``
   (`tests/cases/reject_cls_unknown_field`, `reject_cls_assign_unknown_field`).
 - **`readonly`** fields may be assigned only as `this.f = v` in their own
   class's constructor (`tests/cases/cls_readonly_ok`;
   `` Cannot assign to readonly field `value` of `Id` outside its constructor ``,
-  `reject_cls_readonly_write`). `public`, `private`, `protected` are
-  accepted and ignored.
+  `reject_cls_readonly_write`). A compound assignment is a write like any
+  other, so `this.f |= bit` is refused too, in the declaring class's own
+  constructor as much as anywhere else
+  (`reject_cls_field_bitwise_readonly`). `public`, `private`, `protected`
+  are accepted and ignored.
 - **Equality**: `===` / `!==` on two values of the same class compare
   identity (pointer equality) (`tests/cases/cls_this_method_call`, `Account.same`);
   `<` and friends are rejected (`tests/cases/reject_cls_ordering`). Both
@@ -1109,7 +1114,7 @@ under [Semantics decisions](#semantics-decisions).
 | `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch` |
 | `x = e` | mutable local, field, or element; `e` of the target's type | the target's type | `store` | `locals`, `cls_field_write`, `arr_index_read_write` |
 | `x op= e` (`+= -= *= /= %=`) | numeric mutable local, numeric field, or numeric element; same type | the target's type | load, op, store | `cf_compound_assign`, `cls_compound_field`, `arr_index_read_write`; `reject_cf_compound_const` |
-| `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask | `bit_compound`; a field or element target is not supported yet (`reject_cls_field_bitwise_assign`, `reject_arr_element_bitwise_assign`) |
+| `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local, field, or element of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask; a field is addressed by one GEP and an element bounds-checked once, so the target expression is evaluated exactly once | `bit_compound`, `cls_field_bitwise_assign`, `arr_element_bitwise_assign`; `reject_cls_field_bitwise_readonly`, `reject_arr_element_bitwise_f64`; `tests/differential/corpus/bit_compound_target` |
 | `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec` |
 | `,` | – | – | forbidden | `reject_comma_expression` |
 | `?? ?. in instanceof typeof delete void` | – | – | forbidden by the validator | `reject_nullish`, `reject_optional_chain`, `reject_in_operator`, `reject_instanceof`, `reject_typeof_operator`, `reject_delete`, `reject_void_expression` |
@@ -1540,6 +1545,9 @@ compiler's own marks are never invalidated by user resets.
   `a`, `i`, `v`, then checks and stores; `a[i] op= v` evaluates `a`, `i`,
   checks, loads, evaluates `v`, stores (`tests/cases/arr_index_read_write`);
   `p.f op= v` reads the field before `v` (`tests/cases/cls_compound_field`);
+  the target expression is evaluated **once** whichever `op=` it is, so
+  `a[next()] |= 1` calls `next()` a single time and pays for a single bounds
+  check (`tests/cases/arr_element_bitwise_assign`);
   array literal elements are evaluated before the allocation
   (`tests/cases/arr_literal`); `push`'s argument is evaluated before the
   length is read (`tests/cases/arr_push`).
@@ -1766,7 +1774,7 @@ messages are exact for the cases cited; other rows quote
 | wrong arity | `` `f` expects 1 argument(s), got 2 `` | `reject_arity` |
 | mixed operand types | `` Operator `+` requires two operands of the same numeric type, got i32 and boolean `` | `reject_type_mismatch`, `reject_i64_mixed` |
 | string `+` number | `` ... got string and i32 (no implicit string conversion; use a template literal) `` | `reject_str_plus_number` |
-| bitwise operator on a non-integer | `` Operator `&` requires two operands of the same integer type, got f64 and f64 `` (with `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) `` appended in that mode) / `` Operator `~` requires an integer operand, got f64 `` | `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not` |
+| bitwise operator on a non-integer | `` Operator `&` requires two operands of the same integer type, got f64 and f64 `` (with `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) `` appended in that mode) / `` Operator `~` requires an integer operand, got f64 ``; a compound form names itself, `` Operator `&=` requires two operands of the same integer type, got f64 and f64 ``, for a local, a field and an element alike | `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not`, `reject_arr_element_bitwise_f64` |
 | bitwise operator on booleans | `` Operator `&` is not available on boolean (use `&&`) `` (`\|` names `\|\|`, `^` names `!==`, `~` names `!`) | `reject_bit_boolean` |
 | ordering on booleans / strings / structs | `` Operator `<` requires two numeric operands, got string and i32 `` | `reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |
 | `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned` |
