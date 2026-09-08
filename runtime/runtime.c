@@ -12,101 +12,101 @@
 
 #ifdef __wasi__
 /* No pids on WASI: clock nanoseconds salt the RNG seed instead. */
-static int sts_wasi_salt(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_nsec; }
-#define getpid sts_wasi_salt
+static int amrit_wasi_salt(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_nsec; }
+#define getpid amrit_wasi_salt
 /* wasi-libc's `_start` calls `__main_argc_argv` (clang's name for a C `main`); the IR entry is
  * `main`. Weak, so a reactor build without an entry links. */
-__attribute__((weak)) int sts_c_main(int, char **) __asm__("main");
-int __main_argc_argv(int argc, char **argv) { return sts_c_main(argc, argv); }
+__attribute__((weak)) int amrit_c_main(int, char **) __asm__("main");
+int __main_argc_argv(int argc, char **argv) { return amrit_c_main(argc, argv); }
 #endif
 
-#define STS_COLD __attribute__((noreturn, cold, noinline))
+#define AMRIT_COLD __attribute__((noreturn, cold, noinline))
 
-/* ---- Arena: %struct.sts_arena = type { i8*, i64, i64, i8* } */
-typedef struct sts_chunk { struct sts_chunk *next; size_t cap; } sts_chunk;
-struct sts_arena { char *buf; size_t off; size_t cap; sts_chunk *chunks; };
-struct sts_arena sts_arena;
+/* ---- Arena: %struct.amrit_arena = type { i8*, i64, i64, i8* } */
+typedef struct amrit_chunk { struct amrit_chunk *next; size_t cap; } amrit_chunk;
+struct amrit_arena { char *buf; size_t off; size_t cap; amrit_chunk *chunks; };
+struct amrit_arena amrit_arena;
 
-static STS_COLD void sts_die(const char *msg) {
+static AMRIT_COLD void amrit_die(const char *msg) {
   (void)!write(2, msg, strlen(msg));
   _exit(1);
 }
-#define sts_oom() sts_die("amritc: out of memory\n")
+#define amrit_oom() amrit_die("amritc: out of memory\n")
 
 /* Slow path (size 8-byte rounded): push a chunk (>= 64 KB), bump from it. */
-void *sts_arena_grow(size_t size) {
+void *amrit_arena_grow(size_t size) {
   size_t cap = size > 65536 ? size : 65536;
-  sts_chunk *c = malloc(sizeof *c + cap);
-  if (!c) sts_oom();
-  c->next = sts_arena.chunks;
+  amrit_chunk *c = malloc(sizeof *c + cap);
+  if (!c) amrit_oom();
+  c->next = amrit_arena.chunks;
   c->cap = cap;
-  sts_arena.chunks = c;
-  sts_arena.buf = (char *)(c + 1);
-  sts_arena.off = size;
-  sts_arena.cap = cap;
-  return sts_arena.buf;
+  amrit_arena.chunks = c;
+  amrit_arena.buf = (char *)(c + 1);
+  amrit_arena.off = size;
+  amrit_arena.cap = cap;
+  return amrit_arena.buf;
 }
 
 /* Bump allocation, 8-byte rounded/aligned, uninitialised; the compiler inlines it. */
-void *sts_alloc_struct(size_t size) {
+void *amrit_alloc_struct(size_t size) {
   size = (size + 7) & ~(size_t)7;
-  if (sts_arena.off + size <= sts_arena.cap) {
-    void *p = sts_arena.buf + sts_arena.off;
-    sts_arena.off += size;
+  if (amrit_arena.off + size <= amrit_arena.cap) {
+    void *p = amrit_arena.buf + amrit_arena.off;
+    amrit_arena.off += size;
     return p;
   }
-  return sts_arena_grow(size);
+  return amrit_arena_grow(size);
 }
 
-static void sts_free_until(sts_chunk *c, const sts_chunk *end) {
-  while (c != end) { sts_chunk *n = c->next; free(c); c = n; }
+static void amrit_free_until(amrit_chunk *c, const amrit_chunk *end) {
+  while (c != end) { amrit_chunk *n = c->next; free(c); c = n; }
 }
 
 /* O(1) recycle: keep the newest chunk, free the rest. */
-void sts_reset_arena(void) {
-  sts_chunk *keep = sts_arena.chunks;
+void amrit_reset_arena(void) {
+  amrit_chunk *keep = amrit_arena.chunks;
   if (!keep) return;
-  sts_free_until(keep->next, 0);
+  amrit_free_until(keep->next, 0);
   keep->next = 0;
-  sts_arena.off = 0;
+  amrit_arena.off = 0;
 }
 
-void sts_free_arena(void) {
-  sts_free_until(sts_arena.chunks, 0);
-  memset(&sts_arena, 0, sizeof sts_arena);
+void amrit_free_arena(void) {
+  amrit_free_until(amrit_arena.chunks, 0);
+  memset(&amrit_arena, 0, sizeof amrit_arena);
 }
 
 /* ---- Scopes: mark = buf + off (0 while empty); release rewinds, freeing newer chunks. */
-uint64_t sts_arena_mark(void) {
-  return sts_arena.buf ? (uintptr_t)(sts_arena.buf + sts_arena.off) : 0;
+uint64_t amrit_arena_mark(void) {
+  return amrit_arena.buf ? (uintptr_t)(amrit_arena.buf + amrit_arena.off) : 0;
 }
-uint64_t sts_arena_used(void) { return sts_arena.off; }
+uint64_t amrit_arena_used(void) { return amrit_arena.off; }
 
-void sts_arena_release(uint64_t mark) {
-  sts_chunk *c = sts_arena.chunks;
-  if (!mark) { sts_reset_arena(); return; }
+void amrit_arena_release(uint64_t mark) {
+  amrit_chunk *c = amrit_arena.chunks;
+  if (!mark) { amrit_reset_arena(); return; }
   for (; c; c = c->next) {
     uintptr_t base = (uintptr_t)(c + 1);
     if (mark >= base && mark <= base + c->cap) break;
   }
   if (!c) return;
-  sts_free_until(sts_arena.chunks, c);
-  sts_arena = (struct sts_arena){ (char *)(c + 1), mark - (uintptr_t)(c + 1), c->cap, c };
+  amrit_free_until(amrit_arena.chunks, c);
+  amrit_arena = (struct amrit_arena){ (char *)(c + 1), mark - (uintptr_t)(c + 1), c->cap, c };
 }
 
 /* ---- Strings: { i64 len, bytes[len], '\0' }, immutable; 8 = the len header */
-typedef struct { uint64_t len; char data[]; } sts_str;
+typedef struct { uint64_t len; char data[]; } amrit_str;
 
-sts_str *sts_str_new(const char *bytes, uint64_t len) {
-  sts_str *s = sts_alloc_struct(8 + len + 1);
+amrit_str *amrit_str_new(const char *bytes, uint64_t len) {
+  amrit_str *s = amrit_alloc_struct(8 + len + 1);
   s->len = len;
   if (len) memcpy(s->data, bytes, len);
   s->data[len] = 0;
   return s;
 }
 
-sts_str *sts_str_concat(const sts_str *a, const sts_str *b) {
-  sts_str *s = sts_alloc_struct(8 + a->len + b->len + 1);
+amrit_str *amrit_str_concat(const amrit_str *a, const amrit_str *b) {
+  amrit_str *s = amrit_alloc_struct(8 + a->len + b->len + 1);
   s->len = a->len + b->len;
   memcpy(s->data, a->data, a->len);
   memcpy(s->data + a->len, b->data, b->len);
@@ -114,45 +114,45 @@ sts_str *sts_str_concat(const sts_str *a, const sts_str *b) {
   return s;
 }
 
-_Bool sts_str_eq(const sts_str *a, const sts_str *b) {
+_Bool amrit_str_eq(const amrit_str *a, const amrit_str *b) {
   return a == b || (a->len == b->len && memcmp(a->data, b->data, a->len) == 0);
 }
 
-uint64_t sts_str_len(const sts_str *s) { return s->len; }
+uint64_t amrit_str_len(const amrit_str *s) { return s->len; }
 
 /* `s.startsWith(sub)` is at 0, `s.endsWith(sub)` at len - sub->len, which is
    negative when `sub` is the longer string. */
-_Bool sts_str_at(const sts_str *s, int64_t at, const sts_str *sub) {
+_Bool amrit_str_at(const amrit_str *s, int64_t at, const amrit_str *sub) {
   return at >= 0 && (uint64_t)at + sub->len <= s->len && !memcmp(s->data + at, sub->data, sub->len);
 }
 /* `console.log` / `console.error` / `write` / `writeError` and the message of
    `panic`: fd 1 or 2, with or without the trailing newline. */
-void sts_write(const sts_str *s, int32_t fd, _Bool newline) {
+void amrit_write(const amrit_str *s, int32_t fd, _Bool newline) {
   (void)!write(fd, s->data, s->len);
   if (newline) (void)!write(fd, "\n", 1);
 }
 /* console.log(s) */
-void sts_print(const sts_str *s) { sts_write(s, 1, 1); }
+void amrit_print(const amrit_str *s) { amrit_write(s, 1, 1); }
 
 /* Decimal digits of `u`, with a '-' in front when `neg`. 20 digits is the
    widest a uint64_t can be, plus the sign. */
-static sts_str *str_from_digits(uint64_t u, int neg) {
+static amrit_str *str_from_digits(uint64_t u, int neg) {
   char tmp[21], *p = tmp + 21;
   do { *--p = '0' + u % 10; u /= 10; } while (u);
   if (neg) *--p = '-';
-  return sts_str_new(p, tmp + 21 - p);
+  return amrit_str_new(p, tmp + 21 - p);
 }
 
-sts_str *sts_str_from_i64(int64_t v) {
+amrit_str *amrit_str_from_i64(int64_t v) {
   return str_from_digits(v < 0 ? -(uint64_t)v : (uint64_t)v, v < 0);
 }
-sts_str *sts_str_from_i32(int32_t v) { return sts_str_from_i64(v); }
+amrit_str *amrit_str_from_i32(int32_t v) { return amrit_str_from_i64(v); }
 /* The one unsigned formatter (WP15): u8/u16/u32 are zero-extended by the
    caller, so 0xFFFFFFFF prints as 4294967295 rather than -1. */
-sts_str *sts_str_from_u64(uint64_t v) { return str_from_digits(v, 0); }
+amrit_str *amrit_str_from_u64(uint64_t v) { return str_from_digits(v, 0); }
 
 /* JS Number#toString: shortest round-trip digits, e-form outside (-6, 21] */
-sts_str *sts_str_from_f64(double v) {
+amrit_str *amrit_str_from_f64(double v) {
   char buf[32], out[32], *o = out;
   int k, n, i, e = 0;
   if (v != v) { memcpy(o, "NaN", 3); o += 3; }
@@ -172,33 +172,33 @@ sts_str *sts_str_from_f64(double v) {
       if (e) o += snprintf(o, 8, "e%+d", e);
     }
   }
-  return sts_str_new(out, o - out);
+  return amrit_str_new(out, o - out);
 }
 
 /* ---- Math.random: xorshift64*, seeded lazily from time and pid */
-static uint64_t sts_rng;
+static uint64_t amrit_rng;
 
-double sts_random(void) {
-  uint64_t x = sts_rng ? sts_rng : ((uint64_t)time(0) << 32) ^ getpid() ^ 0x9E3779B97F4A7C15ull;
+double amrit_random(void) {
+  uint64_t x = amrit_rng ? amrit_rng : ((uint64_t)time(0) << 32) ^ getpid() ^ 0x9E3779B97F4A7C15ull;
   x ^= x >> 12; x ^= x << 25; x ^= x >> 27;
-  sts_rng = x;
+  amrit_rng = x;
   return (double)((x * 0x2545F4914F6CDD1Dull) >> 11) * (1.0 / 9007199254740992.0);
 }
 
 /* ---- Process and files */
-void sts_exit(int32_t code) { exit(code); }
-static STS_COLD void sts_io_fail(const char *what, const sts_str *path) {
+void amrit_exit(int32_t code) { exit(code); }
+static AMRIT_COLD void amrit_io_fail(const char *what, const amrit_str *path) {
   dprintf(2, "amritc: cannot %s%.*s\n", what, (int)path->len, path->data);
   _exit(1);
 }
 
 /* `readFileSyncOrNull(path)`: null rather than a message, so a program can
    turn a missing file into its own diagnostic and carry on. */
-sts_str *sts_read_file_or_null(const sts_str *path) {
+amrit_str *amrit_read_file_or_null(const amrit_str *path) {
   int fd = open(path->data, O_RDONLY);
   off_t len = fd < 0 ? -1 : lseek(fd, 0, SEEK_END);
   if (len < 0) return 0;
-  sts_str *s = sts_alloc_struct(8 + len + 1);
+  amrit_str *s = amrit_alloc_struct(8 + len + 1);
   uint64_t got = 0;
   ssize_t n;
   while ((n = pread(fd, s->data + got, len - got, got)) > 0) got += n;
@@ -208,48 +208,48 @@ sts_str *sts_read_file_or_null(const sts_str *path) {
   return s;
 }
 
-sts_str *sts_read_file(const sts_str *path) {
-  sts_str *s = sts_read_file_or_null(path);
-  if (!s) sts_io_fail("read ", path);
+amrit_str *amrit_read_file(const amrit_str *path) {
+  amrit_str *s = amrit_read_file_or_null(path);
+  if (!s) amrit_io_fail("read ", path);
   return s;
 }
 
-static void sts_put_file(const sts_str *path, const sts_str *data, int flags) {
+static void amrit_put_file(const amrit_str *path, const amrit_str *data, int flags) {
   int fd = open(path->data, O_WRONLY | O_CREAT | flags, 0644);
-  if (fd < 0) sts_io_fail("write ", path);
+  if (fd < 0) amrit_io_fail("write ", path);
   for (uint64_t done = 0; done < data->len;) {
     ssize_t n = write(fd, data->data + done, data->len - done);
-    if (n <= 0) sts_io_fail("write ", path);
+    if (n <= 0) amrit_io_fail("write ", path);
     done += n;
   }
   close(fd);
 }
-void sts_write_file(const sts_str *path, const sts_str *data) { sts_put_file(path, data, O_TRUNC); }
-void sts_append_file(const sts_str *path, const sts_str *data) { sts_put_file(path, data, O_APPEND); }
+void amrit_write_file(const amrit_str *path, const amrit_str *data) { amrit_put_file(path, data, O_TRUNC); }
+void amrit_append_file(const amrit_str *path, const amrit_str *data) { amrit_put_file(path, data, O_APPEND); }
 
-/* ---- Arrays: %struct.sts_array = type { i64, i64, i8* }, cold paths */
-typedef struct sts_array { uint64_t len; uint64_t cap; char *data; } sts_array;
+/* ---- Arrays: %struct.amrit_array = type { i64, i64, i8* }, cold paths */
+typedef struct amrit_array { uint64_t len; uint64_t cap; char *data; } amrit_array;
 
 /* Host entry (WP8): `len` uninitialised elements, len == cap */
-sts_array *sts_alloc_array(uint64_t elem_size, uint64_t len) {
-  sts_array *a = sts_alloc_struct(sizeof *a);
-  *a = (sts_array){ len, len, sts_alloc_struct(len * elem_size) };
+amrit_array *amrit_alloc_array(uint64_t elem_size, uint64_t len) {
+  amrit_array *a = amrit_alloc_struct(sizeof *a);
+  *a = (amrit_array){ len, len, amrit_alloc_struct(len * elem_size) };
   return a;
 }
 
 /* process.argv: malloc, not the arena, so Arena.reset() cannot free it. Built once by @main. */
-sts_array *sts_argv;
+amrit_array *amrit_argv;
 
-void sts_argv_init(int32_t argc, char **argv) {
-  sts_array *a = malloc(sizeof *a + argc * sizeof(sts_str *));
-  sts_str **d = (sts_str **)(a + 1);
-  if (!a) sts_oom();
-  *a = (sts_array){ argc, argc, (char *)d };
-  sts_argv = a;
+void amrit_argv_init(int32_t argc, char **argv) {
+  amrit_array *a = malloc(sizeof *a + argc * sizeof(amrit_str *));
+  amrit_str **d = (amrit_str **)(a + 1);
+  if (!a) amrit_oom();
+  *a = (amrit_array){ argc, argc, (char *)d };
+  amrit_argv = a;
   while (argc-- > 0) {
     size_t len = strlen(*argv);
-    sts_str *s = malloc(8 + len + 1);
-    if (!s) sts_oom();
+    amrit_str *s = malloc(8 + len + 1);
+    if (!s) amrit_oom();
     s->len = len;
     strcpy(s->data, *argv++);
     *d++ = s;
@@ -259,37 +259,37 @@ void sts_argv_init(int32_t argc, char **argv) {
 /* ---- String to number: mode 0 parseFloat, 1 Number, 2 parseInt (contract: amritc.h). ASCII
  * whitespace only; strtod parses once the inf/nan spellings JS rejects are ruled out, and its `0x`
  * hex stays accepted (documented). */
-#define STS_SPACES " \t\n\v\f\r"
+#define AMRIT_SPACES " \t\n\v\f\r"
 
-double sts_parse_number(const sts_str *s, int32_t mode) {
+double amrit_parse_number(const amrit_str *s, int32_t mode) {
   const char *p, *q, *stop;
   char *end;
   double v;
   if (mode == 2) return strtoll(s->data, 0, 10);
-  p = s->data + strspn(s->data, STS_SPACES);
+  p = s->data + strspn(s->data, AMRIT_SPACES);
   q = p + (*p == '+' || *p == '-');
   stop = s->data + s->len;
   if (!((*q >= '0' && *q <= '9') || *q == '.' || strncmp(q, "Infinity", 8) == 0)) return mode && p == stop ? 0 : NAN;
   v = strtod(p, &end);
   if (end == p) return NAN; /* "." alone */
-  return mode && end + strspn(end, STS_SPACES) != stop ? NAN : v;
+  return mode && end + strspn(end, AMRIT_SPACES) != stop ? NAN : v;
 }
 
 /* push() when len == cap: double the capacity (4 from empty). */
-void sts_array_grow(sts_array *a, uint64_t elem_size) {
+void amrit_array_grow(amrit_array *a, uint64_t elem_size) {
   uint64_t cap = a->cap ? a->cap * 2 : 4;
-  char *data = sts_alloc_struct(cap * elem_size);
+  char *data = amrit_alloc_struct(cap * elem_size);
   if (a->len) memcpy(data, a->data, a->len * elem_size);
   a->data = data;
   a->cap = cap;
 }
 
-void sts_panic_index(uint64_t idx, uint64_t len) {
+void amrit_panic_index(uint64_t idx, uint64_t len) {
   dprintf(2, "index out of range: %" PRIu64 " >= %" PRIu64 "\n", idx, len);
   _exit(1);
 }
 
 /* ---- Checked division (Rust semantics): the failed-check path */
-void sts_panic_div(_Bool by_zero) {
-  sts_die(by_zero ? "attempt to divide by zero\n" : "attempt to divide with overflow\n");
+void amrit_panic_div(_Bool by_zero) {
+  amrit_die(by_zero ? "attempt to divide by zero\n" : "attempt to divide with overflow\n");
 }

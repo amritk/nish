@@ -108,8 +108,8 @@ a `{ kind: "result", ok, err, state }`.
 
 Each distinct pair gets one LLVM struct, named by a prefix-coded mangling of
 the two payload types (`src/types.ts`, `mangleType`): `Result<i32, string>` is
-`%struct.sts_result.i32.str`, `Result<i32, IoError>` is
-`%struct.sts_result.i32.$IoError`. Writing each constructor's tag before its
+`%struct.amrit_result.i32.str`, `Result<i32, IoError>` is
+`%struct.amrit_result.i32.$IoError`. Writing each constructor's tag before its
 operands makes the encoding unambiguous without separators of its own —
 `res.res.i32.str.str` can only be read one way — and the `$` on a named type
 cannot appear in a TypeScript identifier, so a class called `res` cannot

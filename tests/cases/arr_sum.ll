@@ -1,42 +1,42 @@
-%struct.sts_array = type { i64, i64, i8* }
-%struct.sts_arena = type { i8*, i64, i64, i8* }
+%struct.amrit_array = type { i64, i64, i8* }
+%struct.amrit_arena = type { i8*, i64, i64, i8* }
 
-@sts_arena = external global %struct.sts_arena, align 8
+@amrit_arena = external global %struct.amrit_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
-declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #1
-declare void @sts_free_arena() #2
-declare noundef i64 @sts_arena_mark() #2
-declare void @sts_arena_release(i64 noundef) #2
-declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #2
-declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #2
-declare void @sts_panic_index(i64 noundef, i64 noundef) #3
+declare noalias noundef nonnull align 8 i8* @amrit_arena_grow(i64 noundef) #1
+declare void @amrit_free_arena() #2
+declare noundef i64 @amrit_arena_mark() #2
+declare void @amrit_arena_release(i64 noundef) #2
+declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #2
+declare void @amrit_panic_index(i64 noundef, i64 noundef) #3
 
-define internal noalias noundef nonnull align 8 i8* @sts_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @amrit_alloc_struct(i64 noundef %size) #4 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
-  %off.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 1
+  %off.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 1
   %off = load i64, i64* %off.ptr, align 8
   %new.off = add i64 %off, %size.aligned
-  %cap.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 2
+  %cap.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
   %fits = icmp ule i64 %new.off, %cap
   br i1 %fits, label %fast, label %slow
 
 fast:
   store i64 %new.off, i64* %off.ptr, align 8
-  %buf.ptr = getelementptr inbounds %struct.sts_arena, %struct.sts_arena* @sts_arena, i64 0, i32 0
+  %buf.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 0
   %buf = load i8*, i8** %buf.ptr, align 8
   %obj = getelementptr inbounds i8, i8* %buf, i64 %off
   ret i8* %obj
 
 slow:
-  %grown = call i8* @sts_arena_grow(i64 %size.aligned)
+  %grown = call i8* @amrit_arena_grow(i64 %size.aligned)
   ret i8* %grown
 }
 
-define void @fill(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %n) #0 {
+define void @fill(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, i32 noundef %n) #0 {
 entry:
   %i.addr = alloca i32, align 4
   store i32 0, i32* %i.addr, align 4
@@ -51,17 +51,17 @@ for.body:
   %2 = load i32, i32* %i.addr, align 4
   %3 = sext i32 %2 to i64
   %4 = load i32, i32* %i.addr, align 4
-  %5 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %xs, i64 0, i32 0
+  %5 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
   %6 = load i64, i64* %5, align 8
   %7 = icmp ult i64 %3, %6
   br i1 %7, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @sts_panic_index(i64 %3, i64 %6)
+  call void @amrit_panic_index(i64 %3, i64 %6)
   unreachable
 
 bounds.ok:
-  %8 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %xs, i64 0, i32 2
+  %8 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
   %9 = load i8*, i8** %8, align 8
   %10 = bitcast i8* %9 to i32*
   %11 = getelementptr inbounds i32, i32* %10, i64 %3
@@ -78,7 +78,7 @@ for.end:
   ret void
 }
 
-define noundef i32 @sum(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i32 noundef %n) #0 {
+define noundef i32 @sum(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs, i32 noundef %n) #0 {
 entry:
   %total.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -95,17 +95,17 @@ for.body:
   %2 = load i32, i32* %total.addr, align 4
   %3 = load i32, i32* %i.addr, align 4
   %4 = sext i32 %3 to i64
-  %5 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %xs, i64 0, i32 0
+  %5 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
   %6 = load i64, i64* %5, align 8
   %7 = icmp ult i64 %4, %6
   br i1 %7, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @sts_panic_index(i64 %4, i64 %6)
+  call void @amrit_panic_index(i64 %4, i64 %6)
   unreachable
 
 bounds.ok:
-  %8 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %xs, i64 0, i32 2
+  %8 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
   %9 = load i8*, i8** %8, align 8
   %10 = bitcast i8* %9 to i32*
   %11 = getelementptr inbounds i32, i32* %10, i64 %4
@@ -125,42 +125,42 @@ for.end:
   ret i32 %16
 }
 
-define noundef i32 @sts_main() #0 {
+define noundef i32 @amrit_main() #0 {
 entry:
   %n.addr = alloca i32, align 4
-  %xs.addr = alloca %struct.sts_array*, align 8
-  %arena.mark = call i64 @sts_arena_mark()
+  %xs.addr = alloca %struct.amrit_array*, align 8
+  %arena.mark = call i64 @amrit_arena_mark()
   store i32 1000, i32* %n.addr, align 4
   %0 = load i32, i32* %n.addr, align 4
   %1 = sext i32 %0 to i64
-  %2 = call i8* @sts_alloc_struct(i64 24)
-  %3 = bitcast i8* %2 to %struct.sts_array*
-  %4 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %3, i64 0, i32 0
+  %2 = call i8* @amrit_alloc_struct(i64 24)
+  %3 = bitcast i8* %2 to %struct.amrit_array*
+  %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %3, i64 0, i32 0
   store i64 %1, i64* %4, align 8
-  %5 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %3, i64 0, i32 1
+  %5 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %3, i64 0, i32 1
   store i64 %1, i64* %5, align 8
   %6 = mul i64 %1, 4
-  %7 = call i8* @sts_alloc_struct(i64 %6)
+  %7 = call i8* @amrit_alloc_struct(i64 %6)
   call void @llvm.memset.p0i8.i64(i8* align 8 %7, i8 0, i64 %6, i1 false)
-  %8 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %3, i64 0, i32 2
+  %8 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %3, i64 0, i32 2
   store i8* %7, i8** %8, align 8
-  store %struct.sts_array* %3, %struct.sts_array** %xs.addr, align 8
-  %9 = load %struct.sts_array*, %struct.sts_array** %xs.addr, align 8
+  store %struct.amrit_array* %3, %struct.amrit_array** %xs.addr, align 8
+  %9 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
   %10 = load i32, i32* %n.addr, align 4
-  call void @fill(%struct.sts_array* %9, i32 %10)
-  %11 = load %struct.sts_array*, %struct.sts_array** %xs.addr, align 8
+  call void @fill(%struct.amrit_array* %9, i32 %10)
+  %11 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
   %12 = load i32, i32* %n.addr, align 4
-  %13 = call i32 @sum(%struct.sts_array* %11, i32 %12)
-  %14 = call i8* @sts_str_from_i32(i32 %13)
-  call void @sts_print(i8* %14)
-  call void @sts_arena_release(i64 %arena.mark)
+  %13 = call i32 @sum(%struct.amrit_array* %11, i32 %12)
+  %14 = call i8* @amrit_str_from_i32(i32 %13)
+  call void @amrit_print(i8* %14)
+  call void @amrit_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
-  %0 = call i32 @sts_main()
-  call void @sts_free_arena()
+  %0 = call i32 @amrit_main()
+  call void @amrit_free_arena()
   ret i32 %0
 }
 

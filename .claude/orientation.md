@@ -38,8 +38,9 @@ Read [`selfhost.md`](./selfhost.md) next if you are touching `self/`,
    they change together and `tests/run.js` fails when they disagree.
 5. **The name lives in two files.** `src/branding.ts` and `self/branding.ts`
    are the only source files that spell the project's name; every string the
-   compiler prints builds it from `LANGUAGE` / `CLI` there. `sts_` is ABI, not
-   branding, and never follows a rename.
+   compiler prints builds it from `LANGUAGE` / `CLI` there. The `amrit_` prefix
+   on the runtime's C symbols is ABI, not branding: it is frozen and a rename
+   does not follow it.
 6. **`docs/LANGUAGE.md` is normative.** The `docs/wp*.md` notes are historical;
    where they disagree, LANGUAGE.md wins.
 

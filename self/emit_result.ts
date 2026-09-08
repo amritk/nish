@@ -1,11 +1,11 @@
 // `Result<T, E>` lowering for stage1 (`src/codegen/emit/result.ts`, WP16),
 // checked by `self/result.ts`.
 //
-// Layout: `%struct.sts_result.<T>.<E> = type { i1, <T>, <E> }`, one
+// Layout: `%struct.amrit_result.<T>.<E> = type { i1, <T>, <E> }`, one
 // monomorphisation per pair of payload types, laid out and allocated exactly
 // as a class is. `Result<void, E>` has no `value` field at all.
 //
-//   Ok(v)            `call i8* @sts_alloc_struct(i64 <size>)`, a bitcast, then
+//   Ok(v)            `call i8* @amrit_alloc_struct(i64 <size>)`, a bitcast, then
 //                    the discriminant store and the payload store. When the
 //                    escape analysis proved the site does not outlive the
 //                    function it is an entry-block `alloca` and there is no
@@ -60,7 +60,7 @@ function resultTypeName(layout: ResultLayout): string {
   return `%struct.${layout.name}`;
 }
 
-/** `%struct.sts_result.i32.str = type { i1, i32, i8* }`. */
+/** `%struct.amrit_result.i32.str = type { i1, i32, i8* }`. */
 export function resultTypeDecl(table: TypeTable, type: i32): string {
   const layout = resultLayout(table, type);
   const parts: string[] = ["i1"];
@@ -132,7 +132,7 @@ function allocateResultIn(emitter: Emitter, layout: ResultLayout, stack: boolean
   if (stack) {
     return emitter.fn.emitAlloca(`${layout.name}.obj`, ty, 8);
   }
-  const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("sts_alloc_struct")}(i64 ${layout.size})`);
+  const raw = emitter.fn.emitValue(`call i8* ${emitter.useRuntime("amrit_alloc_struct")}(i64 ${layout.size})`);
   return emitter.fn.emitValue(`bitcast i8* ${raw} to ${ty}*`);
 }
 
@@ -423,7 +423,7 @@ function emitUnwrapOr(emitter: Emitter, expr: Node, receiver: i32): string {
 
 /**
  * `r.expect(message)`: the message on stderr and exit 1, the same ending
- * `panic(message)` and an out-of-range index have. `sts_exit` is `noreturn`,
+ * `panic(message)` and an out-of-range index have. `amrit_exit` is `noreturn`,
  * which is what makes the `unreachable` legal.
  */
 function emitExpect(emitter: Emitter, expr: Node, receiver: i32): string {
@@ -438,8 +438,8 @@ function emitExpect(emitter: Emitter, expr: Node, receiver: i32): string {
 
   emitter.fn.placeBlock(errBlock);
   const message = emitter.emitExpression(expr.children[1].children[0]);
-  emitter.fn.emit(`call void ${emitter.useRuntime("sts_write")}(i8* ${message}, i32 2, i1 true)`);
-  emitter.fn.emit(`call void ${emitter.useRuntime("sts_exit")}(i32 1)`);
+  emitter.fn.emit(`call void ${emitter.useRuntime("amrit_write")}(i8* ${message}, i32 2, i1 true)`);
+  emitter.fn.emit(`call void ${emitter.useRuntime("amrit_exit")}(i32 1)`);
   emitter.fn.emit("unreachable");
 
   emitter.fn.placeBlock(okBlock);

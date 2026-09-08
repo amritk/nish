@@ -14,7 +14,7 @@ A `string` is an `i8*` that points at a header:
 { i64 len, i8 data[len], i8 0 }     8-byte aligned, immutable
 ```
 
-`runtime/runtime.c` (`sts_str`) and every `sts_str_*` declaration in
+`runtime/runtime.c` (`amrit_str`) and every `amrit_str_*` declaration in
 `src/codegen/runtime.ts` expect the pointer to the *header*, never to the
 data. The trailing NUL keeps strings passable to C. Literals are module
 constants with this exact layout; strings built at run time come from the
@@ -24,8 +24,8 @@ copy is ever made.
 Attribute consequences (see `src/codegen/attributes.ts`): string parameters
 are `nonnull noalias readonly align 8`, plus `nocapture` when they are never
 returned and never passed to a *user* function (every runtime string
-function is declared `nocapture`, so passing a parameter to `sts_print` or
-`sts_str_concat` keeps the attribute).
+function is declared `nocapture`, so passing a parameter to `amrit_print` or
+`amrit_str_concat` keeps the attribute).
 
 ## Decisions
 
@@ -42,7 +42,7 @@ function is declared `nocapture`, so passing a parameter to `sts_print` or
 - **`console.log(x)` takes exactly one `string | number | boolean`**, has
   type `void`, and may only appear as an expression statement.
 - **Number formatting.** `number` holes and `console.log(number)` use
-  `sts_str_from_i32` / `sts_str_from_i64` (exact) or `sts_str_from_f64`,
+  `amrit_str_from_i32` / `amrit_str_from_i64` (exact) or `amrit_str_from_f64`,
   which since WP7 prints exactly what JavaScript's `String(x)` prints
   (shortest round-trip digits, `1e+21`, `1e-7`, `NaN`, `Infinity`; see
   `docs/wp7-runtime.md`).
@@ -134,12 +134,12 @@ function test(): number {
 @.str.1 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c"bar\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"!\00" }, align 8
 
-declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
-declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
 
 define noundef nonnull align 8 i8* @join(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #0 {
 entry:
-  %0 = call i8* @sts_str_concat(i8* %a, i8* %b)
+  %0 = call i8* @amrit_str_concat(i8* %a, i8* %b)
   ret i8* %0
 }
 
@@ -147,10 +147,10 @@ define noundef i32 @test() #0 {
 entry:
   %s.addr = alloca i8*, align 8
   %0 = call i8* @join(i8* bitcast ({ i64, [4 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [4 x i8] }* @.str.1 to i8*))
-  %1 = call i8* @sts_str_concat(i8* %0, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  %1 = call i8* @amrit_str_concat(i8* %0, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
   store i8* %1, i8** %s.addr, align 8
   %2 = load i8*, i8** %s.addr, align 8
-  call void @sts_print(i8* %2)
+  call void @amrit_print(i8* %2)
   ret i32 0
 }
 
@@ -158,7 +158,7 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 ```
 
-`sts_str_concat` allocates in the arena (effect `write`), so `join` is
+`amrit_str_concat` allocates in the arena (effect `write`), so `join` is
 neither `readnone` nor `readonly`. Its parameters keep `nocapture` because
 the runtime is declared `nocapture` and nothing else sees them.
 
@@ -170,17 +170,17 @@ function differ(a: string, b: string): boolean { return a !== b; }
 ```
 
 ```llvm
-declare zeroext i1 @sts_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare zeroext i1 @amrit_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 
 define noundef zeroext i1 @same(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #0 {
 entry:
-  %0 = call zeroext i1 @sts_str_eq(i8* %a, i8* %b)
+  %0 = call zeroext i1 @amrit_str_eq(i8* %a, i8* %b)
   ret i1 %0
 }
 
 define noundef zeroext i1 @differ(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #0 {
 entry:
-  %0 = call zeroext i1 @sts_str_eq(i8* %a, i8* %b)
+  %0 = call zeroext i1 @amrit_str_eq(i8* %a, i8* %b)
   %1 = xor i1 %0, true
   ret i1 %1
 }
@@ -189,7 +189,7 @@ attributes #0 = { nounwind willreturn readonly }
 attributes #2 = { nounwind willreturn memory(argmem: read) }
 ```
 
-Comparison is by content (`sts_str_eq` short-circuits on pointer equality).
+Comparison is by content (`amrit_str_eq` short-circuits on pointer equality).
 It only reads, so callers become `readonly`.
 
 ### `s.length`
@@ -232,18 +232,18 @@ function describe(n: number, ok: boolean, name: string): string {
 @.str.3 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 @.str.4 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"!\00" }, align 8
 
-declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
-declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #1
+declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #1
 
 define noundef nonnull align 8 i8* @describe(i32 noundef %n, i1 noundef zeroext %ok, i8* noundef nonnull noalias readonly align 8 nocapture %name) #0 {
 entry:
-  %0 = call i8* @sts_str_concat(i8* %name, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
-  %1 = call i8* @sts_str_from_i32(i32 %n)
-  %2 = call i8* @sts_str_concat(i8* %0, i8* %1)
-  %3 = call i8* @sts_str_concat(i8* %2, i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*))
+  %0 = call i8* @amrit_str_concat(i8* %name, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
+  %1 = call i8* @amrit_str_from_i32(i32 %n)
+  %2 = call i8* @amrit_str_concat(i8* %0, i8* %1)
+  %3 = call i8* @amrit_str_concat(i8* %2, i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*))
   %4 = select i1 %ok, i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*)
-  %5 = call i8* @sts_str_concat(i8* %3, i8* %4)
-  %6 = call i8* @sts_str_concat(i8* %5, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %5 = call i8* @amrit_str_concat(i8* %3, i8* %4)
+  %6 = call i8* @amrit_str_concat(i8* %5, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
   ret i8* %6
 }
 
@@ -252,9 +252,9 @@ attributes #1 = { nounwind }
 ```
 
 Constant parts are interned literals (empty parts are dropped), holes are
-converted to strings (`sts_str_from_i32` / `sts_str_from_f64`, `select` for
+converted to strings (`amrit_str_from_i32` / `amrit_str_from_f64`, `select` for
 booleans, identity for strings), and the parts are joined left to right with
-`sts_str_concat`. Chaining was chosen over an `sts_str_concat_n` runtime
+`amrit_str_concat`. Chaining was chosen over an `amrit_str_concat_n` runtime
 addition to keep `runtime.c` unchanged; each intermediate is a cheap arena
 bump, and templates with many holes are rare in hot loops.
 
@@ -279,21 +279,21 @@ function test(): number {
 @.str.1 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 
-declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #1
-declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #1
+declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #1
 
 define noundef i32 @test() #0 {
 entry:
-  call void @sts_print(i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
-  %0 = call i8* @sts_str_from_i32(i32 7)
-  call void @sts_print(i8* %0)
+  call void @amrit_print(i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
+  %0 = call i8* @amrit_str_from_i32(i32 7)
+  call void @amrit_print(i8* %0)
   %1 = select i1 false, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
-  call void @sts_print(i8* %1)
+  call void @amrit_print(i8* %1)
   ret i32 0
 }
 ```
 
-`sts_print` is one `write(2)` of the bytes plus one of `"\n"`; no stdio.
+`amrit_print` is one `write(2)` of the bytes plus one of `"\n"`; no stdio.
 
 Calls whose callee is a dotted name (`console.log`, later `Math.sqrt`) are
 dispatched through the `builtinCalls` table in `src/checker/strings.ts` and
@@ -321,11 +321,11 @@ fixpoint in `attributes.ts` sees them through `RUNTIME_BY_NAME`:
 | Construct | Facts |
 | --- | --- |
 | literal | none (`readnone` preserved) |
-| `a + b` | calls `sts_str_concat` (write) |
-| `a === b`, `a !== b` | calls `sts_str_eq` (read) |
+| `a + b` | calls `amrit_str_concat` (write) |
+| `a === b`, `a !== b` | calls `amrit_str_eq` (read) |
 | `s.length` | `readsMemory` (read) |
-| template | `sts_str_concat` when more than one part; `sts_str_from_i32/f64` per numeric hole |
-| `console.log(x)` | `sts_print` (write) plus the conversion for `x` |
+| template | `amrit_str_concat` when more than one part; `amrit_str_from_i32/f64` per numeric hole |
+| `console.log(x)` | `amrit_print` (write) plus the conversion for `x` |
 
 ## Runtime budget
 

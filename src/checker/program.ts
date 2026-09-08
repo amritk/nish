@@ -60,7 +60,7 @@ export interface StructInfo {
 export interface FunctionSig {
   /**
    * The LLVM symbol (`@name`). Equal to the declared identifier except for the
-   * entry module's `export function main`, which is emitted as `@sts_main` so
+   * entry module's `export function main`, which is emitted as `@amrit_main` so
    * the C-ABI wrapper can own `@main` (see `docs/wp5-modules.md`).
    */
   name: string;
@@ -136,7 +136,7 @@ export interface CheckedProgram {
   /**
    * Some function reads `process.argv` (WP7). On the entry module the
    * Compilation also sets it when any imported module does, so the `@main`
-   * wrapper calls `sts_argv_init` before the program runs.
+   * wrapper calls `amrit_argv_init` before the program runs.
    */
   usesArgv?: boolean;
   /** Expression node -> resolved StaticType. */

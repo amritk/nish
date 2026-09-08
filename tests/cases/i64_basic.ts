@@ -1,5 +1,5 @@
 // i64: a 64-bit multiply whose result overflows i32, printed through console.log
-// (sts_str_from_i64) and a template literal. Literals take the i64 type from
+// (amrit_str_from_i64) and a template literal. Literals take the i64 type from
 // context: the annotated initializer, the parameter, and the other operand.
 function square(x: i64): i64 {
   return x * x;

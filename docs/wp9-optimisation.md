@@ -102,7 +102,7 @@ safe choice; `--nsw` is for code that carries its own overflow argument.
 
 ### `dereferenceable(24)` on array parameters and returns
 
-Every `%struct.sts_array*` parameter and return value now carries
+Every `%struct.amrit_array*` parameter and return value now carries
 `dereferenceable(24)`, the size of the `{ i64 len, i64 cap, i8* data }`
 header. The guarantee is structural: an array value only ever comes from a
 literal, `new Array<T>(n)`, or a function that returned one of those, and all
@@ -157,8 +157,8 @@ contains **34 `load double` / `store double`** where the C version has
 **none**: C keeps all twelve fields in registers for 5e7 iterations.
 
 Why: the four objects come from the inline arena allocator, so each one is
-`buf + offset` where `buf` and `offset` are reloaded from `@sts_arena` after
-a possible call to `sts_arena_grow`. To LLVM they are four pointers of unknown
+`buf + offset` where `buf` and `offset` are reloaded from `@amrit_arena` after
+a possible call to `amrit_arena_grow`. To LLVM they are four pointers of unknown
 provenance that may alias each other, so every store to `v.x` forces `p.x`,
 `g.x` and `kick.x` to be reloaded before their next use. In C the four
 `malloc` results are `noalias`; in Rust the four `Box`es are.
@@ -167,7 +167,7 @@ provenance that may alias each other, so every store to `v.x` forces `p.x`,
 | --- | ---: | --- |
 | baseline | 757 ms | |
 | `--strict-exports` | 747 ms | inlining is not the problem |
-| replace the four `sts_alloc_struct` calls in `main` with `alloca i8, i64 24` | **349 ms** | what WP6's escape analysis will emit: none of the four objects escapes `main` |
+| replace the four `amrit_alloc_struct` calls in `main` with `alloca i8, i64 24` | **349 ms** | what WP6's escape analysis will emit: none of the four objects escapes `main` |
 | make the allocator `noinline` (its `noalias` return then survives) | **356 ms** | distinct provenance is all LLVM needs |
 | C `-O3` | 334 ms | |
 
@@ -227,8 +227,8 @@ and the run is dominated by page faults (about two thirds of it is system
 time), whereas `malloc`/`free` recycles a few hot pages that stay in cache.
 
 Proposed fix (WP6, in scope): arena scopes. `join` is the textbook case:
-`sts_arena_mark()` before the recursion into a sub-range, copy the result
-out, `sts_arena_release(mark)` after, and the working set drops to roughly
+`amrit_arena_mark()` before the recursion into a sub-range, copy the result
+out, `amrit_arena_release(mark)` after, and the working set drops to roughly
 twice the final string. A cheaper follow-up in the runtime: reuse chunks that
 a release or reset has emptied before calling `malloc` for a new one, so the
 steady state stops touching new pages at all. Neither changes the emitted
@@ -330,14 +330,14 @@ above the profile rows, so a pull request that grows the runtime shows it.
 Every step was measured and kept only when it paid (text at `-Oz` after each
 one, starting from 4,195):
 
-1. **One cold exit path.** `sts_die(msg)` is `noreturn, cold, noinline`; the
-   two panics that format a number or a path (`sts_panic_index`,
-   `sts_io_fail`) use one `dprintf(2, ...)` instead of hand-written digit
-   loops and four `write` calls, and `sts_panic_div` calls `sts_die` with the
-   literal it picked. 3,981 (-214). A variadic `sts_die(fmt, ...)` over
+1. **One cold exit path.** `amrit_die(msg)` is `noreturn, cold, noinline`; the
+   two panics that format a number or a path (`amrit_panic_index`,
+   `amrit_io_fail`) use one `dprintf(2, ...)` instead of hand-written digit
+   loops and four `write` calls, and `amrit_panic_div` calls `amrit_die` with the
+   literal it picked. 3,981 (-214). A variadic `amrit_die(fmt, ...)` over
    `vdprintf` was measured first and rejected: the x86-64 register save area
    of `va_start` costs more than it shares (4,072).
-2. **Number formatter.** `sts_str_from_f64` no longer copies the digits out
+2. **Number formatter.** `amrit_str_from_f64` no longer copies the digits out
    of the `%.*e` buffer: a `DIG(j)` macro indexes them in place, the digit
    count is the loop counter of the shortest-round-trip search, and the four
    JS layouts (integer with trailing zeros, decimal point inside, `0.000ddd`,
@@ -346,21 +346,21 @@ one, starting from 4,195):
    `String(x)` on 40,024 doubles (random bit patterns, decimal fractions,
    integers up to 1e21, every boundary in the test) with zero mismatches, on
    top of the 27 cases in `tests/runtime_test.c`. 3,738 (-243).
-3. **`sts_argv_init` with one `malloc`** for the header, the pointer table
+3. **`amrit_argv_init` with one `malloc`** for the header, the pointer table
    and every string: rejected, the second `strlen` pass costs more than the
    second out-of-memory check saved (3,775; a `strlen(strcpy())` variant of
    the original loop was 3,747, also worse than the original 3,738).
-4. **`sts_parse_number` letting `strtod` do the prefix work** and rejecting
+4. **`amrit_parse_number` letting `strtod` do the prefix work** and rejecting
    `inf`/`nan` afterwards: rejected, the `end - q` arithmetic and `memcmp`
    cost more than the range check they replaced (3,761).
-5. **One chunk-freeing loop.** `sts_reset_arena`, `sts_free_arena` and
-   `sts_arena_release` share `sts_free_until(c, end)`. 3,723 (-15).
-6. **`sts_put_file`** checks the descriptor before the write loop instead of
+5. **One chunk-freeing loop.** `amrit_reset_arena`, `amrit_free_arena` and
+   `amrit_arena_release` share `amrit_free_until(c, end)`. 3,723 (-15).
+6. **`amrit_put_file`** checks the descriptor before the write loop instead of
    inside it. 3,719 (-4). Two other shapes (one failure site through a
-   sentinel, `sts_io_fail` as a macro) were larger (3,732 and 3,755).
-7. **`sts_read_file`** accumulates the byte count in a local instead of
-   `s->len`. 3,714 (-5). Folding `sts_io_fail` into a three-argument
-   `sts_die(what, len, bytes)` to save its unwind entry was measured too:
+   sentinel, `amrit_io_fail` as a macro) were larger (3,732 and 3,755).
+7. **`amrit_read_file`** accumulates the byte count in a local instead of
+   `s->len`. 3,714 (-5). Folding `amrit_io_fail` into a three-argument
+   `amrit_die(what, len, bytes)` to save its unwind entry was measured too:
    the wider call sites cost more than the entry (3,723).
 
 The source pass changed no code generation (the object is byte-for-byte the
@@ -370,8 +370,8 @@ lost their casts, the three copies of the out-of-memory literal and of the
 `INFINITY` from `<math.h>` replace the builtins (same bit patterns), and the
 comments were cut to their contract content. Three source-only rewrites
 that did move code generation were reverted: a compound-literal store in
-`sts_arena_grow` (+6), and initialising `stop` or `p` in the declarations of
-`sts_parse_number`, which hoists work above the `mode == 2` early return
+`amrit_arena_grow` (+6), and initialising `stop` or `p` in the declarations of
+`amrit_parse_number`, which hoists work above the `mode == 2` early return
 (+4 / +7). The source target of 9,000 bytes is missed by 392: what is left is
 one comment per function stating its contract (the two `%struct` layout
 lines, the string layout, the scope semantics, the `malloc`-not-arena rule

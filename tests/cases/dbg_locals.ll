@@ -1,15 +1,15 @@
 %struct.Point = type { i32, i32 }
-%struct.sts_array = type { i64, i64, i8* }
+%struct.amrit_array = type { i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c": \00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"p\00" }, align 8
 
 declare void @llvm.dbg.value(metadata, metadata, metadata)
 declare void @llvm.dbg.declare(metadata, metadata, metadata)
-declare noundef i64 @sts_arena_mark() #0
-declare void @sts_arena_release(i64 noundef) #0
-declare noalias noundef nonnull align 8 i8* @sts_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
+declare noundef i64 @amrit_arena_mark() #0
+declare void @amrit_arena_release(i64 noundef) #0
+declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
 define void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 !dbg !12 {
 entry:
@@ -38,19 +38,19 @@ define noundef nonnull align 8 i8* @label(%struct.Point* noundef nonnull readonl
 entry:
   call void @llvm.dbg.value(metadata %struct.Point* %p, metadata !35, metadata !DIExpression()), !dbg !34
   call void @llvm.dbg.value(metadata i8* %name, metadata !36, metadata !DIExpression()), !dbg !34
-  %0 = call i8* @sts_str_concat(i8* %name, i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*)), !dbg !38
+  %0 = call i8* @amrit_str_concat(i8* %name, i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*)), !dbg !38
   %1 = call i32 @Point.sum(%struct.Point* %p), !dbg !40
-  %2 = call i8* @sts_str_from_i32(i32 %1), !dbg !38
-  %3 = call i8* @sts_str_concat(i8* %0, i8* %2), !dbg !38
+  %2 = call i8* @amrit_str_from_i32(i32 %1), !dbg !38
+  %3 = call i8* @amrit_str_concat(i8* %0, i8* %2), !dbg !38
   ret i8* %3, !dbg !37
 }
 
-define noundef i32 @total(%struct.sts_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %values) #1 !dbg !51 {
+define noundef i32 @total(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %values) #1 !dbg !51 {
 entry:
   %acc.addr = alloca i32, align 4
   %v.addr = alloca i32, align 4
   %forof.idx = alloca i64, align 8
-  call void @llvm.dbg.value(metadata %struct.sts_array* %values, metadata !53, metadata !DIExpression()), !dbg !52
+  call void @llvm.dbg.value(metadata %struct.amrit_array* %values, metadata !53, metadata !DIExpression()), !dbg !52
   store i32 0, i32* %acc.addr, align 4, !dbg !54
   call void @llvm.dbg.declare(metadata i32* %acc.addr, metadata !56, metadata !DIExpression()), !dbg !54
   call void @llvm.dbg.declare(metadata i32* %v.addr, metadata !58, metadata !DIExpression()), !dbg !57
@@ -59,13 +59,13 @@ entry:
 
 forof.cond:
   %0 = load i64, i64* %forof.idx, align 8, !dbg !57
-  %1 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %values, i64 0, i32 0, !dbg !57
+  %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %values, i64 0, i32 0, !dbg !57
   %2 = load i64, i64* %1, align 8, !dbg !57
   %3 = icmp ult i64 %0, %2, !dbg !57
   br i1 %3, label %forof.body, label %forof.end, !dbg !57
 
 forof.body:
-  %4 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %values, i64 0, i32 2, !dbg !57
+  %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %values, i64 0, i32 2, !dbg !57
   %5 = load i8*, i8** %4, align 8, !dbg !57
   %6 = bitcast i8* %5 to i32*, !dbg !57
   %7 = getelementptr inbounds i32, i32* %6, i64 %0, !dbg !57
@@ -97,9 +97,9 @@ entry:
   %ratio.addr = alloca double, align 8
   %s.addr = alloca i8*, align 8
   %t.addr = alloca i32, align 4
-  %arr.hdr = alloca %struct.sts_array, align 8
+  %arr.hdr = alloca %struct.amrit_array, align 8
   %arr.data = alloca [3 x i32], align 8
-  %arena.mark = call i64 @sts_arena_mark(), !dbg !68
+  %arena.mark = call i64 @amrit_arena_mark(), !dbg !68
   call void @Point.constructor(%struct.Point* %Point.obj, i32 3, i32 4), !dbg !70
   store %struct.Point* %Point.obj, %struct.Point** %p.addr, align 8, !dbg !69
   call void @llvm.dbg.declare(metadata %struct.Point** %p.addr, metadata !73, metadata !DIExpression()), !dbg !69
@@ -116,12 +116,12 @@ entry:
   %4 = call i8* @label(%struct.Point* %3, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*)), !dbg !87
   store i8* %4, i8** %s.addr, align 8, !dbg !86
   call void @llvm.dbg.declare(metadata i8** %s.addr, metadata !90, metadata !DIExpression()), !dbg !86
-  %5 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %arr.hdr, i64 0, i32 0, !dbg !93
+  %5 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0, !dbg !93
   store i64 3, i64* %5, align 8, !dbg !93
-  %6 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %arr.hdr, i64 0, i32 1, !dbg !93
+  %6 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1, !dbg !93
   store i64 3, i64* %6, align 8, !dbg !93
   %7 = bitcast [3 x i32]* %arr.data to i8*, !dbg !93
-  %8 = getelementptr inbounds %struct.sts_array, %struct.sts_array* %arr.hdr, i64 0, i32 2, !dbg !93
+  %8 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 2, !dbg !93
   store i8* %7, i8** %8, align 8, !dbg !93
   %9 = bitcast i8* %7 to i32*, !dbg !93
   %10 = getelementptr inbounds i32, i32* %9, i64 0, !dbg !93
@@ -130,7 +130,7 @@ entry:
   store i32 2, i32* %11, align 4, !dbg !93
   %12 = getelementptr inbounds i32, i32* %9, i64 2, !dbg !93
   store i32 3, i32* %12, align 4, !dbg !93
-  %13 = call i32 @total(%struct.sts_array* %arr.hdr), !dbg !92
+  %13 = call i32 @total(%struct.amrit_array* %arr.hdr), !dbg !92
   store i32 %13, i32* %t.addr, align 4, !dbg !91
   call void @llvm.dbg.declare(metadata i32* %t.addr, metadata !97, metadata !DIExpression()), !dbg !91
   %14 = load i1, i1* %ok.addr, align 1, !dbg !99
@@ -171,11 +171,11 @@ if.then:
   %28 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !109
   %29 = call i32 @Point.sum(%struct.Point* %28), !dbg !109
   %30 = add i32 %27, %29, !dbg !108
-  call void @sts_arena_release(i64 %arena.mark), !dbg !107
+  call void @amrit_arena_release(i64 %arena.mark), !dbg !107
   ret i32 %30, !dbg !107
 
 if.end:
-  call void @sts_arena_release(i64 %arena.mark), !dbg !110
+  call void @amrit_arena_release(i64 %arena.mark), !dbg !110
   ret i32 0, !dbg !110
 }
 

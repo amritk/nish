@@ -229,7 +229,7 @@ It is only an AmritScript program that cannot use it.
   emitters, `collect*Facts` for attribute fact collectors, `is*` for
   predicates, `*Sig` / `*Info` for the side-table records they name.
 - Basic blocks are named `kind.role` (`if.then`, `loop.cond`, `arr.oob`) so
-  an IR diff reads as prose. Runtime symbols are `sts_*` on both sides of
+  an IR diff reads as prose. Runtime symbols are `amrit_*` on both sides of
   the ABI.
 - In AmritScript programs, name the function after what it computes and the
   test case after the rule it proves (`cf_while_break`, `reject_null_field_access`).

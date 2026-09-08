@@ -4,13 +4,13 @@
  * The C ABI of a compiled function is the LLVM signature the emitter wrote:
  *   number   -> int32_t (i32 mode) or double (f64 mode)
  *   boolean  -> bool (i1, zero-extended in a register, as clang does)
- *   string   -> sts_str * (const-qualified as a parameter; see amritc.h)
- *   T[]      -> sts_array * (WP4 header; `const` when the function provably
+ *   string   -> amrit_str * (const-qualified as a parameter; see amritc.h)
+ *   T[]      -> amrit_array * (WP4 header; `const` when the function provably
  *               never stores through it, the same proof that gives the IR
  *               parameter `readonly`); the element type is in the comment
  *   void     -> void
- *   Result<T,E> -> the one-word `sts_result_<T>_<E>_word` when it is returned
- *               by value (WP17), otherwise `struct sts_result_<T>_<E> *`; both
+ *   Result<T,E> -> the one-word `amrit_result_<T>_<E>_word` when it is returned
+ *               by value (WP17), otherwise `struct amrit_result_<T>_<E> *`; both
  *               are defined below and the word carries a `sizeof` assertion
  * Parameters are passed by value, in order; there is no hidden context
  * argument, no return-slot pointer, no name mangling. A `.ll` module and a C
@@ -36,10 +36,10 @@ import {
   tsSignature,
 } from "./abi";
 
-/** ` -- xs: double elements, returns int32_t elements`: what an `sts_array` holds, per array in the signature. */
+/** ` -- xs: double elements, returns int32_t elements`: what an `amrit_array` holds, per array in the signature. */
 function elementNotes(fn: ExternalFunction): string {
   const elem = (t: StaticType): string | undefined =>
-    kindOf(t) === "array" ? (cType((t as { elem: StaticType }).elem, "return") ?? "sts_array *") : undefined;
+    kindOf(t) === "array" ? (cType((t as { elem: StaticType }).elem, "return") ?? "amrit_array *") : undefined;
   const notes: string[] = [];
   for (const p of fn.sig.params) {
     const e = elem(p.type);
@@ -113,11 +113,11 @@ export function generateHeader(compilation: Compilation, outFile: string): strin
     " *",
     ` * C ABI of the ${LANGUAGE} modules listed below. Link the .ll module(s) and`,
     ` * runtime/runtime.c next to your C code; include runtime/${RUNTIME_HEADER}'s`,
-    " * directory with -I. Strings (sts_str) and arrays (sts_array, { len, cap,",
+    " * directory with -I. Strings (amrit_str) and arrays (amrit_array, { len, cap,",
     " * data }) live in the arena: a returned value is valid until",
-    " * sts_reset_arena() / sts_arena_release(). A `const sts_array *` parameter",
-    " * is only read; an `sts_array *` one is written through. To pass your own",
-    " * buffer build a header on the stack: sts_array a = { n, n, (char *)buf }. */",
+    " * amrit_reset_arena() / amrit_arena_release(). A `const amrit_array *` parameter",
+    " * is only read; an `amrit_array *` one is written through. To pass your own",
+    " * buffer build a header on the stack: amrit_array a = { n, n, (char *)buf }. */",
     `#ifndef ${guard}`,
     `#define ${guard}`,
     "",

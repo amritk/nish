@@ -1,7 +1,7 @@
 /* C twin of tests/layout/structs.ts.
  *
  * 1. The _Static_asserts pin each struct's size to what the compiler computes
- *    (tests/run.js cross-checks them against `sts_alloc_struct(i64 N)` in the
+ *    (tests/run.js cross-checks them against `amrit_alloc_struct(i64 N)` in the
  *    IR), so both agree with clang's layout of the same fields.
  * 2. main() fills every struct through the C definition and reads each field
  *    back through the AmritScript getters, so every field offset is verified at
@@ -12,7 +12,7 @@
 #include <stdio.h>
 
 /* AmritScript strings are `{ uint64_t len; char data[]; }`; getters return the pointer. */
-typedef const void *sts_string;
+typedef const void *amrit_string;
 static const struct { uint64_t len; char data[4]; } str_abc = { 3, "abc" };
 static const struct { uint64_t len; char data[6]; } str_hello = { 5, "hello" };
 
@@ -21,16 +21,16 @@ struct B { int32_t a; double b; };
 struct C { double a; int32_t b; };
 struct D { bool a; int32_t b; bool c; };
 struct E { bool a; bool b; bool c; };
-struct F { sts_string a; int32_t b; };
-struct G { int32_t a; sts_string b; bool c; double d; };
+struct F { amrit_string a; int32_t b; };
+struct G { int32_t a; amrit_string b; bool c; double d; };
 struct H { bool a; struct A *b; int32_t c; };
 struct I { int32_t a; int32_t b; int32_t c; bool d; };
-struct J { bool a; double b; bool c; int32_t d; bool e; sts_string f; };
+struct J { bool a; double b; bool c; int32_t d; bool e; amrit_string f; };
 /* Derived classes (WP2b) list the base's fields first, flattened: no nested
  * struct, so L's own field lands in C's tail padding and sizeof(L) stays 16. */
 struct K { int32_t a; double b; bool c; };                /* extends B */
 struct L { double a; int32_t b; int32_t c; };             /* extends C */
-struct M { int32_t a; double b; bool c; sts_string d; };  /* extends K */
+struct M { int32_t a; double b; bool c; amrit_string d; };  /* extends K */
 /* WP15: the unsigned widths. `e` cannot share `a`'s slot, so it lands after
    `d` and the struct is 24 bytes, not 16. */
 struct N { uint8_t a; uint16_t b; uint32_t c; uint64_t d; uint8_t e; };
@@ -65,10 +65,10 @@ bool D_c(struct D *);
 bool E_a(struct E *);
 bool E_b(struct E *);
 bool E_c(struct E *);
-sts_string F_a(struct F *);
+amrit_string F_a(struct F *);
 int32_t F_b(struct F *);
 int32_t G_a(struct G *);
-sts_string G_b(struct G *);
+amrit_string G_b(struct G *);
 bool G_c(struct G *);
 double G_d(struct G *);
 bool H_a(struct H *);
@@ -83,7 +83,7 @@ double J_b(struct J *);
 bool J_c(struct J *);
 int32_t J_d(struct J *);
 bool J_e(struct J *);
-sts_string J_f(struct J *);
+amrit_string J_f(struct J *);
 int32_t K_a(struct K *);
 double K_b(struct K *);
 bool K_c(struct K *);
@@ -93,7 +93,7 @@ int32_t L_c(struct L *);
 int32_t M_a(struct M *);
 double M_b(struct M *);
 bool M_c(struct M *);
-sts_string M_d(struct M *);
+amrit_string M_d(struct M *);
 double M_as_B_b(struct M *);
 uint8_t N_a(struct N *);
 uint16_t N_b(struct N *);
@@ -142,10 +142,10 @@ int main(void) {
   CHECK("E.a", E_a(&e) == true);
   CHECK("E.b", E_b(&e) == false);
   CHECK("E.c", E_c(&e) == true);
-  CHECK("F.a", F_a(&f) == (sts_string)&str_abc);
+  CHECK("F.a", F_a(&f) == (amrit_string)&str_abc);
   CHECK("F.b", F_b(&f) == 0x66666666);
   CHECK("G.a", G_a(&g) == 0x77777777);
-  CHECK("G.b", G_b(&g) == (sts_string)&str_hello);
+  CHECK("G.b", G_b(&g) == (amrit_string)&str_hello);
   CHECK("G.c", G_c(&g) == true);
   CHECK("G.d", G_d(&g) == 7.75);
   CHECK("H.a", H_a(&h) == true);
@@ -160,7 +160,7 @@ int main(void) {
   CHECK("J.c", J_c(&j) == true);
   CHECK("J.d", J_d(&j) == 0x09999999);
   CHECK("J.e", J_e(&j) == true);
-  CHECK("J.f", J_f(&j) == (sts_string)&str_abc);
+  CHECK("J.f", J_f(&j) == (amrit_string)&str_abc);
   CHECK("K.a", K_a(&k) == 0x0aaaaaaa);
   CHECK("K.b", K_b(&k) == 11.5);
   CHECK("K.c", K_c(&k) == true);
@@ -170,7 +170,7 @@ int main(void) {
   CHECK("M.a", M_a(&m) == 0x0ddddddd);
   CHECK("M.b", M_b(&m) == 13.5);
   CHECK("M.c", M_c(&m) == true);
-  CHECK("M.d", M_d(&m) == (sts_string)&str_hello);
+  CHECK("M.d", M_d(&m) == (amrit_string)&str_hello);
   CHECK("M as B: b", M_as_B_b(&m) == 13.5);
   /* Every one of these would read the wrong bytes if a narrow width were
      laid out at another offset, and the two u8s would collide if `e` were

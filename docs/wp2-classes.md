@@ -39,7 +39,7 @@ Each field starts at the next multiple of its alignment; the struct's
 alignment is the largest field alignment; `sizeof` rounds the end up to it.
 This is exactly clang's layout for the C struct with the same fields, so a C
 program can read AmritScript objects through a matching `struct` (see the layout
-test below). `sts_alloc_struct` rounds the allocation up to 8 bytes and
+test below). `amrit_alloc_struct` rounds the allocation up to 8 bytes and
 returns 8-aligned memory, so every object satisfies every field's alignment.
 
 The ten structs of `tests/layout/structs.ts`, as the compiler and clang both
@@ -91,16 +91,16 @@ export function main(): number {
 
 ```llvm
 %struct.Point = type { i32, i32 }
-%struct.sts_arena = type { i8*, i64, i64, i8* }
+%struct.amrit_arena = type { i8*, i64, i64, i8* }
 
-@sts_arena = external global %struct.sts_arena, align 8
+@amrit_arena = external global %struct.amrit_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @sts_arena_grow(i64 noundef) #3
-declare void @sts_free_arena() #0
-declare void @sts_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @sts_str_from_i32(i32 noundef) #0
+declare noalias noundef nonnull align 8 i8* @amrit_arena_grow(i64 noundef) #3
+declare void @amrit_free_arena() #0
+declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define internal noalias noundef nonnull align 8 i8* @sts_alloc_struct(i64 noundef %size) #4 {
+define internal noalias noundef nonnull align 8 i8* @amrit_alloc_struct(i64 noundef %size) #4 {
   ; the inline arena bump allocator, unchanged (see README)
 }
 
@@ -133,32 +133,32 @@ entry:
   ret i32 %4
 }
 
-define noundef i32 @sts_main() #0 {
+define noundef i32 @amrit_main() #0 {
 entry:
   %p.addr = alloca %struct.Point*, align 8
   %q.addr = alloca %struct.Point*, align 8
-  %0 = call i8* @sts_alloc_struct(i64 8)
+  %0 = call i8* @amrit_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Point*
   call void @Point.constructor(%struct.Point* %1, i32 3, i32 4)
   store %struct.Point* %1, %struct.Point** %p.addr, align 8
-  %2 = call i8* @sts_alloc_struct(i64 8)
+  %2 = call i8* @amrit_alloc_struct(i64 8)
   %3 = bitcast i8* %2 to %struct.Point*
   call void @Point.constructor(%struct.Point* %3, i32 10, i32 20)
   store %struct.Point* %3, %struct.Point** %q.addr, align 8
   %4 = load %struct.Point*, %struct.Point** %p.addr, align 8
   %5 = call i32 @Point.manhattan(%struct.Point* %4)
-  %6 = call i8* @sts_str_from_i32(i32 %5)
-  call void @sts_print(i8* %6)
+  %6 = call i8* @amrit_str_from_i32(i32 %5)
+  call void @amrit_print(i8* %6)
   %7 = load %struct.Point*, %struct.Point** %p.addr, align 8
   %8 = load %struct.Point*, %struct.Point** %q.addr, align 8
   %9 = call i32 @sumX(%struct.Point* %7, %struct.Point* %8)
-  %10 = call i8* @sts_str_from_i32(i32 %9)
-  call void @sts_print(i8* %10)
+  %10 = call i8* @amrit_str_from_i32(i32 %9)
+  call void @amrit_print(i8* %10)
   %11 = load %struct.Point*, %struct.Point** %p.addr, align 8
   %12 = getelementptr inbounds %struct.Point, %struct.Point* %11, i32 0, i32 1
   %13 = load i32, i32* %12, align 4
-  %14 = call i8* @sts_str_from_i32(i32 %13)
-  call void @sts_print(i8* %14)
+  %14 = call i8* @amrit_str_from_i32(i32 %13)
+  call void @amrit_print(i8* %14)
   ret i32 0
 }
 
@@ -169,7 +169,7 @@ attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 
-- `new Point(3, 4)`: `call i8* @sts_alloc_struct(i64 <sizeof>)`, a `bitcast`
+- `new Point(3, 4)`: `call i8* @amrit_alloc_struct(i64 <sizeof>)`, a `bitcast`
   to `%struct.Point*`, then `call void @Point.constructor(...)` with the
   object as the first argument. The allocator is the inline bump allocator
   from `runtime.ts`; after inlining an allocation is two loads, an add, a
@@ -364,8 +364,8 @@ if.end:
   ret void
 }
 
-  ; new Defaults() in sts_main:
-  %0 = call i8* @sts_alloc_struct(i64 24)
+  ; new Defaults() in amrit_main:
+  %0 = call i8* @amrit_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.Defaults*
   %2 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %1, i32 0, i32 0
   store i32 42, i32* %2, align 4
@@ -438,7 +438,7 @@ function swap(p: Pair): Pair {
 
 define noundef nonnull align 8 dereferenceable(8) %struct.Pair* @swap(%struct.Pair* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #0 {
 entry:
-  %0 = call i8* @sts_alloc_struct(i64 8)
+  %0 = call i8* @amrit_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Pair*
   %2 = getelementptr inbounds %struct.Pair, %struct.Pair* %p, i32 0, i32 1
   %3 = load i32, i32* %2, align 4
@@ -499,7 +499,7 @@ entry:
   ret %struct.Shape* %3
 }
 
-  ; perimeter(r) in sts_main:
+  ; perimeter(r) in amrit_main:
   %2 = load %struct.Rect*, %struct.Rect** %r.addr, align 8
   %3 = bitcast %struct.Rect* %2 to %struct.Shape*
   %4 = call i32 @perimeter(%struct.Shape* %3)
@@ -694,7 +694,7 @@ entry:
 - **C header.** `--emit-header` declares every class and interface as a
   `struct` with the flattened fields, and every method and constructor as
   `Class_method(struct Class *this_, ...)` bound to the real symbol with
-  `STS_SYMBOL("Class.method")` (docs/wp8-interop.md).
+  `AMRIT_SYMBOL("Class.method")` (docs/wp8-interop.md).
 
 ## Rejected forms
 
@@ -746,7 +746,7 @@ entry:
   `cls_extends_override`, `cls_extends_upcast`, `cls_extends_chain`);
   `reject_cls_*.ts` for every row above.
 - `tests/layout/structs.ts` + `structs.c`: the runner reads each class's
-  `sts_alloc_struct(i64 N)` from the IR and compares it with the
+  `amrit_alloc_struct(i64 N)` from the IR and compares it with the
   `_Static_assert(sizeof(struct X) == N)` in the C file; then the C program
   is built with `clang -std=c11 -Wall -Wextra -Werror` (so the asserts are
   validated against clang's layout), fills every struct through the C

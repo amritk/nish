@@ -1,4 +1,4 @@
-declare void @sts_panic_div(i1 noundef zeroext) #1
+declare void @amrit_panic_div(i1 noundef zeroext) #1
 
 define noundef i32 @udiv(i32 noundef %a, i32 noundef %b) #0 {
 entry:
@@ -6,7 +6,7 @@ entry:
   br i1 %0, label %div.fail, label %div.ok
 
 div.fail:
-  call void @sts_panic_div(i1 zeroext %0)
+  call void @amrit_panic_div(i1 zeroext %0)
   unreachable
 
 div.ok:
@@ -24,7 +24,7 @@ entry:
   br i1 %4, label %div.fail, label %div.ok
 
 div.fail:
-  call void @sts_panic_div(i1 zeroext %0)
+  call void @amrit_panic_div(i1 zeroext %0)
   unreachable
 
 div.ok:

@@ -16,7 +16,7 @@
  *   3. print the transformed AST back to TypeScript and hand it to
  *      `ts.transpileModule` to strip the types and produce an ES module.
  *
- * The output modules import runtime/shim.mjs as `__sts`; a generated
+ * The output modules import runtime/shim.mjs as `__amrit`; a generated
  * `__entry.mjs` calls `main()` and turns its return value into the exit code.
  * Type information comes from the compiler, never from `typescript`'s own
  * checker, so the rewrite agrees with what was actually compiled: a
@@ -32,7 +32,7 @@ const SHIM = path.join(root, "runtime", "shim.mjs");
 const { Compilation } = require(path.join(root, "dist", "compiler.js"));
 
 const f = ts.factory;
-const SHIM_NS = "__sts";
+const SHIM_NS = "__amrit";
 
 const shimCall = (name, args) =>
   f.createCallExpression(
@@ -197,7 +197,7 @@ const apply = (kind, op, a, b) => (BITWISE.has(op) ? bitwise(kind, op, a, b) : a
 /**
  * The numeric conversion builtins and the StaticType each produces. A
  * conversion with an unsigned type or an `f32` on either side goes through
- * `__sts.convert`, which takes both kinds; the plain signed/f64 ones keep
+ * `__amrit.convert`, which takes both kinds; the plain signed/f64 ones keep
  * their own shim helpers.
  */
 const CONVERSION_TARGETS = {
@@ -238,7 +238,7 @@ const IDENTIFIER_BUILTINS = new Map([
  * `orReturn()` returns from the *enclosing* function, and no JavaScript
  * expression can do that. The shim's method throws a sentinel instead and the
  * body that contains the call is wrapped in the `try`/`catch` this predicate
- * selects; `__sts.caught` turns the sentinel back into the `Err` the function
+ * selects; `__amrit.caught` turns the sentinel back into the `Err` the function
  * should have returned, and re-raises anything else.
  */
 function propagates(body) {
@@ -259,7 +259,7 @@ function propagates(body) {
   return found;
 }
 
-/** `{ try { <body> } catch (e) { return __sts.caught(e); } }` */
+/** `{ try { <body> } catch (e) { return __amrit.caught(e); } }` */
 function wrapPropagation(body) {
   const thrown = f.createIdentifier("__propagated");
   return f.createBlock(
@@ -447,7 +447,7 @@ function makeTransformer(unit, stems) {
           const r = ts.visitNode(node.right, visit);
           const binop = COMPOUND_TO_BINARY[op];
           if (ts.isElementAccessExpression(node.left)) {
-            // a[i] op= v  ->  __sts.updIdx(a, i, (old) => wrap(old op v))
+            // a[i] op= v  ->  __amrit.updIdx(a, i, (old) => wrap(old op v))
             const a = ts.visitNode(node.left.expression, visit);
             const i = ts.visitNode(node.left.argumentExpression, visit);
             const old = f.createIdentifier("__old");

@@ -46,7 +46,7 @@ export function squares(n: i32): Int32Array {
   return out;
 }
 
-/** Writes through its parameter: the header spells it `sts_array *`, and the host's buffer changes in place. */
+/** Writes through its parameter: the header spells it `amrit_array *`, and the host's buffer changes in place. */
 export function fill(xs: Int32Array, v: i32): void {
   for (let i = 0; i < xs.length; i++) {
     xs[i] = v;

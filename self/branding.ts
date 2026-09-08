@@ -12,9 +12,10 @@
 // because a module constant here is folded at compile time and the folder has
 // less to work with than stage0's does.
 //
-// The `sts_` prefix on the runtime's C symbols is deliberately not here: it is
-// ABI rather than branding, it is in every golden `.ll`, and it was never
-// derived from the product name.
+// The `amrit_` prefix on the runtime's C symbols is deliberately not here: it
+// is ABI rather than branding, it is in every golden `.ll`, and it is frozen —
+// a rename does not follow it. See "Where the name lives" in
+// `docs/ARCHITECTURE.md`.
 
 /** The language, as a diagnostic names it: "`eval` is forbidden in AmritScript". */
 export const LANGUAGE: string = "AmritScript";

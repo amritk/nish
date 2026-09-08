@@ -21,11 +21,11 @@ extern "C" {
 #endif
 
 /* Bind a C declaration to an AmritScript symbol whose name C cannot spell (a
- * keyword such as `double`): `int32_t double_(int32_t n) STS_SYMBOL("double");`
+ * keyword such as `double`): `int32_t double_(int32_t n) AMRIT_SYMBOL("double");`
  * Generated headers use it; __USER_LABEL_PREFIX__ supplies the `_` Mach-O adds. */
-#define STS_STRINGIFY_(x) #x
-#define STS_STRINGIFY(x) STS_STRINGIFY_(x)
-#define STS_SYMBOL(name) __asm__(STS_STRINGIFY(__USER_LABEL_PREFIX__) name)
+#define AMRIT_STRINGIFY_(x) #x
+#define AMRIT_STRINGIFY(x) AMRIT_STRINGIFY_(x)
+#define AMRIT_SYMBOL(name) __asm__(AMRIT_STRINGIFY(__USER_LABEL_PREFIX__) name)
 
 /* ---- Strings ------------------------------------------------------------
  * An AmritScript `string` is a pointer to this header: { u64 len, bytes[len], 0 }.
@@ -35,122 +35,122 @@ extern "C" {
  * pointer can be shared freely and never needs copying.
  *
  * Literals live in the module's constant data; every other string is
- * allocated in the arena and stays valid until `sts_reset_arena` or
- * `sts_free_arena`. Never free a string yourself. */
-typedef struct sts_str {
+ * allocated in the arena and stays valid until `amrit_reset_arena` or
+ * `amrit_free_arena`. Never free a string yourself. */
+typedef struct amrit_str {
   uint64_t len;
   char data[];
-} sts_str;
+} amrit_str;
 
 /* ---- Arena --------------------------------------------------------------
  * One global bump allocator. Compiled modules read this struct directly
  * (the fast path is inlined into the IR), so its layout is ABI:
- *   %struct.sts_arena = type { i8*, i64, i64, i8* }
+ *   %struct.amrit_arena = type { i8*, i64, i64, i8* }
  * Fields: current chunk buffer, bump offset, chunk capacity, chunk list. */
-struct sts_arena {
+struct amrit_arena {
   char *buf;
   size_t off;
   size_t cap;
   void *chunks;
 };
-extern struct sts_arena sts_arena;
+extern struct amrit_arena amrit_arena;
 
 /* Bump allocation: 8-byte rounded and aligned, uninitialised. */
-void *sts_alloc_struct(size_t size);
+void *amrit_alloc_struct(size_t size);
 /* Slow path: push a new chunk (at least 64 KB) and bump from it. Called by
  * the inlined fast path when the current chunk is full; rarely by hosts. */
-void *sts_arena_grow(size_t size);
+void *amrit_arena_grow(size_t size);
 /* Recycle everything in O(1): keeps the newest chunk, frees the rest. Every
  * arena string and object becomes invalid. Call it between batches. */
-void sts_reset_arena(void);
+void amrit_reset_arena(void);
 /* Release every chunk. The arena is lazy, so it can be used again afterwards. */
-void sts_free_arena(void);
+void amrit_free_arena(void);
 /* Arena scopes (WP6). A mark is the current bump address (`buf + off`), or 0
- * while the arena is empty; `sts_arena_release(mark)` frees everything
+ * while the arena is empty; `amrit_arena_release(mark)` frees everything
  * allocated since that mark (chunks pushed after it are freed, a mark of 0
- * behaves like `sts_reset_arena`). Releasing while an object, string or
+ * behaves like `amrit_reset_arena`). Releasing while an object, string or
  * array allocated after the mark is still referenced is undefined behaviour.
  * Compiled functions whose allocations provably die with them bracket their
  * body with these two calls; `Arena.mark/release/used` expose them. */
-uint64_t sts_arena_mark(void);
-void sts_arena_release(uint64_t mark);
+uint64_t amrit_arena_mark(void);
+void amrit_arena_release(uint64_t mark);
 /* Bytes bumped in the current chunk (`Arena.used()`); a steady-state loop keeps it flat. */
-uint64_t sts_arena_used(void);
+uint64_t amrit_arena_used(void);
 
 /* ---- String operations ------------------------------------------------- */
 /* Copy `len` bytes into a new arena string (`bytes` need not be terminated). */
-sts_str *sts_str_new(const char *bytes, uint64_t len);
+amrit_str *amrit_str_new(const char *bytes, uint64_t len);
 /* `a + b` */
-sts_str *sts_str_concat(const sts_str *a, const sts_str *b);
+amrit_str *amrit_str_concat(const amrit_str *a, const amrit_str *b);
 /* `a === b`: same bytes (pointer equality is a fast path, not a requirement). */
-bool sts_str_eq(const sts_str *a, const sts_str *b);
+bool amrit_str_eq(const amrit_str *a, const amrit_str *b);
 /* `s.length`: the byte length. Compiled code loads the header directly. */
-uint64_t sts_str_len(const sts_str *s);
+uint64_t amrit_str_len(const amrit_str *s);
 /* Whether `sub` occurs at byte offset `at` (negative: never); `startsWith` / `endsWith`. */
-bool sts_str_at(const sts_str *s, int64_t at, const sts_str *sub);
+bool amrit_str_at(const amrit_str *s, int64_t at, const amrit_str *sub);
 /* `console.log(s)`: one write(2) of the bytes plus a newline to stdout. */
-void sts_print(const sts_str *s);
+void amrit_print(const amrit_str *s);
 /* `console.error` and the newline-free `write` / `writeError`: fd 1 or 2. */
-void sts_write(const sts_str *s, int32_t fd, bool newline);
+void amrit_write(const amrit_str *s, int32_t fd, bool newline);
 /* Number to string, as `${n}` does: decimal for integers, shortest round-trip (JS Number#toString) for f64. */
-sts_str *sts_str_from_i32(int32_t v);
-sts_str *sts_str_from_f64(double v);
-sts_str *sts_str_from_i64(int64_t v);
+amrit_str *amrit_str_from_i32(int32_t v);
+amrit_str *amrit_str_from_f64(double v);
+amrit_str *amrit_str_from_i64(int64_t v);
 /* Unsigned decimal (WP15). u8/u16/u32 are zero-extended by the caller, so one
    symbol serves every unsigned width. */
-sts_str *sts_str_from_u64(uint64_t v);
+amrit_str *amrit_str_from_u64(uint64_t v);
 
-/* Process and file I/O (WP7). `sts_exit` never returns; the file functions
+/* Process and file I/O (WP7). `amrit_exit` never returns; the file functions
  * print a message to stderr and exit(1) on a fatal error. */
-double sts_random(void);
-void sts_exit(int32_t code);
-sts_str *sts_read_file(const sts_str *path);
+double amrit_random(void);
+void amrit_exit(int32_t code);
+amrit_str *amrit_read_file(const amrit_str *path);
 /* As above, but NULL instead of exiting when the file cannot be read. */
-sts_str *sts_read_file_or_null(const sts_str *path);
-void sts_write_file(const sts_str *path, const sts_str *data);
-void sts_append_file(const sts_str *path, const sts_str *data);
+amrit_str *amrit_read_file_or_null(const amrit_str *path);
+void amrit_write_file(const amrit_str *path, const amrit_str *data);
+void amrit_append_file(const amrit_str *path, const amrit_str *data);
 
 /* ---- Arrays (WP4) -------------------------------------------------------
  * An AmritScript `T[]` (also spelled `Int32Array` / `Float64Array` /
  * `BigInt64Array` for i32 / f64 / i64 elements) is a pointer to this header:
- *   %struct.sts_array = type { i64 len, i64 cap, i8* data }
+ *   %struct.amrit_array = type { i64 len, i64 cap, i8* data }
  * `data` holds `cap` elements of one fixed size (int32_t 4, double 8,
  * int64_t 8, bool 1, pointers 8), 8-byte aligned when the runtime allocated
  * it. A generated header spells a parameter the callee only reads as
- * `const sts_array *` and one it writes through (`a[i] = v`, `push`) as
- * `sts_array *`; the element type is in the comment above each prototype.
+ * `const amrit_array *` and one it writes through (`a[i] = v`, `push`) as
+ * `amrit_array *`; the element type is in the comment above each prototype.
  *
- * Passing a host buffer: build the header yourself (`sts_array a = { n, n,
+ * Passing a host buffer: build the header yourself (`amrit_array a = { n, n,
  * (char *)buf }`) and pass `&a`. The callee treats it like any array, so a
  * `push` that grows it copies the elements into the arena and leaves your
  * buffer behind; the callee must not retain the pointer beyond the call.
  * A returned array lives in the arena (valid until the next reset/release):
  * copy `len` elements out of `data` before recycling. */
-typedef struct sts_array { uint64_t len; uint64_t cap; char *data; } sts_array;
+typedef struct amrit_array { uint64_t len; uint64_t cap; char *data; } amrit_array;
 /* A fresh arena array of `len` uninitialised elements (`len == cap`), for a
  * host that wants the runtime to own the storage (the wasm loader does). */
-sts_array *sts_alloc_array(uint64_t elem_size, uint64_t len);
+amrit_array *amrit_alloc_array(uint64_t elem_size, uint64_t len);
 /* The cold paths compiled code calls: `push` when len == cap, a failed bounds check. */
-void sts_array_grow(sts_array *a, uint64_t elem_size);
-void sts_panic_index(uint64_t idx, uint64_t len);
+void amrit_array_grow(amrit_array *a, uint64_t elem_size);
+void amrit_panic_index(uint64_t idx, uint64_t len);
 
-/* `process.argv` (WP7): a `string[]` (elements are `sts_str *`) that the entry
+/* `process.argv` (WP7): a `string[]` (elements are `amrit_str *`) that the entry
  * wrapper `main` builds once from argc/argv before calling the program; index 0
  * is the executable path. Allocated with malloc, so arena resets never touch
  * it. Hosts that call AmritScript code without a `main` never need it: a program
  * without an entry point cannot read `process.argv` (compile error). */
-extern sts_array *sts_argv;
-void sts_argv_init(int32_t argc, char **argv);
+extern amrit_array *amrit_argv;
+void amrit_argv_init(int32_t argc, char **argv);
 
 /* String to number (WP7), ASCII whitespace only. mode 0 is `parseFloat`
  * (longest JS decimal literal or `Infinity`, else NaN), mode 1 is `Number`
  * (the whole string, trimmed; blank is 0; `0x` hex accepted, as in JS),
  * mode 2 is `parseInt` (base 10 via strtoll, 0 without digits) as a double
  * that the compiler saturates into an i32 with `llvm.fptosi.sat`. */
-double sts_parse_number(const sts_str *s, int32_t mode);
+double amrit_parse_number(const amrit_str *s, int32_t mode);
 
 /* Checked integer division (Rust semantics): the failed-check path. */
-void sts_panic_div(bool by_zero);
+void amrit_panic_div(bool by_zero);
 
 #ifdef __cplusplus
 }

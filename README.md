@@ -14,6 +14,16 @@ TypeScript source ──▶ TS AST ──▶ validator + checker ──▶ LLVM 
 If it compiles, every value has one fixed, known memory layout; binaries are
 a few kilobytes; there is no interpreter and no GC anywhere in the pipeline.
 
+> **AmritScript is a working title.** The name is a placeholder and is expected
+> to change; treat the language name and the `amritc` CLI as unstable, and pin
+> a commit rather than a name if you depend on either. Nothing in the compiler
+> is built around it: every string either compiler prints is composed from
+> `LANGUAGE` and `CLI` in [`src/branding.ts`](src/branding.ts) and
+> [`self/branding.ts`](self/branding.ts), so a rename is an edit to those two
+> files. The one exception is the `amrit_` prefix on the runtime's C symbols,
+> which is ABI rather than branding and stays put through a rename — see
+> [Where the name lives](docs/ARCHITECTURE.md#where-the-name-lives).
+
 ## Quickstart
 
 Requirements: Node.js 18+ and, to produce binaries, clang (LLVM 18) + lld;
@@ -164,7 +174,7 @@ a `new`, object literal or array literal that provably never outlives its
 function is an `alloca` (LLVM's SROA then turns its fields into registers);
 what does reach the arena is bumped inline (a load, an add, a compare and a
 store); a function whose arena temporaries all die with it brackets its body
-with `sts_arena_mark` / `sts_arena_release`, so hot loops keep the arena
+with `amrit_arena_mark` / `amrit_arena_release`, so hot loops keep the arena
 flat. Every LLVM attribute the compiler emits (`nounwind`, `willreturn`,
 `readnone`/`readonly`, `noundef`, `zeroext`, `nonnull`, `noalias`,
 `nocapture`, `dereferenceable`) is a proved guarantee, never a hint; the
@@ -203,9 +213,9 @@ The supported direction is Node importing AmritScript:
   writes next to the `.d.ts` copies it into the module's memory and results
   back out; strings cross the addon as copies (`examples/arrays.ts`).
 - `--emit-header` writes C prototypes (`int32_t add(int32_t a, int32_t b);`,
-  `double sumF64(const sts_array *xs);`) next to `runtime/amritc.h`, the
-  public runtime ABI (arena, strings, arrays, `sts_reset_arena`,
-  `sts_arena_mark` / `sts_arena_release` for a host that manages batches).
+  `double sumF64(const amrit_array *xs);`) next to `runtime/amritc.h`, the
+  public runtime ABI (arena, strings, arrays, `amrit_reset_arena`,
+  `amrit_arena_mark` / `amrit_arena_release` for a host that manages batches).
 - An N-API call costs about 30 ns and a wasm call about 2 ns before any work
   is done; one call with a 1M-element `Float64Array` runs at 0.5 ns/element
   (`node bench/ffi.mjs`), so pass whole buffers, not elements.

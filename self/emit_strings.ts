@@ -4,7 +4,7 @@
 // Layout (ABI, shared with `runtime/runtime.c`): a `string` is an `i8*` to
 // `{ i64 len, i8 data[len], i8 0 }`, 8-byte aligned, immutable. The lowerings
 // are `src/codegen/emit/strings.ts`'s, unchanged: a literal is an interned
-// `@.str.N`, `a + b` is `sts_str_concat`, `a === b` is `sts_str_eq`,
+// `@.str.N`, `a + b` is `amrit_str_concat`, `a === b` is `amrit_str_eq`,
 // `.length` is a header load with no call, and the byte methods lower inline
 // so `runtime.c` stays inside its budget.
 //
@@ -24,7 +24,7 @@ import { isFloat, isUnsigned, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING } fro
 
 /**
  * Add `@.str.<index>` for `text` to the module and answer the `i8*` constant
- * expression that points at its header (what every `sts_str_*` expects).
+ * expression that points at its header (what every `amrit_str_*` expects).
  */
 export function addStringConstant(module: IRModule, index: i32, text: string): string {
   // A string is bytes, so `length` is already the byte length the
@@ -41,23 +41,23 @@ export function addStringConstant(module: IRModule, index: i32, text: string): s
 
 /**
  * The runtime symbol that converts `type` to a string, or the empty string
- * when no call is needed. Every unsigned width shares `sts_str_from_u64`: the
+ * when no call is needed. Every unsigned width shares `amrit_str_from_u64`: the
  * value is `zext`ed to i64 first, which is one instruction the optimiser
  * usually folds away and much cheaper than four formatters in a runtime with
  * a size budget.
  */
 export function stringifyCallee(type: i32): string {
   if (isUnsigned(type)) {
-    return "sts_str_from_u64";
+    return "amrit_str_from_u64";
   }
   if (type === T_I32) {
-    return "sts_str_from_i32";
+    return "amrit_str_from_i32";
   }
   if (type === T_I64) {
-    return "sts_str_from_i64";
+    return "amrit_str_from_i64";
   }
   if (isFloat(type)) {
-    return "sts_str_from_f64";
+    return "amrit_str_from_f64";
   }
   return ""; // string: identity; bool: a select between two literals
 }
@@ -92,14 +92,14 @@ export function emitToString(emitter: Emitter, expr: Node): string {
 }
 
 export function emitConcat(emitter: Emitter, lhs: string, rhs: string): string {
-  return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("sts_str_concat")}(i8* ${lhs}, i8* ${rhs})`);
+  return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("amrit_str_concat")}(i8* ${lhs}, i8* ${rhs})`);
 }
 
 // ---- Template literals ----------------------------------------------------------------
 
 /**
  * Constant parts are literals, holes are converted, and the parts are joined
- * left to right with `sts_str_concat`. A template with no parts at all
+ * left to right with `amrit_str_concat`. A template with no parts at all
  * (`` `` ``) is the empty string.
  */
 export function emitTemplate(emitter: Emitter, expr: Node): string {
@@ -148,13 +148,13 @@ function clampToLength(emitter: Emitter, value: string, len: string): string {
 
 /** A fresh arena string holding `n` bytes copied from `bytes`. */
 function newString(emitter: Emitter, bytes: string, n: string): string {
-  return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("sts_str_new")}(i8* ${bytes}, i64 ${n})`);
+  return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("amrit_str_new")}(i8* ${bytes}, i64 ${n})`);
 }
 
-/** `sts_str_at(s, at, sub)`: whether `sub`'s bytes sit at offset `at`. */
+/** `amrit_str_at(s, at, sub)`: whether `sub`'s bytes sit at offset `at`. */
 function emitOccursAt(emitter: Emitter, str: string, at: string, sub: string): string {
   return emitter.fn.emitValue(
-    `call zeroext i1 ${emitter.useRuntime("sts_str_at")}(i8* ${str}, i64 ${at}, i8* ${sub})`
+    `call zeroext i1 ${emitter.useRuntime("amrit_str_at")}(i8* ${str}, i64 ${at}, i8* ${sub})`
   );
 }
 
@@ -261,7 +261,7 @@ export function emitStringMethodCall(emitter: Emitter, expr: Node): string {
     return emitOccursAt(emitter, str, "0", emitter.emitExpression(expr.children[1].children[0]));
   }
   // `endsWith`: the suffix sits at `len - sub.len`, which is negative when the
-  // suffix is the longer string, and `sts_str_at` then answers false.
+  // suffix is the longer string, and `amrit_str_at` then answers false.
   const sub = emitter.emitExpression(expr.children[1].children[0]);
   const at = emitter.fn.emitValue(
     `sub i64 ${loadStringLength(emitter, str)}, ${loadStringLength(emitter, sub)}`
@@ -282,9 +282,9 @@ export function emitFromCharCode(emitter: Emitter, expr: Node): string {
 export function stringConstructCallees(name: string): string[] {
   const out: string[] = [];
   if (name === "substring") {
-    out.push("sts_str_new");
+    out.push("amrit_str_new");
   } else if (name !== "charCodeAt") {
-    out.push("sts_str_at");
+    out.push("amrit_str_at");
   }
   return out;
 }
@@ -299,7 +299,7 @@ export function emitStrictEquality(emitter: Emitter, expr: Node): string {
   const rhs = emitter.emitExpression(expr.children[1]);
   if (type === T_STRING) {
     const eq = emitter.fn.emitValue(
-      `call zeroext i1 ${emitter.useRuntime("sts_str_eq")}(i8* ${lhs}, i8* ${rhs})`
+      `call zeroext i1 ${emitter.useRuntime("amrit_str_eq")}(i8* ${lhs}, i8* ${rhs})`
     );
     return negate ? emitter.fn.emitValue(`xor i1 ${eq}, true`) : eq;
   }
@@ -314,16 +314,16 @@ export function emitStrictEquality(emitter: Emitter, expr: Node): string {
 
 // ---- console ------------------------------------------------------------------------
 
-/** `console.log(x)`: convert, then `sts_print`, its own one-argument entry point. */
+/** `console.log(x)`: convert, then `amrit_print`, its own one-argument entry point. */
 export function emitConsoleLog(emitter: Emitter, expr: Node): string {
   const text = emitToString(emitter, expr.children[1].children[0]);
-  emitter.fn.emit(`call void ${emitter.useRuntime("sts_print")}(i8* ${text})`);
+  emitter.fn.emit(`call void ${emitter.useRuntime("amrit_print")}(i8* ${text})`);
   return "void";
 }
 
-/** `console.error(x)`: the general `sts_write(s, fd, newline)` on fd 2. */
+/** `console.error(x)`: the general `amrit_write(s, fd, newline)` on fd 2. */
 export function emitConsoleError(emitter: Emitter, expr: Node): string {
   const text = emitToString(emitter, expr.children[1].children[0]);
-  emitter.fn.emit(`call void ${emitter.useRuntime("sts_write")}(i8* ${text}, i32 2, i1 true)`);
+  emitter.fn.emit(`call void ${emitter.useRuntime("amrit_write")}(i8* ${text}, i32 2, i1 true)`);
   return "void";
 }

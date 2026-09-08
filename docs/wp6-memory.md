@@ -8,7 +8,7 @@ heuristic, plus `T | null`:
    outlive its function becomes an `alloca` in the entry block. The module
    then often needs no arena at all.
 2. **Automatic arena scopes.** A function whose arena temporaries all die
-   with it brackets its body with `sts_arena_mark` / `sts_arena_release`, so
+   with it brackets its body with `amrit_arena_mark` / `amrit_arena_release`, so
    calling it a million times keeps the arena flat.
 3. **Explicit control.** `Arena.reset()`, `Arena.mark()`, `Arena.release(m)`,
    `Arena.used()` for programs that manage batches themselves.
@@ -78,9 +78,9 @@ keeps the site in the arena, which is exactly the case where slot reuse
 would be wrong.
 
 **Arrays.** A stack array is a header alloca plus a data alloca:
-`%arr.hdr = alloca %struct.sts_array, align 8` and
+`%arr.hdr = alloca %struct.amrit_array, align 8` and
 `%arr.data = alloca [n x T], align 8` (an empty literal has `data = null`).
-A later `xs.push(v)` calls `sts_array_grow`, which moves the elements into
+A later `xs.push(v)` calls `amrit_array_grow`, which moves the elements into
 the arena and repoints the header; the header stays on the stack and stays
 valid. The data cap keeps stack frames bounded.
 
@@ -129,13 +129,13 @@ because they all die with the function, each function gets an arena scope:
 define noundef i32 @swapped(i32 noundef %a, i32 noundef %b) #0 {
 entry:
   %p.addr = alloca %struct.Pair*, align 8
-  %arena.mark = call i64 @sts_arena_mark()
-  %0 = call i8* @sts_alloc_struct(i64 8)
+  %arena.mark = call i64 @amrit_arena_mark()
+  %0 = call i8* @amrit_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Pair*
   %2 = getelementptr inbounds %struct.Pair, %struct.Pair* %1, i32 0, i32 0
   store i32 %b, i32* %2, align 4
   ...
-  call void @sts_arena_release(i64 %arena.mark)
+  call void @amrit_arena_release(i64 %arena.mark)
   ret i32 %11
 }
 
@@ -144,24 +144,24 @@ entry:
   %p.addr = alloca %struct.Point*, align 8
   %q.addr = alloca %struct.Point*, align 8
   %alias.addr = alloca %struct.Point*, align 8
-  %arena.mark = call i64 @sts_arena_mark()
-  %0 = call i8* @sts_alloc_struct(i64 8)
+  %arena.mark = call i64 @amrit_arena_mark()
+  %0 = call i8* @amrit_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Point*
   call void @Point.constructor(%struct.Point* %1, i32 3, i32 4)
   ...
-  %11 = call i8* @sts_alloc_struct(i64 8)
+  %11 = call i8* @amrit_alloc_struct(i64 8)
   %12 = bitcast i8* %11 to %struct.Point*
   call void @Point.constructor(%struct.Point* %12, i32 1, i32 1)
   %13 = call i32 @Point.manhattan(%struct.Point* %12)
   %14 = add i32 %10, %13
-  call void @sts_arena_release(i64 %arena.mark)
+  call void @amrit_arena_release(i64 %arena.mark)
   ret i32 %14
 }
 
 attributes #0 = { nounwind willreturn }
 ```
 
-By default (after), the module contains no `sts_alloc_struct`, no arena
+By default (after), the module contains no `amrit_alloc_struct`, no arena
 prelude, and `swapped` is `readnone` (golden `mem_stack_struct.ll`):
 
 ```llvm
@@ -235,8 +235,8 @@ the call graph in the same fixpoint as purity. `push` on an array that is not
 a local allocation site (a parameter, a field, an element, a returned array)
 is a leak: the growth belongs to an array someone else owns.
 
-The scope is emitted as `%arena.mark = call i64 @sts_arena_mark()` as the
-first instruction after the allocas and `call void @sts_arena_release(i64
+The scope is emitted as `%arena.mark = call i64 @amrit_arena_mark()` as the
+first instruction after the allocas and `call void @amrit_arena_release(i64
 %arena.mark)` before every `ret`, after the return value has been computed.
 Paths that end in `unreachable` (`process.exit`, `throw`) need no release.
 Both runtime calls are `willreturn` and the function already writes memory
@@ -257,15 +257,15 @@ function histogram(n: number, seed: number): number {
 ```llvm
 define noundef i32 @histogram(i32 noundef %n, i32 noundef %seed) #0 {
 entry:
-  %counts.addr = alloca %struct.sts_array*, align 8
+  %counts.addr = alloca %struct.amrit_array*, align 8
   ...
-  %arena.mark = call i64 @sts_arena_mark()
+  %arena.mark = call i64 @amrit_arena_mark()
   %0 = sext i32 %n to i64
-  %1 = call i8* @sts_alloc_struct(i64 24)
+  %1 = call i8* @amrit_alloc_struct(i64 24)
   ...
 for.end.1:
   %57 = load i32, i32* %best.addr, align 4
-  call void @sts_arena_release(i64 %arena.mark)
+  call void @amrit_arena_release(i64 %arena.mark)
   ret i32 %57
 }
 ```
@@ -279,16 +279,16 @@ scope and the caller `greet` owns and releases the string.
 ### Runtime ABI
 
 ```c
-uint64_t sts_arena_mark(void);            /* buf + off, or 0 while the arena is empty */
-void     sts_arena_release(uint64_t mark);
-uint64_t sts_arena_used(void);            /* bytes bumped in the current chunk */
+uint64_t amrit_arena_mark(void);            /* buf + off, or 0 while the arena is empty */
+void     amrit_arena_release(uint64_t mark);
+uint64_t amrit_arena_used(void);            /* bytes bumped in the current chunk */
 ```
 
 A mark is the absolute bump address, which identifies both the chunk and the
-offset in one `i64`. `sts_arena_release(mark)`:
+offset in one `i64`. `amrit_arena_release(mark)`:
 
 - `mark == 0` (the arena was empty when marked): behaves like
-  `sts_reset_arena`, keeping the newest chunk so a hot loop does not
+  `amrit_reset_arena`, keeping the newest chunk so a hot loop does not
   `malloc`/`free` a chunk per call;
 - the mark lies in the current chunk: `off = mark - buf`;
 - the mark lies in an older chunk: every newer chunk is freed, that chunk
@@ -304,10 +304,10 @@ exercises all four cases and a 100000-iteration mark/release loop.
 
 | Builtin | Lowering | Notes |
 | --- | --- | --- |
-| `Arena.reset(): void` | `sts_reset_arena` | statement position only |
-| `Arena.mark(): i64` | `sts_arena_mark` | |
-| `Arena.release(m: i64): void` | `sts_arena_release` | statement position only; an integer literal argument is typed `i64` by context |
-| `Arena.used(): i64` | `sts_arena_used` | bytes in the current chunk |
+| `Arena.reset(): void` | `amrit_reset_arena` | statement position only |
+| `Arena.mark(): i64` | `amrit_arena_mark` | |
+| `Arena.release(m: i64): void` | `amrit_arena_release` | statement position only; an integer literal argument is typed `i64` by context |
+| `Arena.used(): i64` | `amrit_arena_used` | bytes in the current chunk |
 
 All four are registered in `builtinCalls` next to `console.log`, with effect
 `write` (`mark` and `used` only read the arena, but a `readonly` caller could
@@ -381,9 +381,9 @@ Every existing golden that changed did so for one of two reasons, both
 verified by the unchanged `.out` round trips:
 
 - An allocation moved to the stack (`alloca %struct.C` / `alloca
-  %struct.sts_array` + `alloca [n x T]` replacing `sts_alloc_struct` calls),
+  %struct.amrit_array` + `alloca [n x T]` replacing `amrit_alloc_struct` calls),
   and when no arena allocation was left the arena prelude (type, global,
-  `sts_arena_grow`, the inline allocator and its attribute groups)
+  `amrit_arena_grow`, the inline allocator and its attribute groups)
   disappeared from the module: `cls_point` (both `Point`s), `cls_nested`
   (the `Segment`; its `Point`s are stored by the constructor and stay in
   the arena), `cls_this_method_call`, `cls_field_write`,
@@ -405,7 +405,7 @@ verified by the unchanged `.out` round trips:
   numbers), and `main` in most class/array cases for the same reason.
 
 `tests/layout/structs.ts` is unaffected: its `make<X>` functions return the
-object, so the `sts_alloc_struct(i64 N)` the layout test reads is still there.
+object, so the `amrit_alloc_struct(i64 N)` the layout test reads is still there.
 
 ## Left out
 
