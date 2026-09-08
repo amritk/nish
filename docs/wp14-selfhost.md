@@ -628,6 +628,16 @@ the language as it stands on that day. Deciding that now is what makes the
 tax finite, and it is why §1's "stage0 is not going away" means *kept*, not
 *kept up to date*.
 
+**Frozen is not the end state, and the sequel has its own plan.** The day the
+freeze becomes a deletion — `src/`, the `typescript` dependency and Node out of
+the compiler, the bootstrap seed moved from a second implementation to the
+previous released `amritc`, which is rustc's arrangement and Go's — is
+[WP18](wp18-stage0-retirement.md). It lists what stage0 still owns beyond
+compiling (the oracles, the npm package, the diverse-double-compiling
+property), the six gates that must close before any of it is deleted, and the
+four builtins §7a's leftovers need. Nothing there is scheduled: it is the price
+list, so that the decision when it comes is a decision and not a discovery.
+
 **What the first construct after the freeze actually cost.**
 `Result<T, E>` (WP16) is that construct, and it landed in *both* compilers
 rather than in `self/` alone, because stage0 is still what `dist/` ships and

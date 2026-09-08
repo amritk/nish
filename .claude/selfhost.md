@@ -29,6 +29,15 @@ construct still enters the language (and `src/`) before it enters `self/`, and
 | S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js`, 279/279 whole programs; `reject_oracle.js`, 194/194 cases |
 | S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 289/289 programs byte for byte, and `interop_oracle.js`, 52 sidecars |
 | S5 | `self/` compiles `self/` | **done** — `tests/self/bootstrap.js`: `IR(stage1) == IR(stage2)`, stage3 == stage2 |
+| R1–R6 | stage0 retired rather than frozen | **not started** — the gates are in [`docs/wp18-stage0-retirement.md`](../docs/wp18-stage0-retirement.md) |
+
+**stage0 is frozen, not retired, and that is a decision with an expiry.** Until
+the six gates of `docs/wp18-stage0-retirement.md` §3 close, every rule below
+holds as written: stage0 is the oracle, `self/` is frozen against it, and a
+construct enters the language before it enters `self/`. Retirement moves the
+freeze's reference point from stage0 to the last released `amritc`; it does not
+lift it. Do not delete anything stage0 owns without reading that document —
+six oracles and the `IR(stage0) == IR(stage1)` equality go with it.
 
 ## Building it for use
 

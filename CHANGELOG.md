@@ -9,6 +9,24 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **A plan for retiring stage0 rather than freezing it (WP18,
+  `docs/wp18-stage0-retirement.md`).** WP14 §6 decided that stage0 stays
+  buildable as the bootstrap seed and the differential oracle but is not kept
+  up to date; this is the document for the day that freeze becomes a deletion,
+  and it is a checklist rather than a schedule. It takes the arrangement rustc
+  and Go both reached — the seed is the previous release of the compiler
+  itself, not a second implementation — and prices it: the four things stage0
+  still owns beyond compiling (the twelve oracles, six of which die with it;
+  the npm package and the `--version` source; the four flags and exit codes of
+  §7a; and `IR(stage0, self/) == IR(stage1, self/)`, the diverse-double-compiling
+  property no project in its comparison table asserts), the six gates that must
+  close before any of it is deleted, and the four builtins those gates need —
+  `process.platform`/`process.arch`, `isDirectorySync`, `getenv` and
+  `panicInternal` — each of which lands in stage0 first, because the seed has
+  to be able to compile the compiler that replaces it. It also records what
+  retirement costs and the honest trigger for doing it: a release cycle in
+  which stage0 found nothing, changed nothing and shipped nothing but itself.
+
 - **The self-hosted compiler links its own output; `scripts/amritc.sh` is
   gone (WP14, reversing §3a D4).** `amritc self/compile.ts --link amritc`
   now produces a compiler byte-identical to the one that ran it, with no shell
