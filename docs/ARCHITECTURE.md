@@ -478,8 +478,10 @@ toolchain-dependent steps when LLVM is not installed:
 
 ## Where the name lives
 
-The project's own name is written out in exactly two source files, so renaming
-it is an edit to those two rather than a sweep over the tree:
+AmritScript is a working title and is expected to change, so this is a live
+concern rather than a hypothetical one. The project's own name is written out
+in exactly two source files, so renaming it is an edit to those two rather than
+a sweep over the tree:
 
 | File | Holds |
 | --- | --- |
