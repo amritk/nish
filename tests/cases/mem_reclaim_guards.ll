@@ -43,14 +43,14 @@ slow:
   ret i8* %grown
 }
 
-define void @Box.constructor(%struct.Box* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #0 {
+define internal void @Box.constructor(%struct.Box* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Box, %struct.Box* %this, i32 0, i32 0
   store i8* %text, i8** %0, align 8
   ret void
 }
 
-define noundef nonnull align 8 i8* @fill(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %b, i32 noundef %i) #0 {
+define internal noundef nonnull align 8 i8* @fill(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %b, i32 noundef %i) #0 {
 entry:
   %s.addr = alloca i8*, align 8
   %0 = call i8* @amrit_str_from_i32(i32 %i)
@@ -63,7 +63,7 @@ entry:
   ret i8* %4
 }
 
-define noundef nonnull align 8 i8* @sweep(i32 noundef %i) #0 {
+define internal noundef nonnull align 8 i8* @sweep(i32 noundef %i) #0 {
 entry:
   call void @amrit_reset_arena()
   %0 = call i8* @amrit_str_from_i32(i32 %i)
@@ -71,7 +71,7 @@ entry:
   ret i8* %1
 }
 
-define noundef nonnull align 8 dereferenceable(24) %struct.amrit_result.str.i32* @label(i32 noundef %i) #0 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.amrit_result.str.i32* @label(i32 noundef %i) #0 {
 entry:
   %0 = call i8* @amrit_str_from_i32(i32 %i)
   %1 = call i8* @amrit_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), i8* %0)
@@ -84,7 +84,7 @@ entry:
   ret %struct.amrit_result.str.i32* %3
 }
 
-define noundef nonnull align 8 i8* @plain(i32 noundef %i) #0 {
+define internal noundef nonnull align 8 i8* @plain(i32 noundef %i) #0 {
 entry:
   %0 = call i8* @amrit_str_from_i32(i32 %i)
   %1 = call i8* @amrit_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*), i8* %0)

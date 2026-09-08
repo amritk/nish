@@ -6,6 +6,7 @@
 declare void @amrit_free_arena() #0
 declare noundef i64 @amrit_arena_mark() #0
 declare void @amrit_arena_release(i64 noundef) #0
+declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
@@ -70,18 +71,20 @@ entry:
   %5 = getelementptr inbounds %struct.Version, %struct.Version* %4, i32 0, i32 3
   store i32 9, i32* %5, align 4
   %6 = load %struct.Version*, %struct.Version** %v.addr, align 8
-  %7 = call i8* @Version.render(%struct.Version* %6)
-  call void @amrit_print(i8* %7)
-  %8 = load %struct.Version*, %struct.Version** %v.addr, align 8
-  %9 = getelementptr inbounds %struct.Version, %struct.Version* %8, i32 0, i32 0
-  %10 = load i32, i32* %9, align 4
-  %11 = mul nsw i32 %10, 100
-  %12 = load %struct.Version*, %struct.Version** %v.addr, align 8
-  %13 = getelementptr inbounds %struct.Version, %struct.Version* %12, i32 0, i32 1
-  %14 = load i32, i32* %13, align 4
-  %15 = add nsw i32 %11, %14
-  %16 = call i8* @amrit_str_from_i32(i32 %15)
-  call void @amrit_print(i8* %16)
+  %7 = call i64 @amrit_arena_mark()
+  %8 = call i8* @Version.render(%struct.Version* %6)
+  %9 = call i8* @amrit_arena_keep(i64 %7, i8* %8)
+  call void @amrit_print(i8* %9)
+  %10 = load %struct.Version*, %struct.Version** %v.addr, align 8
+  %11 = getelementptr inbounds %struct.Version, %struct.Version* %10, i32 0, i32 0
+  %12 = load i32, i32* %11, align 4
+  %13 = mul nsw i32 %12, 100
+  %14 = load %struct.Version*, %struct.Version** %v.addr, align 8
+  %15 = getelementptr inbounds %struct.Version, %struct.Version* %14, i32 0, i32 1
+  %16 = load i32, i32* %15, align 4
+  %17 = add nsw i32 %13, %16
+  %18 = call i8* @amrit_str_from_i32(i32 %17)
+  call void @amrit_print(i8* %18)
   call void @amrit_arena_release(i64 %arena.mark)
   ret i32 0
 }

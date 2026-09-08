@@ -39,7 +39,7 @@ slow:
   ret i8* %grown
 }
 
-define void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
+define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
   store i32 %x, i32* %0, align 4
@@ -48,7 +48,7 @@ entry:
   ret void
 }
 
-define noundef nonnull align 8 i8* @render(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #0 {
+define internal noundef nonnull align 8 i8* @render(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %p, i32 0, i32 0
   %1 = load i32, i32* %0, align 4

@@ -9,20 +9,20 @@ declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnul
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define noundef nonnull align 8 i8* @tag(i32 noundef %i) #0 {
+define internal noundef nonnull align 8 i8* @tag(i32 noundef %i) #0 {
 entry:
   %0 = call i8* @amrit_str_from_i32(i32 %i)
   %1 = call i8* @amrit_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), i8* %0)
   ret i8* %1
 }
 
-define noundef nonnull align 8 i8* @shout(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
+define internal noundef nonnull align 8 i8* @shout(i8* noundef nonnull noalias readonly align 8 nocapture %s) #0 {
 entry:
   %0 = call i8* @amrit_str_concat(i8* %s, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
   ret i8* %0
 }
 
-define noundef nonnull align 8 i8* @twice(i32 noundef %i) #0 {
+define internal noundef nonnull align 8 i8* @twice(i32 noundef %i) #0 {
 entry:
   %0 = call i64 @amrit_arena_mark()
   %1 = call i8* @tag(i32 %i)

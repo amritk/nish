@@ -90,13 +90,13 @@ for.body:
   %28 = bitcast i8* %27 to i64*
   %29 = load i64, i64* %28, align 8
   %30 = trunc i64 %29 to i32
-  %31 = add i32 %26, %30
+  %31 = add nsw i32 %26, %30
   store i32 %31, i32* %total.addr, align 4
   br label %for.inc
 
 for.inc:
   %32 = load i32, i32* %i.addr, align 4
-  %33 = add i32 %32, 1
+  %33 = add nsw i32 %32, 1
   store i32 %33, i32* %i.addr, align 4
   br label %for.cond
 
@@ -129,7 +129,7 @@ forof.body.1:
   %48 = bitcast i8* %47 to i64*
   %49 = load i64, i64* %48, align 8
   %50 = trunc i64 %49 to i32
-  %51 = add i32 %46, %50
+  %51 = add nsw i32 %46, %50
   store i32 %51, i32* %seen.addr, align 4
   br label %forof.inc.1
 
@@ -145,14 +145,14 @@ forof.end.1:
   %56 = load i64, i64* %55, align 8
   %57 = trunc i64 %56 to i32
   %58 = load i32, i32* %total.addr, align 4
-  %59 = add i32 %57, %58
+  %59 = add nsw i32 %57, %58
   %60 = load i8*, i8** %head.addr, align 8
   %61 = bitcast i8* %60 to i64*
   %62 = load i64, i64* %61, align 8
   %63 = trunc i64 %62 to i32
-  %64 = add i32 %59, %63
+  %64 = add nsw i32 %59, %63
   %65 = load i32, i32* %seen.addr, align 4
-  %66 = add i32 %64, %65
+  %66 = add nsw i32 %64, %65
   ret i32 %66
 }
 

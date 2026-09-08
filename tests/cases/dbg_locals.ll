@@ -8,6 +8,7 @@ declare void @llvm.dbg.value(metadata, metadata, metadata)
 declare void @llvm.dbg.declare(metadata, metadata, metadata)
 declare noundef i64 @amrit_arena_mark() #0
 declare void @amrit_arena_release(i64 noundef) #0
+declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
@@ -113,66 +114,68 @@ entry:
   store double 0x4004000000000000, double* %ratio.addr, align 8, !dbg !82
   call void @llvm.dbg.declare(metadata double* %ratio.addr, metadata !85, metadata !DIExpression()), !dbg !82
   %3 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !88
-  %4 = call i8* @label(%struct.Point* %3, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*)), !dbg !87
-  store i8* %4, i8** %s.addr, align 8, !dbg !86
+  %4 = call i64 @amrit_arena_mark(), !dbg !87
+  %5 = call i8* @label(%struct.Point* %3, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*)), !dbg !87
+  %6 = call i8* @amrit_arena_keep(i64 %4, i8* %5), !dbg !87
+  store i8* %6, i8** %s.addr, align 8, !dbg !86
   call void @llvm.dbg.declare(metadata i8** %s.addr, metadata !90, metadata !DIExpression()), !dbg !86
-  %5 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0, !dbg !93
-  store i64 3, i64* %5, align 8, !dbg !93
-  %6 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1, !dbg !93
-  store i64 3, i64* %6, align 8, !dbg !93
-  %7 = bitcast [3 x i32]* %arr.data to i8*, !dbg !93
-  %8 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 2, !dbg !93
-  store i8* %7, i8** %8, align 8, !dbg !93
-  %9 = bitcast i8* %7 to i32*, !dbg !93
-  %10 = getelementptr inbounds i32, i32* %9, i64 0, !dbg !93
-  store i32 1, i32* %10, align 4, !dbg !93
-  %11 = getelementptr inbounds i32, i32* %9, i64 1, !dbg !93
-  store i32 2, i32* %11, align 4, !dbg !93
-  %12 = getelementptr inbounds i32, i32* %9, i64 2, !dbg !93
-  store i32 3, i32* %12, align 4, !dbg !93
-  %13 = call i32 @total(%struct.amrit_array* %arr.hdr), !dbg !92
-  store i32 %13, i32* %t.addr, align 4, !dbg !91
+  %7 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0, !dbg !93
+  store i64 3, i64* %7, align 8, !dbg !93
+  %8 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1, !dbg !93
+  store i64 3, i64* %8, align 8, !dbg !93
+  %9 = bitcast [3 x i32]* %arr.data to i8*, !dbg !93
+  %10 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 2, !dbg !93
+  store i8* %9, i8** %10, align 8, !dbg !93
+  %11 = bitcast i8* %9 to i32*, !dbg !93
+  %12 = getelementptr inbounds i32, i32* %11, i64 0, !dbg !93
+  store i32 1, i32* %12, align 4, !dbg !93
+  %13 = getelementptr inbounds i32, i32* %11, i64 1, !dbg !93
+  store i32 2, i32* %13, align 4, !dbg !93
+  %14 = getelementptr inbounds i32, i32* %11, i64 2, !dbg !93
+  store i32 3, i32* %14, align 4, !dbg !93
+  %15 = call i32 @total(%struct.amrit_array* %arr.hdr), !dbg !92
+  store i32 %15, i32* %t.addr, align 4, !dbg !91
   call void @llvm.dbg.declare(metadata i32* %t.addr, metadata !97, metadata !DIExpression()), !dbg !91
-  %14 = load i1, i1* %ok.addr, align 1, !dbg !99
-  br i1 %14, label %land.rhs.2, label %land.end.2, !dbg !99
+  %16 = load i1, i1* %ok.addr, align 1, !dbg !99
+  br i1 %16, label %land.rhs.2, label %land.end.2, !dbg !99
 
 land.rhs.2:
-  %15 = load i64, i64* %big.addr, align 8, !dbg !100
-  %16 = icmp eq i64 %15, 1, !dbg !100
+  %17 = load i64, i64* %big.addr, align 8, !dbg !100
+  %18 = icmp eq i64 %17, 1, !dbg !100
   br label %land.end.2, !dbg !99
 
 land.end.2:
-  %17 = phi i1 [ false, %entry ], [ %16, %land.rhs.2 ], !dbg !99
-  br i1 %17, label %land.rhs.1, label %land.end.1, !dbg !99
+  %19 = phi i1 [ false, %entry ], [ %18, %land.rhs.2 ], !dbg !99
+  br i1 %19, label %land.rhs.1, label %land.end.1, !dbg !99
 
 land.rhs.1:
-  %18 = load double, double* %ratio.addr, align 8, !dbg !102
-  %19 = fcmp ogt double %18, 0x4000000000000000, !dbg !102
+  %20 = load double, double* %ratio.addr, align 8, !dbg !102
+  %21 = fcmp ogt double %20, 0x4000000000000000, !dbg !102
   br label %land.end.1, !dbg !99
 
 land.end.1:
-  %20 = phi i1 [ false, %land.end.2 ], [ %19, %land.rhs.1 ], !dbg !99
-  br i1 %20, label %land.rhs, label %land.end, !dbg !99
+  %22 = phi i1 [ false, %land.end.2 ], [ %21, %land.rhs.1 ], !dbg !99
+  br i1 %22, label %land.rhs, label %land.end, !dbg !99
 
 land.rhs:
-  %21 = load i8*, i8** %s.addr, align 8, !dbg !104
-  %22 = bitcast i8* %21 to i64*, !dbg !104
-  %23 = load i64, i64* %22, align 8, !dbg !104
-  %24 = trunc i64 %23 to i32, !dbg !104
-  %25 = icmp eq i32 %24, 4, !dbg !104
+  %23 = load i8*, i8** %s.addr, align 8, !dbg !104
+  %24 = bitcast i8* %23 to i64*, !dbg !104
+  %25 = load i64, i64* %24, align 8, !dbg !104
+  %26 = trunc i64 %25 to i32, !dbg !104
+  %27 = icmp eq i32 %26, 4, !dbg !104
   br label %land.end, !dbg !99
 
 land.end:
-  %26 = phi i1 [ false, %land.end.1 ], [ %25, %land.rhs ], !dbg !99
-  br i1 %26, label %if.then, label %if.end, !dbg !98
+  %28 = phi i1 [ false, %land.end.1 ], [ %27, %land.rhs ], !dbg !99
+  br i1 %28, label %if.then, label %if.end, !dbg !98
 
 if.then:
-  %27 = load i32, i32* %t.addr, align 4, !dbg !108
-  %28 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !109
-  %29 = call i32 @Point.sum(%struct.Point* %28), !dbg !109
-  %30 = add nsw i32 %27, %29, !dbg !108
+  %29 = load i32, i32* %t.addr, align 4, !dbg !108
+  %30 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !109
+  %31 = call i32 @Point.sum(%struct.Point* %30), !dbg !109
+  %32 = add nsw i32 %29, %31, !dbg !108
   call void @amrit_arena_release(i64 %arena.mark), !dbg !107
-  ret i32 %30, !dbg !107
+  ret i32 %32, !dbg !107
 
 if.end:
   call void @amrit_arena_release(i64 %arena.mark), !dbg !110

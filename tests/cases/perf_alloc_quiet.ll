@@ -106,18 +106,18 @@ bounds.ok.1:
   %23 = bitcast i8* %22 to i32*
   %24 = getelementptr inbounds i32, i32* %23, i64 0
   %25 = load i32, i32* %24, align 4
-  %26 = add i32 %16, %25
+  %26 = add nsw i32 %16, %25
   %27 = load %struct.amrit_array*, %struct.amrit_array** %fixed.addr, align 8
   %28 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %27, i64 0, i32 0
   %29 = load i64, i64* %28, align 8
   %30 = trunc i64 %29 to i32
-  %31 = add i32 %26, %30
+  %31 = add nsw i32 %26, %30
   store i32 %31, i32* %total.addr, align 4
   br label %for.inc
 
 for.inc:
   %32 = load i32, i32* %i.addr, align 4
-  %33 = add i32 %32, 1
+  %33 = add nsw i32 %32, 1
   store i32 %33, i32* %i.addr, align 4
   br label %for.cond
 
@@ -138,7 +138,7 @@ for.body.1:
   store %struct.Point* %Point.obj, %struct.Point** %p.addr, align 8
   %38 = load i32, i32* %i.addr.1, align 4
   %39 = load i32, i32* %i.addr.1, align 4
-  %40 = add i32 %39, 1
+  %40 = add nsw i32 %39, 1
   %41 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr.1, i64 0, i32 0
   store i64 2, i64* %41, align 8
   %42 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr.1, i64 0, i32 1
@@ -156,7 +156,7 @@ for.body.1:
   %49 = load %struct.Point*, %struct.Point** %p.addr, align 8
   %50 = getelementptr inbounds %struct.Point, %struct.Point* %49, i32 0, i32 0
   %51 = load i32, i32* %50, align 4
-  %52 = add i32 %48, %51
+  %52 = add nsw i32 %48, %51
   %53 = load %struct.amrit_array*, %struct.amrit_array** %pair.addr, align 8
   %54 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %53, i64 0, i32 0
   %55 = load i64, i64* %54, align 8
@@ -173,13 +173,13 @@ bounds.ok.2:
   %59 = bitcast i8* %58 to i32*
   %60 = getelementptr inbounds i32, i32* %59, i64 1
   %61 = load i32, i32* %60, align 4
-  %62 = add i32 %52, %61
+  %62 = add nsw i32 %52, %61
   store i32 %62, i32* %total.addr, align 4
   br label %for.inc.1
 
 for.inc.1:
   %63 = load i32, i32* %i.addr.1, align 4
-  %64 = add i32 %63, 1
+  %64 = add nsw i32 %63, 1
   store i32 %64, i32* %i.addr.1, align 4
   br label %for.cond.1
 
@@ -203,7 +203,7 @@ for.cond.2:
 for.body.2:
   %70 = load i32, i32* %width.addr, align 4
   %71 = load i32, i32* %i.addr.2, align 4
-  %72 = add i32 %70, %71
+  %72 = add nsw i32 %70, %71
   %73 = sext i32 %72 to i64
   %74 = call i8* @amrit_alloc_struct(i64 24)
   %75 = bitcast i8* %74 to %struct.amrit_array*
@@ -260,7 +260,7 @@ push.store:
 
 for.inc.2:
   %103 = load i32, i32* %i.addr.2, align 4
-  %104 = add i32 %103, 1
+  %104 = add nsw i32 %103, 1
   store i32 %104, i32* %i.addr.2, align 4
   br label %for.cond.2
 
@@ -300,7 +300,7 @@ bounds.ok.4:
   %124 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %123, i64 0, i32 0
   %125 = load i64, i64* %124, align 8
   %126 = trunc i64 %125 to i32
-  %127 = add i32 %122, %126
+  %127 = add nsw i32 %122, %126
   %128 = load %struct.amrit_array*, %struct.amrit_array** %once.addr, align 8
   %129 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %128, i64 0, i32 0
   %130 = load i64, i64* %129, align 8
@@ -317,7 +317,7 @@ bounds.ok.5:
   %134 = bitcast i8* %133 to i32*
   %135 = getelementptr inbounds i32, i32* %134, i64 0
   %136 = load i32, i32* %135, align 4
-  %137 = add i32 %127, %136
+  %137 = add nsw i32 %127, %136
   ret i32 %137
 }
 

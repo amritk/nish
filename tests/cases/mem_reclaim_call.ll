@@ -8,14 +8,14 @@ declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnul
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define noundef nonnull align 8 i8* @piece(i32 noundef %i) #0 {
+define internal noundef nonnull align 8 i8* @piece(i32 noundef %i) #0 {
 entry:
   %0 = call i8* @amrit_str_from_i32(i32 %i)
   %1 = call i8* @amrit_str_concat(i8* %0, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
   ret i8* %1
 }
 
-define noundef nonnull align 8 i8* @join(i32 noundef %n) #0 {
+define internal noundef nonnull align 8 i8* @join(i32 noundef %n) #0 {
 entry:
   %s.addr = alloca i8*, align 8
   %i.addr = alloca i32, align 4
@@ -40,7 +40,7 @@ for.body:
 
 for.inc:
   %8 = load i32, i32* %i.addr, align 4
-  %9 = add i32 %8, 1
+  %9 = add nsw i32 %8, 1
   store i32 %9, i32* %i.addr, align 4
   br label %for.cond
 

@@ -35,7 +35,7 @@ for.body:
 
 for.inc:
   %4 = load i32, i32* %i.addr, align 4
-  %5 = add i32 %4, 1
+  %5 = add nsw i32 %4, 1
   store i32 %5, i32* %i.addr, align 4
   br label %for.cond
 
@@ -54,7 +54,7 @@ while.body:
   %9 = call i8* @amrit_str_concat(i8* %8, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
   store i8* %9, i8** %tagged.addr, align 8
   %10 = load i32, i32* %n.addr, align 4
-  %11 = add i32 %10, 1
+  %11 = add nsw i32 %10, 1
   store i32 %11, i32* %n.addr, align 4
   br label %while.cond
 
@@ -86,7 +86,7 @@ for.body.2:
 
 for.inc.2:
   %18 = load i32, i32* %j.addr, align 4
-  %19 = add i32 %18, 1
+  %19 = add nsw i32 %18, 1
   store i32 %19, i32* %j.addr, align 4
   br label %for.cond.2
 
@@ -96,13 +96,13 @@ for.end.2:
   %22 = bitcast i8* %21 to i64*
   %23 = load i64, i64* %22, align 8
   %24 = trunc i64 %23 to i32
-  %25 = add i32 %20, %24
+  %25 = add nsw i32 %20, %24
   store i32 %25, i32* %rows.addr, align 4
   br label %for.inc.1
 
 for.inc.1:
   %26 = load i32, i32* %i.addr.1, align 4
-  %27 = add i32 %26, 1
+  %27 = add nsw i32 %26, 1
   store i32 %27, i32* %i.addr.1, align 4
   br label %for.cond.1
 
@@ -116,7 +116,7 @@ do.body:
   %29 = call i8* @amrit_str_concat(i8* %28, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
   store i8* %29, i8** %tail.addr, align 8
   %30 = load i32, i32* %k.addr, align 4
-  %31 = add i32 %30, 1
+  %31 = add nsw i32 %30, 1
   store i32 %31, i32* %k.addr, align 4
   br label %do.cond
 
@@ -134,14 +134,14 @@ do.end:
   %39 = bitcast i8* %38 to i64*
   %40 = load i64, i64* %39, align 8
   %41 = trunc i64 %40 to i32
-  %42 = add i32 %37, %41
+  %42 = add nsw i32 %37, %41
   %43 = load i32, i32* %rows.addr, align 4
-  %44 = add i32 %42, %43
+  %44 = add nsw i32 %42, %43
   %45 = load i8*, i8** %tail.addr, align 8
   %46 = bitcast i8* %45 to i64*
   %47 = load i64, i64* %46, align 8
   %48 = trunc i64 %47 to i32
-  %49 = add i32 %44, %48
+  %49 = add nsw i32 %44, %48
   ret i32 %49
 }
 
