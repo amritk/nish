@@ -9,6 +9,61 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **`Result` across the ABI (WP17).** A `Result<T, E>` whose two payloads are
+  each a scalar of at most four bytes — `void`, `boolean`, `u8`, `u16`,
+  `number`, `u32`, `f32` — now **travels in a register**, returned *and*
+  passed, packed into one `i64`: the discriminant in bits 0-31 and the live
+  arm's payload in bits 32-63. `return Ok(v)` is a shift and an `or` with no
+  allocation at all, the receiving side unpacks the word into an object of its
+  own, and SROA folds both halves away once the call is inlined. Where that
+  object lives is the ordinary WP6 decision: a callee's unpacked parameter is
+  an entry-block `alloca` unless a use of it stores the pointer somewhere that
+  outlives the frame, in which case it is an arena bump
+  (`EscapeResult.stackParams`). Measured on x86-64 with both compilers
+  built and the same program compiled by each (`--profile speed`, 2 × 10^8
+  iterations): **3.5× faster** (0.50 s → 0.143 s), same checksum, and `use` is
+  14 instructions with no frame and no call against 47 with three. Over a call
+  boundary the optimiser cannot inline away the win is 2.09×, where `sret` —
+  the only other uniform option — reaches 1.43×. Eight bytes is
+  not a tuning knob: `i64` is the only return width whose C-ABI lowering is the
+  same LLVM type on all six supported triples, which is why the packed word can
+  live in target-neutral IR at all. The decision, the per-target tables and the
+  assembly for x86-64 and aarch64 are in
+  [docs/wp17-result-abi.md](docs/wp17-result-abi.md); everything else about a
+  `Result` — the in-memory layout, narrowing, the payload accessors, `Result`
+  parameters — is unchanged. `tests/cases/res_by_value`,
+  `res_by_value_propagate`, `reject_result_by_value_unchecked`.
+- **A `Result` crosses the host boundary (WP17).** `--emit-header` no longer
+  skips a function whose signature mentions one: it declares
+  `struct sts_result_<T>_<E>` for the arena object and a
+  `sts_result_<T>_<E>_word` typedef for the packed form, with a `sizeof`
+  assertion, and clang lowers a function returning *or taking* that typedef to
+  exactly the `i64` the module defines — so a C host includes the header and
+  calls across with no glue, in both directions. `--emit-napi` bridges a
+  by-value `Result` over numbers and booleans as `{ ok: true, value }` /
+  `{ ok: false, error }`, in both positions, and `--emit-dts` declares the same
+  union for the wasm build with the generated loader packing an argument and
+  unpacking a result.
+- **DWARF for a `Result` (WP17).** `-g` builds a `DW_TAG_structure_type` from
+  `resultLayout`, so a debugger shows `ok`, `value` and `error` at their byte
+  offsets instead of an opaque pointer; a return slot the ABI packs is
+  described as the packed `{ int32_t ok; union { T; E; }; }` the C header
+  declares, rather than as a pointer that is not in the register.
+- **`bench/result`.** A seventh benchmark: a fallible function returning a
+  `Result<number, number>` and one taking it, 2e8 calls, against a C twin
+  using the two-word struct `--emit-header` declares and a Rust twin using
+  Rust's own `Result<i32, i32>`. It is the regression guard for the packing —
+  and it immediately earned its keep by naming a gap the packing does *not*
+  close: StaticTS is 1.47x behind C and 2.6x behind Rust there, because
+  instcombine simplifies the ok/err `select` only when the two arms are
+  separate SSA values rather than halves of one word. C written the way
+  `statictsc` emits times identically to `statictsc`, so it is not a
+  code-generation defect; respelling the pack as clang's two-word coercion was
+  measured and produced byte-identical assembly, so it was not taken. The
+  diagnosis and the proposed fix (a private two-scalar ABI for internal
+  functions) are in [docs/wp9-optimisation.md](docs/wp9-optimisation.md) and
+  [docs/wp17-result-abi.md](docs/wp17-result-abi.md) §4.
+
 - **Shipping the self-hosted compiler.** `scripts/bootstrap.sh` builds it from
   a checkout — stage0 builds stage1, stage1 builds stage2, and `--verify` also
   builds stage3 and compares every stage's IR for `self/` and the two binaries

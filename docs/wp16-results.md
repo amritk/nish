@@ -85,11 +85,19 @@ costs much less than it sounds:
   and the arena is reclaimed in O(1).
 
 The cost that remains is a returned `Result`: one bump, plus the load of the
-discriminant the caller cannot avoid. `TODO(WP17)` is to add the missing ABI
-lowering and return small `Result`s by value, at which point an inlined ok
-path costs nothing at all. Until then a `Result` may not cross the host
-boundary: `--emit-header`, `--emit-dts` and `--emit-napi` skip such a function
-and leave a note naming the type, which is honest about exactly this gap.
+discriminant the caller cannot avoid.
+
+**WP17 removed that cost for the small cases, and this section's premise
+turned out to be half right.** A by-value *aggregate* really is unavailable —
+clang returns `struct { bool; int32_t; int32_t; }` as `{ i64, i32 }` on
+x86-64, `[2 x i64]` on aarch64 and through `sret` on wasm32, so there is no
+one signature to emit — but a by-value *scalar* is not: a `Result` whose two
+payloads are each at most four bytes packs into one `i64`, which is the same
+LLVM type on all six triples and is expressible in a C header as an eight-byte
+struct clang itself lowers to that `i64`. So the ABI was never the obstacle to
+returning a small `Result` in a register; only to returning it as a struct.
+The reasoning, the six-target table and the measurements are in
+[wp17-result-abi.md](wp17-result-abi.md).
 
 ## 3. Monomorphisation without generics
 
@@ -196,11 +204,18 @@ reverse would be a bug in the declarations.
   gives the same guarantee.
 - **Error conversion on propagation.** Rust's `?` applies `From<E>`; there is
   no trait system here to carry one.
-- **`Result` across the host boundary**, and **by-value returns** — both
-  waiting on the ABI lowering in §2.
-- **DWARF members for a `Result`.** `-g` describes the pointer but not the
-  fields, since there is no `StructInfo` to render; `TODO(WP17)` in
-  `src/codegen/debug.ts`.
+- ~~**`Result` across the host boundary**, and **by-value returns**~~ — both
+  landed in WP17. A `Result` whose payloads are each a scalar of at most four
+  bytes is returned in a register as a packed `i64`; `--emit-header` declares
+  both C shapes and a C host calls across with no glue; `--emit-napi` and
+  `--emit-dts` bridge a by-value `Result` as `{ ok, value }` / `{ ok, error }`.
+  The packing is symmetric: a `Result` argument travels the same way, so what
+  is still left out is only a `Result` whose payloads do not fit the word, and
+  one held in a field or an array element, which has to outlive the frame.
+- ~~**DWARF members for a `Result`.**~~ Also WP17: `resultLayout` is enough to
+  build a `DW_TAG_structure_type`, so `-g` now describes `ok`, `value` and
+  `error` at their offsets, and a return slot the ABI packs is described as the
+  packed shape rather than as a pointer that is not there.
 - **Nothing, on the stage1 side.** `self/` implements the whole package, and
   the S3 and S4 oracles hold it to stage0's exact messages and exact IR. What
   the two do *not* share is the shape of the code: stage0 interns nothing and

@@ -567,6 +567,26 @@ about the language. That is the evidence for the §5 claim above being about
 *effort* and not about *risk*: the second implementation is work, but it is
 work an oracle can check line by line.
 
+**And what the second one cost.** WP17 — carrying a small `Result<T, E>` in
+a register ([wp17-result-abi.md](wp17-result-abi.md)) — is an *ABI* change
+rather than a construct, and that turned out to be the cheaper kind to
+mirror. It touched the same five files on each side (`types.ts`,
+`result.ts`/`emit_result.ts`, `emit.ts`/`emitter.ts`, `escape.ts`,
+`attributes.ts`), added nothing to StaticTS-0 — rule 5 of §6 did not fire, and
+`self/` is written in exactly the subset it was written in before — and the
+IR oracle caught the divergences the same way: the two sides have to agree on
+every SSA number of the pack and the unpack, so a shift emitted in a
+different order is a byte diff rather than a latent difference of opinion.
+The by-value *parameter* half went the same way: it needed a real addition to
+the escape analysis on both sides — the callee unpacks the word into an
+object, and whether that object may be an `alloca` is the same `localOutcome`
+walk a local holding an allocation gets — and the oracle is what said the two
+walks agreed, over 274 of 274 programs, before the bootstrap was allowed to
+close.
+`-g` and the interop sidecars stayed stage0's, as D4 said they would: the
+DWARF and the C header for a `Result` are stage0-only changes, and the driver
+still reports those flags by name rather than ignoring them.
+
 ---
 
 ## 5. Performance is the tiebreaker

@@ -30,11 +30,26 @@
  * `collectResultFacts` reports what all of this does to memory (a payload
  * read, the allocator call, the stores), because `attributes.ts` may only
  * emit `readnone` / `readonly` on a function whose every construct reported.
+ *
+ * WP17 adds one thing and changes nothing else: a `Result` whose two payloads
+ * are each a scalar of at most four bytes is *returned in a register*, packed
+ * into an `i64` (`resultByValue` in `types.ts`; the reasoning and the measured
+ * assembly are in `docs/wp17-result-abi.md`). The packed word exists only at
+ * the return boundary —
+ *
+ *   callee   `pack*` where it would have allocated, then `ret i64`
+ *   caller   `%w = call i64 @f(...)`, then `unpackResult` into the entry-block
+ *            object every construct above already reads
+ *
+ * — so the in-memory layout, the narrowing, the payload accessors and the
+ * escape analysis are WP16's, unchanged. The caller's object is an ordinary
+ * allocation site of the caller, which is what keeps it an `alloca` that SROA
+ * folds away with the shifts once the call is inlined.
  */
 import ts from "typescript";
 import { CheckedProgram } from "../../checker";
 import { ResultLayout, ResultSlot, resultLayout, resultTypesIn } from "../../checker/result";
-import { ResultType, StaticType, llvmType } from "../../types";
+import { RESULT_PAYLOAD_SHIFT, ResultType, StaticType, llvmType, resultByValue } from "../../types";
 import { BuiltinCall } from "./builtins";
 import { EmitContext } from "./context";
 import { MemoryFacts, factCollectors, isStackOwned, methodCallEmitters, propertyEmitters } from "./members";
@@ -89,12 +104,15 @@ const storeSlot = (
  * the `Result` that `orReturn` builds, which is returned by construction and
  * therefore always arena memory.
  */
-const allocate = (ctx: EmitContext, layout: ResultLayout, site?: ts.Node): string => {
+const allocateIn = (ctx: EmitContext, layout: ResultLayout, stack: boolean): string => {
   const ty = typeName(layout);
-  if (site && ctx.isStackSite(site)) return ctx.fn.emitAlloca(`${layout.name}.obj`, ty, 8);
+  if (stack) return ctx.fn.emitAlloca(`${layout.name}.obj`, ty, 8);
   const raw = ctx.fn.emitValue(`call i8* ${ctx.useRuntime("sts_alloc_struct")}(i64 ${layout.size})`);
   return ctx.fn.emitValue(`bitcast i8* ${raw} to ${ty}*`);
 };
+
+const allocate = (ctx: EmitContext, layout: ResultLayout, site?: ts.Node): string =>
+  allocateIn(ctx, layout, site !== undefined && ctx.isStackSite(site));
 
 // ---- `ok(...)` and `err(...)` -------------------------------------------------------
 
@@ -136,6 +154,154 @@ export const resultFunctionEmitters: Record<string, BuiltinCall> = {
   Err: resultConstructor(false),
 };
 
+// ---- The packed by-value word (WP17) ------------------------------------------------
+
+/**
+ * Widen one payload to the high half of the word. `f32` goes through a
+ * bitcast rather than a conversion: the word carries the bits the caller
+ * stored, not a number the ABI is free to round.
+ *
+ * The word is assembled with `shl`/`or` rather than coerced through a
+ * two-word alloca the way clang lowers an eight-byte struct return. Both were
+ * measured on `bench/result` and `llc` produces the same instructions from
+ * either, so the shorter IR wins (`docs/wp17-result-abi.md` §4).
+ */
+const payloadToWord = (ctx: EmitContext, type: StaticType, value: string): string => {
+  if (type.kind === "void") return "0";
+  const bits = type.kind === "f32" ? ctx.fn.emitValue(`bitcast float ${value} to i32`) : value;
+  const from = type.kind === "f32" ? "i32" : llvmType(type);
+  return from === "i64" ? bits : ctx.fn.emitValue(`zext ${from} ${bits} to i64`);
+};
+
+/** The inverse: the low bits of the high half, read back as the payload type. */
+const wordToPayload = (ctx: EmitContext, type: StaticType, high: string): string => {
+  const to = type.kind === "f32" ? "i32" : llvmType(type);
+  const bits = to === "i64" ? high : ctx.fn.emitValue(`trunc i64 ${high} to ${to}`);
+  return type.kind === "f32" ? ctx.fn.emitValue(`bitcast i32 ${bits} to float`) : bits;
+};
+
+/**
+ * The word for an arm that is being built here and now — `return Ok(v)` and
+ * the `Err(...)` `orReturn()` propagates. No object is constructed at all,
+ * which is the whole point: the ok path of a small `Result` costs a shift.
+ *
+ * The tag is the low half, so `Err(e)` needs no `or` (its tag is zero) and
+ * `Ok()` on a `Result<void, E>` is the constant `1`.
+ */
+const packArm = (
+  ctx: EmitContext,
+  type: ResultType,
+  isOk: boolean,
+  payload: string | undefined
+): string => {
+  const payloadType = isOk ? type.ok : type.err;
+  if (payload === undefined || payloadType.kind === "void") return isOk ? "1" : "0";
+  const wide = payloadToWord(ctx, payloadType, payload);
+  const shifted = ctx.fn.emitValue(`shl i64 ${wide}, ${RESULT_PAYLOAD_SHIFT}`);
+  return isOk ? ctx.fn.emitValue(`or i64 ${shifted}, 1`) : shifted;
+};
+
+/**
+ * The word for a `Result` that already exists in memory — `return r` where
+ * `r` is a variable. Both arms are loaded and a `select` keeps the live one:
+ * the dead arm is `undef` in an alloca and a stale byte in the arena, and
+ * `select` discards it either way, which is cheaper than a branch.
+ */
+const packObject = (ctx: EmitContext, type: ResultType, object: string): string => {
+  const layout = resultLayout(type);
+  const ok = loadSlot(ctx, layout, object, layout.ok);
+  const error = payloadToWord(ctx, layout.error.type, loadSlot(ctx, layout, object, layout.error));
+  let payload = error;
+  if (layout.value) {
+    const value = payloadToWord(ctx, layout.value.type, loadSlot(ctx, layout, object, layout.value));
+    payload = ctx.fn.emitValue(`select i1 ${ok}, i64 ${value}, i64 ${error}`);
+  }
+  const shifted = ctx.fn.emitValue(`shl i64 ${payload}, ${RESULT_PAYLOAD_SHIFT}`);
+  const tag = ctx.fn.emitValue(`zext i1 ${ok} to i64`);
+  return ctx.fn.emitValue(`or i64 ${shifted}, ${tag}`);
+};
+
+/**
+ * The word to hand across a call boundary — what a `Result`-returning
+ * function `ret`s, and what a by-value `Result` argument is passed as. A
+ * construction is packed without ever being built (`packArm`); anything else
+ * is emitted as WP16's pointer and read back out of it. At a `return` this
+ * runs before the arena scope is released, because the object it may be read
+ * out of is arena memory the release reclaims.
+ */
+export const emitPackedResult = (ctx: EmitContext, expr: ts.Expression, type: ResultType): string => {
+  declareResultTypes(ctx, type);
+  const arm = constructedArm(ctx.program, expr);
+  if (arm !== undefined) {
+    const call = expr as ts.CallExpression;
+    const payload = call.arguments.length > 0 ? ctx.emitExpression(call.arguments[0]) : undefined;
+    return packArm(ctx, type, arm === "Ok", payload);
+  }
+  return packObject(ctx, type, ctx.emitExpression(expr));
+};
+
+/** `Ok` / `Err` when `expr` is one of them written out here, else undefined. */
+const constructedArm = (program: CheckedProgram, expr: ts.Expression): string | undefined => {
+  if (!ts.isCallExpression(expr) || !isResultConstructorCall(program, expr)) return undefined;
+  return (expr.expression as ts.Identifier).text;
+};
+
+/**
+ * The caller's half: materialise the word as the object every other construct
+ * reads. `site` is the call, which the escape analysis records as an ordinary
+ * allocation site of the *caller* — so this is an entry-block `alloca` unless
+ * the `Result` is handed on to something that keeps the pointer, and SROA
+ * folds the alloca, the stores and the shifts away once the call is inlined.
+ *
+ * Both payload slots get the same bits. Only the arm the discriminant selects
+ * may be read (the checker proves it), so the copy in the dead slot is never
+ * observed, and writing it unconditionally costs less than a branch.
+ *
+ * The same function serves a `Result` *parameter* (WP17): the word arrives in
+ * a register and the callee builds the object once, in its prologue, with
+ * `stack` from `EscapeResult.stackParams` rather than from a call site.
+ */
+export const unpackResult = (
+  ctx: EmitContext,
+  type: ResultType,
+  word: string,
+  stack: boolean
+): string => {
+  declareResultTypes(ctx, type);
+  const layout = resultLayout(type);
+  const object = allocateIn(ctx, layout, stack);
+  const ok = ctx.fn.emitValue(`trunc i64 ${word} to i1`);
+  storeSlot(ctx, layout, object, layout.ok, ok);
+  const high = ctx.fn.emitValue(`lshr i64 ${word}, ${RESULT_PAYLOAD_SHIFT}`);
+  let value: string | undefined;
+  if (layout.value) {
+    value = wordToPayload(ctx, layout.value.type, high);
+    storeSlot(ctx, layout, object, layout.value, value);
+  }
+  // The two arms share the narrowing when they narrow to the same LLVM type,
+  // which is the common `Result<i32, i32>` shape.
+  const sameShape = layout.value !== undefined && llvmType(layout.value.type) === llvmType(layout.error.type);
+  storeSlot(ctx, layout, object, layout.error, sameShape ? value! : wordToPayload(ctx, layout.error.type, high));
+  return object;
+};
+
+/**
+ * Wrap a call that answers a by-value `Result`: the call itself, then the
+ * unpack. `emitCall` hands the finished `call` text in, because who builds the
+ * operand list differs between a plain call and a method call.
+ */
+export const emitResultReturningCall = (
+  ctx: EmitContext,
+  call: string,
+  type: StaticType,
+  site: ts.Node
+): string => {
+  const word = ctx.fn.emitValue(call);
+  return unpackResult(ctx, type as ResultType, word, ctx.isStackSite(site));
+};
+
+
+
 // ---- `r.ok` / `r.value` / `r.error` -------------------------------------------------
 
 propertyEmitters.result = (ctx, expr, receiver) => {
@@ -166,10 +332,12 @@ const branchOnOk = (ctx: EmitContext, layout: ResultLayout, object: string, errL
 };
 
 /**
- * `r.orReturn()`: Rust's `?`. The error arm is an early `return err(r.error)`
+ * `r.orReturn()`: Rust's `?`. The error arm is an early `return Err(r.error)`
  * of *this* function's `Result` type, so the payload is copied into a fresh
  * object rather than the callee's being handed on — the two monomorphisations
- * are different structs even when the error types agree.
+ * are different structs even when the error types agree. When this function
+ * returns by value (WP17) there is no object at all: the propagated error is
+ * packed into the word and `ret`urned, so propagation costs a shift.
  */
 const emitOrReturn = (ctx: EmitContext, expr: ts.CallExpression, receiver: ResultType): string => {
   const returnType = ctx.currentSig.returnType as ResultType;
@@ -182,9 +350,15 @@ const emitOrReturn = (ctx: EmitContext, expr: ts.CallExpression, receiver: Resul
 
   ctx.fn.placeBlock(errBlock);
   const error = loadSlot(ctx, layout, object, layout.error);
-  const propagated = construct(ctx, returnType, false, error);
-  ctx.emitScopeExit();
-  ctx.fn.emit(`ret ${llvmType(returnType)} ${propagated}`);
+  if (resultByValue(returnType)) {
+    const word = packArm(ctx, returnType, false, error);
+    ctx.emitScopeExit();
+    ctx.fn.emit(`ret i64 ${word}`);
+  } else {
+    const propagated = construct(ctx, returnType, false, error);
+    ctx.emitScopeExit();
+    ctx.fn.emit(`ret ${llvmType(returnType)} ${propagated}`);
+  }
 
   ctx.fn.placeBlock(okBlock);
   return layout.value ? loadSlot(ctx, layout, object, layout.value) : "void";
@@ -297,6 +471,19 @@ export const isResultConstructorCall = (program: CheckedProgram, call: ts.CallEx
  */
 export const collectResultFacts = (program: CheckedProgram, node: ts.Node, facts: MemoryFacts): void => {
   if (ts.isCallExpression(node)) {
+    // WP17: a call that answers a `Result` in a register hands back no memory,
+    // so the *caller* builds the object the rest of the lowering reads. That is
+    // an allocation of this function — an own alloca when the escape analysis
+    // says so, an arena bump otherwise — and the allocator call has to be
+    // reported here, because the callee no longer makes it.
+    const callee = program.callees.get(node);
+    if (callee !== undefined) {
+      if (resultByValue(callee.returnType)) {
+        if (!facts.stackSites.has(node)) facts.callees.add("sts_alloc_struct");
+        facts.effect = "write";
+      }
+      return;
+    }
     if (ts.isPropertyAccessExpression(node.expression)) {
       const method = resultMethodName(program, node);
       if (method === undefined) return;

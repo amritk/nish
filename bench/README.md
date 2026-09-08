@@ -33,12 +33,22 @@ it and without one the Rust columns are skipped. `CC` picks the C compiler
 | `sieve` | `boolean[]` strided stores with bounds checks, 20 passes over one 10 MB array | | n = 1e7 | `13291580` |
 | `strbuild` | template literals with a number hole, `+` on immutable strings, the arena allocator | | 131072 pieces | `806394` (final length) |
 | `vec3` | a `Vec3` class with methods called in a tight loop, no allocation in the loop | `--number-mode f64` | 5e7 iterations | position and energy |
+| `result` | a fallible function returning `Result<number, number>` and one taking it, both by value in a register (WP17); the accumulator feeds the next input, so the loop carries a dependency | | 2e8 calls | `15873` |
 
 Every size is chosen so the C version runs for at least a quarter of a second
 on the reference machine (a 2.1 GHz Xeon virtual machine): fib(35) and a
 single 1e7 sieve pass finish in 30-40 ms there, too short for the run-to-run
 noise of a VM. The `bench:n` comment marks the one line the runner rewrites
 for `--n`; the twins carry the same marker.
+
+`result`'s twins are the shapes each language would use anyway: a C struct of
+two words — the one `statictsc --emit-header` declares for
+`Result<number, number>` — and Rust's own `Result<i32, i32>`. All three are
+returned and passed in one register, so the three columns should be the same
+code; a StaticTS column well behind them means a `Result` went back to being
+a pointer into the arena. What the gap it currently shows is about, and the
+respelling that did *not* close it, is in
+[docs/wp17-result-abi.md](../docs/wp17-result-abi.md) §4.
 
 `strbuild` has a fourth version, `strbuild_naive.c`: the same immutable-string
 algorithm with a `malloc` per string and a `free` as soon as a string has been

@@ -181,6 +181,8 @@ export class FunctionFacts {
   stackSites: boolean[];
   /** Locals that only ever hold a stack object: accesses through them are own memory. */
   stackLocals: Local[];
+  /** WP17: by-value `Result` parameters whose unpacked object is an entry-block alloca. */
+  stackParams: StringSet;
   /** Bracket the body with `sts_arena_mark` / `sts_arena_release`. Decided after the fixpoint. */
   arenaScope: boolean;
   /** Performs an arena allocation, directly or through a callee (fixpoint). */
@@ -212,6 +214,7 @@ export class FunctionFacts {
     this.returnDeref = 0;
     this.stackSites = new Array<boolean>(nodeCount);
     this.stackLocals = [];
+    this.stackParams = new StringSet();
     this.arenaScope = false;
     this.allocates = false;
     this.directArena = false;
@@ -242,6 +245,11 @@ export class FunctionFacts {
   /** WP6: the allocation at `node` was proved not to outlive the function. */
   isStackSite(node: Node): boolean {
     return this.stackSites[node.id];
+  }
+
+  /** WP17: the object the by-value `Result` parameter `name` unpacks into is an alloca. */
+  isStackParam(name: string): boolean {
+    return this.stackParams.has(name);
   }
 
   holdsStackObject(local: Local): boolean {
@@ -570,9 +578,17 @@ function structSize(program: CheckedProgram, table: TypeTable, type: i32): i32 {
 }
 
 /** Struct, array and `Result` params, plain or `T | null`, get pointer facts. */
+/**
+ * Struct, array and `Result` params get pointer facts — except a `Result` the
+ * ABI packs into a register (WP17), which is not a pointer at all, so there is
+ * nothing for the fixpoint to say about it.
+ */
 function isPointerParam(table: TypeTable, type: i32): boolean {
   const inner = table.stripNull(type);
-  return table.isStruct(inner) || table.isArray(inner) || table.isResult(inner);
+  if (table.isResult(inner)) {
+    return !table.resultByValue(inner);
+  }
+  return table.isStruct(inner) || table.isArray(inner);
 }
 
 /** The fields `info` declares itself: everything after the inherited prefix. */
@@ -836,6 +852,7 @@ class FactCollector {
 
   /**
    * `Result` constructs (WP16), mirroring `self/emit_result.ts`:
+   *   a call answering a packed `Result`   the caller's own object (WP17)
    *   Ok / Err                write, calls the allocator unless it is a stack site
    *   r.ok / .value / .error  read
    *   orReturn                read plus the allocation of the propagated Result
@@ -845,6 +862,21 @@ class FactCollector {
     const program = this.unit.program;
     const table = this.table;
     if (node.kind === N_CALL) {
+      // WP17: a call that answers a `Result` in a register hands back no
+      // memory, so the *caller* builds the object the rest of the lowering
+      // reads. That is an allocation of this function — an own alloca when the
+      // escape analysis says so, an arena bump otherwise — and the allocator
+      // call has to be reported here, because the callee no longer makes it.
+      const callee = program.nodeCallees[node.id];
+      if (callee !== null) {
+        if (table.resultByValue(callee.returnType)) {
+          if (!this.facts.isStackSite(node)) {
+            this.facts.callees.add("sts_alloc_struct");
+          }
+          this.facts.effect = EFFECT_WRITE;
+        }
+        return;
+      }
       const method = resultMethodName(program, table, node);
       if (method.length > 0) {
         if (this.isStackOwned(node.children[0].children[0])) {
@@ -1015,6 +1047,7 @@ export function collectFacts(
   if (memory !== null) {
     facts.stackSites = memory.stackSites;
     facts.stackLocals = memory.stackLocals;
+    facts.stackParams = memory.stackParams;
     facts.directArena = memory.directArena;
     facts.allocates = memory.directArena;
     facts.allocLeaks = memory.allocLeaks;
@@ -1510,6 +1543,11 @@ export function paramAttributes(table: TypeTable, name: string, type: i32, f: Fu
     }
     return attrs;
   }
+  if (kind === K_RESULT && table.resultByValue(type)) {
+    // WP17: a small `Result` arrives packed in an `i64`, so none of the
+    // pointer facts are about it; `noundef` alone, as for any scalar.
+    return attrs;
+  }
   if (kind === K_RESULT) {
     // WP16: every `Result` comes from `Ok(...)` / `Err(...)`, so the object is
     // whole and never null, and nothing in the language can store through one.
@@ -1564,6 +1602,12 @@ export function returnAttributes(table: TypeTable, type: i32, deref: i32): strin
     attrs.push("nonnull");
     attrs.push("align 8");
     attrs.push(`dereferenceable(${ARRAY_HEADER_BYTES})`);
+    return attrs;
+  }
+  if (kind === K_RESULT && table.resultByValue(type)) {
+    // WP17: a small `Result` comes back packed in an `i64`, so none of the
+    // pointer facts are about it; the word is always fully defined, because
+    // the dead arm is discarded by a `select` before it is shifted in.
     return attrs;
   }
   if (kind === K_STRUCT || kind === K_RESULT) {

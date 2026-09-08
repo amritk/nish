@@ -1066,6 +1066,189 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end stmt_result -->
 
+### `Result<T, E>` returned in a register
+
+The same three functions with `number` as the error arm instead of `string`
+(WP17). Both payloads are four bytes, so `Result<number, number>` is returned
+as one `i64` — the discriminant in bits 0-31, the live payload in bits 32-63 —
+and `@half` has no `sts_alloc_struct`, no arena global and no `%struct.` value
+at all: `return Ok(n / 2)` is `zext`, `shl`, `or`, `ret`.
+
+`@quarter` shows the other two halves of the lowering. Its call to `half` is
+`call i64`, unpacked into `%sts_result.i32.i32.obj` — an entry-block alloca the
+caller owns, which is what `orReturn()` then loads the discriminant from — and
+its `res.propagate` arm packs the error straight back into the return register
+rather than building an `Err`. `@describe` is the caller's view: one alloca,
+one unpack, then the WP16 `getelementptr` + `load` the discriminant test
+guards, unchanged.
+
+<!-- cookbook:begin stmt_result_by_value -->
+```ts
+function half(n: number): Result<number, number> {
+  if (n % 2 !== 0) {
+    return Err(n);
+  }
+  return Ok(n / 2);
+}
+
+function quarter(n: number): Result<number, number> {
+  const h = half(n).orReturn();
+  return half(h);
+}
+
+function describe(n: number): number {
+  const outcome = quarter(n);
+  if (outcome.isErr()) {
+    return -outcome.error;
+  }
+  return outcome.value;
+}
+```
+
+```llvm
+%struct.sts_result.i32.i32 = type { i1, i32, i32 }
+
+declare void @sts_panic_div(i1 noundef zeroext) #1
+
+define noundef i64 @half(i32 noundef %n) #0 {
+entry:
+  %0 = icmp eq i32 2, 0
+  %1 = icmp eq i32 %n, -2147483648
+  %2 = icmp eq i32 2, -1
+  %3 = and i1 %1, %2
+  %4 = or i1 %0, %3
+  br i1 %4, label %div.fail, label %div.ok
+
+div.fail:
+  call void @sts_panic_div(i1 zeroext %0)
+  unreachable
+
+div.ok:
+  %5 = srem i32 %n, 2
+  %6 = icmp ne i32 %5, 0
+  br i1 %6, label %if.then, label %if.end
+
+if.then:
+  %7 = zext i32 %n to i64
+  %8 = shl i64 %7, 32
+  ret i64 %8
+
+if.end:
+  %9 = icmp eq i32 2, 0
+  %10 = icmp eq i32 %n, -2147483648
+  %11 = icmp eq i32 2, -1
+  %12 = and i1 %10, %11
+  %13 = or i1 %9, %12
+  br i1 %13, label %div.fail.1, label %div.ok.1
+
+div.fail.1:
+  call void @sts_panic_div(i1 zeroext %9)
+  unreachable
+
+div.ok.1:
+  %14 = sdiv i32 %n, 2
+  %15 = zext i32 %14 to i64
+  %16 = shl i64 %15, 32
+  %17 = or i64 %16, 1
+  ret i64 %17
+}
+
+define noundef i64 @quarter(i32 noundef %n) #0 {
+entry:
+  %h.addr = alloca i32, align 4
+  %sts_result.i32.i32.obj = alloca %struct.sts_result.i32.i32, align 8
+  %sts_result.i32.i32.obj.1 = alloca %struct.sts_result.i32.i32, align 8
+  %0 = call i64 @half(i32 %n)
+  %1 = trunc i64 %0 to i1
+  %2 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 0
+  store i1 %1, i1* %2, align 1
+  %3 = lshr i64 %0, 32
+  %4 = trunc i64 %3 to i32
+  %5 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 1
+  store i32 %4, i32* %5, align 4
+  %6 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 2
+  store i32 %4, i32* %6, align 4
+  %7 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 0
+  %8 = load i1, i1* %7, align 1
+  br i1 %8, label %res.ok, label %res.propagate
+
+res.propagate:
+  %9 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 2
+  %10 = load i32, i32* %9, align 4
+  %11 = zext i32 %10 to i64
+  %12 = shl i64 %11, 32
+  ret i64 %12
+
+res.ok:
+  %13 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 1
+  %14 = load i32, i32* %13, align 4
+  store i32 %14, i32* %h.addr, align 4
+  %15 = load i32, i32* %h.addr, align 4
+  %16 = call i64 @half(i32 %15)
+  %17 = trunc i64 %16 to i1
+  %18 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj.1, i32 0, i32 0
+  store i1 %17, i1* %18, align 1
+  %19 = lshr i64 %16, 32
+  %20 = trunc i64 %19 to i32
+  %21 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj.1, i32 0, i32 1
+  store i32 %20, i32* %21, align 4
+  %22 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj.1, i32 0, i32 2
+  store i32 %20, i32* %22, align 4
+  %23 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj.1, i32 0, i32 0
+  %24 = load i1, i1* %23, align 1
+  %25 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj.1, i32 0, i32 2
+  %26 = load i32, i32* %25, align 4
+  %27 = zext i32 %26 to i64
+  %28 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj.1, i32 0, i32 1
+  %29 = load i32, i32* %28, align 4
+  %30 = zext i32 %29 to i64
+  %31 = select i1 %24, i64 %30, i64 %27
+  %32 = shl i64 %31, 32
+  %33 = zext i1 %24 to i64
+  %34 = or i64 %32, %33
+  ret i64 %34
+}
+
+define noundef i32 @describe(i32 noundef %n) #0 {
+entry:
+  %outcome.addr = alloca %struct.sts_result.i32.i32*, align 8
+  %sts_result.i32.i32.obj = alloca %struct.sts_result.i32.i32, align 8
+  %0 = call i64 @quarter(i32 %n)
+  %1 = trunc i64 %0 to i1
+  %2 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 0
+  store i1 %1, i1* %2, align 1
+  %3 = lshr i64 %0, 32
+  %4 = trunc i64 %3 to i32
+  %5 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 1
+  store i32 %4, i32* %5, align 4
+  %6 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, i32 0, i32 2
+  store i32 %4, i32* %6, align 4
+  store %struct.sts_result.i32.i32* %sts_result.i32.i32.obj, %struct.sts_result.i32.i32** %outcome.addr, align 8
+  %7 = load %struct.sts_result.i32.i32*, %struct.sts_result.i32.i32** %outcome.addr, align 8
+  %8 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %7, i32 0, i32 0
+  %9 = load i1, i1* %8, align 1
+  %10 = xor i1 %9, true
+  br i1 %10, label %if.then, label %if.end
+
+if.then:
+  %11 = load %struct.sts_result.i32.i32*, %struct.sts_result.i32.i32** %outcome.addr, align 8
+  %12 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %11, i32 0, i32 2
+  %13 = load i32, i32* %12, align 4
+  %14 = sub i32 0, %13
+  ret i32 %14
+
+if.end:
+  %15 = load %struct.sts_result.i32.i32*, %struct.sts_result.i32.i32** %outcome.addr, align 8
+  %16 = getelementptr inbounds %struct.sts_result.i32.i32, %struct.sts_result.i32.i32* %15, i32 0, i32 1
+  %17 = load i32, i32* %16, align 4
+  ret i32 %17
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind noreturn cold }
+```
+<!-- cookbook:end stmt_result_by_value -->
+
 ### `process.exit(code)`
 
 A `noreturn` call plus `unreachable`; it is a terminator, so `finish` needs

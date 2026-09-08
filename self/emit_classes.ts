@@ -21,7 +21,7 @@
 import { explicitSuperCall } from "./assignment";
 import { ownFields } from "./attributes";
 import { Emitter } from "./emit";
-import { resultTypeDecl } from "./emit_result";
+import { emitPackedResult, emitResultReturningCall, resultTypeDecl } from "./emit_result";
 import { emitArrayLength, emitArrayMethodCall, emitNewArray } from "./emit_arrays";
 import { compoundFloatOpcode, compoundIntegerOpcode, emitIntBinary, floatText } from "./emit_ops";
 import { parseIntegerLiteral } from "./constants";
@@ -162,16 +162,22 @@ export function upcast(emitter: Emitter, value: string, from: StructInfo, to: St
  * for the base class, which ends at the nearest ancestor constructor (the one
  * the checker matched `args` against) or at the root.
  */
-function constructObject(emitter: Emitter, info: StructInfo, receiver: string, args: Node[]): void {
+function constructObject(
+  emitter: Emitter,
+  info: StructInfo,
+  receiver: string,
+  args: Node[],
+  site: Node
+): void {
   const ctor = info.ctor;
   if (ctor !== null) {
-    emitCall(emitter, ctor, receiver, args);
+    emitCall(emitter, ctor, receiver, args, site);
     return;
   }
   emitFieldInitializers(emitter, info, receiver);
   const base = info.base;
   if (base !== null) {
-    constructObject(emitter, base, upcast(emitter, receiver, info, base), args);
+    constructObject(emitter, base, upcast(emitter, receiver, info, base), args, site);
   }
 }
 
@@ -189,7 +195,7 @@ export function emitConstructorPrologue(emitter: Emitter, sig: FunctionSig): voi
   emitFieldInitializers(emitter, info, "%this");
   const base = info.base;
   if (base !== null && explicitSuperCall(sig.decl.children[1]) === null) {
-    constructObject(emitter, base, upcast(emitter, "%this", info, base), []);
+    constructObject(emitter, base, upcast(emitter, "%this", info, base), [], sig.decl);
   }
 }
 
@@ -200,7 +206,7 @@ export function emitSuperCall(emitter: Emitter, expr: Node): string {
   if (base === null) {
     panic(`emitter: \`super(...)\` in \`${self.name}\`, which has no base class`);
   }
-  constructObject(emitter, base, upcast(emitter, "%this", self, base), expr.children[1].children);
+  constructObject(emitter, base, upcast(emitter, "%this", self, base), expr.children[1].children, expr);
   return "void";
 }
 
@@ -251,7 +257,7 @@ export function emitNew(emitter: Emitter, expr: Node): string {
   // The class named, not the type it converts to.
   const info = structInfoOf(emitter, intrinsicType(emitter.program, expr));
   const obj = allocate(emitter, info, expr);
-  constructObject(emitter, info, obj, expr.children[2].children);
+  constructObject(emitter, info, obj, expr.children[2].children, expr);
   return obj;
 }
 
@@ -275,17 +281,33 @@ export function emitPropertyAccess(emitter: Emitter, expr: Node): string {
 }
 
 /** `call <ret> @Sym(<this>, args...)` for a method or constructor. */
-function emitCall(emitter: Emitter, callee: FunctionSig, receiver: string, args: Node[]): string {
+function emitCall(
+  emitter: Emitter,
+  callee: FunctionSig,
+  receiver: string,
+  args: Node[],
+  site: Node
+): string {
   const operands: string[] = [`${emitter.llvm(callee.paramTypes[0])} ${receiver}`];
   let i = 0;
   while (i < args.length) {
-    operands.push(`${emitter.llvm(callee.paramTypes[i + 1])} ${emitter.emitExpression(args[i])}`);
+    // WP17: as in the plain call, a `Result` argument the ABI packs travels as the word.
+    const want = callee.paramTypes[i + 1];
+    const value = emitter.table.resultByValue(want)
+      ? emitPackedResult(emitter, args[i], want)
+      : emitter.emitExpression(args[i]);
+    operands.push(`${emitter.llvmAbi(want)} ${value}`);
     i = i + 1;
   }
-  const call = `call ${emitter.llvm(callee.returnType)} @${callee.name}(${operands.join(", ")})`;
+  const call = `call ${emitter.llvmAbi(callee.returnType)} @${callee.name}(${operands.join(", ")})`;
   if (callee.returnType === T_VOID) {
     emitter.fn.emit(call);
     return "void";
+  }
+  // WP17: a small `Result` comes back in a register, exactly as it does from a
+  // plain function; the unpacked object belongs to this caller.
+  if (emitter.table.resultByValue(callee.returnType)) {
+    return emitResultReturningCall(emitter, call, callee.returnType, site);
   }
   return emitter.fn.emitValue(call);
 }
@@ -311,7 +333,7 @@ export function emitMethodCall(emitter: Emitter, expr: Node): string {
   if (owner !== null && owner !== info) {
     receiver = upcast(emitter, receiver, info, owner);
   }
-  return emitCall(emitter, callee, receiver, expr.children[1].children);
+  return emitCall(emitter, callee, receiver, expr.children[1].children, expr);
 }
 
 /** `recv.f = v` stores `v`; `recv.f op= v` reads the field first, as JS does. */

@@ -36,16 +36,18 @@
  * Build: scripts/build.sh <modules.ll> runtime/runtime.c <shim.c> -o x.node --profile napi
  */
 import { Compilation } from "../compilation";
-import { StaticType } from "../types";
+import { ResultType, StaticType, resultByValue } from "../types";
 import {
   banner,
   cFunctionName,
+  cResultWord,
   cParamName,
   cPrototype,
   cType,
   externalFunctions,
   ExternalFunction,
   kindOf,
+  resultDefinitions,
   tsKeyword,
   tsSignature,
   typedView,
@@ -107,6 +109,11 @@ function reader(t: StaticType, written: boolean): Reader | undefined {
       ],
     };
   }
+  // WP17: a `Result` the ABI packs is read from the object JS models it with,
+  // `{ ok: true, value }` / `{ ok: false, error }` — the same shape the shim
+  // hands back. Only the arm `ok` selects is read, because only that one is
+  // meaningful; the other stays whatever the initialiser left.
+  if (kindOf(t) === "result" && resultByValue(t)) return resultReader(t as ResultType);
   const view = typedView(t);
   if (view) {
     return {
@@ -124,8 +131,21 @@ function reader(t: StaticType, written: boolean): Reader | undefined {
   return undefined;
 }
 
-/** The boxing call for a result of this type, or undefined when it cannot cross. */
-function boxer(t: StaticType): { call: (value: string) => string; arena: boolean } | undefined {
+interface Boxer {
+  /** The napi call that puts the value in `&out`. */
+  call: (value: string) => string;
+  /** Lines to emit before it (WP17: a `Result` boxes its payload first). */
+  pre?: (value: string) => string[];
+  arena: boolean;
+}
+
+/**
+ * The napi constructor for a scalar, as a function of the C expression to box
+ * and the `napi_value *` to write; `undefined` when the kind has none. It is
+ * a function rather than a string because a `Result` boxes its payload into
+ * `&payload` while everything else boxes into `&out` (WP17).
+ */
+function scalarBox(t: StaticType): ((value: string, dest: string) => string) | undefined {
   const scalar: Record<string, string> = {
     i32: "napi_create_int32",
     f64: "napi_create_double",
@@ -133,12 +153,76 @@ function boxer(t: StaticType): { call: (value: string) => string; arena: boolean
     i64: "napi_create_bigint_int64",
   };
   const k = kindOf(t);
-  if (scalar[k]) return { call: (v) => `${scalar[k]}(env, ${v}, &out)`, arena: false };
-  if (k === "void") return { call: () => "napi_get_undefined(env, &out)", arena: false };
+  if (scalar[k]) return (value, dest) => `${scalar[k]}(env, ${value}, ${dest})`;
+  if (k === "void") return (_value, dest) => `napi_get_undefined(env, ${dest})`;
+  return undefined;
+}
+
+/** The boxing call for a result of this type, or undefined when it cannot cross. */
+function boxer(t: StaticType): Boxer | undefined {
+  const k = kindOf(t);
+  const scalar = scalarBox(t);
+  if (scalar) return { call: (v) => scalar(v, "&out"), arena: false };
   if (k === "string") return { call: (v) => `napi_create_string_utf8(env, ${v}->data, ${v}->len, &out)`, arena: true };
   const view = typedView(t);
   if (view) return { call: (v) => `sts_napi_array_result(env, ${v}, ${view.napiType}, ${view.elemSize}, &out)`, arena: true };
+  // WP17: a `Result` returned in a register becomes the tagged object JS
+  // already models — `{ ok: true, value }` or `{ ok: false, error }`. Only the
+  // arm the discriminant selects is boxed, because only that one was written.
+  // A `Result` that comes back as an arena pointer stays out: handing JS a
+  // pointer whose memory the next call recycles is not a bridge.
+  if (k === "result" && resultByValue(t)) return resultBoxer(t as ResultType);
   return undefined;
+}
+
+/**
+ * `{ ok: true, value }` / `{ ok: false, error }`: box the arm the discriminant
+ * selects into `payload`, then wrap it with `sts_napi_result`. `undefined`
+ * when either payload has no scalar constructor — the same gap that keeps an
+ * unsigned or `f32` parameter out of this shim.
+ */
+function resultBoxer(t: ResultType): Boxer | undefined {
+  const value = t.ok.kind === "void" ? undefined : scalarBox(t.ok);
+  const error = scalarBox(t.err);
+  if (error === undefined || (t.ok.kind !== "void" && value === undefined)) return undefined;
+  const okArm = (v: string) =>
+    value ? value(`${v}.as.value`, "&payload") : "napi_get_undefined(env, &payload)";
+  return {
+    arena: false,
+    pre: (v) => [
+      "napi_value payload;",
+      `if ((${v}.ok ? ${okArm(v)} : ${error(`${v}.as.error`, "&payload")}) != napi_ok)`,
+    ],
+    call: (v) => `sts_napi_result(env, ${v}.ok != 0, payload, &out)`,
+  };
+}
+
+function resultReader(t: ResultType): Reader | undefined {
+  const value = t.ok.kind === "void" ? undefined : SCALAR_READERS[kindOf(t.ok)];
+  const error = SCALAR_READERS[kindOf(t.err)];
+  if (error === undefined || (t.ok.kind !== "void" && value === undefined)) return undefined;
+  if (kindOf(t.err) === "i64" || (value && kindOf(t.ok) === "i64")) return undefined; // needs `lossless`
+  // `napi_ok` is the no-op arm for `Result<void, E>`: there is nothing to read.
+  const readArm = (c: string) =>
+    `${c}_flag ? ${value ? `${value.getter}(env, ${c}_arm, &${c}.as.value)` : "napi_ok"} : ${error.getter}(env, ${c}_arm, &${c}.as.error)`;
+  return {
+    jsType: "Result object",
+    usesTypeof: false,
+    arena: false,
+    lines: (c, i, fail) => [
+      `napi_value ${c}_ok, ${c}_arm;`,
+      `bool ${c}_flag;`,
+      `if (napi_get_named_property(env, argv[${i}], "ok", &${c}_ok) != napi_ok ||`,
+      `    napi_get_value_bool(env, ${c}_ok, &${c}_flag) != napi_ok)`,
+      `  return ${fail("must be { ok: true, value } or { ok: false, error }")};`,
+      `${cResultWord(t)} ${c};`,
+      `${c}.ok = ${c}_flag;`,
+      `if (napi_get_named_property(env, argv[${i}], ${c}_flag ? "value" : "error", &${c}_arm) != napi_ok)`,
+      `  return ${fail("must be { ok: true, value } or { ok: false, error }")};`,
+      `if ((${readArm(c)}) != napi_ok)`,
+      `  return ${fail("could not be converted")};`,
+    ],
+  };
 }
 
 /** What one function needs from the shim's shared helpers. */
@@ -193,6 +277,11 @@ function wrapper({ fn, readers, box, scoped }: Plan): string[] {
   lines.push("  napi_value out;");
   if (kindOf(sig.returnType) === "void") lines.push(`  ${call};`);
   else lines.push(`  ${cType(sig.returnType, "return")}${cType(sig.returnType, "return")!.endsWith("*") ? "" : " "}result = ${call};`);
+  if (box.pre)
+    lines.push(
+      ...box.pre("result").map((l) => `  ${l}`),
+      `    return ${fail(`${name}: cannot create the result`)};`
+    );
   lines.push(`  if (${box.call("result")} != napi_ok)`, `    return ${fail(`${name}: cannot create the result`)};`);
   if (scoped) lines.push("  sts_arena_release(mark);");
   lines.push("  return out;", "}", "");
@@ -211,13 +300,17 @@ export function generateNapiShim(compilation: Compilation): string {
     }
     const p = plan(fn);
     if (p) plans.push(p);
-    else skipped.push(`${source} -- not bridged: only numbers, booleans, i64, strings and Int32Array/Float64Array/BigInt64Array cross this shim`);
+    else
+      skipped.push(
+        `${source} -- not bridged: only numbers, booleans, i64, strings, Int32Array/Float64Array/BigInt64Array and a Result returned by value over those cross this shim`
+      );
   }
   const needs = {
     string: plans.some((p) => p.readers.some((r) => r.jsType === "string")),
     arrayArg: plans.some((p) => p.readers.some((r) => r.jsType.endsWith("Array"))),
     arrayResult: plans.some((p) => typedView(p.fn.sig.returnType) !== undefined),
     scoped: plans.some((p) => p.scoped),
+    result: plans.some((p) => p.box.pre !== undefined),
   };
 
   const lines: string[] = [
@@ -236,6 +329,9 @@ export function generateNapiShim(compilation: Compilation): string {
     "#include <stdint.h>",
     ...(needs.arrayResult ? ["#include <string.h>"] : []),
     '#include "statictsc.h" /* runtime/; the napi profile adds it to the include path */',
+    // WP17: the `Result` types the bridged signatures mention, spelled exactly
+    // as --emit-header spells them, since this file declares its own prototypes.
+    ...resultDefinitions(plans.map((p) => p.fn)),
     "",
     "/* C ABI of the bridged StaticTS functions (identical to --emit-header). */",
   ];
@@ -305,6 +401,26 @@ export function generateNapiShim(compilation: Compilation): string {
       "  if (status != napi_ok) return status;",
       "  if (a->len) memcpy(data, a->data, a->len * elem_size);",
       "  return napi_create_typedarray(env, type, a->len, buffer, 0, out);",
+      "}",
+      ""
+    );
+  }
+  if (needs.result) {
+    lines.push(
+      "/* WP17: a `Result` as the object JS models it with — `{ ok, value }` or",
+      " * `{ ok, error }`. The dead arm is never written, so it is never read. */",
+      "static napi_status sts_napi_result(napi_env env, bool ok, napi_value payload, napi_value *out) {",
+      "  napi_value obj, flag;",
+      "  napi_status status = napi_create_object(env, &obj);",
+      "  if (status != napi_ok) return status;",
+      "  status = napi_get_boolean(env, ok, &flag);",
+      "  if (status != napi_ok) return status;",
+      '  status = napi_set_named_property(env, obj, "ok", flag);',
+      "  if (status != napi_ok) return status;",
+      '  status = napi_set_named_property(env, obj, ok ? "value" : "error", payload);',
+      "  if (status != napi_ok) return status;",
+      "  *out = obj;",
+      "  return napi_ok;",
       "}",
       ""
     );

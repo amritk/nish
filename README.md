@@ -249,9 +249,8 @@ subset `self/` is written in, are in
 | M5 "Self-hosting" | `self/`: the compiler, written in StaticTS, compiling itself | done |
 
 Not in the language yet, in the order they are likely to land: optional
-reference counting for objects that must outlive an arena reset, virtual
-dispatch (single inheritance is in; method calls resolve statically), and
-returning a small `Result<T, E>` by value instead of through the arena.
+reference counting for objects that must outlive an arena reset, and virtual
+dispatch (single inheritance is in; method calls resolve statically).
 Generics, closures, `try`/`catch` and labelled `break`/`continue` are
 refusals rather than gaps, each with the message and the idiom to use
 instead ([docs/LANGUAGE.md](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)).

@@ -230,6 +230,49 @@ export function resultStructName(t: StaticType): string {
   return `sts_result.${mangleType(t.ok)}.${mangleType(t.err)}`;
 }
 
+/**
+ * WP17: the payload types the packed by-value `Result` word can carry — a
+ * scalar of at most four bytes, so that a discriminant word and a payload
+ * word together are one `i64`. `i64`, `u64` and `f64` are four bytes too
+ * many; a string, an array, a class, a nullable or a nested `Result` is a
+ * pointer, and a pointer payload would need the whole word on its own.
+ */
+function packablePayload(t: StaticType): boolean {
+  switch (t.kind) {
+    case "void":
+    case "bool":
+    case "u8":
+    case "u16":
+    case "i32":
+    case "u32":
+    case "f32":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
+ * WP17: whether a `Result` is returned by value, in one `i64`, rather than as
+ * the WP16 pointer to an arena struct.
+ *
+ *   bits  0..31   the discriminant: 1 for `Ok`, 0 for `Err`
+ *   bits 32..63   the live arm's payload, zero-extended
+ *
+ * The dead arm is not represented, which is what makes `Result<i32, i32>` —
+ * twelve bytes as a struct — fit in a word. Eight bytes is not a tuning knob:
+ * `i64` is the only return width whose C-ABI lowering is the same LLVM type on
+ * all six supported triples (`__int128` is `{ i64, i64 }` on x86-64 and `i128`
+ * elsewhere; an eight-byte C struct is `i64` on the four native ones and
+ * `sret` on wasm32). See `docs/wp17-result-abi.md` §1-2 for the measurements.
+ */
+export function resultByValue(t: StaticType): boolean {
+  return t.kind === "result" && packablePayload(t.ok) && packablePayload(t.err);
+}
+
+/** Bit position of the payload in the packed word; the tag owns the low half. */
+export const RESULT_PAYLOAD_SHIFT = 32;
+
 /** LLVM textual type for a StaticType. */
 export function llvmType(t: StaticType): string {
   switch (t.kind) {
@@ -264,6 +307,16 @@ export function llvmType(t: StaticType): string {
     case "result":
       return `%struct.${resultStructName(t)}*`;
   }
+}
+
+/**
+ * LLVM type at a call boundary — a parameter or a return slot. It differs
+ * from `llvmType` for exactly one shape: a `Result` small enough to pack
+ * travels in a register as an `i64` (WP17), never as a pointer to arena
+ * memory. Every other type is what it is.
+ */
+export function llvmAbiType(t: StaticType): string {
+  return resultByValue(t) ? "i64" : llvmType(t);
 }
 
 /** Natural alignment in bytes, as clang and rustc use for the same LLVM types. */

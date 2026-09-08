@@ -17,11 +17,19 @@
  *   string         -> not available: strings need a WASI runtime, and the wasm
  *                     profile is freestanding. Those functions are listed as
  *                     comments so the reader knows what is missing.
+ *   Result<T, E>   -> `{ ok: true, value: T } | { ok: false, error: E }`, when
+ *                     it is one the ABI packs into a register (WP17), taken or
+ *                     returned. The raw export speaks the packed `i64` as a
+ *                     bigint; the loader packs and unpacks it, so `ok` is a
+ *                     real boolean here and a payload `boolean` is a real
+ *                     boolean too, unlike a bare `bool` return. A `Result`
+ *                     held by pointer does not cross, for the same reason a
+ *                     string does not.
  */
 import { Compilation } from "../compilation";
-import { StaticType } from "../types";
+import { ResultType, StaticType, resultByValue } from "../types";
 import { banner, externalFunctions, kindOf, tsKeyword, tsSignature, typedView } from "./abi";
-import { wasmBridged } from "./wasm";
+import { wasmBridged, wasmResultType } from "./wasm";
 
 /** JS-visible type of a wasm export value; `undefined` when the value cannot cross. */
 export function wasmType(t: StaticType, position: "param" | "return"): string | undefined {
@@ -44,6 +52,10 @@ export function wasmType(t: StaticType, position: "param" | "return"): string | 
       return "void";
     case "array":
       return typedView(t)?.ctor;
+    // WP17: the packed shape, in either direction. The loader is what turns
+    // the bigint the export answers into this object, and an argument back.
+    case "result":
+      return resultByValue(t) ? wasmResultType(t as ResultType) : undefined;
     default:
       return undefined;
   }
@@ -92,7 +104,9 @@ export function generateDts(compilation: Compilation): string {
       params.push(`${p.name}: ${t ?? "never"}`);
     }
     if (!ok) {
-      lines.push(`  // ${source}  -- not exported to JS: string values need the StaticTS runtime, which the freestanding wasm profile does not include`);
+      lines.push(
+        `  // ${source}  -- not exported to JS: string values, and a \`Result\` held by pointer, need the StaticTS runtime, which the freestanding wasm profile does not include`
+      );
       continue;
     }
     count++;

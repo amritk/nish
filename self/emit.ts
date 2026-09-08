@@ -62,9 +62,12 @@ import {
 import { constantText, emitAssignment, emitBinary, emitUnary, numericConstant } from "./emit_ops";
 import {
   declareResultTypes,
+  emitPackedResult,
+  unpackResult,
   emitResultConstructor,
   emitResultMethod,
   emitResultProperty,
+  emitResultReturningCall,
   isResultConstructorCall,
 } from "./emit_result";
 import { addStringConstant, emitTemplate } from "./emit_strings";
@@ -162,6 +165,9 @@ export class Emitter {
   /** Alloca slots of the locals of the function being emitted, by identity. */
   slotLocals: Local[];
   slotNames: string[];
+  /** WP17: the unpacked object of each by-value `Result` parameter, by name. */
+  paramObjectNames: string[];
+  paramObjectValues: string[];
   /** Runtime symbols this module referenced; drives which declarations are emitted. */
   usedRuntime: StringSet;
   /** Interned string literals: text -> index into `stringRefs`. */
@@ -183,6 +189,8 @@ export class Emitter {
     this.loops = [];
     this.slotLocals = [];
     this.slotNames = [];
+    this.paramObjectNames = [];
+    this.paramObjectValues = [];
     this.usedRuntime = new StringSet();
     this.strings = new StringMap();
     this.stringRefs = [];
@@ -253,10 +261,10 @@ export class Emitter {
       if (optimize) {
         attrs = paramAttributes(this.table, name, type, facts);
       }
-      params.push(new IRParam(name, this.llvm(type), attrs));
+      params.push(new IRParam(name, this.llvmAbi(type), attrs));
       i = i + 1;
     }
-    this.fn = new IRFunction(sig.name, params, this.llvm(sig.returnType));
+    this.fn = new IRFunction(sig.name, params, this.llvmAbi(sig.returnType));
     // Linkage: exported functions are always external (they are the module's
     // ABI). Others are external too unless --strict-exports hides them.
     if (this.opts.strictExports && !sig.exported) {
@@ -275,6 +283,20 @@ export class Emitter {
     // WP6: an automatic arena scope remembers the bump position before anything is allocated.
     if (facts.arenaScope) {
       this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("sts_arena_mark")}()`);
+    }
+    // WP17: a `Result` parameter small enough to pack arrives as an `i64`.
+    // Unpack it once, before the body, into the object every construct reads.
+    this.paramObjectNames = [];
+    this.paramObjectValues = [];
+    i = 0;
+    while (i < sig.paramNames.length) {
+      const name = sig.paramNames[i];
+      if (this.table.resultByValue(sig.paramTypes[i])) {
+        const object = unpackResult(this, sig.paramTypes[i], `%${name}`, facts.isStackParam(name));
+        this.paramObjectNames.push(name);
+        this.paramObjectValues.push(object);
+      }
+      i = i + 1;
     }
     // A constructor stores the field initializers before its body runs, and a
     // derived one without an explicit `super(...)` constructs its base part.
@@ -398,7 +420,7 @@ export class Emitter {
     const params: string[] = [];
     let i = 0;
     while (i < sig.paramNames.length) {
-      const parts: string[] = [this.llvm(sig.paramTypes[i])];
+      const parts: string[] = [this.llvmAbi(sig.paramTypes[i])];
       if (optimize) {
         for (const attr of paramAttributes(this.table, sig.paramNames[i], sig.paramTypes[i], facts)) {
           parts.push(attr);
@@ -413,7 +435,7 @@ export class Emitter {
         ret.push(attr);
       }
     }
-    ret.push(this.llvm(sig.returnType));
+    ret.push(this.llvmAbi(sig.returnType));
     const group = optimize ? ` ${this.module.attrGroupFor(functionAttributes(facts))}` : "";
     return `declare ${ret.join(" ")} @${sig.name}(${params.join(", ")})${group}`;
   }
@@ -540,6 +562,19 @@ export class Emitter {
       this.fn.emit("ret void");
       return;
     }
+    const sig = this.currentSig;
+    if (sig === null) {
+      panic("emitter: `return` outside a function");
+    }
+    // WP17: a small `Result` leaves in a register. The word is built before the
+    // scope release, because the object it may be read out of is arena memory
+    // the release reclaims.
+    if (this.table.resultByValue(sig.returnType)) {
+      const word = emitPackedResult(this, value, sig.returnType);
+      this.emitScopeExit();
+      this.fn.emit(`ret i64 ${word}`);
+      return;
+    }
     const type = this.typeOf(value);
     const result = this.emitExpression(value);
     this.emitScopeExit();
@@ -636,7 +671,10 @@ export class Emitter {
     const local = this.program.nodeLocals[expr.id];
     if (local !== null) {
       if (local.storage === STORAGE_PARAM) {
-        return `%${local.name}`;
+        // WP17: a by-value `Result` parameter *is* a pointer to the object the
+        // prologue unpacked it into, so the name lowers to that value.
+        const object = this.paramObject(local.name);
+        return object.length > 0 ? object : `%${local.name}`;
       }
       const ty = this.llvm(local.type);
       return this.fn.emitValue(`load ${ty}, ${ty}* ${this.slotOf(local)}${this.alignSuffix(local.type)}`);
@@ -687,13 +725,24 @@ export class Emitter {
     const operands: string[] = [];
     let i = 0;
     while (i < args.children.length) {
-      operands.push(`${this.llvm(sig.paramTypes[i])} ${this.emitExpression(args.children[i])}`);
+      // WP17: an argument feeding a `Result` parameter the ABI packs is passed
+      // as the word, exactly as a `return` of one is.
+      const want = sig.paramTypes[i];
+      const value = this.table.resultByValue(want)
+        ? emitPackedResult(this, args.children[i], want)
+        : this.emitExpression(args.children[i]);
+      operands.push(`${this.llvmAbi(want)} ${value}`);
       i = i + 1;
     }
-    const call = `call ${this.llvm(sig.returnType)} @${sig.name}(${operands.join(", ")})`;
+    const call = `call ${this.llvmAbi(sig.returnType)} @${sig.name}(${operands.join(", ")})`;
     if (sig.returnType === T_VOID) {
       this.fn.emit(call);
       return "void";
+    }
+    // WP17: a small `Result` comes back in a register; unpack it into the
+    // caller's own object, which is what every other construct reads.
+    if (this.table.resultByValue(sig.returnType)) {
+      return emitResultReturningCall(this, call, sig.returnType, expr);
     }
     return this.fn.emitValue(call);
   }
@@ -726,6 +775,23 @@ export class Emitter {
 
   llvm(type: i32): string {
     return this.table.llvmType(type);
+  }
+
+  /** WP17: the unpacked object of a by-value `Result` parameter, or "". */
+  paramObject(name: string): string {
+    let i = 0;
+    while (i < this.paramObjectNames.length) {
+      if (this.paramObjectNames[i] === name) {
+        return this.paramObjectValues[i];
+      }
+      i = i + 1;
+    }
+    return "";
+  }
+
+  /** The LLVM type at a call boundary: `i64` for a `Result` the ABI packs (WP17). */
+  llvmAbi(type: i32): string {
+    return this.table.llvmAbiType(type);
   }
 
   /** Alignment for a type, or 0 when attributes are disabled. */

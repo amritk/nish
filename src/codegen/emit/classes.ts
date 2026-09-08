@@ -52,9 +52,9 @@
 import ts from "typescript";
 import { CheckedProgram, FieldInfo, FunctionSig, ImportBinding, StructInfo } from "../../checker";
 import { effectiveConstructor, explicitSuperCall, intrinsicType, isAssignmentOperator, ownFields } from "../../checker/classes";
-import { StaticType, isFloat, llvmType } from "../../types";
+import { ResultType, StaticType, isFloat, llvmAbiType, llvmType, resultByValue } from "../../types";
 import { emitIntBinary } from "./arithmetic";
-import { resultTypeDecl } from "./result";
+import { emitPackedResult, emitResultReturningCall, resultTypeDecl } from "./result";
 import { floatConstant } from "./builtins";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
 import {
@@ -158,13 +158,19 @@ export function upcast(ctx: EmitContext, value: string, from: StructInfo, to: St
  * same for the base class (WP2b), which ends at the nearest ancestor
  * constructor (the one the checker matched `args` against) or at the root.
  */
-function constructObject(ctx: EmitContext, info: StructInfo, receiver: string, args: readonly ts.Expression[]): void {
+function constructObject(
+  ctx: EmitContext,
+  info: StructInfo,
+  receiver: string,
+  args: readonly ts.Expression[],
+  site: ts.Node
+): void {
   if (info.ctor) {
-    emitMethodCall(ctx, info.ctor, receiver, args);
+    emitMethodCall(ctx, info.ctor, receiver, args, site);
     return;
   }
   emitFieldInitializers(ctx, info, receiver);
-  if (info.base) constructObject(ctx, info.base, upcast(ctx, receiver, info, info.base), args);
+  if (info.base) constructObject(ctx, info.base, upcast(ctx, receiver, info, info.base), args, site);
 }
 
 /**
@@ -177,14 +183,14 @@ export function emitConstructorPrologue(ctx: EmitContext, sig: FunctionSig): voi
   const info = sig.struct!;
   emitFieldInitializers(ctx, info, "%this");
   if (info.base && !explicitSuperCall(sig.decl as ts.ConstructorDeclaration)) {
-    constructObject(ctx, info.base, upcast(ctx, "%this", info, info.base), []);
+    constructObject(ctx, info.base, upcast(ctx, "%this", info, info.base), [], sig.decl);
   }
 }
 
 /** `super(args)` (WP2b): construct the base part of `this`. */
 export function emitSuperCall(ctx: EmitContext, expr: ts.CallExpression): string {
   const info = structInfo(ctx.program, ctx.program.bindings.get(expr.expression as unknown as ts.Identifier)!.type);
-  constructObject(ctx, info.base!, upcast(ctx, "%this", info, info.base!), expr.arguments);
+  constructObject(ctx, info.base!, upcast(ctx, "%this", info, info.base!), expr.arguments, expr);
   return "void";
 }
 
@@ -226,16 +232,30 @@ propertyEmitters.struct = (ctx, expr, receiver) => {
 };
 
 /** `call <ret> @Sym(<this>, args...)` for a method or constructor. */
-function emitMethodCall(ctx: EmitContext, callee: FunctionSig, receiver: string, args: readonly ts.Expression[]): string {
+function emitMethodCall(
+  ctx: EmitContext,
+  callee: FunctionSig,
+  receiver: string,
+  args: readonly ts.Expression[],
+  site: ts.Node
+): string {
   const operands = [`${llvmType(callee.params[0].type)} ${receiver}`];
   args.forEach((arg, i) => {
-    operands.push(`${llvmType(callee.params[i + 1].type)} ${ctx.emitExpression(arg)}`);
+    // WP17: as in `emitCall`, a `Result` argument the ABI packs travels as the word.
+    const want = callee.params[i + 1].type;
+    const value = resultByValue(want)
+      ? emitPackedResult(ctx, arg, want as ResultType)
+      : ctx.emitExpression(arg);
+    operands.push(`${llvmAbiType(want)} ${value}`);
   });
-  const call = `call ${llvmType(callee.returnType)} @${callee.name}(${operands.join(", ")})`;
+  const call = `call ${llvmAbiType(callee.returnType)} @${callee.name}(${operands.join(", ")})`;
   if (callee.returnType.kind === "void") {
     ctx.fn.emit(call);
     return "void";
   }
+  // WP17: a small `Result` comes back in a register, exactly as it does from a
+  // plain function; the unpacked object belongs to this caller.
+  if (resultByValue(callee.returnType)) return emitResultReturningCall(ctx, call, callee.returnType, site);
   return ctx.fn.emitValue(call);
 }
 
@@ -246,13 +266,13 @@ methodCallEmitters.struct = (ctx, expr, receiverType) => {
   // An inherited method takes `this` as its declaring class (WP2b).
   const info = structInfo(ctx.program, receiverType);
   if (callee.struct !== info) receiver = upcast(ctx, receiver, info, callee.struct!);
-  return emitMethodCall(ctx, callee, receiver, expr.arguments);
+  return emitMethodCall(ctx, callee, receiver, expr.arguments, expr);
 };
 
 newEmitters["*"] = (ctx, expr) => {
   const info = structInfo(ctx.program, intrinsicType(ctx.program, expr)!); // the class named, not the type it converts to
   const obj = allocate(ctx, info, expr);
-  constructObject(ctx, info, obj, expr.arguments ?? []);
+  constructObject(ctx, info, obj, expr.arguments ?? [], expr);
   return obj;
 };
 

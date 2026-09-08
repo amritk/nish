@@ -42,6 +42,7 @@ const BENCHMARKS = [
   { name: "sieve", what: "sieve of Eratosthenes, n = 1e7, 20 passes (boolean[])", mode: "i32", integer: true },
   { name: "strbuild", what: "string building, 131072 template pieces joined into 806 KB", mode: "i32", integer: true, extraC: ["strbuild_naive"] },
   { name: "vec3", what: "Vec3 class with methods, 5e7 iterations (f64)", mode: "f64", integer: false },
+  { name: "result", what: "Result<number, number> returned and passed, 2e8 calls (WP17 packing)", mode: "i32", integer: true },
 ];
 
 // ---- Options ------------------------------------------------------------------------

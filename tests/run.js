@@ -1254,6 +1254,198 @@ if (!only || "interop".includes(only)) {
     }
   }
 
+  // ---- WP17: a `Result` across the host boundary ----------------------------------
+  // WP16 skipped every function whose signature mentioned a `Result` and left a note.
+  // Now: --emit-header declares both C shapes (the packed word a small `Result` travels
+  // in, either direction, and the arena object for the rest), a -Werror C driver calls
+  // all four functions through it — including one that *takes* a `Result` the C side
+  // built itself — the N-API shim speaks `{ ok, value }` / `{ ok, error }` both ways,
+  // and the wasm loader packs and unpacks the i64. The point of the driver is that it
+  // *calls across*, so the register agreement is checked rather than only the header
+  // compiling.
+  const res = emit("tests/cases/res_export.ts", [
+    "--emit-header",
+    sidecar("res_export", "h"),
+    "--emit-dts",
+    sidecar("res_export", "d.ts"),
+    "--emit-napi",
+    sidecar("res_export", "napi.c"),
+  ]);
+  const resHeader = res.status === 0 ? fs.readFileSync(sidecar("res_export", "h"), "utf8") : "";
+  check(
+    "res_export.h declares the packed word a small Result travels in both ways, the arena object for the rest, and asserts the word is 8 bytes",
+    resHeader.includes("typedef struct sts_result_i32_i32_word {") &&
+      resHeader.includes("union { int32_t value; int32_t error; } as;") &&
+      resHeader.includes("STS_RESULT_ASSERT(sizeof(sts_result_i32_i32_word) == 8,") &&
+      resHeader.includes("sts_result_i32_i32_word half(int32_t n);") &&
+      resHeader.includes("sts_result_void_i32_word checkPort(int32_t port);") &&
+      resHeader.includes("struct sts_result_i32__IoError *openFile(const sts_str *path);") &&
+      resHeader.includes("int32_t describe(sts_result_i32_i32_word r);"),
+    resHeader
+  );
+  const resDts = res.status === 0 ? fs.readFileSync(sidecar("res_export", "d.ts"), "utf8") : "";
+  check(
+    "res_export.d.ts declares a by-value Result as a tagged union in both positions and leaves the pointer one out",
+    resDts.includes("half(n: number): { ok: true; value: number } | { ok: false; error: number };") &&
+      resDts.includes("checkPort(port: number): { ok: true } | { ok: false; error: number };") &&
+      resDts.includes(
+        "describe(r: { ok: true; value: number } | { ok: false; error: number }): number;"
+      ) &&
+      resDts.includes("// openFile(path: string): Result<number, IoError>  -- not exported to JS"),
+    resDts
+  );
+  if (fs.existsSync(sidecar("res_export", "d.ts"))) {
+    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("res_export", "d.ts")], { cwd: root });
+    check("res_export.d.ts passes tsc --noEmit --strict", r.status === 0, String(r.stdout) + String(r.stderr));
+  }
+  if (HAS_CLANG && res.status === 0) {
+    const syn = spawnSync("clang", [...strictC, "-pedantic", "-fsyntax-only", "-x", "c", sidecar("res_export", "h")]);
+    check(
+      "res_export.h compiles under -std=c11 -Wall -Wextra -Werror -pedantic",
+      syn.status === 0,
+      String(syn.stderr)
+    );
+    const driver = path.join(interopDir, "res_driver.c");
+    fs.writeFileSync(
+      driver,
+      [
+        "#include <stdio.h>",
+        '#include "res_export.h"',
+        "int main(void) {",
+        "  for (int32_t n = 8; n <= 9; n++) {",
+        "    sts_result_i32_i32_word r = half(n);",
+        '    printf("half(%d) %s %d via %d\\n", n, r.ok ? "ok" : "err",',
+        "           r.ok ? r.as.value : r.as.error, describe(r));",
+        "  }",
+        "  /* a Result the C side builds itself, handed to StaticTS by value */",
+        "  sts_result_i32_i32_word made = { 1, { 41 } };",
+        '  printf("C-built %d ", describe(made));',
+        "  made.ok = 0; made.as.error = 5;",
+        '  printf("%d\\n", describe(made));',
+        "  sts_result_void_i32_word v = checkPort(0), w = checkPort(443);",
+        '  printf("checkPort %d %d %d\\n", v.ok, v.as.error, w.ok);',
+        "  struct sts_result_i32__IoError *o = openFile(sts_str_new(\"\", 0));",
+        '  printf("openFile %d %d\\n", o->ok, o->error->code);',
+        "  sts_free_arena();",
+        "  return 0;",
+        "}",
+        "",
+      ].join("\n")
+    );
+    const exe = path.join(interopDir, "res_driver");
+    const cc = spawnSync(
+      "clang",
+      [...strictC, "-O2", sidecar("res_export", "ll"), path.join(runtimeDir, "runtime.c"), driver, "-o", exe],
+      { cwd: root }
+    );
+    const run = cc.status === 0 ? spawnSync(exe) : null;
+    check(
+      "a -Werror C driver calls a by-value Result in and out, and a pointer Result, through res_export.h",
+      run !== null &&
+        String(run.stdout).trim().split("\n").join(" | ") ===
+          "half(8) ok 4 via 4 | half(9) err 9 via -9 | C-built 41 -5 | checkPort 0 0 1 | openFile 0 2",
+      String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")
+    );
+  }
+  const resShim = res.status === 0 ? fs.readFileSync(sidecar("res_export", "napi.c"), "utf8") : "";
+  check(
+    "res_export.napi.c boxes a by-value Result as { ok, value } / { ok, error } and skips the pointer ones",
+    resShim.includes("static napi_status sts_napi_result(napi_env env, bool ok, napi_value payload, napi_value *out)") &&
+      resShim.includes('napi_set_named_property(env, obj, ok ? "value" : "error", payload)') &&
+      resShim.includes('{"half", sts_napi_half},') &&
+      resShim.includes('{"describe", sts_napi_describe},') &&
+      resShim.includes('napi_get_named_property(env, argv[0], r_flag ? "value" : "error", &r_arm)') &&
+      resShim.includes("openFile(path: string): Result<number, IoError> -- not bridged"),
+    resShim
+  );
+  if (HAS_CLANG && res.status === 0) {
+    if (hasNodeHeaders) {
+      const addon = path.join(interopDir, "res_export.node");
+      const b = spawnSync(
+        "bash",
+        [
+          "scripts/build.sh",
+          sidecar("res_export", "ll"),
+          "runtime/runtime.c",
+          sidecar("res_export", "napi.c"),
+          "-o",
+          addon,
+          "--profile",
+          "napi",
+        ],
+        { cwd: root }
+      );
+      const script = [
+        'import { createRequire } from "node:module";',
+        `const api = createRequire(import.meta.url)(${JSON.stringify(addon)});`,
+        "const out = [api.half(8), api.half(7), api.checkPort(0), api.checkPort(443)].map((r) => JSON.stringify(r));",
+        "out.push(api.describe({ ok: true, value: 41 }), api.describe({ ok: false, error: 5 }), api.describe(api.half(9)));",
+        "try { api.describe(7); } catch (e) { out.push(e.message); }",
+        "console.log(out.join(' '));",
+      ].join("\n");
+      const r = b.status === 0 ? spawnSync("node", ["--input-type=module", "-e", script], { cwd: root }) : null;
+      check(
+        "N-API: a by-value Result crosses both ways as { ok: true, value } / { ok: false, error }",
+        r !== null &&
+          String(r.stdout).trim() ===
+            '{"ok":true,"value":4} {"ok":false,"error":7} {"ok":false,"error":0} {"ok":true} 41 -5 -9' +
+              " describe: argument 1 (r) must be { ok: true, value } or { ok: false, error }",
+        String(b.stderr) + (r ? String(r.stdout) + String(r.stderr) : "")
+      );
+    }
+    if (has("wasm-ld")) {
+      // The freestanding wasm profile has no string runtime, so the wasm half
+      // uses the scalar-only subset of the same four functions.
+      const src = path.join(interopDir, "res_wasm.ts");
+      fs.writeFileSync(
+        src,
+        [
+          "export function half(n: i32): Result<i32, i32> {",
+          "  if (n % 2 !== 0) { return Err(n); }",
+          "  return Ok(n / 2);",
+          "}",
+          "export function checkPort(port: i32): Result<void, i32> {",
+          "  if (port <= 0) { return Err(port); }",
+          "  return Ok();",
+          "}",
+          "export function describe(r: Result<i32, i32>): i32 {",
+          "  if (r.isErr()) { return -r.error; }",
+          "  return r.value;",
+          "}",
+          "",
+        ].join("\n")
+      );
+      const scalar = emit(src, ["--emit-dts", sidecar("res_wasm", "d.ts")]);
+      const wasm = path.join(interopDir, "res_wasm.wasm");
+      const w =
+        scalar.status === 0
+          ? spawnSync(
+              "bash",
+              ["scripts/build.sh", sidecar("res_wasm", "ll"), "-o", wasm, "--profile", "wasm"],
+              { cwd: root }
+            )
+          : { status: 1, stderr: scalar.stderr };
+      const script = [
+        'import { readFileSync } from "node:fs";',
+        `const { load } = await import(${JSON.stringify(sidecar("res_wasm", "mjs"))});`,
+        `const api = await load(readFileSync(${JSON.stringify(wasm)}));`,
+        "const out = [api.half(8), api.half(7), api.checkPort(0), api.checkPort(443)].map((r) => JSON.stringify(r));",
+        "out.push(api.describe({ ok: true, value: 41 }), api.describe({ ok: false, error: 5 }), api.describe(api.half(9)));",
+        "try { api.describe(7); } catch (e) { out.push(e.message); }",
+        "console.log(out.join(' '));",
+      ].join("\n");
+      const r = w.status === 0 ? spawnSync("node", ["--input-type=module", "-e", script], { cwd: root }) : null;
+      check(
+        "wasm: the companion loader packs and unpacks the i64 a by-value Result crosses in",
+        r !== null &&
+          String(r.stdout).trim() ===
+            '{"ok":true,"value":4} {"ok":false,"error":7} {"ok":false,"error":0} {"ok":true} 41 -5 -9' +
+              " expected { ok: true, value } or { ok: false, error }",
+        String(w.stderr) + (r ? String(r.stdout) + String(r.stderr) : "")
+      );
+    }
+  }
+
   // ---- WP4/WP8: arrays and strings across the boundary ----------------------------
   // examples/arrays.ts takes and returns Int32Array / Float64Array / BigInt64Array. Checks:
   //   - the header spells a read-only array parameter `const sts_array *` and a written one

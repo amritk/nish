@@ -71,6 +71,18 @@ export interface EmitContext {
    */
   isStackSite(node: ts.Node): boolean;
   /**
+   * WP17: whether the object a by-value `Result` parameter is unpacked into
+   * may be an entry-block alloca (`EscapeResult.stackParams`). A parameter has
+   * no allocation *expression*, so the decision is keyed by its name.
+   */
+  isStackParam(name: string): boolean;
+  /**
+   * The unpacked object of a by-value `Result` parameter, or `undefined` for
+   * every other parameter. A `Result` value *is* a pointer to its object, so
+   * an identifier bound to one lowers to this value rather than to `%name`.
+   */
+  paramObject(name: string): string | undefined;
+  /**
    * WP6: emit the arena release of the function's automatic scope, if it has
    * one. Called right before every `ret`, after the return value is computed.
    */

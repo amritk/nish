@@ -37,8 +37,8 @@ where they disagree with LANGUAGE.md, LANGUAGE.md wins.
 | [wp13-differential.md](wp13-differential.md) | Design note: differential testing against Node, the typed rewrite rules, `runtime/shim.mjs`, the corpus and the fuzzer, every discrepancy found (with which ones were fixed since). |
 | [wp14-selfhost.md](wp14-selfhost.md) | The plan of record for self-hosting, and what it cost: StaticTS-0 and what it forces, the language gap measured, the five milestones, the oracles, and the bootstrap that closed it. |
 | [wp15-performance.md](wp15-performance.md) | The rule that speed decides a tie and that "faster" means measured: the data-oriented paradigm and how it is enforced, the language features the ordering requires, and the diagnostics that keep the decisions visible. |
-
 | [wp16-results.md](wp16-results.md) | Design note: `Result<T, E>`, the three rules that make a failure impossible to ignore, why the representation is a pointer rather than an LLVM aggregate, why `throw` was removed, and the ambient declarations that keep a StaticTS program type-checkable by `tsc`. |
+| [wp17-result-abi.md](wp17-result-abi.md) | Design note: returning a small `Result` in a register. Why a packed `i64` and not a by-value aggregate or `sret`, what "small" means and where the threshold comes from, the per-target lowering tables, the x86-64 and aarch64 assembly, and the measured 2× — plus the C header, N-API and wasm bridges that let a `Result` cross to a host. |
 
 The remaining semantic changes after WP13 (checked integer division,
 ECMAScript `Math.pow`, numeric-only ordering, `?.`/`??` rejected,
