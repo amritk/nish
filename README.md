@@ -14,6 +14,14 @@ TypeScript source ──▶ TS AST ──▶ validator + checker ──▶ LLVM 
 If it compiles, every value has one fixed, known memory layout; binaries are
 a few kilobytes; there is no interpreter and no GC anywhere in the pipeline.
 
+> **AmritScript is pre-alpha.** The version is `0.1.0`: the language, the CLI
+> flags and the IR that either compiler emits all change without notice until
+> 1.0. Every commit compiles, tests and bootstraps itself — see
+> [Project status](#project-status) for what is done and what is next — but
+> nothing here is frozen yet, so pin a commit rather than a range, expect to
+> fix your source when you move to a newer one, and read
+> [CHANGELOG.md](CHANGELOG.md) before you upgrade.
+
 > **AmritScript is a working title.** The name is a placeholder and is expected
 > to change; treat the language name and the `amritc` CLI as unstable, and pin
 > a commit rather than a name if you depend on either. Nothing in the compiler
@@ -255,6 +263,10 @@ Details, and the subset `self/` is written in, are in
 [docs/wp14-selfhost.md](docs/wp14-selfhost.md).
 
 ## Project status
+
+Pre-alpha, as above: M4 is the milestone that freezes the language reference
+and tags a release, so until it lands a construct's spelling, a flag's name
+and the IR any of them lowers to are all still free to change.
 
 | Milestone | Contents | State |
 | --- | --- | --- |

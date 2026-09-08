@@ -680,16 +680,18 @@ Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 | M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. | done as a package; four of the seven benchmarks are outside 1.10x today ([BENCHMARKS.md](BENCHMARKS.md)), which is what WP15 is for |
 | M4 "1.0" | WP2b, remaining docs, stabilised spec | tagged release, language reference frozen. | **open — the only one left.** Inheritance landed; virtual dispatch, the frozen reference and the tag have not |
 | M5 "Self-hosting" | WP14 ([wp14-selfhost.md](wp14-selfhost.md)) | `self/` compiles `self/`: `IR(stage1, self/) == IR(stage2, self/)` byte for byte, and stage3 is byte-identical to stage2 (`tests/self/bootstrap.js`). | done |
+| M6 "One compiler" | WP19 ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | stage0 is deleted rather than frozen. The six gates of §3 there are closed first: parity, oracle succession, the seed protocol, the seed policy, distribution without Node, and the provenance tag. | open — after M4 |
 
 WP12, WP13, WP16 and WP17 landed between M3 and M5 without a milestone of
 their own; releasing what they built is part of M4.
 
 ### What remains
 
-M4 and WP15 are the whole of it, and they are not sequential: the language
-reference cannot be frozen while most of the list below is still going to
-change it — items 1, 4, 5, 6 and 8 each add or withdraw a rule — so the WP15
-order *is* the road to 1.0 rather than a detour from it. The list is
+M4 and WP15 are the near road and M6 is the far one, and none of the three
+is sequential with the others. The language reference cannot be frozen while
+most of the list below is still going to change it — items 1, 4, 5, 6 and 8
+each add or withdraw a rule — so the WP15 order *is* the road to 1.0 rather
+than a detour from it. The list is
 [wp15-performance.md](wp15-performance.md) §9, repeated here so that this
 document does not need a second one open beside it to be current:
 
