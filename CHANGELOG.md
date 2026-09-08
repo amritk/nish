@@ -449,6 +449,30 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   also checks that every function a `.d.ts` declares has an entry in its
   `.mjs`.
 
+- **The ambient declarations now say that `panic` and `process.exit` do not
+  return, and declare the two builtins they had never declared at all.**
+  `runtime/amritc.d.ts` claims one direction — a program `amritc` accepts is
+  never one `tsc` refuses — and it was wrong about that in 68 places in `self/`
+  alone. Both terminators were typed `void`, so `tsc` saw a function ending in
+  `panic(...)` as one that falls off its end, and saw nothing at all in
+  `if (x === null) { panic(...); }`, which is the guard `self/` writes wherever
+  another language would assert: 16 missing-return errors and some 40 spurious
+  `possibly null` ones, from one word. They are `never` now, which is how
+  TypeScript spells a terminator, and `mkdirSync` and `spawnSync` — documented
+  builtins since WP14 §3a D4 — are declared beside the other file operations.
+  With those three lines, `tsc --strict` accepts all 54 modules of the
+  self-hosted compiler bar one call, and 151 of the 153 accepted cases.
+
+- **The claim is now tested on the whole language rather than on `Result`.**
+  The WP16 block type-checked the `res_*` cases against the declarations, which
+  is why the holes above survived: nothing in that surface panics. It checks
+  every accepted case and every `self/` module now, with the divergences named
+  rather than tolerated — the typed-array aliases and the implicit `super()` on
+  the case side, and `a.pop()` being `T` here and `T | undefined` in
+  `lib.es5.d.ts` on the `self/` side. All three are recorded in the file's own
+  foot-note section; a fourth diagnostic is a hole in the declarations and
+  fails the run.
+
 - **A builtin's argument is checked down to its element type.**
   `checkArgumentType` compared type *kinds*, which was enough while every
   builtin wanted a scalar or a string; `spawnSync` wants a `string[]`, and an

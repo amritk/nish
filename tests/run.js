@@ -3251,6 +3251,55 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
     !refused.ok && refused.output.includes("Property 'value' does not exist"),
     refused.output
   );
+
+  // The declarations claim a direction, not a coincidence: a program amritc
+  // accepts should never be one tsc refuses. `res_*` above tests that claim on
+  // the `Result` surface; this tests it on every accepted case there is, which
+  // is the whole language. Two cases are listed because the divergence is real
+  // and documented, not because the declarations are missing something.
+  const AMBIENT_DIVERGENCES = new Map([
+    [
+      "arr_typed_views.ts",
+      // `Int32Array` and friends name the element-typed array here and the JS
+      // view in lib.es5; redeclaring them would break every other lib type.
+      "typed-array aliases (see the note at the foot of runtime/amritc.d.ts)",
+    ],
+    [
+      "cls_extends_chain.ts",
+      // A derived constructor may omit `super(...)` when no ancestor
+      // constructor takes parameters; JavaScript throws at the first `this`.
+      "implicit `super()` (see docs/wp13-differential.md, rewrite rules)",
+    ],
+  ]);
+  const acceptedCases = fs
+    .readdirSync(casesDir)
+    .filter((f) => f.endsWith(".ts") && !f.startsWith("reject_") && !AMBIENT_DIVERGENCES.has(f));
+  const everyCase = typeCheck("accepted", acceptedCases.map((f) => path.join(casesDir, f)));
+  check(
+    `tsc accepts every case amritc accepts, against the ambient declarations (${acceptedCases.length} cases, ${AMBIENT_DIVERGENCES.size} documented divergences)`,
+    everyCase.ok,
+    everyCase.output
+  );
+
+  // And on the largest AmritScript program there is: the compiler itself.
+  const selfDir = path.join(root, "self");
+  const selfModules = fs
+    .readdirSync(selfDir)
+    .filter((f) => f.endsWith(".ts"))
+    .map((f) => path.join(selfDir, f));
+  const selfCheck = typeCheck("stage1", selfModules);
+  // `a.pop()` is `T` here and `T | undefined` in lib.es5 (the foot of
+  // runtime/amritc.d.ts says why it stays that way), so the one call in
+  // `self/checker.ts` that pops without a null check is the only diagnostic
+  // this may report. Anything else is a hole in the declarations.
+  const selfErrors = selfCheck.output
+    .split("\n")
+    .filter((line) => line.includes(": error TS"));
+  check(
+    `tsc accepts self/ against the ambient declarations, bar the documented \`pop\` divergence (${selfModules.length} modules)`,
+    selfErrors.every((line) => line.includes("TS2345") && line.includes("| undefined")),
+    selfCheck.output
+  );
 }
 
 // ---- WP12: package ------------------------------------------------------------------
