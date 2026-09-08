@@ -17,9 +17,20 @@
 //      agree (N-API borrows the buffer, so writes land directly);
 //   5. `amrit_arena_release(mark)`, in a `finally`, so a trap leaks nothing.
 // `memory.buffer` is re-read after every module call because `memory.grow`
-// detaches the previous ArrayBuffer. Scalar-only exports are passed through
-// untouched; string functions are omitted (no WASI runtime).
+// detaches the previous ArrayBuffer. String functions are omitted (no WASI
+// runtime).
+//
+// A scalar-only export is passed through untouched unless one of its types is
+// narrower or wider than the wasm value type carrying it. The wasm ABI has
+// only i32 / i64 / f32 / f64, so `u8`, `u16`, `u32` and `u64` all share a
+// value type with a signed one and the loader is the only place their range
+// can be restored: it masks a narrow unsigned argument on the way in and every
+// unsigned result on the way out (`wasmUnsignedIn` / `wasmUnsignedOut` say why
+// each). `f32` needs neither — the JS-to-wasm call rounds an argument to f32
+// exactly as an `f32` parameter means, and every f32 is exactly representable
+// in the double a result comes back as.
 
+import { LANGUAGE } from "./branding";
 import { Compilation } from "./compilation";
 import {
   banner,
@@ -28,13 +39,28 @@ import {
   POS_PARAM,
   POS_RETURN,
   pushAll,
+  tsKeyword,
   tsSignature,
   TypedView,
   typedView,
 } from "./interop_abi";
 import { basename } from "./paths";
 import { FunctionSig } from "./program";
-import { K_RESULT, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_U16, T_U32, T_U8, T_VOID, TypeTable } from "./types";
+import {
+  K_ARRAY,
+  K_RESULT,
+  T_BOOL,
+  T_F32,
+  T_F64,
+  T_I32,
+  T_I64,
+  T_U16,
+  T_U32,
+  T_U64,
+  T_U8,
+  T_VOID,
+  TypeTable,
+} from "./types";
 
 /** `x.d.ts` -> `x.mjs`. */
 export function wasmLoaderPath(dtsFile: string): string {
@@ -54,20 +80,161 @@ export class WasmBridge {
   }
 }
 
+/**
+ * JS-visible type of a wasm export value; `""` when the value cannot cross.
+ * This one table decides *both* what `--emit-dts` declares and what the loader
+ * implements: `wasmCrosses` is `wasmType(...).length > 0` and `generateDts`
+ * asks `wasmSkipReason`, which asks the same function. They lived apart once
+ * and drifted — the declarations grew the unsigned widths while the loader did
+ * not, so a `.d.ts` promised a `port(p: number)` the `.mjs` had no entry for —
+ * and one table is what makes that unrepresentable.
+ *
+ * The wasm ABI has four value types, so several source types share one:
+ *   i32 / u8 / u16 / u32 / f32 / f64  -> number
+ *   i64 / u64                         -> bigint
+ *   i1                                -> `WasmBool` (0 | 1) out, `boolean` in
+ * The narrowing that share implies is the loader's job, not the declaration's
+ * (see `wasmUnsignedIn` / `wasmUnsignedOut`).
+ */
+export function wasmType(table: TypeTable, t: i32, position: i32): string {
+  switch (table.kindOf(t)) {
+    // WP15: an unsigned width crosses as the wasm value type of its LLVM type,
+    // so u8/u16/u32 are a `number` like i32 and u64 is a `bigint` like i64.
+    case T_I32:
+      return "number";
+    case T_U8:
+      return "number";
+    case T_U16:
+      return "number";
+    case T_U32:
+      return "number";
+    case T_F32:
+      return "number";
+    case T_F64:
+      return "number";
+    case T_I64:
+      return "bigint";
+    case T_U64:
+      return "bigint";
+    case T_BOOL:
+      return position === POS_PARAM ? "boolean" : "WasmBool";
+    // Only a result can be `void`; a parameter of that type does not exist,
+    // and spelling one `void` would be a declaration the loader cannot honour.
+    case T_VOID:
+      return position === POS_RETURN ? "void" : "";
+    case K_ARRAY: {
+      const view = typedView(table, t);
+      return view === null ? "" : view.ctor;
+    }
+    // WP17: the packed shape, in either direction. The loader is what turns
+    // the bigint the export answers into this object, and an argument back.
+    case K_RESULT:
+      return table.resultByValue(t) ? wasmResultType(table, t) : "";
+    default:
+      return "";
+  }
+}
+
 function wasmCrosses(table: TypeTable, t: i32, position: i32): boolean {
+  return wasmType(table, t, position).length > 0;
+}
+
+/**
+ * Why this function is not on the bridge, or `""` when it is. Naming the
+ * position and the type is the whole point: a reader of the `.d.ts` sees which
+ * argument stopped it rather than the blanket sentence this used to be (and
+ * that the N-API shim still writes for its own skips). `--emit-dts` writes it
+ * as a comment and the loader omits exactly the same functions, because both
+ * ask this.
+ */
+export function wasmSkipReason(table: TypeTable, sig: FunctionSig): string {
+  if (sig.name === "main") {
+    return "`main` is reserved for a process entry";
+  }
+  const tail = ` runtime the freestanding wasm profile does not include`;
+  let i = 0;
+  while (i < sig.paramTypes.length) {
+    if (!wasmCrosses(table, sig.paramTypes[i], POS_PARAM)) {
+      const t = tsKeyword(table, sig.paramTypes[i]);
+      return `argument ${i + 1} (${sig.paramNames[i]}) is \`${t}\`, which needs the ${LANGUAGE}${tail}`;
+    }
+    i = i + 1;
+  }
+  if (!wasmCrosses(table, sig.returnType, POS_RETURN)) {
+    const t = tsKeyword(table, sig.returnType);
+    return `the result is \`${t}\`, which needs the ${LANGUAGE}${tail}`;
+  }
+  return "";
+}
+
+/**
+ * The mask a narrow unsigned *argument* needs on the way in, or `""` when the
+ * value crosses as it stands.
+ *
+ * The emitter gives a `u8` parameter the bare LLVM type `i8` with no `zeroext`
+ * (`define noundef i8 @idU8(i8 noundef %x)`), so the wasm C ABI's rule — a
+ * narrow unsigned argument arrives in an i32 already zero-extended — is the
+ * *caller's* obligation, and JavaScript is the caller here. Today's backend
+ * happens to insert the `i32.and` itself wherever the narrow value is
+ * observable inside the callee (before an `icmp ugt i8`, a `udiv i8`, a
+ * `zext`), so an unmasked argument survives by luck; it is luck that the day
+ * the emitter adds the `zeroext` the ABI asks for would take away, silently.
+ * Masking here also makes the boundary behave the way JavaScript already
+ * behaves for these widths — `f(300)` on a `u8` sees 44, exactly as
+ * `new Uint8Array([300])[0]` is 44, and `-1` sees 255 — which is the rule
+ * `runtime/shim.mjs` follows for the same four types.
+ *
+ * `u32` and `u64` need nothing: ToInt32 and ToBigInt64 hand the wasm call the
+ * bits an unsigned value of that width has, wrapping exactly as the language
+ * wraps.
+ */
+function wasmUnsignedIn(table: TypeTable, t: i32): string {
   const kind = table.kindOf(t);
-  if (kind === T_I32 || kind === T_F32 || kind === T_F64 || kind === T_I64 || kind === T_BOOL) {
-    return true;
+  if (kind === T_U8) {
+    return "0xff";
   }
-  if (kind === T_VOID) {
-    return position === POS_RETURN;
+  if (kind === T_U16) {
+    return "0xffff";
   }
-  // WP17: a packed `Result` crosses as one i64 in either direction — the
-  // loader unpacks a returned one and packs an argument.
-  if (kind === K_RESULT) {
-    return table.resultByValue(t) && wasmResultType(table, t).length > 0;
+  return "";
+}
+
+/**
+ * How an unsigned *result* is read back; `value` unchanged when the raw value
+ * is already the number JS should see.
+ *
+ * All four widths need it, for two different reasons. `u8` and `u16` come back
+ * in an i32 the callee never narrowed — `add i16` is congruent modulo 2^16, so
+ * the wasm backend adds in 32 bits and returns the sum, and `addU16(65535, 2)`
+ * answers 65537 where the language says 1. `u32` and `u64` are the full width
+ * but *signed* on the way out, so anything at or above 2^31 (2^63 for `u64`)
+ * reaches JavaScript negative: a `u32` of 4294967295 arrives as -1.
+ *
+ * The spellings are the ones `runtime/shim.mjs` uses to hold an unsigned value
+ * in a JavaScript one, so the wasm build, the differential rewrite and the
+ * language agree on what a `u32` above 2^31 is.
+ */
+function wasmUnsignedOut(table: TypeTable, t: i32, value: string): string {
+  const kind = table.kindOf(t);
+  if (kind === T_U8) {
+    return `${value} & 0xff`;
   }
-  return typedView(table, t) !== null;
+  if (kind === T_U16) {
+    return `${value} & 0xffff`;
+  }
+  if (kind === T_U32) {
+    return `${value} >>> 0`;
+  }
+  if (kind === T_U64) {
+    return `BigInt.asUintN(64, ${value})`;
+  }
+  return value;
+}
+
+/** Whether `wasmUnsignedOut` has anything to do, which decides if the export needs a wrapper at all. */
+function wasmUnsignedResult(table: TypeTable, t: i32): boolean {
+  const kind = table.kindOf(t);
+  return kind === T_U8 || kind === T_U16 || kind === T_U32 || kind === T_U64;
 }
 
 /** The JS type of one packed `Result` payload, or `""` when it cannot cross. */
@@ -221,18 +388,7 @@ function wasmTakesPacked(table: TypeTable, sig: FunctionSig): boolean {
 export function wasmBridged(table: TypeTable, fns: ExternalFunction[]): WasmBridge {
   const bridged: ExternalFunction[] = [];
   for (const fn of fns) {
-    if (fn.sig.name === "main" || !wasmCrosses(table, fn.sig.returnType, POS_RETURN)) {
-      continue;
-    }
-    let every = true;
-    let i = 0;
-    while (i < fn.sig.paramTypes.length) {
-      if (!wasmCrosses(table, fn.sig.paramTypes[i], POS_PARAM)) {
-        every = false;
-      }
-      i = i + 1;
-    }
-    if (every) {
+    if (wasmSkipReason(table, fn.sig).length === 0) {
       bridged.push(fn);
     }
   }
@@ -272,16 +428,42 @@ function wasmJsParam(name: string): string {
   return wasmIsLoaderLocal(name) ? `${name}_` : name;
 }
 
+/** One non-array argument: packed, masked to its unsigned width, or as it came. */
+function wasmOperand(table: TypeTable, sig: FunctionSig, params: string[], i: i32): string {
+  const t = sig.paramTypes[i];
+  if (table.resultByValue(t)) {
+    return wasmResultPack(table, params[i], t);
+  }
+  const mask = wasmUnsignedIn(table, t);
+  return mask.length > 0 ? `${params[i]} & ${mask}` : params[i];
+}
+
+/** The call's value as JS should see it. The three cases are mutually exclusive. */
+function wasmReturned(table: TypeTable, sig: FunctionSig, ret: TypedView | null, call: string): string {
+  if (ret !== null) {
+    return `arrayOut(${call}, ${ret.ctor})`;
+  }
+  if (table.resultByValue(sig.returnType)) {
+    return wasmResultUnpack(table, call, sig.returnType);
+  }
+  return wasmUnsignedOut(table, sig.returnType, call);
+}
+
 function wasmWrapper(table: TypeTable, fn: ExternalFunction): string[] {
   const sig = fn.sig;
   const ret = typedView(table, sig.returnType);
   const views: (TypedView | null)[] = [];
+  let anyMask = false;
   let i = 0;
   while (i < sig.paramTypes.length) {
     views.push(typedView(table, sig.paramTypes[i]));
+    if (wasmUnsignedIn(table, sig.paramTypes[i]).length > 0) {
+      anyMask = true;
+    }
     i = i + 1;
   }
   const packed = wasmTakesPacked(table, sig);
+  const out = wasmUnsignedResult(table, sig.returnType);
   const lines: string[] = [];
   const params: string[] = [];
   i = 0;
@@ -297,22 +479,18 @@ function wasmWrapper(table: TypeTable, fn: ExternalFunction): string[] {
     }
   }
   if (!anyView) {
-    // WP17: a packed `Result` needs packing or unpacking but no arena scope —
-    // nothing was copied into the module for the call, so nothing to release.
-    if (packed) {
+    // WP17/WP15: a packed `Result` and an unsigned width both need converting
+    // but no arena scope — nothing was copied into the module for the call, so
+    // there is nothing to release.
+    if (packed || out || anyMask) {
       const operands: string[] = [];
       i = 0;
       while (i < sig.paramTypes.length) {
-        operands.push(
-          table.resultByValue(sig.paramTypes[i])
-            ? wasmResultPack(table, params[i], sig.paramTypes[i])
-            : params[i]
-        );
+        operands.push(wasmOperand(table, sig, params, i));
         i = i + 1;
       }
       const call = `raw.${sig.name}(${operands.join(", ")})`;
-      const body = table.resultByValue(sig.returnType) ? wasmResultUnpack(table, call, sig.returnType) : call;
-      lines.push(`${sig.name}: (${params.join(", ")}) => ${body},`);
+      lines.push(`${sig.name}: (${params.join(", ")}) => ${wasmReturned(table, sig, ret, call)},`);
       return lines;
     }
     lines.push(`${sig.name}: raw.${sig.name},`);
@@ -325,11 +503,7 @@ function wasmWrapper(table: TypeTable, fn: ExternalFunction): string[] {
   while (i < sig.paramTypes.length) {
     const view = views[i];
     if (view === null) {
-      args.push(
-        table.resultByValue(sig.paramTypes[i])
-          ? wasmResultPack(table, params[i], sig.paramTypes[i])
-          : params[i]
-      );
+      args.push(wasmOperand(table, sig, params, i));
     } else {
       const name = sig.paramNames[i];
       body.push(
@@ -341,12 +515,7 @@ function wasmWrapper(table: TypeTable, fn: ExternalFunction): string[] {
   }
   const call = `raw.${sig.name}(${args.join(", ")})`;
   const isVoid = table.kindOf(sig.returnType) === T_VOID;
-  let value = call;
-  if (ret !== null) {
-    value = `arrayOut(${call}, ${ret.ctor})`;
-  } else if (table.resultByValue(sig.returnType)) {
-    value = wasmResultUnpack(table, call, sig.returnType);
-  }
+  const value = wasmReturned(table, sig, ret, call);
   const copyBacks: string[] = [];
   i = 0;
   while (i < sig.paramNames.length) {

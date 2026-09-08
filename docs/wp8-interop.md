@@ -27,9 +27,9 @@ the user side.
 | `number` (i32 mode), `i32` | `i32` | `int32_t` | `number`, converted with ToInt32 (`x \| 0`) | `number` |
 | `number` (f64 mode), `f64` | `double` | `double` | `number` | `number` |
 | `i64` | `i64` | `int64_t` | `bigint` | `bigint` |
-| `u8`, `u16`, `u32` | `i8`, `i16`, `i32` | `uint8_t`, `uint16_t`, `uint32_t` | `number`; in through ToUint32 and then the width's own modulus, out through `napi_create_uint32` so a `u32` above 2^31 stays positive | declared `number`; the loader does not wrap one yet (see "Not in this package") |
-| `u64` | `i64` | `uint64_t` | `bigint` | declared `bigint`; the loader does not wrap one yet |
-| `f32` | `float` | `float` | `number`; rounded to nearest on the way in, widened exactly on the way out | `number` |
+| `u8`, `u16`, `u32` | `i8`, `i16`, `i32` | `uint8_t`, `uint16_t`, `uint32_t` | `number`; in through ToUint32 and then the width's own modulus, out through `napi_create_uint32` so a `u32` above 2^31 stays positive | `number`, put back in range by the loader: `& 0xff` / `& 0xffff` on a narrow argument, and `& 0xff` / `& 0xffff` / `>>> 0` on every result |
+| `u64` | `i64` | `uint64_t` | `bigint`, through `napi_get_value_bigint_uint64` / `napi_create_bigint_uint64` | `bigint`, read back with `BigInt.asUintN(64, x)` |
+| `f32` | `float` | `float` | `number`; rounded to nearest on the way in through `amrit_napi_f32`, widened exactly on the way out | `number`, untouched: the call rounds an argument to f32 and every f32 is exact in the double a result arrives in |
 | `boolean` | `i1` (`zeroext`) | `bool` | `boolean` | in: `boolean`; out: `0 \| 1` |
 | `string` | `i8*` | `const amrit_str *` in, `amrit_str *` out | `string`, copied into the arena in, copied out | not available (no WASI runtime) |
 | `i32[]` / `Int32Array`, `f32[]` / `Float32Array`, `f64[]` / `Float64Array`, `i64[]` / `BigInt64Array` | `%struct.amrit_array*` | `const amrit_array *` in (read-only), `amrit_array *` in (written through) and out | that typed array; borrowed in (zero-copy), fresh typed array out | that typed array; copied into the arena in, copied out |
@@ -162,7 +162,7 @@ export interface Exports {
   /** runtime_wasm.c: recycle everything the module allocated (arrays passed and returned are already copies). */
   amrit_reset_arena(): void;
   amrit_free_arena(): void;
-  // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: string values need the AmritScript runtime, ...
+  // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: argument 2 (a) is `string`, which needs ...
   /** examples/arrays.ts: scale(xs: number[], k: number): number[] */
   scale(xs: Float64Array, k: number): Float64Array;
   /** examples/arrays.ts: fill(xs: number[], v: number): void */
@@ -174,9 +174,28 @@ export interface Exports {
 export function load(bytes: BufferSource): Promise<Exports>;
 ```
 
+The declarations and the loader are generated from **one** predicate,
+`wasmSkipReason` in `src/interop/wasm.ts`: a function is declared exactly when
+the loader has an entry for it, so neither file can describe a function the
+other omits. They used to be two predicates and they drifted — the declarations
+grew the unsigned widths while the loader's crossing test did not, so
+`--emit-dts` happily declared `port(p: u16)` and `load()` returned an object
+with no `port` on it, a `TypeError` at the call with no diagnostic anywhere.
+
+A function that cannot cross is a comment naming the position and the type that
+stopped it, which is more than the blanket sentence it used to be (and more than
+the N-API shim's own note, which names the function and then the whole set the
+shim accepts):
+
+```ts
+  // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: argument 2 (a) is `string`, which needs the AmritScript runtime the freestanding wasm profile does not include
+  // spell(n: number): string  -- not exported to JS: the result is `string`, which needs the AmritScript runtime the freestanding wasm profile does not include
+```
+
 The loader (`src/interop/wasm.ts`) instantiates the module and returns the
-raw exports with every array-taking function wrapped. Scalar-only exports
-are passed through untouched. A wrapped call, `scale(xs, 2)`:
+raw exports with every array-taking function wrapped. A scalar-only export is
+passed through untouched unless one of its types is narrower or wider than the
+wasm value type carrying it. A wrapped call, `scale(xs, 2)`:
 
 ```js
 scale: (xs, k) => scoped(() => {
@@ -202,6 +221,54 @@ scale: (xs, k) => scoped(() => {
    that makes it `amrit_array *` in the header) is copied back into the
    caller's typed array after the call, so the wasm and N-API builds agree
    on what the caller observes.
+
+### The unsigned widths
+
+The wasm ABI has four value types — `i32`, `i64`, `f32`, `f64` — so `u8`,
+`u16` and `u32` all travel in the same one as an `i32` and a `u64` in the same
+one as an `i64`. The loader is the only place their range can be restored, and
+`tests/self/interop_unsigned.ts` is the module the suite builds and calls to
+prove it does:
+
+```js
+idU8:  (x) => raw.idU8(x & 0xff) & 0xff,
+idU16: (x) => raw.idU16(x & 0xffff) & 0xffff,
+idU32: (x) => raw.idU32(x) >>> 0,
+idU64: (x) => BigInt.asUintN(64, raw.idU64(x)),
+```
+
+Those are the spellings `runtime/shim.mjs` already uses to hold an unsigned
+value in a JavaScript one, so the wasm build, the differential rewrite and the
+language agree on what a `u32` above 2^31 is. Each side of the boundary needs
+them for a different reason:
+
+- **Out.** A `u32` result is the full width but *signed* on the way out, so
+  `idU32(4294967295)` reaches JavaScript as `-1` without the `>>> 0` — the bug
+  a host actually hits — and a `u64` above 2^63 arrives as a negative bigint.
+  A `u8` or `u16` result needs its mask for a different reason again: the
+  callee never narrows it. `add i16` is congruent modulo 2^16, so the wasm
+  backend adds in a 32-bit register and returns the sum, and `addU16(65535, 2)`
+  answers 65537 where the language says 1.
+- **In.** `u32` and `u64` need nothing: ToInt32 and ToBigInt64 hand the call
+  the bits an unsigned value of that width has, wrapping exactly as the
+  language wraps. `u8` and `u16` are masked, and the reason is the emitted IR
+  rather than the observed behaviour. The emitter writes the parameter as a
+  bare `i8` with no `zeroext` — `define noundef i8 @idU8(i8 noundef %x)` — so
+  the wasm C ABI's rule that a narrow unsigned argument arrives already
+  zero-extended is the *caller's* obligation, and JavaScript is the caller.
+  Today's backend, having no `zeroext` to lean on, inserts the `i32.and`
+  itself wherever the narrow value is observable inside the callee (before an
+  `icmp ugt i8`, a `udiv i8`, a `zext i8 to i32`), so an unmasked argument
+  survives by luck; it is luck the day the emitter adds the `zeroext` the ABI
+  asks for would take away, silently. Masking here also makes the boundary
+  behave the way JavaScript already does for these widths: `idU8(300)` is 44
+  and `idU8(-1)` is 255, exactly as `new Uint8Array([300])[0]` and
+  `new Uint8Array([-1])[0]` are.
+
+`f32` needs nothing in either direction, which is a measurement rather than an
+assumption: the JS-to-wasm call rounds an argument to f32 (`scaleF32(0.1)`
+sees `Math.fround(0.1)`, which is what an `f32` parameter means) and every f32
+is exactly representable in the double a result comes back in.
 
 `memory.buffer` is re-read after every call into the module because
 `memory.grow` replaces the `ArrayBuffer`. The runtime the loader calls,
@@ -502,11 +569,11 @@ real pass over the buffer on top of the crossing.
 | `src/index.ts` | `--emit-header`, `--emit-dts` (writes the `.mjs` next to it), `--emit-napi`. |
 | `self/interop_abi.ts`, `interop_header.ts`, `interop_dts.ts`, `interop_wasm.ts`, `interop_napi.ts` | The same five, in AmritScript, for the self-hosted compiler (WP14 §7); `self/compile.ts` takes the same three flags and writes the same files. |
 | `tests/self/interop_oracle.js` | Both compilers over the corpus below, all four generated files compared byte for byte. |
-| `tests/self/interop_payloads.ts`, `tests/self/interop_widths.ts` | The narrow numeric widths, which nothing else in the corpus mentions: inside a packed `Result`, and at a plain parameter and return. |
+| `tests/self/interop_payloads.ts`, `tests/self/interop_widths.ts`, `tests/self/interop_unsigned.ts` | The narrow numeric widths, which nothing else in the corpus mentions: inside a packed `Result`, at a plain parameter and return for the N-API shim, and as bare parameters and results for the wasm loader's masks. |
 | `scripts/build.sh` | `--profile napi`; `-mbulk-memory` in `--profile wasm`. |
 | `examples/arrays.ts`, `examples/node-addon.mjs`, `examples/node-host.mjs` | The typed-array module, loading the `.node` addon and the `.wasm` module. |
 | `bench/sum.ts`, `bench/ffi.mjs` | The batching benchmark. |
-| `tests/run.js` (`WP8: interop`) | Header/runtime.ts agreement, `-Werror` header compiles and C drivers (a stack-built `amrit_array` included), `tsc` on the `.d.ts`, addon builds, loads, type-check errors, `.node` versus `.wasm` agreement on scalars and on typed arrays, in-place `fill`, the wasm trap path, strings through the addon, the numeric widths through a built addon (boundaries, out-of-range truncation, a `u32` above 2^31), and the comment a skipped function leaves behind. |
+| `tests/run.js` (`WP8: interop`) | Header/runtime.ts agreement, `-Werror` header compiles and C drivers (a stack-built `amrit_array` included), `tsc` on the `.d.ts`, addon builds, loads, type-check errors, `.node` versus `.wasm` agreement on scalars and on typed arrays, in-place `fill`, the wasm trap path, strings through the addon, that every function a `.d.ts` declares has an entry in its `.mjs`, the numeric widths through a built addon (boundaries, out-of-range truncation, a `u32` above 2^31), the unsigned widths through the loader at their boundaries, and the comment a skipped function leaves behind. |
 
 ## Not in this package
 
@@ -519,19 +586,8 @@ real pass over the buffer on top of the crossing.
   builds itself (`amrit_alloc_array` is exported for that).
 - Classes, `T | null`, `string[]`, `boolean[]` and nested arrays across
   either boundary: the generators report those functions as skipped rather
-  than silently omitting them.
-- Bare `u8` / `u16` / `u32` / `u64` values across the **wasm** boundary. The
-  N-API shim carries them; `--emit-dts` declares them (they are a `number` and
-  a `bigint` like their signed twins) but `crossesWasm` in
-  `src/interop/wasm.ts` does not list them, so the companion loader writes no
-  entry and such a function is missing from the object `load()` returns —
-  `port(p: u16)` in `tests/self/interop_payloads.ts` is the case in the corpus.
-  Closing it is loader work rather than a table row: the wasm ABI hands a
-  narrow unsigned parameter over as a plain `i32`, so the loader has to mask on
-  the way in, and a `u32` result comes back as a signed `i32` and a `u64` as a
-  signed bigint, so it has to apply `>>> 0` and `BigInt.asUintN(64, …)` on the
-  way out. Inside a packed `Result` all four already cross, because the loader
-  packs and unpacks those payloads itself.
+  than silently omitting them, naming the argument or the result, and the
+  type, that stopped each one.
 - `--target` cross builds (ARM64, wasm32-wasi): linker work in `build.sh`
   once a WASI runtime variant exists.
 - A `--link`-style one-shot flag for addons. Two commands (`--emit-napi`

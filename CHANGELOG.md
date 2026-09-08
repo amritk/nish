@@ -187,6 +187,38 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   the error. The unwrapped target is passed alongside the real node now, and
   `reject_arr_element_bitwise_f64` is the case that would have caught it.
 
+- **`--emit-dts` no longer declares a wasm export its loader omits (WP8/WP15).**
+  The declarations and the loader each had their own idea of what crosses the
+  wasm boundary, and they drifted: `wasmType` spelled `u8`/`u16`/`u32` as
+  `number` and `u64` as `bigint`, so the `.d.ts` declared such a function,
+  while the loader's crossing test had never learnt the unsigned widths and
+  wrote no entry for it. `load()` handed back an object missing a function its
+  own typings promised — a `TypeError` at the call with no diagnostic
+  anywhere, reproducible today with `port(p: u16)`. There is one predicate
+  now, `wasmSkipReason`, and both files ask it; a function that cannot cross
+  is a comment naming the position and the type that stopped it —
+  `` argument 2 (a) is `string` `` — rather than the blanket sentence it was.
+
+  The unsigned widths cross for real, which needs the loader to put each value
+  back in its range: the wasm ABI has only `i32`/`i64`/`f32`/`f64`, so `u8`,
+  `u16` and `u32` share a value type with `i32` and `u64` shares one with
+  `i64`. A `u32` result above 2^31 was reaching JavaScript *negative*
+  (`idU32(4294967295)` as `-1`) and a `u64` above 2^63 as a negative bigint;
+  both are read unsigned now (`>>> 0`, `BigInt.asUintN(64, x)`). A `u8` or
+  `u16` result is masked because the callee does not narrow it — `add i8` is
+  congruent modulo 256, so the wasm backend adds in a 32-bit register and
+  `addU8(200, 100)` answered 300 — and a narrow *argument* is masked because
+  the emitter writes the parameter as a bare `i8` with no `zeroext`, which
+  leaves zero-extending it the caller's job under the wasm C ABI. The
+  spellings are `runtime/shim.mjs`'s, so the wasm build and the differential
+  rewrite agree on what a `u32` above 2^31 is. `f32` needs nothing in either
+  direction and now says so. Both compilers changed together
+  (`src/interop/{wasm,dts}.ts`, `self/interop_{wasm,dts}.ts`);
+  `tests/self/interop_unsigned.ts` is the new corpus fixture, built to wasm
+  and called at every boundary by the WP8 section of `tests/run.js`, which
+  also checks that every function a `.d.ts` declares has an entry in its
+  `.mjs`.
+
 - **A builtin's argument is checked down to its element type.**
   `checkArgumentType` compared type *kinds*, which was enough while every
   builtin wanted a scalar or a string; `spawnSync` wants a `string[]`, and an

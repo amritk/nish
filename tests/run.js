@@ -1639,6 +1639,126 @@ if (!only || "interop".includes(only)) {
     );
   }
 
+  // ---- WP8/WP15: the unsigned widths across the wasm boundary ---------------------
+  // The wasm ABI has four value types, so `u8` / `u16` / `u32` share one with `i32` and
+  // `u64` shares one with `i64`, and the generated loader is the only place the range
+  // can be restored. `--emit-dts` used to declare these signatures while the loader
+  // wrote no entry for them at all, so `load()` handed back an object missing the
+  // function the `.d.ts` promised. Checks:
+  //   - every function the `.d.ts` declares has an entry in the companion `.mjs`
+  //     (the two files are generated from one predicate, and this says so)
+  //   - the loader masks a narrow argument on the way in, narrows a `u8` / `u16`
+  //     result the callee never narrowed, and hands back a `u32` above 2^31 and a
+  //     `u64` above 2^63 *positive* rather than as the signed value wasm returns
+  const unsignedSrc = "tests/self/interop_unsigned.ts";
+  const unsigned = emit(unsignedSrc, ["--emit-dts", sidecar("interop_unsigned", "d.ts")]);
+  const unsignedDts =
+    unsigned.status === 0 ? fs.readFileSync(sidecar("interop_unsigned", "d.ts"), "utf8") : "";
+  const unsignedMjs =
+    unsigned.status === 0 ? fs.readFileSync(sidecar("interop_unsigned", "mjs"), "utf8") : "";
+  check(
+    "interop_unsigned.d.ts declares the unsigned widths as `number` / `bigint`",
+    unsignedDts.includes("  idU8(x: number): number;") &&
+      unsignedDts.includes("  idU32(x: number): number;") &&
+      unsignedDts.includes("  idU64(x: bigint): bigint;"),
+    unsignedDts
+  );
+  // The regression guard, and the general one: a `.d.ts` may not promise a function
+  // its loader omits. Before the fix `interop_unsigned.mjs` had none of these ten.
+  // The expected count is spelled out so a generator that started declaring nothing
+  // could not pass this by having nothing to miss (strings.d.ts really declares none:
+  // every one of its functions is commented out).
+  for (const [stem, declares] of [
+    ["add", 1],
+    ["strings", 0],
+    ["arrays", 9],
+    ["res_wasm", 3],
+    ["interop_unsigned", 10],
+  ]) {
+    if (!fs.existsSync(sidecar(stem, "d.ts")) || !fs.existsSync(sidecar(stem, "mjs"))) continue;
+    const dts = fs.readFileSync(sidecar(stem, "d.ts"), "utf8");
+    const mjs = fs.readFileSync(sidecar(stem, "mjs"), "utf8");
+    const exports_ = dts.slice(dts.indexOf("export interface Exports {"), dts.indexOf("\n}\n"));
+    const declared = [...exports_.matchAll(/^ {2}(\w+)\(/gm)].map((m) => m[1]);
+    const missing = declared.filter((name) => !new RegExp(`^ {4}${name}: `, "m").test(mjs));
+    check(
+      `${stem}.mjs implements every function ${stem}.d.ts declares (${declares})`,
+      declared.length === declares && missing.length === 0,
+      `declared ${declared.length}, expected ${declares}; declared but not loaded: ${missing.join(", ")}`
+    );
+  }
+  // Both halves of the skip message. No corpus program has a function whose
+  // arguments all cross and whose *result* does not, so that one is written here.
+  const skipSrc = path.join(interopDir, "skip_reasons.ts");
+  fs.writeFileSync(
+    skipSrc,
+    ["export function spell(n: i32): string {", "  return `${n}`;", "}", ""].join("\n")
+  );
+  const skipped = emit(skipSrc, ["--emit-dts", sidecar("skip_reasons", "d.ts")]);
+  const skipDts = skipped.status === 0 ? fs.readFileSync(sidecar("skip_reasons", "d.ts"), "utf8") : "";
+  check(
+    "a skipped function names the argument or the result, and the type, that stopped it",
+    stringsDts.includes(
+      "  // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: argument 2 (a) is `string`,"
+    ) && skipDts.includes("  // spell(n: number): string  -- not exported to JS: the result is `string`,"),
+    stringsDts + skipDts
+  );
+  check(
+    "interop_unsigned.mjs masks a narrow argument in, narrows a narrow result out, and reads u32/u64 unsigned",
+    unsignedMjs.includes("idU8: (x) => raw.idU8(x & 0xff) & 0xff,") &&
+      unsignedMjs.includes("idU16: (x) => raw.idU16(x & 0xffff) & 0xffff,") &&
+      unsignedMjs.includes("idU32: (x) => raw.idU32(x) >>> 0,") &&
+      unsignedMjs.includes("idU64: (x) => BigInt.asUintN(64, raw.idU64(x)),") &&
+      unsignedMjs.includes("scaleF32: raw.scaleF32,"),
+    unsignedMjs
+  );
+  if (unsigned.status === 0) {
+    const r = spawnSync("node", [tsc, "--noEmit", "--strict", sidecar("interop_unsigned", "d.ts")], {
+      cwd: root,
+    });
+    check(
+      "interop_unsigned.d.ts passes tsc --noEmit --strict",
+      r.status === 0,
+      String(r.stdout) + String(r.stderr)
+    );
+  }
+  if (HAS_CLANG && has("wasm-ld")) {
+    const wasm = path.join(interopDir, "interop_unsigned.wasm");
+    const w =
+      unsigned.status === 0
+        ? spawnSync(
+            "bash",
+            ["scripts/build.sh", sidecar("interop_unsigned", "ll"), "-o", wasm, "--profile", "wasm"],
+            { cwd: root }
+          )
+        : { status: 1, stderr: unsigned.stderr };
+    // Boundaries on both sides of every width, the truncations on the way in, and the
+    // two results a signed read would get wrong: 4294967295 and 2^64 - 1.
+    const script = [
+      'import { readFileSync } from "node:fs";',
+      `const { load } = await import(${JSON.stringify(sidecar("interop_unsigned", "mjs"))});`,
+      `const api = await load(readFileSync(${JSON.stringify(wasm)}));`,
+      "const out = [];",
+      "out.push(api.idU8(0), api.idU8(255), api.idU8(256), api.idU8(300), api.idU8(-1));",
+      "out.push(api.addU8(200, 100), api.addU8(255, 1));",
+      "out.push(api.idU16(0), api.idU16(65535), api.idU16(65536), api.idU16(-1));",
+      "out.push(api.addU16(65535, 2), api.widen(300));",
+      "out.push(api.idU32(0), api.idU32(2147483648), api.idU32(4294967295), api.addU32(4294967295, 2));",
+      "out.push(api.idU64(0n), api.idU64(2n ** 63n), api.idU64(2n ** 64n - 1n), api.addU64(2n ** 64n - 1n, 1n));",
+      "out.push(api.scaleF32(0.5), api.scaleF32(Math.fround(0.1)) === Math.fround(0.2));",
+      "console.log(out.join(' '));",
+    ].join("\n");
+    const r = w.status === 0 ? spawnSync("node", ["--input-type=module", "-e", script], { cwd: root }) : null;
+    check(
+      "wasm: the loader puts every unsigned width back in range (a u32 above 2^31 arrives positive)",
+      r !== null &&
+        String(r.stdout).trim() ===
+          "0 255 0 44 255 44 0 0 65535 0 65535 1 44 0 2147483648 4294967295 1 " +
+            "0 9223372036854775808 18446744073709551615 0 1 true",
+      String(w.stderr) + (r ? String(r.stdout) + String(r.stderr) : "")
+    );
+  }
+
   // ---- WP4/WP8: arrays and strings across the boundary ----------------------------
   // examples/arrays.ts takes and returns Int32Array / Float64Array / BigInt64Array. Checks:
   //   - the header spells a read-only array parameter `const amrit_array *` and a written one

@@ -47,6 +47,7 @@
 //
 // Build: scripts/build.sh <modules.ll> runtime/runtime.c <shim.c> -o x.node --profile napi
 
+import { internalError } from "./ice";
 import { CLI, LANGUAGE, RUNTIME_HEADER } from "./branding";
 import { Compilation } from "./compilation";
 import {
@@ -344,7 +345,7 @@ function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boo
     case READ_SCALAR: {
       const scalar = r.scalar;
       if (scalar === null) {
-        panic("internal error: scalar reader without a scalar");
+        process.exit(internalError("napi: scalar reader without a scalar"));
       }
       // The getter writes the parameter itself unless its width is not one
       // N-API has a getter for, and then a temporary carries the raw value.
@@ -372,7 +373,7 @@ function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boo
       const shape = `${what} must be { ok: true, value } or { ok: false, error }`;
       const errScalar = r.errScalar;
       if (errScalar === null) {
-        panic("internal error: result reader without an error arm");
+        process.exit(internalError("napi: result reader without an error arm"));
       }
       // Each arm reads into its union member, or into a temporary the
       // narrowing below turns into that member's own type.
@@ -429,7 +430,7 @@ function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boo
     default: {
       const view = r.view;
       if (view === null) {
-        panic("internal error: view reader without a view");
+        process.exit(internalError("napi: view reader without a view"));
       }
       lines.push(`amrit_array ${c}_hdr; /* borrowed: the ${view.ctor}'s own bytes, for this call only */`);
       lines.push(`if (!amrit_napi_array_arg(env, argv[${i}], ${view.napiType}, &${c}_hdr))`);
@@ -568,7 +569,7 @@ function napiBoxerCall(box: Boxer, value: string): string {
     default: {
       const view = box.view;
       if (view === null) {
-        panic("internal error: view boxer without a view");
+        process.exit(internalError("napi: view boxer without a view"));
       }
       return `amrit_napi_array_result(env, ${value}, ${view.napiType}, ${view.elemSize}, &out)`;
     }

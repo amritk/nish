@@ -24,13 +24,14 @@
  * The default corpus is the one the WP8 section of `tests/run.js` drives the
  * generators over — the header, `.d.ts`, loader and N-API checks there all
  * read these programs — plus the layout program, whose header is the widest
- * struct declaration the generators ever write, and the two `interop_*.ts`
+ * struct declaration the generators ever write, and the three `interop_*.ts`
  * fixtures, which exist only because the narrow numeric widths have a reader
  * and a writer each and nothing else here mentions them: inside a packed
- * `Result` in `interop_payloads.ts`, at a plain parameter and return in
- * `interop_widths.ts`. `--all` runs the same comparison over every whole
- * program the IR oracle reads, which is how a shape nobody thought to put in
- * the corpus gets found.
+ * `Result` in `interop_payloads.ts`, at a plain parameter and return for the
+ * N-API shim in `interop_widths.ts`, and as bare parameters and results for
+ * the wasm loader's masks in `interop_unsigned.ts`. `--all` runs the same
+ * comparison over every whole program the IR oracle reads, which is how a
+ * shape nobody thought to put in the corpus gets found.
  */
 const fs = require("node:fs");
 const os = require("node:os");
@@ -66,6 +67,10 @@ const CORPUS = [
   // The same widths at a plain parameter and return, where the N-API shim
   // narrows what N-API has no getter for and emits its `amrit_napi_f32` helper.
   { file: "tests/self/interop_widths.ts" },
+  // Every unsigned width as a bare parameter and result, which is where the
+  // loader's masks live; the WP8 section of tests/run.js builds this one to
+  // wasm and calls it.
+  { file: "tests/self/interop_unsigned.ts" },
   { file: "tests/layout/structs.ts", stem: "layout_structs" },
 ];
 

@@ -18,6 +18,7 @@
 // over-wide shift poison and JavaScript wraps the count. A literal count is
 // masked here at compile time, so the common `x << 3` stays one instruction.
 
+import { internalError } from "./ice";
 import { parseIntegerLiteral } from "./constants";
 import { Emitter } from "./emit";
 import { emitCompoundAssignment, emitIncDec, emitLogical } from "./emit_control";
@@ -198,7 +199,7 @@ function integerOpcode(op: string): string {
   if (op === "!==") {
     return "icmp ne";
   }
-  panic(`emitter: unexpected binary operator \`${op}\``);
+  process.exit(internalError(`emitter: unexpected binary operator \`${op}\``));
 }
 
 /** The floating-point opcode for the same operator. */
@@ -236,7 +237,7 @@ export function floatOpcode(op: string): string {
   if (op === "!==") {
     return "fcmp une";
   }
-  panic(`emitter: unexpected binary operator \`${op}\``);
+  process.exit(internalError(`emitter: unexpected binary operator \`${op}\``));
 }
 
 /** The bitwise opcode for `& | ^ << >> >>>` and their compound forms. */
@@ -393,7 +394,7 @@ export function emitUnary(emitter: Emitter, expr: Node): string {
     const ty = emitter.llvm(emitter.typeOf(operand));
     return emitter.fn.emitValue(`xor ${ty} ${emitter.emitExpression(operand)}, -1`);
   }
-  panic(`emitter: unexpected unary operator \`${op}\``);
+  process.exit(internalError(`emitter: unexpected unary operator \`${op}\``));
 }
 
 // ---- Locals ------------------------------------------------------------------------
@@ -416,7 +417,7 @@ export function targetLocal(emitter: Emitter, target: Node): Local {
   if (local !== null) {
     return local;
   }
-  panic(`emitter: no binding for the assignment target \`${target.text}\``);
+  process.exit(internalError(`emitter: no binding for the assignment target \`${target.text}\``));
 }
 
 // ---- Assignment ---------------------------------------------------------------------

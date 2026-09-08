@@ -8,6 +8,10 @@
  *   i1             -> a number 0 or 1 on the way out (`WasmBool`); `true`/`false`
  *                     are accepted on the way in because ToInt32 maps them to 1/0
  *   i64            -> bigint (wasm i64 <-> JS BigInt)
+ *   u8 u16 u32     -> number, and u64 -> bigint: an unsigned width shares a
+ *                     wasm value type with the signed one of its size, so the
+ *                     loader is what puts each value back in range — see
+ *                     `unsignedIn` / `unsignedOut` in wasm.ts.
  *   i32[] f64[] i64[] (Int32Array / Float64Array / BigInt64Array) -> that typed
  *                     array. The raw export takes a pointer to an arena header;
  *                     the loader copies the typed array into the arena, passes
@@ -27,40 +31,8 @@
  *                     string does not.
  */
 import { Compilation } from "../compilation";
-import { LANGUAGE } from "../branding";
-import { ResultType, StaticType, resultByValue } from "../types";
-import { banner, externalFunctions, kindOf, tsKeyword, tsSignature, typedView } from "./abi";
-import { wasmBridged, wasmResultType } from "./wasm";
-
-/** JS-visible type of a wasm export value; `undefined` when the value cannot cross. */
-export function wasmType(t: StaticType, position: "param" | "return"): string | undefined {
-  switch (kindOf(t)) {
-    // WP15: an unsigned width crosses as the wasm value type of its LLVM type,
-    // so u8/u16/u32 are a `number` like i32 and u64 is a `bigint` like i64.
-    case "i32":
-    case "u8":
-    case "u16":
-    case "u32":
-    case "f32":
-    case "f64":
-      return "number";
-    case "i64":
-    case "u64":
-      return "bigint";
-    case "bool":
-      return position === "param" ? "boolean" : "WasmBool";
-    case "void":
-      return "void";
-    case "array":
-      return typedView(t)?.ctor;
-    // WP17: the packed shape, in either direction. The loader is what turns
-    // the bigint the export answers into this object, and an argument back.
-    case "result":
-      return resultByValue(t) ? wasmResultType(t as ResultType) : undefined;
-    default:
-      return undefined;
-  }
-}
+import { banner, externalFunctions, tsKeyword, tsSignature } from "./abi";
+import { wasmBridged, wasmSkipReason, wasmType } from "./wasm";
 
 export function generateDts(compilation: Compilation): string {
   const fns = externalFunctions(compilation);
@@ -70,7 +42,10 @@ export function generateDts(compilation: Compilation): string {
     "// Typings for the wasm build (scripts/build.sh --profile wasm), implemented by",
     "// the companion loader written next to this file. Values cross with the wasm",
     "// C ABI: `number` is i32 or f64 exactly as compiled, `boolean` comes back as",
-    "// 0 | 1, `i64` is a bigint. Int32Array / Float64Array / BigInt64Array",
+    "// 0 | 1, `i64` is a bigint. An unsigned width shares a wasm value type with",
+    "// the signed one of its size, so the loader masks a u8 / u16 argument into",
+    "// range on the way in and every u8 / u16 / u32 / u64 result on the way out,",
+    "// the way a typed-array store would. Int32Array / Float64Array / BigInt64Array",
     "// arguments are copied into the module's arena for the call (link",
     "// runtime/runtime_wasm.c), written-through arguments are copied back, and",
     "// an array result is copied out, so the typed arrays you see are your own.",
@@ -93,25 +68,24 @@ export function generateDts(compilation: Compilation): string {
     );
   }
 
+  // One question decides both files: a function is declared here exactly when
+  // `wasmSkipReason` lets it onto the bridge, which is what wasm.ts filters the
+  // loader's entries by. Deciding it twice is what let the declarations get
+  // ahead of the loader once already.
   let count = 0;
   for (const fn of fns) {
     const source = tsSignature(fn.sig, tsKeyword);
-    const ret = wasmType(fn.sig.returnType, "return");
-    const params: string[] = [];
-    let ok = ret !== undefined;
-    for (const p of fn.sig.params) {
-      const t = wasmType(p.type, "param");
-      if (t === undefined) ok = false;
-      params.push(`${p.name}: ${t ?? "never"}`);
-    }
-    if (!ok) {
-      lines.push(
-        `  // ${source}  -- not exported to JS: string values, and a \`Result\` held by pointer, need the ${LANGUAGE} runtime, which the freestanding wasm profile does not include`
-      );
+    const skip = wasmSkipReason(fn.sig);
+    if (skip !== undefined) {
+      lines.push(`  // ${source}  -- not exported to JS: ${skip}`);
       continue;
     }
+    const params = fn.sig.params.map((p) => `${p.name}: ${wasmType(p.type, "param")}`);
     count++;
-    lines.push(`  /** ${fn.unit.fileName}: ${source} */`, `  ${fn.sig.name}(${params.join(", ")}): ${ret};`);
+    lines.push(
+      `  /** ${fn.unit.fileName}: ${source} */`,
+      `  ${fn.sig.name}(${params.join(", ")}): ${wasmType(fn.sig.returnType, "return")};`
+    );
   }
   if (count === 0) lines.push("  // No scalar functions are exported.");
   lines.push("}", "");
