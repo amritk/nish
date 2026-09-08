@@ -14,7 +14,7 @@ User-facing install instructions are in [INSTALL.md](INSTALL.md).
 | `scripts/` | `build.sh` (the `--link` pipeline), `bootstrap.sh` (the self-hosted compiler), `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
 | `README.md`, `LICENSE`, `docs/INSTALL.md` | documentation |
 
-`package.json` is always included by npm (135 files in total at 0.1.0).
+`package.json` is always included by npm (134 files in total at 0.1.0).
 Sources, tests, examples, benchmarks, `CHANGELOG.md` (it lives on GitHub and
 becomes the release notes), the other docs and CI configuration are not in
 the tarball. Check with `npm pack --dry-run`.
