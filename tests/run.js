@@ -1404,7 +1404,9 @@ if (!only || "interop".includes(only)) {
       resShim.includes('{"half", amrit_napi_half},') &&
       resShim.includes('{"describe", amrit_napi_describe},') &&
       resShim.includes('napi_get_named_property(env, argv[0], r_flag ? "value" : "error", &r_arm)') &&
-      resShim.includes("openFile(path: string): Result<number, IoError> -- not bridged"),
+      resShim.includes(
+        "openFile(path: string): Result<number, IoError> -- not bridged: it returns Result<number, IoError>"
+      ),
     resShim
   );
   if (HAS_CLANG && res.status === 0) {
@@ -1493,6 +1495,148 @@ if (!only || "interop".includes(only)) {
         String(w.stderr) + (r ? String(r.stdout) + String(r.stderr) : "")
       );
     }
+  }
+
+  // ---- WP15/WP8: the numeric widths across the N-API boundary ---------------------
+  // The shim's reader and boxer tables knew i32 / f64 / bool / i64 and nothing else, so
+  // a function mentioning u8, u16, u32, u64 or f32 was dropped from the addon instead of
+  // bridged. Checks:
+  //   - each width is read with the getter of its own family, and the two that N-API has
+  //     no getter for (u8 / u16 from ToUint32, f32 from a double) are narrowed explicitly
+  //   - the shim still compiles under -std=c11 -Wall -Wextra -Werror
+  //   - the built addon truncates an out-of-range JS number exactly as a typed array
+  //     store does, hands back a u32 above 2^31 as a positive number, round-trips an f32
+  //     through the f64 JS holds it in, and takes both arms of a narrow packed `Result`
+  //   - a function that genuinely cannot cross is named in the shim with the position and
+  //     the type that stopped it, which is what a silent omission hid
+  const widths = emit("tests/self/interop_widths.ts", [
+    "--emit-header",
+    sidecar("interop_widths", "h"),
+    "--emit-napi",
+    sidecar("interop_widths", "napi.c"),
+  ]);
+  const widthsShim =
+    widths.status === 0 ? fs.readFileSync(sidecar("interop_widths", "napi.c"), "utf8") : "";
+  check(
+    "interop_widths.napi.c bridges u8/u16/u32/u64/f32 instead of skipping them",
+    // u8: ToUint32 into a temporary, then the width's own modulus.
+    widthsShim.includes("if (napi_get_value_uint32(env, argv[0], &x_raw) != napi_ok)") &&
+      widthsShim.includes("uint8_t x = (uint8_t)x_raw;") &&
+      widthsShim.includes("uint16_t x = (uint16_t)x_raw;") &&
+      // u32 needs no temporary: the getter already writes its type.
+      widthsShim.includes("uint32_t x;\n  if (napi_typeof(env, argv[0], &type)") &&
+      widthsShim.includes("napi_get_value_bigint_uint64(env, argv[0], &x, &lossless)") &&
+      widthsShim.includes("float x = amrit_napi_f32(x_raw);") &&
+      widthsShim.includes("static float amrit_napi_f32(double value) {") &&
+      // The boxers: unsigned goes back through napi_create_uint32, f32 as a double.
+      widthsShim.includes("uint32_t result = highBit();") &&
+      widthsShim.includes("napi_create_uint32(env, result, &out)") &&
+      widthsShim.includes("napi_create_bigint_uint64(env, result, &out)") &&
+      // Both arms of Result<f32, u8> narrow, each through its own temporary.
+      widthsShim.includes("if (r_flag) r.as.value = amrit_napi_f32(r_value_raw);") &&
+      widthsShim.includes("if (!r_flag) r.as.error = (uint8_t)r_error_raw;") &&
+      !widthsShim.includes("not bridged"),
+    widthsShim || widths.stderr
+  );
+
+  // A module whose functions cannot cross at all: the shim must name each one
+  // and say which position and which type stopped it.
+  const skipsSrc = path.join(interopDir, "napi_skips.ts");
+  fs.writeFileSync(
+    skipsSrc,
+    [
+      "export class Point {",
+      "  x: number = 0;",
+      "}",
+      "",
+      "export function move(p: Point, dx: number): Point {",
+      "  p.x = p.x + dx;",
+      "  return p;",
+      "}",
+      "",
+      "export function origin(): Point {",
+      "  return new Point();",
+      "}",
+      "",
+    ].join("\n")
+  );
+  const skips = emit(skipsSrc, ["--emit-napi", sidecar("napi_skips", "napi.c")]);
+  const skipsShim =
+    skips.status === 0 ? fs.readFileSync(sidecar("napi_skips", "napi.c"), "utf8") : "";
+  check(
+    "an unbridgeable function is named in the shim with the position and type that stopped it",
+    skipsShim.includes("move(p: Point, dx: number): Point -- not bridged: parameter 1 (p) is Point") &&
+      skipsShim.includes("origin(): Point -- not bridged: it returns Point") &&
+      skipsShim.includes("/* Not bridged, and why."),
+    skipsShim || skips.stderr
+  );
+
+  if (HAS_CLANG && widths.status === 0) {
+    const r = spawnSync("clang", [...strictC, "-fsyntax-only", "-x", "c", sidecar("interop_widths", "h")]);
+    check("interop_widths.h compiles under -std=c11 -Wall -Wextra -Werror", r.status === 0, String(r.stderr));
+  }
+  // The shim needs node_api.h to compile at all, so this is the same skip the
+  // other addon checks take when the Node headers are not installed.
+  if (HAS_CLANG && hasNodeHeaders && widths.status === 0 && skips.status === 0) {
+    for (const stem of ["interop_widths", "napi_skips"]) {
+      const r = spawnSync("clang", [...strictC, `-I${nodeInclude}`, "-fsyntax-only", sidecar(stem, "napi.c")]);
+      check(`${stem}.napi.c compiles under -std=c11 -Wall -Wextra -Werror`, r.status === 0, String(r.stderr));
+    }
+  }
+  if (HAS_CLANG && widths.status === 0 && hasNodeHeaders) {
+    const addon = path.join(interopDir, "interop_widths.node");
+    const b = spawnSync(
+      "bash",
+      [
+        "scripts/build.sh",
+        sidecar("interop_widths", "ll"),
+        "runtime/runtime.c",
+        sidecar("interop_widths", "napi.c"),
+        "-o",
+        addon,
+        "--profile",
+        "napi",
+      ],
+      { cwd: root }
+    );
+    const script = [
+      'import { createRequire } from "node:module";',
+      `const a = createRequire(import.meta.url)(${JSON.stringify(addon)});`,
+      "const out = [];",
+      // Boundaries, and the two out-of-range values whose behaviour is the decision:
+      // ToUint32 then the width's modulus, exactly as a typed-array store.
+      "out.push(a.echoU8(0), a.echoU8(255), a.echoU8(300), a.echoU8(-1));",
+      "out.push(a.echoU16(0), a.echoU16(65535), a.echoU16(65536), a.echoU16(-1));",
+      "out.push(a.echoU32(0), a.echoU32(4294967295), a.echoU32(-1));",
+      "out.push(String(a.echoU64(0n)), String(a.echoU64((1n << 64n) - 1n)));",
+      // 0.1 has no f32, so the round trip must come back as Math.fround(0.1) and not as 0.1.
+      "out.push(a.echoF32(0.1) === Math.fround(0.1), a.echoF32(0.1) === 0.1);",
+      // A double past the float range must be an infinity, not undefined behaviour.
+      "out.push(a.echoF32(1e39), a.echoF32(-1e39), Number.isNaN(a.echoF32(NaN)));",
+      "out.push(a.mixWidths(255, 65535, 4294967295, 0.5), a.highBit());",
+      "out.push(JSON.stringify(a.halve(9)), JSON.stringify(a.halve(-1)));",
+      "out.push(a.orError({ ok: true, value: 0.25 }), a.orError({ ok: false, error: 200 }), a.orError(a.halve(-1)));",
+      'try { a.echoU8("x"); } catch (e) { out.push(e.message); }',
+      "console.log(out.join(' | '));",
+    ].join("\n");
+    const r = b.status === 0 ? spawnSync("node", ["--input-type=module", "-e", script], { cwd: root }) : null;
+    const expected = [
+      "0 | 255 | 44 | 255",
+      "0 | 65535 | 0 | 65535",
+      "0 | 4294967295 | 4294967295",
+      "0 | 18446744073709551615",
+      "true | false",
+      "Infinity | -Infinity | true",
+      "4295033085.5 | 4294967295",
+      '{"ok":true,"value":4.5} | {"ok":false,"error":255}',
+      "0.25 | 200 | 255",
+      "echoU8: argument 1 (x) must be a number",
+    ].join(" | ");
+    check(
+      "N-API: u8/u16/u32 truncate as a typed-array store, u64 is a bigint, f32 round-trips, and a u32 above 2^31 stays positive",
+      r !== null && String(r.stdout).trim() === expected,
+      String(b.stderr) + (r ? String(r.stdout) + String(r.stderr) : "")
+    );
   }
 
   // ---- WP4/WP8: arrays and strings across the boundary ----------------------------
