@@ -34,7 +34,9 @@
  *
  * The rewrite rules that call these helpers are listed in docs/wp13-differential.md.
  */
+import child_process from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 
 const I32_MIN = -2147483648;
 const I32_MAX = 2147483647;
@@ -419,6 +421,38 @@ export function appendFileSync(path, data) {
   } catch {
     ioFail("write", path);
   }
+}
+
+/**
+ * `mkdirSync(path)` (WP14 D4): one directory, not recursive, answering whether
+ * a directory is there afterwards. Node throws where the runtime answers
+ * false, and `EEXIST` on a plain file is a failure here as it is there, so the
+ * `statSync` decides rather than the exception.
+ */
+export function mkdirSync(path) {
+  try {
+    fs.mkdirSync(path);
+    return true;
+  } catch {
+    try {
+      return fs.statSync(path).isDirectory();
+    } catch {
+      return false;
+    }
+  }
+}
+
+/**
+ * `spawnSync(argv)` (WP14 D4): the child's exit status, 128 + n when signal n
+ * killed it, -1 for an empty vector or a program that would not start. The
+ * child inherits this process's streams, as it does natively.
+ */
+export function spawnSync(argv) {
+  if (argv.length === 0) return -1;
+  const r = child_process.spawnSync(argv[0], argv.slice(1), { stdio: "inherit" });
+  if (r.error !== undefined) return -1;
+  if (r.signal !== null && r.signal !== undefined) return 128 + (os.constants.signals[r.signal] ?? 0);
+  return r.status === null ? -1 : r.status;
 }
 
 /** `process.argv`: index 0 is the program (the script here, the executable natively), then the arguments. */

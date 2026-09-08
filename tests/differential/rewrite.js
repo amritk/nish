@@ -228,6 +228,8 @@ const IDENTIFIER_BUILTINS = new Map([
   ["panic", "panic"],
   ["writeFileSync", "writeFileSync"],
   ["appendFileSync", "appendFileSync"],
+  ["mkdirSync", "mkdirSync"],
+  ["spawnSync", "spawnSync"],
   // WP16: natively these bump a struct out of the arena; in JavaScript they
   // build the object with the same three field names (`runtime/shim.mjs`).
   ["Ok", "Ok"],

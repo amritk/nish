@@ -57,7 +57,22 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   the `size` profile strips, and rather than source bytes, which have been over
   since WP4 because comments are not code.
 
+  Both builtins are in the WP13 differential comparison like every other one:
+  `runtime/shim.mjs` implements them for the Node side — `mkdirSync` decides
+  with `statSync` rather than with the exception Node throws, so it answers
+  where the runtime answers — and `tests/differential/rewrite.js` knows their
+  names. Without that the two new goldens ran natively and failed under Node,
+  which is the shape of every builtin that was ever added and forgotten there.
+
 ### Fixed
+
+- **A builtin's argument is checked down to its element type.**
+  `checkArgumentType` compared type *kinds*, which was enough while every
+  builtin wanted a scalar or a string; `spawnSync` wants a `string[]`, and an
+  `i32[]` has the same kind. It compares with `sameType` now
+  (`reject_spawn_element_type`). stage1 was never wrong here: a type is an
+  interned `i32` in `self/types.ts`, so its comparison was already the whole
+  type.
 
 - **stage1's command line answers the way stage0's does, in seven places where
   it silently did not (WP14).** None of them was a decision D4 or §7 records,

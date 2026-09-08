@@ -416,7 +416,7 @@ unwind entries that the `size` build profile strips):
 
 | | Before WP7 | After WP7 | After argv + parsing | After WP14 D4 | Budget |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| source bytes | 4,039 | 7,402 | 11,131 (arrays and WP6 in between) | 13,091 | — (was 8,192; exceeded since WP4, comments) |
+| source bytes | 4,039 | 7,402 | 11,131 (arrays and WP6 in between) | 12,707 | — (was 8,192; exceeded since WP4, comments) |
 | `size` text at `-Oz` | 1,118 | 2,688 | 4,093 (was 3,498) | 4,297 | — (was 4,096; counts `.eh_frame`, which the size profile strips) |
 | `.text` section alone | | | 2,583 (was 2,172) | 2,544 (2,287 before D4) | 4,096 |
 

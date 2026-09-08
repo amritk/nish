@@ -77,7 +77,7 @@ Design rules that every WP must respect:
   a linked binary pays, and `-ffunction-sections -Wl,--gc-sections` means it
   pays only for the functions it calls: adding WP14's `amrit_mkdir` and
   `amrit_spawn` left `examples/hello.ts` at 4,696 bytes, the same number to the
-  byte. Today: 2,544 of 4,096 (`size` text 4,297, source 13,091).
+  byte. Today: 2,544 of 4,096 (`size` text 4,297, source 12,707).
 
 ## 3. Consolidated language specification (AmritScript)
 

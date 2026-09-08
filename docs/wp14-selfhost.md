@@ -918,7 +918,7 @@ fact about the world rather than a conservative guess.
 | --- | ---: | ---: | ---: |
 | `.text` | 2,287 | 2,544 | 4,096 |
 | `size` text (counts `.eh_frame`) | 3,944 | 4,297 | — |
-| source bytes | 10,928 | 13,091 | — |
+| source bytes | 10,928 | 12,707 | — |
 
 §5 rule 4 said self-hosting is not a licence to grow `runtime.c`, and it is
 still the rule. What changed with it is the metric, in `docs/MASTER_PLAN.md`
