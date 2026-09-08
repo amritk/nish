@@ -19,6 +19,7 @@
 // members of `src/types.ts` in order, and `tests/self/types_oracle.js` checks
 // this file against that one over every type either can build.
 
+import { internalError } from "./ice";
 import { StringMap } from "./map";
 
 // The scalar types, which are their own kind and have fixed ids so that a
@@ -386,7 +387,7 @@ export class TypeTable {
       case K_RESULT:
         return `%struct.${this.resultStructName(type)}*`;
       default:
-        panic(`internal error: llvmType of kind ${this.kinds[type]}`);
+        process.exit(internalError(`internal error: llvmType of kind ${this.kinds[type]}`));
     }
   }
 

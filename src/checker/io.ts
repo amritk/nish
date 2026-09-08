@@ -30,11 +30,19 @@
  *                                       for a signal, `-1` when `argv` is
  *                                       empty or the child cannot be started
  *                                       or waited for).
+ *   isDirectorySync(path): boolean      one `stat`: whether a directory is at
+ *                                       `path` right now. It answers rather
+ *                                       than exits for the same reason the
+ *                                       two above do (WP14 §7a).
  *
  *   process.argv: string[]              the command line, index 0 the program
  *                                       path (like C's argv[0]); read-only,
  *                                       and only in a program with a `main`
  *                                       entry, whose wrapper builds it once.
+ *   process.platform: string            what machine the *program* runs on,
+ *   process.arch: string                spelled as Node spells them; the two
+ *                                       halves `--target host` composes a
+ *                                       triple from (WP14 §7a).
  *
  * The file functions are globals rather than `import { readFileSync } from
  * "fs"`: the language has no package resolution and bare specifiers are rejected.
@@ -54,7 +62,7 @@ import {
   requireStatementPosition,
 } from "./builtins";
 import { CheckContext } from "./context";
-import { namespaceProperties } from "./members";
+import { NamespacePropertyChecker, namespaceProperties } from "./members";
 
 const checkProcessExit: BuiltinCallChecker = (ctx, expr, scope) => {
   checkArity(ctx, expr, "process.exit", 1);
@@ -117,6 +125,20 @@ function fileWriter(name: string): BuiltinCallChecker {
 const checkMkdirSync: BuiltinCallChecker = (ctx, expr, scope) => {
   checkArity(ctx, expr, "mkdirSync", 1);
   checkArgumentType(ctx, expr.arguments[0], scope, "mkdirSync", STRING);
+  return BOOL;
+};
+
+/**
+ * `isDirectorySync(path)` (WP14 §7a): the smallest `stat` that answers the
+ * question a driver actually asks of a path — is `-o out` a directory that is
+ * already there, or a file to write? A `boolean` and never an exit, the same
+ * bargain `mkdirSync` and `readFileSyncOrNull` make. A missing path, a plain
+ * file, a broken symlink and an unreadable parent are all `false`: there is
+ * no directory there, which is all the caller wanted to know.
+ */
+const checkIsDirectorySync: BuiltinCallChecker = (ctx, expr, scope) => {
+  checkArity(ctx, expr, "isDirectorySync", 1);
+  checkArgumentType(ctx, expr.arguments[0], scope, "isDirectorySync", STRING);
   return BOOL;
 };
 
@@ -186,6 +208,24 @@ function checkProcessArgv(ctx: CheckContext, expr: ts.PropertyAccessExpression) 
 
 namespaceProperties["process.argv"] = checkProcessArgv;
 
+// ---- process.platform and process.arch ----------------------------------------------
+
+/**
+ * `process.platform` and `process.arch` (WP14 §7a): what machine the compiled
+ * *program* runs on, not what machine compiled it. Both are plain `string`
+ * values with no rule attached — unlike `process.argv` there is nothing for an
+ * entry wrapper to build, so a wasm or N-API library may read them too.
+ *
+ * They exist because `--target host` has to ask the machine what it is, and
+ * nothing else in the language does. The spellings are Node's, so the mapping
+ * from the pair to a triple reads the same in `self/target.ts` as it does in
+ * `hostTriple` in `codegen/target.ts`.
+ */
+const checkMachineProperty: NamespacePropertyChecker = () => STRING;
+
+namespaceProperties["process.platform"] = checkMachineProperty;
+namespaceProperties["process.arch"] = checkMachineProperty;
+
 /** Plain identifier callees, spread into `builtinFunctions`. */
 export const ioBuiltinFunctions: Record<string, BuiltinCallChecker> = {
   readFileSync: checkReadFileSync,
@@ -197,6 +237,7 @@ export const ioBuiltinFunctions: Record<string, BuiltinCallChecker> = {
   panic: checkPanic,
   mkdirSync: checkMkdirSync,
   spawnSync: checkSpawnSync,
+  isDirectorySync: checkIsDirectorySync,
 };
 
 /**

@@ -21,6 +21,7 @@ import { isBuiltinFunction } from "./builtins";
 import { Emitter } from "./emit";
 import { emitIndex } from "./emit_arrays";
 import { emitConsoleError, emitConsoleLog, emitFromCharCode, stringifyCallee } from "./emit_strings";
+import { internalError } from "./ice";
 import { N_IDENT, Node } from "./nodes";
 import { CheckedProgram } from "./program";
 import { ARGV_GLOBAL, ARRAY_TYPE } from "./runtime";
@@ -326,7 +327,7 @@ export function emitBuiltinCall(emitter: Emitter, expr: Node, name: string): str
   if (name === "Arena.used") {
     return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("amrit_arena_used")}()`);
   }
-  panic(`emitter: unexpected builtin \`${name}\``);
+  process.exit(internalError(`emitter: unexpected builtin \`${name}\``));
 }
 
 /**
@@ -484,6 +485,10 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
     }
     return status;
   }
+  // WP14 §7a: one `stat`, and the C answer is already the language's `boolean`.
+  if (name === "isDirectorySync") {
+    return emitter.fn.emitValue(`call zeroext i1 ${emitter.useRuntime("amrit_is_dir")}(${stringArgs(emitter, expr)})`);
+  }
   if (name === "write") {
     return emitStreamWrite(emitter, expr, 1);
   }
@@ -493,7 +498,7 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
   if (name === "panic") {
     return emitPanic(emitter, expr);
   }
-  panic(`emitter: unexpected builtin \`${name}\``);
+  process.exit(internalError(`emitter: unexpected builtin \`${name}\``));
 }
 
 /** The other half of the pair above, in the same order. */
@@ -564,6 +569,10 @@ export function identifierBuiltinCallees(program: CheckedProgram, table: TypeTab
     out.push("amrit_spawn");
     return out;
   }
+  if (name === "isDirectorySync") {
+    out.push("amrit_is_dir");
+    return out;
+  }
   if (name === "write" || name === "writeError") {
     out.push("amrit_write");
     return out;
@@ -578,7 +587,7 @@ export function identifierBuiltinCallees(program: CheckedProgram, table: TypeTab
 
 // ---- Namespace properties -----------------------------------------------------------------
 
-/** `Math.PI`, `Math.E` and `process.argv`, which are values rather than calls. */
+/** `Math.PI`, `Math.E`, `process.argv` and the two machine strings: values rather than calls. */
 export function emitNamespaceProperty(emitter: Emitter, expr: Node, name: string): string {
   if (name === "Math.PI") {
     return f64Hex(Math.PI);
@@ -593,5 +602,14 @@ export function emitNamespaceProperty(emitter: Emitter, expr: Node, name: string
     const align = emitter.opts.optimizeAttributes ? ", align 8" : "";
     return emitter.fn.emitValue(`load ${ARRAY_STRUCT}*, ${ARRAY_STRUCT}** @amrit_argv${align}`);
   }
-  panic(`emitter: unexpected builtin property \`${name}\``);
+  // WP14 §7a. One call to the runtime, which answers the address of a string
+  // in its own constant data: nothing is read and nothing is allocated, so
+  // unlike `process.argv` this leaves a function `readnone`.
+  if (name === "process.platform") {
+    return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("amrit_platform")}()`);
+  }
+  if (name === "process.arch") {
+    return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("amrit_arch")}()`);
+  }
+  process.exit(internalError(`emitter: unexpected builtin property \`${name}\``));
 }

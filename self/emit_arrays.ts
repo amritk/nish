@@ -21,6 +21,7 @@ import { parseIntegerLiteral } from "./constants";
 import { Emitter, LoopTarget } from "./emit";
 import { compoundFloatOpcode, compoundIntegerOpcode, emitIntBinary } from "./emit_ops";
 import { unwrapParens } from "./emit_util";
+import { internalError } from "./ice";
 import { N_NUMBER, Node } from "./nodes";
 import { ARRAY_TYPE } from "./runtime";
 import { ARRAY_STRUCT, isFloat, isUnsigned, T_F64, T_I32, T_STRING } from "./types";
@@ -503,7 +504,7 @@ export function emitForOf(emitter: Emitter, stmt: Node): void {
   const decl = stmt.children[0].children[0].children[0];
   const local = emitter.program.nodeLocals[decl.id];
   if (local === null) {
-    panic("emitter: a `for...of` variable with no local recorded");
+    process.exit(internalError("emitter: a `for...of` variable with no local recorded"));
   }
   const elem = local.type;
   const ty = emitter.llvm(elem);

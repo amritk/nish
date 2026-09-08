@@ -1198,8 +1198,9 @@ divide with overflow` is simply unreachable on an unsigned type.
 - `a.length` on an array: read-only (`tests/cases/arr_length`;
   `` Cannot assign to `length` of i32[] ``, `reject_arr_length_assign`).
 - `p.f` on a class or interface value (`tests/cases/cls_point`).
-- `Math.PI`, `Math.E` (`tests/cases/math_i32`); `process.argv` (see
-  [`process`](#process)); `Arena.*` (see [`Arena`](#arena)). Any other bare
+- `Math.PI`, `Math.E` (`tests/cases/math_i32`); `process.argv`,
+  `process.platform`, `process.arch` (see [`process`](#process));
+  `Arena.*` (see [`Arena`](#arena)). Any other bare
   identifier before a dot is `` Unknown identifier `os` `` *(CLI only)*.
 - Member access on a `T | null` value requires narrowing first
   ([Nullable types](#nullable-types)); `?.` is forbidden
@@ -1313,6 +1314,19 @@ never `readonly` ([wp7-runtime.md](wp7-runtime.md#string-to-number)).
 | --- | --- | --- | --- |
 | `process.exit(code: i32): void` | `amrit_exit` -> libc `exit(code)` (stdio buffers of linked C code are flushed; the arena is abandoned); statement position; a terminator | write, `noreturn` | `process_exit`, `reject_exit_unreachable` |
 | `process.argv: string[]` | the command line: `process.argv[0]` is the program path (C's `argv[0]`, one index earlier than Node, whose `argv[0]` is the `node` binary and `argv[1]` the script) and the rest are the arguments as UTF-8 byte strings; read-only | read | `argv_echo` (run with `argv_echo.argv`), `link/argv_import`; `reject_argv_assign`, `reject_argv_push` (`` `process.argv` is read-only ``) |
+| `process.platform: string` | the operating system the **program** is running on, spelled as Node spells it: `"linux"`, `"darwin"`, or `"unknown"` for anything this compiler has no target triple for (every WASI build included) | none | `io_host`; `reject_platform_assign` (`` Cannot assign to `process.platform` ``) |
+| `process.arch: string` | the architecture, likewise: `"x64"`, `"arm64"`, or `"unknown"` | none | `io_host`; `reject_arch_call` (`` Unknown builtin `process.arch` ``) |
+
+`process.platform` and `process.arch` are what `--target host` asks the
+machine (WP14 §7a): the pair maps to `x86_64`/`aarch64` plus
+`-unknown-linux-gnu`/`-apple-darwin`, and anything else means this compiler has
+no triple for the host and says so. Each is one call to the runtime, which
+answers the address of a string in its own constant data — settled when
+`runtime.c` was compiled, so a cross build reports the *target*, and nothing is
+allocated or loaded, which is why the declarations are `readnone` and a
+function built only from these stays pure. They carry no rule about the entry
+point, unlike `process.argv` below: there is nothing for a wrapper to build, so
+a wasm or N-API library may read them too. Neither can be assigned to.
 
 `process.argv` is an ordinary `string[]` value (`length`, `a[i]`, `for...of`,
 passing it to functions, aliasing it with `const args = process.argv`) that
@@ -1346,15 +1360,23 @@ wins, as it does for every identifier builtin.
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `mkdirSync(path: string): boolean` | create **one** directory, mode `0777 & ~umask` — not recursive, exactly like Node's `fs.mkdirSync(p)` with no options, so a missing parent is a failure and not a reason to create it. `true` when a directory exists at `path` once the call returns, whether this call created it or it was already there; `false` for every other outcome, a plain file at `path` included | write | `io_mkdir`; `reject_mkdir_arity`, `reject_mkdir_type` |
+| `isDirectorySync(path: string): boolean` | one `stat`: `true` when a directory exists at `path` as the call runs, `false` for everything else — a missing path, a plain file, a device node, a parent that cannot be searched. It is the question `-o <dir>` asks of a path, and it is the `stat` half of `mkdirSync`, which calls it (WP14 §7a) | write | `io_is_directory`; `reject_is_directory_arity`, `reject_is_directory_type` |
 | `spawnSync(argv: string[]): number` | run `argv[0]`, searched on `PATH`, with `argv` as its argument vector; wait for it; answer its exit status, or `128 + n` when signal `n` killed it (the shell's convention). `-1` when the vector is **empty** — there is no `argv[0]` to run — and whenever the child cannot be started or cannot be waited for, which is also what a WASI build always answers, since WASI has no processes. The child inherits this process's environment, streams and working directory | write | `io_spawn`; `reject_spawn_arity`, `reject_spawn_element_type` |
 
-Both answer a value where they could have exited, for the reason
+All three answer a value where they could have exited, for the reason
 `readFileSyncOrNull` answers `null` (WP14 B3): the language has no exceptions,
 so a driver has to be able to turn the failure into its own diagnostic. They
-exist so that a compiler written in AmritScript can create its own `-o dir/`
-and shell out for `--link` — the two calls
+exist so that a compiler written in AmritScript can create its own `-o dir/`,
+tell `-o out` meaning a directory from `-o out` meaning a file, and shell out
+for `--link` — `mkdirSync` and `spawnSync` are the calls
 [wp14-selfhost.md](wp14-selfhost.md) §3a D4 named as the price of a
-self-hosted link step.
+self-hosted link step, and `isDirectorySync` is the one §7a named as the price
+of the last spelling of `-o` that was still stage0's.
+
+`isDirectorySync` is a question about the file system *now*: the answer can be
+stale by the time the caller acts on it, so `mkdirSync` is still the call that
+decides whether a directory was made, and `readFileSyncOrNull` is still the way
+to read a file without racing a check against it.
 
 `spawnSync` is the one builtin whose pointer argument the runtime keeps: it
 copies each element's bytes pointer into a vector that outlives the call, so

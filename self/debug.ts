@@ -52,6 +52,7 @@
 
 import { CLI, VERSION } from "./branding";
 import { SourceFile } from "./diagnostics";
+import { internalError } from "./ice";
 import { IRFunction, IRModule } from "./ir";
 import { StringMap } from "./map";
 import { Node } from "./nodes";
@@ -105,7 +106,7 @@ function basicType(type: i32): string {
     case T_BOOL:
       return '!DIBasicType(name: "bool", size: 8, encoding: DW_ATE_boolean)';
     default:
-      panic(`debug: no DWARF basic type for type id ${type}`);
+      process.exit(internalError(`debug: no DWARF basic type for type id ${type}`));
   }
 }
 
@@ -251,7 +252,7 @@ export class DebugInfo {
     } else if (this.table.isStruct(type)) {
       const info = this.program.struct(this.table.nameOf(type));
       if (info === null) {
-        panic(`debug: no struct recorded for \`${this.table.nameOf(type)}\``);
+        process.exit(internalError(`debug: no struct recorded for \`${this.table.nameOf(type)}\``));
       } else {
         ref = this.pointerTo(this.composite(info));
       }

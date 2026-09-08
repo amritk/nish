@@ -2440,6 +2440,86 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           fs.existsSync(path.join(keepDir, "hello.ll")),
         `${keep.status}: ${keep.stdout}${keep.stderr}`
       );
+
+      // ---- The three things §7a listed as still stage0's, closed. -----------
+
+      // `-o <dir>` for a directory that is already there, without the trailing
+      // slash: stage0 stats the path, and so does this now (`isDirectorySync`,
+      // WP14 §7a). The slash still names a directory that does not exist yet,
+      // so both spellings are checked, and a name that is *not* a directory
+      // must still be taken as a file.
+      const statDir = path.join(shipDir, "stat");
+      fs.mkdirSync(statDir, { recursive: true });
+      const intoDir = spawnSync(compiler, ["examples/hello.ts", "-o", statDir], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      const asFile = path.join(shipDir, "stat_file.ll");
+      const intoFile = spawnSync(compiler, ["examples/hello.ts", "-o", asFile], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      check(
+        "the self-hosted compiler: -o <existing dir> without the slash is the directory, as stage0 stats it",
+        intoDir.status === 0 &&
+          fs.existsSync(path.join(statDir, "hello.ll")) &&
+          intoFile.status === 0 &&
+          fs.existsSync(asFile),
+        `dir ${intoDir.status}: ${intoDir.stderr}file ${intoFile.status}: ${intoFile.stderr}`
+      );
+
+      // `--target host`: the machine answers, through `process.platform` and
+      // `process.arch`, and `self/target.ts` composes the triple the way
+      // `src/codegen/target.ts` does — so the two compilers must land on the
+      // same one. Comparing the whole module rather than the triple line keeps
+      // the check honest about the layout string too.
+      const ourHost = path.join(shipDir, "host1.ll");
+      const theirHost = path.join(shipDir, "host0.ll");
+      const hostOurs = spawnSync(compiler, ["examples/hello.ts", "--target", "host", "-o", ourHost], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      const hostTheirs = spawnSync("node", [cli, "examples/hello.ts", "--target", "host", "-o", theirHost], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      const supportedHost = hostTheirs.status === 0;
+      check(
+        supportedHost
+          ? "the self-hosted compiler: --target host resolves to the triple stage0 resolves it to"
+          : "the self-hosted compiler: --target host is refused here exactly as stage0 refuses it",
+        supportedHost
+          ? hostOurs.status === 0 &&
+              stripHeader(fs.readFileSync(ourHost, "utf8")) === stripHeader(fs.readFileSync(theirHost, "utf8"))
+          : hostOurs.status === 2 && hostOurs.stderr.includes("supported: host,"),
+        `stage1 ${hostOurs.status}: ${hostOurs.stderr}stage0 ${hostTheirs.status}: ${hostTheirs.stderr}`
+      );
+
+      // A broken invariant answers 70 (`EX_SOFTWARE`) and stage0's report,
+      // less the two halves a self-hosted compiler honestly has not got: the
+      // input files, which live in a `process.argv` that only a program with
+      // an entry `main` may read, and the stack, which needs the `try`/`catch`
+      // the language does not have. `tests/self/ice.ts` calls the report
+      // directly, because an invariant nothing reaches cannot be provoked from
+      // a command line, and stage1 builds it, so what prints this is stage1's
+      // code compiled by stage1.
+      const iceVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
+      const iceExe = path.join(shipDir, "ice");
+      const iceBuild = spawnSync(compiler, ["tests/self/ice.ts", "--link", iceExe, "--profile", "debug"], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      const ice = iceBuild.status === 0 ? spawnSync(iceExe, [], { cwd: root, encoding: "utf8" }) : null;
+      check(
+        "the self-hosted compiler: an internal error exits 70 and says what it cannot show",
+        ice !== null &&
+          ice.status === 70 &&
+          ice.stderr.startsWith(`amritc ${iceVersion}: internal compiler error\n`) &&
+          ice.stderr.includes("  emitter: no callee recorded for `f`\n") &&
+          ice.stderr.includes("AMRITC_DEBUG=1 adds nothing") &&
+          ice.stderr.includes("This is a bug in amritc, not in your program."),
+        `${iceBuild.status}: ${iceBuild.stderr}${ice ? `ran ${ice.status}: ${ice.stderr}` : ""}`
+      );
     }
   } else {
     // Everything from the lexer oracle down links a stage1 binary, so without

@@ -50,7 +50,7 @@ import { jsonQuote } from "./strings";
 import { resolveTarget, supportedTargets } from "./target";
 
 const USAGE: string =
-  "usage: compile <file.ts> [more.ts ...] [-o <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--out-dir <dir>] [--number-mode i32|f64] [--plain] [--strict-exports] [--unchecked-indexing] [--nsw] [--no-stack-alloc] [--runtime-decls] [--target <triple>] [-g] [--json] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile --version | --help";
+  "usage: compile <file.ts> [more.ts ...] [-o <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--out-dir <dir>] [--number-mode i32|f64] [--plain] [--strict-exports] [--unchecked-indexing] [--nsw] [--no-stack-alloc] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile --version | --help";
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -106,17 +106,23 @@ function makeDirectoryFor(file: string): boolean {
  *                 and `scripts/bootstrap.sh` pass
  *   (none)        `<module>.ll` beside each source
  *
- * Answers an empty array when it refused, having said why. The one rule of
- * stage0's that is missing is `-o <dir>` *without* the slash for a directory
- * that already exists: knowing that needs a `stat` the language does not have,
- * so the trailing slash is the only spelling here — which is what
- * `scripts/amritc.sh` has always done too.
+ * Answers an empty array when it refused, having said why.
+ *
+ * `-o <dir>` *without* the trailing slash is a directory too when one is
+ * already there, which is stage0's rule and needed the `stat` that
+ * `isDirectorySync` now is (WP14 §7a). The trailing slash still names a
+ * directory that does not exist yet, which is why both tests are here and in
+ * that order: the spelling first, because it is an answer about the string and
+ * not about the file system, and it is the one every caller in the tree writes.
  */
 function planOutputs(stems: string[], paths: string[], output: string, link: string, outDir: string): string[] {
   const out: string[] = [];
   if (output.length > 0) {
     if (output.endsWith("/")) {
       return perModule(stems, output.substring(0, output.length - 1));
+    }
+    if (isDirectorySync(output)) {
+      return perModule(stems, output);
     }
     if (stems.length === 1) {
       out.push(output);
@@ -253,13 +259,18 @@ export function main(): number {
         console.error("compile: --target needs a triple");
         return 2;
       }
-      opts.target = process.argv[arg];
-      if (resolveTarget(opts.target) === null) {
-        // `host` is stage0's: answering it means asking the operating system
-        // what machine this is, and stage1 has no `process.platform`.
-        console.error(`compile: unsupported target \`${opts.target}\`; supported: ${supportedTargets().join(", ")}`);
+      const spec = process.argv[arg];
+      const resolved = resolveTarget(spec);
+      if (resolved === null) {
+        console.error(
+          `compile: unsupported target \`${spec}\`; supported: host, ${supportedTargets().join(", ")}`
+        );
         return 2;
       }
+      // The canonical triple, not the spelling that was typed: `host` and the
+      // aliases are resolved once here, as stage0 resolves them once in its
+      // own flag loop, so the emitter never asks the machine anything.
+      opts.target = resolved.triple;
     } else if (value === "--emit-header") {
       arg = arg + 1;
       if (arg >= process.argv.length) {

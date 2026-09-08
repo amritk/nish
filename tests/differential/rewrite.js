@@ -230,6 +230,7 @@ const IDENTIFIER_BUILTINS = new Map([
   ["appendFileSync", "appendFileSync"],
   ["mkdirSync", "mkdirSync"],
   ["spawnSync", "spawnSync"],
+  ["isDirectorySync", "isDirectorySync"],
   // WP16: natively these bump a struct out of the arena; in JavaScript they
   // build the object with the same three field names (`runtime/shim.mjs`).
   ["Ok", "Ok"],
@@ -494,6 +495,14 @@ function makeTransformer(unit, stems) {
       // ---- process.argv -> the script and its arguments (argv[0] is the program, as natively) ----
       if (dottedName(node) === "process.argv" && !bindings.has(node.expression)) {
         return shimCall("argv", []);
+      }
+
+      // ---- process.platform / process.arch -> Node's own, which is what the runtime answers ----
+      if (dottedName(node) === "process.platform" && !bindings.has(node.expression)) {
+        return shimCall("platform", []);
+      }
+      if (dottedName(node) === "process.arch" && !bindings.has(node.expression)) {
+        return shimCall("arch", []);
       }
 
       // ---- new Array<T>(n) (and the Int32Array/Float64Array/BigInt64Array aliases) -> zero-filled ----

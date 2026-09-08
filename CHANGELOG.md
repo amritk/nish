@@ -70,6 +70,54 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   names. Without that the two new goldens ran natively and failed under Node,
   which is the shape of every builtin that was ever added and forgotten there.
 
+- **Three of the four things stage1 still left to stage0 are closed (WP14
+  §7a).** Each of the new constructs entered the language and `src/` first,
+  with a golden `.ll`, a native round trip, negatives, a `docs/LANGUAGE.md`
+  rule and a cookbook entry, and only then `self/`:
+
+  - `process.platform` and `process.arch` (`io_host`;
+    `reject_platform_assign`, `reject_arch_call`) answer what machine the
+    *program* runs on, spelled as Node spells it: `"linux"` / `"darwin"` and
+    `"x64"` / `"arm64"`, and `"unknown"` for anything this compiler has no
+    triple for. Each is one call that answers the address of a string in the
+    runtime's own constant data — settled when `runtime.c` was compiled, so a
+    cross build reports the target — which means nothing is allocated and
+    nothing is loaded, the declarations carry `readnone willreturn`, and two
+    reads in one function fold into one. Not `noalias`: every call answers the
+    same pointer. With them `self/target.ts` composes the host triple exactly
+    as `src/codegen/target.ts` does, so **`--target host` is stage1's** and the
+    two compilers emit the same module for it.
+  - `isDirectorySync(path: string): boolean` (`io_is_directory`;
+    `reject_is_directory_arity`, `reject_is_directory_type`) is one `stat`
+    answering the one question `-o <dir>` asks of a path, and a value rather
+    than an exit for the reason `mkdirSync` and `readFileSyncOrNull` answer
+    values. `amrit_mkdir` is rewritten to call it, so the `stat` exists once.
+    With it **`-o <dir>` without the trailing slash** names an existing
+    directory in stage1, as it always has in stage0.
+  - **An internal compiler error in stage1 exits 70** (`EX_SOFTWARE`) with
+    stage0's report, where a broken invariant used to reach `panic(msg)` and
+    exit 1. This needed *no* language change, which is why it was chosen over
+    the second `panic` §7a also costed: `process.exit(n)` already means "this
+    code, now", so the status one program wants for its own bugs is not the
+    language's business, and the report's wording is the compiler's policy
+    rather than a builtin's. `self/ice.ts` holds it and answers the status, so
+    every one of the 28 sites is the single statement
+    `process.exit(internalError("..."))` — a pair could be half-written and
+    this cannot. stage1 names `AMRITC_DEBUG` and says there is nothing behind
+    it here rather than promising a stack trace: with no exceptions the report
+    is made at the site, so there is no stack to unwind and no `process.argv`
+    to read either. Seven sites in `self/emit_ops.ts` and
+    `self/interop_napi.ts` still exit 1.
+
+  `.text` in `runtime/runtime.c` goes from 2,544 to **2,561** bytes at `-Oz`
+  against the 4,096 budget: eight bytes each for `amrit_platform` and
+  `amrit_arch`, exactly as §7a costed them, and one byte net for
+  `amrit_is_dir`. `runtime/shim.mjs` and `tests/differential/rewrite.js` know
+  all three, so the new goldens are in the WP13 comparison like every other
+  builtin, and `runtime/amritc.d.ts` declares them — along with `mkdirSync` and
+  `spawnSync`, which it had never been told about, so an editor typed them as
+  unknown names. `--emit-ast` is the one thing that stays stage0's, by design.
+
 ### Fixed
 
 - **A builtin's argument is checked down to its element type.**

@@ -1,0 +1,4 @@
+cwd: true
+root: true
+device: false
+missing: false

@@ -100,7 +100,8 @@ export function isBuiltinFunction(name: string): boolean {
     name === "writeError" ||
     name === "panic" ||
     name === "mkdirSync" ||
-    name === "spawnSync"
+    name === "spawnSync" ||
+    name === "isDirectorySync"
   );
 }
 
@@ -146,7 +147,7 @@ function checkArgumentType(ctx: CheckContext, arg: Node, scope: Scope, name: str
 
 // ---- Namespace properties -----------------------------------------------------------
 
-/** `Math.PI`, `Math.E`, `process.argv`. */
+/** `Math.PI`, `Math.E`, `process.argv`, `process.platform`, `process.arch`. */
 export function checkNamespaceProperty(
   ctx: CheckContext,
   expr: Node,
@@ -162,6 +163,15 @@ export function checkNamespaceProperty(
     }
     ctx.program.usesArgv = true;
     return ctx.table.arrayOf(T_STRING);
+  }
+  // WP14 §7a. What machine the *program* runs on, and unlike `process.argv`
+  // there is nothing for an entry wrapper to build, so no rule is attached: a
+  // library without a `main` may read them too. They exist because
+  // `--target host` has to ask the machine what it is and nothing else in the
+  // language does; the spellings are Node's, so `self/target.ts` composes the
+  // triple from them exactly as `src/codegen/target.ts` does.
+  if (namespace === "process" && (member === "platform" || member === "arch")) {
+    return T_STRING;
   }
   if (!isNamespace(namespace)) {
     return ctx.errorType(expr.children[0], `Unknown identifier \`${namespace}\``);
@@ -445,6 +455,15 @@ export function checkBuiltinFunction(ctx: CheckContext, call: Node, scope: Scope
       checkArgumentType(ctx, args.children[0], scope, name, ctx.table.arrayOf(T_STRING));
     }
     return ctx.numberType();
+  }
+  // WP14 §7a. One `stat`, answering the one question a driver asks of a path
+  // it was handed: is `-o out` a directory that is already there? A value like
+  // `mkdirSync`'s, never an exit.
+  if (name === "isDirectorySync") {
+    if (checkBuiltinArity(ctx, call, name, args, 1)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING);
+    }
+    return T_BOOL;
   }
   return ctx.errorType(call.children[0], `Unknown function \`${name}\``);
 }
