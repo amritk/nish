@@ -75,7 +75,11 @@ function llFiles(dir) {
     .sort();
 }
 
-function compare(binary, work, file, negatives) {
+// `negatives` is the set of corpus files that exist to be *refused* (the
+// `tests/link/` cases with an `expected.err`). A caller compiling programs that
+// were never meant to fail — the fuzzer's generated ones — passes none, so it
+// defaults to empty rather than making every such caller build a set.
+function compare(binary, work, file, negatives = new Set()) {
   const { flags, unsupported } = argsFor(file);
   if (unsupported.length > 0) return { skipped: `stage1 has no ${unsupported.join(" ")}` };
   // A `tests/link` program that carries an `expected.err` may be a compile-time

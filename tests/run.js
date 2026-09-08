@@ -2020,6 +2020,47 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       `${irOracle.stdout}${irOracle.stderr}`
     );
 
+    // The same equality, on programs nobody wrote. The corpus the oracle above
+    // reads is checked in and therefore finite and adapted-to; the WP13 fuzzer
+    // generates random straight-line programs, and here both compilers are
+    // asked for the IR of each and the texts compared byte for byte, module set
+    // included (`fuzz.js --stage1`, docs/wp13-differential.md "The fuzzer").
+    //
+    // Sixteen programs from one fixed seed. The count is a time budget rather
+    // than a coverage judgement: the run links one stage1 binary (about 15 s)
+    // and each program then costs about a third of a second, so sixteen keeps
+    // the whole check near 20 s, most of it the link, and leaves the suite the
+    // length it was. Three hundred programs is about two minutes and belongs in
+    // a manual `node tests/differential/fuzz.js --stage1 --count 300` rather
+    // than in every `npm test`. The seed is fixed
+    // so the check is deterministic and a failure reproduces from the summary
+    // line alone, and it is deliberately not the seed the WP13 batch uses, so
+    // the two checks look at different programs.
+    const stage1FuzzSeed = 20261001;
+    const stage1Fuzz = spawnSync(
+      "node",
+      [
+        path.join(root, "tests", "differential", "fuzz.js"),
+        "--stage1",
+        "--seed",
+        String(stage1FuzzSeed),
+        "--count",
+        "16",
+      ],
+      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+    );
+    const stage1FuzzSummary =
+      stage1Fuzz.stdout
+        .trim()
+        .split("\n")
+        .filter((l) => l.startsWith("fuzz: stage1 seed="))
+        .pop() ?? "";
+    check(
+      `self/emit.ts emits the IR stage0 emits for random programs (${stage1FuzzSummary || `seed=${stage1FuzzSeed}`})`,
+      stage1Fuzz.status === 0,
+      `${stage1Fuzz.stdout}${stage1Fuzz.stderr}`
+    );
+
     // S5, and the claim the work package exists for: `self/` compiles `self/`.
     // stage1 is `self/` built by stage0, stage2 is `self/` built by stage1,
     // stage3 is `self/` built by stage2. `IR(stage1) == IR(stage2)` is the

@@ -647,6 +647,21 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   model the narrowing and not just the names. `amritc` remains the
   authority: the widths are aliases of `number` there, and `tsc` cannot see
   the three rules above.
+- **The random-program fuzzer now compares the two compilers, not only the
+  binary against Node (WP13 / WP14).** `tests/differential/fuzz.js --stage1`
+  compiles every program it generates with stage0 *and* with the self-hosted
+  compiler and requires the emitted IR to be identical byte for byte, module
+  set included — the equality `tests/self/ir_oracle.js` asserts over the
+  checked-in corpus, now asserted over programs neither compiler has ever seen,
+  with stage0 as the oracle and no golden anywhere in the path. It reuses the
+  oracle's own `build` and `compare` and links one stage1 binary per run; a
+  disagreement (including a stage1 rejection of a program stage0 accepts) saves
+  the program as `build/test/differential/fuzz-stage1-fail-<seed>.ts` and
+  prints the first differing line and the command that reproduces it,
+  `--stage1 --seed <seed> --count 1`. The WP14 block of `npm test` runs 16
+  programs from a fixed seed; 300 agreed on every byte. The default
+  stage0-against-Node mode is untouched and still runs its own 10-program batch
+  in the WP13 block.
 
 ### Removed
 
