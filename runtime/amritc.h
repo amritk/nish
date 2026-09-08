@@ -142,6 +142,23 @@ void amrit_panic_index(uint64_t idx, uint64_t len);
 extern amrit_array *amrit_argv;
 void amrit_argv_init(int32_t argc, char **argv);
 
+/* ---- Directories and subprocesses (WP14 D4) -----------------------------
+ * The two calls a self-hosted driver needs to link its own output. Both
+ * answer a value instead of exiting, exactly as `amrit_read_file_or_null`
+ * does: AmritScript has no exceptions, so the caller owns the diagnostic. */
+/* `mkdirSync(path)`: create one directory, NOT recursive (mode 0777 & ~umask,
+ * like Node's `fs.mkdirSync(p)` with no options). True when a directory
+ * exists at `path` afterwards, whether this call created it or it was already
+ * there; false for every other failure, a plain file at `path` included. */
+bool amrit_mkdir(const amrit_str *path);
+/* `spawnSync(argv)`: run element 0 of `argv` (searched on `PATH`) with `argv`
+ * as its argument vector, wait for it, and answer its exit status, or
+ * `128 + n` when signal `n` killed it. -1 when `argv` is empty, when the
+ * child cannot be started or waited for, and always under WASI, which has no
+ * processes. The elements are `amrit_str *`; the child receives their bytes,
+ * so an argument containing a NUL is truncated at it. */
+int32_t amrit_spawn(const amrit_array *argv);
+
 /* String to number (WP7), ASCII whitespace only. mode 0 is `parseFloat`
  * (longest JS decimal literal or `Infinity`, else NaN), mode 1 is `Number`
  * (the whole string, trimmed; blank is 0; `0x` hex accepted, as in JS),

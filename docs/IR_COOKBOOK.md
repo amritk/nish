@@ -368,14 +368,14 @@ export function main(): number {
 ```
 
 ```llvm
-@.str.0 = private unnamed_addr constant { i64, [20 x i8] } { i64 19, [20 x i8] c"hello from AmritScript\00" }, align 8
+@.str.0 = private unnamed_addr constant { i64, [23 x i8] } { i64 22, [23 x i8] c"hello from AmritScript\00" }, align 8
 
 declare void @amrit_free_arena() #0
 declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
 
 define noundef i32 @amrit_main() #0 {
 entry:
-  call void @amrit_print(i8* bitcast ({ i64, [20 x i8] }* @.str.0 to i8*))
+  call void @amrit_print(i8* bitcast ({ i64, [23 x i8] }* @.str.0 to i8*))
   ret i32 0
 }
 
@@ -3792,6 +3792,117 @@ attributes #1 = { nounwind }
 ```
 <!-- cookbook:end builtin_files -->
 
+### Directories and subprocesses
+
+`mkdirSync` answers a `boolean` and `spawnSync` an exit status, so the failure
+is a value the program branches on rather than an exit inside the runtime.
+Note what the escape analysis makes of the vector: `argv` is handed to
+`amrit_spawn`, which keeps pointers into it, so the literal stays in the arena
+and `amrit_main` gets no arena scope and no `willreturn`.
+
+<!-- cookbook:begin builtin_process -->
+```ts
+export function main(): number {
+  if (!mkdirSync("build/out")) {
+    panic("cannot create build/out");
+  }
+  const argv: string[] = ["bash", "scripts/build.sh", "app.ll"];
+  return spawnSync(argv);
+}
+```
+
+```llvm
+%struct.amrit_array = type { i64, i64, i8* }
+%struct.amrit_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"build/out\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [24 x i8] } { i64 23, [24 x i8] c"cannot create build/out\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"bash\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [17 x i8] } { i64 16, [17 x i8] c"scripts/build.sh\00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"app.ll\00" }, align 8
+@amrit_arena = external global %struct.amrit_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @amrit_arena_grow(i64 noundef) #1
+declare void @amrit_free_arena() #2
+declare void @amrit_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
+declare void @amrit_exit(i32 noundef) #3
+declare zeroext i1 @amrit_mkdir(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noundef i32 @amrit_spawn(%struct.amrit_array* noundef nonnull align 8) #0
+
+define internal noalias noundef nonnull align 8 i8* @amrit_alloc_struct(i64 noundef %size) #4 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @amrit_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define noundef i32 @amrit_main() #0 {
+entry:
+  %argv.addr = alloca %struct.amrit_array*, align 8
+  %0 = call zeroext i1 @amrit_mkdir(i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*))
+  %1 = xor i1 %0, true
+  br i1 %1, label %if.then, label %if.end
+
+if.then:
+  call void @amrit_write(i8* bitcast ({ i64, [24 x i8] }* @.str.1 to i8*), i32 2, i1 true)
+  call void @amrit_exit(i32 1)
+  unreachable
+
+if.end:
+  %2 = call i8* @amrit_alloc_struct(i64 24)
+  %3 = bitcast i8* %2 to %struct.amrit_array*
+  %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %3, i64 0, i32 0
+  store i64 3, i64* %4, align 8
+  %5 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %3, i64 0, i32 1
+  store i64 3, i64* %5, align 8
+  %6 = call i8* @amrit_alloc_struct(i64 24)
+  %7 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %3, i64 0, i32 2
+  store i8* %6, i8** %7, align 8
+  %8 = bitcast i8* %6 to i8**
+  %9 = getelementptr inbounds i8*, i8** %8, i64 0
+  store i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8** %9, align 8
+  %10 = getelementptr inbounds i8*, i8** %8, i64 1
+  store i8* bitcast ({ i64, [17 x i8] }* @.str.3 to i8*), i8** %10, align 8
+  %11 = getelementptr inbounds i8*, i8** %8, i64 2
+  store i8* bitcast ({ i64, [7 x i8] }* @.str.4 to i8*), i8** %11, align 8
+  store %struct.amrit_array* %3, %struct.amrit_array** %argv.addr, align 8
+  %12 = load %struct.amrit_array*, %struct.amrit_array** %argv.addr, align 8
+  %13 = call i32 @amrit_spawn(%struct.amrit_array* %12)
+  ret i32 %13
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @amrit_main()
+  call void @amrit_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
+attributes #2 = { nounwind willreturn }
+attributes #3 = { noreturn nounwind }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+```
+<!-- cookbook:end builtin_process -->
+
 ## Optimisation flags
 
 ### `--nsw`
@@ -3906,12 +4017,14 @@ declare void @amrit_write_file(i8* noundef nonnull readonly align 8 nocapture, i
 declare void @amrit_append_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare void @amrit_argv_init(i32 noundef, i8** noundef nocapture readonly) #2
 declare noundef double @amrit_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2
+declare zeroext i1 @amrit_mkdir(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noundef i32 @amrit_spawn(%struct.amrit_array* noundef nonnull align 8) #5
 declare void @amrit_array_grow(%struct.amrit_array* noundef nonnull align 8 nocapture, i64 noundef) #2
 declare noalias noundef nonnull align 8 %struct.amrit_array* @amrit_alloc_array(i64 noundef, i64 noundef) #2
-declare void @amrit_panic_index(i64 noundef, i64 noundef) #5
-declare void @amrit_panic_div(i1 noundef zeroext) #5
+declare void @amrit_panic_index(i64 noundef, i64 noundef) #6
+declare void @amrit_panic_div(i1 noundef zeroext) #6
 
-define internal noalias noundef nonnull align 8 i8* @amrit_alloc_struct(i64 noundef %size) #6 {
+define internal noalias noundef nonnull align 8 i8* @amrit_alloc_struct(i64 noundef %size) #7 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -3945,7 +4058,8 @@ attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind willreturn memory(argmem: read) }
 attributes #4 = { noreturn nounwind }
-attributes #5 = { nounwind noreturn cold }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #5 = { nounwind }
+attributes #6 = { nounwind noreturn cold }
+attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end runtime_prelude -->

@@ -9,6 +9,108 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **The self-hosted compiler links its own output; `scripts/amritc.sh` is
+  gone (WP14, reversing §3a D4).** `amritc self/compile.ts --link amritc`
+  now produces a compiler byte-identical to the one that ran it, with no shell
+  script between them. D4 had dropped `--link`, `--profile` and directory
+  creation from stage1 on the grounds that they would mean `spawnSync` and
+  `mkdirSync` builtins and runtime growth; it was right about the order of the
+  work and wrong about the end state, because a compiler that cannot produce an
+  executable on its own is self-hosting in the IR and not in the artifact.
+
+  Two builtins, each landed in `src/` first with its golden, its native round
+  trip, two negatives, its `docs/LANGUAGE.md` rule and its cookbook entry:
+  `mkdirSync(path: string): boolean` makes one directory and answers whether a
+  directory is there afterwards (the retry is a `stat`, not `errno == EEXIST`,
+  so a plain file at the path answers false), and `spawnSync(argv: string[]):
+  number` runs `argv[0]` through `PATH`, waits, and answers the exit status —
+  `128 + n` for a signal, `-1` for an empty vector or a program that would not
+  start. Both answer a value rather than exiting, for the reason
+  `readFileSyncOrNull` answers `null`: there are no exceptions, so the caller
+  owns the diagnostic. `spawnSync` is the first builtin whose pointer argument
+  the runtime keeps — `amrit_spawn` copies each element's bytes pointer into an
+  arena vector that outlives the call — so `classifyUse` reports an escape for
+  it and the declaration carries no `nocapture`, and the first that is not
+  `willreturn`, because the child may never exit and `waitpid` waits.
+
+  With them, `self/compile.ts` answers `-o <file.ll>`, `-o <dir>/`, `--link
+  <exe>` (`<exe>.ll` for one module, `<exe>.modules/` for a program with
+  imports) and `--profile speed|size|debug|wasi`, validated before anything is
+  compiled; it makes every directory in the way of the IR, a sidecar or the
+  binary; it writes `<module>.ll` beside each source when nothing is named,
+  which is stage0's default and replaces stage1's older "one module to stdout";
+  and it refuses `--link` on a program with no `export function main` before
+  the emit rather than leaving it to the linker. It finds `scripts/build.sh`
+  and `runtime/runtime.c` from the path it was invoked by, falling back to the
+  working directory, and names both when neither has them. `--emit-ast` is
+  refused by name by the compiler itself now. Nothing about the host platform
+  came in with any of this: the `uname -s`, the profile flag sets and the wasi
+  sysroot search are in `scripts/build.sh`, where they always were, for both
+  compilers alike.
+
+  The bill is **257 bytes of `.text`** (2,287 to 2,544 at `-Oz`), and a program
+  that calls neither pays none of it: `examples/hello.ts` at the `size` profile
+  is 4,696 bytes with these two functions in the runtime and 4,696 bytes
+  without, because `-ffunction-sections -Wl,--gc-sections` drops both. The
+  runtime budget in `docs/MASTER_PLAN.md` §2 is restated to measure `.text`
+  rather than the `text` column of `size`, which counts the `.eh_frame` entries
+  the `size` profile strips, and rather than source bytes, which have been over
+  since WP4 because comments are not code.
+
+  `scripts/bootstrap.sh` runs on it: every stage is one `--link` by the stage
+  before it, where stages 2 and 3 used to be compiled with `--out-dir` and then
+  linked by the script itself, and the three equalities read the
+  `<exe>.modules/` directory `--link` already writes. The chain that proves the
+  fixed point is now the same command a user runs.
+
+  Both builtins are in the WP13 differential comparison like every other one:
+  `runtime/shim.mjs` implements them for the Node side — `mkdirSync` decides
+  with `statSync` rather than with the exception Node throws, so it answers
+  where the runtime answers — and `tests/differential/rewrite.js` knows their
+  names. Without that the two new goldens ran natively and failed under Node,
+  which is the shape of every builtin that was ever added and forgotten there.
+
+### Fixed
+
+- **A builtin's argument is checked down to its element type.**
+  `checkArgumentType` compared type *kinds*, which was enough while every
+  builtin wanted a scalar or a string; `spawnSync` wants a `string[]`, and an
+  `i32[]` has the same kind. It compares with `sameType` now
+  (`reject_spawn_element_type`). stage1 was never wrong here: a type is an
+  interned `i32` in `self/types.ts`, so its comparison was already the whole
+  type.
+
+- **stage1's command line answers the way stage0's does, in seven places where
+  it silently did not (WP14).** None of them was a decision D4 or §7 records,
+  which is what separates them from `--emit-ast`: they were drift, and each one
+  had a shape a build script could be wrong about without being told. An
+  unknown `--number-mode` is refused instead of quietly meaning `i32` — the
+  worst of the three outcomes, because the program compiles, in the other
+  arithmetic. Every positional is a root, as it is for stage0, instead of the
+  last one winning and the rest being compiled into nothing. `wrote <file>`
+  goes to stderr, where stage0 puts it, so a build script that pipes the IR or
+  reads `--json` finds no chatter mixed in. A root that cannot be opened is
+  reported by the driver — `error: cannot open <path>` on stderr, exit 1, and
+  one flat object under `--json` — rather than by the loader, which could
+  answer neither shape; the errno stays stage0's, since Node names it and
+  `readFileSyncOrNull` answers null without saying why. Three more were fixed
+  in `scripts/amritc.sh` and then inherited by the compiler when it took that
+  script's job over (above): `--link` on a program with no `export function
+  main` is refused with stage0's message and its exit 1, instead of reaching
+  clang and coming back with `undefined reference to main` and exit 3; an
+  unknown `--profile` is refused before the compile rather than after it, as
+  stage0 validates `PROFILES` before it reads a file; and `-o <dir>/` writes
+  into the directory it was given instead of clearing it first, which for
+  `-o build/` took the rest of `build/` with it. Checks in the WP14 section of
+  `tests/run.js` compare each answer against stage0's.
+
+- **The WP14 section says when it skipped itself.** Without clang the
+  self-hosting oracles and the bootstrap did not run and printed nothing, so a
+  run reported the 55 compile-gate passes above them and looked like a proof of
+  the fixed point. It now prints the `SKIP` line WP12 and WP13 print.
+
+### Added
+
 - **The self-hosted compiler writes the interop sidecars (WP8 in `self/`).**
   `--emit-header`, `--emit-dts` — which also writes the companion `.mjs`
   loader beside its declarations — and `--emit-napi` now work in stage1,

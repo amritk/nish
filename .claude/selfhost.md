@@ -36,21 +36,25 @@ The oracles build compilers into temporary directories and delete them. To get
 one you can keep:
 
 ```bash
-npm run bootstrap                            # build/amritc (stage2, speed)
-scripts/bootstrap.sh --verify                # the three equalities, with cmp
-scripts/amritc.sh hello.ts --link hello   # its command line: -o, --link, --profile
+npm run bootstrap                   # build/amritc (stage2, speed)
+scripts/bootstrap.sh --verify       # the three equalities, with cmp
+build/amritc hello.ts --link hello  # -o, --link, --profile, its own directories
 ```
 
-`scripts/amritc.sh` is the wrapper D4 promised: it makes the output
-directory and runs `scripts/build.sh`, which is the half of the driver stage1
-does not have. It takes `-g` and passes it on to both halves, and passes
-`--json`, `--emit-checked`, `--version` and the interop sidecars
-(`--emit-header`, `--emit-dts`, `--emit-napi`, and the loader `--emit-dts`
-writes beside its declarations) through to the compiler, which answers them
-itself; it makes the sidecars' directory as it makes the IR's. It refuses
-`--emit-ast` **by name** — that one is stage0's, not missing — and mirrors
-stage0's file layout exactly, so either compiler can be dropped into a build
-script. See `docs/wp14-selfhost.md` §7.
+There is no wrapper any more: `scripts/amritc.sh` is deleted and
+`self/compile.ts` drives the whole thing (§3a D4, reversed in
+`docs/wp14-selfhost.md` §7a). It plans `-o <file.ll>`, `-o <dir>/` and
+`--link <exe>` by stage0's rules, validates `--profile speed|size|debug|wasi`
+before compiling anything, makes every directory in the way of the IR, a
+sidecar or the binary with `mkdirSync`, and runs `bash scripts/build.sh`
+through `spawnSync` for the link — the same script `src/index.ts` spawns, found
+one level up from the binary's own path or in the working directory. `-g` goes
+into the `.ll` *and* on to that script. `--json`, `--emit-checked`, `--version`
+and the interop sidecars (`--emit-header`, `--emit-dts`, `--emit-napi`, and the
+loader `--emit-dts` writes beside its declarations) it answers itself. It
+refuses `--emit-ast` **by name** — that one is stage0's, not missing — and
+mirrors stage0's file layout exactly, so either compiler can be dropped into a
+build script. `--target host` is the other spelling stage0 keeps.
 
 `--emit-ast` is the one flag that is stage0's *by design* rather than for now:
 stage0's dump prints the `typescript` package's node names and line:column
@@ -161,10 +165,15 @@ the only thing that reproduces a failure is the seed it prints
 A skip in an oracle summary is a fact about how far the port has got, not a
 file that is allowed to disagree — which is why every other outcome is counted
 and named apart from it: a stage1 rejection, a parser refusal whose wording
-differs by design, a program the reject oracle owns. Three skips are left, and
-none of them is about `self/`: `tests/parser/precedence.ts` is a parser fixture
-no checker accepts, `tests/link/no_main` is refused by `--link`, which is
-stage0's, and the dump-flag cases ask for what stage1 does not do.
+differs by design, a program the reject oracle owns. Three skips are left, one
+per oracle and two files between them, and none of them is about `self/`:
+`tests/parser/precedence.ts` is a parser fixture no checker accepts, which
+`checked_oracle.js` and `ir_oracle.js` both pass over, and `tests/link/no_main`
+is refused by `--link`, which is stage0's, so `reject_oracle.js` passes over
+that. The three cases that ask for a dump flag are counted apart from the
+skips, as dumps: they write no IR on either side, and of the two flags only
+`--emit-ast` is stage0's — `checked_oracle.js` compares `--emit-checked` over
+the whole corpus.
 
 ### Running one
 

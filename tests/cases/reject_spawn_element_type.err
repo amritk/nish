@@ -1,0 +1,1 @@
+`spawnSync` expects string[], got i32[]

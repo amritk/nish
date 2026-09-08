@@ -468,6 +468,22 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
     emitter.fn.emit(`call void ${emitter.useRuntime("amrit_append_file")}(${stringArgs(emitter, expr)})`);
     return "void";
   }
+  // WP14 D4: the two host calls a self-hosted driver needs to link its output.
+  if (name === "mkdirSync") {
+    return emitter.fn.emitValue(`call zeroext i1 ${emitter.useRuntime("amrit_mkdir")}(${stringArgs(emitter, expr)})`);
+  }
+  // The array header goes straight to the runtime, which builds the C vector
+  // from it. The status is an `i32`, so `--number-mode f64` widens it the way
+  // `a.length` is widened.
+  if (name === "spawnSync") {
+    emitter.declareType(ARRAY_TYPE);
+    const argv = emitter.emitExpression(firstArgument(expr));
+    const status = emitter.fn.emitValue(`call i32 ${emitter.useRuntime("amrit_spawn")}(${ARRAY_STRUCT}* ${argv})`);
+    if (emitter.typeOf(expr) === T_F64) {
+      return emitter.fn.emitValue(`sitofp i32 ${status} to double`);
+    }
+    return status;
+  }
   if (name === "write") {
     return emitStreamWrite(emitter, expr, 1);
   }
@@ -481,6 +497,18 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
 }
 
 /** The other half of the pair above, in the same order. */
+/**
+ * A call of the `spawnSync` builtin (not of a user function that happens to be
+ * called `spawnSync`, which wins the name as every identifier builtin loses
+ * it). `attributes.ts` asks, because the argument escapes into the runtime:
+ * `amrit_spawn` copies each element's bytes pointer into an arena vector that
+ * outlives the call.
+ */
+export function isSpawnCall(program: CheckedProgram, call: Node): boolean {
+  const callee = call.children[0];
+  return callee.kind === N_IDENT && callee.text === "spawnSync" && program.nodeCallees[call.id] === null;
+}
+
 export function identifierBuiltinCallees(program: CheckedProgram, table: TypeTable, call: Node): string[] {
   const out: string[] = [];
   const name = call.children[0].text;
@@ -526,6 +554,14 @@ export function identifierBuiltinCallees(program: CheckedProgram, table: TypeTab
   }
   if (name === "appendFileSync") {
     out.push("amrit_append_file");
+    return out;
+  }
+  if (name === "mkdirSync") {
+    out.push("amrit_mkdir");
+    return out;
+  }
+  if (name === "spawnSync") {
+    out.push("amrit_spawn");
     return out;
   }
   if (name === "write" || name === "writeError") {

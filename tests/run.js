@@ -2100,10 +2100,11 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // The deployment path (docs/wp14-selfhost.md §7). The check above proves
     // the fixed point and then deletes every compiler it built; this one
     // proves the artifact: `scripts/bootstrap.sh` builds a compiler you can
-    // keep, and `scripts/amritc.sh` is the command line D4 said a wrapper
-    // would supply — the directory creation and the link step stage1 does not
-    // do itself. One stage rather than three, because what is under test here
-    // is the recipe and the wrapper, not the equalities.
+    // keep, and that compiler is the whole command line — the output planning,
+    // the directory creation and the link step included, which is D4 reversed
+    // (§7a). Everything below runs the binary itself, with no wrapper in the
+    // way. One stage rather than three, because what is under test here is the
+    // recipe and the driver, not the equalities.
     const shipDir = path.join(buildDir, "selfhost");
     fs.rmSync(shipDir, { recursive: true, force: true });
     const compiler = path.join(shipDir, "amritc");
@@ -2126,20 +2127,18 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         `${shipped.stdout}${shipped.stderr}`
       )
     ) {
-      const env = { ...process.env, AMRITC: compiler };
-      const wrapper = path.join(root, "scripts", "amritc.sh");
 
       // One module: the IR lands next to the binary as `<exe>.ll`, which is
       // where stage0's `--link` puts it too.
       const hello = path.join(shipDir, "hello");
       const one = spawnSync(
-        "bash",
-        [wrapper, "examples/hello.ts", "--link", hello, "--profile", "debug"],
-        { cwd: root, encoding: "utf8", env }
+        compiler,
+        ["examples/hello.ts", "--link", hello, "--profile", "debug"],
+        { cwd: root, encoding: "utf8" }
       );
       const ranHello = one.status === 0 ? spawnSync(hello, [], { encoding: "utf8" }) : null;
       check(
-        "scripts/amritc.sh: the self-hosted compiler links and runs examples/hello.ts",
+        "the self-hosted compiler: the self-hosted compiler links and runs examples/hello.ts",
         one.status === 0 &&
           fs.existsSync(`${hello}.ll`) &&
           ranHello !== null &&
@@ -2148,20 +2147,20 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         `${one.stdout}${one.stderr}${ranHello ? `ran: ${ranHello.status} ${JSON.stringify(ranHello.stdout)}` : ""}`
       );
 
-      // Two modules: the wrapper makes the `<exe>.modules/` directory the
-      // compiler will not make for itself, and `main()` returns the exit code.
+      // Two modules: the compiler makes the `<exe>.modules/` directory itself
+      // now, and `main()` returns the exit code.
       const multi = path.join(shipDir, "multi");
       const many = spawnSync(
-        "bash",
-        [wrapper, "examples/multi/main.ts", "--link", multi, "--profile", "debug"],
-        { cwd: root, encoding: "utf8", env }
+        compiler,
+        ["examples/multi/main.ts", "--link", multi, "--profile", "debug"],
+        { cwd: root, encoding: "utf8" }
       );
       const ranMulti = many.status === 0 ? spawnSync(multi, [], { encoding: "utf8" }) : null;
       const emitted = fs.existsSync(`${multi}.modules`)
         ? fs.readdirSync(`${multi}.modules`).filter((f) => f.endsWith(".ll")).sort()
         : [];
       check(
-        "scripts/amritc.sh: a program with imports links from <exe>.modules/ and exits 49",
+        "the self-hosted compiler: a program with imports links from <exe>.modules/ and exits 49",
         many.status === 0 &&
           emitted.join(",") === "main.ll,math.ll" &&
           ranMulti !== null &&
@@ -2169,16 +2168,17 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         `${many.stdout}${many.stderr}modules: ${emitted.join(",")}${ranMulti ? ` exit ${ranMulti.status}` : ""}`
       );
 
-      // `-g` is stage1's now: the wrapper hands it to the compiler *and* to
+      // `-g` reaches both halves: the compiler puts the DWARF in the `.ll` and
+      // hands `-g` to
       // scripts/build.sh, so the DWARF in the .ll survives the link instead of
       // being stripped with the profile. A `.debug_info` section in the linked
       // binary is the end-to-end proof; the metadata in the IR is what the
       // oracle compares byte for byte.
       const dbgExe = path.join(shipDir, "hello-g");
       const withG = spawnSync(
-        "bash",
-        [wrapper, "examples/hello.ts", "--link", dbgExe, "--profile", "debug", "-g"],
-        { cwd: root, encoding: "utf8", env }
+        compiler,
+        ["examples/hello.ts", "--link", dbgExe, "--profile", "debug", "-g"],
+        { cwd: root, encoding: "utf8" }
       );
       const dbgIr = fs.existsSync(`${dbgExe}.ll`) ? fs.readFileSync(`${dbgExe}.ll`, "utf8") : "";
       const dwarf = withG.status === 0 && HAS_LLVM_DWARFDUMP
@@ -2189,7 +2189,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         ? dwarf.status === 0 && dwarf.stdout.includes("DW_TAG_compile_unit")
         : withG.status === 0 && fs.readFileSync(dbgExe).includes("debug_info");
       check(
-        "scripts/amritc.sh: -g reaches the compiler and the linked program carries DWARF",
+        "the self-hosted compiler: -g reaches the compiler and the linked program carries DWARF",
         withG.status === 0 &&
           dbgIr.includes("!llvm.dbg.cu") &&
           dbgIr.includes("distinct !DISubprogram(name: \"main\"") &&
@@ -2201,10 +2201,10 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       // string stage0 prints: `self/branding.ts` carries the version as a
       // constant because stage1 cannot read `package.json`, so this is what
       // catches the two drifting apart at the next release bump.
-      const ourVersion = spawnSync("bash", [wrapper, "--version"], { cwd: root, encoding: "utf8", env });
+      const ourVersion = spawnSync(compiler, ["--version"], { cwd: root, encoding: "utf8" });
       const theirVersion = spawnSync("node", [cli, "--version"], { cwd: root, encoding: "utf8" });
       check(
-        "scripts/amritc.sh: --version is the line stage0 prints",
+        "the self-hosted compiler: --version is the line stage0 prints",
         ourVersion.status === 0 &&
           ourVersion.stdout === theirVersion.stdout &&
           ourVersion.stdout.trim() ===
@@ -2218,10 +2218,10 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       // it is also the one that proves stage1 collected every error rather
       // than stopping at the first.
       const jsonCase = path.join("tests", "cases", "reject_multi_error.ts");
-      const ourJson = spawnSync("bash", [wrapper, jsonCase, "--json"], { cwd: root, encoding: "utf8", env });
+      const ourJson = spawnSync(compiler, [jsonCase, "--json"], { cwd: root, encoding: "utf8" });
       const theirJson = spawnSync("node", [cli, jsonCase, "--json"], { cwd: root, encoding: "utf8" });
       check(
-        "scripts/amritc.sh: --json diagnostics are byte-identical to stage0's",
+        "the self-hosted compiler: --json diagnostics are byte-identical to stage0's",
         ourJson.status === 1 &&
           theirJson.status === 1 &&
           ourJson.stdout === theirJson.stdout &&
@@ -2237,10 +2237,10 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       const laterPhases = /^ {2}(facts:|escaping:|calls:|pointer |stackSites)/;
       const checkerLines = (text) => text.split("\n").filter((l) => l.length > 0 && !laterPhases.test(l));
       const dumpCase = path.join("examples", "multi", "main.ts");
-      const ourDump = spawnSync("bash", [wrapper, dumpCase, "--emit-checked"], { cwd: root, encoding: "utf8", env });
+      const ourDump = spawnSync(compiler, [dumpCase, "--emit-checked"], { cwd: root, encoding: "utf8" });
       const theirDump = spawnSync("node", [cli, dumpCase, "--emit-checked"], { cwd: root, encoding: "utf8" });
       check(
-        "scripts/amritc.sh: --emit-checked dumps a whole program as stage0 dumps it",
+        "the self-hosted compiler: --emit-checked dumps a whole program as stage0 dumps it",
         ourDump.status === 0 &&
           theirDump.status === 0 &&
           checkerLines(ourDump.stdout).join("\n") === checkerLines(theirDump.stdout).join("\n") &&
@@ -2256,45 +2256,198 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       // and stage1's tree is the flattened one `self/nodes.ts` defines, so
       // matching it would be imitation rather than parity.
       const refused = spawnSync(
-        "bash",
-        [wrapper, "examples/hello.ts", "--emit-ast"],
-        { cwd: root, encoding: "utf8", env }
+        compiler,
+        ["examples/hello.ts", "--emit-ast"],
+        { cwd: root, encoding: "utf8" }
       );
       check(
-        "scripts/amritc.sh: --emit-ast is refused by name, not ignored (D4)",
+        "the self-hosted compiler: --emit-ast is refused by name, not ignored (D4)",
         refused.status === 2 && refused.stderr.includes("is stage0's"),
         `${refused.status}: ${refused.stdout}${refused.stderr}`
       );
 
-      // The interop sidecars are stage1's, so the wrapper passes them through
-      // and supplies for them the one thing D4 kept out of the compiler: the
-      // directory. The bytes themselves are the interop oracle's business.
+      // The interop sidecars are stage1's, and so is the directory each one
+      // needs. The bytes themselves are the interop oracle's business.
       const sidecarDir = path.join(shipDir, "interop");
       const sidecarFiles = ["add.h", "add.d.ts", "add.mjs", "add.napi.c"];
       const sidecars = spawnSync(
-        "bash",
+        compiler,
         [
-          wrapper,
           "examples/add.ts",
           "-o", path.join(shipDir, "add.ll"),
           "--emit-header", path.join(sidecarDir, "add.h"),
           "--emit-dts", path.join(sidecarDir, "add.d.ts"),
           "--emit-napi", path.join(sidecarDir, "add.napi.c"),
         ],
-        { cwd: root, encoding: "utf8", env }
+        { cwd: root, encoding: "utf8" }
       );
       const wrote = sidecarFiles.filter((f) => fs.existsSync(path.join(sidecarDir, f)));
       const selfHeader = wrote.includes("add.h")
         ? fs.readFileSync(path.join(sidecarDir, "add.h"), "utf8")
         : "";
       check(
-        "scripts/amritc.sh: the interop sidecars are passed through and their directory made",
+        "the self-hosted compiler: the interop sidecars are passed through and their directory made",
         sidecars.status === 0 &&
           wrote.length === sidecarFiles.length &&
           selfHeader.includes("int32_t add(int32_t a, int32_t b);"),
         `${sidecars.status}: ${sidecars.stdout}${sidecars.stderr}wrote: ${wrote.join(",")}`
       );
+
+      // ---- The command line answers the way stage0's does, not merely close
+      // to it. Each of these was a silent divergence: a flag stage1 accepted
+      // and ignored, an input it dropped, a stream it wrote the wrong way
+      // down. None of them is a decision D4 or §7 records, which is what
+      // separates them from `--emit-ast`.
+
+      // An unknown `--number-mode` refused rather than quietly meaning i32:
+      // the failure mode is a program that compiles, in the other arithmetic.
+      const badMode = spawnSync(
+        compiler,
+        ["examples/hello.ts", "--number-mode", "f32", "-o", path.join(shipDir, "unused.ll")],
+        { cwd: root, encoding: "utf8" }
+      );
+      const badMode0 = spawnSync(
+        "node",
+        [cli, "examples/hello.ts", "--number-mode", "f32", "-o", path.join(shipDir, "unused0.ll")],
+        { cwd: root, encoding: "utf8" }
+      );
+      check(
+        "the self-hosted compiler: an unknown --number-mode is refused, as stage0 refuses it",
+        badMode.status === 2 &&
+          badMode0.status === 2 &&
+          !fs.existsSync(path.join(shipDir, "unused.ll")),
+        `stage1 ${badMode.status}: ${badMode.stderr}stage0 ${badMode0.status}: ${badMode0.stderr}`
+      );
+
+      // Every positional is a root, as it is for stage0. Before this the last
+      // one won and the others were compiled into nothing.
+      const rootsDir = path.join(shipDir, "roots");
+      const roots = spawnSync(
+        compiler,
+        ["examples/hello.ts", "examples/add.ts", "-o", `${rootsDir}/`],
+        { cwd: root, encoding: "utf8" }
+      );
+      const rootsWrote = fs.existsSync(rootsDir) ? fs.readdirSync(rootsDir).sort() : [];
+      check(
+        "the self-hosted compiler: every file named on the command line is a root",
+        roots.status === 0 && rootsWrote.join(",") === "add.ll,hello.ll",
+        `${roots.status}: ${roots.stdout}${roots.stderr}wrote: ${rootsWrote.join(",")}`
+      );
+
+      // stdout carries the IR and the `--json` diagnostics and nothing else,
+      // so `wrote <file>` goes to stderr where stage0 puts it. A build script
+      // that pipes the IR somewhere must not find chatter mixed into it.
+      const chatterDir = path.join(shipDir, "chatter");
+      const chatter = spawnSync(
+        compiler,
+        ["examples/hello.ts", "-o", `${chatterDir}/`],
+        { cwd: root, encoding: "utf8" }
+      );
+      const chatter0 = spawnSync(
+        "node",
+        [cli, "examples/hello.ts", "-o", `${path.join(shipDir, "chatter0")}/`],
+        { cwd: root, encoding: "utf8" }
+      );
+      check(
+        "the self-hosted compiler: `wrote <file>` goes to stderr, as stage0 writes it",
+        chatter.status === 0 &&
+          chatter.stdout === "" &&
+          chatter.stderr.includes("wrote ") &&
+          chatter0.stdout === "" &&
+          chatter0.stderr.includes("wrote "),
+        `stage1 out=${JSON.stringify(chatter.stdout)} err=${JSON.stringify(chatter.stderr)}`
+      );
+
+      // A root that cannot be opened is a driver failure, not a diagnostic
+      // with a span: stage0 answers exit 1 with `error: ...` on stderr, and
+      // one flat object on stdout under `--json`. The errno itself stays
+      // stage0's — Node names it and the runtime's read does not.
+      const missing = spawnSync(
+        compiler,
+        [path.join(shipDir, "no_such_file.ts"), "-o", path.join(shipDir, "nope.ll")],
+        { cwd: root, encoding: "utf8" }
+      );
+      const missingJson = spawnSync(
+        compiler,
+        [path.join(shipDir, "no_such_file.ts"), "--json", "-o", path.join(shipDir, "nope.ll")],
+        { cwd: root, encoding: "utf8" }
+      );
+      let missingObject = null;
+      try {
+        missingObject = JSON.parse(missingJson.stdout.trim());
+      } catch {}
+      check(
+        "the self-hosted compiler: an unreadable root exits 1 and --json makes it an object",
+        missing.status === 1 &&
+          missing.stderr.startsWith("error: cannot open ") &&
+          missingJson.status === 1 &&
+          missingObject !== null &&
+          missingObject.severity === "error" &&
+          missingObject.message.startsWith("cannot open "),
+        `${missing.status}: ${missing.stderr}json ${missingJson.status}: ${missingJson.stdout}`
+      );
+
+      // `--link` on a program with no entry point: stage0 refuses it before it
+      // emits anything, with exit 1 and a message naming what to declare.
+      // Reaching clang instead costs a link and answers `undefined reference
+      // to main` with exit 3.
+      const noMain = spawnSync(
+        compiler,
+        ["tests/link/no_main/main.ts", "--link", path.join(shipDir, "no_main"), "--profile", "debug"],
+        { cwd: root, encoding: "utf8" }
+      );
+      const noMain0 = spawnSync(
+        "node",
+        [cli, "tests/link/no_main/main.ts", "--link", path.join(shipDir, "no_main0")],
+        { cwd: root, encoding: "utf8" }
+      );
+      check(
+        "the self-hosted compiler: --link without `export function main` is refused, as stage0 refuses it",
+        noMain.status === 1 &&
+          noMain.stderr.includes("export function main") &&
+          noMain0.status === 1 &&
+          noMain0.stderr.includes("export function main"),
+        `stage1 ${noMain.status}: ${noMain.stderr}stage0 ${noMain0.status}: ${noMain0.stderr}`
+      );
+
+      // An unknown profile refused before the compile rather than after it, as
+      // stage0 validates `PROFILES` before it reads a file.
+      const badProfile = spawnSync(
+        compiler,
+        ["examples/hello.ts", "--link", path.join(shipDir, "bad"), "--profile", "turbo"],
+        { cwd: root, encoding: "utf8" }
+      );
+      check(
+        "the self-hosted compiler: an unknown --profile is refused before anything is compiled",
+        badProfile.status === 2 && badProfile.stderr.includes("unknown profile"),
+        `${badProfile.status}: ${badProfile.stdout}${badProfile.stderr}`
+      );
+
+      // `-o <dir>/` writes into the directory it was given; it does not empty
+      // it first: `-o build/` must not take the rest of `build/` with it.
+      const keepDir = path.join(shipDir, "keep");
+      fs.mkdirSync(keepDir, { recursive: true });
+      fs.writeFileSync(path.join(keepDir, "keep.txt"), "not the compiler's\n");
+      const keep = spawnSync(
+        compiler,
+        ["examples/hello.ts", "-o", `${keepDir}/`],
+        { cwd: root, encoding: "utf8" }
+      );
+      check(
+        "the self-hosted compiler: -o <dir>/ writes into the directory, it does not clear it",
+        keep.status === 0 &&
+          fs.existsSync(path.join(keepDir, "keep.txt")) &&
+          fs.existsSync(path.join(keepDir, "hello.ll")),
+        `${keep.status}: ${keep.stdout}${keep.stderr}`
+      );
     }
+  } else {
+    // Everything from the lexer oracle down links a stage1 binary, so without
+    // clang none of it runs. Say so: the WP14 block is the self-hosting proof,
+    // and a run that quietly leaves it out reports the 55 compile-gate passes
+    // above as though the fixed point had been checked. WP12 and WP13 print
+    // their skip for the same reason.
+    console.log("SKIP  clang not installed: the self-hosting oracles and the bootstrap are skipped");
   }
 }
 

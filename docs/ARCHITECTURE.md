@@ -186,9 +186,9 @@ a layout smoke test.
 
 ### Runtime symbols
 
-`runtime/runtime.c` (about 8 KB of source and 3.5 KB of `.text` at `-Oz`,
-against the MASTER_PLAN.md §2 budget of 8 KB / 4 KB; measure with
-`clang -Oz -c runtime/runtime.c && size runtime.o`) provides, in the order
+`runtime/runtime.c` (2,544 bytes of `.text` at `-Oz` against the
+MASTER_PLAN.md §2 budget of 4 KB, from 12,707 bytes of source; measure with
+`clang -Oz -c runtime/runtime.c && size -A runtime.o`) provides, in the order
 of `RUNTIME_FUNCTIONS`:
 
 | Symbol | Purpose |
@@ -204,6 +204,7 @@ of `RUNTIME_FUNCTIONS`:
 | `amrit_random()` | `Math.random`: xorshift64\*, seeded lazily from time and pid, 53 random bits in `[0, 1)`. |
 | `amrit_exit(code)` | `process.exit`, via libc `exit`. |
 | `amrit_read_file / amrit_write_file / amrit_append_file` | `readFileSync` / `writeFileSync` / `appendFileSync`: `open`/`pread`/`write` syscalls, the whole file in one arena string; a failure prints `amritc: cannot read <path>` (or `cannot write`) and exits 1. |
+| `amrit_mkdir(path)` / `amrit_spawn(argv)` | `mkdirSync` / `spawnSync` (WP14 D4), the two calls a self-hosted driver needs to link its own output. `amrit_mkdir` creates one directory, not recursively, and answers whether a directory is there afterwards (`mkdir`, then a `stat` when that failed). `amrit_spawn` runs `argv[0]` through `PATH` with `posix_spawnp`, waits, and answers the exit status, `128 + signal`, or `-1` for an empty vector, a program that would not start, and every WASI build. Both answer instead of exiting, as `amrit_read_file_or_null` does. `amrit_spawn` is the one runtime function whose pointer parameter is not `nocapture`: it keeps pointers into the vector's strings. |
 | `amrit_array_grow(hdr, elemSize)` | `push` when `len == cap`: doubles `cap` (4 from 0) and moves the elements to fresh arena storage. |
 | `amrit_panic_index(idx, len)` | Failed bounds check: `index out of range: <idx> >= <len>` on stderr, `_exit(1)`. |
 | `amrit_panic_div(by_zero)` | Failed integer-division check (`cold noreturn`): `attempt to divide by zero` or `attempt to divide with overflow` on stderr, `_exit(1)`. |

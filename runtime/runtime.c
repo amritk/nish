@@ -7,8 +7,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+#ifndef __wasi__
+/* WASI has no processes, so `spawn.h` and `wait.h` do not exist there. */
+#include <spawn.h>
+#include <sys/wait.h>
+extern char **environ;
+#endif
 
 #ifdef __wasi__
 /* No pids on WASI: clock nanoseconds salt the RNG seed instead. */
@@ -254,6 +261,44 @@ void amrit_argv_init(int32_t argc, char **argv) {
     strcpy(s->data, *argv++);
     *d++ = s;
   }
+}
+
+/* ---- Directories and subprocesses (WP14 D4): what a driver needs to create
+   its own output directory and shell out for `--link`. Both answer a value
+   instead of exiting, as `amrit_read_file_or_null` does — there are no
+   exceptions, so the caller owns the diagnostic. Contracts: amritc.h. */
+
+/* One directory, not recursive. The retry is a `stat` rather than
+   `errno == EEXIST` so that a plain file at the path answers false, which is
+   what the promise "a directory is there afterwards" means. */
+_Bool amrit_mkdir(const amrit_str *path) {
+  struct stat st;
+  if (mkdir(path->data, 0777) == 0) return 1;
+  return stat(path->data, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+/* `posix_spawnp` is one libc call where fork/execvp/waitpid would be three,
+   it searches PATH, and glibc reports a failed exec through its return
+   value rather than through a child that has already run. */
+int32_t amrit_spawn(const amrit_array *argv) {
+#ifdef __wasi__
+  (void)argv;
+  return -1;
+#else
+  if (!argv->len) return -1; /* argv[0] would read past an empty array */
+  amrit_str **s = (amrit_str **)argv->data;
+  /* NULL-terminated, borrowing each string's bytes; the arena owns it, so no
+     path out of here has anything to free. */
+  char **v = amrit_alloc_struct((argv->len + 1) * sizeof *v);
+  uint64_t i = 0;
+  for (; i < argv->len; i++) v[i] = s[i]->data;
+  v[i] = 0;
+  pid_t pid;
+  int status;
+  if (posix_spawnp(&pid, v[0], 0, 0, v, environ)) return -1;
+  if (waitpid(pid, &status, 0) < 0) return -1;
+  return WIFSIGNALED(status) ? 128 + WTERMSIG(status) : WEXITSTATUS(status);
+#endif
 }
 
 /* ---- String to number: mode 0 parseFloat, 1 Number, 2 parseInt (contract: amritc.h). ASCII

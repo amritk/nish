@@ -25,8 +25,9 @@
 # `node tests/self/bootstrap.js` is the same check with the suite's reporting,
 # and is what CI runs; this script is how the compiler gets built for use.
 #
-# The result emits `.ll` and nothing else (D4): `scripts/amritc.sh` is its
-# command line, and adds the directory creation and the link step.
+# The result is a complete compiler: it plans its own output, makes the
+# directories and links through `scripts/build.sh` itself, so nothing has to
+# stand between it and a build (docs/wp14-selfhost.md §7a).
 #
 # Needs Node and a built dist/ for stage0, and clang + lld on PATH for the
 # links (docs/INSTALL.md).
@@ -48,7 +49,7 @@ usage: scripts/bootstrap.sh [-o <exe>] [--stages 1|2|3] [--profile speed|size|de
 Builds the self-hosted compiler. stage0 (dist/index.js) builds stage1, stage1
 builds stage2 (the default output), stage2 builds stage3. --verify compares the
 IR each stage emits for self/ and the stage2/stage3 binaries, byte for byte.
-scripts/amritc.sh is the resulting compiler's command line.
+The result is the command line itself: -o, --link, --profile and the rest.
 EOF
   exit "${1:-2}"
 }
@@ -93,12 +94,6 @@ fi
 
 say() { [ "$quiet" -eq 1 ] || printf '%s\n' "$*"; }
 
-# One stage's `.ll` files plus the runtime, linked into a native compiler.
-link_stage() {
-  local dir="$1" exe="$2"
-  bash scripts/build.sh "$dir"/*.ll runtime/runtime.c -o "$exe" --profile "$profile" >/dev/null
-}
-
 # `a` and `b` hold one `.ll` per module of `self/`. Both the module set and
 # every byte of every module must match: a stage that emitted one module fewer
 # has not agreed about the rest.
@@ -122,26 +117,27 @@ mkdir -p "$work"
 outdir=$(dirname "$out")
 [ "$outdir" = "" ] || mkdir -p "$outdir"
 
-# stage1: `self/` built by stage0, which links it itself. Its IR lands in
-# `<exe>.modules/`, which is where the first equality reads stage0's output.
+# Every stage is built the same way, by the stage before it, with one
+# `--link`: the compiler plans the output, makes `<exe>.modules/` and runs
+# `scripts/build.sh` itself (docs/wp14-selfhost.md §7a). That leaves each
+# stage's IR in `<exe>.modules/`, which is where the equalities read it, and
+# means the chain exercises the same driver a user does.
 say "stage1: self/ compiled by stage0 (node dist/index.js)"
 rm -rf "$work/stage1.modules"
 node dist/index.js self/compile.ts --link "$work/stage1" --profile "$profile" >/dev/null
 
 if [ "$build_to" -ge 2 ]; then
   say "stage2: self/ compiled by stage1"
-  rm -rf "$work/ir1"; mkdir -p "$work/ir1"
-  "$work/stage1" self/compile.ts --out-dir "$work/ir1" >/dev/null
-  [ "$verify" -eq 1 ] && compare_ir "$work/stage1.modules" "$work/ir1" "IR(stage0) == IR(stage1)"
-  link_stage "$work/ir1" "$work/stage2"
+  rm -rf "$work/stage2.modules"
+  "$work/stage1" self/compile.ts --link "$work/stage2" --profile "$profile" >/dev/null
+  [ "$verify" -eq 1 ] && compare_ir "$work/stage1.modules" "$work/stage2.modules" "IR(stage0) == IR(stage1)"
 fi
 
 if [ "$build_to" -ge 3 ]; then
   say "stage3: self/ compiled by stage2"
-  rm -rf "$work/ir2"; mkdir -p "$work/ir2"
-  "$work/stage2" self/compile.ts --out-dir "$work/ir2" >/dev/null
-  [ "$verify" -eq 1 ] && compare_ir "$work/ir1" "$work/ir2" "IR(stage1) == IR(stage2)"
-  link_stage "$work/ir2" "$work/stage3"
+  rm -rf "$work/stage3.modules"
+  "$work/stage2" self/compile.ts --link "$work/stage3" --profile "$profile" >/dev/null
+  [ "$verify" -eq 1 ] && compare_ir "$work/stage2.modules" "$work/stage3.modules" "IR(stage1) == IR(stage2)"
   if [ "$verify" -eq 1 ]; then
     if cmp -s "$work/stage2" "$work/stage3"; then
       say "  stage3 == stage2: byte-identical binaries"
@@ -154,4 +150,4 @@ fi
 
 cp "$work/stage$install" "$out"
 say "bootstrap: wrote $out ($(wc -c < "$out" | tr -d ' ') bytes, stage$install, $profile profile)"
-say "           run it through scripts/amritc.sh, which adds --link and -o <dir>/"
+say "           it takes -o <file.ll>, -o <dir>/, --link <exe> and --profile"

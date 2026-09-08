@@ -13,7 +13,7 @@
  * can all depend on it without cycles.
  */
 import ts from "typescript";
-import { StaticType, typeToString } from "../types";
+import { StaticType, sameType, typeToString } from "../types";
 import { CheckContext } from "./context";
 import { Scope } from "./scope";
 
@@ -47,7 +47,11 @@ export function requireStatementPosition(ctx: CheckContext, expr: ts.CallExpress
   }
 }
 
-/** Check one argument and require a specific type. */
+/**
+ * Check one argument and require a specific type. `sameType` rather than a
+ * comparison of kinds, because a builtin can want a composite: `spawnSync`
+ * takes a `string[]` and an `i32[]` is not one, though both are arrays.
+ */
 export function checkArgumentType(
   ctx: CheckContext,
   arg: ts.Expression,
@@ -56,7 +60,7 @@ export function checkArgumentType(
   want: StaticType
 ): StaticType {
   const got = ctx.checkExpression(arg, scope);
-  if (got.kind !== want.kind) {
+  if (!sameType(got, want)) {
     throw ctx.error(`\`${name}\` expects ${typeToString(want)}, got ${typeToString(got)}`, arg);
   }
   return got;
