@@ -161,10 +161,15 @@ the only thing that reproduces a failure is the seed it prints
 A skip in an oracle summary is a fact about how far the port has got, not a
 file that is allowed to disagree — which is why every other outcome is counted
 and named apart from it: a stage1 rejection, a parser refusal whose wording
-differs by design, a program the reject oracle owns. Three skips are left, and
-none of them is about `self/`: `tests/parser/precedence.ts` is a parser fixture
-no checker accepts, `tests/link/no_main` is refused by `--link`, which is
-stage0's, and the dump-flag cases ask for what stage1 does not do.
+differs by design, a program the reject oracle owns. Three skips are left, one
+per oracle and two files between them, and none of them is about `self/`:
+`tests/parser/precedence.ts` is a parser fixture no checker accepts, which
+`checked_oracle.js` and `ir_oracle.js` both pass over, and `tests/link/no_main`
+is refused by `--link`, which is stage0's, so `reject_oracle.js` passes over
+that. The three cases that ask for a dump flag are counted apart from the
+skips, as dumps: they write no IR on either side, and of the two flags only
+`--emit-ast` is stage0's — `checked_oracle.js` compares `--emit-checked` over
+the whole corpus.
 
 ### Running one
 

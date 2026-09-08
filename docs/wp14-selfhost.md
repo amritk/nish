@@ -329,8 +329,8 @@ normalised.
 The `tests/self/ir_oracle.js` corpus grew with the driver: it now compiles
 **whole programs** rather than single modules, `tests/link/` included, and
 compares every module of each — the module *set* too, so a stage that emitted
-one module fewer has not agreed about the rest. 280 of 280 programs, 989
-modules, 1,335,240 lines of IR.
+one module fewer has not agreed about the rest. 289 of 289 programs, 1,305
+modules, 2,048,420 lines of IR (280 programs and 989 modules when S5 closed).
 
 ### The skips S5 left behind, closed
 
@@ -338,7 +338,7 @@ The driver landed, but two oracles went on skipping every file that imports,
 with the reason "needs the S5 driver" — a skip that had stopped being true.
 All three now measure what they say they measure:
 
-| Oracle | Before | Now |
+| Oracle | Before | When they closed |
 | --- | --- | --- |
 | `checked_oracle.js` | 225 agree, 48 skipped (42 imports, 6 stage0 rejects) | **272 agree**, 1 skipped |
 | `reject_oracle.js` | 181 agree, 44 skipped (39 parser, 5 imports) | **194 agree**, 42 refused by the parser, 1 skipped |
@@ -369,9 +369,12 @@ What changed:
 One skip is left per oracle and each is a fact about the corpus rather than the
 port: `tests/parser/precedence.ts` is a parser fixture whose `c || d` no checker
 accepts, and `tests/link/no_main` is refused by `--link`, which is stage0's
-(§3a D4). `ir_oracle.js` also skips the five cases that ask for `-g` or a dump
-flag, and names the 11 `tests/link` negatives as negatives rather than skips,
-since `reject_oracle.js` compares them in full.
+(§3a D4). `ir_oracle.js` counts the three cases that ask for a dump flag apart
+from its skips, as dumps, because those write no IR on either side; the two
+that ask for `-g` it compares like any other program, now that stage1 emits
+DWARF too ("`-g` on both sides", below). It names the 11 `tests/link`
+negatives as negatives rather than skips, since `reject_oracle.js` compares
+them in full.
 
 **The same equality now also runs on programs nobody wrote.** That corpus is
 checked in, so it is finite and both compilers have been adapted to it;

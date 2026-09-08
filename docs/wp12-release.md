@@ -11,10 +11,10 @@ User-facing install instructions are in [INSTALL.md](INSTALL.md).
 | --- | --- |
 | `dist/` | the compiled CLI (`dist/index.js` is the `amritc` bin) |
 | `runtime/` | `runtime.c` (linked into every `--link` binary) and `amritc.h` (included by the N-API shim) |
-| `scripts/` | `build.sh` (the `--link` pipeline), `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
+| `scripts/` | `build.sh` (the `--link` pipeline), `bootstrap.sh` and `amritc.sh` (the self-hosted compiler and its command line), `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
 | `README.md`, `LICENSE`, `docs/INSTALL.md` | documentation |
 
-`package.json` is always included by npm (92 files in total at 0.1.0).
+`package.json` is always included by npm (135 files in total at 0.1.0).
 Sources, tests, examples, benchmarks, `CHANGELOG.md` (it lives on GitHub and
 becomes the release notes), the other docs and CI configuration are not in
 the tarball. Check with `npm pack --dry-run`.
@@ -131,4 +131,10 @@ again with a *new* patch version; never move a tag that CI has already built.
 - Windows native support (`build.sh` is bash; WSL is documented instead).
 - Prebuilt binaries of the compiler itself: it is a Node program, and the
   tarball is the release artefact.
-- Multi-error reporting and `--json` diagnostics (WP10 follow-up).
+
+Multi-error reporting and `--json` diagnostics were listed here as a WP10
+follow-up and have since landed in WP10 itself: every phase that can recover
+hands its errors to one `DiagnosticSink` and the driver prints the first 20 in
+source order, and `--json` writes one object per error on stdout
+(`docs/wp10-ci.md`, "Multi-error reporting" and "`--json`"). stage1 answers
+`--json` too (`self/compile.ts`), so the wrapper passes it straight through.
