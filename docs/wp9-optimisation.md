@@ -125,19 +125,24 @@ helper, `intOpcode` in `src/codegen/emit/context.ts`, is the only place the
 decision is made.
 
 Semantics: signed overflow becomes undefined behaviour, exactly as in C (Rust
-release builds wrap instead, like the AmritScript default). What LLVM gains is
+release builds wrap instead, which is what AmritScript did when this package
+landed). What LLVM gains is
 the right to assume that an `i32` induction variable never wraps, so it can
 widen it to the native 64-bit width once instead of sign-extending it on every
 iteration, and to fold `(a + 1) - 1` and friends.
 
-| Benchmark | wrapping (default) | `--nsw` | Change |
+| Benchmark | wrapping | `--nsw` | Change |
 | --- | ---: | ---: | ---: |
 | fib | 355 ms | 358 ms | none (no induction variable) |
 | sieve | 793 ms | 727 ms | **-8 %** (four `sext i32` per marking iteration become zero) |
 | strbuild | 22.9 ms | 22.2 ms | none (runtime-bound) |
 
-The default stays wrapping: it is the documented language semantics and the
-safe choice; `--nsw` is for code that carries its own overflow argument.
+**The default has since flipped.** `--nsw` is on by default and `--wrapping`
+opts out (`docs/wp15-performance.md` §3, decided under §1's rule that the
+faster lowering wins where two answers are defensible). The measurement above
+is what bought that decision, and the -8 % on sieve is why: the table's
+"wrapping" column is now what `--wrapping` produces, not what a default build
+does. `docs/LANGUAGE.md` is normative for the overflow rule.
 
 ### `dereferenceable(24)` on array parameters and returns
 
