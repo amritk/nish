@@ -406,6 +406,22 @@ function checkBinary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
   return checkOperator(ctx, expr, op, expr.children[0], expr.children[1], scope, want);
 }
 
+/**
+ * The type a bare numeric literal takes inside `a op b`: the *other operand's*,
+ * whenever that is a numeric type, and only otherwise whatever the surrounding
+ * context asked for.
+ *
+ * stage0 has no `want` to thread down here at all — `contextualLiteralType`
+ * reaches a literal's binary parent and asks `peekType` about the sibling, and
+ * nothing above the operator is consulted (`src/checker/math.ts`). So in f64
+ * mode `toF64((ij * (ij + 1)) / 2 + i + 1)` types the `1` from `ij: i32` and
+ * stays integer arithmetic, where taking the `f64` the call wants would make
+ * every `+` in it mix widths (bench/spectral.ts).
+ */
+function literalHint(other: i32, fallback: i32): i32 {
+  return isNumeric(other) ? other : fallback;
+}
+
 /** `a op b` for every operator that reads both sides and writes neither. */
 function checkOperator(
   ctx: CheckContext,
@@ -423,10 +439,16 @@ function checkOperator(
   let right = T_ERROR;
   if (leftNode.kind === N_NUMBER && rightNode.kind !== N_NUMBER) {
     right = checkExpression(ctx, rightNode, scope, hint);
-    left = checkExpression(ctx, leftNode, scope, hint < 0 ? right : hint);
+    left = checkExpression(ctx, leftNode, scope, literalHint(right, hint < 0 ? right : hint));
   } else {
     left = checkExpression(ctx, leftNode, scope, hint);
-    right = checkExpression(ctx, rightNode, scope, hint < 0 ? left : hint);
+    const fallback = hint < 0 ? left : hint;
+    right = checkExpression(
+      ctx,
+      rightNode,
+      scope,
+      rightNode.kind === N_NUMBER ? literalHint(left, fallback) : fallback
+    );
   }
   if (left === T_ERROR || right === T_ERROR) {
     return T_ERROR;

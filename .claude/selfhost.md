@@ -26,8 +26,8 @@ construct still enters the language (and `src/`) before it enters `self/`, and
 | --- | --- | --- |
 | S1 | `self/lexer.ts` tokenises AmritScript-0 | **done** — `tests/lexer_oracle.js`, 482/482 files |
 | S2 | `self/parser.ts` builds the tree | **done** — `tests/parser_oracle.js`, 447/447 files |
-| S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js` and `reject_oracle.js` |
-| S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 206/206 files byte for byte |
+| S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js`, 272/272 whole programs; `reject_oracle.js`, 194/194 cases |
+| S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 280/280 programs byte for byte |
 | S5 | `self/` compiles `self/` | **done** — `tests/self/bootstrap.js`: `IR(stage1) == IR(stage2)`, stage3 == stage2 |
 
 ## Building it for use
@@ -128,15 +128,24 @@ wired into the WP14 section of `tests/run.js` and skipped without clang.
 | `tests/self/types_oracle.js` | `self/types.ts` against `src/types.ts` |
 | `tests/self/diagnostics_oracle.js` | `self/diagnostics.ts` against `src/diagnostics.ts` |
 | `tests/self/symbols_oracle.js` | the scope chain and the narrowing rules |
-| `tests/self/checked_oracle.js` | the `--emit-checked` dump, over every positive program in the corpus |
-| `tests/self/reject_oracle.js` | every `reject_*` case, against its own `.err` fragments |
+| `tests/self/checked_oracle.js` | the `--emit-checked` dump of every positive program in the corpus, whole program by whole program |
+| `tests/self/reject_oracle.js` | every `reject_*` case and every `tests/link/` negative, against its own expected fragments |
 | `tests/self/ir_oracle.js` | the emitted IR, byte for byte, over every whole program in the corpus |
 | `tests/self/bootstrap.js` | the stages: `IR(stage0) == IR(stage1) == IR(stage2)`, and stage3 byte-identical to stage2 |
 
 The corpus is `tests/cases/`, `examples/`, `self/`, `docs/cookbook/`, `bench/`,
-`tests/differential/corpus/` and `tests/parser/`. A skip in an oracle summary is
-a fact about how far the port has got, not a file that is allowed to disagree —
-which is why rejections are counted and named apart from the other skips.
+`tests/differential/corpus/`, `tests/parser/` and `tests/link/`;
+`tests/self/corpus.js` enumerates it and answers what flags each program is
+compiled with, so that a program needing `--number-mode f64` is not refused by
+stage0 and then counted as though the *port* could not reach it.
+
+A skip in an oracle summary is a fact about how far the port has got, not a
+file that is allowed to disagree — which is why every other outcome is counted
+and named apart from it: a stage1 rejection, a parser refusal whose wording
+differs by design, a program the reject oracle owns. Three skips are left, and
+none of them is about `self/`: `tests/parser/precedence.ts` is a parser fixture
+no checker accepts, `tests/link/no_main` is refused by `--link`, which is
+stage0's, and the `-g` and dump-flag cases ask for what stage1 does not do.
 
 ### Running one
 

@@ -327,8 +327,49 @@ normalised.
 The `tests/self/ir_oracle.js` corpus grew with the driver: it now compiles
 **whole programs** rather than single modules, `tests/link/` included, and
 compares every module of each — the module *set* too, so a stage that emitted
-one module fewer has not agreed about the rest. 259 of 259 programs, 848
-modules, 1,074,371 lines of IR.
+one module fewer has not agreed about the rest. 280 of 280 programs, 989
+modules, 1,335,240 lines of IR.
+
+### The skips S5 left behind, closed
+
+The driver landed, but two oracles went on skipping every file that imports,
+with the reason "needs the S5 driver" — a skip that had stopped being true.
+All three now measure what they say they measure:
+
+| Oracle | Before | Now |
+| --- | --- | --- |
+| `checked_oracle.js` | 225 agree, 48 skipped (42 imports, 6 stage0 rejects) | **272 agree**, 1 skipped |
+| `reject_oracle.js` | 181 agree, 44 skipped (39 parser, 5 imports) | **194 agree**, 42 refused by the parser, 1 skipped |
+| `ir_oracle.js` | 275 agree, 22 skipped (17 stage0 rejects) | **280 agree**, 6 skipped, 11 negatives |
+
+What changed:
+
+- `self/dump_checked.ts` drives `self/compilation.ts` instead of one `Checker`,
+  so `--emit-checked` is compared over **whole programs**: every module in load
+  order, what pass 1b bound each import to, and each module's own constants,
+  structs and functions. The 42 modules of `self/` are compared against stage0
+  by the dump as well as by their IR.
+- `reject_oracle.js` reads the `tests/link/` negatives too, because a rejection
+  that needs more than one module — a name imported twice, `main` outside the
+  entry — cannot be provoked by a single file. Two rules were missing from
+  stage1's pass 1b and are ported: "`f` is already imported from `./a`" and
+  "Only the entry module may declare `export function main`".
+- Every oracle now gives a program the flags it is compiled with everywhere
+  else, from its `.args` sidecar or its `// smoke: args` line
+  (`tests/self/corpus.js`). Six files were being refused by stage0 for want of
+  `--number-mode f64` and counted as though the *port* could not reach them.
+- Fixing that turned up one real divergence, in stage1's contextual typing of a
+  bare numeric literal: `checkOperator` preferred the type the whole expression
+  was being checked into over the other operand's, where stage0 consults only
+  the operand (`src/checker/math.ts`). In f64 mode that made
+  `toF64((ij * (ij + 1)) / 2 + i + 1)` mix widths at every `+`.
+
+One skip is left per oracle and each is a fact about the corpus rather than the
+port: `tests/parser/precedence.ts` is a parser fixture whose `c || d` no checker
+accepts, and `tests/link/no_main` is refused by `--link`, which is stage0's
+(§3a D4). `ir_oracle.js` also skips the five cases that ask for `-g` or a dump
+flag, and names the 11 `tests/link` negatives as negatives rather than skips,
+since `reject_oracle.js` compares them in full.
 
 ### What S4 cost
 

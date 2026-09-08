@@ -16,6 +16,28 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   budget to grow one (WP14 D4), emits the same bytes for a relatively-spelled
   entry, exactly as it already did for the module header.
 
+- **The stage1 oracles compare whole programs, and the stale skips are gone
+  (WP14).** Two of them still skipped every file that imports with the reason
+  "needs the S5 driver", which had stopped being true when the driver landed.
+  `self/dump_checked.ts` now drives `self/compilation.ts` rather than one
+  `Checker`, so `--emit-checked` is compared over a whole program — every
+  module in load order, what pass 1b bound each import to, and each module's
+  own constants, structs and functions — and `tests/self/reject_oracle.js`
+  covers the importing `reject_*` cases and the `tests/link/` negatives, whose
+  rejections need more than one module to provoke. Every oracle now gives a
+  program the flags it is compiled with everywhere else, read from its `.args`
+  sidecar or its `// smoke: args` line by the new `tests/self/corpus.js`, so
+  six programs that were being refused by stage0 for want of
+  `--number-mode f64` are compared instead of counted as gaps in the port
+  (`bench/*.args` are new, and `bench/run.mjs` reads them instead of carrying
+  its own copy of the mode). `checked_oracle.js` goes from 225 files and 48
+  skips to **272 whole programs and 1 skip**; `reject_oracle.js` from 181 cases
+  and 44 skips to **194 cases**, 42 parser refusals and 1 skip;
+  `ir_oracle.js` from 275 programs and 22 skips to **280 programs and 6
+  skips**, with the 11 `tests/link` negatives named as negatives rather than
+  skipped. What is left is named: a parser fixture no checker accepts, a
+  `--link` failure stage1 has no way to write, and the `-g` and dump flags.
+
 - **Renamed to AmritScript, and the name moved into two files.** The language
   is **AmritScript** and the compiler is **`amritc`** (npm package, `bin`
   entry, `runtime/amritc.h`, `runtime/amritc.d.ts`, `scripts/amritc.sh`,
@@ -648,6 +670,29 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   line in the wrong source. A struct is now described against the file that
   declares it, which is why a program with imports carries more than one
   `DIFile`.
+
+- **A dump written to a pipe is no longer truncated.** The CLI ended with
+  `process.exit(code)`, which drops whatever is still buffered in stdout;
+  writes to a pipe are asynchronous and take 64 KB at a time, so
+  `amritc big.ts --emit-checked | less` came out cut off mid-line while the
+  same command redirected to a file was complete. The exit status is set on
+  `process.exitCode` instead, so Node flushes and then exits with it.
+
+- **A bare numeric literal takes its type from the other operand (stage1).**
+  `self/expressions.ts` preferred the type the whole expression was being
+  checked into over the type of the operand beside the literal, where stage0
+  consults only the operand (`contextualLiteralType` in
+  `src/checker/math.ts`). In `--number-mode f64` that made every `+` of
+  `toF64((ij * (ij + 1)) / 2 + i + 1)` mix an `i32` with an `f64` and refused a
+  program stage0 compiles (`bench/spectral.ts`).
+
+- **Two pass 1b rejections reach stage1.** Importing one local name twice now
+  names the module it first came from (`` `f` is already imported from `./a` ``)
+  instead of only reporting the exported-symbol clash behind it, and a
+  non-entry module that declares `export function main` is refused as such
+  rather than through the entry wrapper's symbol clash. Both are pinned by
+  `tests/link/duplicate_import` and `tests/link/main_in_import`, which
+  `tests/self/reject_oracle.js` now runs against stage1.
 
 - **A compound integer division contributes its panic callee.** `x /= k`,
   `p.f %= k` and their `/=` twins can call the noreturn `sts_panic_div` exactly
