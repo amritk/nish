@@ -675,11 +675,10 @@ the same `DISubprogram` per function, the same `DILocation` on every
 instruction, the same `llvm.dbg.value` / `llvm.dbg.declare`, and the same type
 mapping down to the packed `Result` word a call boundary carries (WP17).
 `self/ir.ts` grew the metadata list the builder writes into, `-g` is a flag of
-`self/compile.ts` and of `scripts/amritc.sh` — which hands it to
-`scripts/build.sh` as well, so the DWARF survives the link — and
-`tests/cases/dbg_locals` and `tests/cases/dbg_result` are compared by
-`tests/self/ir_oracle.js` byte for byte, metadata numbering included, rather
-than skipped.
+`self/compile.ts` — which hands it to `scripts/build.sh` as well, so the DWARF
+survives the link — and `tests/cases/dbg_locals` and `tests/cases/dbg_result`
+are compared by `tests/self/ir_oracle.js` byte for byte, metadata numbering
+included, rather than skipped.
 
 **One thing had to change on stage0's side, and it is the same shape as §4's
 module-header problem.** A `DIFile` carries a filename and a directory, and
@@ -794,7 +793,7 @@ is not a test, and the command line D4 said a wrapper would supply.
 
 ```bash
 npm run bootstrap                         # build/amritc, stage2, speed profile
-scripts/amritc.sh hello.ts --link hello && ./hello
+scripts/amritc.sh hello.ts --link hello && ./hello   # the wrapper; deleted in §7a
 ```
 
 **`scripts/bootstrap.sh` builds the chain.** stage0 (`dist/index.js`) builds
