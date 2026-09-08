@@ -11,7 +11,7 @@ User-facing install instructions are in [INSTALL.md](INSTALL.md).
 | --- | --- |
 | `dist/` | the compiled CLI (`dist/index.js` is the `amritc` bin) |
 | `runtime/` | `runtime.c` (linked into every `--link` binary) and `amritc.h` (included by the N-API shim) |
-| `scripts/` | `build.sh` (the `--link` pipeline), `bootstrap.sh` and `amritc.sh` (the self-hosted compiler and its command line), `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
+| `scripts/` | `build.sh` (the `--link` pipeline), `bootstrap.sh` (the self-hosted compiler), `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
 | `README.md`, `LICENSE`, `docs/INSTALL.md` | documentation |
 
 `package.json` is always included by npm (135 files in total at 0.1.0).

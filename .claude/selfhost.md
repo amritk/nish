@@ -36,21 +36,25 @@ The oracles build compilers into temporary directories and delete them. To get
 one you can keep:
 
 ```bash
-npm run bootstrap                            # build/amritc (stage2, speed)
-scripts/bootstrap.sh --verify                # the three equalities, with cmp
-scripts/amritc.sh hello.ts --link hello   # its command line: -o, --link, --profile
+npm run bootstrap                   # build/amritc (stage2, speed)
+scripts/bootstrap.sh --verify       # the three equalities, with cmp
+build/amritc hello.ts --link hello  # -o, --link, --profile, its own directories
 ```
 
-`scripts/amritc.sh` is the wrapper D4 promised: it makes the output
-directory and runs `scripts/build.sh`, which is the half of the driver stage1
-does not have. It takes `-g` and passes it on to both halves, and passes
-`--json`, `--emit-checked`, `--version` and the interop sidecars
-(`--emit-header`, `--emit-dts`, `--emit-napi`, and the loader `--emit-dts`
-writes beside its declarations) through to the compiler, which answers them
-itself; it makes the sidecars' directory as it makes the IR's. It refuses
-`--emit-ast` **by name** — that one is stage0's, not missing — and mirrors
-stage0's file layout exactly, so either compiler can be dropped into a build
-script. See `docs/wp14-selfhost.md` §7.
+There is no wrapper any more: `scripts/amritc.sh` is deleted and
+`self/compile.ts` drives the whole thing (§3a D4, reversed in
+`docs/wp14-selfhost.md` §7a). It plans `-o <file.ll>`, `-o <dir>/` and
+`--link <exe>` by stage0's rules, validates `--profile speed|size|debug|wasi`
+before compiling anything, makes every directory in the way of the IR, a
+sidecar or the binary with `mkdirSync`, and runs `bash scripts/build.sh`
+through `spawnSync` for the link — the same script `src/index.ts` spawns, found
+one level up from the binary's own path or in the working directory. `-g` goes
+into the `.ll` *and* on to that script. `--json`, `--emit-checked`, `--version`
+and the interop sidecars (`--emit-header`, `--emit-dts`, `--emit-napi`, and the
+loader `--emit-dts` writes beside its declarations) it answers itself. It
+refuses `--emit-ast` **by name** — that one is stage0's, not missing — and
+mirrors stage0's file layout exactly, so either compiler can be dropped into a
+build script. `--target host` is the other spelling stage0 keeps.
 
 `--emit-ast` is the one flag that is stage0's *by design* rather than for now:
 stage0's dump prints the `typescript` package's node names and line:column

@@ -189,7 +189,7 @@ there is more than one `DIFile` in a program with imports
 (`tests/link/reachable_struct`).
 
 **Both compilers emit it.** `self/debug.ts` is the stage1 port, `-g` is a flag
-of `self/compile.ts` and of `scripts/amritc.sh`, and `tests/self/ir_oracle.js`
+of `self/compile.ts` as it is of `src/index.ts`, and `tests/self/ir_oracle.js`
 compares the two byte for byte, metadata numbering included.
 
 `--link -g` passes `-g` to `scripts/build.sh`, which adds `-g` for every

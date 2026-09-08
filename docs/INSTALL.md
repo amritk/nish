@@ -128,26 +128,27 @@ install works from any working directory.
 
 ```bash
 npm run bootstrap                  # dist/ -> stage1 -> build/amritc
-scripts/amritc.sh hello.ts --link hello
+build/amritc hello.ts --link hello
 ./hello
 ```
 
 `scripts/bootstrap.sh` builds stage1 with the Node compiler, then stage2 with
 stage1, and installs stage2 as `build/amritc`. `--verify` also builds stage3
 and compares the IR and the binaries byte for byte; `--stages 1` stops one link
-sooner. `scripts/amritc.sh` is that compiler's command line: it adds the
-directory creation and the `--link` step the self-hosted compiler deliberately
-does not do itself, and takes the same `-o`, `--link` and `--profile` spellings
-as `amritc`.
+sooner. `build/amritc` is then the compiler you run: it takes the same `-o`,
+`--link` and `--profile` spellings as `amritc` and makes every directory in the
+way of the IR, a sidecar or the binary itself. It looks for `scripts/build.sh`
+and `runtime/runtime.c` one level up from wherever it was invoked, then in the
+working directory, so it wants a checkout or an installed package around it the
+way `amritc` does.
 
 The native compiler is about eight times faster than the Node one and needs no
 Node at all. It writes the interop sidecars (`--emit-header`, `--emit-dts`,
-`--emit-napi`) and the DWARF `-g` asks for byte for byte as `amritc` does;
-`scripts/amritc.sh` hands `-g` on to the link as well, so the debug info
-survives into the binary. What is still only `amritc`'s is the link step, the
-directory creation — the two the wrapper above supplies — and the `--emit-ast`
-dump, whose node names come from the `typescript` package the self-hosted
-compiler does not use. `amritc` is also what the npm package installs.
+`--emit-napi`) and the DWARF `-g` asks for byte for byte as `amritc` does, and
+passes `-g` on to `scripts/build.sh`, so the debug info survives into the
+binary. What is still only `amritc`'s is the `--emit-ast` dump, whose node
+names come from the `typescript` package the self-hosted compiler does not use,
+and the `--target host` alias. `amritc` is also what the npm package installs.
 
 ## 3. Hello world
 

@@ -238,16 +238,16 @@ byte-identical to stage2) on every run. Compiling the whole compiler costs the
 native one **91 ms and 86 MB** against the Node one's 786 ms and 178 MB.
 
 ```bash
-npm run bootstrap                            # build/amritc, built by itself
-scripts/amritc.sh hello.ts --link hello   # its command line: -o, --link, --profile
+npm run bootstrap                   # build/amritc, built by itself
+build/amritc hello.ts --link hello  # -o, --link, --profile, its own directories
 ```
 
 `npm install -g amritc` still ships the Node compiler: it is the seed every
 bootstrap starts from and the oracle every `self/` phase is compared against.
-What it is no longer is the only one that can emit DWARF or the interop
-sidecars — the self-hosted compiler writes both, byte for byte the same, and
-what stays stage0's is the link step, the directory creation and the AST dump.
-Details, and the subset `self/` is written in, are in
+What it is no longer is the only one that can emit DWARF, write the interop
+sidecars or link an executable — the self-hosted compiler does all three, the
+first two byte for byte the same. What stays stage0's is the `--emit-ast` dump
+and `--target host`. Details, and the subset `self/` is written in, are in
 [docs/wp14-selfhost.md](docs/wp14-selfhost.md).
 
 ## Project status
