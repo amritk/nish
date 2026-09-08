@@ -702,7 +702,7 @@ document does not need a second one open beside it to be current:
 | 5 | The fast slice beside JavaScript's `substring` | |
 | 6 | Ranged types and length narrowing | a real flow-sensitive analysis; the surviving-check warning from 2 is its acceptance test |
 | 7 | Contiguous struct arrays | the layout change, the escape rule that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI |
-| 8 | Generics by monomorphisation; discriminated unions deferred to their own note | the largest. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code |
+| 8 | Generics by monomorphisation; discriminated unions deferred to their own note | the largest. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code — [wp18-generics.md](wp18-generics.md) §6.1 says why |
 
 An explicit bounds-check opt-out is deferred until 6 has landed and the checks
 that survive it have been counted. What each item is worth is a measurement
