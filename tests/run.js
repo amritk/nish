@@ -2842,22 +2842,26 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         `ours:\n${ourDump.stdout}${ourDump.stderr}\ntheirs:\n${theirDump.stdout}`
       );
 
-      // The mechanism is still there for the flags that *are* stage0's: one of
-      // them refused by name rather than quietly ignored, because a build that
-      // asked for a sidecar must not come out without it. `--emit-ast` is the
-      // one that stays stage0's on purpose rather than for now: its dump
-      // prints the `typescript` package's node names and line:column spans,
-      // and stage1's tree is the flattened one `self/nodes.ts` defines, so
-      // matching it would be imitation rather than parity.
-      const refused = spawnSync(
-        compiler,
-        ["examples/hello.ts", "--emit-ast"],
-        { cwd: root, encoding: "utf8" }
-      );
+      // No flag is stage0's by name any more (`--emit-ast` was the last, WP19
+      // R1), so what this pins is the property the refusal was really about: a
+      // flag the compiler does not know is refused rather than quietly
+      // dropped, because a build that asked for something must not come out
+      // without it and without being told. Both compilers answer exit 2, which
+      // is the usage-error code the CLI contract fixes.
+      const refused = spawnSync(compiler, ["examples/hello.ts", "--emit-sidecar"], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      const refused0 = spawnSync("node", [cli, "examples/hello.ts", "--emit-sidecar"], {
+        cwd: root,
+        encoding: "utf8",
+      });
       check(
-        "the self-hosted compiler: --emit-ast is refused by name, not ignored (D4)",
-        refused.status === 2 && refused.stderr.includes("is stage0's"),
-        `${refused.status}: ${refused.stdout}${refused.stderr}`
+        "the self-hosted compiler: an unknown flag is refused, not ignored, as stage0 refuses it",
+        refused.status === 2 &&
+          refused.stderr.includes("--emit-sidecar") &&
+          refused0.status === 2,
+        `stage1 ${refused.status}: ${refused.stdout}${refused.stderr}stage0 ${refused0.status}: ${refused0.stderr}`
       );
 
       // The `--help` contract is shared rather than each compiler's own: a

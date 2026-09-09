@@ -83,6 +83,23 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   as an out-of-bounds inside stage1 the moment two modules of `self/` both
   declared a `narrow` (`tests/link/duplicate_internal`).
 
+### Fixed
+
+- **stage1 accepted a program stage0 rejects: `unwrapOr`'s fallback was
+  checked with a contextual type (WP19 G1).** `self/result.ts` threaded the
+  success type down as a hint, so in f64 mode `r.unwrapOr(-1)` on a
+  `Result<i32, string>` typed the literal as `i32` and compiled, where stage0
+  types it `f64` with no context at all and refuses the mismatch.
+  `docs/LANGUAGE.md` is normative here and its contextual-literal table is an
+  enumerated list that `unwrapOr`'s argument is not in, so stage1 was the side
+  in the wrong. Write `toI32(-1)` when the fallback has to be an i32.
+
+  Nothing had ever compiled `tests/cases/res_unwrap.ts` in f64 mode through
+  both compilers: every oracle uses the flags a program already carries, and
+  that one carries none. `tests/run.js --parity` compiles the corpus across
+  the flag variations the suite uses, which is exactly the hole, and this was
+  its first find. `reject_res_unwrap_or_f64` pins it.
+
 ### Added
 
 - **`--emit-ast` is no longer stage0's: the self-hosted compiler answers it too
