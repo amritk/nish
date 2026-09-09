@@ -168,6 +168,38 @@ uint64_t amrit_str_len(const amrit_str *s) { return s->len; }
 _Bool amrit_str_at(const amrit_str *s, int64_t at, const amrit_str *sub) {
   return at >= 0 && (uint64_t)at + sub->len <= s->len && !memcmp(s->data + at, sub->data, sub->len);
 }
+/* `s.indexOf(sub)`: the first byte offset where `sub` occurs, or -1. An empty
+   needle answers 0 and a needle longer than the haystack -1, both of which are
+   what JavaScript says and what the inline loop this replaces did.
+
+   This was lowered inline, one `amrit_str_at` per offset, to keep `runtime.c`
+   small. That cost a byte-at-a-time scan — 53.7 ms over 52 MB of haystack —
+   and WP15 section 7's rule is that the budget yields to a measured win, so the
+   search moved here: `memchr` finds a candidate first byte and `memcmp`
+   confirms it, both the libc's vectorised routines. 2.9 ms, or 3.1 ms when the
+   needle starts with a byte the haystack is full of.
+
+   `memmem` is deliberately not used, and costs little: 2.5 ms on the same two
+   measurements. It is a GNU extension glibc hides behind `_GNU_SOURCE`, and
+   defining that here makes `<string.h>` pull in `<strings.h>` — which any `-I`
+   directory holding a file of that name then shadows. This project generates
+   exactly such a header from `examples/strings.ts`, and the interop tests
+   caught runtime.c picking it up and inheriting `amritc.h` through it. A C host
+   would hit the same. A fifth of the time is not worth making the runtime
+   sensitive to its includer's `-I` paths. */
+int64_t amrit_str_index_of(const amrit_str *s, const amrit_str *sub) {
+  if (sub->len == 0) return 0;
+  if (sub->len > s->len) return -1;
+  const char *p = s->data, *end = s->data + s->len - sub->len + 1;
+  while (p < end) {
+    const char *c = memchr(p, sub->data[0], (size_t)(end - p));
+    if (!c) return -1;
+    if (memcmp(c + 1, sub->data + 1, sub->len - 1) == 0) return (int64_t)(c - s->data);
+    p = c + 1;
+  }
+  return -1;
+}
+
 /* `console.log` / `console.error` / `write` / `writeError` and the message of
    `panic`: fd 1 or 2, with or without the trailing newline. */
 void amrit_write(const amrit_str *s, int32_t fd, _Bool newline) {

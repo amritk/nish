@@ -10,39 +10,13 @@ declare void @amrit_arena_release(i64 noundef) #1
 declare noalias noundef nonnull align 8 i8* @amrit_str_new(i8* noundef readonly nocapture, i64 noundef) #1
 declare zeroext i1 @amrit_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 declare zeroext i1 @amrit_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #2
+declare i64 @amrit_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
 
 define internal noundef i32 @find(i8* noundef nonnull noalias readonly align 8 nocapture %s, i8* noundef nonnull noalias readonly align 8 nocapture %needle) #0 {
 entry:
-  %str.at = alloca i64, align 8
-  %0 = bitcast i8* %s to i64*
-  %1 = load i64, i64* %0, align 8
-  %2 = bitcast i8* %needle to i64*
-  %3 = load i64, i64* %2, align 8
-  store i64 0, i64* %str.at, align 8
-  br label %str.find
-
-str.find:
-  %4 = load i64, i64* %str.at, align 8
-  %5 = add i64 %4, %3
-  %6 = icmp ule i64 %5, %1
-  br i1 %6, label %str.probe, label %str.miss
-
-str.probe:
-  %7 = call zeroext i1 @amrit_str_at(i8* %s, i64 %4, i8* %needle)
-  br i1 %7, label %str.found, label %str.next
-
-str.next:
-  %8 = add i64 %4, 1
-  store i64 %8, i64* %str.at, align 8
-  br label %str.find
-
-str.miss:
-  br label %str.found
-
-str.found:
-  %9 = phi i64 [ %4, %str.probe ], [ -1, %str.miss ]
-  %10 = trunc i64 %9 to i32
-  ret i32 %10
+  %0 = call i64 @amrit_str_index_of(i8* %s, i8* %needle)
+  %1 = trunc i64 %0 to i32
+  ret i32 %1
 }
 
 define noundef i32 @test() #1 {

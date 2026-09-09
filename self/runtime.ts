@@ -203,6 +203,14 @@ export class RuntimeTable {
     );
     this.add(
       new RuntimeFunction(
+        "amrit_str_index_of",
+        `declare i64 @amrit_str_index_of(${STR_NOCAP}, ${STR_NOCAP})`,
+        attrs3("nounwind", "willreturn", "memory(argmem: read)"),
+        EFFECT_READ
+      )
+    );
+    this.add(
+      new RuntimeFunction(
         "amrit_str_len",
         `declare i64 @amrit_str_len(${STR_NOCAP})`,
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),

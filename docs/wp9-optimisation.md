@@ -207,10 +207,17 @@ number below being wrong:
   `len` those checks compare against was being reloaded along with everything
   else, so removing the compare left the reload in place. With the header
   hoisted, dropping the checks on the same loop is worth **0.5%**.
-- **The provenance experiments below are still live for *structs*.** The
-  `noinline`-allocator result (nbody -6%) is about `Body` objects aliasing each
-  other, which the array domains say nothing about: annotating nbody's array
-  headers moved it by nothing (1829 ms against 1895, inside the noise).
+- **The `noinline`-allocator experiment below is dead, and was re-measured to
+  find that out.** It reports nbody -6% from giving the allocator's `noalias`
+  return somewhere to survive. On today's compiler the same edit —
+  `alwaysinline` to `noinline` on `@amrit_alloc_struct` in nbody's IR — is
+  **1467 ms against 1479**, which is noise and slightly the wrong way. WP6's
+  stack allocation appears to have taken the objects the experiment was
+  recovering, and the vec3 row it was originally aimed at now beats C. So the
+  trade it proposed (a real call per allocation, for provenance) buys nothing
+  and should not be made. Annotating nbody's array headers moved it by nothing
+  either (1829 ms against 1895), so nbody's remaining gap is still unexplained
+  and is the honest open item here.
 
 ## Diagnosis of the misses
 

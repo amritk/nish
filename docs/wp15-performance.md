@@ -504,6 +504,62 @@ This is what §3 meant when it said `--strict-exports` "does not buy a second
 namespace": it does not, but it does buy a second *calling convention*, and
 that turned out to be worth 1.40x on the shape the benchmark exists to measure.
 
+## 7c. `indexOf` gets a real algorithm — **done**
+
+The second claim on §7's rule, and the plainest one: the budget said the
+string search had to be inline, and inline meant a byte at a time.
+
+`s.indexOf(sub)` was a loop over `amrit_str_at`, one probe per offset, emitted
+at every call site so that `runtime.c` stayed small. Scanning an 880 KB
+haystack sixty times over:
+
+| | needle absent, rare first byte | needle absent, common first byte |
+| --- | ---: | ---: |
+| the inline probe loop | 53.7 ms | 53.7 ms |
+| **`amrit_str_index_of`, this change** | **2.9 ms** | **3.1 ms** |
+| glibc `memmem`, for scale | 2.5 ms | 2.5 ms |
+
+**About 17x**, and within a quarter of `memmem` even on the shape that suits
+`memchr` least. It also *shrinks* every caller, since thirty lines of loop
+become one call; `runtime.c`'s `.text` goes from 3,852 to 4,002 bytes and stays
+inside the 4 KB budget, though with little room left.
+
+**`memmem` was tried and rejected, and the reason is worth keeping.** It is a
+GNU extension glibc hides behind `_GNU_SOURCE`, and defining that macro makes
+`<string.h>` include `<strings.h>` — which any `-I` directory containing a file
+of that name then shadows. This project *generates* exactly such a header from
+`examples/strings.ts`, and the interop tests caught it immediately: `runtime.c`
+picked up the generated `strings.h`, inherited `amritc.h` through it, and
+failed to compile with four redefinitions. A C host passing `-I` at its own
+generated headers would hit the same. A fifth of the time is not worth making
+the runtime sensitive to its includer's include path, so the portable
+`memchr`/`memcmp` scan is the only path and there is no second one to rot.
+
+The semantics are the loop's, unchanged: an empty needle answers 0, a needle
+longer than the haystack -1, and the offset is in bytes.
+
+## 7d. Arena provenance — **measured, and not taken**
+
+The last item on the list this section came from, and the one that turned out
+not to exist any more.
+
+`wp9-optimisation.md` diagnosed vec3 and nbody as provenance problems: the
+inline bump allocator returns `buf + offset` from a global, so LLVM sees
+pointers of unknown origin that may alias, and reloads fields it could have
+kept in registers. Making the allocator `noinline` — so its `noalias` return
+survives as a call — measured vec3 757 -> 356 ms and nbody -6%.
+
+Re-measured on today's compiler, the nbody edit is **1467 ms against 1479**:
+noise, and slightly the wrong way. WP6's stack allocation took the objects the
+experiment was recovering, and vec3 now beats C without it (0.93x Rust). So
+the trade — a real call on every allocation, in exchange for provenance — buys
+nothing and is not being made.
+
+Recording it because a stale measurement is worse than no measurement: it
+would have justified a change that costs a call per allocation for zero.
+nbody's remaining gap (1.19x Rust, 1.16x C) is now unexplained by any theory
+in either note, and that is the honest state of it.
+
 ## 8. The `performance` diagnostic class
 
 None of the above survives contact with a codebase unless the compiler says
@@ -552,6 +608,11 @@ Roughly dependency order; each row ships with the full construct checklist from
    and a correctness fix; the first item to spend the runtime budget.
 1d. **The private `Result` ABI** (§7b) — **done**. 1.40x on `bench/result`,
    no new analysis, and it closes the last gap to C on that shape.
+1e. **`indexOf` in the runtime** (§7c) — **done**. 19x, and smaller code at
+   every call site.
+1f. **Arena provenance** (§7d) — **measured and dropped**. The win WP9
+   recorded is gone; the change would now cost a call per allocation for
+   nothing.
 2. **`performance` diagnostics** (§8) — the framework plus the two warnings that
    need no new analysis (quadratic string building, allocation in a loop).
 3. **Slice iterators** (§2.3) — the biggest speed win per line of emitter code,

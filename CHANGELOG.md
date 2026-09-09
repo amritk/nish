@@ -27,6 +27,28 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Changed
 
+- **`s.indexOf(sub)` is about 17x faster: 53.7 ms to 2.9 ms over 52 MB of
+  haystack (WP15).** The search was emitted inline, one `amrit_str_at` probe
+  per offset, so that `runtime.c` stayed inside its size budget — which made
+  the idiomatic string search a byte-at-a-time scan. It is now
+  `amrit_str_index_of` in the runtime, where `memchr` finds a candidate first
+  byte and `memcmp` confirms it, both the libc's vectorised routines. Every
+  call site *shrinks*, since thirty lines of loop become one call, and
+  `runtime.c`'s `.text` goes from 3,852 to 4,002 bytes, still inside the 4 KB
+  budget.
+
+  `memmem` would be 2.5 ms and is deliberately not used: it needs
+  `_GNU_SOURCE`, which makes glibc's `<string.h>` pull in `<strings.h>` — and
+  this project generates a header of that name from `examples/strings.ts`, so
+  any `-I` at it shadows the POSIX header and drags `amritc.h` into
+  `runtime.c`. The interop tests caught exactly that. A C host would hit the
+  same, and a fifth of the time is not worth making the runtime sensitive to
+  its includer's include path.
+
+  The semantics are unchanged: an empty needle answers 0, a needle longer than
+  the haystack -1, and the offset is in bytes (`tests/cases/str_search`, and
+  eleven cases in `tests/runtime_test.c`).
+
 - **A non-exported function passes a small `Result` as two values instead of
   one packed word: `bench/result` goes from 650 ms to 464 ms (WP15).**
   `Result<T, E>` with two small scalar payloads has travelled in a single

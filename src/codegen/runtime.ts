@@ -141,6 +141,12 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     effect: "read",
   },
   {
+    name: "amrit_str_index_of",
+    signature: `declare i64 @amrit_str_index_of(${STR_NOCAP}, ${STR_NOCAP})`,
+    attrs: ["nounwind", "willreturn", "memory(argmem: read)"],
+    effect: "read",
+  },
+  {
     name: "amrit_str_len",
     signature: `declare i64 @amrit_str_len(${STR_NOCAP})`,
     attrs: ["nounwind", "willreturn", "memory(argmem: read)"],
