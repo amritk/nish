@@ -73,6 +73,39 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **`runtime/amritscript.mjs`: run a program under Node with nothing rewritten
+  (`docs/RUN_UNDER_NODE.md`).** WP13's rewriter is exact because it loads a
+  program through the compiler's own checker and rewrites every expression from
+  the recorded types; it is a testing oracle, not something to hand anyone. This
+  is the smaller claim beside it: `node --experimental-strip-types --import
+  ./runtime/amritscript.mjs prog.ts` runs the source as the TypeScript it is,
+  with the prelude supplying only what Node lacks — `console.log`'s formatting,
+  the file and stream globals, the conversions, `Ok`/`Err`, `parseInt` /
+  `parseFloat`, `process.argv`'s indexing, and an `Arena` that answers zero.
+  Everything delegates to `runtime/shim.mjs`, so the two cannot drift.
+
+  It is honest in **f64 mode**, where JavaScript's `+ - * / %` on doubles *are*
+  `fadd/fsub/fmul/fdiv/frem`, and it will never be honest in i32 mode, where
+  `number` wraps at 32 bits and every operator differs. The doc states the whole
+  overlap: byte-length `.length`, unchecked `a[i]`, virtual dispatch,
+  `orReturn()` (which needs the caller's control flow and so needs the
+  rewriter), `Number(s)`, and the three float decisions. Each one lives in an
+  operator or the object model, where a prelude cannot reach.
+
+  `tests/differential/unmodified.js` pins it: every f64-mode program with an
+  entry point, native against unmodified Node, four listed divergences and any
+  other difference failing the run — 6 of 10 agree today, and the four that do
+  not are the programs written to probe exactly those decisions. An ordinary
+  program does not look like them: `examples/nbody.ts` prints byte-identical
+  output either way. Wired into the WP13 block of `tests/run.js` and available
+  as `npm run test:node`.
+
+- **`readonly` on an interface field has a test** (`reject_cls_readonly_interface`).
+  It has worked since interfaces and classes started sharing `collectField`, and
+  `LANGUAGE.md` documented it as *(CLI only)* — an implemented rule with nothing
+  pinning it, which is how the `panic` hole in the ambient declarations survived
+  too.
+
 - **`readonly T[]` and `ReadonlyArray<T>`: an array a callee may read and not
   write.** The same header, the same pointer, the same LLVM type — the cookbook
   entry is the same function under both spellings and the two bodies are

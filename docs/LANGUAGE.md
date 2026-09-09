@@ -914,8 +914,10 @@ function swap(p: Pair): Pair {
   (`tests/cases/reject_cls_literal_no_context`, `cls_interface_literal`,
   `cls_nested`).
 - `readonly` on an interface field forbids every assignment (`i.a = 2` is
-  `` Cannot assign to readonly field `a` of `I` `` *(CLI only)*); literals
-  still set it.
+  `` Cannot assign to readonly field `a` of `Config` ``,
+  `tests/cases/reject_cls_readonly_interface`); literals still set it. The
+  message drops the class form's "outside its constructor", because an
+  interface has none to point at.
 - **`class C implements I`** requires `C` to declare exactly `I`'s fields
   in the same order with identical types
   (`` Class `Square` does not implement `Shape`: field 1 is ... ``,
@@ -1613,6 +1615,11 @@ compiler's own marks are never invalidated by user resets.
   `2147483647`) like a Rust `as` cast, not JavaScript's modulo-2^32
   `ToInt32`. Integer-to-integer conversions wrap (`toI32(5000000000)` ->
   `705032704`) (`tests/cases/conversions`).
+- **A program can be run under Node** as the TypeScript it is, in f64 mode and
+  within a stated overlap, with `runtime/amritscript.mjs` supplying the globals
+  Node lacks and nothing rewritten
+  ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). Every decision on this page is a
+  reason it is an overlap and not an equivalence.
 - **No exceptions.** Functions are `nounwind`, there is no `throw` and no
   unwinding, and a failure a caller should handle is a `Result<T, E>`
   (`tests/cases/res_basic`); runtime failures (bounds check, integer

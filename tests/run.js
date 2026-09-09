@@ -3361,13 +3361,14 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/runtime.c",
       "runtime/amritc.h",
       "runtime/amritc.d.ts",
+      "runtime/amritscript.mjs",
       "scripts/build.sh",
       "LICENSE",
       "docs/INSTALL.md",
     ];
     const absent = required.filter((f) => !files.includes(f));
     check(
-      "npm pack includes everything --link needs (runtime.c, amritc.h, amritc.d.ts, build.sh) plus LICENSE/INSTALL.md",
+      "npm pack includes everything --link and `node --import` need (runtime.c, amritc.h, amritc.d.ts, amritscript.mjs, build.sh) plus LICENSE/INSTALL.md",
       absent.length === 0,
       absent.join("\n")
     );
@@ -3468,6 +3469,22 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
     `differential: native and Node agree on every corpus program not in known-failures.txt (${summary || "no summary"})`,
     d.status === 0,
     d.stdout + d.stderr
+  );
+
+  // The smaller, unrewritten claim beside it: an f64-mode program run as the
+  // TypeScript it is, under `node --experimental-strip-types` with
+  // runtime/amritscript.mjs supplying the globals Node lacks. Nothing is
+  // rewritten, so only the divergences listed in the runner may differ — they
+  // live in the operators and the object model, where a prelude cannot reach.
+  // docs/RUN_UNDER_NODE.md states the overlap.
+  const u = spawnSync("node", [path.join(__dirname, "differential", "unmodified.js")], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  check(
+    `differential: f64 programs agree with unmodified Node (${u.stdout.trim() || "no summary"})`,
+    u.status === 0,
+    u.stdout + u.stderr
   );
 
   const fuzzSeed = 20260906;
