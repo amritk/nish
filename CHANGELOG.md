@@ -102,6 +102,37 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **A plan for true multithreading (WP20, `docs/wp20-threads.md`).** The
+  answer to "how does AmritScript do threads, like Go or Rust" turns out to be
+  forced rather than chosen: **1:1 OS threads with data races rejected at
+  compile time, not goroutines.** Green threads want a relocatable stack and a
+  relocatable stack wants a precise GC, which is the one thing the project
+  spent first (WP6 puts objects in entry-block `alloca`s and reuses the slot
+  across loop iterations on the argument that nothing outside the frame can
+  name them); and Go's posture — a race is a bug a runtime detector finds — is
+  not available to a compiler whose `readnone`/`readonly`/pointer-parameter
+  attributes are proved by a fixpoint that assumes a single mutator, because a
+  false attribute there is a silent miscompilation rather than a race report.
+  The note prices both the assets and the blocker. The assets are larger than
+  expected and are all accidents of other decisions: there is **no mutable
+  global state in the language at all** (top-level `let`, static fields and
+  top-level statements are each rejected, and a module `const` emits no
+  symbol), there are **no closures**, so a thread entry can only be a named
+  top-level function and the capture question never arises, and
+  `src/codegen/escape.ts` plus the whole-program fixpoint already compute the
+  shape of judgment a `Send` rule needs — which is why the design reaches for
+  a shareable-type rule rather than a trait system. The blocker is that the
+  arena is one process-wide global *and its bump is inlined into the emitted
+  IR* (`inlineAllocator`, a non-atomic load/add/store on `@amrit_arena` at
+  every allocation site), so two threads allocating race in the IR and not
+  merely in `runtime.c`. Five stages follow, of which the first — a
+  thread-local arena and RNG behind `--threads`, with no language surface —
+  is a prerequisite for every version of the design and is gated on
+  BENCHMARKS.md rather than on argument. Channels wait for monomorphisation
+  (WP15 item 8); detached threads, wasm threads, atomics and a race detector
+  are named as out of scope and why. It is a plan, not an implementation:
+  nothing in the compiler changed.
+
 - **`--emit-ast` is no longer stage0's: the self-hosted compiler answers it too
   (WP19 R1).** It was the last flag refused by name, and the refusal was right
   about the reason and wrong about the conclusion. stage0's dump prints the
