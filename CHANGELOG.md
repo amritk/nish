@@ -41,19 +41,22 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   none of it is on the M4 critical path.
 
   How a package *says* it is AmritScript is the condition itself: its presence
-  is the claim and its value is the entry module, and its absence is what lets
-  a bare import of an ordinary npm package fail with "no AmritScript entry
-  point" instead of a module-not-found. Three things a path cannot carry sit
-  beside it — the number mode, a compiler version floor, and the runtime
-  capabilities the package needs — and the note's position is that the
-  compiler should **generate** them rather than let an author declare them,
-  as a fourth interop sidecar next to `--emit-header`, `--emit-dts` and
-  `--emit-napi`. The mode is the one that earns it: an f64 package compiled in
-  i32 mode often fails loudly on a `1.5` literal, but `a / b` compiles under
-  both and truncates under one. None of it is a trust boundary, because the
-  consumer's own build re-establishes the property from source every time and
-  the compiler is the verifier; the manifest exists to make a failure arrive
-  early and legibly, at the package boundary, not to be believed.
+  is the claim, its value is the entry module, and its absence is what lets a
+  bare import of an ordinary npm package fail with "no AmritScript entry point"
+  instead of a module-not-found. The number mode rides in the condition too, by
+  spelling — `amrit-f64`, `amrit-i32`, or plain `amrit` for a package correct
+  under either — so a mismatch is a resolution failure at the package boundary
+  rather than a manifest field to keep in sync. The mode earns that because it
+  is the one semantic flag a package can be quietly wrong about: `(a + b) / 2`
+  answers `3` for `mean(3, 4)` in i32 mode and `3.5` in f64, compiling and
+  running cleanly under both, while most f64-flavoured code fails loudly
+  instead (`Math.sqrt` on a `number` in i32 mode names the fix in its own
+  message). Nothing else needs declaring — the compiler already knows which
+  builtins a program touches and what its target can run, and a version floor
+  belongs in `engines.amritc` — on the rule that **a fact the compiler can
+  recompute is not metadata**. None of it is a trust boundary either, since the
+  consumer's build re-establishes the property from source every time and the
+  compiler is the verifier.
 
 ### Fixed — correctness
 
