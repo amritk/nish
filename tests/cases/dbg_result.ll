@@ -39,7 +39,7 @@ slow:
   ret i8* %grown
 }
 
-define internal noundef i64 @half(i32 noundef %n) #0 !dbg !15 {
+define internal noundef { i1, i32 } @half(i32 noundef %n) #0 !dbg !15 {
 entry:
   call void @llvm.dbg.value(metadata i32 %n, metadata !17, metadata !DIExpression()), !dbg !16
   %0 = icmp eq i32 2, 0, !dbg !19
@@ -61,26 +61,36 @@ div.ok:
 if.then:
   %7 = zext i32 %n to i64, !dbg !23
   %8 = shl i64 %7, 32, !dbg !23
-  ret i64 %8, !dbg !23
+  %9 = trunc i64 %8 to i1, !dbg !23
+  %10 = lshr i64 %8, 32, !dbg !23
+  %11 = trunc i64 %10 to i32, !dbg !23
+  %12 = insertvalue { i1, i32 } undef, i1 %9, 0, !dbg !23
+  %13 = insertvalue { i1, i32 } %12, i32 %11, 1, !dbg !23
+  ret { i1, i32 } %13, !dbg !23
 
 if.end:
-  %9 = icmp eq i32 2, 0, !dbg !26
-  %10 = icmp eq i32 %n, -2147483648, !dbg !26
-  %11 = icmp eq i32 2, -1, !dbg !26
-  %12 = and i1 %10, %11, !dbg !26
-  %13 = or i1 %9, %12, !dbg !26
-  br i1 %13, label %div.fail.1, label %div.ok.1, !dbg !26
+  %14 = icmp eq i32 2, 0, !dbg !26
+  %15 = icmp eq i32 %n, -2147483648, !dbg !26
+  %16 = icmp eq i32 2, -1, !dbg !26
+  %17 = and i1 %15, %16, !dbg !26
+  %18 = or i1 %14, %17, !dbg !26
+  br i1 %18, label %div.fail.1, label %div.ok.1, !dbg !26
 
 div.fail.1:
-  call void @amrit_panic_div(i1 zeroext %9), !dbg !26
+  call void @amrit_panic_div(i1 zeroext %14), !dbg !26
   unreachable, !dbg !26
 
 div.ok.1:
-  %14 = sdiv i32 %n, 2, !dbg !26
-  %15 = zext i32 %14 to i64, !dbg !25
-  %16 = shl i64 %15, 32, !dbg !25
-  %17 = or i64 %16, 1, !dbg !25
-  ret i64 %17, !dbg !25
+  %19 = sdiv i32 %n, 2, !dbg !26
+  %20 = zext i32 %19 to i64, !dbg !25
+  %21 = shl i64 %20, 32, !dbg !25
+  %22 = or i64 %21, 1, !dbg !25
+  %23 = trunc i64 %22 to i1, !dbg !25
+  %24 = lshr i64 %22, 32, !dbg !25
+  %25 = trunc i64 %24 to i32, !dbg !25
+  %26 = insertvalue { i1, i32 } undef, i1 %23, 0, !dbg !25
+  %27 = insertvalue { i1, i32 } %26, i32 %25, 1, !dbg !25
+  ret { i1, i32 } %27, !dbg !25
 }
 
 define internal noundef nonnull align 8 dereferenceable(16) %struct.amrit_result.i32.str* @tag(i8* noundef nonnull noalias readonly align 8 nocapture %path) #1 !dbg !39 {
@@ -111,31 +121,37 @@ if.end:
   ret %struct.amrit_result.i32.str* %9, !dbg !49
 }
 
-define internal noundef i32 @score(i64 noundef %r) #2 !dbg !54 {
+define internal noundef i32 @score({ i1, i32 } noundef %r) #2 !dbg !54 {
 entry:
   %amrit_result.i32.i32.obj = alloca %struct.amrit_result.i32.i32, align 8
-  call void @llvm.dbg.value(metadata i64 %r, metadata !56, metadata !DIExpression()), !dbg !55
-  %0 = trunc i64 %r to i1, !dbg !55
-  %1 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 0, !dbg !55
-  store i1 %0, i1* %1, align 1, !dbg !55
-  %2 = lshr i64 %r, 32, !dbg !55
-  %3 = trunc i64 %2 to i32, !dbg !55
-  %4 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 1, !dbg !55
-  store i32 %3, i32* %4, align 4, !dbg !55
-  %5 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 2, !dbg !55
-  store i32 %3, i32* %5, align 4, !dbg !55
-  %6 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 0, !dbg !58
-  %7 = load i1, i1* %6, align 1, !dbg !58
-  %8 = xor i1 %7, true, !dbg !58
-  br i1 %8, label %if.then, label %if.end, !dbg !57
+  call void @llvm.dbg.value(metadata { i1, i32 } %r, metadata !56, metadata !DIExpression()), !dbg !55
+  %0 = extractvalue { i1, i32 } %r, 0, !dbg !55
+  %1 = extractvalue { i1, i32 } %r, 1, !dbg !55
+  %2 = zext i32 %1 to i64, !dbg !55
+  %3 = shl i64 %2, 32, !dbg !55
+  %4 = zext i1 %0 to i64, !dbg !55
+  %5 = or i64 %3, %4, !dbg !55
+  %6 = trunc i64 %5 to i1, !dbg !55
+  %7 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 0, !dbg !55
+  store i1 %6, i1* %7, align 1, !dbg !55
+  %8 = lshr i64 %5, 32, !dbg !55
+  %9 = trunc i64 %8 to i32, !dbg !55
+  %10 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 1, !dbg !55
+  store i32 %9, i32* %10, align 4, !dbg !55
+  %11 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 2, !dbg !55
+  store i32 %9, i32* %11, align 4, !dbg !55
+  %12 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 0, !dbg !58
+  %13 = load i1, i1* %12, align 1, !dbg !58
+  %14 = xor i1 %13, true, !dbg !58
+  br i1 %14, label %if.then, label %if.end, !dbg !57
 
 if.then:
   ret i32 0, !dbg !60
 
 if.end:
-  %9 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 1, !dbg !63
-  %10 = load i32, i32* %9, align 4, !dbg !63
-  ret i32 %10, !dbg !62
+  %15 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 1, !dbg !63
+  %16 = load i32, i32* %15, align 4, !dbg !63
+  ret i32 %16, !dbg !62
 }
 
 define noundef i32 @test() #0 !dbg !66 {
@@ -144,64 +160,75 @@ entry:
   %amrit_result.i32.i32.obj = alloca %struct.amrit_result.i32.i32, align 8
   %named.addr = alloca %struct.amrit_result.i32.str*, align 8
   %arena.mark = call i64 @amrit_arena_mark(), !dbg !67
-  %0 = call i64 @half(i32 8), !dbg !69
-  %1 = trunc i64 %0 to i1, !dbg !69
-  %2 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 0, !dbg !69
-  store i1 %1, i1* %2, align 1, !dbg !69
-  %3 = lshr i64 %0, 32, !dbg !69
-  %4 = trunc i64 %3 to i32, !dbg !69
-  %5 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 1, !dbg !69
-  store i32 %4, i32* %5, align 4, !dbg !69
-  %6 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 2, !dbg !69
-  store i32 %4, i32* %6, align 4, !dbg !69
+  %0 = call { i1, i32 } @half(i32 8), !dbg !69
+  %1 = extractvalue { i1, i32 } %0, 0, !dbg !69
+  %2 = extractvalue { i1, i32 } %0, 1, !dbg !69
+  %3 = zext i32 %2 to i64, !dbg !69
+  %4 = shl i64 %3, 32, !dbg !69
+  %5 = zext i1 %1 to i64, !dbg !69
+  %6 = or i64 %4, %5, !dbg !69
+  %7 = trunc i64 %6 to i1, !dbg !69
+  %8 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 0, !dbg !69
+  store i1 %7, i1* %8, align 1, !dbg !69
+  %9 = lshr i64 %6, 32, !dbg !69
+  %10 = trunc i64 %9 to i32, !dbg !69
+  %11 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 1, !dbg !69
+  store i32 %10, i32* %11, align 4, !dbg !69
+  %12 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 2, !dbg !69
+  store i32 %10, i32* %12, align 4, !dbg !69
   store %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, %struct.amrit_result.i32.i32** %r.addr, align 8, !dbg !68
   call void @llvm.dbg.declare(metadata %struct.amrit_result.i32.i32** %r.addr, metadata !77, metadata !DIExpression()), !dbg !68
-  %7 = call %struct.amrit_result.i32.str* @tag(i8* bitcast ({ i64, [4 x i8] }* @.str.2 to i8*)), !dbg !79
-  store %struct.amrit_result.i32.str* %7, %struct.amrit_result.i32.str** %named.addr, align 8, !dbg !78
+  %13 = call %struct.amrit_result.i32.str* @tag(i8* bitcast ({ i64, [4 x i8] }* @.str.2 to i8*)), !dbg !79
+  store %struct.amrit_result.i32.str* %13, %struct.amrit_result.i32.str** %named.addr, align 8, !dbg !78
   call void @llvm.dbg.declare(metadata %struct.amrit_result.i32.str** %named.addr, metadata !81, metadata !DIExpression()), !dbg !78
-  %8 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %r.addr, align 8, !dbg !83
-  %9 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %8, i32 0, i32 0, !dbg !83
-  %10 = load i1, i1* %9, align 1, !dbg !83
-  %11 = xor i1 %10, true, !dbg !83
-  br i1 %11, label %lor.end, label %lor.rhs, !dbg !83
+  %14 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %r.addr, align 8, !dbg !83
+  %15 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %14, i32 0, i32 0, !dbg !83
+  %16 = load i1, i1* %15, align 1, !dbg !83
+  %17 = xor i1 %16, true, !dbg !83
+  br i1 %17, label %lor.end, label %lor.rhs, !dbg !83
 
 lor.rhs:
-  %12 = load %struct.amrit_result.i32.str*, %struct.amrit_result.i32.str** %named.addr, align 8, !dbg !84
-  %13 = getelementptr inbounds %struct.amrit_result.i32.str, %struct.amrit_result.i32.str* %12, i32 0, i32 0, !dbg !84
-  %14 = load i1, i1* %13, align 1, !dbg !84
-  %15 = xor i1 %14, true, !dbg !84
+  %18 = load %struct.amrit_result.i32.str*, %struct.amrit_result.i32.str** %named.addr, align 8, !dbg !84
+  %19 = getelementptr inbounds %struct.amrit_result.i32.str, %struct.amrit_result.i32.str* %18, i32 0, i32 0, !dbg !84
+  %20 = load i1, i1* %19, align 1, !dbg !84
+  %21 = xor i1 %20, true, !dbg !84
   br label %lor.end, !dbg !83
 
 lor.end:
-  %16 = phi i1 [ true, %entry ], [ %15, %lor.rhs ], !dbg !83
-  br i1 %16, label %if.then, label %if.end, !dbg !82
+  %22 = phi i1 [ true, %entry ], [ %21, %lor.rhs ], !dbg !83
+  br i1 %22, label %if.then, label %if.end, !dbg !82
 
 if.then:
-  %17 = sub nsw i32 0, 1, !dbg !87
+  %23 = sub nsw i32 0, 1, !dbg !87
   call void @amrit_arena_release(i64 %arena.mark), !dbg !86
-  ret i32 %17, !dbg !86
+  ret i32 %23, !dbg !86
 
 if.end:
-  %18 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %r.addr, align 8, !dbg !91
-  %19 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %18, i32 0, i32 0, !dbg !90
-  %20 = load i1, i1* %19, align 1, !dbg !90
-  %21 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %18, i32 0, i32 2, !dbg !90
-  %22 = load i32, i32* %21, align 4, !dbg !90
-  %23 = zext i32 %22 to i64, !dbg !90
-  %24 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %18, i32 0, i32 1, !dbg !90
-  %25 = load i32, i32* %24, align 4, !dbg !90
-  %26 = zext i32 %25 to i64, !dbg !90
-  %27 = select i1 %20, i64 %26, i64 %23, !dbg !90
-  %28 = shl i64 %27, 32, !dbg !90
-  %29 = zext i1 %20 to i64, !dbg !90
-  %30 = or i64 %28, %29, !dbg !90
-  %31 = call i32 @score(i64 %30), !dbg !90
-  %32 = load %struct.amrit_result.i32.str*, %struct.amrit_result.i32.str** %named.addr, align 8, !dbg !92
-  %33 = getelementptr inbounds %struct.amrit_result.i32.str, %struct.amrit_result.i32.str* %32, i32 0, i32 1, !dbg !92
-  %34 = load i32, i32* %33, align 4, !dbg !92
-  %35 = add nsw i32 %31, %34, !dbg !90
+  %24 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %r.addr, align 8, !dbg !91
+  %25 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %24, i32 0, i32 0, !dbg !90
+  %26 = load i1, i1* %25, align 1, !dbg !90
+  %27 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %24, i32 0, i32 2, !dbg !90
+  %28 = load i32, i32* %27, align 4, !dbg !90
+  %29 = zext i32 %28 to i64, !dbg !90
+  %30 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %24, i32 0, i32 1, !dbg !90
+  %31 = load i32, i32* %30, align 4, !dbg !90
+  %32 = zext i32 %31 to i64, !dbg !90
+  %33 = select i1 %26, i64 %32, i64 %29, !dbg !90
+  %34 = shl i64 %33, 32, !dbg !90
+  %35 = zext i1 %26 to i64, !dbg !90
+  %36 = or i64 %34, %35, !dbg !90
+  %37 = trunc i64 %36 to i1, !dbg !90
+  %38 = lshr i64 %36, 32, !dbg !90
+  %39 = trunc i64 %38 to i32, !dbg !90
+  %40 = insertvalue { i1, i32 } undef, i1 %37, 0, !dbg !90
+  %41 = insertvalue { i1, i32 } %40, i32 %39, 1, !dbg !90
+  %42 = call i32 @score({ i1, i32 } %41), !dbg !90
+  %43 = load %struct.amrit_result.i32.str*, %struct.amrit_result.i32.str** %named.addr, align 8, !dbg !92
+  %44 = getelementptr inbounds %struct.amrit_result.i32.str, %struct.amrit_result.i32.str* %43, i32 0, i32 1, !dbg !92
+  %45 = load i32, i32* %44, align 4, !dbg !92
+  %46 = add nsw i32 %42, %45, !dbg !90
   call void @amrit_arena_release(i64 %arena.mark), !dbg !89
-  ret i32 %35, !dbg !89
+  ret i32 %46, !dbg !89
 }
 
 attributes #0 = { nounwind }

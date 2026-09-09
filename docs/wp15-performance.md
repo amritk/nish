@@ -157,6 +157,78 @@ and their tests move with it.
 
 ---
 
+## 2b. The array header is not the array's elements — **done**
+
+The largest measured win in this note, and it needed no language change at all.
+
+An array is a `%struct.amrit_array*` to `{ i64 len, i64 cap, i8* data }`, and
+`data` points somewhere else. Nothing in the IR said those two regions are
+disjoint, so LLVM had to assume `a[i] = v` might land on some array's `len` or
+`data`. The consequence is not a missed peephole — it is that **the header is
+reloaded on every iteration of every loop that writes an element**, because
+LICM may not hoist a load a store might clobber, and the loop vectoriser gives
+up behind it.
+
+Measured on `dst[i] = src[i] * 2.0`, 8192 doubles (L2-resident), 150k passes,
+`--profile speed`, min of 7:
+
+| | min | |
+| --- | ---: | --- |
+| before | 1205 ms | header reloaded per iteration |
+| **header and elements as separate alias domains** | **763 ms** | **1.58x**, sound today |
+| + the header treated as invariant | 373 ms | 3.23x, and it vectorises — needs §2c |
+| + `--unchecked-indexing` on top | 371 ms | 0.5%: the checks were never the cost |
+
+That last row is worth reading twice. **Bounds checks were not what the loop
+was paying for**, and the intuition that they are is what sent WP9's diagnosis
+looking at `--unchecked-indexing` (which bought 0% on nbody and 4% on sieve).
+The cost was the aliasing, and the checks only looked expensive because the
+`len` they compare against was being reloaded with everything else.
+
+**The proof is about bytes, not allocations.** Every header the compiler
+produces is a 24-byte `amrit_alloc_struct` bump, an entry-block
+`alloca %struct.amrit_array` (WP6), or the `malloc` block `amrit_argv_init`
+builds; every element buffer is a separate bump, a separate `alloca [n x T]`,
+or — for argv alone — the bytes *after* the header in that one block. In all
+four shapes the two occupy disjoint byte ranges, so no store through an element
+pointer reaches a header field and none the other way. `amrit_array_grow` bumps
+a fresh buffer and writes `data`/`cap`, which is a header write, and stays
+inside the same split. The argument lives beside the code in
+`src/codegen/emit/arrays.ts`, per the "no attribute without a proof" rule.
+
+Strings are deliberately left out: a string is one block whose length header and
+bytes are contiguous, so there is no split to describe. Struct fields are left
+out too, until there is a measurement behind them — the nbody gap is a struct
+aliasing problem and annotating the array headers moved it by nothing
+(1829 ms against 1895, noise).
+
+`tests/cases/arr_alias_domains` pins the property a golden cannot express: after
+`opt -O2`, no header load survives inside the loop. The GEPs hoist on their own,
+so the check is on the loads.
+
+## 2c. Making the header invariant — the other 2x
+
+§2b stops the header from being *clobbered*; it does not say the header never
+*changes*. `push` can change `len` and `data`, so the load still has to happen
+once per loop, and the bounds compare still reads a value LLVM cannot fold —
+which is why the vectoriser is still out at 763 ms and in at 373 ms.
+
+Closing it needs the header to be genuinely immutable for the loop's duration.
+Two candidates, in preference order:
+
+1. **Fixed-length arrays.** `Int32Array`/`Float64Array` are aliases of `T[]`
+   today, `push` and all (`docs/LANGUAGE.md`, "Typed-array names are aliases").
+   Making them real fixed-length types gives the header an immutability the
+   emitter can state as `!invariant.load`, and gives a program a way to ask for
+   the fast shape by name.
+2. **A "no `push` reaches this loop" analysis.** Cheaper for existing code and
+   needs no new type, but it is a whole-program question once a callee is
+   involved, so it wants the same fixpoint `attributes.ts` already runs.
+
+`readonly T[]` already carries most of the proof for case 1 and the emitter
+currently throws it away: a `readonly i32[]` parameter emits nothing but the
+`readonly` attribute. That is the cheapest place to start.
+
 ## 3. Fast defaults — **done**
 
 | Flag | Default | What it buys | What it costs |
@@ -358,6 +430,136 @@ assertion. Size is second, not irrelevant.
 
 ---
 
+## 7a. Formatting a double — **done**
+
+The rule in §7 is that the runtime budget yields to a measured win. This is the
+first one to claim it, and it turned out to be a correctness fix as well.
+
+`String(x)` prints the fewest digits that read back as the same double. The old
+`amrit_str_from_f64` looked for that length by asking `snprintf` for k digits
+and `strtod` whether they round-trip, walking k up from 1. Two things were
+wrong with it:
+
+- **Slow.** Up to seventeen format-and-parse round trips per number: 2,557 ns
+  each, against 15 ns for the same value as an integer.
+- **Wrong, about one value in twenty thousand.** `snprintf` can only return the
+  *correctly-rounded* k-digit string, and the shortest string that round-trips
+  at length k need not be that one. When it was not, the search rejected k and
+  went on to k+1. `7.120236347223045e-307` is such a value; we printed
+  `7.1202363472230444e-307`, and so disagreed with `runtime/shim.mjs`, which
+  delegates to JavaScript's own `String`.
+
+Ryu (Adams, PLDI 2018) computes the digits directly: **72 ns, a 35x speedup**,
+and the shortest string by construction. Only digit generation moved; the
+ECMAScript layout around it is untouched.
+
+**What it costs, and who pays.** Two power-of-five tables, 9,888 bytes of
+read-only data, generated with exact integer arithmetic rather than
+transcribed. `runtime.c`'s `.text` goes 2,775 -> 3,852, still inside §2's 4 KB
+budget; `.rodata` goes 32 -> 9,920. Section GC means only a binary that
+actually formats a double links them: `bench/fib` is unchanged at 5,600 bytes,
+`bench/nbody` goes 10,856 -> 21,168. That is the largest size regression this
+project has taken deliberately, and it is recorded here rather than averaged
+away. If it proves too much, Ryu's size-optimised tables (every 26th entry,
+the rest recomputed) trade roughly a third of the speed for about 1.3 KB.
+
+**How it was validated.** Against the ECMAScript rule itself, not against the
+code it replaces — which is just as well, since that code was the buggy one.
+Three properties per value: the digits round-trip, no shorter string
+round-trips, and no same-length string is closer. Checked over 20.9 million
+values: every finite exponent with boundary and random mantissas, the powers of
+ten and two, small integers and their reciprocals, and uniform random bit
+patterns. Zero violations. The same harness finds 46 per 1.4 million in the old
+implementation.
+
+## 7b. A private ABI inside a module — **done**
+
+The third measured win, and the one that needed no new analysis at all: just
+the observation that a function no host can name does not owe anyone its
+calling convention.
+
+WP17 packs a small `Result` into one `i64` because that is what a C or wasm
+host must see. Inside a module nobody is looking, and the word costs
+something: with the discriminant and the payload in one register the `select`
+that picks the live arm happens on the *word*, so instcombine cannot fold the
+arithmetic around it. Giving a non-exported function the two-scalar
+`{ i1, i32 }` shape instead — rustc's `ScalarPair` — takes `bench/result` from
+**650 ms to 464 ms**, which is C's 444 rather than 1.46x behind it.
+
+Two decisions worth keeping:
+
+- **The packing code did not move.** `packArm`, `packObject` and
+  `unpackResult` still build and read the same word; the pair is made from it
+  at the boundary and taken apart on the other side. LLVM folds the round trip
+  away entirely — a hand-written two-scalar lowering measures 467 ms against
+  464, the same within noise — so one packing path was worth more than the
+  instructions the conversion appears to cost. The change is a predicate and a
+  boundary, not a rewrite.
+- **The condition is the linkage condition.** `strictExports && !exported`,
+  the same test that writes `internal`, because the private shape is safe only
+  while no host can name the symbol. The two must not drift, which is why the
+  comment at each site says so. `--no-strict-exports` turns both off together.
+
+This is what §3 meant when it said `--strict-exports` "does not buy a second
+namespace": it does not, but it does buy a second *calling convention*, and
+that turned out to be worth 1.40x on the shape the benchmark exists to measure.
+
+## 7c. `indexOf` gets a real algorithm — **done**
+
+The second claim on §7's rule, and the plainest one: the budget said the
+string search had to be inline, and inline meant a byte at a time.
+
+`s.indexOf(sub)` was a loop over `amrit_str_at`, one probe per offset, emitted
+at every call site so that `runtime.c` stayed small. Scanning an 880 KB
+haystack sixty times over:
+
+| | needle absent, rare first byte | needle absent, common first byte |
+| --- | ---: | ---: |
+| the inline probe loop | 53.7 ms | 53.7 ms |
+| **`amrit_str_index_of`, this change** | **2.9 ms** | **3.1 ms** |
+| glibc `memmem`, for scale | 2.5 ms | 2.5 ms |
+
+**About 17x**, and within a quarter of `memmem` even on the shape that suits
+`memchr` least. It also *shrinks* every caller, since thirty lines of loop
+become one call; `runtime.c`'s `.text` goes from 3,852 to 4,002 bytes and stays
+inside the 4 KB budget, though with little room left.
+
+**`memmem` was tried and rejected, and the reason is worth keeping.** It is a
+GNU extension glibc hides behind `_GNU_SOURCE`, and defining that macro makes
+`<string.h>` include `<strings.h>` — which any `-I` directory containing a file
+of that name then shadows. This project *generates* exactly such a header from
+`examples/strings.ts`, and the interop tests caught it immediately: `runtime.c`
+picked up the generated `strings.h`, inherited `amritc.h` through it, and
+failed to compile with four redefinitions. A C host passing `-I` at its own
+generated headers would hit the same. A fifth of the time is not worth making
+the runtime sensitive to its includer's include path, so the portable
+`memchr`/`memcmp` scan is the only path and there is no second one to rot.
+
+The semantics are the loop's, unchanged: an empty needle answers 0, a needle
+longer than the haystack -1, and the offset is in bytes.
+
+## 7d. Arena provenance — **measured, and not taken**
+
+The last item on the list this section came from, and the one that turned out
+not to exist any more.
+
+`wp9-optimisation.md` diagnosed vec3 and nbody as provenance problems: the
+inline bump allocator returns `buf + offset` from a global, so LLVM sees
+pointers of unknown origin that may alias, and reloads fields it could have
+kept in registers. Making the allocator `noinline` — so its `noalias` return
+survives as a call — measured vec3 757 -> 356 ms and nbody -6%.
+
+Re-measured on today's compiler, the nbody edit is **1467 ms against 1479**:
+noise, and slightly the wrong way. WP6's stack allocation took the objects the
+experiment was recovering, and vec3 now beats C without it (0.93x Rust). So
+the trade — a real call on every allocation, in exchange for provenance — buys
+nothing and is not being made.
+
+Recording it because a stale measurement is worse than no measurement: it
+would have justified a change that costs a call per allocation for zero.
+nbody's remaining gap (1.19x Rust, 1.16x C) is now unexplained by any theory
+in either note, and that is the honest state of it.
+
 ## 8. The `performance` diagnostic class
 
 None of the above survives contact with a codebase unless the compiler says
@@ -395,6 +597,22 @@ Roughly dependency order; each row ships with the full construct checklist from
 1. **Fast defaults** (§3) — **done**. Flag flips plus the honest re-pointing
    of every affected test and doc. Small, and it moves the baseline everything
    else is measured against.
+1a. **Array alias domains** (§2b) — **done**. 1.58x on an element loop, no
+   language change, and it re-ordered this list: it showed that the bounds
+   checks everything below was written to eliminate cost 0.5% once the header
+   is hoisted.
+1b. **An invariant array header** (§2c) — the other 2x, and the first item
+   that needs a language decision (fixed-length arrays) or a whole-program
+   analysis.
+1c. **Shortest-digit formatting** (§7a) — **done**. 35x on printing a double,
+   and a correctness fix; the first item to spend the runtime budget.
+1d. **The private `Result` ABI** (§7b) — **done**. 1.40x on `bench/result`,
+   no new analysis, and it closes the last gap to C on that shape.
+1e. **`indexOf` in the runtime** (§7c) — **done**. 19x, and smaller code at
+   every call site.
+1f. **Arena provenance** (§7d) — **measured and dropped**. The win WP9
+   recorded is gone; the change would now cost a call per allocation for
+   nothing.
 2. **`performance` diagnostics** (§8) — the framework plus the two warnings that
    need no new analysis (quadratic string building, allocation in a loop).
 3. **Slice iterators** (§2.3) — the biggest speed win per line of emitter code,

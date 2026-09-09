@@ -247,50 +247,21 @@ function emitOccursAt(ctx: EmitContext, str: string, at: string, sub: string): s
 }
 
 /**
- * `s.indexOf(sub)`: the first offset where `sub` occurs, or -1. The scan is
- * a loop here rather than a runtime function, which keeps `runtime.c` inside
- * its budget and lets LLVM see through the search when the needle is a
- * constant. `str.probe` tests one offset; `str.miss` is the -1 edge.
+ * `s.indexOf(sub)`: the first byte offset where `sub` occurs, or -1.
  *
- * The loop is invisible to `attributes.ts`, which counts *source* loops, so
- * it must terminate on its own for `willreturn` to stay sound: the offset
- * rises by one per pass and the guard fails once it passes `len - sub.len`,
- * a length the arena already allocated and therefore far below 2^64.
+ * This was an inline loop over `amrit_str_at`, one probe per offset, so that
+ * `runtime.c` stayed inside its size budget. That made the idiomatic search a
+ * byte-at-a-time scan — 51.7 ms against `memmem`'s 2.5 ms over 52 MB of
+ * haystack — and WP15 §7's rule is that the budget yields to a measured win,
+ * so the search moved into the runtime where it can use the libc's vectorised
+ * routines. The empty needle still answers 0 and a too-long one -1, which is
+ * what the loop did and what JavaScript says.
  */
 function emitIndexOf(ctx: EmitContext, expr: ts.CallExpression, str: string): string {
-  const fn = ctx.fn;
   const sub = ctx.emitExpression(expr.arguments[0]);
-  const len = loadStringLength(ctx, str);
-  const subLen = loadStringLength(ctx, sub);
-  const slot = fn.emitAlloca("str.at", "i64", 8);
-  fn.emit(`store i64 0, i64* ${slot}, align 8`);
-  const condBlock = fn.newBlock("str.find");
-  const probeBlock = fn.newBlock("str.probe");
-  const nextBlock = fn.newBlock("str.next");
-  const missBlock = fn.newBlock("str.miss");
-  const endBlock = fn.newBlock("str.found");
-
-  fn.emit(`br label %${condBlock.label}`);
-  fn.placeBlock(condBlock);
-  const at = fn.emitValue(`load i64, i64* ${slot}, align 8`);
-  const end = fn.emitValue(`add i64 ${at}, ${subLen}`);
-  const fits = fn.emitValue(`icmp ule i64 ${end}, ${len}`);
-  fn.emit(`br i1 ${fits}, label %${probeBlock.label}, label %${missBlock.label}`);
-
-  fn.placeBlock(probeBlock);
-  const hit = emitOccursAt(ctx, str, at, sub);
-  fn.emit(`br i1 ${hit}, label %${endBlock.label}, label %${nextBlock.label}`);
-
-  fn.placeBlock(nextBlock);
-  const next = fn.emitValue(`add i64 ${at}, 1`);
-  fn.emit(`store i64 ${next}, i64* ${slot}, align 8`);
-  fn.emit(`br label %${condBlock.label}`);
-
-  fn.placeBlock(missBlock);
-  fn.emit(`br label %${endBlock.label}`);
-
-  fn.placeBlock(endBlock);
-  const found = fn.emitValue(`phi i64 [ ${at}, %${probeBlock.label} ], [ -1, %${missBlock.label} ]`);
+  const found = ctx.fn.emitValue(
+    `call i64 ${ctx.useRuntime("amrit_str_index_of")}(i8* ${str}, i8* ${sub})`
+  );
   return emitNumberFromI64(ctx, found, expr);
 }
 

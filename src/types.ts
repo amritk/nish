@@ -341,9 +341,28 @@ export function llvmType(t: StaticType): string {
  * travels in a register as an `i64` (WP17), never as a pointer to arena
  * memory. Every other type is what it is.
  */
-export function llvmAbiType(t: StaticType): string {
-  return resultByValue(t) ? "i64" : llvmType(t);
+export function llvmAbiType(t: StaticType, privateAbi = false): string {
+  if (!resultByValue(t)) return llvmType(t);
+  return privateAbi ? RESULT_PAIR : "i64";
 }
+
+/**
+ * WP15: the private ABI a *non-exported* function may use for a by-value
+ * `Result` — the discriminant and the payload as two values instead of one
+ * packed word, which is rustc's `ScalarPair`.
+ *
+ * The packed word is what a C or wasm host has to see, and it costs something
+ * a host never pays for: with both halves inside one `i64`, the `select` that
+ * picks the live arm happens on the word, and instcombine can no longer fold
+ * the arithmetic around it. Splitting the halves at the call boundary of a
+ * function no host can name gets that back — measured at 650 ms to 464 ms on
+ * `bench/result`, which is C's 444 ms.
+ *
+ * The payload slot is `i32` for every payload `resultByValue` admits (`void`,
+ * `boolean`, `u8`, `u16`, `i32`, `u32`, `f32`), for the same reason the word
+ * gives it a fixed 32-bit half: one shape rather than one per alignment.
+ */
+export const RESULT_PAIR = "{ i1, i32 }";
 
 /** Natural alignment in bytes, as clang and rustc use for the same LLVM types. */
 export function alignOf(t: StaticType): number {

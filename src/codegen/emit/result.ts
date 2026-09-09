@@ -49,7 +49,14 @@
 import ts from "typescript";
 import { CheckedProgram } from "../../checker/index.js";
 import { ResultLayout, ResultSlot, resultLayout, resultTypesIn } from "../../checker/result.js";
-import { RESULT_PAYLOAD_SHIFT, ResultType, StaticType, llvmType, resultByValue } from "../../types.js";
+import {
+  RESULT_PAIR,
+  RESULT_PAYLOAD_SHIFT,
+  ResultType,
+  StaticType,
+  llvmType,
+  resultByValue,
+} from "../../types.js";
 import { BuiltinCall } from "./builtins.js";
 import { EmitContext } from "./context.js";
 import { MemoryFacts, factCollectors, isStackOwned, methodCallEmitters, propertyEmitters } from "./members.js";
@@ -285,6 +292,69 @@ export const unpackResult = (
   return object;
 };
 
+// ---- The private two-scalar ABI (WP15) ----------------------------------------------
+
+/**
+ * Whether `sig` may use the private `{ i1, i32 }` ABI for a by-value `Result`
+ * rather than the packed word. The condition is exactly the one that decides
+ * `internal` linkage in `emitter.ts`, and it has to stay that way: the private
+ * shape is only safe because no host can name the symbol. `--no-strict-exports`
+ * makes every function external and so turns this off everywhere.
+ *
+ * An imported function is always exported by definition — a module cannot
+ * import what its exporter kept internal — so a cross-module call is packed,
+ * which is what makes the two modules agree without consulting each other.
+ */
+export const privateResultAbi = (ctx: EmitContext, sig: { exported: boolean }): boolean =>
+  ctx.opts.strictExports && !sig.exported;
+
+/**
+ * Split the packed word into the pair, at a boundary that uses the private
+ * ABI. The word is still built exactly as the packed ABI builds it and taken
+ * apart again here, which reads like waste and is not: LLVM folds the round
+ * trip away entirely, and the two spellings measure the same (464 ms against
+ * 467 ms for a hand-written two-scalar lowering of `bench/result`). Keeping
+ * the packing in one place is worth more than the instructions it appears to
+ * cost, so `packArm`, `packObject` and `unpackResult` stay the packed ABI's.
+ */
+export const resultWordToPair = (ctx: EmitContext, word: string): string => {
+  const tag = ctx.fn.emitValue(`trunc i64 ${word} to i1`);
+  const high = ctx.fn.emitValue(`lshr i64 ${word}, ${RESULT_PAYLOAD_SHIFT}`);
+  const payload = ctx.fn.emitValue(`trunc i64 ${high} to i32`);
+  const withTag = ctx.fn.emitValue(`insertvalue ${RESULT_PAIR} undef, i1 ${tag}, 0`);
+  return ctx.fn.emitValue(`insertvalue ${RESULT_PAIR} ${withTag}, i32 ${payload}, 1`);
+};
+
+/** The inverse, on the other side of the same boundary. */
+export const resultPairToWord = (ctx: EmitContext, pair: string): string => {
+  const tag = ctx.fn.emitValue(`extractvalue ${RESULT_PAIR} ${pair}, 0`);
+  const payload = ctx.fn.emitValue(`extractvalue ${RESULT_PAIR} ${pair}, 1`);
+  const wide = ctx.fn.emitValue(`zext i32 ${payload} to i64`);
+  const shifted = ctx.fn.emitValue(`shl i64 ${wide}, ${RESULT_PAYLOAD_SHIFT}`);
+  const low = ctx.fn.emitValue(`zext i1 ${tag} to i64`);
+  return ctx.fn.emitValue(`or i64 ${shifted}, ${low}`);
+};
+
+/**
+ * A by-value `Result` argument, in whichever ABI the *callee* uses. The value
+ * handed in is always the packed word, so this is where it becomes the pair.
+ */
+export const emitResultArgument = (
+  ctx: EmitContext,
+  want: StaticType,
+  value: string,
+  privateAbi: boolean
+): string => (privateAbi && resultByValue(want) ? resultWordToPair(ctx, value) : value);
+
+/** `ret` a by-value `Result`, in whichever ABI the enclosing function uses. */
+export const emitResultReturn = (ctx: EmitContext, word: string): void => {
+  if (!privateResultAbi(ctx, ctx.currentSig)) {
+    ctx.fn.emit(`ret i64 ${word}`);
+    return;
+  }
+  ctx.fn.emit(`ret ${RESULT_PAIR} ${resultWordToPair(ctx, word)}`);
+};
+
 /**
  * Wrap a call that answers a by-value `Result`: the call itself, then the
  * unpack. `emitCall` hands the finished `call` text in, because who builds the
@@ -294,9 +364,11 @@ export const emitResultReturningCall = (
   ctx: EmitContext,
   call: string,
   type: StaticType,
-  site: ts.Node
+  site: ts.Node,
+  privateAbi = false
 ): string => {
-  const word = ctx.fn.emitValue(call);
+  const returned = ctx.fn.emitValue(call);
+  const word = privateAbi ? resultPairToWord(ctx, returned) : returned;
   return unpackResult(ctx, type as ResultType, word, ctx.isStackSite(site));
 };
 
@@ -353,7 +425,7 @@ const emitOrReturn = (ctx: EmitContext, expr: ts.CallExpression, receiver: Resul
   if (resultByValue(returnType)) {
     const word = packArm(ctx, returnType, false, error);
     ctx.emitScopeExit();
-    ctx.fn.emit(`ret i64 ${word}`);
+    emitResultReturn(ctx, word);
   } else {
     const propagated = construct(ctx, returnType, false, error);
     ctx.emitScopeExit();

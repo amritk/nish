@@ -58,6 +58,13 @@ export const R_ERR: i32 = 2;
 /** WP17: bit position of the payload in the packed `Result` word; the tag owns the low half. */
 export const RESULT_PAYLOAD_SHIFT: i32 = 32;
 
+/**
+ * The private ABI a non-exported function may use for a by-value `Result`:
+ * the discriminant and the payload as two values rather than one packed word.
+ * The reasoning and the measurement are in `src/types.ts`.
+ */
+export const RESULT_PAIR: string = "{ i1, i32 }";
+
 /** The one header type every array shares; `ARRAY_TYPE` in `src/codegen/runtime.ts`. */
 export const ARRAY_STRUCT: string = "%struct.amrit_array";
 
@@ -369,9 +376,9 @@ export class TypeTable {
    * pack travels in a register as an `i64`, never as a pointer to arena
    * memory.
    */
-  llvmAbiType(type: i32): string {
+  llvmAbiType(type: i32, privateAbi: boolean): string {
     if (this.resultByValue(type)) {
-      return "i64";
+      return privateAbi ? RESULT_PAIR : "i64";
     }
     return this.llvmType(type);
   }

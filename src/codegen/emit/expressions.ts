@@ -14,7 +14,13 @@ import { ConstValue, constValue } from "../../checker/constants.js";
 import { BuiltinCall, f64Constant, floatConstant } from "./builtins.js";
 import { ioFunctionEmitters } from "./io.js";
 import { conversionEmitters, parseEmitters } from "./math.js";
-import { emitPackedResult, emitResultReturningCall, resultFunctionEmitters } from "./result.js";
+import {
+  emitPackedResult,
+  emitResultArgument,
+  emitResultReturningCall,
+  privateResultAbi,
+  resultFunctionEmitters,
+} from "./result.js";
 import { isAssignmentOperator } from "../../checker/classes.js";
 import { classExpressionEmitters, emitSuperCall } from "./classes.js";
 import { assignmentTargetEmitters, emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members.js";
@@ -208,20 +214,22 @@ const emitCall: ExpressionEmitter = (ctx, node) => {
   if (builtin) return builtin.emit(ctx, expr);
   const callee = ctx.program.callees.get(expr)!;
   // WP17: an argument feeding a `Result` parameter the ABI packs is passed as
-  // the word, exactly as a `return` of one is.
+  // the word, exactly as a `return` of one is — or as the two-scalar pair when
+  // the callee is non-exported and uses the private ABI (WP15).
+  const privateAbi = privateResultAbi(ctx, callee);
   const args = expr.arguments
     .map((arg, i) => {
       const want = callee.params[i].type;
       const value = resultByValue(want)
         ? emitPackedResult(ctx, arg, want as ResultType)
         : ctx.emitExpression(arg);
-      return `${llvmAbiType(want)} ${value}`;
+      return `${llvmAbiType(want, privateAbi)} ${emitResultArgument(ctx, want, value, privateAbi)}`;
     })
     .join(", ");
   // WP9: the mark goes after the arguments, so only the callee's own bumps
   // are inside the bracket (emit/arena.ts, `beginReclaim`).
   const mark = beginReclaim(ctx, callee);
-  const call = `call ${llvmAbiType(callee.returnType)} @${callee.name}(${args})`;
+  const call = `call ${llvmAbiType(callee.returnType, privateAbi)} @${callee.name}(${args})`;
   if (callee.returnType.kind === "void") {
     ctx.fn.emit(call);
     return "void";
@@ -229,7 +237,7 @@ const emitCall: ExpressionEmitter = (ctx, node) => {
   // WP17: a small `Result` comes back in a register; unpack it into the
   // caller's own object, which is what every other construct reads.
   if (resultByValue(callee.returnType))
-    return emitResultReturningCall(ctx, call, callee.returnType, expr);
+    return emitResultReturningCall(ctx, call, callee.returnType, expr, privateAbi);
   return endReclaim(ctx, mark, ctx.fn.emitValue(call));
 };
 

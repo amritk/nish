@@ -51,14 +51,14 @@ entry:
   %1 = call i8* @amrit_alloc_struct(i64 24)
   %2 = bitcast i8* %1 to %struct.amrit_array*
   %3 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %2, i64 0, i32 0
-  store i64 %0, i64* %3, align 8
+  store i64 %0, i64* %3, align 8, !alias.scope !3, !noalias !4
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %2, i64 0, i32 1
-  store i64 %0, i64* %4, align 8
+  store i64 %0, i64* %4, align 8, !alias.scope !3, !noalias !4
   %5 = mul i64 %0, 4
   %6 = call i8* @amrit_alloc_struct(i64 %5)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %6, i8 0, i64 %5, i1 false)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %6, i8 0, i64 %5, i1 false), !alias.scope !4, !noalias !3
   %7 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %2, i64 0, i32 2
-  store i8* %6, i8** %7, align 8
+  store i8* %6, i8** %7, align 8, !alias.scope !3, !noalias !4
   store %struct.amrit_array* %2, %struct.amrit_array** %counts.addr, align 8
   store i32 %seed, i32* %x.addr, align 4
   store i32 0, i32* %i.addr, align 4
@@ -104,7 +104,7 @@ div.ok.1:
   %26 = srem i32 %20, %n
   %27 = sext i32 %26 to i64
   %28 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %19, i64 0, i32 0
-  %29 = load i64, i64* %28, align 8
+  %29 = load i64, i64* %28, align 8, !alias.scope !3, !noalias !4
   %30 = icmp ult i64 %27, %29
   br i1 %30, label %bounds.ok, label %bounds.fail
 
@@ -114,12 +114,12 @@ bounds.fail:
 
 bounds.ok:
   %31 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %19, i64 0, i32 2
-  %32 = load i8*, i8** %31, align 8
+  %32 = load i8*, i8** %31, align 8, !alias.scope !3, !noalias !4
   %33 = bitcast i8* %32 to i32*
   %34 = getelementptr inbounds i32, i32* %33, i64 %27
-  %35 = load i32, i32* %34, align 4
+  %35 = load i32, i32* %34, align 4, !alias.scope !4, !noalias !3
   %36 = add nsw i32 %35, 1
-  store i32 %36, i32* %34, align 4
+  store i32 %36, i32* %34, align 4, !alias.scope !4, !noalias !3
   br label %for.inc
 
 for.inc:
@@ -143,7 +143,7 @@ for.body.1:
   %42 = load i32, i32* %i.addr.1, align 4
   %43 = sext i32 %42 to i64
   %44 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %41, i64 0, i32 0
-  %45 = load i64, i64* %44, align 8
+  %45 = load i64, i64* %44, align 8, !alias.scope !3, !noalias !4
   %46 = icmp ult i64 %43, %45
   br i1 %46, label %bounds.ok.1, label %bounds.fail.1
 
@@ -153,15 +153,15 @@ bounds.fail.1:
 
 bounds.ok.1:
   %47 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %41, i64 0, i32 2
-  %48 = load i8*, i8** %47, align 8
+  %48 = load i8*, i8** %47, align 8, !alias.scope !3, !noalias !4
   %49 = bitcast i8* %48 to i32*
   %50 = getelementptr inbounds i32, i32* %49, i64 %43
-  %51 = load i32, i32* %50, align 4
+  %51 = load i32, i32* %50, align 4, !alias.scope !4, !noalias !3
   %52 = load %struct.amrit_array*, %struct.amrit_array** %counts.addr, align 8
   %53 = load i32, i32* %best.addr, align 4
   %54 = sext i32 %53 to i64
   %55 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %52, i64 0, i32 0
-  %56 = load i64, i64* %55, align 8
+  %56 = load i64, i64* %55, align 8, !alias.scope !3, !noalias !4
   %57 = icmp ult i64 %54, %56
   br i1 %57, label %bounds.ok.2, label %bounds.fail.2
 
@@ -171,10 +171,10 @@ bounds.fail.2:
 
 bounds.ok.2:
   %58 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %52, i64 0, i32 2
-  %59 = load i8*, i8** %58, align 8
+  %59 = load i8*, i8** %58, align 8, !alias.scope !3, !noalias !4
   %60 = bitcast i8* %59 to i32*
   %61 = getelementptr inbounds i32, i32* %60, i64 %54
-  %62 = load i32, i32* %61, align 4
+  %62 = load i32, i32* %61, align 4, !alias.scope !4, !noalias !3
   %63 = icmp sgt i32 %51, %62
   br i1 %63, label %if.then, label %if.end
 
@@ -276,3 +276,9 @@ attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind noreturn cold }
 attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}

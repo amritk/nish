@@ -268,19 +268,19 @@ if.then:
 
 if.end:
   %50 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0
-  store i64 2, i64* %50, align 8
+  store i64 2, i64* %50, align 8, !alias.scope !3, !noalias !4
   %51 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1
-  store i64 2, i64* %51, align 8
+  store i64 2, i64* %51, align 8, !alias.scope !3, !noalias !4
   %52 = mul i64 2, 8
   %53 = bitcast [2 x %struct.Node*]* %arr.data to i8*
-  call void @llvm.memset.p0i8.i64(i8* align 8 %53, i8 0, i64 %52, i1 false)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %53, i8 0, i64 %52, i1 false), !alias.scope !4, !noalias !3
   %54 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 2
-  store i8* %53, i8** %54, align 8
+  store i8* %53, i8** %54, align 8, !alias.scope !3, !noalias !4
   store %struct.amrit_array* %arr.hdr, %struct.amrit_array** %xs.addr, align 8
   %55 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
   %56 = load %struct.Node*, %struct.Node** %c.addr, align 8
   %57 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %55, i64 0, i32 0
-  %58 = load i64, i64* %57, align 8
+  %58 = load i64, i64* %57, align 8, !alias.scope !3, !noalias !4
   %59 = icmp ult i64 1, %58
   br i1 %59, label %bounds.ok, label %bounds.fail
 
@@ -290,13 +290,13 @@ bounds.fail:
 
 bounds.ok:
   %60 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %55, i64 0, i32 2
-  %61 = load i8*, i8** %60, align 8
+  %61 = load i8*, i8** %60, align 8, !alias.scope !3, !noalias !4
   %62 = bitcast i8* %61 to %struct.Node**
   %63 = getelementptr inbounds %struct.Node*, %struct.Node** %62, i64 1
-  store %struct.Node* %56, %struct.Node** %63, align 8
+  store %struct.Node* %56, %struct.Node** %63, align 8, !alias.scope !4, !noalias !3
   %64 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
   %65 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %64, i64 0, i32 0
-  %66 = load i64, i64* %65, align 8
+  %66 = load i64, i64* %65, align 8, !alias.scope !3, !noalias !4
   %67 = icmp ult i64 0, %66
   br i1 %67, label %bounds.ok.1, label %bounds.fail.1
 
@@ -306,10 +306,10 @@ bounds.fail.1:
 
 bounds.ok.1:
   %68 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %64, i64 0, i32 2
-  %69 = load i8*, i8** %68, align 8
+  %69 = load i8*, i8** %68, align 8, !alias.scope !3, !noalias !4
   %70 = bitcast i8* %69 to %struct.Node**
   %71 = getelementptr inbounds %struct.Node*, %struct.Node** %70, i64 0
-  %72 = load %struct.Node*, %struct.Node** %71, align 8
+  %72 = load %struct.Node*, %struct.Node** %71, align 8, !alias.scope !4, !noalias !3
   store %struct.Node* %72, %struct.Node** %x0.addr, align 8
   %73 = load %struct.Node*, %struct.Node** %x0.addr, align 8
   %74 = icmp eq %struct.Node* %73, null
@@ -317,7 +317,7 @@ bounds.ok.1:
   call void @amrit_print(i8* %75)
   %76 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
   %77 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %76, i64 0, i32 0
-  %78 = load i64, i64* %77, align 8
+  %78 = load i64, i64* %77, align 8, !alias.scope !3, !noalias !4
   %79 = icmp ult i64 1, %78
   br i1 %79, label %bounds.ok.2, label %bounds.fail.2
 
@@ -327,10 +327,10 @@ bounds.fail.2:
 
 bounds.ok.2:
   %80 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %76, i64 0, i32 2
-  %81 = load i8*, i8** %80, align 8
+  %81 = load i8*, i8** %80, align 8, !alias.scope !3, !noalias !4
   %82 = bitcast i8* %81 to %struct.Node**
   %83 = getelementptr inbounds %struct.Node*, %struct.Node** %82, i64 1
-  %84 = load %struct.Node*, %struct.Node** %83, align 8
+  %84 = load %struct.Node*, %struct.Node** %83, align 8, !alias.scope !4, !noalias !3
   store %struct.Node* %84, %struct.Node** %x1.addr, align 8
   %85 = load %struct.Node*, %struct.Node** %x1.addr, align 8
   %86 = icmp ne %struct.Node* %85, null
@@ -362,3 +362,9 @@ attributes #3 = { nounwind }
 attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #5 = { nounwind noreturn cold }
 attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}

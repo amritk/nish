@@ -163,7 +163,9 @@ ninety-second map; the table below is the inventory.
 | Docs: the normative reference, the regenerated IR cookbook, the architecture, the FAQ, install, and one design note per package | done (WP11) | `docs/` |
 
 Measured today: `examples/hello.ts` links to 4,696 bytes at the `size` profile
-and `runtime.c` costs 2,544 of its 4,096-byte `.text` budget
+and `runtime.c` costs 3,852 of its 4,096-byte `.text` budget, beside 9,920
+bytes of `.rodata` that Ryu's tables dominate and that only a binary formatting
+a double links (WP15 §7a)
 (`docs/wp14-selfhost.md` §7a); the benchmark binaries are 5.5-12 KB against
 14.5 KB for the C twins and 349-377 KB for the Rust ones
 ([BENCHMARKS.md](BENCHMARKS.md)). stage1 compiles the same programs about

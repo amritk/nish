@@ -191,9 +191,11 @@ a layout smoke test.
 
 ### Runtime symbols
 
-`runtime/runtime.c` (2,544 bytes of `.text` at `-Oz` against the
-MASTER_PLAN.md §2 budget of 4 KB, from 12,707 bytes of source; measure with
-`clang -Oz -c runtime/runtime.c && size -A runtime.o`) provides, in the order
+`runtime/runtime.c` (3,852 bytes of `.text` at `-Oz` against the
+MASTER_PLAN.md §2 budget of 4 KB, plus 9,920 bytes of `.rodata` that is almost
+all Ryu's two power-of-five tables; measure with
+`clang -Oz -c runtime/runtime.c && size -A runtime.o`, or
+`scripts/size-report.sh`, which reports both rows) provides, in the order
 of `RUNTIME_FUNCTIONS`:
 
 | Symbol | Purpose |
@@ -271,6 +273,7 @@ it.
 | `nocapture` | strings: `!escaping`; pointers: `!captured` after the fixpoint | `classifyUse`: a use is harmless when consumed on the spot (operator operand, condition, `.length` receiver, template hole that concatenates, runtime builtin argument, all declared `nocapture`); it escapes when returned, stored, aliased, pushed, or passed to a capturing user function. Strings passed to a user function always escape (no fixpoint for strings). |
 | runtime `declare` attributes | from `RUNTIME_FUNCTIONS` | Written next to each symbol in `runtime.ts`; intrinsics carry a subset of what LLVM itself attaches (`nounwind willreturn readnone`). |
 | `alwaysinline allocsize(0)` / `cold noinline allocsize(0)` | the inline allocator / `amrit_arena_grow` | The fast path must inline; the slow path must not. |
+| `!alias.scope` / `!noalias` (array accesses) | every load and store of an `amrit_array` header field, and every load and store of element data | The header's three fields and the `cap * sizeof(T)` of element storage never overlap, in any of the four shapes the compiler produces them: two arena bumps, two entry-block allocas (WP6), the `amrit_alloc_array` host entry (two bumps again), and `amrit_argv_init`'s single `malloc` block whose elements begin *after* the header. So an element store cannot reach a header field, nor the reverse. Strings are excluded — one block, length and bytes contiguous — and so are struct fields, for want of a measurement. WP15 §2b; the argument is written out in `emit/arrays.ts`. |
 
 `--plain` turns all of this off (and the alignment hints) and produces the
 bare Phase 1 IR, which is useful when comparing against hand-written IR.

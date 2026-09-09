@@ -271,7 +271,12 @@ export class DebugInfo {
    * instruction the emitter does not tie to a node still has one), and
    * describe the parameters with `llvm.dbg.value`.
    */
-  beginFunction(fn: IRFunction, sig: FunctionSig, options: { artificial?: boolean; name?: string } = {}): void {
+  beginFunction(
+    fn: IRFunction,
+    sig: FunctionSig,
+    privateAbi: boolean,
+    options: { artificial?: boolean; name?: string } = {}
+  ): void {
     const line = this.lineOf(sig.decl);
     // The artificial entry wrapper is `int main(int, char**)`; its parameters are not described.
     const types = options.artificial
@@ -295,7 +300,7 @@ export class DebugInfo {
       const variable = this.module.addMetadata(
         `!DILocalVariable(name: ${quote(p.name)}, arg: ${i + 1}, scope: ${this.subprogram}, file: ${this.file}, line: ${line}, type: ${this.abiTypeRef(p.type)}${flags})`
       );
-      fn.emit(`call void @llvm.dbg.value(metadata ${llvmAbiType(p.type)} %${p.name}, metadata ${variable}, metadata !DIExpression())`);
+      fn.emit(`call void @llvm.dbg.value(metadata ${llvmAbiType(p.type, privateAbi)} %${p.name}, metadata ${variable}, metadata !DIExpression())`);
     });
   }
 

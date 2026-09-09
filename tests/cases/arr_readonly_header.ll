@@ -14,16 +14,16 @@ entry:
 forof.cond:
   %0 = load i64, i64* %forof.idx, align 8
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
   %3 = icmp ult i64 %0, %2
   br i1 %3, label %forof.body, label %forof.end
 
 forof.body:
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
-  %5 = load i8*, i8** %4, align 8
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
   store i32 %8, i32* %x.addr, align 4
   %9 = load i32, i32* %total.addr, align 4
   %10 = load i32, i32* %x.addr, align 4
@@ -51,7 +51,7 @@ entry:
 while.cond:
   %0 = load i32, i32* %i.addr, align 4
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
   %3 = trunc i64 %2 to i32
   %4 = icmp slt i32 %0, %3
   br i1 %4, label %while.body, label %while.end
@@ -60,7 +60,7 @@ while.body:
   %5 = load i32, i32* %i.addr, align 4
   %6 = sext i32 %5 to i64
   %7 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
-  %8 = load i64, i64* %7, align 8
+  %8 = load i64, i64* %7, align 8, !alias.scope !3, !noalias !4
   %9 = icmp ult i64 %6, %8
   br i1 %9, label %bounds.ok, label %bounds.fail
 
@@ -70,10 +70,10 @@ bounds.fail:
 
 bounds.ok:
   %10 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
-  %11 = load i8*, i8** %10, align 8
+  %11 = load i8*, i8** %10, align 8, !alias.scope !3, !noalias !4
   %12 = bitcast i8* %11 to i32*
   %13 = getelementptr inbounds i32, i32* %12, i64 %6
-  store i32 %v, i32* %13, align 4
+  store i32 %v, i32* %13, align 4, !alias.scope !4, !noalias !3
   %14 = load i32, i32* %i.addr, align 4
   %15 = add nsw i32 %14, 1
   store i32 %15, i32* %i.addr, align 4
@@ -86,3 +86,9 @@ while.end:
 attributes #0 = { nounwind willreturn readonly }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind noreturn cold }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}

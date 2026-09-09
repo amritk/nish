@@ -48,6 +48,7 @@ import {
   K_ARRAY,
   K_NULLABLE,
   K_RESULT,
+  RESULT_PAIR,
   RESULT_PAYLOAD_SHIFT,
   T_BOOL,
   T_F32,
@@ -330,8 +331,72 @@ export function unpackResult(emitter: Emitter, type: i32, word: string, stack: b
  * unpack. The finished `call` text is handed in, because who builds the
  * operand list differs between a plain call and a method call.
  */
-export function emitResultReturningCall(emitter: Emitter, call: string, type: i32, site: Node): string {
-  const word = emitter.fn.emitValue(call);
+/**
+ * Whether `sig` may use the private two-scalar `Result` ABI rather than the
+ * packed word. The condition is exactly the one that decides `internal`
+ * linkage in `emit.ts`, and the two must not drift: the private shape is safe
+ * only because no host can name the symbol. An imported function is exported
+ * by definition, so a cross-module call is always packed.
+ */
+export function privateResultAbi(emitter: Emitter, exported: boolean): boolean {
+  return emitter.opts.strictExports && !exported;
+}
+
+/**
+ * Split the packed word into the pair at a boundary using the private ABI.
+ * The word is still built exactly as the packed ABI builds it: LLVM folds the
+ * round trip away entirely, and keeping one packing path is worth more than
+ * the instructions this appears to cost (`src/codegen/emit/result.ts`).
+ */
+export function resultWordToPair(emitter: Emitter, word: string): string {
+  const tag = emitter.fn.emitValue(`trunc i64 ${word} to i1`);
+  const high = emitter.fn.emitValue(`lshr i64 ${word}, ${RESULT_PAYLOAD_SHIFT}`);
+  const payload = emitter.fn.emitValue(`trunc i64 ${high} to i32`);
+  const withTag = emitter.fn.emitValue(`insertvalue ${RESULT_PAIR} undef, i1 ${tag}, 0`);
+  return emitter.fn.emitValue(`insertvalue ${RESULT_PAIR} ${withTag}, i32 ${payload}, 1`);
+}
+
+/** The inverse, on the other side of the same boundary. */
+export function resultPairToWord(emitter: Emitter, pair: string): string {
+  const tag = emitter.fn.emitValue(`extractvalue ${RESULT_PAIR} ${pair}, 0`);
+  const payload = emitter.fn.emitValue(`extractvalue ${RESULT_PAIR} ${pair}, 1`);
+  const wide = emitter.fn.emitValue(`zext i32 ${payload} to i64`);
+  const shifted = emitter.fn.emitValue(`shl i64 ${wide}, ${RESULT_PAYLOAD_SHIFT}`);
+  const low = emitter.fn.emitValue(`zext i1 ${tag} to i64`);
+  return emitter.fn.emitValue(`or i64 ${shifted}, ${low}`);
+}
+
+/** A by-value `Result` argument, in whichever ABI the callee uses. */
+export function emitResultArgument(emitter: Emitter, want: i32, value: string, privateAbi: boolean): string {
+  if (privateAbi && emitter.table.resultByValue(want)) {
+    return resultWordToPair(emitter, value);
+  }
+  return value;
+}
+
+/** `ret` a by-value `Result`, in whichever ABI the enclosing function uses. */
+export function emitResultReturn(emitter: Emitter, word: string): void {
+  // Only a local narrows, so the enclosing signature is bound before it is read.
+  const sig = emitter.currentSig;
+  if (sig === null) {
+    process.exit(internalError("emitter: a `Result` return outside a function"));
+  }
+  if (!privateResultAbi(emitter, sig.exported)) {
+    emitter.fn.emit(`ret i64 ${word}`);
+    return;
+  }
+  emitter.fn.emit(`ret ${RESULT_PAIR} ${resultWordToPair(emitter, word)}`);
+}
+
+export function emitResultReturningCall(
+  emitter: Emitter,
+  call: string,
+  type: i32,
+  site: Node,
+  privateAbi: boolean
+): string {
+  const returned = emitter.fn.emitValue(call);
+  const word = privateAbi ? resultPairToWord(emitter, returned) : returned;
   return unpackResult(emitter, type, word, emitter.isStackSite(site));
 }
 
@@ -381,7 +446,7 @@ function emitOrReturn(emitter: Emitter, expr: Node, receiver: i32): string {
   if (emitter.table.resultByValue(returnType)) {
     const word = packArm(emitter, returnType, false, error, true);
     emitter.emitScopeExit();
-    emitter.fn.emit(`ret i64 ${word}`);
+    emitResultReturn(emitter, word);
   } else {
     const propagated = construct(emitter, returnType, false, error, true, null);
     emitter.emitScopeExit();

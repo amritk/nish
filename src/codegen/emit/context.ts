@@ -63,6 +63,12 @@ export interface EmitContext {
   declareType(text: string): void;
   /** Add a module-level global (`@amrit_argv = external global ...`); duplicates are ignored. */
   declareGlobal(text: string): void;
+  /**
+   * Intern a module metadata node and return its `!N` reference. Identical
+   * texts share a node, so a scope list built once per access site still costs
+   * one node per module (see `aliasDomains` in emit/arrays.ts).
+   */
+  metadata(text: string): string;
 
   /**
    * WP6: the allocation expression (`new`, object literal, array literal,

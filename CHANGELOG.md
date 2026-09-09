@@ -7,6 +7,128 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ## [Unreleased]
 
+### Fixed — correctness
+
+- **`String(x)` on a double printed seventeen digits where sixteen suffice, for
+  about one value in twenty thousand.** The language's rule is that number
+  formatting matches JavaScript's `String(x)`, which prints the *fewest* digits
+  that read back as the same double. The old search asked `snprintf` for k
+  digits and `strtod` whether they round-trip, increasing k until they did —
+  but `snprintf` can only hand back the *correctly-rounded* k-digit string, and
+  for some values that one does not round-trip while a neighbouring k-digit
+  string does. The search then gave up on k and moved on.
+
+  `7.120236347223045e-307` is such a value: Node prints those sixteen digits,
+  `amritc` printed `7.1202363472230444e-307`. So did `runtime/shim.mjs`
+  disagree with the native runtime, since the shim delegates to JavaScript's
+  own `String`. Ryu (below) finds the shortest string rather than the rounded
+  one, and `tests/cases/f64_shortest_digits` pins four such values against
+  Node's output alongside `0.1`, `1e21` and `5e-324`.
+
+### Changed
+
+- **`s.indexOf(sub)` is about 17x faster: 53.7 ms to 2.9 ms over 52 MB of
+  haystack (WP15).** The search was emitted inline, one `amrit_str_at` probe
+  per offset, so that `runtime.c` stayed inside its size budget — which made
+  the idiomatic string search a byte-at-a-time scan. It is now
+  `amrit_str_index_of` in the runtime, where `memchr` finds a candidate first
+  byte and `memcmp` confirms it, both the libc's vectorised routines. Every
+  call site *shrinks*, since thirty lines of loop become one call, and
+  `runtime.c`'s `.text` goes from 3,852 to 4,002 bytes, still inside the 4 KB
+  budget.
+
+  `memmem` would be 2.5 ms and is deliberately not used: it needs
+  `_GNU_SOURCE`, which makes glibc's `<string.h>` pull in `<strings.h>` — and
+  this project generates a header of that name from `examples/strings.ts`, so
+  any `-I` at it shadows the POSIX header and drags `amritc.h` into
+  `runtime.c`. The interop tests caught exactly that. A C host would hit the
+  same, and a fifth of the time is not worth making the runtime sensitive to
+  its includer's include path.
+
+  The semantics are unchanged: an empty needle answers 0, a needle longer than
+  the haystack -1, and the offset is in bytes (`tests/cases/str_search`, and
+  eleven cases in `tests/runtime_test.c`).
+
+- **A non-exported function passes a small `Result` as two values instead of
+  one packed word: `bench/result` goes from 650 ms to 464 ms (WP15).**
+  `Result<T, E>` with two small scalar payloads has travelled in a single
+  `i64` since WP17, because that is what a C or wasm host has to see. Inside a
+  module no host is looking, and the word costs something real there: with both
+  halves in one register the `select` that picks the live arm happens on the
+  word, and instcombine can no longer fold the arithmetic around it. A function
+  that gets `internal` linkage now uses `{ i1, i32 }` instead — rustc's
+  `ScalarPair` — which puts us at C's 444 ms rather than 1.46x behind it.
+
+  **The condition is the linkage condition**: `--strict-exports` on and the
+  function not exported, the same test that writes `internal`. The private
+  shape is safe only because no host can name the symbol, so
+  `--no-strict-exports` turns it off along with the linkage it mirrors, and an
+  imported function — exported by definition — is always packed, which is how
+  two modules agree without consulting each other. `--emit-header`,
+  `--emit-dts` and `--emit-napi` describe exported functions only and are
+  unchanged; `tests/cases/res_export` still emits `i64` for all four shapes.
+
+  The packing code did not move: the word is still built exactly as before and
+  split at the boundary. LLVM folds the round trip away, and a hand-written
+  two-scalar lowering measures 467 ms against this 464 — the same, within
+  noise — so one packing path was worth keeping. `docs/wp17-result-abi.md` §4
+  has the four-way table.
+
+- **Formatting a double is 35x faster: 2557 ns to 72 ns (WP15).**
+  `amrit_str_from_f64` used up to seventeen `snprintf`/`strtod` round trips to
+  find the shortest digits; it now computes them directly with Ryu (Adams,
+  PLDI 2018). The ECMAScript layout around the digits — where the point goes,
+  when to use e-form — is unchanged, so only the digit generation moved.
+
+  **This costs binary size, and the size lands only on programs that use it.**
+  The two power-of-five tables are 9,888 bytes of read-only data, generated
+  with exact integer arithmetic rather than transcribed. `runtime.c`'s `.text`
+  goes from 2,775 to 3,852 bytes, still inside the 4 KB budget of
+  `docs/MASTER_PLAN.md` §2; its `.rodata` goes from 32 bytes to 9,920. Section
+  GC keeps the tables out of any binary that never formats a double, so
+  `bench/fib` is unchanged at 5,600 bytes while `bench/nbody` goes from 10,856
+  to 21,168.
+
+  Validated against the ECMAScript rule itself rather than against the code it
+  replaces — the digits round-trip, no shorter string round-trips, and no
+  same-length string is closer — over 20.9 million values: every finite
+  exponent with boundary and random mantissas, the powers of ten, and uniform
+  random bit patterns. Zero violations. The same harness finds 46 violations
+  per 1.4 million in the old implementation, which is the bug above.
+
+- **`scripts/size-report.sh` measures the section the budget is about.** §2
+  defines the runtime budget as `runtime.c`'s `.text` at `-Oz`, but the script
+  reported the `text` *column* of `size`, which also counts `.rodata` and the
+  `.eh_frame` entries the size profile strips. That row therefore read 4,696
+  against a 4,096 budget while the section it names was at 2,775. It now
+  reports `.text` against the budget and `.rodata` on its own row.
+
+- **An array's header and its elements are separate alias domains, which is
+  worth 1.6x on a loop that writes elements (WP15).** Every load and store of a
+  `%struct.amrit_array` field now carries `!alias.scope`/`!noalias` naming a
+  "header" scope, and every load and store of element data the matching
+  "elements" scope. Nothing about the language changes — no flag, no syntax, no
+  observable behaviour — but LLVM stops having to assume that `a[i] = v` might
+  land on some array's `len` or `data`.
+
+  What that assumption cost: the header was reloaded on *every iteration* of
+  every loop that writes an element, because LICM could not hoist a load the
+  store might clobber, and the loop vectoriser gave up behind it. On
+  `dst[i] = src[i] * 2.0` over 8192 doubles, `--profile speed`, the reload alone
+  measured **1205 ms against 763 ms**.
+
+  The proof is about bytes rather than allocations: a header's three fields and
+  the `cap * sizeof(T)` of element storage never overlap, in any of the four
+  shapes the compiler produces them (an arena bump each, two entry-block
+  allocas under WP6, or — for `process.argv` alone — one `malloc` block whose
+  elements start after the header). `src/codegen/emit/arrays.ts` carries the
+  full argument beside the code. Strings are left alone: a string is one block
+  whose length and bytes are contiguous, so it has no such split to describe.
+
+  `tests/cases/arr_alias_domains` pins the consequence a golden cannot express
+  — after `opt -O2` no header load is left inside the loop — and 39 array
+  goldens grew the metadata. `--plain` emits none of it.
+
 ### Changed — BREAKING
 
 - **Signed integer overflow is now undefined behaviour. The documented
