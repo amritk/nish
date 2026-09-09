@@ -5,9 +5,9 @@
  * construct module can depend on this one.
  */
 import ts from "typescript";
-import { CheckedProgram } from "../../checker";
-import { StaticType } from "../../types";
-import { EmitContext } from "./context";
+import { CheckedProgram } from "../../checker/index.js";
+import { StaticType } from "../../types.js";
+import { EmitContext } from "./context.js";
 
 export interface BuiltinCall {
   emit: (ctx: EmitContext, expr: ts.CallExpression) => string;

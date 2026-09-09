@@ -49,7 +49,7 @@
  * JavaScript's modulo-2^32 `ToInt32`. The unsigned targets use `fptoui.sat`,
  * whose clamp is to `0 .. 2^bits-1`, so a negative double becomes 0.
  */
-import { CheckedProgram } from "../../checker";
+import { CheckedProgram } from "../../checker/index.js";
 import {
   F32,
   F64,
@@ -65,9 +65,9 @@ import {
   isInteger,
   isUnsigned,
   llvmType,
-} from "../../types";
-import { BuiltinCall, BuiltinProperty, f64Constant } from "./builtins";
-import { EmitContext } from "./context";
+} from "../../types.js";
+import { BuiltinCall, BuiltinProperty, f64Constant } from "./builtins.js";
+import { EmitContext } from "./context.js";
 
 // ---- Math.* -----------------------------------------------------------------------
 

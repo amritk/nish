@@ -25,13 +25,14 @@
  * The cases are `tests/self/cases.txt`, read by both sides, so the two can
  * never drift onto different inputs.
  */
-const fs = require("node:fs");
-const path = require("node:path");
-const { spawnSync } = require("node:child_process");
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const root = path.resolve(__dirname, "..", "..");
-const { escapeBytes } = require(path.join(root, "dist", "codegen", "emit", "strings.js"));
-const { f32Constant, f64Constant } = require(path.join(root, "dist", "codegen", "emit", "builtins.js"));
+const root = path.resolve(import.meta.dirname, "..", "..");
+const { escapeBytes } = await import(pathToFileURL(path.join(root, "dist", "codegen", "emit", "strings.js")).href);
+const { f32Constant, f64Constant } = await import(pathToFileURL(path.join(root, "dist", "codegen", "emit", "builtins.js")).href);
 
 const CASES = path.join(root, "tests", "self", "cases.txt");
 
@@ -229,5 +230,5 @@ function main(argv) {
   return differing.length === 0 ? 0 : 1;
 }
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { expected, build };
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+export { expected, build };

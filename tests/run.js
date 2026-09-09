@@ -15,11 +15,14 @@
  *  B. Pipeline checks: runtime.c unit test, inline allocator vs C arena layout,
  *     size and wasm build profiles, Node wasm host.
  */
-const { execFileSync, spawnSync } = require("node:child_process");
-const fs = require("node:fs");
-const path = require("node:path");
+import { execFileSync, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 
-const root = path.resolve(__dirname, "..");
+const root = path.resolve(import.meta.dirname, "..");
 const cli = path.join(root, "dist", "index.js");
 const casesDir = path.join(root, "tests", "cases");
 const buildDir = path.join(root, "build", "test");
@@ -1111,7 +1114,7 @@ if (!only || "interop".includes(only)) {
   fs.mkdirSync(interopDir, { recursive: true });
   const runtimeDir = path.join(root, "runtime");
   const publicHeader = fs.readFileSync(path.join(runtimeDir, "amritc.h"), "utf8");
-  const { RUNTIME_FUNCTIONS } = require(path.join(root, "dist", "codegen", "runtime.js"));
+  const { RUNTIME_FUNCTIONS } = await import(pathToFileURL(path.join(root, "dist", "codegen", "runtime.js")).href);
   const runtimeNames = [
     ...RUNTIME_FUNCTIONS.filter((f) => !f.intrinsic).map((f) => f.name),
     "amrit_alloc_struct",
@@ -2194,7 +2197,7 @@ if (!only || "interop".includes(only)) {
 // validator is timed. Budget in docs/MASTER_PLAN.md is 5 ms; the gate is 50 ms for CI headroom.
 if (!only) {
   const ts = require("typescript");
-  const { validateSyntax } = require(path.join(root, "dist", "validator.js"));
+  const { validateSyntax } = await import(pathToFileURL(path.join(root, "dist", "validator.js")).href);
   const lines = [];
   for (let i = 0; lines.length < 1000; i++) {
     const callee = i === 0 ? "fn0" : `fn${i - 1}`;
@@ -3481,7 +3484,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
 // reported but do not fail. A 10-program fuzz batch with a fixed seed runs too; the seed
 // is printed so a failure reproduces with `node tests/differential/fuzz.js --seed <s> --count 1`.
 if ((!only || "differential".includes(only)) && HAS_CLANG) {
-  const diffRunner = path.join(__dirname, "differential", "run.js");
+  const diffRunner = path.join(import.meta.dirname, "differential", "run.js");
   const d = spawnSync("node", [diffRunner, "--quick"], { cwd: root, encoding: "utf8" });
   const summary = (
     d.stdout
@@ -3502,7 +3505,7 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
   // rewritten, so only the divergences listed in the runner may differ — they
   // live in the operators and the object model, where a prelude cannot reach.
   // docs/RUN_UNDER_NODE.md states the overlap.
-  const u = spawnSync("node", [path.join(__dirname, "differential", "unmodified.js")], {
+  const u = spawnSync("node", [path.join(import.meta.dirname, "differential", "unmodified.js")], {
     cwd: root,
     encoding: "utf8",
   });
@@ -3515,7 +3518,7 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
   const fuzzSeed = 20260906;
   const f = spawnSync(
     "node",
-    [path.join(__dirname, "differential", "fuzz.js"), "--seed", String(fuzzSeed), "--count", "10"],
+    [path.join(import.meta.dirname, "differential", "fuzz.js"), "--seed", String(fuzzSeed), "--count", "10"],
     { cwd: root, encoding: "utf8" }
   );
   const fuzzSummary =

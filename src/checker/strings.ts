@@ -24,21 +24,21 @@
  *     same on stderr (WP14 B2), which is where a compiler's diagnostics go.
  */
 import ts from "typescript";
-import { BOOL, F64, I32, STRING, StaticType, VOID, isNumeric, sameType, typeToString } from "../types";
-import { checkArgumentType, checkArity } from "./builtins";
-import { methodCallCheckers } from "./members";
-import { BuiltinCallChecker, dottedName } from "./builtins";
-import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context";
-import { arenaBuiltinCalls } from "./arena";
-import { namespaceProperties, propertyCheckers } from "./members";
-import { checkNullableComparison } from "./nullable";
-import { ioBuiltinCalls } from "./io";
-import { mathBuiltinCalls, mathBuiltinProperties } from "./math";
-import { Scope } from "./scope";
-import { lookup } from "../lookup";
+import { BOOL, F64, I32, STRING, StaticType, VOID, isNumeric, sameType, typeToString } from "../types.js";
+import { checkArgumentType, checkArity } from "./builtins.js";
+import { methodCallCheckers } from "./members.js";
+import { BuiltinCallChecker, dottedName } from "./builtins.js";
+import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context.js";
+import { arenaBuiltinCalls } from "./arena.js";
+import { namespaceProperties, propertyCheckers } from "./members.js";
+import { checkNullableComparison } from "./nullable.js";
+import { ioBuiltinCalls } from "./io.js";
+import { mathBuiltinCalls, mathBuiltinProperties } from "./math.js";
+import { Scope } from "./scope.js";
+import { lookup } from "../lookup.js";
 
-export { dottedName } from "./builtins";
-export type { BuiltinCallChecker } from "./builtins";
+export { dottedName } from "./builtins.js";
+export type { BuiltinCallChecker } from "./builtins.js";
 
 /** Types that can be turned into text: template holes and `console.log` arguments. */
 export function isStringifiable(t: StaticType): boolean {

@@ -24,13 +24,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { CheckedProgram, Checker, FunctionSig, ImportBinding, StructInfo } from "./checker";
-import { FunctionFacts, analyzeFunctions } from "./codegen/attributes";
-import { emitProgram } from "./codegen/emitter";
-import { CompileError, DiagnosticSink } from "./diagnostics";
-import { parseSource } from "./parser";
-import { validateSyntax } from "./validator";
-import { CompilerOptions, DEFAULT_OPTIONS } from "./types";
+import { CheckedProgram, Checker, FunctionSig, ImportBinding, StructInfo } from "./checker/index.js";
+import { FunctionFacts, analyzeFunctions } from "./codegen/attributes.js";
+import { emitProgram } from "./codegen/emitter.js";
+import { CompileError, DiagnosticSink } from "./diagnostics.js";
+import { parseSource } from "./parser.js";
+import { validateSyntax } from "./validator.js";
+import { CompilerOptions, DEFAULT_OPTIONS } from "./types.js";
 
 export interface ModuleUnit {
   /** Absolute path: the module's identity. */

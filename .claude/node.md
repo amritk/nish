@@ -10,8 +10,8 @@ would.
 - Use `node <file>` to run scripts, `npm install` / `npm ci` to install, and
   `npm run <script>` to run scripts. Do not introduce `bun`, `bunx`, `pnpm` or
   `yarn` anywhere, including in docs and CI.
-- `dist/` is what `tsc` wrote (`npm run build`), CommonJS, no bundler. The CLI
-  entry is `dist/index.js`; `tests/run.js` spawns it the way a user's shell
+- `dist/` is what `tsc` wrote (`npm run build`), **ES modules**, no bundler. The
+  CLI entry is `dist/index.js`; `tests/run.js` spawns it the way a user's shell
   would, so a change to the CLI surface is tested end to end.
 - The only runtime dependency is `typescript`. Adding a second one is a
   design decision to raise in the PR, not a convenience.

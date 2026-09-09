@@ -23,12 +23,13 @@
  * has parsed them; for stage1 to give the same message, this parser will have
  * to read them and turn them down itself.
  */
-const fs = require("node:fs");
-const path = require("node:path");
-const { spawnSync } = require("node:child_process");
-const ts = require("typescript");
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import ts from "typescript";
+import { fileURLToPath } from "node:url";
 
-const root = path.resolve(__dirname, "..");
+const root = path.resolve(import.meta.dirname, "..");
 
 /** Byte offset of every UTF-16 index, so the two trees can be compared. */
 function byteOffsets(source) {
@@ -645,5 +646,5 @@ function main(argv) {
   return failed.length === 0 ? 0 : 1;
 }
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { printTypeScriptTree, compare, corpus, build };
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+export { printTypeScriptTree, compare, corpus, build };

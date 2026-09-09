@@ -4,17 +4,17 @@
  * process pool, and the known-failures list. Used by run.js, fuzz.js, and the
  * WP13 block of tests/run.js.
  */
-const { spawn, spawnSync } = require("node:child_process");
-const fs = require("node:fs");
-const path = require("node:path");
-const { rewriteProgram } = require("./rewrite");
+import { spawn, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { rewriteProgram } from "./rewrite.js";
 
-const root = path.resolve(__dirname, "..", "..");
+const root = path.resolve(import.meta.dirname, "..", "..");
 const cli = path.join(root, "dist", "index.js");
 const casesDir = path.join(root, "tests", "cases");
-const corpusDir = path.join(__dirname, "corpus");
+const corpusDir = path.join(import.meta.dirname, "corpus");
 const buildDir = path.join(root, "build", "test", "differential");
-const knownFile = path.join(__dirname, "known-failures.txt");
+const knownFile = path.join(import.meta.dirname, "known-failures.txt");
 
 const RUN_TIMEOUT_MS = 30_000;
 
@@ -175,7 +175,10 @@ function describeMismatch(r) {
   return lines.join("\n");
 }
 
-module.exports = {
+/** Whether clang is on PATH; the toolchain-dependent checks skip rather than fail without it. */
+const hasClang = () => spawnSync("which", ["clang"]).status === 0;
+
+export {
   root,
   buildDir,
   knownFile,
@@ -186,5 +189,5 @@ module.exports = {
   describeMismatch,
   summarize,
   numberModeOf,
-  hasClang: () => spawnSync("which", ["clang"]).status === 0,
+  hasClang,
 };

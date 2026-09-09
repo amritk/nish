@@ -34,17 +34,17 @@
  * constructs call (for the purity fixpoint) and that `.length` reads memory.
  */
 import ts from "typescript";
-import { CheckedProgram } from "../../checker";
-import { dottedName } from "../../checker/builtins";
-import { STRING, StaticType, isFloat, isUnsigned, llvmType } from "../../types";
-import { IRModule } from "../ir";
-import { arenaBuiltinCallEmitters } from "./arena";
-import { BuiltinCall } from "./builtins";
-import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, intOpcode } from "./context";
-import { emitIndex, emitNumberFromI64, emitRangeCheck } from "./arrays";
-import { isValueReceiver, methodCallEmitters, namespacePropertyEmitters, propertyEmitters } from "./members";
-import { ioBuiltinCallEmitters } from "./io";
-import { mathBuiltinCallEmitters, mathPropertyEmitters } from "./math";
+import { CheckedProgram } from "../../checker/index.js";
+import { dottedName } from "../../checker/builtins.js";
+import { STRING, StaticType, isFloat, isUnsigned, llvmType } from "../../types.js";
+import { IRModule } from "../ir.js";
+import { arenaBuiltinCallEmitters } from "./arena.js";
+import { BuiltinCall } from "./builtins.js";
+import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, intOpcode } from "./context.js";
+import { emitIndex, emitNumberFromI64, emitRangeCheck } from "./arrays.js";
+import { isValueReceiver, methodCallEmitters, namespacePropertyEmitters, propertyEmitters } from "./members.js";
+import { ioBuiltinCallEmitters } from "./io.js";
+import { mathBuiltinCallEmitters, mathPropertyEmitters } from "./math.js";
 
 // ---- Constants --------------------------------------------------------------------
 

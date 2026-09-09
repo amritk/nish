@@ -9,10 +9,10 @@
  * wrong attribute, so every emitter that touches memory must have one.
  */
 import ts from "typescript";
-import { CheckedProgram, LocalVar } from "../../checker";
-import { CompilerOptions, StaticType } from "../../types";
-import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
-import { lookup } from "../../lookup";
+import { CheckedProgram, LocalVar } from "../../checker/index.js";
+import { CompilerOptions, StaticType } from "../../types.js";
+import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context.js";
+import { lookup } from "../../lookup.js";
 
 export type PropertyEmitter = (ctx: EmitContext, expr: ts.PropertyAccessExpression, receiver: StaticType) => string;
 export type MethodCallEmitter = (ctx: EmitContext, expr: ts.CallExpression, receiver: StaticType) => string;

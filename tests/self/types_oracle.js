@@ -12,12 +12,13 @@
  * prints, and the assignability matrix are generated here from `dist/types.js`
  * over the same list of types, in the same order, and diffed.
  */
-const fs = require("node:fs");
-const path = require("node:path");
-const { spawnSync } = require("node:child_process");
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const root = path.resolve(__dirname, "..", "..");
-const types = require(path.join(root, "dist", "types.js"));
+const root = path.resolve(import.meta.dirname, "..", "..");
+const types = await import(pathToFileURL(path.join(root, "dist", "types.js")).href);
 
 /** The list `tests/self/types.ts` builds, in the order it builds it. */
 function buildTypes() {
@@ -144,5 +145,5 @@ function main(argv) {
   return differing.length === 0 ? 0 : 1;
 }
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { expected, build };
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+export { expected, build };

@@ -23,9 +23,9 @@
  * line, `#` comments). A listed program that now matches is reported as XPASS
  * and does not fail the run; remove it from the list.
  */
-const fs = require("node:fs");
-const os = require("node:os");
-const lib = require("./lib");
+import fs from "node:fs";
+import os from "node:os";
+import * as lib from "./lib.js";
 
 async function main(argv) {
   let only;

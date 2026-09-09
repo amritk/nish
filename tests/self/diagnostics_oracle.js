@@ -17,12 +17,13 @@
  * in UTF-16 code units and stage1 in bytes, which agree exactly there, and
  * `self/diagnostics.ts` says where they would not.
  */
-const fs = require("node:fs");
-const path = require("node:path");
-const { spawnSync } = require("node:child_process");
-const ts = require("typescript");
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import ts from "typescript";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const root = path.resolve(__dirname, "..", "..");
+const root = path.resolve(import.meta.dirname, "..", "..");
 const {
   CompileError,
   DiagnosticSink,
@@ -30,7 +31,7 @@ const {
   allErrors,
   diagnosticJson,
   formatErrorReport,
-} = require(path.join(root, "dist", "diagnostics.js"));
+} = await import(pathToFileURL(path.join(root, "dist", "diagnostics.js")).href);
 
 const FIXTURE = path.join(root, "tests", "self", "diagnostics_fixture.txt");
 const SECOND = path.join(root, "tests", "self", "diagnostics_second.txt");
@@ -152,5 +153,5 @@ function main(argv) {
   return differing.length === 0 ? 0 : 1;
 }
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { expected, build };
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+export { expected, build };

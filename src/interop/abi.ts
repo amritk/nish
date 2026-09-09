@@ -7,12 +7,12 @@
  * and signatures that ended up in the IR. Nothing here mutates the program.
  */
 import path from "node:path";
-import { CLI } from "../branding";
-import { FunctionSig } from "../checker";
-import { FunctionFacts, analyzeFunctions } from "../codegen/attributes";
-import { Compilation, ModuleUnit } from "../compilation";
-import { ResultType, StaticType, isReadonlyArray, resultByValue, resultStructName } from "../types";
-import { ResultLayout, resultLayout, resultTypesIn } from "../checker/result";
+import { CLI } from "../branding.js";
+import { FunctionSig } from "../checker/index.js";
+import { FunctionFacts, analyzeFunctions } from "../codegen/attributes.js";
+import { Compilation, ModuleUnit } from "../compilation.js";
+import { ResultType, StaticType, isReadonlyArray, resultByValue, resultStructName } from "../types.js";
+import { ResultLayout, resultLayout, resultTypesIn } from "../checker/result.js";
 
 export interface ExternalFunction {
   sig: FunctionSig;

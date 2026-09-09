@@ -7,7 +7,9 @@ LLVM toolchain.
 
 ## 1. Prerequisites
 
-- **Node.js 18 or newer** (22 is what CI uses).
+- **Node.js 22.18 or newer** (22 is what CI uses). That is the version where
+  Node strips TypeScript types without a flag, which the compiler is written in
+  and `docs/RUN_UNDER_NODE.md` relies on.
 - **clang** (LLVM 18 recommended) and **lld**, for `--link`. Without them
   `amritc` still writes the `.ll` files and exits 3 with the install
   command for your platform when you ask for `--link`.

@@ -18,11 +18,12 @@
  * node tests/differential/unmodified.js --verbose  # with the diffs
  * ```
  */
-const { spawnSync } = require("node:child_process");
-const fs = require("node:fs");
-const path = require("node:path");
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = path.resolve(__dirname, "..", "..");
+const root = path.resolve(import.meta.dirname, "..", "..");
 const cli = path.join(root, "dist", "index.js");
 const prelude = path.join(root, "runtime", "amritscript.mjs");
 const work = path.join(root, "build", "test", "unmodified");
@@ -74,22 +75,14 @@ function native({ name, source }) {
 }
 
 /**
- * Run the same source under Node with nothing rewritten.
- *
- * The copy is not cosmetic: this repository's package.json says
- * `"type": "commonjs"`, so a `.ts` file inside it is loaded as CommonJS and its
- * `export function main` is a syntax error before type stripping ever runs. The
- * program is copied under a work directory carrying `{"type": "module"}` so
- * that Node reads it the way a consumer of this language would — as an ES
- * module. Nothing about the source itself changes.
+ * Run the same source under Node with nothing rewritten — in place, from the
+ * directory it lives in, which is the whole point. (It used to be copied into a
+ * scratch directory carrying `{"type": "module"}`, because the package was
+ * CommonJS and an in-tree `.ts` was read as CommonJS too, making its
+ * `export function main` a syntax error before type stripping ever ran.)
  */
-function unmodified({ name, source }) {
-  const dir = path.join(work, "esm");
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(work, "package.json"), '{ "type": "module" }\n');
-  const copy = path.join(dir, `${name}.ts`);
-  fs.copyFileSync(source, copy);
-  const entry = `const m = await import(${JSON.stringify(copy)}); process.exit(m.main());`;
+function unmodified({ source }) {
+  const entry = `const m = await import(${JSON.stringify(source)}); process.exit(m.main());`;
   const ran = spawnSync(
     "node",
     ["--experimental-strip-types", "--no-warnings", "--import", prelude, "-e", entry],
@@ -134,9 +127,9 @@ function runUnmodified({ verbose = false } = {}) {
   };
 }
 
-module.exports = { runUnmodified };
+export { runUnmodified };
 
-if (require.main === module) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const result = runUnmodified({ verbose: process.argv.includes("--verbose") });
   console.log(result.summary);
   if (!result.ok) console.error(result.detail);

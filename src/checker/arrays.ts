@@ -36,7 +36,7 @@ import {
   resolveTypeNode,
   sameType,
   typeToString,
-} from "../types";
+} from "../types.js";
 import {
   BinaryChecker,
   CheckContext,
@@ -44,14 +44,14 @@ import {
   ExpressionChecker,
   LoopInfo,
   StatementChecker,
-} from "./context";
-import { checkBitwiseAssignOperands, isBitwiseCompoundOperator } from "./bitwise";
-import { checkArgumentType, checkArity } from "./builtins";
-import { structOf } from "./classes";
-import { isValueReceiver, methodCallCheckers, newCheckers, propertyCheckers } from "./members";
-import { invalidateNarrowings } from "./narrowing";
-import { LocalVar } from "./program";
-import { Scope } from "./scope";
+} from "./context.js";
+import { checkBitwiseAssignOperands, isBitwiseCompoundOperator } from "./bitwise.js";
+import { checkArgumentType, checkArity } from "./builtins.js";
+import { structOf } from "./classes.js";
+import { isValueReceiver, methodCallCheckers, newCheckers, propertyCheckers } from "./members.js";
+import { invalidateNarrowings } from "./narrowing.js";
+import { LocalVar } from "./program.js";
+import { Scope } from "./scope.js";
 
 /** Assignment operators that may target an element: `=` and the compound forms, numeric and bitwise. */
 export const ELEMENT_ASSIGNMENT_OPERATORS: readonly ts.SyntaxKind[] = [

@@ -22,9 +22,9 @@
  * keeps `readnone` and `willreturn` (`tests/cases/bit_attributes`).
  */
 import ts from "typescript";
-import { StaticType, intBits, isUnsigned, llvmType } from "../../types";
-import { BinaryEmitter, EmitContext, EmitterTable, UnaryEmitter } from "./context";
-import { loadLocal, storeLocal } from "./control-flow";
+import { StaticType, intBits, isUnsigned, llvmType } from "../../types.js";
+import { BinaryEmitter, EmitContext, EmitterTable, UnaryEmitter } from "./context.js";
+import { loadLocal, storeLocal } from "./control-flow.js";
 
 /** LLVM opcode per operator token; the compound form of an operator shares its row. */
 const BITWISE_OPCODES: Partial<Record<ts.SyntaxKind, string>> = {

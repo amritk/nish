@@ -13,10 +13,10 @@
  * and store them and `mem2reg` builds the loop phis later.
  */
 import ts from "typescript";
-import { LocalVar } from "../../checker";
-import { isAlwaysTrue } from "../../checker/control-flow";
-import { isFloat, llvmType } from "../../types";
-import { IRBlock } from "../ir";
+import { LocalVar } from "../../checker/index.js";
+import { isAlwaysTrue } from "../../checker/control-flow.js";
+import { isFloat, llvmType } from "../../types.js";
+import { IRBlock } from "../ir.js";
 import {
   BinaryEmitter,
   EmitContext,
@@ -26,8 +26,8 @@ import {
   StatementEmitter,
   UnaryEmitter,
   intOpcode,
-} from "./context";
-import { emitIntBinary } from "./arithmetic";
+} from "./context.js";
+import { emitIntBinary } from "./arithmetic.js";
 
 // ---- Branch helpers -----------------------------------------------------------
 

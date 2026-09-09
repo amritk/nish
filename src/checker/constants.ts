@@ -19,8 +19,8 @@
  * another whatever order the modules are checked in.
  */
 import ts from "typescript";
-import { CompileError } from "../diagnostics";
-import { BOOL, F64, I32, I64, STRING, StaticType, sameType, typeToString } from "../types";
+import { CompileError } from "../diagnostics.js";
+import { BOOL, F64, I32, I64, STRING, StaticType, sameType, typeToString } from "../types.js";
 
 /** The folded value of a module constant, always exactly one of four shapes. */
 export type ConstValue =

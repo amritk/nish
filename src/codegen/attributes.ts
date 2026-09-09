@@ -110,24 +110,24 @@
  * program (the Compilation rejects clashes), so one map suffices.
  */
 import ts from "typescript";
-import { CheckedProgram, FunctionSig, LocalVar, Param } from "../checker";
+import { CheckedProgram, FunctionSig, LocalVar, Param } from "../checker/index.js";
 import {
   baseConstruction,
   effectiveConstructor,
   intrinsicType,
   isAssignmentOperator,
-} from "../checker/classes";
-import { unwrapParens } from "../checker/control-flow";
-import { CompilerOptions, DEFAULT_OPTIONS, StaticType, resultByValue, stripNull } from "../types";
-import { arrayMethodName, isPushCall } from "./emit/arrays";
-import { CallSite, EscapeResult, analyzeEscapes } from "./escape";
-import { collectBuiltinFacts } from "./emit/expressions";
-import { factCollectors } from "./emit/members";
-import { resultLayout } from "../checker/result";
-import { isSpawnCall } from "./emit/io";
-import { isResultConstructorCall, resultMethodName } from "./emit/result";
-import { collectStringFacts, isStringMethodCall, unwrapStringPassthrough } from "./emit/strings";
-import { INLINE_ALLOCATOR_ATTRS, MemoryEffect, RUNTIME_BY_NAME } from "./runtime";
+} from "../checker/classes.js";
+import { unwrapParens } from "../checker/control-flow.js";
+import { CompilerOptions, DEFAULT_OPTIONS, StaticType, resultByValue, stripNull } from "../types.js";
+import { arrayMethodName, isPushCall } from "./emit/arrays.js";
+import { CallSite, EscapeResult, analyzeEscapes } from "./escape.js";
+import { collectBuiltinFacts } from "./emit/expressions.js";
+import { factCollectors } from "./emit/members.js";
+import { resultLayout } from "../checker/result.js";
+import { isSpawnCall } from "./emit/io.js";
+import { isResultConstructorCall, resultMethodName } from "./emit/result.js";
+import { collectStringFacts, isStringMethodCall, unwrapStringPassthrough } from "./emit/strings.js";
+import { INLINE_ALLOCATOR_ATTRS, MemoryEffect, RUNTIME_BY_NAME } from "./runtime.js";
 
 /** What a function does with one pointer-typed parameter: a struct (WP2, `this` included) or an array (WP4). */
 export interface PointerParamFacts {

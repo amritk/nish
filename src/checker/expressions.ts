@@ -7,29 +7,29 @@
  * `binaryCheckers`.
  */
 import ts from "typescript";
-import { BOOL, F64, I32, assignable, isInteger, isNumeric, sameType, typeToString } from "../types";
-import { arrayExpressionCheckers, installArrayAssignmentCheckers } from "./arrays";
-import { bitwiseBinaryCheckers, bitwiseUnaryCheckers } from "./bitwise";
-import { BuiltinCallChecker } from "./builtins";
-import { ioBuiltinFunctions } from "./io";
-import { contextualLiteralType, conversionBuiltins, parseBuiltins } from "./math";
-import { checkSuperCall, classExpressionCheckers, isAssignmentOperator } from "./classes";
+import { BOOL, F64, I32, assignable, isInteger, isNumeric, sameType, typeToString } from "../types.js";
+import { arrayExpressionCheckers, installArrayAssignmentCheckers } from "./arrays.js";
+import { bitwiseBinaryCheckers, bitwiseUnaryCheckers } from "./bitwise.js";
+import { BuiltinCallChecker } from "./builtins.js";
+import { ioBuiltinFunctions } from "./io.js";
+import { contextualLiteralType, conversionBuiltins, parseBuiltins } from "./math.js";
+import { checkSuperCall, classExpressionCheckers, isAssignmentOperator } from "./classes.js";
 import {
   assignmentTargetCheckers,
   checkMethodCall,
   isValueReceiver,
   memberExpressionCheckers,
-} from "./members";
-import { nullableExpressionCheckers } from "./nullable";
-import { resultBuiltinFunctions } from "./result";
-import { checkBuiltinCall, stringBinaryCheckers, stringExpressionCheckers } from "./strings";
-import { BinaryChecker, CheckerTable, ExpressionChecker, UnaryChecker } from "./context";
+} from "./members.js";
+import { nullableExpressionCheckers } from "./nullable.js";
+import { resultBuiltinFunctions } from "./result.js";
+import { checkBuiltinCall, stringBinaryCheckers, stringExpressionCheckers } from "./strings.js";
+import { BinaryChecker, CheckerTable, ExpressionChecker, UnaryChecker } from "./context.js";
 import {
   controlFlowBinaryCheckers,
   controlFlowExpressionCheckers,
   controlFlowUnaryCheckers,
-} from "./control-flow";
-import { lookup } from "../lookup";
+} from "./control-flow.js";
+import { lookup } from "../lookup.js";
 
 // ---- Leaves -----------------------------------------------------------------
 

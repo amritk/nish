@@ -53,16 +53,16 @@
  * stop leaning on `scripts/amritc.sh`.
  */
 import ts from "typescript";
-import { BOOL, F64, I32, STRING, VOID, arrayOf, nullableOf } from "../types";
+import { BOOL, F64, I32, STRING, VOID, arrayOf, nullableOf } from "../types.js";
 import {
   BuiltinCallChecker,
   checkArgumentType,
   checkArity,
   dottedName,
   requireStatementPosition,
-} from "./builtins";
-import { CheckContext } from "./context";
-import { NamespacePropertyChecker, namespaceProperties } from "./members";
+} from "./builtins.js";
+import { CheckContext } from "./context.js";
+import { NamespacePropertyChecker, namespaceProperties } from "./members.js";
 
 const checkProcessExit: BuiltinCallChecker = (ctx, expr, scope) => {
   checkArity(ctx, expr, "process.exit", 1);

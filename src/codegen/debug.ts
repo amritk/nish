@@ -31,12 +31,12 @@
  * Without `-g` nothing here runs and the IR is byte-for-byte what it was.
  */
 import ts from "typescript";
-import { CLI } from "../branding";
-import { CheckedProgram, FunctionSig, LocalVar, StructInfo } from "../checker";
-import { ResultLayout, ResultSlot, resultLayout } from "../checker/result";
-import { StaticType, intBits, isInteger, llvmAbiType, llvmType, resultByValue, typeToString } from "../types";
-import { packageVersion } from "../version";
-import { IRFunction, IRModule } from "./ir";
+import { CLI } from "../branding.js";
+import { CheckedProgram, FunctionSig, LocalVar, StructInfo } from "../checker/index.js";
+import { ResultLayout, ResultSlot, resultLayout } from "../checker/result.js";
+import { StaticType, intBits, isInteger, llvmAbiType, llvmType, resultByValue, typeToString } from "../types.js";
+import { packageVersion } from "../version.js";
+import { IRFunction, IRModule } from "./ir.js";
 
 /** Metadata id of a basic type, keyed by its `StaticType` kind. */
 const BASIC_TYPES: Partial<Record<StaticType["kind"], string>> = {

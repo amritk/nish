@@ -16,14 +16,15 @@
  * stage1's returns false (D1's error-value threading); that is the one
  * deliberate difference, and it is compared as the same 1/0 either way.
  */
-const fs = require("node:fs");
-const path = require("node:path");
-const { spawnSync } = require("node:child_process");
-const ts = require("typescript");
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import ts from "typescript";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const root = path.resolve(__dirname, "..", "..");
-const { Scope } = require(path.join(root, "dist", "checker", "scope.js"));
-const types = require(path.join(root, "dist", "types.js"));
+const root = path.resolve(import.meta.dirname, "..", "..");
+const { Scope } = await import(pathToFileURL(path.join(root, "dist", "checker", "scope.js")).href);
+const types = await import(pathToFileURL(path.join(root, "dist", "types.js")).href);
 
 const dummy = ts.createSourceFile("scope.ts", "const x = 0;\n", ts.ScriptTarget.Latest, true);
 const dummyNode = dummy.statements[0];
@@ -138,5 +139,5 @@ function main(argv) {
   return differing.length === 0 ? 0 : 1;
 }
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { expected, build };
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+export { expected, build };

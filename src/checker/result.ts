@@ -72,7 +72,7 @@
  * rejected, are in `docs/wp17-result-abi.md`.
  */
 import ts from "typescript";
-import { CompileError } from "../diagnostics";
+import { CompileError } from "../diagnostics.js";
 import {
   BOOL,
   ResultType,
@@ -82,14 +82,14 @@ import {
   resultStructName,
   typeToString,
   withResultState,
-} from "../types";
-import { BuiltinCallChecker, checkArity } from "./builtins";
-import { contextualType, sizeOf } from "./classes";
-import { CheckContext } from "./context";
-import { methodCallCheckers, propertyCheckers } from "./members";
-import { Narrowings, conditionNarrowers } from "./narrowing";
-import { FunctionSig, LocalVar } from "./program";
-import { Scope } from "./scope";
+} from "../types.js";
+import { BuiltinCallChecker, checkArity } from "./builtins.js";
+import { contextualType, sizeOf } from "./classes.js";
+import { CheckContext } from "./context.js";
+import { methodCallCheckers, propertyCheckers } from "./members.js";
+import { Narrowings, conditionNarrowers } from "./narrowing.js";
+import { FunctionSig, LocalVar } from "./program.js";
+import { Scope } from "./scope.js";
 
 // ---- Layout -------------------------------------------------------------------------
 

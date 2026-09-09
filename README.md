@@ -34,7 +34,7 @@ a few kilobytes; there is no interpreter and no GC anywhere in the pipeline.
 
 ## Quickstart
 
-Requirements: Node.js 18+ and, to produce binaries, clang (LLVM 18) + lld;
+Requirements: Node.js 22.18+ and, to produce binaries, clang (LLVM 18) + lld;
 per-OS install commands are in [docs/INSTALL.md](docs/INSTALL.md).
 
 ```bash

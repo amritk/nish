@@ -183,8 +183,17 @@ write the rest the way AmritScript would have it:
 - **`import type` is not used** (`useImportType` is off in `biome.json`,
   `verbatimModuleSyntax` is not on). A plain `import` of a type-only name is
   erased by `tsc`; keep it that way rather than mixing the two forms.
-- **CommonJS, Node 18+, no bundler.** `tsconfig.json` emits CommonJS into
-  `dist/`; `bench/` and `runtime/shim.mjs` are the ESM exceptions.
+- **ES modules, Node 22.18+, no bundler.** `tsconfig.json` emits ES modules
+  into `dist/` under `module: Node16`, so **every relative import carries its
+  `.js` extension** — `./diagnostics.js`, `../types.js`, `./checker/index.js` —
+  because that is what Node resolves at runtime and `tsc` refuses the
+  extensionless form here (TS2835). The whole repository is one module system
+  now: `tests/` and `scripts/` are ESM too, `__dirname` is
+  `import.meta.dirname`, and the `.mjs` files exist only where a name wants to
+  say "this is loaded by something else" (`runtime/shim.mjs`,
+  `runtime/amritscript.mjs`, `bench/`). The floor is the version where Node
+  strips types without a flag, which is what makes
+  `node --experimental-strip-types prog.ts` a real thing to point people at.
 - **The two house rules are mid-migration.** The compiler source predates
   them and still holds a few hundred `function` declarations and a few dozen
   `interface`s, and so does the JavaScript test harness. Both rules are

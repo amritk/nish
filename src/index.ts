@@ -15,20 +15,20 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { Compilation, EmittedModule } from "./compiler";
+import { Compilation, EmittedModule } from "./compiler.js";
 import {
   CompileError,
   allErrors,
   diagnosticJson,
   formatErrorReport,
   formatWarningReport,
-} from "./diagnostics";
-import { dumpAst, dumpChecked } from "./dump";
-import { generateDts, generateHeader, generateNapiShim, generateWasmLoader, wasmLoaderPath } from "./interop";
-import { NumberMode } from "./types";
-import { SUPPORTED_TARGETS, resolveTarget } from "./codegen/target";
-import { CLI, ENV_DEBUG, ENV_SIMULATE_ICE } from "./branding";
-import { PKG_ROOT, packageVersion } from "./version";
+} from "./diagnostics.js";
+import { dumpAst, dumpChecked } from "./dump.js";
+import { generateDts, generateHeader, generateNapiShim, generateWasmLoader, wasmLoaderPath } from "./interop/index.js";
+import { NumberMode } from "./types.js";
+import { SUPPORTED_TARGETS, resolveTarget } from "./codegen/target.js";
+import { CLI, ENV_DEBUG, ENV_SIMULATE_ICE } from "./branding.js";
+import { PKG_ROOT, packageVersion } from "./version.js";
 
 const PROFILES = ["speed", "size", "debug", "wasi"] as const;
 type Profile = (typeof PROFILES)[number];

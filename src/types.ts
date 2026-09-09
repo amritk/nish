@@ -6,8 +6,8 @@
  * compatible only if their StaticType kinds are identical.
  */
 import ts from "typescript";
-import { LANGUAGE } from "./branding";
-import { CompileError } from "./diagnostics";
+import { LANGUAGE } from "./branding.js";
+import { CompileError } from "./diagnostics.js";
 
 export type NumberMode = "i32" | "f64";
 

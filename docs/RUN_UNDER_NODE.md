@@ -23,12 +23,14 @@ replace *globals* — never operators, never the object model.
 node --experimental-strip-types --import ./runtime/amritscript.mjs prog.ts
 ```
 
-The program must be an ES module to Node. This repository's `package.json` says
-`"type": "commonjs"`, so a `.ts` file *inside the repo* is loaded as CommonJS
-and its `export function main` is a syntax error before type stripping runs;
-outside it, or under a directory whose `package.json` says
-`{ "type": "module" }`, it works. (`tests/differential/unmodified.js` copies each
-program into such a directory for exactly this reason.)
+The program must be an ES module to Node, which an AmritScript program always
+is — the language has `import`/`export` and no CommonJS at all. This package is
+`"type": "module"`, so an in-tree `.ts` is read that way and
+`node --experimental-strip-types examples/nbody.ts` works from the repository
+root. Under a package that says `"type": "commonjs"`, Node reads a `.ts` as
+CommonJS and `export function main` is a syntax error before type stripping
+ever runs; put the program under a directory whose `package.json` says
+`{ "type": "module" }`, or give it an `.mts` extension.
 
 ## What the prelude supplies
 

@@ -32,11 +32,12 @@
  *     whether the file is a fixture nothing can type-check or a program this
  *     oracle is compiling wrongly.
  */
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const { spawnSync } = require("node:child_process");
-const { extraArgs, linkPrograms, programs, root } = require("./corpus");
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { extraArgs, linkPrograms, programs, root } from "./corpus.js";
+import { fileURLToPath } from "node:url";
 
 const cli = path.join(root, "dist", "index.js");
 
@@ -252,5 +253,5 @@ function main(argv) {
   return failed.length === 0 && rejected.length === 0 ? 0 : 1;
 }
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { compare, corpus, build };
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+export { compare, corpus, build };

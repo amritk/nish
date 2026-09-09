@@ -18,10 +18,10 @@
  *   - `// smoke: args <flags>` on a line of the source — `examples/`, the
  *     marker `scripts/smoke.sh` reads.
  */
-const fs = require("node:fs");
-const path = require("node:path");
+import fs from "node:fs";
+import path from "node:path";
 
-const root = path.resolve(__dirname, "..", "..");
+const root = path.resolve(import.meta.dirname, "..", "..");
 
 /** Every directory of positive programs, in the order the oracles report them. */
 const CORPUS_DIRS = ["tests/cases", "examples", "self", "docs/cookbook", "bench", "tests/parser"];
@@ -95,4 +95,4 @@ function linkPrograms() {
   return out;
 }
 
-module.exports = { CORPUS_DIRS, extraArgs, numberModeArgs, programs, linkPrograms, root };
+export { CORPUS_DIRS, extraArgs, numberModeArgs, programs, linkPrograms, root };

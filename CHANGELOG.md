@@ -374,6 +374,39 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Changed
 
+- **The package is ES modules, and the Node floor is 22.18.** `"type":
+  "commonjs"` had been there since the first commit — the `tsc` default of 2019,
+  never a decision anyone made — and it had started to cost something real. An
+  in-tree `.ts` was read as CommonJS, so `export function main` was a syntax
+  error before type stripping ran, and
+  `node --experimental-strip-types examples/nbody.ts` failed in the directory
+  the examples live in. A compiler whose own repository could not run its own
+  example programs in place, for a language that has `import`/`export` and no
+  CommonJS at all.
+
+  `tsconfig.json` emits `module: Node16`, so every relative import in `src/`
+  carries its `.js` extension — 294 of them across 55 files, which `tsc`
+  enumerates exactly (TS2835) rather than leaving to a grep. `__dirname` in
+  `version.ts` is `import.meta.dirname`. The 18 files of `tests/` and
+  `scripts/` are ESM too: `require` became `import`, the oracles' synchronous
+  reads out of `dist/` became top-level `await import(...)` of a file URL, and
+  `require.main === module` became a comparison against `import.meta.url`. The
+  one `require` left is a deliberate `createRequire` in `tests/run.js`, because
+  `require.resolve("typescript/bin/tsc")` has no ESM spelling.
+
+  The floor moves from 18 to 22.18 — the version where Node strips types with
+  no flag, which is what makes `docs/RUN_UNDER_NODE.md` something to point
+  people at rather than a footnote about `.mts`. CI already ran 22.
+  `tests/differential/unmodified.js` no longer copies each program into a
+  scratch directory to escape the package's own module system; it runs them
+  where they are.
+
+  Nothing in the repository consumed `amritc` as a library, but `require("amritc")`
+  is now an ESM entry point rather than a CommonJS one; the product is the CLI
+  and the `bin` is unchanged. `runtime/shim.mjs`, `runtime/amritscript.mjs` and
+  `bench/` keep their `.mjs` extensions, which now say "loaded by something
+  else" rather than "the exception to the package".
+
 - **`test (macos-latest)` is commented out of the CI matrix.** It is not a
   compiler failure and not an architecture one: `scripts/build.sh` runs under
   `set -euo pipefail`, and macOS ships bash 3.2 as `/bin/bash`, where expanding

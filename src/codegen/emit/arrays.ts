@@ -51,8 +51,8 @@
  * there by `classifyUse` (see docs/wp4-arrays.md, "Attributes").
  */
 import ts from "typescript";
-import { CheckedProgram } from "../../checker";
-import { ELEMENT_ASSIGNMENT_OPERATORS } from "../../checker/arrays";
+import { CheckedProgram } from "../../checker/index.js";
+import { ELEMENT_ASSIGNMENT_OPERATORS } from "../../checker/arrays.js";
 import {
   ARRAY_STRUCT,
   STRING,
@@ -62,12 +62,12 @@ import {
   isFloat,
   isUnsigned,
   llvmType,
-} from "../../types";
-import { ARRAY_TYPE } from "../runtime";
-import { emitIntBinary } from "./arithmetic";
-import { emitBitwiseCombine, isBitwiseCompoundOperator } from "./bitwise";
-import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, StatementEmitter } from "./context";
-import { FactCollector, factCollectors, methodCallEmitters, newEmitters, propertyEmitters } from "./members";
+} from "../../types.js";
+import { ARRAY_TYPE } from "../runtime.js";
+import { emitIntBinary } from "./arithmetic.js";
+import { emitBitwiseCombine, isBitwiseCompoundOperator } from "./bitwise.js";
+import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, StatementEmitter } from "./context.js";
+import { FactCollector, factCollectors, methodCallEmitters, newEmitters, propertyEmitters } from "./members.js";
 
 type ArrayType = Extract<StaticType, { kind: "array" }>;
 

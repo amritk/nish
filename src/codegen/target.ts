@@ -14,7 +14,7 @@
  * a hard error at build time, never silent miscompilation.
  */
 
-import { lookup } from "../lookup";
+import { lookup } from "../lookup.js";
 
 export interface Target {
   /** The triple written to `target triple`; aliases are normalised to this. */

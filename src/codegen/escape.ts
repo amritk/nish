@@ -70,14 +70,14 @@
  * automatic scopes still read `allocLeaks` and decide exactly what they did.
  */
 import ts from "typescript";
-import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
-import { dottedName } from "../checker/builtins";
-import { effectiveConstructor, intrinsicType, isAssignmentOperator } from "../checker/classes";
-import { CompilerOptions, StaticType, alignOf, isNumeric, resultByValue, stripNull } from "../types";
-import { FunctionFacts, classifyUse } from "./attributes";
-import { isJoinCall, isPushCall } from "./emit/arrays";
-import { isResultConstructorCall, resultMethodName } from "./emit/result";
-import { isStringAllocCall, unwrapStringPassthrough } from "./emit/strings";
+import { CheckedProgram, FunctionSig, LocalVar } from "../checker/index.js";
+import { dottedName } from "../checker/builtins.js";
+import { effectiveConstructor, intrinsicType, isAssignmentOperator } from "../checker/classes.js";
+import { CompilerOptions, StaticType, alignOf, isNumeric, resultByValue, stripNull } from "../types.js";
+import { FunctionFacts, classifyUse } from "./attributes.js";
+import { isJoinCall, isPushCall } from "./emit/arrays.js";
+import { isResultConstructorCall, resultMethodName } from "./emit/result.js";
+import { isStringAllocCall, unwrapStringPassthrough } from "./emit/strings.js";
 
 /** Largest array data block (`[n x T]`) placed on the stack, in bytes. */
 export const STACK_ARRAY_BYTES = 4096;

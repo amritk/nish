@@ -64,12 +64,12 @@ import {
   sameType,
   typeToString,
   unsignedMax,
-} from "../types";
-import { BuiltinCallChecker, calleeName, checkArity } from "./builtins";
-import { CheckContext } from "./context";
-import { Scope } from "./scope";
-import { lookup } from "../lookup";
-import { structOf } from "./classes";
+} from "../types.js";
+import { BuiltinCallChecker, calleeName, checkArity } from "./builtins.js";
+import { CheckContext } from "./context.js";
+import { Scope } from "./scope.js";
+import { lookup } from "../lookup.js";
+import { structOf } from "./classes.js";
 
 // ---- Math.* -------------------------------------------------------------------
 

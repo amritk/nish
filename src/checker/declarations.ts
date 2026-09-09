@@ -3,7 +3,7 @@
  *
  * Module rules (WP5):
  *   - `export` is accepted on function declarations only.
- *   - `import { f, g as h } from "./m"` with a *relative* specifier is the only
+ *   - `import { f, g as h } from "./m.js"` with a *relative* specifier is the only
  *     import form; default, namespace, side-effect and type-only imports are
  *     rejected here with a specific message.
  *   - `export function main` in the entry module is the program entry. It
@@ -12,10 +12,10 @@
  *     C-ABI wrapper can be `@main`.
  */
 import ts from "typescript";
-import { CompileError } from "../diagnostics";
-import { CompilerOptions, resolveTypeNode, typeToString } from "../types";
-import { ConstInfo } from "./constants";
-import { FunctionSig, ImportBinding, Param } from "./program";
+import { CompileError } from "../diagnostics.js";
+import { CompilerOptions, resolveTypeNode, typeToString } from "../types.js";
+import { ConstInfo } from "./constants.js";
+import { FunctionSig, ImportBinding, Param } from "./program.js";
 
 /** Symbol the entry module's `export function main` is emitted under. */
 export const ENTRY_MAIN_SYMBOL = "amrit_main";
@@ -125,7 +125,7 @@ export function rejectNonFunctionExport(stmt: ts.Statement, sf: ts.SourceFile): 
 
 /**
  * Turn an `import` statement into one binding per imported name. Everything
- * but `import { a, b as c } from "./relative"` is rejected.
+ * but `import { a, b as c } from "./relative.js"` is rejected.
  */
 export function collectImports(decl: ts.ImportDeclaration, sf: ts.SourceFile): ImportBinding[] {
   if (!ts.isStringLiteral(decl.moduleSpecifier)) {

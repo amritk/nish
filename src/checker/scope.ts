@@ -1,7 +1,7 @@
 import ts from "typescript";
-import { CompileError } from "../diagnostics";
-import { StaticType } from "../types";
-import { LocalVar } from "./program";
+import { CompileError } from "../diagnostics.js";
+import { StaticType } from "../types.js";
+import { LocalVar } from "./program.js";
 
 /**
  * Lexical scope chain for locals and parameters.

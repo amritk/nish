@@ -5,15 +5,15 @@
  * `statementCheckers`. Return true when the statement definitely terminates.
  */
 import ts from "typescript";
-import { CompileError } from "../diagnostics";
-import { StaticType, assignable, resolveTypeNode, typeToString } from "../types";
-import { arrayStatementCheckers } from "./arrays";
-import { CheckContext, CheckerTable, StatementChecker } from "./context";
-import { controlFlowStatementCheckers } from "./control-flow";
-import { terminatesControlFlow } from "./io";
-import { LocalVar } from "./program";
-import { rejectDiscardedResult } from "./result";
-import { Scope } from "./scope";
+import { CompileError } from "../diagnostics.js";
+import { StaticType, assignable, resolveTypeNode, typeToString } from "../types.js";
+import { arrayStatementCheckers } from "./arrays.js";
+import { CheckContext, CheckerTable, StatementChecker } from "./context.js";
+import { controlFlowStatementCheckers } from "./control-flow.js";
+import { terminatesControlFlow } from "./io.js";
+import { LocalVar } from "./program.js";
+import { rejectDiscardedResult } from "./result.js";
+import { Scope } from "./scope.js";
 
 const checkReturn: StatementChecker = (ctx, node, scope) => {
   const stmt = node as ts.ReturnStatement;

@@ -27,12 +27,13 @@
  * Everything is compared **byte for byte**, module by module. A single
  * attribute out of place fails, which is the point.
  */
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const { spawnSync } = require("node:child_process");
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-const root = path.resolve(__dirname, "..", "..");
+const root = path.resolve(import.meta.dirname, "..", "..");
 const cli = path.join(root, "dist", "index.js");
 const buildSh = path.join(root, "scripts", "build.sh");
 const runtimeC = path.join(root, "runtime", "runtime.c");
@@ -159,5 +160,5 @@ function main(argv) {
   return 0;
 }
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { main };
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+export { main };

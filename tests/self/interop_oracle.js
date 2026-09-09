@@ -33,12 +33,13 @@
  * comparison over every whole program the IR oracle reads, which is how a
  * shape nobody thought to put in the corpus gets found.
  */
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const { spawnSync } = require("node:child_process");
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-const root = path.resolve(__dirname, "..", "..");
+const root = path.resolve(import.meta.dirname, "..", "..");
 const cli = path.join(root, "dist", "index.js");
 
 /**
@@ -276,5 +277,5 @@ const main = (argv) => {
   return failed.length === 0 && rejected.length === 0 ? 0 : 1;
 };
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { compare, CORPUS, build };
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+export { compare, CORPUS, build };

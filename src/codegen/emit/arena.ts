@@ -17,9 +17,9 @@
  * rather than a whole function body. `reclaimsReturnedString` in escape.ts
  * carries the proof, and docs/wp9-optimisation.md what it measured.
  */
-import { FunctionSig } from "../../checker";
-import { BuiltinCall } from "./builtins";
-import { EmitContext } from "./context";
+import { FunctionSig } from "../../checker/index.js";
+import { BuiltinCall } from "./builtins.js";
+import { EmitContext } from "./context.js";
 
 function statementCall(symbol: string, arg?: "i64"): BuiltinCall {
   return {

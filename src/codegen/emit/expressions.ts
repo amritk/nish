@@ -4,28 +4,28 @@
  * value (temp, parameter, or constant) that holds the expression's result.
  */
 import ts from "typescript";
-import { ResultType, StaticType, isFloat, isInteger, llvmAbiType, llvmType, resultByValue } from "../../types";
-import { beginReclaim, endReclaim } from "./arena";
-import { emitIntBinary } from "./arithmetic";
-import { arrayExpressionEmitters, installArrayAssignmentEmitters } from "./arrays";
-import { bitwiseBinaryEmitters, bitwiseUnaryEmitters } from "./bitwise";
-import { CheckedProgram } from "../../checker";
-import { ConstValue, constValue } from "../../checker/constants";
-import { BuiltinCall, f64Constant, floatConstant } from "./builtins";
-import { ioFunctionEmitters } from "./io";
-import { conversionEmitters, parseEmitters } from "./math";
-import { emitPackedResult, emitResultReturningCall, resultFunctionEmitters } from "./result";
-import { isAssignmentOperator } from "../../checker/classes";
-import { classExpressionEmitters, emitSuperCall } from "./classes";
-import { assignmentTargetEmitters, emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members";
-import { emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from "./strings";
-import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, UnaryEmitter, intOpcode } from "./context";
+import { ResultType, StaticType, isFloat, isInteger, llvmAbiType, llvmType, resultByValue } from "../../types.js";
+import { beginReclaim, endReclaim } from "./arena.js";
+import { emitIntBinary } from "./arithmetic.js";
+import { arrayExpressionEmitters, installArrayAssignmentEmitters } from "./arrays.js";
+import { bitwiseBinaryEmitters, bitwiseUnaryEmitters } from "./bitwise.js";
+import { CheckedProgram } from "../../checker/index.js";
+import { ConstValue, constValue } from "../../checker/constants.js";
+import { BuiltinCall, f64Constant, floatConstant } from "./builtins.js";
+import { ioFunctionEmitters } from "./io.js";
+import { conversionEmitters, parseEmitters } from "./math.js";
+import { emitPackedResult, emitResultReturningCall, resultFunctionEmitters } from "./result.js";
+import { isAssignmentOperator } from "../../checker/classes.js";
+import { classExpressionEmitters, emitSuperCall } from "./classes.js";
+import { assignmentTargetEmitters, emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members.js";
+import { emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from "./strings.js";
+import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, UnaryEmitter, intOpcode } from "./context.js";
 import {
   controlFlowBinaryEmitters,
   controlFlowExpressionEmitters,
   controlFlowUnaryEmitters,
-} from "./control-flow";
-import { lookup } from "../../lookup";
+} from "./control-flow.js";
+import { lookup } from "../../lookup.js";
 
 // ---- Constants --------------------------------------------------------------------
 

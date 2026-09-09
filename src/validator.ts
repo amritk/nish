@@ -27,9 +27,9 @@
  * looks at `node.parent` to tell a value reference from a property name.
  */
 import ts from "typescript";
-import { LANGUAGE } from "./branding";
-import { CompileError, DiagnosticSink } from "./diagnostics";
-import { lookup } from "./lookup";
+import { LANGUAGE } from "./branding.js";
+import { CompileError, DiagnosticSink } from "./diagnostics.js";
+import { lookup } from "./lookup.js";
 
 type Validator = (node: ts.Node, sf: ts.SourceFile) => void;
 
