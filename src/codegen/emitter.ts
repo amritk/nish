@@ -44,7 +44,7 @@ import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, r
 import { DebugInfo } from "./debug.js";
 import { reclaimsReturnedString } from "./escape.js";
 import { emitConstructorPrologue, importedStructFunctions, structFunctions, structTypeDeclarations } from "./emit/classes.js";
-import { unpackResult } from "./emit/result.js";
+import { privateResultAbi, resultPairToWord, unpackResult } from "./emit/result.js";
 import { EmitContext, LoopTarget } from "./emit/context.js";
 import { expressionEmitters } from "./emit/expressions.js";
 import { declareResultTypes } from "./emit/result.js";
@@ -135,14 +135,17 @@ export class Emitter implements EmitContext {
     this.currentSig = sig;
     this.declareSignatureTypes(sig);
     const optimize = this.opts.optimizeAttributes;
+    // WP15: a non-exported function uses the private two-scalar `Result` ABI.
+    // The condition is the linkage one below, and the two must not drift.
+    const privateAbi = privateResultAbi(this, sig);
     this.fn = new IRFunction(
       sig.name,
       sig.params.map((p) => ({
         name: p.name,
-        type: llvmAbiType(p.type),
+        type: llvmAbiType(p.type, privateAbi),
         attrs: optimize ? paramAttributes(p, facts) : [],
       })),
-      llvmAbiType(sig.returnType)
+      llvmAbiType(sig.returnType, privateAbi)
     );
     // Linkage: exported functions are always external (they are the module's
     // ABI). Every other function is `internal` unless --no-strict-exports.
@@ -154,16 +157,18 @@ export class Emitter implements EmitContext {
     this.slots = new WeakMap();
     this.current = facts;
     // `-g`: the DISubprogram, the function's default location, and the parameters' dbg.value calls.
-    this.debug?.beginFunction(this.fn, sig);
+    this.debug?.beginFunction(this.fn, sig, privateAbi);
 
     // WP6: an automatic arena scope remembers the bump position before anything is allocated.
     if (facts.arenaScope) this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("amrit_arena_mark")}()`);
-    // WP17: a `Result` parameter small enough to pack arrives as an `i64`.
-    // Unpack it once, before the body, into the object every construct reads.
+    // WP17: a `Result` parameter small enough to pack arrives as an `i64`, or
+    // as the two-scalar pair under the private ABI. Either way it is turned
+    // into the object every construct reads, once, before the body.
     this.paramObjects = new Map();
     for (const p of sig.params) {
       if (!resultByValue(p.type)) continue;
-      const object = unpackResult(this, p.type as ResultType, `%${p.name}`, this.isStackParam(p.name));
+      const word = privateAbi ? resultPairToWord(this, `%${p.name}`) : `%${p.name}`;
+      const object = unpackResult(this, p.type as ResultType, word, this.isStackParam(p.name));
       this.paramObjects.set(p.name, object);
     }
     // A constructor stores the field initializers before its body runs (WP2),
@@ -225,7 +230,7 @@ export class Emitter implements EmitContext {
       fn.attrGroup = this.module.attrGroup(["nounwind"]);
     }
     // `-g`: an artificial subprogram at the user's `main`, so `break main` lands somewhere sensible.
-    this.debug?.beginFunction(fn, userMain, { artificial: true, name: "main" });
+    this.debug?.beginFunction(fn, userMain, false, { artificial: true, name: "main" });
     const freeArena = this.useRuntime("amrit_free_arena");
     if (this.program.usesArgv) fn.emit(`call void ${this.useRuntime("amrit_argv_init")}(i32 %argc, i8** %argv)`);
     let code = "0";

@@ -1147,7 +1147,7 @@ function describe(n: number): number {
 
 declare void @amrit_panic_div(i1 noundef zeroext) #1
 
-define internal noundef i64 @half(i32 noundef %n) #0 {
+define internal noundef { i1, i32 } @half(i32 noundef %n) #0 {
 entry:
   %0 = icmp eq i32 2, 0
   %1 = icmp eq i32 %n, -2147483648
@@ -1168,117 +1168,155 @@ div.ok:
 if.then:
   %7 = zext i32 %n to i64
   %8 = shl i64 %7, 32
-  ret i64 %8
+  %9 = trunc i64 %8 to i1
+  %10 = lshr i64 %8, 32
+  %11 = trunc i64 %10 to i32
+  %12 = insertvalue { i1, i32 } undef, i1 %9, 0
+  %13 = insertvalue { i1, i32 } %12, i32 %11, 1
+  ret { i1, i32 } %13
 
 if.end:
-  %9 = icmp eq i32 2, 0
-  %10 = icmp eq i32 %n, -2147483648
-  %11 = icmp eq i32 2, -1
-  %12 = and i1 %10, %11
-  %13 = or i1 %9, %12
-  br i1 %13, label %div.fail.1, label %div.ok.1
+  %14 = icmp eq i32 2, 0
+  %15 = icmp eq i32 %n, -2147483648
+  %16 = icmp eq i32 2, -1
+  %17 = and i1 %15, %16
+  %18 = or i1 %14, %17
+  br i1 %18, label %div.fail.1, label %div.ok.1
 
 div.fail.1:
-  call void @amrit_panic_div(i1 zeroext %9)
+  call void @amrit_panic_div(i1 zeroext %14)
   unreachable
 
 div.ok.1:
-  %14 = sdiv i32 %n, 2
-  %15 = zext i32 %14 to i64
-  %16 = shl i64 %15, 32
-  %17 = or i64 %16, 1
-  ret i64 %17
+  %19 = sdiv i32 %n, 2
+  %20 = zext i32 %19 to i64
+  %21 = shl i64 %20, 32
+  %22 = or i64 %21, 1
+  %23 = trunc i64 %22 to i1
+  %24 = lshr i64 %22, 32
+  %25 = trunc i64 %24 to i32
+  %26 = insertvalue { i1, i32 } undef, i1 %23, 0
+  %27 = insertvalue { i1, i32 } %26, i32 %25, 1
+  ret { i1, i32 } %27
 }
 
-define internal noundef i64 @quarter(i32 noundef %n) #0 {
+define internal noundef { i1, i32 } @quarter(i32 noundef %n) #0 {
 entry:
   %h.addr = alloca i32, align 4
   %amrit_result.i32.i32.obj = alloca %struct.amrit_result.i32.i32, align 8
   %amrit_result.i32.i32.obj.1 = alloca %struct.amrit_result.i32.i32, align 8
-  %0 = call i64 @half(i32 %n)
-  %1 = trunc i64 %0 to i1
-  %2 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 0
-  store i1 %1, i1* %2, align 1
-  %3 = lshr i64 %0, 32
-  %4 = trunc i64 %3 to i32
-  %5 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 1
-  store i32 %4, i32* %5, align 4
-  %6 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 2
-  store i32 %4, i32* %6, align 4
-  %7 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 0
-  %8 = load i1, i1* %7, align 1
-  br i1 %8, label %res.ok, label %res.propagate
+  %0 = call { i1, i32 } @half(i32 %n)
+  %1 = extractvalue { i1, i32 } %0, 0
+  %2 = extractvalue { i1, i32 } %0, 1
+  %3 = zext i32 %2 to i64
+  %4 = shl i64 %3, 32
+  %5 = zext i1 %1 to i64
+  %6 = or i64 %4, %5
+  %7 = trunc i64 %6 to i1
+  %8 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 0
+  store i1 %7, i1* %8, align 1
+  %9 = lshr i64 %6, 32
+  %10 = trunc i64 %9 to i32
+  %11 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 1
+  store i32 %10, i32* %11, align 4
+  %12 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 2
+  store i32 %10, i32* %12, align 4
+  %13 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 0
+  %14 = load i1, i1* %13, align 1
+  br i1 %14, label %res.ok, label %res.propagate
 
 res.propagate:
-  %9 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 2
-  %10 = load i32, i32* %9, align 4
-  %11 = zext i32 %10 to i64
-  %12 = shl i64 %11, 32
-  ret i64 %12
+  %15 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 2
+  %16 = load i32, i32* %15, align 4
+  %17 = zext i32 %16 to i64
+  %18 = shl i64 %17, 32
+  %19 = trunc i64 %18 to i1
+  %20 = lshr i64 %18, 32
+  %21 = trunc i64 %20 to i32
+  %22 = insertvalue { i1, i32 } undef, i1 %19, 0
+  %23 = insertvalue { i1, i32 } %22, i32 %21, 1
+  ret { i1, i32 } %23
 
 res.ok:
-  %13 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 1
-  %14 = load i32, i32* %13, align 4
-  store i32 %14, i32* %h.addr, align 4
-  %15 = load i32, i32* %h.addr, align 4
-  %16 = call i64 @half(i32 %15)
-  %17 = trunc i64 %16 to i1
-  %18 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 0
-  store i1 %17, i1* %18, align 1
-  %19 = lshr i64 %16, 32
-  %20 = trunc i64 %19 to i32
-  %21 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 1
-  store i32 %20, i32* %21, align 4
-  %22 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 2
-  store i32 %20, i32* %22, align 4
-  %23 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 0
-  %24 = load i1, i1* %23, align 1
-  %25 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 2
-  %26 = load i32, i32* %25, align 4
-  %27 = zext i32 %26 to i64
-  %28 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 1
-  %29 = load i32, i32* %28, align 4
+  %24 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 1
+  %25 = load i32, i32* %24, align 4
+  store i32 %25, i32* %h.addr, align 4
+  %26 = load i32, i32* %h.addr, align 4
+  %27 = call { i1, i32 } @half(i32 %26)
+  %28 = extractvalue { i1, i32 } %27, 0
+  %29 = extractvalue { i1, i32 } %27, 1
   %30 = zext i32 %29 to i64
-  %31 = select i1 %24, i64 %30, i64 %27
-  %32 = shl i64 %31, 32
-  %33 = zext i1 %24 to i64
-  %34 = or i64 %32, %33
-  ret i64 %34
+  %31 = shl i64 %30, 32
+  %32 = zext i1 %28 to i64
+  %33 = or i64 %31, %32
+  %34 = trunc i64 %33 to i1
+  %35 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 0
+  store i1 %34, i1* %35, align 1
+  %36 = lshr i64 %33, 32
+  %37 = trunc i64 %36 to i32
+  %38 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 1
+  store i32 %37, i32* %38, align 4
+  %39 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 2
+  store i32 %37, i32* %39, align 4
+  %40 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 0
+  %41 = load i1, i1* %40, align 1
+  %42 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 2
+  %43 = load i32, i32* %42, align 4
+  %44 = zext i32 %43 to i64
+  %45 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 1
+  %46 = load i32, i32* %45, align 4
+  %47 = zext i32 %46 to i64
+  %48 = select i1 %41, i64 %47, i64 %44
+  %49 = shl i64 %48, 32
+  %50 = zext i1 %41 to i64
+  %51 = or i64 %49, %50
+  %52 = trunc i64 %51 to i1
+  %53 = lshr i64 %51, 32
+  %54 = trunc i64 %53 to i32
+  %55 = insertvalue { i1, i32 } undef, i1 %52, 0
+  %56 = insertvalue { i1, i32 } %55, i32 %54, 1
+  ret { i1, i32 } %56
 }
 
 define internal noundef i32 @describe(i32 noundef %n) #0 {
 entry:
   %outcome.addr = alloca %struct.amrit_result.i32.i32*, align 8
   %amrit_result.i32.i32.obj = alloca %struct.amrit_result.i32.i32, align 8
-  %0 = call i64 @quarter(i32 %n)
-  %1 = trunc i64 %0 to i1
-  %2 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 0
-  store i1 %1, i1* %2, align 1
-  %3 = lshr i64 %0, 32
-  %4 = trunc i64 %3 to i32
-  %5 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 1
-  store i32 %4, i32* %5, align 4
-  %6 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 2
-  store i32 %4, i32* %6, align 4
+  %0 = call { i1, i32 } @quarter(i32 %n)
+  %1 = extractvalue { i1, i32 } %0, 0
+  %2 = extractvalue { i1, i32 } %0, 1
+  %3 = zext i32 %2 to i64
+  %4 = shl i64 %3, 32
+  %5 = zext i1 %1 to i64
+  %6 = or i64 %4, %5
+  %7 = trunc i64 %6 to i1
+  %8 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 0
+  store i1 %7, i1* %8, align 1
+  %9 = lshr i64 %6, 32
+  %10 = trunc i64 %9 to i32
+  %11 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 1
+  store i32 %10, i32* %11, align 4
+  %12 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 2
+  store i32 %10, i32* %12, align 4
   store %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, %struct.amrit_result.i32.i32** %outcome.addr, align 8
-  %7 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %outcome.addr, align 8
-  %8 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %7, i32 0, i32 0
-  %9 = load i1, i1* %8, align 1
-  %10 = xor i1 %9, true
-  br i1 %10, label %if.then, label %if.end
+  %13 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %outcome.addr, align 8
+  %14 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %13, i32 0, i32 0
+  %15 = load i1, i1* %14, align 1
+  %16 = xor i1 %15, true
+  br i1 %16, label %if.then, label %if.end
 
 if.then:
-  %11 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %outcome.addr, align 8
-  %12 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %11, i32 0, i32 2
-  %13 = load i32, i32* %12, align 4
-  %14 = sub nsw i32 0, %13
-  ret i32 %14
+  %17 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %outcome.addr, align 8
+  %18 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %17, i32 0, i32 2
+  %19 = load i32, i32* %18, align 4
+  %20 = sub nsw i32 0, %19
+  ret i32 %20
 
 if.end:
-  %15 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %outcome.addr, align 8
-  %16 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %15, i32 0, i32 1
-  %17 = load i32, i32* %16, align 4
-  ret i32 %17
+  %21 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %outcome.addr, align 8
+  %22 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %21, i32 0, i32 1
+  %23 = load i32, i32* %22, align 4
+  ret i32 %23
 }
 
 attributes #0 = { nounwind }

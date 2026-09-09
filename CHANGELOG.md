@@ -27,6 +27,31 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Changed
 
+- **A non-exported function passes a small `Result` as two values instead of
+  one packed word: `bench/result` goes from 650 ms to 464 ms (WP15).**
+  `Result<T, E>` with two small scalar payloads has travelled in a single
+  `i64` since WP17, because that is what a C or wasm host has to see. Inside a
+  module no host is looking, and the word costs something real there: with both
+  halves in one register the `select` that picks the live arm happens on the
+  word, and instcombine can no longer fold the arithmetic around it. A function
+  that gets `internal` linkage now uses `{ i1, i32 }` instead — rustc's
+  `ScalarPair` — which puts us at C's 444 ms rather than 1.46x behind it.
+
+  **The condition is the linkage condition**: `--strict-exports` on and the
+  function not exported, the same test that writes `internal`. The private
+  shape is safe only because no host can name the symbol, so
+  `--no-strict-exports` turns it off along with the linkage it mirrors, and an
+  imported function — exported by definition — is always packed, which is how
+  two modules agree without consulting each other. `--emit-header`,
+  `--emit-dts` and `--emit-napi` describe exported functions only and are
+  unchanged; `tests/cases/res_export` still emits `i64` for all four shapes.
+
+  The packing code did not move: the word is still built exactly as before and
+  split at the boundary. LLVM folds the round trip away, and a hand-written
+  two-scalar lowering measures 467 ms against this 464 — the same, within
+  noise — so one packing path was worth keeping. `docs/wp17-result-abi.md` §4
+  has the four-way table.
+
 - **Formatting a double is 35x faster: 2557 ns to 72 ns (WP15).**
   `amrit_str_from_f64` used up to seventeen `snprintf`/`strtod` round trips to
   find the shortest digits; it now computes them directly with Ryu (Adams,

@@ -472,6 +472,38 @@ ten and two, small integers and their reciprocals, and uniform random bit
 patterns. Zero violations. The same harness finds 46 per 1.4 million in the old
 implementation.
 
+## 7b. A private ABI inside a module — **done**
+
+The third measured win, and the one that needed no new analysis at all: just
+the observation that a function no host can name does not owe anyone its
+calling convention.
+
+WP17 packs a small `Result` into one `i64` because that is what a C or wasm
+host must see. Inside a module nobody is looking, and the word costs
+something: with the discriminant and the payload in one register the `select`
+that picks the live arm happens on the *word*, so instcombine cannot fold the
+arithmetic around it. Giving a non-exported function the two-scalar
+`{ i1, i32 }` shape instead — rustc's `ScalarPair` — takes `bench/result` from
+**650 ms to 464 ms**, which is C's 444 rather than 1.46x behind it.
+
+Two decisions worth keeping:
+
+- **The packing code did not move.** `packArm`, `packObject` and
+  `unpackResult` still build and read the same word; the pair is made from it
+  at the boundary and taken apart on the other side. LLVM folds the round trip
+  away entirely — a hand-written two-scalar lowering measures 467 ms against
+  464, the same within noise — so one packing path was worth more than the
+  instructions the conversion appears to cost. The change is a predicate and a
+  boundary, not a rewrite.
+- **The condition is the linkage condition.** `strictExports && !exported`,
+  the same test that writes `internal`, because the private shape is safe only
+  while no host can name the symbol. The two must not drift, which is why the
+  comment at each site says so. `--no-strict-exports` turns both off together.
+
+This is what §3 meant when it said `--strict-exports` "does not buy a second
+namespace": it does not, but it does buy a second *calling convention*, and
+that turned out to be worth 1.40x on the shape the benchmark exists to measure.
+
 ## 8. The `performance` diagnostic class
 
 None of the above survives contact with a codebase unless the compiler says
@@ -516,6 +548,10 @@ Roughly dependency order; each row ships with the full construct checklist from
 1b. **An invariant array header** (§2c) — the other 2x, and the first item
    that needs a language decision (fixed-length arrays) or a whole-program
    analysis.
+1c. **Shortest-digit formatting** (§7a) — **done**. 35x on printing a double,
+   and a correctness fix; the first item to spend the runtime budget.
+1d. **The private `Result` ABI** (§7b) — **done**. 1.40x on `bench/result`,
+   no new analysis, and it closes the last gap to C on that shape.
 2. **`performance` diagnostics** (§8) — the framework plus the two warnings that
    need no new analysis (quadratic string building, allocation in a loop).
 3. **Slice iterators** (§2.3) — the biggest speed win per line of emitter code,

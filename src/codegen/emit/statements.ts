@@ -1,7 +1,7 @@
 /** Statement lowering, one handler per `ts.SyntaxKind`. */
 import ts from "typescript";
 import { ResultType, llvmType, resultByValue } from "../../types.js";
-import { emitPackedResult } from "./result.js";
+import { emitPackedResult, emitResultReturn } from "./result.js";
 import { arrayStatementEmitters } from "./arrays.js";
 import { EmitContext, EmitterTable, StatementEmitter } from "./context.js";
 import { controlFlowStatementEmitters } from "./control-flow.js";
@@ -21,7 +21,7 @@ const emitReturn: StatementEmitter = (ctx, node) => {
   if (resultByValue(want)) {
     const word = emitPackedResult(ctx, stmt.expression, want as ResultType);
     ctx.emitScopeExit();
-    ctx.fn.emit(`ret i64 ${word}`);
+    emitResultReturn(ctx, word);
     return;
   }
   const type = ctx.typeOf(stmt.expression);
