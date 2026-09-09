@@ -46,20 +46,24 @@ typedef struct amrit_str {
  * One global bump allocator. Compiled modules read this struct directly
  * (the fast path is inlined into the IR), so its layout is ABI:
  *   %struct.amrit_arena = type { i8*, i64, i64, i8* }
- * Fields: current chunk buffer, bump offset, chunk capacity, chunk list. */
+ * Fields: current chunk buffer, bump offset, chunk capacity, chunk list.
+ * `off` and `cap` are `uint64_t` and not `size_t` because that `i64` is what
+ * the inlined fast path bumps and compares on every target: under wasm32 a
+ * `size_t` pair would put them at bytes 4 and 8 while compiled code reads 8
+ * and 16. runtime.c and runtime_wasm.c static-assert these offsets. */
 struct amrit_arena {
   char *buf;
-  size_t off;
-  size_t cap;
+  uint64_t off;
+  uint64_t cap;
   void *chunks;
 };
 extern struct amrit_arena amrit_arena;
 
 /* Bump allocation: 8-byte rounded and aligned, uninitialised. */
-void *amrit_alloc_struct(size_t size);
+void *amrit_alloc_struct(uint64_t size);
 /* Slow path: push a new chunk (at least 64 KB) and bump from it. Called by
  * the inlined fast path when the current chunk is full; rarely by hosts. */
-void *amrit_arena_grow(size_t size);
+void *amrit_arena_grow(uint64_t size);
 /* Recycle everything in O(1): keeps the newest chunk, frees the rest. Every
  * arena string and object becomes invalid. Call it between batches. */
 void amrit_reset_arena(void);

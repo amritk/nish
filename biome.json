@@ -16,6 +16,7 @@
       "docs/*.mjs",
       "bench/**/*.ts",
       "bench/**/*.mjs",
+      "web/**/*.mjs",
       "!**/dist",
       "!**/build",
       "!**/node_modules",
@@ -130,6 +131,7 @@
         "tests/**/*.js",
         "docs/*.mjs",
         "bench/**/*.mjs",
+      "web/**/*.mjs",
         "examples/*.mjs"
       ],
       "plugins": [

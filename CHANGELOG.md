@@ -217,6 +217,23 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Fixed — soundness
 
+- **The arena's C struct was 16 bytes on wasm32 where the IR says 32, so the
+  `wasi` profile handed out wild pointers.** `struct amrit_arena` spelled `off`
+  and `cap` as `size_t`, which is the IR's `i64` only on a 64-bit target. Under
+  wasm32 they sat at bytes 4 and 8, while the bump allocator every compiled
+  function inlines (`%struct.amrit_arena = type { i8*, i64, i64, i8* }`,
+  `src/codegen/runtime.ts`) bumped byte 8 and compared byte 16 — past the end
+  of a global that was only 16 bytes long. A string-only program survived,
+  because `runtime.c` allocates its strings through its own consistent view of
+  the struct; anything that built an object or an array in compiled code got a
+  pointer from nowhere, and a `new` in a loop trapped. The freestanding `wasm`
+  profile was never affected: `runtime/runtime_wasm.c` had the rule right and
+  said why. `runtime.c` and `amritc.h` now use `uint64_t` for the same reason,
+  all three static-assert the offsets wherever they are compiled, and
+  `tests/run.js` compiles the header's layout assertions for the host *and* for
+  wasm32 — `-fsyntax-only`, so the guard runs without a WASI sysroot, which is
+  what the old host-only check was missing.
+
 - **A duplicate function name is refused whether or not `--strict-exports` is
   in play.** The check used to be skipped under that flag, on the reasoning
   that an `internal` symbol never reaches the linker. It does reach
@@ -310,6 +327,24 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   its first find. `reject_res_unwrap_or_f64` pins it.
 
 ### Added
+
+- **`web/`: the compiler compiled to wasm, driven from a Web Worker.** `self/`
+  is an AmritScript program, so `--profile wasi` links it into one 480 KB
+  module (about 140 KB gzipped) that lexes, checks and emits LLVM IR with no
+  server involved. `web/wasi.mjs` is a WASI preview1 host over an in-memory
+  filesystem, with no imports at all, so the same file runs in a page and under
+  Node; `web/worker.mjs` answers one compile per message in a fresh instance;
+  `web/compile.mjs` drives it from `node:worker_threads` and `web/index.html`
+  is a playground. `tests/run.js` builds the module and checks that the IR it
+  emits for `examples/add.ts` is stage0's, byte for byte (skipped without a
+  WASI sysroot, like the rest of the `wasi` block).
+
+  It stops at the IR, and that is the design rather than a gap: `amritc` emits
+  textual LLVM IR and hands the rest to `clang` and `wasm-ld`, neither of which
+  exists in a page. `--link` and `--profile` need `spawnSync`, which WASI
+  answers with `-1` — reported as a toolchain failure, exit 3 — and
+  `--target host` is refused because `process.platform` is `unknown` there.
+  `web/README.md` has the whole list.
 
 - **A plan for true multithreading (WP20, `docs/wp20-threads.md`).** The
   answer to "how does AmritScript do threads, like Go or Rust" turns out to be
