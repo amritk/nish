@@ -78,7 +78,7 @@ const DECLARED = [
   {
     // No `flag`: this one is about the program, not about how it was compiled.
     surface: "stderr",
-    matches: (want, got) => {
+    matches: (want, got, run) => {
       const zero = firstDiagnostic(want);
       const one = firstDiagnostic(got);
       const syntax = (line) => line.includes(": syntax error: ");
@@ -87,12 +87,13 @@ const DECLARED = [
       // to say because it never built a tree. Anything else — stage0 accepting
       // the program, a different file, stage1 refusing where stage0 does not —
       // falls through and reports.
+      if (!syntax(one)) return false;
+      // Under `--emit-ast` stage0 says nothing at all: the `typescript` parser
+      // recovers from the syntax error and it prints the tree it got. There is
+      // no stage0 diagnostic to compare against, and the reason is this one.
+      if (zero === "") return run.flags.includes("--emit-ast");
       return (
-        syntax(one) &&
-        zero !== "" &&
-        !syntax(zero) &&
-        diagnosticFile(one) !== "" &&
-        diagnosticFile(one) === diagnosticFile(zero)
+        !syntax(zero) && diagnosticFile(one) !== "" && diagnosticFile(one) === diagnosticFile(zero)
       );
     },
     why: "the parser refuses before Phase 0 gets to name the rule. `.claude/selfhost.md` states the habit — lex and parse what is written, refuse in the phase that owns the rule — and stage1's grammar is AmritScript-0's, so syntax the language forbids stops at the parser with `expected `;`` where stage0 parses it with the `typescript` package and refuses it in Phase 0 by name. 43 cases of the corpus are this, and `reject_oracle.js` counts them apart for the same reason. What is *not* declared here is the outcome: the exit status, the stdout and every file written are still compared, and stage0 accepting a program stage1 refuses is a failure, not this.",
@@ -111,6 +112,16 @@ const DECLARED = [
       return zero.length > one.length && one.length >= 1 && rest(want) === rest(got);
     },
     why: "stage0 reports an inheritance cycle once per class in it and stage1 once. The second report is an artefact of the throw: `collectStructMembers` sets `collected = \"collecting\"` and the `CompileError` leaves the function without ever clearing it, so the next class of the cycle finds a stale marker and reports itself too. stage1 has no throw to leave the marker behind, and reproducing it by hand — returning early and leaving `collecting` set — makes the compiler *loop*, because `resolveBase` collects the base recursively and the pair then re-enter each other. A caret is not worth an infinite loop in the self-hosted compiler; the first diagnostic is identical and refuses the program on both sides (`tests/cases/reject_cls_extends_cycle`).",
+  },
+  {
+    surface: "exit",
+    matches: (want, got, run) => {
+      const syntax = firstDiagnostic(run.one.stderr).includes(": syntax error: ");
+      // Only that direction: stage0 dumped a tree and exited 0, stage1 could
+      // not read the file. stage1 exiting 0 where stage0 refuses is a failure.
+      return syntax && want === "0" && got === "1";
+    },
+    why: "the same parser refusal as the stderr declaration above, on the surface a dump flag reaches: `--emit-ast` asks for the tree of a program stage1's grammar cannot read, so there is none to print and it exits 1, while stage0 parses it with the `typescript` package, which recovers from the syntax error, dumps a tree and exits 0. Declared only when stage1's own first diagnostic is that syntax error and only in that direction.",
   },
   {
     flag: "--emit-checked",
@@ -134,12 +145,12 @@ const DECLARED = [
  * texts together — which is what a difference whose *shape* is the decided
  * part needs, rather than one whose bytes are.
  */
-function declaredFor(flags, surface, want, got) {
+function declaredFor(flags, surface, want, got, run) {
   for (const d of DECLARED) {
     if (d.flag !== undefined && !flags.includes(d.flag)) continue;
     if (d.surface !== surface) continue;
     if (d.whole === true) return d;
-    if (d.matches !== undefined && d.matches(want, got)) return d;
+    if (d.matches !== undefined && d.matches(want, got, run)) return d;
     if (d.normalize !== undefined && d.normalize(want) === d.normalize(got)) return d;
   }
   return null;
@@ -243,8 +254,12 @@ async function compare(compiler, program, variation, index) {
   ]);
 
   const found = [];
+  // The whole run is handed to a declaration as well as the two texts, because
+  // a difference on one surface can be decided by what happened on another:
+  // an exit status of 1 where stage0 has 0 is the parser's refusal when the
+  // stderr *is* that refusal, and nothing else.
   const note = (surface, want, got, detail) => {
-    const declared = declaredFor(args, surface, want, got);
+    const declared = declaredFor(args, surface, want, got, { zero, one, flags: args });
     found.push({ program: program.name, variation: variation.name, surface, detail, declared });
   };
 

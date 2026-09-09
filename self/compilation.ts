@@ -183,7 +183,16 @@ export class Compilation {
     // reached — does not (`self/compile.ts`, WP19 §A3).
     const beforeValidation = this.sink.count();
     validate(checker.ctx, file);
+    const failedValidation = this.sink.count() > beforeValidation;
     this.validationErrors = this.validationErrors + (this.sink.count() - beforeValidation);
+    if (failedValidation) {
+      // Phase 0 refused the file, and that ends the compilation rather than
+      // going on to pass 1: stage0's validator `throw`s out of `load` and the
+      // driver reports the one diagnostic (`src/validator.ts`, `fail`). Going
+      // on meant the checker refused `any` a second time, from the annotation
+      // resolver, for one `any` in the source (WP19 §A3).
+      return false;
+    }
     checker.collectSignatures(); // pass 1, which also validates the import syntax
     const dir = dirname(path);
     let ok = true;

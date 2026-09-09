@@ -416,19 +416,14 @@ export function main(): number {
   // stage0 answers it from. The tree is this compiler's own, not a mirror of
   // stage0's (`ast_text.ts` says why), so the two goldens differ by design.
   //
-  // *Validated*, though, is the half that used to be missing: `load` reports a
-  // Phase 0 refusal into the sink and answers true anyway, so a program with
-  // `any` in it dumped a tree and exited 0 here while stage0 printed the
-  // refusal, dumped nothing and exited 1. A dump flag does not turn a refused
-  // program into a compiling one (WP19 §A3, `tests/cases/dump_ast_reject`).
+  // *Validated*, though, is the half that used to be missing: `load` reported
+  // a Phase 0 refusal into the sink and answered true anyway, so a program
+  // with `any` in it dumped a tree and exited 0 here while stage0 printed the
+  // refusal, dumped nothing and exited 1. `load` answers false for that now,
+  // so the failure is reported above and this is only ever reached with a
+  // validated program — a dump flag does not turn a refused program into a
+  // compiling one (WP19 §A3, `tests/cases/dump_ast_reject`).
   if (emitAst) {
-    // Phase 0's refusals only: stage0 dumps from the parsed and validated
-    // modules, so a rule the *checker* would have broken is not one it has
-    // reached, and the dump goes out as it does there.
-    if (compilation.validationErrors > 0) {
-      report(compilation, json);
-      return 1;
-    }
     for (const unit of compilation.modules) {
       write(astText(unit.file, unit.path));
     }

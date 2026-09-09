@@ -205,13 +205,14 @@ export function checkVariableList(ctx: CheckContext, list: Node, scope: Scope): 
       type = T_ERROR;
     }
     // A rejected initializer leaves the variable declared only when the
-    // annotation says what it is. Without one there is no type to give it, so
-    // it stays undeclared and its later uses are `Unknown identifier` —
+    // annotation says what it is — and an annotation that did not resolve does
+    // not say. Without a type there is nothing to declare it as, so it stays
+    // undeclared and its later uses are `Unknown identifier` —
     // stage0's `catch` declares it in exactly the annotated case and rethrows
     // otherwise (`checkVariableDeclaration` in `src/checker/statements.ts`),
     // and the cascade that follows is the visible half of the difference
     // (WP19 §A3: `const at = m.get(k, -1)` in f64 mode).
-    if (ctx.errored && declared < 0) {
+    if (ctx.errored && (declared < 0 || declared === T_ERROR)) {
       continue;
     }
     declareLocal(ctx, scope, decl, name, type, mutable);
