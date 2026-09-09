@@ -69,13 +69,13 @@ const VARIATIONS = [
  */
 const DECLARED = [
   {
-    variation: "--emit-ast",
+    flag: "--emit-ast",
     surface: "stdout",
     whole: true,
     why: "each compiler dumps its own tree: stage0 the `typescript` package's node names and 1-based line:col spans, stage1 the flattened vocabulary of `self/nodes.ts` with byte offsets (wp19 §2A). A golden per compiler pins each; there is deliberately no oracle between them.",
   },
   {
-    variation: "--emit-checked",
+    flag: "--emit-checked",
     surface: "stdout",
     normalize: (text) => text.replace(/^module .*?([^/\\]+\.ts)( \(entry\))?$/gm, "module $1$2"),
     why: "the `module <path>` header only. stage0 rewrites a file name to be cwd-relative (`displayName` in src/dump.ts) because the harness hands it absolute paths and a golden must not carry a checkout path; stage1 prints the path it was given, because it has no `cwd` to relativise against and adding a builtin to change one line of a debug dump is what §4 means by the runtime budget dying. Every other line of the dump is compared as it stands.",
@@ -83,13 +83,19 @@ const DECLARED = [
 ];
 
 /**
- * The declaration covering a surface, or null. `whole` declarations match
- * outright; the rest have to *earn* it by normalising the two texts into
- * agreement, so a second, real difference on the same surface still reports.
+ * The declaration covering a surface, or null. It is keyed on the flags the
+ * run *effectively* carried, not on the variation's name: a program whose own
+ * `.args` ask for a dump (`tests/cases/dump_ast.ts`) is dumping under every
+ * variation, and keying on the name reported its difference as undeclared
+ * eleven times over.
+ *
+ * `whole` declarations match outright; the rest have to *earn* it by
+ * normalising the two texts into agreement, so a second, real difference on
+ * the same surface still reports.
  */
-function declaredFor(variation, surface, want, got) {
+function declaredFor(flags, surface, want, got) {
   for (const d of DECLARED) {
-    if (d.variation !== variation || d.surface !== surface) continue;
+    if (!flags.includes(d.flag) || d.surface !== surface) continue;
     if (d.whole === true) return d;
     if (d.normalize !== undefined && d.normalize(want) === d.normalize(got)) return d;
   }
@@ -184,7 +190,7 @@ async function compare(compiler, program, variation, index) {
 
   const found = [];
   const note = (surface, want, got, detail) => {
-    const declared = declaredFor(variation.name, surface, want, got);
+    const declared = declaredFor(args, surface, want, got);
     found.push({ program: program.name, variation: variation.name, surface, detail, declared });
   };
 
@@ -283,7 +289,23 @@ async function main(argv) {
     for (const variation of VARIATIONS) runs.push({ program, variation });
   }
   const t0 = Date.now();
-  const results = await pool(runs, 8, (run_, i) => compare(compiler, run_.program, run_.variation, i));
+  // A full run is minutes — `self/`'s modules are whole programs and every one
+  // of them is compiled under every variation — so it says where it is. On
+  // stderr, so that piping the table somewhere does not collect the progress
+  // with it, and only when stderr is a terminal, so a CI log is not a
+  // thousand lines of counter.
+  const total = runs.length;
+  let done = 0;
+  const ticking = process.stderr.isTTY === true && !verbose;
+  const results = await pool(runs, 8, async (run_, i) => {
+    const found = await compare(compiler, run_.program, run_.variation, i);
+    done++;
+    if (ticking && done % 25 === 0) {
+      process.stderr.write(`\rparity: ${done}/${total} runs`);
+    }
+    return found;
+  });
+  if (ticking) process.stderr.write(`\r${" ".repeat(30)}\r`);
   const differences = results.flat();
   const undeclared = differences.filter((d) => d.declared === null);
   const declared = differences.filter((d) => d.declared !== null);
@@ -302,7 +324,7 @@ async function main(argv) {
     const byReason = new Map();
     for (const d of declared) byReason.set(d.declared, (byReason.get(d.declared) ?? 0) + 1);
     for (const [reason, count] of byReason) {
-      process.stdout.write(`declared: ${count} × ${reason.variation} ${reason.surface} — ${reason.why}\n`);
+      process.stdout.write(`declared: ${count} × ${reason.flag} ${reason.surface} — ${reason.why}\n`);
     }
   }
   const seconds = ((Date.now() - t0) / 1000).toFixed(1);
