@@ -87,6 +87,64 @@ function align8(ctx: EmitContext): string {
   return ctx.opts.optimizeAttributes ? ", align 8" : "";
 }
 
+// ---- Alias domains ------------------------------------------------------------------
+
+/**
+ * WP15: an array's 24-byte header and the element buffer it points at never
+ * share a byte, and saying so is worth more than every other array
+ * optimisation measured so far.
+ *
+ * Without it, LLVM must assume `a[i] = v` might land on some array's `len` or
+ * `data`, so it reloads the header on every iteration of every loop that
+ * writes an element — which blocks LICM, and with it the loop vectoriser. On
+ * `dst[i] = src[i] * 2.0` over 8192 doubles the reload alone costs 1.58x
+ * (1205 ms against 763 ms, `--profile speed`).
+ *
+ * **The proof is about bytes, not allocations.** Every header the compiler
+ * produces is either a 24-byte `amrit_alloc_struct` bump, an entry-block
+ * `alloca %struct.amrit_array` (WP6), or the malloc'd block `amrit_argv_init`
+ * builds; every element buffer is a separate bump, a separate `alloca [n x T]`,
+ * or — for argv alone — the bytes *after* the header in that one block. In all
+ * four shapes the header's three fields and the `cap * sizeof(T)` of element
+ * storage occupy disjoint byte ranges, so no store through an element pointer
+ * can reach a header field and no store to a header field can reach element
+ * data. `amrit_array_grow` bumps a fresh buffer and writes `data`/`cap`, which
+ * is a header write, and stays inside the same split.
+ *
+ * The domains cover *arrays* only. A string is one block whose length header
+ * and bytes are contiguous, so it has no such split to describe, and struct
+ * fields are left alone until there is a measurement behind them.
+ *
+ * The nodes are spelled with names rather than as self-referential nodes so
+ * that LLVM's uniquing merges module A's header domain with module B's under
+ * LTO; distinct domains would answer "may alias" across an inlined boundary,
+ * which is exactly where the array traffic is.
+ */
+function aliasDomains(ctx: EmitContext): { header: string; element: string } {
+  const domain = ctx.metadata(`!{!"amritc array"}`);
+  const header = ctx.metadata(`!{!"header", ${domain}}`);
+  const element = ctx.metadata(`!{!"elements", ${domain}}`);
+  return { header: ctx.metadata(`!{${header}}`), element: ctx.metadata(`!{${element}}`) };
+}
+
+/**
+ * `, !alias.scope ..., !noalias ...` for a load or store of an array header
+ * field. Both halves are needed: `alias.scope` alone says where the access is,
+ * and only the `noalias` on the other side makes the pair a NoAlias answer.
+ */
+function headerAccess(ctx: EmitContext): string {
+  if (!ctx.opts.optimizeAttributes) return "";
+  const { header, element } = aliasDomains(ctx);
+  return `, !alias.scope ${header}, !noalias ${element}`;
+}
+
+/** The same, for a load or store of array element data. */
+export function elementAccess(ctx: EmitContext): string {
+  if (!ctx.opts.optimizeAttributes) return "";
+  const { header, element } = aliasDomains(ctx);
+  return `, !alias.scope ${element}, !noalias ${header}`;
+}
+
 // ---- Header access ------------------------------------------------------------------
 
 /** Address of header field `index` (0 len, 1 cap, 2 data). */
@@ -94,14 +152,24 @@ function fieldPointer(ctx: EmitContext, arr: string, index: 0 | 1 | 2): string {
   return ctx.fn.emitValue(`getelementptr inbounds ${HEADER}, ${HEADER_PTR} ${arr}, i64 0, i32 ${index}`);
 }
 
+/** Load header field `index`, in the header alias domain. */
+function loadHeaderField(ctx: EmitContext, arr: string, index: 0 | 1 | 2, type = "i64"): string {
+  return ctx.fn.emitValue(`load ${type}, ${type}* ${fieldPointer(ctx, arr, index)}${align8(ctx)}${headerAccess(ctx)}`);
+}
+
+/** Store `value` into header field `index`, in the header alias domain. */
+function storeHeaderField(ctx: EmitContext, arr: string, index: 0 | 1 | 2, value: string, type = "i64"): void {
+  ctx.fn.emit(`store ${type} ${value}, ${type}* ${fieldPointer(ctx, arr, index)}${align8(ctx)}${headerAccess(ctx)}`);
+}
+
 function loadLength(ctx: EmitContext, arr: string): string {
-  return ctx.fn.emitValue(`load i64, i64* ${fieldPointer(ctx, arr, 0)}${align8(ctx)}`);
+  return loadHeaderField(ctx, arr, 0);
 }
 
 /** `T*` to element `idx` (an i64 value) of `arr`. */
 function elementPointer(ctx: EmitContext, arr: string, elem: StaticType, idx: string): string {
   const ty = llvmType(elem);
-  const data = ctx.fn.emitValue(`load i8*, i8** ${fieldPointer(ctx, arr, 2)}${align8(ctx)}`);
+  const data = loadHeaderField(ctx, arr, 2, "i8*");
   const typed = ctx.fn.emitValue(`bitcast i8* ${data} to ${ty}*`);
   return ctx.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${typed}, i64 ${idx}`);
 }
@@ -170,8 +238,8 @@ function emitHeader(ctx: EmitContext, n: string, site: ts.Node): string {
     const raw = ctx.fn.emitValue(`call i8* ${ctx.useRuntime("amrit_alloc_struct")}(i64 ${HEADER_BYTES})`);
     arr = ctx.fn.emitValue(`bitcast i8* ${raw} to ${HEADER_PTR}`);
   }
-  ctx.fn.emit(`store i64 ${n}, i64* ${fieldPointer(ctx, arr, 0)}${align8(ctx)}`);
-  ctx.fn.emit(`store i64 ${n}, i64* ${fieldPointer(ctx, arr, 1)}${align8(ctx)}`);
+  storeHeaderField(ctx, arr, 0, n);
+  storeHeaderField(ctx, arr, 1, n);
   return arr;
 }
 
@@ -196,7 +264,7 @@ function emitData(
 }
 
 function storeData(ctx: EmitContext, arr: string, data: string): void {
-  ctx.fn.emit(`store i8* ${data}, i8** ${fieldPointer(ctx, arr, 2)}${align8(ctx)}`);
+  storeHeaderField(ctx, arr, 2, data, "i8*");
 }
 
 // ---- Construction -------------------------------------------------------------------
@@ -215,7 +283,7 @@ const emitArrayLiteral: ExpressionEmitter = (ctx, node) => {
     const typed = ctx.fn.emitValue(`bitcast i8* ${data} to ${ty}*`);
     values.forEach((value, i) => {
       const slot = ctx.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${typed}, i64 ${i}`);
-      ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${ctx.alignSuffix(elem)}`);
+      ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`);
     });
   }
   return arr;
@@ -232,7 +300,9 @@ newEmitters.Array = (ctx, expr) => {
   const data = emitData(ctx, expr, elem, count, bytes);
   ctx.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`);
   const dataArg = ctx.opts.optimizeAttributes ? `i8* align 8 ${data}` : `i8* ${data}`;
-  ctx.fn.emit(`call void @${MEMSET}(${dataArg}, i8 0, i64 ${bytes}, i1 false)`);
+  // The zero fill is element traffic like any other store, and saying so keeps
+  // it from being read as a clobber of the `len`/`cap` written just above.
+  ctx.fn.emit(`call void @${MEMSET}(${dataArg}, i8 0, i64 ${bytes}, i1 false)${elementAccess(ctx)}`);
   storeData(ctx, arr, data);
   return arr;
 };
@@ -250,7 +320,7 @@ const emitElementAccess: ExpressionEmitter = (ctx, node) => {
   emitBoundsCheck(ctx, arr, idx);
   const ty = llvmType(elem);
   return ctx.fn.emitValue(
-    `load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}`
+    `load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`
   );
 };
 
@@ -286,7 +356,7 @@ const emitElementAssignment: BinaryEmitter = (ctx, expr) => {
     const value = ctx.emitExpression(expr.right);
     emitBoundsCheck(ctx, arr, idx);
     ctx.fn.emit(
-      `store ${ty} ${value}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}`
+      `store ${ty} ${value}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`
     );
     return value;
   }
@@ -295,7 +365,7 @@ const emitElementAssignment: BinaryEmitter = (ctx, expr) => {
   // what keeps `xs[next()] |= 1` to one call and one bounds check.
   emitBoundsCheck(ctx, arr, idx);
   const slot = elementPointer(ctx, arr, elem, idx);
-  const old = ctx.fn.emitValue(`load ${ty}, ${ty}* ${slot}${ctx.alignSuffix(elem)}`);
+  const old = ctx.fn.emitValue(`load ${ty}, ${ty}* ${slot}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`);
   let value: string;
   if (isBitwiseCompoundOperator(op)) {
     value = emitBitwiseCombine(ctx, op, elem, old, expr.right);
@@ -306,7 +376,7 @@ const emitElementAssignment: BinaryEmitter = (ctx, expr) => {
       ? ctx.fn.emitValue(`${floatOp} ${ty} ${old}, ${rhs}`)
       : emitIntBinary(ctx, intOp, elem, old, rhs);
   }
-  ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${ctx.alignSuffix(elem)}`);
+  ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`);
   return value;
 };
 
@@ -357,8 +427,8 @@ function emitPush(ctx: EmitContext, expr: ts.CallExpression, arr: string, elem: 
   const fn = ctx.fn;
   const value = ctx.emitExpression(expr.arguments[0]);
   const lenPtr = fieldPointer(ctx, arr, 0);
-  const len = fn.emitValue(`load i64, i64* ${lenPtr}${align8(ctx)}`);
-  const cap = fn.emitValue(`load i64, i64* ${fieldPointer(ctx, arr, 1)}${align8(ctx)}`);
+  const len = fn.emitValue(`load i64, i64* ${lenPtr}${align8(ctx)}${headerAccess(ctx)}`);
+  const cap = loadHeaderField(ctx, arr, 1);
   const full = fn.emitValue(`icmp eq i64 ${len}, ${cap}`);
   const growBlock = fn.newBlock("push.grow");
   const storeBlock = fn.newBlock("push.store");
@@ -367,9 +437,9 @@ function emitPush(ctx: EmitContext, expr: ts.CallExpression, arr: string, elem: 
   fn.emit(`call void ${ctx.useRuntime("amrit_array_grow")}(${HEADER_PTR} ${arr}, i64 ${elementSize(elem)})`);
   fn.emit(`br label %${storeBlock.label}`);
   fn.placeBlock(storeBlock);
-  fn.emit(`store ${ty} ${value}, ${ty}* ${elementPointer(ctx, arr, elem, len)}${ctx.alignSuffix(elem)}`);
+  fn.emit(`store ${ty} ${value}, ${ty}* ${elementPointer(ctx, arr, elem, len)}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`);
   const newLen = fn.emitValue(`add i64 ${len}, 1`);
-  fn.emit(`store i64 ${newLen}, i64* ${lenPtr}${align8(ctx)}`);
+  fn.emit(`store i64 ${newLen}, i64* ${lenPtr}${align8(ctx)}${headerAccess(ctx)}`);
   return emitNumberFromI64(ctx, newLen, expr);
 }
 
@@ -382,7 +452,7 @@ function emitPush(ctx: EmitContext, expr: ts.CallExpression, arr: string, elem: 
 function emitPop(ctx: EmitContext, arr: string, elem: StaticType): string {
   const fn = ctx.fn;
   const lenPtr = fieldPointer(ctx, arr, 0);
-  const len = fn.emitValue(`load i64, i64* ${lenPtr}${align8(ctx)}`);
+  const len = fn.emitValue(`load i64, i64* ${lenPtr}${align8(ctx)}${headerAccess(ctx)}`);
   if (!ctx.opts.uncheckedIndexing) {
     const empty = fn.emitValue(`icmp eq i64 ${len}, 0`);
     const failBlock = fn.newBlock("pop.empty");
@@ -394,9 +464,9 @@ function emitPop(ctx: EmitContext, arr: string, elem: StaticType): string {
     fn.placeBlock(okBlock);
   }
   const last = fn.emitValue(`sub i64 ${len}, 1`);
-  fn.emit(`store i64 ${last}, i64* ${lenPtr}${align8(ctx)}`);
+  fn.emit(`store i64 ${last}, i64* ${lenPtr}${align8(ctx)}${headerAccess(ctx)}`);
   const ty = llvmType(elem);
-  return fn.emitValue(`load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, last)}${ctx.alignSuffix(elem)}`);
+  return fn.emitValue(`load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, last)}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`);
 }
 
 /**
@@ -429,7 +499,7 @@ function emitIndexOf(ctx: EmitContext, expr: ts.CallExpression, arr: string, ele
   fn.placeBlock(testBlock);
   const ty = llvmType(elem);
   const element = fn.emitValue(
-    `load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, at)}${ctx.alignSuffix(elem)}`
+    `load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, at)}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`
   );
   const hit = emitElementEquals(ctx, elem, element, value);
   fn.emit(`br i1 ${hit}, label %${endBlock.label}, label %${nextBlock.label}`);
@@ -493,7 +563,7 @@ function emitJoin(ctx: EmitContext, expr: ts.CallExpression, arr: string): strin
 
   fn.placeBlock(sumBodyBlock);
   const partPtr = elementPointer(ctx, arr, STRING, sumAt);
-  const part = fn.emitValue(`load i8*, i8** ${partPtr}${align8(ctx)}`);
+  const part = fn.emitValue(`load i8*, i8** ${partPtr}${align8(ctx)}${elementAccess(ctx)}`);
   const total = fn.emitValue(`load i64, i64* ${totalSlot}, align 8`);
   const grown = fn.emitValue(`add i64 ${total}, ${stringLength(ctx, part)}`);
   fn.emit(`store i64 ${grown}, i64* ${totalSlot}, align 8`);
@@ -526,7 +596,7 @@ function emitJoin(ctx: EmitContext, expr: ts.CallExpression, arr: string): strin
   const sepData = fn.emitValue(`getelementptr inbounds i8, i8* ${sep}, i64 8`);
   fn.emit(`call void @${MEMCPY}(i8* ${cursor}, i8* ${sepData}, i64 ${gapLen}, i1 false)`);
   const afterGap = fn.emitValue(`getelementptr inbounds i8, i8* ${cursor}, i64 ${gapLen}`);
-  const item = fn.emitValue(`load i8*, i8** ${elementPointer(ctx, arr, STRING, copyAt)}${align8(ctx)}`);
+  const item = fn.emitValue(`load i8*, i8** ${elementPointer(ctx, arr, STRING, copyAt)}${align8(ctx)}${elementAccess(ctx)}`);
   const itemLen = stringLength(ctx, item);
   const itemData = fn.emitValue(`getelementptr inbounds i8, i8* ${item}, i64 8`);
   fn.emit(`call void @${MEMCPY}(i8* ${afterGap}, i8* ${itemData}, i64 ${itemLen}, i1 false)`);
@@ -595,7 +665,7 @@ const emitForOf: StatementEmitter = (ctx, node) => {
 
   fn.placeBlock(bodyBlock);
   const value = fn.emitValue(
-    `load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}`
+    `load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`
   );
   fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${ctx.alignSuffix(elem)}`);
   ctx.loops.push({ breakBlock: endBlock, continueBlock: incBlock, hasBreak: false });

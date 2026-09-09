@@ -521,6 +521,11 @@ export class Emitter {
     this.module.addGlobal(text);
   }
 
+  /** Intern a module metadata node and return its `!N` reference; identical texts share a node. */
+  metadata(text: string): string {
+    return this.module.addMetadata(text);
+  }
+
   emitRuntimePrelude(): void {
     const all = this.opts.runtimeDecls;
     const wantsAlloc = all || this.usedRuntime.has("amrit_alloc_struct");

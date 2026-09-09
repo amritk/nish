@@ -311,6 +311,10 @@ export class Emitter implements EmitContext {
     this.module.addGlobal(text);
   }
 
+  metadata(text: string): string {
+    return this.module.addMetadata(text);
+  }
+
   private emitRuntimePrelude(): void {
     const all = this.opts.runtimeDecls;
     const wantsAlloc = all || this.usedRuntime.has("amrit_alloc_struct");

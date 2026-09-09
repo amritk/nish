@@ -809,6 +809,28 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
       run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
     );
   }
+  // WP15: the array header and the element buffer are separate alias domains, so an
+  // element store cannot be read as a clobber of a header. The consequence a golden
+  // cannot express is that LICM then hoists `len` and `data` out of a loop that writes
+  // elements: after `opt -O2` every `%struct.amrit_array` access in `@scale` must sit
+  // in the preheader, none in the loop body. Without the domains all four were reloaded
+  // per iteration, which measured 1.6x on the same shape.
+  const aliasLl = path.join(buildDir, "arr_alias_domains.ll");
+  if (has("opt") && fs.existsSync(aliasLl)) {
+    const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", aliasLl]);
+    const body = String(o.stdout).match(/define[^\n]*@scale\b[\s\S]*?\n}/)?.[0] ?? "";
+    // Everything from the loop's back-edge target onwards is the loop; the preheader is before it.
+    // The GEPs hoist on their own (they are pure address arithmetic), so what tells the two builds
+    // apart is the *loads*: `len` is `load i64` and `data` is `load ptr`, and the elements here are
+    // `i32`, so neither spelling can be element traffic.
+    const loop = body.slice(body.indexOf("\nwhile.body:"));
+    const reloads = (loop.match(/load (i64|ptr),/g) ?? []).join(" ");
+    check(
+      "arr_alias_domains: opt -O2 hoists every array header load out of the loop",
+      o.status === 0 && body !== "" && loop !== "" && reloads === "",
+      o.status === 0 ? `reloaded in the loop: ${reloads || "(none)"}\n${body}` : String(o.stderr)
+    );
+  }
   if (has("opt")) {
     const uncheckedLl = path.join(buildDir, "arr_sum_unchecked.ll");
     const c = spawnSync(

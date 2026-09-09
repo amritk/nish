@@ -157,6 +157,78 @@ and their tests move with it.
 
 ---
 
+## 2b. The array header is not the array's elements — **done**
+
+The largest measured win in this note, and it needed no language change at all.
+
+An array is a `%struct.amrit_array*` to `{ i64 len, i64 cap, i8* data }`, and
+`data` points somewhere else. Nothing in the IR said those two regions are
+disjoint, so LLVM had to assume `a[i] = v` might land on some array's `len` or
+`data`. The consequence is not a missed peephole — it is that **the header is
+reloaded on every iteration of every loop that writes an element**, because
+LICM may not hoist a load a store might clobber, and the loop vectoriser gives
+up behind it.
+
+Measured on `dst[i] = src[i] * 2.0`, 8192 doubles (L2-resident), 150k passes,
+`--profile speed`, min of 7:
+
+| | min | |
+| --- | ---: | --- |
+| before | 1205 ms | header reloaded per iteration |
+| **header and elements as separate alias domains** | **763 ms** | **1.58x**, sound today |
+| + the header treated as invariant | 373 ms | 3.23x, and it vectorises — needs §2c |
+| + `--unchecked-indexing` on top | 371 ms | 0.5%: the checks were never the cost |
+
+That last row is worth reading twice. **Bounds checks were not what the loop
+was paying for**, and the intuition that they are is what sent WP9's diagnosis
+looking at `--unchecked-indexing` (which bought 0% on nbody and 4% on sieve).
+The cost was the aliasing, and the checks only looked expensive because the
+`len` they compare against was being reloaded with everything else.
+
+**The proof is about bytes, not allocations.** Every header the compiler
+produces is a 24-byte `amrit_alloc_struct` bump, an entry-block
+`alloca %struct.amrit_array` (WP6), or the `malloc` block `amrit_argv_init`
+builds; every element buffer is a separate bump, a separate `alloca [n x T]`,
+or — for argv alone — the bytes *after* the header in that one block. In all
+four shapes the two occupy disjoint byte ranges, so no store through an element
+pointer reaches a header field and none the other way. `amrit_array_grow` bumps
+a fresh buffer and writes `data`/`cap`, which is a header write, and stays
+inside the same split. The argument lives beside the code in
+`src/codegen/emit/arrays.ts`, per the "no attribute without a proof" rule.
+
+Strings are deliberately left out: a string is one block whose length header and
+bytes are contiguous, so there is no split to describe. Struct fields are left
+out too, until there is a measurement behind them — the nbody gap is a struct
+aliasing problem and annotating the array headers moved it by nothing
+(1829 ms against 1895, noise).
+
+`tests/cases/arr_alias_domains` pins the property a golden cannot express: after
+`opt -O2`, no header load survives inside the loop. The GEPs hoist on their own,
+so the check is on the loads.
+
+## 2c. Making the header invariant — the other 2x
+
+§2b stops the header from being *clobbered*; it does not say the header never
+*changes*. `push` can change `len` and `data`, so the load still has to happen
+once per loop, and the bounds compare still reads a value LLVM cannot fold —
+which is why the vectoriser is still out at 763 ms and in at 373 ms.
+
+Closing it needs the header to be genuinely immutable for the loop's duration.
+Two candidates, in preference order:
+
+1. **Fixed-length arrays.** `Int32Array`/`Float64Array` are aliases of `T[]`
+   today, `push` and all (`docs/LANGUAGE.md`, "Typed-array names are aliases").
+   Making them real fixed-length types gives the header an immutability the
+   emitter can state as `!invariant.load`, and gives a program a way to ask for
+   the fast shape by name.
+2. **A "no `push` reaches this loop" analysis.** Cheaper for existing code and
+   needs no new type, but it is a whole-program question once a callee is
+   involved, so it wants the same fixpoint `attributes.ts` already runs.
+
+`readonly T[]` already carries most of the proof for case 1 and the emitter
+currently throws it away: a `readonly i32[]` parameter emits nothing but the
+`readonly` attribute. That is the cheapest place to start.
+
 ## 3. Fast defaults — **done**
 
 | Flag | Default | What it buys | What it costs |
@@ -395,6 +467,13 @@ Roughly dependency order; each row ships with the full construct checklist from
 1. **Fast defaults** (§3) — **done**. Flag flips plus the honest re-pointing
    of every affected test and doc. Small, and it moves the baseline everything
    else is measured against.
+1a. **Array alias domains** (§2b) — **done**. 1.58x on an element loop, no
+   language change, and it re-ordered this list: it showed that the bounds
+   checks everything below was written to eliminate cost 0.5% once the header
+   is hoisted.
+1b. **An invariant array header** (§2c) — the other 2x, and the first item
+   that needs a language decision (fixed-length arrays) or a whole-program
+   analysis.
 2. **`performance` diagnostics** (§8) — the framework plus the two warnings that
    need no new analysis (quadratic string building, allocation in a loop).
 3. **Slice iterators** (§2.3) — the biggest speed win per line of emitter code,

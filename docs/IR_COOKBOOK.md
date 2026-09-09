@@ -1349,16 +1349,16 @@ entry:
 forof.cond:
   %0 = load i64, i64* %forof.idx, align 8
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
   %3 = icmp ult i64 %0, %2
   br i1 %3, label %forof.body, label %forof.end
 
 forof.body:
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
-  %5 = load i8*, i8** %4, align 8
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
   store i32 %8, i32* %x.addr, align 4
   %9 = load i32, i32* %sum.addr, align 4
   %10 = load i32, i32* %x.addr, align 4
@@ -1378,6 +1378,12 @@ forof.end:
 }
 
 attributes #0 = { nounwind willreturn readonly }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
 ```
 <!-- cookbook:end stmt_for_of -->
 
@@ -1621,7 +1627,7 @@ define internal void @clamp(%struct.amrit_array* noundef nonnull align 8 derefer
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %bytes, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
   %3 = icmp ult i64 %0, %2
   br i1 %3, label %bounds.ok, label %bounds.fail
 
@@ -1631,12 +1637,12 @@ bounds.fail:
 
 bounds.ok:
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %bytes, i64 0, i32 2
-  %5 = load i8*, i8** %4, align 8
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
   %9 = and i32 %8, 255
-  store i32 %9, i32* %7, align 4
+  store i32 %9, i32* %7, align 4, !alias.scope !4, !noalias !3
   ret void
 }
 
@@ -1653,6 +1659,12 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind noreturn cold }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
 ```
 <!-- cookbook:end expr_compound_target -->
 
@@ -2205,7 +2217,7 @@ define internal noundef i32 @get(%struct.amrit_array* noundef nonnull align 8 de
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %a, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
   %3 = icmp ult i64 %0, %2
   br i1 %3, label %bounds.ok, label %bounds.fail
 
@@ -2215,10 +2227,10 @@ bounds.fail:
 
 bounds.ok:
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %a, i64 0, i32 2
-  %5 = load i8*, i8** %4, align 8
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
   ret i32 %8
 }
 
@@ -2226,7 +2238,7 @@ define internal void @set(%struct.amrit_array* noundef nonnull align 8 dereferen
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %a, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
   %3 = icmp ult i64 %0, %2
   br i1 %3, label %bounds.ok, label %bounds.fail
 
@@ -2236,15 +2248,21 @@ bounds.fail:
 
 bounds.ok:
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %a, i64 0, i32 2
-  %5 = load i8*, i8** %4, align 8
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  store i32 %v, i32* %7, align 4
+  store i32 %v, i32* %7, align 4, !alias.scope !4, !noalias !3
   ret void
 }
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind noreturn cold }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
 ```
 <!-- cookbook:end arr_index -->
 
@@ -2270,14 +2288,20 @@ define internal noundef i32 @get(%struct.amrit_array* noundef nonnull align 8 de
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %a, i64 0, i32 2
-  %2 = load i8*, i8** %1, align 8
+  %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4
   %3 = bitcast i8* %2 to i32*
   %4 = getelementptr inbounds i32, i32* %3, i64 %0
-  %5 = load i32, i32* %4, align 4
+  %5 = load i32, i32* %4, align 4, !alias.scope !4, !noalias !3
   ret i32 %5
 }
 
 attributes #0 = { nounwind willreturn readonly }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
 ```
 <!-- cookbook:end arr_unchecked -->
 
@@ -2342,11 +2366,11 @@ entry:
   %0 = call i8* @amrit_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.amrit_array*
   %2 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %1, i64 0, i32 0
-  store i64 0, i64* %2, align 8
+  store i64 0, i64* %2, align 8, !alias.scope !3, !noalias !4
   %3 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %1, i64 0, i32 1
-  store i64 0, i64* %3, align 8
+  store i64 0, i64* %3, align 8, !alias.scope !3, !noalias !4
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %1, i64 0, i32 2
-  store i8* null, i8** %4, align 8
+  store i8* null, i8** %4, align 8, !alias.scope !3, !noalias !4
   store %struct.amrit_array* %1, %struct.amrit_array** %xs.addr, align 8
   store i32 0, i32* %i.addr, align 4
   br label %for.cond
@@ -2362,9 +2386,9 @@ for.body:
   %9 = load i32, i32* %i.addr, align 4
   %10 = mul nsw i32 %8, %9
   %11 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %7, i64 0, i32 0
-  %12 = load i64, i64* %11, align 8
+  %12 = load i64, i64* %11, align 8, !alias.scope !3, !noalias !4
   %13 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %7, i64 0, i32 1
-  %14 = load i64, i64* %13, align 8
+  %14 = load i64, i64* %13, align 8, !alias.scope !3, !noalias !4
   %15 = icmp eq i64 %12, %14
   br i1 %15, label %push.grow, label %push.store
 
@@ -2374,12 +2398,12 @@ push.grow:
 
 push.store:
   %16 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %7, i64 0, i32 2
-  %17 = load i8*, i8** %16, align 8
+  %17 = load i8*, i8** %16, align 8, !alias.scope !3, !noalias !4
   %18 = bitcast i8* %17 to i32*
   %19 = getelementptr inbounds i32, i32* %18, i64 %12
-  store i32 %10, i32* %19, align 4
+  store i32 %10, i32* %19, align 4, !alias.scope !4, !noalias !3
   %20 = add i64 %12, 1
-  store i64 %20, i64* %11, align 8
+  store i64 %20, i64* %11, align 8, !alias.scope !3, !noalias !4
   %21 = trunc i64 %20 to i32
   br label %for.inc
 
@@ -2399,23 +2423,29 @@ entry:
   %0 = call i8* @amrit_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.amrit_array*
   %2 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %1, i64 0, i32 0
-  store i64 2, i64* %2, align 8
+  store i64 2, i64* %2, align 8, !alias.scope !3, !noalias !4
   %3 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %1, i64 0, i32 1
-  store i64 2, i64* %3, align 8
+  store i64 2, i64* %3, align 8, !alias.scope !3, !noalias !4
   %4 = call i8* @amrit_alloc_struct(i64 8)
   %5 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %1, i64 0, i32 2
-  store i8* %4, i8** %5, align 8
+  store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %4 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 0
-  store i32 1, i32* %7, align 4
+  store i32 1, i32* %7, align 4, !alias.scope !4, !noalias !3
   %8 = getelementptr inbounds i32, i32* %6, i64 1
-  store i32 2, i32* %8, align 4
+  store i32 2, i32* %8, align 4, !alias.scope !4, !noalias !3
   ret %struct.amrit_array* %1
 }
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
 ```
 <!-- cookbook:end arr_literal_push -->
 
@@ -2481,7 +2511,7 @@ entry:
   %join.at = alloca i64, align 8
   %join.p = alloca i8*, align 8
   %0 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %parts, i64 0, i32 0
-  %1 = load i64, i64* %0, align 8
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
   %2 = bitcast i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*) to i64*
   %3 = load i64, i64* %2, align 8
   %4 = sub i64 %1, 1
@@ -2499,10 +2529,10 @@ join.sum:
 
 join.sum.body:
   %10 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %parts, i64 0, i32 2
-  %11 = load i8*, i8** %10, align 8
+  %11 = load i8*, i8** %10, align 8, !alias.scope !3, !noalias !4
   %12 = bitcast i8* %11 to i8**
   %13 = getelementptr inbounds i8*, i8** %12, i64 %8
-  %14 = load i8*, i8** %13, align 8
+  %14 = load i8*, i8** %13, align 8, !alias.scope !4, !noalias !3
   %15 = load i64, i64* %join.total, align 8
   %16 = bitcast i8* %14 to i64*
   %17 = load i64, i64* %16, align 8
@@ -2536,10 +2566,10 @@ join.part:
   call void @llvm.memcpy.p0i8.p0i8.i64(i8* %27, i8* %30, i64 %29, i1 false)
   %31 = getelementptr inbounds i8, i8* %27, i64 %29
   %32 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %parts, i64 0, i32 2
-  %33 = load i8*, i8** %32, align 8
+  %33 = load i8*, i8** %32, align 8, !alias.scope !3, !noalias !4
   %34 = bitcast i8* %33 to i8**
   %35 = getelementptr inbounds i8*, i8** %34, i64 %25
-  %36 = load i8*, i8** %35, align 8
+  %36 = load i8*, i8** %35, align 8, !alias.scope !4, !noalias !3
   %37 = bitcast i8* %36 to i64*
   %38 = load i64, i64* %37, align 8
   %39 = getelementptr inbounds i8, i8* %36, i64 8
@@ -2560,7 +2590,7 @@ define internal noundef i32 @firstAt(%struct.amrit_array* noundef nonnull align 
 entry:
   %idx.at = alloca i64, align 8
   %0 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %names, i64 0, i32 0
-  %1 = load i64, i64* %0, align 8
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
   store i64 0, i64* %idx.at, align 8
   br label %idx.scan
 
@@ -2571,10 +2601,10 @@ idx.scan:
 
 idx.test:
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %names, i64 0, i32 2
-  %5 = load i8*, i8** %4, align 8
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i8**
   %7 = getelementptr inbounds i8*, i8** %6, i64 %2
-  %8 = load i8*, i8** %7, align 8
+  %8 = load i8*, i8** %7, align 8, !alias.scope !4, !noalias !3
   %9 = call zeroext i1 @amrit_str_eq(i8* %8, i8* %name)
   br i1 %9, label %idx.found, label %idx.next
 
@@ -2597,6 +2627,12 @@ attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { nounwind willreturn memory(argmem: read) }
 attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
 ```
 <!-- cookbook:end arr_join -->
 
@@ -2655,21 +2691,21 @@ entry:
   %1 = call i8* @amrit_alloc_struct(i64 24)
   %2 = bitcast i8* %1 to %struct.amrit_array*
   %3 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %2, i64 0, i32 0
-  store i64 %0, i64* %3, align 8
+  store i64 %0, i64* %3, align 8, !alias.scope !3, !noalias !4
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %2, i64 0, i32 1
-  store i64 %0, i64* %4, align 8
+  store i64 %0, i64* %4, align 8, !alias.scope !3, !noalias !4
   %5 = mul i64 %0, 4
   %6 = call i8* @amrit_alloc_struct(i64 %5)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %6, i8 0, i64 %5, i1 false)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %6, i8 0, i64 %5, i1 false), !alias.scope !4, !noalias !3
   %7 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %2, i64 0, i32 2
-  store i8* %6, i8** %7, align 8
+  store i8* %6, i8** %7, align 8, !alias.scope !3, !noalias !4
   ret %struct.amrit_array* %2
 }
 
 define internal noundef i32 @len(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #1 {
 entry:
   %0 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
-  %1 = load i64, i64* %0, align 8
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
   %2 = trunc i64 %1 to i32
   ret i32 %2
 }
@@ -2678,6 +2714,12 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
 ```
 <!-- cookbook:end arr_new -->
 
@@ -2726,16 +2768,16 @@ entry:
 forof.cond:
   %0 = load i64, i64* %forof.idx, align 8
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
   %3 = icmp ult i64 %0, %2
   br i1 %3, label %forof.body, label %forof.end
 
 forof.body:
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
-  %5 = load i8*, i8** %4, align 8
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
   store i32 %8, i32* %x.addr, align 4
   %9 = load i32, i32* %total.addr, align 4
   %10 = load i32, i32* %x.addr, align 4
@@ -2766,16 +2808,16 @@ entry:
 forof.cond:
   %0 = load i64, i64* %forof.idx, align 8
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
   %3 = icmp ult i64 %0, %2
   br i1 %3, label %forof.body, label %forof.end
 
 forof.body:
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
-  %5 = load i8*, i8** %4, align 8
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
-  %8 = load i32, i32* %7, align 4
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
   store i32 %8, i32* %x.addr, align 4
   %9 = load i32, i32* %total.addr, align 4
   %10 = load i32, i32* %x.addr, align 4
@@ -2795,6 +2837,12 @@ forof.end:
 }
 
 attributes #0 = { nounwind willreturn readonly }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
 ```
 <!-- cookbook:end arr_readonly -->
 
@@ -3676,14 +3724,14 @@ entry:
   %1 = call i8* @amrit_alloc_struct(i64 24)
   %2 = bitcast i8* %1 to %struct.amrit_array*
   %3 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %2, i64 0, i32 0
-  store i64 2000, i64* %3, align 8
+  store i64 2000, i64* %3, align 8, !alias.scope !3, !noalias !4
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %2, i64 0, i32 1
-  store i64 2000, i64* %4, align 8
+  store i64 2000, i64* %4, align 8, !alias.scope !3, !noalias !4
   %5 = mul i64 2000, 4
   %6 = call i8* @amrit_alloc_struct(i64 %5)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %6, i8 0, i64 %5, i1 false)
+  call void @llvm.memset.p0i8.i64(i8* align 8 %6, i8 0, i64 %5, i1 false), !alias.scope !4, !noalias !3
   %7 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %2, i64 0, i32 2
-  store i8* %6, i8** %7, align 8
+  store i8* %6, i8** %7, align 8, !alias.scope !3, !noalias !4
   store %struct.amrit_array* %2, %struct.amrit_array** %xs.addr, align 8
   %8 = call i64 @amrit_arena_used()
   store i64 %8, i64* %used.addr, align 8
@@ -3692,7 +3740,7 @@ entry:
   %10 = load i64, i64* %used.addr, align 8
   %11 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
   %12 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %11, i64 0, i32 0
-  %13 = load i64, i64* %12, align 8
+  %13 = load i64, i64* %12, align 8, !alias.scope !3, !noalias !4
   %14 = trunc i64 %13 to i32
   %15 = sext i32 %14 to i64
   %16 = add nsw i64 %10, %15
@@ -3708,6 +3756,12 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
 ```
 <!-- cookbook:end mem_arena_builtins -->
 
@@ -3824,7 +3878,7 @@ define internal noundef i32 @firstValue(%struct.amrit_array* noundef nonnull ali
 entry:
   %head.addr = alloca %struct.Node*, align 8
   %0 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %slots, i64 0, i32 0
-  %1 = load i64, i64* %0, align 8
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
   %2 = icmp ult i64 0, %1
   br i1 %2, label %bounds.ok, label %bounds.fail
 
@@ -3834,10 +3888,10 @@ bounds.fail:
 
 bounds.ok:
   %3 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %slots, i64 0, i32 2
-  %4 = load i8*, i8** %3, align 8
+  %4 = load i8*, i8** %3, align 8, !alias.scope !3, !noalias !4
   %5 = bitcast i8* %4 to %struct.Node**
   %6 = getelementptr inbounds %struct.Node*, %struct.Node** %5, i64 0
-  %7 = load %struct.Node*, %struct.Node** %6, align 8
+  %7 = load %struct.Node*, %struct.Node** %6, align 8, !alias.scope !4, !noalias !3
   store %struct.Node* %7, %struct.Node** %head.addr, align 8
   %8 = load %struct.Node*, %struct.Node** %head.addr, align 8
   %9 = icmp ne %struct.Node* %8, null
@@ -3862,6 +3916,12 @@ attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind readonly }
 attributes #3 = { nounwind }
 attributes #4 = { nounwind noreturn cold }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
 ```
 <!-- cookbook:end mem_nullable -->
 
@@ -4252,19 +4312,19 @@ if.end:
   %2 = call i8* @amrit_alloc_struct(i64 24)
   %3 = bitcast i8* %2 to %struct.amrit_array*
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %3, i64 0, i32 0
-  store i64 3, i64* %4, align 8
+  store i64 3, i64* %4, align 8, !alias.scope !3, !noalias !4
   %5 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %3, i64 0, i32 1
-  store i64 3, i64* %5, align 8
+  store i64 3, i64* %5, align 8, !alias.scope !3, !noalias !4
   %6 = call i8* @amrit_alloc_struct(i64 24)
   %7 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %3, i64 0, i32 2
-  store i8* %6, i8** %7, align 8
+  store i8* %6, i8** %7, align 8, !alias.scope !3, !noalias !4
   %8 = bitcast i8* %6 to i8**
   %9 = getelementptr inbounds i8*, i8** %8, i64 0
-  store i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8** %9, align 8
+  store i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8** %9, align 8, !alias.scope !4, !noalias !3
   %10 = getelementptr inbounds i8*, i8** %8, i64 1
-  store i8* bitcast ({ i64, [17 x i8] }* @.str.3 to i8*), i8** %10, align 8
+  store i8* bitcast ({ i64, [17 x i8] }* @.str.3 to i8*), i8** %10, align 8, !alias.scope !4, !noalias !3
   %11 = getelementptr inbounds i8*, i8** %8, i64 2
-  store i8* bitcast ({ i64, [7 x i8] }* @.str.4 to i8*), i8** %11, align 8
+  store i8* bitcast ({ i64, [7 x i8] }* @.str.4 to i8*), i8** %11, align 8, !alias.scope !4, !noalias !3
   store %struct.amrit_array* %3, %struct.amrit_array** %argv.addr, align 8
   %12 = load %struct.amrit_array*, %struct.amrit_array** %argv.addr, align 8
   %13 = call i32 @amrit_spawn(%struct.amrit_array* %12)
@@ -4283,6 +4343,12 @@ attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { noreturn nounwind }
 attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
 ```
 <!-- cookbook:end builtin_process -->
 

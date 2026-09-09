@@ -190,6 +190,28 @@ is hot and how deep the recursion goes, which drives its block layout and
 partial unrolling. nbody gains little because its cost is memory traffic, not
 branch layout (see below).
 
+## What the alias domains changed about this section — read first
+
+WP15 §2b landed after everything below was written, and it moves the ground
+under part of it. An array's header and its element buffer are now separate
+alias domains, so LLVM no longer assumes an element store might clobber a
+`len` or a `data`, and LICM hoists the header out of any loop that writes
+elements. On a `dst[i] = src[i] * 2.0` loop that is 1205 ms -> 763 ms.
+
+Two corrections follow, and both are about *attribution* rather than about any
+number below being wrong:
+
+- **The bounds checks were never the cost they looked like.** This section
+  reports `--unchecked-indexing` buying 0% on nbody and 4% on sieve, and reads
+  that as "LLVM already hoists the checks". The fuller explanation is that the
+  `len` those checks compare against was being reloaded along with everything
+  else, so removing the compare left the reload in place. With the header
+  hoisted, dropping the checks on the same loop is worth **0.5%**.
+- **The provenance experiments below are still live for *structs*.** The
+  `noinline`-allocator result (nbody -6%) is about `Body` objects aliasing each
+  other, which the array domains say nothing about: annotating nbody's array
+  headers moved it by nothing (1829 ms against 1895, inside the noise).
+
 ## Diagnosis of the misses
 
 The experiments below rewrite the emitted `.ll` by hand or add flags, then

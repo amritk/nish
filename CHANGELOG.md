@@ -7,6 +7,34 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ## [Unreleased]
 
+### Changed
+
+- **An array's header and its elements are separate alias domains, which is
+  worth 1.6x on a loop that writes elements (WP15).** Every load and store of a
+  `%struct.amrit_array` field now carries `!alias.scope`/`!noalias` naming a
+  "header" scope, and every load and store of element data the matching
+  "elements" scope. Nothing about the language changes — no flag, no syntax, no
+  observable behaviour — but LLVM stops having to assume that `a[i] = v` might
+  land on some array's `len` or `data`.
+
+  What that assumption cost: the header was reloaded on *every iteration* of
+  every loop that writes an element, because LICM could not hoist a load the
+  store might clobber, and the loop vectoriser gave up behind it. On
+  `dst[i] = src[i] * 2.0` over 8192 doubles, `--profile speed`, the reload alone
+  measured **1205 ms against 763 ms**.
+
+  The proof is about bytes rather than allocations: a header's three fields and
+  the `cap * sizeof(T)` of element storage never overlap, in any of the four
+  shapes the compiler produces them (an arena bump each, two entry-block
+  allocas under WP6, or — for `process.argv` alone — one `malloc` block whose
+  elements start after the header). `src/codegen/emit/arrays.ts` carries the
+  full argument beside the code. Strings are left alone: a string is one block
+  whose length and bytes are contiguous, so it has no such split to describe.
+
+  `tests/cases/arr_alias_domains` pins the consequence a golden cannot express
+  — after `opt -O2` no header load is left inside the loop — and 39 array
+  goldens grew the metadata. `--plain` emits none of it.
+
 ### Changed — BREAKING
 
 - **Signed integer overflow is now undefined behaviour. The documented
