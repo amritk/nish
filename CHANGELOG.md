@@ -9,6 +9,30 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **What the number mode costs, measured (`docs/wp9-optimisation.md`).** The
+  FAQ has said `i32` is "one machine word, exact, vectorisable" since WP11
+  with no number beside it. Compiling the same program `--number-mode f64`
+  costs **1.36x on `fib`, 1.80x on `sieve`, 1.52x on `strbuild`** and **3.42x
+  on an array reduction — 14.3x when the array is cache-resident**, so the
+  gap is not memory traffic. Three mechanisms, all visible in the IR: every
+  subscript pays an `fptosi` (five in `sieve`, none in i32 mode); induction
+  variables lose `nsw` (eight `add nsw i32` become `fadd double`), and with it
+  the widening and strength reduction §`--nsw` describes; and a reduction
+  cannot be reassociated, so where the i32 binary carries 13 `paddd` the f64
+  one carries 11 `addsd` on a serial dependency chain. Binary size is a flat
+  **+12.2 KB**, the shortest-digits formatter that `console.log` of a double
+  links — which also explains the size column of BENCHMARKS.md, where the
+  three f64 benchmarks sit at 18-21 KB and the four i32 ones at 5.5-6.9 KB.
+
+  Two of the four i32 benchmarks do not survive being recompiled in f64 mode,
+  and that is the other half of the finding: `result.ts` does not compile at
+  all (`&` needs integer operands, and says so), while **`strbuild.ts`
+  compiles, runs, exits 0 and prints a different answer** — 806394 against
+  2410293 — because `const step = (count + 31) / 32; // ceil(count / 32)`
+  has a comment that is true only where `/` truncates. It is now the worked
+  example in WP21 §6 for why the number mode has to be visible at a package
+  boundary, in place of the invented one that was there.
+
 - **A plan for packages (WP21, `docs/wp21-packages.md`).** The question "what
   goes in an `exports` map beside `import` and `require`" turned out to be two
   questions, and the note's first job is to separate them. A **foreign host** —

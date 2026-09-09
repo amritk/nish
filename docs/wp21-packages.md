@@ -201,21 +201,31 @@ the consumer's own mistake.
 
 The mode is the one semantic flag a package can be wrong about without saying
 so. The consumer picks it — one `--number-mode` for the whole program — but
-the consumer picked it for *their* code, and it tells them nothing about
-whether a dependency was written under the other one. Measured, both halves:
+they picked it for *their* code, and it tells them nothing about whether a
+dependency was written under the other one. The demonstration is in this
+repository, in a benchmark that has been checked in since WP9.
+`bench/strbuild.ts` divides once:
 
 ```ts
-export function mean(a: number, b: number): number { return (a + b) / 2; }
+const step = (count + 31) / 32; // ceil(count / 32)
 ```
 
-`mean(3, 4)` is **`3`** in i32 mode and **`3.5`** in f64 mode, compiling and
-running cleanly under both, because `/` truncates in i32. Most f64-flavoured
-code is not so quiet — `Math.sqrt` on a `number` in i32 mode is
-`` `Math.sqrt` requires an f64 argument, got i32 (use --number-mode f64 or
-toF64(x)) ``, and a `1.5` literal is `Non-integer literal` — so the silent
-window is narrow: division, and what is built on it (averages, percentages,
-interpolation). Narrow is not empty, and the failure is a wrong number rather
-than a diagnostic.
+That comment is true in i32 mode, where `/` truncates, and false in f64 mode,
+where `step` is fractional, `piece(i)` then formats numbers like `1.5,`, and
+the built string comes out three times too long. Compiled both ways the
+program builds, links, runs, exits 0 — and prints a different answer:
+**806394** in i32 mode, **2410293** in f64. Nothing in the source announces
+which mode it is for except the comment.
+
+Most f64-flavoured code is not so quiet. `Math.sqrt` on a `number` in i32 mode
+is `` `Math.sqrt` requires an f64 argument, got i32 (use --number-mode f64 or
+toF64(x)) ``, a `1.5` literal is `Non-integer literal`, and `bench/result.ts`
+does not compile in f64 mode at all because `&` needs two integer operands.
+So the silent window is narrow — division, and what is built on it — but
+inside it the failure is a wrong answer rather than a diagnostic, which is
+exactly the case a package boundary should catch.
+[wp9-optimisation.md](wp9-optimisation.md#what-the-number-mode-costs) has the
+rest of the mode comparison, including what i32 buys to be worth the split.
 
 So the mode rides in the condition rather than in metadata:
 

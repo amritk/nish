@@ -364,6 +364,134 @@ see the signature. That makes `--strict-exports` load-bearing rather than
 advisory, which is already one of the two open questions below.
 `docs/wp17-result-abi.md` §4 has the four-way table.
 
+## What the number mode costs
+
+i32 is the default because it is faster, and until now the FAQ asserted "one
+machine word, exact, vectorisable" with no number beside it. These are the
+numbers. `--number-mode f64` exists for a different reason — it is the only
+mode Node can run a program in unmodified
+([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)), which is what
+`tests/differential/unmodified.js` is built on — so this section prices the
+default rather than arguing against the flag.
+
+Measured the way `bench/run.mjs` measures: 3 warm-up runs, 15 timed, wall
+time around `spawnSync`, min and median in ms, `--profile speed`, on the
+machine in the [BENCHMARKS.md](BENCHMARKS.md) header. **This is a one-off
+measurement, not a generated table** — `bench/run.mjs` has no mode axis — so
+the commands are spelled out and the numbers move with the machine:
+
+```bash
+node dist/index.js bench/fib.ts --link build/fib.i32 --profile speed
+sed 's/main(): number/main(): i32/' bench/fib.ts > build/fib_f64.ts   # f64 mode requires it
+node dist/index.js build/fib_f64.ts --number-mode f64 --link build/fib.f64 --profile speed
+```
+
+### Not every program crosses
+
+The four i32-mode benchmarks were compiled both ways. Two do not survive the
+trip, and the way they fail is the interesting half:
+
+- **`result.ts` does not compile in f64 mode.** `` Operator `&` requires two
+  operands of the same integer type, got f64 and f64 (`number` is f64 under
+  --number-mode f64; convert with toI32/toI64) ``. Bitwise code is i32-only
+  unless it converts, and it says so.
+- **`strbuild.ts` compiles and answers differently**: `806394` in i32,
+  `2410293` in f64. One line does it — `const step = (count + 31) / 32;
+  // ceil(count / 32)` — whose comment is true only where `/` truncates.
+  Timed below against a repaired variant (`Math.floor` around the divide) so
+  that both columns do the same work.
+
+### Wall time (min / median ms)
+
+| Benchmark | i32 | f64 | f64 / i32 |
+| --- | ---: | ---: | ---: |
+| fib | 343.8 / 346.2 | 469.3 / 474.6 | 1.36x |
+| sieve | 658.5 / 707.3 | 1183.1 / 1225.2 | 1.80x |
+| strbuild (repaired) | 15.2 / 15.4 | 23.1 / 23.9 | 1.52x |
+| reduce, 20M elements | 184.6 / 201.5 | 630.6 / 645.2 | 3.42x |
+| reduce, 100k elements | 34.2 / 34.5 | 490.3 / 492.9 | 14.3x |
+
+`reduce` is not part of the suite; it isolates a reduction over a `number[]`,
+and the two sizes separate memory traffic from arithmetic (100k elements is
+400 KB as `i32` and 800 KB as `double`, both cache-resident):
+
+```ts
+function fill(xs: number[], n: number): void {
+  for (let i = 0; i < n; i++) {
+    xs[i] = 3;
+  }
+}
+
+function total(xs: number[], n: number): number {
+  let t = 0;
+  for (let i = 0; i < n; i++) {
+    t = t + xs[i];
+  }
+  return t;
+}
+```
+
+The gap *widens* when the data fits in cache, so it is not bandwidth.
+
+### Binary size (bytes, `--profile speed`)
+
+| Benchmark | i32 | f64 | delta |
+| --- | ---: | ---: | ---: |
+| fib | 5,600 | 17,952 | +12,352 |
+| sieve | 6,576 | 18,648 | +12,072 |
+| strbuild | 6,664 | 18,984 | +12,320 |
+
+A flat ~12.2 KB, and the modules are otherwise identical — the whole
+difference is one `declare`:
+
+```llvm
+i32:  declare ... i8* @amrit_str_from_i32(i32 noundef)
+f64:  declare ... i8* @amrit_str_from_f64(double noundef)
+```
+
+`console.log` of a double links the shortest-digits formatter and its
+power-of-5 tables. This also explains the size column of
+[BENCHMARKS.md](BENCHMARKS.md), where nbody, spectral and vec3 sit at 18-21 KB
+and fib, sieve, strbuild and result at 5.5-6.9 KB: that spread is the number
+mode, not the programs.
+
+### The three mechanisms
+
+1. **Every subscript pays a truncation.** `sieve` in f64 mode has five
+   `fptosi double to i64`, one per `a[i]`, before the `getelementptr`; in i32
+   mode it has none.
+2. **Induction variables lose `nsw`.** `sieve` in i32 mode has eight
+   `add nsw i32`; in f64 mode none, because they are `fadd double %i, 1.0`
+   and the loop tests are `fcmp ole double` rather than `icmp sle i32`.
+   `nsw` is what lets LLVM widen and strength-reduce a counter (§`--nsw`
+   above); a float counter gets none of it.
+3. **Reductions cannot be reassociated, and this is the large one.**
+   Disassembling the two linked binaries of the cache-resident `reduce`:
+
+   | | packed integer add | scalar double add |
+   | --- | ---: | ---: |
+   | i32 | **13 `paddd`** | 0 |
+   | f64 | 0 | **11 `addsd`** |
+
+   Integer addition is associative, so LLVM splits the accumulator into
+   parallel partial sums and vectorises — about 0.24 cycles per element
+   measured. IEEE-754 addition is not, so without fast-math the serial
+   dependency chain has to be preserved: one `addsd` per element, about 3.4
+   cycles measured against its 4-cycle latency. That is the 14x, and it is a
+   semantics wall rather than a missing optimisation.
+
+Check mechanism 3 on the shipped binary, not on hand-run passes: `opt -O3`
+piped to `llc` does not reproduce what `scripts/build.sh` does, and reading
+it instead of `objdump -d` says there is no vectorisation in either mode.
+
+### What i32 costs, for the same honesty
+
+Signed overflow is undefined above 2^31 (`--wrapping` opts out), where f64 is
+exact to 2^53 and then rounds silently — i32 is not "more exact", it is exact
+over a narrower range with a sharper edge. Fractional literals and direct
+`Math.*` need `f64` and `toF64`. `/` truncates. And the whole differential
+oracle against unmodified Node is unavailable, which is what f64 mode is for.
+
 ## The call-site reclaim
 
 The remaining item of the WP6 note at the top of this file, and the fix the

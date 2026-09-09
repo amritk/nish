@@ -32,7 +32,7 @@ where they disagree with LANGUAGE.md, LANGUAGE.md wins.
 | [wp6-memory.md](wp6-memory.md) | Design note: escape-analysed stack allocation, automatic arena scopes, the `Arena.*` builtins and the mark/release runtime ABI, `T \| null` and narrowing, which goldens moved and why. |
 | [wp7-runtime.md](wp7-runtime.md) | Design note: `Math.*` intrinsics, `i64`, conversions, `process.exit`, file I/O, JavaScript number formatting, runtime budget. |
 | [wp8-interop.md](wp8-interop.md) | Design note: the C ABI, `--emit-header`, `--emit-dts`, `--emit-napi`, the `napi` profile, the batching benchmark. |
-| [wp9-optimisation.md](wp9-optimisation.md) | Design note: `--target`, `--nsw`, `dereferenceable(24)` on arrays, the PGO recipe, the benchmark results against C and Rust and a diagnosis of every gap. |
+| [wp9-optimisation.md](wp9-optimisation.md) | Design note: `--target`, `--nsw`, `dereferenceable(24)` on arrays, the PGO recipe, the benchmark results against C and Rust and a diagnosis of every gap, and what the number mode costs (measured: time, binary size, and the three mechanisms behind them). |
 | [wp10-ci.md](wp10-ci.md) | Design note: the CI matrix, running it locally, the diagnostic format. |
 | [wp12-release.md](wp12-release.md) | Design note: package contents, exit codes and failure modes, the smoke test, the release procedure. |
 | [wp13-differential.md](wp13-differential.md) | Design note: differential testing against Node, the typed rewrite rules, `runtime/shim.mjs`, the corpus and the fuzzer, every discrepancy found (with which ones were fixed since). |

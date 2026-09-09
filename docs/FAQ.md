@@ -22,7 +22,14 @@ Loop and index code is the common case in the programs AmritScript targets,
 and `i32` is what C and Rust use for it: one machine word, exact, vectorisable,
 and the natural type for array indices and exit codes. Treating every
 `number` as a double would make `i % 2`, `a[i]`, and `for (let i ...)`
-carry conversions and lose exactness above 2^53. The cost is that `number`
+carry conversions and lose exactness above 2^53. Measured on the benchmark
+suite, compiling the same program `--number-mode f64` costs 1.36x on `fib`,
+1.80x on `sieve` and 3.4x on an array reduction (14x when the array is
+cache-resident, where a float accumulator cannot be split into parallel
+partial sums), plus about 12 KB of binary for the double formatter that
+`console.log` then needs:
+[wp9-optimisation.md](wp9-optimisation.md#what-the-number-mode-costs) has the
+tables and the three mechanisms. The cost is that `number`
 does not behave like JavaScript's number: signed integer overflow is
 undefined behaviour rather than a wrap, and `1.5` is rejected in i32 mode
 ([LANGUAGE.md: Semantics decisions](LANGUAGE.md#semantics-decisions)). The
