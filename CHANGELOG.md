@@ -7,6 +7,150 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ## [Unreleased]
 
+### Fixed — correctness
+
+- **`String(x)` on a double printed seventeen digits where sixteen suffice, for
+  about one value in twenty thousand.** The language's rule is that number
+  formatting matches JavaScript's `String(x)`, which prints the *fewest* digits
+  that read back as the same double. The old search asked `snprintf` for k
+  digits and `strtod` whether they round-trip, increasing k until they did —
+  but `snprintf` can only hand back the *correctly-rounded* k-digit string, and
+  for some values that one does not round-trip while a neighbouring k-digit
+  string does. The search then gave up on k and moved on.
+
+  `7.120236347223045e-307` is such a value: Node prints those sixteen digits,
+  `amritc` printed `7.1202363472230444e-307`. So did `runtime/shim.mjs`
+  disagree with the native runtime, since the shim delegates to JavaScript's
+  own `String`. Ryu (below) finds the shortest string rather than the rounded
+  one, and `tests/cases/f64_shortest_digits` pins four such values against
+  Node's output alongside `0.1`, `1e21` and `5e-324`.
+
+### Changed
+
+- **`--out-dir` is gone from the self-hosted compiler; `-o <dir>/` is the one
+  spelling (WP19 G1).** It was stage1's own flag, added when
+  `scripts/bootstrap.sh` drove the stages and kept afterwards because the
+  oracles passed it. stage0 has never had it, so it was a difference in the
+  flag sets running in the direction nobody checks — a flag a user could come
+  to depend on that the one remaining compiler would then have to keep forever.
+
+  `-o <dir>/` did the same thing already, with the same directory-making and
+  the same per-module stems, so the removal costs nothing: `tests/self/`'s IR,
+  interop and bootstrap oracles pass `-o <dir>/` to both compilers now instead
+  of one spelling each. Both usage texts also name the same six spellings now —
+  `-o`/`--output`, `-v`/`--version` and `-h`/`--help` were always accepted by
+  both and each side documented a different subset, and since the flag-set
+  check reads `--help`, what a compiler documents is what it is held to.
+
+- **A `<name>.env` line that is a bare `NAME` unsets the variable.** The
+  sidecar layers `NAME=value` over the inherited environment, so `getenv`'s
+  third answer — unset — was only as reliable as the developer's own
+  environment: `io_getenv` assumed `AMRITC_TEST_NOT_SET` was absent rather than
+  making it so. A line with no `=` now removes it, in both readers
+  (`tests/run.js` and `tests/differential/lib.js`), and the case says so.
+
+- **`s.indexOf(sub)` is about 17x faster: 53.7 ms to 2.9 ms over 52 MB of
+  haystack (WP15).** The search was emitted inline, one `amrit_str_at` probe
+  per offset, so that `runtime.c` stayed inside its size budget — which made
+  the idiomatic string search a byte-at-a-time scan. It is now
+  `amrit_str_index_of` in the runtime, where `memchr` finds a candidate first
+  byte and `memcmp` confirms it, both the libc's vectorised routines. Every
+  call site *shrinks*, since thirty lines of loop become one call, and
+  `runtime.c`'s `.text` goes from 3,852 to 4,002 bytes, still inside the 4 KB
+  budget.
+
+  `memmem` would be 2.5 ms and is deliberately not used: it needs
+  `_GNU_SOURCE`, which makes glibc's `<string.h>` pull in `<strings.h>` — and
+  this project generates a header of that name from `examples/strings.ts`, so
+  any `-I` at it shadows the POSIX header and drags `amritc.h` into
+  `runtime.c`. The interop tests caught exactly that. A C host would hit the
+  same, and a fifth of the time is not worth making the runtime sensitive to
+  its includer's include path.
+
+  The semantics are unchanged: an empty needle answers 0, a needle longer than
+  the haystack -1, and the offset is in bytes (`tests/cases/str_search`, and
+  eleven cases in `tests/runtime_test.c`).
+
+- **A non-exported function passes a small `Result` as two values instead of
+  one packed word: `bench/result` goes from 650 ms to 464 ms (WP15).**
+  `Result<T, E>` with two small scalar payloads has travelled in a single
+  `i64` since WP17, because that is what a C or wasm host has to see. Inside a
+  module no host is looking, and the word costs something real there: with both
+  halves in one register the `select` that picks the live arm happens on the
+  word, and instcombine can no longer fold the arithmetic around it. A function
+  that gets `internal` linkage now uses `{ i1, i32 }` instead — rustc's
+  `ScalarPair` — which puts us at C's 444 ms rather than 1.46x behind it.
+
+  **The condition is the linkage condition**: `--strict-exports` on and the
+  function not exported, the same test that writes `internal`. The private
+  shape is safe only because no host can name the symbol, so
+  `--no-strict-exports` turns it off along with the linkage it mirrors, and an
+  imported function — exported by definition — is always packed, which is how
+  two modules agree without consulting each other. `--emit-header`,
+  `--emit-dts` and `--emit-napi` describe exported functions only and are
+  unchanged; `tests/cases/res_export` still emits `i64` for all four shapes.
+
+  The packing code did not move: the word is still built exactly as before and
+  split at the boundary. LLVM folds the round trip away, and a hand-written
+  two-scalar lowering measures 467 ms against this 464 — the same, within
+  noise — so one packing path was worth keeping. `docs/wp17-result-abi.md` §4
+  has the four-way table.
+
+- **Formatting a double is 35x faster: 2557 ns to 72 ns (WP15).**
+  `amrit_str_from_f64` used up to seventeen `snprintf`/`strtod` round trips to
+  find the shortest digits; it now computes them directly with Ryu (Adams,
+  PLDI 2018). The ECMAScript layout around the digits — where the point goes,
+  when to use e-form — is unchanged, so only the digit generation moved.
+
+  **This costs binary size, and the size lands only on programs that use it.**
+  The two power-of-five tables are 9,888 bytes of read-only data, generated
+  with exact integer arithmetic rather than transcribed. `runtime.c`'s `.text`
+  goes from 2,775 to 3,852 bytes, still inside the 4 KB budget of
+  `docs/MASTER_PLAN.md` §2; its `.rodata` goes from 32 bytes to 9,920. Section
+  GC keeps the tables out of any binary that never formats a double, so
+  `bench/fib` is unchanged at 5,600 bytes while `bench/nbody` goes from 10,856
+  to 21,168.
+
+  Validated against the ECMAScript rule itself rather than against the code it
+  replaces — the digits round-trip, no shorter string round-trips, and no
+  same-length string is closer — over 20.9 million values: every finite
+  exponent with boundary and random mantissas, the powers of ten, and uniform
+  random bit patterns. Zero violations. The same harness finds 46 violations
+  per 1.4 million in the old implementation, which is the bug above.
+
+- **`scripts/size-report.sh` measures the section the budget is about.** §2
+  defines the runtime budget as `runtime.c`'s `.text` at `-Oz`, but the script
+  reported the `text` *column* of `size`, which also counts `.rodata` and the
+  `.eh_frame` entries the size profile strips. That row therefore read 4,696
+  against a 4,096 budget while the section it names was at 2,775. It now
+  reports `.text` against the budget and `.rodata` on its own row.
+
+- **An array's header and its elements are separate alias domains, which is
+  worth 1.6x on a loop that writes elements (WP15).** Every load and store of a
+  `%struct.amrit_array` field now carries `!alias.scope`/`!noalias` naming a
+  "header" scope, and every load and store of element data the matching
+  "elements" scope. Nothing about the language changes — no flag, no syntax, no
+  observable behaviour — but LLVM stops having to assume that `a[i] = v` might
+  land on some array's `len` or `data`.
+
+  What that assumption cost: the header was reloaded on *every iteration* of
+  every loop that writes an element, because LICM could not hoist a load the
+  store might clobber, and the loop vectoriser gave up behind it. On
+  `dst[i] = src[i] * 2.0` over 8192 doubles, `--profile speed`, the reload alone
+  measured **1205 ms against 763 ms**.
+
+  The proof is about bytes rather than allocations: a header's three fields and
+  the `cap * sizeof(T)` of element storage never overlap, in any of the four
+  shapes the compiler produces them (an arena bump each, two entry-block
+  allocas under WP6, or — for `process.argv` alone — one `malloc` block whose
+  elements start after the header). `src/codegen/emit/arrays.ts` carries the
+  full argument beside the code. Strings are left alone: a string is one block
+  whose length and bytes are contiguous, so it has no such split to describe.
+
+  `tests/cases/arr_alias_domains` pins the consequence a golden cannot express
+  — after `opt -O2` no header load is left inside the loop — and 39 array
+  goldens grew the metadata. `--plain` emits none of it.
+
 ### Changed — BREAKING
 
 - **Signed integer overflow is now undefined behaviour. The documented
@@ -102,6 +246,71 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Fixed
 
+- **The self-hosted compiler printed no performance warnings at all, and had no
+  `--no-warn-performance` (WP19 G1).** stage1 has had the whole of WP15 §8
+  since the class landed — the analysis in `self/checker.ts`, the second list
+  in the sink, the report in `self/diagnostics.ts` — and its driver never
+  printed a word of it, so `build/amritc` compiled a quadratic string loop in
+  silence where `amritc` named four warnings.
+
+  It reports them now on stage0's terms and stage0's streams: the human report
+  on stderr capped at 20, one flat object per warning on stdout under `--json`,
+  in the order the checker found them, exit code untouched.
+  `--no-warn-performance` silences both, which is the flag stage0 has had since
+  the class shipped and stage1 did not accept at all.
+
+  **No oracle could have caught it, and neither could the corpus half of
+  `--parity`**: a performance warning goes to stderr on a compile that
+  *succeeds*, and nothing compared that stream on a success. What found it was
+  a second half of the parity check that asks each compiler what flags it has,
+  by reading its own `--help`, and diffs the two sets — added to
+  `tests/self/parity.js` beside the corpus comparison. The same half found
+  `--out-dir`.
+
+- **Six programs of the corpus had silently stopped being compared, and
+  `self/dump_checked.ts` was dropping a flag it did not know.** A skip in a
+  stage1 oracle prints only under `--verbose`, so a corpus file whose `.args`
+  names a flag the oracle's `SHARED_FLAGS` set does not list leaves the
+  comparison without failing anything. `--wrapping` and `--no-strict-exports`
+  had been stage1's since WP14 §7a and were never added to that set, so the
+  `--wrapping` cases the WP15 overflow flip brought with it — `const_wrap`,
+  `opt_wrapping`, `i64_basic` and `export_no_strict` among them — went straight
+  into the skip count. The IR oracle was at seven skips and is back to the one
+  documented file (`tests/parser/precedence.ts`).
+
+  `checked_oracle.js` passed only `--number-mode` on the grounds that it is the
+  only flag the checker reads, which stopped being true when constant folding
+  learned about `--wrapping`: `tests/cases/const_wrap.ts` was refused by stage0
+  without it and counted as a skip. It passes both now (`checkerArgs` in
+  `tests/self/corpus.js`).
+
+  That last one uncovered a real bug rather than a stale list.
+  `self/dump_checked.ts` took any argument it did not recognise as the file
+  name, so `--wrapping` became the path, the real path overwrote it, and the
+  dump was produced with the flag dropped — stage1 then rejected a fold stage0
+  accepted. It takes `--wrapping` now, and refuses an unknown flag instead of
+  turning it into a file name.
+
+- **`` `X` expects an argument of type Y, got Z ``: eight uncoded diagnostics
+  become one.** The suite pins how many distinct rejection messages carry no
+  stable `code`, as a ratchet that may shrink and not grow. The registry is
+  derived from the longest literal run between a message's interpolations, and
+  `` `${name}` expects ${want}, got ${got} `` has none long enough to name a
+  rule — that one template was eight of the nine uncoded messages, and adding a
+  builtin adds a ninth, because a new builtin's argument-type message is a new
+  distinct message.
+
+  So the message got words of its own, which is what the check's own comment
+  says to do instead of editing the table: it reads `expects an argument of
+  type string, got i32` now, and that covers `readFileSync`, `mkdirSync`,
+  `isDirectorySync`, `spawnSync`, `getenv`, `indexOf`, `f64ToBits`,
+  `bitsToF64` and `Arena.release` at once. Coverage goes from 230/239 (96.2 %)
+  to **238/239 (99.6 %)** and the pin is now 1. The registry gained one rule,
+  `AS2268`, and no existing number moved. The one still uncoded is
+  `` Unknown base class `X` (`extends` must name a class declared in this
+  module) ``, whose leading run is shorter than the parenthetical that states
+  the rule.
+
 - **stage1 accepted a program stage0 rejects: `unwrapOr`'s fallback was
   checked with a contextual type (WP19 G1).** `self/result.ts` threaded the
   success type down as a hint, so in f64 mode `r.unwrapOr(-1)` on a
@@ -136,6 +345,37 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   answers with `-1` — reported as a toolchain failure, exit 3 — and
   `--target host` is refused because `process.platform` is `unknown` there.
   `web/README.md` has the whole list.
+
+- **A plan for true multithreading (WP20, `docs/wp20-threads.md`).** The
+  answer to "how does AmritScript do threads, like Go or Rust" turns out to be
+  forced rather than chosen: **1:1 OS threads with data races rejected at
+  compile time, not goroutines.** Green threads want a relocatable stack and a
+  relocatable stack wants a precise GC, which is the one thing the project
+  spent first (WP6 puts objects in entry-block `alloca`s and reuses the slot
+  across loop iterations on the argument that nothing outside the frame can
+  name them); and Go's posture — a race is a bug a runtime detector finds — is
+  not available to a compiler whose `readnone`/`readonly`/pointer-parameter
+  attributes are proved by a fixpoint that assumes a single mutator, because a
+  false attribute there is a silent miscompilation rather than a race report.
+  The note prices both the assets and the blocker. The assets are larger than
+  expected and are all accidents of other decisions: there is **no mutable
+  global state in the language at all** (top-level `let`, static fields and
+  top-level statements are each rejected, and a module `const` emits no
+  symbol), there are **no closures**, so a thread entry can only be a named
+  top-level function and the capture question never arises, and
+  `src/codegen/escape.ts` plus the whole-program fixpoint already compute the
+  shape of judgment a `Send` rule needs — which is why the design reaches for
+  a shareable-type rule rather than a trait system. The blocker is that the
+  arena is one process-wide global *and its bump is inlined into the emitted
+  IR* (`inlineAllocator`, a non-atomic load/add/store on `@amrit_arena` at
+  every allocation site), so two threads allocating race in the IR and not
+  merely in `runtime.c`. Five stages follow, of which the first — a
+  thread-local arena and RNG behind `--threads`, with no language surface —
+  is a prerequisite for every version of the design and is gated on
+  BENCHMARKS.md rather than on argument. Channels wait for monomorphisation
+  (WP15 item 8); detached threads, wasm threads, atomics and a race detector
+  are named as out of scope and why. It is a plan, not an implementation:
+  nothing in the compiler changed.
 
 - **`--emit-ast` is no longer stage0's: the self-hosted compiler answers it too
   (WP19 R1).** It was the last flag refused by name, and the refusal was right
@@ -538,6 +778,19 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Changed
 
+- **`--out-dir` is gone from the self-hosted compiler; `-o <dir>/` is the one
+  spelling (WP19 G1).** It was stage1's own flag, added when
+  `scripts/bootstrap.sh` drove the stages and kept afterwards because the
+  oracles passed it. stage0 has never had it, so it was a difference in the
+  flag sets in the direction nobody checks — a flag a user could come to
+  depend on that the one remaining compiler would then have to keep forever.
+
+  `-o <dir>/` did the same thing already, with the same directory-making and
+  the same per-module stems, so the removal costs nothing: `tests/self/`'s IR,
+  interop and bootstrap oracles pass `-o <dir>/` to both compilers now instead
+  of one spelling each, which is what the parity check of G1 wants of them
+  anyway.
+
 - **The package is ES modules, and the Node floor is 22.18.** `"type":
   "commonjs"` had been there since the first commit — the `tsc` default of 2019,
   never a decision anyone made — and it had started to cost something real. An
@@ -585,6 +838,31 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `build.sh` that no Linux runner exercises at any architecture.
 
 ### Fixed
+
+- **Six programs of the corpus had silently stopped being compared, and
+  `self/dump_checked.ts` was dropping a flag it did not know (WP19 G1).** A
+  skip in a stage1 oracle prints only under `--verbose`, so a corpus file whose
+  `.args` names a flag the oracle's `SHARED_FLAGS` set does not list leaves the
+  comparison without failing anything. `--wrapping` and `--no-strict-exports`
+  had been stage1's since WP14 §7a and were never added to that set, so the
+  `--wrapping` cases the WP15 overflow flip brought with it — `const_wrap`,
+  `opt_wrapping`, `i64_basic` and `export_no_strict` among them — went straight
+  into the skip count. The IR oracle was at seven skips and is back to the one
+  documented file (`tests/parser/precedence.ts`); it compares 318 programs
+  where it compared 312.
+
+  `checked_oracle.js` passed only `--number-mode` on the grounds that it is the
+  only flag the checker reads, which stopped being true when constant folding
+  learned about `--wrapping`: `tests/cases/const_wrap.ts` was refused by stage0
+  without it and counted as a skip. It passes both flags now (`checkerArgs` in
+  `tests/self/corpus.js`) and compares 308 whole programs.
+
+  That last one uncovered a real bug rather than a stale list.
+  `self/dump_checked.ts` took any argument it did not recognise as the file
+  name, so `--wrapping` became the path, the real path overwrote it, and the
+  dump was produced with the flag dropped — stage1 then rejected a fold stage0
+  accepted. It takes `--wrapping` now, and refuses an unknown flag instead of
+  turning it into a file name.
 
 - **`self/lexer.ts` no longer builds a literal one byte at a time (WP14
   §2.3).** The `performance` class above found it in the compiler's own

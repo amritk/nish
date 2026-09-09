@@ -21,7 +21,13 @@
 import { explicitSuperCall } from "./assignment";
 import { ownFields } from "./attributes";
 import { Emitter } from "./emit";
-import { emitPackedResult, emitResultReturningCall, resultTypeDecl } from "./emit_result";
+import {
+  emitPackedResult,
+  emitResultArgument,
+  emitResultReturningCall,
+  privateResultAbi,
+  resultTypeDecl,
+} from "./emit_result";
 import { emitArrayLength, emitArrayMethodCall, emitNewArray } from "./emit_arrays";
 import {
   compoundFloatOpcode,
@@ -296,6 +302,7 @@ function emitCall(
   args: Node[],
   site: Node
 ): string {
+  const calleePrivate = privateResultAbi(emitter, callee.exported);
   const operands: string[] = [`${emitter.llvm(callee.paramTypes[0])} ${receiver}`];
   let i = 0;
   while (i < args.length) {
@@ -304,13 +311,13 @@ function emitCall(
     const value = emitter.table.resultByValue(want)
       ? emitPackedResult(emitter, args[i], want)
       : emitter.emitExpression(args[i]);
-    operands.push(`${emitter.llvmAbi(want)} ${value}`);
+    operands.push(`${emitter.llvmAbi(want, calleePrivate)} ${emitResultArgument(emitter, want, value, calleePrivate)}`);
     i = i + 1;
   }
   // WP9: after the receiver and the arguments, so the bracket holds only what
   // the method itself allocates (`Emitter.beginReclaim`).
   const mark = emitter.beginReclaim(callee);
-  const call = `call ${emitter.llvmAbi(callee.returnType)} @${callee.name}(${operands.join(", ")})`;
+  const call = `call ${emitter.llvmAbi(callee.returnType, calleePrivate)} @${callee.name}(${operands.join(", ")})`;
   if (callee.returnType === T_VOID) {
     emitter.fn.emit(call);
     return "void";
@@ -318,7 +325,7 @@ function emitCall(
   // WP17: a small `Result` comes back in a register, exactly as it does from a
   // plain function; the unpacked object belongs to this caller.
   if (emitter.table.resultByValue(callee.returnType)) {
-    return emitResultReturningCall(emitter, call, callee.returnType, site);
+    return emitResultReturningCall(emitter, call, callee.returnType, site, calleePrivate);
   }
   return emitter.endReclaim(mark, emitter.fn.emitValue(call));
 }

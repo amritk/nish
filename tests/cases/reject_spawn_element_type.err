@@ -1,1 +1,1 @@
-`spawnSync` expects string[], got i32[]
+`spawnSync` expects an argument of type string[], got i32[]

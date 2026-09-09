@@ -25,7 +25,7 @@ entry:
   %1 = getelementptr inbounds %struct.Window, %struct.Window* %0, i32 0, i32 0
   %2 = load %struct.amrit_array*, %struct.amrit_array** %1, align 8
   %3 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %2, i64 0, i32 0
-  %4 = load i64, i64* %3, align 8
+  %4 = load i64, i64* %3, align 8, !alias.scope !3, !noalias !4
   %5 = trunc i64 %4 to i32
   ret i32 %5
 }
@@ -33,7 +33,7 @@ entry:
 define noundef i32 @touch(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %rows, i32 noundef %v) #2 {
 entry:
   %0 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %rows, i64 0, i32 0
-  %1 = load i64, i64* %0, align 8
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
   %2 = icmp ult i64 0, %1
   br i1 %2, label %bounds.ok, label %bounds.fail
 
@@ -43,12 +43,12 @@ bounds.fail:
 
 bounds.ok:
   %3 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %rows, i64 0, i32 2
-  %4 = load i8*, i8** %3, align 8
+  %4 = load i8*, i8** %3, align 8, !alias.scope !3, !noalias !4
   %5 = bitcast i8* %4 to %struct.amrit_array**
   %6 = getelementptr inbounds %struct.amrit_array*, %struct.amrit_array** %5, i64 0
-  %7 = load %struct.amrit_array*, %struct.amrit_array** %6, align 8
+  %7 = load %struct.amrit_array*, %struct.amrit_array** %6, align 8, !alias.scope !4, !noalias !3
   %8 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %7, i64 0, i32 0
-  %9 = load i64, i64* %8, align 8
+  %9 = load i64, i64* %8, align 8, !alias.scope !3, !noalias !4
   %10 = icmp ult i64 0, %9
   br i1 %10, label %bounds.ok.1, label %bounds.fail.1
 
@@ -58,12 +58,12 @@ bounds.fail.1:
 
 bounds.ok.1:
   %11 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %7, i64 0, i32 2
-  %12 = load i8*, i8** %11, align 8
+  %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4
   %13 = bitcast i8* %12 to i32*
   %14 = getelementptr inbounds i32, i32* %13, i64 0
-  store i32 %v, i32* %14, align 4
+  store i32 %v, i32* %14, align 4, !alias.scope !4, !noalias !3
   %15 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %rows, i64 0, i32 0
-  %16 = load i64, i64* %15, align 8
+  %16 = load i64, i64* %15, align 8, !alias.scope !3, !noalias !4
   %17 = trunc i64 %16 to i32
   ret i32 %17
 }
@@ -72,3 +72,9 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind }
 attributes #3 = { nounwind noreturn cold }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}

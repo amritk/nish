@@ -1,1 +1,1 @@
-`f64ToBits` expects f64, got i32
+`f64ToBits` expects an argument of type f64, got i32

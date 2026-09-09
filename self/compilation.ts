@@ -324,7 +324,7 @@ export class Compilation {
   /**
    * The file stem per module: its basename normally, and — when two modules
    * share one — its path relative to the entry's directory with the separators
-   * turned into `_`, so `--out-dir` never overwrites a module.
+   * turned into `_`, so `-o <dir>/` never overwrites a module.
    */
   outputStems(): string[] {
     const counts = new StringMap();

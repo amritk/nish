@@ -61,7 +61,12 @@ export function checkArgumentType(
 ): StaticType {
   const got = ctx.checkExpression(arg, scope);
   if (!sameType(got, want)) {
-    throw ctx.error(`\`${name}\` expects ${typeToString(want)}, got ${typeToString(got)}`, arg);
+    // "an argument of type" rather than the bare type, so the message has a
+    // literal run of its own: `scripts/gen-diagnostic-codes.mjs` derives a code
+    // from the longest run between interpolations, and `` `${n}` expects ${a},
+    // got ${b} `` has none long enough to name a rule. This one template was
+    // eight of the nine uncoded diagnostics in the suite's coverage check.
+    throw ctx.error(`\`${name}\` expects an argument of type ${typeToString(want)}, got ${typeToString(got)}`, arg);
   }
   return got;
 }

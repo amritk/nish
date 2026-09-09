@@ -100,6 +100,9 @@ bool amrit_str_eq(const amrit_str *a, const amrit_str *b);
 uint64_t amrit_str_len(const amrit_str *s);
 /* Whether `sub` occurs at byte offset `at` (negative: never); `startsWith` / `endsWith`. */
 bool amrit_str_at(const amrit_str *s, int64_t at, const amrit_str *sub);
+/* `s.indexOf(sub)`: the first byte offset where `sub` occurs, or -1. An empty
+   needle answers 0 and one longer than `s` answers -1, as in JavaScript. */
+int64_t amrit_str_index_of(const amrit_str *s, const amrit_str *sub);
 /* `console.log(s)`: one write(2) of the bytes plus a newline to stdout. */
 void amrit_print(const amrit_str *s);
 /* `console.error` and the newline-free `write` / `writeError`: fd 1 or 2. */

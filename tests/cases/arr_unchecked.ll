@@ -4,10 +4,10 @@ define internal noundef i32 @get(%struct.amrit_array* noundef nonnull align 8 de
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
-  %2 = load i8*, i8** %1, align 8
+  %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4
   %3 = bitcast i8* %2 to i32*
   %4 = getelementptr inbounds i32, i32* %3, i64 %0
-  %5 = load i32, i32* %4, align 4
+  %5 = load i32, i32* %4, align 4, !alias.scope !4, !noalias !3
   ret i32 %5
 }
 
@@ -15,12 +15,18 @@ define internal void @set(%struct.amrit_array* noundef nonnull align 8 dereferen
 entry:
   %0 = sext i32 %i to i64
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
-  %2 = load i8*, i8** %1, align 8
+  %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4
   %3 = bitcast i8* %2 to i32*
   %4 = getelementptr inbounds i32, i32* %3, i64 %0
-  store i32 %v, i32* %4, align 4
+  store i32 %v, i32* %4, align 4, !alias.scope !4, !noalias !3
   ret void
 }
 
 attributes #0 = { nounwind willreturn readonly }
 attributes #1 = { nounwind willreturn }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}

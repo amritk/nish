@@ -24,6 +24,7 @@ uint64_t amrit_str_len(const amrit_str *);
 amrit_str *amrit_str_from_i32(int32_t);
 amrit_str *amrit_str_from_i64(int64_t);
 amrit_str *amrit_str_from_f64(double);
+int64_t amrit_str_index_of(const amrit_str *, const amrit_str *);
 double amrit_random(void);
 amrit_str *amrit_read_file(const amrit_str *);
 void amrit_write_file(const amrit_str *, const amrit_str *);
@@ -37,6 +38,13 @@ static void expect_str(const amrit_str *s, const char *want, const char *what) {
 }
 
 static void expect_f64(double v, const char *want) { expect_str(amrit_str_from_f64(v), want, want); }
+
+static void expect_i64(int64_t got, int64_t want, const char *what) {
+  if (got != want) {
+    fprintf(stderr, "runtime_test: %s: expected %lld, got %lld\n", what, (long long)want, (long long)got);
+    assert(0);
+  }
+}
 /* WP4 */
 typedef struct amrit_array { uint64_t len; uint64_t cap; char *data; } amrit_array;
 void amrit_array_grow(amrit_array *, uint64_t);
@@ -192,6 +200,28 @@ int main(void) {
   expect_f64(1e20, "100000000000000000000");
   expect_f64(123456789012345680000.0, "123456789012345680000");
   expect_f64(1.5e300, "1.5e+300");
+  /* WP15: the shortest string that round-trips at this length is not the
+     correctly-rounded one, so the old snprintf/strtod search printed all
+     seventeen digits of each of these. Node prints sixteen. */
+  /* `indexOf` moved into the runtime (WP15): the edge cases the inline loop
+     used to define, and the repeated-first-byte case the memchr fallback
+     walks. `tests/run.js` runs this file against both paths. */
+  expect_i64(amrit_str_index_of(lit("hello world"), lit("world")), 6, "indexOf hit");
+  expect_i64(amrit_str_index_of(lit("hello"), lit("")), 0, "indexOf empty needle");
+  expect_i64(amrit_str_index_of(lit("hi"), lit("longer")), -1, "indexOf needle longer than haystack");
+  expect_i64(amrit_str_index_of(lit(""), lit("")), 0, "indexOf both empty");
+  expect_i64(amrit_str_index_of(lit(""), lit("x")), -1, "indexOf empty haystack");
+  expect_i64(amrit_str_index_of(lit("abc"), lit("abc")), 0, "indexOf whole string");
+  expect_i64(amrit_str_index_of(lit("abc"), lit("c")), 2, "indexOf last byte");
+  expect_i64(amrit_str_index_of(lit("abc"), lit("d")), -1, "indexOf absent");
+  expect_i64(amrit_str_index_of(lit("aaaaab"), lit("aab")), 3, "indexOf repeated first byte");
+  expect_i64(amrit_str_index_of(lit("aaaa"), lit("aaaaa")), -1, "indexOf needle one longer");
+  expect_i64(amrit_str_index_of(lit("h\xc3\xa9llo"), lit("\xc3\xa9")), 1, "indexOf utf-8 byte offset");
+
+  expect_f64(7.120236347223045e-307, "7.120236347223045e-307");
+  expect_f64(7.291122019556398e-304, "7.291122019556398e-304");
+  expect_f64(8.209073602596753e-289, "8.209073602596753e-289");
+  expect_f64(5.641232424577593e-278, "5.641232424577593e-278");
   expect_f64(-1e-7, "-1e-7");
   expect_f64(2.5e-7, "2.5e-7");
   expect_f64(9007199254740992.0, "9007199254740992");

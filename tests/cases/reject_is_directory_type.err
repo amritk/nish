@@ -1,1 +1,1 @@
-`isDirectorySync` expects string, got i32
+`isDirectorySync` expects an argument of type string, got i32

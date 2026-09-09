@@ -22,7 +22,7 @@ define internal noundef i32 @count() #0 {
 entry:
   %0 = load %struct.amrit_array*, %struct.amrit_array** @amrit_argv, align 8
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %0, i64 0, i32 0
-  %2 = load i64, i64* %1, align 8
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
   %3 = trunc i64 %2 to i32
   %4 = sub nsw i32 %3, 1
   ret i32 %4
@@ -33,7 +33,7 @@ entry:
   %0 = load %struct.amrit_array*, %struct.amrit_array** @amrit_argv, align 8
   %1 = sext i32 %i to i64
   %2 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %0, i64 0, i32 0
-  %3 = load i64, i64* %2, align 8
+  %3 = load i64, i64* %2, align 8, !alias.scope !3, !noalias !4
   %4 = icmp ult i64 %1, %3
   br i1 %4, label %bounds.ok, label %bounds.fail
 
@@ -43,10 +43,10 @@ bounds.fail:
 
 bounds.ok:
   %5 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %0, i64 0, i32 2
-  %6 = load i8*, i8** %5, align 8
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4
   %7 = bitcast i8* %6 to i8**
   %8 = getelementptr inbounds i8*, i8** %7, i64 %1
-  %9 = load i8*, i8** %8, align 8
+  %9 = load i8*, i8** %8, align 8, !alias.scope !4, !noalias !3
   ret i8* %9
 }
 
@@ -71,7 +71,7 @@ for.cond:
   %4 = load i32, i32* %i.addr, align 4
   %5 = load %struct.amrit_array*, %struct.amrit_array** %args.addr, align 8
   %6 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %5, i64 0, i32 0
-  %7 = load i64, i64* %6, align 8
+  %7 = load i64, i64* %6, align 8, !alias.scope !3, !noalias !4
   %8 = trunc i64 %7 to i32
   %9 = icmp slt i32 %4, %8
   br i1 %9, label %for.body, label %for.end
@@ -88,7 +88,7 @@ for.body:
   %18 = load i32, i32* %i.addr, align 4
   %19 = sext i32 %18 to i64
   %20 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %17, i64 0, i32 0
-  %21 = load i64, i64* %20, align 8
+  %21 = load i64, i64* %20, align 8, !alias.scope !3, !noalias !4
   %22 = icmp ult i64 %19, %21
   br i1 %22, label %bounds.ok, label %bounds.fail
 
@@ -98,10 +98,10 @@ bounds.fail:
 
 bounds.ok:
   %23 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %17, i64 0, i32 2
-  %24 = load i8*, i8** %23, align 8
+  %24 = load i8*, i8** %23, align 8, !alias.scope !3, !noalias !4
   %25 = bitcast i8* %24 to i8**
   %26 = getelementptr inbounds i8*, i8** %25, i64 %19
-  %27 = load i8*, i8** %26, align 8
+  %27 = load i8*, i8** %26, align 8, !alias.scope !4, !noalias !3
   %28 = bitcast i8* %27 to i64*
   %29 = load i64, i64* %28, align 8
   %30 = trunc i64 %29 to i32
@@ -126,16 +126,16 @@ for.end:
 forof.cond:
   %37 = load i64, i64* %forof.idx, align 8
   %38 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %36, i64 0, i32 0
-  %39 = load i64, i64* %38, align 8
+  %39 = load i64, i64* %38, align 8, !alias.scope !3, !noalias !4
   %40 = icmp ult i64 %37, %39
   br i1 %40, label %forof.body, label %forof.end
 
 forof.body:
   %41 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %36, i64 0, i32 2
-  %42 = load i8*, i8** %41, align 8
+  %42 = load i8*, i8** %41, align 8, !alias.scope !3, !noalias !4
   %43 = bitcast i8* %42 to i8**
   %44 = getelementptr inbounds i8*, i8** %43, i64 %37
-  %45 = load i8*, i8** %44, align 8
+  %45 = load i8*, i8** %44, align 8, !alias.scope !4, !noalias !3
   store i8* %45, i8** %arg.addr, align 8
   %46 = load i32, i32* %sum.addr, align 4
   %47 = load i8*, i8** %arg.addr, align 8
@@ -158,7 +158,7 @@ forof.end:
   call void @amrit_print(i8* %55)
   %56 = load %struct.amrit_array*, %struct.amrit_array** %args.addr, align 8
   %57 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %56, i64 0, i32 0
-  %58 = load i64, i64* %57, align 8
+  %58 = load i64, i64* %57, align 8, !alias.scope !3, !noalias !4
   %59 = trunc i64 %58 to i32
   %60 = icmp sgt i32 %59, 1
   br i1 %60, label %cond.true, label %cond.false
@@ -188,3 +188,9 @@ attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn }
 attributes #3 = { nounwind noreturn cold }
 attributes #4 = { nounwind willreturn readnone }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}

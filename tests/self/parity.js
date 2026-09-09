@@ -2,6 +2,7 @@
  * WP19 G1: parity between the two compilers, as one table.
  *
  *   node tests/self/parity.js                 the whole corpus, every variation
+ *   node tests/self/parity.js --flags-only    the flag-set half alone (seconds)
  *   node tests/self/parity.js --only str_     just the programs whose path matches
  *   node tests/self/parity.js --verbose       list every run, not only the differences
  *   node tests/run.js --parity                the same thing, as the suite runs it
@@ -275,8 +276,72 @@ function argsFor(entry) {
   return marker ? marker[1].trim().split(/\s+/).filter(Boolean) : [];
 }
 
+/**
+ * Flags one compiler documents and the other does not.
+ *
+ * The corpus half below compiles *programs* with flags, which can only ever
+ * exercise a flag someone thought to put in `VARIATIONS`. This asks the other
+ * question — what flags does each compiler say it has? — and it is the half
+ * that found the two differences no oracle and no variation could reach:
+ * `--no-warn-performance` was stage0's and stage1 printed no performance
+ * warnings at all, and `--out-dir` was stage1's alone. Both had been there for
+ * as long as they had existed.
+ *
+ * The set comes from each compiler's own `--help`, which is deliberate: a flag
+ * that is implemented and undocumented is a difference this is entitled to
+ * miss, because a user cannot find it either.
+ */
+function flagsOf(help) {
+  const found = new Set();
+  for (const line of help.split("\n")) {
+    // stage0's option lines: exactly two spaces, then `-x` or `--xyz`,
+    // optionally `-o, --output`. Continuations are indented much further and
+    // cannot match, so a flag named in a description is not counted.
+    const option = /^ {2}(-[\w-]+)(?:, (--[\w-]+))?/.exec(line);
+    if (option !== null) {
+      found.add(option[1]);
+      if (option[2] !== undefined) found.add(option[2]);
+      continue;
+    }
+    // The usage lines on both sides: `[--flag ...]`, and the alternatives of
+    // `-v, --version | -h, --help`, which is why `,` and `|` separate too.
+    for (const m of line.matchAll(/(?:^|[[\s|,])(--?[\w-]+)/g)) found.add(m[1]);
+  }
+  return found;
+}
+
+/**
+ * The flag-set difference, as rows shaped like the corpus half's so one table
+ * prints both. A flag on one side only is undeclared unless `DECLARED` names
+ * it, which is how `--emit-ast` — answered by both compilers now, about their
+ * own trees — differs from a flag one of them simply does not have.
+ */
+function flagSetDifferences(help0, help1) {
+  const flags0 = flagsOf(help0);
+  const flags1 = flagsOf(help1);
+  const out = [];
+  for (const flag of [...new Set([...flags0, ...flags1])].sort()) {
+    if (flags0.has(flag) === flags1.has(flag)) continue;
+    const owner = flags0.has(flag) ? "stage0" : "stage1";
+    const declared = DECLARED.find((d) => d.flag === flag && d.surface === "flag set") ?? null;
+    out.push({
+      program: "--help",
+      variation: "flag set",
+      surface: "flag set",
+      declared,
+      detail: `\`${flag}\` is ${owner}'s alone`,
+    });
+  }
+  return out;
+}
+
 async function main(argv) {
   const verbose = argv.includes("--verbose");
+  // The flag-set half needs two `--help` runs and no corpus, so it is seconds
+  // where the whole mode is minutes. `tests/run.js` runs it on every `npm
+  // test` for that reason; the corpus half stays the opt-in mode it was built
+  // as.
+  const flagsOnly = argv.includes("--flags-only");
   const onlyAt = argv.indexOf("--only");
   const only = onlyAt >= 0 ? argv[onlyAt + 1] : null;
   const compiler = process.env.AMRITC_PARITY_COMPILER ?? (await build());
@@ -284,9 +349,11 @@ async function main(argv) {
   fresh(workRoot);
 
   const runs = [];
-  for (const program of corpus()) {
-    if (only !== null && !program.name.includes(only)) continue;
-    for (const variation of VARIATIONS) runs.push({ program, variation });
+  if (!flagsOnly) {
+    for (const program of corpus()) {
+      if (only !== null && !program.name.includes(only)) continue;
+      for (const variation of VARIATIONS) runs.push({ program, variation });
+    }
   }
   const t0 = Date.now();
   // A full run is minutes — `self/`'s modules are whole programs and every one
@@ -306,7 +373,15 @@ async function main(argv) {
     return found;
   });
   if (ticking) process.stderr.write(`\r${" ".repeat(30)}\r`);
-  const differences = results.flat();
+  // The flag sets, compared once: it is a property of the two compilers rather
+  // than of any program, so it does not belong in the per-run pool above.
+  const help0 = await run("node", [cli, "--help"]);
+  const help1 = await run(compiler, ["--help"]);
+  if (help0.status !== 0 || help1.status !== 0) {
+    process.stdout.write("parity: a compiler would not answer --help\n");
+    return 1;
+  }
+  const differences = [...flagSetDifferences(help0.stdout, help1.stdout), ...results.flat()];
   const undeclared = differences.filter((d) => d.declared === null);
   const declared = differences.filter((d) => d.declared !== null);
 
@@ -329,8 +404,11 @@ async function main(argv) {
   }
   const seconds = ((Date.now() - t0) / 1000).toFixed(1);
   process.stdout.write(
-    `parity: ${runs.length} runs over ${new Set(runs.map((r) => r.program.name)).size} programs ` +
-      `(${seconds} s); ${undeclared.length} undeclared difference(s), ${declared.length} declared\n`
+    flagsOnly
+      ? `parity: the flag sets each --help names (${seconds} s); ` +
+        `${undeclared.length} undeclared difference(s), ${declared.length} declared\n`
+      : `parity: ${runs.length} runs over ${new Set(runs.map((r) => r.program.name)).size} programs ` +
+        `(${seconds} s); ${undeclared.length} undeclared difference(s), ${declared.length} declared\n`
   );
   return undeclared.length === 0 ? 0 : 1;
 }

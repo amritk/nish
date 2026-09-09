@@ -51,8 +51,12 @@ export const EXIT_INTERNAL: i32 = 70;
 
 /**
  * The variable stage0 reads for the stack behind an internal error. Named here
- * so the report can say what it would and would not do, not read: there is no
- * `getenv` in the language, and a stack trace is the only thing it turns on.
+ * so the report can say what it would and would not do, and still not read,
+ * which is now a decision rather than a limit: `getenv` is in the language
+ * (WP19 §4), and reading this would change nothing. A stack trace is the only
+ * thing the variable turns on, and a compiler with no exceptions has no stack
+ * to print whether or not it is set — so the report says so once, rather than
+ * branching on a variable to print two versions of the same "nothing here".
  */
 const ENV_DEBUG: string = "AMRITC_DEBUG";
 

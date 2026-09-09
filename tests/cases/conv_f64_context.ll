@@ -42,19 +42,19 @@ entry:
   %1 = call i8* @amrit_alloc_struct(i64 24)
   %2 = bitcast i8* %1 to %struct.amrit_array*
   %3 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %2, i64 0, i32 0
-  store i64 3, i64* %3, align 8
+  store i64 3, i64* %3, align 8, !alias.scope !3, !noalias !4
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %2, i64 0, i32 1
-  store i64 3, i64* %4, align 8
+  store i64 3, i64* %4, align 8, !alias.scope !3, !noalias !4
   %5 = call i8* @amrit_alloc_struct(i64 24)
   %6 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %2, i64 0, i32 2
-  store i8* %5, i8** %6, align 8
+  store i8* %5, i8** %6, align 8, !alias.scope !3, !noalias !4
   %7 = bitcast i8* %5 to double*
   %8 = getelementptr inbounds double, double* %7, i64 0
-  store double 0x3FE0000000000000, double* %8, align 8
+  store double 0x3FE0000000000000, double* %8, align 8, !alias.scope !4, !noalias !3
   %9 = getelementptr inbounds double, double* %7, i64 1
-  store double 0x3FF8000000000000, double* %9, align 8
+  store double 0x3FF8000000000000, double* %9, align 8, !alias.scope !4, !noalias !3
   %10 = getelementptr inbounds double, double* %7, i64 2
-  store double 0x4004000000000000, double* %10, align 8
+  store double 0x4004000000000000, double* %10, align 8, !alias.scope !4, !noalias !3
   %11 = getelementptr inbounds %struct.Config, %struct.Config* %this, i32 0, i32 1
   store %struct.amrit_array* %2, %struct.amrit_array** %11, align 8
   ret void
@@ -78,23 +78,23 @@ entry:
   %Config.obj = alloca %struct.Config, align 8
   %Point.obj = alloca %struct.Point, align 8
   %0 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0
-  store i64 2, i64* %0, align 8
+  store i64 2, i64* %0, align 8, !alias.scope !3, !noalias !4
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1
-  store i64 2, i64* %1, align 8
+  store i64 2, i64* %1, align 8, !alias.scope !3, !noalias !4
   %2 = bitcast [2 x double]* %arr.data to i8*
   %3 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 2
-  store i8* %2, i8** %3, align 8
+  store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4
   %4 = bitcast i8* %2 to double*
   %5 = getelementptr inbounds double, double* %4, i64 0
-  store double 0x3FE0000000000000, double* %5, align 8
+  store double 0x3FE0000000000000, double* %5, align 8, !alias.scope !4, !noalias !3
   %6 = getelementptr inbounds double, double* %4, i64 1
-  store double 0x3FF8000000000000, double* %6, align 8
+  store double 0x3FF8000000000000, double* %6, align 8, !alias.scope !4, !noalias !3
   store %struct.amrit_array* %arr.hdr, %struct.amrit_array** %xs.addr, align 8
   call void @Config.constructor(%struct.Config* %Config.obj)
   store %struct.Config* %Config.obj, %struct.Config** %c.addr, align 8
   %7 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
   %8 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %7, i64 0, i32 0
-  %9 = load i64, i64* %8, align 8
+  %9 = load i64, i64* %8, align 8, !alias.scope !3, !noalias !4
   %10 = icmp ult i64 0, %9
   br i1 %10, label %bounds.ok, label %bounds.fail
 
@@ -104,10 +104,10 @@ bounds.fail:
 
 bounds.ok:
   %11 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %7, i64 0, i32 2
-  %12 = load i8*, i8** %11, align 8
+  %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4
   %13 = bitcast i8* %12 to double*
   %14 = getelementptr inbounds double, double* %13, i64 0
-  %15 = load double, double* %14, align 8
+  %15 = load double, double* %14, align 8, !alias.scope !4, !noalias !3
   %16 = load %struct.Config*, %struct.Config** %c.addr, align 8
   %17 = getelementptr inbounds %struct.Config, %struct.Config* %16, i32 0, i32 0
   %18 = load double, double* %17, align 8
@@ -116,7 +116,7 @@ bounds.ok:
   %21 = getelementptr inbounds %struct.Config, %struct.Config* %20, i32 0, i32 1
   %22 = load %struct.amrit_array*, %struct.amrit_array** %21, align 8
   %23 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %22, i64 0, i32 0
-  %24 = load i64, i64* %23, align 8
+  %24 = load i64, i64* %23, align 8, !alias.scope !3, !noalias !4
   %25 = icmp ult i64 2, %24
   br i1 %25, label %bounds.ok.1, label %bounds.fail.1
 
@@ -126,10 +126,10 @@ bounds.fail.1:
 
 bounds.ok.1:
   %26 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %22, i64 0, i32 2
-  %27 = load i8*, i8** %26, align 8
+  %27 = load i8*, i8** %26, align 8, !alias.scope !3, !noalias !4
   %28 = bitcast i8* %27 to double*
   %29 = getelementptr inbounds double, double* %28, i64 2
-  %30 = load double, double* %29, align 8
+  %30 = load double, double* %29, align 8, !alias.scope !4, !noalias !3
   %31 = fadd double %19, %30
   %32 = call i8* @amrit_str_from_f64(double %31)
   call void @amrit_print(i8* %32)
@@ -153,3 +153,9 @@ attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { nounwind noreturn cold }
 attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
