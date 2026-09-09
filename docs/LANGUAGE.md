@@ -1382,7 +1382,7 @@ supplies the arguments (`examples/wasi-host.mjs`).
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `readFileSync(path: string): string` | whole file as one arena string; failure prints `amritc: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects string, got i32 ``) |
+| `readFileSync(path: string): string` | whole file as one arena string; failure prints `amritc: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects an argument of type string, got i32 ``) |
 | `readFileSyncOrNull(path: string): string \| null` | the same read, `null` where the other exits, so a program can report the missing file itself and carry on with the rest (WP14 B3). It subsumes an `existsSync` and has no time-of-check race. The result is narrowed with `if (text !== null)` like any other nullable | write | `io_streams`; `reject_readfile_or_null_unchecked` |
 | `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position | write | `io_files` |
 | `appendFileSync(path: string, data: string): void` | create/append and write; statement position | write | `io_files` |
@@ -1428,7 +1428,7 @@ are passed as bytes, so an embedded NUL truncates one.
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `getenv(name: string): string \| null` | the value of environment variable `name` as the call runs, or `null` when it is **unset**. A variable set to nothing (`CC=`) is set, and answers a zero-length string rather than `null`. The bytes are copied into the arena, so the result is an ordinary string that outlives any later change to the environment; the result is narrowed with `if (cc !== null)` like any other nullable (WP19 R1) | write | `io_getenv`; `reject_getenv_arity`, `reject_getenv_unchecked` |
+| `getenv(name: string): string \| null` | the value of environment variable `name` as the call runs, or `null` when it is **unset**. A variable set to nothing (`CC=`) is set, and answers a zero-length string rather than `null`. The bytes are copied into the arena, so the result is an ordinary string that outlives any later change to the environment; the result is narrowed with `if (cc !== null)` like any other nullable (WP19 R1) | write | `io_getenv`; `reject_getenv_arity`, `reject_getenv_type`, `reject_getenv_unchecked` |
 
 It is a **call and not `process.env.CC`**, and that is a language decision
 rather than a spelling: `process.env.NAME` is member access on a key chosen at
@@ -1450,6 +1450,11 @@ Because of that, a test that depends on a variable is given one by the harness
 — `tests/cases/<name>.env`, one `NAME=value` per line, read by both
 `tests/run.js` and the differential runner so the native binary and the Node
 rewrite see the same environment.
+
+Two reads of one variable in a function are two calls: the declaration is not
+`readonly`, because a `setenv` from linked C — this program cannot call one,
+but a library linked beside it can — may change the answer between them, so
+LLVM may not fold the second read into the first.
 
 The value is what `getenv(3)` answers, so it is bytes: a variable holding
 something that is not valid UTF-8 comes back as those bytes, exactly as
@@ -1565,7 +1570,7 @@ batches itself. All four are available in both number modes.
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `Arena.mark(): i64` | the current bump address (`amrit_arena_mark`; `0` while the arena is empty) | write | `mem_arena_builtins` |
-| `Arena.release(m: i64): void` | free everything allocated since `m` (`amrit_arena_release`); statement position; an integer literal argument is typed `i64` by context; `m == 0` behaves like `Arena.reset()`; a stale mark is ignored | write | `mem_arena_builtins`; `reject_arena_release_type` (`` `Arena.release` expects i64, got i32 ``) |
+| `Arena.release(m: i64): void` | free everything allocated since `m` (`amrit_arena_release`); statement position; an integer literal argument is typed `i64` by context; `m == 0` behaves like `Arena.reset()`; a stale mark is ignored | write | `mem_arena_builtins`; `reject_arena_release_type` (`` `Arena.release` expects an argument of type i64, got i32 ``) |
 | `Arena.reset(): void` | recycle everything in O(1), keeping the newest chunk (`amrit_reset_arena`); statement position | write | `mem_arena_builtins`; `` `Arena.reset` returns void and can only be used as a statement `` *(CLI only)* |
 | `Arena.used(): i64` | bytes bumped in the current chunk (`amrit_arena_used`); the number the memory tests watch | write | `mem_arena_builtins`, `mem_scope_dynamic_array` |
 
@@ -1987,7 +1992,7 @@ messages are exact for the cases cited; other rows quote
 | bitwise operator on booleans | `` Operator `&` is not available on boolean (use `&&`) `` (`\|` names `\|\|`, `^` names `!==`, `~` names `!`) | `reject_bit_boolean` |
 | ordering on booleans / strings / structs | `` Operator `<` requires two numeric operands, got string and i32 `` | `reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |
 | `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned` |
-| `Arena.release` with a non-`i64` argument | `` `Arena.release` expects i64, got i32 `` | `reject_arena_release_type` |
+| `Arena.release` with a non-`i64` argument | `` `Arena.release` expects an argument of type i64, got i32 `` | `reject_arena_release_type` |
 | non-integer literal in i32 mode | `` Non-integer literal `1.5` in i32 number mode (use --number-mode f64) `` | `reject_float_in_i32` |
 | non-boolean condition | `Condition must be boolean, got i32 (AmritScript has no truthiness)` | `reject_cf_nonbool_cond` |
 | `&&`/`\|\|` on numbers | `` Operator `&&` requires boolean operands, got i32 and i32 `` | `reject_cf_logical_numbers` |
@@ -2000,7 +2005,7 @@ messages are exact for the cases cited; other rows quote
 | unknown property / method / builtin | `` Unknown property `foo` on string `` / `` Unknown property `length` on i32 `` / `` Unknown builtin `Math.foo` (supported: ...) `` | `reject_unknown_property`, `reject_length_on_number`, `reject_unknown_builtin` |
 | `Math.*` on an integer | `` `Math.sqrt` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) `` | `reject_math_i32` |
 | conversion of a non-number | `` `toI32` expects a number (i32, i64, or f64), got string `` | `reject_toi32_string` |
-| I/O with the wrong type | `` `readFileSync` expects string, got i32 `` | `reject_readfile_number` |
+| I/O with the wrong type | `` `readFileSync` expects an argument of type string, got i32 `` | `reject_readfile_number` |
 | array errors | see [Arrays](#array-literals), [Element access](#element-access), [`for...of`](#for-const-x-of-a) | `reject_arr_*` |
 | class and interface errors | see [Classes](#classes), [Interfaces](#interfaces-and-object-literals) | `reject_cls_*` |
 | inheritance errors: `extends` on an interface, unknown or imported base, cycles, redeclared field, changed override signature, `super` misuse, downcast | `` Class `User` cannot extend interface `Named`; use `implements Named` `` / `` Inheritance cycle: class `Pong` extends `Ping`, which already extends `Pong` `` / `` `super(...)` must be the first statement of the constructor of `Derived` `` / ... (see [Classes](#classes)) | `reject_cls_extends_*`, `reject_cls_super_*`, `reject_cls_override_signature`, `reject_cls_shadow_field`, `reject_cls_this_before_super`, `reject_cls_readonly_inherited`, `reject_cls_downcast`, `tests/link/extends_imported_base` |

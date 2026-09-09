@@ -27,6 +27,28 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Changed
 
+- **`--out-dir` is gone from the self-hosted compiler; `-o <dir>/` is the one
+  spelling (WP19 G1).** It was stage1's own flag, added when
+  `scripts/bootstrap.sh` drove the stages and kept afterwards because the
+  oracles passed it. stage0 has never had it, so it was a difference in the
+  flag sets running in the direction nobody checks — a flag a user could come
+  to depend on that the one remaining compiler would then have to keep forever.
+
+  `-o <dir>/` did the same thing already, with the same directory-making and
+  the same per-module stems, so the removal costs nothing: `tests/self/`'s IR,
+  interop and bootstrap oracles pass `-o <dir>/` to both compilers now instead
+  of one spelling each. Both usage texts also name the same six spellings now —
+  `-o`/`--output`, `-v`/`--version` and `-h`/`--help` were always accepted by
+  both and each side documented a different subset, and since the flag-set
+  check reads `--help`, what a compiler documents is what it is held to.
+
+- **A `<name>.env` line that is a bare `NAME` unsets the variable.** The
+  sidecar layers `NAME=value` over the inherited environment, so `getenv`'s
+  third answer — unset — was only as reliable as the developer's own
+  environment: `io_getenv` assumed `AMRITC_TEST_NOT_SET` was absent rather than
+  making it so. A line with no `=` now removes it, in both readers
+  (`tests/run.js` and `tests/differential/lib.js`), and the case says so.
+
 - **`s.indexOf(sub)` is about 17x faster: 53.7 ms to 2.9 ms over 52 MB of
   haystack (WP15).** The search was emitted inline, one `amrit_str_at` probe
   per offset, so that `runtime.c` stayed inside its size budget — which made
@@ -206,6 +228,71 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   declared a `narrow` (`tests/link/duplicate_internal`).
 
 ### Fixed
+
+- **The self-hosted compiler printed no performance warnings at all, and had no
+  `--no-warn-performance` (WP19 G1).** stage1 has had the whole of WP15 §8
+  since the class landed — the analysis in `self/checker.ts`, the second list
+  in the sink, the report in `self/diagnostics.ts` — and its driver never
+  printed a word of it, so `build/amritc` compiled a quadratic string loop in
+  silence where `amritc` named four warnings.
+
+  It reports them now on stage0's terms and stage0's streams: the human report
+  on stderr capped at 20, one flat object per warning on stdout under `--json`,
+  in the order the checker found them, exit code untouched.
+  `--no-warn-performance` silences both, which is the flag stage0 has had since
+  the class shipped and stage1 did not accept at all.
+
+  **No oracle could have caught it, and neither could the corpus half of
+  `--parity`**: a performance warning goes to stderr on a compile that
+  *succeeds*, and nothing compared that stream on a success. What found it was
+  a second half of the parity check that asks each compiler what flags it has,
+  by reading its own `--help`, and diffs the two sets — added to
+  `tests/self/parity.js` beside the corpus comparison. The same half found
+  `--out-dir`.
+
+- **Six programs of the corpus had silently stopped being compared, and
+  `self/dump_checked.ts` was dropping a flag it did not know.** A skip in a
+  stage1 oracle prints only under `--verbose`, so a corpus file whose `.args`
+  names a flag the oracle's `SHARED_FLAGS` set does not list leaves the
+  comparison without failing anything. `--wrapping` and `--no-strict-exports`
+  had been stage1's since WP14 §7a and were never added to that set, so the
+  `--wrapping` cases the WP15 overflow flip brought with it — `const_wrap`,
+  `opt_wrapping`, `i64_basic` and `export_no_strict` among them — went straight
+  into the skip count. The IR oracle was at seven skips and is back to the one
+  documented file (`tests/parser/precedence.ts`).
+
+  `checked_oracle.js` passed only `--number-mode` on the grounds that it is the
+  only flag the checker reads, which stopped being true when constant folding
+  learned about `--wrapping`: `tests/cases/const_wrap.ts` was refused by stage0
+  without it and counted as a skip. It passes both now (`checkerArgs` in
+  `tests/self/corpus.js`).
+
+  That last one uncovered a real bug rather than a stale list.
+  `self/dump_checked.ts` took any argument it did not recognise as the file
+  name, so `--wrapping` became the path, the real path overwrote it, and the
+  dump was produced with the flag dropped — stage1 then rejected a fold stage0
+  accepted. It takes `--wrapping` now, and refuses an unknown flag instead of
+  turning it into a file name.
+
+- **`` `X` expects an argument of type Y, got Z ``: eight uncoded diagnostics
+  become one.** The suite pins how many distinct rejection messages carry no
+  stable `code`, as a ratchet that may shrink and not grow. The registry is
+  derived from the longest literal run between a message's interpolations, and
+  `` `${name}` expects ${want}, got ${got} `` has none long enough to name a
+  rule — that one template was eight of the nine uncoded messages, and adding a
+  builtin adds a ninth, because a new builtin's argument-type message is a new
+  distinct message.
+
+  So the message got words of its own, which is what the check's own comment
+  says to do instead of editing the table: it reads `expects an argument of
+  type string, got i32` now, and that covers `readFileSync`, `mkdirSync`,
+  `isDirectorySync`, `spawnSync`, `getenv`, `indexOf`, `f64ToBits`,
+  `bitsToF64` and `Arena.release` at once. Coverage goes from 230/239 (96.2 %)
+  to **238/239 (99.6 %)** and the pin is now 1. The registry gained one rule,
+  `AS2268`, and no existing number moved. The one still uncoded is
+  `` Unknown base class `X` (`extends` must name a class declared in this
+  module) ``, whose leading run is shorter than the parenthetical that states
+  the rule.
 
 - **stage1 accepted a program stage0 rejects: `unwrapOr`'s fallback was
   checked with a contextual type (WP19 G1).** `self/result.ts` threaded the
@@ -656,6 +743,19 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Changed
 
+- **`--out-dir` is gone from the self-hosted compiler; `-o <dir>/` is the one
+  spelling (WP19 G1).** It was stage1's own flag, added when
+  `scripts/bootstrap.sh` drove the stages and kept afterwards because the
+  oracles passed it. stage0 has never had it, so it was a difference in the
+  flag sets in the direction nobody checks — a flag a user could come to
+  depend on that the one remaining compiler would then have to keep forever.
+
+  `-o <dir>/` did the same thing already, with the same directory-making and
+  the same per-module stems, so the removal costs nothing: `tests/self/`'s IR,
+  interop and bootstrap oracles pass `-o <dir>/` to both compilers now instead
+  of one spelling each, which is what the parity check of G1 wants of them
+  anyway.
+
 - **The package is ES modules, and the Node floor is 22.18.** `"type":
   "commonjs"` had been there since the first commit — the `tsc` default of 2019,
   never a decision anyone made — and it had started to cost something real. An
@@ -703,6 +803,31 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `build.sh` that no Linux runner exercises at any architecture.
 
 ### Fixed
+
+- **Six programs of the corpus had silently stopped being compared, and
+  `self/dump_checked.ts` was dropping a flag it did not know (WP19 G1).** A
+  skip in a stage1 oracle prints only under `--verbose`, so a corpus file whose
+  `.args` names a flag the oracle's `SHARED_FLAGS` set does not list leaves the
+  comparison without failing anything. `--wrapping` and `--no-strict-exports`
+  had been stage1's since WP14 §7a and were never added to that set, so the
+  `--wrapping` cases the WP15 overflow flip brought with it — `const_wrap`,
+  `opt_wrapping`, `i64_basic` and `export_no_strict` among them — went straight
+  into the skip count. The IR oracle was at seven skips and is back to the one
+  documented file (`tests/parser/precedence.ts`); it compares 318 programs
+  where it compared 312.
+
+  `checked_oracle.js` passed only `--number-mode` on the grounds that it is the
+  only flag the checker reads, which stopped being true when constant folding
+  learned about `--wrapping`: `tests/cases/const_wrap.ts` was refused by stage0
+  without it and counted as a skip. It passes both flags now (`checkerArgs` in
+  `tests/self/corpus.js`) and compares 308 whole programs.
+
+  That last one uncovered a real bug rather than a stale list.
+  `self/dump_checked.ts` took any argument it did not recognise as the file
+  name, so `--wrapping` became the path, the real path overwrote it, and the
+  dump was produced with the flag dropped — stage1 then rejected a fold stage0
+  accepted. It takes `--wrapping` now, and refuses an unknown flag instead of
+  turning it into a file name.
 
 - **`self/lexer.ts` no longer builds a literal one byte at a time (WP14
   §2.3).** The `performance` class above found it in the compiler's own

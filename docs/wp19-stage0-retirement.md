@@ -65,9 +65,11 @@ finished and is not.
 
 `wp14-selfhost.md` §7a lists these in full; they are reproduced here as work
 rather than as trivia, because each is a gate. **All four of §7a's have now
-closed, and building G1's check found a fifth this bill had missed** — which is
-the argument for building the check before declaring the gate met, and the
-reason the row below is in the table rather than in someone's memory.
+closed, and building G1's check found three more this bill had missed** — which
+is the argument for building the check before declaring the gate met, and the
+reason those rows are in the table rather than in someone's memory. Two of the
+three came from asking a question no oracle asks and the corpus half of
+`--parity` cannot ask either: *what flags does each compiler say it has?*
 Three closed as WP14 §7a work rather than alongside the generics of WP18 as
 this package first expected: `process.platform` and `process.arch` closed
 `--target host`, `isDirectorySync` closed the `-o <dir>` spelling, and
@@ -80,6 +82,8 @@ R1. They are left in the table so the count stays honest.
 | `--target host` | **closed** | `process.platform` / `process.arch`, composed exactly as `src/codegen/target.ts` composes them (`tests/cases/io_host`), at the 8 bytes of `.text` §7a predicted and measured |
 | exit **70** on an internal error, and `AMRITC_DEBUG` | **closed** | `process.exit(internalError(...))` at each of the 35 sites, with the report in `self/ice.ts`; no second `panic` builtin, so the language did not grow for it. stage1 has no stack to print, and says so rather than promising one |
 | `-o <dir>` without the trailing slash | **closed** | `isDirectorySync(path: string): boolean`, the `stat` beside `mkdirSync` (`tests/cases/io_is_directory`) |
+| `--no-warn-performance`, and the WP15 §8 warnings themselves | **closed, found by the flag-set diff** | stage1 had the whole class — the analysis in `self/checker.ts`, the second list in the sink, the report in `self/diagnostics.ts` — and its driver never printed a word of it, so `build/amritc` compiled a quadratic string loop in silence where `amritc` named it. The driver reports them on stage0's streams and takes the flag that silences them. No oracle could see it: a warning goes to stderr on a compile that succeeds, and none of them reads that stream on a success |
+| `--out-dir` | **closed, by removal** | the one difference that ran the other way: stage1's own spelling for `-o <dir>/`, which stage0 has never had, kept because three oracles passed it. They pass `-o <dir>/` to both compilers now and the flag is gone — parity without the frozen compiler growing anything |
 | `--emit-checked`'s later-phase lines | **open, found by `--parity`** | stage0 runs the attribute pass before it dumps and prints `facts:`, `escaping:`, `calls:`, `pointer ...` and `stackSites=`; stage1 dumps straight after `check()` and prints none of them. `checked_oracle.js` never saw it, because it filters exactly those lines away (`LATER_PHASES`) — by design, since it is comparing the *checker*. Closing it is `analyzeFunctions` before the dump in `self/dump.ts` and stage0's `factsText` formatting matched byte for byte, then the filter deleted. `self/attributes.ts` already records every field stage0 prints, so it is a port and not a design question |
 
 ### A2. What `--parity` found on its first run
@@ -125,9 +129,9 @@ decision and a leap:
 | `types_oracle.js` | `src/types.ts` | **dies** |
 | `diagnostics_oracle.js` | `src/diagnostics.ts` | **dies** |
 | `symbols_oracle.js` | `src/checker/scope.ts` | **dies** |
-| `checked_oracle.js` | stage0's `--emit-checked`, 279 programs | **dies** |
-| `ir_oracle.js` | stage0's IR, 289 programs byte for byte | **dies** |
-| `interop_oracle.js` | stage0's sidecars, 52 of them | **dies** |
+| `checked_oracle.js` | stage0's `--emit-checked`, 308 programs | **dies** |
+| `ir_oracle.js` | stage0's IR, 312 programs byte for byte | **dies** |
+| `interop_oracle.js` | stage0's sidecars, 60 of them | **dies** |
 | `fuzz.js --stage1` | `IR(stage0, p) == IR(stage1, p)` on generated programs | **dies in that form** |
 | `bootstrap.js`, first equality | `IR(stage0, self/) == IR(stage1, self/)` | **dies** |
 | `bootstrap.js`, second and third | the fixed point, stage3 == stage2 | **survive** — they never involved stage0's output |
@@ -150,7 +154,7 @@ about stage0 and all three stop being true on the day it goes.
 ### D. Provenance
 
 `IR(stage0, self/) == IR(stage1, self/)` is the diverse-double-compiling
-property. It holds today over all 51 modules and 6,049,827 bytes of IR. When
+property. It holds today over all 53 modules and 6,557,991 bytes of IR. When
 stage0 goes, it goes, and it cannot be re-established later without writing a
 second compiler again.
 
@@ -169,7 +173,12 @@ of §2A are closed and the "stage0 rejects it" / "stage1 rejects it" counters in
 every oracle read **zero**, with the three documented skips of
 `.claude/selfhost.md` closed or re-justified in writing.
 
-**The check.** `node tests/run.js --parity` (`tests/self/parity.js`), which
+**The check, in two halves.** `node tests/run.js --parity`
+(`tests/self/parity.js`). The first half asks each compiler what flags it has,
+by reading its own `--help`, and diffs the two sets: that is the half that
+found `--no-warn-performance` and `--out-dir`, and nothing else in the tree
+asks the question, because every oracle compiles programs with flags rather
+than enumerating them. The second half
 runs the corpus through both compilers on every flag variation the suite uses
 — the fourteen of `VARIATIONS`, each of them a flag some `.args` sidecar or
 `tests/run.js` already passes — and compares *everything the command line
@@ -326,7 +335,7 @@ is one commit that does nothing else.
    itself depends on can survive a release, because the only thing checking the
    compiler is a compiler built from the same source. G6 archives the last
    point at which that was not true; it does not extend it.
-2. **The diagnostics lose their oracle.** 279 whole programs of `--emit-checked`
+2. **The diagnostics lose their oracle.** 308 whole programs of `--emit-checked`
    and every diagnostic wording are presently proved by agreement between two
    implementations. Afterwards they are proved by goldens someone wrote, which
    is what every other compiler in §1 does and is strictly weaker.

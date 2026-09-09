@@ -439,7 +439,10 @@ function checkIndexArgument(ctx: CheckContext, arg: Node, scope: Scope, name: st
 function checkStringArgument(ctx: CheckContext, arg: Node, scope: Scope, name: string): void {
   const type = checkExpression(ctx, arg, scope, T_STRING);
   if (type !== T_ERROR && type !== T_STRING) {
-    ctx.error(arg, `\`${name}\` expects string, got ${ctx.table.typeName(type)}`);
+    // The wording `checkArgumentType` uses in `self/builtins.ts`, and stage0's
+    // in `src/checker/builtins.ts`: one run for the code registry to derive a
+    // rule from, and one sentence for a reader to recognise.
+    ctx.error(arg, `\`${name}\` expects an argument of type string, got ${ctx.table.typeName(type)}`);
   }
 }
 

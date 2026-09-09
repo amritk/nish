@@ -45,11 +45,22 @@ function split(text) {
   return text.trim().split(/\s+/).filter(Boolean);
 }
 
-/** `--number-mode <mode>` when the program needs it: the only flag pass 1 reads. */
-function numberModeArgs(file) {
+/**
+ * The flags of a program that the *checker* reads, so a dump comparison runs
+ * the program as its own `.args` mean it to be run. Two of them:
+ * `--number-mode <mode>`, which decides what `number` is, and `--wrapping`,
+ * which the constant folder reads — `tests/cases/const_wrap.ts` is a fold that
+ * only succeeds under it, and passing only the first is why that program used
+ * to be refused by stage0 and counted as a skip (WP19 G1). Everything else in
+ * an `.args` changes the IR and belongs to `ir_oracle.js`.
+ */
+function checkerArgs(file) {
   const flags = extraArgs(file);
+  const out = [];
   const at = flags.indexOf("--number-mode");
-  return at >= 0 ? ["--number-mode", flags[at + 1]] : [];
+  if (at >= 0) out.push("--number-mode", flags[at + 1]);
+  if (flags.includes("--wrapping")) out.push("--wrapping");
+  return out;
 }
 
 /**
@@ -95,4 +106,4 @@ function linkPrograms() {
   return out;
 }
 
-export { CORPUS_DIRS, extraArgs, numberModeArgs, programs, linkPrograms, root };
+export { CORPUS_DIRS, checkerArgs, extraArgs, programs, linkPrograms, root };

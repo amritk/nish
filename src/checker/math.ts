@@ -183,7 +183,11 @@ function bitcastBuiltin(name: string, from: StaticType, to: StaticType): Builtin
     checkArity(ctx, expr, name, 1);
     const t = ctx.checkExpression(expr.arguments[0], scope);
     if (!sameType(t, from)) {
-      throw ctx.error(`\`${name}\` expects ${typeToString(from)}, got ${typeToString(t)}`, expr.arguments[0]);
+      // The wording `checkArgumentType` uses, for the reason given there.
+      throw ctx.error(
+        `\`${name}\` expects an argument of type ${typeToString(from)}, got ${typeToString(t)}`,
+        expr.arguments[0]
+      );
     }
     return to;
   };

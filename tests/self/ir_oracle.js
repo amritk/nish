@@ -47,6 +47,12 @@ const SHARED_FLAGS = new Set([
   "--strict-exports",
   "--unchecked-indexing",
   "--nsw",
+  // Both of these are stage1's and have been since WP14 §7a; they were left
+  // out of this set when they were stage0's alone, and a skip is silent, so
+  // four programs of the corpus stopped being compared without anyone
+  // deciding that (WP19 G1).
+  "--wrapping",
+  "--no-strict-exports",
   "--no-stack-alloc",
   "--runtime-decls",
   // `-g` is compared like any other flag, metadata and all: the `DIFile` both
@@ -122,7 +128,7 @@ function compare(binary, work, file, negatives = new Set()) {
   const names = llFiles(dir0);
   if (names.length === 0) return { skipped: "stage0 wrote no IR" };
 
-  const stage1 = spawnSync(binary, [...flags, named, "--out-dir", dir1], {
+  const stage1 = spawnSync(binary, [...flags, named, "-o", `${dir1}/`], {
     cwd: root,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,

@@ -22,7 +22,8 @@ const words = (file) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8").tri
 
 /**
  * `<name>.env`: one `NAME=value` per line, layered over the inherited
- * environment, the same sidecar `tests/run.js` reads. Both sides need it and
+ * environment (and a bare `NAME` unsets one), the same sidecar `tests/run.js`
+ * reads. Both sides need it and
  * for the same reason: `getenv` (WP19 R1) is only comparable when the native
  * binary and the Node rewrite are handed the same environment, and only the
  * runner can set one.
@@ -34,7 +35,11 @@ function envFile(file) {
     const text = line.trim();
     if (text.length === 0 || text.startsWith("#")) continue;
     const eq = text.indexOf("=");
-    if (eq > 0) env[text.slice(0, eq)] = text.slice(eq + 1);
+    // A bare `NAME` takes the variable *away*, which `NAME=` cannot do: an
+    // empty value is a set variable, and `getenv`'s third answer — unset — is
+    // otherwise only as reliable as the developer's own environment.
+    if (eq < 0) delete env[text];
+    else if (eq > 0) env[text.slice(0, eq)] = text.slice(eq + 1);
   }
   return env;
 }

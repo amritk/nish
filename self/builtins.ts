@@ -142,7 +142,10 @@ function requireStatementPosition(ctx: CheckContext, call: Node, name: string): 
 function checkArgumentType(ctx: CheckContext, arg: Node, scope: Scope, name: string, want: i32): void {
   const got = checkExpression(ctx, arg, scope, want);
   if (got !== T_ERROR && got !== want) {
-    ctx.error(arg, `\`${name}\` expects ${ctx.table.typeName(want)}, got ${ctx.table.typeName(got)}`);
+    // "an argument of type" rather than the bare type, so the message has a
+    // literal run a diagnostic code can be derived from; stage0 words it the
+    // same way in `src/checker/builtins.ts` and `src/checker/math.ts`.
+    ctx.error(arg, `\`${name}\` expects an argument of type ${ctx.table.typeName(want)}, got ${ctx.table.typeName(got)}`);
   }
 }
 

@@ -203,7 +203,7 @@ for (const name of cases) {
  * is the only place the value can come from, and a golden that depended on
  * the developer's own environment would not be a golden. Blank lines and `#`
  * comments are ignored; `NAME=` sets an empty value, which is a *set*
- * variable and not the same as leaving it out.
+ * variable and not the same as leaving it out, and a bare `NAME` unsets it.
  */
 function caseEnv(file) {
   if (!fs.existsSync(file)) return process.env;
@@ -212,7 +212,11 @@ function caseEnv(file) {
     const text = line.trim();
     if (text.length === 0 || text.startsWith("#")) continue;
     const eq = text.indexOf("=");
-    if (eq > 0) env[text.slice(0, eq)] = text.slice(eq + 1);
+    // A bare `NAME` takes the variable *away*, which `NAME=` cannot do: an
+    // empty value is a set variable, and `getenv`'s third answer — unset — is
+    // otherwise only as reliable as the developer's own environment.
+    if (eq < 0) delete env[text];
+    else if (eq > 0) env[text.slice(0, eq)] = text.slice(eq + 1);
   }
   return env;
 }
@@ -381,11 +385,15 @@ if (!only || "diagnostics".includes(only)) {
   );
 
   // Coverage over every rejection the suite exercises. The uncoded remainder is
-  // the backlog, pinned so it can shrink but not grow: those messages are built
-  // entirely out of interpolations (`\`${fn}\` expects ${a}, got ${b}`) and have
-  // no literal run long enough to identify a rule. Adding one is a matter of
-  // giving the message words of its own, not of editing the table.
-  const UNCODED_BACKLOG = 8;
+  // the backlog, pinned so it can shrink but not grow: such a message is built
+  // entirely out of interpolations and has no literal run long enough to
+  // identify a rule. Adding one is a matter of giving the message words of its
+  // own, not of editing the table -- which is what took this from 8 to 1:
+  // `` `${fn}` expects ${a}, got ${b} `` was eight of them, and now reads
+  // `expects an argument of type ${a}`, a run a code can be derived from.
+  // The one left is `Unknown base class ...`, whose leading run is shorter
+  // than the parenthetical that actually states the rule.
+  const UNCODED_BACKLOG = 1;
   const rejectCases = fs
     .readdirSync(casesDir)
     .filter((f) => f.startsWith("reject_") && f.endsWith(".ts"));
@@ -2622,8 +2630,8 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // every whole program in the corpus — not a golden a human wrote, and not
     // a summary either: every attribute, every block label and every SSA
     // number has to match, which is the half of the output a golden test reads
-    // past. The skips are the flags stage1 does not have (`-g`, the dumps) and
-    // the one parser fixture no checker accepts.
+    // past. One skip is left and it is the parser fixture no checker accepts;
+    // the dump flags are counted apart from it, as dumps.
     const irOracle = spawnSync("node", [path.join(root, "tests", "self", "ir_oracle.js")], {
       cwd: root,
       encoding: "utf8",
@@ -2683,6 +2691,28 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // same one: run both compilers over the corpus the WP8 section above
     // drives the generators over, and compare all four files byte for byte.
     // Only the link step and the directory creation are still stage0's (D4).
+    // WP19 G1, the flag-set half only. The corpus half is `--parity`, a mode
+    // rather than a section, because it is minutes (see the top of this file);
+    // this is two `--help` runs and belongs in every `npm test`, because it
+    // asks the one question no oracle and no variation asks — what flags does
+    // each compiler say it has? — and a flag one side lacks is invisible to
+    // everything else here.
+    //
+    // It earns that by what it found: `--no-warn-performance` was stage0's
+    // alone and stage1 printed no performance warnings at all, and `--out-dir`
+    // was stage1's alone. Both had been so for as long as they had existed.
+    const parity = spawnSync(
+      "node",
+      [path.join(root, "tests", "self", "parity.js"), "--flags-only"],
+      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+    );
+    const paritySummary = parity.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `the two compilers document the same flags (${paritySummary})`,
+      parity.status === 0,
+      `${parity.stdout}${parity.stderr}`
+    );
+
     const interopOracle = spawnSync("node", [path.join(root, "tests", "self", "interop_oracle.js")], {
       cwd: root,
       encoding: "utf8",
@@ -2843,6 +2873,41 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           ourJson.stdout === theirJson.stdout &&
           ourJson.stdout.split("\n").filter(Boolean).length === 3,
         `ours:\n${ourJson.stdout}${ourJson.stderr}\ntheirs:\n${theirJson.stdout}`
+      );
+
+      // WP15 §8 through the driver (WP19 G1). The analysis is compared word
+      // for word by the checked oracle already; what this pins is the half
+      // that is the driver's -- that stage1 prints the warnings at all, on
+      // stderr, in stage0's order and with stage0's cap, as JSON objects on
+      // stdout under `--json`, and not at all under `--no-warn-performance`.
+      // A warning changes no exit code on either side, so the compile that
+      // carries it is a successful one. `wrote <file>` is dropped from both:
+      // it names a path in a temporary directory that differs per side.
+      const perfCase = path.join("tests", "cases", "perf_str_concat_loop.ts");
+      const perfOut = (dir) => path.join(shipDir, dir, "perf.ll");
+      const withoutWrote = (text) =>
+        text.split("\n").filter((line) => !line.startsWith("wrote ")).join("\n");
+      const ourPerf = spawnSync(compiler, [perfCase, "-o", perfOut("perf1")], { cwd: root, encoding: "utf8" });
+      const theirPerf = spawnSync("node", [cli, perfCase, "-o", perfOut("perf0")], { cwd: root, encoding: "utf8" });
+      const ourPerfJson = spawnSync(compiler, [perfCase, "-o", perfOut("perf1j"), "--json"], { cwd: root, encoding: "utf8" });
+      const theirPerfJson = spawnSync("node", [cli, perfCase, "-o", perfOut("perf0j"), "--json"], { cwd: root, encoding: "utf8" });
+      const ourPerfOff = spawnSync(
+        compiler,
+        [perfCase, "-o", perfOut("perf1q"), "--no-warn-performance"],
+        { cwd: root, encoding: "utf8" }
+      );
+      check(
+        "the self-hosted compiler: the performance warnings are stage0's, and --no-warn-performance silences them",
+        ourPerf.status === 0 &&
+          theirPerf.status === 0 &&
+          withoutWrote(ourPerf.stderr) === withoutWrote(theirPerf.stderr) &&
+          ourPerf.stderr.includes("performance: `out` is rebuilt") &&
+          withoutWrote(ourPerf.stderr).trimEnd().endsWith("4 performance warnings") &&
+          ourPerfJson.stdout === theirPerfJson.stdout &&
+          ourPerfJson.stdout.split("\n").filter(Boolean).length === 4 &&
+          ourPerfOff.status === 0 &&
+          withoutWrote(ourPerfOff.stderr).trim() === "",
+        `ours:\n${ourPerf.stderr}\ntheirs:\n${theirPerf.stderr}\nours --json:\n${ourPerfJson.stdout}\ntheirs --json:\n${theirPerfJson.stdout}\nours --no-warn-performance:\n${ourPerfOff.stderr}`
       );
 
       // `--emit-checked` through the driver, rather than through the

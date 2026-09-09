@@ -40,7 +40,7 @@ export const TOOLCHAIN: string = "AS0002";
 export const INTERNAL: string = "AS0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 335;
+export const RULE_COUNT: i32 = 336;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -498,6 +498,8 @@ export function diagnosticRules(): string[] {
     "AS3001",
     "` expects a number index, got ",
     "AS2058",
+    "` expects an argument of type ",
+    "AS2268",
     "` must return a value of type ",
     "AS2093",
     "`bigint` type is forbidden in ",

@@ -107,7 +107,7 @@ function missingToolchain(): string | null {
 const usageText = (): string =>
   [
     `usage: ${CLI} <entry.ts> [more.ts ...] [options]`,
-    `       ${CLI} --version | --help`,
+    `       ${CLI} -v, --version | -h, --help`,
     "  -o, --output <file.ll>     output path for a single module (default: <input>.ll)",
     "  -o, --output <dir>/        output directory: one <dir>/<module>.ll per module",
     "  --link <exe>               build a native binary from every module + runtime/runtime.c",
