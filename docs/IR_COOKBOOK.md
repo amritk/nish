@@ -3413,14 +3413,14 @@ declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef n
 declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
 
-define noundef nonnull align 8 i8* @piece(i32 noundef %i) #0 {
+define internal noundef nonnull align 8 i8* @piece(i32 noundef %i) #0 {
 entry:
   %0 = call i8* @amrit_str_from_i32(i32 %i)
   %1 = call i8* @amrit_str_concat(i8* %0, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
   ret i8* %1
 }
 
-define noundef nonnull align 8 i8* @join(i32 noundef %n) #0 {
+define internal noundef nonnull align 8 i8* @join(i32 noundef %n) #0 {
 entry:
   %s.addr = alloca i8*, align 8
   %i.addr = alloca i32, align 4
@@ -3445,7 +3445,7 @@ for.body:
 
 for.inc:
   %8 = load i32, i32* %i.addr, align 4
-  %9 = add i32 %8, 1
+  %9 = add nsw i32 %8, 1
   store i32 %9, i32* %i.addr, align 4
   br label %for.cond
 
@@ -3454,14 +3454,14 @@ for.end:
   ret i8* %10
 }
 
-define void @Box.constructor(%struct.Box* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #0 {
+define internal void @Box.constructor(%struct.Box* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Box, %struct.Box* %this, i32 0, i32 0
   store i8* %text, i8** %0, align 8
   ret void
 }
 
-define noundef nonnull align 8 i8* @fill(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %b, i32 noundef %i) #0 {
+define internal noundef nonnull align 8 i8* @fill(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %b, i32 noundef %i) #0 {
 entry:
   %s.addr = alloca i8*, align 8
   %0 = call i8* @amrit_str_from_i32(i32 %i)
@@ -3474,7 +3474,7 @@ entry:
   ret i8* %4
 }
 
-define noundef nonnull align 8 i8* @report(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %b, i32 noundef %n) #0 {
+define internal noundef nonnull align 8 i8* @report(%struct.Box* noundef nonnull align 8 dereferenceable(8) nocapture %b, i32 noundef %n) #0 {
 entry:
   %0 = call i64 @amrit_arena_mark()
   %1 = call i8* @join(i32 %n)
