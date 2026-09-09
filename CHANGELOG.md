@@ -7,6 +7,39 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ## [Unreleased]
 
+### Added
+
+- **A plan for packages (WP21, `docs/wp21-packages.md`).** The question "what
+  goes in an `exports` map beside `import` and `require`" turned out to be two
+  questions, and the note's first job is to separate them. A **foreign host** —
+  JavaScript on Node, JavaScript in a browser, C — takes a *built artifact*
+  across the ABI, and WP8 already generates all three of them. Another
+  **AmritScript program** takes *source*, compiled as part of its own whole
+  program, and four existing decisions force that rather than suggest it: a
+  prebuilt library hands the optimiser an opaque symbol instead of the
+  exporter's attribute set, which is the whole point of compiling a program as
+  a whole (WP5); a generic has no code until a consumer's call site
+  instantiates it (WP18); `--number-mode` decides what `number` *is*, so
+  prebuilding means prebuilding {i32, f64} × three targets × three profiles;
+  and source lets `internal` linkage drop everything the consumer never calls.
+  So a built artifact is a *cache* for an AmritScript consumer, never a
+  distribution format — and the package a JS host sees through `--emit-napi`
+  is a narrowed projection of the one an AmritScript consumer sees, which may
+  take and return classes, `T | null` and `Result<T, E>` freely because nothing
+  crosses a boundary.
+
+  The blocker is not packaging: **the symbol namespace is flat.** Two modules
+  defining the same *non-exported* name is already an error, and deliberately
+  not one the linkage flag can waive, because `analyzeFunctions` keys the
+  whole-program fact fixpoint by symbol name and a duplicate would hand each
+  function the other's attributes — a miscompile, not a link failure
+  (`tests/link/duplicate_internal`). Two unrelated packages that each have a
+  private `helper()` would fail to compile together. Package-scoped symbols are
+  therefore stage one of five; they have no language surface, and the diff is
+  mechanical and grows with every golden added in the meantime. Nothing in the
+  note is implemented, several of its sections are explicitly sketches, and
+  none of it is on the M4 critical path.
+
 ### Fixed — correctness
 
 - **`String(x)` on a double printed seventeen digits where sixteen suffice, for

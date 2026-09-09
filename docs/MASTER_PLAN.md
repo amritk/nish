@@ -729,3 +729,19 @@ it. Its first stage, a thread-local arena, has no language surface and is a
 prerequisite for every version of the design, so it can land whenever it is
 convenient; the four stages that add rules to LANGUAGE.md cannot land before
 M4 without delaying the freeze, and are 1.1 scope by default.
+
+Packages are not on that list either, and the question "how does one
+AmritScript package depend on another" turns out to have the same character:
+the answer is forced by whole-program compilation rather than chosen. A
+foreign host — JavaScript on Node, JavaScript in a browser, C — takes a built
+artifact across the ABI, which is what WP8 already generates; an AmritScript
+consumer takes **source**, compiled as part of its own program, because a
+prebuilt library cannot carry the attribute fixpoint of §3a, cannot contain a
+generic that nobody has instantiated yet, and would have to be built once per
+(number mode × target × profile). An `exports` map states both, one condition
+per consumer. [wp21-packages.md](wp21-packages.md) is the plan of record; it
+is rough, and its one hard blocker is that the symbol namespace is flat today
+— two packages with a private `helper()` each would fail to compile together,
+because the whole-program fact table is keyed by symbol name. Package-scoped
+symbols are its first stage, have no language surface, and are worth landing
+early: the diff is mechanical and grows with every new golden.
