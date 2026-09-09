@@ -1059,7 +1059,14 @@ const checkObjectLiteral: ExpressionChecker = (ctx, node, scope) => {
     seen.add(name);
     const t = ctx.checkExpression(value, scope);
     if (!assignable(t, field.type)) {
-      throw ctx.error(`Field \`${name}\` of \`${info.name}\` is ${typeToString(field.type)}, got ${typeToString(t)}`, value);
+      // "expects a value of type" rather than a bare "is": the words are what
+      // `scripts/gen-diagnostic-codes.mjs` derives the rule's code from, and a
+      // message assembled entirely out of interpolations has no run long
+      // enough to key on (`tests/run.js`'s coverage check).
+      throw ctx.error(
+        `Field \`${name}\` of \`${info.name}\` expects a value of type ${typeToString(field.type)}, got ${typeToString(t)}`,
+        value
+      );
     }
   }
   const missing = info.fields.find((f) => !seen.has(f.name));

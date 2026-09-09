@@ -61,6 +61,7 @@ import {
   N_VAR_DECL,
   Node,
 } from "./nodes";
+import { literalLength } from "./emit_arrays";
 import { isResultConstructorCall, resultMethodName } from "./emit_result";
 import { StringSet } from "./map";
 import { Options } from "./options";
@@ -265,19 +266,6 @@ class EscapeAnalysis {
     return this.table.alignOf(elem);
   }
 
-  /** The non-negative integer a literal length denotes, or -1 for anything else. */
-  literalLength(expr: Node): i32 {
-    const e = unwrapParens(expr);
-    if (e.kind !== N_NUMBER) {
-      return -1;
-    }
-    const n: f64 = Number(e.text);
-    if (n !== Math.floor(n) || n < 0.0) {
-      return -1;
-    }
-    return toI32(n);
-  }
-
   visit(node: Node): void {
     const program = this.unit.program;
     if (node.kind === N_IDENT) {
@@ -330,7 +318,7 @@ class EscapeAnalysis {
       return;
     }
     const args = node.children[2];
-    const n = args.children.length > 0 ? this.literalLength(args.children[0]) : -1;
+    const n = args.children.length > 0 ? literalLength(args.children[0]) : -1;
     const stackable = n >= 0 && n * this.elementSize(this.table.refOf(type)) <= STACK_ARRAY_BYTES;
     this.sites.push(new Site(node, stackable));
   }

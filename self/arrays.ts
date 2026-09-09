@@ -118,7 +118,10 @@ export function checkIndexAssignment(ctx: CheckContext, expr: Node, scope: Scope
     const a = ctx.table.typeName(elem);
     return ctx.errorType(
       expr,
-      `Operator \`${op.substring(0, op.length - 1)}\` requires two operands of the same numeric type, got ${a} and ${ctx.table.typeName(rhs)}`
+      // The token as it was written, `*=` and not `*`: stage0's element path
+      // names the compound one (`src/checker/arrays.ts`), as its local and
+      // field paths do (WP19 §A2).
+      `Operator \`${op}\` requires two operands of the same numeric type, got ${a} and ${ctx.table.typeName(rhs)}`
     );
   }
   return elem;

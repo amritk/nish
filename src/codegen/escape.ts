@@ -75,7 +75,7 @@ import { dottedName } from "../checker/builtins.js";
 import { effectiveConstructor, intrinsicType, isAssignmentOperator } from "../checker/classes.js";
 import { CompilerOptions, StaticType, alignOf, isNumeric, resultByValue, stripNull } from "../types.js";
 import { FunctionFacts, classifyUse } from "./attributes.js";
-import { isJoinCall, isPushCall } from "./emit/arrays.js";
+import { isJoinCall, isPushCall, literalLength } from "./emit/arrays.js";
 import { isResultConstructorCall, resultMethodName } from "./emit/result.js";
 import { isStringAllocCall, unwrapStringPassthrough } from "./emit/strings.js";
 
@@ -141,14 +141,6 @@ function unwrapParens(expr: ts.Expression): ts.Expression {
   let inner = expr;
   while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
   return inner;
-}
-
-/** The non-negative integer a literal length denotes, or undefined for anything else. */
-function literalLength(expr: ts.Expression): number | undefined {
-  const e = unwrapParens(expr);
-  if (!ts.isNumericLiteral(e)) return undefined;
-  const n = Number(e.text);
-  return Number.isInteger(n) && n >= 0 ? n : undefined;
 }
 
 function isAssignmentTarget(node: ts.Node): boolean {

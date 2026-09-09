@@ -25,9 +25,10 @@
  * file that is allowed to disagree.
  *
  * The lines stage0 prints that the checker is not responsible for — the
- * attribute pass's facts, escape sets and stack sites — are dropped here
- * rather than left out of the format, so they start being compared the moment
- * that phase is ported.
+ * attribute pass's facts, escape sets and stack sites — used to be dropped
+ * here rather than left out of the format, so that they would start being
+ * compared the moment that phase was ported. It is ported (WP19 R1,
+ * `self/dump.ts`), the filter is gone, and every line of the dump is compared.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -37,14 +38,9 @@ import { fileURLToPath } from "node:url";
 
 const cli = path.join(root, "dist", "index.js");
 
-/**
- * Lines of the dump that a later phase fills in. Only the attribute pass is
- * left: the locals and callees of each body are pass 2's, and are compared.
- */
-const LATER_PHASES = /^ {2}(facts:|escaping:|calls:|pointer |stackSites)/;
-
-function signatureLines(dump) {
-  return dump.split("\n").filter((line) => line.length > 0 && !LATER_PHASES.test(line));
+/** The dump's lines, blanks dropped; nothing else is filtered out any more. */
+function dumpLines(dump) {
+  return dump.split("\n").filter((line) => line.length > 0);
 }
 
 function compare(binary, file) {
@@ -70,8 +66,8 @@ function compare(binary, file) {
   });
   if (stage1.status !== 0) return { rejected: firstLine(stage1.stderr) };
 
-  const want = signatureLines(stage0.stdout);
-  const got = signatureLines(stage1.stdout);
+  const want = dumpLines(stage0.stdout);
+  const got = dumpLines(stage1.stdout);
   for (let i = 0; i < Math.max(want.length, got.length); i++) {
     if (want[i] !== got[i]) {
       return { failed: `line ${i + 1}: ours \`${got[i] ?? "<end>"}\`, stage0 \`${want[i] ?? "<end>"}\`` };

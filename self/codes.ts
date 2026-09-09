@@ -40,7 +40,7 @@ export const TOOLCHAIN: string = "AS0002";
 export const INTERNAL: string = "AS0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 336;
+export const RULE_COUNT: i32 = 337;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -560,6 +560,8 @@ export function diagnosticRules(): string[] {
     "AS2180",
     ": cannot create the result",
     "AS4003",
+    "` expects a value of type ",
+    "AS2269",
     "`, which already extends `",
     "AS2110",
     "`Reflect` is forbidden in ",

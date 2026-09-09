@@ -65,7 +65,7 @@ finished and is not.
 
 `wp14-selfhost.md` §7a lists these in full; they are reproduced here as work
 rather than as trivia, because each is a gate. **All four of §7a's have now
-closed, and building G1's check found three more this bill had missed** — which
+closed, and so have the three that building G1's check found** — which
 is the argument for building the check before declaring the gate met, and the
 reason those rows are in the table rather than in someone's memory. Two of the
 three came from asking a question no oracle asks and the corpus half of
@@ -84,7 +84,7 @@ R1. They are left in the table so the count stays honest.
 | `-o <dir>` without the trailing slash | **closed** | `isDirectorySync(path: string): boolean`, the `stat` beside `mkdirSync` (`tests/cases/io_is_directory`) |
 | `--no-warn-performance`, and the WP15 §8 warnings themselves | **closed, found by the flag-set diff** | stage1 had the whole class — the analysis in `self/checker.ts`, the second list in the sink, the report in `self/diagnostics.ts` — and its driver never printed a word of it, so `build/amritc` compiled a quadratic string loop in silence where `amritc` named it. The driver reports them on stage0's streams and takes the flag that silences them. No oracle could see it: a warning goes to stderr on a compile that succeeds, and none of them reads that stream on a success |
 | `--out-dir` | **closed, by removal** | the one difference that ran the other way: stage1's own spelling for `-o <dir>/`, which stage0 has never had, kept because three oracles passed it. They pass `-o <dir>/` to both compilers now and the flag is gone — parity without the frozen compiler growing anything |
-| `--emit-checked`'s later-phase lines | **open, found by `--parity`** | stage0 runs the attribute pass before it dumps and prints `facts:`, `escaping:`, `calls:`, `pointer ...` and `stackSites=`; stage1 dumps straight after `check()` and prints none of them. `checked_oracle.js` never saw it, because it filters exactly those lines away (`LATER_PHASES`) — by design, since it is comparing the *checker*. Closing it is `analyzeFunctions` before the dump in `self/dump.ts` and stage0's `factsText` formatting matched byte for byte, then the filter deleted. `self/attributes.ts` already records every field stage0 prints, so it is a port and not a design question |
+| `--emit-checked`'s later-phase lines | **closed** | it was the port this row predicted: `self/compilation.ts` grew stage0's memoised `analyze()`, `self/dump.ts` grew `factsText` in stage0's format, and `checked_oracle.js`'s `LATER_PHASES` filter is deleted — 314 programs agree over 297,074 dump lines with nothing filtered out. It earned its keep immediately, catching a lost `amrit_panic_div` fact that the compound-assignment fix below had just introduced |
 
 ### A2. What `--parity` found on its first run
 
@@ -98,16 +98,40 @@ carries, and none of these programs carries the flag that exposes it.
 | Found | What it is | State |
 | --- | --- | --- |
 | `unwrapOr`'s fallback took a contextual type in stage1 | in f64 mode `r.unwrapOr(-1)` on a `Result<i32, string>` compiled in stage1 and was refused by stage0. `docs/LANGUAGE.md`'s contextual-literal table is an enumerated list and this is not one of its positions, so stage1 was in the wrong | **fixed**, `reject_res_unwrap_or_f64` |
-| `Ok(...)`'s payload and an object literal's field, same cause | `` `Ok(...)` expects i32 for Result<i32, i32>, got f64 `` and `` Field `code` of `IoError` is i32, got f64 `` — stage0 refuses, stage1 compiles (`res_by_value_param`, `res_export`, `res_struct_error` under `--number-mode f64`) | **open**: the same one-line shape as the `unwrapOr` fix, at two more sites |
-| a fixed-length stack array is sized from an IR operand, not a constant | `new Float32Array(2)` in f64 mode reaches `emitData` as a register rather than digits, because the length has been through a conversion. stage0 writes `alloca [NaN x float]` — **IR that `llvm-as` refuses, from a compiler that exited 0** — and stage1 writes `alloca [0 x float]`, which assembles and then stores two floats past a zero-element stack slot. Both are wrong and stage1's is the more dangerous, because it builds and runs (`f32_struct.ts --number-mode f64`) | **open**, and the most serious of the five |
-| the first diagnostic differs | `cf_switch_break.ts` in f64 mode: stage1 reports the `case` label against the discriminant at 12:12, stage0 an operand mismatch at 36:10. Both refuse the program; they disagree about which check fires first | **open**, low severity |
-| a compound operator loses its spelling | `div_compound_attributes.ts` in f64 mode: stage0 says ``Operator `/=` requires…``, stage1 says ``Operator `/` requires…`` | **open**, low severity |
+| `Ok(...)`'s payload and an object literal's field, same cause | `` `Ok(...)` expects i32 for Result<i32, i32>, got f64 `` and `` Field `code` of `IoError` is i32, got f64 `` — stage0 refuses, stage1 compiles (`res_by_value_param`, `res_export`, `res_struct_error` under `--number-mode f64`) | **fixed**, `reject_res_ok_f64` and `reject_struct_field_f64`. The payload was the one-line shape this row predicted; the field was not. stage0 answers that position from *three* walks — the object-literal one names it, the numeric and array ones do not — and stage1 threads one contextual type down, so it was also compiling `{ b: 255 }` for a `u8` field and `{ xs: [] }`, in the default mode with no flag involved (`reject_struct_field_u8`, `reject_struct_field_empty_array`). A nested object literal and a `null` still take the field's type |
+| a fixed-length stack array is sized from an IR operand, not a constant | `new Float32Array(2)` in f64 mode reaches `emitData` as a register rather than digits, because the length has been through a conversion. stage0 writes `alloca [NaN x float]` — **IR that `llvm-as` refuses, from a compiler that exited 0** — and stage1 writes `alloca [0 x float]`, which assembles and then stores two floats past a zero-element stack slot. Both are wrong and stage1's is the more dangerous, because it builds and runs (`f32_struct.ts --number-mode f64`) | **fixed**, `arr_stack_f64`. Both emitters read the length from the literal now, through the same `literalLength` the escape analysis used to decide the site was stackable, so the two answers cannot differ; a stack site whose length is not a literal is an internal error rather than a silent zero |
+| the first diagnostic differs | `cf_switch_break.ts` in f64 mode: stage1 reported the `case` label against the discriminant at 12:12, stage0 an operand mismatch at 36:10. Both refuse the program; they disagreed about which check fires first | **closed**: both compilers now report the same `switch` discriminant error at 8:13. Re-derived rather than trusted, which is what this table is for |
+| a compound operator loses its spelling | `div_compound_attributes.ts` in f64 mode: stage0 says ``Operator `/=` requires…``, stage1 says ``Operator `/` requires…`` | **fixed**, `reject_cf_compound_string` and `reject_cf_compound_widths`. Not the one-word fix it looks like: stage1 was routing a compound arithmetic assignment through the *binary operator's* rule, which is where the spelling was lost and also why `s += "b"` compiled there — stage0 has one numeric-only rule for the construct, and stage1 has it now, for a local, a field and an element alike |
 
 The remaining 193 rows are all the `--emit-checked` row of §2A above, which is
-one cause counted once per program.
+one cause counted once per program, and it is closed too: stage1 prints the
+facts, and `checked_oracle.js` compares them.
 
-Two of the five are in the compilers' *output* rather than their diagnostics,
-and the stack-array one is a bug in the shipped compiler that predates this
+**All five are fixed, and the count they were found at is the point.** Between
+them they cost four one-line refusals, one shared `literalLength`, one rule
+moved out of `checkOperator` and one ported dump — and finding them cost a
+cross product nobody had run. Two of the five turned out to be wider than this
+table recorded (the object literal's field, and the compound operator), which
+is the ordinary way of it: a difference found under one flag is rarely only
+under that flag.
+
+Fixing them turned up a sixth of the same family, which nothing had reported
+because no corpus program is written that way: **the context around a binary
+operator reached its operands in stage1**, so `const b: u8 = 1 + 2` compiled
+there and is refused by stage0 — in the default mode, under no flag at all.
+All six are one design difference seen from six directions. stage0 decides a
+contextual type by walking *up* from the literal through three functions with
+enumerated positions (`contextType` in `src/checker/math.ts` for numbers,
+`contextualType` in `classes.ts` for object literals and `null`, another in
+`arrays.ts` for `[]`); stage1 threads a single `want` *down*, because
+AmritScript-0 has no parent pointers (`.claude/selfhost.md`). One channel where
+stage0 has three is more permissive by construction, and every difference here
+is stage1 handing `want` to a position stage0's walk does not name. That is the
+shape to look for next time, and `--parity` under a flag that changes what a
+bare literal means (`--number-mode f64`) is what makes it visible.
+
+Two of the five were in the compilers' *output* rather than their diagnostics,
+and the stack-array one was a bug in the shipped compiler that predates this
 package entirely. That is the case for the gate stated as plainly as it can
 be: a cross product over flags the suite already uses, run once, found a
 miscompile that eleven oracles and 1,161 checks had not.
@@ -154,7 +178,7 @@ about stage0 and all three stop being true on the day it goes.
 ### D. Provenance
 
 `IR(stage0, self/) == IR(stage1, self/)` is the diverse-double-compiling
-property. It holds today over all 53 modules and 6,557,991 bytes of IR. When
+property. It holds today over all 54 modules and 6,977,900 bytes of IR. When
 stage0 goes, it goes, and it cannot be re-established later without writing a
 second compiler again.
 
@@ -316,7 +340,7 @@ gate nobody has opened is how a runtime budget dies.
 
 | | Milestone | Done when |
 | --- | --- | --- |
-| **R1** | Parity | §4's builtins land in both compilers — three landed with WP14 §7a and `getenv` with this package; the rows of §2A close (§7a's four have; the fifth, which building the check itself found, has not); `--parity` is green with an empty difference set |
+| **R1** | Parity | §4's builtins land in both compilers — three landed with WP14 §7a and `getenv` with this package; the rows of §2A close (all seven have) and so do §A2's five; `--parity` is green with an empty difference set |
 | **R2** | The seed protocol | `AMRITC_BOOTSTRAP` in `scripts/bootstrap.sh`; CI builds `self/` with the last release on both operating systems; the policy sentence is in `wp12-release.md` (G3, G4) |
 | **R3** | Oracle succession | `amritc-cmp` green over the corpus; `fuzz.js --stage1` repointed; the four survivors repointed to the seed; the lost coverage recovered as goldens, with the numbers written into §2B (G2) |
 | **R4** | Distribution | four binaries per release; the npm package installs one; `--version` has a new source; INSTALL.md and wp12 rewritten (G5) |

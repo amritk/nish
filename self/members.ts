@@ -15,7 +15,20 @@ import { checkResultMethod, checkResultProperty } from "./result";
 import { fieldOwner } from "./structs";
 import { CheckContext } from "./context";
 import { assignInto, checkExpression } from "./expressions";
-import { N_IDENT, N_INDEX, N_MEMBER, N_PROPERTY, N_SUPER, N_THIS, Node } from "./nodes";
+import {
+  N_ARRAY,
+  N_CONDITIONAL,
+  N_IDENT,
+  N_INDEX,
+  N_MEMBER,
+  N_NUMBER,
+  N_PAREN,
+  N_PROPERTY,
+  N_SUPER,
+  N_THIS,
+  N_UNARY,
+  Node,
+} from "./nodes";
 import { FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program";
 import { Scope } from "./symbols";
 import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types";
@@ -214,6 +227,40 @@ export function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   return info.type;
 }
 
+/**
+ * Whether a field's type may serve as the contextual type of the value written
+ * for it in an object literal.
+ *
+ * stage0 answers this with three separate walks up the parent chain and stage1
+ * threads one `want` down, so the difference between them has to be written
+ * here. `contextualType` in `src/checker/classes.ts` names a property
+ * assignment, which is why an object literal or a `null` in this position does
+ * get the field's type; the numeric one (`contextType` in
+ * `src/checker/math.ts`, the enumerated table in `docs/LANGUAGE.md`) and the
+ * array one (`contextualType` in `src/checker/arrays.ts`) both do not, so a
+ * numeric literal here takes the mode's default and `[]` here has no element
+ * type at all and is refused. Passing `want` to those two made stage1 compile
+ * `{ b: 255 }` for a `u8` field and `{ xs: [] }`, which stage0 refuses
+ * (`reject_struct_field_u8`, `reject_struct_field_empty_array`), and
+ * `{ code: 2 }` for an `i32` field in f64 mode (`reject_struct_field_f64`).
+ *
+ * Parentheses, a leading minus and both arms of a ternary are transparent in
+ * stage0's walks, so they are transparent here too: `{ code: c ? 1 : 2 }` gets
+ * no more context than `{ code: 1 }` does.
+ */
+function takesFieldContext(value: Node): boolean {
+  if (value.kind === N_PAREN) {
+    return takesFieldContext(value.children[0]);
+  }
+  if (value.kind === N_CONDITIONAL) {
+    return takesFieldContext(value.children[1]) && takesFieldContext(value.children[2]);
+  }
+  if (value.kind === N_UNARY) {
+    return takesFieldContext(value.children[0]);
+  }
+  return value.kind !== N_NUMBER && value.kind !== N_ARRAY;
+}
+
 /** `{ x: 1, y: 2 }`, which needs a contextual class or interface type. */
 export function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
   if (want < 0 || !ctx.table.isStruct(ctx.table.stripNull(want))) {
@@ -248,12 +295,14 @@ export function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, 
       continue;
     }
     seen.push(prop.text);
-    const got = checkExpression(ctx, prop.children[0], scope, field.type);
+    const value = prop.children[0];
+    const context = takesFieldContext(value) ? field.type : -1;
+    const got = checkExpression(ctx, value, scope, context);
     if (got !== T_ERROR && !ctx.table.assignable(got, field.type)) {
       const spelled = ctx.table.typeName(field.type);
       ctx.error(
-        prop.children[0],
-        `Field \`${prop.text}\` of \`${info.name}\` is ${spelled}, got ${ctx.table.typeName(got)}`
+        value,
+        `Field \`${prop.text}\` of \`${info.name}\` expects a value of type ${spelled}, got ${ctx.table.typeName(got)}`
       );
     }
   }

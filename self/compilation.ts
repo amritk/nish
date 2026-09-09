@@ -99,6 +99,15 @@ export class Compilation {
    * object stage0 answers with (`self/compile.ts`).
    */
   unreadableRoot: string;
+  /**
+   * The whole-program attribute fixpoint, once it has been computed.
+   * `analyze()` memoises it here for the reason `src/compilation.ts` memoises
+   * its own: the emitter needs it and so does the `--emit-checked` dump, and
+   * the fixpoint is the most expensive thing either of them asks for.
+   */
+  facts: FactsTable | null;
+  /** The analysis units the fixpoint ran over, in `modules` order. */
+  analysisUnits: AnalysisUnit[];
 
   constructor(opts: Options) {
     this.opts = opts;
@@ -108,6 +117,8 @@ export class Compilation {
     this.modules = [];
     this.byPath = new StringMap();
     this.unreadableRoot = "";
+    this.facts = null;
+    this.analysisUnits = [];
   }
 
   entry(): ModuleUnit {
@@ -298,8 +309,17 @@ export class Compilation {
     }
   }
 
-  /** Program-wide attribute analysis, then one IR module per source module. */
-  emit(): EmittedModule[] {
+  /**
+   * The whole-program attribute fixpoint, computed once per compilation.
+   * `emit()` reads it, and so does `--emit-checked`, whose dump prints the
+   * facts of every function the way `src/dump.ts` prints them; running it
+   * twice would be the most expensive thing this class does twice.
+   */
+  analyze(): FactsTable {
+    const done = this.facts;
+    if (done !== null) {
+      return done;
+    }
     const units: AnalysisUnit[] = [];
     for (const unit of this.modules) {
       units.push(new AnalysisUnit(unit.checker.program, unit.parents));
@@ -311,6 +331,15 @@ export class Compilation {
       }
     }
     const facts = analyzeFunctions(units, this.table, this.opts, this.runtime);
+    this.analysisUnits = units;
+    this.facts = facts;
+    return facts;
+  }
+
+  /** Program-wide attribute analysis, then one IR module per source module. */
+  emit(): EmittedModule[] {
+    const facts = this.analyze();
+    const units = this.analysisUnits;
     const stems = this.outputStems();
     const out: EmittedModule[] = [];
     let i = 0;

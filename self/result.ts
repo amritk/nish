@@ -134,7 +134,14 @@ export function checkResultConstructor(ctx: CheckContext, call: Node, scope: Sco
   if (!checkBuiltinArity(ctx, call, name, args, 1)) {
     return want;
   }
-  const got = checkExpression(ctx, args.children[0], scope, payload);
+  // No `want`, for `checkUnwrapOr`'s reason below: `docs/LANGUAGE.md`'s
+  // contextual-literal table is an enumerated list and a `Result` payload is
+  // not one of its positions, so stage0 checks this argument with no
+  // contextual type (`checkOk` / `checkErr` in `src/checker/result.ts`) and in
+  // f64 mode `Ok(3)` for a `Result<i32, E>` is an f64 meeting an i32. Passing
+  // `payload` down made stage1 compile what stage0 refuses, which
+  // `tests/run.js --parity` found (WP19 G1) and `reject_res_ok_f64` pins.
+  const got = checkExpression(ctx, args.children[0], scope, -1);
   if (!ctx.table.assignable(got, payload)) {
     ctx.error(
       args.children[0],

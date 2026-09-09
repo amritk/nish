@@ -413,11 +413,6 @@ export function checkBitwiseAssignOperands(ctx: CheckContext, expr: Node, target
   return target;
 }
 
-/** The arithmetic behind a compound assignment: `+=` is `+`. */
-function compoundOperator(op: string): string {
-  return op.substring(0, op.length - 1);
-}
-
 function checkBinary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
   const op = expr.text;
   if (op === "==" || op === "!=") {
@@ -429,7 +424,7 @@ function checkBinary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
   if (op === "&&" || op === "||") {
     return checkLogical(ctx, expr, scope);
   }
-  return checkOperator(ctx, expr, op, expr.children[0], expr.children[1], scope, want);
+  return checkOperator(ctx, expr, op, expr.children[0], expr.children[1], scope);
 }
 
 /**
@@ -455,25 +450,33 @@ function checkOperator(
   op: string,
   leftNode: Node,
   rightNode: Node,
-  scope: Scope,
-  want: i32
+  scope: Scope
 ): i32 {
   // A bare literal takes its width from the other side, which is what makes
-  // `kind === 3` work when `kind` is an `i64`.
-  const hint = yieldsBool(op) || isShift(op) ? -1 : want;
+  // `kind === 3` work when `kind` is an `i64` — and from the other side
+  // *only*. The context around the operator does not reach an operand:
+  // `docs/LANGUAGE.md` says so in as many words ("only the literal's
+  // immediate context counts"), and stage0 enforces it by reading the sibling
+  // rather than the annotation (`contextType`'s binary branch in
+  // `src/checker/math.ts`). Threading `want` in made stage1 compile
+  // `const b: u8 = 1 + 2`, which is a sum of two `i32` literals no annotation
+  // reaches (`reject_bin_operand_context`). The sibling still propagates:
+  // whichever side is checked first is what the other is checked against.
   let left = T_ERROR;
   let right = T_ERROR;
   if (leftNode.kind === N_NUMBER && rightNode.kind !== N_NUMBER) {
-    right = checkExpression(ctx, rightNode, scope, hint);
-    left = checkExpression(ctx, leftNode, scope, literalHint(right, hint < 0 ? right : hint));
+    right = checkExpression(ctx, rightNode, scope, -1);
+    left = checkExpression(ctx, leftNode, scope, literalHint(right, right));
   } else {
-    left = checkExpression(ctx, leftNode, scope, hint);
-    const fallback = hint < 0 ? left : hint;
+    left = checkExpression(ctx, leftNode, scope, -1);
+    // The left type is what the right side is checked against, literal or not:
+    // it is the sibling for a literal and the contextual type `x === null`
+    // needs for the `null`.
     right = checkExpression(
       ctx,
       rightNode,
       scope,
-      rightNode.kind === N_NUMBER ? literalHint(left, fallback) : fallback
+      rightNode.kind === N_NUMBER ? literalHint(left, left) : left
     );
   }
   if (left === T_ERROR || right === T_ERROR) {
@@ -783,14 +786,38 @@ export function assignInto(
     }
     return checkBitwiseAssignOperands(ctx, expr, slot, bits);
   }
-  const arithmetic = compoundOperator(op);
-  const result = checkOperator(ctx, expr, arithmetic, expr.children[0], value, scope, slot);
+  // A compound arithmetic assignment has a rule of its own rather than the
+  // binary operator's: the target must be numeric and the value must be
+  // exactly the target's type, and the refusal names the token that was
+  // written (`checkCompoundAssignment` in `src/checker/control-flow.ts`, and
+  // the field and element paths beside it, all say the same sentence). Routing
+  // it through `checkOperator` gave stage1 `+`'s wording for `+=` and `/`'s
+  // for `/=`, and let `s += "b"` and `b += 1` through as well, because `+`
+  // takes two strings and a boolean operand is a different refusal there.
+  // WP19 §A2 found the spelling; the rest came with it.
+  //
+  // The target is still checked, in the order and with the hints
+  // `checkOperator` used, because that is what records its type — and
+  // `collectDivisionFacts` reads exactly that to decide whether `x /= k` can
+  // reach `amrit_panic_div` (`tests/cases/div_compound_attributes`).
+  const target = checkExpression(ctx, expr.children[0], scope, slot);
+  const rhs = checkExpression(
+    ctx,
+    value,
+    scope,
+    value.kind === N_NUMBER ? literalHint(target, slot) : slot
+  );
   if (local !== null) {
     scope.clearNarrowing(local);
   }
-  if (result !== T_ERROR && slot !== T_ERROR && !ctx.table.assignable(result, slot)) {
-    const got = ctx.table.typeName(result);
-    return ctx.errorType(value, `Cannot assign ${got} to ${ctx.table.typeName(slot)} ${what} \`${name}\``);
+  if (target === T_ERROR || rhs === T_ERROR || slot === T_ERROR) {
+    return slot;
+  }
+  if (!isNumeric(slot) || rhs !== slot) {
+    return ctx.errorType(
+      expr,
+      `Operator \`${op}\` requires two operands of the same numeric type, got ${ctx.table.typeName(slot)} and ${ctx.table.typeName(rhs)}`
+    );
   }
   return slot;
 }

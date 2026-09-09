@@ -556,6 +556,8 @@ const RULES: string[] = [
     "AS2180",
     ": cannot create the result",
     "AS4003",
+    "` expects a value of type ",
+    "AS2269",
     "`, which already extends `",
     "AS2110",
     "`Reflect` is forbidden in ",
@@ -725,7 +727,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 336;
+export const RULE_COUNT = 337;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line
