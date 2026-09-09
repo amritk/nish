@@ -84,7 +84,13 @@ export function collectFunctionSignature(ctx: CheckContext, decl: Node): Functio
  */
 export function markEntryMain(ctx: CheckContext, sig: FunctionSig): void {
   if (sig.paramTypes.length > 0) {
-    ctx.error(sig.decl, "`main` cannot take parameters (command-line arguments are not supported yet)");
+    // Against the first parameter, as stage0 hands `sig.decl.parameters[0]` to
+    // the error (`markEntryMain` in `src/checker/declarations.ts`), not against
+    // the whole declaration.
+    ctx.error(
+      sig.decl.children[1].children[0],
+      "`main` cannot take parameters (command-line arguments are not supported yet)"
+    );
   }
   if (sig.returnType !== T_VOID && sig.returnType !== T_I32 && sig.returnType !== T_ERROR) {
     const spelled = ctx.table.typeName(sig.returnType);
@@ -107,7 +113,7 @@ export function markEntryMain(ctx: CheckContext, sig: FunctionSig): void {
 export function collectImports(ctx: CheckContext, decl: Node): void {
   const specifier = decl.text;
   if (!specifier.startsWith("./") && !specifier.startsWith("../")) {
-    ctx.error(
+    ctx.errorAtSpecifier(
       decl,
       `Only relative import specifiers are supported (\`./x\` or \`../x\`), got \`${specifier}\``
     );
@@ -120,7 +126,7 @@ export function collectImports(ctx: CheckContext, decl: Node): void {
   }
   for (const spec of specs.children) {
     const importedName = spec.children[0].text;
-    ctx.program.imports.push(new ImportBinding(specifier, importedName, spec.text, spec));
+    ctx.program.imports.push(new ImportBinding(specifier, importedName, spec.text, spec, decl));
     // An imported name may be written as a type before pass 1b can say what
     // it is; `resolveType` resolves it provisionally and binding rejects the
     // ones that turn out to be functions or constants.

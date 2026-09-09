@@ -106,9 +106,9 @@ function computeType(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     case N_PAREN:
       return checkExpression(ctx, expr.children[0], scope, want);
     case N_NUMBER:
-      return checkNumericLiteral(ctx, expr, want, false);
+      return checkNumericLiteral(ctx, expr, want, false, expr);
     case N_BIGINT:
-      return ctx.errorType(expr, "Bigint literals are forbidden in " + LANGUAGE + "; use the `i64` type");
+      return ctx.errorType(expr, "`bigint` literals are forbidden in " + LANGUAGE + " (use number, i32, or f64)");
     case N_STRING:
       return T_STRING;
     case N_TEMPLATE:
@@ -153,7 +153,13 @@ function computeType(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
  * five and `Math.sqrt(2)` an `f64` two. Without a context it is `number`,
  * which is `i32` unless `--number-mode f64`.
  */
-export function checkNumericLiteral(ctx: CheckContext, expr: Node, want: i32, negated: boolean): i32 {
+export function checkNumericLiteral(
+  ctx: CheckContext,
+  expr: Node,
+  want: i32,
+  negated: boolean,
+  at: Node
+): i32 {
   const type = want >= 0 && isNumeric(want) ? want : ctx.numberType();
   if (isFloat(type)) {
     return type;
@@ -175,7 +181,7 @@ export function checkNumericLiteral(ctx: CheckContext, expr: Node, want: i32, ne
     const spelled = ctx.table.typeName(type);
     if (negated) {
       return ctx.errorType(
-        expr,
+        at,
         `Negative literal \`-${text}\` where ${spelled} is expected (${spelled} is unsigned)`
       );
     }
@@ -287,7 +293,10 @@ function checkUnary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32
   if (op === "-" && operand.kind === N_NUMBER) {
     // The negation is part of the literal, which is what makes `-2147483648`
     // spell `INT_MIN` rather than overflowing the positive half.
-    const type = checkNumericLiteral(ctx, operand, want, true);
+    // `at` is the whole `-1`: stage0 hands the literal's *parent* to the
+    // refusal so the caret covers the sign (`contextualLiteralType` in
+    // `src/checker/math.ts`), and the digits alone start a column late.
+    const type = checkNumericLiteral(ctx, operand, want, true, expr);
     ctx.program.nodeTypes[operand.id] = type;
     return type;
   }
@@ -687,7 +696,7 @@ function checkConditional(ctx: CheckContext, expr: Node, scope: Scope, want: i32
 export function checkCondition(ctx: CheckContext, expr: Node, scope: Scope): void {
   const type = checkExpression(ctx, expr, scope, T_BOOL);
   if (type !== T_BOOL && type !== T_ERROR) {
-    ctx.error(expr, `Condition must be boolean, got ${ctx.table.typeName(type)}`);
+    ctx.error(expr, `Condition must be boolean, got ${ctx.table.typeName(type)} (${LANGUAGE} has no truthiness)`);
   }
 }
 

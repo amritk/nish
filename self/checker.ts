@@ -106,6 +106,10 @@ export class Checker {
     }
 
     for (const stmt of this.program.file.children) {
+      // Per declaration: stage0 wraps each of these in `sink.recover`, so one
+      // rejected class or constant costs its own diagnostic and no more
+      // (`collectSignatures` in `src/checker/index.ts`).
+      this.ctx.errored = false;
       if (stmt.kind === N_CLASS || stmt.kind === N_INTERFACE) {
         const info = this.program.struct(stmt.children[0].text);
         if (info !== null && info.decl === stmt) {
@@ -117,11 +121,13 @@ export class Checker {
         this.collectFunction(stmt);
       }
     }
+    this.ctx.errored = false;
 
     // The checks that need every layout: `implements` compares field lists,
     // and definite assignment needs the inherited prefix to know what
     // `super(...)` covers.
     for (const info of declared) {
+      this.ctx.errored = false;
       if (info.kind === STRUCT_CLASS) {
         checkImplements(this.ctx, info);
         checkDefiniteAssignment(this.ctx, info);
@@ -279,9 +285,14 @@ export class Checker {
   foldConstants(): void {
     for (const info of this.program.constantList) {
       if (info.origin === this.program.source) {
+        // Per constant, as `sink.recover(() => constValue(info))` makes it in
+        // stage0: a cycle is reported once for each constant in it, not once
+        // for the program (`tests/cases/reject_const_cycle`).
+        this.ctx.errored = false;
         foldConstant(this.ctx, info);
       }
     }
+    this.ctx.errored = false;
   }
 
   /**

@@ -110,6 +110,39 @@ export class CheckContext {
   }
 
   /**
+   * Report against the module specifier of an `import`, which stage0 has as a
+   * node (`imp.node.moduleSpecifier`) and this tree does not: `nodes.ts` keeps
+   * the specifier as *text* on the import, so the span is recovered from the
+   * source by walking back from the statement's end to the string's quotes.
+   * The alternative is a child node for it, which would change the layout
+   * `nodes.ts` documents, the `--emit-ast` golden and the parser oracle's
+   * translation, all to move a caret.
+   */
+  errorAtSpecifier(node: Node, message: string): void {
+    if (this.errored) {
+      return;
+    }
+    const text = this.source.text;
+    let end = node.end;
+    while (end > node.start && text.charCodeAt(end - 1) !== 34 && text.charCodeAt(end - 1) !== 39) {
+      end = end - 1;
+    }
+    let start = end - 1;
+    const quote = start >= node.start ? text.charCodeAt(start) : 0;
+    while (start > node.start && text.charCodeAt(start - 1) !== quote) {
+      start = start - 1;
+    }
+    if (start <= node.start || end <= start) {
+      // No string literal to point at (the parser already said so); the
+      // statement itself is the best span left.
+      this.error(node, message);
+      return;
+    }
+    this.sink.report(this.source, start - 1, end, message);
+    this.errored = true;
+  }
+
+  /**
    * Report against the *property name* of a member access rather than the whole
    * access. stage0 hands `expr.name` to the error and stage1's tree has no node
    * for the name — it is `text` on the member itself — so the span is the tail

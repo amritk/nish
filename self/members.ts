@@ -103,7 +103,8 @@ export function checkMember(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   if (ctx.table.isStruct(receiver)) {
     return checkStructProperty(ctx, expr, receiver);
   }
-  return ctx.errorType(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`);
+  ctx.errorAtProperty(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`);
+  return T_ERROR;
 }
 
 function checkStructProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 {
@@ -115,7 +116,8 @@ function checkStructProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 
   if (field === null) {
     const hint = info.method(expr.text) !== null ? " (it is a method; call it)" : "";
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
-    return ctx.errorType(expr, `Unknown field \`${expr.text}\` on ${kind} \`${info.name}\`${hint}`);
+    ctx.errorAtProperty(expr, `Unknown field \`${expr.text}\` on ${kind} \`${info.name}\`${hint}`);
+    return T_ERROR;
   }
   return field.type;
 }
@@ -155,7 +157,8 @@ export function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i3
     return checkArrayMethod(ctx, expr, access, args, receiver, scope);
   }
   if (!ctx.table.isStruct(receiver)) {
-    return ctx.errorType(access, `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}`);
+    ctx.errorAtProperty(access, `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}`);
+    return T_ERROR;
   }
   const info = structOf(ctx, receiver);
   if (info === null) {
@@ -165,7 +168,8 @@ export function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i3
   if (method === null) {
     const hint = info.field(access.text) !== null ? " (it is a field, not a method)" : "";
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
-    return ctx.errorType(access, `Unknown method \`${access.text}\` on ${kind} \`${info.name}\`${hint}`);
+    ctx.errorAtProperty(access, `Unknown method \`${access.text}\` on ${kind} \`${info.name}\`${hint}`);
+    return T_ERROR;
   }
   checkMethodArguments(ctx, expr, method, args, `${info.name}.${access.text}`, scope, false);
   ctx.program.nodeCallees[expr.id] = method;
@@ -378,7 +382,8 @@ export function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scop
   const field = info.field(target.text);
   if (field === null) {
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
-    return ctx.errorType(target, `Unknown field \`${target.text}\` on ${kind} \`${info.name}\``);
+    ctx.errorAtProperty(target, `Unknown field \`${target.text}\` on ${kind} \`${info.name}\``);
+    return T_ERROR;
   }
   if (field.readonly && !assignableReadonly(ctx, info, target, receiverExpr, expr.text)) {
     const owner = fieldOwner(info, field.name);
@@ -449,7 +454,8 @@ function checkSuperMethodCall(ctx: CheckContext, expr: Node, access: Node, scope
         `\`super.${access.text}\` is not supported: inherited fields are read and written as \`this.${access.text}\` (only \`super.method(...)\` is allowed)`
       );
     }
-    return ctx.errorType(access, `Unknown method \`${access.text}\` on class \`${base.name}\``);
+    ctx.errorAtProperty(access, `Unknown method \`${access.text}\` on class \`${base.name}\``);
+    return T_ERROR;
   }
   // `super` is bound to the `this` local so the attribute analysis sees the
   // pointer flow into the callee.
@@ -464,7 +470,10 @@ function checkSuperMethodCall(ctx: CheckContext, expr: Node, access: Node, scope
 export function checkSuperCall(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   const current = ctx.current;
   if (current === null || current.role !== ROLE_CONSTRUCTOR) {
-    return ctx.errorType(expr, "`super(...)` is only valid as the first statement of the constructor");
+    return ctx.errorType(
+      expr,
+      "`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class"
+    );
   }
   const owner = current.owner;
   const base: StructInfo | null = owner === null ? null : owner.base;
@@ -496,7 +505,8 @@ export function checkStringProperty(ctx: CheckContext, expr: Node, receiver: i32
   if (expr.text === "length") {
     return ctx.numberType();
   }
-  return ctx.errorType(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`);
+  ctx.errorAtProperty(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`);
+  return T_ERROR;
 }
 
 function checkIndexArgument(ctx: CheckContext, arg: Node, scope: Scope, name: string): void {
@@ -552,5 +562,6 @@ export function checkStringMethod(
     }
     return T_BOOL;
   }
-  return ctx.errorType(access, `Unknown method \`${name}\` on string (supported: ${STRING_METHODS})`);
+  ctx.errorAtProperty(access, `Unknown method \`${name}\` on string (supported: ${STRING_METHODS})`);
+  return T_ERROR;
 }

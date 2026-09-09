@@ -249,16 +249,23 @@ export class ImportBinding {
   localName: string;
   /** The specifier element, for error spans. */
   node: Node;
+  /**
+   * The `import` statement it came from. A diagnostic about the *module* —
+   * "cannot find" — points at the module specifier, which stage0 has as a node
+   * and this tree keeps as text on this one (`CheckContext.errorAtSpecifier`).
+   */
+  decl: Node;
   /** Exactly one of these is set in pass 1b, or none if the import failed. */
   sig: FunctionSig | null;
   struct: StructInfo | null;
   constant: ConstInfo | null;
 
-  constructor(specifier: string, importedName: string, localName: string, node: Node) {
+  constructor(specifier: string, importedName: string, localName: string, node: Node, decl: Node) {
     this.specifier = specifier;
     this.importedName = importedName;
     this.localName = localName;
     this.node = node;
+    this.decl = decl;
     this.sig = null;
     this.struct = null;
     this.constant = null;

@@ -163,7 +163,10 @@ export function checkNamespaceProperty(
   }
   if (namespace === "process" && member === "argv") {
     if (!ctx.entryHasMain) {
-      return ctx.errorType(expr, "`process.argv` requires a `main` entry point");
+      return ctx.errorType(
+        expr,
+        "`process.argv` requires a `main` entry point (this program has no `export function main`)"
+      );
     }
     ctx.program.usesArgv = true;
     return ctx.table.arrayOf(T_STRING);

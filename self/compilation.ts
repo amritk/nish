@@ -106,6 +106,8 @@ export class Compilation {
    * the fixpoint is the most expensive thing either of them asks for.
    */
   facts: FactsTable | null;
+  /** How many diagnostics Phase 0 reported, over every module loaded so far. */
+  validationErrors: i32;
   /** The analysis units the fixpoint ran over, in `modules` order. */
   analysisUnits: AnalysisUnit[];
 
@@ -119,6 +121,7 @@ export class Compilation {
     this.unreadableRoot = "";
     this.facts = null;
     this.analysisUnits = [];
+    this.validationErrors = 0;
   }
 
   entry(): ModuleUnit {
@@ -173,8 +176,14 @@ export class Compilation {
     this.modules.push(unit);
 
     // Phase 0 before pass 1, so what is forbidden by design is refused before
-    // the checker can report it as merely unsupported.
+    // the checker can report it as merely unsupported. The count around it is
+    // what `--emit-ast` reads: stage0 answers that flag from the parsed and
+    // *validated* modules and never checks anything, so a Phase 0 refusal
+    // stops the dump there and a pass 1 diagnostic — which stage0 has not
+    // reached — does not (`self/compile.ts`, WP19 §A3).
+    const beforeValidation = this.sink.count();
     validate(checker.ctx, file);
+    this.validationErrors = this.validationErrors + (this.sink.count() - beforeValidation);
     checker.collectSignatures(); // pass 1, which also validates the import syntax
     const dir = dirname(path);
     let ok = true;
@@ -184,12 +193,13 @@ export class Compilation {
       }
       const target = resolveModule(dir, imp.specifier);
       if (readFileSyncOrNull(target) === null) {
-        this.sink.report(
-          source,
-          imp.node.start,
-          imp.node.end,
+        // At the module specifier, where stage0 points
+        // (`imp.node.moduleSpecifier` in `src/compilation.ts`).
+        checker.ctx.errorAtSpecifier(
+          imp.decl,
           `Cannot find module \`${imp.specifier}\` (looked for ${target})`
         );
+        checker.ctx.errored = false;
         continue;
       }
       // A module that fails to load is reported and the others still load;

@@ -422,7 +422,10 @@ export function main(): number {
   // refusal, dumped nothing and exited 1. A dump flag does not turn a refused
   // program into a compiling one (WP19 §A3, `tests/cases/dump_ast_reject`).
   if (emitAst) {
-    if (compilation.sink.hasErrors()) {
+    // Phase 0's refusals only: stage0 dumps from the parsed and validated
+    // modules, so a rule the *checker* would have broken is not one it has
+    // reached, and the dump goes out as it does there.
+    if (compilation.validationErrors > 0) {
       report(compilation, json);
       return 1;
     }
