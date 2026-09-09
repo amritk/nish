@@ -13,9 +13,9 @@
  * can all depend on it without cycles.
  */
 import ts from "typescript";
-import { StaticType, sameType, typeToString } from "../types";
-import { CheckContext } from "./context";
-import { Scope } from "./scope";
+import { StaticType, sameType, typeToString } from "../types.js";
+import { CheckContext } from "./context.js";
+import { Scope } from "./scope.js";
 
 export type BuiltinCallChecker = (ctx: CheckContext, expr: ts.CallExpression, scope: Scope) => StaticType;
 

@@ -38,19 +38,19 @@
  *     `ret void`). `unreachable` paths (`process.exit`, `throw`) need none.
  */
 import ts from "typescript";
-import { CheckedProgram, FunctionSig, LocalVar } from "../checker";
-import { CompilerOptions, ResultType, StaticType, alignOf, llvmAbiType, llvmType, resultByValue } from "../types";
-import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, returnAttributes } from "./attributes";
-import { DebugInfo } from "./debug";
-import { reclaimsReturnedString } from "./escape";
-import { emitConstructorPrologue, importedStructFunctions, structFunctions, structTypeDeclarations } from "./emit/classes";
-import { unpackResult } from "./emit/result";
-import { EmitContext, LoopTarget } from "./emit/context";
-import { expressionEmitters } from "./emit/expressions";
-import { declareResultTypes } from "./emit/result";
-import { emitVariableDeclarationList, statementEmitters } from "./emit/statements";
-import { addStringConstant } from "./emit/strings";
-import { IRFunction, IRModule } from "./ir";
+import { CheckedProgram, FunctionSig, LocalVar } from "../checker/index.js";
+import { CompilerOptions, ResultType, StaticType, alignOf, llvmAbiType, llvmType, resultByValue } from "../types.js";
+import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, returnAttributes } from "./attributes.js";
+import { DebugInfo } from "./debug.js";
+import { reclaimsReturnedString } from "./escape.js";
+import { emitConstructorPrologue, importedStructFunctions, structFunctions, structTypeDeclarations } from "./emit/classes.js";
+import { unpackResult } from "./emit/result.js";
+import { EmitContext, LoopTarget } from "./emit/context.js";
+import { expressionEmitters } from "./emit/expressions.js";
+import { declareResultTypes } from "./emit/result.js";
+import { emitVariableDeclarationList, statementEmitters } from "./emit/statements.js";
+import { addStringConstant } from "./emit/strings.js";
+import { IRFunction, IRModule } from "./ir.js";
 import {
   ARENA_GLOBAL,
   ARENA_TYPE,
@@ -59,8 +59,8 @@ import {
   INLINE_ALLOCATOR_ATTRS,
   RUNTIME_FUNCTIONS,
   inlineAllocator,
-} from "./runtime";
-import { resolveTarget, targetHeader } from "./target";
+} from "./runtime.js";
+import { resolveTarget, targetHeader } from "./target.js";
 
 export class Emitter implements EmitContext {
   private readonly module: IRModule;

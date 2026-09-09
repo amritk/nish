@@ -14,8 +14,8 @@
  *   2.  `checkBodies`        function and method bodies, now that every callee is known
  */
 import ts from "typescript";
-import { CompileError, DiagnosticSink, PerformanceWarning } from "../diagnostics";
-import { CompilerOptions, StaticType, registerNamedTypes, typeToString } from "../types";
+import { CompileError, DiagnosticSink, PerformanceWarning } from "../diagnostics.js";
+import { CompilerOptions, StaticType, registerNamedTypes, typeToString } from "../types.js";
 import {
   coerceToContext,
   collectStructMembers,
@@ -25,27 +25,27 @@ import {
   referencedStructNames,
   signatureStructNames,
   thisLocal,
-} from "./classes";
-import { ConstInfo, constValue } from "./constants";
+} from "./classes.js";
+import { ConstInfo, constValue } from "./constants.js";
 import {
   collectConstant,
   collectFunctionSignature,
   collectImports,
   markEntryMain,
   rejectNonFunctionExport,
-} from "./declarations";
-import { CheckContext, LoopInfo } from "./context";
-import { expressionCheckers } from "./expressions";
-import { CheckedProgram, FunctionSig, ImportBinding, LocalVar, StructInfo } from "./program";
-import { checkPerformance } from "./performance";
-import { checkResultLocalsHandled } from "./result";
-import { Scope } from "./scope";
-import { checkStatements, checkVariableDeclarationList, statementCheckers } from "./statements";
+} from "./declarations.js";
+import { CheckContext, LoopInfo } from "./context.js";
+import { expressionCheckers } from "./expressions.js";
+import { CheckedProgram, FunctionSig, ImportBinding, LocalVar, StructInfo } from "./program.js";
+import { checkPerformance } from "./performance.js";
+import { checkResultLocalsHandled } from "./result.js";
+import { Scope } from "./scope.js";
+import { checkStatements, checkVariableDeclarationList, statementCheckers } from "./statements.js";
 
-export * from "./program";
-export { Scope } from "./scope";
-export { ENTRY_MAIN_SYMBOL } from "./declarations";
-export type { CheckContext, StatementChecker, ExpressionChecker, BinaryChecker, UnaryChecker } from "./context";
+export * from "./program.js";
+export { Scope } from "./scope.js";
+export { ENTRY_MAIN_SYMBOL } from "./declarations.js";
+export type { CheckContext, StatementChecker, ExpressionChecker, BinaryChecker, UnaryChecker } from "./context.js";
 
 export interface CheckerModuleOptions {
   /** The entry module may (and with `--link` must) declare `export function main`. */

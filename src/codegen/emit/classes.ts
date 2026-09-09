@@ -50,15 +50,15 @@
  * `attributes.ts`, which owns the per-parameter pointer facts.
  */
 import ts from "typescript";
-import { CheckedProgram, FieldInfo, FunctionSig, ImportBinding, StructInfo } from "../../checker";
-import { effectiveConstructor, explicitSuperCall, intrinsicType, isAssignmentOperator, ownFields } from "../../checker/classes";
-import { ResultType, StaticType, isFloat, llvmAbiType, llvmType, resultByValue } from "../../types";
-import { beginReclaim, endReclaim } from "./arena";
-import { emitIntBinary } from "./arithmetic";
-import { emitBitwiseCombine, isBitwiseCompoundOperator } from "./bitwise";
-import { emitPackedResult, emitResultReturningCall, resultTypeDecl } from "./result";
-import { floatConstant } from "./builtins";
-import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context";
+import { CheckedProgram, FieldInfo, FunctionSig, ImportBinding, StructInfo } from "../../checker/index.js";
+import { effectiveConstructor, explicitSuperCall, intrinsicType, isAssignmentOperator, ownFields } from "../../checker/classes.js";
+import { ResultType, StaticType, isFloat, llvmAbiType, llvmType, resultByValue } from "../../types.js";
+import { beginReclaim, endReclaim } from "./arena.js";
+import { emitIntBinary } from "./arithmetic.js";
+import { emitBitwiseCombine, isBitwiseCompoundOperator } from "./bitwise.js";
+import { emitPackedResult, emitResultReturningCall, resultTypeDecl } from "./result.js";
+import { floatConstant } from "./builtins.js";
+import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context.js";
 import {
   MemoryFacts,
   assignmentTargetEmitters,
@@ -67,7 +67,7 @@ import {
   methodCallEmitters,
   newEmitters,
   propertyEmitters,
-} from "./members";
+} from "./members.js";
 
 // ---- Helpers ------------------------------------------------------------------------
 

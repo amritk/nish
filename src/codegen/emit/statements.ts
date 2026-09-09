@@ -1,10 +1,10 @@
 /** Statement lowering, one handler per `ts.SyntaxKind`. */
 import ts from "typescript";
-import { ResultType, llvmType, resultByValue } from "../../types";
-import { emitPackedResult } from "./result";
-import { arrayStatementEmitters } from "./arrays";
-import { EmitContext, EmitterTable, StatementEmitter } from "./context";
-import { controlFlowStatementEmitters } from "./control-flow";
+import { ResultType, llvmType, resultByValue } from "../../types.js";
+import { emitPackedResult } from "./result.js";
+import { arrayStatementEmitters } from "./arrays.js";
+import { EmitContext, EmitterTable, StatementEmitter } from "./context.js";
+import { controlFlowStatementEmitters } from "./control-flow.js";
 
 /** `return e`: the value first (it may allocate), then the arena scope release (WP6), then `ret`. */
 const emitReturn: StatementEmitter = (ctx, node) => {

@@ -40,7 +40,7 @@ export const TOOLCHAIN: string = "AS0002";
 export const INTERNAL: string = "AS0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 331;
+export const RULE_COUNT: i32 = 335;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -112,6 +112,8 @@ export function diagnosticRules(): string[] {
     "AS2231",
     "`export default` / `export =` are not supported; use a named `export function`",
     "AS2129",
+    "`ReadonlyArray` needs exactly one type argument, e.g. `ReadonlyArray<number>`",
+    "AS2266",
     "`main` cannot take parameters (command-line arguments are not supported yet)",
     "AS2139",
     "`for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)`",
@@ -222,6 +224,8 @@ export function diagnosticRules(): string[] {
     "AS2068",
     "`Number` expects a string, number, or boolean, got ",
     "AS2146",
+    "`readonly` is only permitted on an array type, got ",
+    "AS2265",
     "`this` is only valid inside a method or constructor",
     "AS2162",
     "Union types other than `T | null` are forbidden in ",
@@ -484,6 +488,8 @@ export function diagnosticRules(): string[] {
     "AS1028",
     "async methods are not supported",
     "AS2174",
+    "Cannot assign to an element of ",
+    "AS2267",
     "Condition must be boolean, got ",
     "AS2188",
     "Ternary branches cannot be void",
@@ -624,6 +630,8 @@ export function diagnosticRules(): string[] {
     "AS4005",
     "Unsupported operator `",
     "AS2259",
+    " to write through it)",
+    "AS2264",
     "` does not fit in i32",
     "AS2053",
     "` must be initialized",

@@ -40,9 +40,9 @@
  *
  * Build: scripts/build.sh <modules.ll> runtime/runtime.c <shim.c> -o x.node --profile napi
  */
-import { CLI, LANGUAGE, RUNTIME_HEADER } from "../branding";
-import { Compilation } from "../compilation";
-import { ResultType, StaticType, resultByValue } from "../types";
+import { CLI, LANGUAGE, RUNTIME_HEADER } from "../branding.js";
+import { Compilation } from "../compilation.js";
+import { ResultType, StaticType, resultByValue } from "../types.js";
 import {
   banner,
   cFunctionName,
@@ -57,7 +57,7 @@ import {
   tsKeyword,
   tsSignature,
   typedView,
-} from "./abi";
+} from "./abi.js";
 
 /** `a Float64Array`, `an Int32Array`. */
 export function withArticle(noun: string): string {

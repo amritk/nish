@@ -7,7 +7,7 @@
  */
 import ts from "typescript";
 import fs from "node:fs";
-import { DiagnosticSink, StaticSyntaxError } from "./diagnostics";
+import { DiagnosticSink, StaticSyntaxError } from "./diagnostics.js";
 
 /**
  * Parse one file. Syntax errors (unbalanced braces, etc.) are surfaced before

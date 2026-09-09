@@ -1,7 +1,7 @@
 /** Data model produced by the checker and consumed by the emitter. */
 import ts from "typescript";
-import { ConstInfo } from "./constants";
-import { StaticType } from "../types";
+import { ConstInfo } from "./constants.js";
+import { StaticType } from "../types.js";
 
 export interface Param {
   name: string;
@@ -91,7 +91,7 @@ export interface LocalVar {
   storage: "param" | "local";
 }
 
-/** One name brought in by `import { f, g as h } from "./m"`. */
+/** One name brought in by `import { f, g as h } from "./m.js"`. */
 export interface ImportBinding {
   /** The `import` statement. */
   node: ts.ImportDeclaration;

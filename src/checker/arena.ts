@@ -14,8 +14,8 @@
  * `Arena.reset` / `Arena.release` (directly or through a callee) never gets
  * an automatic scope of its own.
  */
-import { I64, VOID } from "../types";
-import { BuiltinCallChecker, checkArgumentType, checkArity, requireStatementPosition } from "./builtins";
+import { I64, VOID } from "../types.js";
+import { BuiltinCallChecker, checkArgumentType, checkArity, requireStatementPosition } from "./builtins.js";
 
 const checkReset: BuiltinCallChecker = (ctx, expr) => {
   checkArity(ctx, expr, "Arena.reset", 0);

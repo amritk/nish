@@ -46,8 +46,8 @@
  * every word of both messages is shared with it, byte for byte.
  */
 import ts from "typescript";
-import { CheckContext } from "./context";
-import { CheckedProgram, FunctionSig, LocalVar } from "./program";
+import { CheckContext } from "./context.js";
+import { CheckedProgram, FunctionSig, LocalVar } from "./program.js";
 
 /**
  * The state the walk carries. `loops` is the enclosing loop *statements*,

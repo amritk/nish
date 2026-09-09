@@ -24,12 +24,13 @@
  *     that is a keyword there and not here is an `IDENT`, which is what it is
  *     to this lexer: the parser refuses `try` as a statement, not as a token.
  */
-const fs = require("node:fs");
-const path = require("node:path");
-const { spawnSync } = require("node:child_process");
-const ts = require("typescript");
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import ts from "typescript";
+import { fileURLToPath } from "node:url";
 
-const root = path.resolve(__dirname, "..");
+const root = path.resolve(import.meta.dirname, "..");
 
 /** Our name for each TypeScript token kind; anything absent is reported as unmapped. */
 const NAMES = new Map([
@@ -306,5 +307,5 @@ function main(argv) {
   return failed.length === 0 ? 0 : 1;
 }
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { scanWithTypeScript, compare, corpus, build };
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+export { scanWithTypeScript, compare, corpus, build };

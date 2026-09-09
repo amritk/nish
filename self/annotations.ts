@@ -16,8 +16,18 @@
 
 import { LANGUAGE } from "./branding";
 import { CheckContext, NUMBER_MODE_I32 } from "./context";
-import { N_LIST, N_TYPE_ARRAY, N_TYPE_NULL, N_TYPE_PAREN, N_TYPE_REF, N_TYPE_UNION, Node } from "./nodes";
 import {
+  N_LIST,
+  N_TYPE_ARRAY,
+  N_TYPE_NULL,
+  N_TYPE_PAREN,
+  N_TYPE_READONLY,
+  N_TYPE_REF,
+  N_TYPE_UNION,
+  Node,
+} from "./nodes";
+import {
+  K_ARRAY,
   T_BOOL,
   T_ERROR,
   T_F32,
@@ -115,6 +125,8 @@ export function resolveType(node: Node, ctx: CheckContext): i32 {
       return resolveType(node.children[0], ctx);
     case N_TYPE_ARRAY:
       return ctx.table.arrayOf(resolveType(node.children[0], ctx));
+    case N_TYPE_READONLY:
+      return resolveReadonly(node, ctx);
     case N_TYPE_UNION:
       return resolveNullableUnion(node, ctx);
     case N_TYPE_REF:
@@ -122,6 +134,26 @@ export function resolveType(node: Node, ctx: CheckContext): i32 {
     default:
       return ctx.errorType(node, `Unsupported type \`${ctx.textOf(node)}\` ${SUPPORTED_TYPES}`);
   }
+}
+
+/**
+ * `readonly T[]`. TypeScript allows the modifier on nothing else (TS1354,
+ * "only permitted on array and tuple literal types"), so `readonly` in front of
+ * a scalar or a class is not a construct this compiler has yet to support — it
+ * is not TypeScript either, and the message says which rule it broke.
+ */
+function resolveReadonly(node: Node, ctx: CheckContext): i32 {
+  const inner = resolveType(node.children[0], ctx);
+  if (inner === T_ERROR) {
+    return T_ERROR; // D1: the inner annotation already reported; do not report twice
+  }
+  if (ctx.table.kindOf(inner) !== K_ARRAY) {
+    return ctx.errorType(
+      node,
+      `\`readonly\` is only permitted on an array type, got ${ctx.table.typeName(inner)}`
+    );
+  }
+  return ctx.table.readonlyArrayOf(ctx.table.refOf(inner));
 }
 
 /** A named type, with or without type arguments. */
@@ -139,6 +171,14 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
       return ctx.errorType(node, "`Array` needs exactly one type argument, e.g. `Array<number>`");
     }
     return ctx.table.arrayOf(resolveType(args.children[0], ctx));
+  }
+
+  // `ReadonlyArray<T>` is `readonly T[]`, the way `Array<T>` is `T[]`.
+  if (name === "ReadonlyArray") {
+    if (argc !== 1) {
+      return ctx.errorType(node, "`ReadonlyArray` needs exactly one type argument, e.g. `ReadonlyArray<number>`");
+    }
+    return ctx.table.readonlyArrayOf(resolveType(args.children[0], ctx));
   }
 
   const alias = typedArrayElement(name);

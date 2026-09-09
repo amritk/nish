@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { codeFor } from "./codes";
+import { codeFor } from "./codes.js";
 
 /**
  * Diagnostics.

@@ -29,10 +29,11 @@
  * rather than left out of the format, so they start being compared the moment
  * that phase is ported.
  */
-const fs = require("node:fs");
-const path = require("node:path");
-const { spawnSync } = require("node:child_process");
-const { numberModeArgs, programs, root } = require("./corpus");
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { numberModeArgs, programs, root } from "./corpus.js";
+import { fileURLToPath } from "node:url";
 
 const cli = path.join(root, "dist", "index.js");
 
@@ -141,5 +142,5 @@ function main(argv) {
   return failed.length === 0 ? 0 : 1;
 }
 
-if (require.main === module) process.exit(main(process.argv.slice(2)));
-module.exports = { compare, corpus, build };
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+export { compare, corpus, build };

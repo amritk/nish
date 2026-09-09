@@ -18,11 +18,11 @@
  */
 import path from "node:path";
 import ts from "typescript";
-import { FunctionSig, LocalVar, StructInfo } from "./checker";
-import { ConstInfo, constValue } from "./checker/constants";
-import { FunctionFacts } from "./codegen/attributes";
-import { Compilation, ModuleUnit } from "./compilation";
-import { typeToString } from "./types";
+import { FunctionSig, LocalVar, StructInfo } from "./checker/index.js";
+import { ConstInfo, constValue } from "./checker/constants.js";
+import { FunctionFacts } from "./codegen/attributes.js";
+import { Compilation, ModuleUnit } from "./compilation.js";
+import { typeToString } from "./types.js";
 
 /**
  * `ts.SyntaxKind[kind]` returns the *last* name declared for a value, which

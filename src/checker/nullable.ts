@@ -29,13 +29,13 @@
  * is `null` where a plain `T` is expected.
  */
 import ts from "typescript";
-import { StaticType, resolveTypeNode, stripNull, typeToString } from "../types";
-import { contextualType } from "./classes";
-import { CheckContext, CheckerTable, ExpressionChecker } from "./context";
-import { methodCallCheckers, propertyCheckers } from "./members";
-import { Narrowing, Narrowings, conditionNarrowers, unwrapParens } from "./narrowing";
-import { LocalVar } from "./program";
-import { Scope } from "./scope";
+import { StaticType, resolveTypeNode, stripNull, typeToString } from "../types.js";
+import { contextualType } from "./classes.js";
+import { CheckContext, CheckerTable, ExpressionChecker } from "./context.js";
+import { methodCallCheckers, propertyCheckers } from "./members.js";
+import { Narrowing, Narrowings, conditionNarrowers, unwrapParens } from "./narrowing.js";
+import { LocalVar } from "./program.js";
+import { Scope } from "./scope.js";
 
 export function isNullLiteral(expr: ts.Expression): boolean {
   return unwrapParens(expr).kind === ts.SyntaxKind.NullKeyword;

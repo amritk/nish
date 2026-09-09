@@ -16,10 +16,10 @@
  * argument, no return-slot pointer, no name mangling. A `.ll` module and a C
  * file that includes this header therefore link with a plain `clang a.ll b.c`.
  */
-import { StructInfo } from "../checker";
-import { HEADER_GUARD_PREFIX, LANGUAGE, RUNTIME_HEADER } from "../branding";
-import { Compilation } from "../compilation";
-import { StaticType } from "../types";
+import { StructInfo } from "../checker/index.js";
+import { HEADER_GUARD_PREFIX, LANGUAGE, RUNTIME_HEADER } from "../branding.js";
+import { Compilation } from "../compilation.js";
+import { StaticType } from "../types.js";
 import {
   banner,
   cFieldType,
@@ -34,7 +34,7 @@ import {
   resultDefinitions,
   tsKeyword,
   tsSignature,
-} from "./abi";
+} from "./abi.js";
 
 /** ` -- xs: double elements, returns int32_t elements`: what an `amrit_array` holds, per array in the signature. */
 function elementNotes(fn: ExternalFunction): string {

@@ -21,9 +21,9 @@
  * is in `codegen/emit/bitwise.ts`.
  */
 import ts from "typescript";
-import { StaticType, isInteger, sameType, typeToString } from "../types";
-import { BinaryChecker, CheckContext, CheckerTable, UnaryChecker } from "./context";
-import { resolveMutableTarget } from "./control-flow";
+import { StaticType, isInteger, sameType, typeToString } from "../types.js";
+import { BinaryChecker, CheckContext, CheckerTable, UnaryChecker } from "./context.js";
+import { resolveMutableTarget } from "./control-flow.js";
 
 /** Every operator this module owns, mapped to the operator it becomes on booleans (if any). */
 const BOOLEAN_ALTERNATIVE: Partial<Record<ts.SyntaxKind, string>> = {

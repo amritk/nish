@@ -40,18 +40,18 @@
  * back up.
  */
 import ts from "typescript";
-import { CheckedProgram } from "../../checker";
-import { dottedName } from "../../checker/builtins";
-import { ARRAY_STRUCT } from "../../types";
-import { ARGV_GLOBAL, ARRAY_TYPE } from "../runtime";
-import { BuiltinCall } from "./builtins";
-import { EmitContext } from "./context";
+import { CheckedProgram } from "../../checker/index.js";
+import { dottedName } from "../../checker/builtins.js";
+import { ARRAY_STRUCT } from "../../types.js";
+import { ARGV_GLOBAL, ARRAY_TYPE } from "../runtime.js";
+import { BuiltinCall } from "./builtins.js";
+import { EmitContext } from "./context.js";
 import {
   NamespacePropertyEmitter,
   factCollectors,
   isValueReceiver,
   namespacePropertyEmitters,
-} from "./members";
+} from "./members.js";
 
 function stringArgs(ctx: EmitContext, expr: ts.CallExpression): string {
   return expr.arguments.map((arg) => `i8* ${ctx.emitExpression(arg)}`).join(", ");

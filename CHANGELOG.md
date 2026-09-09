@@ -85,6 +85,69 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **`runtime/amritscript.mjs`: run a program under Node with nothing rewritten
+  (`docs/RUN_UNDER_NODE.md`).** WP13's rewriter is exact because it loads a
+  program through the compiler's own checker and rewrites every expression from
+  the recorded types; it is a testing oracle, not something to hand anyone. This
+  is the smaller claim beside it: `node --experimental-strip-types --import
+  ./runtime/amritscript.mjs prog.ts` runs the source as the TypeScript it is,
+  with the prelude supplying only what Node lacks — `console.log`'s formatting,
+  the file and stream globals, the conversions, `Ok`/`Err`, `parseInt` /
+  `parseFloat`, `process.argv`'s indexing, and an `Arena` that answers zero.
+  Everything delegates to `runtime/shim.mjs`, so the two cannot drift.
+
+  It is honest in **f64 mode**, where JavaScript's `+ - * / %` on doubles *are*
+  `fadd/fsub/fmul/fdiv/frem`, and it will never be honest in i32 mode, where
+  `number` wraps at 32 bits and every operator differs. The doc states the whole
+  overlap: byte-length `.length`, unchecked `a[i]`, virtual dispatch,
+  `orReturn()` (which needs the caller's control flow and so needs the
+  rewriter), `Number(s)`, and the three float decisions. Each one lives in an
+  operator or the object model, where a prelude cannot reach.
+
+  `tests/differential/unmodified.js` pins it: every f64-mode program with an
+  entry point, native against unmodified Node, four listed divergences and any
+  other difference failing the run — 6 of 10 agree today, and the four that do
+  not are the programs written to probe exactly those decisions. An ordinary
+  program does not look like them: `examples/nbody.ts` prints byte-identical
+  output either way. Wired into the WP13 block of `tests/run.js` and available
+  as `npm run test:node`.
+
+- **`readonly` on an interface field has a test** (`reject_cls_readonly_interface`).
+  It has worked since interfaces and classes started sharing `collectField`, and
+  `LANGUAGE.md` documented it as *(CLI only)* — an implemented rule with nothing
+  pinning it, which is how the `panic` hole in the ambient declarations survived
+  too.
+
+- **`readonly T[]` and `ReadonlyArray<T>`: an array a callee may read and not
+  write.** The same header, the same pointer, the same LLVM type — the cookbook
+  entry is the same function under both spellings and the two bodies are
+  identical instruction for instruction, because the annotation is a promise
+  the checker keeps rather than a value the emitter lowers. A `T[]` widens into
+  one at any sink and never back (`reject_arr_readonly_widen`), stores, `push`
+  and `pop` through one are refused under their own names
+  (`reject_arr_readonly_store`, `_push`, `_pop`), and it is shallow, as
+  TypeScript's is. It is a type and not a parameter modifier, so it is legal
+  wherever an array type is — a field, a return type, a `const`'s annotation —
+  and the rule travels with it (`arr_readonly_field`).
+
+  The reason to write one is the C ABI. `--emit-header` already spelled an
+  array parameter `const amrit_array *` when the whole-program fixpoint proved
+  nothing stored through it, which makes `const` a consequence that can
+  disappear when a callee three levels down starts writing; on a `readonly T[]`
+  it is the signature keeping a promise, and the comment above the prototype
+  shows the annotation that earned it. The fixpoint is not consulted for one:
+  `writesThrough` is a conservative *may-write* that every escape sets, so a
+  `readonly` parameter which is only returned or stored in a field would
+  otherwise lose the `const` it was promised (`arr_readonly_escape`).
+
+  The spelling was not a choice. TypeScript allows `readonly` on array and
+  tuple types and nothing else (TS1354), so `readonly Point` — the struct
+  parameter that would have been the other half of this — is not TypeScript and
+  was left out rather than invented; `readonly i32` names that rule
+  (`reject_arr_readonly_scalar`) instead of reading as a gap. Both compilers
+  landed together and `IR(stage0) == IR(stage1) == IR(stage2)` still holds over
+  the whole corpus.
+
 - **Stable diagnostic codes in `--json` (`code`).** The field was reserved and
   empty; it now carries a stable identifier for the rule that was broken —
   `AS1013` for `` `any` is forbidden ``, `AS2231` for a mismatched operator —
@@ -369,6 +432,39 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Changed
 
+- **The package is ES modules, and the Node floor is 22.18.** `"type":
+  "commonjs"` had been there since the first commit — the `tsc` default of 2019,
+  never a decision anyone made — and it had started to cost something real. An
+  in-tree `.ts` was read as CommonJS, so `export function main` was a syntax
+  error before type stripping ran, and
+  `node --experimental-strip-types examples/nbody.ts` failed in the directory
+  the examples live in. A compiler whose own repository could not run its own
+  example programs in place, for a language that has `import`/`export` and no
+  CommonJS at all.
+
+  `tsconfig.json` emits `module: Node16`, so every relative import in `src/`
+  carries its `.js` extension — 294 of them across 55 files, which `tsc`
+  enumerates exactly (TS2835) rather than leaving to a grep. `__dirname` in
+  `version.ts` is `import.meta.dirname`. The 18 files of `tests/` and
+  `scripts/` are ESM too: `require` became `import`, the oracles' synchronous
+  reads out of `dist/` became top-level `await import(...)` of a file URL, and
+  `require.main === module` became a comparison against `import.meta.url`. The
+  one `require` left is a deliberate `createRequire` in `tests/run.js`, because
+  `require.resolve("typescript/bin/tsc")` has no ESM spelling.
+
+  The floor moves from 18 to 22.18 — the version where Node strips types with
+  no flag, which is what makes `docs/RUN_UNDER_NODE.md` something to point
+  people at rather than a footnote about `.mts`. CI already ran 22.
+  `tests/differential/unmodified.js` no longer copies each program into a
+  scratch directory to escape the package's own module system; it runs them
+  where they are.
+
+  Nothing in the repository consumed `amritc` as a library, but `require("amritc")`
+  is now an ESM entry point rather than a CommonJS one; the product is the CLI
+  and the `bin` is unchanged. `runtime/shim.mjs`, `runtime/amritscript.mjs` and
+  `bench/` keep their `.mjs` extensions, which now say "loaded by something
+  else" rather than "the exception to the package".
+
 - **`test (macos-latest)` is commented out of the CI matrix.** It is not a
   compiler failure and not an architecture one: `scripts/build.sh` runs under
   `set -euo pipefail`, and macOS ships bash 3.2 as `/bin/bash`, where expanding
@@ -506,6 +602,28 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   and called at every boundary by the WP8 section of `tests/run.js`, which
   also checks that every function a `.d.ts` declares has an entry in its
   `.mjs`.
+
+- **The ambient declarations now say that `panic` and `process.exit` do not
+  return.**
+  `runtime/amritc.d.ts` claims one direction — a program `amritc` accepts is
+  never one `tsc` refuses — and it was wrong about that in 68 places in `self/`
+  alone. Both terminators were typed `void`, so `tsc` saw a function ending in
+  `panic(...)` as one that falls off its end, and saw nothing at all in
+  `if (x === null) { panic(...); }`, which is the guard `self/` writes wherever
+  another language would assert: 16 missing-return errors and some 40 spurious
+  `possibly null` ones, from one word. They are `never` now, which is how
+  TypeScript spells a terminator. With those two words, `tsc --strict` accepts all 54 modules of the
+  self-hosted compiler bar one call, and 151 of the 153 accepted cases.
+
+- **The claim is now tested on the whole language rather than on `Result`.**
+  The WP16 block type-checked the `res_*` cases against the declarations, which
+  is why the holes above survived: nothing in that surface panics. It checks
+  every accepted case and every `self/` module now, with the divergences named
+  rather than tolerated — the typed-array aliases and the implicit `super()` on
+  the case side, and `a.pop()` being `T` here and `T | undefined` in
+  `lib.es5.d.ts` on the `self/` side. All three are recorded in the file's own
+  foot-note section; a fourth diagnostic is a hole in the declarations and
+  fails the run.
 
 - **A builtin's argument is checked down to its element type.**
   `checkArgumentType` compared type *kinds*, which was enough while every

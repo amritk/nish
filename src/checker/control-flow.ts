@@ -23,8 +23,8 @@
  * through.
  */
 import ts from "typescript";
-import { BOOL, assignable, isInteger, isNumeric, sameType, typeToString } from "../types";
-import { constValue } from "./constants";
+import { BOOL, assignable, isInteger, isNumeric, sameType, typeToString } from "../types.js";
+import { constValue } from "./constants.js";
 import {
   BinaryChecker,
   CheckContext,
@@ -33,17 +33,17 @@ import {
   LoopInfo,
   StatementChecker,
   UnaryChecker,
-} from "./context";
-import { LANGUAGE } from "../branding";
+} from "./context.js";
+import { LANGUAGE } from "../branding.js";
 import {
   Narrowing,
   applyNarrowings,
   conditionNarrowings,
   invalidateNarrowings,
   narrowedScope,
-} from "./narrowing";
-import { LocalVar } from "./program";
-import { Scope } from "./scope";
+} from "./narrowing.js";
+import { LocalVar } from "./program.js";
+import { Scope } from "./scope.js";
 
 // ---- Helpers shared with the emitter and the attribute analysis --------------
 

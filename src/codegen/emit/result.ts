@@ -47,12 +47,12 @@
  * folds away with the shifts once the call is inlined.
  */
 import ts from "typescript";
-import { CheckedProgram } from "../../checker";
-import { ResultLayout, ResultSlot, resultLayout, resultTypesIn } from "../../checker/result";
-import { RESULT_PAYLOAD_SHIFT, ResultType, StaticType, llvmType, resultByValue } from "../../types";
-import { BuiltinCall } from "./builtins";
-import { EmitContext } from "./context";
-import { MemoryFacts, factCollectors, isStackOwned, methodCallEmitters, propertyEmitters } from "./members";
+import { CheckedProgram } from "../../checker/index.js";
+import { ResultLayout, ResultSlot, resultLayout, resultTypesIn } from "../../checker/result.js";
+import { RESULT_PAYLOAD_SHIFT, ResultType, StaticType, llvmType, resultByValue } from "../../types.js";
+import { BuiltinCall } from "./builtins.js";
+import { EmitContext } from "./context.js";
+import { MemoryFacts, factCollectors, isStackOwned, methodCallEmitters, propertyEmitters } from "./members.js";
 
 // ---- Types and addresses ------------------------------------------------------------
 

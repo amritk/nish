@@ -6,8 +6,8 @@
  * compatible only if their StaticType kinds are identical.
  */
 import ts from "typescript";
-import { LANGUAGE } from "./branding";
-import { CompileError } from "./diagnostics";
+import { LANGUAGE } from "./branding.js";
+import { CompileError } from "./diagnostics.js";
 
 export type NumberMode = "i32" | "f64";
 
@@ -102,8 +102,20 @@ export type StaticType =
   | { kind: "bool" }
   | { kind: "string" }
   | { kind: "void" }
-  /** `T[]` / `Array<T>`: pointer to an arena header `{ i64 len, i64 cap, i8* data }` (WP4). */
-  | { kind: "array"; elem: StaticType }
+  /**
+   * `T[]` / `Array<T>`: pointer to an arena header `{ i64 len, i64 cap, i8* data }` (WP4).
+   *
+   * `readonly` marks the `readonly T[]` / `ReadonlyArray<T>` spelling, which is
+   * the *same* header, the same pointer and the same LLVM type — the flag
+   * changes nothing about the value and everything about who may write through
+   * it. A mutable array widens into a readonly sink (`assignable`) and never
+   * back, so a callee that declares one cannot store, `push` or `pop`, and the
+   * C header can spell the parameter `const amrit_array *` because the
+   * signature said so rather than because the whole-program fixpoint happened
+   * to prove it (`src/interop/abi.ts`). It is shallow, as TypeScript's is: the
+   * element of a `readonly T[][]` is a mutable `T[]`.
+   */
+  | { kind: "array"; elem: StaticType; readonly?: true }
   /** A class or interface (WP2): a pointer to `%struct.<name>`, always arena-allocated and 8-aligned. */
   | { kind: "struct"; name: string }
   /**
@@ -157,6 +169,16 @@ export const ARRAY_STRUCT = "%struct.amrit_array";
 
 export function arrayOf(elem: StaticType): StaticType {
   return { kind: "array", elem };
+}
+
+/** `readonly T[]` / `ReadonlyArray<T>`: `T[]`'s layout, with every write rejected. */
+export function readonlyArrayOf(elem: StaticType): StaticType {
+  return { kind: "array", elem, readonly: true };
+}
+
+/** True for the `readonly T[]` spelling of an array type; false for every other type. */
+export function isReadonlyArray(t: StaticType): boolean {
+  return t.kind === "array" && t.readonly === true;
 }
 
 /**
@@ -360,7 +382,7 @@ export function alignOf(t: StaticType): number {
 }
 
 export function typeToString(t: StaticType): string {
-  if (t.kind === "array") return `${typeToString(t.elem)}[]`;
+  if (t.kind === "array") return `${t.readonly === true ? "readonly " : ""}${typeToString(t.elem)}[]`;
   if (t.kind === "struct") return t.name;
   if (t.kind === "nullable") return `${typeToString(t.inner)} | null`;
   if (t.kind === "result") return `Result<${typeToString(t.ok)}, ${typeToString(t.err)}>`;
@@ -370,7 +392,10 @@ export function typeToString(t: StaticType): string {
 export function sameType(a: StaticType, b: StaticType): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "struct") return a.name === (b as { name: string }).name;
-  if (a.kind === "array") return sameType(a.elem, (b as { elem: StaticType }).elem);
+  if (a.kind === "array") {
+    const other = b as { elem: StaticType; readonly?: true };
+    return a.readonly === other.readonly && sameType(a.elem, other.elem);
+  }
   if (a.kind === "nullable") return sameType(a.inner, (b as { inner: StaticType }).inner);
   // `state` is a proof about one use site, not part of the type: a `Result`
   // narrowed to its `ok` arm is the same value, and the same LLVM pointer, as
@@ -383,13 +408,25 @@ export function sameType(a: StaticType, b: StaticType): boolean {
 }
 
 /**
- * `from` may be stored where `to` is expected: identical types, or a `T`
- * where `T | null` is expected (the pointer is the same LLVM value). Used by
- * every value sink: initializers, assignments, returns, arguments, fields,
- * pushes, elements.
+ * A `T[]` where a `readonly T[]` is wanted. One direction only: handing a
+ * mutable array to something that promises not to write through it is safe,
+ * and the reverse would launder the promise away. The LLVM value is the same
+ * pointer either way, so nothing is emitted for the conversion.
+ */
+function widensToReadonlyArray(from: StaticType, to: StaticType): boolean {
+  return to.kind === "array" && to.readonly === true && from.kind === "array" && sameType(from.elem, to.elem);
+}
+
+/**
+ * `from` may be stored where `to` is expected: identical types, a `T` where
+ * `T | null` is expected (the pointer is the same LLVM value), or a mutable
+ * array where a `readonly T[]` is expected. Used by every value sink:
+ * initializers, assignments, returns, arguments, fields, pushes, elements.
  */
 export function assignable(from: StaticType, to: StaticType): boolean {
-  return sameType(from, to) || (to.kind === "nullable" && sameType(from, to.inner));
+  if (sameType(from, to) || widensToReadonlyArray(from, to)) return true;
+  if (to.kind === "nullable") return sameType(from, to.inner) || widensToReadonlyArray(from, to.inner);
+  return false;
 }
 
 export function isNumeric(t: StaticType): boolean {
@@ -488,6 +525,31 @@ export function resolveTypeNode(
       throw new CompileError(`\`unknown\` is forbidden in ${LANGUAGE}`, node, sourceFile);
     case ts.SyntaxKind.ArrayType:
       return arrayOf(resolveTypeNode((node as ts.ArrayTypeNode).elementType, sourceFile, opts));
+    case ts.SyntaxKind.TypeOperator: {
+      // `readonly T[]`. TypeScript itself allows the modifier on nothing else
+      // (TS1354, "only permitted on array and tuple literal types"), so a
+      // `readonly` on anything here means the source is not TypeScript either
+      // and the message says which rule it broke rather than "unsupported".
+      const op = node as ts.TypeOperatorNode;
+      if (op.operator !== ts.SyntaxKind.ReadonlyKeyword) {
+        // `keyof T`, `unique symbol`: no rule of their own, so the generic
+        // "unsupported type" message the default arm prints is the right one.
+        throw new CompileError(
+          `Unsupported type \`${node.getText(sourceFile)}\` (Phase 1 supports number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void)`,
+          node,
+          sourceFile
+        );
+      }
+      const inner = resolveTypeNode(op.type, sourceFile, opts);
+      if (inner.kind !== "array") {
+        throw new CompileError(
+          `\`readonly\` is only permitted on an array type, got ${typeToString(inner)}`,
+          node,
+          sourceFile
+        );
+      }
+      return readonlyArrayOf(inner.elem);
+    }
     case ts.SyntaxKind.ParenthesizedType:
       return resolveTypeNode((node as ts.ParenthesizedTypeNode).type, sourceFile, opts);
     case ts.SyntaxKind.UnionType:
@@ -502,6 +564,17 @@ export function resolveTypeNode(
           throw new CompileError("`Array` needs exactly one type argument, e.g. `Array<number>`", node, sourceFile);
         }
         return arrayOf(resolveTypeNode(ref.typeArguments[0], sourceFile, opts));
+      }
+      // `ReadonlyArray<T>` is `readonly T[]`, the way `Array<T>` is `T[]`.
+      if (ts.isIdentifier(ref.typeName) && ref.typeName.text === "ReadonlyArray") {
+        if (ref.typeArguments?.length !== 1) {
+          throw new CompileError(
+            "`ReadonlyArray` needs exactly one type argument, e.g. `ReadonlyArray<number>`",
+            node,
+            sourceFile
+          );
+        }
+        return readonlyArrayOf(resolveTypeNode(ref.typeArguments[0], sourceFile, opts));
       }
       if (ts.isIdentifier(ref.typeName) && ref.typeArguments && TYPED_ARRAY_ALIASES[ref.typeName.text]) {
         throw new CompileError(

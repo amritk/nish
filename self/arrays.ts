@@ -73,6 +73,17 @@ export function checkIndex(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   return ctx.table.refOf(base);
 }
 
+/**
+ * The one rule a `readonly T[]` adds: it is the same array, so every read still
+ * works and no write does. The message names the fix rather than the rule,
+ * because the caller is almost always holding a mutable array that widened on
+ * the way in — the parameter's annotation is what has to change, not the call.
+ */
+function readonlyWriteMessage(ctx: CheckContext, receiver: i32, what: string): string {
+  const mutable = ctx.table.typeName(ctx.table.arrayOf(ctx.table.refOf(receiver)));
+  return `Cannot ${what} ${ctx.table.typeName(receiver)} (declare it ${mutable} to write through it)`;
+}
+
 /** `a[i] = v` and `a[i] op= v`. */
 export function checkIndexAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   if (isArgvExpression(ctx, expr.children[0].children[0], scope)) {
@@ -80,6 +91,10 @@ export function checkIndexAssignment(ctx: CheckContext, expr: Node, scope: Scope
   }
   const elem = checkIndex(ctx, expr.children[0], scope);
   ctx.program.nodeTypes[expr.children[0].id] = elem;
+  const target = ctx.program.nodeTypes[expr.children[0].children[0].id];
+  if (ctx.table.isReadonlyArray(target)) {
+    return ctx.errorType(expr.children[0], readonlyWriteMessage(ctx, target, "assign to an element of"));
+  }
   const op = expr.text;
   const value = expr.children[1];
   const rhs = checkExpression(ctx, value, scope, elem);
@@ -128,6 +143,9 @@ export function checkArrayMethod(
   const name = access.text;
   if ((name === "push" || name === "pop") && isArgvExpression(ctx, access.children[0], scope)) {
     return ctx.errorType(call, "`process.argv` is read-only");
+  }
+  if ((name === "push" || name === "pop") && ctx.table.isReadonlyArray(receiver)) {
+    return ctx.errorType(call, readonlyWriteMessage(ctx, receiver, `\`${name}\` through`));
   }
   const elem = ctx.table.refOf(receiver);
   const spelled = ctx.table.typeName(receiver);

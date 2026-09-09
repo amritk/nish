@@ -6,11 +6,11 @@
  * emits one IR module per source file. Phase order per module: A parse,
  * (0 validate), B check; then C emit for the whole program.
  */
-import { Compilation, EmittedModule } from "./compilation";
-import { CompilerOptions } from "./types";
+import { Compilation, EmittedModule } from "./compilation.js";
+import { CompilerOptions } from "./types.js";
 
-export { Compilation, parseModule } from "./compilation";
-export type { EmittedModule, ModuleUnit } from "./compilation";
+export { Compilation, parseModule } from "./compilation.js";
+export type { EmittedModule, ModuleUnit } from "./compilation.js";
 
 /**
  * Compile one file (given as text) and return *its* IR. Modules it imports are

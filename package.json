@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "AmritScript: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
   "license": "MIT",
-  "type": "commonjs",
+  "type": "module",
   "main": "dist/index.js",
   "bin": {
     "amritc": "dist/index.js"
@@ -27,12 +27,13 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "test:update": "npm run build && UPDATE_GOLDENS=1 node tests/run.js",
     "test:diff": "npm run build && node tests/differential/run.js",
+    "test:node": "npm run build && node tests/differential/unmodified.js",
     "lint": "biome check --formatter-enabled=false .",
     "format": "biome format --write .",
     "prepublishOnly": "npm run check && npm run build && npm test"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.18.0"
   },
   "repository": {
     "type": "git",

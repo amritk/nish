@@ -88,8 +88,9 @@ export const N_TYPE_UNION: i32 = 53; // children: the members
 export const N_TYPE_NULL: i32 = 54; // the `null` of `T | null`
 export const N_SUPER: i32 = 55; // `super`, as `super(...)` or `super.m(...)`
 export const N_TYPE_PAREN: i32 = 56; // children: the type inside the parentheses
+export const N_TYPE_READONLY: i32 = 57; // `readonly T[]`; children: the type the modifier applies to
 
-export const N_COUNT: i32 = 57;
+export const N_COUNT: i32 = 58;
 
 // `flags` on N_UNARY: which side the operator was written on.
 export const FLAG_PREFIX: i32 = 0;
@@ -257,6 +258,8 @@ export function nodeName(kind: i32): string {
       return "SUPER";
     case N_TYPE_PAREN:
       return "TYPE_PAREN";
+    case N_TYPE_READONLY:
+      return "TYPE_READONLY";
     default:
       return "?";
   }

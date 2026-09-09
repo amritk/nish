@@ -7,12 +7,12 @@
  * and signatures that ended up in the IR. Nothing here mutates the program.
  */
 import path from "node:path";
-import { CLI } from "../branding";
-import { FunctionSig } from "../checker";
-import { FunctionFacts, analyzeFunctions } from "../codegen/attributes";
-import { Compilation, ModuleUnit } from "../compilation";
-import { ResultType, StaticType, resultByValue, resultStructName } from "../types";
-import { ResultLayout, resultLayout, resultTypesIn } from "../checker/result";
+import { CLI } from "../branding.js";
+import { FunctionSig } from "../checker/index.js";
+import { FunctionFacts, analyzeFunctions } from "../codegen/attributes.js";
+import { Compilation, ModuleUnit } from "../compilation.js";
+import { ResultType, StaticType, isReadonlyArray, resultByValue, resultStructName } from "../types.js";
+import { ResultLayout, resultLayout, resultTypesIn } from "../checker/result.js";
 
 export interface ExternalFunction {
   sig: FunctionSig;
@@ -50,7 +50,18 @@ export function externalFunctions(compilation: Compilation): ExternalFunction[] 
 function writtenArrayParams(sig: FunctionSig, facts: FunctionFacts | undefined): Set<string> {
   const written = new Set<string>();
   for (const p of sig.params) {
-    if (kindOf(p.type) === "array" && facts?.pointerParams.get(p.name)?.writesThrough) written.add(p.name);
+    if (kindOf(p.type) !== "array") continue;
+    // A `readonly T[]` is `const` because its type says so, and the fixpoint is
+    // never consulted for one. That is not a shortcut: `writesThrough` is a
+    // conservative *may-write* — `noteUse` sets it for every escape, on the
+    // grounds that an alias may be written through later — so a `readonly`
+    // parameter that is merely returned or stored in a field would land here
+    // and lose the `const` its annotation promised. The checker is the thing
+    // that makes the promise true (no store, no `push`, no `pop`, and no
+    // widening back to a mutable `T[]`), and it is exact where this is not.
+    if (isReadonlyArray(p.type)) continue;
+    if (!facts?.pointerParams.get(p.name)?.writesThrough) continue;
+    written.add(p.name);
   }
   return written;
 }
@@ -262,7 +273,10 @@ export function tsKeyword(t: StaticType): string {
     case "struct":
       return (t as { name: string }).name;
     case "array":
-      return `${tsKeyword((t as { elem: StaticType }).elem)}[]`;
+      // The comment above the prototype is the signature as it was written, so
+      // a `readonly T[]` says so: it is what makes the `const` on the C
+      // parameter beside it read as the promise the source made.
+      return `${isReadonlyArray(t) ? "readonly " : ""}${tsKeyword((t as { elem: StaticType }).elem)}[]`;
     case "nullable":
       return `${tsKeyword((t as { inner: StaticType }).inner)} | null`;
     // WP17: the type as the programmer wrote it, for the comment above the

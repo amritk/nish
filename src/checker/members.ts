@@ -13,10 +13,10 @@
  * (`builtinCalls` in strings.ts) or `namespaceProperties` here.
  */
 import ts from "typescript";
-import { StaticType, typeToString } from "../types";
-import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context";
-import { Scope } from "./scope";
-import { lookup } from "../lookup";
+import { StaticType, typeToString } from "../types.js";
+import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context.js";
+import { Scope } from "./scope.js";
+import { lookup } from "../lookup.js";
 
 export type PropertyChecker = (
   ctx: CheckContext,

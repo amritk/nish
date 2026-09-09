@@ -108,6 +108,8 @@ const RULES: string[] = [
     "AS2231",
     "`export default` / `export =` are not supported; use a named `export function`",
     "AS2129",
+    "`ReadonlyArray` needs exactly one type argument, e.g. `ReadonlyArray<number>`",
+    "AS2266",
     "`main` cannot take parameters (command-line arguments are not supported yet)",
     "AS2139",
     "`for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)`",
@@ -218,6 +220,8 @@ const RULES: string[] = [
     "AS2068",
     "`Number` expects a string, number, or boolean, got ",
     "AS2146",
+    "`readonly` is only permitted on an array type, got ",
+    "AS2265",
     "`this` is only valid inside a method or constructor",
     "AS2162",
     "Union types other than `T | null` are forbidden in ",
@@ -480,6 +484,8 @@ const RULES: string[] = [
     "AS1028",
     "async methods are not supported",
     "AS2174",
+    "Cannot assign to an element of ",
+    "AS2267",
     "Condition must be boolean, got ",
     "AS2188",
     "Ternary branches cannot be void",
@@ -620,6 +626,8 @@ const RULES: string[] = [
     "AS4005",
     "Unsupported operator `",
     "AS2259",
+    " to write through it)",
+    "AS2264",
     "` does not fit in i32",
     "AS2053",
     "` must be initialized",
@@ -715,7 +723,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 331;
+export const RULE_COUNT = 335;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

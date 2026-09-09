@@ -9,8 +9,13 @@
 import fs from "node:fs";
 import path from "node:path";
 
-/** Package root: dist/version.js -> .. (the same for src/version.ts under ts-node). */
-export const PKG_ROOT = path.resolve(__dirname, "..");
+/**
+ * Package root: dist/version.js -> `..`.
+ *
+ * `import.meta.dirname` rather than `__dirname`, which an ES module does not
+ * have. It needs Node 20.11+, which the `engines` floor is well past.
+ */
+export const PKG_ROOT = path.resolve(import.meta.dirname, "..");
 
 export function packageVersion(): string {
   try {

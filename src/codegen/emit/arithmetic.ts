@@ -20,9 +20,9 @@
  * memory, exactly like a bounds check (`docs/wp4-arrays.md`).
  */
 import ts from "typescript";
-import { StaticType, isInteger, isUnsigned, llvmType } from "../../types";
-import { EmitContext, intOpcode } from "./context";
-import { factCollectors } from "./members";
+import { StaticType, isInteger, isUnsigned, llvmType } from "../../types.js";
+import { EmitContext, intOpcode } from "./context.js";
+import { factCollectors } from "./members.js";
 
 const INT_MIN: Record<string, string> = { i32: "-2147483648", i64: "-9223372036854775808" };
 

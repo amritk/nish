@@ -32,11 +32,11 @@
  * double a result comes back as.
  */
 import path from "node:path";
-import { Compilation } from "../compilation";
-import { LANGUAGE } from "../branding";
-import { FunctionSig } from "../checker";
-import { ResultType, StaticType, resultByValue } from "../types";
-import { banner, ExternalFunction, externalFunctions, kindOf, tsKeyword, tsSignature, typedView } from "./abi";
+import { Compilation } from "../compilation.js";
+import { LANGUAGE } from "../branding.js";
+import { FunctionSig } from "../checker/index.js";
+import { ResultType, StaticType, resultByValue } from "../types.js";
+import { banner, ExternalFunction, externalFunctions, kindOf, tsKeyword, tsSignature, typedView } from "./abi.js";
 
 /** `x.d.ts` -> `x.mjs`. */
 export function wasmLoaderPath(dtsFile: string): string {

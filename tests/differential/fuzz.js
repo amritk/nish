@@ -30,12 +30,13 @@
  * in stage1 mode) and reproduces with
  * `node tests/differential/fuzz.js [--stage1] --seed <S + i> --count 1`.
  */
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const lib = require("./lib");
-const irOracle = require("../self/ir_oracle");
-const ts = require("typescript");
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import * as lib from "./lib.js";
+import * as irOracle from "../self/ir_oracle.js";
+import ts from "typescript";
+import { fileURLToPath } from "node:url";
 
 /** mulberry32: small, seedable, good enough for program shapes. */
 function rng(seed) {
@@ -363,9 +364,9 @@ function stage1Run({ count = 20, seed = 1, depth = 3, log = () => {} } = {}) {
   return { seed, count, binary, agreed, modules, lines, disagreements };
 }
 
-module.exports = { generateProgram, fuzzRun, stage1Run };
+export { generateProgram, fuzzRun, stage1Run };
 
-if (require.main === module) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2);
   let count = 50;
   let seed = (Date.now() ^ (process.pid << 8)) >>> 0;

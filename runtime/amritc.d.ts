@@ -102,8 +102,12 @@ interface Console {
 declare var console: Console;
 
 interface Process {
-  /** Terminate with `code`. Statement position, and a terminator for definite return. */
-  exit(code: i32): void;
+  /**
+   * Terminate with `code`. Statement position, and a terminator: `never` is
+   * how TypeScript spells that, so a function ending in `process.exit(c)`
+   * satisfies its return type in `tsc` as it does in `amritc`.
+   */
+  exit(code: i32): never;
   /** The command line; `argv[0]` is the program path, as in C. Read-only. */
   readonly argv: string[];
   /** The operating system the program runs on: `"linux"`, `"darwin"`, or `"unknown"`. */
@@ -133,8 +137,13 @@ declare function bitsToF64(bits: i64): f64;
 declare function write(s: string): void;
 /** `s` to stderr, likewise. */
 declare function writeError(s: string): void;
-/** `message` and a newline to stderr, then exit 1. Terminates control flow. */
-declare function panic(message: string): void;
+/**
+ * `message` and a newline to stderr, then exit 1. Terminates control flow, so
+ * it is `never`: that is what lets `tsc` agree that a function ending in a
+ * `panic` returns, and that `x` is not null after `if (x === null) { panic(...); }`
+ * — the guard-then-panic shape `self/` uses everywhere in place of an assert.
+ */
+declare function panic(message: string): never;
 /** The whole file as a string; a missing file prints a message and exits 1. */
 declare function readFileSync(path: string): string;
 /** The same read, answering `null` where the other exits. */
@@ -170,3 +179,9 @@ declare const Arena: {
 // library. So `tsc` reads them as the JavaScript views it knows, which accept
 // indexing and `.length` but not an array literal; write `i32[]` where you
 // want both compilers to agree.
+//
+// `a.pop()` is `T` in AmritScript — an empty array panics, because there is no
+// `undefined` to answer with — and `T | undefined` in `lib.es5.d.ts`. Narrowing
+// the standard `Array<T>` would need a global augmentation that changed the
+// method for every array in the project, including a host's, so this one is
+// left as it is: `tsc` asks for a null check that `amritc` does not need.

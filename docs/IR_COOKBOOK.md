@@ -2681,6 +2681,124 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end arr_new -->
 
+### `readonly T[]`
+
+The zero-cost claim, as a diff you can read: `sum` takes a `readonly number[]`
+and `sumMutable` the same array without the modifier, and the two bodies are
+the same instructions with the same attributes. `readonly` is a promise the
+checker keeps — it refuses the stores, the `push` and the `pop` — so by the
+time the emitter runs there is nothing left of it to lower. The `readonly
+nocapture` on both parameters is the whole-program fixpoint's, earned the way
+it always was; on `sum` the signature guarantees it as well, which is what lets
+`--emit-header` write `const amrit_array *` without proving anything.
+
+<!-- cookbook:begin arr_readonly -->
+```ts
+function sum(xs: readonly number[]): number {
+  let total = 0;
+  for (const x of xs) {
+    total = total + x;
+  }
+  return total;
+}
+
+function sumMutable(xs: number[]): number {
+  let total = 0;
+  for (const x of xs) {
+    total = total + x;
+  }
+  return total;
+}
+```
+
+```llvm
+%struct.amrit_array = type { i64, i64, i8* }
+
+define internal noundef i32 @sum(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+entry:
+  %total.addr = alloca i32, align 4
+  %x.addr = alloca i32, align 4
+  %forof.idx = alloca i64, align 8
+  store i32 0, i32* %total.addr, align 4
+  store i64 0, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.cond:
+  %0 = load i64, i64* %forof.idx, align 8
+  %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %forof.body, label %forof.end
+
+forof.body:
+  %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8
+  %6 = bitcast i8* %5 to i32*
+  %7 = getelementptr inbounds i32, i32* %6, i64 %0
+  %8 = load i32, i32* %7, align 4
+  store i32 %8, i32* %x.addr, align 4
+  %9 = load i32, i32* %total.addr, align 4
+  %10 = load i32, i32* %x.addr, align 4
+  %11 = add nsw i32 %9, %10
+  store i32 %11, i32* %total.addr, align 4
+  br label %forof.inc
+
+forof.inc:
+  %12 = load i64, i64* %forof.idx, align 8
+  %13 = add i64 %12, 1
+  store i64 %13, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.end:
+  %14 = load i32, i32* %total.addr, align 4
+  ret i32 %14
+}
+
+define internal noundef i32 @sumMutable(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+entry:
+  %total.addr = alloca i32, align 4
+  %x.addr = alloca i32, align 4
+  %forof.idx = alloca i64, align 8
+  store i32 0, i32* %total.addr, align 4
+  store i64 0, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.cond:
+  %0 = load i64, i64* %forof.idx, align 8
+  %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %forof.body, label %forof.end
+
+forof.body:
+  %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8
+  %6 = bitcast i8* %5 to i32*
+  %7 = getelementptr inbounds i32, i32* %6, i64 %0
+  %8 = load i32, i32* %7, align 4
+  store i32 %8, i32* %x.addr, align 4
+  %9 = load i32, i32* %total.addr, align 4
+  %10 = load i32, i32* %x.addr, align 4
+  %11 = add nsw i32 %9, %10
+  store i32 %11, i32* %total.addr, align 4
+  br label %forof.inc
+
+forof.inc:
+  %12 = load i64, i64* %forof.idx, align 8
+  %13 = add i64 %12, 1
+  store i64 %13, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.end:
+  %14 = load i32, i32* %total.addr, align 4
+  ret i32 %14
+}
+
+attributes #0 = { nounwind willreturn readonly }
+```
+<!-- cookbook:end arr_readonly -->
+
+
 ## Classes and interfaces
 
 ### Class, `new`, constructor, method, field read and write

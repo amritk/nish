@@ -30,9 +30,9 @@
  *                     held by pointer does not cross, for the same reason a
  *                     string does not.
  */
-import { Compilation } from "../compilation";
-import { banner, externalFunctions, tsKeyword, tsSignature } from "./abi";
-import { wasmBridged, wasmSkipReason, wasmType } from "./wasm";
+import { Compilation } from "../compilation.js";
+import { banner, externalFunctions, tsKeyword, tsSignature } from "./abi.js";
+import { wasmBridged, wasmSkipReason, wasmType } from "./wasm.js";
 
 export function generateDts(compilation: Compilation): string {
   const fns = externalFunctions(compilation);

@@ -70,13 +70,13 @@ import {
   sameType,
   stripNull,
   typeToString,
-} from "../types";
-import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context";
-import { hasExportModifier } from "./declarations";
-import { assignmentTargetCheckers, methodCallCheckers, newCheckers, propertyCheckers } from "./members";
-import { checkBitwiseAssignOperands, isBitwiseCompoundOperator } from "./bitwise";
-import { CheckedProgram, FieldInfo, FunctionSig, LocalVar, Param, StructInfo } from "./program";
-import { Scope } from "./scope";
+} from "../types.js";
+import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context.js";
+import { hasExportModifier } from "./declarations.js";
+import { assignmentTargetCheckers, methodCallCheckers, newCheckers, propertyCheckers } from "./members.js";
+import { checkBitwiseAssignOperands, isBitwiseCompoundOperator } from "./bitwise.js";
+import { CheckedProgram, FieldInfo, FunctionSig, LocalVar, Param, StructInfo } from "./program.js";
+import { Scope } from "./scope.js";
 
 // ---- Layout ------------------------------------------------------------------------
 

@@ -137,7 +137,11 @@ function writtenArrayParams(table: TypeTable, sig: FunctionSig, facts: FunctionF
   }
   let i = 0;
   while (i < sig.paramNames.length) {
-    if (table.isArray(sig.paramTypes[i])) {
+    // A `readonly T[]` is `const` because its type says so, and the fixpoint is
+    // never consulted for one: `writesThrough` is a conservative *may-write*
+    // that every escape sets, so a `readonly` parameter that is only returned
+    // or stored would otherwise lose the `const` its annotation promised.
+    if (table.isArray(sig.paramTypes[i]) && !table.isReadonlyArray(sig.paramTypes[i])) {
       const pointer = facts.pointerParam(sig.paramNames[i]);
       if (pointer !== null && pointer.writesThrough) {
         written.add(sig.paramNames[i]);
@@ -403,7 +407,12 @@ export function tsKeyword(table: TypeTable, t: i32): string {
     case K_STRUCT:
       return table.nameOf(t);
     case K_ARRAY:
-      return `${tsKeyword(table, table.refOf(t))}[]`;
+      // The comment above the prototype is the signature as it was written, so
+      // a `readonly T[]` says so: it is what makes the `const` on the C
+      // parameter beside it read as the promise the source made.
+      return table.isReadonlyArray(t)
+        ? `readonly ${tsKeyword(table, table.refOf(t))}[]`
+        : `${tsKeyword(table, table.refOf(t))}[]`;
     case K_NULLABLE:
       return `${tsKeyword(table, table.refOf(t))} | null`;
     // WP17: the type as the programmer wrote it, for the comment above the

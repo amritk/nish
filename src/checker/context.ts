@@ -7,10 +7,10 @@
  * statement or expression kind means adding a file, not editing the core.
  */
 import ts from "typescript";
-import { CompileError } from "../diagnostics";
-import { CompilerOptions, StaticType } from "../types";
-import { CheckedProgram, FunctionSig } from "./program";
-import { Scope } from "./scope";
+import { CompileError } from "../diagnostics.js";
+import { CompilerOptions, StaticType } from "../types.js";
+import { CheckedProgram, FunctionSig } from "./program.js";
+import { Scope } from "./scope.js";
 
 /**
  * A `break` target whose body is being checked: a loop, or a `switch` (WP14).

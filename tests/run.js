@@ -15,11 +15,14 @@
  *  B. Pipeline checks: runtime.c unit test, inline allocator vs C arena layout,
  *     size and wasm build profiles, Node wasm host.
  */
-const { execFileSync, spawnSync } = require("node:child_process");
-const fs = require("node:fs");
-const path = require("node:path");
+import { execFileSync, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 
-const root = path.resolve(__dirname, "..");
+const root = path.resolve(import.meta.dirname, "..");
 const cli = path.join(root, "dist", "index.js");
 const casesDir = path.join(root, "tests", "cases");
 const buildDir = path.join(root, "build", "test");
@@ -1204,7 +1207,7 @@ if (!only || "interop".includes(only)) {
   fs.mkdirSync(interopDir, { recursive: true });
   const runtimeDir = path.join(root, "runtime");
   const publicHeader = fs.readFileSync(path.join(runtimeDir, "amritc.h"), "utf8");
-  const { RUNTIME_FUNCTIONS } = require(path.join(root, "dist", "codegen", "runtime.js"));
+  const { RUNTIME_FUNCTIONS } = await import(pathToFileURL(path.join(root, "dist", "codegen", "runtime.js")).href);
   const runtimeNames = [
     ...RUNTIME_FUNCTIONS.filter((f) => !f.intrinsic).map((f) => f.name),
     "amrit_alloc_struct",
@@ -1291,6 +1294,43 @@ if (!only || "interop".includes(only)) {
     "--emit-napi",
     sidecar("arrays", "napi.c"),
   ]);
+
+  // A `readonly T[]` parameter *declares* the `const` that the whole-program
+  // fixpoint otherwise has to prove, and the comment above the prototype shows
+  // the annotation that earned it. The mutable `fill` beside it is the control:
+  // it writes, so it stays `amrit_array *` and its comment stays `number[]`.
+  const readonlyArrays = emit("tests/cases/arr_readonly_header.ts", [
+    "--emit-header",
+    sidecar("arr_readonly_header", "h"),
+  ]);
+  const readonlyHeader =
+    readonlyArrays.status === 0 ? fs.readFileSync(sidecar("arr_readonly_header", "h"), "utf8") : "";
+  check(
+    "a `readonly T[]` parameter is `const amrit_array *`, and the comment shows the annotation that promised it",
+    readonlyHeader.includes("/* sum(xs: readonly number[]): number -- xs: int32_t elements */") &&
+      readonlyHeader.includes("int32_t sum(const amrit_array *xs);") &&
+      readonlyHeader.includes("/* fill(xs: number[], v: number): void -- xs: int32_t elements */") &&
+      readonlyHeader.includes("void fill(amrit_array *xs, int32_t v);"),
+    readonlyHeader || readonlyArrays.stderr
+  );
+
+  // The `const` survives an escape. `writesThrough` is a may-write that every
+  // escape sets, so a `readonly` parameter that is returned or stored in a field
+  // would lose its `const` if the header consulted the fixpoint for one — and
+  // for a while the disagreement aborted the compile with exit 70 instead.
+  const escaped = emit("tests/cases/arr_readonly_escape.ts", [
+    "--emit-header",
+    sidecar("arr_readonly_escape", "h"),
+  ]);
+  const escapedHeader = escaped.status === 0 ? fs.readFileSync(sidecar("arr_readonly_escape", "h"), "utf8") : "";
+  check(
+    "a `readonly T[]` that escapes (returned, stored in a field) keeps its `const`, and compiling it is not an internal error",
+    escaped.status === 0 &&
+      escapedHeader.includes("amrit_array *first(const amrit_array *xs);") &&
+      escapedHeader.includes("int32_t hold(const amrit_array *xs);") &&
+      escapedHeader.includes("int32_t touch(const amrit_array *rows, int32_t v);"),
+    escapedHeader || escaped.stdout + escaped.stderr
+  );
 
   const keyword = emit("tests/cases/export_fn.ts", ["--emit-header", sidecar("export_fn", "h")]);
   const keywordHeader = keyword.status === 0 ? fs.readFileSync(sidecar("export_fn", "h"), "utf8") : "";
@@ -2248,7 +2288,7 @@ if (!only || "interop".includes(only)) {
 // validator is timed. Budget in docs/MASTER_PLAN.md is 5 ms; the gate is 50 ms for CI headroom.
 if (!only) {
   const ts = require("typescript");
-  const { validateSyntax } = require(path.join(root, "dist", "validator.js"));
+  const { validateSyntax } = await import(pathToFileURL(path.join(root, "dist", "validator.js")).href);
   const lines = [];
   for (let i = 0; lines.length < 1000; i++) {
     const callee = i === 0 ? "fn0" : `fn${i - 1}`;
@@ -3444,6 +3484,62 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
     !refused.ok && refused.output.includes("Property 'value' does not exist"),
     refused.output
   );
+
+  // The declarations claim a direction, not a coincidence: a program amritc
+  // accepts should never be one tsc refuses. `res_*` above tests that claim on
+  // the `Result` surface; this tests it on every accepted case there is, which
+  // is the whole language. Two cases are listed because the divergence is real
+  // and documented, not because the declarations are missing something.
+  const AMBIENT_DIVERGENCES = new Map([
+    [
+      "arr_typed_views.ts",
+      // `Int32Array` and friends name the element-typed array here and the JS
+      // view in lib.es5; redeclaring them would break every other lib type.
+      "typed-array aliases (see the note at the foot of runtime/amritc.d.ts)",
+    ],
+    [
+      "cls_extends_chain.ts",
+      // A derived constructor may omit `super(...)` when no ancestor
+      // constructor takes parameters; JavaScript throws at the first `this`.
+      "implicit `super()` (see docs/wp13-differential.md, rewrite rules)",
+    ],
+  ]);
+  const acceptedCases = fs
+    .readdirSync(casesDir)
+    .filter((f) => f.endsWith(".ts") && !f.startsWith("reject_") && !AMBIENT_DIVERGENCES.has(f));
+  const everyCase = typeCheck("accepted", acceptedCases.map((f) => path.join(casesDir, f)));
+  check(
+    `tsc accepts every case amritc accepts, against the ambient declarations (${acceptedCases.length} cases, ${AMBIENT_DIVERGENCES.size} documented divergences)`,
+    everyCase.ok,
+    everyCase.output
+  );
+
+  // And on the largest AmritScript program there is: the compiler itself.
+  const selfDir = path.join(root, "self");
+  const selfModules = fs
+    .readdirSync(selfDir)
+    .filter((f) => f.endsWith(".ts"))
+    .map((f) => path.join(selfDir, f));
+  const selfCheck = typeCheck("stage1", selfModules);
+  // `a.pop()` is `T` here and `T | undefined` in lib.es5 (the foot of
+  // runtime/amritc.d.ts says why it stays that way), so the one call in
+  // `self/checker.ts` that pops without a null check is the only diagnostic
+  // this may report. Anything else is a hole in the declarations.
+  const selfErrors = selfCheck.output
+    .split("\n")
+    .filter((line) => line.includes(": error TS"));
+  // `selfCheck.ok` has to be part of the predicate: a tsc that fell over before
+  // it checked anything (a bad config, TS18003, a spawn failure) produces no
+  // `error TS` lines at all, and `[].every(...)` is `true` — a check that passes
+  // by having tested nothing. So: either tsc was clean, or the only things it
+  // said are the one divergence the declarations document.
+  const isPopDivergence = (line) =>
+    line.includes("TS2345") && line.includes("| undefined") && line.includes("self/checker.ts");
+  check(
+    `tsc accepts self/ against the ambient declarations, bar the documented \`pop\` divergence (${selfModules.length} modules)`,
+    selfCheck.ok || (selfErrors.length > 0 && selfErrors.every(isPopDivergence)),
+    selfCheck.output
+  );
 }
 
 // ---- WP12: package ------------------------------------------------------------------
@@ -3486,13 +3582,14 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/runtime.c",
       "runtime/amritc.h",
       "runtime/amritc.d.ts",
+      "runtime/amritscript.mjs",
       "scripts/build.sh",
       "LICENSE",
       "docs/INSTALL.md",
     ];
     const absent = required.filter((f) => !files.includes(f));
     check(
-      "npm pack includes everything --link needs (runtime.c, amritc.h, amritc.d.ts, build.sh) plus LICENSE/INSTALL.md",
+      "npm pack includes everything --link and `node --import` need (runtime.c, amritc.h, amritc.d.ts, amritscript.mjs, build.sh) plus LICENSE/INSTALL.md",
       absent.length === 0,
       absent.join("\n")
     );
@@ -3580,7 +3677,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
 // reported but do not fail. A 10-program fuzz batch with a fixed seed runs too; the seed
 // is printed so a failure reproduces with `node tests/differential/fuzz.js --seed <s> --count 1`.
 if ((!only || "differential".includes(only)) && HAS_CLANG) {
-  const diffRunner = path.join(__dirname, "differential", "run.js");
+  const diffRunner = path.join(import.meta.dirname, "differential", "run.js");
   const d = spawnSync("node", [diffRunner, "--quick"], { cwd: root, encoding: "utf8" });
   const summary = (
     d.stdout
@@ -3595,10 +3692,26 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
     d.stdout + d.stderr
   );
 
+  // The smaller, unrewritten claim beside it: an f64-mode program run as the
+  // TypeScript it is, under `node --experimental-strip-types` with
+  // runtime/amritscript.mjs supplying the globals Node lacks. Nothing is
+  // rewritten, so only the divergences listed in the runner may differ — they
+  // live in the operators and the object model, where a prelude cannot reach.
+  // docs/RUN_UNDER_NODE.md states the overlap.
+  const u = spawnSync("node", [path.join(import.meta.dirname, "differential", "unmodified.js")], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  check(
+    `differential: f64 programs agree with unmodified Node (${u.stdout.trim() || "no summary"})`,
+    u.status === 0,
+    u.stdout + u.stderr
+  );
+
   const fuzzSeed = 20260906;
   const f = spawnSync(
     "node",
-    [path.join(__dirname, "differential", "fuzz.js"), "--seed", String(fuzzSeed), "--count", "10"],
+    [path.join(import.meta.dirname, "differential", "fuzz.js"), "--seed", String(fuzzSeed), "--count", "10"],
     { cwd: root, encoding: "utf8" }
   );
   const fuzzSummary =

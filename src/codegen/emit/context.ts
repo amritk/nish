@@ -6,10 +6,10 @@
  * side tables, and helpers for alignment and runtime symbols.
  */
 import ts from "typescript";
-import { CheckedProgram, FunctionSig, LocalVar } from "../../checker";
-import { CompilerOptions, StaticType, isUnsigned } from "../../types";
-import { DebugInfo } from "../debug";
-import { IRBlock, IRFunction } from "../ir";
+import { CheckedProgram, FunctionSig, LocalVar } from "../../checker/index.js";
+import { CompilerOptions, StaticType, isUnsigned } from "../../types.js";
+import { DebugInfo } from "../debug.js";
+import { IRBlock, IRFunction } from "../ir.js";
 
 /**
  * Branch targets of an enclosing loop, for `break` and `continue`. A `switch`

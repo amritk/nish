@@ -23,13 +23,14 @@
  * `number` that the checker typed `i32` gets integer semantics, an `f64`
  * (or any `number` under `--number-mode f64`) is left alone.
  */
-const fs = require("node:fs");
-const path = require("node:path");
-const ts = require("typescript");
+import fs from "node:fs";
+import path from "node:path";
+import ts from "typescript";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const root = path.resolve(__dirname, "..", "..");
+const root = path.resolve(import.meta.dirname, "..", "..");
 const SHIM = path.join(root, "runtime", "shim.mjs");
-const { Compilation } = require(path.join(root, "dist", "compiler.js"));
+const { Compilation } = await import(pathToFileURL(path.join(root, "dist", "compiler.js")).href);
 
 const f = ts.factory;
 const SHIM_NS = "__amrit";
@@ -667,9 +668,9 @@ function rewriteProgram(entry, opts, outDir) {
   return { entry: entryJs, modules, hasMain };
 }
 
-module.exports = { rewriteProgram, SHIM };
+export { rewriteProgram, SHIM };
 
-if (require.main === module) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // node tests/differential/rewrite.js <file.ts> [--number-mode f64] [--wrapping] [-o <dir>]
   const argv = process.argv.slice(2);
   let numberMode = "i32";

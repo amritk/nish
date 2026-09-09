@@ -26,9 +26,9 @@
  *     textually.
  */
 import ts from "typescript";
-import { StaticType } from "../types";
-import { LocalVar } from "./program";
-import { Scope } from "./scope";
+import { StaticType } from "../types.js";
+import { LocalVar } from "./program.js";
+import { Scope } from "./scope.js";
 
 export type Narrowing = {
   v: LocalVar;
