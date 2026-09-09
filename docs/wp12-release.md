@@ -36,11 +36,24 @@ unrelated directory with the installed `amritc`.
 
 | Code | When | Message shape |
 | ---: | --- | --- |
-| 0 | success | `wrote <file.ll>` / `linked <exe>: <bytes> bytes (<profile>)` on stderr |
+| 0 | success, and `--help` / `--version`: a request that was answered | `wrote <file.ll>` / `linked <exe>: <bytes> bytes (<profile>)` on stderr; the usage text or the version line on **stdout** |
 | 1 | `CompileError` from the validator, parser or checker; a driver refusal (`--link` without `export function main`, several modules with a single `-o file.ll`); a Node system error on an input or output path | `file:line:col: error: ...` with caret excerpt, or one line |
-| 2 | usage: unknown flag, missing argument, no inputs, `--help` | `usage: ...` |
+| 2 | usage *error*: unknown flag, missing argument, no inputs | `usage: ...` on stderr |
 | 3 | toolchain: `--link` requested but `clang` (or `$CC`) is not runnable; or `scripts/build.sh` exited non-zero / could not be spawned | the per-platform install hint; or build.sh's stderr verbatim followed by `--link: <build.sh> failed (exit N); the IR is in ...` |
 | 70 | internal compiler error: any other exception escaping `main` (`EX_SOFTWARE`) | `amritc <version>: internal compiler error while compiling <inputs>`, the exception, a request to report it at the issue tracker; the stack trace only with `AMRITC_DEBUG=1` |
+
+`--help` is the answer to a question, not a refusal, so it prints on stdout and
+exits 0 — what clang, tsc and git do, and what lets a wrapper ask the compiler
+what it accepts without treating the run as a failure. A usage *error* prints
+the same text on stderr with exit 2. The two are told apart by the stream and
+the code, and `tests/run.js` pins both. stage1 answers the same way
+(`self/compile.ts`).
+
+Under `--json` every one of these failures is also one JSON object on stdout —
+including exit 3 and exit 70, which have no source position and so carry
+`{"severity","code","message"}` with the band-0 codes `AS0002` and `AS0003`. A
+tool that asked for JSON is never left with an empty stdout and an exit code to
+guess about. See [wp10-ci.md](wp10-ci.md#failures-without-a-source-position).
 
 The toolchain check runs *before* compilation (`missingToolchain()` probes
 `$CC --version`), so a missing compiler is reported instantly, without

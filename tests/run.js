@@ -27,6 +27,18 @@ fs.mkdirSync(buildDir, { recursive: true });
 
 let failures = 0;
 let passes = 0;
+/**
+ * Sections that did not run. Counted rather than only printed: without LLVM the
+ * toolchain-dependent half of this suite skips instead of failing, and a run
+ * that ends `N passed, 0 failed` then looks exactly like a run that proved
+ * everything. The summary says how many skipped and the banner says which
+ * tools were missing, so a reader -- or an agent -- can tell the two apart.
+ */
+const skipped = [];
+const skip = (reason) => {
+  console.log(`SKIP  ${reason}`);
+  skipped.push(reason);
+};
 function check(name, ok, detail) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}`);
   if (ok) passes++;
@@ -276,6 +288,84 @@ if (!only || "diagnostics".includes(only)) {
       JSON.parse(jsSyn.stdout.split("\n")[0]).message.startsWith("syntax error: "),
     jsSyn.stdout + jsSyn.stderr
   );
+
+  // ---- stable diagnostic codes ---------------------------------------------
+  // `code` is what a tool keys on instead of the prose, so it has to mean the
+  // same rule next release. Three things keep that true: the registry is
+  // generated from the compiler's own sources (so a new diagnostic cannot go
+  // uncoded unnoticed), the generator only ever appends numbers, and the two
+  // compilers share one table.
+  const codesGen = spawnSync("node", [path.join(root, "scripts", "gen-diagnostic-codes.mjs"), "--check"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  check(
+    "codes: src/codes.ts and self/codes.ts are up to date with the diagnostics in src/",
+    codesGen.status === 0,
+    codesGen.stdout + codesGen.stderr
+  );
+
+  // One table, two compilers: the pairs must be identical, exactly as
+  // `branding.ts` must name the same language on both sides.
+  const pairsOf = (file) => {
+    const text = fs.readFileSync(path.join(root, file), "utf8");
+    return [...text.matchAll(/^ {4}("(?:[^"\\]|\\.)*"),\n {4}"(AS\d{4})",$/gm)].map((m) => `${m[2]} ${m[1]}`);
+  };
+  const stage0Codes = pairsOf("src/codes.ts");
+  const stage1Codes = pairsOf("self/codes.ts");
+  check(
+    `codes: stage0 and stage1 hold the same registry (${stage0Codes.length} rules)`,
+    stage0Codes.length > 0 && stage0Codes.join("\n") === stage1Codes.join("\n"),
+    `stage0 ${stage0Codes.length} rules, stage1 ${stage1Codes.length} rules`
+  );
+  // A number handed out once is never handed to a different rule.
+  const dupCodes = stage0Codes.map((p) => p.split(" ")[0]).filter((c, i, a) => a.indexOf(c) !== i);
+  check("codes: every rule has its own number", dupCodes.length === 0, `reused: ${dupCodes.join(", ")}`);
+
+  const jsCode = JSON.parse(js.stdout.split("\n")[0]);
+  check(
+    `codes: --json carries a code (${jsCode.code}) and the human summary line does not`,
+    /^AS\d{4}$/.test(jsCode.code) &&
+      jsCode.code !== "AS0000" &&
+      !manyErr.includes(jsCode.code) &&
+      !many.stderr.includes("AS"),
+    `${js.stdout.split("\n")[0]}\n---\n${manyErr.split("\n")[0]}`
+  );
+  check(
+    "codes: a syntax error is AS0001, whatever the `typescript` package worded it as",
+    JSON.parse(jsSyn.stdout.split("\n")[0]).code === "AS0001",
+    jsSyn.stdout
+  );
+
+  // Coverage over every rejection the suite exercises. The uncoded remainder is
+  // the backlog, pinned so it can shrink but not grow: those messages are built
+  // entirely out of interpolations (`\`${fn}\` expects ${a}, got ${b}`) and have
+  // no literal run long enough to identify a rule. Adding one is a matter of
+  // giving the message words of its own, not of editing the table.
+  const UNCODED_BACKLOG = 8;
+  const rejectCases = fs
+    .readdirSync(casesDir)
+    .filter((f) => f.startsWith("reject_") && f.endsWith(".ts"));
+  const byMessage = new Map();
+  for (const c of rejectCases) {
+    const args = [path.join("tests", "cases", c), "--json"];
+    const argsFile = path.join(casesDir, `${c.slice(0, -3)}.args`);
+    if (fs.existsSync(argsFile))
+      args.push(...fs.readFileSync(argsFile, "utf8").trim().split(/\s+/).filter(Boolean));
+    const r = spawnSync("node", [cli, ...args], { cwd: root, encoding: "utf8" });
+    for (const line of r.stdout.split("\n")) {
+      if (!line.startsWith("{")) continue;
+      const o = JSON.parse(line);
+      byMessage.set(o.message, o.code);
+    }
+  }
+  const uncoded = [...byMessage].filter(([, code]) => code === "AS0000");
+  const coverage = ((1 - uncoded.length / byMessage.size) * 100).toFixed(1);
+  check(
+    `codes: ${byMessage.size - uncoded.length}/${byMessage.size} distinct rejection messages carry a code (${coverage}%), ${uncoded.length} uncoded`,
+    byMessage.size > 200 && uncoded.length <= UNCODED_BACKLOG,
+    uncoded.map(([m]) => `  uncoded: ${m}`).join("\n")
+  );
   const jsOk = spawnSync(
     "node",
     [cli, path.join(casesDir, "cf_fib.ts"), "-o", path.join(buildDir, "diag_json_ok.ll"), "--json"],
@@ -288,8 +378,12 @@ if (!only || "diagnostics".includes(only)) {
   );
 
   // -g: the IR verifies, and a linked debug binary carries a DWARF line table naming the .ts file.
-  if (has("opt")) {
-    const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(buildDir, "dbg_locals.ll")]);
+  // The golden is compiled by the cases loop above, which a `node tests/run.js
+  // <sub>` run may have filtered out; verifying a file that was never written
+  // reports a failure about the filter rather than about the compiler.
+  const dbgLocalsIr = path.join(buildDir, "dbg_locals.ll");
+  if (has("opt") && fs.existsSync(dbgLocalsIr)) {
+    const v = spawnSync("opt", ["-passes=verify", "-disable-output", dbgLocalsIr]);
     check("dbg_locals: opt -passes=verify accepts the -g IR", v.status === 0, String(v.stderr));
   }
   // A class reached only through an imported class's signatures is described
@@ -344,7 +438,7 @@ if (!only || "diagnostics".includes(only)) {
       ];
       const tool = dumpers.find(([t]) => has(t));
       if (!tool) {
-        console.log("SKIP  -g: neither llvm-dwarfdump nor objdump is installed; line table not inspected");
+        skip("-g: neither llvm-dwarfdump nor objdump is installed; line table not inspected");
       } else {
         const dump = spawnSync(tool[0], tool[1], { encoding: "utf8" });
         const out = dump.stdout;
@@ -1086,12 +1180,11 @@ if (!only && HAS_CLANG) {
       String(w.stderr) + (host ? String(host.stdout) + String(host.stderr) : "")
     );
   } else {
-    console.log(
-      `SKIP  skipped: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT or install wasi-sdk, see docs/INSTALL.md): wasi profile not built`
+    skip(`skipped: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT or install wasi-sdk, see docs/INSTALL.md): wasi profile not built`
     );
   }
 } else if (!HAS_CLANG) {
-  console.log("SKIP  clang not installed: native round trips and pipeline checks skipped");
+  skip("clang not installed: native round trips and pipeline checks skipped");
 }
 
 // ---- WP8: interop ------------------------------------------------------------------
@@ -1390,8 +1483,7 @@ if (!only || "interop".includes(only)) {
   if (!HAS_CLANG) {
     // nothing to build
   } else if (!hasNodeHeaders) {
-    console.log(
-      `SKIP  Node headers not found (${path.join(nodeInclude, "node_api.h")}): N-API addon build skipped`
+    skip(`Node headers not found (${path.join(nodeInclude, "node_api.h")}): N-API addon build skipped`
     );
   } else {
     for (const stem of ["add", "strings", "arrays"]) {
@@ -2056,8 +2148,7 @@ if (!only || "interop".includes(only)) {
       );
       napiOk = b.status === 0 && s.status === 0;
     } else {
-      console.log(
-        `SKIP  Node headers not found (${path.join(nodeInclude, "node_api.h")}): arrays/strings addon build skipped`
+      skip(`Node headers not found (${path.join(nodeInclude, "node_api.h")}): arrays/strings addon build skipped`
       );
     }
     const script = [
@@ -2689,6 +2780,25 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         `${refused.status}: ${refused.stdout}${refused.stderr}`
       );
 
+      // The `--help` contract is shared rather than each compiler's own: a
+      // request that succeeded goes to stdout with exit 0, a refusal to stderr
+      // with exit 2. The two usage *texts* differ -- stage1's is one line and
+      // names `compile` -- so it is the shape that is pinned, not the bytes.
+      const ourHelp = spawnSync(compiler, ["--help"], { cwd: root, encoding: "utf8" });
+      const theirHelp = spawnSync("node", [cli, "--help"], { cwd: root, encoding: "utf8" });
+      const ourRefusal = spawnSync(compiler, [], { cwd: root, encoding: "utf8" });
+      check(
+        "the self-hosted compiler: --help answers on stdout with exit 0, as stage0 does",
+        ourHelp.status === 0 &&
+          theirHelp.status === 0 &&
+          ourHelp.stdout.includes("usage:") &&
+          ourHelp.stderr === "" &&
+          ourRefusal.status === 2 &&
+          ourRefusal.stderr.includes("usage:") &&
+          ourRefusal.stdout === "",
+        `help ${ourHelp.status}:\n${ourHelp.stdout}${ourHelp.stderr}\nrefusal ${ourRefusal.status}:\n${ourRefusal.stdout}${ourRefusal.stderr}`
+      );
+
       // The interop sidecars are stage1's, and so is the directory each one
       // needs. The bytes themselves are the interop oracle's business.
       const sidecarDir = path.join(shipDir, "interop");
@@ -2950,7 +3060,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // and a run that quietly leaves it out reports the 55 compile-gate passes
     // above as though the fixed point had been checked. WP12 and WP13 print
     // their skip for the same reason.
-    console.log("SKIP  clang not installed: the self-hosting oracles and the bootstrap are skipped");
+    skip("clang not installed: the self-hosting oracles and the bootstrap are skipped");
   }
 }
 
@@ -3114,6 +3224,37 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     noInputs.status === 2 && noInputs.stderr.includes("usage: amritc"),
     noInputs.stderr
   );
+
+  // `--help` is a request that succeeded and a usage error is a refusal; the
+  // two are told apart by the stream and the exit code, so a wrapper -- a
+  // script, an editor, an agent -- can ask for the text without reading the
+  // run as a failure. `noInputs` above is the other half of this pair.
+  const help = run(["--help"]);
+  check(
+    "--help: usage on stdout, nothing on stderr, exit 0",
+    help.status === 0 && help.stdout.includes("usage: amritc") && help.stderr === "",
+    help.stdout + help.stderr
+  );
+  const shortHelp = run(["-h"]);
+  check(
+    "-h: identical to --help",
+    shortHelp.status === 0 && shortHelp.stdout === help.stdout,
+    shortHelp.stdout + shortHelp.stderr
+  );
+  check(
+    "--help and a usage error print the same text on different streams",
+    help.stdout.trim() === noInputs.stderr.trim(),
+    `stdout:\n${help.stdout}\nstderr:\n${noInputs.stderr}`
+  );
+  // Every flag the driver accepts is listed: a wrapper that reads --help to
+  // learn the surface must not be missing one.
+  const documented = ["--json", "--link", "--emit-header", "--emit-dts", "--emit-napi", "--target", "--profile"];
+  const undocumented = documented.filter((f) => !help.stdout.includes(f));
+  check(
+    `--help lists every advertised flag (${documented.length} checked)`,
+    undocumented.length === 0,
+    `missing from --help: ${undocumented.join(", ")}`
+  );
   const badFlag = run(["--bogus", entry]);
   check(
     "unknown flag: names it, exit 2",
@@ -3122,6 +3263,58 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   );
   const noValue = run([entry, "-o"]);
   check("-o without a value: exit 2", noValue.status === 2, noValue.stderr);
+
+  // Under `--json` every failure is a parseable line, not just the ones with a
+  // source span. A wrapper that asked for JSON and got an empty stdout plus a
+  // non-zero exit has to scrape stderr to find out what happened, which is the
+  // thing `--json` exists to avoid. Band 0 marks what is wrong with the run
+  // rather than with the program: AS0002 toolchain, AS0003 internal error.
+  const jsonLine = (r) => {
+    const first = r.stdout.split("\n").find((l) => l.startsWith("{"));
+    try {
+      return first ? JSON.parse(first) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const iceJson = run([entry, "--json", "-o", path.join(wp12Dir, "ice_json.ll")], {
+    AMRITC_SIMULATE_ICE: "1",
+  });
+  const iceObj = jsonLine(iceJson);
+  check(
+    "--json: an internal compiler error is an AS0003 object on stdout, exit 70, human report still on stderr",
+    iceJson.status === 70 &&
+      iceObj !== null &&
+      iceObj.code === "AS0003" &&
+      iceObj.severity === "error" &&
+      iceObj.message.includes("internal compiler error") &&
+      iceJson.stderr.includes("This is a bug in amritc"),
+    iceJson.stdout + iceJson.stderr
+  );
+
+  const ccJson = run([entry, "--json", "--link", path.join(wp12Dir, "cc_json")], { CC: "/nonexistent-cc" });
+  const ccObj = jsonLine(ccJson);
+  check(
+    "--json: no usable C compiler is an AS0002 object on stdout, exit 3, nothing on stderr",
+    ccJson.status === 3 &&
+      ccObj !== null &&
+      ccObj.code === "AS0002" &&
+      ccObj.message.includes("no usable C compiler") &&
+      ccJson.stderr === "",
+    ccJson.stdout + ccJson.stderr
+  );
+
+  const missingJson = run(["does-not-exist.ts", "--json"]);
+  const missingObj = jsonLine(missingJson);
+  check(
+    "--json: an unreadable input is an object on stdout with a code, exit 1",
+    missingJson.status === 1 &&
+      missingObj !== null &&
+      /^AS\d{4}$/.test(missingObj.code) &&
+      missingObj.message.includes("ENOENT"),
+    missingJson.stdout + missingJson.stderr
+  );
 
   const missing = run(["does-not-exist.ts"]);
   check(
@@ -3314,7 +3507,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     }
 
     if (!HAS_CLANG) {
-      console.log("SKIP  package install + --link from another cwd (clang not found)");
+      skip("package install + --link from another cwd (clang not found)");
     } else {
       const tarball = path.join(pkgDir, info.filename);
       const prefix = path.join(pkgDir, "prefix");
@@ -3420,8 +3613,30 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
     f.stdout + f.stderr
   );
 } else if (!HAS_CLANG) {
-  console.log("SKIP  clang not installed: differential tests skipped");
+  skip("clang not installed: differential tests skipped");
 }
 
-console.log(`\n${passes} passed, ${failures} failed.`);
+// The summary counts what did *not* run as well as what did. A skip is not a
+// failure -- a contributor without LLVM is meant to be able to run this -- but
+// it is also not a pass, and the difference decides how much a green run is
+// worth. `.claude/orientation.md` and `.claude/node.md` say so in prose; this
+// says it in the output, where it is read.
+const summary = [`${passes} passed`, `${failures} failed`];
+if (skipped.length > 0) summary.push(`${skipped.length} skipped`);
+console.log(`\n${summary.join(", ")}.`);
+
+if (skipped.length > 0) {
+  const TOOLCHAIN = ["clang", "llc", "llvm-as", "opt", "ld.lld", "wasm-ld"];
+  const absent = TOOLCHAIN.filter((tool) => !has(tool));
+  console.log(
+    absent.length > 0
+      ? `\nDEGRADED: ${absent.length} of the ${TOOLCHAIN.length} LLVM 18 tools are missing (${absent.join(", ")}), so ` +
+          `${skipped.length} section(s) were skipped rather than run. This result does NOT prove the toolchain-dependent\n` +
+          "checks pass: assembly, native round trips, linking, the interop addons, the self-hosting oracles and the\n" +
+          "differential suite are among them. Install LLVM 18 (docs/INSTALL.md) and run again before trusting a green run."
+      : `\nNote: ${skipped.length} section(s) were skipped for reasons other than a missing LLVM toolchain ` +
+          "(see the SKIP lines above); everything they cover is unproven by this run."
+  );
+}
+
 process.exit(failures === 0 ? 0 : 1);

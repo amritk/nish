@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { codeFor } from "./codes";
 
 /**
  * Diagnostics.
@@ -304,9 +305,15 @@ export function formatWarningReport(
  * The machine-readable form of one diagnostic (`--json`): one flat object, no
  * excerpt. `severity` is `"error"` for every `CompileError` and
  * `"performance"` for a WP15 §8 warning, which is the field a tool filters
- * on; `code` is reserved for stable diagnostic codes and absent for now. The
+ * on; `code` is the stable identifier from `./codes` (`AS0000` when no rule
+ * matches the message yet), and is the field to key on rather than the prose,
+ * because the prose is allowed to improve and the code is not. The
  * `syntax error: ` prefix stays in `message` because the severity of a syntax
  * error is still `error`.
+ *
+ * The key order is part of the contract: `tests/run.js` compares stage0's
+ * output with stage1's byte for byte, so `self/diagnostics.ts` builds the same
+ * object in the same order.
  */
 export function diagnosticJson(err: CompileError | PerformanceWarning): string {
   const severity = err.kind === "performance" ? "performance" : "error";
@@ -317,6 +324,7 @@ export function diagnosticJson(err: CompileError | PerformanceWarning): string {
     endLine: err.endLine,
     endColumn: err.endColumn,
     severity,
+    code: codeFor(err.kind, err.text),
     message: err.kind === "error" || err.kind === "performance" ? err.text : `${err.kind}: ${err.text}`,
   });
 }

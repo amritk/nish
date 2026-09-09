@@ -41,6 +41,55 @@ Most of `npm test` needs LLVM 18 on `PATH` (`clang`, `llc`, `llvm-as`, `opt`,
 not failed, so a green run without LLVM proves less than it looks. Install
 steps per OS are in [`docs/INSTALL.md`](./docs/INSTALL.md).
 
+## Machine-readable surfaces
+
+Read these rather than scraping prose; they are contracts with tests behind
+them.
+
+| Ask | Command | Answer |
+| --- | --- | --- |
+| what the CLI accepts | `amritc --help` | usage text on **stdout**, exit **0**. A usage *error* prints the same text on stderr with exit 2, so the stream and the code tell a request apart from a refusal |
+| what is wrong with a program | `amritc --json <files>` | one JSON object per line on stdout, nothing on stderr, exit unchanged |
+| the version | `amritc --version` | `amritc <semver>` on stdout, exit 0 |
+| what the compiler parsed | `amritc --emit-ast <file>` | the syntax tree, one node per line |
+| what the checker recorded | `amritc --emit-checked <file>` | the side tables the emitter reads |
+
+Every `--json` object is flat:
+`{"file","line","column","endLine","endColumn","severity","code","message"}`,
+1-based, `endLine`/`endColumn` exclusive.
+
+- **`severity`** is `"error"` or `"performance"`. A performance warning never
+  changes the exit code.
+- **`code`** is the stable rule identifier — `AS1013`, `AS2231` — and is the
+  field to key on. The prose in `message` may improve between releases; the
+  code may not. `AS0000` means the message has no rule yet. The bands
+  (`AS1xxx` Phase 0, `AS2xxx` checker, `AS3xxx` driver, `AS4xxx` interop,
+  `AS9xxx` performance, `AS0001`–`AS0003` syntax / toolchain / internal) and
+  the registry are documented in
+  [`docs/wp10-ci.md`](./docs/wp10-ci.md#code). The registry lives in
+  `src/codes.ts` and `self/codes.ts` and is **generated** by
+  `scripts/gen-diagnostic-codes.mjs`; run it after adding a diagnostic, or
+  `npm test` fails while it is stale.
+- A failure with no source position — an unusable C toolchain, an internal
+  compiler error, a bad `-o` layout — is still one JSON line,
+  `{"severity","code","message"}`. Under `--json` you never have to read stderr
+  to find out why a run failed.
+
+Exit codes (`docs/wp12-release.md`): **0** ok, **1** the program was rejected,
+**2** usage, **3** toolchain (clang or `scripts/build.sh`), **70** internal
+compiler error — a bug in `amritc`, not in the input.
+
+## Trusting a test run
+
+`npm test` ends with `N passed, M failed, K skipped`. **The skip count is the
+number that decides what a green run is worth**: without LLVM 18 the
+toolchain-dependent checks — assembly, native round trips, linking, the interop
+addons, the self-hosting oracles, the differential suite — skip rather than
+fail, and the run prints a `DEGRADED:` banner naming the tools it could not
+find. A run that skipped anything has not proved what it looks like it proved.
+`.claude/hooks/session-start.sh` installs the toolchain in a fresh container so
+this does not happen silently.
+
 ## House rules
 
 - **`npm test` must be green**, and every new construct ships with a golden
