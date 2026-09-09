@@ -1,0 +1,93 @@
+<!doctype html>
+<!-- A playground for amritc compiled to wasm: type AmritScript, get LLVM IR.
+     Everything runs in the worker next door; this page only moves text. Serve
+     the directory (any static server) with amritc.wasm beside these files. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>amritc in the browser</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0;
+        font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        height: 100vh;
+      }
+      header { display: flex; gap: 12px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #8884; }
+      header h1 { font-size: 14px; font-weight: 600; margin: 0 auto 0 0; }
+      main { display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+      textarea, pre { margin: 0; padding: 12px; border: 0; overflow: auto; font: inherit; }
+      textarea { resize: none; border-right: 1px solid #8884; background: transparent; color: inherit; }
+      pre { white-space: pre-wrap; }
+      pre.failed { color: #c0392b; }
+      input { font: inherit; padding: 2px 6px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>amritc &rarr; LLVM IR</h1>
+      <label>flags <input id="flags" value="" size="24" placeholder="--number-mode f64" /></label>
+      <button id="compile" disabled>Compile</button>
+      <span id="status">loading amritc.wasm…</span>
+    </header>
+    <main>
+      <textarea id="source" spellcheck="false">
+export function add(a: number, b: number): number {
+  return a + b;
+}
+
+export function main(): number {
+  console.log(`2 + 3 = ${add(2, 3)}`);
+  return 0;
+}
+</textarea>
+      <pre id="output"></pre>
+    </main>
+    <script type="module">
+      const worker = new Worker(new URL("./worker.mjs", import.meta.url), { type: "module" });
+      const el = (id) => document.getElementById(id);
+      const pending = new Map();
+      let nextId = 0;
+
+      worker.onmessage = (event) => {
+        const resolve = pending.get(event.data.id);
+        pending.delete(event.data.id);
+        resolve?.(event.data);
+      };
+      const send = (message) =>
+        new Promise((resolve) => {
+          const id = nextId++;
+          pending.set(id, resolve);
+          worker.postMessage({ ...message, id });
+        });
+
+      // The worker fetches and compiles the module once; every later request
+      // only instantiates it, which is why a compile feels instant.
+      await send({ wasm: new URL("./amritc.wasm", import.meta.url).href });
+      el("status").textContent = "ready";
+      el("compile").disabled = false;
+
+      async function compile() {
+        el("status").textContent = "compiling…";
+        const started = performance.now();
+        const result = await send({
+          files: { "main.ts": el("source").value },
+          args: el("flags").value.trim().split(/\s+/).filter(Boolean),
+        });
+        const ir = Object.values(result.files).join("\n");
+        el("output").textContent = result.status === 0 ? ir : result.stderr || result.stdout;
+        el("output").className = result.status === 0 ? "" : "failed";
+        el("status").textContent = `exit ${result.status} · ${Math.round(performance.now() - started)} ms`;
+      }
+
+      el("compile").addEventListener("click", compile);
+      el("source").addEventListener("keydown", (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") compile();
+      });
+      await compile();
+    </script>
+  </body>
+</html>

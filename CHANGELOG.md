@@ -119,6 +119,24 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **`web/`: the compiler compiled to wasm, driven from a Web Worker.** `self/`
+  is an AmritScript program, so `--profile wasi` links it into one 480 KB
+  module (about 140 KB gzipped) that lexes, checks and emits LLVM IR with no
+  server involved. `web/wasi.mjs` is a WASI preview1 host over an in-memory
+  filesystem, with no imports at all, so the same file runs in a page and under
+  Node; `web/worker.mjs` answers one compile per message in a fresh instance;
+  `web/compile.mjs` drives it from `node:worker_threads` and `web/index.html`
+  is a playground. `tests/run.js` builds the module and checks that the IR it
+  emits for `examples/add.ts` is stage0's, byte for byte (skipped without a
+  WASI sysroot, like the rest of the `wasi` block).
+
+  It stops at the IR, and that is the design rather than a gap: `amritc` emits
+  textual LLVM IR and hands the rest to `clang` and `wasm-ld`, neither of which
+  exists in a page. `--link` and `--profile` need `spawnSync`, which WASI
+  answers with `-1` — reported as a toolchain failure, exit 3 — and
+  `--target host` is refused because `process.platform` is `unknown` there.
+  `web/README.md` has the whole list.
+
 - **`--emit-ast` is no longer stage0's: the self-hosted compiler answers it too
   (WP19 R1).** It was the last flag refused by name, and the refusal was right
   about the reason and wrong about the conclusion. stage0's dump prints the

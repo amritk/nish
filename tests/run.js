@@ -16,7 +16,8 @@
  *
  *  B. Pipeline checks: runtime.c unit test, inline allocator vs C arena layout
  *     (linked for the host, and asserted per target so wasm32 cannot drift),
- *     size and wasm build profiles, Node wasm host.
+ *     size and wasm build profiles, Node wasm host, and the browser harness in
+ *     web/ compiling with the compiler's own wasi build.
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -1259,6 +1260,35 @@ if (!only && HAS_CLANG) {
       host !== null && host.status === 0 && String(host.stdout).trim() === want,
       String(w.stderr) + (host ? String(host.stdout) + String(host.stderr) : "")
     );
+
+    // web/: the compiler itself as one wasi module, driven through web/worker.mjs
+    // over the in-memory filesystem in web/wasi.mjs — the browser path, exercised
+    // without a browser. The IR has to be the bytes stage0 writes for the same
+    // input, because a playground that emits *nearly* the right IR is worse than
+    // no playground. This is also the end-to-end guard on the arena ABI: the
+    // compiler allocates from compiled code on every node it parses, so a wasm32
+    // layout that disagrees with the IR traps here long before it prints anything.
+    const compilerWasm = path.join(buildDir, "amritc.wasm");
+    const linked = spawnSync(
+      "node",
+      [cli, "self/compile.ts", "--link", compilerWasm, "--profile", "wasi"],
+      { cwd: root }
+    );
+    check(
+      "web: self/ links into one wasi module (the compiler as amritc.wasm)",
+      linked.status === 0,
+      String(linked.stderr)
+    );
+    if (linked.status === 0) {
+      const referenceLl = path.join(buildDir, "web_add.ll");
+      execFileSync("node", [cli, "examples/add.ts", "-o", referenceLl], { cwd: root, stdio: "pipe" });
+      const worker = spawnSync("node", ["web/compile.mjs", compilerWasm, "examples/add.ts"], { cwd: root });
+      check(
+        "web: amritc.wasm in a worker emits stage0's IR for examples/add.ts, byte for byte",
+        worker.status === 0 && String(worker.stdout) === fs.readFileSync(referenceLl, "utf8"),
+        String(worker.stderr)
+      );
+    }
   } else {
     skip(`skipped: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT or install wasi-sdk, see docs/INSTALL.md): wasi profile not built`
     );

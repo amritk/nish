@@ -240,6 +240,22 @@ The supported direction is Node importing AmritScript:
 
 Details: [docs/wp8-interop.md](docs/wp8-interop.md).
 
+## The compiler in a browser
+
+`self/` is an AmritScript program, so the compiler compiles itself to
+WebAssembly like any other one:
+
+```bash
+node dist/index.js self/compile.ts --link web/amritc.wasm --profile wasi
+node web/compile.mjs web/amritc.wasm examples/add.ts     # the IR, from a Web Worker
+```
+
+That module is about 480 KB (140 KB gzipped) and lexes, checks and emits IR
+with no server in the loop; `web/index.html` is a playground built on it and
+`web/wasi.mjs` is the in-memory filesystem it runs against. It stops at the
+IR — `clang` and `wasm-ld` are not in a page — so `--link` and `--profile` are
+refused there. [web/README.md](web/README.md) has the rest.
+
 ## Self-hosting
 
 `self/` is the same compiler written in AmritScript — lexer, parser, checker and
