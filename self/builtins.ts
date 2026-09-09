@@ -101,7 +101,8 @@ export function isBuiltinFunction(name: string): boolean {
     name === "panic" ||
     name === "mkdirSync" ||
     name === "spawnSync" ||
-    name === "isDirectorySync"
+    name === "isDirectorySync" ||
+    name === "getenv"
   );
 }
 
@@ -464,6 +465,17 @@ export function checkBuiltinFunction(ctx: CheckContext, call: Node, scope: Scope
       checkArgumentType(ctx, args.children[0], scope, name, T_STRING);
     }
     return T_BOOL;
+  }
+  // WP19 R1. One environment variable, or null when it is unset — nullable
+  // rather than an empty string because "unset" and "set to nothing" are
+  // different answers and a driver acts on the difference. A call and not
+  // `process.env.NAME`: member access on a key chosen at runtime is what
+  // Phase 0 refuses.
+  if (name === "getenv") {
+    if (checkBuiltinArity(ctx, call, name, args, 1)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING);
+    }
+    return ctx.table.nullableOf(T_STRING);
   }
   return ctx.errorType(call.children[0], `Unknown function \`${name}\``);
 }

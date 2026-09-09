@@ -85,6 +85,7 @@ provide("appendFileSync", shim.appendFileSync);
 provide("mkdirSync", shim.mkdirSync);
 provide("isDirectorySync", shim.isDirectorySync);
 provide("spawnSync", shim.spawnSync);
+provide("getenv", shim.getenv);
 
 // Conversions. In f64 mode `toF64` is the identity and `toI32` is the one that
 // matters (it saturates, where a JavaScript cast would not).

@@ -469,6 +469,16 @@ export function arch() {
 }
 
 /**
+ * `getenv(name)` (WP19 R1): the value, or `null` when the variable is unset.
+ * Node answers `undefined` there and the language has no `undefined`, so the
+ * `??` is what makes the two runtimes agree; an empty value stays an empty
+ * string on both sides, because `CC=` is set and `CC` unset is not.
+ */
+export function getenv(name) {
+  return process.env[name] ?? null;
+}
+
+/**
  * `spawnSync(argv)` (WP14 D4): the child's exit status, 128 + n when signal n
  * killed it, -1 for an empty vector or a program that would not start. The
  * child inherits this process's streams, as it does natively.

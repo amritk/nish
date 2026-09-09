@@ -21,12 +21,39 @@ const RUN_TIMEOUT_MS = 30_000;
 const words = (file) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim().split(/\s+/).filter(Boolean) : []);
 
 /**
- * A program the harness can run: `{ name, entry, args, argv, kind }`. `args`
- * are compiler flags (`<name>.args`), `argv` the command line both the native
- * binary and the Node rewrite receive (`<name>.argv`, WP7 `process.argv`).
+ * `<name>.env`: one `NAME=value` per line, layered over the inherited
+ * environment, the same sidecar `tests/run.js` reads. Both sides need it and
+ * for the same reason: `getenv` (WP19 R1) is only comparable when the native
+ * binary and the Node rewrite are handed the same environment, and only the
+ * runner can set one.
+ */
+function envFile(file) {
+  if (!fs.existsSync(file)) return process.env;
+  const env = { ...process.env };
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    const text = line.trim();
+    if (text.length === 0 || text.startsWith("#")) continue;
+    const eq = text.indexOf("=");
+    if (eq > 0) env[text.slice(0, eq)] = text.slice(eq + 1);
+  }
+  return env;
+}
+
+/**
+ * A program the harness can run: `{ name, entry, args, argv, env, kind }`.
+ * `args` are compiler flags (`<name>.args`), `argv` the command line both the
+ * native binary and the Node rewrite receive (`<name>.argv`, WP7
+ * `process.argv`), and `env` the environment both are given (`<name>.env`).
  */
 function program(name, entry, argsFile, kind) {
-  return { name, entry, args: words(argsFile), argv: words(argsFile.replace(/args$/, "argv")), kind };
+  return {
+    name,
+    entry,
+    args: words(argsFile),
+    argv: words(argsFile.replace(/args$/, "argv")),
+    env: envFile(argsFile.replace(/args$/, "env")),
+    kind,
+  };
 }
 
 /**
@@ -102,7 +129,8 @@ async function runProgram(prog) {
     return { prog, verdict: "compile-error", detail: String(cc.stderr), ms: Date.now() - t0 };
   }
   const argv = prog.argv ?? []; // fuzz programs carry no command line
-  const native = await run(exe, argv);
+  const env = prog.env ?? process.env; // and no environment of their own either
+  const native = await run(exe, argv, { env });
 
   let js;
   try {
@@ -114,7 +142,7 @@ async function runProgram(prog) {
   } catch (e) {
     return { prog, verdict: "rewrite-error", detail: e.stack ?? String(e), native, ms: Date.now() - t0 };
   }
-  const node = await run("node", [js.entry, ...argv]);
+  const node = await run("node", [js.entry, ...argv], { env });
 
   const same = native.status === node.status && native.signal === node.signal && native.stdout.equals(node.stdout);
   return { prog, verdict: same ? "match" : "mismatch", native, node, ms: Date.now() - t0, work };

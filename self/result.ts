@@ -256,7 +256,15 @@ function checkUnwrapOr(ctx: CheckContext, call: Node, args: Node, receiver: i32,
   if (!checkBuiltinArity(ctx, call, "unwrapOr", args, 1)) {
     return ok;
   }
-  const got = checkExpression(ctx, args.children[0], scope, ok);
+  // No `want`, deliberately. `docs/LANGUAGE.md` grants a bare numeric literal
+  // its context's type only in the positions its table names, and this is not
+  // one of them: stage0 checks the argument with no contextual type at all
+  // (`checkUnwrapOr` in `src/checker/result.ts`), so in f64 mode
+  // `r.unwrapOr(-1)` on a `Result<i32, string>` is an f64 meeting an i32 and
+  // is refused. Threading `ok` down here made stage1 accept it, which
+  // `tests/run.js --parity` found (WP19 G1) and
+  // `reject_res_unwrap_or_f64` pins.
+  const got = checkExpression(ctx, args.children[0], scope, -1);
   if (!ctx.table.assignable(got, ok)) {
     ctx.error(
       args.children[0],

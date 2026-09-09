@@ -282,6 +282,23 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     attrs: ["nounwind"],
     effect: "write",
   },
+  // ---- WP19 R1: the environment, so a self-hosted driver can honour `CC`
+  // before it spawns `scripts/build.sh` the way stage0's preflight does.
+  {
+    // `effect: "write"` and no `readnone`, for two reasons that each suffice:
+    // the call allocates, so it moves the arena, and `environ` is not memory
+    // LLVM is tracking, so two reads either side of a `spawnSync` must not
+    // fold into one. `noalias` is a fact here where it is not on
+    // `amrit_platform`: every call answers a fresh arena string rather than
+    // the same constant. The name is read and never retained (`STR_NOCAP`),
+    // and the result may be null, so no `nonnull` — exactly
+    // `amrit_read_file_or_null`'s shape, which is the other builtin whose
+    // answer is `string | null`.
+    name: "amrit_getenv",
+    signature: `declare noalias noundef align 8 i8* @amrit_getenv(${STR_NOCAP})`,
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
   // ---- WP14 §7a: what machine this is. `--target host` composes its triple
   // from the two, and so does any program that wants to know where it is.
   ...["amrit_platform", "amrit_arch"].map((name) => ({

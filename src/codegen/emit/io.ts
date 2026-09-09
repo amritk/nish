@@ -12,6 +12,7 @@
  *   mkdirSync(path)             call zeroext i1 @amrit_mkdir(i8* path)
  *   spawnSync(argv)             call i32 @amrit_spawn(%struct.amrit_array* argv)
  *   isDirectorySync(path)       call zeroext i1 @amrit_is_dir(i8* path)
+ *   getenv(name)                call i8* @amrit_getenv(i8* name)
  *   process.argv                load %struct.amrit_array*, %struct.amrit_array** @amrit_argv
  *   process.platform            call i8* @amrit_platform()
  *   process.arch                call i8* @amrit_arch()
@@ -134,6 +135,18 @@ const isDirectorySync: BuiltinCall = {
 };
 
 /**
+ * `getenv(name)` (WP19 R1): one call, and the runtime's null is already the
+ * language's. The same shape as `readFileSyncOrNull` down to the LLVM type:
+ * an `i8*` that may be null, which the checker typed `string | null` and the
+ * narrowing reads with an ordinary null compare.
+ */
+const getenv: BuiltinCall = {
+  emit: (ctx, expr) =>
+    ctx.fn.emitValue(`call i8* ${ctx.useRuntime("amrit_getenv")}(${stringArgs(ctx, expr)})`),
+  callees: () => ["amrit_getenv"],
+};
+
+/**
  * `spawnSync(argv)`: the array header goes straight to the runtime, which
  * builds the C vector from it. The status is an `i32`, so `--number-mode f64`
  * widens it the way `a.length` is widened.
@@ -177,6 +190,7 @@ export const ioFunctionEmitters: Record<string, BuiltinCall> = {
   mkdirSync,
   spawnSync,
   isDirectorySync,
+  getenv,
 };
 
 // ---- process.argv -------------------------------------------------------------------

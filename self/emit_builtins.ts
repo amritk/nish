@@ -489,6 +489,11 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
   if (name === "isDirectorySync") {
     return emitter.fn.emitValue(`call zeroext i1 ${emitter.useRuntime("amrit_is_dir")}(${stringArgs(emitter, expr)})`);
   }
+  // WP19 R1: one call, and the runtime's null is already the language's — the
+  // same shape as `readFileSyncOrNull` down to the LLVM type.
+  if (name === "getenv") {
+    return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("amrit_getenv")}(${stringArgs(emitter, expr)})`);
+  }
   if (name === "write") {
     return emitStreamWrite(emitter, expr, 1);
   }
@@ -571,6 +576,10 @@ export function identifierBuiltinCallees(program: CheckedProgram, table: TypeTab
   }
   if (name === "isDirectorySync") {
     out.push("amrit_is_dir");
+    return out;
+  }
+  if (name === "getenv") {
+    out.push("amrit_getenv");
     return out;
   }
   if (name === "write" || name === "writeError") {

@@ -156,6 +156,8 @@ declare function mkdirSync(path: string): boolean;
 declare function isDirectorySync(path: string): boolean;
 /** Run `argv[0]` through `PATH` and wait: the exit status, `128 + n` for a signal, `-1` for a failure. */
 declare function spawnSync(argv: string[]): number;
+/** One environment variable, or `null` when it is unset (an empty value is a set variable). */
+declare function getenv(name: string): string | null;
 
 // ---- Arena (docs/LANGUAGE.md -> Arena) ---------------------------------------
 

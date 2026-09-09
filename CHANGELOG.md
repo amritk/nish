@@ -83,7 +83,78 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   as an out-of-bounds inside stage1 the moment two modules of `self/` both
   declared a `narrow` (`tests/link/duplicate_internal`).
 
+### Fixed
+
+- **stage1 accepted a program stage0 rejects: `unwrapOr`'s fallback was
+  checked with a contextual type (WP19 G1).** `self/result.ts` threaded the
+  success type down as a hint, so in f64 mode `r.unwrapOr(-1)` on a
+  `Result<i32, string>` typed the literal as `i32` and compiled, where stage0
+  types it `f64` with no context at all and refuses the mismatch.
+  `docs/LANGUAGE.md` is normative here and its contextual-literal table is an
+  enumerated list that `unwrapOr`'s argument is not in, so stage1 was the side
+  in the wrong. Write `toI32(-1)` when the fallback has to be an i32.
+
+  Nothing had ever compiled `tests/cases/res_unwrap.ts` in f64 mode through
+  both compilers: every oracle uses the flags a program already carries, and
+  that one carries none. `tests/run.js --parity` compiles the corpus across
+  the flag variations the suite uses, which is exactly the hole, and this was
+  its first find. `reject_res_unwrap_or_f64` pins it.
+
 ### Added
+
+- **`--emit-ast` is no longer stage0's: the self-hosted compiler answers it too
+  (WP19 R1).** It was the last flag refused by name, and the refusal was right
+  about the reason and wrong about the conclusion. stage0's dump prints the
+  `typescript` package's node names and 1-based `line:col` spans; mirroring
+  those inside the self-hosted compiler would have been imitation, not parity.
+  So both compilers answer the flag and **each dumps its own tree**: stage1
+  prints the flattened vocabulary `self/nodes.ts` defines, with byte offsets,
+  one `SOURCE_FILE <path>` header per module in the same order stage0 prints
+  its `SourceFile <path>` headers.
+
+  There is therefore no oracle between the two dumps — there is a golden per
+  compiler, over the same input file: `tests/cases/dump_ast.stdout` for stage0
+  and the new `tests/self/dump_ast.golden` for stage1.
+
+  The printer moved to **`self/ast_text.ts`**, shared by `self/compile.ts` and
+  `self/dump_ast.ts`, which is the arrangement `self/dump.ts` already had for
+  `--emit-checked`: the flag and the parser oracle print through one function
+  and cannot drift into two spellings of one tree. `dump_ast.ts`'s own output
+  is unchanged to the byte, because `tests/parser_oracle.js` compares against
+  it.
+
+- **`getenv(name: string): string | null`, the language's one environment read
+  (WP19 R1).** The first of the six retirement gates asks that no flag and no
+  program be stage0's alone, and reading the environment was the last thing
+  only stage0 could do: its `--link` preflight checks the compiler named by
+  `CC` before it spawns `scripts/build.sh`, and stage1 had no way to ask what
+  `CC` was. Both compilers now answer it, with the same IR — one
+  `call i8* @amrit_getenv(i8* name)`, `noalias` because every call answers a
+  fresh arena copy, and `readnone` on neither, because it allocates and the
+  environment is not memory LLVM tracks.
+
+  **`null` and `""` are different answers.** An unset variable is `null`; one
+  set to nothing (`CC=`) is a zero-length string. A driver acts on that
+  difference — unset means "use the default" — which is why the result is
+  `string | null` and narrows with `!== null` like every other nullable, and
+  why the builtin takes no second "default" argument: `cc === null ? "clang" :
+  cc` already says it.
+
+  It is a **call and not `process.env.CC`**: member access on a key chosen at
+  runtime is what Phase 0 forbids, so the two `process.*` surfaces the language
+  has stay what they were, fixed names with no key. There is no `setenv`
+  either; a program reads its own environment and passes one on through
+  `spawnSync`, and that is all. `runtime/shim.mjs` answers
+  `process.env[name] ?? null` for the differential runs, since Node has an
+  `undefined` where the language has only `null`.
+
+  New: `tests/cases/<name>.env`, one `NAME=value` per line, read by both
+  `tests/run.js` and `tests/differential/lib.js`. A case that calls `getenv`
+  cannot pin its own answer, and a golden that read the developer's
+  environment would not be a golden. `io_getenv` pins all three answers;
+  `reject_getenv_arity` pins the refusal of a second "default" argument and
+  `reject_getenv_unchecked` the one that matters — the result is `string |
+  null` and has to be narrowed before it is used.
 
 - **`runtime/amritscript.mjs`: run a program under Node with nothing rewritten
   (`docs/RUN_UNDER_NODE.md`).** WP13's rewriter is exact because it loads a

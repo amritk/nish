@@ -60,21 +60,28 @@ through `spawnSync` for the link — the same script `src/index.ts` spawns, foun
 one level up from the binary's own path or in the working directory. `-g` goes
 into the `.ll` *and* on to that script. `--json`, `--emit-checked`, `--version`
 and the interop sidecars (`--emit-header`, `--emit-dts`, `--emit-napi`, and the
-loader `--emit-dts` writes beside its declarations) it answers itself. It
-refuses `--emit-ast` **by name** — that one is stage0's, not missing — and
-mirrors stage0's file layout exactly, so either compiler can be dropped into a
-build script. `--target host` is stage1's too (§7a): `process.platform` and
-`process.arch` are builtins, and `self/target.ts` composes the triple the way
-`src/codegen/target.ts` does, so `--emit-ast` is the only spelling stage0
-keeps. A broken invariant exits **70** with stage0's report, less the stack and
+loader `--emit-dts` writes beside its declarations) it answers itself. It answers
+`--emit-ast` too since WP19 R1, and mirrors stage0's file layout exactly, so
+either compiler can be dropped into a build script. `--target host` is stage1's
+as well (§7a): `process.platform` and `process.arch` are builtins, and
+`self/target.ts` composes the triple the way `src/codegen/target.ts` does. **No
+flag is stage0's by name any more** — what differs is what one of them *prints*:
+`--emit-ast` dumps each compiler's own tree, stage0's in the `typescript`
+package's node names and 1-based line:column spans, stage1's in the flattened
+vocabulary of `self/nodes.ts` with byte offsets, so there is a golden per
+compiler (`tests/cases/dump_ast.stdout`, `tests/self/dump_ast.golden`) and no
+oracle between them. The printer is `self/ast_text.ts`, shared with
+`self/dump_ast.ts` so the flag and the parser oracle cannot drift. A broken invariant exits **70** with stage0's report, less the stack and
 the input names a compiler with no exceptions cannot reach (`self/ice.ts`).
 
-`--emit-ast` is the one flag that is stage0's *by design* rather than for now:
-stage0's dump prints the `typescript` package's node names and line:column
-spans, and stage1's tree is the flattened one `self/nodes.ts` defines. The
-parser oracle translates TypeScript into stage1's vocabulary; going the other
-way would put someone else's SyntaxKind naming inside the self-hosted
-compiler.
+`--emit-ast` is the one flag whose *output* differs by design rather than by
+backlog. Both compilers answer it; stage0's dump prints the `typescript`
+package's node names and line:column spans, and stage1's prints the flattened
+tree `self/nodes.ts` defines with byte offsets. The parser oracle translates
+TypeScript into stage1's vocabulary; going the other way would put someone
+else's SyntaxKind naming inside the self-hosted compiler, so stage1 prints its
+own tree and is held to a golden rather than to stage0
+(`tests/self/dump_ast.golden`, checked in the WP14 block of `tests/run.js`).
 
 ## The rules that are specific to this work
 
@@ -139,6 +146,7 @@ No generics, arrow functions, closures, nested functions or function values; no
 | `compilation.ts` | `src/compilation.ts`: the whole-program driver |
 | `interop_abi.ts` `interop_header.ts` `interop_dts.ts` `interop_wasm.ts` `interop_napi.ts` | `src/interop/*.ts`: the WP8 sidecars, one module per file so the two stay diffable |
 | `dump.ts` | `src/dump.ts`'s `--emit-checked` text, printed by both the driver and the dump entry |
+| `ast_text.ts` | `src/dump.ts`'s `--emit-ast` text, printed by both the driver and the dump entry — the arrangement `dump.ts` has for `--emit-checked` |
 | `dump_tokens.ts` `dump_ast.ts` `dump_checked.ts` `compile.ts` | the dump entry points the oracles spawn, and the CLI |
 
 Cyclic imports between family modules are fine and already used
@@ -185,9 +193,9 @@ per oracle and two files between them, and none of them is about `self/`:
 `checked_oracle.js` and `ir_oracle.js` both pass over, and `tests/link/no_main`
 is refused by `--link`, which is stage0's, so `reject_oracle.js` passes over
 that. The three cases that ask for a dump flag are counted apart from the
-skips, as dumps: they write no IR on either side, and of the two flags only
-`--emit-ast` is stage0's — `checked_oracle.js` compares `--emit-checked` over
-the whole corpus.
+skips, as dumps: they write no IR on either side. `checked_oracle.js` compares
+`--emit-checked` over the whole corpus; `--emit-ast` has no oracle because each
+compiler dumps its own tree, and is pinned by a golden per compiler instead.
 
 ### Running one
 

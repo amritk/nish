@@ -1413,6 +1413,37 @@ may never exit. The argument is checked down to its element type: an `i32[]`
 is an array but not a command line (`reject_spawn_element_type`). Arguments
 are passed as bytes, so an embedded NUL truncates one.
 
+### The environment
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `getenv(name: string): string \| null` | the value of environment variable `name` as the call runs, or `null` when it is **unset**. A variable set to nothing (`CC=`) is set, and answers a zero-length string rather than `null`. The bytes are copied into the arena, so the result is an ordinary string that outlives any later change to the environment; the result is narrowed with `if (cc !== null)` like any other nullable (WP19 R1) | write | `io_getenv`; `reject_getenv_arity`, `reject_getenv_unchecked` |
+
+It is a **call and not `process.env.CC`**, and that is a language decision
+rather than a spelling: `process.env.NAME` is member access on a key chosen at
+runtime, which Phase 0 forbids outright
+([wp19-stage0-retirement.md](wp19-stage0-retirement.md) §4). The two
+`process.*` values the language does have — `process.argv`, and
+`process.platform` / `process.arch` below — are fixed names with no key.
+
+`null` and `""` are different answers, and a driver acts on the difference: an
+unset `CC` means "use the default", and `CC=` means someone set it to nothing.
+That is why the result is `string | null` and not a string that is empty when
+nothing is there.
+
+There is no `setenv`: a program can read its environment and pass an
+environment on to a child through `spawnSync`, which inherits this process's,
+but it cannot change its own. Nothing in the compiler needs to, and a setter
+would make `getenv`'s "as the call runs" a much sharper caveat than it is.
+Because of that, a test that depends on a variable is given one by the harness
+— `tests/cases/<name>.env`, one `NAME=value` per line, read by both
+`tests/run.js` and the differential runner so the native binary and the Node
+rewrite see the same environment.
+
+The value is what `getenv(3)` answers, so it is bytes: a variable holding
+something that is not valid UTF-8 comes back as those bytes, exactly as
+`readFileSync` does, and every offset into it is a byte offset.
+
 ### Arrays and strings as receivers
 
 | Member | Semantics | Test |

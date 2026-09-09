@@ -148,9 +148,11 @@ The native compiler is about eight times faster than the Node one and needs no
 Node at all. It writes the interop sidecars (`--emit-header`, `--emit-dts`,
 `--emit-napi`) and the DWARF `-g` asks for byte for byte as `amritc` does, and
 passes `-g` on to `scripts/build.sh`, so the debug info survives into the
-binary. What is still only `amritc`'s is the `--emit-ast` dump, whose node
-names come from the `typescript` package the self-hosted compiler does not use,
-and the `--target host` alias. `amritc` is also what the npm package installs.
+binary. It answers every flag `amritc` answers, `--emit-ast` and
+`--target host` included; the one thing that differs is what `--emit-ast`
+prints, because each compiler dumps its own syntax tree and only `amritc` has
+the `typescript` package's node names to print. `amritc` is also what the npm
+package installs.
 
 ## 3. Hello world
 
