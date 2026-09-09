@@ -5,7 +5,10 @@ workstation, and the format every compile error is printed in.
 
 ## CI matrix
 
-`.github/workflows/ci.yml` runs on every push and pull request.
+`.github/workflows/ci.yml` runs on every pull request and on pushes to
+`main`. Scoping the `push` trigger to `main` is what stops a branch with an
+open pull request from running the matrix twice over, once per event; the
+comment above the `on:` block has the details.
 
 | Job | Runner | Steps |
 | --- | --- | --- |

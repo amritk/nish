@@ -10,8 +10,17 @@
 # To run the same steps locally see docs/wp10-ci.md.
 name: CI
 
+# `push` is scoped to main on purpose. An unscoped `push:` fires on every
+# branch, so one push to a branch with an open pull request ran the whole
+# matrix twice: once for `push` and once for `pull_request`. The concurrency
+# group below cannot collapse those two, because `github.ref` is
+# `refs/heads/<branch>` for the push and `refs/pull/<n>/merge` for the pull
+# request, which puts them in different groups where neither cancels the
+# other. Tags keep their coverage: release.yml triggers on `v*` and reaches
+# this workflow through `workflow_call`.
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_call:
 
