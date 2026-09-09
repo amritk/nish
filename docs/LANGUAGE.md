@@ -93,7 +93,7 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 | `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). |
 | `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, and narrowing: [Nullable types](#nullable-types). |
-| `Result<T, E>` | `%struct.amrit_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes | 8 / 8 (pointer); struct as clang lays out the same C struct | `amrit_result_<T>_<E>_word` by value, `struct amrit_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
+| `Result<T, E>` | `%struct.amrit_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32 }` between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `amrit_result_<T>_<E>_word` by value, `struct amrit_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
 | `void` | `void` | – | `void` | Return type only. |
 
 Sources: `src/types.ts` (`llvmType`, `alignOf`), `src/interop/abi.ts`
@@ -416,6 +416,17 @@ width), and the receiving side unpacks the word into an object of its own,
 which every construct below reads exactly as before. Only the value in transit
 changes: a `Result` in a field or an array element, and a `Result` whose
 payloads do not fit, stay the WP16 pointer.
+
+The word is what a **host** sees. Between two functions of one module it is
+`{ i1, i32 }` — the discriminant and the payload as two values — because a
+non-exported function's calling convention is nobody else's business and the
+word costs a fold the pair does not (WP15 §7b: 650 ms to 464 ms on
+`bench/result`). The condition is exactly the one that gives a function
+`internal` linkage, so `--no-strict-exports` returns every function to the
+word, and an exported function is packed whoever calls it — which is what
+keeps `--emit-header` honest (`tests/cases/res_export`). Nothing about the
+language changes either way: the two spellings compute the same value and only
+the register they arrive in differs.
 
 Where that object lives is the ordinary WP6 decision. A callee's unpacked
 parameter is an entry-block `alloca` unless a use of the parameter stores the
@@ -1417,33 +1428,37 @@ are passed as bytes, so an embedded NUL truncates one.
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `getenv(name: string): string \| null` | the value of the environment variable `name` as the call runs, copied into the arena, or `null` when it is not set. A variable set to nothing (`FOO=`) is `""` and **not** `null` — that distinction is why the result is nullable rather than a string that is empty when absent. A `name` containing a NUL byte is truncated at it, as `spawnSync`'s arguments are (WP19 §4) | write | `io_getenv`; `reject_getenv_arity`, `reject_getenv_type`, `reject_getenv_unchecked` |
+| `getenv(name: string): string \| null` | the value of environment variable `name` as the call runs, or `null` when it is **unset**. A variable set to nothing (`CC=`) is set, and answers a zero-length string rather than `null`. The bytes are copied into the arena, so the result is an ordinary string that outlives any later change to the environment; the result is narrowed with `if (cc !== null)` like any other nullable (WP19 R1) | write | `io_getenv`; `reject_getenv_arity`, `reject_getenv_type`, `reject_getenv_unchecked` |
 
-**It is a call and not `process.env.NAME`, and that is forced rather than
-chosen.** `process.platform`, `process.arch` and `process.argv` are member
-reads on a name fixed at compile time. An environment lookup is by a key that
-is a *value*, and member access on a dynamic key is exactly what Phase 0
-refuses; there is no object type with arbitrary properties for `process.env` to
-be, either. A function is the only shape the language has for it.
+It is a **call and not `process.env.CC`**, and that is a language decision
+rather than a spelling: `process.env.NAME` is member access on a key chosen at
+runtime, which Phase 0 forbids outright
+([wp19-stage0-retirement.md](wp19-stage0-retirement.md) §4). The two
+`process.*` values the language does have — `process.argv`, and
+`process.platform` / `process.arch` below — are fixed names with no key.
 
-The result is narrowed like every other nullable — `if (v !== null)`, or a
-`v === null` ternary — so a program cannot read a variable's value without
-first saying what an unset one means. Reading `.length` off it directly is
-`reject_getenv_unchecked`.
+`null` and `""` are different answers, and a driver acts on the difference: an
+unset `CC` means "use the default", and `CC=` means someone set it to nothing.
+That is why the result is `string | null` and not a string that is empty when
+nothing is there.
 
-Two reads of the same variable in one function are two calls: the declaration
-is not `readonly`, because a `setenv` from linked C can change the answer
-between them, so LLVM may not fold the second into the first. The bytes are
-copied out of the environment rather than borrowed from it, for the same
-reason and because a string here carries a length header the environment's
-does not.
+There is no `setenv`: a program can read its environment and pass an
+environment on to a child through `spawnSync`, which inherits this process's,
+but it cannot change its own. Nothing in the compiler needs to, and a setter
+would make `getenv`'s "as the call runs" a much sharper caveat than it is.
+Because of that, a test that depends on a variable is given one by the harness
+— `tests/cases/<name>.env`, one `NAME=value` per line, read by both
+`tests/run.js` and the differential runner so the native binary and the Node
+rewrite see the same environment.
 
-It exists because the compiler's own driver reads `CC` and `AMRITC_DEBUG`, and
-[wp19-stage0-retirement.md](wp19-stage0-retirement.md) §4 names it as the last
-builtin the retirement gates need. Deliberately *not* beside it: `setenv`.
-Reading the environment a process was given is a question with one answer;
-writing it is a mutation of global state shared with every library linked into
-the program, and nothing in the compiler needs it.
+Two reads of one variable in a function are two calls: the declaration is not
+`readonly`, because a `setenv` from linked C — this program cannot call one,
+but a library linked beside it can — may change the answer between them, so
+LLVM may not fold the second read into the first.
+
+The value is what `getenv(3)` answers, so it is bytes: a variable holding
+something that is not valid UTF-8 comes back as those bytes, exactly as
+`readFileSync` does, and every offset into it is a byte offset.
 
 ### Arrays and strings as receivers
 
@@ -1457,7 +1472,7 @@ the program, and nothing in the compiler needs it.
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`amrit_str_new`) | `str_bytes`; `reject_str_substring_arity` |
-| `s.indexOf(sub: string): number` | the first **byte** offset at which `sub` occurs, or `-1`; `s.indexOf("")` is `0`. A scan in the emitted code rather than a runtime function | `str_search`; `reject_str_index_of_type` |
+| `s.indexOf(sub: string): number` | the first **byte** offset at which `sub` occurs, or `-1`; `s.indexOf("")` is `0`. One `amrit_str_index_of` call: the search is the runtime's, so it is the libc's vectorised one rather than a probe per offset (WP15 §7c) | `str_search`; `reject_str_index_of_type` |
 | `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`amrit_str_at`) | `str_search` |
 | `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
 | `String.fromCharCode(c: number): string` | the one-byte string of `c & 0xFF`, the inverse of `charCodeAt`. A value above 127 makes a byte that is not valid UTF-8 on its own; nothing validates it | `str_search` |
@@ -1642,6 +1657,10 @@ compiler's own marks are never invalidated by user resets.
   `` `a${1}` ``); no ordering (`<`) is defined (`tests/cases/str_length`,
   `str_eq`, `reject_str_plus_number`, `reject_str_lt_str`).
 - **Number formatting** matches `String(x)` in JavaScript (see `console`).
+  For an `f64` that means the *fewest* digits that read back as the same
+  double, which is not the same as the correctly-rounded string of that length:
+  `7.120236347223045e-307` prints those sixteen digits and not the seventeen a
+  round-and-check search settles for (`tests/cases/f64_shortest_digits`).
 - **`Math.round`** rounds half toward +infinity like JavaScript;
   `Math.round(-0.3)` is `+0` here and `-0` in JavaScript (both print `0`).
   **`Math.min`/`Math.max`** on `f64` use `minnum`/`maxnum`: with one NaN

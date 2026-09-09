@@ -469,10 +469,11 @@ export function checkBuiltinFunction(ctx: CheckContext, call: Node, scope: Scope
     }
     return T_BOOL;
   }
-  // WP19 §4. A call and not `process.env.NAME`: the key is a value, and member
-  // access on a dynamic key is what Phase 0 refuses. `string | null` because a
-  // variable set to nothing is a state of its own — `CC=` is not `CC` unset —
-  // and narrowing is what makes the value readable, as for `readFileSyncOrNull`.
+  // WP19 R1. One environment variable, or null when it is unset — nullable
+  // rather than an empty string because "unset" and "set to nothing" are
+  // different answers and a driver acts on the difference. A call and not
+  // `process.env.NAME`: member access on a key chosen at runtime is what
+  // Phase 0 refuses.
   if (name === "getenv") {
     if (checkBuiltinArity(ctx, call, name, args, 1)) {
       checkArgumentType(ctx, args.children[0], scope, name, T_STRING);

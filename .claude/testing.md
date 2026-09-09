@@ -21,6 +21,12 @@ is **data, not code**: a source file next to the output it must produce.
     (or `tests/driver.c`, which prints `test()`) and `runtime/runtime.c` and
     run. A source with `export function main` is linked without the driver.
   - `<name>.args` — extra CLI flags, whitespace separated.
+  - `<name>.env` — the environment the run is given, one `NAME=value` per line,
+    layered over the inherited one (blank lines and `#` comments ignored;
+    `NAME=` sets an empty value, which is *set*). A case that calls `getenv`
+    has no other way to pin its answer, because the language has no `setenv`.
+    `tests/differential/lib.js` reads the same file, so the native binary and
+    the Node rewrite are handed the same environment.
   - `<name>.stdout` — for dump flags (`--emit-ast`, `--emit-checked`): the
     compiler's stdout is the golden and no IR is written.
 - **Naming is by family prefix**, matching the module that owns the construct:

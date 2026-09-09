@@ -135,11 +135,10 @@ const isDirectorySync: BuiltinCall = {
 };
 
 /**
- * `getenv(name)` (WP19 §4): one runtime call, and the null the C answers is
- * already the language's `null` — a nullable string is a pointer that may be
- * zero, so there is nothing to wrap and nothing to test here. The narrowing
- * that makes it safe to read is the checker's, as it is for
- * `readFileSyncOrNull`.
+ * `getenv(name)` (WP19 R1): one call, and the runtime's null is already the
+ * language's. The same shape as `readFileSyncOrNull` down to the LLVM type:
+ * an `i8*` that may be null, which the checker typed `string | null` and the
+ * narrowing reads with an ordinary null compare.
  */
 const getenv: BuiltinCall = {
   emit: (ctx, expr) =>

@@ -10,8 +10,8 @@
  *       <name>.out   expected stdout when linked with <name>.c (or tests/driver.c,
  *                    which prints `test()`) and runtime/runtime.c, then run
  *       <name>.argv  command-line arguments for that run, whitespace separated (WP7)
- *       <name>.env   environment for that run, one per line: `KEY=value` sets it
- *                    (the value may be empty), a bare `KEY` unsets it (WP19 `getenv`)
+ *       <name>.env   environment for that run, `NAME=value` per line, layered over
+ *                    the inherited one (WP19 R1: `getenv` has no other way to be pinned)
  *     Every successfully compiled case is also assembled with llvm-as.
  *
  *  B. Pipeline checks: runtime.c unit test, inline allocator vs C arena layout,
@@ -72,6 +72,23 @@ function stripHeader(ir) {
     .filter((l) => !l.startsWith(";") && !l.startsWith("source_filename"))
     .join("\n")
     .trim();
+}
+
+// ---- WP19 G1: `--parity`, a mode rather than a section ----------------------------
+// The gate asks for the corpus through both compilers on every flag combination
+// the suite uses, with an empty difference set printed as a table. That is a
+// different shape from the checks below — a cross product rather than a list of
+// properties — and it links a stage1 binary, so it is its own run rather than a
+// block that would make every `npm test` pay for it. `tests/self/parity.js` is
+// the driver; everything after `--parity` is passed on to it.
+if (process.argv.includes("--parity")) {
+  const at = process.argv.indexOf("--parity");
+  const r = spawnSync(
+    "node",
+    [path.join(import.meta.dirname, "self", "parity.js"), ...process.argv.slice(at + 1)],
+    { cwd: root, stdio: "inherit" }
+  );
+  process.exit(r.status ?? 1);
 }
 
 // ---- A. Golden cases -------------------------------------------------------------
@@ -169,22 +186,7 @@ for (const name of cases) {
     const argv = fs.existsSync(side("argv"))
       ? fs.readFileSync(side("argv"), "utf8").trim().split(/\s+/).filter(Boolean)
       : [];
-    // `<name>.env`: what the run's environment must be, so a case that reads it
-    // prints the same thing under every shell. One entry per line rather than
-    // whitespace-separated, because a value may contain spaces; `KEY=value`
-    // sets it, a bare `KEY` unsets it, which is the state `getenv` answers
-    // `null` for and the only way to test that reliably.
-    const env = { ...process.env };
-    if (fs.existsSync(side("env"))) {
-      for (const line of fs.readFileSync(side("env"), "utf8").split("\n")) {
-        const entry = line.trim();
-        if (entry === "" || entry.startsWith("#")) continue;
-        const eq = entry.indexOf("=");
-        if (eq < 0) delete env[entry];
-        else env[entry.slice(0, eq)] = entry.slice(eq + 1);
-      }
-    }
-    const run = spawnSync(exe, argv, { env });
+    const run = spawnSync(exe, argv, { env: caseEnv(side("env")) });
     const want = fs.readFileSync(side("out"), "utf8").trim();
     check(
       `${name}: native output matches .out`,
@@ -192,6 +194,31 @@ for (const name of cases) {
       `--- expected\n${want}\n--- actual (exit ${run.status})\n${run.stdout}${run.stderr}`
     );
   }
+}
+
+/**
+ * `<name>.env`: one `NAME=value` per line, layered over the environment the
+ * harness inherited. A case that reads the environment (`getenv`, WP19 R1)
+ * cannot pin the answer itself — the language has no `setenv` — so the runner
+ * is the only place the value can come from, and a golden that depended on
+ * the developer's own environment would not be a golden. Blank lines and `#`
+ * comments are ignored; `NAME=` sets an empty value, which is a *set*
+ * variable and not the same as leaving it out, and a bare `NAME` unsets it.
+ */
+function caseEnv(file) {
+  if (!fs.existsSync(file)) return process.env;
+  const env = { ...process.env };
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    const text = line.trim();
+    if (text.length === 0 || text.startsWith("#")) continue;
+    const eq = text.indexOf("=");
+    // A bare `NAME` takes the variable *away*, which `NAME=` cannot do: an
+    // empty value is a set variable, and `getenv`'s third answer — unset — is
+    // otherwise only as reliable as the developer's own environment.
+    if (eq < 0) delete env[text];
+    else if (eq > 0) env[text.slice(0, eq)] = text.slice(eq + 1);
+  }
+  return env;
 }
 
 // ---- WP10: diagnostics ------------------------------------------------------------
@@ -828,6 +855,28 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
         String(run.stderr).includes("index out of range: 5 >= 3") &&
         String(run.stdout).trim() === "3",
       run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    );
+  }
+  // WP15: the array header and the element buffer are separate alias domains, so an
+  // element store cannot be read as a clobber of a header. The consequence a golden
+  // cannot express is that LICM then hoists `len` and `data` out of a loop that writes
+  // elements: after `opt -O2` every `%struct.amrit_array` access in `@scale` must sit
+  // in the preheader, none in the loop body. Without the domains all four were reloaded
+  // per iteration, which measured 1.6x on the same shape.
+  const aliasLl = path.join(buildDir, "arr_alias_domains.ll");
+  if (has("opt") && fs.existsSync(aliasLl)) {
+    const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", aliasLl]);
+    const body = String(o.stdout).match(/define[^\n]*@scale\b[\s\S]*?\n}/)?.[0] ?? "";
+    // Everything from the loop's back-edge target onwards is the loop; the preheader is before it.
+    // The GEPs hoist on their own (they are pure address arithmetic), so what tells the two builds
+    // apart is the *loads*: `len` is `load i64` and `data` is `load ptr`, and the elements here are
+    // `i32`, so neither spelling can be element traffic.
+    const loop = body.slice(body.indexOf("\nwhile.body:"));
+    const reloads = (loop.match(/load (i64|ptr),/g) ?? []).join(" ");
+    check(
+      "arr_alias_domains: opt -O2 hoists every array header load out of the loop",
+      o.status === 0 && body !== "" && loop !== "" && reloads === "",
+      o.status === 0 ? `reloaded in the loop: ${reloads || "(none)"}\n${body}` : String(o.stderr)
     );
   }
   if (has("opt")) {
@@ -2642,26 +2691,24 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // same one: run both compilers over the corpus the WP8 section above
     // drives the generators over, and compare all four files byte for byte.
     // Only the link step and the directory creation are still stage0's (D4).
-    // WP19 G1. Every oracle above compares the two compilers over the corpus
-    // with each program's own flags; this one compares them over the *flags*,
-    // which is the axis none of them reads. It diffs the two `--help` texts
-    // and then runs a matrix of every flag across a handful of programs,
-    // requiring the same exit code, the same streams and the same IR. A
-    // difference is allowed only when it is named with a reason, and
-    // `--emit-ast` is the one that is.
+    // WP19 G1, the flag-set half only. The corpus half is `--parity`, a mode
+    // rather than a section, because it is minutes (see the top of this file);
+    // this is two `--help` runs and belongs in every `npm test`, because it
+    // asks the one question no oracle and no variation asks — what flags does
+    // each compiler say it has? — and a flag one side lacks is invisible to
+    // everything else here.
     //
-    // It earns its place by what it found on the way in: `--no-warn-performance`
-    // was stage0's alone and stage1 printed no performance warnings at all,
-    // `--out-dir` was stage1's alone, and neither was visible to anything else
-    // here, because nothing else asks a compiler what flags it has.
-    const parity = spawnSync("node", [path.join(root, "tests", "self", "parity.js")], {
-      cwd: root,
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    });
+    // It earns that by what it found: `--no-warn-performance` was stage0's
+    // alone and stage1 printed no performance warnings at all, and `--out-dir`
+    // was stage1's alone. Both had been so for as long as they had existed.
+    const parity = spawnSync(
+      "node",
+      [path.join(root, "tests", "self", "parity.js"), "--flags-only"],
+      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+    );
     const paritySummary = parity.stdout.trim().split("\n").pop() ?? "";
     check(
-      `the two compilers answer the same flags the same way (${paritySummary})`,
+      `the two compilers document the same flags (${paritySummary})`,
       parity.status === 0,
       `${parity.stdout}${parity.stderr}`
     );
@@ -2882,22 +2929,26 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         `ours:\n${ourDump.stdout}${ourDump.stderr}\ntheirs:\n${theirDump.stdout}`
       );
 
-      // The mechanism is still there for the flags that *are* stage0's: one of
-      // them refused by name rather than quietly ignored, because a build that
-      // asked for a sidecar must not come out without it. `--emit-ast` is the
-      // one that stays stage0's on purpose rather than for now: its dump
-      // prints the `typescript` package's node names and line:column spans,
-      // and stage1's tree is the flattened one `self/nodes.ts` defines, so
-      // matching it would be imitation rather than parity.
-      const refused = spawnSync(
-        compiler,
-        ["examples/hello.ts", "--emit-ast"],
-        { cwd: root, encoding: "utf8" }
-      );
+      // No flag is stage0's by name any more (`--emit-ast` was the last, WP19
+      // R1), so what this pins is the property the refusal was really about: a
+      // flag the compiler does not know is refused rather than quietly
+      // dropped, because a build that asked for something must not come out
+      // without it and without being told. Both compilers answer exit 2, which
+      // is the usage-error code the CLI contract fixes.
+      const refused = spawnSync(compiler, ["examples/hello.ts", "--emit-sidecar"], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      const refused0 = spawnSync("node", [cli, "examples/hello.ts", "--emit-sidecar"], {
+        cwd: root,
+        encoding: "utf8",
+      });
       check(
-        "the self-hosted compiler: --emit-ast is refused by name, not ignored (D4)",
-        refused.status === 2 && refused.stderr.includes("is stage0's"),
-        `${refused.status}: ${refused.stdout}${refused.stderr}`
+        "the self-hosted compiler: an unknown flag is refused, not ignored, as stage0 refuses it",
+        refused.status === 2 &&
+          refused.stderr.includes("--emit-sidecar") &&
+          refused0.status === 2,
+        `stage1 ${refused.status}: ${refused.stdout}${refused.stderr}stage0 ${refused0.status}: ${refused0.stderr}`
       );
 
       // The `--help` contract is shared rather than each compiler's own: a
@@ -3146,6 +3197,34 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
               stripHeader(fs.readFileSync(ourHost, "utf8")) === stripHeader(fs.readFileSync(theirHost, "utf8"))
           : hostOurs.status === 2 && hostOurs.stderr.includes("supported: host,"),
         `stage1 ${hostOurs.status}: ${hostOurs.stderr}stage0 ${hostTheirs.status}: ${hostTheirs.stderr}`
+      );
+
+      // `--emit-ast`, the last flag that was stage0's by name (WP19 R1, §2A).
+      // What it prints is deliberately *not* stage0's output: stage0 dumps the
+      // `typescript` package's node names and 1-based line:column spans, and
+      // this dumps the flattened vocabulary of `self/nodes.ts` with byte
+      // offsets, because that is the tree this compiler actually has. So there
+      // is no oracle between the two — there is a golden per compiler, over
+      // the same input file, and this is stage1's. The check is that the flag
+      // is answered (exit 0, no IR written) and that the tree is the one
+      // `tests/self/dump_ast.golden` records.
+      const astOut = path.join(shipDir, "ast");
+      fs.mkdirSync(astOut, { recursive: true });
+      const astRun = spawnSync(compiler, ["tests/cases/dump_ast.ts", "--emit-ast", "-o", `${astOut}/`], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      const astGoldenFile = path.join(root, "tests", "self", "dump_ast.golden");
+      const astGolden = fs.existsSync(astGoldenFile) ? fs.readFileSync(astGoldenFile, "utf8") : "";
+      if (process.env.UPDATE_GOLDENS === "1" && astRun.status === 0 && astRun.stdout !== astGolden) {
+        fs.writeFileSync(astGoldenFile, astRun.stdout);
+      }
+      check(
+        "the self-hosted compiler: --emit-ast prints its own tree and writes no IR",
+        astRun.status === 0 &&
+          astRun.stdout === fs.readFileSync(astGoldenFile, "utf8") &&
+          fs.readdirSync(astOut).length === 0,
+        `${astRun.status}: ${astRun.stderr}--- stdout\n${astRun.stdout}`
       );
 
       // A broken invariant answers 70 (`EX_SOFTWARE`) and stage0's report,

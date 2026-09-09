@@ -1,4 +1,4 @@
-set: /usr/local/amritc
+set: clang-18
 empty: ""
-missing: <null>
-length: 17
+unset: <null>
+length: 8

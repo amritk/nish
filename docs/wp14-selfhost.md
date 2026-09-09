@@ -1009,7 +1009,7 @@ which is not the same thing:
 
 | | Why | What it cost |
 | --- | --- | --- |
-| `--emit-ast` | §7: the dump prints the `typescript` package's node names, and this compiler's tree is its own. **Still refused by name**, and this one is a decision rather than a to-do | a mirror of `ts.SyntaxKind` inside the self-hosted compiler, which is the opposite of what §1 means |
+| `--emit-ast` | §7: the dump prints the `typescript` package's node names, and this compiler's tree is its own. **Closed by WP19 R1** — not by mirroring the names, which stays refused, but by answering the flag with stage1's own tree and a golden of its own | a mirror of `ts.SyntaxKind` inside the self-hosted compiler, which is the opposite of what §1 means |
 | `--target host` | it asked the machine what it is, and nothing in the language did. **Done** | `process.platform` and `process.arch` as builtins, **8 bytes of `.text` each** as costed; `self/target.ts` composes the triple exactly as `src/codegen/target.ts` does |
 | exit **70** for an internal error, and `AMRITC_DEBUG` | a broken invariant reached `panic(msg)`, which the language defines as the message and exit 1. **Done**, with `process.exit(internalError(...))` and `self/ice.ts` | 28 sites edited and no language change; the two the design costed are weighed below |
 | `-o <dir>` for an existing directory **without** the trailing slash | stage0 `stat`s the path; the trailing slash was the only spelling here. **Done** | `isDirectorySync(path)`, the smallest `stat` that answers the question, and one byte of `.text` net once `amrit_mkdir` was rewritten to call it |

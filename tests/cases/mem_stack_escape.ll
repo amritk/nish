@@ -82,9 +82,9 @@ entry:
   %1 = bitcast i8* %0 to %struct.Point*
   call void @Point.constructor(%struct.Point* %1, i32 5, i32 6)
   %2 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
-  %3 = load i64, i64* %2, align 8
+  %3 = load i64, i64* %2, align 8, !alias.scope !3, !noalias !4
   %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 1
-  %5 = load i64, i64* %4, align 8
+  %5 = load i64, i64* %4, align 8, !alias.scope !3, !noalias !4
   %6 = icmp eq i64 %3, %5
   br i1 %6, label %push.grow, label %push.store
 
@@ -94,12 +94,12 @@ push.grow:
 
 push.store:
   %7 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
-  %8 = load i8*, i8** %7, align 8
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4
   %9 = bitcast i8* %8 to %struct.Point**
   %10 = getelementptr inbounds %struct.Point*, %struct.Point** %9, i64 %3
-  store %struct.Point* %1, %struct.Point** %10, align 8
+  store %struct.Point* %1, %struct.Point** %10, align 8, !alias.scope !4, !noalias !3
   %11 = add i64 %3, 1
-  store i64 %11, i64* %2, align 8
+  store i64 %11, i64* %2, align 8, !alias.scope !3, !noalias !4
   %12 = trunc i64 %11 to i32
   ret void
 }
@@ -175,11 +175,11 @@ entry:
   %arr.hdr = alloca %struct.amrit_array, align 8
   %b.addr = alloca %struct.Box*, align 8
   %0 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0
-  store i64 0, i64* %0, align 8
+  store i64 0, i64* %0, align 8, !alias.scope !3, !noalias !4
   %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1
-  store i64 0, i64* %1, align 8
+  store i64 0, i64* %1, align 8, !alias.scope !3, !noalias !4
   %2 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 2
-  store i8* null, i8** %2, align 8
+  store i8* null, i8** %2, align 8, !alias.scope !3, !noalias !4
   store %struct.amrit_array* %arr.hdr, %struct.amrit_array** %xs.addr, align 8
   %3 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
   call void @stash(%struct.amrit_array* %3)
@@ -192,7 +192,7 @@ entry:
   %8 = load i32, i32* %7, align 4
   %9 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
   %10 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %9, i64 0, i32 0
-  %11 = load i64, i64* %10, align 8
+  %11 = load i64, i64* %10, align 8, !alias.scope !3, !noalias !4
   %12 = icmp ult i64 0, %11
   br i1 %12, label %bounds.ok, label %bounds.fail
 
@@ -202,10 +202,10 @@ bounds.fail:
 
 bounds.ok:
   %13 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %9, i64 0, i32 2
-  %14 = load i8*, i8** %13, align 8
+  %14 = load i8*, i8** %13, align 8, !alias.scope !3, !noalias !4
   %15 = bitcast i8* %14 to %struct.Point**
   %16 = getelementptr inbounds %struct.Point*, %struct.Point** %15, i64 0
-  %17 = load %struct.Point*, %struct.Point** %16, align 8
+  %17 = load %struct.Point*, %struct.Point** %16, align 8, !alias.scope !4, !noalias !3
   %18 = getelementptr inbounds %struct.Point, %struct.Point* %17, i32 0, i32 1
   %19 = load i32, i32* %18, align 4
   %20 = add nsw i32 %8, %19
@@ -239,3 +239,9 @@ attributes #2 = { nounwind }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #4 = { nounwind noreturn cold }
 attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}

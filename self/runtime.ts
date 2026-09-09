@@ -203,6 +203,14 @@ export class RuntimeTable {
     );
     this.add(
       new RuntimeFunction(
+        "amrit_str_index_of",
+        `declare i64 @amrit_str_index_of(${STR_NOCAP}, ${STR_NOCAP})`,
+        attrs3("nounwind", "willreturn", "memory(argmem: read)"),
+        EFFECT_READ
+      )
+    );
+    this.add(
+      new RuntimeFunction(
         "amrit_str_len",
         `declare i64 @amrit_str_len(${STR_NOCAP})`,
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),
@@ -288,15 +296,6 @@ export class RuntimeTable {
     // `mkdir`, then `amrit_is_dir` when it failed: it changes the file system,
     // so `write`, and the path is only read and never retained (`STR_NOCAP`).
     this.add(plain("amrit_mkdir", `declare zeroext i1 @amrit_mkdir(${STR_NOCAP})`, EFFECT_WRITE));
-    // WP19 §4. Reads the process environment and copies the answer into the
-    // arena, so it reads state this function does not own *and* writes memory:
-    // `EFFECT_WRITE`, and neither readonly nor readnone. A `setenv` from linked
-    // C is what makes the read unrepeatable, as a failed `stat` makes
-    // `amrit_is_dir`'s. Freshly allocated, so `noalias`; nullable, so no
-    // `nonnull`. The name is read and never retained (`STR_NOCAP`).
-    this.add(
-      plain("amrit_getenv", `declare noalias noundef align 8 i8* @amrit_getenv(${STR_NOCAP})`, EFFECT_WRITE)
-    );
     // WP14 §7a. One `stat`, answering only "is there a directory here?", which
     // is the question `-o <dir>` asks. `EFFECT_WRITE` rather than read for the
     // reason `amrit_parse_number` is not readonly: a failed `stat` stores
@@ -322,6 +321,18 @@ export class RuntimeTable {
         attrs1("nounwind"),
         EFFECT_WRITE
       )
+    );
+    // WP19 R1: the environment, so a self-hosted driver can honour `CC` before
+    // it spawns `scripts/build.sh` the way stage0's preflight does.
+    // `EFFECT_WRITE` and no `readnone`, for two reasons that each suffice: the
+    // call allocates, so it moves the arena, and `environ` is not memory LLVM
+    // is tracking, so two reads either side of a `spawnSync` must not fold
+    // into one. `noalias` is a fact here where it is not on `amrit_platform`:
+    // every call answers a fresh arena string rather than the same constant.
+    // The name is read and never retained (`STR_NOCAP`), and the result may be
+    // null, so no `nonnull`.
+    this.add(
+      plain("amrit_getenv", `declare noalias noundef align 8 i8* @amrit_getenv(${STR_NOCAP})`, EFFECT_WRITE)
     );
     // WP14 §7a: what machine this is. `--target host` composes its triple from
     // the two. Each answers the address of a string in the runtime's own

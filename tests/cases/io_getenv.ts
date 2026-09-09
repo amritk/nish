@@ -1,29 +1,23 @@
-// `getenv` (WP19 §4): the one way to read the environment, because
-// `process.env.NAME` is member access on a key that is a value, which Phase 0
-// refuses. It answers `string | null` and is narrowed like any other nullable,
-// so a program cannot read the value without first deciding what an unset
-// variable means.
+// `getenv` (WP19 R1): the one environment read the language has, and the one a
+// self-hosted driver needs to honour `CC` before it spawns `scripts/build.sh`.
 //
-// The harness sets `AMRITC_TEST_ENV` and `AMRITC_TEST_EMPTY` for this case and
-// unsets `AMRITC_TEST_MISSING`, so the output does not depend on the shell it
-// was run from. The empty one is the case the nullable exists for: `FOO=` is
-// set and answers "", where an unset variable answers null.
+// The three answers this pins are the whole contract, and the middle one is
+// why the result is `string | null` rather than a string that is empty when
+// nothing is set: `AMRITC_TEST_EMPTY=` is a variable that *is* set, and a
+// driver that treats it as "unset, use the default" would be wrong. The values
+// come from `io_getenv.env`, because the language has no `setenv` and a golden
+// that read the developer's own environment would not be a golden.
 export function main(): number {
-  const set = getenv("AMRITC_TEST_ENV");
+  const set = getenv("AMRITC_TEST_VALUE");
   console.log(`set: ${set === null ? "<null>" : set}`);
-
   const empty = getenv("AMRITC_TEST_EMPTY");
   console.log(`empty: ${empty === null ? "<null>" : `"${empty}"`}`);
-
-  const missing = getenv("AMRITC_TEST_MISSING");
-  if (missing === null) {
-    console.log("missing: <null>");
-  } else {
-    console.log(`missing: ${missing}`);
+  const unset = getenv("AMRITC_TEST_NOT_SET");
+  console.log(`unset: ${unset === null ? "<null>" : unset}`);
+  // The narrowing is an ordinary `T | null` one: inside the guard the value is
+  // a `string` and carries string methods, with no cast anywhere.
+  if (set !== null) {
+    console.log(`length: ${set.length}`);
   }
-
-  // Narrowing carries into the branch, so `.length` needs no second test.
-  const path = getenv("AMRITC_TEST_ENV");
-  console.log(`length: ${path === null ? -1 : path.length}`);
   return 0;
 }

@@ -72,8 +72,12 @@ import {
   emitResultConstructor,
   emitResultMethod,
   emitResultProperty,
+  emitResultArgument,
+  emitResultReturn,
   emitResultReturningCall,
   isResultConstructorCall,
+  privateResultAbi,
+  resultPairToWord,
 } from "./emit_result";
 import { addStringConstant, emitTemplate } from "./emit_strings";
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit_util";
@@ -265,6 +269,9 @@ export class Emitter {
     this.declareSignatureTypes(sig);
     const optimize = this.opts.optimizeAttributes;
     const params: IRParam[] = [];
+    // A non-exported function uses the private two-scalar `Result` ABI; the
+    // condition is the linkage one below, and the two must not drift.
+    const privateAbi = privateResultAbi(this, sig.exported);
     let i = 0;
     while (i < sig.paramNames.length) {
       const name = sig.paramNames[i];
@@ -273,10 +280,10 @@ export class Emitter {
       if (optimize) {
         attrs = paramAttributes(this.table, name, type, facts);
       }
-      params.push(new IRParam(name, this.llvmAbi(type), attrs));
+      params.push(new IRParam(name, this.llvmAbi(type, privateAbi), attrs));
       i = i + 1;
     }
-    this.fn = new IRFunction(sig.name, params, this.llvmAbi(sig.returnType));
+    this.fn = new IRFunction(sig.name, params, this.llvmAbi(sig.returnType, privateAbi));
     // Linkage: exported functions are always external (they are the module's
     // ABI). Every other function is `internal` unless --no-strict-exports.
     if (this.opts.strictExports && !sig.exported) {
@@ -294,7 +301,7 @@ export class Emitter {
     // `-g`: the DISubprogram, the function's default location, and the parameters' dbg.value calls.
     const debug = this.debug;
     if (debug !== null) {
-      debug.beginFunction(this.fn, sig, false, "");
+      debug.beginFunction(this.fn, sig, false, "", privateAbi);
     }
 
     // WP6: an automatic arena scope remembers the bump position before anything is allocated.
@@ -309,7 +316,8 @@ export class Emitter {
     while (i < sig.paramNames.length) {
       const name = sig.paramNames[i];
       if (this.table.resultByValue(sig.paramTypes[i])) {
-        const object = unpackResult(this, sig.paramTypes[i], `%${name}`, facts.isStackParam(name));
+        const incoming = privateAbi ? resultPairToWord(this, `%${name}`) : `%${name}`;
+        const object = unpackResult(this, sig.paramTypes[i], incoming, facts.isStackParam(name));
         this.paramObjectNames.push(name);
         this.paramObjectValues.push(object);
       }
@@ -398,7 +406,7 @@ export class Emitter {
     // `-g`: an artificial subprogram at the user's `main`, so `break main` lands somewhere sensible.
     const debug = this.debug;
     if (debug !== null) {
-      debug.beginFunction(fn, userMain, true, "main");
+      debug.beginFunction(fn, userMain, true, "main", false);
     }
     const freeArena = this.useRuntime("amrit_free_arena");
     if (this.program.usesArgv) {
@@ -470,7 +478,7 @@ export class Emitter {
     const params: string[] = [];
     let i = 0;
     while (i < sig.paramNames.length) {
-      const parts: string[] = [this.llvmAbi(sig.paramTypes[i])];
+      const parts: string[] = [this.llvmAbi(sig.paramTypes[i], false)];
       if (optimize) {
         for (const attr of paramAttributes(this.table, sig.paramNames[i], sig.paramTypes[i], facts)) {
           parts.push(attr);
@@ -485,7 +493,7 @@ export class Emitter {
         ret.push(attr);
       }
     }
-    ret.push(this.llvmAbi(sig.returnType));
+    ret.push(this.llvmAbi(sig.returnType, false));
     const group = optimize ? ` ${this.module.attrGroupFor(functionAttributes(facts))}` : "";
     return `declare ${ret.join(" ")} @${sig.name}(${params.join(", ")})${group}`;
   }
@@ -519,6 +527,11 @@ export class Emitter {
 
   declareGlobal(text: string): void {
     this.module.addGlobal(text);
+  }
+
+  /** Intern a module metadata node and return its `!N` reference; identical texts share a node. */
+  metadata(text: string): string {
+    return this.module.addMetadata(text);
   }
 
   emitRuntimePrelude(): void {
@@ -633,7 +646,7 @@ export class Emitter {
     if (this.table.resultByValue(sig.returnType)) {
       const word = emitPackedResult(this, value, sig.returnType);
       this.emitScopeExit();
-      this.fn.emit(`ret i64 ${word}`);
+      emitResultReturn(this, word);
       return;
     }
     const type = this.typeOf(value);
@@ -807,21 +820,24 @@ export class Emitter {
     }
     const args = expr.children[1];
     const operands: string[] = [];
+    // A non-exported callee takes and answers the two-scalar pair (WP15).
+    const calleePrivate = privateResultAbi(this, sig.exported);
     let i = 0;
     while (i < args.children.length) {
       // WP17: an argument feeding a `Result` parameter the ABI packs is passed
-      // as the word, exactly as a `return` of one is.
+      // as the word, exactly as a `return` of one is — or as the pair when the
+      // callee uses the private ABI.
       const want = sig.paramTypes[i];
       const value = this.table.resultByValue(want)
         ? emitPackedResult(this, args.children[i], want)
         : this.emitExpression(args.children[i]);
-      operands.push(`${this.llvmAbi(want)} ${value}`);
+      operands.push(`${this.llvmAbi(want, calleePrivate)} ${emitResultArgument(this, want, value, calleePrivate)}`);
       i = i + 1;
     }
     // WP9: the mark goes after the arguments, so only the callee's own bumps
     // are inside the bracket (`beginReclaim`).
     const mark = this.beginReclaim(sig);
-    const call = `call ${this.llvmAbi(sig.returnType)} @${sig.name}(${operands.join(", ")})`;
+    const call = `call ${this.llvmAbi(sig.returnType, calleePrivate)} @${sig.name}(${operands.join(", ")})`;
     if (sig.returnType === T_VOID) {
       this.fn.emit(call);
       return "void";
@@ -829,7 +845,7 @@ export class Emitter {
     // WP17: a small `Result` comes back in a register; unpack it into the
     // caller's own object, which is what every other construct reads.
     if (this.table.resultByValue(sig.returnType)) {
-      return emitResultReturningCall(this, call, sig.returnType, expr);
+      return emitResultReturningCall(this, call, sig.returnType, expr, calleePrivate);
     }
     return this.endReclaim(mark, this.fn.emitValue(call));
   }
@@ -877,8 +893,8 @@ export class Emitter {
   }
 
   /** The LLVM type at a call boundary: `i64` for a `Result` the ABI packs (WP17). */
-  llvmAbi(type: i32): string {
-    return this.table.llvmAbiType(type);
+  llvmAbi(type: i32, privateAbi: boolean): string {
+    return this.table.llvmAbiType(type, privateAbi);
   }
 
   /** Alignment for a type, or 0 when attributes are disabled. */

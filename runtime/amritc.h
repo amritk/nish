@@ -96,6 +96,9 @@ bool amrit_str_eq(const amrit_str *a, const amrit_str *b);
 uint64_t amrit_str_len(const amrit_str *s);
 /* Whether `sub` occurs at byte offset `at` (negative: never); `startsWith` / `endsWith`. */
 bool amrit_str_at(const amrit_str *s, int64_t at, const amrit_str *sub);
+/* `s.indexOf(sub)`: the first byte offset where `sub` occurs, or -1. An empty
+   needle answers 0 and one longer than `s` answers -1, as in JavaScript. */
+int64_t amrit_str_index_of(const amrit_str *s, const amrit_str *sub);
 /* `console.log(s)`: one write(2) of the bytes plus a newline to stdout. */
 void amrit_print(const amrit_str *s);
 /* `console.error` and the newline-free `write` / `writeError`: fd 1 or 2. */
@@ -164,13 +167,6 @@ bool amrit_mkdir(const amrit_str *path);
    a parent that cannot be searched. One `stat`, no allocation, no exit; it is
    the `stat` half of `amrit_mkdir`, which calls it. */
 bool amrit_is_dir(const amrit_str *path);
-/* `getenv(name)` (WP19 §4): the value of the environment variable `name`,
-   copied into the arena, or NULL when it is not set. A variable set to the
-   empty string answers an empty string, not NULL. The bytes are copied rather
-   than borrowed: the environment's are bare, and a later `setenv` may free
-   them. A `name` containing a NUL is truncated at it, as `spawnSync`'s
-   arguments are. */
-amrit_str *amrit_getenv(const amrit_str *name);
 /* `spawnSync(argv)`: run element 0 of `argv` (searched on `PATH`) with `argv`
  * as its argument vector, wait for it, and answer its exit status, or
  * `128 + n` when signal `n` killed it. -1 when `argv` is empty, when the
@@ -178,6 +174,15 @@ amrit_str *amrit_getenv(const amrit_str *name);
  * processes. The elements are `amrit_str *`; the child receives their bytes,
  * so an argument containing a NUL is truncated at it. */
 int32_t amrit_spawn(const amrit_array *argv);
+
+/* ---- The environment (WP19 R1) ------------------------------------------
+ * `getenv(name)`: the value of environment variable `name`, copied into the
+ * arena (so a later `setenv` cannot change a string the program still holds),
+ * or NULL when it is unset — the language's `string | null`. An empty value
+ * is a set variable and answers a zero-length string, not NULL. `name` is
+ * read and never retained; a NUL inside it truncates the lookup, as it does
+ * for every other path-like argument here. */
+amrit_str *amrit_getenv(const amrit_str *name);
 
 /* ---- What machine this is (WP14 §7a) ------------------------------------
  * `process.platform` and `process.arch`, spelled as Node spells them:

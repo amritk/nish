@@ -63,28 +63,54 @@ finished and is not.
 
 ### A. Compiler behaviour stage1 does not have
 
-`wp14-selfhost.md` §7a lists four of these in full; they are reproduced here as
-work rather than as trivia, because each is a gate. **Five of the seven have
-since closed**; `--emit-ast` and the error list after the first error are open,
-and the second of those is a row the G1 check opened rather than closed. Three closed as WP14 §7a work rather
-than alongside the generics of WP18 as this package first expected:
-`process.platform` and `process.arch` closed `--target host`, `isDirectorySync`
-closed the `-o <dir>` spelling, and `process.exit(internalError(...))` closed
-exit 70. Two closed as R1 work, and are the reason a gate is a check and not a
-memory: the performance warnings opened a *new* row after this table was
-written — stage1 collected them and never printed them — and `--out-dir` had
-been a difference in the flag sets since §7a, running the other way. Every
-closed row is left in the table so the count stays honest.
+`wp14-selfhost.md` §7a lists these in full; they are reproduced here as work
+rather than as trivia, because each is a gate. **All four of §7a's have now
+closed, and building G1's check found three more this bill had missed** — which
+is the argument for building the check before declaring the gate met, and the
+reason those rows are in the table rather than in someone's memory. Two of the
+three came from asking a question no oracle asks and the corpus half of
+`--parity` cannot ask either: *what flags does each compiler say it has?*
+Three closed as WP14 §7a work rather than alongside the generics of WP18 as
+this package first expected: `process.platform` and `process.arch` closed
+`--target host`, `isDirectorySync` closed the `-o <dir>` spelling, and
+`process.exit(internalError(...))` closed exit 70. `--emit-ast` closed here, as
+R1. They are left in the table so the count stays honest.
 
 | | State today | What closing it needs |
 | --- | --- | --- |
-| `--emit-ast` | refused by name | stage1's own dump over `self/nodes.ts`'s vocabulary, with checked-in goldens. **Not** a mirror of `ts.SyntaxKind` — §7 was right about that, and the answer is a different dump, not the same one |
-| `--no-warn-performance`, and the WP15 §8 warnings themselves | **closed** | stage1 found the warnings and its driver never printed them, which is the gap this table is for and which opened *after* it was written. The driver reports them on stage0's streams and takes the flag that silences them |
-| the error list after the first error | **open**, and newly named | the parity check found it: on a program refused in a mode it was not written for, the two compilers report different *sets* of errors. stage0 poisons the declaration and cascades (`Unknown identifier \`mag\`` five times); stage1 recovers and finds three further real errors further down. Both refuse, both exit 1, and every individual message agrees — it is the recovery that does not. `reject_oracle.js` compares each case against its own fragments rather than against stage0's list, so nothing here was ever going to see it |
-| `--out-dir` | **closed**, by removal | the one difference that ran the other way: stage1's own spelling for `-o <dir>/`, which stage0 has never had. Deleted rather than mirrored, so the flag sets are equal without the frozen compiler growing anything |
+| `--emit-ast` | **closed** | stage1's own dump over `self/nodes.ts`'s vocabulary, with a checked-in golden (`tests/self/dump_ast.golden`). **Not** a mirror of `ts.SyntaxKind` — §7 was right about that, and what shipped is a different dump, not the same one: both compilers answer the flag, each about its own tree, and the printer is `self/ast_text.ts`, shared with `self/dump_ast.ts` so the flag and the parser oracle cannot drift |
 | `--target host` | **closed** | `process.platform` / `process.arch`, composed exactly as `src/codegen/target.ts` composes them (`tests/cases/io_host`), at the 8 bytes of `.text` §7a predicted and measured |
 | exit **70** on an internal error, and `AMRITC_DEBUG` | **closed** | `process.exit(internalError(...))` at each of the 35 sites, with the report in `self/ice.ts`; no second `panic` builtin, so the language did not grow for it. stage1 has no stack to print, and says so rather than promising one |
 | `-o <dir>` without the trailing slash | **closed** | `isDirectorySync(path: string): boolean`, the `stat` beside `mkdirSync` (`tests/cases/io_is_directory`) |
+| `--no-warn-performance`, and the WP15 §8 warnings themselves | **closed, found by the flag-set diff** | stage1 had the whole class — the analysis in `self/checker.ts`, the second list in the sink, the report in `self/diagnostics.ts` — and its driver never printed a word of it, so `build/amritc` compiled a quadratic string loop in silence where `amritc` named it. The driver reports them on stage0's streams and takes the flag that silences them. No oracle could see it: a warning goes to stderr on a compile that succeeds, and none of them reads that stream on a success |
+| `--out-dir` | **closed, by removal** | the one difference that ran the other way: stage1's own spelling for `-o <dir>/`, which stage0 has never had, kept because three oracles passed it. They pass `-o <dir>/` to both compilers now and the flag is gone — parity without the frozen compiler growing anything |
+| `--emit-checked`'s later-phase lines | **open, found by `--parity`** | stage0 runs the attribute pass before it dumps and prints `facts:`, `escaping:`, `calls:`, `pointer ...` and `stackSites=`; stage1 dumps straight after `check()` and prints none of them. `checked_oracle.js` never saw it, because it filters exactly those lines away (`LATER_PHASES`) — by design, since it is comparing the *checker*. Closing it is `analyzeFunctions` before the dump in `self/dump.ts` and stage0's `factsText` formatting matched byte for byte, then the filter deleted. `self/attributes.ts` already records every field stage0 prints, so it is a port and not a design question |
+
+### A2. What `--parity` found on its first run
+
+The mode of G1 was run over `tests/cases` — 172 programs × 14 variations,
+2,408 runs — before this section was written, and the point of writing the
+numbers down is that they are the argument for the gate. **206 undeclared
+differences, from five root causes, none of which any oracle could have
+caught**: every oracle compiles a program with the flags that program already
+carries, and none of these programs carries the flag that exposes it.
+
+| Found | What it is | State |
+| --- | --- | --- |
+| `unwrapOr`'s fallback took a contextual type in stage1 | in f64 mode `r.unwrapOr(-1)` on a `Result<i32, string>` compiled in stage1 and was refused by stage0. `docs/LANGUAGE.md`'s contextual-literal table is an enumerated list and this is not one of its positions, so stage1 was in the wrong | **fixed**, `reject_res_unwrap_or_f64` |
+| `Ok(...)`'s payload and an object literal's field, same cause | `` `Ok(...)` expects i32 for Result<i32, i32>, got f64 `` and `` Field `code` of `IoError` is i32, got f64 `` — stage0 refuses, stage1 compiles (`res_by_value_param`, `res_export`, `res_struct_error` under `--number-mode f64`) | **open**: the same one-line shape as the `unwrapOr` fix, at two more sites |
+| a fixed-length stack array is sized from an IR operand, not a constant | `new Float32Array(2)` in f64 mode reaches `emitData` as a register rather than digits, because the length has been through a conversion. stage0 writes `alloca [NaN x float]` — **IR that `llvm-as` refuses, from a compiler that exited 0** — and stage1 writes `alloca [0 x float]`, which assembles and then stores two floats past a zero-element stack slot. Both are wrong and stage1's is the more dangerous, because it builds and runs (`f32_struct.ts --number-mode f64`) | **open**, and the most serious of the five |
+| the first diagnostic differs | `cf_switch_break.ts` in f64 mode: stage1 reports the `case` label against the discriminant at 12:12, stage0 an operand mismatch at 36:10. Both refuse the program; they disagree about which check fires first | **open**, low severity |
+| a compound operator loses its spelling | `div_compound_attributes.ts` in f64 mode: stage0 says ``Operator `/=` requires…``, stage1 says ``Operator `/` requires…`` | **open**, low severity |
+
+The remaining 193 rows are all the `--emit-checked` row of §2A above, which is
+one cause counted once per program.
+
+Two of the five are in the compilers' *output* rather than their diagnostics,
+and the stack-array one is a bug in the shipped compiler that predates this
+package entirely. That is the case for the gate stated as plainly as it can
+be: a cross product over flags the suite already uses, run once, found a
+miscompile that eleven oracles and 1,161 checks had not.
 
 ### B. The oracles
 
@@ -147,23 +173,33 @@ of §2A are closed and the "stage0 rejects it" / "stage1 rejects it" counters in
 every oracle read **zero**, with the three documented skips of
 `.claude/selfhost.md` closed or re-justified in writing.
 
-**The check, and it exists.** `tests/self/parity.js`, run by the WP14 section
-of `tests/run.js` on every `npm test`. It reads the flag set out of each
-compiler's own `--help`, diffs the two, and then runs a matrix of every
-no-value flag and every value a valued flag takes across a handful of programs
-— each with the flags the suite compiles it with — requiring the same exit
-code, the same stdout, the same stderr and the same IR from both sides. A
-difference is allowed only when the file names it with a reason, and the table
-is printed rather than asserted silently.
+**The check, in two halves.** `node tests/run.js --parity`
+(`tests/self/parity.js`). The first half asks each compiler what flags it has,
+by reading its own `--help`, and diffs the two sets: that is the half that
+found `--no-warn-performance` and `--out-dir`, and nothing else in the tree
+asks the question, because every oracle compiles programs with flags rather
+than enumerating them. The second half
+runs the corpus through both compilers on every flag variation the suite uses
+— the fourteen of `VARIATIONS`, each of them a flag some `.args` sidecar or
+`tests/run.js` already passes — and compares *everything the command line
+produces*: exit status, stdout, stderr's `error:` lines, and every file
+written, byte for byte. It prints a table rather than asserting silently, and
+it is a mode rather than a block in `npm test` because it is a cross product
+and it links a stage1 binary.
 
-Today: **24 stage0 flags, 23 stage1 flags, 100 flag/program pairs agree, 0
-differences, 1 named exception** — `--emit-ast`. That is G1's empty difference
-set, over the flags. What it does not yet cover is the row above: the error
-*list* a refused program produces, which is a comparison over programs the
-suite does not compile and which nothing in the tree makes today.
+A difference is a failure unless it is **declared** in the driver with a
+reason, and a declaration has to *earn* itself: it normalises away exactly the
+bytes that are allowed to differ, and anything still differing afterwards is
+reported. A declaration that swallowed a surface whole would hide the next real
+divergence on it, which is the failure this mode exists to prevent — the one
+`whole` declaration is `--emit-ast`'s stdout, where every byte differs by
+design and there is nothing finer to say.
 
 **Why it blocks.** A retirement that leaves one flag behind is a regression
-shipped to users who were told the two compilers were the same compiler.
+shipped to users who were told the two compilers were the same compiler. §A2
+is what that reads like in practice: the first run of this check found five
+disagreements, one of them a miscompile, and every one of them had been
+sitting under a flag combination nothing had ever tried.
 
 ### G2 — Oracle succession: the replacement runs before the original is deleted
 
@@ -251,22 +287,23 @@ retirement exactly as it applied to the port. The seed has to be able to
 compile the compiler that replaces it, so the last thing stage0 ever does is
 grow the features that make it unnecessary.
 
-All four have landed. Three did so as WP14 §7a work rather than with WP18, and
-`getenv` as R1 work; they are kept here so the gate reads complete. **The
-language side of the gates is finished** — what remains in §2A is a dump
-(`--emit-ast`), a driver change (the `CC` probe), and a checker difference (the
-error list after the first error), and not a construct among them:
+All four have landed: three as WP14 §7a work rather than with WP18, and
+`getenv` as this package's own. They are kept here so the gate reads complete:
 
 | Builtin | Signature | Gate | Where |
 | --- | --- | --- | --- |
 | host platform | `process.platform: string`, `process.arch: string` | G1 (`--target host`) | **Landed (WP14 §7a).** Read-only members, like `process.argv`. `self/target.ts` composes the triple exactly as `src/codegen/target.ts` does. 8 bytes of `.text`, measured in §7a |
 | directory test | `isDirectorySync(path: string): boolean` | G1 (`-o <dir>`) | **Landed (WP14 §7a).** A value, not an exit, for the reason `mkdirSync` answers a boolean and `readFileSyncOrNull` answers `null`: there are no exceptions, so the driver phrases its own diagnostic. It is a `stat`, so a plain file answers `false` |
-| environment | `getenv(name: string): string \| null` | G1 (`AMRITC_DEBUG`), G5 (`CC`) | **Landed.** A call and not `process.env.X`, because member access on a dynamic key is exactly what Phase 0 forbids. Nullable, narrowed like any other `T \| null`, and a variable set to nothing answers `""` rather than `null`, which is the distinction the nullable exists for. 42 bytes of `.text`. Both *uses* are still open, and one of them is closed by argument rather than by code: the `CC` pre-flight probe is a stage1 driver change and G5's to make, and `AMRITC_DEBUG` cannot be closed by this builtin at all — stage1 has no stack to print whether the variable is set or not, so `self/ice.ts` says so once instead of branching |
+| environment | `getenv(name: string): string \| null` | G5 (`CC`) | **Landed (WP19 R1).** A call and not `process.env.X`, because member access on a dynamic key is exactly what Phase 0 forbids. Nullable, narrowed like any other `T \| null`, and `null` is not `""`: an unset variable and one set to nothing are different answers and a driver acts on the difference. The `AMRITC_DEBUG` half of this row is struck: §2A's exit-70 work closed it by the other design, and `self/ice.ts` names the variable to say there is no stack behind it here rather than reading it (`tests/cases/io_getenv`) |
 | internal error | none: `process.exit(internalError(msg))` | G1 (exit 70) | **Landed (WP14 §7a), by the other design.** This row proposed a second terminator builtin rather than 40 rewrites, to spare the definite-return analysis. What shipped is the rewrite: `panic(m)` already means "this message, then exit 1" and `process.exit(n)` already means "this code, now", so the status a compiler wants for its own bugs needs no new construct, and a second panic would put one compiler's reporting policy — the version line, the issue tracker, the word "internal" — inside the language that compiles it. The report is `self/ice.ts`; the cost was 35 statements, and they are `self/`'s own |
 
-`--emit-ast` needs no builtin — it needs `self/dump_ast.ts` promoted from an
-oracle entry point to a CLI flag, with its own goldens. That is the one item in
-§2A that is a deliverable rather than a lowering.
+`--emit-ast` needed no builtin — it needed `self/dump_ast.ts` promoted from an
+oracle entry point to a CLI flag, with its own goldens. That was the one item
+in §2A that was a deliverable rather than a lowering, and it landed as
+`self/ast_text.ts`: the printer moved out of the oracle entry point so that
+`compile.ts` and `dump_ast.ts` share it, the entry point kept its output byte
+for byte (the parser oracle compares against it), and the flag adds the module
+path on the root line the way stage0's `SourceFile <path>` header does.
 
 **Deliberately not on this list**: `readdirSync`, a monotonic clock, and
 recursive directory removal. They are what a *harness* needs, not what a
@@ -279,7 +316,7 @@ gate nobody has opened is how a runtime budget dies.
 
 | | Milestone | Done when |
 | --- | --- | --- |
-| **R1** | Parity | §4's builtins land in both compilers — **done**: three with WP14 §7a and `getenv` here; the rows of §2A close — **five of seven**, `--emit-ast` and the error list open; `--parity` is green with an empty difference set — **done over the flags** (`tests/self/parity.js`) |
+| **R1** | Parity | §4's builtins land in both compilers — three landed with WP14 §7a and `getenv` with this package; the rows of §2A close (§7a's four have; the fifth, which building the check itself found, has not); `--parity` is green with an empty difference set |
 | **R2** | The seed protocol | `AMRITC_BOOTSTRAP` in `scripts/bootstrap.sh`; CI builds `self/` with the last release on both operating systems; the policy sentence is in `wp12-release.md` (G3, G4) |
 | **R3** | Oracle succession | `amritc-cmp` green over the corpus; `fuzz.js --stage1` repointed; the four survivors repointed to the seed; the lost coverage recovered as goldens, with the numbers written into §2B (G2) |
 | **R4** | Distribution | four binaries per release; the npm package installs one; `--version` has a new source; INSTALL.md and wp12 rewritten (G5) |

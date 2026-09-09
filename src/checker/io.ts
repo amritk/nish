@@ -34,12 +34,11 @@
  *                                       `path` right now. It answers rather
  *                                       than exits for the same reason the
  *                                       two above do (WP14 §7a).
- *   getenv(name): string | null         the environment variable's value, or
- *                                       `null` when it is not set. A call and
- *                                       not `process.env.NAME`, because the
- *                                       key is a value and member access on a
- *                                       dynamic key is what Phase 0 forbids
- *                                       (WP19 §4).
+ *   getenv(name): string | null         one environment variable, or `null`
+ *                                       when it is unset (WP19 R1). A call
+ *                                       and not `process.env.NAME`, because
+ *                                       member access on a dynamic key is
+ *                                       what Phase 0 forbids.
  *
  *   process.argv: string[]              the command line, index 0 the program
  *                                       path (like C's argv[0]); read-only,
@@ -149,20 +148,16 @@ const checkIsDirectorySync: BuiltinCallChecker = (ctx, expr, scope) => {
 };
 
 /**
- * `getenv(name)` (WP19 §4): the value of an environment variable, or `null`.
+ * `getenv(name)` (WP19 R1): the value of one environment variable, or `null`
+ * when it is unset. Nullable rather than an empty string because "unset" and
+ * "set to nothing" are different answers and a driver acts on the difference:
+ * `CC=` is a deliberately empty setting, `CC` unset means "use the default".
+ * The result narrows with `!== null` like every other `T | null`.
  *
- * A *function* rather than `process.env.NAME`, and that is a fact about the
- * language rather than a preference. `process.platform` and `process.argv`
- * are member reads on a name known at compile time; an environment lookup is
- * by a key that is a value, and member access on a dynamic key is exactly what
- * Phase 0 rejects. There is no object type with arbitrary properties either,
- * so a call is the only shape that fits.
- *
- * `string | null` rather than the empty string for "not set", because a
- * variable set to nothing is a real state a caller may need to tell apart —
- * `CC=` is not `CC` unset. Narrowed like any other nullable, which is the
- * bargain `readFileSyncOrNull` makes for the same reason: there are no
- * exceptions, so absence has to be a value.
+ * A function and not `process.env.NAME`: the namespace properties this file
+ * already has (`process.argv`, `process.platform`) are fixed names, and
+ * `process.env` would need member access on a key chosen at runtime, which is
+ * exactly what Phase 0 refuses. WP19 §4 chose the call for that reason.
  */
 const checkGetenv: BuiltinCallChecker = (ctx, expr, scope) => {
   checkArity(ctx, expr, "getenv", 1);

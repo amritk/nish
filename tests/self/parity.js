@@ -1,141 +1,137 @@
 /**
- * The WP19 G1 parity check: no flag and no answer is one compiler's alone.
+ * WP19 G1: parity between the two compilers, as one table.
  *
- *   node tests/self/parity.js              the difference table, empty or not
- *   node tests/self/parity.js --verbose    every row, not only the differing ones
+ *   node tests/self/parity.js                 the whole corpus, every variation
+ *   node tests/self/parity.js --flags-only    the flag-set half alone (seconds)
+ *   node tests/self/parity.js --only str_     just the programs whose path matches
+ *   node tests/self/parity.js --verbose       list every run, not only the differences
+ *   node tests/run.js --parity                the same thing, as the suite runs it
  *
- * The oracles beside this one compare the two compilers over the *corpus* with
- * each program's own flags. This one compares them over the *flags*: it reads
- * both `--help` texts, diffs the two sets, and then runs a matrix of every
- * no-value flag and every value a valued flag takes across a handful of
- * programs, requiring the same exit code, the same IR and the same streams
- * from both sides. G1 wants an empty difference set printed as a table rather
- * than asserted silently, so the table is what this writes.
+ * **What this is, next to the other oracles.** `ir_oracle.js` compares the IR,
+ * `checked_oracle.js` the checked dump, `interop_oracle.js` the sidecars and
+ * `reject_oracle.js` the refusals — each over one surface, with the flags each
+ * program already carries. This compares *everything the command line
+ * produces* — exit status, stdout, stderr, and every file written — across the
+ * flag variations the suite uses, which is the gate's actual question: is there
+ * a program or a flag that is still stage0's?
  *
- * The two halves catch different things and both were needed:
- *
- *   - the flag-set diff is what notices a flag that exists on one side only.
- *     `--no-warn-performance` was stage0's and `--out-dir` was stage1's, and
- *     neither showed up anywhere, because no test asks a compiler what flags
- *     it has;
- *   - the matrix is what notices a flag that both sides accept and only one
- *     side acts on. Nothing else here would: a flag the driver parses and
- *     drops leaves no trace in the IR the other oracles compare.
- *
- * A difference is only allowed when it is *named* below, with the reason, and
- * `--emit-ast` is the one that is (wp14-selfhost.md §7). An unnamed one fails
- * the run, which is the whole of G1: a gate nobody can fail is a wish.
+ * A difference is a failure unless it is **declared** below with a reason. The
+ * mode is green when the undeclared set is empty; declared ones are counted
+ * and named in the table, never hidden, for the reason a skip in the other
+ * oracles is counted and named (`.claude/selfhost.md`).
  */
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
-import { build } from "./ir_oracle.js";
-import { extraArgs } from "./corpus.js";
+import { spawn } from "node:child_process";
+import { linkPrograms, programs, root } from "./corpus.js";
 
-const root = path.resolve(import.meta.dirname, "..", "..");
 const cli = path.join(root, "dist", "index.js");
+const workRoot = path.join(root, "build", "test", "parity");
 
 /**
- * Differences that are decisions rather than work, each with the reason it is
- * one. Anything not in here is a failure.
- */
-const ALLOWED = new Map([
-  [
-    "--emit-ast",
-    "stage0's: its dump prints the `typescript` package's node names and line:column spans, and stage1's tree is the flattened one `self/nodes.ts` defines (wp14-selfhost.md §7)",
-  ],
-]);
-
-/**
- * The programs the matrix runs. Small and few on purpose — this is a flag
- * matrix, and the corpus is `ir_oracle.js`'s job — but between them they reach
- * a string, a class, an array, a loop the performance class warns about, a
- * program whose modules arrive by `import`, and one that is refused, so a flag
- * that only shows up in one of those has somewhere to show up.
+ * The flag variations, applied on top of whatever flags a program already
+ * carries. Every one of them is a flag the suite itself uses (the `.args`
+ * sidecars of `tests/cases` and `tests/link`, and `tests/run.js`'s own runs);
+ * nothing here is invented for the occasion.
  *
- * Each is run with **its own flags** as the base, the ones the suite compiles
- * it with (`// smoke: args` or an `.args` sidecar), and the matrix flag on top.
- * Running a program in a mode it was not written for compares error recovery
- * rather than the flag, and the two compilers do diverge there — see the R1 row
- * for it in `docs/wp19-stage0-retirement.md` §2A, which is where that belongs.
+ * `family` is what the variation sets, so a program that already sets it in
+ * its own `.args` is left alone rather than compiled with two spellings of one
+ * flag. `stdoutOnly` marks the dumps, which write no IR.
  */
-const PROGRAMS = [
-  "examples/hello.ts",
-  "examples/strings.ts",
-  "examples/nbody.ts",
-  "tests/cases/perf_str_concat_loop.ts",
-  "tests/cases/reject_multi_error.ts",
-  "examples/multi/main.ts",
-];
-
-/** Flags that stand alone. Every one of them is run against every program. */
-const NO_VALUE = [
-  "--plain",
-  "--strict-exports",
-  "--no-strict-exports",
-  "--unchecked-indexing",
-  "--nsw",
-  "--wrapping",
-  "--no-stack-alloc",
-  "--runtime-decls",
-  "--no-warn-performance",
-  "--json",
-  "-g",
-];
-
-/** Flags that take a value, and the values worth running. */
-const VALUED = [
-  ["--number-mode", "i32"],
-  ["--number-mode", "f64"],
-  ["--target", "host"],
-  ["--target", "x86_64-unknown-linux-gnu"],
-  ["--target", "aarch64-apple-darwin"],
-  ["--target", "wasm32-wasi"],
+const VARIATIONS = [
+  { name: "plain", args: [] },
+  { name: "--plain", args: ["--plain"], family: "--plain" },
+  { name: "-g", args: ["-g"], family: "-g" },
+  { name: "--wrapping", args: ["--wrapping"], family: "--wrapping" },
+  { name: "--unchecked-indexing", args: ["--unchecked-indexing"], family: "--unchecked-indexing" },
+  { name: "--no-stack-alloc", args: ["--no-stack-alloc"], family: "--no-stack-alloc" },
+  { name: "--no-strict-exports", args: ["--no-strict-exports"], family: "strict-exports" },
+  { name: "--strict-exports", args: ["--strict-exports"], family: "strict-exports" },
+  { name: "--runtime-decls", args: ["--runtime-decls"], family: "--runtime-decls" },
+  { name: "--number-mode f64", args: ["--number-mode", "f64"], family: "--number-mode" },
+  { name: "--target", args: ["--target", "x86_64-unknown-linux-gnu"], family: "--target" },
+  { name: "--target host", args: ["--target", "host"], family: "--target" },
+  { name: "--emit-checked", args: ["--emit-checked"], family: "dump", stdoutOnly: true },
+  { name: "--emit-ast", args: ["--emit-ast"], family: "dump", stdoutOnly: true },
 ];
 
 /**
- * The flags a compiler says it has. stage0 prints one option per line, two
- * spaces then the flag, with continuations indented further; stage1 prints the
- * one-line usage with each flag in brackets. Reading both out of `--help` is
- * deliberate: a flag that is implemented and undocumented is a difference this
- * check is entitled to miss, because a user cannot find it either.
+ * Differences that are decided rather than broken. Each answers "why is this
+ * not a parity bug?" in its own words, and each is counted in the table, so
+ * the list can only grow by someone writing a sentence they are willing to
+ * sign.
+ *
+ * A declaration is **narrow on purpose**: `normalize` rewrites away exactly
+ * the part that is allowed to differ, and whatever still differs afterwards is
+ * reported as undeclared. A declaration that returned a constant would swallow
+ * the next real divergence on the same surface, which is the failure mode this
+ * whole mode exists to prevent — the one exception is `whole`, for a surface
+ * where every byte differs by design and there is nothing finer to say.
  */
-function flagsOf(help) {
-  const found = new Set();
-  for (const line of help.split("\n")) {
-    // stage0's option lines: exactly two spaces, then `-x` or `--xyz`,
-    // optionally `-o, --output`. Continuations are indented much further and
-    // cannot match.
-    const option = /^ {2}(-[\w-]+)(?:, (--[\w-]+))?/.exec(line);
-    if (option !== null) {
-      found.add(option[1]);
-      if (option[2] !== undefined) found.add(option[2]);
-      continue;
-    }
-    // The usage lines, on both sides: `[--flag ...]`, and the alternatives
-    // of `-v, --version | -h, --help`, which is why `,` and `|` separate too.
-    for (const m of line.matchAll(/(?:^|[[\s|,])(--?[\w-]+)/g)) found.add(m[1]);
+const DECLARED = [
+  {
+    flag: "--emit-ast",
+    surface: "stdout",
+    whole: true,
+    why: "each compiler dumps its own tree: stage0 the `typescript` package's node names and 1-based line:col spans, stage1 the flattened vocabulary of `self/nodes.ts` with byte offsets (wp19 §2A). A golden per compiler pins each; there is deliberately no oracle between them.",
+  },
+  {
+    flag: "--emit-checked",
+    surface: "stdout",
+    normalize: (text) => text.replace(/^module .*?([^/\\]+\.ts)( \(entry\))?$/gm, "module $1$2"),
+    why: "the `module <path>` header only. stage0 rewrites a file name to be cwd-relative (`displayName` in src/dump.ts) because the harness hands it absolute paths and a golden must not carry a checkout path; stage1 prints the path it was given, because it has no `cwd` to relativise against and adding a builtin to change one line of a debug dump is what §4 means by the runtime budget dying. Every other line of the dump is compared as it stands.",
+  },
+];
+
+/**
+ * The declaration covering a surface, or null. It is keyed on the flags the
+ * run *effectively* carried, not on the variation's name: a program whose own
+ * `.args` ask for a dump (`tests/cases/dump_ast.ts`) is dumping under every
+ * variation, and keying on the name reported its difference as undeclared
+ * eleven times over.
+ *
+ * `whole` declarations match outright; the rest have to *earn* it by
+ * normalising the two texts into agreement, so a second, real difference on
+ * the same surface still reports.
+ */
+function declaredFor(flags, surface, want, got) {
+  for (const d of DECLARED) {
+    if (!flags.includes(d.flag) || d.surface !== surface) continue;
+    if (d.whole === true) return d;
+    if (d.normalize !== undefined && d.normalize(want) === d.normalize(got)) return d;
   }
-  return found;
+  return null;
 }
 
-/** `wrote <path>` names a temporary directory that differs per side. */
-function normalize(text) {
-  return text
-    .split("\n")
-    .filter((line) => !line.startsWith("wrote "))
-    // The driver's own prefix is the program's name, and the two programs are
-    // named differently on purpose. The diagnostics themselves carry no prefix
-    // and are compared whole.
-    .map((line) => line.replace(/^(amritc|compile): /, ""))
-    .join("\n")
-    .trimEnd();
+/**
+ * The stage1 compiler this compares against: `build/self/compile`, linked from
+ * `self/compile.ts` by stage0, which is what every other oracle builds too.
+ * Reused when it is already there, so a run of the mode after `npm test` does
+ * not pay for it twice. `AMRITC_PARITY_COMPILER` points at another one.
+ */
+async function build() {
+  const out = path.join(root, "build", "self", "compile");
+  if (fs.existsSync(out)) return out;
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  const r = await run("node", [cli, path.join(root, "self", "compile.ts"), "--link", out]);
+  if (r.status !== 0) {
+    process.stderr.write(`parity: could not build the stage1 compiler\n${r.stderr}\n`);
+    return null;
+  }
+  return out;
 }
 
-function llFiles(dir) {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir).filter((f) => f.endsWith(".ll")).sort();
+/** Spawn, resolving with `{ status, stdout, stderr }` as strings. */
+function run(cmd, args) {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    let err = "";
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (err += d));
+    child.on("close", (status) => resolve({ status, stdout: out, stderr: err }));
+    child.on("error", (e) => resolve({ status: null, stdout: out, stderr: String(e) }));
+  });
 }
 
 function fresh(dir) {
@@ -144,112 +140,277 @@ function fresh(dir) {
   return dir;
 }
 
-/**
- * One cell of the matrix: both compilers, the same program, the same flags,
- * the same output directory spelling. Answers null when they agree, and the
- * first thing that differed when they do not.
- */
-function runBoth(binary, work, program, flags) {
-  const dir0 = fresh(path.join(work, "stage0"));
-  const dir1 = fresh(path.join(work, "stage1"));
-  const opts = { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 };
-  const a = spawnSync("node", [cli, program, "-o", `${dir0}/`, ...flags], opts);
-  const b = spawnSync(binary, [program, "-o", `${dir1}/`, ...flags], opts);
-
-  if (a.status !== b.status) return `exit ${a.status} vs ${b.status}`;
-  if (normalize(a.stdout) !== normalize(b.stdout)) {
-    return `stdout:\n  stage0: ${normalize(a.stdout).split("\n")[0]}\n  stage1: ${normalize(b.stdout).split("\n")[0]}`;
-  }
-  if (normalize(a.stderr) !== normalize(b.stderr)) {
-    return `stderr:\n  stage0: ${normalize(a.stderr).split("\n")[0]}\n  stage1: ${normalize(b.stderr).split("\n")[0]}`;
-  }
-  const names0 = llFiles(dir0);
-  const names1 = llFiles(dir1);
-  if (names0.join(",") !== names1.join(",")) {
-    return `modules [${names0.join(" ")}] vs [${names1.join(" ")}]`;
-  }
-  for (const name of names0) {
-    const ir0 = fs.readFileSync(path.join(dir0, name), "utf8");
-    const ir1 = fs.readFileSync(path.join(dir1, name), "utf8");
-    if (ir0 !== ir1) {
-      const at = ir0.split("\n").findIndex((line, i) => line !== ir1.split("\n")[i]);
-      return `${name} differs at line ${at + 1}`;
+/** Every file under `dir`, as `relative path -> bytes`, so a missing file is a difference too. */
+function tree(dir) {
+  const out = new Map();
+  const walk = (at, prefix) => {
+    for (const entry of fs.readdirSync(at, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const full = path.join(at, entry.name);
+      const rel = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(full, rel);
+      else out.set(rel, fs.readFileSync(full, "utf8"));
     }
-  }
-  return null;
+  };
+  if (fs.existsSync(dir)) walk(dir, "");
+  return out;
 }
 
-function main(argv) {
-  const verbose = argv.includes("--verbose");
-  const binary = build();
-  if (binary === null) return 1;
-
-  const help0 = spawnSync("node", [cli, "--help"], { cwd: root, encoding: "utf8" });
-  const help1 = spawnSync(binary, ["--help"], { cwd: root, encoding: "utf8" });
-  if (help0.status !== 0 || help1.status !== 0) {
-    process.stderr.write("parity: a compiler would not answer --help\n");
-    return 1;
-  }
-  const flags0 = flagsOf(help0.stdout);
-  const flags1 = flagsOf(help1.stdout);
-
-  const differences = [];
-  const rows = [];
-  for (const flag of [...new Set([...flags0, ...flags1])].sort()) {
-    const both = flags0.has(flag) && flags1.has(flag);
-    const owner = flags0.has(flag) ? "stage0" : "stage1";
-    if (both) {
-      rows.push([flag, "both", ""]);
-      continue;
+/**
+ * The path of the first byte at which two texts differ, as a line and its two
+ * spellings — the shape `ir_oracle.js` reports, because it is what a reader
+ * can act on without opening both files.
+ */
+function firstDifference(want, got) {
+  const wantLines = want.split("\n");
+  const gotLines = got.split("\n");
+  for (let i = 0; i < Math.max(wantLines.length, gotLines.length); i++) {
+    if (wantLines[i] !== gotLines[i]) {
+      return `line ${i + 1}: stage1 \`${gotLines[i] ?? "<end>"}\`, stage0 \`${wantLines[i] ?? "<end>"}\``;
     }
-    const reason = ALLOWED.get(flag);
-    rows.push([flag, `${owner} only`, reason ?? "UNNAMED"]);
-    if (reason === undefined) differences.push(`${flag}: ${owner} only, with no reason given`);
   }
+  return "the texts differ but no line does";
+}
 
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), "amrit-parity-"));
-  let cells = 0;
-  const combinations = [...NO_VALUE.map((f) => [f]), ...VALUED];
-  for (const program of PROGRAMS) {
-    for (const flags of combinations) {
-      // A flag one side documents and the other does not is already a
-      // difference above; running it would report the same thing twice, in a
-      // worse shape. A flag *neither* documents still runs: `--nsw` and
-      // `--strict-exports` are accepted by both and listed by neither, since
-      // they now spell out what the compiler does anyway, and they are exactly
-      // the kind of flag that stops being wired up without anyone noticing.
-      if (flags.some((f) => f.startsWith("-") && flags0.has(f) !== flags1.has(f))) continue;
-      // The program's own flags first, and the matrix flag on top -- unless
-      // the two name the same thing, in which case the cell would be asking
-      // what `--number-mode i32 --number-mode f64` means rather than what the
-      // flag does.
-      const own = extraArgs(path.join(root, program));
-      if (flags.some((f) => own.includes(f))) continue;
-      const all = [...own, ...flags];
-      cells++;
-      const why = runBoth(binary, work, program, all);
-      if (why !== null) differences.push(`${program} ${all.join(" ")}: ${why}`);
-      if (verbose) process.stdout.write(`  ${why === null ? "same" : "DIFF"} ${program} ${all.join(" ")}\n`);
+/** Compare one program under one variation; returns the differences it found. */
+async function compare(compiler, program, variation, index) {
+  const own = program.args;
+  if (variation.family !== undefined && own.includes(variation.family)) return [];
+  if (variation.family === "strict-exports" && (own.includes("--strict-exports") || own.includes("--no-strict-exports"))) {
+    return [];
+  }
+  if (variation.family === "--number-mode" && own.includes("--number-mode")) return [];
+
+  const work = fresh(path.join(workRoot, String(index)));
+  const zeroDir = fresh(path.join(work, "stage0"));
+  const oneDir = fresh(path.join(work, "stage1"));
+  const args = [...own, ...variation.args];
+  const [zero, one] = await Promise.all([
+    run("node", [cli, program.entry, "-o", `${zeroDir}${path.sep}`, ...args]),
+    run(compiler, [program.entry, "-o", `${oneDir}${path.sep}`, ...args]),
+  ]);
+
+  const found = [];
+  const note = (surface, want, got, detail) => {
+    const declared = declaredFor(args, surface, want, got);
+    found.push({ program: program.name, variation: variation.name, surface, detail, declared });
+  };
+
+  if (zero.status !== one.status) {
+    note("exit", String(zero.status), String(one.status), `stage0 ${zero.status}, stage1 ${one.status}`);
+  }
+  if (zero.stdout !== one.stdout) note("stdout", zero.stdout, one.stdout, firstDifference(zero.stdout, one.stdout));
+  // stderr is compared as the *set of messages*, not byte for byte: stage0
+  // prints a source excerpt with a caret under the offending node and stage1
+  // prints the same diagnostics without it, which `reject_oracle.js` owns and
+  // `docs/wp14-selfhost.md` §7 records. The `error:` lines themselves must
+  // match, and that is what this compares.
+  const errors = (text) =>
+    text
+      .split("\n")
+      .filter((l) => / (error|warning): /.test(l))
+      .join("\n");
+  if (errors(zero.stderr) !== errors(one.stderr)) {
+    note("stderr", errors(zero.stderr), errors(one.stderr), firstDifference(errors(zero.stderr), errors(one.stderr)));
+  }
+  if (variation.stdoutOnly !== true) {
+    const zeroTree = tree(zeroDir);
+    const oneTree = tree(oneDir);
+    const names = new Set([...zeroTree.keys(), ...oneTree.keys()]);
+    for (const name of [...names].sort()) {
+      const want = zeroTree.get(name);
+      const got = oneTree.get(name);
+      if (want === undefined) note("files", "", name, `stage1 wrote ${name}, stage0 did not`);
+      else if (got === undefined) note("files", name, "", `stage0 wrote ${name}, stage1 did not`);
+      else if (want !== got) note(name, want, got, firstDifference(want, got));
     }
   }
   fs.rmSync(work, { recursive: true, force: true });
-
-  if (verbose || differences.length > 0) {
-    const width = Math.max(...rows.map(([flag]) => flag.length));
-    for (const [flag, where, note] of rows) {
-      if (!verbose && where === "both") continue;
-      process.stdout.write(`  ${flag.padEnd(width)}  ${where}${note ? `  ${note}` : ""}\n`);
-    }
-    for (const d of differences) process.stdout.write(`  DIFFERENCE ${d}\n`);
-  }
-
-  const named = rows.filter(([, where, note]) => where !== "both" && note !== "UNNAMED").length;
-  process.stdout.write(
-    `${flags0.size} stage0 flags, ${flags1.size} stage1 flags, ` +
-      `${cells} flag/program pairs agree, ${differences.length} differences` +
-      `${named > 0 ? `, ${named} named exception${named === 1 ? "" : "s"}` : ""}\n`
-  );
-  return differences.length === 0 ? 0 : 1;
+  return found;
 }
 
-process.exit(main(process.argv.slice(2)));
+/** Run `fn` over `items` with at most `n` in flight; results keep the input order. */
+async function pool(items, n, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(n, items.length)) }, worker));
+  return results;
+}
+
+/**
+ * The corpus as `{ name, entry, args }`: every positive program, every
+ * `tests/link` program (including the ones that exist to be refused — a
+ * refusal is a surface too, and both compilers must refuse alike), and the
+ * `reject_*` cases, which are where the two have the most to disagree about.
+ */
+function corpus() {
+  const out = [];
+  for (const entry of programs()) {
+    out.push({ name: path.relative(root, entry), entry, args: argsFor(entry) });
+  }
+  for (const program of linkPrograms()) {
+    out.push({ name: `link/${program.name}`, entry: program.main, args: argsFor(program.main) });
+  }
+  const casesDir = path.join(root, "tests", "cases");
+  for (const name of fs.readdirSync(casesDir).sort()) {
+    if (!name.endsWith(".err")) continue;
+    const entry = path.join(casesDir, `${name.slice(0, -4)}.ts`);
+    if (fs.existsSync(entry)) out.push({ name: `cases/${name.slice(0, -4)}`, entry, args: argsFor(entry) });
+  }
+  return out;
+}
+
+function argsFor(entry) {
+  const sidecar = entry.replace(/\.ts$/, ".args");
+  if (fs.existsSync(sidecar)) return fs.readFileSync(sidecar, "utf8").trim().split(/\s+/).filter(Boolean);
+  const dirArgs = path.join(path.dirname(entry), "args");
+  if (path.basename(entry) === "main.ts" && fs.existsSync(dirArgs)) {
+    return fs.readFileSync(dirArgs, "utf8").trim().split(/\s+/).filter(Boolean);
+  }
+  const marker = /^\/\/ smoke: args (.*)$/m.exec(fs.readFileSync(entry, "utf8"));
+  return marker ? marker[1].trim().split(/\s+/).filter(Boolean) : [];
+}
+
+/**
+ * Flags one compiler documents and the other does not.
+ *
+ * The corpus half below compiles *programs* with flags, which can only ever
+ * exercise a flag someone thought to put in `VARIATIONS`. This asks the other
+ * question — what flags does each compiler say it has? — and it is the half
+ * that found the two differences no oracle and no variation could reach:
+ * `--no-warn-performance` was stage0's and stage1 printed no performance
+ * warnings at all, and `--out-dir` was stage1's alone. Both had been there for
+ * as long as they had existed.
+ *
+ * The set comes from each compiler's own `--help`, which is deliberate: a flag
+ * that is implemented and undocumented is a difference this is entitled to
+ * miss, because a user cannot find it either.
+ */
+function flagsOf(help) {
+  const found = new Set();
+  for (const line of help.split("\n")) {
+    // stage0's option lines: exactly two spaces, then `-x` or `--xyz`,
+    // optionally `-o, --output`. Continuations are indented much further and
+    // cannot match, so a flag named in a description is not counted.
+    const option = /^ {2}(-[\w-]+)(?:, (--[\w-]+))?/.exec(line);
+    if (option !== null) {
+      found.add(option[1]);
+      if (option[2] !== undefined) found.add(option[2]);
+      continue;
+    }
+    // The usage lines on both sides: `[--flag ...]`, and the alternatives of
+    // `-v, --version | -h, --help`, which is why `,` and `|` separate too.
+    for (const m of line.matchAll(/(?:^|[[\s|,])(--?[\w-]+)/g)) found.add(m[1]);
+  }
+  return found;
+}
+
+/**
+ * The flag-set difference, as rows shaped like the corpus half's so one table
+ * prints both. A flag on one side only is undeclared unless `DECLARED` names
+ * it, which is how `--emit-ast` — answered by both compilers now, about their
+ * own trees — differs from a flag one of them simply does not have.
+ */
+function flagSetDifferences(help0, help1) {
+  const flags0 = flagsOf(help0);
+  const flags1 = flagsOf(help1);
+  const out = [];
+  for (const flag of [...new Set([...flags0, ...flags1])].sort()) {
+    if (flags0.has(flag) === flags1.has(flag)) continue;
+    const owner = flags0.has(flag) ? "stage0" : "stage1";
+    const declared = DECLARED.find((d) => d.flag === flag && d.surface === "flag set") ?? null;
+    out.push({
+      program: "--help",
+      variation: "flag set",
+      surface: "flag set",
+      declared,
+      detail: `\`${flag}\` is ${owner}'s alone`,
+    });
+  }
+  return out;
+}
+
+async function main(argv) {
+  const verbose = argv.includes("--verbose");
+  // The flag-set half needs two `--help` runs and no corpus, so it is seconds
+  // where the whole mode is minutes. `tests/run.js` runs it on every `npm
+  // test` for that reason; the corpus half stays the opt-in mode it was built
+  // as.
+  const flagsOnly = argv.includes("--flags-only");
+  const onlyAt = argv.indexOf("--only");
+  const only = onlyAt >= 0 ? argv[onlyAt + 1] : null;
+  const compiler = process.env.AMRITC_PARITY_COMPILER ?? (await build());
+  if (compiler === null) return 1;
+  fresh(workRoot);
+
+  const runs = [];
+  if (!flagsOnly) {
+    for (const program of corpus()) {
+      if (only !== null && !program.name.includes(only)) continue;
+      for (const variation of VARIATIONS) runs.push({ program, variation });
+    }
+  }
+  const t0 = Date.now();
+  // A full run is minutes — `self/`'s modules are whole programs and every one
+  // of them is compiled under every variation — so it says where it is. On
+  // stderr, so that piping the table somewhere does not collect the progress
+  // with it, and only when stderr is a terminal, so a CI log is not a
+  // thousand lines of counter.
+  const total = runs.length;
+  let done = 0;
+  const ticking = process.stderr.isTTY === true && !verbose;
+  const results = await pool(runs, 8, async (run_, i) => {
+    const found = await compare(compiler, run_.program, run_.variation, i);
+    done++;
+    if (ticking && done % 25 === 0) {
+      process.stderr.write(`\rparity: ${done}/${total} runs`);
+    }
+    return found;
+  });
+  if (ticking) process.stderr.write(`\r${" ".repeat(30)}\r`);
+  // The flag sets, compared once: it is a property of the two compilers rather
+  // than of any program, so it does not belong in the per-run pool above.
+  const help0 = await run("node", [cli, "--help"]);
+  const help1 = await run(compiler, ["--help"]);
+  if (help0.status !== 0 || help1.status !== 0) {
+    process.stdout.write("parity: a compiler would not answer --help\n");
+    return 1;
+  }
+  const differences = [...flagSetDifferences(help0.stdout, help1.stdout), ...results.flat()];
+  const undeclared = differences.filter((d) => d.declared === null);
+  const declared = differences.filter((d) => d.declared !== null);
+
+  if (undeclared.length > 0 || verbose) {
+    const rows = verbose ? differences : undeclared;
+    process.stdout.write(`${"program".padEnd(44)} ${"variation".padEnd(20)} ${"surface".padEnd(12)} detail\n`);
+    process.stdout.write(`${"-".repeat(110)}\n`);
+    for (const d of rows) {
+      process.stdout.write(
+        `${d.program.padEnd(44)} ${d.variation.padEnd(20)} ${d.surface.padEnd(12)} ${d.declared ? "(declared) " : ""}${d.detail}\n`
+      );
+    }
+  }
+  if (declared.length > 0) {
+    const byReason = new Map();
+    for (const d of declared) byReason.set(d.declared, (byReason.get(d.declared) ?? 0) + 1);
+    for (const [reason, count] of byReason) {
+      process.stdout.write(`declared: ${count} × ${reason.flag} ${reason.surface} — ${reason.why}\n`);
+    }
+  }
+  const seconds = ((Date.now() - t0) / 1000).toFixed(1);
+  process.stdout.write(
+    flagsOnly
+      ? `parity: the flag sets each --help names (${seconds} s); ` +
+        `${undeclared.length} undeclared difference(s), ${declared.length} declared\n`
+      : `parity: ${runs.length} runs over ${new Set(runs.map((r) => r.program.name)).size} programs ` +
+        `(${seconds} s); ${undeclared.length} undeclared difference(s), ${declared.length} declared\n`
+  );
+  return undeclared.length === 0 ? 0 : 1;
+}
+
+process.exitCode = await main(process.argv.slice(2));

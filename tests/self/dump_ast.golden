@@ -1,0 +1,54 @@
+SOURCE_FILE tests/cases/dump_ast.ts
+  FUNCTION 0 133
+    IDENT 9 14 scale
+    LIST 15 35
+      PARAM 15 24
+        IDENT 15 16 p
+        TYPE_REF 18 24 number
+          LIST 0 0
+      PARAM 26 35
+        IDENT 26 27 k
+        TYPE_REF 29 35 number
+          LIST 0 0
+    TYPE_REF 38 44 number
+      LIST 0 0
+    BLOCK 45 133
+      VAR 49 63
+        LIST 53 62
+          VAR_DECL 53 62
+            IDENT 53 58 total
+            EMPTY 0 0
+            NUMBER 61 62 0
+      FOR 66 115
+        VAR 71 80
+          LIST 75 80
+            VAR_DECL 75 80
+              IDENT 75 76 i
+              EMPTY 0 0
+              NUMBER 79 80 0
+        BINARY 82 87 <
+          IDENT 82 83 i
+          IDENT 86 87 k
+        UNARY+postfix 89 92 ++
+          IDENT 89 90 i
+        BLOCK 94 115
+          EXPR_STMT 100 111
+            BINARY 100 110 +=
+              IDENT 100 105 total
+              IDENT 109 110 p
+      RETURN 118 131
+        IDENT 125 130 total
+  FUNCTION+export 135 205
+    IDENT 151 156 greet
+    LIST 157 169
+      PARAM 157 169
+        IDENT 157 161 name
+        TYPE_REF 163 169 string
+          LIST 0 0
+    TYPE_REF 172 178 string
+      LIST 0 0
+    BLOCK 179 205
+      RETURN 183 203
+        BINARY 190 202 +
+          STRING 190 195 #3
+          IDENT 198 202 name

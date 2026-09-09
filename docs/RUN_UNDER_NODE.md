@@ -45,8 +45,8 @@ the same commit.
 - `readFileSync`, `readFileSyncOrNull`, `writeFileSync`, `appendFileSync`,
   `mkdirSync`, `isDirectorySync`, `spawnSync` — globals in AmritScript, not
   imports from `node:fs`
-- `getenv` — `process.env[name] ?? null`, because Node answers `undefined` for
-  an unset variable and the language has no `undefined`
+- `getenv` — `process.env[name] ?? null`, because Node answers `undefined`
+  where the language has only `null`
 - `toI32`, `toI64`, `toF32`, `toF64`, `toU8`…`toU64`, `f64ToBits`, `bitsToF64`
 - `Ok`, `Err`
 - `parseInt`, `parseFloat` — AmritScript's, whose deviations from JavaScript are

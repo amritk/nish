@@ -141,6 +141,12 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     effect: "read",
   },
   {
+    name: "amrit_str_index_of",
+    signature: `declare i64 @amrit_str_index_of(${STR_NOCAP}, ${STR_NOCAP})`,
+    attrs: ["nounwind", "willreturn", "memory(argmem: read)"],
+    effect: "read",
+  },
+  {
     name: "amrit_str_len",
     signature: `declare i64 @amrit_str_len(${STR_NOCAP})`,
     attrs: ["nounwind", "willreturn", "memory(argmem: read)"],
@@ -253,20 +259,6 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     effect: "write",
   },
   {
-    // WP19 §4. Reads the process environment and copies the answer into the
-    // arena, so it both reads state this function does not own and writes
-    // memory: `effect: "write"`, and neither `readonly` nor `readnone`. A
-    // `setenv` from linked C is what makes the read unrepeatable, exactly as a
-    // failed `stat` makes `amrit_is_dir`'s. The result is freshly allocated
-    // (`noalias`) and may be null, so no `nonnull` — unlike `amrit_read_file`
-    // beside it and like `amrit_read_file_or_null`. The name is read and never
-    // retained (`STR_NOCAP`).
-    name: "amrit_getenv",
-    signature: `declare noalias noundef align 8 i8* @amrit_getenv(${STR_NOCAP})`,
-    attrs: ["nounwind", "willreturn"],
-    effect: "write",
-  },
-  {
     // WP14 §7a. One `stat`, answering only "is there a directory here?", which
     // is the question `-o <dir>` asks. `effect: "write"` rather than "read"
     // for the reason `amrit_parse_number` is not readonly: a failed `stat`
@@ -294,6 +286,23 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     name: "amrit_spawn",
     signature: "declare noundef i32 @amrit_spawn(%struct.amrit_array* noundef nonnull align 8)",
     attrs: ["nounwind"],
+    effect: "write",
+  },
+  // ---- WP19 R1: the environment, so a self-hosted driver can honour `CC`
+  // before it spawns `scripts/build.sh` the way stage0's preflight does.
+  {
+    // `effect: "write"` and no `readnone`, for two reasons that each suffice:
+    // the call allocates, so it moves the arena, and `environ` is not memory
+    // LLVM is tracking, so two reads either side of a `spawnSync` must not
+    // fold into one. `noalias` is a fact here where it is not on
+    // `amrit_platform`: every call answers a fresh arena string rather than
+    // the same constant. The name is read and never retained (`STR_NOCAP`),
+    // and the result may be null, so no `nonnull` — exactly
+    // `amrit_read_file_or_null`'s shape, which is the other builtin whose
+    // answer is `string | null`.
+    name: "amrit_getenv",
+    signature: `declare noalias noundef align 8 i8* @amrit_getenv(${STR_NOCAP})`,
+    attrs: ["nounwind", "willreturn"],
     effect: "write",
   },
   // ---- WP14 §7a: what machine this is. `--target host` composes its triple

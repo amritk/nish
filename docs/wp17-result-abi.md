@@ -305,6 +305,35 @@ ABI of two scalars, the way rustc's `ScalarPair` does, and pack only where a
 host can see. That needs `--strict-exports` to be more than advisory and is
 the natural next step rather than something to bolt on here.
 
+### That step has since been taken (WP15)
+
+A non-exported function now takes and answers a by-value `Result` as
+`{ i1, i32 }` rather than the packed word, on exactly the condition that gives
+it `internal` linkage. `bench/result` goes from **650 ms to 464 ms**, against
+C's 444: the row above that reads "C, an eight-byte struct clang coerces at
+the boundary" is the one we now sit next to, and the 1.46x behind C is 1.04x.
+
+Two things about how it was done are worth keeping.
+
+**The packing code did not move.** `packArm`, `packObject` and `unpackResult`
+still build and read the same `i64`; the pair is made from that word at the
+call boundary and taken apart again on the other side. That reads like waste
+and is not: LLVM folds the round trip away completely, and a hand-written
+two-scalar lowering of this benchmark measures **467 ms against 464 ms** —
+the same, within noise. Keeping one packing path was worth more than the
+instructions the conversion appears to cost, and it is why the change is a
+boundary and a predicate rather than a rewrite of §1.
+
+**The condition is the linkage condition, and must stay that way.** The
+private shape is safe only because no host can name the symbol, so
+`privateResultAbi` is `strictExports && !exported` — the same test that writes
+`internal` — and `--no-strict-exports` turns it off everywhere along with the
+linkage it mirrors. An imported function is exported by definition, so a
+cross-module call is always packed and the two modules agree without
+consulting each other. `--emit-header`, `--emit-dts` and `--emit-napi` describe
+exported functions only and are therefore untouched: `tests/cases/res_export`
+still emits `i64` for all four of its shapes.
+
 ## 5. What is *not* by value
 
 - **Large `Result`s**, by the rule in §1. They still travel as the arena

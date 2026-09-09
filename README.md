@@ -264,9 +264,11 @@ build/amritc hello.ts --link hello  # -o, --link, --profile, its own directories
 bootstrap starts from and the oracle every `self/` phase is compared against.
 What it is no longer is the only one that can emit DWARF, write the interop
 sidecars or link an executable — the self-hosted compiler does all three, the
-first two byte for byte the same, and it answers `--target host` by asking the
-machine what it is. What stays stage0's is the `--emit-ast` dump, which prints
-the `typescript` package's node names and so could only ever be imitated.
+first two byte for byte the same, and it answers `--target host` and `--emit-ast` too.
+No flag is stage0's by name any more; what differs is what `--emit-ast`
+*prints*, since each compiler dumps its own tree — stage0 the `typescript`
+package's node names, the self-hosted one the vocabulary of `self/nodes.ts` —
+and imitating the other was never the point.
 Details, and the subset `self/` is written in, are in
 [docs/wp14-selfhost.md](docs/wp14-selfhost.md).
 

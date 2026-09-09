@@ -7,6 +7,150 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ## [Unreleased]
 
+### Fixed — correctness
+
+- **`String(x)` on a double printed seventeen digits where sixteen suffice, for
+  about one value in twenty thousand.** The language's rule is that number
+  formatting matches JavaScript's `String(x)`, which prints the *fewest* digits
+  that read back as the same double. The old search asked `snprintf` for k
+  digits and `strtod` whether they round-trip, increasing k until they did —
+  but `snprintf` can only hand back the *correctly-rounded* k-digit string, and
+  for some values that one does not round-trip while a neighbouring k-digit
+  string does. The search then gave up on k and moved on.
+
+  `7.120236347223045e-307` is such a value: Node prints those sixteen digits,
+  `amritc` printed `7.1202363472230444e-307`. So did `runtime/shim.mjs`
+  disagree with the native runtime, since the shim delegates to JavaScript's
+  own `String`. Ryu (below) finds the shortest string rather than the rounded
+  one, and `tests/cases/f64_shortest_digits` pins four such values against
+  Node's output alongside `0.1`, `1e21` and `5e-324`.
+
+### Changed
+
+- **`--out-dir` is gone from the self-hosted compiler; `-o <dir>/` is the one
+  spelling (WP19 G1).** It was stage1's own flag, added when
+  `scripts/bootstrap.sh` drove the stages and kept afterwards because the
+  oracles passed it. stage0 has never had it, so it was a difference in the
+  flag sets running in the direction nobody checks — a flag a user could come
+  to depend on that the one remaining compiler would then have to keep forever.
+
+  `-o <dir>/` did the same thing already, with the same directory-making and
+  the same per-module stems, so the removal costs nothing: `tests/self/`'s IR,
+  interop and bootstrap oracles pass `-o <dir>/` to both compilers now instead
+  of one spelling each. Both usage texts also name the same six spellings now —
+  `-o`/`--output`, `-v`/`--version` and `-h`/`--help` were always accepted by
+  both and each side documented a different subset, and since the flag-set
+  check reads `--help`, what a compiler documents is what it is held to.
+
+- **A `<name>.env` line that is a bare `NAME` unsets the variable.** The
+  sidecar layers `NAME=value` over the inherited environment, so `getenv`'s
+  third answer — unset — was only as reliable as the developer's own
+  environment: `io_getenv` assumed `AMRITC_TEST_NOT_SET` was absent rather than
+  making it so. A line with no `=` now removes it, in both readers
+  (`tests/run.js` and `tests/differential/lib.js`), and the case says so.
+
+- **`s.indexOf(sub)` is about 17x faster: 53.7 ms to 2.9 ms over 52 MB of
+  haystack (WP15).** The search was emitted inline, one `amrit_str_at` probe
+  per offset, so that `runtime.c` stayed inside its size budget — which made
+  the idiomatic string search a byte-at-a-time scan. It is now
+  `amrit_str_index_of` in the runtime, where `memchr` finds a candidate first
+  byte and `memcmp` confirms it, both the libc's vectorised routines. Every
+  call site *shrinks*, since thirty lines of loop become one call, and
+  `runtime.c`'s `.text` goes from 3,852 to 4,002 bytes, still inside the 4 KB
+  budget.
+
+  `memmem` would be 2.5 ms and is deliberately not used: it needs
+  `_GNU_SOURCE`, which makes glibc's `<string.h>` pull in `<strings.h>` — and
+  this project generates a header of that name from `examples/strings.ts`, so
+  any `-I` at it shadows the POSIX header and drags `amritc.h` into
+  `runtime.c`. The interop tests caught exactly that. A C host would hit the
+  same, and a fifth of the time is not worth making the runtime sensitive to
+  its includer's include path.
+
+  The semantics are unchanged: an empty needle answers 0, a needle longer than
+  the haystack -1, and the offset is in bytes (`tests/cases/str_search`, and
+  eleven cases in `tests/runtime_test.c`).
+
+- **A non-exported function passes a small `Result` as two values instead of
+  one packed word: `bench/result` goes from 650 ms to 464 ms (WP15).**
+  `Result<T, E>` with two small scalar payloads has travelled in a single
+  `i64` since WP17, because that is what a C or wasm host has to see. Inside a
+  module no host is looking, and the word costs something real there: with both
+  halves in one register the `select` that picks the live arm happens on the
+  word, and instcombine can no longer fold the arithmetic around it. A function
+  that gets `internal` linkage now uses `{ i1, i32 }` instead — rustc's
+  `ScalarPair` — which puts us at C's 444 ms rather than 1.46x behind it.
+
+  **The condition is the linkage condition**: `--strict-exports` on and the
+  function not exported, the same test that writes `internal`. The private
+  shape is safe only because no host can name the symbol, so
+  `--no-strict-exports` turns it off along with the linkage it mirrors, and an
+  imported function — exported by definition — is always packed, which is how
+  two modules agree without consulting each other. `--emit-header`,
+  `--emit-dts` and `--emit-napi` describe exported functions only and are
+  unchanged; `tests/cases/res_export` still emits `i64` for all four shapes.
+
+  The packing code did not move: the word is still built exactly as before and
+  split at the boundary. LLVM folds the round trip away, and a hand-written
+  two-scalar lowering measures 467 ms against this 464 — the same, within
+  noise — so one packing path was worth keeping. `docs/wp17-result-abi.md` §4
+  has the four-way table.
+
+- **Formatting a double is 35x faster: 2557 ns to 72 ns (WP15).**
+  `amrit_str_from_f64` used up to seventeen `snprintf`/`strtod` round trips to
+  find the shortest digits; it now computes them directly with Ryu (Adams,
+  PLDI 2018). The ECMAScript layout around the digits — where the point goes,
+  when to use e-form — is unchanged, so only the digit generation moved.
+
+  **This costs binary size, and the size lands only on programs that use it.**
+  The two power-of-five tables are 9,888 bytes of read-only data, generated
+  with exact integer arithmetic rather than transcribed. `runtime.c`'s `.text`
+  goes from 2,775 to 3,852 bytes, still inside the 4 KB budget of
+  `docs/MASTER_PLAN.md` §2; its `.rodata` goes from 32 bytes to 9,920. Section
+  GC keeps the tables out of any binary that never formats a double, so
+  `bench/fib` is unchanged at 5,600 bytes while `bench/nbody` goes from 10,856
+  to 21,168.
+
+  Validated against the ECMAScript rule itself rather than against the code it
+  replaces — the digits round-trip, no shorter string round-trips, and no
+  same-length string is closer — over 20.9 million values: every finite
+  exponent with boundary and random mantissas, the powers of ten, and uniform
+  random bit patterns. Zero violations. The same harness finds 46 violations
+  per 1.4 million in the old implementation, which is the bug above.
+
+- **`scripts/size-report.sh` measures the section the budget is about.** §2
+  defines the runtime budget as `runtime.c`'s `.text` at `-Oz`, but the script
+  reported the `text` *column* of `size`, which also counts `.rodata` and the
+  `.eh_frame` entries the size profile strips. That row therefore read 4,696
+  against a 4,096 budget while the section it names was at 2,775. It now
+  reports `.text` against the budget and `.rodata` on its own row.
+
+- **An array's header and its elements are separate alias domains, which is
+  worth 1.6x on a loop that writes elements (WP15).** Every load and store of a
+  `%struct.amrit_array` field now carries `!alias.scope`/`!noalias` naming a
+  "header" scope, and every load and store of element data the matching
+  "elements" scope. Nothing about the language changes — no flag, no syntax, no
+  observable behaviour — but LLVM stops having to assume that `a[i] = v` might
+  land on some array's `len` or `data`.
+
+  What that assumption cost: the header was reloaded on *every iteration* of
+  every loop that writes an element, because LICM could not hoist a load the
+  store might clobber, and the loop vectoriser gave up behind it. On
+  `dst[i] = src[i] * 2.0` over 8192 doubles, `--profile speed`, the reload alone
+  measured **1205 ms against 763 ms**.
+
+  The proof is about bytes rather than allocations: a header's three fields and
+  the `cap * sizeof(T)` of element storage never overlap, in any of the four
+  shapes the compiler produces them (an arena bump each, two entry-block
+  allocas under WP6, or — for `process.argv` alone — one `malloc` block whose
+  elements start after the header). `src/codegen/emit/arrays.ts` carries the
+  full argument beside the code. Strings are left alone: a string is one block
+  whose length and bytes are contiguous, so it has no such split to describe.
+
+  `tests/cases/arr_alias_domains` pins the consequence a golden cannot express
+  — after `opt -O2` no header load is left inside the loop — and 39 array
+  goldens grew the metadata. `--plain` emits none of it.
+
 ### Changed — BREAKING
 
 - **Signed integer overflow is now undefined behaviour. The documented
@@ -83,130 +227,174 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   as an out-of-bounds inside stage1 the moment two modules of `self/` both
   declared a `narrow` (`tests/link/duplicate_internal`).
 
-### Added
+### Fixed
 
-- **`getenv(name: string): string | null`: the environment, as a call (WP19
-  §4).** The last builtin the retirement gates named, and the only shape the
-  language has for the job. `process.platform`, `process.arch` and
-  `process.argv` are member reads on a name fixed at compile time; an
-  environment lookup is by a key that is a *value*, and member access on a
-  dynamic key is exactly what Phase 0 refuses — nor is there an object type
-  with arbitrary properties for `process.env` to be. So it is a function, named
-  after C's rather than after Node's, because Node's spelling is the one that
-  cannot exist here.
+- **The self-hosted compiler printed no performance warnings at all, and had no
+  `--no-warn-performance` (WP19 G1).** stage1 has had the whole of WP15 §8
+  since the class landed — the analysis in `self/checker.ts`, the second list
+  in the sink, the report in `self/diagnostics.ts` — and its driver never
+  printed a word of it, so `build/amritc` compiled a quadratic string loop in
+  silence where `amritc` named four warnings.
 
-  It answers `string | null` and a variable set to nothing (`FOO=`) is `""`,
-  **not** `null`: that distinction is the reason the result is nullable rather
-  than a string that happens to be empty when absent, and `CC=` meaning
-  something different from `CC` unset is exactly the case a driver cares about.
-  The value is narrowed like any other nullable, so a program cannot read it
-  without first saying what an unset variable means
-  (`reject_getenv_unchecked`).
+  It reports them now on stage0's terms and stage0's streams: the human report
+  on stderr capped at 20, one flat object per warning on stdout under `--json`,
+  in the order the checker found them, exit code untouched.
+  `--no-warn-performance` silences both, which is the flag stage0 has had since
+  the class shipped and stage1 did not accept at all.
 
-  The bytes are copied into the arena rather than borrowed from the
-  environment, because a string here carries a length header the environment's
-  does not and because a later `setenv` from linked C may free what a previous
-  `getenv` answered. That same possibility is why the declaration is not
-  `readonly`: two reads of one variable in a function stay two calls, and LLVM
-  may not fold the second into the first. `noalias` (freshly allocated) but not
-  `nonnull` (it may be unset), the shape `amrit_read_file_or_null` has.
+  **No oracle could have caught it, and neither could the corpus half of
+  `--parity`**: a performance warning goes to stderr on a compile that
+  *succeeds*, and nothing compared that stream on a success. What found it was
+  a second half of the parity check that asks each compiler what flags it has,
+  by reading its own `--help`, and diffs the two sets — added to
+  `tests/self/parity.js` beside the corpus comparison. The same half found
+  `--out-dir`.
 
-  **42 bytes of `.text`** at `-Oz`, against the 4,096 budget. `io_getenv` is
-  the round trip, `reject_getenv_arity`, `reject_getenv_type` and
-  `reject_getenv_unchecked` the negatives, `builtin_getenv` the cookbook entry,
-  and `runtime/shim.mjs` has it so the WP13 differential runs it under Node
-  like every other builtin.
+- **Six programs of the corpus had silently stopped being compared, and
+  `self/dump_checked.ts` was dropping a flag it did not know.** A skip in a
+  stage1 oracle prints only under `--verbose`, so a corpus file whose `.args`
+  names a flag the oracle's `SHARED_FLAGS` set does not list leaves the
+  comparison without failing anything. `--wrapping` and `--no-strict-exports`
+  had been stage1's since WP14 §7a and were never added to that set, so the
+  `--wrapping` cases the WP15 overflow flip brought with it — `const_wrap`,
+  `opt_wrapping`, `i64_basic` and `export_no_strict` among them — went straight
+  into the skip count. The IR oracle was at seven skips and is back to the one
+  documented file (`tests/parser/precedence.ts`).
 
-  Deliberately not beside it: `setenv`. Reading the environment a process was
-  given is a question with one answer; writing it mutates global state shared
-  with every library linked into the program, and nothing in the compiler needs
-  it.
+  `checked_oracle.js` passed only `--number-mode` on the grounds that it is the
+  only flag the checker reads, which stopped being true when constant folding
+  learned about `--wrapping`: `tests/cases/const_wrap.ts` was refused by stage0
+  without it and counted as a skip. It passes both now (`checkerArgs` in
+  `tests/self/corpus.js`).
 
-  What it closes is the *language* side of two gates rather than the gates: the
-  `CC` pre-flight probe is a stage1 driver change and is still open, and
-  `AMRITC_DEBUG` turns out not to be closable by this builtin at all — a stack
-  trace is the only thing that variable turns on, and a compiler with no
-  exceptions has none to print whether it is set or not. `self/ice.ts` says
-  that once rather than branching on a variable to print two versions of the
-  same "nothing here", and its note now records that as a decision instead of a
-  limit.
+  That last one uncovered a real bug rather than a stale list.
+  `self/dump_checked.ts` took any argument it did not recognise as the file
+  name, so `--wrapping` became the path, the real path overwrote it, and the
+  dump was produced with the flag dropped — stage1 then rejected a fold stage0
+  accepted. It takes `--wrapping` now, and refuses an unknown flag instead of
+  turning it into a file name.
 
 - **`` `X` expects an argument of type Y, got Z ``: eight uncoded diagnostics
   become one.** The suite pins how many distinct rejection messages carry no
-  stable `code`, as a ratchet that may shrink and not grow, and adding `getenv`
-  pushed it from 8 to 9 — a new builtin's argument-type message is a new
-  distinct message, and that whole family was the backlog. The code registry is
+  stable `code`, as a ratchet that may shrink and not grow. The registry is
   derived from the longest literal run between a message's interpolations, and
   `` `${name}` expects ${want}, got ${got} `` has none long enough to name a
-  rule.
+  rule — that one template was eight of the nine uncoded messages, and adding a
+  builtin adds a ninth, because a new builtin's argument-type message is a new
+  distinct message.
 
   So the message got words of its own, which is what the check's own comment
   says to do instead of editing the table: it reads `expects an argument of
-  type string, got i32` now. That is one run a code can be derived from, and it
-  covers `readFileSync`, `mkdirSync`, `isDirectorySync`, `spawnSync`, `getenv`,
-  `indexOf`, `f64ToBits`, `bitsToF64` and `Arena.release` at once. Coverage goes
-  from 230/239 (96.2 %) to **238/239 (99.6 %)** and the pin is now 1. The
-  registry gained one rule, `AS2268`, and no existing number moved.
+  type string, got i32` now, and that covers `readFileSync`, `mkdirSync`,
+  `isDirectorySync`, `spawnSync`, `getenv`, `indexOf`, `f64ToBits`,
+  `bitsToF64` and `Arena.release` at once. Coverage goes from 230/239 (96.2 %)
+  to **238/239 (99.6 %)** and the pin is now 1. The registry gained one rule,
+  `AS2268`, and no existing number moved. The one still uncoded is
+  `` Unknown base class `X` (`extends` must name a class declared in this
+  module) ``, whose leading run is shorter than the parenthetical that states
+  the rule.
 
-  The one still uncoded is `` Unknown base class `X` (`extends` must name a
-  class declared in this module) ``, whose leading run is shorter than the
-  parenthetical that actually states the rule.
+- **stage1 accepted a program stage0 rejects: `unwrapOr`'s fallback was
+  checked with a contextual type (WP19 G1).** `self/result.ts` threaded the
+  success type down as a hint, so in f64 mode `r.unwrapOr(-1)` on a
+  `Result<i32, string>` typed the literal as `i32` and compiled, where stage0
+  types it `f64` with no context at all and refuses the mismatch.
+  `docs/LANGUAGE.md` is normative here and its contextual-literal table is an
+  enumerated list that `unwrapOr`'s argument is not in, so stage1 was the side
+  in the wrong. Write `toI32(-1)` when the fallback has to be an i32.
 
-- **`<name>.env` in the golden harness.** One entry per line, `KEY=value` to
-  set (the value may be empty) and a bare `KEY` to unset, applied to the native
-  run beside the existing `<name>.argv`. A case that reads the environment
-  cannot otherwise have a `.out`: the unset case is only reliable if the
-  harness unsets it, and the empty case only exists if the harness sets it.
+  Nothing had ever compiled `tests/cases/res_unwrap.ts` in f64 mode through
+  both compilers: every oracle uses the flags a program already carries, and
+  that one carries none. `tests/run.js --parity` compiles the corpus across
+  the flag variations the suite uses, which is exactly the hole, and this was
+  its first find. `reject_res_unwrap_or_f64` pins it.
 
-- **`tests/self/parity.js`: the two compilers compared over the flags, which is
-  the axis nothing else read (WP19 G1).** Every oracle in `tests/self/` runs the
-  corpus through both compilers with each program's own flags. None of them
-  asks a compiler what flags it *has*, so a flag one side had and the other did
-  not was invisible — which is how `--no-warn-performance` stayed stage0's and
-  `--out-dir` stayed stage1's, both of them for as long as they had existed.
+### Added
 
-  This reads the flag set out of each compiler's own `--help`, diffs the two,
-  and then runs a matrix of every no-value flag and every value a valued flag
-  takes across six programs — each with the flags the suite compiles it with —
-  requiring the same exit code, the same stdout, the same stderr and the same
-  IR from both sides. A difference is a failure unless the file names it with a
-  reason; `--emit-ast` is the one that does. It runs in the WP14 section of
-  `npm test` and prints its table rather than asserting silently, which is what
-  G1 asked for. Today: 24 stage0 flags, 23 stage1 flags, 100 flag/program pairs
-  agreeing, no differences.
+- **A plan for true multithreading (WP20, `docs/wp20-threads.md`).** The
+  answer to "how does AmritScript do threads, like Go or Rust" turns out to be
+  forced rather than chosen: **1:1 OS threads with data races rejected at
+  compile time, not goroutines.** Green threads want a relocatable stack and a
+  relocatable stack wants a precise GC, which is the one thing the project
+  spent first (WP6 puts objects in entry-block `alloca`s and reuses the slot
+  across loop iterations on the argument that nothing outside the frame can
+  name them); and Go's posture — a race is a bug a runtime detector finds — is
+  not available to a compiler whose `readnone`/`readonly`/pointer-parameter
+  attributes are proved by a fixpoint that assumes a single mutator, because a
+  false attribute there is a silent miscompilation rather than a race report.
+  The note prices both the assets and the blocker. The assets are larger than
+  expected and are all accidents of other decisions: there is **no mutable
+  global state in the language at all** (top-level `let`, static fields and
+  top-level statements are each rejected, and a module `const` emits no
+  symbol), there are **no closures**, so a thread entry can only be a named
+  top-level function and the capture question never arises, and
+  `src/codegen/escape.ts` plus the whole-program fixpoint already compute the
+  shape of judgment a `Send` rule needs — which is why the design reaches for
+  a shareable-type rule rather than a trait system. The blocker is that the
+  arena is one process-wide global *and its bump is inlined into the emitted
+  IR* (`inlineAllocator`, a non-atomic load/add/store on `@amrit_arena` at
+  every allocation site), so two threads allocating race in the IR and not
+  merely in `runtime.c`. Five stages follow, of which the first — a
+  thread-local arena and RNG behind `--threads`, with no language surface —
+  is a prerequisite for every version of the design and is gated on
+  BENCHMARKS.md rather than on argument. Channels wait for monomorphisation
+  (WP15 item 8); detached threads, wasm threads, atomics and a race detector
+  are named as out of scope and why. It is a plan, not an implementation:
+  nothing in the compiler changed.
 
-  Both usage texts now name the same six spellings. `-o`/`--output`,
-  `-v`/`--version` and `-h`/`--help` have always both been accepted by both
-  compilers, and each side documented a different subset of them — stage0's
-  usage line named neither short form of `--help`, stage1's named neither long
-  form of `-o` nor either short form. Since the check reads `--help` for the
-  flag set, what a compiler documents is what it is held to.
+- **`--emit-ast` is no longer stage0's: the self-hosted compiler answers it too
+  (WP19 R1).** It was the last flag refused by name, and the refusal was right
+  about the reason and wrong about the conclusion. stage0's dump prints the
+  `typescript` package's node names and 1-based `line:col` spans; mirroring
+  those inside the self-hosted compiler would have been imitation, not parity.
+  So both compilers answer the flag and **each dumps its own tree**: stage1
+  prints the flattened vocabulary `self/nodes.ts` defines, with byte offsets,
+  one `SOURCE_FILE <path>` header per module in the same order stage0 prints
+  its `SourceFile <path>` headers.
 
-  It also found something it cannot yet fix, recorded as an open R1 row in
-  `docs/wp19-stage0-retirement.md` §2A: on a program refused in a mode it was
-  not written for, the two compilers report different *sets* of errors. stage0
-  poisons the offending declaration and cascades; stage1 recovers and reaches
-  three further real errors below. Every individual message agrees and both
-  exit 1 — it is the recovery that differs, and `reject_oracle.js` compares each
-  case against its own fragments rather than against stage0's list, so nothing
-  here was ever going to see it.
+  There is therefore no oracle between the two dumps — there is a golden per
+  compiler, over the same input file: `tests/cases/dump_ast.stdout` for stage0
+  and the new `tests/self/dump_ast.golden` for stage1.
 
-- **The self-hosted compiler prints the performance warnings, and takes
-  `--no-warn-performance` (WP19 G1).** stage1 has had the whole of WP15 §8
-  since the class landed — `self/checker.ts` finds the warnings, the sink keeps
-  them apart from the errors, `self/diagnostics.ts` formats the report — and
-  its driver never printed them. So `build/amritc prog.ts` compiled a quadratic
-  string loop in silence where `amritc prog.ts` named it, which is the kind of
-  divergence the two compilers are supposed to be incapable of.
+  The printer moved to **`self/ast_text.ts`**, shared by `self/compile.ts` and
+  `self/dump_ast.ts`, which is the arrangement `self/dump.ts` already had for
+  `--emit-checked`: the flag and the parser oracle print through one function
+  and cannot drift into two spellings of one tree. `dump_ast.ts`'s own output
+  is unchanged to the byte, because `tests/parser_oracle.js` compares against
+  it.
 
-  The driver reports them now on stage0's terms and stage0's streams: the human
-  report on stderr capped at 20, one flat object per warning on stdout under
-  `--json`, in the order the checker found them, and the exit code untouched.
-  `--no-warn-performance` silences both, which is the flag stage0 has had since
-  the class shipped and stage1 did not accept at all. `tests/run.js` compares
-  the two compilers' stderr byte for byte over `tests/cases/perf_str_concat_loop.ts`,
-  their `--json` objects likewise, and requires the suppressed run to say
-  nothing.
+- **`getenv(name: string): string | null`, the language's one environment read
+  (WP19 R1).** The first of the six retirement gates asks that no flag and no
+  program be stage0's alone, and reading the environment was the last thing
+  only stage0 could do: its `--link` preflight checks the compiler named by
+  `CC` before it spawns `scripts/build.sh`, and stage1 had no way to ask what
+  `CC` was. Both compilers now answer it, with the same IR — one
+  `call i8* @amrit_getenv(i8* name)`, `noalias` because every call answers a
+  fresh arena copy, and `readnone` on neither, because it allocates and the
+  environment is not memory LLVM tracks.
+
+  **`null` and `""` are different answers.** An unset variable is `null`; one
+  set to nothing (`CC=`) is a zero-length string. A driver acts on that
+  difference — unset means "use the default" — which is why the result is
+  `string | null` and narrows with `!== null` like every other nullable, and
+  why the builtin takes no second "default" argument: `cc === null ? "clang" :
+  cc` already says it.
+
+  It is a **call and not `process.env.CC`**: member access on a key chosen at
+  runtime is what Phase 0 forbids, so the two `process.*` surfaces the language
+  has stay what they were, fixed names with no key. There is no `setenv`
+  either; a program reads its own environment and passes one on through
+  `spawnSync`, and that is all. `runtime/shim.mjs` answers
+  `process.env[name] ?? null` for the differential runs, since Node has an
+  `undefined` where the language has only `null`.
+
+  New: `tests/cases/<name>.env`, one `NAME=value` per line, read by both
+  `tests/run.js` and `tests/differential/lib.js`. A case that calls `getenv`
+  cannot pin its own answer, and a golden that read the developer's
+  environment would not be a golden. `io_getenv` pins all three answers;
+  `reject_getenv_arity` pins the refusal of a second "default" argument and
+  `reject_getenv_unchecked` the one that matters — the result is `string |
+  null` and has to be narrowed before it is used.
 
 - **`runtime/amritscript.mjs`: run a program under Node with nothing rewritten
   (`docs/RUN_UNDER_NODE.md`).** WP13's rewriter is exact because it loads a

@@ -448,7 +448,7 @@ export class DebugInfo {
    * `int main(int, char**)` and whose parameters are not described; `name`
    * overrides `sig.sourceName` for it, and is empty everywhere else.
    */
-  beginFunction(fn: IRFunction, sig: FunctionSig, artificial: boolean, name: string): void {
+  beginFunction(fn: IRFunction, sig: FunctionSig, artificial: boolean, name: string, privateAbi: boolean): void {
     const line = this.lineOf(this.source, sig.decl);
     const types: string[] = [];
     if (artificial) {
@@ -484,7 +484,7 @@ export class DebugInfo {
         `!DILocalVariable(name: ${quote(sig.paramNames[i])}, arg: ${i + 1}, scope: ${this.subprogram}, file: ${this.file}, line: ${line}, type: ${this.abiTypeRef(sig.paramTypes[i])}${extra})`
       );
       fn.emit(
-        `call void @llvm.dbg.value(metadata ${this.table.llvmAbiType(sig.paramTypes[i])} %${sig.paramNames[i]}, metadata ${variable}, metadata !DIExpression())`
+        `call void @llvm.dbg.value(metadata ${this.table.llvmAbiType(sig.paramTypes[i], privateAbi)} %${sig.paramNames[i]}, metadata ${variable}, metadata !DIExpression())`
       );
       i = i + 1;
     }

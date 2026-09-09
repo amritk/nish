@@ -56,7 +56,13 @@ import { ResultType, StaticType, isFloat, llvmAbiType, llvmType, resultByValue }
 import { beginReclaim, endReclaim } from "./arena.js";
 import { emitIntBinary } from "./arithmetic.js";
 import { emitBitwiseCombine, isBitwiseCompoundOperator } from "./bitwise.js";
-import { emitPackedResult, emitResultReturningCall, resultTypeDecl } from "./result.js";
+import {
+  emitPackedResult,
+  emitResultArgument,
+  emitResultReturningCall,
+  privateResultAbi,
+  resultTypeDecl,
+} from "./result.js";
 import { floatConstant } from "./builtins.js";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter } from "./context.js";
 import {
@@ -241,6 +247,7 @@ function emitMethodCall(
   args: readonly ts.Expression[],
   site: ts.Node
 ): string {
+  const privateAbi = privateResultAbi(ctx, callee);
   const operands = [`${llvmType(callee.params[0].type)} ${receiver}`];
   args.forEach((arg, i) => {
     // WP17: as in `emitCall`, a `Result` argument the ABI packs travels as the word.
@@ -248,19 +255,19 @@ function emitMethodCall(
     const value = resultByValue(want)
       ? emitPackedResult(ctx, arg, want as ResultType)
       : ctx.emitExpression(arg);
-    operands.push(`${llvmAbiType(want)} ${value}`);
+    operands.push(`${llvmAbiType(want, privateAbi)} ${emitResultArgument(ctx, want, value, privateAbi)}`);
   });
   // WP9: after the receiver and the arguments, so the bracket holds only what
   // the method itself allocates (emit/arena.ts, `beginReclaim`).
   const mark = beginReclaim(ctx, callee);
-  const call = `call ${llvmAbiType(callee.returnType)} @${callee.name}(${operands.join(", ")})`;
+  const call = `call ${llvmAbiType(callee.returnType, privateAbi)} @${callee.name}(${operands.join(", ")})`;
   if (callee.returnType.kind === "void") {
     ctx.fn.emit(call);
     return "void";
   }
   // WP17: a small `Result` comes back in a register, exactly as it does from a
   // plain function; the unpacked object belongs to this caller.
-  if (resultByValue(callee.returnType)) return emitResultReturningCall(ctx, call, callee.returnType, site);
+  if (resultByValue(callee.returnType)) return emitResultReturningCall(ctx, call, callee.returnType, site, privateAbi);
   return endReclaim(ctx, mark, ctx.fn.emitValue(call));
 }
 
