@@ -430,6 +430,48 @@ assertion. Size is second, not irrelevant.
 
 ---
 
+## 7a. Formatting a double — **done**
+
+The rule in §7 is that the runtime budget yields to a measured win. This is the
+first one to claim it, and it turned out to be a correctness fix as well.
+
+`String(x)` prints the fewest digits that read back as the same double. The old
+`amrit_str_from_f64` looked for that length by asking `snprintf` for k digits
+and `strtod` whether they round-trip, walking k up from 1. Two things were
+wrong with it:
+
+- **Slow.** Up to seventeen format-and-parse round trips per number: 2,557 ns
+  each, against 15 ns for the same value as an integer.
+- **Wrong, about one value in twenty thousand.** `snprintf` can only return the
+  *correctly-rounded* k-digit string, and the shortest string that round-trips
+  at length k need not be that one. When it was not, the search rejected k and
+  went on to k+1. `7.120236347223045e-307` is such a value; we printed
+  `7.1202363472230444e-307`, and so disagreed with `runtime/shim.mjs`, which
+  delegates to JavaScript's own `String`.
+
+Ryu (Adams, PLDI 2018) computes the digits directly: **72 ns, a 35x speedup**,
+and the shortest string by construction. Only digit generation moved; the
+ECMAScript layout around it is untouched.
+
+**What it costs, and who pays.** Two power-of-five tables, 9,888 bytes of
+read-only data, generated with exact integer arithmetic rather than
+transcribed. `runtime.c`'s `.text` goes 2,775 -> 3,852, still inside §2's 4 KB
+budget; `.rodata` goes 32 -> 9,920. Section GC means only a binary that
+actually formats a double links them: `bench/fib` is unchanged at 5,600 bytes,
+`bench/nbody` goes 10,856 -> 21,168. That is the largest size regression this
+project has taken deliberately, and it is recorded here rather than averaged
+away. If it proves too much, Ryu's size-optimised tables (every 26th entry,
+the rest recomputed) trade roughly a third of the speed for about 1.3 KB.
+
+**How it was validated.** Against the ECMAScript rule itself, not against the
+code it replaces — which is just as well, since that code was the buggy one.
+Three properties per value: the digits round-trip, no shorter string
+round-trips, and no same-length string is closer. Checked over 20.9 million
+values: every finite exponent with boundary and random mantissas, the powers of
+ten and two, small integers and their reciprocals, and uniform random bit
+patterns. Zero violations. The same harness finds 46 per 1.4 million in the old
+implementation.
+
 ## 8. The `performance` diagnostic class
 
 None of the above survives contact with a codebase unless the compiler says

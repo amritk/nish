@@ -1610,6 +1610,10 @@ compiler's own marks are never invalidated by user resets.
   `` `a${1}` ``); no ordering (`<`) is defined (`tests/cases/str_length`,
   `str_eq`, `reject_str_plus_number`, `reject_str_lt_str`).
 - **Number formatting** matches `String(x)` in JavaScript (see `console`).
+  For an `f64` that means the *fewest* digits that read back as the same
+  double, which is not the same as the correctly-rounded string of that length:
+  `7.120236347223045e-307` prints those sixteen digits and not the seventeen a
+  round-and-check search settles for (`tests/cases/f64_shortest_digits`).
 - **`Math.round`** rounds half toward +infinity like JavaScript;
   `Math.round(-0.3)` is `+0` here and `-0` in JavaScript (both print `0`).
   **`Math.min`/`Math.max`** on `f64` use `minnum`/`maxnum`: with one NaN

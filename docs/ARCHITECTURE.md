@@ -191,9 +191,11 @@ a layout smoke test.
 
 ### Runtime symbols
 
-`runtime/runtime.c` (2,544 bytes of `.text` at `-Oz` against the
-MASTER_PLAN.md §2 budget of 4 KB, from 12,707 bytes of source; measure with
-`clang -Oz -c runtime/runtime.c && size -A runtime.o`) provides, in the order
+`runtime/runtime.c` (3,852 bytes of `.text` at `-Oz` against the
+MASTER_PLAN.md §2 budget of 4 KB, plus 9,920 bytes of `.rodata` that is almost
+all Ryu's two power-of-five tables; measure with
+`clang -Oz -c runtime/runtime.c && size -A runtime.o`, or
+`scripts/size-report.sh`, which reports both rows) provides, in the order
 of `RUNTIME_FUNCTIONS`:
 
 | Symbol | Purpose |

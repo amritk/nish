@@ -7,7 +7,54 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ## [Unreleased]
 
+### Fixed — correctness
+
+- **`String(x)` on a double printed seventeen digits where sixteen suffice, for
+  about one value in twenty thousand.** The language's rule is that number
+  formatting matches JavaScript's `String(x)`, which prints the *fewest* digits
+  that read back as the same double. The old search asked `snprintf` for k
+  digits and `strtod` whether they round-trip, increasing k until they did —
+  but `snprintf` can only hand back the *correctly-rounded* k-digit string, and
+  for some values that one does not round-trip while a neighbouring k-digit
+  string does. The search then gave up on k and moved on.
+
+  `7.120236347223045e-307` is such a value: Node prints those sixteen digits,
+  `amritc` printed `7.1202363472230444e-307`. So did `runtime/shim.mjs`
+  disagree with the native runtime, since the shim delegates to JavaScript's
+  own `String`. Ryu (below) finds the shortest string rather than the rounded
+  one, and `tests/cases/f64_shortest_digits` pins four such values against
+  Node's output alongside `0.1`, `1e21` and `5e-324`.
+
 ### Changed
+
+- **Formatting a double is 35x faster: 2557 ns to 72 ns (WP15).**
+  `amrit_str_from_f64` used up to seventeen `snprintf`/`strtod` round trips to
+  find the shortest digits; it now computes them directly with Ryu (Adams,
+  PLDI 2018). The ECMAScript layout around the digits — where the point goes,
+  when to use e-form — is unchanged, so only the digit generation moved.
+
+  **This costs binary size, and the size lands only on programs that use it.**
+  The two power-of-five tables are 9,888 bytes of read-only data, generated
+  with exact integer arithmetic rather than transcribed. `runtime.c`'s `.text`
+  goes from 2,775 to 3,852 bytes, still inside the 4 KB budget of
+  `docs/MASTER_PLAN.md` §2; its `.rodata` goes from 32 bytes to 9,920. Section
+  GC keeps the tables out of any binary that never formats a double, so
+  `bench/fib` is unchanged at 5,600 bytes while `bench/nbody` goes from 10,856
+  to 21,168.
+
+  Validated against the ECMAScript rule itself rather than against the code it
+  replaces — the digits round-trip, no shorter string round-trips, and no
+  same-length string is closer — over 20.9 million values: every finite
+  exponent with boundary and random mantissas, the powers of ten, and uniform
+  random bit patterns. Zero violations. The same harness finds 46 violations
+  per 1.4 million in the old implementation, which is the bug above.
+
+- **`scripts/size-report.sh` measures the section the budget is about.** §2
+  defines the runtime budget as `runtime.c`'s `.text` at `-Oz`, but the script
+  reported the `text` *column* of `size`, which also counts `.rodata` and the
+  `.eh_frame` entries the size profile strips. That row therefore read 4,696
+  against a 4,096 budget while the section it names was at 2,775. It now
+  reports `.text` against the budget and `.rodata` on its own row.
 
 - **An array's header and its elements are separate alias domains, which is
   worth 1.6x on a loop that writes elements (WP15).** Every load and store of a

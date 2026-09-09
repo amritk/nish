@@ -192,6 +192,13 @@ int main(void) {
   expect_f64(1e20, "100000000000000000000");
   expect_f64(123456789012345680000.0, "123456789012345680000");
   expect_f64(1.5e300, "1.5e+300");
+  /* WP15: the shortest string that round-trips at this length is not the
+     correctly-rounded one, so the old snprintf/strtod search printed all
+     seventeen digits of each of these. Node prints sixteen. */
+  expect_f64(7.120236347223045e-307, "7.120236347223045e-307");
+  expect_f64(7.291122019556398e-304, "7.291122019556398e-304");
+  expect_f64(8.209073602596753e-289, "8.209073602596753e-289");
+  expect_f64(5.641232424577593e-278, "5.641232424577593e-278");
   expect_f64(-1e-7, "-1e-7");
   expect_f64(2.5e-7, "2.5e-7");
   expect_f64(9007199254740992.0, "9007199254740992");
