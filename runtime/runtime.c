@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <math.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,10 +30,25 @@ int __main_argc_argv(int argc, char **argv) { return amrit_c_main(argc, argv); }
 
 #define AMRIT_COLD __attribute__((noreturn, cold, noinline))
 
-/* ---- Arena: %struct.amrit_arena = type { i8*, i64, i64, i8* } */
-typedef struct amrit_chunk { struct amrit_chunk *next; size_t cap; } amrit_chunk;
-struct amrit_arena { char *buf; size_t off; size_t cap; amrit_chunk *chunks; };
+/* ---- Arena: %struct.amrit_arena = type { i8*, i64, i64, i8* }
+
+   The widths are fixed rather than `size_t` for the reason runtime_wasm.c
+   gives for its own copy: every compiled function inlines the bump allocator
+   and reads these fields directly, so the IR's `i64` is what `off` and `cap`
+   have to be on every target, not just the 64-bit ones. With `size_t` they
+   were four bytes each under wasm32 and the inlined fast path bumped an
+   offset that was really `cap`, then compared it against memory past the end
+   of the global — a wild pointer on the wasi profile for any program that
+   allocates from compiled code. The asserts below are the contract, checked
+   wherever this file is compiled. */
+typedef struct amrit_chunk { struct amrit_chunk *next; uint64_t cap; } amrit_chunk;
+struct amrit_arena { char *buf; uint64_t off; uint64_t cap; amrit_chunk *chunks; };
 struct amrit_arena amrit_arena;
+
+_Static_assert(sizeof(struct amrit_arena) == 32, "arena layout is ABI: runtime.ts, amritc.h");
+_Static_assert(offsetof(struct amrit_arena, off) == 8, "the inlined allocator bumps field 1");
+_Static_assert(offsetof(struct amrit_arena, cap) == 16, "the inlined allocator reads field 2");
+_Static_assert(offsetof(struct amrit_arena, chunks) == 24, "arena layout is ABI");
 
 static AMRIT_COLD void amrit_die(const char *msg) {
   (void)!write(2, msg, strlen(msg));
@@ -41,9 +57,12 @@ static AMRIT_COLD void amrit_die(const char *msg) {
 #define amrit_oom() amrit_die("amritc: out of memory\n")
 
 /* Slow path (size 8-byte rounded): push a chunk (>= 64 KB), bump from it. */
-void *amrit_arena_grow(size_t size) {
-  size_t cap = size > 65536 ? size : 65536;
-  amrit_chunk *c = malloc(sizeof *c + cap);
+void *amrit_arena_grow(uint64_t size) {
+  uint64_t cap = size > 65536 ? size : 65536;
+  /* A 64-bit request cannot always be asked for: wasm32's `size_t` is 32 bits,
+     and malloc would silently take the low half of a chunk nobody can address. */
+  if (cap > (uint64_t)(SIZE_MAX - sizeof(amrit_chunk))) amrit_oom();
+  amrit_chunk *c = malloc(sizeof *c + (size_t)cap);
   if (!c) amrit_oom();
   c->next = amrit_arena.chunks;
   c->cap = cap;
@@ -55,8 +74,8 @@ void *amrit_arena_grow(size_t size) {
 }
 
 /* Bump allocation, 8-byte rounded/aligned, uninitialised; the compiler inlines it. */
-void *amrit_alloc_struct(size_t size) {
-  size = (size + 7) & ~(size_t)7;
+void *amrit_alloc_struct(uint64_t size) {
+  size = (size + 7) & ~(uint64_t)7;
   if (amrit_arena.off + size <= amrit_arena.cap) {
     void *p = amrit_arena.buf + amrit_arena.off;
     amrit_arena.off += size;

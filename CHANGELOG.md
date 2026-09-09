@@ -73,6 +73,23 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Fixed — soundness
 
+- **The arena's C struct was 16 bytes on wasm32 where the IR says 32, so the
+  `wasi` profile handed out wild pointers.** `struct amrit_arena` spelled `off`
+  and `cap` as `size_t`, which is the IR's `i64` only on a 64-bit target. Under
+  wasm32 they sat at bytes 4 and 8, while the bump allocator every compiled
+  function inlines (`%struct.amrit_arena = type { i8*, i64, i64, i8* }`,
+  `src/codegen/runtime.ts`) bumped byte 8 and compared byte 16 — past the end
+  of a global that was only 16 bytes long. A string-only program survived,
+  because `runtime.c` allocates its strings through its own consistent view of
+  the struct; anything that built an object or an array in compiled code got a
+  pointer from nowhere, and a `new` in a loop trapped. The freestanding `wasm`
+  profile was never affected: `runtime/runtime_wasm.c` had the rule right and
+  said why. `runtime.c` and `amritc.h` now use `uint64_t` for the same reason,
+  all three static-assert the offsets wherever they are compiled, and
+  `tests/run.js` compiles the header's layout assertions for the host *and* for
+  wasm32 — `-fsyntax-only`, so the guard runs without a WASI sysroot, which is
+  what the old host-only check was missing.
+
 - **A duplicate function name is refused whether or not `--strict-exports` is
   in play.** The check used to be skipped under that flag, on the reasoning
   that an `internal` symbol never reaches the linker. It does reach

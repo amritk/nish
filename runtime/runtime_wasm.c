@@ -12,10 +12,16 @@
  * RuntimeError); there is no stderr to write a message to. Strings and I/O
  * need a WASI runtime and are not provided here, so `--emit-dts` lists
  * string functions as not exported. */
+#include <stddef.h>
 #include <stdint.h>
 
 struct amrit_arena { char *buf; uint64_t off; uint64_t cap; void *chunks; };
 struct amrit_arena amrit_arena;
+
+_Static_assert(sizeof(struct amrit_arena) == 32, "arena layout is ABI: runtime.ts, amritc.h");
+_Static_assert(offsetof(struct amrit_arena, off) == 8, "the inlined allocator bumps field 1");
+_Static_assert(offsetof(struct amrit_arena, cap) == 16, "the inlined allocator reads field 2");
+_Static_assert(offsetof(struct amrit_arena, chunks) == 24, "arena layout is ABI");
 
 extern unsigned char __heap_base;
 #define AMRIT_PAGE ((uint64_t)65536)
