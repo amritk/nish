@@ -32,7 +32,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { numberModeArgs, programs, root } from "./corpus.js";
+import { checkerArgs, programs, root } from "./corpus.js";
 import { fileURLToPath } from "node:url";
 
 const cli = path.join(root, "dist", "index.js");
@@ -48,9 +48,10 @@ function signatureLines(dump) {
 }
 
 function compare(binary, file) {
-  // `--number-mode` is the only flag the dump depends on; the rest change the
-  // IR, which is `ir_oracle.js`'s half of the comparison.
-  const flags = numberModeArgs(file);
+  // The flags the dump depends on -- what `number` is, and whether the
+  // constant folder wraps -- and no others: the rest change the IR, which is
+  // `ir_oracle.js`'s half of the comparison.
+  const flags = checkerArgs(file);
   // Both sides name each module by the path they resolved it to, and stage0's
   // dump is relative to the working directory, so the entry must be too.
   const named = path.relative(root, file);

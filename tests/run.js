@@ -2560,8 +2560,8 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // every whole program in the corpus — not a golden a human wrote, and not
     // a summary either: every attribute, every block label and every SSA
     // number has to match, which is the half of the output a golden test reads
-    // past. The skips are the flags stage1 does not have (`-g`, the dumps) and
-    // the one parser fixture no checker accepts.
+    // past. One skip is left and it is the parser fixture no checker accepts;
+    // the dump flags are counted apart from it, as dumps.
     const irOracle = spawnSync("node", [path.join(root, "tests", "self", "ir_oracle.js")], {
       cwd: root,
       encoding: "utf8",
@@ -2621,6 +2621,30 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // same one: run both compilers over the corpus the WP8 section above
     // drives the generators over, and compare all four files byte for byte.
     // Only the link step and the directory creation are still stage0's (D4).
+    // WP19 G1. Every oracle above compares the two compilers over the corpus
+    // with each program's own flags; this one compares them over the *flags*,
+    // which is the axis none of them reads. It diffs the two `--help` texts
+    // and then runs a matrix of every flag across a handful of programs,
+    // requiring the same exit code, the same streams and the same IR. A
+    // difference is allowed only when it is named with a reason, and
+    // `--emit-ast` is the one that is.
+    //
+    // It earns its place by what it found on the way in: `--no-warn-performance`
+    // was stage0's alone and stage1 printed no performance warnings at all,
+    // `--out-dir` was stage1's alone, and neither was visible to anything else
+    // here, because nothing else asks a compiler what flags it has.
+    const parity = spawnSync("node", [path.join(root, "tests", "self", "parity.js")], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const paritySummary = parity.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `the two compilers answer the same flags the same way (${paritySummary})`,
+      parity.status === 0,
+      `${parity.stdout}${parity.stderr}`
+    );
+
     const interopOracle = spawnSync("node", [path.join(root, "tests", "self", "interop_oracle.js")], {
       cwd: root,
       encoding: "utf8",
@@ -2781,6 +2805,41 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           ourJson.stdout === theirJson.stdout &&
           ourJson.stdout.split("\n").filter(Boolean).length === 3,
         `ours:\n${ourJson.stdout}${ourJson.stderr}\ntheirs:\n${theirJson.stdout}`
+      );
+
+      // WP15 §8 through the driver (WP19 G1). The analysis is compared word
+      // for word by the checked oracle already; what this pins is the half
+      // that is the driver's -- that stage1 prints the warnings at all, on
+      // stderr, in stage0's order and with stage0's cap, as JSON objects on
+      // stdout under `--json`, and not at all under `--no-warn-performance`.
+      // A warning changes no exit code on either side, so the compile that
+      // carries it is a successful one. `wrote <file>` is dropped from both:
+      // it names a path in a temporary directory that differs per side.
+      const perfCase = path.join("tests", "cases", "perf_str_concat_loop.ts");
+      const perfOut = (dir) => path.join(shipDir, dir, "perf.ll");
+      const withoutWrote = (text) =>
+        text.split("\n").filter((line) => !line.startsWith("wrote ")).join("\n");
+      const ourPerf = spawnSync(compiler, [perfCase, "-o", perfOut("perf1")], { cwd: root, encoding: "utf8" });
+      const theirPerf = spawnSync("node", [cli, perfCase, "-o", perfOut("perf0")], { cwd: root, encoding: "utf8" });
+      const ourPerfJson = spawnSync(compiler, [perfCase, "-o", perfOut("perf1j"), "--json"], { cwd: root, encoding: "utf8" });
+      const theirPerfJson = spawnSync("node", [cli, perfCase, "-o", perfOut("perf0j"), "--json"], { cwd: root, encoding: "utf8" });
+      const ourPerfOff = spawnSync(
+        compiler,
+        [perfCase, "-o", perfOut("perf1q"), "--no-warn-performance"],
+        { cwd: root, encoding: "utf8" }
+      );
+      check(
+        "the self-hosted compiler: the performance warnings are stage0's, and --no-warn-performance silences them",
+        ourPerf.status === 0 &&
+          theirPerf.status === 0 &&
+          withoutWrote(ourPerf.stderr) === withoutWrote(theirPerf.stderr) &&
+          ourPerf.stderr.includes("performance: `out` is rebuilt") &&
+          withoutWrote(ourPerf.stderr).trimEnd().endsWith("4 performance warnings") &&
+          ourPerfJson.stdout === theirPerfJson.stdout &&
+          ourPerfJson.stdout.split("\n").filter(Boolean).length === 4 &&
+          ourPerfOff.status === 0 &&
+          withoutWrote(ourPerfOff.stderr).trim() === "",
+        `ours:\n${ourPerf.stderr}\ntheirs:\n${theirPerf.stderr}\nours --json:\n${ourPerfJson.stdout}\ntheirs --json:\n${theirPerfJson.stdout}\nours --no-warn-performance:\n${ourPerfOff.stderr}`
       );
 
       // `--emit-checked` through the driver, rather than through the

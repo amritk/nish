@@ -24,12 +24,13 @@ construct still enters the language (and `src/`) before it enters `self/`, and
 
 | | Deliverable | State |
 | --- | --- | --- |
-| S1 | `self/lexer.ts` tokenises AmritScript-0 | **done** — `tests/lexer_oracle.js`, 565/565 files |
-| S2 | `self/parser.ts` builds the tree | **done** — `tests/parser_oracle.js`, 528/528 files |
-| S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js`, 279/279 whole programs; `reject_oracle.js`, 194/194 cases |
-| S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 289/289 programs byte for byte, and `interop_oracle.js`, 52 sidecars |
+| S1 | `self/lexer.ts` tokenises AmritScript-0 | **done** — `tests/lexer_oracle.js`, 612/612 files |
+| S2 | `self/parser.ts` builds the tree | **done** — `tests/parser_oracle.js`, 574/574 files |
+| S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js`, 308/308 whole programs; `reject_oracle.js`, 211/211 cases |
+| S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 318/318 programs byte for byte, and `interop_oracle.js`, 60 sidecars |
 | S5 | `self/` compiles `self/` | **done** — `tests/self/bootstrap.js`: `IR(stage1) == IR(stage2)`, stage3 == stage2 |
-| R1–R6 | stage0 retired rather than frozen | **not started** — the gates are in [`docs/wp19-stage0-retirement.md`](../docs/wp19-stage0-retirement.md) |
+| R1 | parity: no program and no flag is stage0's | **in progress** — G1's check is `tests/self/parity.js` and reads 0 differences over the flags. The performance warnings and `--no-warn-performance` are stage1's, `--out-dir` is gone, the oracles' stale skips are closed. `--emit-ast`, `getenv` and the diverging error *list* after the first error are open |
+| R2–R6 | stage0 retired rather than frozen | **not started** — the gates are in [`docs/wp19-stage0-retirement.md`](../docs/wp19-stage0-retirement.md) |
 
 **stage0 is frozen, not retired, and that is a decision with an expiry.** Until
 the six gates of `docs/wp19-stage0-retirement.md` §3 close, every rule below
@@ -163,6 +164,7 @@ wired into the WP14 section of `tests/run.js` and skipped without clang.
 | `tests/self/reject_oracle.js` | every `reject_*` case and every `tests/link/` negative, against its own expected fragments |
 | `tests/self/ir_oracle.js` | the emitted IR, byte for byte, over every whole program in the corpus |
 | `tests/self/interop_oracle.js` | the WP8 sidecars — `.h`, `.d.ts`, its `.mjs` loader, `.napi.c` — byte for byte over the interop corpus (`--all` for the whole one) |
+| `tests/self/parity.js` | the two compilers over the *flags* rather than the corpus (WP19 G1): the flag set each `--help` names, then a matrix of every flag across a handful of programs — same exit code, same streams, same IR. A difference must be named with a reason; `--emit-ast` is the one that is |
 | `tests/self/bootstrap.js` | the stages: `IR(stage0) == IR(stage1) == IR(stage2)`, and stage3 byte-identical to stage2 |
 | `tests/differential/fuzz.js --stage1` | the emitted IR, byte for byte, over random programs the WP13 generator invents — the same comparison as the IR oracle, on a corpus that is not checked in |
 
@@ -184,7 +186,17 @@ per oracle and two files between them, and none of them is about `self/`:
 `tests/parser/precedence.ts` is a parser fixture no checker accepts, which
 `checked_oracle.js` and `ir_oracle.js` both pass over, and `tests/link/no_main`
 is refused by `--link`, which is stage0's, so `reject_oracle.js` passes over
-that. The three cases that ask for a dump flag are counted apart from the
+that.
+
+**That count is a thing to re-derive rather than to trust, and it drifted once
+already.** A skip prints only under `--verbose`, so a *new* corpus file whose
+`.args` names a flag an oracle does not know is dropped from the comparison in
+silence: the WP15 `--wrapping` cases arrived that way and took the IR oracle
+from one skip to seven without failing anything. Both flag sets are stage1's
+now (WP19 G1), `checked_oracle.js` passes the two flags the checker reads, and
+`self/dump_checked.ts` refuses a flag it does not know instead of taking it for
+the file name — which is what had been dropping `--wrapping` there. Run the
+oracles with `--verbose` and read the reasons before believing the three. The three cases that ask for a dump flag are counted apart from the
 skips, as dumps: they write no IR on either side, and of the two flags only
 `--emit-ast` is stage0's — `checked_oracle.js` compares `--emit-checked` over
 the whole corpus.

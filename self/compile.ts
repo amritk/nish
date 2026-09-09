@@ -5,16 +5,22 @@
 // named on the command line, which is how a program names a module nothing
 // imports — checks the program as a whole, and writes one `.ll` per module.
 // Where they go is `planOutputs` below, and the rules are stage0's: `-o
-// <dir>/` or `--out-dir <dir>` is one file per module, `-o <file.ll>` is the
-// one module, `--link <exe>` puts them beside the binary, and naming nothing
-// writes `<module>.ll` next to each source. Every directory in the way is
-// made, the sidecars' included.
+// <dir>/` is one file per module, `-o <file.ll>` is the one module, `--link
+// <exe>` puts them beside the binary, and naming nothing writes `<module>.ll`
+// next to each source. Every directory in the way is made, the sidecars'
+// included.
 //
 // The flags are the subset of stage0's that change the IR, `-g` included:
 // DWARF is metadata in the `.ll` and costs the driver nothing. `--emit-checked`
 // is here too, because the dump is this compiler's own tables and stage1
 // already writes them byte for byte as stage0 does
 // (`tests/self/checked_oracle.js`).
+//
+// The WP15 §8 performance warnings are here for the same reason and on the
+// same terms: they change no byte of the IR, the analysis behind them is
+// `self/checker.ts`'s and is already compared against stage0's word for word,
+// so what was missing was the driver printing them. `--no-warn-performance`
+// silences them, as it does on the other side.
 //
 // `--emit-header`, `--emit-dts` and `--emit-napi` write the WP8 sidecars
 // beside the IR, spelled and placed exactly as stage0 spells and places them
@@ -51,7 +57,7 @@ import { codeFor, TOOLCHAIN } from "./codes";
 import { resolveTarget, supportedTargets } from "./target";
 
 const USAGE: string =
-  "usage: compile <file.ts> [more.ts ...] [-o <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--out-dir <dir>] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile --version | --help";
+  "usage: compile <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile -v, --version | -h, --help";
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -103,8 +109,6 @@ function makeDirectoryFor(file: string): boolean {
  *                 their names, rather than silently picking one
  *   --link <exe>  `<exe>.ll` for a single module, `<exe>.modules/` otherwise,
  *                 so the intermediates land beside the binary
- *   --out-dir     as `-o <dir>/`; stage1's own spelling, and what the oracles
- *                 and `scripts/bootstrap.sh` pass
  *   (none)        `<module>.ll` beside each source
  *
  * Answers an empty array when it refused, having said why.
@@ -116,7 +120,7 @@ function makeDirectoryFor(file: string): boolean {
  * that order: the spelling first, because it is an answer about the string and
  * not about the file system, and it is the one every caller in the tree writes.
  */
-function planOutputs(stems: string[], paths: string[], output: string, link: string, outDir: string): string[] {
+function planOutputs(stems: string[], paths: string[], output: string, link: string): string[] {
   const out: string[] = [];
   if (output.length > 0) {
     if (output.endsWith("/")) {
@@ -141,9 +145,6 @@ function planOutputs(stems: string[], paths: string[], output: string, link: str
       return out;
     }
     return perModule(stems, `${link}.modules`);
-  }
-  if (outDir.length > 0) {
-    return perModule(stems, outDir);
   }
   for (const path of paths) {
     out.push(path.endsWith(".ts") ? `${path.substring(0, path.length - 3)}.ll` : `${path}.ll`);
@@ -173,6 +174,33 @@ function report(compilation: Compilation, json: boolean): void {
   for (const diagnostic of compilation.sink.sorted()) {
     console.log(diagnostic.json());
   }
+}
+
+/**
+ * The WP15 §8 performance warnings, in the same two shapes and on the same two
+ * streams stage0 prints them on (`reportPerformance` in `src/index.ts`): the
+ * human report on **stderr**, capped where the error report is capped, or one
+ * flat object per warning on **stdout** under `--json`. Neither touches the
+ * exit code, and `--no-warn-performance` silences both.
+ *
+ * Only a compilation that checked cleanly gets here, which is the rule and not
+ * an accident of placement: advice about code that does not compile is noise,
+ * and the caller returns before this on an error.
+ */
+function reportPerformance(compilation: Compilation, enabled: boolean, json: boolean): void {
+  if (!enabled) {
+    return;
+  }
+  if (compilation.sink.warnings.length === 0) {
+    return;
+  }
+  if (json) {
+    for (const warning of compilation.sink.warnings) {
+      console.log(warning.json());
+    }
+    return;
+  }
+  writeError(`${compilation.sink.formatWarnings(20)}\n`);
 }
 
 /**
@@ -210,12 +238,14 @@ export function main(): number {
   }
   const opts = new Options();
   const roots: string[] = [];
-  let outDir = "";
   let output = "";
   let link = "";
   let profile = "speed";
   let json = false;
   let emitChecked = false;
+  // WP15 §8: on by default on both sides, and driver-level rather than an
+  // `Options` field, because it changes no byte of the IR.
+  let warnPerformance = true;
   let arg = 1;
   while (arg < process.argv.length) {
     const value = process.argv[arg];
@@ -261,13 +291,6 @@ export function main(): number {
         console.error(`compile: unknown profile \`${profile}\` (${PROFILE_NAMES})`);
         return 2;
       }
-    } else if (value === "--out-dir") {
-      arg = arg + 1;
-      if (arg >= process.argv.length) {
-        console.error("compile: --out-dir needs a directory");
-        return 2;
-      }
-      outDir = process.argv[arg];
     } else if (value === "--target") {
       arg = arg + 1;
       if (arg >= process.argv.length) {
@@ -321,6 +344,8 @@ export function main(): number {
       opts.nsw = false;
     } else if (value === "--no-stack-alloc") {
       opts.stackAlloc = false;
+    } else if (value === "--no-warn-performance") {
+      warnPerformance = false;
     } else if (value === "--runtime-decls") {
       opts.runtimeDecls = true;
     } else if (value === "-g") {
@@ -389,6 +414,7 @@ export function main(): number {
     report(compilation, json);
     return 1;
   }
+  reportPerformance(compilation, warnPerformance, json);
   // The checked dump is what pass 2 leaves behind, so it is written here
   // rather than after `emit`: nothing about the IR changes it.
   if (emitChecked) {
@@ -413,7 +439,7 @@ export function main(): number {
   for (const unit of compilation.modules) {
     paths.push(unit.path);
   }
-  const outputs = planOutputs(stems, paths, output, link, outDir);
+  const outputs = planOutputs(stems, paths, output, link);
   if (outputs.length === 0) {
     return 1;
   }

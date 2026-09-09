@@ -55,7 +55,7 @@ function compileWithStage0(dir) {
 
 /** A stage1-or-later compiler compiles `self/` into `dir`. */
 function compileWithStage(binary, dir) {
-  const r = spawnSync(binary, [ENTRY, "--out-dir", dir], { cwd: root, encoding: "utf8" });
+  const r = spawnSync(binary, [ENTRY, "-o", `${dir}/`], { cwd: root, encoding: "utf8" });
   return r.status === 0 ? null : `${path.basename(binary)}: ${r.stderr || r.stdout}`;
 }
 

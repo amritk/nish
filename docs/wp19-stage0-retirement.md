@@ -63,17 +63,25 @@ finished and is not.
 
 ### A. Compiler behaviour stage1 does not have
 
-`wp14-selfhost.md` §7a lists these in full; they are reproduced here as work
-rather than as trivia, because each is a gate. **Three of the four have since
-closed**, as WP14 §7a work rather than alongside the generics of WP18 as this
-package first expected: `process.platform` and `process.arch` closed
-`--target host`, `isDirectorySync` closed the `-o <dir>` spelling, and
-`process.exit(internalError(...))` closed exit 70. They are struck from this
-package's bill and left in the table so the count stays honest.
+`wp14-selfhost.md` §7a lists four of these in full; they are reproduced here as
+work rather than as trivia, because each is a gate. **Five of the seven have
+since closed**; `--emit-ast` and the error list after the first error are open,
+and the second of those is a row the G1 check opened rather than closed. Three closed as WP14 §7a work rather
+than alongside the generics of WP18 as this package first expected:
+`process.platform` and `process.arch` closed `--target host`, `isDirectorySync`
+closed the `-o <dir>` spelling, and `process.exit(internalError(...))` closed
+exit 70. Two closed as R1 work, and are the reason a gate is a check and not a
+memory: the performance warnings opened a *new* row after this table was
+written — stage1 collected them and never printed them — and `--out-dir` had
+been a difference in the flag sets since §7a, running the other way. Every
+closed row is left in the table so the count stays honest.
 
 | | State today | What closing it needs |
 | --- | --- | --- |
 | `--emit-ast` | refused by name | stage1's own dump over `self/nodes.ts`'s vocabulary, with checked-in goldens. **Not** a mirror of `ts.SyntaxKind` — §7 was right about that, and the answer is a different dump, not the same one |
+| `--no-warn-performance`, and the WP15 §8 warnings themselves | **closed** | stage1 found the warnings and its driver never printed them, which is the gap this table is for and which opened *after* it was written. The driver reports them on stage0's streams and takes the flag that silences them |
+| the error list after the first error | **open**, and newly named | the parity check found it: on a program refused in a mode it was not written for, the two compilers report different *sets* of errors. stage0 poisons the declaration and cascades (`Unknown identifier \`mag\`` five times); stage1 recovers and finds three further real errors further down. Both refuse, both exit 1, and every individual message agrees — it is the recovery that does not. `reject_oracle.js` compares each case against its own fragments rather than against stage0's list, so nothing here was ever going to see it |
+| `--out-dir` | **closed**, by removal | the one difference that ran the other way: stage1's own spelling for `-o <dir>/`, which stage0 has never had. Deleted rather than mirrored, so the flag sets are equal without the frozen compiler growing anything |
 | `--target host` | **closed** | `process.platform` / `process.arch`, composed exactly as `src/codegen/target.ts` composes them (`tests/cases/io_host`), at the 8 bytes of `.text` §7a predicted and measured |
 | exit **70** on an internal error, and `AMRITC_DEBUG` | **closed** | `process.exit(internalError(...))` at each of the 35 sites, with the report in `self/ice.ts`; no second `panic` builtin, so the language did not grow for it. stage1 has no stack to print, and says so rather than promising one |
 | `-o <dir>` without the trailing slash | **closed** | `isDirectorySync(path: string): boolean`, the `stat` beside `mkdirSync` (`tests/cases/io_is_directory`) |
@@ -95,9 +103,9 @@ decision and a leap:
 | `types_oracle.js` | `src/types.ts` | **dies** |
 | `diagnostics_oracle.js` | `src/diagnostics.ts` | **dies** |
 | `symbols_oracle.js` | `src/checker/scope.ts` | **dies** |
-| `checked_oracle.js` | stage0's `--emit-checked`, 279 programs | **dies** |
-| `ir_oracle.js` | stage0's IR, 289 programs byte for byte | **dies** |
-| `interop_oracle.js` | stage0's sidecars, 52 of them | **dies** |
+| `checked_oracle.js` | stage0's `--emit-checked`, 308 programs | **dies** |
+| `ir_oracle.js` | stage0's IR, 312 programs byte for byte | **dies** |
+| `interop_oracle.js` | stage0's sidecars, 60 of them | **dies** |
 | `fuzz.js --stage1` | `IR(stage0, p) == IR(stage1, p)` on generated programs | **dies in that form** |
 | `bootstrap.js`, first equality | `IR(stage0, self/) == IR(stage1, self/)` | **dies** |
 | `bootstrap.js`, second and third | the fixed point, stage3 == stage2 | **survive** — they never involved stage0's output |
@@ -120,7 +128,7 @@ about stage0 and all three stop being true on the day it goes.
 ### D. Provenance
 
 `IR(stage0, self/) == IR(stage1, self/)` is the diverse-double-compiling
-property. It holds today over all 51 modules and 6,049,827 bytes of IR. When
+property. It holds today over all 53 modules and 6,557,991 bytes of IR. When
 stage0 goes, it goes, and it cannot be re-established later without writing a
 second compiler again.
 
@@ -139,9 +147,20 @@ of §2A are closed and the "stage0 rejects it" / "stage1 rejects it" counters in
 every oracle read **zero**, with the three documented skips of
 `.claude/selfhost.md` closed or re-justified in writing.
 
-**The check.** A `--parity` mode of `tests/run.js` that runs the corpus through
-both compilers on every flag combination the suite uses and requires an empty
-difference set, printed as a table rather than asserted silently.
+**The check, and it exists.** `tests/self/parity.js`, run by the WP14 section
+of `tests/run.js` on every `npm test`. It reads the flag set out of each
+compiler's own `--help`, diffs the two, and then runs a matrix of every
+no-value flag and every value a valued flag takes across a handful of programs
+— each with the flags the suite compiles it with — requiring the same exit
+code, the same stdout, the same stderr and the same IR from both sides. A
+difference is allowed only when the file names it with a reason, and the table
+is printed rather than asserted silently.
+
+Today: **24 stage0 flags, 23 stage1 flags, 100 flag/program pairs agree, 0
+differences, 1 named exception** — `--emit-ast`. That is G1's empty difference
+set, over the flags. What it does not yet cover is the row above: the error
+*list* a refused program produces, which is a comparison over programs the
+suite does not compile and which nothing in the tree makes today.
 
 **Why it blocks.** A retirement that leaves one flag behind is a regression
 shipped to users who were told the two compilers were the same compiler.
@@ -276,7 +295,7 @@ is one commit that does nothing else.
    itself depends on can survive a release, because the only thing checking the
    compiler is a compiler built from the same source. G6 archives the last
    point at which that was not true; it does not extend it.
-2. **The diagnostics lose their oracle.** 279 whole programs of `--emit-checked`
+2. **The diagnostics lose their oracle.** 308 whole programs of `--emit-checked`
    and every diagnostic wording are presently proved by agreement between two
    implementations. Afterwards they are proved by goldens someone wrote, which
    is what every other compiler in §1 does and is strictly weaker.
