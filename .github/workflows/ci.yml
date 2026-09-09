@@ -2,8 +2,9 @@
 #
 # test: typecheck + the full golden/native test suite on Linux and macOS with
 #       LLVM 18 (clang, llc, llvm-as, opt, ld.lld, wasm-ld), then a binary size
-#       table in the job summary.
-# lint: `npm run lint` when package.json defines it (no-op otherwise).
+#       table in the job summary, and the IR cookbook staleness check.
+# lint: `npm run lint` when package.json defines it (no-op otherwise), then
+#       docs/check-links.mjs over every Markdown file.
 #
 # Also reusable via `workflow_call`: release.yml runs it before packing a tag.
 # To run the same steps locally see docs/wp10-ci.md.
@@ -94,6 +95,20 @@ jobs:
       - name: Smoke (build + run every example with a main, size profile)
         run: bash scripts/smoke.sh
 
+      # docs/IR_COOKBOOK.md promises the exact IR each construct compiles to
+      # *today*, and agents are pointed at it as a reference. It drifted once
+      # (the `internal` linkage of --strict-exports and the `nsw` defaults were
+      # missing), so the staleness check is a gate rather than a chore.
+      - name: Docs (IR cookbook up to date)
+        run: bash docs/cookbook/regen.sh --check
+
+      # The diagnostic-code registry is generated from the compiler's own
+      # diagnostic sites; a new diagnostic without a code must not ship.
+      # `npm test` checks it too -- this names it in its own step so a stale
+      # registry reads as itself rather than as one failure among a thousand.
+      - name: Diagnostic codes (registry up to date)
+        run: node scripts/gen-diagnostic-codes.mjs --check
+
       - name: Size report
         run: |
           node dist/index.js examples/add.ts -o build/add.ll
@@ -122,3 +137,9 @@ jobs:
 
       - name: Lint (only when package.json defines a lint script)
         run: npm run lint --if-present
+
+      # Every relative link and heading anchor in README, CHANGELOG and docs/**.
+      # The guidelines are a graph of pointers between files; a broken one sends
+      # a reader -- human or agent -- to a page that does not exist.
+      - name: Docs (links and anchors resolve)
+        run: node docs/check-links.mjs

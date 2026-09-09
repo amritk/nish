@@ -61,6 +61,13 @@ const ENV_DEBUG: string = "AMRITC_DEBUG";
  * caller is `process.exit(internalError(...))`, which ends the path.
  */
 export function internalError(message: string): i32 {
+  // stage0 also prints the crash as a `--json` object (`AS0003`), and this does
+  // not. It cannot: `process.argv` needs an `export function main` and this is
+  // a library module, the language has no mutable module state to stash the
+  // flag in, and threading it through all 39 callers would put a diagnostics
+  // flag in the signature of every broken invariant in the compiler. The
+  // difference is recorded in `docs/wp14-selfhost.md` §7 with the other
+  // deliberate ones; the human report below is identical either way.
   console.error(`${CLI} ${VERSION}: internal compiler error`);
   console.error(`  ${message}`);
   console.error(`  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`);

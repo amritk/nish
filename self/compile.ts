@@ -47,6 +47,7 @@ import { generateWasmLoader, wasmLoaderPath } from "./interop_wasm";
 import { Options } from "./options";
 import { dirname } from "./paths";
 import { jsonQuote } from "./strings";
+import { codeFor, TOOLCHAIN } from "./codes";
 import { resolveTarget, supportedTargets } from "./target";
 
 const USAGE: string =
@@ -182,10 +183,24 @@ function report(compilation: Compilation, json: boolean): void {
  */
 function reportRootFailure(message: string, json: boolean): void {
   if (json) {
-    console.log(`{"severity":"error","message":${jsonQuote(message)}}`);
+    console.log(`{"severity":"error","code":"${codeFor("error", message)}","message":${jsonQuote(message)}}`);
     return;
   }
   console.error(`error: ${message}`);
+}
+
+/**
+ * A `--link` failure: the C toolchain could not be used, so the run is wrong
+ * rather than the program. stage0 shapes it the same way (`failureJson` in
+ * `src/index.ts`) and both carry the band-0 code, so a reader parses one shape
+ * whichever compiler it ran.
+ */
+function reportToolchainFailure(message: string, json: boolean): void {
+  if (json) {
+    console.log(`{"severity":"error","code":"${TOOLCHAIN}","message":${jsonQuote(message)}}`);
+    return;
+  }
+  console.error(message);
 }
 
 export function main(): number {
@@ -322,10 +337,12 @@ export function main(): number {
       console.error(`${CLI}: \`--emit-ast\` is stage0's (docs/wp14-selfhost.md §7); run \`node dist/index.js\` for it`);
       return 2;
     } else if (value === "-h" || value === "--help") {
-      // stage0 answers `--help` on stderr and exits 2, so a script that asks
-      // either compiler for its help sees the same shape.
-      console.error(USAGE);
-      return 2;
+      // A request that succeeded, not a refusal: stdout and exit 0. stage0
+      // answers it the same way (`usageText` in `src/index.ts`), so a script
+      // that asks either compiler for its help sees the same shape; an actual
+      // usage error still prints USAGE on stderr and returns 2 below.
+      console.log(USAGE);
+      return 0;
     } else if (value === "-v" || value === "--version") {
       // The line stage0 prints. stage1 cannot read `package.json`, so the
       // version is a constant in `self/branding.ts` and a check in
@@ -419,7 +436,7 @@ export function main(): number {
   if (link.length === 0) {
     return 0;
   }
-  return linkProgram(outputs, link, profile, opts.debugInfo);
+  return linkProgram(outputs, link, profile, opts.debugInfo, json);
 }
 
 /**
@@ -452,11 +469,12 @@ function packageRoot(): string {
  * same stream. Its stderr is inherited, so a clang diagnostic reaches the
  * caller as it happens rather than after the link has finished.
  */
-function linkProgram(outputs: string[], link: string, profile: string, debugInfo: boolean): number {
+function linkProgram(outputs: string[], link: string, profile: string, debugInfo: boolean, json: boolean): number {
   const root = packageRoot();
   if (root.length === 0) {
-    console.error(
-      `--link: cannot find scripts/build.sh (looked in ${dirname(process.argv[0])}/.. and .); run the compiler from a checkout or an installed package`
+    reportToolchainFailure(
+      `--link: cannot find scripts/build.sh (looked in ${dirname(process.argv[0])}/.. and .); run the compiler from a checkout or an installed package`,
+      json
     );
     return 3;
   }
@@ -490,7 +508,7 @@ function linkProgram(outputs: string[], link: string, profile: string, debugInfo
   const status = spawnSync(argv);
   if (status !== 0) {
     const why = status < 0 ? "could not run bash" : `exit ${status}`;
-    console.error(`--link: ${script} failed (${why}); the IR is in ${outputs.join(", ")}`);
+    reportToolchainFailure(`--link: ${script} failed (${why}); the IR is in ${outputs.join(", ")}`, json);
     return 3;
   }
   const binary = readFileSyncOrNull(link);

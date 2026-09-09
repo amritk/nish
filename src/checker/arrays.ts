@@ -213,8 +213,9 @@ function rejectWriteThroughReadonly(
   what: string
 ): void {
   if (!isReadonlyArray(receiver)) return;
+  const mutable = typeToString(arrayOf((receiver as { elem: StaticType }).elem));
   throw ctx.error(
-    `Cannot \`${what}\` through ${typeToString(receiver)} (declare it ${typeToString(arrayOf((receiver as { elem: StaticType }).elem))} to write through it)`,
+    `Cannot \`${what}\` through ${typeToString(receiver)} (declare it ${mutable} to write through it)`,
     expr
   );
 }
@@ -336,8 +337,9 @@ function checkElementAssignment(
   const elem = ctx.checkExpression(target, scope); // records the base and index types
   const base = ctx.program.types.get(target.expression);
   if (base !== undefined && isReadonlyArray(base)) {
+    const mutable = typeToString(arrayOf((base as { elem: StaticType }).elem));
     throw ctx.error(
-      `Cannot assign to an element of ${typeToString(base)} (declare it ${typeToString(arrayOf((base as { elem: StaticType }).elem))} to write through it)`,
+      `Cannot assign to an element of ${typeToString(base)} (declare it ${mutable} to write through it)`,
       target
     );
   }

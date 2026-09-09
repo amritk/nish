@@ -1793,13 +1793,19 @@ by the caller.
     every pass, and not when the value is pushed, stored, returned or passed
     on, because then the program asked for one object per iteration
     (`tests/cases/perf_alloc_quiet`).
-- **`--json`** prints every error as one JSON object per line on stdout,
-  `{"file","line","column","endLine","endColumn","severity","message"}`
+- **`--json`** prints every diagnostic as one JSON object per line on stdout,
+  `{"file","line","column","endLine","endColumn","severity","code","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in
-  `message`; `code` is reserved), nothing else on stdout and nothing on
-  stderr, with the same exit code. `severity` is `"error"` for every error and
-  `"performance"` for a WP15 §8 warning, which is the field a tool filters on.
-  A clean compile with no warnings prints nothing.
+  `message`), nothing else on stdout and nothing on stderr, with the same exit
+  code. `severity` is `"error"` for every error and `"performance"` for a
+  WP15 §8 warning, which is the field a tool filters on; `code` is the stable
+  identifier for the rule (`AS1013`, `AS2231`, ...) and is the field to key on,
+  because the prose may improve between releases and the code may not. A
+  failure with no source position — an unusable C toolchain, an internal
+  compiler error, a bad `-o` layout — is `{"severity","code","message"}`. The
+  bands and the registry are in
+  [wp10-ci.md](wp10-ci.md#code). A clean compile with no warnings prints
+  nothing.
 - **`--emit-ast`** prints the syntax tree of every module after Phase 0 as an
   indented `<SyntaxKind> <line:col>-<line:col>` tree (identifier and literal
   text appended) and writes no IR (`tests/cases/dump_ast`).

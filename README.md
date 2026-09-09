@@ -141,9 +141,14 @@ a caret excerpt), `2` usage error, `3` toolchain error, `70` internal
 compiler error (please report it; `AMRITC_DEBUG=1` adds the stack trace).
 A compile that fails reports every error it found (statement by statement,
 declaration by declaration), in source order, up to 20 before `...and N more
-errors`; `--json` gives editors the same list as
-`{"file","line","column","endLine","endColumn","severity","message"}` objects,
-one per line. `-g` adds a DWARF line table and variables to the IR so
+errors`; `--json` gives editors and tools the same list as
+`{"file","line","column","endLine","endColumn","severity","code","message"}`
+objects, one per line, where `code` is a stable identifier for the rule
+(`AS1013`, `AS2231`) and is what to match on rather than the prose. Failures
+with no source position — an unusable C toolchain, an internal error — are JSON
+objects too, so `--json` never leaves a caller with an empty stdout.
+`--help` prints on stdout and exits `0`; only a usage *error* goes to stderr
+with `2`. `-g` adds a DWARF line table and variables to the IR so
 `gdb`/`lldb` step through the `.ts` source of a `--link`ed binary
 ([docs/wp10-ci.md](docs/wp10-ci.md)).
 Multi-file programs: `amritc examples/multi/main.ts --link build/multi && ./build/multi; echo $?`

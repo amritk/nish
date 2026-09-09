@@ -42,7 +42,14 @@ npm run smoke            # build and run every example with a main
 npm run size-report      # binary size table for examples/add.ts
 node bench/run.mjs       # rewrite docs/BENCHMARKS.md (about 3 minutes)
 docs/cookbook/regen.sh   # refresh docs/IR_COOKBOOK.md; node docs/check-links.mjs checks links
+node scripts/gen-diagnostic-codes.mjs        # rewrite src/codes.ts + self/codes.ts
+node scripts/gen-diagnostic-codes.mjs --check  # fail if either is stale (CI + npm test)
 ```
+
+Three generated artefacts have a `--check` mode and all three are gates:
+`docs/IR_COOKBOOK.md`, and the two halves of the diagnostic-code registry.
+Adding a diagnostic means running the code generator; it appends a number and
+never moves one that already exists.
 
 ## The toolchain that is not npm
 

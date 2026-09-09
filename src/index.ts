@@ -28,6 +28,7 @@ import { generateDts, generateHeader, generateNapiShim, generateWasmLoader, wasm
 import { NumberMode } from "./types.js";
 import { SUPPORTED_TARGETS, resolveTarget } from "./codegen/target.js";
 import { CLI, ENV_DEBUG, ENV_SIMULATE_ICE } from "./branding.js";
+import { INTERNAL, TOOLCHAIN, codeFor } from "./codes.js";
 import { PKG_ROOT, packageVersion } from "./version.js";
 
 const PROFILES = ["speed", "size", "debug", "wasi"] as const;
@@ -49,6 +50,16 @@ const EXIT_INTERNAL = 70;
 
 /** A user-facing error raised by the driver itself (exit 1, message only). */
 class CliError extends Error {}
+
+/**
+ * The `--json` object for a failure with no source location: an unusable C
+ * toolchain, an internal compiler error, a path the driver could not read.
+ * Same keys as `diagnosticJson`, minus the ones that need a position, so a
+ * reader can parse every line of `--json` output the same way and never has to
+ * fall back to scraping stderr to find out why a run failed.
+ */
+const failureJson = (code: string, message: string): string =>
+  JSON.stringify({ severity: "error", code, message });
 
 /** Node system errors (ENOENT on an input file, EACCES on the output dir, ...). */
 function isSystemError(err: unknown): err is NodeJS.ErrnoException {
@@ -88,42 +99,53 @@ function missingToolchain(): string | null {
   ].join("\n");
 }
 
+/**
+ * The usage text. Split from the two ways it is printed because they are not
+ * the same event: `--help` is a request that succeeded (stdout, exit 0, in
+ * `main`), and a usage error is a refusal (`usage` below: stderr, exit 2).
+ */
+const usageText = (): string =>
+  [
+    `usage: ${CLI} <entry.ts> [more.ts ...] [options]`,
+    `       ${CLI} --version | --help`,
+    "  -o, --output <file.ll>     output path for a single module (default: <input>.ll)",
+    "  -o, --output <dir>/        output directory: one <dir>/<module>.ll per module",
+    "  --link <exe>               build a native binary from every module + runtime/runtime.c",
+    "                             (entry module must declare `export function main`)",
+    "  --profile speed|size|debug|wasi",
+    "                             build profile for --link (default: speed); wasi needs a WASI sysroot",
+    "  --no-strict-exports        every function is an external symbol (default: non-exported",
+    "                             functions get `internal` linkage)",
+    "  --number-mode i32|f64      lowering of `number` (default: i32)",
+    "  --plain                    no performance attributes or alignment hints",
+    "  --runtime-decls            always emit the runtime ABI prelude (arena + strings)",
+    "  --emit-header <file.h>     also write a C header for the callable functions",
+    "  --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports, plus",
+    "                             <file>.mjs, a loader that marshals typed arrays",
+    "  --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)",
+    "  --unchecked-indexing       drop array bounds checks (unsafe; for benchmarks)",
+    "  --target <triple>|host     emit `target datalayout`/`target triple` for that machine",
+    `                             (${SUPPORTED_TARGETS.join(", ")}); default: target-neutral IR`,
+    "  --wrapping                 signed integer add/sub/mul wrap two's-complement (default: they",
+    "                             carry `nsw`, so signed overflow is undefined, like C)",
+    "  --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)",
+    "  --no-warn-performance      do not report the `performance` diagnostics (WP15 §8; they are on by",
+    "                             default, print on stderr, and never change the exit code)",
+    "  -g                         emit DWARF debug info (!dbg locations, variables); kept by --link",
+    "  --json                     print diagnostics as one JSON object per line on stdout (no excerpt)",
+    "  --emit-ast                 print the syntax tree of every module to stdout instead of IR",
+    "  --emit-checked             print the checker's tables (signatures, locals, structs, facts) instead of IR",
+    `  -v, --version              print the ${CLI} version and exit`,
+    "exit codes: 0 ok, 1 compile error, 2 usage, 3 toolchain (clang / build.sh), 70 internal error",
+  ].join("\n");
+
+/**
+ * A usage *error*: the request was refused, so the text goes to stderr and the
+ * exit code is 2. `-h` / `--help` is the other half and deliberately not this
+ * one -- see the branch in `main`.
+ */
 function usage(): never {
-  console.error(
-    [
-      `usage: ${CLI} <entry.ts> [more.ts ...] [options]`,
-      `       ${CLI} --version | --help`,
-      "  -o, --output <file.ll>     output path for a single module (default: <input>.ll)",
-      "  -o, --output <dir>/        output directory: one <dir>/<module>.ll per module",
-      "  --link <exe>               build a native binary from every module + runtime/runtime.c",
-      "                             (entry module must declare `export function main`)",
-      "  --profile speed|size|debug|wasi",
-      "                             build profile for --link (default: speed); wasi needs a WASI sysroot",
-      "  --no-strict-exports        every function is an external symbol (default: non-exported",
-      "                             functions get `internal` linkage)",
-      "  --number-mode i32|f64      lowering of `number` (default: i32)",
-      "  --plain                    no performance attributes or alignment hints",
-      "  --runtime-decls            always emit the runtime ABI prelude (arena + strings)",
-      "  --emit-header <file.h>     also write a C header for the callable functions",
-      "  --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports, plus",
-      "                             <file>.mjs, a loader that marshals typed arrays",
-      "  --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)",
-      "  --unchecked-indexing       drop array bounds checks (unsafe; for benchmarks)",
-      "  --target <triple>|host     emit `target datalayout`/`target triple` for that machine",
-      `                             (${SUPPORTED_TARGETS.join(", ")}); default: target-neutral IR`,
-      "  --wrapping                 signed integer add/sub/mul wrap two's-complement (default: they",
-      "                             carry `nsw`, so signed overflow is undefined, like C)",
-      "  --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)",
-      "  --no-warn-performance      do not report the `performance` diagnostics (WP15 §8; they are on by",
-      "                             default, print on stderr, and never change the exit code)",
-      "  -g                         emit DWARF debug info (!dbg locations, variables); kept by --link",
-      "  --json                     print diagnostics as one JSON object per line on stdout (no excerpt)",
-      "  --emit-ast                 print the syntax tree of every module to stdout instead of IR",
-      "  --emit-checked             print the checker's tables (signatures, locals, structs, facts) instead of IR",
-      `  -v, --version              print the ${CLI} version and exit`,
-      "exit codes: 0 ok, 1 compile error, 2 usage, 3 toolchain (clang / build.sh), 70 internal error",
-    ].join("\n")
-  );
+  console.error(usageText());
   process.exit(EXIT_USAGE);
 }
 
@@ -266,7 +288,15 @@ function main(argv: string[]): number {
     } else if (arg === "--emit-checked") {
       dump = "checked";
     } else if (arg === "-h" || arg === "--help") {
-      usage();
+      // A request that succeeded, not a refusal: stdout and exit 0, the way
+      // clang, tsc and git answer it, so a script or an agent that wraps the
+      // compiler can read the text without treating the run as a failure.
+      // `usage()` keeps stderr and exit 2 for an actual usage error. Returning
+      // rather than calling `process.exit` matters here for the reason at the
+      // bottom of this file: the usage text is the longest thing the driver
+      // writes to stdout and `process.exit` would truncate it into a pipe.
+      console.log(usageText());
+      return EXIT_OK;
     } else if (arg === "-v" || arg === "--version") {
       console.log(`${CLI} ${packageVersion()}`);
       return EXIT_OK;
@@ -285,7 +315,8 @@ function main(argv: string[]): number {
   if (link !== undefined) {
     const problem = missingToolchain();
     if (problem !== null) {
-      console.error(problem);
+      if (json) console.log(failureJson(TOOLCHAIN, problem));
+      else console.error(problem);
       return EXIT_TOOLCHAIN;
     }
   }
@@ -339,14 +370,14 @@ function main(argv: string[]): number {
       return EXIT_COMPILE_ERROR;
     }
     if (err instanceof CliError) {
-      if (json) console.log(JSON.stringify({ severity: "error", message: err.message }));
+      if (json) console.log(failureJson(codeFor("error", err.message), err.message));
       else console.error(err.message);
       return EXIT_COMPILE_ERROR;
     }
     if (isSystemError(err)) {
       const where = err.path ? ` ${err.path}` : "";
       const message = `cannot ${err.syscall ?? "access"}${where}: ${err.code}`;
-      if (json) console.log(JSON.stringify({ severity: "error", message }));
+      if (json) console.log(failureJson(codeFor("error", message), message));
       else console.error(`error: ${message}`);
       return EXIT_COMPILE_ERROR;
     }
@@ -386,7 +417,9 @@ function main(argv: string[]): number {
       // Surface the compiler/linker output verbatim, then say what failed.
       if (build.stderr) process.stderr.write(build.stderr.endsWith("\n") ? build.stderr : `${build.stderr}\n`);
       const why = build.error ? `could not run bash: ${build.error.message}` : `exit ${build.status}`;
-      console.error(`--link: ${BUILD_SH} failed (${why}); the IR is in ${outputs.join(", ")}`);
+      const failed = `--link: ${BUILD_SH} failed (${why}); the IR is in ${outputs.join(", ")}`;
+      if (json) console.log(failureJson(TOOLCHAIN, failed));
+      else console.error(failed);
       return EXIT_TOOLCHAIN;
     }
     // build.sh reports `<exe>: <bytes> bytes (<profile>)`.
@@ -405,6 +438,13 @@ function reportInternalError(err: unknown, argv: string[]): number {
   const inputs = argv.filter((a, i) => !a.startsWith("-") && !takesValue.test(argv[i - 1] ?? ""));
   const where = inputs.length > 0 ? ` while compiling ${inputs.join(", ")}` : "";
   const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  // Read off argv rather than passed in: this runs outside `main`, which is the
+  // point -- it catches what `main` could not. Under `--json` the crash is a
+  // parseable line too, so a wrapper is never left with an empty stdout and an
+  // exit code it has to guess about; the human report still goes to stderr.
+  if (argv.includes("--json")) {
+    console.log(failureJson(INTERNAL, `internal compiler error${where}: ${message}`));
+  }
   console.error(`${CLI} ${packageVersion()}: internal compiler error${where}`);
   console.error(`  ${message}`);
   if (process.env[ENV_DEBUG] && err instanceof Error && err.stack) {

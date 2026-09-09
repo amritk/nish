@@ -53,7 +53,10 @@ is **data, not code**: a source file next to the output it must produce.
 - **Toolchain-dependent checks skip, never fail, without LLVM.** `run.js` probes
   for `llvm-as` / `clang` and skips assembly, linking and native runs when they
   are missing. Do not write a check that assumes a tool is present; gate it the
-  way the existing ones are.
+  way the existing ones are — and report the skip through `skip(reason)`, not
+  `console.log`, so it is counted. The run ends `N passed, M failed, K skipped`
+  and prints a `DEGRADED:` banner when the toolchain is what was missing;
+  that count is how a reader knows what a green run was worth.
 
 ## What every construct ships with
 
@@ -68,6 +71,12 @@ PR adding a construct is not finished without all of them:
    message.
 4. `.args` for any flag the case depends on.
 5. Its `docs/LANGUAGE.md` rule, citing the case by name, and a cookbook entry.
+6. A diagnostic code, if the construct can be refused: run
+   `node scripts/gen-diagnostic-codes.mjs` so `src/codes.ts` and `self/codes.ts`
+   pick the new message up. The generator appends and never renumbers, and
+   `npm test` fails while either file is stale. A message built entirely out of
+   interpolations gets `AS0000`; giving it a code means giving it words of its
+   own, not editing the table by hand.
 
 A golden is only worth what a human can read in it: keep each case small and
 about one thing, and hand-check the IR before committing it rather than
