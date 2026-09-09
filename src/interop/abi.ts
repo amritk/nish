@@ -51,17 +51,16 @@ function writtenArrayParams(sig: FunctionSig, facts: FunctionFacts | undefined):
   const written = new Set<string>();
   for (const p of sig.params) {
     if (kindOf(p.type) !== "array") continue;
+    // A `readonly T[]` is `const` because its type says so, and the fixpoint is
+    // never consulted for one. That is not a shortcut: `writesThrough` is a
+    // conservative *may-write* — `noteUse` sets it for every escape, on the
+    // grounds that an alias may be written through later — so a `readonly`
+    // parameter that is merely returned or stored in a field would land here
+    // and lose the `const` its annotation promised. The checker is the thing
+    // that makes the promise true (no store, no `push`, no `pop`, and no
+    // widening back to a mutable `T[]`), and it is exact where this is not.
+    if (isReadonlyArray(p.type)) continue;
     if (!facts?.pointerParams.get(p.name)?.writesThrough) continue;
-    // A `readonly T[]` parameter *declares* what this fixpoint otherwise has to
-    // prove, so the two have to agree. If they ever disagree the checker let a
-    // write through, and `const` on the prototype would be a promise the code
-    // does not keep — which is a miscompile in the C that trusts it, not a
-    // cosmetic difference. Fail loudly instead (exit 70).
-    if (isReadonlyArray(p.type)) {
-      throw new Error(
-        `internal: \`${sig.name}\` writes through its \`readonly\` array parameter \`${p.name}\``
-      );
-    }
     written.add(p.name);
   }
   return written;

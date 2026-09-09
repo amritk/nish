@@ -41,6 +41,14 @@
  *     functions and do get AmritScript's semantics.
  *   - **`Arena.*` reports zero.** There is no arena, and a program that prints
  *     `Arena.used()` is measuring the native allocator by definition.
+ *   - **`i64` and `u64` are out**, for the same reason i32 mode is. The shim
+ *     represents them as BigInt, because that is the only JavaScript type that
+ *     holds 64 bits and wraps where the native ones wrap. Unrewritten source
+ *     says `n + 1`, and JavaScript refuses to mix a BigInt with a number, so
+ *     `toI64`/`toU64`/`f64ToBits` throw at the first arithmetic instead of
+ *     answering something that is quietly wrong. That is the intended failure:
+ *     a `TypeError` naming the line beats a number that silently stopped
+ *     wrapping at 2^53.
  *
  * Everything here delegates to `runtime/shim.mjs`, the module the differential
  * harness already uses, so the two cannot drift apart: a semantic fixed there
@@ -108,9 +116,11 @@ process.argv = shim.argv();
 // There is no arena. `mark`/`release`/`reset` are no-ops rather than errors so
 // that a program which manages memory explicitly still runs; `used()` answers
 // zero, which is the honest number for a host that is not bump-allocating.
+// Delegated like everything else here rather than written inline, so that the
+// answers cannot drift from the ones the rewritten runner gives.
 provide("Arena", {
-  mark: () => 0n,
-  release: () => {},
-  reset: () => {},
-  used: () => 0n,
+  mark: shim.arenaMark,
+  release: shim.arenaRelease,
+  reset: shim.arenaReset,
+  used: shim.arenaUsed,
 });

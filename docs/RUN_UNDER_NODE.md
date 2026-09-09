@@ -81,6 +81,14 @@ no prelude can reach it. They are language decisions
   prefixes.
 - **`Arena.used()` reports zero**, because there is no arena. A program printing
   it is measuring the native allocator by definition.
+- **`i64` and `u64` are out**, for the same reason i32 mode is. `runtime/shim.mjs`
+  represents them as BigInt — the only JavaScript type that holds 64 bits and
+  wraps where the native ones wrap — and unrewritten source writes `n + 1`,
+  which JavaScript refuses to mix with a BigInt. So `toI64`, `toU64` and
+  `f64ToBits` throw a `TypeError` at the first arithmetic rather than answer
+  something quietly wrong, which is the failure mode to want: a number that
+  silently stopped wrapping at 2^53 would be much worse than a thrown error
+  naming the line.
 - **1-ulp libm differences** in `sin`/`cos`/`log`/`pow` (glibc vs V8's fdlibm),
   **`Math.min`/`Math.max` with a NaN operand** (`llvm.minnum`/`maxnum` answer the
   other operand; JavaScript answers NaN), and **`Math.round(-0.3)`** (`+0`

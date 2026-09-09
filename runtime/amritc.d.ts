@@ -157,13 +157,6 @@ declare function isDirectorySync(path: string): boolean;
 /** Run `argv[0]` through `PATH` and wait: the exit status, `128 + n` for a signal, `-1` for a failure. */
 declare function spawnSync(argv: string[]): number;
 
-// ---- Directories and subprocesses (docs/LANGUAGE.md -> Directories and subprocesses)
-
-/** Create one directory, not recursive. True when a directory is there afterwards. */
-declare function mkdirSync(path: string): boolean;
-/** Run `argv[0]` with `argv`, wait, answer its exit status (`128 + n` on a signal, `-1` on failure). */
-declare function spawnSync(argv: string[]): number;
-
 // ---- Arena (docs/LANGUAGE.md -> Arena) ---------------------------------------
 
 declare const Arena: {

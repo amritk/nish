@@ -1218,6 +1218,24 @@ if (!only || "interop".includes(only)) {
     readonlyHeader || readonlyArrays.stderr
   );
 
+  // The `const` survives an escape. `writesThrough` is a may-write that every
+  // escape sets, so a `readonly` parameter that is returned or stored in a field
+  // would lose its `const` if the header consulted the fixpoint for one — and
+  // for a while the disagreement aborted the compile with exit 70 instead.
+  const escaped = emit("tests/cases/arr_readonly_escape.ts", [
+    "--emit-header",
+    sidecar("arr_readonly_escape", "h"),
+  ]);
+  const escapedHeader = escaped.status === 0 ? fs.readFileSync(sidecar("arr_readonly_escape", "h"), "utf8") : "";
+  check(
+    "a `readonly T[]` that escapes (returned, stored in a field) keeps its `const`, and compiling it is not an internal error",
+    escaped.status === 0 &&
+      escapedHeader.includes("amrit_array *first(const amrit_array *xs);") &&
+      escapedHeader.includes("int32_t hold(const amrit_array *xs);") &&
+      escapedHeader.includes("int32_t touch(const amrit_array *rows, int32_t v);"),
+    escapedHeader || escaped.stdout + escaped.stderr
+  );
+
   const keyword = emit("tests/cases/export_fn.ts", ["--emit-header", sidecar("export_fn", "h")]);
   const keywordHeader = keyword.status === 0 ? fs.readFileSync(sidecar("export_fn", "h"), "utf8") : "";
   check(
@@ -3314,9 +3332,16 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   const selfErrors = selfCheck.output
     .split("\n")
     .filter((line) => line.includes(": error TS"));
+  // `selfCheck.ok` has to be part of the predicate: a tsc that fell over before
+  // it checked anything (a bad config, TS18003, a spawn failure) produces no
+  // `error TS` lines at all, and `[].every(...)` is `true` — a check that passes
+  // by having tested nothing. So: either tsc was clean, or the only things it
+  // said are the one divergence the declarations document.
+  const isPopDivergence = (line) =>
+    line.includes("TS2345") && line.includes("| undefined") && line.includes("self/checker.ts");
   check(
     `tsc accepts self/ against the ambient declarations, bar the documented \`pop\` divergence (${selfModules.length} modules)`,
-    selfErrors.every((line) => line.includes("TS2345") && line.includes("| undefined")),
+    selfCheck.ok || (selfErrors.length > 0 && selfErrors.every(isPopDivergence)),
     selfCheck.output
   );
 }

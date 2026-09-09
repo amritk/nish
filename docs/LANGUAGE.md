@@ -1489,11 +1489,15 @@ int32_t sum(const amrit_array *xs);
 void fill(amrit_array *xs, int32_t v);
 ```
 
-The declaration and the fixpoint have to agree. If they ever disagree the
-checker let a write through, and `const` would be a promise the code does not
-keep — a miscompile in the C that trusts it — so the build fails with exit 70
-rather than emitting the header (`writtenArrayParams`, `src/interop/abi.ts` and
-`self/interop_abi.ts`).
+The fixpoint is not consulted for a `readonly T[]` at all, and that is
+deliberate rather than a shortcut. `writesThrough` is a conservative
+*may-write*: every escape sets it, on the grounds that an alias might be
+written through later, so a `readonly` parameter that is merely returned or
+stored in a field would land in the written set and lose the `const` its
+annotation promised (`tests/cases/arr_readonly_escape`). The checker is what
+makes the promise true — no store, no `push`, no `pop`, and no widening back to
+a mutable `T[]` — and it is exact where the fixpoint is not
+(`writtenArrayParams`, `src/interop/abi.ts` and `self/interop_abi.ts`).
 
 `process.argv` is read-only under a rule of its own rather than this type
 (`` `process.argv` is read-only ``), because it is a value and not an

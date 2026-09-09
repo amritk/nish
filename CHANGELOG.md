@@ -123,9 +123,10 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   nothing stored through it, which makes `const` a consequence that can
   disappear when a callee three levels down starts writing; on a `readonly T[]`
   it is the signature keeping a promise, and the comment above the prototype
-  shows the annotation that earned it. The two mechanisms must agree: a
-  `readonly` parameter the fixpoint says is written through is an internal
-  error (exit 70) rather than a header whose `const` the code does not keep.
+  shows the annotation that earned it. The fixpoint is not consulted for one:
+  `writesThrough` is a conservative *may-write* that every escape sets, so a
+  `readonly` parameter which is only returned or stored in a field would
+  otherwise lose the `const` it was promised (`arr_readonly_escape`).
 
   The spelling was not a choice. TypeScript allows `readonly` on array and
   tuple types and nothing else (TS1354), so `readonly Point` — the struct
@@ -512,7 +513,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `.mjs`.
 
 - **The ambient declarations now say that `panic` and `process.exit` do not
-  return, and declare the two builtins they had never declared at all.**
+  return.**
   `runtime/amritc.d.ts` claims one direction — a program `amritc` accepts is
   never one `tsc` refuses — and it was wrong about that in 68 places in `self/`
   alone. Both terminators were typed `void`, so `tsc` saw a function ending in
@@ -520,9 +521,7 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `if (x === null) { panic(...); }`, which is the guard `self/` writes wherever
   another language would assert: 16 missing-return errors and some 40 spurious
   `possibly null` ones, from one word. They are `never` now, which is how
-  TypeScript spells a terminator, and `mkdirSync` and `spawnSync` — documented
-  builtins since WP14 §3a D4 — are declared beside the other file operations.
-  With those three lines, `tsc --strict` accepts all 54 modules of the
+  TypeScript spells a terminator. With those two words, `tsc --strict` accepts all 54 modules of the
   self-hosted compiler bar one call, and 151 of the 153 accepted cases.
 
 - **The claim is now tested on the whole language rather than on `Result`.**

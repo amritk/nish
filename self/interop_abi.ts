@@ -23,7 +23,6 @@
 // the emitter already used, so the header, the `.d.ts` and the N-API shim
 // describe exactly the symbols and signatures that ended up in the IR.
 
-import { internalError } from "./ice";
 import { analyzeFunctions, AnalysisUnit, FunctionFacts } from "./attributes";
 import { CLI } from "./branding";
 import { Compilation, ModuleUnit } from "./compilation";
@@ -138,19 +137,13 @@ function writtenArrayParams(table: TypeTable, sig: FunctionSig, facts: FunctionF
   }
   let i = 0;
   while (i < sig.paramNames.length) {
-    if (table.isArray(sig.paramTypes[i])) {
+    // A `readonly T[]` is `const` because its type says so, and the fixpoint is
+    // never consulted for one: `writesThrough` is a conservative *may-write*
+    // that every escape sets, so a `readonly` parameter that is only returned
+    // or stored would otherwise lose the `const` its annotation promised.
+    if (table.isArray(sig.paramTypes[i]) && !table.isReadonlyArray(sig.paramTypes[i])) {
       const pointer = facts.pointerParam(sig.paramNames[i]);
       if (pointer !== null && pointer.writesThrough) {
-        // A `readonly T[]` parameter *declares* what this fixpoint otherwise
-        // has to prove, so the two have to agree. If they ever disagree the
-        // checker let a write through, and `const` on the prototype would be a
-        // promise the code does not keep — a miscompile in the C that trusts
-        // it, not a cosmetic difference.
-        if (table.isReadonlyArray(sig.paramTypes[i])) {
-          internalError(
-            `\`${sig.name}\` writes through its \`readonly\` array parameter \`${sig.paramNames[i]}\``
-          );
-        }
         written.add(sig.paramNames[i]);
       }
     }
