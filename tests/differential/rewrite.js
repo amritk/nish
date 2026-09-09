@@ -232,6 +232,7 @@ const IDENTIFIER_BUILTINS = new Map([
   ["mkdirSync", "mkdirSync"],
   ["spawnSync", "spawnSync"],
   ["isDirectorySync", "isDirectorySync"],
+  ["getenv", "getenv"],
   // WP16: natively these bump a struct out of the arena; in JavaScript they
   // build the object with the same three field names (`runtime/shim.mjs`).
   ["Ok", "Ok"],

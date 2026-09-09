@@ -85,6 +85,79 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **`getenv(name: string): string | null`: the environment, as a call (WP19
+  §4).** The last builtin the retirement gates named, and the only shape the
+  language has for the job. `process.platform`, `process.arch` and
+  `process.argv` are member reads on a name fixed at compile time; an
+  environment lookup is by a key that is a *value*, and member access on a
+  dynamic key is exactly what Phase 0 refuses — nor is there an object type
+  with arbitrary properties for `process.env` to be. So it is a function, named
+  after C's rather than after Node's, because Node's spelling is the one that
+  cannot exist here.
+
+  It answers `string | null` and a variable set to nothing (`FOO=`) is `""`,
+  **not** `null`: that distinction is the reason the result is nullable rather
+  than a string that happens to be empty when absent, and `CC=` meaning
+  something different from `CC` unset is exactly the case a driver cares about.
+  The value is narrowed like any other nullable, so a program cannot read it
+  without first saying what an unset variable means
+  (`reject_getenv_unchecked`).
+
+  The bytes are copied into the arena rather than borrowed from the
+  environment, because a string here carries a length header the environment's
+  does not and because a later `setenv` from linked C may free what a previous
+  `getenv` answered. That same possibility is why the declaration is not
+  `readonly`: two reads of one variable in a function stay two calls, and LLVM
+  may not fold the second into the first. `noalias` (freshly allocated) but not
+  `nonnull` (it may be unset), the shape `amrit_read_file_or_null` has.
+
+  **42 bytes of `.text`** at `-Oz`, against the 4,096 budget. `io_getenv` is
+  the round trip, `reject_getenv_arity`, `reject_getenv_type` and
+  `reject_getenv_unchecked` the negatives, `builtin_getenv` the cookbook entry,
+  and `runtime/shim.mjs` has it so the WP13 differential runs it under Node
+  like every other builtin.
+
+  Deliberately not beside it: `setenv`. Reading the environment a process was
+  given is a question with one answer; writing it mutates global state shared
+  with every library linked into the program, and nothing in the compiler needs
+  it.
+
+  What it closes is the *language* side of two gates rather than the gates: the
+  `CC` pre-flight probe is a stage1 driver change and is still open, and
+  `AMRITC_DEBUG` turns out not to be closable by this builtin at all — a stack
+  trace is the only thing that variable turns on, and a compiler with no
+  exceptions has none to print whether it is set or not. `self/ice.ts` says
+  that once rather than branching on a variable to print two versions of the
+  same "nothing here", and its note now records that as a decision instead of a
+  limit.
+
+- **`` `X` expects an argument of type Y, got Z ``: eight uncoded diagnostics
+  become one.** The suite pins how many distinct rejection messages carry no
+  stable `code`, as a ratchet that may shrink and not grow, and adding `getenv`
+  pushed it from 8 to 9 — a new builtin's argument-type message is a new
+  distinct message, and that whole family was the backlog. The code registry is
+  derived from the longest literal run between a message's interpolations, and
+  `` `${name}` expects ${want}, got ${got} `` has none long enough to name a
+  rule.
+
+  So the message got words of its own, which is what the check's own comment
+  says to do instead of editing the table: it reads `expects an argument of
+  type string, got i32` now. That is one run a code can be derived from, and it
+  covers `readFileSync`, `mkdirSync`, `isDirectorySync`, `spawnSync`, `getenv`,
+  `indexOf`, `f64ToBits`, `bitsToF64` and `Arena.release` at once. Coverage goes
+  from 230/239 (96.2 %) to **238/239 (99.6 %)** and the pin is now 1. The
+  registry gained one rule, `AS2268`, and no existing number moved.
+
+  The one still uncoded is `` Unknown base class `X` (`extends` must name a
+  class declared in this module) ``, whose leading run is shorter than the
+  parenthetical that actually states the rule.
+
+- **`<name>.env` in the golden harness.** One entry per line, `KEY=value` to
+  set (the value may be empty) and a bare `KEY` to unset, applied to the native
+  run beside the existing `<name>.argv`. A case that reads the environment
+  cannot otherwise have a `.out`: the unset case is only reliable if the
+  harness unsets it, and the empty case only exists if the harness sets it.
+
 - **`tests/self/parity.js`: the two compilers compared over the flags, which is
   the axis nothing else read (WP19 G1).** Every oracle in `tests/self/` runs the
   corpus through both compilers with each program's own flags. None of them

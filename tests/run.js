@@ -10,6 +10,8 @@
  *       <name>.out   expected stdout when linked with <name>.c (or tests/driver.c,
  *                    which prints `test()`) and runtime/runtime.c, then run
  *       <name>.argv  command-line arguments for that run, whitespace separated (WP7)
+ *       <name>.env   environment for that run, one per line: `KEY=value` sets it
+ *                    (the value may be empty), a bare `KEY` unsets it (WP19 `getenv`)
  *     Every successfully compiled case is also assembled with llvm-as.
  *
  *  B. Pipeline checks: runtime.c unit test, inline allocator vs C arena layout,
@@ -167,7 +169,22 @@ for (const name of cases) {
     const argv = fs.existsSync(side("argv"))
       ? fs.readFileSync(side("argv"), "utf8").trim().split(/\s+/).filter(Boolean)
       : [];
-    const run = spawnSync(exe, argv);
+    // `<name>.env`: what the run's environment must be, so a case that reads it
+    // prints the same thing under every shell. One entry per line rather than
+    // whitespace-separated, because a value may contain spaces; `KEY=value`
+    // sets it, a bare `KEY` unsets it, which is the state `getenv` answers
+    // `null` for and the only way to test that reliably.
+    const env = { ...process.env };
+    if (fs.existsSync(side("env"))) {
+      for (const line of fs.readFileSync(side("env"), "utf8").split("\n")) {
+        const entry = line.trim();
+        if (entry === "" || entry.startsWith("#")) continue;
+        const eq = entry.indexOf("=");
+        if (eq < 0) delete env[entry];
+        else env[entry.slice(0, eq)] = entry.slice(eq + 1);
+      }
+    }
+    const run = spawnSync(exe, argv, { env });
     const want = fs.readFileSync(side("out"), "utf8").trim();
     check(
       `${name}: native output matches .out`,
@@ -341,11 +358,15 @@ if (!only || "diagnostics".includes(only)) {
   );
 
   // Coverage over every rejection the suite exercises. The uncoded remainder is
-  // the backlog, pinned so it can shrink but not grow: those messages are built
-  // entirely out of interpolations (`\`${fn}\` expects ${a}, got ${b}`) and have
-  // no literal run long enough to identify a rule. Adding one is a matter of
-  // giving the message words of its own, not of editing the table.
-  const UNCODED_BACKLOG = 8;
+  // the backlog, pinned so it can shrink but not grow: such a message is built
+  // entirely out of interpolations and has no literal run long enough to
+  // identify a rule. Adding one is a matter of giving the message words of its
+  // own, not of editing the table -- which is what took this from 8 to 1:
+  // `` `${fn}` expects ${a}, got ${b} `` was eight of them, and now reads
+  // `expects an argument of type ${a}`, a run a code can be derived from.
+  // The one left is `Unknown base class ...`, whose leading run is shorter
+  // than the parenthetical that actually states the rule.
+  const UNCODED_BACKLOG = 1;
   const rejectCases = fs
     .readdirSync(casesDir)
     .filter((f) => f.startsWith("reject_") && f.endsWith(".ts"));

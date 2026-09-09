@@ -34,6 +34,12 @@
  *                                       `path` right now. It answers rather
  *                                       than exits for the same reason the
  *                                       two above do (WP14 §7a).
+ *   getenv(name): string | null         the environment variable's value, or
+ *                                       `null` when it is not set. A call and
+ *                                       not `process.env.NAME`, because the
+ *                                       key is a value and member access on a
+ *                                       dynamic key is what Phase 0 forbids
+ *                                       (WP19 §4).
  *
  *   process.argv: string[]              the command line, index 0 the program
  *                                       path (like C's argv[0]); read-only,
@@ -143,6 +149,28 @@ const checkIsDirectorySync: BuiltinCallChecker = (ctx, expr, scope) => {
 };
 
 /**
+ * `getenv(name)` (WP19 §4): the value of an environment variable, or `null`.
+ *
+ * A *function* rather than `process.env.NAME`, and that is a fact about the
+ * language rather than a preference. `process.platform` and `process.argv`
+ * are member reads on a name known at compile time; an environment lookup is
+ * by a key that is a value, and member access on a dynamic key is exactly what
+ * Phase 0 rejects. There is no object type with arbitrary properties either,
+ * so a call is the only shape that fits.
+ *
+ * `string | null` rather than the empty string for "not set", because a
+ * variable set to nothing is a real state a caller may need to tell apart —
+ * `CC=` is not `CC` unset. Narrowed like any other nullable, which is the
+ * bargain `readFileSyncOrNull` makes for the same reason: there are no
+ * exceptions, so absence has to be a value.
+ */
+const checkGetenv: BuiltinCallChecker = (ctx, expr, scope) => {
+  checkArity(ctx, expr, "getenv", 1);
+  checkArgumentType(ctx, expr.arguments[0], scope, "getenv", STRING);
+  return nullableOf(STRING);
+};
+
+/**
  * `spawnSync(argv)` (WP14 D4): the child's exit status, a `number` like
  * `a.length` is, so `f64` under `--number-mode f64`. The argument is checked
  * down to its element type — a `number[]` is not a command line — which is
@@ -238,6 +266,7 @@ export const ioBuiltinFunctions: Record<string, BuiltinCallChecker> = {
   mkdirSync: checkMkdirSync,
   spawnSync: checkSpawnSync,
   isDirectorySync: checkIsDirectorySync,
+  getenv: checkGetenv,
 };
 
 /**

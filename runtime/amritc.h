@@ -164,6 +164,13 @@ bool amrit_mkdir(const amrit_str *path);
    a parent that cannot be searched. One `stat`, no allocation, no exit; it is
    the `stat` half of `amrit_mkdir`, which calls it. */
 bool amrit_is_dir(const amrit_str *path);
+/* `getenv(name)` (WP19 §4): the value of the environment variable `name`,
+   copied into the arena, or NULL when it is not set. A variable set to the
+   empty string answers an empty string, not NULL. The bytes are copied rather
+   than borrowed: the environment's are bare, and a later `setenv` may free
+   them. A `name` containing a NUL is truncated at it, as `spawnSync`'s
+   arguments are. */
+amrit_str *amrit_getenv(const amrit_str *name);
 /* `spawnSync(argv)`: run element 0 of `argv` (searched on `PATH`) with `argv`
  * as its argument vector, wait for it, and answer its exit status, or
  * `128 + n` when signal `n` killed it. -1 when `argv` is empty, when the

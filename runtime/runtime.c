@@ -315,6 +315,19 @@ _Bool amrit_is_dir(const amrit_str *path) {
   return stat(path->data, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
+/* `getenv(name)` (WP19 §4): the variable's value, or NULL when it is not set.
+   The bytes are *copied* into the arena rather than handed back where they
+   live, for two reasons that are both about who owns them: a string here is
+   `{ len, bytes, '\0' }` and the environment's is bare bytes with no header,
+   and a `setenv` or `putenv` from linked C may free or overwrite what a
+   previous `getenv` answered. A variable set to nothing (`FOO=`) is the empty
+   string and not NULL — that distinction is the whole reason this answers a
+   nullable. */
+amrit_str *amrit_getenv(const amrit_str *name) {
+  const char *v = getenv(name->data);
+  return v ? amrit_str_new(v, strlen(v)) : 0;
+}
+
 /* One directory, not recursive. The retry is the `stat` above rather than
    `errno == EEXIST` so that a plain file at the path answers false, which is
    what the promise "a directory is there afterwards" means. */

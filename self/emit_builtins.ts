@@ -489,6 +489,12 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
   if (name === "isDirectorySync") {
     return emitter.fn.emitValue(`call zeroext i1 ${emitter.useRuntime("amrit_is_dir")}(${stringArgs(emitter, expr)})`);
   }
+  // WP19 §4: one call, and the null the C answers is already the language's
+  // null — a nullable string is a pointer that may be zero, so there is
+  // nothing to wrap and nothing to test here.
+  if (name === "getenv") {
+    return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("amrit_getenv")}(${stringArgs(emitter, expr)})`);
+  }
   if (name === "write") {
     return emitStreamWrite(emitter, expr, 1);
   }
@@ -571,6 +577,10 @@ export function identifierBuiltinCallees(program: CheckedProgram, table: TypeTab
   }
   if (name === "isDirectorySync") {
     out.push("amrit_is_dir");
+    return out;
+  }
+  if (name === "getenv") {
+    out.push("amrit_getenv");
     return out;
   }
   if (name === "write" || name === "writeError") {

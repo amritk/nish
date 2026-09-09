@@ -494,6 +494,8 @@ const RULES: string[] = [
     "AS3001",
     "` expects a number index, got ",
     "AS2058",
+    "` expects an argument of type ",
+    "AS2268",
     "` must return a value of type ",
     "AS2093",
     "`bigint` type is forbidden in ",
@@ -723,7 +725,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 335;
+export const RULE_COUNT = 336;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

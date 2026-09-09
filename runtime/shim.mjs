@@ -443,6 +443,16 @@ export function mkdirSync(path) {
 }
 
 /**
+ * `getenv(name)` (WP19 §4): the variable's value or `null`. Node answers
+ * `undefined` for an unset variable and the language has no `undefined`, so
+ * the `??` is the whole of the translation. A variable set to the empty string
+ * stays an empty string on both sides.
+ */
+export function getenv(name) {
+  return process.env[name] ?? null;
+}
+
+/**
  * `isDirectorySync(path)` (WP14 §7a): one stat, and a boolean out of it rather
  * than an exception, which is what the runtime's `stat` answers too.
  */

@@ -251,14 +251,17 @@ retirement exactly as it applied to the port. The seed has to be able to
 compile the compiler that replaces it, so the last thing stage0 ever does is
 grow the features that make it unnecessary.
 
-Three of the four have landed since this table was written — as WP14 §7a work
-rather than with WP18 — and are kept here so the gate reads complete:
+All four have landed. Three did so as WP14 §7a work rather than with WP18, and
+`getenv` as R1 work; they are kept here so the gate reads complete. **The
+language side of the gates is finished** — what remains in §2A is a dump
+(`--emit-ast`), a driver change (the `CC` probe), and a checker difference (the
+error list after the first error), and not a construct among them:
 
 | Builtin | Signature | Gate | Where |
 | --- | --- | --- | --- |
 | host platform | `process.platform: string`, `process.arch: string` | G1 (`--target host`) | **Landed (WP14 §7a).** Read-only members, like `process.argv`. `self/target.ts` composes the triple exactly as `src/codegen/target.ts` does. 8 bytes of `.text`, measured in §7a |
 | directory test | `isDirectorySync(path: string): boolean` | G1 (`-o <dir>`) | **Landed (WP14 §7a).** A value, not an exit, for the reason `mkdirSync` answers a boolean and `readFileSyncOrNull` answers `null`: there are no exceptions, so the driver phrases its own diagnostic. It is a `stat`, so a plain file answers `false` |
-| environment | `getenv(name: string): string \| null` | G1 (`AMRITC_DEBUG`), G5 (`CC`) | **this package.** A call and not `process.env.X`, because member access on a dynamic key is exactly what Phase 0 forbids. Nullable, narrowed like any other `T \| null` |
+| environment | `getenv(name: string): string \| null` | G1 (`AMRITC_DEBUG`), G5 (`CC`) | **Landed.** A call and not `process.env.X`, because member access on a dynamic key is exactly what Phase 0 forbids. Nullable, narrowed like any other `T \| null`, and a variable set to nothing answers `""` rather than `null`, which is the distinction the nullable exists for. 42 bytes of `.text`. Both *uses* are still open, and one of them is closed by argument rather than by code: the `CC` pre-flight probe is a stage1 driver change and G5's to make, and `AMRITC_DEBUG` cannot be closed by this builtin at all — stage1 has no stack to print whether the variable is set or not, so `self/ice.ts` says so once instead of branching |
 | internal error | none: `process.exit(internalError(msg))` | G1 (exit 70) | **Landed (WP14 §7a), by the other design.** This row proposed a second terminator builtin rather than 40 rewrites, to spare the definite-return analysis. What shipped is the rewrite: `panic(m)` already means "this message, then exit 1" and `process.exit(n)` already means "this code, now", so the status a compiler wants for its own bugs needs no new construct, and a second panic would put one compiler's reporting policy — the version line, the issue tracker, the word "internal" — inside the language that compiles it. The report is `self/ice.ts`; the cost was 35 statements, and they are `self/`'s own |
 
 `--emit-ast` needs no builtin — it needs `self/dump_ast.ts` promoted from an
@@ -276,7 +279,7 @@ gate nobody has opened is how a runtime budget dies.
 
 | | Milestone | Done when |
 | --- | --- | --- |
-| **R1** | Parity | §4's builtins land in both compilers — three landed with WP14 §7a, `getenv` remains this package's; the four rows of §2A close; `--parity` is green with an empty difference set |
+| **R1** | Parity | §4's builtins land in both compilers — **done**: three with WP14 §7a and `getenv` here; the rows of §2A close — **five of seven**, `--emit-ast` and the error list open; `--parity` is green with an empty difference set — **done over the flags** (`tests/self/parity.js`) |
 | **R2** | The seed protocol | `AMRITC_BOOTSTRAP` in `scripts/bootstrap.sh`; CI builds `self/` with the last release on both operating systems; the policy sentence is in `wp12-release.md` (G3, G4) |
 | **R3** | Oracle succession | `amritc-cmp` green over the corpus; `fuzz.js --stage1` repointed; the four survivors repointed to the seed; the lost coverage recovered as goldens, with the numbers written into §2B (G2) |
 | **R4** | Distribution | four binaries per release; the npm package installs one; `--version` has a new source; INSTALL.md and wp12 rewritten (G5) |

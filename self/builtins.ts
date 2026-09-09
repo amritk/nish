@@ -101,7 +101,8 @@ export function isBuiltinFunction(name: string): boolean {
     name === "panic" ||
     name === "mkdirSync" ||
     name === "spawnSync" ||
-    name === "isDirectorySync"
+    name === "isDirectorySync" ||
+    name === "getenv"
   );
 }
 
@@ -141,7 +142,10 @@ function requireStatementPosition(ctx: CheckContext, call: Node, name: string): 
 function checkArgumentType(ctx: CheckContext, arg: Node, scope: Scope, name: string, want: i32): void {
   const got = checkExpression(ctx, arg, scope, want);
   if (got !== T_ERROR && got !== want) {
-    ctx.error(arg, `\`${name}\` expects ${ctx.table.typeName(want)}, got ${ctx.table.typeName(got)}`);
+    // "an argument of type" rather than the bare type, so the message has a
+    // literal run a diagnostic code can be derived from; stage0 words it the
+    // same way in `src/checker/builtins.ts` and `src/checker/math.ts`.
+    ctx.error(arg, `\`${name}\` expects an argument of type ${ctx.table.typeName(want)}, got ${ctx.table.typeName(got)}`);
   }
 }
 
@@ -464,6 +468,16 @@ export function checkBuiltinFunction(ctx: CheckContext, call: Node, scope: Scope
       checkArgumentType(ctx, args.children[0], scope, name, T_STRING);
     }
     return T_BOOL;
+  }
+  // WP19 §4. A call and not `process.env.NAME`: the key is a value, and member
+  // access on a dynamic key is what Phase 0 refuses. `string | null` because a
+  // variable set to nothing is a state of its own — `CC=` is not `CC` unset —
+  // and narrowing is what makes the value readable, as for `readFileSyncOrNull`.
+  if (name === "getenv") {
+    if (checkBuiltinArity(ctx, call, name, args, 1)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING);
+    }
+    return ctx.table.nullableOf(T_STRING);
   }
   return ctx.errorType(call.children[0], `Unknown function \`${name}\``);
 }

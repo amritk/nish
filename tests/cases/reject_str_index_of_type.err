@@ -1,1 +1,1 @@
-`indexOf` expects string, got i32
+`indexOf` expects an argument of type string, got i32

@@ -253,6 +253,20 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     effect: "write",
   },
   {
+    // WP19 §4. Reads the process environment and copies the answer into the
+    // arena, so it both reads state this function does not own and writes
+    // memory: `effect: "write"`, and neither `readonly` nor `readnone`. A
+    // `setenv` from linked C is what makes the read unrepeatable, exactly as a
+    // failed `stat` makes `amrit_is_dir`'s. The result is freshly allocated
+    // (`noalias`) and may be null, so no `nonnull` — unlike `amrit_read_file`
+    // beside it and like `amrit_read_file_or_null`. The name is read and never
+    // retained (`STR_NOCAP`).
+    name: "amrit_getenv",
+    signature: `declare noalias noundef align 8 i8* @amrit_getenv(${STR_NOCAP})`,
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
     // WP14 §7a. One `stat`, answering only "is there a directory here?", which
     // is the question `-o <dir>` asks. `effect: "write"` rather than "read"
     // for the reason `amrit_parse_number` is not readonly: a failed `stat`

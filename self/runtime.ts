@@ -288,6 +288,15 @@ export class RuntimeTable {
     // `mkdir`, then `amrit_is_dir` when it failed: it changes the file system,
     // so `write`, and the path is only read and never retained (`STR_NOCAP`).
     this.add(plain("amrit_mkdir", `declare zeroext i1 @amrit_mkdir(${STR_NOCAP})`, EFFECT_WRITE));
+    // WP19 §4. Reads the process environment and copies the answer into the
+    // arena, so it reads state this function does not own *and* writes memory:
+    // `EFFECT_WRITE`, and neither readonly nor readnone. A `setenv` from linked
+    // C is what makes the read unrepeatable, as a failed `stat` makes
+    // `amrit_is_dir`'s. Freshly allocated, so `noalias`; nullable, so no
+    // `nonnull`. The name is read and never retained (`STR_NOCAP`).
+    this.add(
+      plain("amrit_getenv", `declare noalias noundef align 8 i8* @amrit_getenv(${STR_NOCAP})`, EFFECT_WRITE)
+    );
     // WP14 §7a. One `stat`, answering only "is there a directory here?", which
     // is the question `-o <dir>` asks. `EFFECT_WRITE` rather than read for the
     // reason `amrit_parse_number` is not readonly: a failed `stat` stores

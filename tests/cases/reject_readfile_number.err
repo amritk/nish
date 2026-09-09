@@ -1,1 +1,1 @@
-`readFileSync` expects string, got i32
+`readFileSync` expects an argument of type string, got i32
