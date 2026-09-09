@@ -70,6 +70,23 @@ fib at 1.10x on the line) and **three are outside it**:
 ["The call-site reclaim"](#the-call-site-reclaim) below. It is now faster than
 Rust's and than plain C's string building, and 0.82x against the naive C twin.
 
+**The suite has since gained a Go column** (seven `.go` twins, the same rules
+as the C and Rust ones). Against Go, AmritScript is ahead on six of the seven
+programs and behind on `result` alone; the two columns agree about which
+program is the outlier, which is the useful thing they say together.
+
+**Read the ratios on that machine with the run-to-run spread in mind.** The
+report is regenerated on whatever host the run happens on, and on a shared
+virtual machine the medians sit 15-20 % above the minima and the ratios move
+by about that much between two back-to-back runs of the same binaries — fib
+1.01x then 0.83x against Rust, nbody 1.24x then 1.03x, spectral 1.09x then
+0.86x, vec3 0.94x then 1.10x. Only three rows were stable across both:
+sieve at about 0.82x, strbuild at about 0.96x, and `result` at about 2.8x.
+So a single run of this suite resolves a gap the size of `result`'s and does
+not resolve the difference between 0.95x and 1.15x; a row near the 1.10x line
+needs several runs before it means anything, and the entries below that read a
+single run's ratio as a miss should be read that way.
+
 That column says where to look, not what the cause is: the diagnosis
 experiments in this file have not been re-run against these numbers, and
 guessing a cause for the one that is undiagnosed would be worth less than

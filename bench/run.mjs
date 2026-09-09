@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // AmritScript benchmark runner (WP9). Builds every benchmark in bench/ for
-// AmritScript, C and Rust, checks that all of them print the same checksum, times
-// the binaries and writes docs/BENCHMARKS.md. See bench/README.md.
+// AmritScript, C, Go and Rust, checks that all of them print the same checksum,
+// times the binaries and writes docs/BENCHMARKS.md. See bench/README.md.
 //
 //   npm run build && node bench/run.mjs [options]
 //     --runs N          timed runs per binary (default 5), after --warmup N (default 1)
@@ -9,12 +9,13 @@
 //     --n name=value    override a benchmark's size (the `bench:n` line in its sources)
 //     --validate        build and compare checksums only: no timing, no docs written
 //     --no-rust         skip Rust even when rustc is installed
+//     --no-go           skip Go even when the go tool is installed
 //     --out <file>      where to write the report (default docs/BENCHMARKS.md)
 //
 // Every benchmark prints one checksum (one or more lines of numbers). Outputs
 // are compared token by token; numeric tokens must agree to 1e-9 relative so
-// that `%.17g`, Rust's `{}` and AmritScript's JavaScript-style formatting of the
-// same double all count as equal.
+// that `%.17g`, Rust's `{}`, Go's `%v` and AmritScript's JavaScript-style
+// formatting of the same double all count as equal.
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -57,7 +58,7 @@ function sourceArgs(name) {
 
 // ---- Options ------------------------------------------------------------------------
 
-const opts = { runs: 5, warmup: 1, only: null, sizes: new Map(), validate: false, rust: true, out: path.join(root, "docs", "BENCHMARKS.md") };
+const opts = { runs: 5, warmup: 1, only: null, sizes: new Map(), validate: false, rust: true, go: true, out: path.join(root, "docs", "BENCHMARKS.md") };
 for (let i = 2; i < process.argv.length; i++) {
   const a = process.argv[i];
   const next = () => {
@@ -76,9 +77,15 @@ for (let i = 2; i < process.argv.length; i++) {
     }
   } else if (a === "--validate") opts.validate = true;
   else if (a === "--no-rust") opts.rust = false;
+  else if (a === "--no-go") opts.go = false;
   else if (a === "--out") opts.out = path.resolve(next());
   else if (a === "-h" || a === "--help") {
-    console.log(fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 17).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
+    // The banner is this file's leading comment block, minus the shebang: it
+    // ends at the first line that is not a comment, so adding an option above
+    // does not need a line count here changed to match.
+    const banner = fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1);
+    const end = banner.findIndex((l) => !l.startsWith("//"));
+    console.log(banner.slice(0, end).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
     process.exit(0);
   } else fail(`unknown option ${a}`);
 }
@@ -109,6 +116,7 @@ function version(cmd, args = ["--version"]) {
 if (!fs.existsSync(cli)) fail("dist/index.js is missing; run `npm run build` first");
 const CC = process.env.CC || which("clang") || fail("clang not found (set CC)");
 const RUSTC = opts.rust ? process.env.RUSTC || which("rustc", [path.join(os.homedir(), ".cargo", "bin")]) : null;
+const GO = opts.go ? process.env.GO || which("go", ["/usr/local/go/bin", path.join(os.homedir(), "go", "bin")]) : null;
 // Peak RSS of a child comes from bench/rss.c (fork, exec, wait4): `/usr/bin/time`
 // is not installed everywhere and an interpreter's fork would count its own pages.
 const RSS_HELPER = (() => {
@@ -119,6 +127,7 @@ const RSS_HELPER = (() => {
   return r.status === 0 ? exe : null;
 })();
 if (!RUSTC && opts.rust) console.error("note: rustc not found; Rust columns are skipped (set RUSTC=<path> or install rustup)");
+if (!GO && opts.go) console.error("note: the go tool was not found; Go columns are skipped (set GO=<path> or install Go)");
 
 // ---- Build ----------------------------------------------------------------------------
 
@@ -158,6 +167,7 @@ function build(bench) {
   const ts = prepare(`${bench.name}.ts`, size);
   const c = prepare(`${bench.name}.c`, size);
   const rs = fs.existsSync(path.join(benchDir, `${bench.name}.rs`)) ? prepare(`${bench.name}.rs`, size) : null;
+  const go = fs.existsSync(path.join(benchDir, `${bench.name}.go`)) ? prepare(`${bench.name}.go`, size) : null;
   const rel = (p) => path.relative(root, p);
   const variants = [];
   const modeFlags = sourceArgs(bench.name);
@@ -190,6 +200,16 @@ function build(bench) {
     };
     rustc("rust", "Rust -O3", []);
     rustc("rust-native", "Rust -O3 native", ["-C", "target-cpu=native"]);
+  }
+
+  // `go build` is always -O-equivalent: the gc compiler has one optimisation
+  // level. `-trimpath` keeps the binary independent of build/bench/src, and
+  // `-ldflags=-s -w` strips it as every other column is stripped.
+  if (GO && go) {
+    const exe = path.join(outDir, `${bench.name}-go`);
+    const args = ["build", "-trimpath", "-ldflags=-s -w", "-o", rel(exe), rel(go)];
+    run(GO, args, `${bench.name}/go`);
+    variants.push({ id: "go", label: "Go", exe, timed: true, cmd: `go ${args.join(" ")}` });
   }
   return variants;
 }
@@ -285,7 +305,7 @@ if (opts.validate) {
     console.error(`${mismatches} of ${n} binaries disagree with the C checksum`);
     process.exit(1);
   }
-  console.log(`checksums agree: ${n} binaries over ${results.length} benchmark(s)${RUSTC ? "" : " (Rust skipped)"}`);
+  console.log(`checksums agree: ${n} binaries over ${results.length} benchmark(s)${RUSTC ? "" : " (Rust skipped)"}${GO ? "" : " (Go skipped)"}`);
   for (const r of results) console.log(`  ${r.bench.name}: ${r.reference.trim().split("\n").join(" ")}  [${r.variants.map((v) => v.id).join(", ")}]`);
   process.exit(0);
 }
@@ -298,9 +318,23 @@ const columns = [
   ["amrit-nsw", "AmritScript `--nsw`"],
   ["c", "C `-O3`"],
   ["c-naive", "C `-O3` naive"],
+  ["go", "Go"],
   ["rust", "Rust `-O3`"],
   ["rust-native", "Rust native"],
 ].filter(([id]) => results.some((r) => r.variants.some((v) => v.id === id)));
+
+/** One `AmritScript / <language>` column per reference language that ran. */
+const ratios = [
+  ["go", "AmritScript / Go"],
+  ["rust", "AmritScript / Rust"],
+].filter(([id]) => results.some((r) => r.variants.some((v) => v.id === id)));
+
+/** AmritScript's minimum over `id`'s, as `N.NNx`, or "" when either is missing. */
+const ratio = (result, id) => {
+  const amrit = result.variants.find((v) => v.id === "amrit");
+  const other = result.variants.find((v) => v.id === id);
+  return amrit && other ? `${(amrit.min / other.min).toFixed(2)}x` : "";
+};
 
 const lines = [];
 const cpu = (() => {
@@ -328,32 +362,30 @@ lines.push(`| CPU | ${cpu}, ${os.cpus().length} logical cores |`);
 lines.push(`| OS | ${os.platform()} ${os.release()} (${os.arch()}) |`);
 lines.push(`| C | ${version(CC)} |`);
 lines.push(`| Rust | ${RUSTC ? version(RUSTC) : "not installed (columns skipped)"} |`);
+lines.push(`| Go | ${GO ? version(GO, ["version"]) : "not installed (columns skipped)"} |`);
 lines.push(`| Node | ${process.version} |`);
 lines.push(`| Runs | ${opts.runs} timed after ${opts.warmup} warm-up, wall time via \`process.hrtime.bigint\` around \`spawnSync\`; min and median in ms |`);
 lines.push("");
 
 lines.push("## Wall time (ms, min / median)", "");
-lines.push(`| Benchmark | ${columns.map(([, l]) => l).join(" | ")} | AmritScript / Rust |`);
-lines.push(`| --- | ${columns.map(() => "---:").join(" | ")} | ---: |`);
+lines.push(`| Benchmark | ${columns.map(([, l]) => l).join(" | ")} | ${ratios.map(([, l]) => l).join(" | ")} |`);
+lines.push(`| --- | ${columns.map(() => "---:").join(" | ")} | ${ratios.map(() => "---:").join(" | ")} |`);
 for (const r of results) {
   const cell = (id) => {
     const v = r.variants.find((x) => x.id === id);
     return v ? `${fmt(v.min)} / ${fmt(v.median)}` : "";
   };
-  const amrit = r.variants.find((v) => v.id === "amrit");
-  const rust = r.variants.find((v) => v.id === "rust");
-  const ratio = amrit && rust ? `${(amrit.min / rust.min).toFixed(2)}x` : "";
-  lines.push(`| ${r.bench.name} | ${columns.map(([id]) => cell(id)).join(" | ")} | ${ratio} |`);
+  lines.push(`| ${r.bench.name} | ${columns.map(([id]) => cell(id)).join(" | ")} | ${ratios.map(([id]) => ratio(r, id)).join(" | ")} |`);
 }
-lines.push("", "The last column divides the AmritScript minimum by the Rust `-O3` minimum: 1.00x is parity, above 1.10x misses the WP9 target. Rust native is `-C target-cpu=native`; C is plain `-O3` without `-march`.", "");
+lines.push("", "The ratio columns divide the AmritScript minimum by that language's minimum (Rust `-O3`, Go): 1.00x is parity, above 1.10x misses the WP9 target. Rust native is `-C target-cpu=native`; C is plain `-O3` without `-march`; Go has one optimisation level and always bounds-checks.", "");
 
 lines.push("## Binary size (bytes, stripped)", "");
-lines.push("| Benchmark | AmritScript speed | AmritScript size | C `-O3` | Rust `-O3` |", "| --- | ---: | ---: | ---: | ---: |");
+lines.push("| Benchmark | AmritScript speed | AmritScript size | C `-O3` | Go | Rust `-O3` |", "| --- | ---: | ---: | ---: | ---: | ---: |");
 for (const r of results) {
   const b = (id) => r.variants.find((v) => v.id === id)?.bytes.toLocaleString("en-US") ?? "";
-  lines.push(`| ${r.bench.name} | ${b("amrit")} | ${b("amrit-size")} | ${b("c")} | ${b("rust")} |`);
+  lines.push(`| ${r.bench.name} | ${b("amrit")} | ${b("amrit-size")} | ${b("c")} | ${b("go")} | ${b("rust")} |`);
 }
-lines.push("", "AmritScript binaries link `runtime/runtime.c` statically and glibc dynamically; the Rust binaries carry `std` statically (`panic=abort`, `strip=symbols`).", "");
+lines.push("", "AmritScript binaries link `runtime/runtime.c` statically and glibc dynamically; the Rust binaries carry `std` statically (`panic=abort`, `strip=symbols`) and the Go binaries their runtime, scheduler and garbage collector (`-ldflags=-s -w`).", "");
 
 if (results.some((r) => r.variants.some((v) => v.rss !== null))) {
   lines.push("## Peak resident memory (KB)", "");
@@ -381,21 +413,19 @@ for (const r of results) {
   for (const v of r.variants) lines.push(v.cmd);
   lines.push("```", "");
 }
-lines.push("Rust flags: `-C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols`, plus `-C target-cpu=native` for the native column. `amritc --link` runs `scripts/build.sh --profile speed` (`clang -O3 -flto` with section GC and stripping; see the README) over the module and `runtime/runtime.c`.", "");
+lines.push("Rust flags: `-C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols`, plus `-C target-cpu=native` for the native column. Go has no optimisation level to choose: `-trimpath` and `-ldflags=-s -w` only strip the binary. `amritc --link` runs `scripts/build.sh --profile speed` (`clang -O3 -flto` with section GC and stripping; see the README) over the module and `runtime/runtime.c`.", "");
 
 fs.mkdirSync(path.dirname(opts.out), { recursive: true });
 fs.writeFileSync(opts.out, lines.join("\n"));
 
 // Console summary.
-console.log(`\n${"benchmark".padEnd(10)} ${columns.map(([, l]) => l.replace(/`/g, "").padStart(18)).join("")}   amrit/rust`);
+console.log(`\n${"benchmark".padEnd(10)} ${columns.map(([, l]) => l.replace(/`/g, "").padStart(18)).join("")}${ratios.map(([, l]) => l.replace("AmritScript", "amrit").padStart(20)).join("")}`);
 for (const r of results) {
   const cell = (id) => {
     const v = r.variants.find((x) => x.id === id);
     return (v ? `${fmt(v.min)}/${fmt(v.median)}` : "-").padStart(18);
   };
-  const amrit = r.variants.find((v) => v.id === "amrit");
-  const rust = r.variants.find((v) => v.id === "rust");
-  console.log(`${r.bench.name.padEnd(10)} ${columns.map(([id]) => cell(id)).join("")}   ${amrit && rust ? (amrit.min / rust.min).toFixed(2) + "x" : "-"}`);
+  console.log(`${r.bench.name.padEnd(10)} ${columns.map(([id]) => cell(id)).join("")}${ratios.map(([id]) => (ratio(r, id) || "-").padStart(20)).join("")}`);
 }
 console.log(`\nwrote ${path.relative(root, opts.out)}`);
 if (mismatches) {

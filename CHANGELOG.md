@@ -377,6 +377,27 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   are named as out of scope and why. It is a plan, not an implementation:
   nothing in the compiler changed.
 
+- **The benchmark suite has a Go column (`bench/*.go`).** Seven Go twins, one
+  per program, built with `go build -trimpath -ldflags=-s -w` and held to the
+  rules the C and Rust twins already follow: the same loops with the same
+  temporaries in the same order, slice bounds checks left on (no
+  `-gcflags=-B`), objects heap allocated as they are in C, Rust and the
+  AmritScript arena, and the collector at its default `GOGC`. `go build` has
+  one optimisation level, so Go gets one column rather than the plain/native
+  pair Rust gets. `bench/run.mjs` gains `--no-go`, a `GO` override, an
+  `AmritScript / Go` ratio beside the Rust one, and Go rows in the size and
+  memory tables; `docs/BENCHMARKS.md` is regenerated with them.
+
+  Two twins are not literal transliterations, for reasons written beside
+  them. `nbody.go` spells its constants as typed variables, because an untyped
+  Go constant expression is folded in arbitrary precision and rounded once
+  where C, Rust and AmritScript round every step to `f64`; one ULP in
+  `SOLAR_MASS` moves the last digits of a chaotic system's final energy, and
+  the suite's twins agree bit for bit. `result.go` uses the two-word struct
+  `--emit-header` declares for `Result<number, number>`, Go having no `Result`
+  type of its own; Go's register ABI passes and returns that struct in
+  registers, exactly as it would Go's own `(value, ok)` pair of results.
+
 - **`--emit-ast` is no longer stage0's: the self-hosted compiler answers it too
   (WP19 R1).** It was the last flag refused by name, and the refusal was right
   about the reason and wrong about the conclusion. stage0's dump prints the
