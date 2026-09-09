@@ -100,20 +100,21 @@ carries, and none of these programs carries the flag that exposes it.
 | `unwrapOr`'s fallback took a contextual type in stage1 | in f64 mode `r.unwrapOr(-1)` on a `Result<i32, string>` compiled in stage1 and was refused by stage0. `docs/LANGUAGE.md`'s contextual-literal table is an enumerated list and this is not one of its positions, so stage1 was in the wrong | **fixed**, `reject_res_unwrap_or_f64` |
 | `Ok(...)`'s payload and an object literal's field, same cause | `` `Ok(...)` expects i32 for Result<i32, i32>, got f64 `` and `` Field `code` of `IoError` is i32, got f64 `` — stage0 refuses, stage1 compiles (`res_by_value_param`, `res_export`, `res_struct_error` under `--number-mode f64`) | **fixed**, `reject_res_ok_f64` and `reject_struct_field_f64`. The payload was the one-line shape this row predicted; the field was not. stage0 answers that position from *three* walks — the object-literal one names it, the numeric and array ones do not — and stage1 threads one contextual type down, so it was also compiling `{ b: 255 }` for a `u8` field and `{ xs: [] }`, in the default mode with no flag involved (`reject_struct_field_u8`, `reject_struct_field_empty_array`). A nested object literal and a `null` still take the field's type |
 | a fixed-length stack array is sized from an IR operand, not a constant | `new Float32Array(2)` in f64 mode reaches `emitData` as a register rather than digits, because the length has been through a conversion. stage0 writes `alloca [NaN x float]` — **IR that `llvm-as` refuses, from a compiler that exited 0** — and stage1 writes `alloca [0 x float]`, which assembles and then stores two floats past a zero-element stack slot. Both are wrong and stage1's is the more dangerous, because it builds and runs (`f32_struct.ts --number-mode f64`) | **fixed**, `arr_stack_f64`. Both emitters read the length from the literal now, through the same `literalLength` the escape analysis used to decide the site was stackable, so the two answers cannot differ; a stack site whose length is not a literal is an internal error rather than a silent zero |
-| the first diagnostic differs | `cf_switch_break.ts` in f64 mode: stage1 reported the `case` label against the discriminant at 12:12, stage0 an operand mismatch at 36:10. Both refuse the program; they disagreed about which check fires first | **closed**: both compilers now report the same `switch` discriminant error at 8:13. Re-derived rather than trusted, which is what this table is for |
+| the first diagnostic differs | `cf_switch_break.ts` in f64 mode: stage1 reports the `case` label against the discriminant at 12:12, stage0 an operand mismatch at 36:10. Both refuse the program | **open, and misnamed here**: the first diagnostic is the same on both sides (`switch` wants an integer discriminant, 8:13) and always was. What differs is what comes *after* it — stage1 reports the `case` label as well, stage0 throws out of the `switch` and never looks at it. It is the error-recovery row of the table below, not a disagreement about which check fires first, and reading only the first line is what made it look closed |
 | a compound operator loses its spelling | `div_compound_attributes.ts` in f64 mode: stage0 says ``Operator `/=` requires…``, stage1 says ``Operator `/` requires…`` | **fixed**, `reject_cf_compound_string` and `reject_cf_compound_widths`. Not the one-word fix it looks like: stage1 was routing a compound arithmetic assignment through the *binary operator's* rule, which is where the spelling was lost and also why `s += "b"` compiled there — stage0 has one numeric-only rule for the construct, and stage1 has it now, for a local, a field and an element alike |
 
 The remaining 193 rows are all the `--emit-checked` row of §2A above, which is
 one cause counted once per program, and it is closed too: stage1 prints the
 facts, and `checked_oracle.js` compares them.
 
-**All five are fixed, and the count they were found at is the point.** Between
-them they cost four one-line refusals, one shared `literalLength`, one rule
-moved out of `checkOperator` and one ported dump — and finding them cost a
-cross product nobody had run. Two of the five turned out to be wider than this
+**Four of the five are fixed, and the count they were found at is the point.**
+Between them they cost four one-line refusals, one shared `literalLength`, one
+rule moved out of `checkOperator` and one ported dump — and finding them cost a
+cross product nobody had run. Two of the four turned out to be wider than this
 table recorded (the object literal's field, and the compound operator), which
 is the ordinary way of it: a difference found under one flag is rarely only
-under that flag.
+under that flag. The fifth was recorded wrongly and is a different problem than
+the row says, which §A3 takes up.
 
 Fixing them turned up a sixth of the same family, which nothing had reported
 because no corpus program is written that way: **the context around a binary
@@ -135,6 +136,39 @@ and the stack-array one was a bug in the shipped compiler that predates this
 package entirely. That is the case for the gate stated as plainly as it can
 be: a cross product over flags the suite already uses, run once, found a
 miscompile that eleven oracles and 1,161 checks had not.
+
+### A3. What `--parity` says over the whole corpus
+
+§A2 was `tests/cases` — 172 programs, 2,408 runs. The mode's own default is the
+whole corpus that `tests/self/corpus.js` enumerates: `self/`, `examples/`,
+`docs/cookbook/`, `bench/`, `tests/parser/` and `tests/link/` as well. That is
+**593 programs and 8,302 runs, and it reports 13,800 undeclared differences**
+after everything above is fixed. The number is not a surprise waiting to
+happen; it is five classes, none of them a wrong-code bug, and writing them
+down is what turns "R1 is nearly done" into a list:
+
+| Rows | Class | What it is |
+| --- | --- | --- |
+| 12,209 | **a path inside the IR** | `; ModuleID = '...'` and `-g`'s `!DIFile(filename: ...)`. Handed the same absolute path, stage0 rewrites it cwd-relative (`displayName`) and stage1 prints what it was given. This is the difference **already declared** for `--emit-checked`'s `module <path>` header, at two more surfaces. The oracles never see it because they pass relative paths to both compilers |
+| 602 | **the parser refuses before Phase 0 does** | `var x = 1` is `` syntax error: expected `;` `` from stage1 and `` `var` is forbidden; use `let` or `const` `` from stage0. By design (`.claude/selfhost.md`: lex and parse what is written, refuse in the phase that owns the rule) — `reject_oracle.js` counts these apart, and this mode does not |
+| ~950 | **error recovery after the first refusal** | stage0 `throw`s out of the construct and unwinds; stage1 threads an error value and keeps checking. Both refuse, with the same first diagnostic, and stage1 says more after it. Mostly `--number-mode f64` over programs written for i32 mode, where one bad type cascades. `cf_switch_break` in §A2 is this, not what its row said |
+| 40 | **`--emit-ast` on a program Phase 0 refuses** | stage0 validates before it dumps and exits 1; stage1 dumps the tree it parsed and exits 0 |
+| 13 | **one wording** | unary `+` is `` Unary `+` is forbidden; it converts, and AmritScript has no conversions `` in stage1 and `` Unsupported unary operator `+` `` in stage0 |
+
+Three of the five are decided rather than broken and want a **declaration** —
+a narrow one that normalises away exactly the bytes allowed to differ, as G1
+requires — rather than a code change. The path class is the existing
+declaration extended to `.ll` files; the parser class is a rule this repository
+already wrote down; the wording is stage1's improvement on a stage0 message and
+the decision is which one the language keeps. The other two are code: `--emit-ast`
+should validate before dumping on both sides, and error recovery is the one
+that is genuinely structural — a compiler with exceptions unwinds where a
+compiler without them carries on, and making the two agree means deciding, per
+construct, where stage1 stops.
+
+**None of this is a miscompile, and none of it was reachable from §A2's
+numbers.** That is the argument for running the mode over the corpus it
+defaults to rather than the directory the first run happened to use.
 
 ### B. The oracles
 
@@ -340,7 +374,7 @@ gate nobody has opened is how a runtime budget dies.
 
 | | Milestone | Done when |
 | --- | --- | --- |
-| **R1** | Parity | §4's builtins land in both compilers — three landed with WP14 §7a and `getenv` with this package; the rows of §2A close (all seven have) and so do §A2's five; `--parity` is green with an empty difference set |
+| **R1** | Parity | §4's builtins land in both compilers — three landed with WP14 §7a and `getenv` with this package; the rows of §2A close (all seven have) and so do §A2's five (four fixed, the fifth re-read as §A3's recovery class); `--parity` is green with an empty difference set over the **whole** corpus, which means §A3's five classes are declared or closed |
 | **R2** | The seed protocol | `AMRITC_BOOTSTRAP` in `scripts/bootstrap.sh`; CI builds `self/` with the last release on both operating systems; the policy sentence is in `wp12-release.md` (G3, G4) |
 | **R3** | Oracle succession | `amritc-cmp` green over the corpus; `fuzz.js --stage1` repointed; the four survivors repointed to the seed; the lost coverage recovered as goldens, with the numbers written into §2B (G2) |
 | **R4** | Distribution | four binaries per release; the npm package installs one; `--version` has a new source; INSTALL.md and wp12 rewritten (G5) |
