@@ -1199,6 +1199,25 @@ if (!only || "interop".includes(only)) {
     sidecar("arrays", "napi.c"),
   ]);
 
+  // A `readonly T[]` parameter *declares* the `const` that the whole-program
+  // fixpoint otherwise has to prove, and the comment above the prototype shows
+  // the annotation that earned it. The mutable `fill` beside it is the control:
+  // it writes, so it stays `amrit_array *` and its comment stays `number[]`.
+  const readonlyArrays = emit("tests/cases/arr_readonly_header.ts", [
+    "--emit-header",
+    sidecar("arr_readonly_header", "h"),
+  ]);
+  const readonlyHeader =
+    readonlyArrays.status === 0 ? fs.readFileSync(sidecar("arr_readonly_header", "h"), "utf8") : "";
+  check(
+    "a `readonly T[]` parameter is `const amrit_array *`, and the comment shows the annotation that promised it",
+    readonlyHeader.includes("/* sum(xs: readonly number[]): number -- xs: int32_t elements */") &&
+      readonlyHeader.includes("int32_t sum(const amrit_array *xs);") &&
+      readonlyHeader.includes("/* fill(xs: number[], v: number): void -- xs: int32_t elements */") &&
+      readonlyHeader.includes("void fill(amrit_array *xs, int32_t v);"),
+    readonlyHeader || readonlyArrays.stderr
+  );
+
   const keyword = emit("tests/cases/export_fn.ts", ["--emit-header", sidecar("export_fn", "h")]);
   const keywordHeader = keyword.status === 0 ? fs.readFileSync(sidecar("export_fn", "h"), "utf8") : "";
   check(

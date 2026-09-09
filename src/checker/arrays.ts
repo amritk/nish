@@ -31,6 +31,7 @@ import {
   arrayOf,
   assignable,
   isNumeric,
+  isReadonlyArray,
   llvmType,
   resolveTypeNode,
   sameType,
@@ -195,12 +196,36 @@ propertyCheckers.array = (ctx, expr, receiver) => {
 /** The method set, in the order the "supported:" message lists them. */
 export const ARRAY_METHODS = ["push", "pop", "indexOf", "join"];
 
+/**
+ * The one rule a `readonly T[]` adds: it is the same array, so every read still
+ * works, and no write does. `push` and `pop` are the two methods that write;
+ * element stores are caught in `checkElementAssignment`, and `a.length = n` was
+ * already refused for every array.
+ *
+ * The message names the fix rather than the rule, because the caller is almost
+ * always holding a mutable array that widened on the way in: the parameter's
+ * annotation is what has to change, not the call.
+ */
+function rejectWriteThroughReadonly(
+  ctx: CheckContext,
+  expr: ts.Node,
+  receiver: StaticType,
+  what: string
+): void {
+  if (!isReadonlyArray(receiver)) return;
+  throw ctx.error(
+    `Cannot \`${what}\` through ${typeToString(receiver)} (declare it ${typeToString(arrayOf((receiver as { elem: StaticType }).elem))} to write through it)`,
+    expr
+  );
+}
+
 methodCallCheckers.array = (ctx, expr, receiver, scope) => {
   const access = expr.expression as ts.PropertyAccessExpression;
   const name = access.name.text;
   if (receiver.kind !== "array") throw ctx.error("internal: array method on non-array", expr);
   switch (name) {
     case "push": {
+      rejectWriteThroughReadonly(ctx, expr, receiver, "push");
       checkArity(ctx, expr, "push", 1);
       const t = ctx.checkExpression(expr.arguments[0], scope);
       if (!assignable(t, receiver.elem)) {
@@ -211,6 +236,7 @@ methodCallCheckers.array = (ctx, expr, receiver, scope) => {
     case "pop":
       // There is no `undefined`, so an empty array is a panic rather than
       // a second return type; the check is the one `a[i]` already pays for.
+      rejectWriteThroughReadonly(ctx, expr, receiver, "pop");
       checkArity(ctx, expr, "pop", 0);
       return receiver.elem;
     case "indexOf": {
@@ -308,6 +334,13 @@ function checkElementAssignment(
   scope: Scope
 ): StaticType {
   const elem = ctx.checkExpression(target, scope); // records the base and index types
+  const base = ctx.program.types.get(target.expression);
+  if (base !== undefined && isReadonlyArray(base)) {
+    throw ctx.error(
+      `Cannot assign to an element of ${typeToString(base)} (declare it ${typeToString(arrayOf((base as { elem: StaticType }).elem))} to write through it)`,
+      target
+    );
+  }
   const rhs = ctx.checkExpression(expr.right, scope);
   const op = expr.operatorToken.kind;
   if (op === ts.SyntaxKind.EqualsToken) {

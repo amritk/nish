@@ -73,6 +73,35 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **`readonly T[]` and `ReadonlyArray<T>`: an array a callee may read and not
+  write.** The same header, the same pointer, the same LLVM type — the cookbook
+  entry is the same function under both spellings and the two bodies are
+  identical instruction for instruction, because the annotation is a promise
+  the checker keeps rather than a value the emitter lowers. A `T[]` widens into
+  one at any sink and never back (`reject_arr_readonly_widen`), stores, `push`
+  and `pop` through one are refused under their own names
+  (`reject_arr_readonly_store`, `_push`, `_pop`), and it is shallow, as
+  TypeScript's is. It is a type and not a parameter modifier, so it is legal
+  wherever an array type is — a field, a return type, a `const`'s annotation —
+  and the rule travels with it (`arr_readonly_field`).
+
+  The reason to write one is the C ABI. `--emit-header` already spelled an
+  array parameter `const amrit_array *` when the whole-program fixpoint proved
+  nothing stored through it, which makes `const` a consequence that can
+  disappear when a callee three levels down starts writing; on a `readonly T[]`
+  it is the signature keeping a promise, and the comment above the prototype
+  shows the annotation that earned it. The two mechanisms must agree: a
+  `readonly` parameter the fixpoint says is written through is an internal
+  error (exit 70) rather than a header whose `const` the code does not keep.
+
+  The spelling was not a choice. TypeScript allows `readonly` on array and
+  tuple types and nothing else (TS1354), so `readonly Point` — the struct
+  parameter that would have been the other half of this — is not TypeScript and
+  was left out rather than invented; `readonly i32` names that rule
+  (`reject_arr_readonly_scalar`) instead of reading as a gap. Both compilers
+  landed together and `IR(stage0) == IR(stage1) == IR(stage2)` still holds over
+  the whole corpus.
+
 - **The `performance` diagnostic class, with its first two warnings (WP15
   §8).** The compiler now says something when it had to take a slow path and
   a faster one was available. A warning is the same anchored, excerpted

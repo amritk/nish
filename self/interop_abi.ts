@@ -23,6 +23,7 @@
 // the emitter already used, so the header, the `.d.ts` and the N-API shim
 // describe exactly the symbols and signatures that ended up in the IR.
 
+import { internalError } from "./ice";
 import { analyzeFunctions, AnalysisUnit, FunctionFacts } from "./attributes";
 import { CLI } from "./branding";
 import { Compilation, ModuleUnit } from "./compilation";
@@ -140,6 +141,16 @@ function writtenArrayParams(table: TypeTable, sig: FunctionSig, facts: FunctionF
     if (table.isArray(sig.paramTypes[i])) {
       const pointer = facts.pointerParam(sig.paramNames[i]);
       if (pointer !== null && pointer.writesThrough) {
+        // A `readonly T[]` parameter *declares* what this fixpoint otherwise
+        // has to prove, so the two have to agree. If they ever disagree the
+        // checker let a write through, and `const` on the prototype would be a
+        // promise the code does not keep — a miscompile in the C that trusts
+        // it, not a cosmetic difference.
+        if (table.isReadonlyArray(sig.paramTypes[i])) {
+          internalError(
+            `\`${sig.name}\` writes through its \`readonly\` array parameter \`${sig.paramNames[i]}\``
+          );
+        }
         written.add(sig.paramNames[i]);
       }
     }
@@ -403,7 +414,12 @@ export function tsKeyword(table: TypeTable, t: i32): string {
     case K_STRUCT:
       return table.nameOf(t);
     case K_ARRAY:
-      return `${tsKeyword(table, table.refOf(t))}[]`;
+      // The comment above the prototype is the signature as it was written, so
+      // a `readonly T[]` says so: it is what makes the `const` on the C
+      // parameter beside it read as the promise the source made.
+      return table.isReadonlyArray(t)
+        ? `readonly ${tsKeyword(table, table.refOf(t))}[]`
+        : `${tsKeyword(table, table.refOf(t))}[]`;
     case K_NULLABLE:
       return `${tsKeyword(table, table.refOf(t))} | null`;
     // WP17: the type as the programmer wrote it, for the comment above the

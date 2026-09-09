@@ -89,6 +89,7 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 | `boolean` | `i1` | 1 / 1 | `bool` | `zeroext` at the ABI boundary. |
 | `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }` | 8 / 8 (pointer) | `const amrit_str *` in, `amrit_str *` out | Immutable, 8-aligned, NUL-terminated (so `data` is a C string; sharing a pointer is always safe, nothing is ever copied); literals are module constants, everything else lives in the arena; `len` is the UTF-8 byte length. |
 | `T[]`, `Array<T>` | `%struct.amrit_array*` to `{ i64 len, i64 cap, i8* data }` | 8 / 8 (pointer); header 24 bytes | `const amrit_array *` in (read-only), `amrit_array *` in (written through) and out | One element type; `data` holds `cap` elements of `sizeof(T)`; bounds-checked. |
+| `readonly T[]`, `ReadonlyArray<T>` | the same as `T[]` | as `T[]` | `const amrit_array *` in | The same array, with every write refused: [Readonly arrays](#readonly-arrays). |
 | `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). |
 | `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, and narrowing: [Nullable types](#nullable-types). |
@@ -105,7 +106,8 @@ Type rules:
 - **Accepted type syntax**: `number`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`,
   `f32`, `f64`, `boolean`,
   `string`, `void`, `T[]`, `Array<T>` (exactly one type argument:
-  `` `Array` needs exactly one type argument ``), `Int32Array`,
+  `` `Array` needs exactly one type argument ``), `readonly T[]` and
+  `ReadonlyArray<T>` ([Readonly arrays](#readonly-arrays)), `Int32Array`,
   `Float32Array`, `Float64Array`, `BigInt64Array` (no type argument:
   `` `Float64Array` takes no type argument (it is an alias of `f64[]`) ``,
   `tests/cases/reject_arr_typed_view_type_annotation_arg`; a `Float64Array`
@@ -1434,6 +1436,66 @@ valid string (docs/wp13-differential.md notes what Node then does with them).
 A numeric literal argument to `push` or `indexOf` takes the element type, so
 `wide.push(3)` on an `i64[]` is an `i64` three
 ([Numeric literals](#numeric-literals)).
+
+### Readonly arrays
+
+`readonly T[]` — or `ReadonlyArray<T>`, the same type under the other spelling
+— is a `T[]` that may not be written through. It is the same header, the same
+pointer and the same LLVM type; the golden
+(`tests/cases/arr_readonly_param`) is the IR the mutable spelling emits,
+instruction for instruction, because the annotation is a promise to the checker
+and not a value.
+
+- **Everything that reads still works**: `a.length`, `a[i]`, `for...of`,
+  `indexOf`, `join`, passing it on to another `readonly T[]`.
+- **Everything that writes is refused**: `a[i] = v` and `a[i] op= v` are
+  `` Cannot assign to an element of readonly i32[] (declare it i32[] to write through it) ``
+  (`reject_arr_readonly_store`), and `push` / `pop` are
+  `` Cannot `push` through readonly i32[] (...) `` under their own names
+  (`reject_arr_readonly_push`, `reject_arr_readonly_pop`). `a.length = n` was
+  already refused for every array.
+- **A `T[]` widens into a `readonly T[]`, and never back.** The conversion
+  emits nothing, because the two are the same pointer; the reverse is
+  `` Argument 1 of `fill`: expected i32[], got readonly i32[] ``
+  (`reject_arr_readonly_widen`), since laundering the promise away one call
+  deeper would make it worth nothing.
+- **It is shallow**, as TypeScript's is: the element of a `readonly T[][]` is a
+  mutable `T[]`.
+- **It is a type, not a parameter modifier**, so it is legal wherever an array
+  type is — a class field, a return type, a `const`'s annotation — and the rule
+  travels with it (`arr_readonly_field`, `reject_arr_readonly_field`). That is
+  why the message says "declare it" rather than naming a parameter.
+- **`readonly` goes on an array type and nothing else.** TypeScript allows the
+  modifier on array and tuple types only (TS1354), so `readonly i32` is
+  `` `readonly` is only permitted on an array type, got i32 ``
+  (`reject_arr_readonly_scalar`) rather than a construct waiting to be
+  supported — a program that used it would not be TypeScript either.
+
+The reason to write one is the C ABI. `--emit-header` already spells an array
+parameter `const amrit_array *` when the whole-program fixpoint proves nothing
+stores through it, which makes `const` a *consequence* that can quietly
+disappear when a callee three levels down starts writing. On a `readonly T[]`
+it is the signature keeping a promise instead, and the comment above the
+prototype shows the annotation that earned it
+(`tests/cases/arr_readonly_header`, checked in the WP8 block of
+`tests/run.js`):
+
+```c
+/* sum(xs: readonly number[]): number -- xs: int32_t elements */
+int32_t sum(const amrit_array *xs);
+/* fill(xs: number[], v: number): void -- xs: int32_t elements */
+void fill(amrit_array *xs, int32_t v);
+```
+
+The declaration and the fixpoint have to agree. If they ever disagree the
+checker let a write through, and `const` would be a promise the code does not
+keep — a miscompile in the C that trusts it — so the build fails with exit 70
+rather than emitting the header (`writtenArrayParams`, `src/interop/abi.ts` and
+`self/interop_abi.ts`).
+
+`process.argv` is read-only under a rule of its own rather than this type
+(`` `process.argv` is read-only ``), because it is a value and not an
+annotation.
 
 There are no other array or string methods (`slice`, `map`, `shift`,
 `toUpperCase`, `charAt`, ...) and no `toString` (template literals

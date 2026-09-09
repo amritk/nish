@@ -82,6 +82,7 @@ import {
   N_TYPE_ARRAY,
   N_TYPE_NULL,
   N_TYPE_PAREN,
+  N_TYPE_READONLY,
   N_TYPE_REF,
   N_TYPE_UNION,
   N_VAR,
@@ -676,6 +677,19 @@ export class Parser {
 
   parsePostfixType(): Node {
     const start = this.start;
+    // `readonly T[]`. It binds looser than the `[]` suffix and tighter than
+    // `|`, which is why it sits here and not in `parseType`: `readonly T[] |
+    // null` is a nullable readonly array, the way the `typescript` parser
+    // reads it. Whether the operand is actually an array is the checker's
+    // question, so a `readonly` on anything parses and is refused there with
+    // a message that names the rule.
+    if (this.at(TOK_IDENT) && this.value === "readonly") {
+      this.advance();
+      const node = this.node(N_TYPE_READONLY, start, this.end);
+      node.children.push(this.parsePostfixType());
+      node.end = this.previousEnd;
+      return node;
+    }
     let type = this.parsePrimaryType();
     while (this.at(TOK_LBRACKET) && this.peek() === TOK_RBRACKET) {
       this.advance();

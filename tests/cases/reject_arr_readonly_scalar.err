@@ -1,0 +1,1 @@
+`readonly` is only permitted on an array type, got i32

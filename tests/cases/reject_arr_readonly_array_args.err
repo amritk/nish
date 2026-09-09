@@ -1,0 +1,1 @@
+`ReadonlyArray` needs exactly one type argument, e.g. `ReadonlyArray<number>`

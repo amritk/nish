@@ -128,6 +128,14 @@ function printTypeScriptTree(source, sf) {
         emit(depth, "TYPE_ARRAY", s, e);
         type(node.elementType, depth + 1);
         return;
+      // `readonly T[]`. TypeScript models it as a TypeOperator and allows the
+      // modifier on nothing else (TS1354), so any other operator here — `keyof`,
+      // `unique` — is a type stage1 does not have a node for either.
+      case ts.SyntaxKind.TypeOperator:
+        if (node.operator !== ts.SyntaxKind.ReadonlyKeyword) unsupported(node);
+        emit(depth, "TYPE_READONLY", s, e);
+        type(node.type, depth + 1);
+        return;
       case ts.SyntaxKind.UnionType:
         emit(depth, "TYPE_UNION", s, e);
         for (const member of node.types) type(member, depth + 1);

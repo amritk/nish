@@ -11,7 +11,7 @@ import { CLI } from "../branding";
 import { FunctionSig } from "../checker";
 import { FunctionFacts, analyzeFunctions } from "../codegen/attributes";
 import { Compilation, ModuleUnit } from "../compilation";
-import { ResultType, StaticType, resultByValue, resultStructName } from "../types";
+import { ResultType, StaticType, isReadonlyArray, resultByValue, resultStructName } from "../types";
 import { ResultLayout, resultLayout, resultTypesIn } from "../checker/result";
 
 export interface ExternalFunction {
@@ -50,7 +50,19 @@ export function externalFunctions(compilation: Compilation): ExternalFunction[] 
 function writtenArrayParams(sig: FunctionSig, facts: FunctionFacts | undefined): Set<string> {
   const written = new Set<string>();
   for (const p of sig.params) {
-    if (kindOf(p.type) === "array" && facts?.pointerParams.get(p.name)?.writesThrough) written.add(p.name);
+    if (kindOf(p.type) !== "array") continue;
+    if (!facts?.pointerParams.get(p.name)?.writesThrough) continue;
+    // A `readonly T[]` parameter *declares* what this fixpoint otherwise has to
+    // prove, so the two have to agree. If they ever disagree the checker let a
+    // write through, and `const` on the prototype would be a promise the code
+    // does not keep — which is a miscompile in the C that trusts it, not a
+    // cosmetic difference. Fail loudly instead (exit 70).
+    if (isReadonlyArray(p.type)) {
+      throw new Error(
+        `internal: \`${sig.name}\` writes through its \`readonly\` array parameter \`${p.name}\``
+      );
+    }
+    written.add(p.name);
   }
   return written;
 }
@@ -262,7 +274,10 @@ export function tsKeyword(t: StaticType): string {
     case "struct":
       return (t as { name: string }).name;
     case "array":
-      return `${tsKeyword((t as { elem: StaticType }).elem)}[]`;
+      // The comment above the prototype is the signature as it was written, so
+      // a `readonly T[]` says so: it is what makes the `const` on the C
+      // parameter beside it read as the promise the source made.
+      return `${isReadonlyArray(t) ? "readonly " : ""}${tsKeyword((t as { elem: StaticType }).elem)}[]`;
     case "nullable":
       return `${tsKeyword((t as { inner: StaticType }).inner)} | null`;
     // WP17: the type as the programmer wrote it, for the comment above the

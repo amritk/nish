@@ -1,0 +1,1 @@
+Cannot assign to an element of readonly i32[] (declare it i32[] to write through it)

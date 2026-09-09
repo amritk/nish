@@ -119,6 +119,14 @@ export class TypeTable {
   errs: i32[];
   /** The proof carried by a `Result` id; `R_UNKNOWN` for every other kind. */
   states: i32[];
+  /**
+   * `true` for the `readonly T[]` spelling of an array id, `false` for every
+   * other id. It is a flag beside the kind rather than a kind of its own so
+   * that every site asking `kindOf(t) === K_ARRAY` — the length, the element,
+   * `for...of`, the layout, the emitter — keeps working unchanged, and only
+   * the three that write have to ask the extra question.
+   */
+  readonlys: boolean[];
   /** The interning index: a key built by `derivedKey` -> the id it names. */
   index: StringMap;
 
@@ -128,6 +136,7 @@ export class TypeTable {
     this.names = [];
     this.errs = [];
     this.states = [];
+    this.readonlys = [];
     this.index = new StringMap();
     let scalar = 0;
     while (scalar < T_FIRST_DERIVED) {
@@ -136,6 +145,7 @@ export class TypeTable {
       this.names.push("");
       this.errs.push(-1);
       this.states.push(R_UNKNOWN);
+      this.readonlys.push(false);
       scalar = scalar + 1;
     }
   }
@@ -170,12 +180,16 @@ export class TypeTable {
 
   /** The id for a derived type, interning it the first time it is asked for. */
   intern(kind: i32, ref: i32, name: string): i32 {
-    return this.internAll(kind, ref, name, -1, R_UNKNOWN);
+    return this.internAll(kind, ref, name, -1, R_UNKNOWN, false);
   }
 
-  /** `intern` with the two `Result` payloads; every other kind takes the defaults. */
-  internAll(kind: i32, ref: i32, name: string, err: i32, state: i32): i32 {
-    const key = kind === K_RESULT ? `${kind}:${ref}:${err}:${state}` : this.derivedKey(kind, ref, name);
+  /** `intern` with the two `Result` payloads and the array `readonly` flag. */
+  internAll(kind: i32, ref: i32, name: string, err: i32, state: i32, ro: boolean): i32 {
+    // `readonly T[]` and `T[]` are two types, so they are two ids and the key
+    // has to tell them apart; the suffix is only added for the readonly one so
+    // that every key already in the table keeps its spelling.
+    const base = kind === K_RESULT ? `${kind}:${ref}:${err}:${state}` : this.derivedKey(kind, ref, name);
+    const key = ro ? `${base}:ro` : base;
     const existing = this.index.get(key, -1);
     if (existing >= 0) {
       return existing;
@@ -186,12 +200,23 @@ export class TypeTable {
     this.names.push(name);
     this.errs.push(err);
     this.states.push(state);
+    this.readonlys.push(ro);
     this.index.set(key, id);
     return id;
   }
 
   arrayOf(elem: i32): i32 {
     return this.intern(K_ARRAY, elem, "");
+  }
+
+  /** `readonly T[]` / `ReadonlyArray<T>`: `T[]`'s id space, with every write refused. */
+  readonlyArrayOf(elem: i32): i32 {
+    return this.internAll(K_ARRAY, elem, "", -1, R_UNKNOWN, true);
+  }
+
+  /** True for the `readonly T[]` spelling; false for every other id, -1 included. */
+  isReadonlyArray(type: i32): boolean {
+    return type >= 0 && this.kinds[type] === K_ARRAY && this.readonlys[type];
   }
 
   structOf(name: string): i32 {
@@ -214,7 +239,7 @@ export class TypeTable {
   // ---- `Result<T, E>` (WP16) ----------------------------------------------
 
   resultOf(ok: i32, err: i32, state: i32): i32 {
-    return this.internAll(K_RESULT, ok, "", err, state);
+    return this.internAll(K_RESULT, ok, "", err, state, false);
   }
 
   /**
@@ -421,7 +446,9 @@ export class TypeTable {
       case T_BOOL:
         return "boolean";
       case K_ARRAY:
-        return `${this.typeName(this.refs[type])}[]`;
+        return this.readonlys[type]
+          ? `readonly ${this.typeName(this.refs[type])}[]`
+          : `${this.typeName(this.refs[type])}[]`;
       case K_STRUCT:
         return this.names[type];
       case K_NULLABLE:
@@ -486,6 +513,25 @@ export class TypeTable {
     if (this.kinds[from] === K_RESULT && this.kinds[to] === K_RESULT) {
       return this.refs[from] === this.refs[to] && this.errs[from] === this.errs[to];
     }
-    return this.kinds[to] === K_NULLABLE && this.refs[to] === from;
+    if (this.widensToReadonlyArray(from, to)) {
+      return true;
+    }
+    if (this.kinds[to] === K_NULLABLE) {
+      return this.refs[to] === from || this.widensToReadonlyArray(from, this.refs[to]);
+    }
+    return false;
+  }
+
+  /**
+   * A `T[]` where a `readonly T[]` is wanted. One direction only: handing a
+   * mutable array to something that promises not to write through it is safe,
+   * and the reverse would launder the promise away. The two ids name the same
+   * pointer, so nothing is emitted for the conversion.
+   */
+  widensToReadonlyArray(from: i32, to: i32): boolean {
+    if (!this.isReadonlyArray(to) || this.kinds[from] !== K_ARRAY) {
+      return false;
+    }
+    return this.refs[from] === this.refs[to];
   }
 }
