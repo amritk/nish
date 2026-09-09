@@ -82,6 +82,32 @@ R1. They are left in the table so the count stays honest.
 | `-o <dir>` without the trailing slash | **closed** | `isDirectorySync(path: string): boolean`, the `stat` beside `mkdirSync` (`tests/cases/io_is_directory`) |
 | `--emit-checked`'s later-phase lines | **open, found by `--parity`** | stage0 runs the attribute pass before it dumps and prints `facts:`, `escaping:`, `calls:`, `pointer ...` and `stackSites=`; stage1 dumps straight after `check()` and prints none of them. `checked_oracle.js` never saw it, because it filters exactly those lines away (`LATER_PHASES`) — by design, since it is comparing the *checker*. Closing it is `analyzeFunctions` before the dump in `self/dump.ts` and stage0's `factsText` formatting matched byte for byte, then the filter deleted. `self/attributes.ts` already records every field stage0 prints, so it is a port and not a design question |
 
+### A2. What `--parity` found on its first run
+
+The mode of G1 was run over `tests/cases` — 172 programs × 14 variations,
+2,408 runs — before this section was written, and the point of writing the
+numbers down is that they are the argument for the gate. **206 undeclared
+differences, from five root causes, none of which any oracle could have
+caught**: every oracle compiles a program with the flags that program already
+carries, and none of these programs carries the flag that exposes it.
+
+| Found | What it is | State |
+| --- | --- | --- |
+| `unwrapOr`'s fallback took a contextual type in stage1 | in f64 mode `r.unwrapOr(-1)` on a `Result<i32, string>` compiled in stage1 and was refused by stage0. `docs/LANGUAGE.md`'s contextual-literal table is an enumerated list and this is not one of its positions, so stage1 was in the wrong | **fixed**, `reject_res_unwrap_or_f64` |
+| `Ok(...)`'s payload and an object literal's field, same cause | `` `Ok(...)` expects i32 for Result<i32, i32>, got f64 `` and `` Field `code` of `IoError` is i32, got f64 `` — stage0 refuses, stage1 compiles (`res_by_value_param`, `res_export`, `res_struct_error` under `--number-mode f64`) | **open**: the same one-line shape as the `unwrapOr` fix, at two more sites |
+| a fixed-length stack array is sized from an IR operand, not a constant | `new Float32Array(2)` in f64 mode reaches `emitData` as a register rather than digits, because the length has been through a conversion. stage0 writes `alloca [NaN x float]` — **IR that `llvm-as` refuses, from a compiler that exited 0** — and stage1 writes `alloca [0 x float]`, which assembles and then stores two floats past a zero-element stack slot. Both are wrong and stage1's is the more dangerous, because it builds and runs (`f32_struct.ts --number-mode f64`) | **open**, and the most serious of the five |
+| the first diagnostic differs | `cf_switch_break.ts` in f64 mode: stage1 reports the `case` label against the discriminant at 12:12, stage0 an operand mismatch at 36:10. Both refuse the program; they disagree about which check fires first | **open**, low severity |
+| a compound operator loses its spelling | `div_compound_attributes.ts` in f64 mode: stage0 says ``Operator `/=` requires…``, stage1 says ``Operator `/` requires…`` | **open**, low severity |
+
+The remaining 193 rows are all the `--emit-checked` row of §2A above, which is
+one cause counted once per program.
+
+Two of the five are in the compilers' *output* rather than their diagnostics,
+and the stack-array one is a bug in the shipped compiler that predates this
+package entirely. That is the case for the gate stated as plainly as it can
+be: a cross product over flags the suite already uses, run once, found a
+miscompile that eleven oracles and 1,161 checks had not.
+
 ### B. The oracles
 
 Twelve comparisons keep the two implementations honest. Retiring stage0 does
@@ -161,7 +187,10 @@ divergence on it, which is the failure this mode exists to prevent — the one
 design and there is nothing finer to say.
 
 **Why it blocks.** A retirement that leaves one flag behind is a regression
-shipped to users who were told the two compilers were the same compiler.
+shipped to users who were told the two compilers were the same compiler. §A2
+is what that reads like in practice: the first run of this check found five
+disagreements, one of them a miscompile, and every one of them had been
+sitting under a flag combination nothing had ever tried.
 
 ### G2 — Oracle succession: the replacement runs before the original is deleted
 
