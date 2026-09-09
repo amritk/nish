@@ -10,6 +10,8 @@
  *       <name>.out   expected stdout when linked with <name>.c (or tests/driver.c,
  *                    which prints `test()`) and runtime/runtime.c, then run
  *       <name>.argv  command-line arguments for that run, whitespace separated (WP7)
+ *       <name>.env   environment for that run, `NAME=value` per line, layered over
+ *                    the inherited one (WP19 R1: `getenv` has no other way to be pinned)
  *     Every successfully compiled case is also assembled with llvm-as.
  *
  *  B. Pipeline checks: runtime.c unit test, inline allocator vs C arena layout,
@@ -70,6 +72,23 @@ function stripHeader(ir) {
     .filter((l) => !l.startsWith(";") && !l.startsWith("source_filename"))
     .join("\n")
     .trim();
+}
+
+// ---- WP19 G1: `--parity`, a mode rather than a section ----------------------------
+// The gate asks for the corpus through both compilers on every flag combination
+// the suite uses, with an empty difference set printed as a table. That is a
+// different shape from the checks below — a cross product rather than a list of
+// properties — and it links a stage1 binary, so it is its own run rather than a
+// block that would make every `npm test` pay for it. `tests/self/parity.js` is
+// the driver; everything after `--parity` is passed on to it.
+if (process.argv.includes("--parity")) {
+  const at = process.argv.indexOf("--parity");
+  const r = spawnSync(
+    "node",
+    [path.join(import.meta.dirname, "self", "parity.js"), ...process.argv.slice(at + 1)],
+    { cwd: root, stdio: "inherit" }
+  );
+  process.exit(r.status ?? 1);
 }
 
 // ---- A. Golden cases -------------------------------------------------------------
@@ -167,7 +186,7 @@ for (const name of cases) {
     const argv = fs.existsSync(side("argv"))
       ? fs.readFileSync(side("argv"), "utf8").trim().split(/\s+/).filter(Boolean)
       : [];
-    const run = spawnSync(exe, argv);
+    const run = spawnSync(exe, argv, { env: caseEnv(side("env")) });
     const want = fs.readFileSync(side("out"), "utf8").trim();
     check(
       `${name}: native output matches .out`,
@@ -175,6 +194,27 @@ for (const name of cases) {
       `--- expected\n${want}\n--- actual (exit ${run.status})\n${run.stdout}${run.stderr}`
     );
   }
+}
+
+/**
+ * `<name>.env`: one `NAME=value` per line, layered over the environment the
+ * harness inherited. A case that reads the environment (`getenv`, WP19 R1)
+ * cannot pin the answer itself — the language has no `setenv` — so the runner
+ * is the only place the value can come from, and a golden that depended on
+ * the developer's own environment would not be a golden. Blank lines and `#`
+ * comments are ignored; `NAME=` sets an empty value, which is a *set*
+ * variable and not the same as leaving it out.
+ */
+function caseEnv(file) {
+  if (!fs.existsSync(file)) return process.env;
+  const env = { ...process.env };
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    const text = line.trim();
+    if (text.length === 0 || text.startsWith("#")) continue;
+    const eq = text.indexOf("=");
+    if (eq > 0) env[text.slice(0, eq)] = text.slice(eq + 1);
+  }
+  return env;
 }
 
 // ---- WP10: diagnostics ------------------------------------------------------------
@@ -3066,6 +3106,34 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
               stripHeader(fs.readFileSync(ourHost, "utf8")) === stripHeader(fs.readFileSync(theirHost, "utf8"))
           : hostOurs.status === 2 && hostOurs.stderr.includes("supported: host,"),
         `stage1 ${hostOurs.status}: ${hostOurs.stderr}stage0 ${hostTheirs.status}: ${hostTheirs.stderr}`
+      );
+
+      // `--emit-ast`, the last flag that was stage0's by name (WP19 R1, §2A).
+      // What it prints is deliberately *not* stage0's output: stage0 dumps the
+      // `typescript` package's node names and 1-based line:column spans, and
+      // this dumps the flattened vocabulary of `self/nodes.ts` with byte
+      // offsets, because that is the tree this compiler actually has. So there
+      // is no oracle between the two — there is a golden per compiler, over
+      // the same input file, and this is stage1's. The check is that the flag
+      // is answered (exit 0, no IR written) and that the tree is the one
+      // `tests/self/dump_ast.golden` records.
+      const astOut = path.join(shipDir, "ast");
+      fs.mkdirSync(astOut, { recursive: true });
+      const astRun = spawnSync(compiler, ["tests/cases/dump_ast.ts", "--emit-ast", "-o", `${astOut}/`], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      const astGoldenFile = path.join(root, "tests", "self", "dump_ast.golden");
+      const astGolden = fs.existsSync(astGoldenFile) ? fs.readFileSync(astGoldenFile, "utf8") : "";
+      if (process.env.UPDATE_GOLDENS === "1" && astRun.status === 0 && astRun.stdout !== astGolden) {
+        fs.writeFileSync(astGoldenFile, astRun.stdout);
+      }
+      check(
+        "the self-hosted compiler: --emit-ast prints its own tree and writes no IR",
+        astRun.status === 0 &&
+          astRun.stdout === fs.readFileSync(astGoldenFile, "utf8") &&
+          fs.readdirSync(astOut).length === 0,
+        `${astRun.status}: ${astRun.stderr}--- stdout\n${astRun.stdout}`
       );
 
       // A broken invariant answers 70 (`EX_SOFTWARE`) and stage0's report,

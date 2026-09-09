@@ -4377,6 +4377,85 @@ attributes #3 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end builtin_host -->
 
+### Reading the environment
+
+`getenv` is the only environment read the language has, and it is a call rather
+than `process.env.CC` because member access on a key chosen at runtime is what
+Phase 0 refuses. The lowering is one call whose result may be null, so the IR
+below is the same shape `readFileSyncOrNull` produces: an `i8*` and an `icmp eq
+... null` that the `T | null` narrowing reads directly, with no tag and no
+unwrapping. The declaration is `noalias` — every call answers a fresh arena
+copy of the value, unlike `amrit_platform`, which hands back the same constant
+every time — and it is not `readnone`: it allocates, and the environment is not
+memory LLVM is tracking, so two reads either side of a `spawnSync` must not
+fold into one.
+
+The `cc === null ? "clang" : cc` below is how a default is written, and why the
+builtin takes no second argument: the fallback is an ordinary ternary over a
+nullable, so `getenv` does not need a spelling of its own for it.
+
+<!-- cookbook:begin builtin_env -->
+```ts
+export function main(): number {
+  const cc = getenv("CC");
+  const compiler = cc === null ? "clang" : cc;
+  console.log(`building with ${compiler}`);
+  return 0;
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"CC\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"clang\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [15 x i8] } { i64 14, [15 x i8] c"building with \00" }, align 8
+
+declare void @amrit_free_arena() #0
+declare noundef i64 @amrit_arena_mark() #0
+declare void @amrit_arena_release(i64 noundef) #0
+declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef align 8 i8* @amrit_getenv(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define noundef i32 @amrit_main() #0 {
+entry:
+  %cc.addr = alloca i8*, align 8
+  %compiler.addr = alloca i8*, align 8
+  %arena.mark = call i64 @amrit_arena_mark()
+  %0 = call i8* @amrit_getenv(i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*))
+  store i8* %0, i8** %cc.addr, align 8
+  %1 = load i8*, i8** %cc.addr, align 8
+  %2 = icmp eq i8* %1, null
+  br i1 %2, label %cond.true, label %cond.false
+
+cond.true:
+  br label %cond.end
+
+cond.false:
+  %3 = load i8*, i8** %cc.addr, align 8
+  br label %cond.end
+
+cond.end:
+  %4 = phi i8* [ bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), %cond.true ], [ %3, %cond.false ]
+  store i8* %4, i8** %compiler.addr, align 8
+  %5 = load i8*, i8** %compiler.addr, align 8
+  %6 = call i8* @amrit_str_concat(i8* bitcast ({ i64, [15 x i8] }* @.str.2 to i8*), i8* %5)
+  call void @amrit_print(i8* %6)
+  call void @amrit_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @amrit_main()
+  call void @amrit_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+```
+<!-- cookbook:end builtin_env -->
+
 ## Optimisation flags
 
 ### Integer overflow: `nsw` by default, `--wrapping` to opt out
@@ -4529,6 +4608,7 @@ declare noundef double @amrit_parse_number(i8* noundef nonnull readonly align 8 
 declare zeroext i1 @amrit_mkdir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare zeroext i1 @amrit_is_dir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noundef i32 @amrit_spawn(%struct.amrit_array* noundef nonnull align 8) #5
+declare noalias noundef align 8 i8* @amrit_getenv(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noundef nonnull align 8 i8* @amrit_platform() #0
 declare noundef nonnull align 8 i8* @amrit_arch() #0
 declare void @amrit_array_grow(%struct.amrit_array* noundef nonnull align 8 nocapture, i64 noundef) #2

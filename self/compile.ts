@@ -28,13 +28,18 @@
 // platform comes in with them, because the `uname` and the profile flag sets
 // live in that script and always did — for both compilers.
 //
-// `--emit-ast` stays stage0's, and that one *is* a decision: stage0's AST dump
-// prints the *`typescript` package's* node names and line:column spans, and
-// stage1's tree is the flattened one `self/nodes.ts` defines, with its own
-// vocabulary and byte offsets. Printing someone else's node names would be
-// imitation rather than parity, so stage1 keeps `self/dump_ast.ts` in the
-// shape its parser oracle compares.
+// `--emit-ast` is answered here too (WP19 R1), and *what* it answers is the
+// decision: stage0's AST dump prints the `typescript` package's node names and
+// line:column spans, and stage1's tree is the flattened one `self/nodes.ts`
+// defines, with its own vocabulary and byte offsets. Printing someone else's
+// node names would be imitation rather than parity, so both compilers answer
+// the flag and each answers it about its own tree. The printer is
+// `ast_text.ts`, shared with `dump_ast.ts` so the flag and the parser oracle
+// cannot drift, and the goldens are per compiler
+// (`tests/cases/dump_ast.stdout` is stage0's, `tests/self/dump_ast.golden`
+// this one's) because there is nothing between them to be an oracle.
 
+import { astText } from "./ast_text";
 import { CLI, VERSION } from "./branding";
 import { Compilation } from "./compilation";
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context";
@@ -51,7 +56,7 @@ import { codeFor, TOOLCHAIN } from "./codes";
 import { resolveTarget, supportedTargets } from "./target";
 
 const USAGE: string =
-  "usage: compile <file.ts> [more.ts ...] [-o <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--out-dir <dir>] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile --version | --help";
+  "usage: compile <file.ts> [more.ts ...] [-o <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--out-dir <dir>] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile --version | --help";
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -216,6 +221,7 @@ export function main(): number {
   let profile = "speed";
   let json = false;
   let emitChecked = false;
+  let emitAst = false;
   let arg = 1;
   while (arg < process.argv.length) {
     const value = process.argv[arg];
@@ -330,12 +336,7 @@ export function main(): number {
     } else if (value === "--emit-checked") {
       emitChecked = true;
     } else if (value === "--emit-ast") {
-      // Refused by name rather than ignored: a flag a build quietly drops is
-      // how it ends up not carrying the thing it asked for. stage0's AST dump
-      // prints the `typescript` package's node names and line:column spans,
-      // and this compiler's tree is the flattened one `self/nodes.ts` defines.
-      console.error(`${CLI}: \`--emit-ast\` is stage0's (docs/wp14-selfhost.md §7); run \`node dist/index.js\` for it`);
-      return 2;
+      emitAst = true;
     } else if (value === "-h" || value === "--help") {
       // A request that succeeded, not a refusal: stdout and exit 0. stage0
       // answers it the same way (`usageText` in `src/index.ts`), so a script
@@ -384,6 +385,16 @@ export function main(): number {
       report(compilation, json);
     }
     return 1;
+  }
+  // `--emit-ast` needs only the parsed and Phase 0 validated modules, so it
+  // answers before `check` and writes no IR — the same point in the pipeline
+  // stage0 answers it from. The tree is this compiler's own, not a mirror of
+  // stage0's (`ast_text.ts` says why), so the two goldens differ by design.
+  if (emitAst) {
+    for (const unit of compilation.modules) {
+      write(astText(unit.file, unit.path));
+    }
+    return 0;
   }
   if (!compilation.check()) {
     report(compilation, json);

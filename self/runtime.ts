@@ -314,6 +314,18 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     );
+    // WP19 R1: the environment, so a self-hosted driver can honour `CC` before
+    // it spawns `scripts/build.sh` the way stage0's preflight does.
+    // `EFFECT_WRITE` and no `readnone`, for two reasons that each suffice: the
+    // call allocates, so it moves the arena, and `environ` is not memory LLVM
+    // is tracking, so two reads either side of a `spawnSync` must not fold
+    // into one. `noalias` is a fact here where it is not on `amrit_platform`:
+    // every call answers a fresh arena string rather than the same constant.
+    // The name is read and never retained (`STR_NOCAP`), and the result may be
+    // null, so no `nonnull`.
+    this.add(
+      plain("amrit_getenv", `declare noalias noundef align 8 i8* @amrit_getenv(${STR_NOCAP})`, EFFECT_WRITE)
+    );
     // WP14 §7a: what machine this is. `--target host` composes its triple from
     // the two. Each answers the address of a string in the runtime's own
     // constant data, decided when `runtime.c` was compiled — a cross build

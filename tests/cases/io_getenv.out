@@ -1,0 +1,4 @@
+set: clang-18
+empty: ""
+unset: <null>
+length: 8

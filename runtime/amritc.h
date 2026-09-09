@@ -172,6 +172,15 @@ bool amrit_is_dir(const amrit_str *path);
  * so an argument containing a NUL is truncated at it. */
 int32_t amrit_spawn(const amrit_array *argv);
 
+/* ---- The environment (WP19 R1) ------------------------------------------
+ * `getenv(name)`: the value of environment variable `name`, copied into the
+ * arena (so a later `setenv` cannot change a string the program still holds),
+ * or NULL when it is unset — the language's `string | null`. An empty value
+ * is a set variable and answers a zero-length string, not NULL. `name` is
+ * read and never retained; a NUL inside it truncates the lookup, as it does
+ * for every other path-like argument here. */
+amrit_str *amrit_getenv(const amrit_str *name);
+
 /* ---- What machine this is (WP14 §7a) ------------------------------------
  * `process.platform` and `process.arch`, spelled as Node spells them:
  * "linux" or "darwin", "x64" or "arm64", and "unknown" for anything this

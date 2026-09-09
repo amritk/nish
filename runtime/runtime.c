@@ -346,6 +346,26 @@ int32_t amrit_spawn(const amrit_array *argv) {
 #endif
 }
 
+/* ---- The environment (WP19 R1): `getenv(name)`, the one environment read the
+   language has. A driver needs it to honour `CC` the way `scripts/build.sh`
+   does before it spawns that script, which is the whole reason it exists.
+
+   The bytes are copied into the arena rather than handed back where libc put
+   them: `getenv` answers a pointer into `environ`, and a later `setenv` in the
+   same process may move or overwrite that block, so a string the program is
+   still holding would change under it. Copying makes it an ordinary arena
+   string with the lifetime every other one has. NULL for an unset variable,
+   which is the language's `string | null`. Contract: amritc.h. */
+amrit_str *amrit_getenv(const amrit_str *name) {
+  const char *v = getenv(name->data);
+  if (!v) return 0;
+  uint64_t len = strlen(v);
+  amrit_str *s = amrit_alloc_struct(8 + len + 1);
+  s->len = len;
+  memcpy(s->data, v, len + 1);
+  return s;
+}
+
 /* ---- What machine this is (WP14 §7a): `process.platform` and `process.arch`,
    the two halves `--target host` composes a triple from. Both are settled when
    this file is compiled — a cross build compiles the runtime for the target,

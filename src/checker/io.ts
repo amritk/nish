@@ -34,6 +34,11 @@
  *                                       `path` right now. It answers rather
  *                                       than exits for the same reason the
  *                                       two above do (WP14 §7a).
+ *   getenv(name): string | null         one environment variable, or `null`
+ *                                       when it is unset (WP19 R1). A call
+ *                                       and not `process.env.NAME`, because
+ *                                       member access on a dynamic key is
+ *                                       what Phase 0 forbids.
  *
  *   process.argv: string[]              the command line, index 0 the program
  *                                       path (like C's argv[0]); read-only,
@@ -143,6 +148,24 @@ const checkIsDirectorySync: BuiltinCallChecker = (ctx, expr, scope) => {
 };
 
 /**
+ * `getenv(name)` (WP19 R1): the value of one environment variable, or `null`
+ * when it is unset. Nullable rather than an empty string because "unset" and
+ * "set to nothing" are different answers and a driver acts on the difference:
+ * `CC=` is a deliberately empty setting, `CC` unset means "use the default".
+ * The result narrows with `!== null` like every other `T | null`.
+ *
+ * A function and not `process.env.NAME`: the namespace properties this file
+ * already has (`process.argv`, `process.platform`) are fixed names, and
+ * `process.env` would need member access on a key chosen at runtime, which is
+ * exactly what Phase 0 refuses. WP19 §4 chose the call for that reason.
+ */
+const checkGetenv: BuiltinCallChecker = (ctx, expr, scope) => {
+  checkArity(ctx, expr, "getenv", 1);
+  checkArgumentType(ctx, expr.arguments[0], scope, "getenv", STRING);
+  return nullableOf(STRING);
+};
+
+/**
  * `spawnSync(argv)` (WP14 D4): the child's exit status, a `number` like
  * `a.length` is, so `f64` under `--number-mode f64`. The argument is checked
  * down to its element type — a `number[]` is not a command line — which is
@@ -238,6 +261,7 @@ export const ioBuiltinFunctions: Record<string, BuiltinCallChecker> = {
   mkdirSync: checkMkdirSync,
   spawnSync: checkSpawnSync,
   isDirectorySync: checkIsDirectorySync,
+  getenv: checkGetenv,
 };
 
 /**
