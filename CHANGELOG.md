@@ -59,6 +59,18 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 - `--nsw` and `--strict-exports` are still accepted and now spell out what the
   compiler does anyway, so a build script written before the flip still runs.
 
+- **`--help` answers on stdout and exits 0.** It used to print the usage text
+  on stderr and exit 2, which made a request that was answered
+  indistinguishable from one that was refused: `amritc --help` counted as a
+  failed command, and the text could not be read from stdout at all. It now
+  behaves the way clang, tsc and git do. A usage *error* — an unknown flag, a
+  missing argument, no inputs — is unchanged: the same text on stderr with exit
+  2. The self-hosted compiler mirrored the old behaviour on purpose and moves
+  with it, so both answer the same way.
+
+  A script that relied on `--help` failing, or that captured it from stderr,
+  needs the obvious edit. `docs/wp12-release.md` has the exit-code table.
+
 ### Fixed — soundness
 
 - **A duplicate function name is refused whether or not `--strict-exports` is
@@ -72,6 +84,52 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   declared a `narrow` (`tests/link/duplicate_internal`).
 
 ### Added
+
+- **Stable diagnostic codes in `--json` (`code`).** The field was reserved and
+  empty; it now carries a stable identifier for the rule that was broken —
+  `AS1013` for `` `any` is forbidden ``, `AS2231` for a mismatched operator —
+  and it, not the prose, is what a tool should key on: `message` is allowed to
+  improve between releases and the code is not. The band says which phase
+  refused the program: `AS1xxx` Phase 0, `AS2xxx` the checker, `AS3xxx` the
+  driver, `AS4xxx` the interop sidecars, `AS9xxx` a WP15 §8 performance
+  warning, and `AS0001`–`AS0003` a syntax error, an unusable C toolchain and an
+  internal compiler error. `AS0000` means the message has no rule yet.
+
+  The registry is one table in two files, `src/codes.ts` and its stage1 twin
+  `self/codes.ts`, generated from the compiler's own diagnostic sites by
+  `scripts/gen-diagnostic-codes.mjs`; a diagnostic added without a code fails
+  `npm test` rather than shipping uncoded. The generator only ever appends
+  numbers, so a code means the same rule next release, and a retired rule keeps
+  its number reserved. 221 of the 229 distinct messages the suite exercises
+  carry one; the remaining eight are built entirely out of interpolations and
+  are pinned as a backlog that may shrink but not grow.
+
+  Codes are in `--json` only. The human summary line is byte-for-byte what it
+  was, because the `.err` goldens and `tests/self/reject_oracle.js` match on it.
+
+- **Every `--json` failure is a JSON object, including the ones with no source
+  position.** An unusable C toolchain (exit 3) and an internal compiler error
+  (exit 70) used to print prose on stderr and nothing on stdout, so a tool that
+  asked for JSON was left with an empty stream and an exit code to guess about.
+  Both now print `{"severity","code","message"}` on stdout as well; the human
+  report still goes to stderr for the internal error, because a crash is worth
+  seeing twice.
+
+- **`npm test` reports how many checks were skipped, and says when that
+  matters.** The summary is `N passed, M failed, K skipped`, and a run that
+  skipped anything because LLVM 18 was missing ends with a `DEGRADED:` banner
+  naming the tools it could not find. Without the toolchain the assembly,
+  native round-trip, linking, interop, self-hosting and differential checks
+  skip rather than fail, so `N passed, 0 failed` looked identical whether it
+  had proved everything or almost nothing. It no longer does.
+
+- **A `SessionStart` hook and settings for AI coding agents
+  (`.claude/settings.json`, `.claude/hooks/session-start.sh`).** A fresh
+  container gets the same six LLVM 18 binaries CI installs, so an agent's
+  `npm test` means what it means on a developer machine, and the repository's
+  standard commands are pre-allowed. `AGENTS.md` gains the table of
+  machine-readable surfaces — `--help`, `--json` and its schema, the exit
+  codes, the skip count — with the contracts each one has a test for.
 
 - **The `performance` diagnostic class, with its first two warnings (WP15
   §8).** The compiler now says something when it had to take a slow path and

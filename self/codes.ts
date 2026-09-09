@@ -31,8 +31,16 @@ export const UNCODED: string = "AS0000";
 /** Every syntax error shares one code: stage0 takes that text from the `typescript` package. */
 export const SYNTAX: string = "AS0001";
 
+/**
+ * Band 0 is what is wrong with the *run* rather than with the program: the C
+ * toolchain `--link` needs could not be used (exit 3), and an internal compiler
+ * error (exit 70). Neither has a source location.
+ */
+export const TOOLCHAIN: string = "AS0002";
+export const INTERNAL: string = "AS0003";
+
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 332;
+export const RULE_COUNT: i32 = 331;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -676,8 +684,6 @@ export function diagnosticRules(): string[] {
     "AS2244",
     "Unsupported `new ",
     "AS2252",
-    "); the IR is in ",
-    "AS3004",
     "` has no field `",
     "AS2065",
     "must be a string",

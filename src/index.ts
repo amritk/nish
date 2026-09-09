@@ -28,6 +28,7 @@ import { generateDts, generateHeader, generateNapiShim, generateWasmLoader, wasm
 import { NumberMode } from "./types";
 import { SUPPORTED_TARGETS, resolveTarget } from "./codegen/target";
 import { CLI, ENV_DEBUG, ENV_SIMULATE_ICE } from "./branding";
+import { INTERNAL, TOOLCHAIN, codeFor } from "./codes";
 import { PKG_ROOT, packageVersion } from "./version";
 
 const PROFILES = ["speed", "size", "debug", "wasi"] as const;
@@ -49,6 +50,16 @@ const EXIT_INTERNAL = 70;
 
 /** A user-facing error raised by the driver itself (exit 1, message only). */
 class CliError extends Error {}
+
+/**
+ * The `--json` object for a failure with no source location: an unusable C
+ * toolchain, an internal compiler error, a path the driver could not read.
+ * Same keys as `diagnosticJson`, minus the ones that need a position, so a
+ * reader can parse every line of `--json` output the same way and never has to
+ * fall back to scraping stderr to find out why a run failed.
+ */
+const failureJson = (code: string, message: string): string =>
+  JSON.stringify({ severity: "error", code, message });
 
 /** Node system errors (ENOENT on an input file, EACCES on the output dir, ...). */
 function isSystemError(err: unknown): err is NodeJS.ErrnoException {
@@ -93,8 +104,8 @@ function missingToolchain(): string | null {
  * the same event: `--help` is a request that succeeded (stdout, exit 0, in
  * `main`), and a usage error is a refusal (`usage` below: stderr, exit 2).
  */
-function usageText(): string {
-  return [
+const usageText = (): string =>
+  [
     `usage: ${CLI} <entry.ts> [more.ts ...] [options]`,
     `       ${CLI} --version | --help`,
     "  -o, --output <file.ll>     output path for a single module (default: <input>.ll)",
@@ -127,7 +138,6 @@ function usageText(): string {
     `  -v, --version              print the ${CLI} version and exit`,
     "exit codes: 0 ok, 1 compile error, 2 usage, 3 toolchain (clang / build.sh), 70 internal error",
   ].join("\n");
-}
 
 /**
  * A usage *error*: the request was refused, so the text goes to stderr and the
@@ -305,7 +315,8 @@ function main(argv: string[]): number {
   if (link !== undefined) {
     const problem = missingToolchain();
     if (problem !== null) {
-      console.error(problem);
+      if (json) console.log(failureJson(TOOLCHAIN, problem));
+      else console.error(problem);
       return EXIT_TOOLCHAIN;
     }
   }
@@ -359,14 +370,14 @@ function main(argv: string[]): number {
       return EXIT_COMPILE_ERROR;
     }
     if (err instanceof CliError) {
-      if (json) console.log(JSON.stringify({ severity: "error", message: err.message }));
+      if (json) console.log(failureJson(codeFor("error", err.message), err.message));
       else console.error(err.message);
       return EXIT_COMPILE_ERROR;
     }
     if (isSystemError(err)) {
       const where = err.path ? ` ${err.path}` : "";
       const message = `cannot ${err.syscall ?? "access"}${where}: ${err.code}`;
-      if (json) console.log(JSON.stringify({ severity: "error", message }));
+      if (json) console.log(failureJson(codeFor("error", message), message));
       else console.error(`error: ${message}`);
       return EXIT_COMPILE_ERROR;
     }
@@ -406,7 +417,9 @@ function main(argv: string[]): number {
       // Surface the compiler/linker output verbatim, then say what failed.
       if (build.stderr) process.stderr.write(build.stderr.endsWith("\n") ? build.stderr : `${build.stderr}\n`);
       const why = build.error ? `could not run bash: ${build.error.message}` : `exit ${build.status}`;
-      console.error(`--link: ${BUILD_SH} failed (${why}); the IR is in ${outputs.join(", ")}`);
+      const failed = `--link: ${BUILD_SH} failed (${why}); the IR is in ${outputs.join(", ")}`;
+      if (json) console.log(failureJson(TOOLCHAIN, failed));
+      else console.error(failed);
       return EXIT_TOOLCHAIN;
     }
     // build.sh reports `<exe>: <bytes> bytes (<profile>)`.
@@ -425,6 +438,13 @@ function reportInternalError(err: unknown, argv: string[]): number {
   const inputs = argv.filter((a, i) => !a.startsWith("-") && !takesValue.test(argv[i - 1] ?? ""));
   const where = inputs.length > 0 ? ` while compiling ${inputs.join(", ")}` : "";
   const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  // Read off argv rather than passed in: this runs outside `main`, which is the
+  // point -- it catches what `main` could not. Under `--json` the crash is a
+  // parseable line too, so a wrapper is never left with an empty stdout and an
+  // exit code it has to guess about; the human report still goes to stderr.
+  if (argv.includes("--json")) {
+    console.log(failureJson(INTERNAL, `internal compiler error${where}: ${message}`));
+  }
   console.error(`${CLI} ${packageVersion()}: internal compiler error${where}`);
   console.error(`  ${message}`);
   if (process.env[ENV_DEBUG] && err instanceof Error && err.stack) {

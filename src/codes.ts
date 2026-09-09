@@ -32,6 +32,15 @@ export const UNCODED = "AS0000";
 export const SYNTAX = "AS0001";
 
 /**
+ * Band 0 is what is wrong with the *run* rather than with the program: the C
+ * toolchain `--link` needs could not be used (exit 3), and an internal compiler
+ * error (exit 70). Neither has a source location, so their `--json` object
+ * carries `code`, `severity` and `message` and nothing else.
+ */
+export const TOOLCHAIN = "AS0002";
+export const INTERNAL = "AS0003";
+
+/**
  * Fragment, code, fragment, code -- flat rather than tuples so the stage1 twin
  * can hold it too (AmritScript has no tuple type). Longest fragment first, so a
  * specific rule wins over a general one it contains.
@@ -671,8 +680,6 @@ const RULES: string[] = [
     "AS2244",
     "Unsupported `new ",
     "AS2252",
-    "); the IR is in ",
-    "AS3004",
     "` has no field `",
     "AS2065",
     "must be a string",
@@ -708,7 +715,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 332;
+export const RULE_COUNT = 331;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

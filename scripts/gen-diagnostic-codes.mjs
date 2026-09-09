@@ -23,6 +23,8 @@
  *
  *   AS0001         a syntax error; the text is the `typescript` package's, not
  *                  ours, so every one of them shares the code
+ *   AS0002         the C toolchain `--link` needs could not be used (exit 3)
+ *   AS0003         an internal compiler error (exit 70)
  *   AS1xxx         Phase 0, the forbidden-syntax sweep (`src/validator.ts`)
  *   AS2xxx         the checker: signatures, bodies, types
  *   AS3xxx         the driver and module loading
@@ -156,6 +158,17 @@ const build = () => {
   }
   for (const fragment of PERFORMANCE) entries.push({ fragment, band: 9, perf: true });
 
+  // A rule that no longer exists keeps its entry, and with it its number. The
+  // alternative -- dropping the line -- would let the next new rule be handed a
+  // number a released compiler had already used for something else, which is
+  // the one thing a stable code may not do. A retired fragment matches nothing,
+  // so carrying it costs a string.
+  const live = new Set(entries.map((e) => e.fragment));
+  for (const [fragment, code] of assigned) {
+    if (live.has(fragment)) continue;
+    entries.push({ fragment, band: Number(code[2]), perf: code.startsWith("AS9"), retired: true });
+  }
+
   // Assign in a deterministic order so a fresh generation is reproducible,
   // then let the committed assignments win.
   entries.sort((a, b) => a.band - b.band || a.fragment.localeCompare(b.fragment));
@@ -217,6 +230,15 @@ export const UNCODED = "AS0000";
 export const SYNTAX = "AS0001";
 
 /**
+ * Band 0 is what is wrong with the *run* rather than with the program: the C
+ * toolchain \`--link\` needs could not be used (exit 3), and an internal compiler
+ * error (exit 70). Neither has a source location, so their \`--json\` object
+ * carries \`code\`, \`severity\` and \`message\` and nothing else.
+ */
+export const TOOLCHAIN = "AS0002";
+export const INTERNAL = "AS0003";
+
+/**
  * Fragment, code, fragment, code -- flat rather than tuples so the stage1 twin
  * can hold it too (AmritScript has no tuple type). Longest fragment first, so a
  * specific rule wins over a general one it contains.
@@ -269,6 +291,14 @@ export const UNCODED: string = "AS0000";
 
 /** Every syntax error shares one code: stage0 takes that text from the \`typescript\` package. */
 export const SYNTAX: string = "AS0001";
+
+/**
+ * Band 0 is what is wrong with the *run* rather than with the program: the C
+ * toolchain \`--link\` needs could not be used (exit 3), and an internal compiler
+ * error (exit 70). Neither has a source location.
+ */
+export const TOOLCHAIN: string = "AS0002";
+export const INTERNAL: string = "AS0003";
 
 /** Number of rules that carry a code; \`tests/run.js\` checks it against stage0's. */
 export const RULE_COUNT: i32 = ${rules.length + perf.length};

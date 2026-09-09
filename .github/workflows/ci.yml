@@ -102,6 +102,13 @@ jobs:
       - name: Docs (IR cookbook up to date)
         run: bash docs/cookbook/regen.sh --check
 
+      # The diagnostic-code registry is generated from the compiler's own
+      # diagnostic sites; a new diagnostic without a code must not ship.
+      # `npm test` checks it too -- this names it in its own step so a stale
+      # registry reads as itself rather than as one failure among a thousand.
+      - name: Diagnostic codes (registry up to date)
+        run: node scripts/gen-diagnostic-codes.mjs --check
+
       - name: Size report
         run: |
           node dist/index.js examples/add.ts -o build/add.ll

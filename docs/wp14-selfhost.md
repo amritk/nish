@@ -902,7 +902,16 @@ and this one would only pay for the same two links again.
 `dist/`, and it has to: it is the seed every bootstrap starts from and the
 oracle every `self/` phase is compared against. What it is no longer is the
 only one that emits DWARF or the interop sidecars; what is still only stage0's
-is the link step, the directory creation and the AST dump. What changed is that
+is the AST dump, and the `--json` object for an *internal compiler error*
+(`AS0003`). The second is a language limit rather than a decision to skip work:
+`self/ice.ts` is a library module, so `process.argv` is out of reach there —
+it needs an `export function main` — and AmritScript has no mutable module
+state to stash the flag in, so the only way to get it to `internalError` is a
+parameter on all 39 of its callers, which are broken invariants scattered
+through every phase. Both compilers print the same human report; only stage0
+also prints the machine-readable line. Every other `--json` object, the codes
+included, is byte-identical between the two and `tests/run.js` proves it.
+What changed is that
 a checkout can now produce
 the self-hosted compiler in one command, and that compiler compiles the same
 programs about eight times faster (§4, D5).

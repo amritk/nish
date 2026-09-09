@@ -27,6 +27,18 @@ fs.mkdirSync(buildDir, { recursive: true });
 
 let failures = 0;
 let passes = 0;
+/**
+ * Sections that did not run. Counted rather than only printed: without LLVM the
+ * toolchain-dependent half of this suite skips instead of failing, and a run
+ * that ends `N passed, 0 failed` then looks exactly like a run that proved
+ * everything. The summary says how many skipped and the banner says which
+ * tools were missing, so a reader -- or an agent -- can tell the two apart.
+ */
+const skipped = [];
+const skip = (reason) => {
+  console.log(`SKIP  ${reason}`);
+  skipped.push(reason);
+};
 function check(name, ok, detail) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}`);
   if (ok) passes++;
@@ -426,7 +438,7 @@ if (!only || "diagnostics".includes(only)) {
       ];
       const tool = dumpers.find(([t]) => has(t));
       if (!tool) {
-        console.log("SKIP  -g: neither llvm-dwarfdump nor objdump is installed; line table not inspected");
+        skip("-g: neither llvm-dwarfdump nor objdump is installed; line table not inspected");
       } else {
         const dump = spawnSync(tool[0], tool[1], { encoding: "utf8" });
         const out = dump.stdout;
@@ -1168,12 +1180,11 @@ if (!only && HAS_CLANG) {
       String(w.stderr) + (host ? String(host.stdout) + String(host.stderr) : "")
     );
   } else {
-    console.log(
-      `SKIP  skipped: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT or install wasi-sdk, see docs/INSTALL.md): wasi profile not built`
+    skip(`skipped: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT or install wasi-sdk, see docs/INSTALL.md): wasi profile not built`
     );
   }
 } else if (!HAS_CLANG) {
-  console.log("SKIP  clang not installed: native round trips and pipeline checks skipped");
+  skip("clang not installed: native round trips and pipeline checks skipped");
 }
 
 // ---- WP8: interop ------------------------------------------------------------------
@@ -1472,8 +1483,7 @@ if (!only || "interop".includes(only)) {
   if (!HAS_CLANG) {
     // nothing to build
   } else if (!hasNodeHeaders) {
-    console.log(
-      `SKIP  Node headers not found (${path.join(nodeInclude, "node_api.h")}): N-API addon build skipped`
+    skip(`Node headers not found (${path.join(nodeInclude, "node_api.h")}): N-API addon build skipped`
     );
   } else {
     for (const stem of ["add", "strings", "arrays"]) {
@@ -2138,8 +2148,7 @@ if (!only || "interop".includes(only)) {
       );
       napiOk = b.status === 0 && s.status === 0;
     } else {
-      console.log(
-        `SKIP  Node headers not found (${path.join(nodeInclude, "node_api.h")}): arrays/strings addon build skipped`
+      skip(`Node headers not found (${path.join(nodeInclude, "node_api.h")}): arrays/strings addon build skipped`
       );
     }
     const script = [
@@ -3051,7 +3060,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // and a run that quietly leaves it out reports the 55 compile-gate passes
     // above as though the fixed point had been checked. WP12 and WP13 print
     // their skip for the same reason.
-    console.log("SKIP  clang not installed: the self-hosting oracles and the bootstrap are skipped");
+    skip("clang not installed: the self-hosting oracles and the bootstrap are skipped");
   }
 }
 
@@ -3255,6 +3264,58 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   const noValue = run([entry, "-o"]);
   check("-o without a value: exit 2", noValue.status === 2, noValue.stderr);
 
+  // Under `--json` every failure is a parseable line, not just the ones with a
+  // source span. A wrapper that asked for JSON and got an empty stdout plus a
+  // non-zero exit has to scrape stderr to find out what happened, which is the
+  // thing `--json` exists to avoid. Band 0 marks what is wrong with the run
+  // rather than with the program: AS0002 toolchain, AS0003 internal error.
+  const jsonLine = (r) => {
+    const first = r.stdout.split("\n").find((l) => l.startsWith("{"));
+    try {
+      return first ? JSON.parse(first) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const iceJson = run([entry, "--json", "-o", path.join(wp12Dir, "ice_json.ll")], {
+    AMRITC_SIMULATE_ICE: "1",
+  });
+  const iceObj = jsonLine(iceJson);
+  check(
+    "--json: an internal compiler error is an AS0003 object on stdout, exit 70, human report still on stderr",
+    iceJson.status === 70 &&
+      iceObj !== null &&
+      iceObj.code === "AS0003" &&
+      iceObj.severity === "error" &&
+      iceObj.message.includes("internal compiler error") &&
+      iceJson.stderr.includes("This is a bug in amritc"),
+    iceJson.stdout + iceJson.stderr
+  );
+
+  const ccJson = run([entry, "--json", "--link", path.join(wp12Dir, "cc_json")], { CC: "/nonexistent-cc" });
+  const ccObj = jsonLine(ccJson);
+  check(
+    "--json: no usable C compiler is an AS0002 object on stdout, exit 3, nothing on stderr",
+    ccJson.status === 3 &&
+      ccObj !== null &&
+      ccObj.code === "AS0002" &&
+      ccObj.message.includes("no usable C compiler") &&
+      ccJson.stderr === "",
+    ccJson.stdout + ccJson.stderr
+  );
+
+  const missingJson = run(["does-not-exist.ts", "--json"]);
+  const missingObj = jsonLine(missingJson);
+  check(
+    "--json: an unreadable input is an object on stdout with a code, exit 1",
+    missingJson.status === 1 &&
+      missingObj !== null &&
+      /^AS\d{4}$/.test(missingObj.code) &&
+      missingObj.message.includes("ENOENT"),
+    missingJson.stdout + missingJson.stderr
+  );
+
   const missing = run(["does-not-exist.ts"]);
   check(
     "missing input file: one-line ENOENT message, exit 1",
@@ -3446,7 +3507,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     }
 
     if (!HAS_CLANG) {
-      console.log("SKIP  package install + --link from another cwd (clang not found)");
+      skip("package install + --link from another cwd (clang not found)");
     } else {
       const tarball = path.join(pkgDir, info.filename);
       const prefix = path.join(pkgDir, "prefix");
@@ -3552,8 +3613,30 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
     f.stdout + f.stderr
   );
 } else if (!HAS_CLANG) {
-  console.log("SKIP  clang not installed: differential tests skipped");
+  skip("clang not installed: differential tests skipped");
 }
 
-console.log(`\n${passes} passed, ${failures} failed.`);
+// The summary counts what did *not* run as well as what did. A skip is not a
+// failure -- a contributor without LLVM is meant to be able to run this -- but
+// it is also not a pass, and the difference decides how much a green run is
+// worth. `.claude/orientation.md` and `.claude/node.md` say so in prose; this
+// says it in the output, where it is read.
+const summary = [`${passes} passed`, `${failures} failed`];
+if (skipped.length > 0) summary.push(`${skipped.length} skipped`);
+console.log(`\n${summary.join(", ")}.`);
+
+if (skipped.length > 0) {
+  const TOOLCHAIN = ["clang", "llc", "llvm-as", "opt", "ld.lld", "wasm-ld"];
+  const absent = TOOLCHAIN.filter((tool) => !has(tool));
+  console.log(
+    absent.length > 0
+      ? `\nDEGRADED: ${absent.length} of the ${TOOLCHAIN.length} LLVM 18 tools are missing (${absent.join(", ")}), so ` +
+          `${skipped.length} section(s) were skipped rather than run. This result does NOT prove the toolchain-dependent\n` +
+          "checks pass: assembly, native round trips, linking, the interop addons, the self-hosting oracles and the\n" +
+          "differential suite are among them. Install LLVM 18 (docs/INSTALL.md) and run again before trusting a green run."
+      : `\nNote: ${skipped.length} section(s) were skipped for reasons other than a missing LLVM toolchain ` +
+          "(see the SKIP lines above); everything they cover is unproven by this run."
+  );
+}
+
 process.exit(failures === 0 ? 0 : 1);
