@@ -76,6 +76,28 @@ const DECLARED = [
     why: "each compiler dumps its own tree: stage0 the `typescript` package's node names and 1-based line:col spans, stage1 the flattened vocabulary of `self/nodes.ts` with byte offsets (wp19 §2A). A golden per compiler pins each; there is deliberately no oracle between them.",
   },
   {
+    // No `flag`: this one is about the program, not about how it was compiled.
+    surface: "stderr",
+    matches: (want, got) => {
+      const zero = firstDiagnostic(want);
+      const one = firstDiagnostic(got);
+      const syntax = (line) => line.includes(": syntax error: ");
+      // stage1's parser refused the file and stage0's Phase 0 refused the same
+      // file. Both said no, in different words, and stage1 has nothing further
+      // to say because it never built a tree. Anything else — stage0 accepting
+      // the program, a different file, stage1 refusing where stage0 does not —
+      // falls through and reports.
+      return (
+        syntax(one) &&
+        zero !== "" &&
+        !syntax(zero) &&
+        diagnosticFile(one) !== "" &&
+        diagnosticFile(one) === diagnosticFile(zero)
+      );
+    },
+    why: "the parser refuses before Phase 0 gets to name the rule. `.claude/selfhost.md` states the habit — lex and parse what is written, refuse in the phase that owns the rule — and stage1's grammar is AmritScript-0's, so syntax the language forbids stops at the parser with `expected `;`` where stage0 parses it with the `typescript` package and refuses it in Phase 0 by name. 43 cases of the corpus are this, and `reject_oracle.js` counts them apart for the same reason. What is *not* declared here is the outcome: the exit status, the stdout and every file written are still compared, and stage0 accepting a program stage1 refuses is a failure, not this.",
+  },
+  {
     flag: "--emit-checked",
     surface: "stdout",
     normalize: (text) => text.replace(/^module .*?([^/\\]+\.ts)( \(entry\))?$/gm, "module $1$2"),
@@ -92,15 +114,31 @@ const DECLARED = [
  *
  * `whole` declarations match outright; the rest have to *earn* it by
  * normalising the two texts into agreement, so a second, real difference on
- * the same surface still reports.
+ * the same surface still reports. A declaration with no `flag` applies to
+ * every invocation, and one with a `matches` predicate is asked about the two
+ * texts together — which is what a difference whose *shape* is the decided
+ * part needs, rather than one whose bytes are.
  */
 function declaredFor(flags, surface, want, got) {
   for (const d of DECLARED) {
-    if (!flags.includes(d.flag) || d.surface !== surface) continue;
+    if (d.flag !== undefined && !flags.includes(d.flag)) continue;
+    if (d.surface !== surface) continue;
     if (d.whole === true) return d;
+    if (d.matches !== undefined && d.matches(want, got)) return d;
     if (d.normalize !== undefined && d.normalize(want) === d.normalize(got)) return d;
   }
   return null;
+}
+
+/** The first `error:` / `warning:` line of a report, or "". */
+function firstDiagnostic(text) {
+  return text.split("\n").find((line) => / (error|warning): /.test(line)) ?? "";
+}
+
+/** The file a diagnostic line names, or "" when it names none. */
+function diagnosticFile(line) {
+  const m = line.match(/^(.*?):\d+:\d+: /);
+  return m === null ? "" : m[1];
 }
 
 /**
@@ -399,7 +437,8 @@ async function main(argv) {
     const byReason = new Map();
     for (const d of declared) byReason.set(d.declared, (byReason.get(d.declared) ?? 0) + 1);
     for (const [reason, count] of byReason) {
-      process.stdout.write(`declared: ${count} × ${reason.flag} ${reason.surface} — ${reason.why}\n`);
+      const where = reason.flag ?? "any invocation";
+      process.stdout.write(`declared: ${count} × ${where} ${reason.surface} — ${reason.why}\n`);
     }
   }
   const seconds = ((Date.now() - t0) / 1000).toFixed(1);

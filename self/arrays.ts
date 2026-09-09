@@ -6,7 +6,7 @@ import { resolveType, typedArrayElement } from "./annotations";
 import { checkBuiltinArity, isArgvExpression } from "./builtins";
 import { CheckContext } from "./context";
 import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound } from "./expressions";
-import { Node } from "./nodes";
+import { N_IDENT, Node } from "./nodes";
 import { Scope } from "./symbols";
 import { isNumeric, T_ERROR, T_STRING, T_VOID } from "./types";
 
@@ -152,11 +152,18 @@ export function checkArrayMethod(
   }
   const elem = ctx.table.refOf(receiver);
   const spelled = ctx.table.typeName(receiver);
+  // `xs.push(3)` and `xs.indexOf(3)` give a bare literal the element type — but
+  // only when the receiver is a plain identifier. stage0 reaches that rule
+  // through `calleeName`, which names `xs.push` and gives up on `b.xs.push`
+  // (its receiver is not an identifier), so `b.xs.push(0)` in f64 mode is an
+  // f64 pushed onto an `i32[]` there and was accepted here
+  // (`reject_push_field_literal`, WP19 §A3).
+  const elemContext = access.children[0].kind === N_IDENT ? elem : -1;
   if (name === "push") {
     if (!checkBuiltinArity(ctx, call, "push", args, 1)) {
       return ctx.numberType();
     }
-    const got = checkExpression(ctx, args.children[0], scope, elem);
+    const got = checkExpression(ctx, args.children[0], scope, elemContext);
     if (got !== T_ERROR && !ctx.table.assignable(got, elem)) {
       ctx.error(args.children[0], `Cannot push ${ctx.table.typeName(got)} onto ${spelled}`);
     }
@@ -172,7 +179,7 @@ export function checkArrayMethod(
     if (!checkBuiltinArity(ctx, call, "indexOf", args, 1)) {
       return ctx.numberType();
     }
-    const got = checkExpression(ctx, args.children[0], scope, elem);
+    const got = checkExpression(ctx, args.children[0], scope, elemContext);
     if (got !== T_ERROR && !ctx.table.assignable(got, elem)) {
       const want = ctx.table.typeName(elem);
       ctx.error(

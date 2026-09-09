@@ -84,10 +84,12 @@ export function checkMember(ctx: CheckContext, expr: Node, scope: Scope): i32 {
     return T_ERROR;
   }
   if (ctx.table.isNullable(receiver)) {
-    return ctx.errorType(
+    // Against the property name, where stage0 puts it (`expr.name`).
+    ctx.errorAtProperty(
       expr,
       `Cannot read property \`${expr.text}\` of \`${ctx.table.typeName(receiver)}\`; ${nullableHint(ctx, receiver, receiverExpr)}`
     );
+    return T_ERROR;
   }
   if (receiver === T_STRING) {
     return checkStringProperty(ctx, expr, receiver);
@@ -136,10 +138,12 @@ export function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i3
   }
   const args = expr.children[1];
   if (ctx.table.isNullable(receiver)) {
-    return ctx.errorType(
+    // Against the method name, where stage0 puts it (`access.name`).
+    ctx.errorAtProperty(
       access,
       `Cannot call \`${access.text}\` on \`${ctx.table.typeName(receiver)}\`; ${nullableHint(ctx, receiver, receiverExpr)}`
     );
+    return T_ERROR;
   }
   if (receiver === T_STRING) {
     return checkStringMethod(ctx, expr, access, args, scope);
@@ -163,19 +167,28 @@ export function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i3
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
     return ctx.errorType(access, `Unknown method \`${access.text}\` on ${kind} \`${info.name}\`${hint}`);
   }
-  checkMethodArguments(ctx, expr, method, args, `${info.name}.${access.text}`, scope);
+  checkMethodArguments(ctx, expr, method, args, `${info.name}.${access.text}`, scope, false);
   ctx.program.nodeCallees[expr.id] = method;
   return method.returnType;
 }
 
-/** `args` against `callee`'s parameters after `this`. */
+/**
+ * `args` against `callee`'s parameters after `this`.
+ *
+ * `literalContext` says whether a bare numeric or array literal may take the
+ * parameter's type: a constructor's arguments do (stage0's numeric walk names
+ * `new Pixel(255, 0, 0)`), a method's and `super`'s do not
+ * (`takesDeclaredContext`). Everything else — an object literal, a `null` —
+ * takes it either way.
+ */
 export function checkMethodArguments(
   ctx: CheckContext,
   call: Node,
   callee: FunctionSig,
   args: Node,
   what: string,
-  scope: Scope
+  scope: Scope,
+  literalContext: boolean
 ): void {
   const arity = callee.paramTypes.length - 1;
   if (args.children.length !== arity) {
@@ -186,7 +199,8 @@ export function checkMethodArguments(
   while (i < arity) {
     const arg = args.children[i];
     const want = callee.paramTypes[i + 1];
-    const got = checkExpression(ctx, arg, scope, want);
+    const context = literalContext || takesDeclaredContext(arg) ? want : -1;
+    const got = checkExpression(ctx, arg, scope, context);
     if (got !== T_ERROR && !ctx.table.assignable(got, want)) {
       const spelled = ctx.table.typeName(want);
       ctx.error(arg, `Argument ${i + 1} of \`${what}\`: expected ${spelled}, got ${ctx.table.typeName(got)}`);
@@ -216,7 +230,7 @@ export function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   }
   const ctor = info.effectiveConstructor(); // own, or the nearest ancestor's
   if (ctor !== null) {
-    checkMethodArguments(ctx, expr, ctor, args, `new ${name}`, scope);
+    checkMethodArguments(ctx, expr, ctor, args, `new ${name}`, scope, true);
     ctx.program.nodeCallees[expr.id] = ctor;
   } else if (args.children.length > 0) {
     ctx.error(
@@ -228,35 +242,42 @@ export function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 {
 }
 
 /**
- * Whether a field's type may serve as the contextual type of the value written
- * for it in an object literal.
+ * Whether a declared type may serve as `value`'s contextual type in a position
+ * that stage0's *object-literal* walk names and its numeric and array walks do
+ * not — an object literal's property value, and a method's or `super`'s
+ * argument.
  *
- * stage0 answers this with three separate walks up the parent chain and stage1
- * threads one `want` down, so the difference between them has to be written
- * here. `contextualType` in `src/checker/classes.ts` names a property
- * assignment, which is why an object literal or a `null` in this position does
- * get the field's type; the numeric one (`contextType` in
- * `src/checker/math.ts`, the enumerated table in `docs/LANGUAGE.md`) and the
- * array one (`contextualType` in `src/checker/arrays.ts`) both do not, so a
- * numeric literal here takes the mode's default and `[]` here has no element
- * type at all and is refused. Passing `want` to those two made stage1 compile
- * `{ b: 255 }` for a `u8` field and `{ xs: [] }`, which stage0 refuses
- * (`reject_struct_field_u8`, `reject_struct_field_empty_array`), and
- * `{ code: 2 }` for an `i32` field in f64 mode (`reject_struct_field_f64`).
+ * stage0 answers the question with three separate walks up the parent chain
+ * and stage1 threads one `want` down, so where they part has to be written
+ * here. `contextualType` in `src/checker/classes.ts` names both positions,
+ * which is why an object literal or a `null` in either does get the declared
+ * type; the numeric walk (`contextType` in `src/checker/math.ts`, the
+ * enumerated table in `docs/LANGUAGE.md`) names neither, and the array one
+ * (`contextualType` in `src/checker/arrays.ts`) names neither, so a numeric
+ * literal there takes the mode's default and `[]` there has no element type at
+ * all and is refused. Handing `want` to those two made stage1 compile
+ * `{ b: 255 }` for a `u8` field, `{ xs: [] }` and `b.get(-1)` for a method
+ * whose parameter is an `i32` — all of which stage0 refuses
+ * (`reject_struct_field_u8`, `reject_struct_field_empty_array`,
+ * `reject_struct_field_f64`, `reject_method_arg_literal`).
+ *
+ * A `new` argument is *not* one of these: stage0's numeric walk names it
+ * (`new Pixel(255, 0, 0)` in the table), so a constructor's parameters do give
+ * a literal its type on both sides.
  *
  * Parentheses, a leading minus and both arms of a ternary are transparent in
  * stage0's walks, so they are transparent here too: `{ code: c ? 1 : 2 }` gets
  * no more context than `{ code: 1 }` does.
  */
-function takesFieldContext(value: Node): boolean {
+export function takesDeclaredContext(value: Node): boolean {
   if (value.kind === N_PAREN) {
-    return takesFieldContext(value.children[0]);
+    return takesDeclaredContext(value.children[0]);
   }
   if (value.kind === N_CONDITIONAL) {
-    return takesFieldContext(value.children[1]) && takesFieldContext(value.children[2]);
+    return takesDeclaredContext(value.children[1]) && takesDeclaredContext(value.children[2]);
   }
   if (value.kind === N_UNARY) {
-    return takesFieldContext(value.children[0]);
+    return takesDeclaredContext(value.children[0]);
   }
   return value.kind !== N_NUMBER && value.kind !== N_ARRAY;
 }
@@ -296,7 +317,7 @@ export function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, 
     }
     seen.push(prop.text);
     const value = prop.children[0];
-    const context = takesFieldContext(value) ? field.type : -1;
+    const context = takesDeclaredContext(value) ? field.type : -1;
     const got = checkExpression(ctx, value, scope, context);
     if (got !== T_ERROR && !ctx.table.assignable(got, field.type)) {
       const spelled = ctx.table.typeName(field.type);
@@ -434,7 +455,7 @@ function checkSuperMethodCall(ctx: CheckContext, expr: Node, access: Node, scope
   // pointer flow into the callee.
   ctx.program.nodeLocals[access.children[0].id] = self;
   ctx.program.nodeTypes[access.children[0].id] = base.type;
-  checkMethodArguments(ctx, expr, method, expr.children[1], `${base.name}.${access.text}`, scope);
+  checkMethodArguments(ctx, expr, method, expr.children[1], `${base.name}.${access.text}`, scope, false);
   ctx.program.nodeCallees[expr.id] = method;
   return method.returnType;
 }
@@ -457,7 +478,7 @@ export function checkSuperCall(ctx: CheckContext, expr: Node, scope: Scope): i32
     }
     return T_VOID;
   }
-  checkMethodArguments(ctx, expr, ctor, expr.children[1], "super", scope);
+  checkMethodArguments(ctx, expr, ctor, expr.children[1], "super", scope, false);
   ctx.program.nodeCallees[expr.id] = ctor;
   return T_VOID;
 }

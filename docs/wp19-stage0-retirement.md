@@ -147,26 +147,27 @@ after everything above is fixed. The number is not a surprise waiting to
 happen; it is five classes, none of them a wrong-code bug, and writing them
 down is what turns "R1 is nearly done" into a list:
 
-| Rows | Class | What it is |
-| --- | --- | --- |
-| 12,209 | **a path inside the IR** | `; ModuleID = '...'` and `-g`'s `!DIFile(filename: ...)`. Handed the same absolute path, stage0 rewrites it cwd-relative (`displayName`) and stage1 prints what it was given. This is the difference **already declared** for `--emit-checked`'s `module <path>` header, at two more surfaces. The oracles never see it because they pass relative paths to both compilers |
-| 602 | **the parser refuses before Phase 0 does** | `var x = 1` is `` syntax error: expected `;` `` from stage1 and `` `var` is forbidden; use `let` or `const` `` from stage0. By design (`.claude/selfhost.md`: lex and parse what is written, refuse in the phase that owns the rule) — `reject_oracle.js` counts these apart, and this mode does not |
-| ~950 | **error recovery after the first refusal** | stage0 `throw`s out of the construct and unwinds; stage1 threads an error value and keeps checking. Both refuse, with the same first diagnostic, and stage1 says more after it. Mostly `--number-mode f64` over programs written for i32 mode, where one bad type cascades. `cf_switch_break` in §A2 is this, not what its row said |
-| 40 | **`--emit-ast` on a program Phase 0 refuses** | stage0 validates before it dumps and exits 1; stage1 dumps the tree it parsed and exits 0 |
-| 13 | **one wording** | unary `+` is `` Unary `+` is forbidden; it converts, and AmritScript has no conversions `` in stage1 and `` Unsupported unary operator `+` `` in stage0 |
+| Rows | Class | What it is | How it closed |
+| --- | --- | --- | --- |
+| 12,209 | **a path inside the IR** | `; ModuleID = '...'` and `-g`'s `!DIFile(filename: ...)`. Handed the same absolute path, stage0 rewrote it cwd-relative (`displayName`) and stage1 printed what it was given. The oracles never saw it because they pass relative paths to both compilers | **stage0 changed.** An imported module is named by the specifier resolved against the name the *importer* was given (`importedName`), which is stage1's rule and needs no working directory. Named relatively no golden moves; named absolutely the two now write the same bytes. It also takes the cwd out of the emitted IR, which is what makes a build reproducible. `runtime.c` has eight bytes left of its 4 KB budget, so a `cwd` builtin was never available to buy the other direction |
+| 602 | **the parser refuses before Phase 0 does** | `var x = 1` is `` syntax error: expected `;` `` from stage1 and `` `var` is forbidden; use `let` or `const` `` from stage0. By design (`.claude/selfhost.md`: lex and parse what is written, refuse in the phase that owns the rule) — `reject_oracle.js` counts these apart | **declared.** The narrow form: it applies only when stage1's first diagnostic is a syntax error *and* stage0 refuses the same file, and it covers stderr only — exit status, stdout and every file written are still compared, and stage0 accepting a program stage1 refuses is a failure rather than this. Closing it in code means grammar for 43 constructs the language forbids, which is a parser rewrite, not a fix |
+| ~950 | **error recovery after the first refusal** | stage0 `throw`s out of the statement and unwinds; stage1 threaded an error value and kept checking. Both refuse, with the same first diagnostic, and stage1 said more after it. Mostly `--number-mode f64` over programs written for i32 mode, where one bad type cascades. `cf_switch_break` in §A2 is this, not what its row said | **stage1 changed.** `errored` in `self/context.ts` is the throw in a language without one: set by `error`, cleared per statement, and consulted where the throw would have unwound. Measuring it turned up four more contextual-type differences and one message, all listed in `CHANGELOG.md` |
+| 40 | **`--emit-ast` on a program Phase 0 refuses** | stage0 validates before it dumps and exits 1; stage1 dumped the tree it parsed and exited 0 | **stage1 changed.** A dump flag does not turn a refused program into a compiling one (`tests/cases/dump_ast_reject`) |
+| 13 | **one wording** | unary `+` is `` Unary `+` is forbidden; it converts, and AmritScript has no conversions `` in stage1 and `` Unsupported unary operator `+` `` in stage0 | **stage0 changed**, to the better sentence: it says *why* (`tests/cases/reject_unary_plus`) |
 
-Three of the five are decided rather than broken and want a **declaration** —
-a narrow one that normalises away exactly the bytes allowed to differ, as G1
-requires — rather than a code change. The path class is the existing
-declaration extended to `.ll` files; the parser class is a rule this repository
-already wrote down; the wording is stage1's improvement on a stage0 message and
-the decision is which one the language keeps. The other two are code: `--emit-ast`
-should validate before dumping on both sides, and error recovery is the one
-that is genuinely structural — a compiler with exceptions unwinds where a
-compiler without them carries on, and making the two agree means deciding, per
-construct, where stage1 stops.
+**Four of the five closed in code and one by declaration**, and the direction
+each closed in is the interesting part. Twice it was the *frozen* compiler that
+moved, because it was the one in the wrong: cwd-relative names in the IR and a
+refusal that did not say why are both worse than what stage1 did, and "stage0
+is the oracle" is a rule about who decides a disagreement, not a claim that
+stage0 is right. Once it was a declaration, because the difference is a design
+this repository already argued for. And the big one was stage1 adopting an
+exception's control flow without exceptions — which then exposed four more
+contextual-type divergences and a message, none of which anything had reported,
+because a compiler that reports every consequence of a mistake buries the ones
+that are its own.
 
-**None of this is a miscompile, and none of it was reachable from §A2's
+**None of this was a miscompile, and none of it was reachable from §A2's
 numbers.** That is the argument for running the mode over the corpus it
 defaults to rather than the directory the first run happened to use.
 

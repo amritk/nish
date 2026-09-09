@@ -83,6 +83,13 @@ import {
  * know about upcasts.
  */
 export function checkExpression(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
+  // Refused already: stage0 unwound out of this statement at the first
+  // diagnostic and never checked the rest of the expression either
+  // (`context.ts`, `errored`). `T_ERROR` is what every caller here already
+  // handles, and it does not report a second time.
+  if (ctx.errored) {
+    return T_ERROR;
+  }
   const type = computeType(ctx, expr, scope, want);
   if (coercesTo(ctx, type, want)) {
     const target = ctx.table.stripNull(want);
@@ -443,6 +450,34 @@ function literalHint(other: i32, fallback: i32): i32 {
   return isNumeric(other) ? other : fallback;
 }
 
+/**
+ * Whether stage0's `peekType` would answer for this node — which is what
+ * decides whether a bare literal on the *other* side may take its type.
+ *
+ * `docs/LANGUAGE.md` spells the list out: "an already-checked left operand, a
+ * variable, a field or element of one of those, or a call to a user function
+ * or to `toI32`/`toI64`/…". A sub-expression that is none of those has no type
+ * yet as far as that walk is concerned, so the literal stays at the mode's
+ * default: `0xc0 | (cp >> 6)` in f64 mode is an f64 meeting an i32 and is
+ * refused, however obvious the shift's type looks (`self/lexer.ts` under
+ * `--number-mode f64`, WP19 §A3). Reading the sibling's *computed* type
+ * instead is more useful and is not what the language says.
+ */
+function peekable(node: Node): boolean {
+  if (node.kind === N_PAREN) {
+    return peekable(node.children[0]);
+  }
+  if (node.kind === N_UNARY) {
+    return node.text === "-" && peekable(node.children[0]);
+  }
+  // A call is peekable only when the callee is a plain name, which is how
+  // stage0 reaches a signature or a conversion builtin (`peekType`).
+  if (node.kind === N_CALL) {
+    return node.children[0].kind === N_IDENT;
+  }
+  return node.kind === N_IDENT || node.kind === N_MEMBER || node.kind === N_INDEX;
+}
+
 /** `a op b` for every operator that reads both sides and writes neither. */
 function checkOperator(
   ctx: CheckContext,
@@ -466,7 +501,10 @@ function checkOperator(
   let right = T_ERROR;
   if (leftNode.kind === N_NUMBER && rightNode.kind !== N_NUMBER) {
     right = checkExpression(ctx, rightNode, scope, -1);
-    left = checkExpression(ctx, leftNode, scope, literalHint(right, right));
+    // The right operand has not been checked yet as far as stage0's walk is
+    // concerned — it *peeks* at the node rather than checking it — so a shape
+    // that walk does not answer for gives this literal nothing.
+    left = checkExpression(ctx, leftNode, scope, peekable(rightNode) ? literalHint(right, right) : -1);
   } else {
     left = checkExpression(ctx, leftNode, scope, -1);
     // The left type is what the right side is checked against, literal or not:

@@ -200,7 +200,9 @@ export class Checker {
   /**
    * Pass 2: every body, now that every callee in the program is known.
    * Recovery is per statement, so one bad expression costs one statement's
-   * worth of checking and the rest of the function is still checked.
+   * worth of checking and the rest of the function is still checked — the
+   * granularity stage0's `try` per statement gives it, and `errored` in
+   * `context.ts` is how a language without exceptions reaches it.
    */
   checkBodies(): void {
     for (const sig of this.program.functions) {
@@ -212,6 +214,7 @@ export class Checker {
 
   checkFunctionBody(sig: FunctionSig): void {
     this.ctx.current = sig;
+    this.ctx.errored = false;
     this.ctx.loopKinds = [];
     this.ctx.loopBreaks = [];
     const scope = new Scope(null);
@@ -234,6 +237,9 @@ export class Checker {
     const before = this.ctx.sink.count();
     const terminates = checkStatements(this.ctx, body.children, scope);
     const failed = this.ctx.sink.count() > before;
+    // Outside a statement list the flag is always clear, so a diagnostic from
+    // constant folding or from another module is never dropped by this body.
+    this.ctx.errored = false;
     if (failed) {
       sig.poisoned = true;
     } else {

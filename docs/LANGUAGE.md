@@ -176,7 +176,12 @@ of type u8, got i32 `` and has to be written `toU8(255)`
 same position in f64 mode); nor is a `Result` payload, so `Ok(3)` for a
 `Result<i32, string>` is refused in f64 mode
 (`tests/cases/reject_res_ok_f64`), as `unwrapOr`'s fallback is
-(`reject_res_unwrap_or_f64`). "Known type" means an already-checked
+(`reject_res_unwrap_or_f64`); and nor is a **method's** argument, which is why
+the table says a user *function* and a constructor — `b.get(-1)` on a method
+whose parameter is an `i32` is an f64 in f64 mode
+(`tests/cases/reject_method_arg_literal`), and so is `super`'s argument.
+`xs.push(3)` and `xs.indexOf(3)` are on the list only through a receiver that
+is a plain name: `b.xs.push(0)` is not (`reject_push_field_literal`). "Known type" means an already-checked
 left operand, a variable, a field or element of one of those, or a call to a
 user function or to
 `toI32/toI64/toU8/toU16/toU32/toU64/toF64`. Only the literal's *immediate* context counts: in i32
@@ -184,7 +189,9 @@ mode `const f: f64 = 0.1 + 0.2` is rejected because `0.1` is an operand of
 `+` whose other operand has no known type yet; write `const a: f64 = 0.1;
 const f = a + 0.2` *(CLI only)*. The same rule refuses `const b: u8 = 1 + 2`,
 which is a sum of two `i32` literals rather than a literal in a `u8` context
-(`tests/cases/reject_bin_operand_context`). A literal in an integer context must be integral
+(`tests/cases/reject_bin_operand_context`), and `0xc0 | (cp >> 6)` in f64 mode,
+because a shift is not one of the shapes "known type" names however plainly it
+is an integer: give it a name first, or write `toI32(0xc0)`. A literal in an integer context must be integral
 (`` Non-integer literal `1.5` where i64 is expected ``,
 `tests/cases/reject_i64_literal_float`); in an `i64` context it must also be
 at most 2^53 in magnitude (`` exceeds 2^53 and cannot be written exactly ``
@@ -2012,6 +2019,7 @@ messages are exact for the cases cited; other rows quote
 | string `+` number | `` ... got string and i32 (no implicit string conversion; use a template literal) `` | `reject_str_plus_number` |
 | arithmetic compound assignment | `` Operator `+=` requires two operands of the same numeric type, got string and string `` — one rule, naming the token that was written, for a local, a field and an element alike: the target must be numeric (so `+=` never concatenates) and the value must be exactly its type | `reject_cf_compound_string`, `reject_cf_compound_widths` |
 | object literal field of the wrong type | `` Field `code` of `IoError` expects a value of type i32, got f64 `` | `reject_struct_field_f64`, `reject_struct_field_u8` |
+| a dotted call that is not a builtin | `` Unknown builtin `foo.bar` (supported: console.log, console.error, String.fromCharCode, Math.sqrt, ...) `` — the callee is named, not its receiver, whether the receiver is a namespace or not | `reject_unknown_builtin`, `reject_arch_call` |
 | bitwise operator on a non-integer | `` Operator `&` requires two operands of the same integer type, got f64 and f64 `` (with `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) `` appended in that mode) / `` Operator `~` requires an integer operand, got f64 ``; a compound form names itself, `` Operator `&=` requires two operands of the same integer type, got f64 and f64 ``, for a local, a field and an element alike | `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not`, `reject_arr_element_bitwise_f64` |
 | bitwise operator on booleans | `` Operator `&` is not available on boolean (use `&&`) `` (`\|` names `\|\|`, `^` names `!==`, `~` names `!`) | `reject_bit_boolean` |
 | ordering on booleans / strings / structs | `` Operator `<` requires two numeric operands, got string and i32 `` | `reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |

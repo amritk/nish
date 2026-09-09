@@ -92,6 +92,52 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   which is what `tests/run.js`'s coverage check asks for rather than a longer
   uncoded backlog.
 
+- **The self-hosted compiler recovers from an error where stage0 does, and
+  reports the same diagnostics after the first one (WP19 §A3).** Both compilers
+  recover per statement — `checkStatements` wraps each one in a `try` in stage0
+  — but stage0's `throw` abandons the rest of the statement it came from and
+  stage1 carried on through it, so one bad type became a paragraph of
+  consequences where stage0 reported the cause. Over a program written for i32
+  mode and compiled with `--number-mode f64` that was the difference between 20
+  diagnostics and 20 different ones.
+
+  `errored` in `self/context.ts` is stage0's `throw` in a language that has
+  none: set by `error`, cleared at the start of each statement, and consulted
+  by `checkStatement` and `checkExpression` so nothing further in a refused
+  statement is checked or reported. A list *inside* a refused statement is not
+  entered at all (a `switch` abandoned at its discriminant does not go on to
+  refuse its `case` labels), and a list that runs to the end clears the flag,
+  so the `else` of an `if` whose `then` failed is still checked. A rejected
+  initializer leaves its variable undeclared unless the annotation says what it
+  is, which is what makes `const at = m.get(k, -1)` in f64 mode report
+  `Unknown identifier \`at\`` at each later use on both sides.
+
+  Four contextual-type differences fell out of measuring this, all the same
+  shape as the ones above — stage1 handing its one `want` to a position
+  stage0's walk does not name:
+
+  - **A method's argument.** `docs/LANGUAGE.md` grants a bare literal the
+    parameter's type for a *function* and a *constructor*; a method is neither,
+    so `b.get(-1)` on an `i32` parameter is an f64 in f64 mode
+    (`reject_method_arg_literal`). `super`'s arguments go the same way.
+  - **`push` and `indexOf` through a field.** The element type reaches a
+    literal only when the receiver is a plain identifier: stage0 gets there
+    through `calleeName`, which names `xs.push` and gives up on `b.xs.push`
+    (`reject_push_field_literal`).
+  - **The other operand of a binary operator, when it is not a shape stage0
+    can peek at.** "Known type" is an enumerated list — a variable, a field or
+    element of one, a call to a user function or a conversion — and a
+    sub-expression is not on it, so `0xc0 | (cp >> 6)` in f64 mode is an f64
+    meeting an i32 (`self/lexer.ts` compiles under it; the rule is
+    `peekable` in `self/expressions.ts`).
+  - **The caret on a nullable member access** sits under the property name, as
+    stage0 puts it, not under the receiver.
+
+  And one message: an unknown dotted call is `` Unknown builtin `foo.bar`
+  (supported: …) `` in both compilers now, naming the callee and listing what
+  there is, rather than four shorter sentences and an `Unknown identifier` for
+  the receiver.
+
 - **`--emit-checked` prints the attribute pass's facts in the self-hosted
   compiler too (WP19 G1).** stage0 runs the whole-program fixpoint before it
   dumps and prints `facts:`, `escaping:`, `calls:`, `pointer ...` and

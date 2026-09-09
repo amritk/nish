@@ -54,6 +54,21 @@ export class CheckContext {
    * tree does not have, recorded by the one caller that knows.
    */
   statementExpression: Node | null;
+  /**
+   * Set by `error` and cleared at the start of each statement: the statement
+   * has already been refused, so nothing further *in it* is checked or
+   * reported.
+   *
+   * This is stage0's `throw` in a language that has none. Both compilers
+   * recover per statement — `checkStatements` wraps each one in a `try` there
+   * — but stage0's throw abandons the rest of the statement it came from and
+   * stage1 carried on through it, reporting every consequence of the first
+   * mistake where stage0 reported the mistake. Under `--number-mode f64` over
+   * a program written for i32 mode that is the difference between one
+   * diagnostic and several, and it was about 950 rows of `--parity`
+   * (WP19 §A3).
+   */
+  errored: boolean;
 
   constructor(
     table: TypeTable,
@@ -74,11 +89,40 @@ export class CheckContext {
     this.loopKinds = [];
     this.loopBreaks = [];
     this.statementExpression = null;
+    this.errored = false;
   }
 
-  /** Report against a node's own span. Nothing is thrown; the caller decides. */
+  /**
+   * Report against a node's own span. Nothing is thrown; the caller decides —
+   * but the *first* diagnostic inside a statement is the only one it gets,
+   * because that is what stage0's `throw` leaves behind. Dropping the rest
+   * here rather than at each call site is what makes it complete: a check that
+   * reports without going through `checkStatement` or `checkExpression` — the
+   * `switch` clause rules, say — would otherwise keep talking about a
+   * statement stage0 had already left.
+   */
   error(node: Node, message: string): void {
+    if (this.errored) {
+      return;
+    }
     this.sink.report(this.source, node.start, node.end, message);
+    this.errored = true;
+  }
+
+  /**
+   * Report against the *property name* of a member access rather than the whole
+   * access. stage0 hands `expr.name` to the error and stage1's tree has no node
+   * for the name — it is `text` on the member itself — so the span is the tail
+   * of the access, which is exactly what `expr.name` covers there
+   * (`propertyCheckers.nullable` in `src/checker/nullable.ts`). Without this the
+   * caret sits under `g` where stage0 puts it under `paramNames`.
+   */
+  errorAtProperty(member: Node, message: string): void {
+    if (this.errored) {
+      return;
+    }
+    this.sink.report(this.source, member.end - member.text.length, member.end, message);
+    this.errored = true;
   }
 
   /**
