@@ -322,10 +322,12 @@ export function main(): number {
       console.error(`${CLI}: \`--emit-ast\` is stage0's (docs/wp14-selfhost.md §7); run \`node dist/index.js\` for it`);
       return 2;
     } else if (value === "-h" || value === "--help") {
-      // stage0 answers `--help` on stderr and exits 2, so a script that asks
-      // either compiler for its help sees the same shape.
-      console.error(USAGE);
-      return 2;
+      // A request that succeeded, not a refusal: stdout and exit 0. stage0
+      // answers it the same way (`usageText` in `src/index.ts`), so a script
+      // that asks either compiler for its help sees the same shape; an actual
+      // usage error still prints USAGE on stderr and returns 2 below.
+      console.log(USAGE);
+      return 0;
     } else if (value === "-v" || value === "--version") {
       // The line stage0 prints. stage1 cannot read `package.json`, so the
       // version is a constant in `self/branding.ts` and a check in

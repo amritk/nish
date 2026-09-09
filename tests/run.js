@@ -276,6 +276,84 @@ if (!only || "diagnostics".includes(only)) {
       JSON.parse(jsSyn.stdout.split("\n")[0]).message.startsWith("syntax error: "),
     jsSyn.stdout + jsSyn.stderr
   );
+
+  // ---- stable diagnostic codes ---------------------------------------------
+  // `code` is what a tool keys on instead of the prose, so it has to mean the
+  // same rule next release. Three things keep that true: the registry is
+  // generated from the compiler's own sources (so a new diagnostic cannot go
+  // uncoded unnoticed), the generator only ever appends numbers, and the two
+  // compilers share one table.
+  const codesGen = spawnSync("node", [path.join(root, "scripts", "gen-diagnostic-codes.mjs"), "--check"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  check(
+    "codes: src/codes.ts and self/codes.ts are up to date with the diagnostics in src/",
+    codesGen.status === 0,
+    codesGen.stdout + codesGen.stderr
+  );
+
+  // One table, two compilers: the pairs must be identical, exactly as
+  // `branding.ts` must name the same language on both sides.
+  const pairsOf = (file) => {
+    const text = fs.readFileSync(path.join(root, file), "utf8");
+    return [...text.matchAll(/^ {4}("(?:[^"\\]|\\.)*"),\n {4}"(AS\d{4})",$/gm)].map((m) => `${m[2]} ${m[1]}`);
+  };
+  const stage0Codes = pairsOf("src/codes.ts");
+  const stage1Codes = pairsOf("self/codes.ts");
+  check(
+    `codes: stage0 and stage1 hold the same registry (${stage0Codes.length} rules)`,
+    stage0Codes.length > 0 && stage0Codes.join("\n") === stage1Codes.join("\n"),
+    `stage0 ${stage0Codes.length} rules, stage1 ${stage1Codes.length} rules`
+  );
+  // A number handed out once is never handed to a different rule.
+  const dupCodes = stage0Codes.map((p) => p.split(" ")[0]).filter((c, i, a) => a.indexOf(c) !== i);
+  check("codes: every rule has its own number", dupCodes.length === 0, `reused: ${dupCodes.join(", ")}`);
+
+  const jsCode = JSON.parse(js.stdout.split("\n")[0]);
+  check(
+    `codes: --json carries a code (${jsCode.code}) and the human summary line does not`,
+    /^AS\d{4}$/.test(jsCode.code) &&
+      jsCode.code !== "AS0000" &&
+      !manyErr.includes(jsCode.code) &&
+      !many.stderr.includes("AS"),
+    `${js.stdout.split("\n")[0]}\n---\n${manyErr.split("\n")[0]}`
+  );
+  check(
+    "codes: a syntax error is AS0001, whatever the `typescript` package worded it as",
+    JSON.parse(jsSyn.stdout.split("\n")[0]).code === "AS0001",
+    jsSyn.stdout
+  );
+
+  // Coverage over every rejection the suite exercises. The uncoded remainder is
+  // the backlog, pinned so it can shrink but not grow: those messages are built
+  // entirely out of interpolations (`\`${fn}\` expects ${a}, got ${b}`) and have
+  // no literal run long enough to identify a rule. Adding one is a matter of
+  // giving the message words of its own, not of editing the table.
+  const UNCODED_BACKLOG = 8;
+  const rejectCases = fs
+    .readdirSync(casesDir)
+    .filter((f) => f.startsWith("reject_") && f.endsWith(".ts"));
+  const byMessage = new Map();
+  for (const c of rejectCases) {
+    const args = [path.join("tests", "cases", c), "--json"];
+    const argsFile = path.join(casesDir, `${c.slice(0, -3)}.args`);
+    if (fs.existsSync(argsFile))
+      args.push(...fs.readFileSync(argsFile, "utf8").trim().split(/\s+/).filter(Boolean));
+    const r = spawnSync("node", [cli, ...args], { cwd: root, encoding: "utf8" });
+    for (const line of r.stdout.split("\n")) {
+      if (!line.startsWith("{")) continue;
+      const o = JSON.parse(line);
+      byMessage.set(o.message, o.code);
+    }
+  }
+  const uncoded = [...byMessage].filter(([, code]) => code === "AS0000");
+  const coverage = ((1 - uncoded.length / byMessage.size) * 100).toFixed(1);
+  check(
+    `codes: ${byMessage.size - uncoded.length}/${byMessage.size} distinct rejection messages carry a code (${coverage}%), ${uncoded.length} uncoded`,
+    byMessage.size > 200 && uncoded.length <= UNCODED_BACKLOG,
+    uncoded.map(([m]) => `  uncoded: ${m}`).join("\n")
+  );
   const jsOk = spawnSync(
     "node",
     [cli, path.join(casesDir, "cf_fib.ts"), "-o", path.join(buildDir, "diag_json_ok.ll"), "--json"],
@@ -288,8 +366,12 @@ if (!only || "diagnostics".includes(only)) {
   );
 
   // -g: the IR verifies, and a linked debug binary carries a DWARF line table naming the .ts file.
-  if (has("opt")) {
-    const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(buildDir, "dbg_locals.ll")]);
+  // The golden is compiled by the cases loop above, which a `node tests/run.js
+  // <sub>` run may have filtered out; verifying a file that was never written
+  // reports a failure about the filter rather than about the compiler.
+  const dbgLocalsIr = path.join(buildDir, "dbg_locals.ll");
+  if (has("opt") && fs.existsSync(dbgLocalsIr)) {
+    const v = spawnSync("opt", ["-passes=verify", "-disable-output", dbgLocalsIr]);
     check("dbg_locals: opt -passes=verify accepts the -g IR", v.status === 0, String(v.stderr));
   }
   // A class reached only through an imported class's signatures is described
@@ -2689,6 +2771,25 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         `${refused.status}: ${refused.stdout}${refused.stderr}`
       );
 
+      // The `--help` contract is shared rather than each compiler's own: a
+      // request that succeeded goes to stdout with exit 0, a refusal to stderr
+      // with exit 2. The two usage *texts* differ -- stage1's is one line and
+      // names `compile` -- so it is the shape that is pinned, not the bytes.
+      const ourHelp = spawnSync(compiler, ["--help"], { cwd: root, encoding: "utf8" });
+      const theirHelp = spawnSync("node", [cli, "--help"], { cwd: root, encoding: "utf8" });
+      const ourRefusal = spawnSync(compiler, [], { cwd: root, encoding: "utf8" });
+      check(
+        "the self-hosted compiler: --help answers on stdout with exit 0, as stage0 does",
+        ourHelp.status === 0 &&
+          theirHelp.status === 0 &&
+          ourHelp.stdout.includes("usage:") &&
+          ourHelp.stderr === "" &&
+          ourRefusal.status === 2 &&
+          ourRefusal.stderr.includes("usage:") &&
+          ourRefusal.stdout === "",
+        `help ${ourHelp.status}:\n${ourHelp.stdout}${ourHelp.stderr}\nrefusal ${ourRefusal.status}:\n${ourRefusal.stdout}${ourRefusal.stderr}`
+      );
+
       // The interop sidecars are stage1's, and so is the directory each one
       // needs. The bytes themselves are the interop oracle's business.
       const sidecarDir = path.join(shipDir, "interop");
@@ -3113,6 +3214,37 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "no inputs: usage on stderr, exit 2",
     noInputs.status === 2 && noInputs.stderr.includes("usage: amritc"),
     noInputs.stderr
+  );
+
+  // `--help` is a request that succeeded and a usage error is a refusal; the
+  // two are told apart by the stream and the exit code, so a wrapper -- a
+  // script, an editor, an agent -- can ask for the text without reading the
+  // run as a failure. `noInputs` above is the other half of this pair.
+  const help = run(["--help"]);
+  check(
+    "--help: usage on stdout, nothing on stderr, exit 0",
+    help.status === 0 && help.stdout.includes("usage: amritc") && help.stderr === "",
+    help.stdout + help.stderr
+  );
+  const shortHelp = run(["-h"]);
+  check(
+    "-h: identical to --help",
+    shortHelp.status === 0 && shortHelp.stdout === help.stdout,
+    shortHelp.stdout + shortHelp.stderr
+  );
+  check(
+    "--help and a usage error print the same text on different streams",
+    help.stdout.trim() === noInputs.stderr.trim(),
+    `stdout:\n${help.stdout}\nstderr:\n${noInputs.stderr}`
+  );
+  // Every flag the driver accepts is listed: a wrapper that reads --help to
+  // learn the surface must not be missing one.
+  const documented = ["--json", "--link", "--emit-header", "--emit-dts", "--emit-napi", "--target", "--profile"];
+  const undocumented = documented.filter((f) => !help.stdout.includes(f));
+  check(
+    `--help lists every advertised flag (${documented.length} checked)`,
+    undocumented.length === 0,
+    `missing from --help: ${undocumented.join(", ")}`
   );
   const badFlag = run(["--bogus", entry]);
   check(

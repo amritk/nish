@@ -29,6 +29,7 @@
 // the analysis meets them in module load order and then in source order, which
 // is the order `sorted()` puts errors into anyway.
 
+import { codeFor } from "./codes";
 import { jsonQuote, StringBuilder } from "./strings";
 import { StringMap } from "./map";
 
@@ -187,7 +188,12 @@ export class Diagnostic {
    * The `--json` form: one flat object, no excerpt. `severity` is the field a
    * tool filters on, so a WP15 §8 warning says `performance` there; a syntax
    * error keeps its `syntax error: ` prefix inside `message`, because its
-   * severity is still `error`.
+   * severity is still `error`. `code` is the stable identifier from
+   * `self/codes.ts` — the field to key on rather than the prose, since the
+   * prose may improve and the code may not.
+   *
+   * The key order matches `diagnosticJson` in `src/diagnostics.ts` exactly:
+   * `tests/run.js` compares the two compilers' `--json` byte for byte.
    */
   json(): string {
     const endLine = this.source.lineOf(this.end);
@@ -195,7 +201,8 @@ export class Diagnostic {
     const performance = this.kind === PERFORMANCE;
     const severity = performance ? PERFORMANCE : "error";
     const message = this.kind === "error" || performance ? this.text : `${this.kind}: ${this.text}`;
-    return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"${severity}","message":${jsonQuote(message)}}`;
+    const code = codeFor(this.kind, this.text);
+    return `{"file":${jsonQuote(this.source.path)},"line":${this.line},"column":${this.column},"endLine":${endLine},"endColumn":${endColumn},"severity":"${severity}","code":"${code}","message":${jsonQuote(message)}}`;
   }
 }
 
