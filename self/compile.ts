@@ -415,7 +415,17 @@ export function main(): number {
   // answers before `check` and writes no IR — the same point in the pipeline
   // stage0 answers it from. The tree is this compiler's own, not a mirror of
   // stage0's (`ast_text.ts` says why), so the two goldens differ by design.
+  //
+  // *Validated*, though, is the half that used to be missing: `load` reports a
+  // Phase 0 refusal into the sink and answers true anyway, so a program with
+  // `any` in it dumped a tree and exited 0 here while stage0 printed the
+  // refusal, dumped nothing and exited 1. A dump flag does not turn a refused
+  // program into a compiling one (WP19 §A3, `tests/cases/dump_ast_reject`).
   if (emitAst) {
+    if (compilation.sink.hasErrors()) {
+      report(compilation, json);
+      return 1;
+    }
     for (const unit of compilation.modules) {
       write(astText(unit.file, unit.path));
     }
