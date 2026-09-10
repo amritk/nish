@@ -7,6 +7,81 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ## [Unreleased]
 
+### Added
+
+- **What the number mode costs, measured (`docs/wp9-optimisation.md`).** The
+  FAQ has said `i32` is "one machine word, exact, vectorisable" since WP11
+  with no number beside it. Compiling the same program `--number-mode f64`
+  costs **1.36x on `fib`, 1.80x on `sieve`, 1.52x on `strbuild`** and **3.42x
+  on an array reduction — 14.3x when the array is cache-resident**, so the
+  gap is not memory traffic. Three mechanisms, all visible in the IR: every
+  subscript pays an `fptosi` (five in `sieve`, none in i32 mode); induction
+  variables lose `nsw` (eight `add nsw i32` become `fadd double`), and with it
+  the widening and strength reduction §`--nsw` describes; and a reduction
+  cannot be reassociated, so where the i32 binary carries 13 `paddd` the f64
+  one carries 11 `addsd` on a serial dependency chain. Binary size is a flat
+  **+12.2 KB**, the shortest-digits formatter that `console.log` of a double
+  links — which also explains the size column of BENCHMARKS.md, where the
+  three f64 benchmarks sit at 18-21 KB and the four i32 ones at 5.5-6.9 KB.
+
+  Two of the four i32 benchmarks do not survive being recompiled in f64 mode,
+  and that is the other half of the finding: `result.ts` does not compile at
+  all (`&` needs integer operands, and says so), while **`strbuild.ts`
+  compiles, runs, exits 0 and prints a different answer** — 806394 against
+  2410293 — because `const step = (count + 31) / 32; // ceil(count / 32)`
+  has a comment that is true only where `/` truncates. It is now the worked
+  example in WP21 §6 for why the number mode has to be visible at a package
+  boundary, in place of the invented one that was there.
+
+- **A plan for packages (WP21, `docs/wp21-packages.md`).** The question "what
+  goes in an `exports` map beside `import` and `require`" turned out to be two
+  questions, and the note's first job is to separate them. A **foreign host** —
+  JavaScript on Node, JavaScript in a browser, C — takes a *built artifact*
+  across the ABI, and WP8 already generates all three of them. Another
+  **AmritScript program** takes *source*, compiled as part of its own whole
+  program, and four existing decisions force that rather than suggest it: a
+  prebuilt library hands the optimiser an opaque symbol instead of the
+  exporter's attribute set, which is the whole point of compiling a program as
+  a whole (WP5); a generic has no code until a consumer's call site
+  instantiates it (WP18); `--number-mode` decides what `number` *is*, so
+  prebuilding means prebuilding {i32, f64} × three targets × three profiles;
+  and source lets `internal` linkage drop everything the consumer never calls.
+  So a built artifact is a *cache* for an AmritScript consumer, never a
+  distribution format — and the package a JS host sees through `--emit-napi`
+  is a narrowed projection of the one an AmritScript consumer sees, which may
+  take and return classes, `T | null` and `Result<T, E>` freely because nothing
+  crosses a boundary.
+
+  The blocker is not packaging: **the symbol namespace is flat.** Two modules
+  defining the same *non-exported* name is already an error, and deliberately
+  not one the linkage flag can waive, because `analyzeFunctions` keys the
+  whole-program fact fixpoint by symbol name and a duplicate would hand each
+  function the other's attributes — a miscompile, not a link failure
+  (`tests/link/duplicate_internal`). Two unrelated packages that each have a
+  private `helper()` would fail to compile together. Package-scoped symbols are
+  therefore stage one of five; they have no language surface, and the diff is
+  mechanical and grows with every golden added in the meantime. Nothing in the
+  note is implemented, several of its sections are explicitly sketches, and
+  none of it is on the M4 critical path.
+
+  How a package *says* it is AmritScript is the condition itself: its presence
+  is the claim, its value is the entry module, and its absence is what lets a
+  bare import of an ordinary npm package fail with "no AmritScript entry point"
+  instead of a module-not-found. The number mode rides in the condition too, by
+  spelling — `amrit-f64`, `amrit-i32`, or plain `amrit` for a package correct
+  under either — so a mismatch is a resolution failure at the package boundary
+  rather than a manifest field to keep in sync. The mode earns that because it
+  is the one semantic flag a package can be quietly wrong about: `(a + b) / 2`
+  answers `3` for `mean(3, 4)` in i32 mode and `3.5` in f64, compiling and
+  running cleanly under both, while most f64-flavoured code fails loudly
+  instead (`Math.sqrt` on a `number` in i32 mode names the fix in its own
+  message). Nothing else needs declaring — the compiler already knows which
+  builtins a program touches and what its target can run, and a version floor
+  belongs in `engines.amritc` — on the rule that **a fact the compiler can
+  recompute is not metadata**. None of it is a trust boundary either, since the
+  consumer's build re-establishes the property from source every time and the
+  compiler is the verifier.
+
 ### Fixed — correctness
 
 - **`String(x)` on a double printed seventeen digits where sixteen suffice, for
