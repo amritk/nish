@@ -1,11 +1,11 @@
 # AmritScript benchmark suite
 
-Six programs, each written three times with the same data layout and the same
+Seven programs, each written four times with the same data layout and the same
 expression order (so the floating-point results agree bit for bit): AmritScript
-(`.ts`), C (`.c`, `clang -O3`) and Rust (`.rs`, `rustc -C opt-level=3
--C panic=abort -C codegen-units=1`). `bench/run.mjs` builds them all, checks
-that every binary prints the same checksum, times them and writes
-[docs/BENCHMARKS.md](../docs/BENCHMARKS.md). The analysis of the results, and
+(`.ts`), C (`.c`, `clang -O3`), Go (`.go`, `go build`) and Rust (`.rs`,
+`rustc -C opt-level=3 -C panic=abort -C codegen-units=1`). `bench/run.mjs`
+builds them all, checks that every binary prints the same checksum, times them
+and writes [docs/BENCHMARKS.md](../docs/BENCHMARKS.md). The analysis of the results, and
 of every gap over the 10 % target, is in
 [docs/wp9-optimisation.md](../docs/wp9-optimisation.md).
 
@@ -17,11 +17,14 @@ node bench/run.mjs --runs 10 --warmup 2   # more samples
 node bench/run.mjs --n fib=30,sieve=1000000   # other sizes (rewrites the `bench:n` line)
 node bench/run.mjs --validate --only fib,sieve --n fib=25,sieve=100000   # what CI runs: checksums only
 node bench/run.mjs --no-rust              # skip Rust even when rustc is installed
+node bench/run.mjs --no-go                # skip Go even when the go tool is installed
 ```
 
 `rustc` is looked up on `PATH` and in `~/.cargo/bin`; `RUSTC=<path>` overrides
-it and without one the Rust columns are skipped. `CC` picks the C compiler
-(default `clang`). Build products go to `build/bench/`.
+it and without one the Rust columns are skipped. `go` is looked up on `PATH`,
+in `/usr/local/go/bin` and in `~/go/bin`, with `GO=<path>` the override and the
+same skip when it is missing. `CC` picks the C compiler (default `clang`).
+Build products go to `build/bench/`.
 
 ## The programs
 
@@ -43,19 +46,23 @@ for `--n`; the twins carry the same marker.
 
 `result`'s twins are the shapes each language would use anyway: a C struct of
 two words — the one `amritc --emit-header` declares for
-`Result<number, number>` — and Rust's own `Result<i32, i32>`. All three are
-returned and passed in one register, so the three columns should be the same
-code; an AmritScript column well behind them means a `Result` went back to being
-a pointer into the arena. What the gap it currently shows is about, and the
+`Result<number, number>` — and Rust's own `Result<i32, i32>`. Go has no such
+type, so `result.go` uses the same two-word struct as the C twin; Go's register
+ABI returns and passes it in registers, exactly as Go's own `(value, ok)` pair
+of results would be. All four are returned and passed in registers, so the four
+columns should be the same code; an AmritScript column well behind them means a
+`Result` went back to being a pointer into the arena. What the gap it currently shows is about, and the
 respelling that did *not* close it, is in
 [docs/wp17-result-abi.md](../docs/wp17-result-abi.md) §4.
 
-`strbuild` has a fourth version, `strbuild_naive.c`: the same immutable-string
+`strbuild` has one more version, `strbuild_naive.c`: the same immutable-string
 algorithm with a `malloc` per string and a `free` as soon as a string has been
 copied into its successor. Against `strbuild.c` (a bump arena that never
 frees, i.e. the AmritScript runtime's model) it isolates what the arena costs and
 saves. The Rust version allocates a fresh `String` per concatenation, the same
-work as the naive C.
+work as the naive C; the Go version does the same with `s + piece`, except that
+a garbage collector, not `free` or an arena, reclaims the intermediates — so
+`strbuild` is the one benchmark where the Go column is measuring a GC.
 
 ## Rules
 
@@ -63,15 +70,25 @@ work as the naive C.
   loops, the same temporaries, the same left-to-right evaluation. No
   `-ffast-math`, no `-march=native` for C; Rust gets a separate
   `-C target-cpu=native` column because that is what Rust programmers commonly
-  ship with.
-- **Same memory model where the language allows it.** C and Rust objects are
-  heap allocated (`malloc`, `Box`) like the arena objects in AmritScript; arrays
-  are indexed with a 32-bit index converted to the native width. Rust's
-  bounds checks stay on (`Vec` indexing), like AmritScript's.
+  ship with. Go has no such knob — `go build` has one optimisation level and
+  targets the baseline amd64 — so it gets one column, which is also what a Go
+  programmer ships.
+- **Same memory model where the language allows it.** C, Go and Rust objects
+  are heap allocated (`malloc`, `&T{…}`, `Box`) like the arena objects in
+  AmritScript; arrays are indexed with a 32-bit index converted to the native
+  width. Rust's and Go's bounds checks stay on (`Vec` and slice indexing), like
+  AmritScript's — no `-gcflags=-B`. Go's garbage collector runs at its default
+  `GOGC=100`; only `strbuild` allocates enough for that to show.
+- **Constants fold the same way.** A Go untyped constant expression is folded
+  in arbitrary precision and rounded once, where C, Rust and AmritScript round
+  every step to `f64`; `nbody.go` therefore spells its constants as typed
+  variables, or one ULP in `SOLAR_MASS` would move the last digits of a
+  chaotic system's final energy. Go does not fuse multiply-add on amd64, so no
+  version needs to suppress FMA.
 - **One checksum per program.** Outputs are compared token by token; numeric
-  tokens must agree to 1e-9 relative, which lets `%.17g`, Rust's `{}` and
-  AmritScript's JavaScript-style shortest round-trip formatting print the same
-  double differently. A mismatch fails the run, and the CI test in
+  tokens must agree to 1e-9 relative, which lets `%.17g`, Rust's `{}`, Go's
+  `%v` and AmritScript's JavaScript-style shortest round-trip formatting print
+  the same double differently. A mismatch fails the run, and the CI test in
   `tests/run.js` (`WP9: bench`) validates `fib` and `sieve` at small sizes on
   every push.
 - **Timing.** Wall time of the whole process, `process.hrtime.bigint()`
@@ -79,8 +96,10 @@ work as the naive C.
   minimum and median. Process start-up (about 1 ms) is included and identical
   for every column.
 - **Sizes.** Every binary is stripped: AmritScript through `scripts/build.sh`
-  (`-s`, section GC, LTO), C with `-s`, Rust with `-C strip=symbols`. The
-  AmritScript `size` profile (`-Oz`) gets its own column.
+  (`-s`, section GC, LTO), C with `-s`, Rust with `-C strip=symbols`, Go with
+  `-ldflags=-s -w`. The AmritScript `size` profile (`-Oz`) gets its own column.
+  A Go binary still carries the runtime, the scheduler and the collector, so
+  its floor is about a megabyte and the column is not a like-for-like one.
 - **Memory.** Peak RSS of one run, from `wait4`'s `ru_maxrss` via
   `bench/rss.c`.
 
@@ -93,11 +112,14 @@ work as the naive C.
 | AmritScript (size profile) | `--profile size`, size table only |
 | C `-O3` | `clang -O3 -s <src> -lm` |
 | C `-O3` naive | `strbuild_naive.c` only |
+| Go | `go build -trimpath -ldflags=-s -w` |
 | Rust `-O3` | `rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols` |
 | Rust native | as above plus `-C target-cpu=native` |
 
-The `AmritScript / Rust` column divides the AmritScript minimum by the Rust `-O3`
-minimum. The WP9 target is 1.10x or better for loop and math code.
+The `AmritScript / Go` and `AmritScript / Rust` columns divide the AmritScript
+minimum by that language's minimum. The WP9 target is 1.10x or better for loop
+and math code, and it is set against Rust: Go is reported for scale, not as a
+gate.
 
 ## Other files
 
