@@ -318,9 +318,12 @@ function checkUnary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32
   }
   if (op === "~") {
     if (!isInteger(type)) {
+      // With the same hint the binary operators carry: an `f64` here is
+      // usually the mode's `number` rather than a deliberate annotation
+      // (`checkBitwiseNot` in `src/checker/bitwise.ts`).
       return ctx.errorType(
         expr,
-        `Operator \`~\` requires an integer operand, got ${ctx.table.typeName(type)}`
+        `Operator \`~\` requires an integer operand, got ${ctx.table.typeName(type)}${f64Hint(ctx, type, type)}`
       );
     }
     return type;

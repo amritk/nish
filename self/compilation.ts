@@ -193,7 +193,17 @@ export class Compilation {
       // resolver, for one `any` in the source (WP19 §A3).
       return false;
     }
+    const beforeSignatures = this.sink.count();
     checker.collectSignatures(); // pass 1, which also validates the import syntax
+    if (this.sink.count() > beforeSignatures) {
+      // Pass 1 refused something in this module, and stage0 stops there rather
+      // than going on to its imports: a duplicate function in the entry hides
+      // everything a module it imports would have said, because the imported
+      // module is never loaded (`tests/link/main_in_import` in f64 mode, where
+      // the entry's own `main` is the refusal). Loading them anyway reported
+      // diagnostics stage0 never reaches.
+      return false;
+    }
     const dir = dirname(path);
     let ok = true;
     for (const imp of checker.program.imports) {

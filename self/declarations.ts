@@ -101,6 +101,13 @@ export function markEntryMain(ctx: CheckContext, sig: FunctionSig): void {
       `\`main\` must return void or an i32 number (the process exit code), not ${spelled}${hint}`
     );
   }
+  if (ctx.errored) {
+    // A rejected `main` is not the entry's `main`: stage0 throws from here and
+    // never records it, so a *second* module declaring one is not yet a second
+    // (`tests/link/main_in_import` in f64 mode reported both there and one
+    // here).
+    return;
+  }
   sig.name = ENTRY_MAIN_SYMBOL;
   ctx.program.entryMain = sig;
 }

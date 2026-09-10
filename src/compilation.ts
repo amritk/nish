@@ -127,7 +127,10 @@ export class Compilation {
     else if (!resolved.endsWith(".ts")) resolved += ".ts";
     if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
       throw new CompileError(
-        `Cannot find module \`${imp.specifier}\` (looked for ${displayName(resolved)})`,
+        // Named from the importer, as `importedName` names one that *is* found:
+        // a diagnostic about a missing file should not depend on the directory
+        // the compiler was run from any more than the IR does (WP19 §A3).
+        `Cannot find module \`${imp.specifier}\` (looked for ${importedName(importer, resolved)})`,
         imp.node.moduleSpecifier,
         importer.sourceFile
       );
@@ -264,11 +267,6 @@ export class Compilation {
     }
     return stems;
   }
-}
-
-function displayName(absPath: string): string {
-  const rel = path.relative(process.cwd(), absPath);
-  return rel && !rel.startsWith("..") ? rel : absPath;
 }
 
 /**
