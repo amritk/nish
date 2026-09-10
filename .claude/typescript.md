@@ -233,6 +233,35 @@ It is only an AmritScript program that cannot use it.
 
 ## Naming Conventions
 
+- **camelCase for values, PascalCase for types** — TypeScript's own
+  convention, with no repo dialect on top of it. Functions, locals,
+  parameters, class fields and object properties are camelCase
+  (`checkExpression`, `emitCall`, `declareVariables`); classes and `type`
+  aliases are PascalCase (`CheckContext`, `StaticType`, `FunctionSig`);
+  a module-level constant that is a frozen table or a fixed scalar is
+  CONSTANT_CASE (`RUNTIME_FUNCTIONS`, `TYPED_ARRAY_ALIASES`, `LANGUAGE`).
+  An acronym keeps its own case rather than being title-cased: `IRBlock`,
+  `IRFunction`, `compileToIR`, not `IrBlock` or `compileToIr`. File names
+  are the one place that is not camelCase, and Biome enforces it
+  (`useFilenamingConvention`): kebab-case or snake_case, so `emit/strings.ts`
+  and `interop_abi.ts` are both fine and `emitStrings.ts` is not.
+- **Three kinds of name are exempt, because the spelling is the meaning.**
+  A table key that names a JavaScript global or builtin keeps that global's
+  exact spelling, since the key *is* the identifier being matched —
+  `Function`, `Proxy`, `Reflect`, `Symbol` in the validator's
+  `FORBIDDEN_VALUE_IDENTIFIERS`, `Int32Array` in `TYPED_ARRAY_ALIASES`,
+  `parseInt` and `Number` in the builtin checkers. A name that crosses an ABI keeps the
+  ABI's spelling: `amrit_*` runtime symbols, WASI's `fd_write` and
+  `args_get` in `web/wasi.mjs`, `x86_64Layout` in `codegen/target.ts`. And a
+  benchmark ported from another language keeps the source program's
+  constants, so `bench/nbody.ts` has `SOLAR_MASS` and `PI` as locals.
+- **This one is prose, not lint, and that is measured.** Biome's
+  `useNamingConvention` was tried over the whole repo: with `strictCase` on
+  it flags 82 places, and with it off (the setting that tolerates `IRBlock`)
+  still 70 — every single one of them in the three exempt classes above,
+  and none of them a name anyone would want changed. A rule whose entire
+  output is false positives is worse than no rule, so the convention lives
+  here and the reviewer is what enforces it.
 - Be descriptive.
 - Use suffixes appropriately: `check*` for checker handlers, `emit*` for
   emitters, `collect*Facts` for attribute fact collectors, `is*` for
