@@ -28,6 +28,8 @@ import {
 } from "./classes.js";
 import { ConstInfo, constValue } from "./constants.js";
 import {
+  arrowFunctionOf,
+  collectArrowSignature,
   collectConstant,
   collectFunctionSignature,
   collectImports,
@@ -40,7 +42,7 @@ import { CheckedProgram, FunctionSig, ImportBinding, LocalVar, StructInfo } from
 import { checkPerformance } from "./performance.js";
 import { checkResultLocalsHandled } from "./result.js";
 import { Scope } from "./scope.js";
-import { checkStatements, checkVariableDeclarationList, statementCheckers } from "./statements.js";
+import { checkReturnValue, checkStatements, checkVariableDeclarationList, statementCheckers } from "./statements.js";
 
 export * from "./program.js";
 export { Scope } from "./scope.js";
@@ -188,7 +190,10 @@ export class Checker implements CheckContext {
         continue;
       }
       if (ts.isVariableStatement(stmt)) {
-        this.sink.recover(() => this.collectConstants(stmt));
+        // WP22: an arrow initialiser makes this a function declaration; every
+        // other module-level `const` names a compile-time value.
+        const isFunction = stmt.declarationList.declarations.some((d) => arrowFunctionOf(d) !== undefined);
+        this.sink.recover(() => (isFunction ? this.collectArrowFunction(stmt) : this.collectConstants(stmt)));
         continue;
       }
       this.sink.recover(() => this.collectFunction(stmt));
@@ -222,13 +227,30 @@ export class Checker implements CheckContext {
         stmt
       );
     }
-    const sig = collectFunctionSignature(stmt, this.sf, this.opts);
+    this.registerFunction(collectFunctionSignature(stmt, this.sf, this.opts), stmt);
+  }
+
+  /**
+   * WP22: the arrow form. `const double = (n: i32): i32 => n * 2` at module
+   * level declares a function, so it is registered in the function table and
+   * never in `program.constants` — which is what keeps a function out of the
+   * value namespace, and `const g = double` an unknown identifier as it always
+   * was for the `function` spelling.
+   */
+  private collectArrowFunction(stmt: ts.VariableStatement): void {
+    const decl = stmt.declarationList.declarations[0];
+    const arrow = arrowFunctionOf(decl)!;
+    this.registerFunction(collectArrowSignature(stmt, decl, arrow, this.sf, this.opts), stmt);
+  }
+
+  /** The name checks and the entry-point wiring, shared by both spellings. */
+  private registerFunction(sig: FunctionSig, stmt: ts.Statement): void {
     if (this.sigs.has(sig.sourceName)) this.error(`Duplicate function \`${sig.sourceName}\``, stmt);
     if (this.program.structs.has(sig.sourceName)) {
-      this.error(`\`${sig.sourceName}\` is already declared as a class or interface`, stmt.name!);
+      this.error(`\`${sig.sourceName}\` is already declared as a class or interface`, sig.nameNode);
     }
     if (sig.exported && sig.sourceName === "main") {
-      if (!this.isEntry) this.error("Only the entry module may declare `export function main`", stmt.name!);
+      if (!this.isEntry) this.error("Only the entry module may declare `export function main`", sig.nameNode);
       this.program.entryMain = markEntryMain(sig, this.sf);
     }
     this.sigs.set(sig.sourceName, sig);
@@ -438,7 +460,15 @@ export class Checker implements CheckContext {
 
     // The body shares the parameter scope rather than opening a child, so
     // `function f(a) { let a }` is a duplicate-declaration error as in TS.
-    const terminates = checkStatements(this, sig.decl.body!.statements, scope);
+    // WP22 §4: a concise arrow body (`=> n * 2`) is a block with one `return`,
+    // so it always terminates and its expression is checked as that return's.
+    let terminates: boolean;
+    if (ts.isBlock(sig.body)) {
+      terminates = checkStatements(this, sig.body.statements, scope);
+    } else {
+      checkReturnValue(this, sig.body, scope);
+      terminates = true;
+    }
     // WP16: a `Result` local nobody reads is an unhandled failure. Reported
     // after the body so the diagnostic names a variable whose type is known.
     if (!sig.poisoned) {
@@ -453,7 +483,7 @@ export class Checker implements CheckContext {
     if (sig.returnType.kind !== "void" && !terminates && !sig.poisoned) {
       this.error(
         `Function \`${sig.sourceName}\` must return a value of type ${typeToString(sig.returnType)} on every path`,
-        sig.decl.name ?? sig.decl
+        sig.nameNode
       );
     }
   }

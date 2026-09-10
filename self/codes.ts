@@ -40,7 +40,7 @@ export const TOOLCHAIN: string = "AS0002";
 export const INTERNAL: string = "AS0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 336;
+export const RULE_COUNT: i32 = 339;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -168,6 +168,8 @@ export function diagnosticRules(): string[] {
     "AS2143",
     " (it has `isOk`, `isErr`, `orReturn`, `unwrapOr` and `expect`)",
     "AS2005",
+    "` takes its signature from the arrow; drop the annotation on `",
+    "AS2270",
     "Template literal hole must be string, number, or boolean, got ",
     "AS2238",
     "`Array` needs exactly one type argument, e.g. `Array<number>`",
@@ -364,10 +366,14 @@ export function diagnosticRules(): string[] {
     "AS2004",
     "Cannot declare a variable of type void",
     "AS2183",
+    "` must be declared `const`, not `let`",
+    "AS2269",
     "`break` outside of a loop or `switch`",
     "AS2122",
     "`join` expects 0 or 1 arguments, got ",
     "AS2138",
+    "A function declaration binds one name",
+    "AS2271",
     "Only simple variables can be assigned",
     "AS2228",
     " (use --number-mode f64 or toF64(x))",

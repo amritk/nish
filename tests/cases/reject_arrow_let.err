@@ -1,0 +1,1 @@
+Function `double` must be declared `const`, not `let`

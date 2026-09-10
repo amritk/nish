@@ -142,10 +142,21 @@ them. That forces four stages, and no two of them can be merged:
 
 | Stage | What lands | Done when |
 | --- | --- | --- |
-| **A** | Stage0 accepts arrows: the two rules of §5, the concise-body desugaring, goldens for both body forms, negative tests for every escape in rule 2 | `npm test` green; a golden proves `function f` and `const f = () => ...` emit byte-identical IR |
+| **A** | Stage0 accepts arrows: §5's rules, the concise-body branch, negative tests | `npm test` green; the two spellings of one program emit byte-identical IR |
 | **B** | Stage1 accepts arrows: `self/parser.ts` and its checker half, message-for-message with stage0 | the parser and checker oracles agree on an arrow corpus |
 | **C** | The migration: `self/` first, then the corpus, then the docs | goldens unchanged; the bootstrap reproduces stage1 byte for byte |
 | **D** | a `function` *definition* is rejected, with §6's message and its `reject_function_declaration` case; `declare function` stays legal (§9) | `npm test` green with no `function` declaration left in any AmritScript source |
+
+**A cannot carry its own positive golden, and that is the plan's one real
+correction.** Every `.ts` in `tests/cases/` is compiled by *both* compilers —
+`tests/self/ir_oracle.js` requires stage1 to emit what stage0 emits for each of
+them — so an arrow program in the corpus fails the oracle until B lands, with
+`1 rejected by stage1`. Stage A therefore ships its rejection cases (stage1's
+parser refuses those, which the reject oracle already tolerates as "refused by
+the parser instead") and the positive `fn_arrow` golden with its native round
+trip lands in B. The identity of the two spellings is still proven in A, by
+compiling one program written both ways and diffing the IR; it just cannot live
+in the corpus yet.
 
 Stage C is where the risk is, and it is worth doing `self/` in one commit of
 its own: the bootstrap comparing stage1's output against itself is the only

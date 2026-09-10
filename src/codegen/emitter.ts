@@ -48,7 +48,7 @@ import { privateResultAbi, resultPairToWord, unpackResult } from "./emit/result.
 import { EmitContext, LoopTarget } from "./emit/context.js";
 import { expressionEmitters } from "./emit/expressions.js";
 import { declareResultTypes } from "./emit/result.js";
-import { emitVariableDeclarationList, statementEmitters } from "./emit/statements.js";
+import { emitReturnValue, emitVariableDeclarationList, statementEmitters } from "./emit/statements.js";
 import { addStringConstant } from "./emit/strings.js";
 import { IRFunction, IRModule } from "./ir.js";
 import {
@@ -174,7 +174,9 @@ export class Emitter implements EmitContext {
     // A constructor stores the field initializers before its body runs (WP2),
     // and a derived one without an explicit `super(...)` constructs its base part (WP2b).
     if (sig.role === "constructor") emitConstructorPrologue(this, sig);
-    this.emitBlock(sig.decl.body!);
+    // WP22 §4: a concise arrow body is the one `return` it means.
+    if (ts.isBlock(sig.body)) this.emitBlock(sig.body);
+    else emitReturnValue(this, sig.body);
 
     // Void functions may fall off the end; give them an explicit terminator.
     if (!this.fn.currentBlock.terminated) {

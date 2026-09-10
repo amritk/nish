@@ -14,18 +14,27 @@ const emitReturn: StatementEmitter = (ctx, node) => {
     ctx.fn.emit("ret void");
     return;
   }
+  emitReturnValue(ctx, stmt.expression);
+};
+
+/**
+ * The value half of a `return`, shared with the concise arrow body (WP22 §4),
+ * which lowers to exactly the same instructions as the block with one `return`
+ * it means — the goldens for the two spellings are byte-identical.
+ */
+export const emitReturnValue = (ctx: EmitContext, expression: ts.Expression): void => {
   // WP17: a small `Result` leaves in a register. The word is built before the
   // scope release, because the object it may be read out of is arena memory
   // the release reclaims.
   const want = ctx.currentSig.returnType;
   if (resultByValue(want)) {
-    const word = emitPackedResult(ctx, stmt.expression, want as ResultType);
+    const word = emitPackedResult(ctx, expression, want as ResultType);
     ctx.emitScopeExit();
     emitResultReturn(ctx, word);
     return;
   }
-  const type = ctx.typeOf(stmt.expression);
-  const value = ctx.emitExpression(stmt.expression);
+  const type = ctx.typeOf(expression);
+  const value = ctx.emitExpression(expression);
   ctx.emitScopeExit();
   ctx.fn.emit(`ret ${llvmType(type)} ${value}`);
 };

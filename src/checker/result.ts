@@ -483,7 +483,7 @@ export const checkResultLocalsHandled = (ctx: CheckContext, sig: FunctionSig): v
     }
     ts.forEachChild(node, visit);
   };
-  visit(sig.decl.body!);
+  visit(sig.body);
   for (const decl of declarations) {
     const v = ctx.program.locals.get(decl);
     if (!v || v.type.kind !== "result" || read.has(v)) continue;

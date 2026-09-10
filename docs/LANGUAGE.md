@@ -574,12 +574,32 @@ must be a value the compiler can compute for itself.
 
 ### Functions
 
+A function is declared as an arrow bound to a module-level `const`
+([wp22-arrow-functions.md](wp22-arrow-functions.md)):
+
 ```ts
-function add(a: number, b: number): number {
+const add = (a: number, b: number): number => {
   return a + b;
-}
+};
+
+const double = (n: i32): i32 => n * 2; // a concise body is that one `return`
 ```
 
+The `function` keyword declares the same thing and is accepted as the legacy
+spelling; the two compile to identical IR, instruction for instruction.
+
+- **The arrow form** is a `const` — `let` is
+  `` Function `f` must be declared `const`, not `let` ``
+  (`tests/cases/reject_arrow_let`) — binding one name, with the signature on
+  the arrow itself. Annotating the `const` is
+  `` Function `f` takes its signature from the arrow ``
+  (`reject_arrow_annotated`), because the annotation would be a function type
+  and those are forbidden. A **concise body** (`=> n * 2`) means exactly what a
+  block with one `return` means, and a function returning `void` uses a block.
+- **A function is not a value** in either spelling: a name bound to one may
+  only be called, so `const alias = double` is `` Unknown identifier `double` ``
+  (`tests/cases/reject_arrow_as_value`). Function types, and therefore
+  callbacks, stay forbidden.
 - Every parameter and the return type must be annotated
   (`` Parameter `x` needs a type annotation ``; `explicit return type`,
   `tests/cases/reject_missing_return_type`).

@@ -22,15 +22,25 @@ const checkReturn: StatementChecker = (ctx, node, scope) => {
     if (want.kind !== "void") throw ctx.error(`Expected a return value of type ${typeToString(want)}`, stmt);
     return true;
   }
-  const got = ctx.checkExpression(stmt.expression, scope);
+  checkReturnValue(ctx, stmt.expression, scope);
+  return true;
+};
+
+/**
+ * The value of a `return`, checked against the enclosing function's return
+ * type. Shared with the concise arrow body (`=> n * 2`), which means the same
+ * thing as a block with one `return` (WP22 §4).
+ */
+export function checkReturnValue(ctx: CheckContext, expr: ts.Expression, scope: Scope): void {
+  const want = ctx.current.returnType;
+  const got = ctx.checkExpression(expr, scope);
   if (!assignable(got, want)) {
     throw ctx.error(
       `Return type mismatch: function returns ${typeToString(want)} but expression is ${typeToString(got)}`,
-      stmt.expression
+      expr
     );
   }
-  return true;
-};
+}
 
 const checkVariableStatement: StatementChecker = (ctx, node, scope) => {
   checkVariableDeclarationList(ctx, (node as ts.VariableStatement).declarationList, scope);

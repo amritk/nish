@@ -53,9 +53,31 @@ export function collectFunctionSignature(
     throw new CompileError("Function names starting with `amrit_` are reserved for the runtime", decl.name, sf);
   }
 
+  return {
+    name: decl.name.text,
+    sourceName: decl.name.text,
+    params: collectPlainParams(decl.parameters, sf, opts),
+    returnType: resolveTypeNode(decl.type, sf, opts),
+    decl,
+    nameNode: decl.name,
+    body: decl.body,
+    exported: hasExportModifier(decl),
+  };
+}
+
+/**
+ * The parameter list of a top-level function, in either spelling. Methods and
+ * constructors do not come through here: they prepend `this` and resolve types
+ * against their owner (`checker/classes.ts`, `collectParams`).
+ */
+function collectPlainParams(
+  parameters: readonly ts.ParameterDeclaration[],
+  sf: ts.SourceFile,
+  opts: CompilerOptions
+): Param[] {
   const params: Param[] = [];
   const seen = new Set<string>();
-  for (const p of decl.parameters) {
+  for (const p of parameters) {
     if (!ts.isIdentifier(p.name)) throw new CompileError("Destructured parameters are not supported", p, sf);
     if (p.dotDotDotToken) throw new CompileError("Rest parameters are not supported", p, sf);
     if (p.questionToken || p.initializer) {
@@ -66,15 +88,64 @@ export function collectFunctionSignature(
     seen.add(p.name.text);
     params.push({ name: p.name.text, type: resolveTypeNode(p.type, sf, opts) });
   }
+  return params;
+}
 
+/**
+ * WP22: the arrow form, `const double = (n: i32): i32 => n * 2`. A module-level
+ * `const` whose initialiser is an arrow declares a *function*, not a value, and
+ * takes its signature from the arrow's own annotations — so nothing here needs
+ * the function type that Phase 0 forbids. The name and the `export` modifier
+ * come from the statement, everything else from the arrow.
+ */
+export function collectArrowSignature(
+  stmt: ts.VariableStatement,
+  decl: ts.VariableDeclaration,
+  arrow: ts.ArrowFunction,
+  sf: ts.SourceFile,
+  opts: CompilerOptions
+): FunctionSig {
+  if (!ts.isIdentifier(decl.name)) throw new CompileError("Functions must be named", decl.name, sf);
+  const name = decl.name.text;
+  if ((stmt.declarationList.flags & ts.NodeFlags.Const) === 0) {
+    throw new CompileError(`Function \`${name}\` must be declared \`const\`, not \`let\``, stmt, sf);
+  }
+  if (stmt.declarationList.declarations.length !== 1) {
+    throw new CompileError("A function declaration binds one name", stmt, sf);
+  }
+  if (decl.type) {
+    throw new CompileError(
+      `Function \`${name}\` takes its signature from the arrow; drop the annotation on \`${name}\``,
+      decl.type,
+      sf
+    );
+  }
+  if (arrow.typeParameters) throw new CompileError("Generic functions are not supported", arrow, sf);
+  if (arrow.modifiers?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) {
+    throw new CompileError("async functions are not supported", arrow, sf);
+  }
+  if (!arrow.type) {
+    throw new CompileError(`Function \`${name}\` needs an explicit return type annotation`, decl.name, sf);
+  }
+  if (name.startsWith("amrit_")) {
+    throw new CompileError("Function names starting with `amrit_` are reserved for the runtime", decl.name, sf);
+  }
   return {
-    name: decl.name.text,
-    sourceName: decl.name.text,
-    params,
-    returnType: resolveTypeNode(decl.type, sf, opts),
-    decl,
-    exported: hasExportModifier(decl),
+    name,
+    sourceName: name,
+    params: collectPlainParams(arrow.parameters, sf, opts),
+    returnType: resolveTypeNode(arrow.type, sf, opts),
+    decl: arrow,
+    nameNode: decl.name,
+    body: arrow.body,
+    exported: hasExportModifier(stmt),
   };
+}
+
+/** The arrow of a module-level `const f = (...) => ...`, or `undefined` for a value `const`. */
+export function arrowFunctionOf(decl: ts.VariableDeclaration): ts.ArrowFunction | undefined {
+  const init = decl.initializer;
+  return init && ts.isArrowFunction(init) ? init : undefined;
 }
 
 /**

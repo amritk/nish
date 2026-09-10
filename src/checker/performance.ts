@@ -279,7 +279,7 @@ const walkNode = (walk: Walk, node: ts.Node): void => {
  * compile is noise, and a poisoned body has incomplete side tables anyway.
  */
 export const checkPerformance = (ctx: CheckContext, sig: FunctionSig): void => {
-  const body = sig.decl.body;
+  const body = sig.body;
   if (!body) return;
   walkNode({ ctx, loops: [], declared: [], declaredDepth: [] }, body);
 };

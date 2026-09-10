@@ -9,6 +9,32 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **Arrow functions declare a function (WP22 stage A, stage0).** `const double
+  = (n: i32): i32 => n * 2` at module level declares a *function*, not a value,
+  and takes its signature from the arrow's own annotations — so nothing needs
+  the function type Phase 0 forbids. A concise body (`=> n * 2`) means exactly
+  what a block with one `return` means, and lowers through the same
+  `emitReturnValue`. The `function` keyword still declares the same thing and
+  is now the legacy spelling.
+
+  **The two spellings emit byte-identical IR**, which is what makes the
+  migration ahead verifiable: the emitter iterates checked `FunctionSig`s and
+  never looks at the declaration's syntax kind, so one program written both
+  ways diffs clean. `FunctionSig` gains a normalised `body` (a `Block` or the
+  concise expression) and a `nameNode` — an arrow has no name of its own, so a
+  diagnostic that names the function points at the `const`'s identifier.
+
+  A function is still not a value in either spelling: the arrow form registers
+  in the function table and never in `program.constants`, so `const alias =
+  double` is `` Unknown identifier `double` `` exactly as it always was for
+  `function`. Rejections: `reject_arrow_let`, `reject_arrow_annotated`,
+  `reject_arrow_return_type`, `reject_arrow_as_value`.
+
+  The positive golden waits for stage B, and finding out why corrected the
+  plan: every program in `tests/cases/` is compiled by **both** compilers, so
+  an arrow program there fails `tests/self/ir_oracle.js` with `1 rejected by
+  stage1` until stage1 parses arrows too.
+
 - **A plan for arrow functions (WP22, `docs/wp22-arrow-functions.md`).**
   `const f = (n: i32): i32 => n * 2` becomes how AmritScript declares a
   function, and `function` becomes legacy. The note's first job is to establish
