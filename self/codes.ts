@@ -40,7 +40,7 @@ export const TOOLCHAIN: string = "AS0002";
 export const INTERNAL: string = "AS0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 337;
+export const RULE_COUNT: i32 = 339;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -104,6 +104,8 @@ export function diagnosticRules(): string[] {
     "AS2226",
     ": a `Result` is immutable once built (return a new `ok(...)` or `err(...)` instead)",
     "AS2028",
+    ": a `Result` is immutable once built (return a new `Ok(...)` or `Err(...)` instead)",
+    "AS2270",
     "`; check the nullable side against `null` first, then compare the narrowed values",
     "AS2114",
     "` is not supported; a module has no top-level code, so only `const` is available",
@@ -334,6 +336,8 @@ export function diagnosticRules(): string[] {
     "AS2212",
     "Spread in array literals is not supported",
     "AS2237",
+    "Unary `+` is forbidden; it converts, and ",
+    "AS2271",
     " (array length is read-only; use `push`)",
     "AS2002",
     "`for...of` declares exactly one variable",

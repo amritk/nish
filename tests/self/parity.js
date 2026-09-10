@@ -109,7 +109,7 @@ const DECLARED = [
       // Every other line has to match as it stands: only the *repetition* of
       // the cycle line is declared, and only when stage1 reported one of them.
       const rest = (t) => t.split("\n").filter((l) => !cycle.test(l)).join("\n");
-      return zero.length > one.length && one.length >= 1 && rest(want) === rest(got);
+      return zero.length > one.length && one.length > 0 && rest(want) === rest(got);
     },
     why: "stage0 reports an inheritance cycle once per class in it and stage1 once. The second report is an artefact of the throw: `collectStructMembers` sets `collected = \"collecting\"` and the `CompileError` leaves the function without ever clearing it, so the next class of the cycle finds a stale marker and reports itself too. stage1 has no throw to leave the marker behind, and reproducing it by hand — returning early and leaving `collecting` set — makes the compiler *loop*, because `resolveBase` collects the base recursively and the pair then re-enter each other. A caret is not worth an infinite loop in the self-hosted compiler; the first diagnostic is identical and refuses the program on both sides (`tests/cases/reject_cls_extends_cycle`).",
   },
