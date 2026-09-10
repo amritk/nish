@@ -16,6 +16,7 @@
 
 import { LANGUAGE } from "./branding";
 import { CheckContext, NUMBER_MODE_I32 } from "./context";
+import { AliasInfo } from "./program";
 import {
   N_LIST,
   N_TYPE_ARRAY,
@@ -206,13 +207,20 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
     return ctx.table.arrayOf(alias);
   }
 
+  // A `type` alias is the type it names, so it answers here and the caller
+  // never learns that a name was involved (docs/LANGUAGE.md, Type aliases).
+  const declared = ctx.program.alias(name);
+  if (declared !== null) {
+    return aliasType(declared, ctx);
+  }
+
   // A class or interface: one this module declares or imports. A name that is
   // imported but not yet bound resolves provisionally, exactly as stage0 does,
   // and pass 1b rejects it if it turns out to name a function or a constant.
   if (ctx.program.typeNames.has(name)) {
-    const declared = ctx.program.struct(name);
-    if (declared !== null) {
-      return declared.type;
+    const struct = ctx.program.struct(name);
+    if (struct !== null) {
+      return struct.type;
     }
     ctx.program.importsUsedAsTypes.add(name);
     return ctx.table.structOf(name);
@@ -288,4 +296,56 @@ function resolveNullableUnion(node: Node, ctx: CheckContext): i32 {
     );
   }
   return ctx.table.nullableOf(inner);
+}
+
+/**
+ * Whether `name` is a type the language already spells for itself, and so may
+ * not be taken by a `type` alias. A keyword like `string` is resolved from the
+ * syntax, and `i32` or `Result` before any declared name is consulted, so an
+ * alias under one of these names would simply never be looked at -- silently,
+ * which is the part worth refusing.
+ */
+export function builtinTypeName(name: string): boolean {
+  if (scalarNamed(name, NUMBER_MODE_I32) >= 0) {
+    return true;
+  }
+  if (typedArrayElement(name) >= 0) {
+    return true;
+  }
+  return (
+    name === "any" ||
+    name === "unknown" ||
+    name === "undefined" ||
+    name === "never" ||
+    name === "Array" ||
+    name === "ReadonlyArray" ||
+    name === "Result"
+  );
+}
+
+/**
+ * The type `info` names, resolved once. A second reference gets the memo, and
+ * a reference reached from `info`'s own right-hand side is the cycle — caught
+ * here rather than followed forever, the way `constants.ts` catches a constant
+ * defined in terms of itself.
+ *
+ * A failed resolution clears the mark instead of memoising `T_ERROR`, so a
+ * second use reports the same real error rather than a spurious cycle.
+ */
+export function aliasType(info: AliasInfo, ctx: CheckContext): i32 {
+  if (info.resolving) {
+    ctx.error(info.decl, `Type alias \`${info.name}\` is defined in terms of itself`);
+    return T_ERROR;
+  }
+  if (info.type >= 0) {
+    return info.type;
+  }
+  info.resolving = true;
+  const resolved = resolveType(info.decl.children[1], ctx);
+  info.resolving = false;
+  if (resolved === T_ERROR) {
+    return T_ERROR;
+  }
+  info.type = resolved;
+  return resolved;
 }

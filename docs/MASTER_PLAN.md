@@ -759,3 +759,24 @@ be migrated, and `self/` must be arrows before `function` can be rejected.
 Stages A and B are cheap and strictly additive; C and D are 1,401 rewrites for
 no expressiveness, and are worth taking incrementally — new code in arrows, a
 file converted when it is opened for another reason — rather than as a flag day.
+
+The rest of the language surface has no owner either, and a review of the
+corpus for the sentence *the language has no X* turned up eight candidates
+that belong to nobody: [wp23-language-surface.md](wp23-language-surface.md) is
+the plan of record, and its most useful half is the three it **refuses**.
+Non-generic `type` aliases and a numeric `enum` are being built now — both are
+pure checker work that changes no byte of IR, the alias because `Int32Array`
+already establishes that an alias is the type it names, the enum because
+`self/` stands 171 module constants in for three of them and nothing stops
+passing a token kind where a node kind belongs. Module-level mutable state is
+the one functional gap, since stage1 cannot emit the `--json` object for an
+internal compiler error and orientation rule 7 says every failure is one of
+those objects; the note designs the narrow version — module-private, scalar,
+thread-local by construction — and then argues against building it, because a
+boolean parameter costs seven ugly signatures and no proofs while the first
+writable global costs a symbol in the flat namespace WP21 has to fix and a row
+from WP20's asset table. Pairs and compile-time function parameters are both
+deferred to WP18 rather than given syntax of their own, and `for...of` over a
+string, a string `switch` and `?.` are declined with the argument written out:
+each is refused by a rule the project already accepted, and a plan of record
+that says what it turned down is worth more than one that only says yes.
