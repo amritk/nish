@@ -266,7 +266,10 @@ function resolveNullableUnion(node: Node, ctx: CheckContext): i32 {
     }
   }
   if (inner < 0 || nulls !== 1 || node.children.length !== 2) {
-    return ctx.errorType(node, "Union types other than `T | null` are forbidden in " + LANGUAGE);
+    return ctx.errorType(
+      node,
+      "Union types other than `T | null` are forbidden in " + LANGUAGE + " (values have one fixed layout)"
+    );
   }
   if (inner === T_ERROR) {
     return T_ERROR;

@@ -7,6 +7,7 @@
  * `binaryCheckers`.
  */
 import ts from "typescript";
+import { LANGUAGE } from "../branding.js";
 import { BOOL, F64, I32, assignable, isInteger, isNumeric, sameType, typeToString } from "../types.js";
 import { arrayExpressionCheckers, installArrayAssignmentCheckers } from "./arrays.js";
 import { bitwiseBinaryCheckers, bitwiseUnaryCheckers } from "./bitwise.js";
@@ -88,9 +89,21 @@ const checkNot: UnaryChecker = (ctx, expr, scope) => {
   return BOOL;
 };
 
+/**
+ * Unary `+` has a refusal of its own rather than the table's fallback, because
+ * the fallback says only that the operator is unsupported and the interesting
+ * half is *why*: `+x` is a conversion, and this language has none. stage1 said
+ * this sentence first and `--parity` was the only thing comparing the two
+ * (WP19 §A3); `tests/cases/reject_unary_plus` pins it on both.
+ */
+const checkUnaryPlus: UnaryChecker = (ctx, expr) => {
+  throw ctx.error(`Unary \`+\` is forbidden; it converts, and ${LANGUAGE} has no conversions`, expr);
+};
+
 /** Prefix operators keyed by operator token, like `binaryCheckers` for binary ones. */
 export const unaryCheckers: CheckerTable<UnaryChecker> = {
   [ts.SyntaxKind.MinusToken]: checkNegate,
+  [ts.SyntaxKind.PlusToken]: checkUnaryPlus,
   [ts.SyntaxKind.ExclamationToken]: checkNot,
   ...bitwiseUnaryCheckers, // `~`
   ...controlFlowUnaryCheckers,

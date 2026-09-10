@@ -40,7 +40,7 @@ export const TOOLCHAIN: string = "AS0002";
 export const INTERNAL: string = "AS0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 339;
+export const RULE_COUNT: i32 = 342;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -104,6 +104,8 @@ export function diagnosticRules(): string[] {
     "AS2226",
     ": a `Result` is immutable once built (return a new `ok(...)` or `err(...)` instead)",
     "AS2028",
+    ": a `Result` is immutable once built (return a new `Ok(...)` or `Err(...)` instead)",
+    "AS2270",
     "`; check the nullable side against `null` first, then compare the narrowed values",
     "AS2114",
     "` is not supported; a module has no top-level code, so only `const` is available",
@@ -169,7 +171,7 @@ export function diagnosticRules(): string[] {
     " (it has `isOk`, `isErr`, `orReturn`, `unwrapOr` and `expect`)",
     "AS2005",
     "` takes its signature from the arrow; drop the annotation on `",
-    "AS2270",
+    "AS2273",
     "Template literal hole must be string, number, or boolean, got ",
     "AS2238",
     "`Array` needs exactly one type argument, e.g. `Array<number>`",
@@ -336,6 +338,8 @@ export function diagnosticRules(): string[] {
     "AS2212",
     "Spread in array literals is not supported",
     "AS2237",
+    "Unary `+` is forbidden; it converts, and ",
+    "AS2271",
     " (array length is read-only; use `push`)",
     "AS2002",
     "`for...of` declares exactly one variable",
@@ -367,13 +371,13 @@ export function diagnosticRules(): string[] {
     "Cannot declare a variable of type void",
     "AS2183",
     "` must be declared `const`, not `let`",
-    "AS2269",
+    "AS2272",
     "`break` outside of a loop or `switch`",
     "AS2122",
     "`join` expects 0 or 1 arguments, got ",
     "AS2138",
     "A function declaration binds one name",
-    "AS2271",
+    "AS2274",
     "Only simple variables can be assigned",
     "AS2228",
     " (use --number-mode f64 or toF64(x))",
@@ -566,6 +570,8 @@ export function diagnosticRules(): string[] {
     "AS2180",
     ": cannot create the result",
     "AS4003",
+    "` expects a value of type ",
+    "AS2269",
     "`, which already extends `",
     "AS2110",
     "`Reflect` is forbidden in ",

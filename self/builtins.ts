@@ -163,7 +163,10 @@ export function checkNamespaceProperty(
   }
   if (namespace === "process" && member === "argv") {
     if (!ctx.entryHasMain) {
-      return ctx.errorType(expr, "`process.argv` requires a `main` entry point");
+      return ctx.errorType(
+        expr,
+        "`process.argv` requires a `main` entry point (this program has no `export function main`)"
+      );
     }
     ctx.program.usesArgv = true;
     return ctx.table.arrayOf(T_STRING);
@@ -186,6 +189,26 @@ export function checkNamespaceProperty(
 // ---- Dotted calls -------------------------------------------------------------------
 
 /** `console.log(x)`, `Math.sqrt(x)`, `process.exit(n)`, `Arena.reset()`, ... */
+/**
+ * Every dotted builtin, in the order `src/checker/strings.ts` builds its
+ * `builtinCalls` table — `Object.keys` there, so the order is the table's and
+ * the string is the tail of the one refusal stage0 has for an unknown one.
+ * stage1 refused in four places with four shorter sentences and named the
+ * receiver rather than the call when the namespace itself was unknown, so
+ * `foo.bar(1)` was `Unknown identifier \`foo\`` here and
+ * `Unknown builtin \`foo.bar\` (supported: …)` there (WP19 §A3,
+ * `tests/cases/reject_unknown_builtin`).
+ */
+const SUPPORTED_BUILTINS: string =
+  "console.log, console.error, String.fromCharCode, Math.sqrt, Math.floor, Math.ceil, Math.trunc, " +
+  "Math.round, Math.sin, Math.cos, Math.exp, Math.log, Math.pow, Math.abs, Math.min, Math.max, " +
+  "Math.random, process.exit, Arena.reset, Arena.mark, Arena.release, Arena.used";
+
+/** stage0's one sentence for a call whose dotted name is not a builtin. */
+function unknownBuiltin(ctx: CheckContext, at: Node, name: string): i32 {
+  return ctx.errorType(at, `Unknown builtin \`${name}\` (supported: ${SUPPORTED_BUILTINS})`);
+}
+
 export function checkBuiltinCall(ctx: CheckContext, call: Node, scope: Scope): i32 {
   const access = call.children[0];
   const receiver = access.children[0];
@@ -197,7 +220,9 @@ export function checkBuiltinCall(ctx: CheckContext, call: Node, scope: Scope): i
   const member = access.text;
   const name = `${namespace}.${member}`;
   if (!isNamespace(namespace)) {
-    return ctx.errorType(receiver, `Unknown identifier \`${namespace}\``);
+    // stage0 looks the whole dotted name up in one table and names the call,
+    // not the receiver: the callee is what was not found.
+    return unknownBuiltin(ctx, call.children[0], name);
   }
   if (namespace === "console") {
     return checkConsole(ctx, call, args, name, member, scope);
@@ -223,7 +248,7 @@ export function checkBuiltinCall(ctx: CheckContext, call: Node, scope: Scope): i
     }
     return T_STRING;
   }
-  return ctx.errorType(call, `Unknown builtin \`${name}\``);
+  return unknownBuiltin(ctx, call.children[0], name);
 }
 
 function checkConsole(
@@ -235,7 +260,7 @@ function checkConsole(
   scope: Scope
 ): i32 {
   if (member !== "log" && member !== "error") {
-    return ctx.errorType(call, `Unknown builtin \`${name}\``);
+    return unknownBuiltin(ctx, call.children[0], name);
   }
   if (args.children.length !== 1) {
     return ctx.errorType(call, `\`${name}\` expects exactly 1 argument, got ${args.children.length}`);
@@ -300,7 +325,7 @@ function checkMath(
     checkBuiltinArity(ctx, call, name, args, 0);
     return T_F64;
   }
-  return ctx.errorType(call, `Unknown builtin \`${name}\``);
+  return unknownBuiltin(ctx, call.children[0], name);
 }
 
 function requireF64(ctx: CheckContext, name: string, arg: Node, scope: Scope): void {
@@ -327,7 +352,7 @@ function checkProcess(
   scope: Scope
 ): i32 {
   if (member !== "exit") {
-    return ctx.errorType(call, `Unknown builtin \`${name}\``);
+    return unknownBuiltin(ctx, call.children[0], name);
   }
   if (checkBuiltinArity(ctx, call, name, args, 1)) {
     checkArgumentType(ctx, args.children[0], scope, name, T_I32);
@@ -360,7 +385,7 @@ function checkArena(
     requireStatementPosition(ctx, call, name);
     return T_VOID;
   }
-  return ctx.errorType(call, `Unknown builtin \`${name}\``);
+  return unknownBuiltin(ctx, call.children[0], name);
 }
 
 // ---- Plain calls ----------------------------------------------------------------------

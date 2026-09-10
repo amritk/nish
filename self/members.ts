@@ -15,7 +15,20 @@ import { checkResultMethod, checkResultProperty } from "./result";
 import { fieldOwner } from "./structs";
 import { CheckContext } from "./context";
 import { assignInto, checkExpression } from "./expressions";
-import { N_IDENT, N_INDEX, N_MEMBER, N_PROPERTY, N_SUPER, N_THIS, Node } from "./nodes";
+import {
+  N_ARRAY,
+  N_CONDITIONAL,
+  N_IDENT,
+  N_INDEX,
+  N_MEMBER,
+  N_NUMBER,
+  N_PAREN,
+  N_PROPERTY,
+  N_SUPER,
+  N_THIS,
+  N_UNARY,
+  Node,
+} from "./nodes";
 import { FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program";
 import { Scope } from "./symbols";
 import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types";
@@ -71,10 +84,12 @@ export function checkMember(ctx: CheckContext, expr: Node, scope: Scope): i32 {
     return T_ERROR;
   }
   if (ctx.table.isNullable(receiver)) {
-    return ctx.errorType(
+    // Against the property name, where stage0 puts it (`expr.name`).
+    ctx.errorAtProperty(
       expr,
       `Cannot read property \`${expr.text}\` of \`${ctx.table.typeName(receiver)}\`; ${nullableHint(ctx, receiver, receiverExpr)}`
     );
+    return T_ERROR;
   }
   if (receiver === T_STRING) {
     return checkStringProperty(ctx, expr, receiver);
@@ -88,7 +103,8 @@ export function checkMember(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   if (ctx.table.isStruct(receiver)) {
     return checkStructProperty(ctx, expr, receiver);
   }
-  return ctx.errorType(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`);
+  ctx.errorAtProperty(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`);
+  return T_ERROR;
 }
 
 function checkStructProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 {
@@ -100,7 +116,8 @@ function checkStructProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 
   if (field === null) {
     const hint = info.method(expr.text) !== null ? " (it is a method; call it)" : "";
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
-    return ctx.errorType(expr, `Unknown field \`${expr.text}\` on ${kind} \`${info.name}\`${hint}`);
+    ctx.errorAtProperty(expr, `Unknown field \`${expr.text}\` on ${kind} \`${info.name}\`${hint}`);
+    return T_ERROR;
   }
   return field.type;
 }
@@ -123,10 +140,12 @@ export function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i3
   }
   const args = expr.children[1];
   if (ctx.table.isNullable(receiver)) {
-    return ctx.errorType(
+    // Against the method name, where stage0 puts it (`access.name`).
+    ctx.errorAtProperty(
       access,
       `Cannot call \`${access.text}\` on \`${ctx.table.typeName(receiver)}\`; ${nullableHint(ctx, receiver, receiverExpr)}`
     );
+    return T_ERROR;
   }
   if (receiver === T_STRING) {
     return checkStringMethod(ctx, expr, access, args, scope);
@@ -138,7 +157,8 @@ export function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i3
     return checkArrayMethod(ctx, expr, access, args, receiver, scope);
   }
   if (!ctx.table.isStruct(receiver)) {
-    return ctx.errorType(access, `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}`);
+    ctx.errorAtProperty(access, `Unknown method \`${access.text}\` on ${ctx.table.typeName(receiver)}`);
+    return T_ERROR;
   }
   const info = structOf(ctx, receiver);
   if (info === null) {
@@ -148,21 +168,31 @@ export function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i3
   if (method === null) {
     const hint = info.field(access.text) !== null ? " (it is a field, not a method)" : "";
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
-    return ctx.errorType(access, `Unknown method \`${access.text}\` on ${kind} \`${info.name}\`${hint}`);
+    ctx.errorAtProperty(access, `Unknown method \`${access.text}\` on ${kind} \`${info.name}\`${hint}`);
+    return T_ERROR;
   }
-  checkMethodArguments(ctx, expr, method, args, `${info.name}.${access.text}`, scope);
+  checkMethodArguments(ctx, expr, method, args, `${info.name}.${access.text}`, scope, false);
   ctx.program.nodeCallees[expr.id] = method;
   return method.returnType;
 }
 
-/** `args` against `callee`'s parameters after `this`. */
+/**
+ * `args` against `callee`'s parameters after `this`.
+ *
+ * `literalContext` says whether a bare numeric or array literal may take the
+ * parameter's type: a constructor's arguments do (stage0's numeric walk names
+ * `new Pixel(255, 0, 0)`), a method's and `super`'s do not
+ * (`takesDeclaredContext`). Everything else — an object literal, a `null` —
+ * takes it either way.
+ */
 export function checkMethodArguments(
   ctx: CheckContext,
   call: Node,
   callee: FunctionSig,
   args: Node,
   what: string,
-  scope: Scope
+  scope: Scope,
+  literalContext: boolean
 ): void {
   const arity = callee.paramTypes.length - 1;
   if (args.children.length !== arity) {
@@ -173,7 +203,8 @@ export function checkMethodArguments(
   while (i < arity) {
     const arg = args.children[i];
     const want = callee.paramTypes[i + 1];
-    const got = checkExpression(ctx, arg, scope, want);
+    const context = literalContext || takesDeclaredContext(arg) ? want : -1;
+    const got = checkExpression(ctx, arg, scope, context);
     if (got !== T_ERROR && !ctx.table.assignable(got, want)) {
       const spelled = ctx.table.typeName(want);
       ctx.error(arg, `Argument ${i + 1} of \`${what}\`: expected ${spelled}, got ${ctx.table.typeName(got)}`);
@@ -203,7 +234,7 @@ export function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   }
   const ctor = info.effectiveConstructor(); // own, or the nearest ancestor's
   if (ctor !== null) {
-    checkMethodArguments(ctx, expr, ctor, args, `new ${name}`, scope);
+    checkMethodArguments(ctx, expr, ctor, args, `new ${name}`, scope, true);
     ctx.program.nodeCallees[expr.id] = ctor;
   } else if (args.children.length > 0) {
     ctx.error(
@@ -212,6 +243,47 @@ export function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 {
     );
   }
   return info.type;
+}
+
+/**
+ * Whether a declared type may serve as `value`'s contextual type in a position
+ * that stage0's *object-literal* walk names and its numeric and array walks do
+ * not — an object literal's property value, and a method's or `super`'s
+ * argument.
+ *
+ * stage0 answers the question with three separate walks up the parent chain
+ * and stage1 threads one `want` down, so where they part has to be written
+ * here. `contextualType` in `src/checker/classes.ts` names both positions,
+ * which is why an object literal or a `null` in either does get the declared
+ * type; the numeric walk (`contextType` in `src/checker/math.ts`, the
+ * enumerated table in `docs/LANGUAGE.md`) names neither, and the array one
+ * (`contextualType` in `src/checker/arrays.ts`) names neither, so a numeric
+ * literal there takes the mode's default and `[]` there has no element type at
+ * all and is refused. Handing `want` to those two made stage1 compile
+ * `{ b: 255 }` for a `u8` field, `{ xs: [] }` and `b.get(-1)` for a method
+ * whose parameter is an `i32` — all of which stage0 refuses
+ * (`reject_struct_field_u8`, `reject_struct_field_empty_array`,
+ * `reject_struct_field_f64`, `reject_method_arg_literal`).
+ *
+ * A `new` argument is *not* one of these: stage0's numeric walk names it
+ * (`new Pixel(255, 0, 0)` in the table), so a constructor's parameters do give
+ * a literal its type on both sides.
+ *
+ * Parentheses, a leading minus and both arms of a ternary are transparent in
+ * stage0's walks, so they are transparent here too: `{ code: c ? 1 : 2 }` gets
+ * no more context than `{ code: 1 }` does.
+ */
+export function takesDeclaredContext(value: Node): boolean {
+  if (value.kind === N_PAREN) {
+    return takesDeclaredContext(value.children[0]);
+  }
+  if (value.kind === N_CONDITIONAL) {
+    return takesDeclaredContext(value.children[1]) && takesDeclaredContext(value.children[2]);
+  }
+  if (value.kind === N_UNARY) {
+    return takesDeclaredContext(value.children[0]);
+  }
+  return value.kind !== N_NUMBER && value.kind !== N_ARRAY;
 }
 
 /** `{ x: 1, y: 2 }`, which needs a contextual class or interface type. */
@@ -248,12 +320,14 @@ export function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, 
       continue;
     }
     seen.push(prop.text);
-    const got = checkExpression(ctx, prop.children[0], scope, field.type);
+    const value = prop.children[0];
+    const context = takesDeclaredContext(value) ? field.type : -1;
+    const got = checkExpression(ctx, value, scope, context);
     if (got !== T_ERROR && !ctx.table.assignable(got, field.type)) {
       const spelled = ctx.table.typeName(field.type);
       ctx.error(
-        prop.children[0],
-        `Field \`${prop.text}\` of \`${info.name}\` is ${spelled}, got ${ctx.table.typeName(got)}`
+        value,
+        `Field \`${prop.text}\` of \`${info.name}\` expects a value of type ${spelled}, got ${ctx.table.typeName(got)}`
       );
     }
   }
@@ -308,7 +382,8 @@ export function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scop
   const field = info.field(target.text);
   if (field === null) {
     const kind = info.kind === STRUCT_CLASS ? "class" : "interface";
-    return ctx.errorType(target, `Unknown field \`${target.text}\` on ${kind} \`${info.name}\``);
+    ctx.errorAtProperty(target, `Unknown field \`${target.text}\` on ${kind} \`${info.name}\``);
+    return T_ERROR;
   }
   if (field.readonly && !assignableReadonly(ctx, info, target, receiverExpr, expr.text)) {
     const owner = fieldOwner(info, field.name);
@@ -379,13 +454,14 @@ function checkSuperMethodCall(ctx: CheckContext, expr: Node, access: Node, scope
         `\`super.${access.text}\` is not supported: inherited fields are read and written as \`this.${access.text}\` (only \`super.method(...)\` is allowed)`
       );
     }
-    return ctx.errorType(access, `Unknown method \`${access.text}\` on class \`${base.name}\``);
+    ctx.errorAtProperty(access, `Unknown method \`${access.text}\` on class \`${base.name}\``);
+    return T_ERROR;
   }
   // `super` is bound to the `this` local so the attribute analysis sees the
   // pointer flow into the callee.
   ctx.program.nodeLocals[access.children[0].id] = self;
   ctx.program.nodeTypes[access.children[0].id] = base.type;
-  checkMethodArguments(ctx, expr, method, expr.children[1], `${base.name}.${access.text}`, scope);
+  checkMethodArguments(ctx, expr, method, expr.children[1], `${base.name}.${access.text}`, scope, false);
   ctx.program.nodeCallees[expr.id] = method;
   return method.returnType;
 }
@@ -394,7 +470,10 @@ function checkSuperMethodCall(ctx: CheckContext, expr: Node, access: Node, scope
 export function checkSuperCall(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   const current = ctx.current;
   if (current === null || current.role !== ROLE_CONSTRUCTOR) {
-    return ctx.errorType(expr, "`super(...)` is only valid as the first statement of the constructor");
+    return ctx.errorType(
+      expr,
+      "`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class"
+    );
   }
   const owner = current.owner;
   const base: StructInfo | null = owner === null ? null : owner.base;
@@ -408,7 +487,7 @@ export function checkSuperCall(ctx: CheckContext, expr: Node, scope: Scope): i32
     }
     return T_VOID;
   }
-  checkMethodArguments(ctx, expr, ctor, expr.children[1], "super", scope);
+  checkMethodArguments(ctx, expr, ctor, expr.children[1], "super", scope, false);
   ctx.program.nodeCallees[expr.id] = ctor;
   return T_VOID;
 }
@@ -426,7 +505,8 @@ export function checkStringProperty(ctx: CheckContext, expr: Node, receiver: i32
   if (expr.text === "length") {
     return ctx.numberType();
   }
-  return ctx.errorType(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`);
+  ctx.errorAtProperty(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`);
+  return T_ERROR;
 }
 
 function checkIndexArgument(ctx: CheckContext, arg: Node, scope: Scope, name: string): void {
@@ -482,5 +562,6 @@ export function checkStringMethod(
     }
     return T_BOOL;
   }
-  return ctx.errorType(access, `Unknown method \`${name}\` on string (supported: ${STRING_METHODS})`);
+  ctx.errorAtProperty(access, `Unknown method \`${name}\` on string (supported: ${STRING_METHODS})`);
+  return T_ERROR;
 }

@@ -115,7 +115,7 @@ export class Compilation {
       // A missing module is reported and the others still load; `check()` stops before binding.
       this.sink.recover(() => {
         const target = this.resolveSpecifier(unit, imp);
-        unit.resolved.set(imp.specifier, this.load(target, displayName(target), undefined, false));
+        unit.resolved.set(imp.specifier, this.load(target, importedName(unit, target), undefined, false));
       });
     }
     return unit;
@@ -127,7 +127,10 @@ export class Compilation {
     else if (!resolved.endsWith(".ts")) resolved += ".ts";
     if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
       throw new CompileError(
-        `Cannot find module \`${imp.specifier}\` (looked for ${displayName(resolved)})`,
+        // Named from the importer, as `importedName` names one that *is* found:
+        // a diagnostic about a missing file should not depend on the directory
+        // the compiler was run from any more than the IR does (WP19 §A3).
+        `Cannot find module \`${imp.specifier}\` (looked for ${importedName(importer, resolved)})`,
         imp.node.moduleSpecifier,
         importer.sourceFile
       );
@@ -266,7 +269,23 @@ export class Compilation {
   }
 }
 
-function displayName(absPath: string): string {
-  const rel = path.relative(process.cwd(), absPath);
-  return rel && !rel.startsWith("..") ? rel : absPath;
+/**
+ * The name an imported module carries — in its IR header, its `DIFile` and its
+ * diagnostics — which is the specifier resolved against **the name the importer
+ * was given**, not against the working directory.
+ *
+ * The difference shows only when a caller names the entry absolutely, and then
+ * it is the whole difference: cwd-relative naming makes the emitted IR depend
+ * on where the compiler was run from, and it made the two compilers disagree
+ * about `ModuleID`, `source_filename` and `-g`'s `DIFile` on every multi-module
+ * program a build system compiles by absolute path (WP19 §A3, 12,209 rows of
+ * `--parity`). stage1 has no working directory to relativise against and is not
+ * going to grow one for this — `runtime.c` has eight bytes left of its 4 KB
+ * budget — so the rule that survives is the one that needs no cwd, which is
+ * also the one that makes a build reproducible. Named relatively, as every
+ * caller in this repository names it, the answer is what it always was.
+ */
+function importedName(importer: ModuleUnit, target: string): string {
+  const rel = path.relative(path.dirname(importer.path), target);
+  return path.join(path.dirname(importer.fileName), rel);
 }

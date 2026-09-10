@@ -167,13 +167,31 @@ takes that type (`src/checker/math.ts`, `contextualLiteralType`;
 | a field or element assignment target | `p.b = 255`, `bytes[i] = 255` | the field's / element's type |
 | a ternary arm, from the conditional's own context | `const x: f64 = c ? 1.5 : 2.5` | `f64` (`tests/cases/f64_ternary_literal`) |
 
-`-5` and `(5)` count as the literal. "Known type" means an already-checked
+`-5` and `(5)` count as the literal. **The table is the whole list**, so a
+position that is not on it leaves the literal at the mode's default however
+obvious the intended type looks: an object literal's property value is not on
+it, so `const p: Pixel = { b: 255 }` is `` Field `b` of `Pixel` expects a value
+of type u8, got i32 `` and has to be written `toU8(255)`
+(`tests/cases/reject_struct_field_u8`, and `reject_struct_field_f64` for the
+same position in f64 mode); nor is a `Result` payload, so `Ok(3)` for a
+`Result<i32, string>` is refused in f64 mode
+(`tests/cases/reject_res_ok_f64`), as `unwrapOr`'s fallback is
+(`reject_res_unwrap_or_f64`); and nor is a **method's** argument, which is why
+the table says a user *function* and a constructor — `b.get(-1)` on a method
+whose parameter is an `i32` is an f64 in f64 mode
+(`tests/cases/reject_method_arg_literal`), and so is `super`'s argument.
+`xs.push(3)` and `xs.indexOf(3)` are on the list only through a receiver that
+is a plain name: `b.xs.push(0)` is not (`reject_push_field_literal`). "Known type" means an already-checked
 left operand, a variable, a field or element of one of those, or a call to a
 user function or to
 `toI32/toI64/toU8/toU16/toU32/toU64/toF64`. Only the literal's *immediate* context counts: in i32
 mode `const f: f64 = 0.1 + 0.2` is rejected because `0.1` is an operand of
 `+` whose other operand has no known type yet; write `const a: f64 = 0.1;
-const f = a + 0.2` *(CLI only)*. A literal in an integer context must be integral
+const f = a + 0.2` *(CLI only)*. The same rule refuses `const b: u8 = 1 + 2`,
+which is a sum of two `i32` literals rather than a literal in a `u8` context
+(`tests/cases/reject_bin_operand_context`), and `0xc0 | (cp >> 6)` in f64 mode,
+because a shift is not one of the shapes "known type" names however plainly it
+is an integer: give it a name first, or write `toI32(0xc0)`. A literal in an integer context must be integral
 (`` Non-integer literal `1.5` where i64 is expected ``,
 `tests/cases/reject_i64_literal_float`); in an `i64` context it must also be
 at most 2^53 in magnitude (`` exceeds 2^53 and cannot be written exactly ``
@@ -944,7 +962,14 @@ function swap(p: Pair): Pair {
   enclosing literal; otherwise
   `Object literal needs a contextual class or interface type`
   (`tests/cases/reject_cls_literal_no_context`, `cls_interface_literal`,
-  `cls_nested`).
+  `cls_nested`). That context reaches a *nested* object literal and a `null`,
+  and stops there: a numeric literal written for a field keeps the mode's
+  default type (see "Numeric literals"), and `[]` has no element type at all
+  in this position — `{ xs: [] }` is `Empty array literal needs a type
+  annotation` and wants a named array instead
+  (`tests/cases/reject_struct_field_empty_array`). A value of the wrong type
+  is `` Field `code` of `IoError` expects a value of type i32, got f64 ``
+  (`reject_struct_field_f64`).
 - `readonly` on an interface field forbids every assignment (`i.a = 2` is
   `` Cannot assign to readonly field `a` of `Config` ``,
   `tests/cases/reject_cls_readonly_interface`); literals still set it. The
@@ -1166,7 +1191,7 @@ under [Semantics decisions](#semantics-decisions).
 | `&& \|\|` | two `boolean` | `boolean` | short-circuit: `br` + `phi` | `cf_logical`; `reject_cf_logical_numbers` (`requires boolean operands`) |
 | `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch` |
 | `x = e` | mutable local, field, or element; `e` of the target's type | the target's type | `store` | `locals`, `cls_field_write`, `arr_index_read_write` |
-| `x op= e` (`+= -= *= /= %=`) | numeric mutable local, numeric field, or numeric element; same type | the target's type | load, op, store | `cf_compound_assign`, `cls_compound_field`, `arr_index_read_write`; `reject_cf_compound_const` |
+| `x op= e` (`+= -= *= /= %=`) | numeric mutable local, numeric field, or numeric element; same type | the target's type | load, op, store | `cf_compound_assign`, `cls_compound_field`, `arr_index_read_write`; `reject_cf_compound_const`, `reject_cf_compound_string`, `reject_cf_compound_widths` |
 | `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local, field, or element of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask; a field is addressed by one GEP and an element bounds-checked once, so the target expression is evaluated exactly once | `bit_compound`, `cls_field_bitwise_assign`, `arr_element_bitwise_assign`; `reject_cls_field_bitwise_readonly`, `reject_arr_element_bitwise_f64`; `tests/differential/corpus/bit_compound_target` |
 | `++x --x x++ x--` | numeric mutable local only | the new / old value | load, `add 1`, store | `cf_incdec`; `reject_cf_incdec_param`, `reject_cls_field_incdec` |
 | `,` | – | – | forbidden | `reject_comma_expression` |
@@ -1764,7 +1789,11 @@ where its memory lives and when it is reused.
    (`tests/cases/mem_stack_escape`). A site inside a loop gets one slot,
    reused every iteration (`tests/cases/mem_stack_loop`). Stack arrays are
    capped at 4096 bytes of data; a later `push` moves the elements to the
-   arena and the header stays valid. `--no-stack-alloc` turns this off.
+   arena and the header stays valid. The slot's type spells the length out,
+   and the length is read from the literal that made the site stackable in the
+   first place, so `--number-mode f64` — where the same literal reaches the
+   emitter as a converted register — allocates the same `[n x T]`
+   (`tests/cases/arr_stack_f64`). `--no-stack-alloc` turns this off.
 2. **Automatic arena scopes.** A function whose arena temporaries all die
    with it (a dynamic `new Array<T>(n)`, `push` growth on its own array, a
    string concatenation or template, a number printed by `console.log`, a
@@ -2009,6 +2038,9 @@ messages are exact for the cases cited; other rows quote
 | wrong arity | `` `f` expects 1 argument(s), got 2 `` | `reject_arity` |
 | mixed operand types | `` Operator `+` requires two operands of the same numeric type, got i32 and boolean `` | `reject_type_mismatch`, `reject_i64_mixed` |
 | string `+` number | `` ... got string and i32 (no implicit string conversion; use a template literal) `` | `reject_str_plus_number` |
+| arithmetic compound assignment | `` Operator `+=` requires two operands of the same numeric type, got string and string `` — one rule, naming the token that was written, for a local, a field and an element alike: the target must be numeric (so `+=` never concatenates) and the value must be exactly its type | `reject_cf_compound_string`, `reject_cf_compound_widths` |
+| object literal field of the wrong type | `` Field `code` of `IoError` expects a value of type i32, got f64 `` | `reject_struct_field_f64`, `reject_struct_field_u8` |
+| a dotted call that is not a builtin | `` Unknown builtin `foo.bar` (supported: console.log, console.error, String.fromCharCode, Math.sqrt, ...) `` — the callee is named, not its receiver, whether the receiver is a namespace or not | `reject_unknown_builtin`, `reject_arch_call` |
 | bitwise operator on a non-integer | `` Operator `&` requires two operands of the same integer type, got f64 and f64 `` (with `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) `` appended in that mode) / `` Operator `~` requires an integer operand, got f64 ``; a compound form names itself, `` Operator `&=` requires two operands of the same integer type, got f64 and f64 ``, for a local, a field and an element alike | `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not`, `reject_arr_element_bitwise_f64` |
 | bitwise operator on booleans | `` Operator `&` is not available on boolean (use `&&`) `` (`\|` names `\|\|`, `^` names `!==`, `~` names `!`) | `reject_bit_boolean` |
 | ordering on booleans / strings / structs | `` Operator `<` requires two numeric operands, got string and i32 `` | `reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |

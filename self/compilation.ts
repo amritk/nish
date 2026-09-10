@@ -99,6 +99,24 @@ export class Compilation {
    * object stage0 answers with (`self/compile.ts`).
    */
   unreadableRoot: string;
+  /**
+   * The whole-program attribute fixpoint, once it has been computed.
+   * `analyze()` memoises it here for the reason `src/compilation.ts` memoises
+   * its own: the emitter needs it and so does the `--emit-checked` dump, and
+   * the fixpoint is the most expensive thing either of them asks for.
+   */
+  facts: FactsTable | null;
+  /** How many diagnostics Phase 0 reported, over every module loaded so far. */
+  validationErrors: i32;
+  /**
+   * `--emit-ast` is answered from the parsed and validated modules, and stage0
+   * reaches its dump before it looks at anything pass 1 recorded — so a pass 1
+   * refusal must not stop the load here either. Phase 0 still does: stage0's
+   * validator throws, and a program it refuses prints no tree on either side.
+   */
+  dumpOnly: boolean;
+  /** The analysis units the fixpoint ran over, in `modules` order. */
+  analysisUnits: AnalysisUnit[];
 
   constructor(opts: Options) {
     this.opts = opts;
@@ -108,6 +126,10 @@ export class Compilation {
     this.modules = [];
     this.byPath = new StringMap();
     this.unreadableRoot = "";
+    this.facts = null;
+    this.analysisUnits = [];
+    this.validationErrors = 0;
+    this.dumpOnly = false;
   }
 
   entry(): ModuleUnit {
@@ -162,9 +184,35 @@ export class Compilation {
     this.modules.push(unit);
 
     // Phase 0 before pass 1, so what is forbidden by design is refused before
-    // the checker can report it as merely unsupported.
+    // the checker can report it as merely unsupported. The count around it is
+    // what `--emit-ast` reads: stage0 answers that flag from the parsed and
+    // *validated* modules and never checks anything, so a Phase 0 refusal
+    // stops the dump there and a pass 1 diagnostic — which stage0 has not
+    // reached — does not (`self/compile.ts`, WP19 §A3).
+    const beforeValidation = this.sink.count();
     validate(checker.ctx, file);
+    const failedValidation = this.sink.count() > beforeValidation;
+    this.validationErrors = this.validationErrors + (this.sink.count() - beforeValidation);
+    if (failedValidation) {
+      // Phase 0 refused the file, and that ends the compilation rather than
+      // going on to pass 1: stage0's validator `throw`s out of `load` and the
+      // driver reports the one diagnostic (`src/validator.ts`, `fail`). Going
+      // on meant the checker refused `any` a second time, from the annotation
+      // resolver, for one `any` in the source (WP19 §A3).
+      return false;
+    }
+    const beforeSignatures = this.sink.count();
     checker.collectSignatures(); // pass 1, which also validates the import syntax
+    // Pass 1 refused something in this module. Its specifiers are still
+    // *resolved* — a missing module is reported either way — but the modules
+    // that do exist are not loaded, so nothing they would have said is
+    // reported: stage0 stops at what this module got wrong, and a duplicate
+    // function in the entry hides an imported module's own refusals
+    // (`tests/link/main_in_import` in f64 mode, `tests/link/missing_module`
+    // for the half that still reports). `--emit-ast` is exempt: it prints the
+    // tree of every module it managed to read, and stage0 reaches that dump
+    // before it looks at anything pass 1 recorded.
+    const signaturesFailed = this.sink.count() > beforeSignatures && !this.dumpOnly;
     const dir = dirname(path);
     let ok = true;
     for (const imp of checker.program.imports) {
@@ -173,13 +221,17 @@ export class Compilation {
       }
       const target = resolveModule(dir, imp.specifier);
       if (readFileSyncOrNull(target) === null) {
-        this.sink.report(
-          source,
-          imp.node.start,
-          imp.node.end,
+        // At the module specifier, where stage0 points
+        // (`imp.node.moduleSpecifier` in `src/compilation.ts`).
+        checker.ctx.errorAtSpecifier(
+          imp.decl,
           `Cannot find module \`${imp.specifier}\` (looked for ${target})`
         );
+        checker.ctx.errored = false;
         continue;
+      }
+      if (signaturesFailed) {
+        continue; // resolved, and deliberately not loaded: see above
       }
       // A module that fails to load is reported and the others still load;
       // `check` stops before binding anything.
@@ -298,8 +350,17 @@ export class Compilation {
     }
   }
 
-  /** Program-wide attribute analysis, then one IR module per source module. */
-  emit(): EmittedModule[] {
+  /**
+   * The whole-program attribute fixpoint, computed once per compilation.
+   * `emit()` reads it, and so does `--emit-checked`, whose dump prints the
+   * facts of every function the way `src/dump.ts` prints them; running it
+   * twice would be the most expensive thing this class does twice.
+   */
+  analyze(): FactsTable {
+    const done = this.facts;
+    if (done !== null) {
+      return done;
+    }
     const units: AnalysisUnit[] = [];
     for (const unit of this.modules) {
       units.push(new AnalysisUnit(unit.checker.program, unit.parents));
@@ -311,6 +372,15 @@ export class Compilation {
       }
     }
     const facts = analyzeFunctions(units, this.table, this.opts, this.runtime);
+    this.analysisUnits = units;
+    this.facts = facts;
+    return facts;
+  }
+
+  /** Program-wide attribute analysis, then one IR module per source module. */
+  emit(): EmittedModule[] {
+    const facts = this.analyze();
+    const units = this.analysisUnits;
     const stems = this.outputStems();
     const out: EmittedModule[] = [];
     let i = 0;
