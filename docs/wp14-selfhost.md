@@ -297,10 +297,10 @@ compiler compiles itself.
 ### The bootstrap, and what it says
 
 `tests/self/bootstrap.js` runs the stages and compares them. All three
-equalities hold over the whole of `self/` — 51 modules, 6,049,827 bytes of IR
+equalities hold over the whole of `self/` — 54 modules, 6,977,900 bytes of IR
 (41 modules and 4,095,128 bytes when S5 first closed; the port has since taken
-on DWARF, the interop sidecars and its own link step). 51 rather than the 54
-files in `self/`, because `dump_tokens.ts`, `dump_ast.ts` and
+on DWARF, the interop sidecars, its own link step and WP19 R1's parity work).
+Fewer than the files in `self/`, because `dump_tokens.ts`, `dump_ast.ts` and
 `dump_checked.ts` are the oracles' own entry points and reach the same
 modules from their own roots:
 

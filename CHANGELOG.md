@@ -82,7 +82,42 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   consumer's build re-establishes the property from source every time and the
   compiler is the verifier.
 
+- **WP19 R1 is closed: `node tests/run.js --parity` is green over the whole
+  corpus.** 8,358 runs over 597 programs — every program the suite has, through
+  both compilers, under each of the fourteen flag variations — with **0
+  undeclared differences** and 1,523 declared by five written reasons
+  (`docs/wp19-stage0-retirement.md` §A4). Every diagnostic, every span, every
+  byte of IR, every sidecar and every exit code is identical; what is left is
+  the parser refusing syntax the language forbids before Phase 0 can name the
+  rule, each compiler's own `--emit-ast` tree, the one `module <path>` header
+  line, an inheritance cycle stage0 reports twice, and the exit status the
+  first of those reaches under a dump flag.
+
+  It took the undeclared count from 13,800 to 0 across the entries below, and
+  one step went backwards — 28 to 53, on a rule about stage0 inferred from two
+  experiments and wrong in two ways. The mode caught that as well.
+
 ### Fixed — correctness
+
+- **A fixed-length stack array was sized from an IR operand rather than from
+  the length that was written, and in f64 mode that operand is a register.**
+  `new Float32Array(2)` in a function that keeps its array on the stack (WP6)
+  types the slot `[2 x float]`, and the emitter got the `2` by parsing the
+  operand it had just emitted for the length. Under `--number-mode f64` the
+  literal has been through a conversion by then, so the operand is `%5`:
+  stage0 parsed it to `NaN` and wrote `alloca [NaN x float]` — IR `llvm-as`
+  refuses, from a compile that exited 0 — and stage1 parsed it to 0 and wrote
+  `alloca [0 x float]`, which assembles and then stores two floats past a
+  zero-element stack slot. stage1's was the more dangerous of the two, because
+  it builds and runs.
+
+  Both compilers now read the length the way `escape.ts` read it when it
+  decided the site was stackable at all: from the literal (`literalLength`,
+  now shared with the emitter rather than reimplemented by parsing text). The
+  two cannot disagree any more, and a stack site whose length is not a literal
+  is an internal error instead of a silent zero. `tests/cases/arr_stack_f64`
+  pins the IR and runs it. Found by `tests/run.js --parity` (WP19 §A2), which
+  is the only thing that had ever compiled these programs in f64 mode.
 
 - **`String(x)` on a double printed seventeen digits where sixteen suffice, for
   about one value in twenty thousand.** The language's rule is that number
@@ -101,6 +136,121 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   Node's output alongside `0.1`, `1e21` and `5e-324`.
 
 ### Changed
+
+- **The self-hosted compiler refuses five programs it used to compile, and
+  words a sixth refusal as stage0 does (WP19 G1).** Each is stage1 having been
+  more permissive than the compiler it is frozen against, and each was invisible
+  to the oracles, which compile a program with the flags that program already
+  carries:
+
+  - **A contextual type no longer reaches a `Result` payload.**
+    `docs/LANGUAGE.md`'s contextual-literal table is an enumerated list of
+    positions and `Ok(...)` is not one of them, so `Ok(3)` for a
+    `Result<i32, string>` in f64 mode is an `f64` meeting an `i32`, as stage0
+    has always had it (`reject_res_ok_f64`). This is the `unwrapOr` fix of the
+    previous release at the site it did not reach.
+  - **Nor an object literal's property value, for a numeric literal or `[]`.**
+    stage0 answers this position from three separate walks: the one that types
+    an object literal and a `null` names it, and the numeric and array ones do
+    not. stage1 threads a single contextual type down and was handing it to all
+    four, so `{ b: 255 }` for a `u8` field and `{ xs: [] }` both compiled where
+    stage0 refuses them — in the *default* mode, with no flag involved
+    (`reject_struct_field_u8`, `reject_struct_field_empty_array`,
+    `reject_struct_field_f64`). A nested object literal and a `null` still take
+    the field's type, as they do in stage0.
+  - **`+=` is arithmetic, not concatenation.** A compound arithmetic assignment
+    has one rule of its own — the target must be numeric and the value must be
+    exactly its type — and stage1 was routing it through the binary operator's
+    rule instead, which takes two strings. `s += "b"` compiled there and is
+    refused by stage0 (`reject_cf_compound_string`, `reject_cf_compound_widths`).
+  - **The refusal names the token that was written.** `x /= k` is
+    `` Operator `/=` requires ... ``, not `` `/` ``, for a local, a field and an
+    element alike, which is what stage0 says and what the bitwise family already
+    said on both sides.
+  - **The context around a binary operator no longer reaches its operands.**
+    `docs/LANGUAGE.md` says only the literal's *immediate* context counts, and
+    for an operand that context is the other operand — never the annotation
+    outside. stage1 was passing the outer type in, so `const b: u8 = 1 + 2`
+    compiled there and is refused by stage0, which reads the sibling instead
+    (`reject_bin_operand_context`). The sibling still propagates, which is what
+    makes `kind === 3` work when `kind` is an `i64`.
+
+  `Field \`code\` of \`IoError\` is i32, got f64` is now
+  `` ... expects a value of type i32, got f64 ``. The message was assembled
+  entirely out of interpolations and so had no literal run for
+  `scripts/gen-diagnostic-codes.mjs` to key a code on; it is `AS2269` now,
+  which is what `tests/run.js`'s coverage check asks for rather than a longer
+  uncoded backlog.
+
+- **The self-hosted compiler recovers from an error where stage0 does, and
+  reports the same diagnostics after the first one (WP19 §A3).** Both compilers
+  recover per statement — `checkStatements` wraps each one in a `try` in stage0
+  — but stage0's `throw` abandons the rest of the statement it came from and
+  stage1 carried on through it, so one bad type became a paragraph of
+  consequences where stage0 reported the cause. Over a program written for i32
+  mode and compiled with `--number-mode f64` that was the difference between 20
+  diagnostics and 20 different ones.
+
+  `errored` in `self/context.ts` is stage0's `throw` in a language that has
+  none: set by `error`, cleared at the start of each statement, and consulted
+  by `checkStatement` and `checkExpression` so nothing further in a refused
+  statement is checked or reported. A list *inside* a refused statement is not
+  entered at all (a `switch` abandoned at its discriminant does not go on to
+  refuse its `case` labels), and a list that runs to the end clears the flag,
+  so the `else` of an `if` whose `then` failed is still checked. A rejected
+  initializer leaves its variable undeclared unless the annotation says what it
+  is, which is what makes `const at = m.get(k, -1)` in f64 mode report
+  `Unknown identifier \`at\`` at each later use on both sides.
+
+  Four contextual-type differences fell out of measuring this, all the same
+  shape as the ones above — stage1 handing its one `want` to a position
+  stage0's walk does not name:
+
+  - **A method's argument.** `docs/LANGUAGE.md` grants a bare literal the
+    parameter's type for a *function* and a *constructor*; a method is neither,
+    so `b.get(-1)` on an `i32` parameter is an f64 in f64 mode
+    (`reject_method_arg_literal`). `super`'s arguments go the same way.
+  - **`push` and `indexOf` through a field.** The element type reaches a
+    literal only when the receiver is a plain identifier: stage0 gets there
+    through `calleeName`, which names `xs.push` and gives up on `b.xs.push`
+    (`reject_push_field_literal`).
+  - **The other operand of a binary operator, when it is not a shape stage0
+    can peek at.** "Known type" is an enumerated list — a variable, a field or
+    element of one, a call to a user function or a conversion — and a
+    sub-expression is not on it, so `0xc0 | (cp >> 6)` in f64 mode is an f64
+    meeting an i32 (`self/lexer.ts` compiles under it; the rule is
+    `peekable` in `self/expressions.ts`).
+  - **The caret on a nullable member access** sits under the property name, as
+    stage0 puts it, not under the receiver.
+
+  And one message: an unknown dotted call is `` Unknown builtin `foo.bar`
+  (supported: …) `` in both compilers now, naming the callee and listing what
+  there is, rather than four shorter sentences and an `Unknown identifier` for
+  the receiver.
+
+- **`--emit-checked` prints the attribute pass's facts in the self-hosted
+  compiler too (WP19 G1).** stage0 runs the whole-program fixpoint before it
+  dumps and prints `facts:`, `escaping:`, `calls:`, `pointer ...` and
+  `stackSites=` for every function; stage1 dumped straight after `check()` and
+  printed none of them. That was 193 of the 206 differences `--parity` found,
+  one per program, and no oracle could see it because `checked_oracle.js`
+  filtered exactly those lines away — by design, since it was comparing the
+  checker.
+
+  `self/dump.ts` now formats them the way `src/dump.ts`'s `factsText` does and
+  `self/compilation.ts` has stage0's memoised `analyze()` behind it, so a
+  compile that also emits does not run the fixpoint twice. The oracle's filter
+  is deleted: all 314 programs of the corpus agree over 297,361 dump lines,
+  every line compared.
+
+  The new lines caught a regression on their first run, which is the argument
+  for comparing them: the compound-assignment change above had stopped
+  recording the target's type, and `collectDivisionFacts` reads exactly that to
+  decide whether `x /= k` can reach `amrit_panic_div`, so stage1 reported
+  `effect=none willReturn=true` for a function stage0 called
+  `effect=write willReturn=false callsNoReturn=true`. Wrong facts are wrong
+  *attributes*, the class of bug a golden `.ll` is worst at catching, and it
+  was caught inside the change that caused it rather than in a release.
 
 - **`--out-dir` is gone from the self-hosted compiler; `-o <dir>/` is the one
   spelling (WP19 G1).** It was stage1's own flag, added when

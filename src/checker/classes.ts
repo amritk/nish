@@ -1059,7 +1059,14 @@ const checkObjectLiteral: ExpressionChecker = (ctx, node, scope) => {
     seen.add(name);
     const t = ctx.checkExpression(value, scope);
     if (!assignable(t, field.type)) {
-      throw ctx.error(`Field \`${name}\` of \`${info.name}\` is ${typeToString(field.type)}, got ${typeToString(t)}`, value);
+      // "expects a value of type" rather than a bare "is": the words are what
+      // `scripts/gen-diagnostic-codes.mjs` derives the rule's code from, and a
+      // message assembled entirely out of interpolations has no run long
+      // enough to key on (`tests/run.js`'s coverage check).
+      throw ctx.error(
+        `Field \`${name}\` of \`${info.name}\` expects a value of type ${typeToString(field.type)}, got ${typeToString(t)}`,
+        value
+      );
     }
   }
   const missing = info.fields.find((f) => !seen.has(f.name));
@@ -1149,7 +1156,19 @@ const checkFieldAssignment: BinaryChecker = (ctx, expr, scope) => {
   const receiver = ctx.checkExpression(target.expression, scope);
   if (receiver.kind === "result") {
     throw ctx.error(
-      `Cannot assign to \`${target.name.text}\` of ${typeToString(receiver)}: a \`Result\` is immutable once built (return a new \`ok(...)\` or \`err(...)\` instead)`,
+      `Cannot assign to \`${target.name.text}\` of ${typeToString(receiver)}: a \`Result\` is immutable once built (return a new \`Ok(...)\` or \`Err(...)\` instead)`,
+      target
+    );
+  }
+  // `a.length = n` before the generic property refusal, because it is the one
+  // an array tempts and the message that names `push` is the useful one.
+  // `rejectLengthAssignment` in `arrays.ts` says the same sentence and cannot
+  // reach it: its wrapper goes on the `=` handler that this one has already
+  // replaced, so the rule `docs/LANGUAGE.md` documents was unreachable and
+  // only `--parity` against stage1 — which does say it — noticed (WP19 §A3).
+  if (receiver.kind === "array" && target.name.text === "length") {
+    throw ctx.error(
+      `Cannot assign to \`length\` of ${typeToString(receiver)} (array length is read-only; use \`push\`)`,
       target
     );
   }

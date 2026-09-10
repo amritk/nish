@@ -6,7 +6,8 @@ import { resolveType, typedArrayElement } from "./annotations";
 import { checkBuiltinArity, isArgvExpression } from "./builtins";
 import { CheckContext } from "./context";
 import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound } from "./expressions";
-import { Node } from "./nodes";
+import { unwrapParens } from "./emit_util";
+import { N_IDENT, Node } from "./nodes";
 import { Scope } from "./symbols";
 import { isNumeric, T_ERROR, T_STRING, T_VOID } from "./types";
 
@@ -87,7 +88,9 @@ function readonlyWriteMessage(ctx: CheckContext, receiver: i32, what: string): s
 /** `a[i] = v` and `a[i] op= v`. */
 export function checkIndexAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   if (isArgvExpression(ctx, expr.children[0].children[0], scope)) {
-    return ctx.errorType(expr, "`process.argv` is read-only");
+    // At the `process.argv` itself, parentheses stepped through, where stage0
+    // puts it (`checkProcessArgv` in `src/checker/io.ts`).
+    return ctx.errorType(unwrapParens(expr.children[0].children[0]), "`process.argv` is read-only");
   }
   const elem = checkIndex(ctx, expr.children[0], scope);
   ctx.program.nodeTypes[expr.children[0].id] = elem;
@@ -118,7 +121,10 @@ export function checkIndexAssignment(ctx: CheckContext, expr: Node, scope: Scope
     const a = ctx.table.typeName(elem);
     return ctx.errorType(
       expr,
-      `Operator \`${op.substring(0, op.length - 1)}\` requires two operands of the same numeric type, got ${a} and ${ctx.table.typeName(rhs)}`
+      // The token as it was written, `*=` and not `*`: stage0's element path
+      // names the compound one (`src/checker/arrays.ts`), as its local and
+      // field paths do (WP19 §A2).
+      `Operator \`${op}\` requires two operands of the same numeric type, got ${a} and ${ctx.table.typeName(rhs)}`
     );
   }
   return elem;
@@ -128,7 +134,8 @@ export function checkArrayProperty(ctx: CheckContext, expr: Node, receiver: i32)
   if (expr.text === "length") {
     return ctx.numberType();
   }
-  return ctx.errorType(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`);
+  ctx.errorAtProperty(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`);
+  return T_ERROR;
 }
 
 /** `a.push(v)`, `a.pop()`, `a.indexOf(v)`, `a.join(sep)`. */
@@ -142,18 +149,25 @@ export function checkArrayMethod(
 ): i32 {
   const name = access.text;
   if ((name === "push" || name === "pop") && isArgvExpression(ctx, access.children[0], scope)) {
-    return ctx.errorType(call, "`process.argv` is read-only");
+    return ctx.errorType(unwrapParens(access.children[0]), "`process.argv` is read-only");
   }
   if ((name === "push" || name === "pop") && ctx.table.isReadonlyArray(receiver)) {
     return ctx.errorType(call, readonlyWriteMessage(ctx, receiver, `\`${name}\` through`));
   }
   const elem = ctx.table.refOf(receiver);
   const spelled = ctx.table.typeName(receiver);
+  // `xs.push(3)` and `xs.indexOf(3)` give a bare literal the element type — but
+  // only when the receiver is a plain identifier. stage0 reaches that rule
+  // through `calleeName`, which names `xs.push` and gives up on `b.xs.push`
+  // (its receiver is not an identifier), so `b.xs.push(0)` in f64 mode is an
+  // f64 pushed onto an `i32[]` there and was accepted here
+  // (`reject_push_field_literal`, WP19 §A3).
+  const elemContext = access.children[0].kind === N_IDENT ? elem : -1;
   if (name === "push") {
     if (!checkBuiltinArity(ctx, call, "push", args, 1)) {
       return ctx.numberType();
     }
-    const got = checkExpression(ctx, args.children[0], scope, elem);
+    const got = checkExpression(ctx, args.children[0], scope, elemContext);
     if (got !== T_ERROR && !ctx.table.assignable(got, elem)) {
       ctx.error(args.children[0], `Cannot push ${ctx.table.typeName(got)} onto ${spelled}`);
     }
@@ -169,7 +183,7 @@ export function checkArrayMethod(
     if (!checkBuiltinArity(ctx, call, "indexOf", args, 1)) {
       return ctx.numberType();
     }
-    const got = checkExpression(ctx, args.children[0], scope, elem);
+    const got = checkExpression(ctx, args.children[0], scope, elemContext);
     if (got !== T_ERROR && !ctx.table.assignable(got, elem)) {
       const want = ctx.table.typeName(elem);
       ctx.error(
@@ -184,10 +198,11 @@ export function checkArrayMethod(
     // lengths and one memcpy per part. Converting elements would allocate per
     // element, which is the quadratic shape `join` exists to avoid.
     if (elem !== T_STRING) {
-      return ctx.errorType(
+      ctx.errorAtProperty(
         access,
         `\`join\` requires string[], got ${spelled} (build the parts with template literals first)`
       );
+      return T_ERROR;
     }
     if (args.children.length > 1) {
       ctx.error(call, `\`join\` expects 0 or 1 arguments, got ${args.children.length}`);
@@ -199,7 +214,8 @@ export function checkArrayMethod(
     }
     return T_STRING;
   }
-  return ctx.errorType(access, `Unknown method \`${name}\` on ${spelled} (supported: ${ARRAY_METHODS})`);
+  ctx.errorAtProperty(access, `Unknown method \`${name}\` on ${spelled} (supported: ${ARRAY_METHODS})`);
+  return T_ERROR;
 }
 
 /**

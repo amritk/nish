@@ -392,6 +392,9 @@ export function main(): number {
   }
 
   const compilation = new Compilation(opts);
+  // The tree is printed from what parsed and validated, so pass 1's refusals
+  // do not stop the load — stage0 records them and reaches its dump first.
+  compilation.dumpOnly = emitAst;
   let loaded = true;
   for (const root of roots) {
     if (!compilation.load(root)) {
@@ -415,6 +418,14 @@ export function main(): number {
   // answers before `check` and writes no IR — the same point in the pipeline
   // stage0 answers it from. The tree is this compiler's own, not a mirror of
   // stage0's (`ast_text.ts` says why), so the two goldens differ by design.
+  //
+  // *Validated*, though, is the half that used to be missing: `load` reported
+  // a Phase 0 refusal into the sink and answered true anyway, so a program
+  // with `any` in it dumped a tree and exited 0 here while stage0 printed the
+  // refusal, dumped nothing and exited 1. `load` answers false for that now,
+  // so the failure is reported above and this is only ever reached with a
+  // validated program — a dump flag does not turn a refused program into a
+  // compiling one (WP19 §A3, `tests/cases/dump_ast_reject`).
   if (emitAst) {
     for (const unit of compilation.modules) {
       write(astText(unit.file, unit.path));

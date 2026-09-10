@@ -244,6 +244,24 @@ function emitHeader(ctx: EmitContext, n: string, site: ts.Node): string {
 }
 
 /**
+ * The non-negative integer a literal length denotes, or undefined for anything
+ * else. It lives here rather than in `escape.ts`, which is the phase that
+ * *asks* it whether a `new Array` site can be a stack slot, because that file
+ * already imports this one (`isPushCall`, `isJoinCall`) and the reverse import
+ * would close an ESM cycle — one that shows up as a dispatch table read before
+ * its initializer, not as an error anyone would connect to this. Both callers
+ * have to agree: the analysis decides the site is stackable from the literal
+ * and the emitter types the slot `[n x T]` from it.
+ */
+export function literalLength(expr: ts.Expression): number | undefined {
+  let inner = expr;
+  while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
+  if (!ts.isNumericLiteral(inner)) return undefined;
+  const n = Number(inner.text);
+  return Number.isInteger(n) && n >= 0 ? n : undefined;
+}
+
+/**
  * Element storage as an `i8*`: `[count x T]` on the stack when `site` is a
  * stack allocation (the count is then a literal, see escape.ts), else
  * `bytes` from the arena.
@@ -296,7 +314,16 @@ newEmitters.Array = (ctx, expr) => {
   const n = emitIndex(ctx, expr.arguments![0]);
   const arr = emitHeader(ctx, n, expr);
   const bytes = size === 1 ? n : ctx.fn.emitValue(`mul i64 ${n}, ${size}`);
-  const count = ctx.isStackSite(expr) ? Number(n) : undefined; // a stack site always has a literal length
+  // The slot's type spells the length out, so it has to come from the literal
+  // and not from `n`, which is an IR operand: under `--number-mode f64` the
+  // literal reaches here as a register (it has been through a conversion) and
+  // parsing it back gave `[NaN x T]`, IR `llvm-as` refuses, from a compile that
+  // exited 0. `escape.ts` decided this was a stack site from the same literal,
+  // so ask it the same question rather than a different one.
+  const count = ctx.isStackSite(expr) ? literalLength(expr.arguments![0]) : undefined;
+  if (count === undefined && ctx.isStackSite(expr)) {
+    throw new Error("emitter: a stack array whose length is not a literal");
+  }
   const data = emitData(ctx, expr, elem, count, bytes);
   ctx.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`);
   const dataArg = ctx.opts.optimizeAttributes ? `i8* align 8 ${data}` : `i8* ${data}`;

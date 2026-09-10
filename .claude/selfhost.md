@@ -26,10 +26,10 @@ construct still enters the language (and `src/`) before it enters `self/`, and
 | --- | --- | --- |
 | S1 | `self/lexer.ts` tokenises AmritScript-0 | **done** — `tests/lexer_oracle.js`, 612/612 files |
 | S2 | `self/parser.ts` builds the tree | **done** — `tests/parser_oracle.js`, 574/574 files |
-| S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js`, 308/308 whole programs; `reject_oracle.js`, 211/211 cases |
-| S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 318/318 programs byte for byte, and `interop_oracle.js`, 60 sidecars |
+| S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js`, 314/314 whole programs; `reject_oracle.js`, 222/222 cases |
+| S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 324/324 programs byte for byte, and `interop_oracle.js`, 60 sidecars |
 | S5 | `self/` compiles `self/` | **done** — `tests/self/bootstrap.js`: `IR(stage1) == IR(stage2)`, stage3 == stage2 |
-| R1 | parity: no program and no flag is stage0's | **in progress** — G1's check is `tests/self/parity.js`, in two halves: the flag sets each `--help` names, and the corpus under every flag variation. `getenv` and `--emit-ast` landed, the performance warnings and `--no-warn-performance` are stage1's, `--out-dir` is gone, the oracles' stale skips are closed. Open: `--emit-checked`'s later-phase lines and the four diagnostic differences §A2 of [`wp19`](../docs/wp19-stage0-retirement.md) names |
+| R1 | parity: no program and no flag is stage0's | **done** — `node tests/run.js --parity` is green over the whole corpus: 8,358 runs over 597 programs, 0 undeclared differences, 1,523 declared by the five reasons §A4 of [`wp19`](../docs/wp19-stage0-retirement.md) lists.  G1's check is `tests/self/parity.js`, in two halves: the flag sets each `--help` names, and the corpus under every flag variation. `getenv` and `--emit-ast` landed, the performance warnings and `--no-warn-performance` are stage1's, `--out-dir` is gone, the oracles' stale skips are closed. `--emit-checked` prints the attribute pass's facts now, so `checked_oracle.js` filters nothing, four of §A2's five differences are fixed — the fifth was misrecorded and is really §A3's recovery class — and §A3's five classes are closed too: four in code and one by declaration. Recovery is the one that mattered, and closing it turned up four more contextual-type divergences of the same family, because a compiler that reports every consequence of a mistake buries the ones that are its own |
 | R2–R6 | stage0 retired rather than frozen | **not started** — the gates are in [`docs/wp19-stage0-retirement.md`](../docs/wp19-stage0-retirement.md) |
 
 **stage0 is frozen, not retired, and that is a decision with an expiry.** Until
@@ -168,7 +168,7 @@ wired into the WP14 section of `tests/run.js` and skipped without clang.
 | `tests/self/types_oracle.js` | `self/types.ts` against `src/types.ts` |
 | `tests/self/diagnostics_oracle.js` | `self/diagnostics.ts` against `src/diagnostics.ts` |
 | `tests/self/symbols_oracle.js` | the scope chain and the narrowing rules |
-| `tests/self/checked_oracle.js` | the `--emit-checked` dump of every positive program in the corpus, whole program by whole program |
+| `tests/self/checked_oracle.js` | the `--emit-checked` dump of every positive program in the corpus, whole program by whole program — every line of it, the attribute pass's `facts:` / `escaping:` / `calls:` / `pointer` / `stackSites=` included since WP19 R1 |
 | `tests/self/reject_oracle.js` | every `reject_*` case and every `tests/link/` negative, against its own expected fragments |
 | `tests/self/ir_oracle.js` | the emitted IR, byte for byte, over every whole program in the corpus |
 | `tests/self/interop_oracle.js` | the WP8 sidecars — `.h`, `.d.ts`, its `.mjs` loader, `.napi.c` — byte for byte over the interop corpus (`--all` for the whole one) |

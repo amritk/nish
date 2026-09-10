@@ -72,8 +72,23 @@ export function checkBlock(ctx: CheckContext, block: Node, scope: Scope): boolea
 
 /** A statement list in `scope`; the caller decides whether that is a new one. */
 export function checkStatements(ctx: CheckContext, stmts: Node[], scope: Scope): boolean {
+  // A list *inside* a statement that has already been refused is never reached
+  // in stage0: the throw left the enclosing statement, clause bodies and all.
+  // Without this the loop below would clear `errored` on the clause's first
+  // statement and start reporting again inside a `switch` stage0 had
+  // abandoned at its discriminant (`tests/cases/cf_switch_break` in f64 mode).
+  if (ctx.errored) {
+    return false;
+  }
   let terminator: Node | null = null;
   for (const stmt of stmts) {
+    // The recovery point, and the reason it is *here*: stage0 wraps each
+    // statement of each list in its own `try`, so a `CompileError` thrown from
+    // anywhere inside one statement costs exactly that statement's worth of
+    // checking and the next statement starts clean
+    // (`checkStatements` in `src/checker/statements.ts`). `errored` is this
+    // file's throw, so it is cleared exactly where that `catch` is.
+    ctx.errored = false;
     const before = terminator;
     if (before !== null) {
       ctx.error(stmt, `Unreachable code after ${terminatorName(before)}`);
@@ -83,10 +98,24 @@ export function checkStatements(ctx: CheckContext, stmts: Node[], scope: Scope):
       terminator = stmt;
     }
   }
+  // A list that ran has recovered from everything inside it — that is what
+  // per-statement recovery means — so the flag does not escape it. The early
+  // return above deliberately leaves it set instead: a list skipped because
+  // its enclosing statement was already refused has recovered from nothing,
+  // and its siblings (the other clauses of a `switch`, the `else` of an `if`
+  // whose condition failed) must be skipped too.
+  ctx.errored = false;
   return terminator !== null;
 }
 
 export function checkStatement(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
+  // This statement has been refused already: stage0's `throw` would have left
+  // it by now and reported nothing further (`context.ts`, `errored`).
+  // Answering "does not fall through" would invent a terminator, so this
+  // answers false and the list moves on to the next statement.
+  if (ctx.errored) {
+    return false;
+  }
   switch (stmt.kind) {
     case N_BLOCK:
       return checkBlock(ctx, stmt, scope);
@@ -174,6 +203,17 @@ export function checkVariableList(ctx: CheckContext, list: Node, scope: Scope): 
     if (type === T_VOID) {
       ctx.error(decl, "Cannot declare a variable of type void");
       type = T_ERROR;
+    }
+    // A rejected initializer leaves the variable declared only when the
+    // annotation says what it is — and an annotation that did not resolve does
+    // not say. Without a type there is nothing to declare it as, so it stays
+    // undeclared and its later uses are `Unknown identifier` —
+    // stage0's `catch` declares it in exactly the annotated case and rethrows
+    // otherwise (`checkVariableDeclaration` in `src/checker/statements.ts`),
+    // and the cascade that follows is the visible half of the difference
+    // (WP19 §A3: `const at = m.get(k, -1)` in f64 mode).
+    if (ctx.errored && (declared < 0 || declared === T_ERROR)) {
+      continue;
     }
     declareLocal(ctx, scope, decl, name, type, mutable);
   }

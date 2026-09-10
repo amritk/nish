@@ -182,7 +182,7 @@ function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void {
       rejectForbiddenIndex(ctx, node);
       break;
     case N_BIGINT:
-      ctx.error(node, "`bigint` literals are forbidden in " + LANGUAGE + "; use the `i64` type");
+      ctx.error(node, "`bigint` literals are forbidden in " + LANGUAGE + " (use number, i32, or f64)");
       break;
     case N_TYPE_UNION:
       // Everything but `T | null` is refused here, before the checker reports
@@ -219,12 +219,14 @@ function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void {
 }
 
 function rejectForbiddenMember(ctx: CheckContext, node: Node): void {
+  // Against the member name, as stage0 hands `access.name` to `fail`
+  // (`src/validator.ts`), not against the whole access.
   if (node.text === "__proto__") {
-    ctx.error(node, "`__proto__` access is forbidden in " + LANGUAGE + " (no prototype chain)");
+    ctx.errorAtProperty(node, "`__proto__` access is forbidden in " + LANGUAGE + " (no prototype chain)");
     return;
   }
   if (node.text === "prototype") {
-    ctx.error(node, "`.prototype` access is forbidden in " + LANGUAGE + " (no prototype chain)");
+    ctx.errorAtProperty(node, "`.prototype` access is forbidden in " + LANGUAGE + " (no prototype chain)");
     return;
   }
   const receiver = node.children[0];
@@ -288,6 +290,9 @@ function checkNullUnion(ctx: CheckContext, node: Node): void {
     }
   }
   if (nulls !== 1 || node.children.length !== 2) {
-    ctx.error(node, "Union types other than `T | null` are forbidden in " + LANGUAGE);
+    ctx.error(
+      node,
+      "Union types other than `T | null` are forbidden in " + LANGUAGE + " (values have one fixed layout)"
+    );
   }
 }

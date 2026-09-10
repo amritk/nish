@@ -163,13 +163,21 @@ export function foldConstant(ctx: CheckContext, info: ConstInfo): void {
       info.decl.end,
       `Module constant \`${info.name}\` is defined in terms of itself`
     );
-    info.folded = true;
+    ctx.errored = true;
     return;
   }
   info.folding = true;
   const initializer = info.decl.children[2];
   const value = fold(ctx, info, initializer, info.type);
   info.folding = false;
+  if (ctx.errored) {
+    // Nothing is marked folded: stage0's `catch` resets the marker and
+    // rethrows so that "a second reference reports the same error rather than
+    // a stale `folding`" (`constValue` in `src/checker/constants.ts`). Each
+    // constant of a cycle is then reported against itself, which is what
+    // `tests/cases/reject_const_cycle` pins.
+    return;
+  }
   info.folded = true;
   if (value.type === T_ERROR || info.type === T_ERROR) {
     return;

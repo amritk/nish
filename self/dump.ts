@@ -16,12 +16,18 @@
 // itself.
 //
 // The lines stage0 prints that the checker is not responsible for — the
-// attribute pass's facts, escape sets and stack sites — are dropped by the
-// oracle rather than left out here.
+// attribute pass's facts, escape sets and stack sites — are printed here too,
+// which means running the whole-program fixpoint before the dump exactly as
+// `dumpChecked` does (`compilation.analyze()`). They used to be left out and
+// filtered away by the oracle, and WP19's `--parity` counted that as the
+// biggest single difference between the two compilers: 193 of its 206 rows.
 
+import { FactsTable, FunctionFacts } from "./attributes";
 import { Compilation, ModuleUnit } from "./compilation";
 import { SourceFile } from "./diagnostics";
-import { jsonQuote } from "./strings";
+import { EFFECT_READ, EFFECT_WRITE } from "./runtime";
+import { StringSet } from "./map";
+import { compareStrings, jsonQuote } from "./strings";
 import { N_BLOCK, N_CALL, N_CONSTRUCTOR, N_IDENT, N_NEW, N_VAR_DECL, Node } from "./nodes";
 import {
   CheckedProgram,
@@ -33,6 +39,101 @@ import {
   StructInfo,
 } from "./program";
 import { T_BOOL, T_F64, T_STRING, TypeTable } from "./types";
+
+/** A boolean as the dump spells it; the language does not interpolate one. */
+function flag(value: boolean): string {
+  return value ? "true" : "false";
+}
+
+/** The strings in byte order, which is what `[...set].sort()` gives stage0. */
+function sortedStrings(set: StringSet): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < set.size()) {
+    out.push(set.at(i));
+    i = i + 1;
+  }
+  // Insertion sort: these are a function's parameter names and its callees, so
+  // the lists are short and the constant matters more than the exponent.
+  let a = 1;
+  while (a < out.length) {
+    const key = out[a];
+    let b = a - 1;
+    while (b >= 0 && compareStrings(out[b], key) > 0) {
+      out[b + 1] = out[b];
+      b = b - 1;
+    }
+    out[b + 1] = key;
+    a = a + 1;
+  }
+  return out;
+}
+
+/**
+ * The attribute pass's facts for one function, in `src/dump.ts`'s `factsText`
+ * format and order. Every field is printed the way stage0 prints it, including
+ * the two lists it sorts and the `returnDeref` it omits for a function that
+ * does not return a struct, because `checked_oracle.js` compares these lines
+ * byte for byte like all the others.
+ */
+function factsText(table: TypeTable, sig: FunctionSig, facts: FunctionFacts, out: string[]): void {
+  let effect = "none";
+  if (facts.effect === EFFECT_READ) {
+    effect = "read";
+  } else if (facts.effect === EFFECT_WRITE) {
+    effect = "write";
+  }
+  const flags: string[] = [
+    `effect=${effect}`,
+    `willReturn=${flag(facts.willReturn)}`,
+    `hasLoops=${flag(facts.hasLoops)}`,
+    `loopsBounded=${flag(facts.loopsBounded)}`,
+    `readsMemory=${flag(facts.readsMemory)}`,
+    `hasTrap=${flag(facts.hasTrap)}`,
+    `callsNoReturn=${flag(facts.callsNoReturn)}`,
+    `allocates=${flag(facts.allocates)}`,
+    `arenaScope=${flag(facts.arenaScope)}`,
+    `freshThis=${flag(facts.freshThis)}`,
+  ];
+  // stage0 leaves the field undefined unless the return type has a size to
+  // dereference, which is a struct or a `Result` (`structSize` in
+  // `src/codegen/attributes.ts`); stage1 stores 0 for the same thing, so the
+  // condition is the type and not the number.
+  const returns = sig.returnType;
+  if (table.isStruct(returns) || table.isResult(returns)) {
+    flags.push(`returnDeref=${facts.returnDeref}`);
+  }
+  out.push(`  facts: ${flags.join(" ")}`);
+  const escaping = sortedStrings(facts.escaping);
+  if (escaping.length > 0) {
+    out.push(`  escaping: ${escaping.join(" ")}`);
+  }
+  const callees = sortedStrings(facts.callees);
+  if (callees.length > 0) {
+    out.push(`  calls: ${callees.join(" ")}`);
+  }
+  // Signature order on both sides: stage0 walks a `Map` it filled in that
+  // order and stage1 an array it pushed in that order.
+  for (const p of facts.pointerParams) {
+    const passed: string[] = [];
+    let i = 0;
+    while (i < p.passedToCallees.length) {
+      passed.push(`${p.passedToCallees[i]}#${p.passedToIndices[i]}`);
+      i = i + 1;
+    }
+    const to = passed.length > 0 ? ` passedTo=${passed.join(" ")}` : "";
+    out.push(
+      `  pointer ${p.name}: size=${p.size} writesThrough=${flag(p.writesThrough)} captured=${flag(p.captured)}${to}`
+    );
+  }
+  let sites = 0;
+  for (const site of facts.stackSites) {
+    if (site) {
+      sites = sites + 1;
+    }
+  }
+  out.push(`  stackSites=${sites} stackLocals=${facts.stackLocals.length}`);
+}
 
 /** `name(a: i32, b: string): void`, the signature as `src/dump.ts` writes it. */
 function signatureText(table: TypeTable, sig: FunctionSig): string {
@@ -157,7 +258,7 @@ function walkBody(
  * is filtered by origin rather than printed as the checker's table holds it —
  * pass 1b adds every imported name to the importer's tables too.
  */
-function dumpModule(unit: ModuleUnit, table: TypeTable, out: string[]): void {
+function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: string[]): void {
   const program = unit.checker.program;
   const source = unit.source;
   out.push(`module ${unit.path}${unit.isEntry ? " (entry)" : ""}`);
@@ -206,6 +307,10 @@ function dumpModule(unit: ModuleUnit, table: TypeTable, out: string[]): void {
     }
     const suffix = tags.length > 0 ? ` [${tags.join(" ")}]` : "";
     out.push(`function ${signatureText(table, sig)} -> @${sig.name}${suffix}`);
+    const f = facts.get(sig.name);
+    if (f !== null) {
+      factsText(table, sig, f, out);
+    }
     bodyTables(program, source, table, sig, out);
   }
 }
@@ -217,9 +322,13 @@ function dumpModule(unit: ModuleUnit, table: TypeTable, out: string[]): void {
  * two can never drift into two spellings of the same dump.
  */
 export function checkedText(compilation: Compilation): string {
+  // The dump prints the attribute pass's facts, so the fixpoint has to have
+  // run: `dumpChecked` in `src/dump.ts` opens with the same call, and it is
+  // memoised there and here so a compile that also emits does not pay twice.
+  const facts = compilation.analyze();
   const out: string[] = [];
   for (const unit of compilation.modules) {
-    dumpModule(unit, compilation.table, out);
+    dumpModule(unit, compilation.table, facts, out);
   }
   return `${out.join("\n")}\n`;
 }

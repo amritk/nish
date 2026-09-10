@@ -83,6 +83,13 @@ import {
  * know about upcasts.
  */
 export function checkExpression(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
+  // Refused already: stage0 unwound out of this statement at the first
+  // diagnostic and never checked the rest of the expression either
+  // (`context.ts`, `errored`). `T_ERROR` is what every caller here already
+  // handles, and it does not report a second time.
+  if (ctx.errored) {
+    return T_ERROR;
+  }
   const type = computeType(ctx, expr, scope, want);
   if (coercesTo(ctx, type, want)) {
     const target = ctx.table.stripNull(want);
@@ -99,9 +106,9 @@ function computeType(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     case N_PAREN:
       return checkExpression(ctx, expr.children[0], scope, want);
     case N_NUMBER:
-      return checkNumericLiteral(ctx, expr, want, false);
+      return checkNumericLiteral(ctx, expr, want, false, expr);
     case N_BIGINT:
-      return ctx.errorType(expr, "Bigint literals are forbidden in " + LANGUAGE + "; use the `i64` type");
+      return ctx.errorType(expr, "`bigint` literals are forbidden in " + LANGUAGE + " (use number, i32, or f64)");
     case N_STRING:
       return T_STRING;
     case N_TEMPLATE:
@@ -146,7 +153,13 @@ function computeType(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
  * five and `Math.sqrt(2)` an `f64` two. Without a context it is `number`,
  * which is `i32` unless `--number-mode f64`.
  */
-export function checkNumericLiteral(ctx: CheckContext, expr: Node, want: i32, negated: boolean): i32 {
+export function checkNumericLiteral(
+  ctx: CheckContext,
+  expr: Node,
+  want: i32,
+  negated: boolean,
+  at: Node
+): i32 {
   const type = want >= 0 && isNumeric(want) ? want : ctx.numberType();
   if (isFloat(type)) {
     return type;
@@ -168,7 +181,7 @@ export function checkNumericLiteral(ctx: CheckContext, expr: Node, want: i32, ne
     const spelled = ctx.table.typeName(type);
     if (negated) {
       return ctx.errorType(
-        expr,
+        at,
         `Negative literal \`-${text}\` where ${spelled} is expected (${spelled} is unsigned)`
       );
     }
@@ -280,7 +293,10 @@ function checkUnary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32
   if (op === "-" && operand.kind === N_NUMBER) {
     // The negation is part of the literal, which is what makes `-2147483648`
     // spell `INT_MIN` rather than overflowing the positive half.
-    const type = checkNumericLiteral(ctx, operand, want, true);
+    // `at` is the whole `-1`: stage0 hands the literal's *parent* to the
+    // refusal so the caret covers the sign (`contextualLiteralType` in
+    // `src/checker/math.ts`), and the digits alone start a column late.
+    const type = checkNumericLiteral(ctx, operand, want, true, expr);
     ctx.program.nodeTypes[operand.id] = type;
     return type;
   }
@@ -302,9 +318,12 @@ function checkUnary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32
   }
   if (op === "~") {
     if (!isInteger(type)) {
+      // With the same hint the binary operators carry: an `f64` here is
+      // usually the mode's `number` rather than a deliberate annotation
+      // (`checkBitwiseNot` in `src/checker/bitwise.ts`).
       return ctx.errorType(
         expr,
-        `Operator \`~\` requires an integer operand, got ${ctx.table.typeName(type)}`
+        `Operator \`~\` requires an integer operand, got ${ctx.table.typeName(type)}${f64Hint(ctx, type, type)}`
       );
     }
     return type;
@@ -413,11 +432,6 @@ export function checkBitwiseAssignOperands(ctx: CheckContext, expr: Node, target
   return target;
 }
 
-/** The arithmetic behind a compound assignment: `+=` is `+`. */
-function compoundOperator(op: string): string {
-  return op.substring(0, op.length - 1);
-}
-
 function checkBinary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
   const op = expr.text;
   if (op === "==" || op === "!=") {
@@ -429,7 +443,7 @@ function checkBinary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
   if (op === "&&" || op === "||") {
     return checkLogical(ctx, expr, scope);
   }
-  return checkOperator(ctx, expr, op, expr.children[0], expr.children[1], scope, want);
+  return checkOperator(ctx, expr, op, expr.children[0], expr.children[1], scope);
 }
 
 /**
@@ -448,6 +462,34 @@ function literalHint(other: i32, fallback: i32): i32 {
   return isNumeric(other) ? other : fallback;
 }
 
+/**
+ * Whether stage0's `peekType` would answer for this node — which is what
+ * decides whether a bare literal on the *other* side may take its type.
+ *
+ * `docs/LANGUAGE.md` spells the list out: "an already-checked left operand, a
+ * variable, a field or element of one of those, or a call to a user function
+ * or to `toI32`/`toI64`/…". A sub-expression that is none of those has no type
+ * yet as far as that walk is concerned, so the literal stays at the mode's
+ * default: `0xc0 | (cp >> 6)` in f64 mode is an f64 meeting an i32 and is
+ * refused, however obvious the shift's type looks (`self/lexer.ts` under
+ * `--number-mode f64`, WP19 §A3). Reading the sibling's *computed* type
+ * instead is more useful and is not what the language says.
+ */
+function peekable(node: Node): boolean {
+  if (node.kind === N_PAREN) {
+    return peekable(node.children[0]);
+  }
+  if (node.kind === N_UNARY) {
+    return node.text === "-" && peekable(node.children[0]);
+  }
+  // A call is peekable only when the callee is a plain name, which is how
+  // stage0 reaches a signature or a conversion builtin (`peekType`).
+  if (node.kind === N_CALL) {
+    return node.children[0].kind === N_IDENT;
+  }
+  return node.kind === N_IDENT || node.kind === N_MEMBER || node.kind === N_INDEX;
+}
+
 /** `a op b` for every operator that reads both sides and writes neither. */
 function checkOperator(
   ctx: CheckContext,
@@ -455,25 +497,36 @@ function checkOperator(
   op: string,
   leftNode: Node,
   rightNode: Node,
-  scope: Scope,
-  want: i32
+  scope: Scope
 ): i32 {
   // A bare literal takes its width from the other side, which is what makes
-  // `kind === 3` work when `kind` is an `i64`.
-  const hint = yieldsBool(op) || isShift(op) ? -1 : want;
+  // `kind === 3` work when `kind` is an `i64` — and from the other side
+  // *only*. The context around the operator does not reach an operand:
+  // `docs/LANGUAGE.md` says so in as many words ("only the literal's
+  // immediate context counts"), and stage0 enforces it by reading the sibling
+  // rather than the annotation (`contextType`'s binary branch in
+  // `src/checker/math.ts`). Threading `want` in made stage1 compile
+  // `const b: u8 = 1 + 2`, which is a sum of two `i32` literals no annotation
+  // reaches (`reject_bin_operand_context`). The sibling still propagates:
+  // whichever side is checked first is what the other is checked against.
   let left = T_ERROR;
   let right = T_ERROR;
   if (leftNode.kind === N_NUMBER && rightNode.kind !== N_NUMBER) {
-    right = checkExpression(ctx, rightNode, scope, hint);
-    left = checkExpression(ctx, leftNode, scope, literalHint(right, hint < 0 ? right : hint));
+    right = checkExpression(ctx, rightNode, scope, -1);
+    // The right operand has not been checked yet as far as stage0's walk is
+    // concerned — it *peeks* at the node rather than checking it — so a shape
+    // that walk does not answer for gives this literal nothing.
+    left = checkExpression(ctx, leftNode, scope, peekable(rightNode) ? literalHint(right, right) : -1);
   } else {
-    left = checkExpression(ctx, leftNode, scope, hint);
-    const fallback = hint < 0 ? left : hint;
+    left = checkExpression(ctx, leftNode, scope, -1);
+    // The left type is what the right side is checked against, literal or not:
+    // it is the sibling for a literal and the contextual type `x === null`
+    // needs for the `null`.
     right = checkExpression(
       ctx,
       rightNode,
       scope,
-      rightNode.kind === N_NUMBER ? literalHint(left, fallback) : fallback
+      rightNode.kind === N_NUMBER ? literalHint(left, left) : left
     );
   }
   if (left === T_ERROR || right === T_ERROR) {
@@ -646,7 +699,7 @@ function checkConditional(ctx: CheckContext, expr: Node, scope: Scope, want: i32
 export function checkCondition(ctx: CheckContext, expr: Node, scope: Scope): void {
   const type = checkExpression(ctx, expr, scope, T_BOOL);
   if (type !== T_BOOL && type !== T_ERROR) {
-    ctx.error(expr, `Condition must be boolean, got ${ctx.table.typeName(type)}`);
+    ctx.error(expr, `Condition must be boolean, got ${ctx.table.typeName(type)} (${LANGUAGE} has no truthiness)`);
   }
 }
 
@@ -783,14 +836,38 @@ export function assignInto(
     }
     return checkBitwiseAssignOperands(ctx, expr, slot, bits);
   }
-  const arithmetic = compoundOperator(op);
-  const result = checkOperator(ctx, expr, arithmetic, expr.children[0], value, scope, slot);
+  // A compound arithmetic assignment has a rule of its own rather than the
+  // binary operator's: the target must be numeric and the value must be
+  // exactly the target's type, and the refusal names the token that was
+  // written (`checkCompoundAssignment` in `src/checker/control-flow.ts`, and
+  // the field and element paths beside it, all say the same sentence). Routing
+  // it through `checkOperator` gave stage1 `+`'s wording for `+=` and `/`'s
+  // for `/=`, and let `s += "b"` and `b += 1` through as well, because `+`
+  // takes two strings and a boolean operand is a different refusal there.
+  // WP19 §A2 found the spelling; the rest came with it.
+  //
+  // The target is still checked, in the order and with the hints
+  // `checkOperator` used, because that is what records its type — and
+  // `collectDivisionFacts` reads exactly that to decide whether `x /= k` can
+  // reach `amrit_panic_div` (`tests/cases/div_compound_attributes`).
+  const target = checkExpression(ctx, expr.children[0], scope, slot);
+  const rhs = checkExpression(
+    ctx,
+    value,
+    scope,
+    value.kind === N_NUMBER ? literalHint(target, slot) : slot
+  );
   if (local !== null) {
     scope.clearNarrowing(local);
   }
-  if (result !== T_ERROR && slot !== T_ERROR && !ctx.table.assignable(result, slot)) {
-    const got = ctx.table.typeName(result);
-    return ctx.errorType(value, `Cannot assign ${got} to ${ctx.table.typeName(slot)} ${what} \`${name}\``);
+  if (target === T_ERROR || rhs === T_ERROR || slot === T_ERROR) {
+    return slot;
+  }
+  if (!isNumeric(slot) || rhs !== slot) {
+    return ctx.errorType(
+      expr,
+      `Operator \`${op}\` requires two operands of the same numeric type, got ${ctx.table.typeName(slot)} and ${ctx.table.typeName(rhs)}`
+    );
   }
   return slot;
 }

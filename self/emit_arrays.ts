@@ -203,6 +203,27 @@ function emitHeader(emitter: Emitter, n: string, site: Node): string {
 }
 
 /**
+ * The non-negative integer a literal length denotes, or -1 for anything else.
+ * It lives here rather than in `escape.ts`, which is the phase that *asks* it
+ * whether a `new Array` site can be a stack slot, so that the module graph
+ * reads the way stage0's does (`src/codegen/emit/arrays.ts`, where the reverse
+ * import would close an ESM cycle). Both callers have to agree: the analysis
+ * decides the site is stackable from the literal and the emitter types the
+ * slot `[n x T]` from it.
+ */
+export function literalLength(expr: Node): i32 {
+  const e = unwrapParens(expr);
+  if (e.kind !== N_NUMBER) {
+    return -1;
+  }
+  const n: f64 = Number(e.text);
+  if (n !== Math.floor(n) || n < 0.0) {
+    return -1;
+  }
+  return toI32(n);
+}
+
+/**
  * Element storage as an `i8*`: `[count x T]` on the stack when `site` is a
  * stack allocation (the count is then a literal), else `bytes` from the arena.
  * A `count` of -1 means the length is not a literal.
@@ -257,8 +278,16 @@ export function emitNewArray(emitter: Emitter, expr: Node): string {
   const n = emitIndex(emitter, expr.children[2].children[0]);
   const arr = emitHeader(emitter, n, expr);
   const bytes = size === 1 ? n : emitter.fn.emitValue(`mul i64 ${n}, ${size}`);
-  // A stack site always has a literal length, so the decimal `n` parses back.
-  const count = emitter.isStackSite(expr) ? toI32(Number(n)) : -1;
+  // The slot's type spells the length out, so it has to come from the literal
+  // and not from `n`, which is an IR operand: under `--number-mode f64` the
+  // literal reaches here as a register (it has been through a conversion) and
+  // parsing it back gave `[0 x T]`, a zero-element stack slot that then takes
+  // the stores of a full-length array. `escape.ts` decided this was a stack
+  // site from the same literal, so ask it the same question.
+  const count = emitter.isStackSite(expr) ? literalLength(expr.children[2].children[0]) : -1;
+  if (count < 0 && emitter.isStackSite(expr)) {
+    process.exit(internalError("emitter: a stack array whose length is not a literal"));
+  }
   const data = emitData(emitter, expr, elem, count, bytes);
   emitter.declare(`declare void @${MEMSET}(i8* nocapture writeonly, i8, i64, i1 immarg)`);
   const dataArg = emitter.opts.optimizeAttributes ? `i8* align 8 ${data}` : `i8* ${data}`;

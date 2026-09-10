@@ -805,6 +805,35 @@ for (const name of linkTests) {
   }
 }
 
+// An imported module's name — the one in its `ModuleID`, its `source_filename`
+// and its `DIFile` — is the specifier resolved against the name the *importer*
+// was given, never against the working directory. Two things ride on that: the
+// emitted IR does not change with the directory the compiler was run from, and
+// the self-hosted compiler can produce the same bytes without a `cwd` builtin
+// it has no room for (WP19 §A3). Compiling the same program by absolute path
+// is what tells the two rules apart: cwd-relative naming would answer
+// `tests/link/diamond/b.ts` where this answers the absolute path the entry
+// carried.
+const diamondEntry = path.join(linkDir, "diamond", "main.ts");
+if (fs.existsSync(diamondEntry)) {
+  const absOut = path.join(buildDir, "link", "diamond-abs");
+  fs.rmSync(absOut, { recursive: true, force: true });
+  fs.mkdirSync(absOut, { recursive: true });
+  const r = spawnSync("node", [cli, diamondEntry, "-o", `${absOut}${path.sep}`], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  const imported = path.join(absOut, "b.ll");
+  const header =
+    r.status === 0 && fs.existsSync(imported) ? fs.readFileSync(imported, "utf8").split("\n")[0] : "";
+  const want = `; ModuleID = '${path.join(linkDir, "diamond", "b.ts")}'`;
+  check(
+    "link/diamond: an imported module is named from the entry's own path, not from cwd",
+    header === want,
+    `--- expected\n${want}\n--- actual\n${header}\n${r.stderr}`
+  );
+}
+
 // ---- WP1: optimisation ------------------------------------------------------------
 // The emitted IR is target-neutral, so `opt` needs a triple before it believes it has
 // vector registers; without one the loop vectoriser never fires. x86_64 is always built in.

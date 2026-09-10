@@ -100,6 +100,8 @@ const RULES: string[] = [
     "AS2226",
     ": a `Result` is immutable once built (return a new `ok(...)` or `err(...)` instead)",
     "AS2028",
+    ": a `Result` is immutable once built (return a new `Ok(...)` or `Err(...)` instead)",
+    "AS2270",
     "`; check the nullable side against `null` first, then compare the narrowed values",
     "AS2114",
     "` is not supported; a module has no top-level code, so only `const` is available",
@@ -330,6 +332,8 @@ const RULES: string[] = [
     "AS2212",
     "Spread in array literals is not supported",
     "AS2237",
+    "Unary `+` is forbidden; it converts, and ",
+    "AS2271",
     " (array length is read-only; use `push`)",
     "AS2002",
     "`for...of` declares exactly one variable",
@@ -556,6 +560,8 @@ const RULES: string[] = [
     "AS2180",
     ": cannot create the result",
     "AS4003",
+    "` expects a value of type ",
+    "AS2269",
     "`, which already extends `",
     "AS2110",
     "`Reflect` is forbidden in ",
@@ -725,7 +731,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 336;
+export const RULE_COUNT = 339;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line
