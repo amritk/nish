@@ -7,6 +7,23 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ## [Unreleased]
 
+### Added
+
+- **WP19 R1 is closed: `node tests/run.js --parity` is green over the whole
+  corpus.** 8,358 runs over 597 programs — every program the suite has, through
+  both compilers, under each of the fourteen flag variations — with **0
+  undeclared differences** and 1,523 declared by five written reasons
+  (`docs/wp19-stage0-retirement.md` §A4). Every diagnostic, every span, every
+  byte of IR, every sidecar and every exit code is identical; what is left is
+  the parser refusing syntax the language forbids before Phase 0 can name the
+  rule, each compiler's own `--emit-ast` tree, the one `module <path>` header
+  line, an inheritance cycle stage0 reports twice, and the exit status the
+  first of those reaches under a dump flag.
+
+  It took the undeclared count from 13,800 to 0 across the entries below, and
+  one step went backwards — 28 to 53, on a rule about stage0 inferred from two
+  experiments and wrong in two ways. The mode caught that as well.
+
 ### Fixed — correctness
 
 - **A fixed-length stack array was sized from an IR operand rather than from

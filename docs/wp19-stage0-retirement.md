@@ -171,6 +171,31 @@ that are its own.
 numbers.** That is the argument for running the mode over the corpus it
 defaults to rather than the directory the first run happened to use.
 
+### A4. The gate, green
+
+```
+parity: 8358 runs over 597 programs; 0 undeclared difference(s), 1523 declared
+```
+
+Five declarations stand, and they are the whole of what the two compilers
+are allowed to differ about:
+
+| Rows | Surface | What is decided |
+| --- | --- | --- |
+| 602 | stderr | stage1's parser refuses syntax the language forbids before Phase 0 can name the rule. Closing it in code is grammar for 43 constructs that never compile, which is a parser rewrite rather than a fix |
+| 548 | `--emit-ast` stdout | each compiler dumps its own tree; a golden per compiler pins each |
+| 349 | `--emit-checked` stdout | the `module <path>` header only, where stage0 relativises against a working directory stage1 does not have |
+| 13 | stderr | stage0 reports an inheritance cycle once per class, from a marker its throw leaves behind; reproducing that without exceptions makes stage1 loop |
+| 11 | exit | the parser refusal again, on the status a dump flag reaches |
+
+Everything else — every diagnostic, every span, every byte of IR, every
+sidecar, every exit code, under every flag the suite uses — is identical.
+Getting there took the count from 13,800 to 503 to 189 to 28 to 0, and one
+step of it went *backwards*, from 28 to 53, on a rule about stage0 inferred
+from two experiments and wrong in two ways. The mode is what caught that
+too.
+
+
 ### B. The oracles
 
 Twelve comparisons keep the two implementations honest. Retiring stage0 does
@@ -375,7 +400,7 @@ gate nobody has opened is how a runtime budget dies.
 
 | | Milestone | Done when |
 | --- | --- | --- |
-| **R1** | Parity | §4's builtins land in both compilers — three landed with WP14 §7a and `getenv` with this package; the rows of §2A close (all seven have) and so do §A2's five (four fixed, the fifth re-read as §A3's recovery class); `--parity` is green with an empty difference set over the **whole** corpus, which means §A3's five classes are declared or closed |
+| **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) |
 | **R2** | The seed protocol | `AMRITC_BOOTSTRAP` in `scripts/bootstrap.sh`; CI builds `self/` with the last release on both operating systems; the policy sentence is in `wp12-release.md` (G3, G4) |
 | **R3** | Oracle succession | `amritc-cmp` green over the corpus; `fuzz.js --stage1` repointed; the four survivors repointed to the seed; the lost coverage recovered as goldens, with the numbers written into §2B (G2) |
 | **R4** | Distribution | four binaries per release; the npm package installs one; `--version` has a new source; INSTALL.md and wp12 rewritten (G5) |
