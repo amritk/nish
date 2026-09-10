@@ -382,6 +382,136 @@ attributes #1 = { nounwind }
 ```
 <!-- cookbook:end decl_const -->
 
+### Type aliases
+
+A `type` alias is a second name for a type that already exists, so it emits
+nothing: `Byte` is `u8`, `Bytes` is `u8[]`, `Label` is `string`, and the IR
+below is the IR of the same program with the aliases written out. There is no
+listing for "the alias", because there is nothing for it to be.
+
+<!-- cookbook:begin decl_type_alias -->
+```ts
+type Byte = u8;
+type Bytes = Byte[];
+type Label = string;
+
+function widen(b: Byte): i32 {
+  return toI32(b);
+}
+
+export function main(): number {
+  const data: Bytes = [toU8(2), toU8(3)];
+  const label: Label = "sum = ";
+  console.log(`${label}${widen(data[0]) + widen(data[1])}`);
+  return 0;
+}
+```
+
+```llvm
+%struct.amrit_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"sum = \00" }, align 8
+
+declare void @amrit_free_arena() #2
+declare noundef i64 @amrit_arena_mark() #2
+declare void @amrit_arena_release(i64 noundef) #2
+declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #2
+declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #2
+declare void @amrit_panic_index(i64 noundef, i64 noundef) #3
+
+define internal noundef i32 @widen(i8 noundef %b) #0 {
+entry:
+  %0 = zext i8 %b to i32
+  ret i32 %0
+}
+
+define noundef i32 @amrit_main() #1 {
+entry:
+  %data.addr = alloca %struct.amrit_array*, align 8
+  %arr.hdr = alloca %struct.amrit_array, align 8
+  %arr.data = alloca [2 x i8], align 8
+  %label.addr = alloca i8*, align 8
+  %arena.mark = call i64 @amrit_arena_mark()
+  %0 = trunc i32 2 to i8
+  %1 = trunc i32 3 to i8
+  %2 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0
+  store i64 2, i64* %2, align 8, !alias.scope !3, !noalias !4
+  %3 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1
+  store i64 2, i64* %3, align 8, !alias.scope !3, !noalias !4
+  %4 = bitcast [2 x i8]* %arr.data to i8*
+  %5 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 2
+  store i8* %4, i8** %5, align 8, !alias.scope !3, !noalias !4
+  %6 = bitcast i8* %4 to i8*
+  %7 = getelementptr inbounds i8, i8* %6, i64 0
+  store i8 %0, i8* %7, align 1, !alias.scope !4, !noalias !3
+  %8 = getelementptr inbounds i8, i8* %6, i64 1
+  store i8 %1, i8* %8, align 1, !alias.scope !4, !noalias !3
+  store %struct.amrit_array* %arr.hdr, %struct.amrit_array** %data.addr, align 8
+  store i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*), i8** %label.addr, align 8
+  %9 = load i8*, i8** %label.addr, align 8
+  %10 = load %struct.amrit_array*, %struct.amrit_array** %data.addr, align 8
+  %11 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %10, i64 0, i32 0
+  %12 = load i64, i64* %11, align 8, !alias.scope !3, !noalias !4
+  %13 = icmp ult i64 0, %12
+  br i1 %13, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @amrit_panic_index(i64 0, i64 %12)
+  unreachable
+
+bounds.ok:
+  %14 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %10, i64 0, i32 2
+  %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4
+  %16 = bitcast i8* %15 to i8*
+  %17 = getelementptr inbounds i8, i8* %16, i64 0
+  %18 = load i8, i8* %17, align 1, !alias.scope !4, !noalias !3
+  %19 = call i32 @widen(i8 %18)
+  %20 = load %struct.amrit_array*, %struct.amrit_array** %data.addr, align 8
+  %21 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %20, i64 0, i32 0
+  %22 = load i64, i64* %21, align 8, !alias.scope !3, !noalias !4
+  %23 = icmp ult i64 1, %22
+  br i1 %23, label %bounds.ok.1, label %bounds.fail.1
+
+bounds.fail.1:
+  call void @amrit_panic_index(i64 1, i64 %22)
+  unreachable
+
+bounds.ok.1:
+  %24 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %20, i64 0, i32 2
+  %25 = load i8*, i8** %24, align 8, !alias.scope !3, !noalias !4
+  %26 = bitcast i8* %25 to i8*
+  %27 = getelementptr inbounds i8, i8* %26, i64 1
+  %28 = load i8, i8* %27, align 1, !alias.scope !4, !noalias !3
+  %29 = call i32 @widen(i8 %28)
+  %30 = add nsw i32 %19, %29
+  %31 = call i8* @amrit_str_from_i32(i32 %30)
+  %32 = call i8* @amrit_str_concat(i8* %9, i8* %31)
+  call void @amrit_print(i8* %32)
+  call void @amrit_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @amrit_main()
+  call void @amrit_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readnone }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
+attributes #3 = { nounwind noreturn cold }
+
+!0 = !{!"amritc array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+```
+<!-- cookbook:end decl_type_alias -->
+
 ### `export function main` and the entry wrapper
 
 The user's `main` becomes `@amrit_main`; the compiler adds a C-ABI `@main` that

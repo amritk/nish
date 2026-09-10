@@ -26,6 +26,7 @@ import {
   signatureStructNames,
   thisLocal,
 } from "./classes.js";
+import { AliasInfo, aliasType, collectAlias } from "./aliases.js";
 import { ConstInfo, constValue } from "./constants.js";
 import {
   arrowFunctionOf,
@@ -129,10 +130,15 @@ export class Checker implements CheckContext {
       reachableStructs: [],
       coercions: new WeakMap(),
       caseValues: new WeakMap(),
+      aliases: new Map(),
     };
     registerNamedTypes(sourceFile, (name) => {
       const own = this.typeNames.has(name) ? this.program.structs.get(name) : undefined;
       if (own) return own.type;
+      // An alias is the type it names, so it answers here and the caller never
+      // learns that a name was involved (WP23).
+      const alias = this.program.aliases.get(name);
+      if (alias) return aliasType(alias, this.opts);
       if (this.program.imports.some((imp) => imp.localName === name)) {
         this.importsUsedAsTypes.add(name);
         return { kind: "struct", name };
@@ -170,6 +176,7 @@ export class Checker implements CheckContext {
    */
   collectSignatures(): void {
     const structs: StructInfo[] = [];
+    const aliases: AliasInfo[] = [];
     for (const stmt of this.sf.statements) {
       this.sink.recover(() => {
         if (ts.isImportDeclaration(stmt)) this.program.imports.push(...collectImports(stmt, this.sf));
@@ -177,11 +184,17 @@ export class Checker implements CheckContext {
           const info = declareStruct(this, stmt);
           this.typeNames.add(info.name);
           structs.push(info);
+        } else if (ts.isTypeAliasDeclaration(stmt)) {
+          // Names first, resolution second (below): an alias may name a class
+          // declared further down the file, or another alias (WP23).
+          const info = collectAlias(stmt, this.sf);
+          this.declareAlias(info);
+          aliases.push(info);
         }
       });
     }
     for (const stmt of this.sf.statements) {
-      if (ts.isImportDeclaration(stmt)) continue;
+      if (ts.isImportDeclaration(stmt) || ts.isTypeAliasDeclaration(stmt)) continue;
       if (isStructDeclaration(stmt)) {
         const info = stmt.name && this.program.structs.get(stmt.name.text);
         if (info && info.decl === stmt && !this.sink.recover(() => collectStructMembers(this, info))) {
@@ -201,6 +214,27 @@ export class Checker implements CheckContext {
     for (const info of structs) {
       if (!info.poisoned && !this.sink.recover(() => finishStruct(this, info))) info.poisoned = true;
     }
+    // Every alias is resolved even when nothing names it, so that a broken
+    // right-hand side and a cycle are reported where they are written rather
+    // than at the first use — or never.
+    for (const info of aliases) this.sink.recover(() => aliasType(info, this.opts));
+  }
+
+  /**
+   * Register an alias under its name. A type alias shares the one declaration
+   * namespace with functions, classes, interfaces and module constants, so
+   * every clash reads the same way whichever came first.
+   */
+  private declareAlias(info: AliasInfo): void {
+    if (
+      this.program.aliases.has(info.name) ||
+      this.program.structs.has(info.name) ||
+      this.sigs.has(info.name) ||
+      this.program.constants.has(info.name)
+    ) {
+      this.error(`\`${info.name}\` is already declared in this module`, info.decl.name);
+    }
+    this.program.aliases.set(info.name, info);
   }
 
   /**
@@ -211,7 +245,12 @@ export class Checker implements CheckContext {
   private collectConstants(stmt: ts.VariableStatement): void {
     for (const decl of stmt.declarationList.declarations) {
       const info = collectConstant(stmt, decl, this.sf, this.opts, this.program.constants);
-      if (this.program.constants.has(info.name) || this.sigs.has(info.name) || this.program.structs.has(info.name)) {
+      if (
+        this.program.constants.has(info.name) ||
+        this.sigs.has(info.name) ||
+        this.program.structs.has(info.name) ||
+        this.program.aliases.has(info.name)
+      ) {
         this.error(`\`${info.name}\` is already declared in this module`, decl.name);
       }
       this.program.constants.set(info.name, info);
@@ -248,6 +287,9 @@ export class Checker implements CheckContext {
     if (this.sigs.has(sig.sourceName)) this.error(`Duplicate function \`${sig.sourceName}\``, stmt);
     if (this.program.structs.has(sig.sourceName)) {
       this.error(`\`${sig.sourceName}\` is already declared as a class or interface`, sig.nameNode);
+    }
+    if (this.program.aliases.has(sig.sourceName)) {
+      this.error(`\`${sig.sourceName}\` is already declared in this module`, sig.nameNode);
     }
     if (sig.exported && sig.sourceName === "main") {
       if (!this.isEntry) this.error("Only the entry module may declare `export function main`", sig.nameNode);

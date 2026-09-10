@@ -470,6 +470,15 @@ function printTypeScriptTree(source, sf) {
         });
         return;
       }
+      // `type X = T;` (WP23). An alias is a declaration in stage1's tree and a
+      // type in its right-hand child, which is exactly TypeScript's shape.
+      case ts.SyntaxKind.TypeAliasDeclaration: {
+        if (node.typeParameters !== undefined) unsupported(node);
+        emit(depth, `TYPE_ALIAS${exported(node)}`, s, e);
+        identifier(node.name, depth + 1);
+        type(node.type, depth + 1);
+        return;
+      }
       case ts.SyntaxKind.VariableStatement: {
         if (!isConst(node.declarationList)) unsupported(node);
         // A module-level `const` bound to an arrow declares a *function*

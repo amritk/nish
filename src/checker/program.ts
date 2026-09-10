@@ -1,5 +1,6 @@
 /** Data model produced by the checker and consumed by the emitter. */
 import ts from "typescript";
+import { AliasInfo } from "./aliases.js";
 import { ConstInfo } from "./constants.js";
 import { StaticType } from "../types.js";
 
@@ -140,6 +141,13 @@ export interface CheckedProgram {
   constants: Map<string, ConstInfo>;
   /** Declared name -> constant, for every `export const` in this module. */
   exportedConstants: Map<string, ConstInfo>;
+  /**
+   * Module-level `type` aliases, by the name they were declared under (WP23).
+   * An alias emits nothing and is not a type of its own — it resolves to the
+   * type it names — so this table exists only to answer an annotation and to
+   * catch a name that is declared twice.
+   */
+  aliases: Map<string, AliasInfo>;
   /**
    * Set on the entry module when it declares `export function main`. The
    * emitter then adds the `define i32 @main(i32, i8**)` wrapper around it.

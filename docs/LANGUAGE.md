@@ -580,11 +580,12 @@ may recycle.
 
 A module (one `.ts` file) may contain, at the top level, only `function`,
 `class`, and `interface` declarations, `const` declarations
-([Module constants](#module-constants)), `import` statements, and `export`
-modifiers on those declarations. Any other top-level statement, including
-`let`, `enum`, and `type` aliases, is rejected with
+([Module constants](#module-constants)), `type` aliases
+([Type aliases](#type-aliases)), `import` statements, and `export` modifiers on
+those declarations. Any other top-level statement, including `let` and `enum`,
+is rejected with
 `Only top-level function declarations are supported in Phase 1 (found <Kind>)`
-(`tests/cases/reject_top_level_stmt`; `enum`/`type` *(CLI only)*); top-level
+(`tests/cases/reject_top_level_stmt`; `enum` *(CLI only)*); top-level
 `let` and `var` name the reason instead (`` Top-level `let` is not supported ``,
 `reject_const_top_level_let`). Modules have no top-level code, so there is no
 initialisation order to worry about — which is exactly why a top-level `const`
@@ -719,6 +720,66 @@ having no top-level code and therefore no initialisation order.
 - **A string constant is a value**, so it is a receiver like any other string:
   `NAME.length` is the folded literal's byte length
   (`tests/cases/const_string_member`).
+
+### Type aliases
+
+```ts
+type Byte = u8;
+type Bytes = Byte[];
+type Reading = Sample | null;
+```
+
+A `type` alias is a second name for a type that already exists. **It is not a
+type of its own**: `type Byte = u8` says that `Byte` and `u8` are two spellings
+of one type, exactly as `Int32Array` is a spelling of `i32[]` (see
+[Types](#types)). So `sameType` never sees the alias's name, there is no new
+LLVM type, and an alias emits nothing at all — the same program written with
+and without its aliases produces byte-identical IR, which is what
+`tests/cases/type_alias_ir` and `tests/cases/type_alias_expanded` are: one
+program twice, with one golden between them.
+
+- **The right-hand side may be any type the language accepts**: a scalar,
+  `string`, `void`, `T[]`, `readonly T[]`, `T | null`, `Result<T, E>`, a
+  declared class or interface, or another alias
+  (`tests/cases/type_alias_ir`). Everything is refused exactly where it would
+  be in an annotation, so `type Bad = any` is `` `any` is forbidden `` and not
+  a rule of its own.
+- **Order does not matter.** An alias may name a class, an interface or an
+  alias declared further down the file, because resolution is by need rather
+  than in source order — the rule module constants follow. A cycle is
+  `` Type alias `Feet` is defined in terms of itself ``
+  (`tests/cases/reject_type_alias_cycle`), the wording the constant cycle uses,
+  because it is the same mistake.
+- **An alias is resolved even when nothing uses it**, so a broken right-hand
+  side is reported where it is written rather than never.
+- **Generic aliases are forbidden**, as every other generic is:
+  `type Box<T> = T[]` is
+  `` Generic type parameters are forbidden in AmritScript (no monomorphisation yet) ``
+  (`tests/cases/reject_type_alias_generic`).
+- **A built-in type name may not be aliased.** `type string = i32` is
+  `` `string` is a built-in type name and cannot be used for a type alias ``
+  (`tests/cases/reject_type_alias_builtin`). A keyword like `string` is
+  resolved from the syntax, and `i32`, `Array`, `ReadonlyArray`, `Result` and
+  the typed-array names before any declared name, so such an alias would
+  otherwise sit there meaning nothing.
+- **The name shares one declaration namespace** with functions, classes,
+  interfaces and module constants: a clash is
+  `` `Point` is already declared in this module `` whichever came first
+  (`tests/cases/reject_type_alias_duplicate`).
+- **An alias is module-local and cannot be exported.**
+  `export type Byte = u8` is
+  `` Type aliases cannot be exported: an alias names a type inside one module (declare it in every module that needs it) ``
+  (`tests/cases/reject_type_alias_export`). This is a limitation rather than a
+  design decision: a module's signatures are resolved before its imports are
+  bound (pass 1 runs during load, pass 1b after it), so an imported name used
+  in type position is resolved provisionally as a class, and an alias has no
+  layout to stand in for. Making it work means resolving every module's
+  aliases before any module's signatures, which is a change to the load order
+  of both drivers and is not part of this rule. Declare the alias in each
+  module that needs it; a class or interface is what crosses a module
+  boundary.
+- **Aliases are top-level only.** `type X = i32` inside a function body is
+  `Unsupported statement in Phase 1: TypeAliasDeclaration` *(CLI only)*.
 
 ### `export` and `import`
 
@@ -1959,7 +2020,7 @@ fragment `tests/run.js` matches and the case that proves it.
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| type parameters on functions, methods, arrows, classes, interfaces, type aliases | `` Generic type parameters are forbidden in AmritScript (no monomorphisation yet) `` | `reject_generic_function`, `reject_generic_class` |
+| type parameters on functions, methods, arrows, classes, interfaces, type aliases | `` Generic type parameters are forbidden in AmritScript (no monomorphisation yet) `` | `reject_generic_function`, `reject_generic_class`, `reject_type_alias_generic` |
 | generators (`function*`) | `` Generators are forbidden in AmritScript (no coroutine runtime) `` | `reject_generator` |
 | `async` functions, methods, arrows | `` `async` functions are forbidden in AmritScript (no event loop or promises) `` | `reject_async_function` |
 | `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |
@@ -2028,7 +2089,10 @@ messages are exact for the cases cited; other rows quote
 
 | Situation | Message | Test |
 | --- | --- | --- |
-| top-level statement other than function/class/interface/const/import | `Only top-level function declarations are supported in Phase 1 (found <Kind>)` | `reject_top_level_stmt` |
+| top-level statement other than function/class/interface/const/type/import | `Only top-level function declarations are supported in Phase 1 (found <Kind>)` | `reject_top_level_stmt` |
+| type alias cycle | `` Type alias `Feet` is defined in terms of itself `` | `reject_type_alias_cycle` |
+| type alias named after a built-in type | `` `string` is a built-in type name and cannot be used for a type alias `` | `reject_type_alias_builtin` |
+| `export` on a type alias | `Type aliases cannot be exported: an alias names a type inside one module ...` | `reject_type_alias_export` |
 | top-level `let` / `var` | `` Top-level `let` is not supported; a module has no top-level code, so only `const` is available `` | `reject_const_top_level_let` |
 | constant initialiser that is not constant | `A module constant's initialiser must be a literal, another constant, or arithmetic over them` | `reject_const_not_constant` |
 | constant cycle | `` Module constant `A` is defined in terms of itself `` | `reject_const_cycle` |

@@ -79,6 +79,7 @@ import {
   N_THROW,
   N_TRUE,
   N_UNARY,
+  N_TYPE_ALIAS,
   N_TYPE_ARRAY,
   N_TYPE_NULL,
   N_TYPE_PAREN,
@@ -418,8 +419,13 @@ export class Parser {
     if (this.at(TOK_CONST) || this.at(TOK_LET)) {
       return this.exportable(this.parseModuleConst(start), exported);
     }
+    // `type` is a contextual keyword, an ordinary identifier everywhere else,
+    // so it is matched by text here exactly as `from` and `of` are.
+    if (this.at(TOK_IDENT) && this.value === "type") {
+      return this.exportable(this.parseTypeAlias(start), exported);
+    }
     return this.fail(
-      `a module holds only \`function\`, \`class\`, \`interface\`, \`const\` and \`import\`, found \`${tokenName(this.kind)}\``
+      `a module holds only \`function\`, \`class\`, \`interface\`, \`const\`, \`type\` and \`import\`, found \`${tokenName(this.kind)}\``
     );
   }
 
@@ -686,6 +692,23 @@ export class Parser {
       this.expect(TOK_RBRACE);
     }
     node.children.push(this.closeList(fields));
+    node.end = this.previousEnd;
+    return node;
+  }
+
+  /**
+   * `type X = T;` — a second name for a type that already exists, never a type
+   * of its own (docs/LANGUAGE.md, Type aliases). A type parameter list is not
+   * accepted: `type Box<T>` stops at the `=` this expects, which is where the
+   * language has always turned generics down.
+   */
+  parseTypeAlias(start: i32): Node {
+    this.advance(); // `type`
+    const node = this.node(N_TYPE_ALIAS, start, this.end);
+    node.children.push(this.parseIdentifier());
+    this.expect(TOK_ASSIGN);
+    node.children.push(this.parseType());
+    this.expectSemicolon();
     node.end = this.previousEnd;
     return node;
   }
