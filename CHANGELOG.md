@@ -46,6 +46,21 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   `self/` and **798** across the corpus is 1,401 rewrites for no
   expressiveness. Stage1 needs no lexer work; `TOK_ARROW` is already emitted.
 
+  §9 audits what the last stage forecloses, because only that stage removes a
+  spelling. **An arrow cannot be a generator** — `const g = *() => {}` is a
+  TypeScript syntax error, and JavaScript has no arrow-generator form — but
+  `function*` and `yield` are already Phase 0 errors ("no coroutine runtime"),
+  so this keeps a forbid rather than blocking a plan, and generator *methods*
+  stay reachable because class methods survive. Overload signatures and
+  `declare function` have no arrow spelling either, both needing the function
+  types Phase 0 forbids; the second matters, because `declare function` is
+  merely "not supported yet" and is the natural way to declare an external C
+  function. So the last stage is scoped to reject a function *definition*, and
+  `declare function` stays legal. Generic functions are fine — `const f =
+  <T>(x: T): T => x` parses in a `.ts` file — but every example in
+  `docs/wp18-generics.md` is written `function identity<T>`, so that surface is
+  restated with the rest of the docs rather than left to contradict this note.
+
 - **What the number mode costs, measured (`docs/wp9-optimisation.md`).** The
   FAQ has said `i32` is "one machine word, exact, vectorisable" since WP11
   with no number beside it. Compiling the same program `--number-mode f64`

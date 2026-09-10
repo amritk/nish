@@ -145,13 +145,59 @@ them. That forces four stages, and no two of them can be merged:
 | **A** | Stage0 accepts arrows: the two rules of §5, the concise-body desugaring, goldens for both body forms, negative tests for every escape in rule 2 | `npm test` green; a golden proves `function f` and `const f = () => ...` emit byte-identical IR |
 | **B** | Stage1 accepts arrows: `self/parser.ts` and its checker half, message-for-message with stage0 | the parser and checker oracles agree on an arrow corpus |
 | **C** | The migration: `self/` first, then the corpus, then the docs | goldens unchanged; the bootstrap reproduces stage1 byte for byte |
-| **D** | `function` is rejected, with §6's message and its `reject_function_declaration` case | `npm test` green with no `function` declaration left in any AmritScript source |
+| **D** | a `function` *definition* is rejected, with §6's message and its `reject_function_declaration` case; `declare function` stays legal (§9) | `npm test` green with no `function` declaration left in any AmritScript source |
 
 Stage C is where the risk is, and it is worth doing `self/` in one commit of
 its own: the bootstrap comparing stage1's output against itself is the only
 check that the 603 rewrites were all meaning-preserving.
 
-## 9. Open
+## 9. What stage D forecloses
+
+Stages A to C are additive and reversible. **D removes a spelling, and a
+removed spelling cannot express anything later**, so this is the audit of what
+`function` can say that an arrow `const` cannot:
+
+| `function` form | Arrow equivalent | Consequence of D |
+| --- | --- | --- |
+| `function* g()` | **none.** `const g = *() => {}` is a TypeScript syntax error (TS1109); JavaScript has no arrow-generator syntax | forecloses top-level generators |
+| overload signatures | none. `const f: { (a: i32): void; (a: string): void }` is an object type with call signatures, which Phase 0 forbids | forecloses overloading |
+| `declare function f(...)` | `declare const f: (a: i32) => i32` needs a function type, which Phase 0 forbids | forecloses ambient/extern declarations |
+| `function f<T>(x: T): T` | `const f = <T>(x: T): T => x` — valid in a `.ts` file (the `<T,>` disambiguation is only needed in `.tsx`) | none, but see below |
+| `async function f()` | `async (n: i32): Promise<i32> => ...` | none |
+
+Three of those need an answer before D lands, and two have one already.
+
+**Generators are not a plan being blocked; they are a forbid being kept.**
+`function*` and `yield` are Phase 0 errors today with a stated reason — "no
+coroutine runtime" (`reject_generator`, `reject_yield`) — and MASTER_PLAN §3.2
+lists them among the constructs the language excludes rather than defers. D
+does not change that. And if a coroutine runtime ever arrives, the spelling is
+still reachable, because **class methods survive D**: `class Chars { *bytes():
+Generator<i32> { ... } }` parses as TypeScript and is a generator method, not a
+generator function. So the escape hatch is the same exception §3 already keeps
+for an unrelated reason.
+
+**WP18's surface has to be restated.** [wp18-generics.md](wp18-generics.md) is
+the plan of record for user generics and every example in it is written
+`function identity<T>(x: T): T`. Nothing technical is lost — the arrow form
+parses — but that rewrite belongs in stage C alongside the rest of the docs,
+not deferred until generics land and the two notes contradict each other.
+
+**Ambient declarations are the live hazard, and D's rule should be narrower
+than "no `function`".** `declare function` is refused by the checker today as
+*not supported yet* rather than forbidden, which is exactly the bucket things
+climb out of: declaring an external C function is the natural thing to want the
+first time somebody binds a library, and the arrow spelling for it needs a
+function type. The fix is to scope D to what it is actually for:
+
+> **D rejects a function *definition* written with the `function` keyword.**
+> `declare function` is not a competing way to define a function — it defines
+> nothing — so it stays legal, and the extern surface stays open.
+
+That keeps D to one spelling of one thing, which is the whole point of taking
+it.
+
+## 10. Open
 
 - **The entry point.** `export const main = (): number => ...` is the
   consequence of §1, and it changes the first line of every example, every
