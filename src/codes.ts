@@ -54,6 +54,8 @@ const RULES: string[] = [
     "AS2035",
     " | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)",
     "AS2010",
+    "Type aliases cannot be exported: an alias names a type inside one module (declare it in every module that needs it)",
+    "AS2276",
     "`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class",
     "AS2155",
     "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead",
@@ -170,6 +172,8 @@ const RULES: string[] = [
     "AS2273",
     "Template literal hole must be string, number, or boolean, got ",
     "AS2238",
+    "` is a built-in type name and cannot be used for a type alias",
+    "AS2275",
     "`Array` needs exactly one type argument, e.g. `Array<number>`",
     "AS2121",
     "`extends` must name exactly one class declared in this module",
@@ -737,7 +741,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 342;
+export const RULE_COUNT = 344;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

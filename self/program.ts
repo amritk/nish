@@ -245,6 +245,34 @@ export class ConstInfo {
   }
 }
 
+/**
+ * A module-level `type` alias. It is not a type of its own: `type Byte = u8`
+ * says that `Byte` and `u8` are two spellings of one type, so this record
+ * holds a type id and the emitter never hears of it (`src/checker/aliases.ts`).
+ *
+ * Resolution is lazy and memoised, for the reasons `ConstInfo`'s fold is: an
+ * alias may name a class declared further down the file, or another alias, and
+ * one that names itself has to be caught rather than followed forever.
+ */
+export class AliasInfo {
+  name: string;
+  decl: Node;
+  /** The module that declares it; an alias never leaves the one that wrote it. */
+  origin: SourceFile;
+  /** The resolved type id, or -1 while it is still a name. */
+  type: i32;
+  /** In progress, which is how a cycle is caught. */
+  resolving: boolean;
+
+  constructor(name: string, decl: Node, origin: SourceFile) {
+    this.name = name;
+    this.decl = decl;
+    this.origin = origin;
+    this.type = -1;
+    this.resolving = false;
+  }
+}
+
 /** One name brought in by `import { f, g as h } from "./m"`. */
 export class ImportBinding {
   /** Module specifier text, e.g. `./math`. Relative specifiers only. */
@@ -354,6 +382,10 @@ export class CheckedProgram {
   constants: StringMap;
   constantList: ConstInfo[];
 
+  /** Name -> index into `aliasList`, for the `type` aliases this module declares. */
+  aliases: StringMap;
+  aliasList: AliasInfo[];
+
   /** Set when this module declares `export function main`; the entry wrapper wraps it. */
   entryMain: FunctionSig | null;
   /** Some function reads `process.argv`, so the `@main` wrapper calls `amrit_argv_init`. */
@@ -391,6 +423,8 @@ export class CheckedProgram {
     this.importsUsedAsTypes = new StringSet();
     this.constants = new StringMap();
     this.constantList = [];
+    this.aliases = new StringMap();
+    this.aliasList = [];
     this.entryMain = null;
     this.usesArgv = false;
     this.nodeTypes = new Array<i32>(nodeCount);
@@ -427,6 +461,17 @@ export class CheckedProgram {
   addConstant(info: ConstInfo): void {
     this.constants.set(info.name, this.constantList.length);
     this.constantList.push(info);
+  }
+
+  /** The `type` alias called `name` in this module, or `null`. */
+  alias(name: string): AliasInfo | null {
+    const at = this.aliases.get(name, -1);
+    return at < 0 ? null : this.aliasList[at];
+  }
+
+  addAlias(info: AliasInfo): void {
+    this.aliases.set(info.name, this.aliasList.length);
+    this.aliasList.push(info);
   }
 
   /** The exported function called `name`, or `null`. */

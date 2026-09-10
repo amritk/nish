@@ -10,7 +10,7 @@
 // WP10's multi-error guarantee, and here it is D1's status returns rather
 // than the six `try`/`catch` sites `src/` uses.
 
-import { resolveType } from "./annotations";
+import { aliasType, builtinTypeName, resolveType } from "./annotations";
 import { checkDefiniteAssignment } from "./assignment";
 import { foldConstant } from "./constants";
 import { CheckContext } from "./context";
@@ -37,12 +37,14 @@ import {
   N_PAREN,
   N_TEMPLATE,
   N_TEMPLATE_TEXT,
+  N_TYPE_ALIAS,
   N_VAR_DECL,
   N_WHILE,
   Node,
 } from "./nodes";
 import { StringSet } from "./map";
 import {
+  AliasInfo,
   CheckedProgram,
   ConstInfo,
   FunctionSig,
@@ -102,6 +104,10 @@ export class Checker {
         if (info !== null) {
           declared.push(info);
         }
+      } else if (stmt.kind === N_TYPE_ALIAS) {
+        // Names first, resolution last: an alias may name a class declared
+        // further down the file, or another alias.
+        this.declareAlias(stmt);
       }
     }
 
@@ -133,13 +139,60 @@ export class Checker {
         checkDefiniteAssignment(this.ctx, info);
       }
     }
+
+    // Last, exactly where stage0 puts it, so two compilers report one file's
+    // diagnostics in one order: every alias is resolved even when nothing
+    // names it, so a broken right-hand side and a cycle are reported where
+    // they are written rather than at the first use -- or never.
+    for (const alias of this.program.aliasList) {
+      this.ctx.errored = false;
+      aliasType(alias, this.ctx);
+    }
+    this.ctx.errored = false;
+  }
+
+  /**
+   * One `type X = T;`. The name goes in now and the right-hand side is
+   * resolved later; the language shares one declaration namespace, so a clash
+   * with a function, class, interface or constant reads the same way whichever
+   * came first.
+   */
+  declareAlias(stmt: Node): void {
+    const nameNode = stmt.children[0];
+    const name = nameNode.text;
+    if (builtinTypeName(name)) {
+      this.ctx.error(nameNode, `\`${name}\` is a built-in type name and cannot be used for a type alias`);
+      return;
+    }
+    if (isExported(stmt)) {
+      this.ctx.error(
+        stmt,
+        "Type aliases cannot be exported: an alias names a type inside one module (declare it in every module that needs it)"
+      );
+      return;
+    }
+    if (
+      this.program.aliases.has(name) ||
+      this.program.structs.has(name) ||
+      this.ctx.sigs.has(name) ||
+      this.program.constants.has(name)
+    ) {
+      this.ctx.error(nameNode, `\`${name}\` is already declared in this module`);
+      return;
+    }
+    this.program.addAlias(new AliasInfo(name, stmt, this.program.source));
   }
 
   /** One `function` declaration: its signature, its name, and `main`. */
   collectFunction(stmt: Node): void {
     const sig = collectFunctionSignature(this.ctx, stmt);
     const name = sig.sourceName;
-    if (this.ctx.sigs.has(name) || this.program.structs.has(name) || this.program.constants.has(name)) {
+    if (
+      this.ctx.sigs.has(name) ||
+      this.program.structs.has(name) ||
+      this.program.constants.has(name) ||
+      this.program.aliases.has(name)
+    ) {
       this.ctx.error(stmt.children[0], `\`${name}\` is already declared in this module`);
       return;
     }
@@ -192,7 +245,12 @@ export class Checker {
         );
         continue;
       }
-      if (this.program.constants.has(name) || this.ctx.sigs.has(name) || this.program.structs.has(name)) {
+      if (
+        this.program.constants.has(name) ||
+        this.ctx.sigs.has(name) ||
+        this.program.structs.has(name) ||
+        this.program.aliases.has(name)
+      ) {
         this.ctx.error(decl.children[0], `\`${name}\` is already declared in this module`);
         continue;
       }

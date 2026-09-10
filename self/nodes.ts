@@ -89,14 +89,18 @@ export const N_TYPE_NULL: i32 = 54; // the `null` of `T | null`
 export const N_SUPER: i32 = 55; // `super`, as `super(...)` or `super.m(...)`
 export const N_TYPE_PAREN: i32 = 56; // children: the type inside the parentheses
 export const N_TYPE_READONLY: i32 = 57; // `readonly T[]`; children: the type the modifier applies to
+// A declaration rather than a type, but numbered here because the numbers are
+// appended and never moved: forty constants and a `nodeName` switch read the
+// same either way, and renumbering them would churn every one of them.
+export const N_TYPE_ALIAS: i32 = 58; // `type X = T;`; children: name, the aliased type
 
-export const N_COUNT: i32 = 58;
+export const N_COUNT: i32 = 59;
 
 // `flags` on N_UNARY: which side the operator was written on.
 export const FLAG_PREFIX: i32 = 0;
 export const FLAG_POSTFIX: i32 = 1;
 
-// `flags` on N_FUNCTION, N_CLASS, N_INTERFACE, N_MODULE_CONST: bit 0 is
+// `flags` on N_FUNCTION, N_CLASS, N_INTERFACE, N_MODULE_CONST, N_TYPE_ALIAS: bit 0 is
 // `export`. A bitfield rather than a field per modifier, because the checker
 // asks about them one at a time and the parser sets them in one place.
 export const FLAG_EXPORTED: i32 = 1;
@@ -260,6 +264,8 @@ export function nodeName(kind: i32): string {
       return "TYPE_PAREN";
     case N_TYPE_READONLY:
       return "TYPE_READONLY";
+    case N_TYPE_ALIAS:
+      return "TYPE_ALIAS";
     default:
       return "?";
   }

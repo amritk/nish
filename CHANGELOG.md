@@ -9,6 +9,44 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **Non-generic `type` aliases, in both compilers.** `type Byte = u8;` at
+  module level is accepted now instead of
+  `Only top-level function declarations are supported in Phase 1 (found TypeAliasDeclaration)`.
+  An alias **is** the type it names, the way `Int32Array` is `i32[]`: no new
+  `StaticType`, no new LLVM type, and no line of IR anywhere. The proof is
+  `tests/cases/type_alias_ir` and `tests/cases/type_alias_expanded` — one
+  program written with the aliases and once without — whose `.ll` goldens are
+  byte-identical files. The right-hand side may be any type the language
+  accepts: a scalar, `string`, `T[]`, `readonly T[]`, `T | null`,
+  `Result<T, E>`, a declared class or interface, or another alias.
+
+  Resolution is lazy and memoised, the way a module constant's fold is, so an
+  alias may name a class or an alias declared further down the file and a cycle
+  is `` Type alias `Feet` is defined in terms of itself `` rather than a hang
+  (`reject_type_alias_cycle`). Every alias is resolved even when nothing names
+  it, so a broken right-hand side is reported where it is written. Generic
+  aliases stay forbidden (`reject_type_alias_generic`), a built-in type name
+  may not be taken (`` `string` is a built-in type name and cannot be used for
+  a type alias ``, `reject_type_alias_builtin`), and the name shares the one
+  declaration namespace with functions, classes, interfaces and constants
+  (`reject_type_alias_duplicate`).
+
+  **An alias does not cross a module boundary yet**: `export type` is
+  `Type aliases cannot be exported` (`reject_type_alias_export`). A module's
+  signatures are resolved during load, before its imports are bound, so an
+  imported name in type position resolves provisionally as a class and an alias
+  has no layout to stand in for; making it work means resolving every module's
+  aliases before any module's signatures, which is a change to both drivers'
+  load order rather than part of this rule. Declare the alias in each module
+  that needs it.
+
+  stage1 grows the grammar to match: `type` is a contextual keyword matched by
+  text where `from` and `of` are, `N_TYPE_ALIAS` is a new node kind, and
+  `tests/parser_oracle.js` transcribes `TypeAliasDeclaration` into it, so the
+  self-hosted parser is still compared with the `typescript` one node for node
+  (AmritScript-0, the subset `self/` is itself written in, is unchanged: it
+  still has no `type` aliases).
+
 - **Stage1 accepts arrow functions too (WP22 stage B).** Both compilers now
   read `const double = (n: i32): i32 => n * 2`, and
   `tests/cases/fn_arrow` ships with the golden `.ll`, the `llvm-as` pass and

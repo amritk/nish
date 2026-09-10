@@ -106,6 +106,10 @@ export function declareStruct(ctx: CheckContext, decl: Node, kind: i32): StructI
     ctx.error(decl.children[0], `\`${name}\` is already declared as a function`);
     return null;
   }
+  if (ctx.program.aliases.has(name)) {
+    ctx.error(decl.children[0], `\`${name}\` is already declared in this module`);
+    return null;
+  }
   const info = new StructInfo(name, kind, ctx.table.structOf(name), decl, ctx.source);
   info.exported = isExported(decl);
   ctx.program.addStruct(name, info);
