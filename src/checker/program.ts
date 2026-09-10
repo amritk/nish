@@ -69,7 +69,19 @@ export interface FunctionSig {
   /** For methods and constructors the first entry is `this` (WP2). */
   params: Param[];
   returnType: StaticType;
-  decl: ts.FunctionDeclaration | ts.MethodDeclaration | ts.ConstructorDeclaration;
+  decl: ts.FunctionDeclaration | ts.MethodDeclaration | ts.ConstructorDeclaration | ts.ArrowFunction;
+  /**
+   * Where a diagnostic that names the function points. An arrow has no name of
+   * its own, so for the arrow form this is the `const`'s identifier (WP22 §5).
+   */
+  nameNode: ts.Node;
+  /**
+   * The body, normalised. A `function`, a method and a constructor always carry
+   * a `Block`; an arrow may carry a concise body (`=> n * 2`), which means
+   * exactly what a block with one `return` means (WP22 §4). The four places
+   * that walk a body branch on `ts.isBlock`.
+   */
+  body: ts.Block | ts.Expression;
   /** Declared with the `export` modifier: callable from other modules, never `internal`. */
   exported: boolean;
   /** Owning class when this is a method or constructor; `params[0]` is then `this`. */

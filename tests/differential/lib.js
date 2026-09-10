@@ -62,7 +62,7 @@ function program(name, entry, argsFile, kind) {
 }
 
 /**
- * Every `tests/cases/*.ts` with `export function main` and no `.err`, and
+ * Every `tests/cases/*.ts` with an exported `main` in either spelling (WP22) and no `.err`, and
  * every corpus program: `tests/differential/corpus/<name>.ts` (+ `<name>.args`)
  * or `tests/differential/corpus/<name>/main.ts` (+ `args`) for multi-module ones.
  */
@@ -74,7 +74,7 @@ function discoverPrograms({ cases = true, corpus = true } = {}) {
       const name = file.slice(0, -3);
       const src = path.join(casesDir, file);
       if (fs.existsSync(path.join(casesDir, `${name}.err`))) continue;
-      if (!/\bexport\s+function\s+main\b/.test(fs.readFileSync(src, "utf8"))) continue;
+      if (!/\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"))) continue;
       out.push(program(`cases/${name}`, src, path.join(casesDir, `${name}.args`), "case"));
     }
   }

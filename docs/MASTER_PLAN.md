@@ -745,3 +745,17 @@ is rough, and its one hard blocker is that the symbol namespace is flat today
 because the whole-program fact table is keyed by symbol name. Package-scoped
 symbols are its first stage, have no language surface, and are worth landing
 early: the diff is mechanical and grows with every new golden.
+
+The declaration form is not on that list either, and it is the one entry here
+that is pure spelling: **arrow functions become how AmritScript declares a
+function, and `function` becomes legacy**.
+[wp22-arrow-functions.md](wp22-arrow-functions.md) is the plan of record. The
+change cannot alter a byte of IR — the emitter reads `FunctionSig`s and never
+the declaration's syntax kind — so the golden `.ll` files verify the migration
+instead of being work it creates, and the two checker rules it needs accept an
+arrow without admitting the function values Phase 0 forbids. The order is
+forced by the bootstrap: both compilers must accept arrows before `self/` can
+be migrated, and `self/` must be arrows before `function` can be rejected.
+Stages A and B are cheap and strictly additive; C and D are 1,401 rewrites for
+no expressiveness, and are worth taking incrementally — new code in arrows, a
+file converted when it is opened for another reason — rather than as a flag day.

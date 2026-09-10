@@ -163,8 +163,9 @@ for (const name of cases) {
 
   if (fs.existsSync(side("out")) && HAS_CLANG) {
     const driver = fs.existsSync(side("c")) ? side("c") : path.join(root, "tests", "driver.c");
-    // WP5: a case with its own `export function main` is a whole program; link it without the driver.
-    const hasEntry = /\bexport\s+function\s+main\b/.test(fs.readFileSync(src, "utf8"));
+    // WP5: a case with its own exported `main` is a whole program; link it without the driver.
+    // Either spelling declares it (WP22): `export function main` or `export const main = (...) => ...`.
+    const hasEntry = /\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"));
     const exe = path.join(buildDir, name);
     // -lm: Math.sin/cos/exp/log/pow lower to LLVM intrinsics that become libm calls (WP7).
     const cc = spawnSync(

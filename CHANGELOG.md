@@ -9,6 +9,124 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **Stage1 accepts arrow functions too (WP22 stage B).** Both compilers now
+  read `const double = (n: i32): i32 => n * 2`, and
+  `tests/cases/fn_arrow` ships with the golden `.ll`, the `llvm-as` pass and
+  the native round trip that stage A could not carry — `IR(stage0, p) ==
+  IR(stage1, p)` holds byte for byte over it, concise body and recursion
+  included.
+
+  One piece of the parser was genuine work: a parenthesis opens a parameter
+  list *and* a parenthesised expression, and `self/parser.ts` keeps one token
+  of lookahead, so `const x = (a + b) * c` and `const f = (a: i32): i32 => a`
+  are indistinguishable at the `(`. A scratch `Lexer` runs ahead over the same
+  source from the `const`, counts to the parenthesis that closes this one and
+  looks at what follows: `=>`, or the `:` of a return type. Exact rather than
+  heuristic — nothing else can follow a parameter list, and at the head of an
+  initialiser nothing else puts a `:` after a parenthesis.
+
+  Everything downstream was free, because the parser **normalises** to the same
+  `N_FUNCTION` node the keyword builds: stage1's checker, emitter, attribute
+  pass and escape analysis are untouched for block bodies.
+  `tests/parser_oracle.js` normalises the same way and says so — the one place
+  it reshapes a `typescript` tree rather than transcribing it, because the
+  language says the two spellings declare one thing. It agrees on
+  `fn_arrow` node for node and span for span.
+
+  **The oracles earned their keep twice.** `tests/self/checked_oracle.js`
+  caught `self/dump.ts` guarding its body walk on `N_BLOCK`, so a call inside a
+  concise body — `sumTo` recursing at 13:50 — was missing from stage1's
+  `--emit-checked` output while stage0 printed it. The real callee table was
+  never wrong (the IR oracle agreed byte for byte); it was the dump that could
+  not see past the guard, and `walkBody` had always been a generic node walker.
+
+  **The harness, not the compiler, was the other surprise.** `tests/run.js` decided
+  whether a case is a whole program by matching
+  `` /\bexport\s+function\s+main\b/ `` against the source, and
+  `tests/differential/{lib,unmodified}.js` did the same, so an arrow entry
+  point linked against `tests/driver.c` and failed with *multiple definition of
+  `main`*. Three regexes, each now accepting either spelling — and a preview of
+  what stage C will keep finding: the tooling that reads AmritScript with a
+  regex rather than a parser.
+
+- **Arrow functions declare a function (WP22 stage A, stage0).** `const double
+  = (n: i32): i32 => n * 2` at module level declares a *function*, not a value,
+  and takes its signature from the arrow's own annotations — so nothing needs
+  the function type Phase 0 forbids. A concise body (`=> n * 2`) means exactly
+  what a block with one `return` means, and lowers through the same
+  `emitReturnValue`. The `function` keyword still declares the same thing and
+  is now the legacy spelling.
+
+  **The two spellings emit byte-identical IR**, which is what makes the
+  migration ahead verifiable: the emitter iterates checked `FunctionSig`s and
+  never looks at the declaration's syntax kind, so one program written both
+  ways diffs clean. `FunctionSig` gains a normalised `body` (a `Block` or the
+  concise expression) and a `nameNode` — an arrow has no name of its own, so a
+  diagnostic that names the function points at the `const`'s identifier.
+
+  A function is still not a value in either spelling: the arrow form registers
+  in the function table and never in `program.constants`, so `const alias =
+  double` is `` Unknown identifier `double` `` exactly as it always was for
+  `function`. Rejections: `reject_arrow_let`, `reject_arrow_annotated`,
+  `reject_arrow_return_type`, `reject_arrow_as_value`.
+
+  The positive golden waits for stage B, and finding out why corrected the
+  plan: every program in `tests/cases/` is compiled by **both** compilers, so
+  an arrow program there fails `tests/self/ir_oracle.js` with `1 rejected by
+  stage1` until stage1 parses arrows too.
+
+- **A plan for arrow functions (WP22, `docs/wp22-arrow-functions.md`).**
+  `const f = (n: i32): i32 => n * 2` becomes how AmritScript declares a
+  function, and `function` becomes legacy. The note's first job is to establish
+  that this cannot change the output of any program: `codegen/emitter.ts`
+  iterates the checked `FunctionSig`s and there is no `isFunctionDeclaration`
+  anywhere in `src/codegen/`, so the declaration form is erased before codegen
+  begins. That turns the **golden `.ll` files into the migration's oracle
+  rather than work it creates** — a rewritten test case whose golden moved by
+  one byte is a wrong rewrite.
+
+  Runtime cost is nil on both sides. Under Node, 2x10^9 calls at a monomorphic
+  call site measured 1475.6 / 1494.9 / 1495.2 ms for declarations against
+  1510.1 / 1486.1 / 1486.3 ms for arrows. A first attempt said arrows were
+  **7.6x slower** and was wrong in an instructive way: it passed both forms
+  through one `bench(f)` helper, so the second made the call site polymorphic
+  and deoptimised it — the declaration then measured 10.5 s too. What costs 7x
+  in JavaScript is an indirect call site with more than one callee, and
+  AmritScript forbids function values outright, so every call site is
+  monomorphic by construction.
+
+  Two checker rules accept an arrow without admitting those values: a
+  module-level `const` whose initializer is an arrow **is** a function
+  declaration and takes its signature from the arrow's own annotations, and a
+  name bound to a function may appear **only in call position**. Class methods
+  stay methods, which is the one permanent exception to "one spelling". The
+  concise body (`=> n * 2`) is the only genuinely new shape, and needs one
+  desugaring at the ~40 sites that reach `sig.decl.body`, because
+  `FunctionSig.decl` is already a three-way union and arrows are a fourth
+  member rather than a refactor.
+
+  The order is forced by the bootstrap — both compilers must accept arrows
+  before `self/` can be migrated, and `self/` must be arrows before `function`
+  can be rejected — so the note lays out four stages and recommends taking the
+  last two incrementally rather than as a flag day: **603** declarations in
+  `self/` and **798** across the corpus is 1,401 rewrites for no
+  expressiveness. Stage1 needs no lexer work; `TOK_ARROW` is already emitted.
+
+  §9 audits what the last stage forecloses, because only that stage removes a
+  spelling. **An arrow cannot be a generator** — `const g = *() => {}` is a
+  TypeScript syntax error, and JavaScript has no arrow-generator form — but
+  `function*` and `yield` are already Phase 0 errors ("no coroutine runtime"),
+  so this keeps a forbid rather than blocking a plan, and generator *methods*
+  stay reachable because class methods survive. Overload signatures and
+  `declare function` have no arrow spelling either, both needing the function
+  types Phase 0 forbids; the second matters, because `declare function` is
+  merely "not supported yet" and is the natural way to declare an external C
+  function. So the last stage is scoped to reject a function *definition*, and
+  `declare function` stays legal. Generic functions are fine — `const f =
+  <T>(x: T): T => x` parses in a `.ts` file — but every example in
+  `docs/wp18-generics.md` is written `function identity<T>`, so that surface is
+  restated with the rest of the docs rather than left to contradict this note.
+
 - **What the number mode costs, measured (`docs/wp9-optimisation.md`).** The
   FAQ has said `i32` is "one machine word, exact, vectorisable" since WP11
   with no number beside it. Compiling the same program `--number-mode f64`

@@ -166,6 +166,8 @@ const RULES: string[] = [
     "AS2143",
     " (it has `isOk`, `isErr`, `orReturn`, `unwrapOr` and `expect`)",
     "AS2005",
+    "` takes its signature from the arrow; drop the annotation on `",
+    "AS2273",
     "Template literal hole must be string, number, or boolean, got ",
     "AS2238",
     "`Array` needs exactly one type argument, e.g. `Array<number>`",
@@ -364,10 +366,14 @@ const RULES: string[] = [
     "AS2004",
     "Cannot declare a variable of type void",
     "AS2183",
+    "` must be declared `const`, not `let`",
+    "AS2272",
     "`break` outside of a loop or `switch`",
     "AS2122",
     "`join` expects 0 or 1 arguments, got ",
     "AS2138",
+    "A function declaration binds one name",
+    "AS2274",
     "Only simple variables can be assigned",
     "AS2228",
     " (use --number-mode f64 or toF64(x))",
@@ -731,7 +737,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 339;
+export const RULE_COUNT = 342;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

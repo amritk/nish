@@ -166,6 +166,18 @@ function checkReturn(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
     }
     return true;
   }
+  checkReturnValue(ctx, value, scope);
+  return true;
+}
+
+/**
+ * The value of a `return`, checked against the enclosing function's return
+ * type. Shared with the concise arrow body (`=> n * 2`), which means the same
+ * thing as a block with one `return` (docs/wp22-arrow-functions.md).
+ */
+export function checkReturnValue(ctx: CheckContext, value: Node, scope: Scope): void {
+  const current = ctx.current;
+  const want = current === null ? T_ERROR : current.returnType;
   const got = checkExpression(ctx, value, scope, want);
   if (got !== T_ERROR && want !== T_ERROR && !ctx.table.assignable(got, want)) {
     ctx.error(
@@ -173,7 +185,6 @@ function checkReturn(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
       `Return type mismatch: function returns ${ctx.table.typeName(want)} but expression is ${ctx.table.typeName(got)}`
     );
   }
-  return true;
 }
 
 /** Each `let`/`const` of a list, declared in `scope`. Shared with a `for` initializer. */
