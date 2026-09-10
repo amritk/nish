@@ -586,7 +586,8 @@ const double = (n: i32): i32 => n * 2; // a concise body is that one `return`
 ```
 
 The `function` keyword declares the same thing and is accepted as the legacy
-spelling; the two compile to identical IR, instruction for instruction.
+spelling; the two compile to identical IR, instruction for instruction
+(`tests/cases/fn_arrow`), and both compilers read both.
 
 - **The arrow form** is a `const` — `let` is
   `` Function `f` must be declared `const`, not `let` ``

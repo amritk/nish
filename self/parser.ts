@@ -412,6 +412,9 @@ export class Parser {
     if (this.at(TOK_FUNCTION)) return this.exportable(this.parseFunction(start), exported);
     if (this.at(TOK_CLASS)) return this.exportable(this.parseClass(start), exported);
     if (this.at(TOK_INTERFACE)) return this.exportable(this.parseInterface(start), exported);
+    if (this.at(TOK_CONST) && this.startsArrowDeclaration()) {
+      return this.exportable(this.parseArrowFunction(start), exported);
+    }
     if (this.at(TOK_CONST) || this.at(TOK_LET)) {
       return this.exportable(this.parseModuleConst(start), exported);
     }
@@ -475,6 +478,61 @@ export class Parser {
     node.children.push(this.parseParameters());
     node.children.push(this.parseReturnType());
     node.children.push(this.parseBlock());
+    node.end = this.previousEnd;
+    return node;
+  }
+
+  /**
+   * Whether the `const` about to be parsed declares a function rather than a
+   * value — `const double = (n: i32): i32 => n * 2`
+   * (docs/wp22-arrow-functions.md).
+   *
+   * The parenthesis that opens a parameter list also opens a parenthesised
+   * expression, so `const x = (a + b) * c` and `const f = (a: i32): i32 => a`
+   * cannot be told apart by the one token of lookahead this parser keeps. A
+   * scratch lexer runs ahead over the same source instead, counts to the
+   * parenthesis that closes this one, and looks at what follows: `=>`, or the
+   * `:` of a return type. Nothing else can follow a parameter list, and at the
+   * head of an initialiser nothing else puts a `:` after a parenthesis — a
+   * ternary's `:` belongs to a condition that started earlier.
+   */
+  startsArrowDeclaration(): boolean {
+    const scan = new Lexer(this.file.text);
+    scan.pos = this.start;
+    scan.next(); // `const`
+    scan.next();
+    if (scan.kind !== TOK_IDENT) return false;
+    scan.next();
+    if (scan.kind !== TOK_ASSIGN) return false;
+    scan.next();
+    if (scan.kind !== TOK_LPAREN) return false;
+    let depth = 1;
+    while (depth > 0) {
+      scan.next();
+      if (scan.kind === TOK_END) return false;
+      if (scan.kind === TOK_LPAREN) depth = depth + 1;
+      else if (scan.kind === TOK_RPAREN) depth = depth - 1;
+    }
+    scan.next();
+    return scan.kind === TOK_ARROW || scan.kind === TOK_COLON;
+  }
+
+  /**
+   * `const double = (n: i32): i32 => n * 2;` -- the same `N_FUNCTION` the
+   * `function` spelling builds, so every pass after this one is unchanged. The
+   * body child is the `BLOCK` when there is one and the returned expression
+   * when the body is concise.
+   */
+  parseArrowFunction(start: i32): Node {
+    this.advance(); // `const`
+    const node = this.node(N_FUNCTION, start, this.end);
+    node.children.push(this.parseIdentifier());
+    this.expect(TOK_ASSIGN);
+    node.children.push(this.parseParameters());
+    node.children.push(this.parseReturnType());
+    this.expect(TOK_ARROW);
+    node.children.push(this.at(TOK_LBRACE) ? this.parseBlock() : this.parseExpression());
+    this.expectSemicolon();
     node.end = this.previousEnd;
     return node;
   }

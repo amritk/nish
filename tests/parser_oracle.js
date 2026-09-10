@@ -472,6 +472,30 @@ function printTypeScriptTree(source, sf) {
       }
       case ts.SyntaxKind.VariableStatement: {
         if (!isConst(node.declarationList)) unsupported(node);
+        // A module-level `const` bound to an arrow declares a *function*
+        // (docs/wp22-arrow-functions.md), and stage1's parser builds the same
+        // `N_FUNCTION` it builds for the `function` spelling -- so this side
+        // normalises the same way. It is the one place the oracle reshapes a
+        // `typescript` tree rather than transcribing it, and it does so
+        // because the language says the two spellings declare one thing.
+        const single = node.declarationList.declarations;
+        const arrow =
+          single.length === 1 && single[0].initializer !== undefined && ts.isArrowFunction(single[0].initializer)
+            ? single[0].initializer
+            : undefined;
+        if (arrow !== undefined) {
+          if (arrow.typeParameters !== undefined || arrow.type === undefined) unsupported(node);
+          if (single[0].type !== undefined || !ts.isIdentifier(single[0].name)) unsupported(node);
+          emit(depth, `FUNCTION${exported(node)}`, s, e);
+          identifier(single[0].name, depth + 1);
+          list(depth + 1, arrow.parameters, parameter);
+          type(arrow.type, depth + 1);
+          // The body child is the block, or the expression a concise body
+          // returns -- exactly what stage1 puts there.
+          if (ts.isBlock(arrow.body)) block(arrow.body, depth + 1);
+          else expression(arrow.body, depth + 1);
+          return;
+        }
         emit(depth, `MODULE_CONST${exported(node)}+const`, s, e);
         list(depth + 1, node.declarationList.declarations, variableDeclaration);
         return;

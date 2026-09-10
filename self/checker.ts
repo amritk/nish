@@ -52,7 +52,7 @@ import {
   StructRegistry,
 } from "./program";
 import { checkResultLocalsHandled } from "./result";
-import { checkStatements } from "./statements";
+import { checkReturnValue, checkStatements } from "./statements";
 import { Local, STORAGE_PARAM, Scope } from "./symbols";
 import {
   checkImplements,
@@ -232,7 +232,14 @@ export class Checker {
     // The body shares the parameter scope rather than opening a child, so
     // `function f(a) { let a; }` is a duplicate declaration as in TypeScript.
     const before = this.ctx.sink.count();
-    const terminates = checkStatements(this.ctx, body.children, scope);
+    // A concise arrow body (`=> n * 2`) is a block with one `return`, so it
+    // always terminates and its expression is checked as that return's.
+    let terminates = true;
+    if (body.kind === N_BLOCK) {
+      terminates = checkStatements(this.ctx, body.children, scope);
+    } else {
+      checkReturnValue(this.ctx, body, scope);
+    }
     const failed = this.ctx.sink.count() > before;
     if (failed) {
       sig.poisoned = true;

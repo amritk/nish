@@ -9,6 +9,46 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **Stage1 accepts arrow functions too (WP22 stage B).** Both compilers now
+  read `const double = (n: i32): i32 => n * 2`, and
+  `tests/cases/fn_arrow` ships with the golden `.ll`, the `llvm-as` pass and
+  the native round trip that stage A could not carry — `IR(stage0, p) ==
+  IR(stage1, p)` holds byte for byte over it, concise body and recursion
+  included.
+
+  One piece of the parser was genuine work: a parenthesis opens a parameter
+  list *and* a parenthesised expression, and `self/parser.ts` keeps one token
+  of lookahead, so `const x = (a + b) * c` and `const f = (a: i32): i32 => a`
+  are indistinguishable at the `(`. A scratch `Lexer` runs ahead over the same
+  source from the `const`, counts to the parenthesis that closes this one and
+  looks at what follows: `=>`, or the `:` of a return type. Exact rather than
+  heuristic — nothing else can follow a parameter list, and at the head of an
+  initialiser nothing else puts a `:` after a parenthesis.
+
+  Everything downstream was free, because the parser **normalises** to the same
+  `N_FUNCTION` node the keyword builds: stage1's checker, emitter, attribute
+  pass and escape analysis are untouched for block bodies.
+  `tests/parser_oracle.js` normalises the same way and says so — the one place
+  it reshapes a `typescript` tree rather than transcribing it, because the
+  language says the two spellings declare one thing. It agrees on
+  `fn_arrow` node for node and span for span.
+
+  **The oracles earned their keep twice.** `tests/self/checked_oracle.js`
+  caught `self/dump.ts` guarding its body walk on `N_BLOCK`, so a call inside a
+  concise body — `sumTo` recursing at 13:50 — was missing from stage1's
+  `--emit-checked` output while stage0 printed it. The real callee table was
+  never wrong (the IR oracle agreed byte for byte); it was the dump that could
+  not see past the guard, and `walkBody` had always been a generic node walker.
+
+  **The harness, not the compiler, was the other surprise.** `tests/run.js` decided
+  whether a case is a whole program by matching
+  `` /\bexport\s+function\s+main\b/ `` against the source, and
+  `tests/differential/{lib,unmodified}.js` did the same, so an arrow entry
+  point linked against `tests/driver.c` and failed with *multiple definition of
+  `main`*. Three regexes, each now accepting either spelling — and a preview of
+  what stage C will keep finding: the tooling that reads AmritScript with a
+  regex rather than a parser.
+
 - **Arrow functions declare a function (WP22 stage A, stage0).** `const double
   = (n: i32): i32 => n * 2` at module level declares a *function*, not a value,
   and takes its signature from the arrow's own annotations — so nothing needs

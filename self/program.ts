@@ -19,7 +19,7 @@
 
 import { SourceFile } from "./diagnostics";
 import { StringMap, StringSet } from "./map";
-import { N_BLOCK, N_CONSTRUCTOR, Node } from "./nodes";
+import { N_CONSTRUCTOR, N_EMPTY, Node } from "./nodes";
 import { Local } from "./symbols";
 
 /** What a `FunctionSig` is: a free function, a method, or a constructor. */
@@ -55,10 +55,16 @@ export class FunctionSig {
   /** A statement of the body was rejected: no IR is emitted for this program. */
   poisoned: boolean;
 
-  /** The `BLOCK` of the body, or `null` when the declaration has none. */
+  /**
+   * The body, or `null` when the declaration has none. A `BLOCK` for every
+   * form but the concise arrow body (`=> n * 2`), which is the expression it
+   * returns (docs/wp22-arrow-functions.md §4); the two callers that want a
+   * statement list check `kind === N_BLOCK` for themselves, and the analyses
+   * that only walk the tree take either.
+   */
   body(): Node | null {
-    const block = this.decl.kind === N_CONSTRUCTOR ? this.decl.children[1] : this.decl.children[3];
-    return block.kind === N_BLOCK ? block : null;
+    const node = this.decl.kind === N_CONSTRUCTOR ? this.decl.children[1] : this.decl.children[3];
+    return node.kind === N_EMPTY ? null : node;
   }
 
   /**

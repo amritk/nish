@@ -329,7 +329,12 @@ export class Emitter {
       emitConstructorPrologue(this, sig);
     }
     const body = sig.decl.kind === N_CONSTRUCTOR ? sig.decl.children[1] : sig.decl.children[3];
-    this.emitBlock(body);
+    // A concise arrow body is the one `return` it means.
+    if (body.kind === N_BLOCK) {
+      this.emitBlock(body);
+    } else {
+      this.emitReturnValue(body);
+    }
 
     // Void functions may fall off the end; give them an explicit terminator.
     if (!this.fn.currentBlock().terminated()) {
@@ -636,6 +641,15 @@ export class Emitter {
       this.fn.emit("ret void");
       return;
     }
+    this.emitReturnValue(value);
+  }
+
+  /**
+   * The value half of a `return`, shared with the concise arrow body, which
+   * lowers to exactly the instructions the block with one `return` it means
+   * lowers to (docs/wp22-arrow-functions.md).
+   */
+  emitReturnValue(value: Node): void {
     const sig = this.currentSig;
     if (sig === null) {
       process.exit(internalError("emitter: `return` outside a function"));

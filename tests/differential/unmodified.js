@@ -55,7 +55,9 @@ function programs() {
       const name = path.basename(source, ".ts");
       if (name.startsWith("reject_")) continue;
       if (!fs.existsSync(source)) continue;
-      if (!fs.readFileSync(source, "utf8").includes("export function main")) continue;
+      // Either spelling declares the entry (WP22).
+      const text = fs.readFileSync(source, "utf8");
+      if (!/\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(text)) continue;
       found.push({ name, source });
     }
   }

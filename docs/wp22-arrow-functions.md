@@ -143,12 +143,13 @@ them. That forces four stages, and no two of them can be merged:
 | Stage | What lands | Done when |
 | --- | --- | --- |
 | **A** | Stage0 accepts arrows: §5's rules, the concise-body branch, negative tests | `npm test` green; the two spellings of one program emit byte-identical IR |
-| **B** | Stage1 accepts arrows: `self/parser.ts` and its checker half, message-for-message with stage0 | the parser and checker oracles agree on an arrow corpus |
+| **B** | Stage1 accepts arrows: the lookahead and `parseArrowFunction` in `self/parser.ts`, the concise-body branch in its checker and emitter | the parser oracle builds the same tree with the same spans, and `IR(stage0) == IR(stage1)` byte for byte |
 | **C** | The migration: `self/` first, then the corpus, then the docs | goldens unchanged; the bootstrap reproduces stage1 byte for byte |
 | **D** | a `function` *definition* is rejected, with §6's message and its `reject_function_declaration` case; `declare function` stays legal (§9) | `npm test` green with no `function` declaration left in any AmritScript source |
 
 **A cannot carry its own positive golden, and that is the plan's one real
-correction.** Every `.ts` in `tests/cases/` is compiled by *both* compilers —
+correction.** *(Resolved in B: `tests/cases/fn_arrow` ships there, with its
+golden `.ll`, its `llvm-as` pass and its native round trip.)* Every `.ts` in `tests/cases/` is compiled by *both* compilers —
 `tests/self/ir_oracle.js` requires stage1 to emit what stage0 emits for each of
 them — so an arrow program in the corpus fails the oracle until B lands, with
 `1 rejected by stage1`. Stage A therefore ships its rejection cases (stage1's
@@ -161,6 +162,48 @@ in the corpus yet.
 Stage C is where the risk is, and it is worth doing `self/` in one commit of
 its own: the bootstrap comparing stage1's output against itself is the only
 check that the 603 rewrites were all meaning-preserving.
+
+### What B cost, measured
+
+Stage1's parser needed one piece of genuine work and the rest fell out. The
+piece: the parenthesis that opens a parameter list also opens a parenthesised
+expression, and `self/parser.ts` keeps one token of lookahead, which cannot
+tell `const x = (a + b) * c` from `const f = (a: i32): i32 => a`. A scratch
+`Lexer` over the same source runs ahead from the `const`, counts to the
+parenthesis that closes this one and looks at what follows — `=>`, or the `:`
+of a return type. Nothing else can follow a parameter list, and at the head of
+an initialiser nothing else puts a `:` after a parenthesis, so the test is
+exact rather than heuristic.
+
+Everything downstream was free, because the parser **normalises**: it builds
+the same `N_FUNCTION` node the `function` spelling builds, with the name from
+the `const` and the parameters, return type and body from the arrow. Stage1's
+checker, emitter, attribute pass and escape analysis are untouched for block
+bodies. `tests/parser_oracle.js` normalises the same way, and says so — it is
+the one place that oracle reshapes a `typescript` tree rather than
+transcribing it, and it does so because the language says the two spellings
+declare one thing.
+
+The concise body cost four small branches, mirroring stage A's: `body()`
+answers the expression rather than `null`, the checker calls
+`checkReturnValue`, the emitter calls `emitReturnValue`, and the dump already
+tested for a block. The analyses that only walk the tree took the expression
+unchanged.
+
+The oracles caught one thing the branches missed: `self/dump.ts` guarded its
+body walk on `N_BLOCK`, so a call inside a concise body never reached
+`--emit-checked`, and `tests/self/checked_oracle.js` said so. The emitted IR was
+never affected — `walkBody` prints the callee table, it does not build it — but
+it is the shape of mistake this migration invites, and the reason every branch
+added for the concise body is worth reading twice.
+
+**The surprise was outside the compiler.** `tests/run.js` decided whether a
+case is a whole program by matching `/\bexport\s+function\s+main\b/` against
+the source, and `tests/differential/{lib,unmodified}.js` did the same — so an
+arrow entry point linked against `tests/driver.c` and failed with *multiple
+definition of `main`*. Three regexes, each now accepting either spelling. This
+is the shape of what stage C will keep finding: not the compiler, but the
+tooling around it that reads AmritScript with a regex.
 
 ## 9. What stage D forecloses
 

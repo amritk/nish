@@ -22,7 +22,7 @@
 import { Compilation, ModuleUnit } from "./compilation";
 import { SourceFile } from "./diagnostics";
 import { jsonQuote } from "./strings";
-import { N_BLOCK, N_CALL, N_CONSTRUCTOR, N_IDENT, N_NEW, N_VAR_DECL, Node } from "./nodes";
+import { N_CALL, N_CONSTRUCTOR, N_EMPTY, N_IDENT, N_NEW, N_VAR_DECL, Node } from "./nodes";
 import {
   CheckedProgram,
   ConstInfo,
@@ -108,7 +108,9 @@ function bodyTables(
   out: string[]
 ): void {
   const body = sig.decl.kind === N_CONSTRUCTOR ? sig.decl.children[1] : sig.decl.children[3];
-  if (body.kind === N_BLOCK) {
+  // Any body, not just a block: a concise arrow body is the expression it
+  // returns, and a call inside it is a callee like any other.
+  if (body.kind !== N_EMPTY) {
     walkBody(program, source, table, body, out);
   }
 }

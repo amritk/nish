@@ -88,6 +88,31 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end fn_add -->
 
+### The same function as an arrow
+
+The declaration form is a spelling, not a lowering
+([wp22-arrow-functions.md](wp22-arrow-functions.md)): the emitter reads the
+checked signature and never the syntax that produced it, so the arrow form and
+the `function` above compile to the same module, instruction for instruction —
+attribute group included. A **concise body** (`=> a + b`) is the one `return`
+it means, and lowers through the same code path.
+
+<!-- cookbook:begin fn_add_arrow -->
+```ts
+const add = (a: number, b: number): number => a + b;
+```
+
+```llvm
+define internal noundef i32 @add(i32 noundef %a, i32 noundef %b) #0 {
+entry:
+  %0 = add nsw i32 %a, %b
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readnone }
+```
+<!-- cookbook:end fn_add_arrow -->
+
 ### The same function with `--plain`
 
 <!-- cookbook:begin fn_add_plain -->
