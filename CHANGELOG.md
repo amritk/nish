@@ -9,6 +9,43 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
 ### Added
 
+- **A plan for arrow functions (WP22, `docs/wp22-arrow-functions.md`).**
+  `const f = (n: i32): i32 => n * 2` becomes how AmritScript declares a
+  function, and `function` becomes legacy. The note's first job is to establish
+  that this cannot change the output of any program: `codegen/emitter.ts`
+  iterates the checked `FunctionSig`s and there is no `isFunctionDeclaration`
+  anywhere in `src/codegen/`, so the declaration form is erased before codegen
+  begins. That turns the **golden `.ll` files into the migration's oracle
+  rather than work it creates** — a rewritten test case whose golden moved by
+  one byte is a wrong rewrite.
+
+  Runtime cost is nil on both sides. Under Node, 2x10^9 calls at a monomorphic
+  call site measured 1475.6 / 1494.9 / 1495.2 ms for declarations against
+  1510.1 / 1486.1 / 1486.3 ms for arrows. A first attempt said arrows were
+  **7.6x slower** and was wrong in an instructive way: it passed both forms
+  through one `bench(f)` helper, so the second made the call site polymorphic
+  and deoptimised it — the declaration then measured 10.5 s too. What costs 7x
+  in JavaScript is an indirect call site with more than one callee, and
+  AmritScript forbids function values outright, so every call site is
+  monomorphic by construction.
+
+  Two checker rules accept an arrow without admitting those values: a
+  module-level `const` whose initializer is an arrow **is** a function
+  declaration and takes its signature from the arrow's own annotations, and a
+  name bound to a function may appear **only in call position**. Class methods
+  stay methods, which is the one permanent exception to "one spelling". The
+  concise body (`=> n * 2`) is the only genuinely new shape, and needs one
+  desugaring at the ~40 sites that reach `sig.decl.body`, because
+  `FunctionSig.decl` is already a three-way union and arrows are a fourth
+  member rather than a refactor.
+
+  The order is forced by the bootstrap — both compilers must accept arrows
+  before `self/` can be migrated, and `self/` must be arrows before `function`
+  can be rejected — so the note lays out four stages and recommends taking the
+  last two incrementally rather than as a flag day: **603** declarations in
+  `self/` and **798** across the corpus is 1,401 rewrites for no
+  expressiveness. Stage1 needs no lexer work; `TOK_ARROW` is already emitted.
+
 - **What the number mode costs, measured (`docs/wp9-optimisation.md`).** The
   FAQ has said `i32` is "one machine word, exact, vectorisable" since WP11
   with no number beside it. Compiling the same program `--number-mode f64`
