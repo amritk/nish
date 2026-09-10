@@ -392,6 +392,9 @@ export function main(): number {
   }
 
   const compilation = new Compilation(opts);
+  // The tree is printed from what parsed and validated, so pass 1's refusals
+  // do not stop the load — stage0 records them and reaches its dump first.
+  compilation.dumpOnly = emitAst;
   let loaded = true;
   for (const root of roots) {
     if (!compilation.load(root)) {

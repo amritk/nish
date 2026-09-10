@@ -108,6 +108,13 @@ export class Compilation {
   facts: FactsTable | null;
   /** How many diagnostics Phase 0 reported, over every module loaded so far. */
   validationErrors: i32;
+  /**
+   * `--emit-ast` is answered from the parsed and validated modules, and stage0
+   * reaches its dump before it looks at anything pass 1 recorded — so a pass 1
+   * refusal must not stop the load here either. Phase 0 still does: stage0's
+   * validator throws, and a program it refuses prints no tree on either side.
+   */
+  dumpOnly: boolean;
   /** The analysis units the fixpoint ran over, in `modules` order. */
   analysisUnits: AnalysisUnit[];
 
@@ -122,6 +129,7 @@ export class Compilation {
     this.facts = null;
     this.analysisUnits = [];
     this.validationErrors = 0;
+    this.dumpOnly = false;
   }
 
   entry(): ModuleUnit {
@@ -195,15 +203,16 @@ export class Compilation {
     }
     const beforeSignatures = this.sink.count();
     checker.collectSignatures(); // pass 1, which also validates the import syntax
-    if (this.sink.count() > beforeSignatures) {
-      // Pass 1 refused something in this module, and stage0 stops there rather
-      // than going on to its imports: a duplicate function in the entry hides
-      // everything a module it imports would have said, because the imported
-      // module is never loaded (`tests/link/main_in_import` in f64 mode, where
-      // the entry's own `main` is the refusal). Loading them anyway reported
-      // diagnostics stage0 never reaches.
-      return false;
-    }
+    // Pass 1 refused something in this module. Its specifiers are still
+    // *resolved* — a missing module is reported either way — but the modules
+    // that do exist are not loaded, so nothing they would have said is
+    // reported: stage0 stops at what this module got wrong, and a duplicate
+    // function in the entry hides an imported module's own refusals
+    // (`tests/link/main_in_import` in f64 mode, `tests/link/missing_module`
+    // for the half that still reports). `--emit-ast` is exempt: it prints the
+    // tree of every module it managed to read, and stage0 reaches that dump
+    // before it looks at anything pass 1 recorded.
+    const signaturesFailed = this.sink.count() > beforeSignatures && !this.dumpOnly;
     const dir = dirname(path);
     let ok = true;
     for (const imp of checker.program.imports) {
@@ -220,6 +229,9 @@ export class Compilation {
         );
         checker.ctx.errored = false;
         continue;
+      }
+      if (signaturesFailed) {
+        continue; // resolved, and deliberately not loaded: see above
       }
       // A module that fails to load is reported and the others still load;
       // `check` stops before binding anything.
