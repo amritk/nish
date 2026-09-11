@@ -100,8 +100,18 @@ step below is done by hand.
 
    The title is a conventional commit because it *is* one: the squash merge
    makes it the subject of the commit that lands on `main`, so `pr-title.yml`
-   checks it like any other and the generator files it under "Chores" in the
-   next release rather than "Uncategorised".
+   checks it like any other and the generator files it under "Internal" in the
+   next release rather than skipping it.
+
+   Only conventional subjects become entries. The notes are the account of
+   what a release changed, and the commits behind a merge -- the
+   work-in-progress whose landed subject already has an entry -- are not that
+   account; before the filter they were 171 of the 175 commits in the first
+   release and roughly 97% of the rendered file. Every skipped subject is
+   named on stderr, so nothing goes missing quietly, and
+   `--include-unconventional` restores the old behaviour for a release that
+   wants the raw history. Prose that belongs above the sections goes in
+   `changelog/<version>.intro.md`.
 
    The notes are therefore reviewable *before* anyone can read them, in the
    pull request whose body is those notes. To fix a wording, edit the JSON on

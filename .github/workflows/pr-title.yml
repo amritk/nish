@@ -4,8 +4,8 @@
 # title as the subject of the single commit that lands on main. That subject is
 # what `scripts/changelog-gen.mjs` reads for the release-note heading and for
 # the version bump, so a title that is not a conventional commit does not just
-# look untidy -- it lands under "Uncategorised" and contributes nothing to the
-# semver decision.
+# look untidy -- the generator skips it, and the change is missing from the
+# release notes and from the semver decision.
 #
 # The rule is not duplicated here. The check shells out to the generator's own
 # `--check-subject`, so CI enforces exactly what the generator parses; a title

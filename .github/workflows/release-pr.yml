@@ -116,7 +116,7 @@ jobs:
           branch="release/next"
           # The title is the squash-merge subject, so it is a conventional
           # commit: pr-title.yml checks it like any other, and the merge lands
-          # under "Chores" in the next release instead of "Uncategorised".
+          # under "Internal" in the next release instead of being skipped.
           title="chore(release): $next"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
