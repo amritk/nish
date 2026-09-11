@@ -1,6 +1,6 @@
 # WP13: Differential testing against Node
 
-A compiled AmritScript program must behave exactly like the same TypeScript run
+A compiled Nish program must behave exactly like the same TypeScript run
 under Node, up to the handful of semantic decisions this compiler documents
 (32-bit `number`, byte-length strings, ...). This package proves that on a
 corpus of whole programs plus a random-program fuzzer: every program is built
@@ -29,7 +29,7 @@ both compilers", below).
 | --- | --- |
 | `tests/differential/run.js` | The runner: discovers programs, builds and runs both sides in a process pool, prints the table, applies `known-failures.txt`. |
 | `tests/differential/lib.js` | Shared pieces: discovery, `runProgram` (build, run, rewrite, run, compare), the pool, known-failure parsing, mismatch description. |
-| `tests/differential/rewrite.js` | AmritScript -> JavaScript. Checks the program with the compiler's own checker and rewrites the AST from the recorded types. |
+| `tests/differential/rewrite.js` | Nish -> JavaScript. Checks the program with the compiler's own checker and rewrites the AST from the recorded types. |
 | `runtime/shim.mjs` | The Node side of the runtime: `toI32`/`toI64`/`toF64`, wrapping helpers, byte length, bounds-checked indexing, `console.log`, file I/O, `process.exit`, trap. |
 | `tests/differential/fuzz.js` | Random integer/boolean program generator and driver: `fuzzRun` compares the binary with Node, `stage1Run` (`--stage1`) compares stage0's IR with stage1's through `tests/self/ir_oracle.js`. |
 | `tests/differential/corpus/` | 50 hand-written programs (`<name>.ts` + optional `<name>.args`; multi-module ones as `<name>/main.ts` + `args`). |
@@ -82,7 +82,7 @@ The type in the left column is the checker's type of the whole expression
 `number` under `--number-mode f64` or an explicit `f64`). Anything not listed
 is left unchanged: comparisons, `&&`/`||`/`!`, ternaries, string `+` and
 `===`, template literals (a BigInt hole prints without `n`, a double hole
-prints with `String(x)`, which is what `amrit_str_from_f64` reproduces),
+prints with `String(x)`, which is what `nish_str_from_f64` reproduces),
 array literals, `push`, `for...of`, control flow, `Math.floor/ceil/trunc/
 round/sqrt/sin/cos/exp/log/pow`, `Math.PI/E`, `Math.random`.
 
@@ -93,50 +93,50 @@ round/sqrt/sin/cos/exp/log/pow`, `Math.PI/E`, `Math.random`.
 | `a / b` | i32 | `((a / b) \| 0)` | `sdiv` truncates toward zero |
 | `a % b` | i32 | `((a % b) \| 0)` | JS `%` on integers already matches `srem`; `\| 0` normalises `-0` to `0` |
 | `-a` | i32 | `((-(a)) \| 0)` | `sub i32 0, x` wraps: `-INT_MIN` is `INT_MIN` |
-| `a + b`, `a - b`, `a * b`, `a / b`, `-a` | i64 | `__amrit.wrapI64(a op b)` = `BigInt.asIntN(64, ...)` | BigInt is unbounded; wrap to 64 bits. BigInt `/` truncates toward zero like `sdiv` |
+| `a + b`, `a - b`, `a * b`, `a / b`, `-a` | i64 | `__nish.wrapI64(a op b)` = `BigInt.asIntN(64, ...)` | BigInt is unbounded; wrap to 64 bits. BigInt `/` truncates toward zero like `sdiv` |
 | `a % b` | i64 | unchanged | BigInt `%` is `srem` |
 | numeric literal | i64 / u64 | `123n` | the checker typed it by context (`let x: i64 = 5`, `x * 2`, `f(5)`, `return 5`) |
 | `a + b`, `a - b`, `a / b`, `a % b`, `-a` | u8 / u16 / u32 | `((a op b) & 0xFF)`, `& 0xFFFF`, `>>> 0` | JavaScript has no unsigned integers; the mask is the width. `& 0xFF` also handles a negative intermediate (ToInt32 first), and `>>> 0` is ToUint32, which is `trunc ... to i32` read as unsigned |
 | `a * b` | u32 | `(Math.imul(a, b) >>> 0)` | as i32: the double product can exceed 2^53, and `mul` is bit-identical for both signednesses |
-| `a op b`, `-a` | u64 | `__amrit.wrapU64(a op b)` = `BigInt.asUintN(64, ...)` | as i64, but wrapped into `0 .. 2^64-1` |
+| `a op b`, `-a` | u64 | `__nish.wrapU64(a op b)` = `BigInt.asUintN(64, ...)` | as i64, but wrapped into `0 .. 2^64-1` |
 | `a op b`, `-a`, `++`/`--` | f32 | `Math.fround(a op b)` | JavaScript has only doubles; every f32 result is rounded to the nearest float |
 | numeric literal | f32 | `Math.fround(0.1)` | 0.1 is not a float, so the literal rounds at its source |
 | `a & b`, `a \| b`, `a ^ b` | i32 / u8 / u16 / u32 | `((a op b) & mask)` | JavaScript computes these on int32 operands, which is the same bit pattern; the mask re-establishes the type |
-| `a & b`, `a \| b`, `a ^ b` | i64 / u64 | `__amrit.wrapI64/wrapU64(a op b)` | BigInt already agrees; the wrap is the uniform rule and cannot change an in-range result |
+| `a & b`, `a \| b`, `a ^ b` | i64 / u64 | `__nish.wrapI64/wrapU64(a op b)` | BigInt already agrees; the wrap is the uniform rule and cannot change an in-range result |
 | `~a` | any integer | `wrap(~a)` | JS `~` on an int32 and BigInt `~` are both the `xor x, -1` we emit |
 | `a << b`, `a >> b` | i32 | `((a op b) \| 0)` | JS masks the count to 31 exactly as the emitter does, and `>>` is `ashr` |
-| `a >>> b` | i32 | `((a >>> b) \| 0)` | JS `>>>` yields the *unsigned* 32-bit value in a double; `\| 0` reads those bits back as the signed `i32` AmritScript has ([LANGUAGE.md, Semantics decisions](LANGUAGE.md#semantics-decisions)) |
+| `a >>> b` | i32 | `((a >>> b) \| 0)` | JS `>>>` yields the *unsigned* 32-bit value in a double; `\| 0` reads those bits back as the signed `i32` Nish has ([LANGUAGE.md, Semantics decisions](LANGUAGE.md#semantics-decisions)) |
 | `a << b` | u8 / u16 / u32 | `((a << (b & w)) & mask)` | the count mask is spelled out below 32 bits, where JavaScript's own mask of 31 is too wide |
 | `a >> b`, `a >>> b` | u8 / u16 / u32 | `((a >>> (b & w)) & mask)` | `>>` is `lshr` on an unsigned type, which is JavaScript's `>>>` |
-| `a << b`, `a >> b`, `a >>> b` | i64 | `__amrit.shlI64/ashrI64/lshrI64(a, b)` | BigInt shifts do not mask the count and BigInt has no `>>>` at all |
-| `a << b`, `a >> b`, `a >>> b` | u64 | `__amrit.shlU64/lshrU64(a, b)` | the same, with the unsigned wrap; a u64 is non-negative, so BigInt `>>` is already logical |
+| `a << b`, `a >> b`, `a >>> b` | i64 | `__nish.shlI64/ashrI64/lshrI64(a, b)` | BigInt shifts do not mask the count and BigInt has no `>>>` at all |
+| `a << b`, `a >> b`, `a >>> b` | u64 | `__nish.shlU64/lshrU64(a, b)` | the same, with the unsigned wrap; a u64 is non-negative, so BigInt `>>` is already logical |
 | `x += e` etc. | any integer | `x = <a op b rule>` | the target is a local or a field, both of which are re-read rather than re-evaluated, so spelling `x` twice is safe; an element target has its own row below |
 | `x &= e`, `x \|= e`, `x ^= e`, `x <<= e`, `x >>= e`, `x >>>= e` | any integer | `x = <a op b rule>` | the same, with the bitwise rules above |
 | `++x`, `--x` | any integer | `(x = wrap(x + 1))` | |
 | `x++`, `x--` | any integer | `wrap((x = wrap(x + 1)) - 1)` | the old value, recovered with wrapping arithmetic so `INT_MAX++` works |
-| `a[i]` read | any | `__amrit.idx(a, i)` | WP4 bounds check: out of range prints `index out of range: i >= len` to stderr and exits 1; negative indices fail like the unsigned compare; a double index is truncated like `fptosi` |
-| `a[i] = v` | any | `__amrit.setIdx(a, i, v)` | evaluates `a`, `i`, `v`, then checks and stores; yields `v` |
-| `a[i] op= v` | any numeric, and any integer for the bitwise forms | `__amrit.updIdx(a, i, (old) => <old op v rule>)` | evaluates `a`, `i`, checks, loads, evaluates `v`, computes, stores — once each, which is what `corpus/bit_compound_target` counts |
-| `s.length` | receiver string | `__amrit.strLen(s)` = `Buffer.byteLength(s, "utf8")` | UTF-8 byte length. Arrays keep `.length` |
-| `new Array<T>(n)` | | `__amrit.newArray(n, 0 \| 0n \| false)` | zero-filled, no holes |
-| `console.log(x)` | | `__amrit.log(x)` | `String(x)` + newline via `fs.writeSync(1)`: no `n` suffix on BigInt, synchronous so `process.exit` cannot lose it |
-| `process.exit(c)` | | `__amrit.exit(c)` | |
-| `throw e` | | `__amrit.trap()` | SIGILL, like `llvm.trap` |
+| `a[i]` read | any | `__nish.idx(a, i)` | WP4 bounds check: out of range prints `index out of range: i >= len` to stderr and exits 1; negative indices fail like the unsigned compare; a double index is truncated like `fptosi` |
+| `a[i] = v` | any | `__nish.setIdx(a, i, v)` | evaluates `a`, `i`, `v`, then checks and stores; yields `v` |
+| `a[i] op= v` | any numeric, and any integer for the bitwise forms | `__nish.updIdx(a, i, (old) => <old op v rule>)` | evaluates `a`, `i`, checks, loads, evaluates `v`, computes, stores — once each, which is what `corpus/bit_compound_target` counts |
+| `s.length` | receiver string | `__nish.strLen(s)` = `Buffer.byteLength(s, "utf8")` | UTF-8 byte length. Arrays keep `.length` |
+| `new Array<T>(n)` | | `__nish.newArray(n, 0 \| 0n \| false)` | zero-filled, no holes |
+| `console.log(x)` | | `__nish.log(x)` | `String(x)` + newline via `fs.writeSync(1)`: no `n` suffix on BigInt, synchronous so `process.exit` cannot lose it |
+| `process.exit(c)` | | `__nish.exit(c)` | |
+| `throw e` | | `__nish.trap()` | SIGILL, like `llvm.trap` |
 | `Math.abs(x)` | i32 | `(Math.abs(x) \| 0)` | `llvm.abs.i32(x, false)`: `abs(INT_MIN)` is `INT_MIN` |
-| `Math.abs(x)` | i64 | `__amrit.absI64(x)` | same, 64-bit |
+| `Math.abs(x)` | i64 | `__nish.absI64(x)` | same, 64-bit |
 | `Math.abs(x)` | unsigned | the argument alone | the value is already its own magnitude, and `Math.abs` throws on a BigInt |
-| `Math.min/max(a, b)` | i64 | `__amrit.minI64/maxI64` | `Math.min` rejects BigInt |
-| `Math.min/max(a, b)` | u64 | `__amrit.minU64/maxU64` | same |
-| `toI32(x)` | | `__amrit.toI32(x)` | BigInt: wrap (`trunc`); double: saturate, NaN -> 0 (`llvm.fptosi.sat`) |
-| `toI64(x)` | | `__amrit.toI64(x)` | int32: exact (`sext`); double: truncate and saturate |
-| `toF64(x)` | | `__amrit.toF64(x)` | `Number(bigint)` rounds to nearest like `sitofp` |
-| any `toX(y)` with an unsigned type or an `f32` on either side | | `__amrit.convert(y, "<from>", "<to>")` | one helper for the whole matrix: the value becomes an exact BigInt, then `BigInt.asIntN`/`asUintN` at the target's width performs the `sext`, `zext` or `trunc`. From a float it saturates like `llvm.fpto{s,u}i.sat`; to an `f32` it is `Math.fround` |
-| `readFileSync`, `writeFileSync`, `appendFileSync` | | `__amrit.*` over `node:fs` with UTF-8 | a failure prints `amritc: cannot read <path>` and exits 1 |
-| derived-class constructor without `super(...)` | | `super();` prepended to the body | AmritScript calls the (parameterless) ancestor constructor implicitly (WP2b); JavaScript throws at the first `this` without an explicit call |
-| `process.argv` | | `__amrit.argv()` = `process.argv.slice(1)` | index 0 is the program on both sides (the executable natively, the rewritten entry script under Node); the arguments come from `<name>.argv` next to the program and are passed to both runs |
-| `parseInt(s)` | | `__amrit.parseInt(s)` | base-10 `strtoll` semantics (ASCII whitespace, sign, digits; no `0x`) then `toI32` saturation, 0 without digits |
-| `parseFloat(s)` | | `__amrit.parseFloat(s)` | longest decimal literal or `Infinity` after ASCII whitespace; a `0x` prefix is read as hex like `strtod` (JS gives 0) |
-| `Number(x)` | | `__amrit.number(x)` | strings: one literal bar ASCII whitespace, blank is 0, `0x` hex accepted, no `0b`/`0o`; BigInt and booleans convert numerically |
+| `Math.min/max(a, b)` | i64 | `__nish.minI64/maxI64` | `Math.min` rejects BigInt |
+| `Math.min/max(a, b)` | u64 | `__nish.minU64/maxU64` | same |
+| `toI32(x)` | | `__nish.toI32(x)` | BigInt: wrap (`trunc`); double: saturate, NaN -> 0 (`llvm.fptosi.sat`) |
+| `toI64(x)` | | `__nish.toI64(x)` | int32: exact (`sext`); double: truncate and saturate |
+| `toF64(x)` | | `__nish.toF64(x)` | `Number(bigint)` rounds to nearest like `sitofp` |
+| any `toX(y)` with an unsigned type or an `f32` on either side | | `__nish.convert(y, "<from>", "<to>")` | one helper for the whole matrix: the value becomes an exact BigInt, then `BigInt.asIntN`/`asUintN` at the target's width performs the `sext`, `zext` or `trunc`. From a float it saturates like `llvm.fpto{s,u}i.sat`; to an `f32` it is `Math.fround` |
+| `readFileSync`, `writeFileSync`, `appendFileSync` | | `__nish.*` over `node:fs` with UTF-8 | a failure prints `nish: cannot read <path>` and exits 1 |
+| derived-class constructor without `super(...)` | | `super();` prepended to the body | Nish calls the (parameterless) ancestor constructor implicitly (WP2b); JavaScript throws at the first `this` without an explicit call |
+| `process.argv` | | `__nish.argv()` = `process.argv.slice(1)` | index 0 is the program on both sides (the executable natively, the rewritten entry script under Node); the arguments come from `<name>.argv` next to the program and are passed to both runs |
+| `parseInt(s)` | | `__nish.parseInt(s)` | base-10 `strtoll` semantics (ASCII whitespace, sign, digits; no `0x`) then `toI32` saturation, 0 without digits |
+| `parseFloat(s)` | | `__nish.parseFloat(s)` | longest decimal literal or `Infinity` after ASCII whitespace; a `0x` prefix is read as hex like `strtod` (JS gives 0) |
+| `Number(x)` | | `__nish.number(x)` | strings: one literal bar ASCII whitespace, blank is 0, `0x` hex accepted, no `0b`/`0o`; BigInt and booleans convert numerically |
 
 A user function named like a builtin (`toI32`, `readFileSync`) shadows it in
 the checker (`callees` has the call), and the rewrite follows that.
@@ -355,7 +355,7 @@ A generated program is parsed with the TypeScript parser before it is used,
 and the seed is re-rolled while the text has a syntax error. Only one shape
 triggers this: the `a < b > (c)` ambiguity, where TypeScript reads the `<`
 of a comparison as the start of a type-argument list. `tsc` rejects such a
-program at exactly the positions `amritc` reports, so it compares nothing
+program at exactly the positions `nish` reports, so it compares nothing
 (seed 4277 produced one before the re-roll existed). Re-rolling is
 deterministic per seed, so a saved failure still reproduces.
 

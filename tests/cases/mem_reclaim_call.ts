@@ -2,7 +2,7 @@
 // the one it returns has to outlive it. The *caller* can: the return value is
 // the only thing a call hands back, so once `escape.ts` proves the callee lets
 // nothing else out of its frame, everything it bumped underneath that string is
-// garbage. `%arena.mark` before the call and `@amrit_arena_keep` after it are
+// garbage. `%arena.mark` before the call and `@nish_arena_keep` after it are
 // the bracket; the kept string moves down to the mark.
 function piece(i: number): string {
   return `${i},`;

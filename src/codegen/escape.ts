@@ -45,7 +45,7 @@
  *
  * Arena scopes: a function whose direct arena allocations all flow `local`
  * (and whose callees do not leak allocations, see the fixpoint) reclaims them
- * with `amrit_arena_mark` at entry and `amrit_arena_release` before every `ret`.
+ * with `nish_arena_mark` at entry and `nish_arena_release` before every `ret`.
  * A `returned` site disables the scope (the caller owns that memory); a
  * `leaks` site marks the function `allocLeaks`, which disables the scope of
  * every caller too, since the leaked memory may be reachable from an object
@@ -64,7 +64,7 @@
  * per-function union, and `reclaimsReturnedString` is what it buys: at a call
  * whose callee never lets an allocation out other than through its return
  * value, the caller may mark the arena before the call and hand the returned
- * string to `amrit_arena_keep`, which moves it down to the mark and reclaims
+ * string to `nish_arena_keep`, which moves it down to the mark and reclaims
  * every temporary the callee left behind it. `allocEscapes` implies
  * `allocLeaks` but not the reverse, and only the new fact is refined: the
  * automatic scopes still read `allocLeaks` and decide exactly what they did.
@@ -317,7 +317,7 @@ export function analyzeEscapes(
     const name = dottedName(call.expression);
     if (name === "Arena.reset" || name === "Arena.release") result.usesArenaControl = true;
     else if (name === "console.log" && isNumeric(program.types.get(call.arguments[0]) ?? { kind: "void" })) {
-      logsNumbers = true; // `amrit_str_from_*` allocates the text; `amrit_print` does not retain it
+      logsNumbers = true; // `nish_str_from_*` allocates the text; `nish_print` does not retain it
     }
   };
   visit(sig.decl.body!);

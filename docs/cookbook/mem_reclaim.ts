@@ -2,7 +2,7 @@
 // has to outlive it, so `join` gets no arena scope and every intermediate it
 // made would live for the whole program. Its *caller* can reclaim them,
 // because a call hands back exactly one value — so the call is bracketed by
-// `amrit_arena_mark` and `amrit_arena_keep`, which moves the returned string
+// `nish_arena_mark` and `nish_arena_keep`, which moves the returned string
 // down onto the mark and releases everything underneath it.
 function piece(i: number): string {
   return `${i},`;

@@ -306,7 +306,7 @@ export class Emitter {
 
     // WP6: an automatic arena scope remembers the bump position before anything is allocated.
     if (facts.arenaScope) {
-      this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("amrit_arena_mark")}()`);
+      this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("nish_arena_mark")}()`);
     }
     // WP17: a `Result` parameter small enough to pack arrives as an `i64`.
     // Unpack it once, before the body, into the object every construct reads.
@@ -360,7 +360,7 @@ export class Emitter {
     if (!reclaimsReturnedString(callee, this.facts)) {
       return "";
     }
-    return this.fn.emitValue(`call i64 ${this.useRuntime("amrit_arena_mark")}()`);
+    return this.fn.emitValue(`call i64 ${this.useRuntime("nish_arena_mark")}()`);
   }
 
   /**
@@ -373,19 +373,19 @@ export class Emitter {
     if (mark.length === 0) {
       return value;
     }
-    return this.fn.emitValue(`call i8* ${this.useRuntime("amrit_arena_keep")}(i64 ${mark}, i8* ${value})`);
+    return this.fn.emitValue(`call i8* ${this.useRuntime("nish_arena_keep")}(i64 ${mark}, i8* ${value})`);
   }
 
   emitScopeExit(): void {
     if (!this.current.arenaScope) {
       return;
     }
-    this.fn.emit(`call void ${this.useRuntime("amrit_arena_release")}(i64 %arena.mark)`);
+    this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 %arena.mark)`);
   }
 
   /**
    * The C-ABI process entry, with the signature every libc start-up expects.
-   * When the program reads `process.argv`, `amrit_argv_init(argc, argv)` builds
+   * When the program reads `process.argv`, `nish_argv_init(argc, argv)` builds
    * the string array before the user's `main` runs. The attributes are
    * deliberately minimal: the wrapper calls the runtime, so it is neither pure
    * nor provably returning.
@@ -413,9 +413,9 @@ export class Emitter {
     if (debug !== null) {
       debug.beginFunction(fn, userMain, true, "main", false);
     }
-    const freeArena = this.useRuntime("amrit_free_arena");
+    const freeArena = this.useRuntime("nish_free_arena");
     if (this.program.usesArgv) {
-      fn.emit(`call void ${this.useRuntime("amrit_argv_init")}(i32 %argc, i8** %argv)`);
+      fn.emit(`call void ${this.useRuntime("nish_argv_init")}(i32 %argc, i8** %argv)`);
     }
     let code = "0";
     if (userMain.returnType === T_VOID) {
@@ -541,17 +541,17 @@ export class Emitter {
 
   emitRuntimePrelude(): void {
     const all = this.opts.runtimeDecls;
-    const wantsAlloc = all || this.usedRuntime.has("amrit_alloc_struct");
+    const wantsAlloc = all || this.usedRuntime.has("nish_alloc_struct");
     if (wantsAlloc) {
-      this.usedRuntime.add("amrit_arena_grow");
+      this.usedRuntime.add("nish_arena_grow");
       this.module.addTypeDecl(ARENA_TYPE);
       this.module.addGlobal(ARENA_GLOBAL);
     }
-    // The array header type is referenced by `amrit_array_grow`'s declaration.
-    if (all || this.usedRuntime.has("amrit_array_grow")) {
+    // The array header type is referenced by `nish_array_grow`'s declaration.
+    if (all || this.usedRuntime.has("nish_array_grow")) {
       this.module.addTypeDecl(ARRAY_TYPE);
     }
-    // `@amrit_argv` is part of the C ABI too; modules that read `process.argv` declared it already.
+    // `@nish_argv` is part of the C ABI too; modules that read `process.argv` declared it already.
     if (all) {
       this.module.addGlobal(ARGV_GLOBAL);
     }

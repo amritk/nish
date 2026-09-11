@@ -1,6 +1,6 @@
 # WP18: Generics by monomorphisation
 
-User generics for AmritScript: `function identity<T>(x: T): T`,
+User generics for Nish: `function identity<T>(x: T): T`,
 `class Box<T>`, `interface Pair<A, B>`, and `<T extends Shape>`. Every
 instantiation is compiled to its own specialised code, named by a mangled
 symbol, and is indistinguishable from the monomorphic version somebody would
@@ -13,9 +13,9 @@ open it says so (§14) rather than inventing certainty.
 [LANGUAGE.md](LANGUAGE.md) stays normative for what the language *is*; this
 file says what it should become and why.
 
-**Why at all.** Because AmritScript is a static subset of TypeScript and
+**Why at all.** Because Nish is a static subset of TypeScript and
 TypeScript has generics. That is the whole reason, and it is enough: every
-other rule in this repository exists to keep an AmritScript program a
+other rule in this repository exists to keep an Nish program a
 TypeScript program that `tsc --strict` also accepts
 ([wp16-results.md](wp16-results.md) §5), and a subset that refuses `<T>` makes
 the most ordinary container in the language unwritable.
@@ -39,7 +39,7 @@ this lands in `src/` and `self/` in the same milestones, and the oracles are
 what say the two agree — exactly as WP16 and WP17 did
 ([wp17-result-abi.md](wp17-result-abi.md) §6).
 
-**AmritScript-0 does not adopt them.** `self/` implements generics without
+**Nish-0 does not adopt them.** `self/` implements generics without
 using them. §10 is the argument.
 
 ---
@@ -318,7 +318,7 @@ heritage and debug info that a `Result` does not.
 **`$` must be reserved.** `mangleType`'s comment today claims a class name is
 prefixed with `$` "because that character cannot appear in a TypeScript
 identifier". That is not true — `$` is a legal identifier character in
-TypeScript and in AmritScript (`isIdentStart` in `self/lexer.ts` accepts
+TypeScript and in Nish (`isIdentStart` in `self/lexer.ts` accepts
 `CH_DOLLAR`). The existing encoding survives anyway, because a struct's `$`
 prefix distinguishes it from the bare `res`/`arr`/`opt` constructor tags. The
 new encoding does not: a class literally named `Box$i32` would collide with
@@ -338,11 +338,11 @@ refuses `$` in a C identifier — measured, clang 18.1.3:
 header test compiles its driver with `-Wall -Wextra -Werror -pedantic`. The
 mechanism for this exists: `cFunctionName` in `src/interop/abi.ts` already
 collapses `.` to `_` and binds the C declaration to the real symbol with
-`AMRIT_SYMBOL`, which is how `Point.shifted` becomes `Point_shifted`. It needs
+`NISH_SYMBOL`, which is how `Point.shifted` becomes `Point_shifted`. It needs
 one character added to its condition. Measured end to end:
 
 ```c
-int identity_i32(int x) AMRIT_SYMBOL("identity$i32");
+int identity_i32(int x) NISH_SYMBOL("identity$i32");
 ```
 compiles clean under `-Wall -Wextra -Werror -pedantic` and emits
 `jmp identity$i32@PLT`. §14 records the one thing to check: whether the header
@@ -586,7 +586,7 @@ entry:
 define noundef zeroext i1 @eq$str(i8* noundef nonnull noalias readonly align 8 nocapture %a,
                                   i8* noundef nonnull noalias readonly align 8 nocapture %b) #1 {
 entry:
-  %0 = call zeroext i1 @amrit_str_eq(i8* %a, i8* %b)
+  %0 = call zeroext i1 @nish_str_eq(i8* %a, i8* %b)
   ret i1 %0
 }
 
@@ -669,10 +669,10 @@ as `Point.constructor` and `Point.manhattan` do.
 
 The caller is unchanged from a non-generic class, WP6 included — the escape
 analysis proves neither box outlives `main`, so both are entry-block allocas
-and there is no `amrit_alloc_struct` in the module:
+and there is no `nish_alloc_struct` in the module:
 
 ```llvm
-define noundef i32 @amrit_main() #0 {
+define noundef i32 @nish_main() #0 {
 entry:
   %n.addr = alloca %struct.Box$i32*, align 8
   %Box$i32.obj = alloca %struct.Box$i32, align 8
@@ -827,10 +827,10 @@ So:
 
 ```c
 /* identity<i32> */
-int32_t identity_i32(int32_t x) AMRIT_SYMBOL("identity$i32");
+int32_t identity_i32(int32_t x) NISH_SYMBOL("identity$i32");
 ```
 
-with the C-identifier collapse and the `AMRIT_SYMBOL` binding of §3c, which is
+with the C-identifier collapse and the `NISH_SYMBOL` binding of §3c, which is
 the mechanism `Point.shifted` already uses and which was measured to produce
 the right relocation. `--emit-dts` and `--emit-napi` need no collapse at all:
 `$` is a legal JavaScript identifier character, so they export `identity$i32`
@@ -919,7 +919,7 @@ then a `;` and the fix, phrased as the code the programmer should write.
 4. **Type arguments at a call site**
 
    ```
-   Type arguments are not written at a call site in AmritScript: `T` is inferred
+   Type arguments are not written at a call site in Nish: `T` is inferred
    from the arguments, so write `identity(x)`; a type argument is written out in an
    annotation (`const b: Box<i32>`) and after `new` (`new Box<i32>(v)`)
    ```
@@ -958,7 +958,7 @@ then a `;` and the fix, phrased as the code the programmer should write.
 7. **`$` in a declared name**
 
    ```
-   `Box$i32` cannot be the name of a class in AmritScript: `$` separates a generic's
+   `Box$i32` cannot be the name of a class in Nish: `$` separates a generic's
    name from its type arguments in the symbols the compiler emits, so `Box<i32>` is
    already `Box$i32`
    ```
@@ -1033,11 +1033,11 @@ proves it.
 
 ---
 
-## 10. AmritScript-0 does not adopt them
+## 10. Nish-0 does not adopt them
 
 `self/` implements generics. `self/` is not written with them.
 
-`docs/wp14-selfhost.md` §2 fixes AmritScript-0 as the subset the self-hosted
+`docs/wp14-selfhost.md` §2 fixes Nish-0 as the subset the self-hosted
 compiler may use, and its first line is "no generics". That line does not
 change. `self/nodes.ts` keeps its one `Node` class, `self/types.ts` keeps its
 interned `i32` ids, and `self/map.ts` keeps its hand-written `StringMap` over
@@ -1060,7 +1060,7 @@ parallel arrays.
    The port is done; the work package is this one; the language gets them. What
    does not follow is that `self/` must then use them.
 3. **wp14 §6 rule 5 is satisfied precisely because the subset does not grow.**
-   "AmritScript-0 does not grow quietly" fires when a construct is added to the
+   "Nish-0 does not grow quietly" fires when a construct is added to the
    subset, because every addition is something stage1 must implement in order
    to compile itself. Nothing is added here, so the rule does not fire — the
    same way WP17 did not fire it (`wp17-result-abi.md` §6: "the packing is
@@ -1216,7 +1216,7 @@ and a `CHANGELOG.md` line.
   layout", because that is what `implements` already means here. A bound that
   said "any type with a method `compare`" would be a trait system, and it is
   not on this path.
-- **Generics in AmritScript-0.** §10. `self/` implements them and does not use
+- **Generics in Nish-0.** §10. `self/` implements them and does not use
   them, and the hand-written `StringMap` stays.
 - **Any change to the bootstrap's input.** `self/` compiles to byte-identical
   IR before and after this package, and that is a test, not a hope.

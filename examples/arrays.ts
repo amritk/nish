@@ -1,5 +1,5 @@
 // Arrays across the host boundary (docs/wp8-interop.md). `Int32Array`,
-// `Float64Array` and `BigInt64Array` are the AmritScript spellings of i32[],
+// `Float64Array` and `BigInt64Array` are the Nish spellings of i32[],
 // f64[] and i64[]: one layout, and the name a Node host sees in the typings.
 //
 //   node dist/index.js examples/arrays.ts -o build/arrays.ll \
@@ -46,7 +46,7 @@ export function squares(n: i32): Int32Array {
   return out;
 }
 
-/** Writes through its parameter: the header spells it `amrit_array *`, and the host's buffer changes in place. */
+/** Writes through its parameter: the header spells it `nish_array *`, and the host's buffer changes in place. */
 export function fill(xs: Int32Array, v: i32): void {
   for (let i = 0; i < xs.length; i++) {
     xs[i] = v;

@@ -2,7 +2,7 @@
  * The corpus the stage1 oracles read, and the flags each of its programs is
  * compiled with.
  *
- * Three oracles walk the same set of AmritScript programs — `checked_oracle.js`,
+ * Three oracles walk the same set of Nish programs — `checked_oracle.js`,
  * `ir_oracle.js` and, for the negatives, `reject_oracle.js` — and a program
  * that is only compilable with a flag has to be given it by all of them.
  * Otherwise stage0 refuses it, the oracle records "stage0 rejects it", and a

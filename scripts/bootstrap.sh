@@ -34,7 +34,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-out=build/amritc
+out=build/nish
 work=build/selfhost
 profile=speed
 stages=2

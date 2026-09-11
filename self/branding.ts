@@ -17,22 +17,22 @@
 // less to work with than stage0's does: `CLI.toUpperCase()` is how `src/`
 // spells the guard prefix, and there is no `toUpperCase` in the language.
 //
-// The `amrit_` prefix on the runtime's C symbols is deliberately not here: it
+// The `nish_` prefix on the runtime's C symbols is deliberately not here: it
 // is ABI rather than branding, it is in every golden `.ll`, and it is frozen —
 // a rename does not follow it. See "Where the name lives" in
 // `docs/ARCHITECTURE.md`.
 
-/** The language, as a diagnostic names it: "`eval` is forbidden in AmritScript". */
-export const LANGUAGE: string = "AmritScript";
+/** The language, as a diagnostic names it: "`eval` is forbidden in Nish". */
+export const LANGUAGE: string = "Nish";
 
 /**
  * The compiler: the npm package, the `bin` entry, the word a generated file
  * uses when it talks about the tool that wrote it, and the way the DWARF
- * `producer` names it ("amritc 0.1.0"). stage0 builds that string from `CLI`
+ * `producer` names it ("nish 0.1.0"). stage0 builds that string from `CLI`
  * and `packageVersion()`, and `tests/self/ir_oracle.js` compares the two byte
  * for byte on every `-g` case.
  */
-export const CLI: string = "amritc";
+export const CLI: string = "nish";
 
 /**
  * The package version, baked in rather than read from `package.json`: stage1
@@ -44,7 +44,7 @@ export const CLI: string = "amritc";
 export const VERSION: string = "0.1.0";
 
 /** The public C ABI header in `runtime/`; every generated header includes it. */
-export const RUNTIME_HEADER: string = "amritc.h";
+export const RUNTIME_HEADER: string = "nish.h";
 
-/** Include guard on a generated header: `AMRITC_ADD_H` for `build/add.h`. */
-export const HEADER_GUARD_PREFIX: string = "AMRITC";
+/** Include guard on a generated header: `NISH_ADD_H` for `build/add.h`. */
+export const HEADER_GUARD_PREFIX: string = "NISH";

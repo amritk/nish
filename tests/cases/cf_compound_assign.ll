@@ -1,4 +1,4 @@
-declare void @amrit_panic_div(i1 noundef zeroext) #2
+declare void @nish_panic_div(i1 noundef zeroext) #2
 
 define internal noundef double @scale(double noundef %v, double noundef %k) #0 {
 entry:
@@ -40,7 +40,7 @@ entry:
   br i1 %11, label %div.fail, label %div.ok
 
 div.fail:
-  call void @amrit_panic_div(i1 zeroext %7)
+  call void @nish_panic_div(i1 zeroext %7)
   unreachable
 
 div.ok:
@@ -55,7 +55,7 @@ div.ok:
   br i1 %18, label %div.fail.1, label %div.ok.1
 
 div.fail.1:
-  call void @amrit_panic_div(i1 zeroext %14)
+  call void @nish_panic_div(i1 zeroext %14)
   unreachable
 
 div.ok.1:

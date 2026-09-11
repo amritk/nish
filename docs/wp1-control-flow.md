@@ -44,7 +44,7 @@ existing dispatch tables with a spread. `src/codegen/attributes.ts` owns the
   emitted for loop-carried values. `opt -mem2reg` (part of `-O1`) rebuilds
   the SSA form, so the pattern below optimises exactly like clang's output.
 - **Integer arithmetic goes through one opcode helper**, so compound
-  assignment and `++`/`--` are flagged exactly like every other AmritScript
+  assignment and `++`/`--` are flagged exactly like every other Nish
   integer operation. When this was written that meant no `nsw` at all; since
   WP15 §3 the signed widths carry `nsw` by default and `--wrapping` takes it
   off (docs/LANGUAGE.md is normative).
@@ -682,5 +682,5 @@ scripts/build.sh bench/fib.c -o build/bench/fib_c --profile speed
 
 | | run 1 | run 2 | run 3 | binary |
 | --- | ---: | ---: | ---: | ---: |
-| AmritScript | 0.030 s | 0.031 s | 0.030 s | 4592 B |
+| Nish | 0.030 s | 0.031 s | 0.030 s | 4592 B |
 | C | 0.030 s | 0.031 s | 0.033 s | 4592 B |

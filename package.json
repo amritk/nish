@@ -1,12 +1,12 @@
 {
-  "name": "amritc",
+  "name": "nish",
   "version": "0.1.0",
-  "description": "AmritScript: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
+  "description": "Nish: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "amritc": "dist/index.js"
+    "nish": "dist/index.js"
   },
   "files": [
     "dist",
@@ -37,12 +37,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/amritk/compiler.git"
+    "url": "git+https://github.com/amritk/nish.git"
   },
   "bugs": {
-    "url": "https://github.com/amritk/compiler/issues"
+    "url": "https://github.com/amritk/nish/issues"
   },
-  "homepage": "https://github.com/amritk/compiler#readme",
+  "homepage": "https://github.com/amritk/nish#readme",
   "keywords": [
     "typescript",
     "compiler",
@@ -53,8 +53,7 @@
     "native",
     "wasm",
     "webassembly",
-    "amritc",
-    "amritscript"
+    "nish"
   ],
   "dependencies": {
     "typescript": "^5.6.0"

@@ -17,7 +17,7 @@
  *   - `DILocalVariable`s: `llvm.dbg.value` for parameters (SSA values) and
  *     `llvm.dbg.declare` for `let`/`const` slots (entry-block allocas).
  *
- * Types map to what the C ABI header (`runtime/amritc.h`) calls them:
+ * Types map to what the C ABI header (`runtime/nish.h`) calls them:
  * `i32` is `int`, `i64` `long`, `f64` `double`, `boolean` `bool`, a string a
  * `char*` (the header precedes the bytes, so `p s` in gdb shows the text), a
  * class or interface a pointer to a `DICompositeType` with the exact field
@@ -182,7 +182,7 @@ export class DebugInfo {
     return ref;
   }
 
-  /** The `%struct.amrit_array` header `{ i64 len, i64 cap, T* data }`, specialised per element type for the debugger's sake. */
+  /** The `%struct.nish_array` header `{ i64 len, i64 cap, T* data }`, specialised per element type for the debugger's sake. */
   private arrayHeader(elem: StaticType, name: string): string {
     const ref = this.module.reserveMetadata();
     const long = this.typeRef({ kind: "i64" });
@@ -200,7 +200,7 @@ export class DebugInfo {
   }
 
   /**
-   * `%struct.amrit_result.<T>.<E>` with the layout the checker derived: the
+   * `%struct.nish_result.<T>.<E>` with the layout the checker derived: the
    * discriminant, the success payload (absent for `Result<void, E>`) and the
    * error payload, each at its computed byte offset. There is no declaration
    * to take a source line from, so the members carry none.

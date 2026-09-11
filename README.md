@@ -1,4 +1,4 @@
-# AmritScript
+# Nish
 
 An ahead-of-time compiler for a strictly static subset of TypeScript. It
 parses source with the official TypeScript compiler API, rejects everything
@@ -14,7 +14,7 @@ TypeScript source ──▶ TS AST ──▶ validator + checker ──▶ LLVM 
 If it compiles, every value has one fixed, known memory layout; binaries are
 a few kilobytes; there is no interpreter and no GC anywhere in the pipeline.
 
-> **AmritScript is pre-alpha.** The version is `0.1.0`: the language, the CLI
+> **Nish is pre-alpha.** The version is `0.1.0`: the language, the CLI
 > flags and the IR that either compiler emits all change without notice until
 > 1.0. Every commit compiles, tests and bootstraps itself — see
 > [Project status](#project-status) for what is done and what is next — but
@@ -22,13 +22,13 @@ a few kilobytes; there is no interpreter and no GC anywhere in the pipeline.
 > fix your source when you move to a newer one, and read
 > [CHANGELOG.md](CHANGELOG.md) before you upgrade.
 
-> **AmritScript is a working title.** The name is a placeholder and is expected
-> to change; treat the language name and the `amritc` CLI as unstable, and pin
+> **Nish is a working title.** The name is a placeholder and is expected
+> to change; treat the language name and the `nish` CLI as unstable, and pin
 > a commit rather than a name if you depend on either. Nothing in the compiler
 > is built around it: every string either compiler prints is composed from
 > `LANGUAGE` and `CLI` in [`src/branding.ts`](src/branding.ts) and
 > [`self/branding.ts`](self/branding.ts), so a rename is an edit to those two
-> files. The one exception is the `amrit_` prefix on the runtime's C symbols,
+> files. The one exception is the `nish_` prefix on the runtime's C symbols,
 > which is ABI rather than branding and stays put through a rename — see
 > [Where the name lives](docs/ARCHITECTURE.md#where-the-name-lives).
 
@@ -38,22 +38,22 @@ Requirements: Node.js 22.18+ and, to produce binaries, clang (LLVM 18) + lld;
 per-OS install commands are in [docs/INSTALL.md](docs/INSTALL.md).
 
 ```bash
-npm install -g amritc          # or: git clone, npm install, npm run build, node dist/index.js ...
+npm install -g nish          # or: git clone, npm install, npm run build, node dist/index.js ...
 ```
 
 `hello.ts`:
 
 ```ts
 export function main(): number {
-  console.log("hello from AmritScript");
+  console.log("hello from Nish");
   return 0;                          // the process exit code
 }
 ```
 
 ```bash
-amritc hello.ts --link hello    # writes hello.ll, then builds hello with clang -O3 -flto
-./hello                            # hello from AmritScript
-amritc hello.ts -o hello.ll     # IR only
+nish hello.ts --link hello    # writes hello.ll, then builds hello with clang -O3 -flto
+./hello                            # hello from Nish
+nish hello.ts -o hello.ll     # IR only
 ```
 
 The IR is readable as is. `examples/add.ts` compiles to:
@@ -104,8 +104,8 @@ Node.
 ## Command line
 
 ```
-amritc <entry.ts> [more.ts ...] [options]
-       amritc --version | --help
+nish <entry.ts> [more.ts ...] [options]
+       nish --version | --help
   -o, --output <file.ll>     output path for a single module (default: <input>.ll)
   -o, --output <dir>/        output directory: one <dir>/<module>.ll per module
   --link <exe>               build a native binary from every module + runtime/runtime.c
@@ -133,25 +133,25 @@ amritc <entry.ts> [more.ts ...] [options]
   --json                     print diagnostics as one JSON object per line on stdout (no excerpt)
   --emit-ast                 print the syntax tree of every module to stdout instead of IR
   --emit-checked             print the checker's tables (signatures, locals, structs, facts) instead of IR
-  -v, --version              print the amritc version and exit
+  -v, --version              print the nish version and exit
 ```
 
 Exit codes: `0` success, `1` compile error (`file:line:col: error: ...` plus
 a caret excerpt), `2` usage error, `3` toolchain error, `70` internal
-compiler error (please report it; `AMRITC_DEBUG=1` adds the stack trace).
+compiler error (please report it; `NISH_DEBUG=1` adds the stack trace).
 A compile that fails reports every error it found (statement by statement,
 declaration by declaration), in source order, up to 20 before `...and N more
 errors`; `--json` gives editors and tools the same list as
 `{"file","line","column","endLine","endColumn","severity","code","message"}`
 objects, one per line, where `code` is a stable identifier for the rule
-(`AS1013`, `AS2231`) and is what to match on rather than the prose. Failures
+(`NL1013`, `NL2231`) and is what to match on rather than the prose. Failures
 with no source position — an unusable C toolchain, an internal error — are JSON
 objects too, so `--json` never leaves a caller with an empty stdout.
 `--help` prints on stdout and exits `0`; only a usage *error* goes to stderr
 with `2`. `-g` adds a DWARF line table and variables to the IR so
 `gdb`/`lldb` step through the `.ts` source of a `--link`ed binary
 ([docs/wp10-ci.md](docs/wp10-ci.md)).
-Multi-file programs: `amritc examples/multi/main.ts --link build/multi && ./build/multi; echo $?`
+Multi-file programs: `nish examples/multi/main.ts --link build/multi && ./build/multi; echo $?`
 prints `49`.
 
 Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c -o app`
@@ -192,14 +192,14 @@ a `new`, object literal or array literal that provably never outlives its
 function is an `alloca` (LLVM's SROA then turns its fields into registers);
 what does reach the arena is bumped inline (a load, an add, a compare and a
 store); a function whose arena temporaries all die with it brackets its body
-with `amrit_arena_mark` / `amrit_arena_release`, so hot loops keep the arena
+with `nish_arena_mark` / `nish_arena_release`, so hot loops keep the arena
 flat. Every LLVM attribute the compiler emits (`nounwind`, `willreturn`,
 `readnone`/`readonly`, `noundef`, `zeroext`, `nonnull`, `noalias`,
 `nocapture`, `dereferenceable`) is a proved guarantee, never a hint; the
 rules are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#attribute-soundness-rules).
 
 The benchmark suite (`bench/`: fib, n-body, spectral norm, sieve, string
-building, a `Vec3` method loop, each in AmritScript, C and Rust with identical
+building, a `Vec3` method loop, each in Nish, C and Rust with identical
 algorithms and a shared checksum) is run by `node bench/run.mjs`, which
 writes [docs/BENCHMARKS.md](docs/BENCHMARKS.md): wall time, binary size and
 peak memory per column, plus the exact build commands. The analysis of every
@@ -209,11 +209,11 @@ the rules of the game are in [bench/README.md](bench/README.md).
 
 ## Interop: export, do not embed
 
-AmritScript never embeds a JavaScript engine (see the [FAQ](docs/FAQ.md#why-not-embed-a-javascript-engine-for-npm-packages)).
-The supported direction is Node importing AmritScript:
+Nish never embeds a JavaScript engine (see the [FAQ](docs/FAQ.md#why-not-embed-a-javascript-engine-for-npm-packages)).
+The supported direction is Node importing Nish:
 
 ```
-[ Node / Bun process ]  imports  [ AmritScript .wasm or .node addon ]
+[ Node / Bun process ]  imports  [ Nish .wasm or .node addon ]
   I/O, HTTP, npm packages          math, parsing, data transforms, hot loops
                  cross the boundary once per batch, not once per element
 ```
@@ -224,16 +224,16 @@ The supported direction is Node importing AmritScript:
   takes or returns an array.
 - `--emit-napi` + `scripts/build.sh --profile napi` build a `.node` addon
   with argument type checks (`examples/node-addon.mjs`).
-- Buffers cross as typed arrays: an AmritScript `Int32Array` / `Float64Array` /
+- Buffers cross as typed arrays: an Nish `Int32Array` / `Float64Array` /
   `BigInt64Array` parameter (the spellings of `i32[]` / `f64[]` / `i64[]`,
   one layout) is a JS typed array on both paths. The addon borrows it
   (zero-copy; writes are visible in JS), the wasm loader that `--emit-dts`
   writes next to the `.d.ts` copies it into the module's memory and results
   back out; strings cross the addon as copies (`examples/arrays.ts`).
 - `--emit-header` writes C prototypes (`int32_t add(int32_t a, int32_t b);`,
-  `double sumF64(const amrit_array *xs);`) next to `runtime/amritc.h`, the
-  public runtime ABI (arena, strings, arrays, `amrit_reset_arena`,
-  `amrit_arena_mark` / `amrit_arena_release` for a host that manages batches).
+  `double sumF64(const nish_array *xs);`) next to `runtime/nish.h`, the
+  public runtime ABI (arena, strings, arrays, `nish_reset_arena`,
+  `nish_arena_mark` / `nish_arena_release` for a host that manages batches).
 - An N-API call costs about 30 ns and a wasm call about 2 ns before any work
   is done; one call with a 1M-element `Float64Array` runs at 0.5 ns/element
   (`node bench/ffi.mjs`), so pass whole buffers, not elements.
@@ -242,12 +242,12 @@ Details: [docs/wp8-interop.md](docs/wp8-interop.md).
 
 ## The compiler in a browser
 
-`self/` is an AmritScript program, so the compiler compiles itself to
+`self/` is an Nish program, so the compiler compiles itself to
 WebAssembly like any other one:
 
 ```bash
-node dist/index.js self/compile.ts --link web/amritc.wasm --profile wasi
-node web/compile.mjs web/amritc.wasm examples/add.ts     # the IR, from a Web Worker
+node dist/index.js self/compile.ts --link web/nish.wasm --profile wasi
+node web/compile.mjs web/nish.wasm examples/add.ts     # the IR, from a Web Worker
 ```
 
 That module is about 480 KB (140 KB gzipped) and lexes, checks and emits IR
@@ -258,7 +258,7 @@ refused there. [web/README.md](web/README.md) has the rest.
 
 ## Self-hosting
 
-`self/` is the same compiler written in AmritScript — lexer, parser, checker and
+`self/` is the same compiler written in Nish — lexer, parser, checker and
 emitter, 43 modules, no `typescript` package underneath — and it compiles its
 own source to a fixed point:
 
@@ -272,11 +272,11 @@ byte-identical to stage2) on every run. Compiling the whole compiler costs the
 native one **91 ms and 86 MB** against the Node one's 786 ms and 178 MB.
 
 ```bash
-npm run bootstrap                   # build/amritc, built by itself
-build/amritc hello.ts --link hello  # -o, --link, --profile, its own directories
+npm run bootstrap                   # build/nish, built by itself
+build/nish hello.ts --link hello  # -o, --link, --profile, its own directories
 ```
 
-`npm install -g amritc` still ships the Node compiler: it is the seed every
+`npm install -g nish` still ships the Node compiler: it is the seed every
 bootstrap starts from and the oracle every `self/` phase is compared against.
 What it is no longer is the only one that can emit DWARF, write the interop
 sidecars or link an executable — the self-hosted compiler does all three, the
@@ -300,7 +300,7 @@ and the IR any of them lowers to are all still free to change.
 | M2 "Data" | classes and interfaces, arrays, runtime and intrinsics | done |
 | M3 "Rust parity" | interop, memory strategy (stack allocation, arena scopes, `T \| null`), benchmarks with `--target`/`--nsw`/PGO, differential testing against Node | done |
 | M4 "1.0" | frozen language reference, tagged release | next |
-| M5 "Self-hosting" | `self/`: the compiler, written in AmritScript, compiling itself | done |
+| M5 "Self-hosting" | `self/`: the compiler, written in Nish, compiling itself | done |
 
 Not in the language yet, in the order they are likely to land: optional
 reference counting for objects that must outlive an arena reset, and virtual
@@ -325,7 +325,7 @@ node tests/differential/fuzz.js --count 200   # random integer programs against 
 npm run check            # tsc --noEmit
 npm run lint             # Biome style lint (advisory, never a compile gate)
 npm run smoke            # build and run every example with a main
-npm run bootstrap        # build the self-hosted compiler into build/amritc
+npm run bootstrap        # build the self-hosted compiler into build/nish
 node bench/run.mjs       # the benchmark suite; rewrites docs/BENCHMARKS.md (about 3 minutes)
 docs/cookbook/regen.sh   # refresh docs/IR_COOKBOOK.md; node docs/check-links.mjs checks the links
 ```

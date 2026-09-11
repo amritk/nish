@@ -1,4 +1,4 @@
-// Load an AmritScript module built as a native Node addon (N-API) and call it.
+// Load an Nish module built as a native Node addon (N-API) and call it.
 // Same interop direction as node-host.mjs, but native code instead of wasm:
 // full -O3 machine code, the C runtime (strings, arena) linked in, and Node's
 // stable ABI so the .node file survives Node upgrades.
@@ -9,7 +9,7 @@
 //
 // The same two commands on examples/arrays.ts give an addon whose functions
 // take and return typed arrays. An Int32Array / Float64Array argument is not
-// copied: the shim hands the AmritScript function a header over the typed array's
+// copied: the shim hands the Nish function a header over the typed array's
 // own bytes, so `fill(xs, 7)` changes `xs` in place; a returned array is a
 // fresh typed array. Strings cross as copies (examples/strings.ts).
 //

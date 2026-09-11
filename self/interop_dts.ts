@@ -62,11 +62,11 @@ export function generateDts(compilation: Compilation, fns: ExternalFunction[]): 
     lines.push(
       "  /** runtime_wasm.c: recycle everything the module allocated (arrays passed and returned are already copies). */"
     );
-    lines.push("  amrit_reset_arena(): void;");
+    lines.push("  nish_reset_arena(): void;");
     lines.push(
-      "  /** runtime_wasm.c: same as amrit_reset_arena; wasm memory is never returned to the host. */"
+      "  /** runtime_wasm.c: same as nish_reset_arena; wasm memory is never returned to the host. */"
     );
-    lines.push("  amrit_free_arena(): void;");
+    lines.push("  nish_free_arena(): void;");
   }
 
   // One question decides both files: a function is declared here exactly when

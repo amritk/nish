@@ -3,16 +3,16 @@
 //
 // The three answers this pins are the whole contract, and the middle one is
 // why the result is `string | null` rather than a string that is empty when
-// nothing is set: `AMRITC_TEST_EMPTY=` is a variable that *is* set, and a
+// nothing is set: `NISH_TEST_EMPTY=` is a variable that *is* set, and a
 // driver that treats it as "unset, use the default" would be wrong. The values
 // come from `io_getenv.env`, because the language has no `setenv` and a golden
 // that read the developer's own environment would not be a golden.
 export function main(): number {
-  const set = getenv("AMRITC_TEST_VALUE");
+  const set = getenv("NISH_TEST_VALUE");
   console.log(`set: ${set === null ? "<null>" : set}`);
-  const empty = getenv("AMRITC_TEST_EMPTY");
+  const empty = getenv("NISH_TEST_EMPTY");
   console.log(`empty: ${empty === null ? "<null>" : `"${empty}"`}`);
-  const unset = getenv("AMRITC_TEST_NOT_SET");
+  const unset = getenv("NISH_TEST_NOT_SET");
   console.log(`unset: ${unset === null ? "<null>" : unset}`);
   // The narrowing is an ordinary `T | null` one: inside the guard the value is
   // a `string` and carries string methods, with no cast anywhere.

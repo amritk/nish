@@ -1,5 +1,5 @@
 // Go twin of nbody.ts: the same struct, the same expression order, the bodies
-// in a heap-allocated []*Body as they are in nbody.c and in the AmritScript
+// in a heap-allocated []*Body as they are in nbody.c and in the Nish
 // arena. math.Sqrt is an intrinsic, so it is the same sqrtsd instruction.
 package main
 
@@ -63,7 +63,7 @@ func body(x, y, z, vx, vy, vz, mass float64) *Body {
 func main() {
 	// Typed variables, not Go constants: an untyped constant expression would
 	// be folded in arbitrary precision and rounded once, where C, Rust and
-	// AmritScript round every step to f64. One ULP here moves the last digits
+	// Nish round every step to f64. One ULP here moves the last digits
 	// of the final energy, the system being chaotic.
 	pi := 3.141592653589793
 	solarMass := 4 * pi * pi

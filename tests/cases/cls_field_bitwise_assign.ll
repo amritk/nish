@@ -1,16 +1,16 @@
 %struct.Flags = type { i32, i32, i32 }
 
-declare void @amrit_free_arena() #0
-declare noundef i64 @amrit_arena_mark() #0
-declare void @amrit_arena_release(i64 noundef) #0
-declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 
-define noundef i32 @amrit_main() #0 {
+define noundef i32 @nish_main() #0 {
 entry:
   %f.addr = alloca %struct.Flags*, align 8
   %Flags.obj = alloca %struct.Flags, align 8
-  %arena.mark = call i64 @amrit_arena_mark()
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = getelementptr inbounds %struct.Flags, %struct.Flags* %Flags.obj, i32 0, i32 0
   store i32 255, i32* %0, align 4
   %1 = getelementptr inbounds %struct.Flags, %struct.Flags* %Flags.obj, i32 0, i32 1
@@ -51,26 +51,26 @@ entry:
   %27 = load %struct.Flags*, %struct.Flags** %f.addr, align 8
   %28 = getelementptr inbounds %struct.Flags, %struct.Flags* %27, i32 0, i32 0
   %29 = load i32, i32* %28, align 4
-  %30 = call i8* @amrit_str_from_i32(i32 %29)
-  call void @amrit_print(i8* %30)
+  %30 = call i8* @nish_str_from_i32(i32 %29)
+  call void @nish_print(i8* %30)
   %31 = load %struct.Flags*, %struct.Flags** %f.addr, align 8
   %32 = getelementptr inbounds %struct.Flags, %struct.Flags* %31, i32 0, i32 1
   %33 = load i32, i32* %32, align 4
-  %34 = call i8* @amrit_str_from_i32(i32 %33)
-  call void @amrit_print(i8* %34)
+  %34 = call i8* @nish_str_from_i32(i32 %33)
+  call void @nish_print(i8* %34)
   %35 = load %struct.Flags*, %struct.Flags** %f.addr, align 8
   %36 = getelementptr inbounds %struct.Flags, %struct.Flags* %35, i32 0, i32 2
   %37 = load i32, i32* %36, align 4
-  %38 = call i8* @amrit_str_from_i32(i32 %37)
-  call void @amrit_print(i8* %38)
-  call void @amrit_arena_release(i64 %arena.mark)
+  %38 = call i8* @nish_str_from_i32(i32 %37)
+  call void @nish_print(i8* %38)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
-  %0 = call i32 @amrit_main()
-  call void @amrit_free_arena()
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
   ret i32 %0
 }
 

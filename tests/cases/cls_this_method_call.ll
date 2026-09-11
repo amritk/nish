@@ -3,11 +3,11 @@
 @.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 
-declare void @amrit_free_arena() #0
-declare noundef i64 @amrit_arena_mark() #0
-declare void @amrit_arena_release(i64 noundef) #0
-declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 
 define internal void @Account.constructor(%struct.Account* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %balance, i32 noundef %fee) #0 {
 entry:
@@ -70,45 +70,45 @@ entry:
   ret i1 %0
 }
 
-define noundef i32 @amrit_main() #0 {
+define noundef i32 @nish_main() #0 {
 entry:
   %a.addr = alloca %struct.Account*, align 8
   %Account.obj = alloca %struct.Account, align 8
   %Account.obj.1 = alloca %struct.Account, align 8
-  %arena.mark = call i64 @amrit_arena_mark()
+  %arena.mark = call i64 @nish_arena_mark()
   call void @Account.constructor(%struct.Account* %Account.obj, i32 100, i32 1)
   store %struct.Account* %Account.obj, %struct.Account** %a.addr, align 8
   %0 = load %struct.Account*, %struct.Account** %a.addr, align 8
   %1 = call i1 @Account.withdraw(%struct.Account* %0, i32 30)
   %2 = select i1 %1, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
-  call void @amrit_print(i8* %2)
+  call void @nish_print(i8* %2)
   %3 = load %struct.Account*, %struct.Account** %a.addr, align 8
   %4 = getelementptr inbounds %struct.Account, %struct.Account* %3, i32 0, i32 0
   %5 = load i32, i32* %4, align 4
-  %6 = call i8* @amrit_str_from_i32(i32 %5)
-  call void @amrit_print(i8* %6)
+  %6 = call i8* @nish_str_from_i32(i32 %5)
+  call void @nish_print(i8* %6)
   %7 = load %struct.Account*, %struct.Account** %a.addr, align 8
   %8 = call i32 @Account.drain(%struct.Account* %7, i32 20)
-  %9 = call i8* @amrit_str_from_i32(i32 %8)
-  call void @amrit_print(i8* %9)
+  %9 = call i8* @nish_str_from_i32(i32 %8)
+  call void @nish_print(i8* %9)
   %10 = load %struct.Account*, %struct.Account** %a.addr, align 8
   %11 = load %struct.Account*, %struct.Account** %a.addr, align 8
   %12 = call i1 @Account.same(%struct.Account* %10, %struct.Account* %11)
   %13 = select i1 %12, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
-  call void @amrit_print(i8* %13)
+  call void @nish_print(i8* %13)
   %14 = load %struct.Account*, %struct.Account** %a.addr, align 8
   call void @Account.constructor(%struct.Account* %Account.obj.1, i32 1, i32 1)
   %15 = call i1 @Account.same(%struct.Account* %14, %struct.Account* %Account.obj.1)
   %16 = select i1 %15, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
-  call void @amrit_print(i8* %16)
-  call void @amrit_arena_release(i64 %arena.mark)
+  call void @nish_print(i8* %16)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
 entry:
-  %0 = call i32 @amrit_main()
-  call void @amrit_free_arena()
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
   ret i32 %0
 }
 

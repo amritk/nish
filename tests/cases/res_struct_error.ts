@@ -1,5 +1,5 @@
 // An interface as the error payload: `Result<i32, IoError>` monomorphises to
-// `%struct.amrit_result.i32.$IoError = type { i1, i32, %struct.IoError* }`, and
+// `%struct.nish_result.i32.$IoError = type { i1, i32, %struct.IoError* }`, and
 // the importer of a signature mentioning it gets `IoError`'s layout through the
 // `Result` even though the name appears nowhere in its own source.
 interface IoError {

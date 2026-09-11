@@ -1,5 +1,5 @@
 // Go twin of spectral.ts: same loops and evaluation order, []float64 indexed
-// by an int32 (bounds-checked, as in AmritScript).
+// by an int32 (bounds-checked, as in Nish).
 package main
 
 import (

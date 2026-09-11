@@ -1,45 +1,45 @@
 %struct.Node = type { i32, %struct.Node* }
-%struct.amrit_array = type { i64, i64, i8* }
-%struct.amrit_arena = type { i8*, i64, i64, i8* }
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"none\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"node \00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 @.str.4 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"text\00" }, align 8
-@amrit_arena = external global %struct.amrit_arena, align 8
+@nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
-declare noalias noundef nonnull align 8 i8* @amrit_arena_grow(i64 noundef) #4
-declare void @amrit_free_arena() #0
-declare noundef i64 @amrit_arena_mark() #0
-declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
-declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
-declare void @amrit_panic_index(i64 noundef, i64 noundef) #5
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #4
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare void @nish_panic_index(i64 noundef, i64 noundef) #5
 
-define internal noalias noundef nonnull align 8 i8* @amrit_alloc_struct(i64 noundef %size) #6 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
-  %off.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 1
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
   %off = load i64, i64* %off.ptr, align 8
   %new.off = add i64 %off, %size.aligned
-  %cap.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 2
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
   %fits = icmp ule i64 %new.off, %cap
   br i1 %fits, label %fast, label %slow
 
 fast:
   store i64 %new.off, i64* %off.ptr, align 8
-  %buf.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 0
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
   %buf = load i8*, i8** %buf.ptr, align 8
   %obj = getelementptr inbounds i8, i8* %buf, i64 %off
   ret i8* %obj
 
 slow:
-  %grown = call i8* @amrit_arena_grow(i64 %size.aligned)
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
   ret i8* %grown
 }
 
@@ -128,8 +128,8 @@ if.then:
 if.end:
   %1 = getelementptr inbounds %struct.Node, %struct.Node* %n, i32 0, i32 0
   %2 = load i32, i32* %1, align 4
-  %3 = call i8* @amrit_str_from_i32(i32 %2)
-  %4 = call i8* @amrit_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8* %3)
+  %3 = call i8* @nish_str_from_i32(i32 %2)
+  %4 = call i8* @nish_str_concat(i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*), i8* %3)
   ret i8* %4
 }
 
@@ -181,26 +181,26 @@ while.end:
   ret %struct.Node* %9
 }
 
-define noundef i32 @amrit_main() #3 {
+define noundef i32 @nish_main() #3 {
 entry:
   %a.addr = alloca %struct.Node*, align 8
   %b.addr = alloca %struct.Node*, align 8
   %c.addr = alloca %struct.Node*, align 8
   %s.addr = alloca i8*, align 8
-  %xs.addr = alloca %struct.amrit_array*, align 8
-  %arr.hdr = alloca %struct.amrit_array, align 8
+  %xs.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
   %arr.data = alloca [2 x %struct.Node*], align 8
   %x0.addr = alloca %struct.Node*, align 8
   %x1.addr = alloca %struct.Node*, align 8
-  %0 = call i8* @amrit_alloc_struct(i64 16)
+  %0 = call i8* @nish_alloc_struct(i64 16)
   %1 = bitcast i8* %0 to %struct.Node*
   call void @Node.constructor(%struct.Node* %1, i32 1)
   store %struct.Node* %1, %struct.Node** %a.addr, align 8
-  %2 = call i8* @amrit_alloc_struct(i64 16)
+  %2 = call i8* @nish_alloc_struct(i64 16)
   %3 = bitcast i8* %2 to %struct.Node*
   call void @Node.constructor(%struct.Node* %3, i32 2)
   store %struct.Node* %3, %struct.Node** %b.addr, align 8
-  %4 = call i8* @amrit_alloc_struct(i64 16)
+  %4 = call i8* @nish_alloc_struct(i64 16)
   %5 = bitcast i8* %4 to %struct.Node*
   call void @Node.constructor(%struct.Node* %5, i32 3)
   store %struct.Node* %5, %struct.Node** %c.addr, align 8
@@ -214,44 +214,44 @@ entry:
   store %struct.Node* %10, %struct.Node** %11, align 8
   %12 = load %struct.Node*, %struct.Node** %a.addr, align 8
   %13 = call i32 @sum(%struct.Node* %12)
-  %14 = call i8* @amrit_str_from_i32(i32 %13)
-  call void @amrit_print(i8* %14)
+  %14 = call i8* @nish_str_from_i32(i32 %13)
+  call void @nish_print(i8* %14)
   %15 = call i32 @sum(%struct.Node* null)
-  %16 = call i8* @amrit_str_from_i32(i32 %15)
-  call void @amrit_print(i8* %16)
+  %16 = call i8* @nish_str_from_i32(i32 %15)
+  call void @nish_print(i8* %16)
   %17 = load %struct.Node*, %struct.Node** %a.addr, align 8
   %18 = call %struct.Node* @find(%struct.Node* %17, i32 2)
-  %19 = call i64 @amrit_arena_mark()
+  %19 = call i64 @nish_arena_mark()
   %20 = call i8* @describe(%struct.Node* %18)
-  %21 = call i8* @amrit_arena_keep(i64 %19, i8* %20)
-  call void @amrit_print(i8* %21)
+  %21 = call i8* @nish_arena_keep(i64 %19, i8* %20)
+  call void @nish_print(i8* %21)
   %22 = load %struct.Node*, %struct.Node** %a.addr, align 8
   %23 = call %struct.Node* @find(%struct.Node* %22, i32 9)
-  %24 = call i64 @amrit_arena_mark()
+  %24 = call i64 @nish_arena_mark()
   %25 = call i8* @describe(%struct.Node* %23)
-  %26 = call i8* @amrit_arena_keep(i64 %24, i8* %25)
-  call void @amrit_print(i8* %26)
+  %26 = call i8* @nish_arena_keep(i64 %24, i8* %25)
+  call void @nish_print(i8* %26)
   %27 = load %struct.Node*, %struct.Node** %a.addr, align 8
   %28 = call %struct.Node* @find(%struct.Node* %27, i32 3)
   %29 = sub nsw i32 0, 1
   %30 = call i32 @valueOr(%struct.Node* %28, i32 %29)
-  %31 = call i8* @amrit_str_from_i32(i32 %30)
-  call void @amrit_print(i8* %31)
+  %31 = call i8* @nish_str_from_i32(i32 %30)
+  call void @nish_print(i8* %31)
   %32 = sub nsw i32 0, 1
   %33 = call i32 @valueOr(%struct.Node* null, i32 %32)
-  %34 = call i8* @amrit_str_from_i32(i32 %33)
-  call void @amrit_print(i8* %34)
+  %34 = call i8* @nish_str_from_i32(i32 %33)
+  call void @nish_print(i8* %34)
   %35 = load %struct.Node*, %struct.Node** %a.addr, align 8
   %36 = call %struct.Node* @last(%struct.Node* %35)
   %37 = getelementptr inbounds %struct.Node, %struct.Node* %36, i32 0, i32 0
   %38 = load i32, i32* %37, align 4
-  %39 = call i8* @amrit_str_from_i32(i32 %38)
-  call void @amrit_print(i8* %39)
+  %39 = call i8* @nish_str_from_i32(i32 %38)
+  call void @nish_print(i8* %39)
   store i8* null, i8** %s.addr, align 8
   %40 = load i8*, i8** %s.addr, align 8
   %41 = icmp eq i8* %40, null
   %42 = select i1 %41, i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*)
-  call void @amrit_print(i8* %42)
+  call void @nish_print(i8* %42)
   store i8* bitcast ({ i64, [5 x i8] }* @.str.4 to i8*), i8** %s.addr, align 8
   %43 = load i8*, i8** %s.addr, align 8
   %44 = icmp ne i8* %43, null
@@ -262,50 +262,50 @@ if.then:
   %46 = bitcast i8* %45 to i64*
   %47 = load i64, i64* %46, align 8
   %48 = trunc i64 %47 to i32
-  %49 = call i8* @amrit_str_from_i32(i32 %48)
-  call void @amrit_print(i8* %49)
+  %49 = call i8* @nish_str_from_i32(i32 %48)
+  call void @nish_print(i8* %49)
   br label %if.end
 
 if.end:
-  %50 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0
+  %50 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
   store i64 2, i64* %50, align 8, !alias.scope !3, !noalias !4
-  %51 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1
+  %51 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
   store i64 2, i64* %51, align 8, !alias.scope !3, !noalias !4
   %52 = mul i64 2, 8
   %53 = bitcast [2 x %struct.Node*]* %arr.data to i8*
   call void @llvm.memset.p0i8.i64(i8* align 8 %53, i8 0, i64 %52, i1 false), !alias.scope !4, !noalias !3
-  %54 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 2
+  %54 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
   store i8* %53, i8** %54, align 8, !alias.scope !3, !noalias !4
-  store %struct.amrit_array* %arr.hdr, %struct.amrit_array** %xs.addr, align 8
-  %55 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %xs.addr, align 8
+  %55 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %56 = load %struct.Node*, %struct.Node** %c.addr, align 8
-  %57 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %55, i64 0, i32 0
+  %57 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %55, i64 0, i32 0
   %58 = load i64, i64* %57, align 8, !alias.scope !3, !noalias !4
   %59 = icmp ult i64 1, %58
   br i1 %59, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @amrit_panic_index(i64 1, i64 %58)
+  call void @nish_panic_index(i64 1, i64 %58)
   unreachable
 
 bounds.ok:
-  %60 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %55, i64 0, i32 2
+  %60 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %55, i64 0, i32 2
   %61 = load i8*, i8** %60, align 8, !alias.scope !3, !noalias !4
   %62 = bitcast i8* %61 to %struct.Node**
   %63 = getelementptr inbounds %struct.Node*, %struct.Node** %62, i64 1
   store %struct.Node* %56, %struct.Node** %63, align 8, !alias.scope !4, !noalias !3
-  %64 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
-  %65 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %64, i64 0, i32 0
+  %64 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %65 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %64, i64 0, i32 0
   %66 = load i64, i64* %65, align 8, !alias.scope !3, !noalias !4
   %67 = icmp ult i64 0, %66
   br i1 %67, label %bounds.ok.1, label %bounds.fail.1
 
 bounds.fail.1:
-  call void @amrit_panic_index(i64 0, i64 %66)
+  call void @nish_panic_index(i64 0, i64 %66)
   unreachable
 
 bounds.ok.1:
-  %68 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %64, i64 0, i32 2
+  %68 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %64, i64 0, i32 2
   %69 = load i8*, i8** %68, align 8, !alias.scope !3, !noalias !4
   %70 = bitcast i8* %69 to %struct.Node**
   %71 = getelementptr inbounds %struct.Node*, %struct.Node** %70, i64 0
@@ -314,19 +314,19 @@ bounds.ok.1:
   %73 = load %struct.Node*, %struct.Node** %x0.addr, align 8
   %74 = icmp eq %struct.Node* %73, null
   %75 = select i1 %74, i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*)
-  call void @amrit_print(i8* %75)
-  %76 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
-  %77 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %76, i64 0, i32 0
+  call void @nish_print(i8* %75)
+  %76 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
+  %77 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %76, i64 0, i32 0
   %78 = load i64, i64* %77, align 8, !alias.scope !3, !noalias !4
   %79 = icmp ult i64 1, %78
   br i1 %79, label %bounds.ok.2, label %bounds.fail.2
 
 bounds.fail.2:
-  call void @amrit_panic_index(i64 1, i64 %78)
+  call void @nish_panic_index(i64 1, i64 %78)
   unreachable
 
 bounds.ok.2:
-  %80 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %76, i64 0, i32 2
+  %80 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %76, i64 0, i32 2
   %81 = load i8*, i8** %80, align 8, !alias.scope !3, !noalias !4
   %82 = bitcast i8* %81 to %struct.Node**
   %83 = getelementptr inbounds %struct.Node*, %struct.Node** %82, i64 1
@@ -340,8 +340,8 @@ if.then.1:
   %87 = load %struct.Node*, %struct.Node** %x1.addr, align 8
   %88 = getelementptr inbounds %struct.Node, %struct.Node* %87, i32 0, i32 0
   %89 = load i32, i32* %88, align 4
-  %90 = call i8* @amrit_str_from_i32(i32 %89)
-  call void @amrit_print(i8* %90)
+  %90 = call i8* @nish_str_from_i32(i32 %89)
+  call void @nish_print(i8* %90)
   br label %if.end.1
 
 if.end.1:
@@ -350,8 +350,8 @@ if.end.1:
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #3 {
 entry:
-  %0 = call i32 @amrit_main()
-  call void @amrit_free_arena()
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
   ret i32 %0
 }
 
@@ -363,7 +363,7 @@ attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #5 = { nounwind noreturn cold }
 attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
-!0 = !{!"amritc array"}
+!0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
 !3 = !{!1}

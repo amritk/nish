@@ -1,16 +1,16 @@
 /**
  * Explicit arena control (WP6), checked by `checker/arena.ts`.
  *
- *   Arena.reset()      call void @amrit_reset_arena()
- *   Arena.mark()       call i64 @amrit_arena_mark()
- *   Arena.release(m)   call void @amrit_arena_release(i64 m)
- *   Arena.used()       call i64 @amrit_arena_used()
+ *   Arena.reset()      call void @nish_reset_arena()
+ *   Arena.mark()       call i64 @nish_arena_mark()
+ *   Arena.release(m)   call void @nish_arena_release(i64 m)
+ *   Arena.used()       call i64 @nish_arena_used()
  *
  * All four are declared with effect `write` in runtime.ts: `mark` and `used`
  * only read the arena state, but a caller that is `readonly` could be
  * hoisted or merged across an allocation by the optimiser, so they are kept
  * conservative. The automatic scopes (`FunctionFacts.arenaScope`) use the
- * same `amrit_arena_mark` / `amrit_arena_release` symbols; see escape.ts.
+ * same `nish_arena_mark` / `nish_arena_release` symbols; see escape.ts.
  *
  * The call-site reclaim (WP9) lives here too, because it is the same arena
  * bracket one level down: `beginReclaim` / `endReclaim` wrap a single call
@@ -41,10 +41,10 @@ function valueCall(symbol: string): BuiltinCall {
 
 /** Dotted callees, spread into `builtinCallEmitters`; mirrors `arenaBuiltinCalls`. */
 export const arenaBuiltinCallEmitters: Record<string, BuiltinCall> = {
-  "Arena.reset": statementCall("amrit_reset_arena"),
-  "Arena.mark": valueCall("amrit_arena_mark"),
-  "Arena.release": statementCall("amrit_arena_release", "i64"),
-  "Arena.used": valueCall("amrit_arena_used"),
+  "Arena.reset": statementCall("nish_reset_arena"),
+  "Arena.mark": valueCall("nish_arena_mark"),
+  "Arena.release": statementCall("nish_arena_release", "i64"),
+  "Arena.used": valueCall("nish_arena_used"),
 };
 
 // ---- Call-site reclaim (WP9) -----------------------------------------------------------
@@ -57,7 +57,7 @@ export const arenaBuiltinCallEmitters: Record<string, BuiltinCall> = {
  */
 export function beginReclaim(ctx: EmitContext, callee: FunctionSig): string | undefined {
   if (!ctx.reclaimsCall(callee)) return undefined;
-  return ctx.fn.emitValue(`call i64 ${ctx.useRuntime("amrit_arena_mark")}()`);
+  return ctx.fn.emitValue(`call i64 ${ctx.useRuntime("nish_arena_mark")}()`);
 }
 
 /**
@@ -68,5 +68,5 @@ export function beginReclaim(ctx: EmitContext, callee: FunctionSig): string | un
  */
 export function endReclaim(ctx: EmitContext, mark: string | undefined, value: string): string {
   if (mark === undefined) return value;
-  return ctx.fn.emitValue(`call i8* ${ctx.useRuntime("amrit_arena_keep")}(i64 ${mark}, i8* ${value})`);
+  return ctx.fn.emitValue(`call i8* ${ctx.useRuntime("nish_arena_keep")}(i64 ${mark}, i8* ${value})`);
 }

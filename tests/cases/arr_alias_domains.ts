@@ -2,7 +2,7 @@
 // Writing `dst[i]` while reading `src[i]` and `src.length` is the shape where
 // that costs the most — without the alias domains LLVM reloads both headers on
 // every iteration, which blocks LICM. `tests/run.js` pins the consequence: after
-// `opt -O2` no `%struct.amrit_array` access is left inside the loop.
+// `opt -O2` no `%struct.nish_array` access is left inside the loop.
 export function scale(dst: i32[], src: i32[]): void {
   let i = 0;
   while (i < src.length) {

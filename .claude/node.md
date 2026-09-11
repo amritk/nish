@@ -2,7 +2,7 @@
 
 This repo runs on **Node.js 18+ and npm**, not Bun. The sibling repos (`mjst`,
 `mini`, `agent-ummo`) carry a `bun.md` that says "default to Bun"; that rule is
-deliberately not carried here. `amritc` is published to npm as a tool a
+deliberately not carried here. `nish` is published to npm as a tool a
 user installs with `npm install -g` on a machine that has Node and clang and
 nothing else, and CI (`.github/workflows/ci.yml`) runs the same commands a user
 would.
@@ -17,8 +17,8 @@ would.
   design decision to raise in the PR, not a convenience.
 - Node built-ins are imported as `node:fs`, `node:path`, `node:child_process`.
   There is no `.env` loading. The only environment variables read are `CC`
-  (the C compiler `--link` invokes), `AMRITC_DEBUG` (full stack on an
-  internal error) and `AMRITC_SIMULATE_ICE` (test hook) in `src/index.ts`,
+  (the C compiler `--link` invokes), `NISH_DEBUG` (full stack on an
+  internal error) and `NISH_SIMULATE_ICE` (test hook) in `src/index.ts`,
   plus `UPDATE_GOLDENS` in the test runner. A new one is a CLI design decision,
   not a shortcut.
 - Bun-specific APIs (`Bun.file`, `Bun.$`, `bun:sqlite`, HTML imports) do not
@@ -90,7 +90,7 @@ else is noise in the diff. So:
   `noVoid`, `noParameterAssign`, `useExplicitLengthCheck`,
   `useConsistentArrayType`, `useFilenamingConvention`), with `useOptionalChain`
   and `useExponentiationOperator` turned *off* because they push code towards
-  `?.` and `**`, which AmritScript rejects. `useImportType`, `useTemplate` and
+  `?.` and `**`, which Nish rejects. `useImportType`, `useTemplate` and
   `noNonNullAssertion` are off as house style. The full reasoning is in
   `docs/wp0-validator.md` ("Biome").
 - Two house-style rules are `warn` rather than `error` because the source
@@ -101,7 +101,7 @@ else is noise in the diff. So:
   `biome check`, so `npm run lint` stays green and the count is the migration
   backlog; `npm run lint -- --diagnostic-level=error` hides it while you look
   for real errors.
-- The AmritScript programs a reader learns from (`examples/`, `docs/cookbook/`,
+- The Nish programs a reader learns from (`examples/`, `docs/cookbook/`,
   `bench/*.ts`) are linted too, with the unused-variable and numeric-literal
   rules off, and with both house-style rules off as well: the language has no
   arrow functions and no `type` aliases, so `function` and `interface` are the

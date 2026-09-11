@@ -1,16 +1,16 @@
-%struct.amrit_array = type { i64, i64, i8* }
+%struct.nish_array = type { i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"a\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"b\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"<\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c">\00" }, align 8
 
-declare void @amrit_free_arena() #1
-declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
-declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
-declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #1
+declare void @nish_free_arena() #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 
-define internal noundef i32 @total(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+define internal noundef i32 @total(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %sum.addr = alloca i32, align 4
   %x.addr = alloca i32, align 4
@@ -21,13 +21,13 @@ entry:
 
 forof.cond:
   %0 = load i64, i64* %forof.idx, align 8
-  %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
   %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
   %3 = icmp ult i64 %0, %2
   br i1 %3, label %forof.body, label %forof.end
 
 forof.body:
-  %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
   %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
   %6 = bitcast i8* %5 to i32*
   %7 = getelementptr inbounds i32, i32* %6, i64 %0
@@ -66,21 +66,21 @@ forof.end:
   ret i32 %18
 }
 
-define noundef i32 @amrit_main() #1 {
+define noundef i32 @nish_main() #1 {
 entry:
-  %arr.hdr = alloca %struct.amrit_array, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
   %arr.data = alloca [5 x i32], align 8
   %word.addr = alloca i8*, align 8
   %forof.idx = alloca i64, align 8
-  %arr.hdr.1 = alloca %struct.amrit_array, align 8
+  %arr.hdr.1 = alloca %struct.nish_array, align 8
   %arr.data.1 = alloca [2 x i8*], align 8
   %0 = sub nsw i32 0, 2
-  %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
   store i64 5, i64* %1, align 8, !alias.scope !3, !noalias !4
-  %2 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
   store i64 5, i64* %2, align 8, !alias.scope !3, !noalias !4
   %3 = bitcast [5 x i32]* %arr.data to i8*
-  %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 2
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
   store i8* %3, i8** %4, align 8, !alias.scope !3, !noalias !4
   %5 = bitcast i8* %3 to i32*
   %6 = getelementptr inbounds i32, i32* %5, i64 0
@@ -93,15 +93,15 @@ entry:
   store i32 500, i32* %9, align 4, !alias.scope !4, !noalias !3
   %10 = getelementptr inbounds i32, i32* %5, i64 4
   store i32 4, i32* %10, align 4, !alias.scope !4, !noalias !3
-  %11 = call i32 @total(%struct.amrit_array* %arr.hdr)
-  %12 = call i8* @amrit_str_from_i32(i32 %11)
-  call void @amrit_print(i8* %12)
-  %13 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr.1, i64 0, i32 0
+  %11 = call i32 @total(%struct.nish_array* %arr.hdr)
+  %12 = call i8* @nish_str_from_i32(i32 %11)
+  call void @nish_print(i8* %12)
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 0
   store i64 2, i64* %13, align 8, !alias.scope !3, !noalias !4
-  %14 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr.1, i64 0, i32 1
+  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 1
   store i64 2, i64* %14, align 8, !alias.scope !3, !noalias !4
   %15 = bitcast [2 x i8*]* %arr.data.1 to i8*
-  %16 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr.1, i64 0, i32 2
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 2
   store i8* %15, i8** %16, align 8, !alias.scope !3, !noalias !4
   %17 = bitcast i8* %15 to i8**
   %18 = getelementptr inbounds i8*, i8** %17, i64 0
@@ -113,24 +113,24 @@ entry:
 
 forof.cond:
   %20 = load i64, i64* %forof.idx, align 8
-  %21 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr.1, i64 0, i32 0
+  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 0
   %22 = load i64, i64* %21, align 8, !alias.scope !3, !noalias !4
   %23 = icmp ult i64 %20, %22
   br i1 %23, label %forof.body, label %forof.end
 
 forof.body:
-  %24 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr.1, i64 0, i32 2
+  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 2
   %25 = load i8*, i8** %24, align 8, !alias.scope !3, !noalias !4
   %26 = bitcast i8* %25 to i8**
   %27 = getelementptr inbounds i8*, i8** %26, i64 %20
   %28 = load i8*, i8** %27, align 8, !alias.scope !4, !noalias !3
   store i8* %28, i8** %word.addr, align 8
   %29 = load i8*, i8** %word.addr, align 8
-  %30 = call i8* @amrit_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), i8* %29)
-  %31 = call i8* @amrit_str_concat(i8* %30, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
+  %30 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), i8* %29)
+  %31 = call i8* @nish_str_concat(i8* %30, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
   store i8* %31, i8** %word.addr, align 8
   %32 = load i8*, i8** %word.addr, align 8
-  call void @amrit_print(i8* %32)
+  call void @nish_print(i8* %32)
   br label %forof.inc
 
 forof.inc:
@@ -145,8 +145,8 @@ forof.end:
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
 entry:
-  %0 = call i32 @amrit_main()
-  call void @amrit_free_arena()
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
   ret i32 %0
 }
 
@@ -154,7 +154,7 @@ attributes #0 = { nounwind willreturn readonly }
 attributes #1 = { nounwind willreturn }
 attributes #2 = { nounwind }
 
-!0 = !{!"amritc array"}
+!0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
 !3 = !{!1}

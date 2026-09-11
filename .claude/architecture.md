@@ -1,6 +1,6 @@
 # Architecture
 
-`amritc` is an ahead-of-time compiler from a strictly static subset of
+`nish` is an ahead-of-time compiler from a strictly static subset of
 TypeScript to textual LLVM IR. It parses with the official TypeScript compiler
 API, rejects everything dynamic (`any`, prototypes, `eval`, exceptions, a
 garbage collector), and emits `.ll` files that clang / llc turn into native
@@ -14,7 +14,7 @@ and is not duplicated here. This file is the map of where to look.
 ## The pipeline in one screen
 
 ```
-amritc a.ts b.ts [-o out/] [--link exe]                             src/index.ts
+nish a.ts b.ts [-o out/] [--link exe]                             src/index.ts
    │
    ▼
 Compilation                                                            src/compilation.ts
@@ -50,7 +50,7 @@ Compilation                                                            src/compi
   written next to the code. See "Attribute soundness rules" in
   `docs/ARCHITECTURE.md`.
 - **Layout changes are two-sided.** A struct layout lives in
-  `src/codegen/runtime.ts` and `runtime/runtime.c` / `runtime/amritc.h`;
+  `src/codegen/runtime.ts` and `runtime/runtime.c` / `runtime/nish.h`;
   they change in the same commit and a layout test grows with them.
   `tests/run.js` fails when the runtime symbol table disagrees between them.
 - **The runtime has a budget.** `runtime/runtime.c` stays around 8 KB of source
@@ -58,7 +58,7 @@ Compilation                                                            src/compi
 - **The name lives in two files.** `src/branding.ts` and `self/branding.ts` are
   the only source files that spell the project's name. Every string the
   compiler prints builds it from `LANGUAGE` / `CLI` there; prose is exempt, and
-  the `amrit_` prefix on the runtime's C symbols is ABI rather than branding:
+  the `nish_` prefix on the runtime's C symbols is ABI rather than branding:
   it is frozen and a rename does not follow it. See "Where the name lives" in
   `docs/ARCHITECTURE.md`.
 - **The language is the reference.** `docs/LANGUAGE.md` is normative and every
@@ -88,11 +88,11 @@ src/                 the compiler (tsc → dist/)
   checker/           pass 1 signatures, pass 1b imports, pass 2 bodies; side tables in program.ts
   codegen/           attributes, escape analysis, target table, ir builder, runtime ABI, emit/*
   interop/           C header, wasm .d.ts and N-API shim generators
-runtime/             runtime.c, amritc.h, runtime_wasm.c, shim.mjs (the Node twin)
+runtime/             runtime.c, nish.h, runtime_wasm.c, shim.mjs (the Node twin)
 scripts/             build.sh (clang/LTO profiles), size-report.sh, smoke.sh, changelog-section.sh
 tests/               run.js + cases/ (goldens), link/, ir/, layout/, differential/, driver.c, runtime_test.c
-examples/            AmritScript inputs used by the README, smoke test and size report
-bench/               AmritScript / C / Rust suite that writes docs/BENCHMARKS.md
+examples/            Nish inputs used by the README, smoke test and size report
+bench/               Nish / C / Rust suite that writes docs/BENCHMARKS.md
 docs/                LANGUAGE, ARCHITECTURE, IR_COOKBOOK, FAQ, INSTALL, MASTER_PLAN, wp*.md design notes
 .claude/             these guidelines
 ```

@@ -1,42 +1,42 @@
 %struct.Pair = type { i32, i32 }
 %struct.Tagged = type { i8*, i1, %struct.Pair* }
-%struct.amrit_arena = type { i8*, i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"hello\00" }, align 8
-@amrit_arena = external global %struct.amrit_arena, align 8
+@nish_arena = external global %struct.nish_arena, align 8
 
-declare noalias noundef nonnull align 8 i8* @amrit_arena_grow(i64 noundef) #2
-declare void @amrit_free_arena() #0
-declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
+declare void @nish_free_arena() #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 
-define internal noalias noundef nonnull align 8 i8* @amrit_alloc_struct(i64 noundef %size) #3 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
-  %off.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 1
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
   %off = load i64, i64* %off.ptr, align 8
   %new.off = add i64 %off, %size.aligned
-  %cap.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 2
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
   %cap = load i64, i64* %cap.ptr, align 8
   %fits = icmp ule i64 %new.off, %cap
   br i1 %fits, label %fast, label %slow
 
 fast:
   store i64 %new.off, i64* %off.ptr, align 8
-  %buf.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 0
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
   %buf = load i8*, i8** %buf.ptr, align 8
   %obj = getelementptr inbounds i8, i8* %buf, i64 %off
   ret i8* %obj
 
 slow:
-  %grown = call i8* @amrit_arena_grow(i64 %size.aligned)
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
   ret i8* %grown
 }
 
 define internal noundef nonnull align 8 dereferenceable(8) %struct.Pair* @swap(%struct.Pair* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #0 {
 entry:
-  %0 = call i8* @amrit_alloc_struct(i64 8)
+  %0 = call i8* @nish_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Pair*
   %2 = getelementptr inbounds %struct.Pair, %struct.Pair* %p, i32 0, i32 1
   %3 = load i32, i32* %2, align 4
@@ -58,7 +58,7 @@ entry:
 if.then:
   %2 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %t, i32 0, i32 0
   %3 = load i8*, i8** %2, align 8
-  call void @amrit_print(i8* %3)
+  call void @nish_print(i8* %3)
   br label %if.end
 
 if.end:
@@ -75,14 +75,14 @@ if.end:
   ret i32 %13
 }
 
-define noundef i32 @amrit_main() #0 {
+define noundef i32 @nish_main() #0 {
 entry:
   %p.addr = alloca %struct.Pair*, align 8
   %q.addr = alloca %struct.Pair*, align 8
   %second.addr = alloca i32, align 4
   %t.addr = alloca %struct.Tagged*, align 8
   %Tagged.obj = alloca %struct.Tagged, align 8
-  %0 = call i8* @amrit_alloc_struct(i64 8)
+  %0 = call i8* @nish_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Pair*
   %2 = getelementptr inbounds %struct.Pair, %struct.Pair* %1, i32 0, i32 0
   store i32 1, i32* %2, align 4
@@ -95,14 +95,14 @@ entry:
   %6 = load %struct.Pair*, %struct.Pair** %q.addr, align 8
   %7 = getelementptr inbounds %struct.Pair, %struct.Pair* %6, i32 0, i32 0
   %8 = load i32, i32* %7, align 4
-  %9 = call i8* @amrit_str_from_i32(i32 %8)
-  call void @amrit_print(i8* %9)
+  %9 = call i8* @nish_str_from_i32(i32 %8)
+  call void @nish_print(i8* %9)
   store i32 9, i32* %second.addr, align 4
   %10 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %Tagged.obj, i32 0, i32 0
   store i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*), i8** %10, align 8
   %11 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %Tagged.obj, i32 0, i32 1
   store i1 true, i1* %11, align 1
-  %12 = call i8* @amrit_alloc_struct(i64 8)
+  %12 = call i8* @nish_alloc_struct(i64 8)
   %13 = bitcast i8* %12 to %struct.Pair*
   %14 = getelementptr inbounds %struct.Pair, %struct.Pair* %13, i32 0, i32 0
   store i32 4, i32* %14, align 4
@@ -114,8 +114,8 @@ entry:
   store %struct.Tagged* %Tagged.obj, %struct.Tagged** %t.addr, align 8
   %18 = load %struct.Tagged*, %struct.Tagged** %t.addr, align 8
   %19 = call i32 @describe(%struct.Tagged* %18)
-  %20 = call i8* @amrit_str_from_i32(i32 %19)
-  call void @amrit_print(i8* %20)
+  %20 = call i8* @nish_str_from_i32(i32 %19)
+  call void @nish_print(i8* %20)
   %21 = load %struct.Tagged*, %struct.Tagged** %t.addr, align 8
   %22 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
   %23 = getelementptr inbounds %struct.Tagged, %struct.Tagged* %21, i32 0, i32 2
@@ -128,15 +128,15 @@ entry:
   %28 = load %struct.Pair*, %struct.Pair** %p.addr, align 8
   %29 = getelementptr inbounds %struct.Pair, %struct.Pair* %28, i32 0, i32 0
   %30 = load i32, i32* %29, align 4
-  %31 = call i8* @amrit_str_from_i32(i32 %30)
-  call void @amrit_print(i8* %31)
+  %31 = call i8* @nish_str_from_i32(i32 %30)
+  call void @nish_print(i8* %31)
   ret i32 0
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
 entry:
-  %0 = call i32 @amrit_main()
-  call void @amrit_free_arena()
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
   ret i32 %0
 }
 

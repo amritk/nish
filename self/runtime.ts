@@ -8,9 +8,9 @@
 // convenient one.
 //
 // The arena bump allocation fast path is not a call into C at all: it is
-// emitted as an `alwaysinline` IR function that bumps `@amrit_arena` directly,
+// emitted as an `alwaysinline` IR function that bumps `@nish_arena` directly,
 // so after inlining an allocation is a load, an add, a compare and a store.
-// Only the overflow path calls `@amrit_arena_grow` in runtime.c.
+// Only the overflow path calls `@nish_arena_grow` in runtime.c.
 //
 // `src/` keeps the table as an array of object literals and a `Map` beside it.
 // Here it is a class built once per compilation: the same array, with a
@@ -19,17 +19,17 @@
 
 import { StringMap } from "./map";
 
-/** Global arena state; must match `struct amrit_arena` in runtime.c. */
-export const ARENA_TYPE: string = "%struct.amrit_arena = type { i8*, i64, i64, i8* }";
-/** Array header (WP4); must match `struct amrit_array` in runtime.c: { len, cap, data }. */
-export const ARRAY_TYPE: string = "%struct.amrit_array = type { i64, i64, i8* }";
+/** Global arena state; must match `struct nish_arena` in runtime.c. */
+export const ARENA_TYPE: string = "%struct.nish_arena = type { i8*, i64, i64, i8* }";
+/** Array header (WP4); must match `struct nish_array` in runtime.c: { len, cap, data }. */
+export const ARRAY_TYPE: string = "%struct.nish_array = type { i64, i64, i8* }";
 
-export const ARENA_GLOBAL: string = "@amrit_arena = external global %struct.amrit_arena, align 8";
+export const ARENA_GLOBAL: string = "@nish_arena = external global %struct.nish_arena, align 8";
 /**
  * `process.argv` (WP7): the `string[]` the entry wrapper builds once with
- * `amrit_argv_init(argc, argv)`; every module that reads it loads this global.
+ * `nish_argv_init(argc, argv)`; every module that reads it loads this global.
  */
-export const ARGV_GLOBAL: string = "@amrit_argv = external global %struct.amrit_array*, align 8";
+export const ARGV_GLOBAL: string = "@nish_argv = external global %struct.nish_array*, align 8";
 
 /** What calling a function does to memory; the rank is the order they merge in. */
 export const EFFECT_NONE: i32 = 0;
@@ -54,7 +54,7 @@ export class RuntimeFunction {
    * prelude documents the C ABI and intrinsics are not part of it.
    */
   intrinsic: boolean;
-  /** Never returns to the caller (`amrit_exit`); callers lose `willreturn`. */
+  /** Never returns to the caller (`nish_exit`); callers lose `willreturn`. */
   noreturn: boolean;
 
   constructor(name: string, signature: string, attrs: string[], effect: i32) {
@@ -145,19 +145,19 @@ export class RuntimeTable {
 
   build(): void {
     const grow = new RuntimeFunction(
-      "amrit_arena_grow",
-      "declare noalias noundef nonnull align 8 i8* @amrit_arena_grow(i64 noundef)",
+      "nish_arena_grow",
+      "declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef)",
       ["nounwind", "willreturn", "cold", "noinline", "allocsize(0)"],
       EFFECT_WRITE
     );
     this.add(grow);
-    this.add(plain("amrit_reset_arena", "declare void @amrit_reset_arena()", EFFECT_WRITE));
-    this.add(plain("amrit_free_arena", "declare void @amrit_free_arena()", EFFECT_WRITE));
+    this.add(plain("nish_reset_arena", "declare void @nish_reset_arena()", EFFECT_WRITE));
+    this.add(plain("nish_free_arena", "declare void @nish_free_arena()", EFFECT_WRITE));
     // WP6, arena scopes. A mark is the absolute bump address (`buf + off`), 0 while the arena is empty.
-    this.add(plain("amrit_arena_mark", "declare noundef i64 @amrit_arena_mark()", EFFECT_WRITE));
+    this.add(plain("nish_arena_mark", "declare noundef i64 @nish_arena_mark()", EFFECT_WRITE));
     // Rewinds to a mark: same chunk -> reset the offset; an older chunk -> free the newer ones first.
-    this.add(plain("amrit_arena_release", "declare void @amrit_arena_release(i64 noundef)", EFFECT_WRITE));
-    this.add(plain("amrit_arena_used", "declare noundef i64 @amrit_arena_used()", EFFECT_WRITE));
+    this.add(plain("nish_arena_release", "declare void @nish_arena_release(i64 noundef)", EFFECT_WRITE));
+    this.add(plain("nish_arena_used", "declare noundef i64 @nish_arena_used()", EFFECT_WRITE));
     // WP9 call-site reclaim: rewinds to a mark while keeping the newest block,
     // which it moves down to the mark and answers at its new address. Neither
     // `noalias` nor `nocapture` is claimed: the guards in runtime.c answer the
@@ -166,80 +166,80 @@ export class RuntimeTable {
     // so `willreturn` holds.
     this.add(
       plain(
-        "amrit_arena_keep",
-        "declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8)",
+        "nish_arena_keep",
+        "declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8)",
         EFFECT_WRITE
       )
     );
     this.add(
       plain(
-        "amrit_str_new",
-        "declare noalias noundef nonnull align 8 i8* @amrit_str_new(i8* noundef readonly nocapture, i64 noundef)",
+        "nish_str_new",
+        "declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef)",
         EFFECT_WRITE
       )
     );
     this.add(
       plain(
-        "amrit_str_concat",
-        `declare noalias noundef nonnull align 8 i8* @amrit_str_concat(${STR_NOCAP}, ${STR_NOCAP})`,
+        "nish_str_concat",
+        `declare noalias noundef nonnull align 8 i8* @nish_str_concat(${STR_NOCAP}, ${STR_NOCAP})`,
         EFFECT_WRITE
       )
     );
     this.add(
       new RuntimeFunction(
-        "amrit_str_eq",
-        `declare zeroext i1 @amrit_str_eq(${STR_NOCAP}, ${STR_NOCAP})`,
+        "nish_str_eq",
+        `declare zeroext i1 @nish_str_eq(${STR_NOCAP}, ${STR_NOCAP})`,
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),
         EFFECT_READ
       )
     );
     this.add(
       new RuntimeFunction(
-        "amrit_str_at",
-        `declare zeroext i1 @amrit_str_at(${STR_NOCAP}, i64 noundef, ${STR_NOCAP})`,
+        "nish_str_at",
+        `declare zeroext i1 @nish_str_at(${STR_NOCAP}, i64 noundef, ${STR_NOCAP})`,
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),
         EFFECT_READ
       )
     );
     this.add(
       new RuntimeFunction(
-        "amrit_str_index_of",
-        `declare i64 @amrit_str_index_of(${STR_NOCAP}, ${STR_NOCAP})`,
+        "nish_str_index_of",
+        `declare i64 @nish_str_index_of(${STR_NOCAP}, ${STR_NOCAP})`,
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),
         EFFECT_READ
       )
     );
     this.add(
       new RuntimeFunction(
-        "amrit_str_len",
-        `declare i64 @amrit_str_len(${STR_NOCAP})`,
+        "nish_str_len",
+        `declare i64 @nish_str_len(${STR_NOCAP})`,
         attrs3("nounwind", "willreturn", "memory(argmem: read)"),
         EFFECT_READ
       )
     );
     this.add(
-      plain("amrit_write", `declare void @amrit_write(${STR_NOCAP}, i32 noundef, i1 noundef zeroext)`, EFFECT_WRITE)
+      plain("nish_write", `declare void @nish_write(${STR_NOCAP}, i32 noundef, i1 noundef zeroext)`, EFFECT_WRITE)
     );
-    this.add(plain("amrit_print", `declare void @amrit_print(${STR_NOCAP})`, EFFECT_WRITE));
+    this.add(plain("nish_print", `declare void @nish_print(${STR_NOCAP})`, EFFECT_WRITE));
     this.add(
       plain(
-        "amrit_str_from_i32",
-        "declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef)",
+        "nish_str_from_i32",
+        "declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef)",
         EFFECT_WRITE
       )
     );
     this.add(
       plain(
-        "amrit_str_from_f64",
-        "declare noalias noundef nonnull align 8 i8* @amrit_str_from_f64(double noundef)",
+        "nish_str_from_f64",
+        "declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef)",
         EFFECT_WRITE
       )
     );
     // WP7: i64 strings, Math.random, process, files.
     this.add(
       plain(
-        "amrit_str_from_i64",
-        "declare noalias noundef nonnull align 8 i8* @amrit_str_from_i64(i64 noundef)",
+        "nish_str_from_i64",
+        "declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef)",
         EFFECT_WRITE
       )
     );
@@ -248,16 +248,16 @@ export class RuntimeTable {
     // is what keeps `runtime.c` inside its `.text` budget.
     this.add(
       plain(
-        "amrit_str_from_u64",
-        "declare noalias noundef nonnull align 8 i8* @amrit_str_from_u64(i64 noundef)",
+        "nish_str_from_u64",
+        "declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef)",
         EFFECT_WRITE
       )
     );
     // xorshift64* over a global state word: reads and writes memory.
-    this.add(plain("amrit_random", "declare noundef double @amrit_random()", EFFECT_WRITE));
+    this.add(plain("nish_random", "declare noundef double @nish_random()", EFFECT_WRITE));
     const exit = new RuntimeFunction(
-      "amrit_exit",
-      "declare void @amrit_exit(i32 noundef)",
+      "nish_exit",
+      "declare void @nish_exit(i32 noundef)",
       attrs2("noreturn", "nounwind"),
       EFFECT_WRITE
     );
@@ -265,43 +265,43 @@ export class RuntimeTable {
     this.add(exit);
     this.add(
       plain(
-        "amrit_read_file",
-        `declare noalias noundef nonnull align 8 i8* @amrit_read_file(${STR_NOCAP})`,
+        "nish_read_file",
+        `declare noalias noundef nonnull align 8 i8* @nish_read_file(${STR_NOCAP})`,
         EFFECT_WRITE
       )
     );
     this.add(
       plain(
-        "amrit_read_file_or_null",
-        `declare noalias noundef align 8 i8* @amrit_read_file_or_null(${STR_NOCAP})`,
+        "nish_read_file_or_null",
+        `declare noalias noundef align 8 i8* @nish_read_file_or_null(${STR_NOCAP})`,
         EFFECT_WRITE
       )
     );
-    this.add(plain("amrit_write_file", `declare void @amrit_write_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE));
-    this.add(plain("amrit_append_file", `declare void @amrit_append_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE));
+    this.add(plain("nish_write_file", `declare void @nish_write_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE));
+    this.add(plain("nish_append_file", `declare void @nish_append_file(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE));
     // WP7: process.argv and string-to-number parsing.
     // Called once by the entry wrapper: mallocs the array and copies every argument.
     this.add(
-      plain("amrit_argv_init", "declare void @amrit_argv_init(i32 noundef, i8** noundef nocapture readonly)", EFFECT_WRITE)
+      plain("nish_argv_init", "declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly)", EFFECT_WRITE)
     );
     // mode 0 parseFloat, 1 Number, 2 parseInt (as a double; the caller saturates it).
     // The string is only read and never retained (`readonly nocapture`), but the
     // function itself is not `readonly`: strtod/strtoll may store errno on overflow.
     this.add(
-      plain("amrit_parse_number", `declare noundef double @amrit_parse_number(${STR_NOCAP}, i32 noundef)`, EFFECT_WRITE)
+      plain("nish_parse_number", `declare noundef double @nish_parse_number(${STR_NOCAP}, i32 noundef)`, EFFECT_WRITE)
     );
     // WP14 D4: the directory and subprocess calls a self-hosted driver needs
     // to link its own output, and the WP14 §7a `stat` beside them. Each
     // answers a value rather than exiting.
-    // `mkdir`, then `amrit_is_dir` when it failed: it changes the file system,
+    // `mkdir`, then `nish_is_dir` when it failed: it changes the file system,
     // so `write`, and the path is only read and never retained (`STR_NOCAP`).
-    this.add(plain("amrit_mkdir", `declare zeroext i1 @amrit_mkdir(${STR_NOCAP})`, EFFECT_WRITE));
+    this.add(plain("nish_mkdir", `declare zeroext i1 @nish_mkdir(${STR_NOCAP})`, EFFECT_WRITE));
     // WP14 §7a. One `stat`, answering only "is there a directory here?", which
     // is the question `-o <dir>` asks. `EFFECT_WRITE` rather than read for the
-    // reason `amrit_parse_number` is not readonly: a failed `stat` stores
+    // reason `nish_parse_number` is not readonly: a failed `stat` stores
     // `errno`, and the file system is not memory LLVM may reason about, so a
     // caller must not be hoisted across anything that could change it.
-    this.add(plain("amrit_is_dir", `declare zeroext i1 @amrit_is_dir(${STR_NOCAP})`, EFFECT_WRITE));
+    this.add(plain("nish_is_dir", `declare zeroext i1 @nish_is_dir(${STR_NOCAP})`, EFFECT_WRITE));
     // Runs an arbitrary program, so the honest answer to every question is the
     // conservative one:
     //   - no `memory(...)` and `EFFECT_WRITE`: the child reads and writes
@@ -316,8 +316,8 @@ export class RuntimeTable {
     // does the C that implements this.
     this.add(
       new RuntimeFunction(
-        "amrit_spawn",
-        "declare noundef i32 @amrit_spawn(%struct.amrit_array* noundef nonnull align 8)",
+        "nish_spawn",
+        "declare noundef i32 @nish_spawn(%struct.nish_array* noundef nonnull align 8)",
         attrs1("nounwind"),
         EFFECT_WRITE
       )
@@ -327,12 +327,12 @@ export class RuntimeTable {
     // `EFFECT_WRITE` and no `readnone`, for two reasons that each suffice: the
     // call allocates, so it moves the arena, and `environ` is not memory LLVM
     // is tracking, so two reads either side of a `spawnSync` must not fold
-    // into one. `noalias` is a fact here where it is not on `amrit_platform`:
+    // into one. `noalias` is a fact here where it is not on `nish_platform`:
     // every call answers a fresh arena string rather than the same constant.
     // The name is read and never retained (`STR_NOCAP`), and the result may be
     // null, so no `nonnull`.
     this.add(
-      plain("amrit_getenv", `declare noalias noundef align 8 i8* @amrit_getenv(${STR_NOCAP})`, EFFECT_WRITE)
+      plain("nish_getenv", `declare noalias noundef align 8 i8* @nish_getenv(${STR_NOCAP})`, EFFECT_WRITE)
     );
     // WP14 §7a: what machine this is. `--target host` composes its triple from
     // the two. Each answers the address of a string in the runtime's own
@@ -343,43 +343,43 @@ export class RuntimeTable {
     // call answers the same pointer, and `noalias` promises the opposite.
     this.add(
       new RuntimeFunction(
-        "amrit_platform",
-        "declare noundef nonnull align 8 i8* @amrit_platform()",
+        "nish_platform",
+        "declare noundef nonnull align 8 i8* @nish_platform()",
         attrs3("nounwind", "willreturn", "readnone"),
         EFFECT_NONE
       )
     );
     this.add(
       new RuntimeFunction(
-        "amrit_arch",
-        "declare noundef nonnull align 8 i8* @amrit_arch()",
+        "nish_arch",
+        "declare noundef nonnull align 8 i8* @nish_arch()",
         attrs3("nounwind", "willreturn", "readnone"),
         EFFECT_NONE
       )
     );
-    // WP4: arrays. `amrit_array_grow` doubles `cap` (4 when 0) and moves the
+    // WP4: arrays. `nish_array_grow` doubles `cap` (4 when 0) and moves the
     // elements into fresh arena storage; `len` is untouched.
     this.add(
       plain(
-        "amrit_array_grow",
-        "declare void @amrit_array_grow(%struct.amrit_array* noundef nonnull align 8 nocapture, i64 noundef)",
+        "nish_array_grow",
+        "declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef)",
         EFFECT_WRITE
       )
     );
     // Host entry (WP8): header + `len` uninitialised elements, `len == cap`. Compiled code
     // never calls it (literals and `new Array` use the inline allocator); the wasm loader and
-    // C hosts do, so it is part of the declared ABI and of amritc.h.
+    // C hosts do, so it is part of the declared ABI and of nish.h.
     this.add(
       plain(
-        "amrit_alloc_array",
-        "declare noalias noundef nonnull align 8 %struct.amrit_array* @amrit_alloc_array(i64 noundef, i64 noundef)",
+        "nish_alloc_array",
+        "declare noalias noundef nonnull align 8 %struct.nish_array* @nish_alloc_array(i64 noundef, i64 noundef)",
         EFFECT_WRITE
       )
     );
     // Bounds-check failure: prints "index out of range: <idx> >= <len>" and exits 1.
     const panicIndex = new RuntimeFunction(
-      "amrit_panic_index",
-      "declare void @amrit_panic_index(i64 noundef, i64 noundef)",
+      "nish_panic_index",
+      "declare void @nish_panic_index(i64 noundef, i64 noundef)",
       attrs3("nounwind", "noreturn", "cold"),
       EFFECT_WRITE
     );
@@ -387,8 +387,8 @@ export class RuntimeTable {
     this.add(panicIndex);
     // Division failure: "attempt to divide by zero" (true) or "... with overflow" (false), exit 1.
     const panicDiv = new RuntimeFunction(
-      "amrit_panic_div",
-      "declare void @amrit_panic_div(i1 noundef zeroext)",
+      "nish_panic_div",
+      "declare void @nish_panic_div(i1 noundef zeroext)",
       attrs3("nounwind", "noreturn", "cold"),
       EFFECT_WRITE
     );
@@ -448,27 +448,27 @@ export function inlineAllocatorAttrs(): string[] {
  */
 export function inlineAllocator(attrGroup: string): string {
   const lines: string[] = [];
-  lines.push(`define internal noalias noundef nonnull align 8 i8* @amrit_alloc_struct(i64 noundef %size) ${attrGroup} {`);
+  lines.push(`define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) ${attrGroup} {`);
   lines.push("entry:");
   lines.push("  %size.p7 = add i64 %size, 7");
   lines.push("  %size.aligned = and i64 %size.p7, -8");
-  lines.push("  %off.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 1");
+  lines.push("  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1");
   lines.push("  %off = load i64, i64* %off.ptr, align 8");
   lines.push("  %new.off = add i64 %off, %size.aligned");
-  lines.push("  %cap.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 2");
+  lines.push("  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2");
   lines.push("  %cap = load i64, i64* %cap.ptr, align 8");
   lines.push("  %fits = icmp ule i64 %new.off, %cap");
   lines.push("  br i1 %fits, label %fast, label %slow");
   lines.push("");
   lines.push("fast:");
   lines.push("  store i64 %new.off, i64* %off.ptr, align 8");
-  lines.push("  %buf.ptr = getelementptr inbounds %struct.amrit_arena, %struct.amrit_arena* @amrit_arena, i64 0, i32 0");
+  lines.push("  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0");
   lines.push("  %buf = load i8*, i8** %buf.ptr, align 8");
   lines.push("  %obj = getelementptr inbounds i8, i8* %buf, i64 %off");
   lines.push("  ret i8* %obj");
   lines.push("");
   lines.push("slow:");
-  lines.push("  %grown = call i8* @amrit_arena_grow(i64 %size.aligned)");
+  lines.push("  %grown = call i8* @nish_arena_grow(i64 %size.aligned)");
   lines.push("  ret i8* %grown");
   lines.push("}");
   return lines.join("\n");

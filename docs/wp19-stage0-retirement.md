@@ -7,7 +7,7 @@ the end state.
 
 This package writes down what has to be true before the freeze becomes a
 deletion — before `src/`, the `typescript` dependency and Node leave the
-*compiler*, and `self/` becomes the only implementation of AmritScript. It is a
+*compiler*, and `self/` becomes the only implementation of Nish. It is a
 checklist, not a schedule. Nothing here says when; everything here says what.
 
 ---
@@ -35,7 +35,7 @@ is why a Thompson-style backdoor cannot presently hide in either compiler.
 It also costs a full second implementation of every construct, forever.
 
 **The target shape is Rust's and Go's**: `self/` is the compiler, and the seed
-is the previous released `amritc` binary. This document is the price list.
+is the previous released `nish` binary. This document is the price list.
 
 ### Two things retirement is not
 
@@ -46,10 +46,10 @@ day; a compiler is self-hosted when it compiles itself, not when nothing else
 in the tree is written by anyone else. Porting the harness is a separate
 question and this package does not open it.
 
-**It is not "AmritScript-0 dissolves."** The subset does not disappear when
+**It is not "Nish-0 dissolves."** The subset does not disappear when
 stage0 does — its *reference point* moves. Today `self/` may only use what
 stage0 compiles, permanently. After retirement `self/` may only use what **the
-last released `amritc`** compiles, which is rustc's `#[cfg(bootstrap)]` window
+last released `nish`** compiles, which is rustc's `#[cfg(bootstrap)]` window
 with a longer period. The freeze stops being permanent and starts rolling, and
 that — not the deleted code — is the actual prize: a construct added in 0.N
 becomes available to `self/` in 0.(N+1) instead of never.
@@ -80,11 +80,11 @@ R1. They are left in the table so the count stays honest.
 | --- | --- | --- |
 | `--emit-ast` | **closed** | stage1's own dump over `self/nodes.ts`'s vocabulary, with a checked-in golden (`tests/self/dump_ast.golden`). **Not** a mirror of `ts.SyntaxKind` — §7 was right about that, and what shipped is a different dump, not the same one: both compilers answer the flag, each about its own tree, and the printer is `self/ast_text.ts`, shared with `self/dump_ast.ts` so the flag and the parser oracle cannot drift |
 | `--target host` | **closed** | `process.platform` / `process.arch`, composed exactly as `src/codegen/target.ts` composes them (`tests/cases/io_host`), at the 8 bytes of `.text` §7a predicted and measured |
-| exit **70** on an internal error, and `AMRITC_DEBUG` | **closed** | `process.exit(internalError(...))` at each of the 35 sites, with the report in `self/ice.ts`; no second `panic` builtin, so the language did not grow for it. stage1 has no stack to print, and says so rather than promising one |
+| exit **70** on an internal error, and `NISH_DEBUG` | **closed** | `process.exit(internalError(...))` at each of the 35 sites, with the report in `self/ice.ts`; no second `panic` builtin, so the language did not grow for it. stage1 has no stack to print, and says so rather than promising one |
 | `-o <dir>` without the trailing slash | **closed** | `isDirectorySync(path: string): boolean`, the `stat` beside `mkdirSync` (`tests/cases/io_is_directory`) |
-| `--no-warn-performance`, and the WP15 §8 warnings themselves | **closed, found by the flag-set diff** | stage1 had the whole class — the analysis in `self/checker.ts`, the second list in the sink, the report in `self/diagnostics.ts` — and its driver never printed a word of it, so `build/amritc` compiled a quadratic string loop in silence where `amritc` named it. The driver reports them on stage0's streams and takes the flag that silences them. No oracle could see it: a warning goes to stderr on a compile that succeeds, and none of them reads that stream on a success |
+| `--no-warn-performance`, and the WP15 §8 warnings themselves | **closed, found by the flag-set diff** | stage1 had the whole class — the analysis in `self/checker.ts`, the second list in the sink, the report in `self/diagnostics.ts` — and its driver never printed a word of it, so `build/nish` compiled a quadratic string loop in silence where `nish` named it. The driver reports them on stage0's streams and takes the flag that silences them. No oracle could see it: a warning goes to stderr on a compile that succeeds, and none of them reads that stream on a success |
 | `--out-dir` | **closed, by removal** | the one difference that ran the other way: stage1's own spelling for `-o <dir>/`, which stage0 has never had, kept because three oracles passed it. They pass `-o <dir>/` to both compilers now and the flag is gone — parity without the frozen compiler growing anything |
-| `--emit-checked`'s later-phase lines | **closed** | it was the port this row predicted: `self/compilation.ts` grew stage0's memoised `analyze()`, `self/dump.ts` grew `factsText` in stage0's format, and `checked_oracle.js`'s `LATER_PHASES` filter is deleted — 314 programs agree over 297,074 dump lines with nothing filtered out. It earned its keep immediately, catching a lost `amrit_panic_div` fact that the compound-assignment fix below had just introduced |
+| `--emit-checked`'s later-phase lines | **closed** | it was the port this row predicted: `self/compilation.ts` grew stage0's memoised `analyze()`, `self/dump.ts` grew `factsText` in stage0's format, and `checked_oracle.js`'s `LATER_PHASES` filter is deleted — 314 programs agree over 297,074 dump lines with nothing filtered out. It earned its keep immediately, catching a lost `nish_panic_div` fact that the compound-assignment fix below had just introduced |
 
 ### A2. What `--parity` found on its first run
 
@@ -125,7 +125,7 @@ contextual type by walking *up* from the literal through three functions with
 enumerated positions (`contextType` in `src/checker/math.ts` for numbers,
 `contextualType` in `classes.ts` for object literals and `null`, another in
 `arrays.ts` for `[]`); stage1 threads a single `want` *down*, because
-AmritScript-0 has no parent pointers (`.claude/selfhost.md`). One channel where
+Nish-0 has no parent pointers (`.claude/selfhost.md`). One channel where
 stage0 has three is more permissive by construction, and every difference here
 is stage1 handing `want` to a position stage0's walk does not name. That is the
 shape to look for next time, and `--parity` under a flag that changes what a
@@ -153,7 +153,7 @@ down is what turns "R1 is nearly done" into a list:
 | 602 | **the parser refuses before Phase 0 does** | `var x = 1` is `` syntax error: expected `;` `` from stage1 and `` `var` is forbidden; use `let` or `const` `` from stage0. By design (`.claude/selfhost.md`: lex and parse what is written, refuse in the phase that owns the rule) — `reject_oracle.js` counts these apart | **declared.** The narrow form: it applies only when stage1's first diagnostic is a syntax error *and* stage0 refuses the same file, and it covers stderr only — exit status, stdout and every file written are still compared, and stage0 accepting a program stage1 refuses is a failure rather than this. Closing it in code means grammar for 43 constructs the language forbids, which is a parser rewrite, not a fix |
 | ~950 | **error recovery after the first refusal** | stage0 `throw`s out of the statement and unwinds; stage1 threaded an error value and kept checking. Both refuse, with the same first diagnostic, and stage1 said more after it. Mostly `--number-mode f64` over programs written for i32 mode, where one bad type cascades. `cf_switch_break` in §A2 is this, not what its row said | **stage1 changed.** `errored` in `self/context.ts` is the throw in a language without one: set by `error`, cleared per statement, and consulted where the throw would have unwound. Measuring it turned up four more contextual-type differences and one message, all listed in `CHANGELOG.md` |
 | 40 | **`--emit-ast` on a program Phase 0 refuses** | stage0 validates before it dumps and exits 1; stage1 dumped the tree it parsed and exited 0 | **stage1 changed.** A dump flag does not turn a refused program into a compiling one (`tests/cases/dump_ast_reject`) |
-| 13 | **one wording** | unary `+` is `` Unary `+` is forbidden; it converts, and AmritScript has no conversions `` in stage1 and `` Unsupported unary operator `+` `` in stage0 | **stage0 changed**, to the better sentence: it says *why* (`tests/cases/reject_unary_plus`) |
+| 13 | **one wording** | unary `+` is `` Unary `+` is forbidden; it converts, and Nish has no conversions `` in stage1 and `` Unsupported unary operator `+` `` in stage0 | **stage0 changed**, to the better sentence: it says *why* (`tests/cases/reject_unary_plus`) |
 
 **Four of the five closed in code and one by declaration**, and the direction
 each closed in is the interesting part. Twice it was the *frozen* compiler that
@@ -229,7 +229,7 @@ and it is the only one available once there is one implementation.
 
 ### C. Distribution
 
-`npm install -g amritc` ships `dist/`. `--version` reads `package.json` at
+`npm install -g nish` ships `dist/`. `--version` reads `package.json` at
 runtime. `wp12-release.md` lists "prebuilt binaries of the compiler itself"
 under *Not in this work package*, on the grounds that the compiler is a Node
 program and the tarball is the artefact. All three of those statements are
@@ -290,7 +290,7 @@ sitting under a flag combination nothing had ever tried.
 Every row of §2B is either surviving, replaced, or written off with a reason.
 Specifically:
 
-1. `amritc-cmp` exists and is green: the last released `amritc` and HEAD are
+1. `nish-cmp` exists and is green: the last released `nish` and HEAD are
    compared over the whole corpus, byte for byte, and a difference must be
    named in `CHANGELOG.md` before CI goes green. This is Go's `toolstash -cmp`
    and it is the successor to `ir_oracle.js` and `interop_oracle.js`.
@@ -312,20 +312,20 @@ easy; noticing six months later that nothing checks the diagnostics is not.
 
 ### G3 — The seed protocol exists and CI uses it
 
-`scripts/bootstrap.sh` accepts a seed compiler — `AMRITC_BOOTSTRAP=<path>`,
+`scripts/bootstrap.sh` accepts a seed compiler — `NISH_BOOTSTRAP=<path>`,
 Go's `GOROOT_BOOTSTRAP` by another name — instead of assuming `dist/index.js`.
 CI builds `self/` with the **last released binary** on every run, on both
 operating systems, and that build is a required check.
 
 **Why it blocks.** The rolling freeze of §1 is enforced by this job and by
-nothing else. AmritScript has no conditional compilation and will not grow any:
+nothing else. Nish has no conditional compilation and will not grow any:
 there is no `#[cfg(bootstrap)]` to write, so the discipline is "do not use it
 yet", and a discipline that CI does not check is a comment.
 
 ### G4 — The seed policy is written before it is needed
 
 One sentence in `wp12-release.md`, decided now rather than at the first
-awkward release: **`amritc` 0.N is built by the last patch release of
+awkward release: **`nish` 0.N is built by the last patch release of
 0.(N−1)**. Go publishes its version of this and it is why nobody argues about
 it during a release.
 
@@ -336,9 +336,9 @@ retirement unchanged — only its subject changes, from stage0 to the seed.
 
 ### G5 — Distribution does not need Node
 
-- The release workflow builds `amritc` for `x86_64`/`aarch64` × `linux`/`darwin`
+- The release workflow builds `nish` for `x86_64`/`aarch64` × `linux`/`darwin`
   from the seed release and attaches the four binaries to the GitHub release.
-- `npm install -g amritc` keeps working: the package becomes a thin installer
+- `npm install -g nish` keeps working: the package becomes a thin installer
   that fetches the binary for the host, or ships it. Whichever, the check in
   `tests/run.js`'s WP12 block — pack, install into a temporary prefix, link a
   hello-world from an unrelated directory — must still pass.
@@ -378,7 +378,7 @@ All four have landed: three as WP14 §7a work rather than with WP18, and
 | --- | --- | --- | --- |
 | host platform | `process.platform: string`, `process.arch: string` | G1 (`--target host`) | **Landed (WP14 §7a).** Read-only members, like `process.argv`. `self/target.ts` composes the triple exactly as `src/codegen/target.ts` does. 8 bytes of `.text`, measured in §7a |
 | directory test | `isDirectorySync(path: string): boolean` | G1 (`-o <dir>`) | **Landed (WP14 §7a).** A value, not an exit, for the reason `mkdirSync` answers a boolean and `readFileSyncOrNull` answers `null`: there are no exceptions, so the driver phrases its own diagnostic. It is a `stat`, so a plain file answers `false` |
-| environment | `getenv(name: string): string \| null` | G5 (`CC`) | **Landed (WP19 R1).** A call and not `process.env.X`, because member access on a dynamic key is exactly what Phase 0 forbids. Nullable, narrowed like any other `T \| null`, and `null` is not `""`: an unset variable and one set to nothing are different answers and a driver acts on the difference. The `AMRITC_DEBUG` half of this row is struck: §2A's exit-70 work closed it by the other design, and `self/ice.ts` names the variable to say there is no stack behind it here rather than reading it (`tests/cases/io_getenv`) |
+| environment | `getenv(name: string): string \| null` | G5 (`CC`) | **Landed (WP19 R1).** A call and not `process.env.X`, because member access on a dynamic key is exactly what Phase 0 forbids. Nullable, narrowed like any other `T \| null`, and `null` is not `""`: an unset variable and one set to nothing are different answers and a driver acts on the difference. The `NISH_DEBUG` half of this row is struck: §2A's exit-70 work closed it by the other design, and `self/ice.ts` names the variable to say there is no stack behind it here rather than reading it (`tests/cases/io_getenv`) |
 | internal error | none: `process.exit(internalError(msg))` | G1 (exit 70) | **Landed (WP14 §7a), by the other design.** This row proposed a second terminator builtin rather than 40 rewrites, to spare the definite-return analysis. What shipped is the rewrite: `panic(m)` already means "this message, then exit 1" and `process.exit(n)` already means "this code, now", so the status a compiler wants for its own bugs needs no new construct, and a second panic would put one compiler's reporting policy — the version line, the issue tracker, the word "internal" — inside the language that compiles it. The report is `self/ice.ts`; the cost was 35 statements, and they are `self/`'s own |
 
 `--emit-ast` needed no builtin — it needed `self/dump_ast.ts` promoted from an
@@ -401,8 +401,8 @@ gate nobody has opened is how a runtime budget dies.
 | | Milestone | Done when |
 | --- | --- | --- |
 | **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) |
-| **R2** | The seed protocol | `AMRITC_BOOTSTRAP` in `scripts/bootstrap.sh`; CI builds `self/` with the last release on both operating systems; the policy sentence is in `wp12-release.md` (G3, G4) |
-| **R3** | Oracle succession | `amritc-cmp` green over the corpus; `fuzz.js --stage1` repointed; the four survivors repointed to the seed; the lost coverage recovered as goldens, with the numbers written into §2B (G2) |
+| **R2** | The seed protocol | `NISH_BOOTSTRAP` in `scripts/bootstrap.sh`; CI builds `self/` with the last release on both operating systems; the policy sentence is in `wp12-release.md` (G3, G4) |
+| **R3** | Oracle succession | `nish-cmp` green over the corpus; `fuzz.js --stage1` repointed; the four survivors repointed to the seed; the lost coverage recovered as goldens, with the numbers written into §2B (G2) |
 | **R4** | Distribution | four binaries per release; the npm package installs one; `--version` has a new source; INSTALL.md and wp12 rewritten (G5) |
 | **R5** | Provenance | the `ddc-<version>` tag and the re-verification procedure (G6) |
 | **R6** | The deletion | `src/`, the `typescript` runtime dependency, the six dead oracles, and every rule that names stage0 |

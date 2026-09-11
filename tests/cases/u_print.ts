@@ -1,5 +1,5 @@
 // Printing a value above INT_MAX must show it unsigned. Every width goes
-// through the one `amrit_str_from_u64`, with a `zext` at the call site for the
+// through the one `nish_str_from_u64`, with a `zext` at the call site for the
 // narrow three, so `4294967295` prints as itself and not as `-1`.
 export function test(): number {
   const b: u8 = 200;

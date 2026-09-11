@@ -1,5 +1,5 @@
 // Go twin of fib.ts: same shape, same checksum line. Go's integers wrap on
-// overflow like AmritScript's; fib(40) does not overflow an int32 anyway.
+// overflow like Nish's; fib(40) does not overflow an int32 anyway.
 package main
 
 import "fmt"

@@ -13,7 +13,7 @@
  * pieces" — over every construct the corpus contains, which is every construct
  * the language has.
  *
- * **Skips are the measurement, not a weakness.** AmritScript-0's grammar is
+ * **Skips are the measurement, not a weakness.** Nish-0's grammar is
  * deliberately smaller than TypeScript's: it has no `try`, no arrow function,
  * no generic parameter list, no `as`. A file using one of those is a parse
  * error here and a tree there, so it is skipped and *counted*, and the tally
@@ -56,7 +56,7 @@ function byteOffsets(source) {
  *
  * The printer is a pair of mutually recursive emitters — one for the node
  * kinds `self/nodes.ts` models, one for the list wrappers — and every
- * unhandled kind raises, which is how a construct AmritScript-0 has no node for
+ * unhandled kind raises, which is how a construct Nish-0 has no node for
  * becomes a skip rather than a silent difference.
  */
 function printTypeScriptTree(source, sf) {
@@ -89,7 +89,7 @@ function printTypeScriptTree(source, sf) {
   const exported = (node) =>
     node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) ? "+export" : "";
 
-  /** `const` rather than `let`, which AmritScript spells as a flag on the statement. */
+  /** `const` rather than `let`, which Nish spells as a flag on the statement. */
   const isConst = (declarationList) => (declarationList.flags & ts.NodeFlags.Const) !== 0;
 
   const identifier = (node, depth) => {
@@ -516,7 +516,7 @@ function printTypeScriptTree(source, sf) {
 
   /**
    * `readonly` is recorded; `public`, `private` and `protected` are accepted
-   * and ignored, as AmritScript does (docs/LANGUAGE.md, Classes). Anything else
+   * and ignored, as Nish does (docs/LANGUAGE.md, Classes). Anything else
    * — `static`, `abstract`, `async`, `declare` — is a construct the language
    * does not have, so the file is skipped and counted.
    */

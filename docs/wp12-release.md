@@ -9,8 +9,8 @@ User-facing install instructions are in [INSTALL.md](INSTALL.md).
 
 | Path | Why it ships |
 | --- | --- |
-| `dist/` | the compiled CLI (`dist/index.js` is the `amritc` bin) |
-| `runtime/` | `runtime.c` (linked into every `--link` binary) and `amritc.h` (included by the N-API shim) |
+| `dist/` | the compiled CLI (`dist/index.js` is the `nish` bin) |
+| `runtime/` | `runtime.c` (linked into every `--link` binary) and `nish.h` (included by the N-API shim) |
 | `scripts/` | `build.sh` (the `--link` pipeline), `bootstrap.sh` (the self-hosted compiler), `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
 | `README.md`, `LICENSE`, `docs/INSTALL.md` | documentation |
 
@@ -21,10 +21,10 @@ the tarball. Check with `npm pack --dry-run`.
 
 `src/index.ts` resolves `scripts/build.sh` and `runtime/runtime.c` from the
 package root (`PKG_ROOT` in `src/version.ts`, i.e. `dist/..`), never from the
-working directory, so `npm install -g amritc` works from anywhere. The
+working directory, so `npm install -g nish` works from anywhere. The
 `// ---- WP12: package` block of `tests/run.js` proves it: it runs `npm pack`,
 installs the tarball into a temporary prefix, and links a hello-world from an
-unrelated directory with the installed `amritc`.
+unrelated directory with the installed `nish`.
 
 `--version` reads `version` from `package.json` at runtime
 (`src/version.ts`). There is no generated version file to keep in sync.
@@ -40,7 +40,7 @@ unrelated directory with the installed `amritc`.
 | 1 | `CompileError` from the validator, parser or checker; a driver refusal (`--link` without `export function main`, several modules with a single `-o file.ll`); a Node system error on an input or output path | `file:line:col: error: ...` with caret excerpt, or one line |
 | 2 | usage *error*: unknown flag, missing argument, no inputs | `usage: ...` on stderr |
 | 3 | toolchain: `--link` requested but `clang` (or `$CC`) is not runnable; or `scripts/build.sh` exited non-zero / could not be spawned | the per-platform install hint; or build.sh's stderr verbatim followed by `--link: <build.sh> failed (exit N); the IR is in ...` |
-| 70 | internal compiler error: any other exception escaping `main` (`EX_SOFTWARE`) | `amritc <version>: internal compiler error while compiling <inputs>`, the exception, a request to report it at the issue tracker; the stack trace only with `AMRITC_DEBUG=1` |
+| 70 | internal compiler error: any other exception escaping `main` (`EX_SOFTWARE`) | `nish <version>: internal compiler error while compiling <inputs>`, the exception, a request to report it at the issue tracker; the stack trace only with `NISH_DEBUG=1` |
 
 `--help` is the answer to a question, not a refusal, so it prints on stdout and
 exits 0 — what clang, tsc and git do, and what lets a wrapper ask the compiler
@@ -51,7 +51,7 @@ the code, and `tests/run.js` pins both. stage1 answers the same way
 
 Under `--json` every one of these failures is also one JSON object on stdout —
 including exit 3 and exit 70, which have no source position and so carry
-`{"severity","code","message"}` with the band-0 codes `AS0002` and `AS0003`. A
+`{"severity","code","message"}` with the band-0 codes `NL0002` and `NL0003`. A
 tool that asked for JSON is never left with an empty stdout and an exit code to
 guess about. See [wp10-ci.md](wp10-ci.md#failures-without-a-source-position).
 
@@ -61,7 +61,7 @@ writing any IR. A `build.sh` failure happens *after* the IR is written and the
 message names the `.ll` files so the user can build them by hand.
 
 Every code is exercised by the `// ---- WP12: exit codes` block of
-`tests/run.js`: the internal-error path through the `AMRITC_SIMULATE_ICE=1`
+`tests/run.js`: the internal-error path through the `NISH_SIMULATE_ICE=1`
 test hook (which throws a `TypeError` at the top of the compile step and
 exists only for that test), the missing-toolchain path by running with `PATH`
 set to an empty directory, and the build failure path with `CC` pointing at a
@@ -110,7 +110,7 @@ Releases are tag-driven; nothing is published from a developer machine.
 4. **Merge** the branch to `main`, then **tag and push the tag**:
 
    ```bash
-   git tag -a v0.2.0 -m "amritc 0.2.0"
+   git tag -a v0.2.0 -m "nish 0.2.0"
    git push origin v0.2.0
    ```
 
@@ -120,9 +120,9 @@ Releases are tag-driven; nothing is published from a developer machine.
      size report on Ubuntu and macOS, lint;
    - refuses to continue if the tag does not equal `package.json#version`;
    - `npm ci && npm run build && npm pack`, and checks the tarball contains
-     `dist/index.js`, `runtime/runtime.c`, `runtime/amritc.h` and
+     `dist/index.js`, `runtime/runtime.c`, `runtime/nish.h` and
      `scripts/build.sh`;
-   - `gh release create v0.2.0 amritc-0.2.0.tgz` with the CHANGELOG
+   - `gh release create v0.2.0 nish-0.2.0.tgz` with the CHANGELOG
      section as the notes.
 
 6. **npm publish is manual** for now. When ready:
@@ -142,7 +142,7 @@ again with a *new* patch version; never move a tag that CI has already built.
 ## Open decision: which compiler the package ships
 
 The position this project is run on: **the compiled native binary is what
-should reach a user.** `build/amritc` — stage2, the self-hosted compiler built
+should reach a user.** `build/nish` — stage2, the self-hosted compiler built
 by the compiler stage0 built — compiles the same programs about eight times
 faster than the Node one and needs no Node at all
 ([wp14-selfhost.md](wp14-selfhost.md) §4, D5). That does not retire stage0 and
@@ -165,10 +165,10 @@ Three ways to close it, and what each costs:
 | | What ships | What it costs |
 | --- | --- | --- |
 | **(a) ship `self/`** | the 54 modules of the self-hosted compiler, 791,835 bytes of TypeScript, so an installed package can run `scripts/bootstrap.sh` | the user builds the compiler: clang on `PATH`, and `self/` compiled twice for the default stage2 (three times under `--verify`). The unpacked package grows from 1.3 MB to about 2.1 MB, and `self/` becomes a published surface rather than a checkout-only one |
-| **(b) per-platform prebuilt binaries** | `amritc-<os>-<arch>` packages declared as `optionalDependencies` with `os`/`cpu` — the esbuild pattern — with the main package resolving whichever one npm installed | a release build matrix that does not exist. `release.yml` runs one `ubuntu-latest` job and attaches one tarball; every supported triple would need its own runner and its own artefact, macOS needs an answer for both architectures, and each release publishes N+1 packages instead of one. It also needs a fallback for a platform with no binary, and that fallback is (a) |
-| **(c) make stage2 the compiler, stage0 the seed** | `bin.amritc` runs the native binary; `dist/` stays, as the seed and the oracle | **all four of the things [wp14-selfhost.md](wp14-selfhost.md) §7a listed as still stage0's have since closed** — `--target host` and `--emit-ast` are answered, `-o <dir>` is stated, and an internal error exits 70 with its own report — so the objection this row recorded no longer stands, and what remains for (c) is [wp19-stage0-retirement.md](wp19-stage0-retirement.md)'s later gates (the seed protocol, oracle succession, distribution) rather than the compiler's own surface. It is also not a delivery mechanism on its own — the binary still arrives by (a) or (b) |
+| **(b) per-platform prebuilt binaries** | `nish-<os>-<arch>` packages declared as `optionalDependencies` with `os`/`cpu` — the esbuild pattern — with the main package resolving whichever one npm installed | a release build matrix that does not exist. `release.yml` runs one `ubuntu-latest` job and attaches one tarball; every supported triple would need its own runner and its own artefact, macOS needs an answer for both architectures, and each release publishes N+1 packages instead of one. It also needs a fallback for a platform with no binary, and that fallback is (a) |
+| **(c) make stage2 the compiler, stage0 the seed** | `bin.nish` runs the native binary; `dist/` stays, as the seed and the oracle | **all four of the things [wp14-selfhost.md](wp14-selfhost.md) §7a listed as still stage0's have since closed** — `--target host` and `--emit-ast` are answered, `-o <dir>` is stated, and an internal error exits 70 with its own report — so the objection this row recorded no longer stands, and what remains for (c) is [wp19-stage0-retirement.md](wp19-stage0-retirement.md)'s later gates (the seed protocol, oracle succession, distribution) rather than the compiler's own surface. It is also not a delivery mechanism on its own — the binary still arrives by (a) or (b) |
 
-The options are not exclusive: (c) is about which binary is `amritc`, and (a)
+The options are not exclusive: (c) is about which binary is `nish`, and (a)
 or (b) is about how it gets onto the machine. What is not open is stage0's
 role — it is the seed and the oracle in all three.
 

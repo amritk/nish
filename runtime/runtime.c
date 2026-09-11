@@ -1,4 +1,4 @@
-/* AmritScript runtime: arena + strings + cold paths. Layouts are ABI (runtime.ts, amritc.h). */
+/* Nish runtime: arena + strings + cold paths. Layouts are ABI (runtime.ts, nish.h). */
 #define _POSIX_C_SOURCE 200809L
 #include <fcntl.h>
 #include <inttypes.h>
@@ -20,17 +20,17 @@ extern char **environ;
 
 #ifdef __wasi__
 /* No pids on WASI: clock nanoseconds salt the RNG seed instead. */
-static int amrit_wasi_salt(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_nsec; }
-#define getpid amrit_wasi_salt
+static int nish_wasi_salt(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_nsec; }
+#define getpid nish_wasi_salt
 /* wasi-libc's `_start` calls `__main_argc_argv` (clang's name for a C `main`); the IR entry is
  * `main`. Weak, so a reactor build without an entry links. */
-__attribute__((weak)) int amrit_c_main(int, char **) __asm__("main");
-int __main_argc_argv(int argc, char **argv) { return amrit_c_main(argc, argv); }
+__attribute__((weak)) int nish_c_main(int, char **) __asm__("main");
+int __main_argc_argv(int argc, char **argv) { return nish_c_main(argc, argv); }
 #endif
 
-#define AMRIT_COLD __attribute__((noreturn, cold, noinline))
+#define NISH_COLD __attribute__((noreturn, cold, noinline))
 
-/* ---- Arena: %struct.amrit_arena = type { i8*, i64, i64, i8* }
+/* ---- Arena: %struct.nish_arena = type { i8*, i64, i64, i8* }
 
    The widths are fixed rather than `size_t` for the reason runtime_wasm.c
    gives for its own copy: every compiled function inlines the bump allocator
@@ -41,83 +41,83 @@ int __main_argc_argv(int argc, char **argv) { return amrit_c_main(argc, argv); }
    of the global — a wild pointer on the wasi profile for any program that
    allocates from compiled code. The asserts below are the contract, checked
    wherever this file is compiled. */
-typedef struct amrit_chunk { struct amrit_chunk *next; uint64_t cap; } amrit_chunk;
-struct amrit_arena { char *buf; uint64_t off; uint64_t cap; amrit_chunk *chunks; };
-struct amrit_arena amrit_arena;
+typedef struct nish_chunk { struct nish_chunk *next; uint64_t cap; } nish_chunk;
+struct nish_arena { char *buf; uint64_t off; uint64_t cap; nish_chunk *chunks; };
+struct nish_arena nish_arena;
 
-_Static_assert(sizeof(struct amrit_arena) == 32, "arena layout is ABI: runtime.ts, amritc.h");
-_Static_assert(offsetof(struct amrit_arena, off) == 8, "the inlined allocator bumps field 1");
-_Static_assert(offsetof(struct amrit_arena, cap) == 16, "the inlined allocator reads field 2");
-_Static_assert(offsetof(struct amrit_arena, chunks) == 24, "arena layout is ABI");
+_Static_assert(sizeof(struct nish_arena) == 32, "arena layout is ABI: runtime.ts, nish.h");
+_Static_assert(offsetof(struct nish_arena, off) == 8, "the inlined allocator bumps field 1");
+_Static_assert(offsetof(struct nish_arena, cap) == 16, "the inlined allocator reads field 2");
+_Static_assert(offsetof(struct nish_arena, chunks) == 24, "arena layout is ABI");
 
-static AMRIT_COLD void amrit_die(const char *msg) {
+static NISH_COLD void nish_die(const char *msg) {
   (void)!write(2, msg, strlen(msg));
   _exit(1);
 }
-#define amrit_oom() amrit_die("amritc: out of memory\n")
+#define nish_oom() nish_die("nish: out of memory\n")
 
 /* Slow path (size 8-byte rounded): push a chunk (>= 64 KB), bump from it. */
-void *amrit_arena_grow(uint64_t size) {
+void *nish_arena_grow(uint64_t size) {
   uint64_t cap = size > 65536 ? size : 65536;
   /* A 64-bit request cannot always be asked for: wasm32's `size_t` is 32 bits,
      and malloc would silently take the low half of a chunk nobody can address. */
-  if (cap > (uint64_t)(SIZE_MAX - sizeof(amrit_chunk))) amrit_oom();
-  amrit_chunk *c = malloc(sizeof *c + (size_t)cap);
-  if (!c) amrit_oom();
-  c->next = amrit_arena.chunks;
+  if (cap > (uint64_t)(SIZE_MAX - sizeof(nish_chunk))) nish_oom();
+  nish_chunk *c = malloc(sizeof *c + (size_t)cap);
+  if (!c) nish_oom();
+  c->next = nish_arena.chunks;
   c->cap = cap;
-  amrit_arena.chunks = c;
-  amrit_arena.buf = (char *)(c + 1);
-  amrit_arena.off = size;
-  amrit_arena.cap = cap;
-  return amrit_arena.buf;
+  nish_arena.chunks = c;
+  nish_arena.buf = (char *)(c + 1);
+  nish_arena.off = size;
+  nish_arena.cap = cap;
+  return nish_arena.buf;
 }
 
 /* Bump allocation, 8-byte rounded/aligned, uninitialised; the compiler inlines it. */
-void *amrit_alloc_struct(uint64_t size) {
+void *nish_alloc_struct(uint64_t size) {
   size = (size + 7) & ~(uint64_t)7;
-  if (amrit_arena.off + size <= amrit_arena.cap) {
-    void *p = amrit_arena.buf + amrit_arena.off;
-    amrit_arena.off += size;
+  if (nish_arena.off + size <= nish_arena.cap) {
+    void *p = nish_arena.buf + nish_arena.off;
+    nish_arena.off += size;
     return p;
   }
-  return amrit_arena_grow(size);
+  return nish_arena_grow(size);
 }
 
-static void amrit_free_until(amrit_chunk *c, const amrit_chunk *end) {
-  while (c != end) { amrit_chunk *n = c->next; free(c); c = n; }
+static void nish_free_until(nish_chunk *c, const nish_chunk *end) {
+  while (c != end) { nish_chunk *n = c->next; free(c); c = n; }
 }
 
 /* O(1) recycle: keep the newest chunk, free the rest. */
-void amrit_reset_arena(void) {
-  amrit_chunk *keep = amrit_arena.chunks;
+void nish_reset_arena(void) {
+  nish_chunk *keep = nish_arena.chunks;
   if (!keep) return;
-  amrit_free_until(keep->next, 0);
+  nish_free_until(keep->next, 0);
   keep->next = 0;
-  amrit_arena.off = 0;
+  nish_arena.off = 0;
 }
 
-void amrit_free_arena(void) {
-  amrit_free_until(amrit_arena.chunks, 0);
-  memset(&amrit_arena, 0, sizeof amrit_arena);
+void nish_free_arena(void) {
+  nish_free_until(nish_arena.chunks, 0);
+  memset(&nish_arena, 0, sizeof nish_arena);
 }
 
 /* ---- Scopes: mark = buf + off (0 while empty); release rewinds, freeing newer chunks. */
-uint64_t amrit_arena_mark(void) {
-  return amrit_arena.buf ? (uintptr_t)(amrit_arena.buf + amrit_arena.off) : 0;
+uint64_t nish_arena_mark(void) {
+  return nish_arena.buf ? (uintptr_t)(nish_arena.buf + nish_arena.off) : 0;
 }
-uint64_t amrit_arena_used(void) { return amrit_arena.off; }
+uint64_t nish_arena_used(void) { return nish_arena.off; }
 
-void amrit_arena_release(uint64_t mark) {
-  amrit_chunk *c = amrit_arena.chunks;
-  if (!mark) { amrit_reset_arena(); return; }
+void nish_arena_release(uint64_t mark) {
+  nish_chunk *c = nish_arena.chunks;
+  if (!mark) { nish_reset_arena(); return; }
   for (; c; c = c->next) {
     uintptr_t base = (uintptr_t)(c + 1);
     if (mark >= base && mark <= base + c->cap) break;
   }
   if (!c) return;
-  amrit_free_until(amrit_arena.chunks, c);
-  amrit_arena = (struct amrit_arena){ (char *)(c + 1), mark - (uintptr_t)(c + 1), c->cap, c };
+  nish_free_until(nish_arena.chunks, c);
+  nish_arena = (struct nish_arena){ (char *)(c + 1), mark - (uintptr_t)(c + 1), c->cap, c };
 }
 
 /* Release back to `mark` while keeping the newest allocation; returns where it
@@ -133,11 +133,11 @@ void amrit_arena_release(uint64_t mark) {
    the current chunk (a literal, or a value older than the mark), a mark in no
    live chunk (a stale one, or 0 for an arena that was empty), or a mark newer
    than `p`. */
-void *amrit_arena_keep(uint64_t mark, void *p) {
-  uintptr_t base = (uintptr_t)amrit_arena.buf, q = (uintptr_t)p, top = base + amrit_arena.off;
+void *nish_arena_keep(uint64_t mark, void *p) {
+  uintptr_t base = (uintptr_t)nish_arena.buf, q = (uintptr_t)p, top = base + nish_arena.off;
   if (q < base || q >= top || mark == q) return p;
   size_t size = top - q;
-  amrit_chunk *pc = amrit_arena.chunks, *c = pc; /* pc holds `p`: it is the current chunk */
+  nish_chunk *pc = nish_arena.chunks, *c = pc; /* pc holds `p`: it is the current chunk */
   for (; c; c = c->next) {
     uintptr_t cb = (uintptr_t)(c + 1);
     if (mark >= cb && mark <= cb + c->cap) break;
@@ -147,28 +147,28 @@ void *amrit_arena_keep(uint64_t mark, void *p) {
      the second arm is only ever reached with `c` older than `pc`. */
   if (mark + size <= (uintptr_t)(c + 1) + c->cap) {
     memmove((void *)mark, p, size);
-    amrit_free_until(pc, c);
-    amrit_arena = (struct amrit_arena){ (char *)(c + 1), mark + size - (uintptr_t)(c + 1), c->cap, c };
+    nish_free_until(pc, c);
+    nish_arena = (struct nish_arena){ (char *)(c + 1), mark + size - (uintptr_t)(c + 1), c->cap, c };
     return (void *)mark;
   }
-  amrit_free_until(pc->next, c);
+  nish_free_until(pc->next, c);
   pc->next = c;
   return p;
 }
 
 /* ---- Strings: { i64 len, bytes[len], '\0' }, immutable; 8 = the len header */
-typedef struct { uint64_t len; char data[]; } amrit_str;
+typedef struct { uint64_t len; char data[]; } nish_str;
 
-amrit_str *amrit_str_new(const char *bytes, uint64_t len) {
-  amrit_str *s = amrit_alloc_struct(8 + len + 1);
+nish_str *nish_str_new(const char *bytes, uint64_t len) {
+  nish_str *s = nish_alloc_struct(8 + len + 1);
   s->len = len;
   if (len) memcpy(s->data, bytes, len);
   s->data[len] = 0;
   return s;
 }
 
-amrit_str *amrit_str_concat(const amrit_str *a, const amrit_str *b) {
-  amrit_str *s = amrit_alloc_struct(8 + a->len + b->len + 1);
+nish_str *nish_str_concat(const nish_str *a, const nish_str *b) {
+  nish_str *s = nish_alloc_struct(8 + a->len + b->len + 1);
   s->len = a->len + b->len;
   memcpy(s->data, a->data, a->len);
   memcpy(s->data + a->len, b->data, b->len);
@@ -176,22 +176,22 @@ amrit_str *amrit_str_concat(const amrit_str *a, const amrit_str *b) {
   return s;
 }
 
-_Bool amrit_str_eq(const amrit_str *a, const amrit_str *b) {
+_Bool nish_str_eq(const nish_str *a, const nish_str *b) {
   return a == b || (a->len == b->len && memcmp(a->data, b->data, a->len) == 0);
 }
 
-uint64_t amrit_str_len(const amrit_str *s) { return s->len; }
+uint64_t nish_str_len(const nish_str *s) { return s->len; }
 
 /* `s.startsWith(sub)` is at 0, `s.endsWith(sub)` at len - sub->len, which is
    negative when `sub` is the longer string. */
-_Bool amrit_str_at(const amrit_str *s, int64_t at, const amrit_str *sub) {
+_Bool nish_str_at(const nish_str *s, int64_t at, const nish_str *sub) {
   return at >= 0 && (uint64_t)at + sub->len <= s->len && !memcmp(s->data + at, sub->data, sub->len);
 }
 /* `s.indexOf(sub)`: the first byte offset where `sub` occurs, or -1. An empty
    needle answers 0 and a needle longer than the haystack -1, both of which are
    what JavaScript says and what the inline loop this replaces did.
 
-   This was lowered inline, one `amrit_str_at` per offset, to keep `runtime.c`
+   This was lowered inline, one `nish_str_at` per offset, to keep `runtime.c`
    small. That cost a byte-at-a-time scan — 53.7 ms over 52 MB of haystack —
    and WP15 section 7's rule is that the budget yields to a measured win, so the
    search moved here: `memchr` finds a candidate first byte and `memcmp`
@@ -203,10 +203,10 @@ _Bool amrit_str_at(const amrit_str *s, int64_t at, const amrit_str *sub) {
    defining that here makes `<string.h>` pull in `<strings.h>` — which any `-I`
    directory holding a file of that name then shadows. This project generates
    exactly such a header from `examples/strings.ts`, and the interop tests
-   caught runtime.c picking it up and inheriting `amritc.h` through it. A C host
+   caught runtime.c picking it up and inheriting `nish.h` through it. A C host
    would hit the same. A fifth of the time is not worth making the runtime
    sensitive to its includer's `-I` paths. */
-int64_t amrit_str_index_of(const amrit_str *s, const amrit_str *sub) {
+int64_t nish_str_index_of(const nish_str *s, const nish_str *sub) {
   if (sub->len == 0) return 0;
   if (sub->len > s->len) return -1;
   const char *p = s->data, *end = s->data + s->len - sub->len + 1;
@@ -221,29 +221,29 @@ int64_t amrit_str_index_of(const amrit_str *s, const amrit_str *sub) {
 
 /* `console.log` / `console.error` / `write` / `writeError` and the message of
    `panic`: fd 1 or 2, with or without the trailing newline. */
-void amrit_write(const amrit_str *s, int32_t fd, _Bool newline) {
+void nish_write(const nish_str *s, int32_t fd, _Bool newline) {
   (void)!write(fd, s->data, s->len);
   if (newline) (void)!write(fd, "\n", 1);
 }
 /* console.log(s) */
-void amrit_print(const amrit_str *s) { amrit_write(s, 1, 1); }
+void nish_print(const nish_str *s) { nish_write(s, 1, 1); }
 
 /* Decimal digits of `u`, with a '-' in front when `neg`. 20 digits is the
    widest a uint64_t can be, plus the sign. */
-static amrit_str *str_from_digits(uint64_t u, int neg) {
+static nish_str *str_from_digits(uint64_t u, int neg) {
   char tmp[21], *p = tmp + 21;
   do { *--p = '0' + u % 10; u /= 10; } while (u);
   if (neg) *--p = '-';
-  return amrit_str_new(p, tmp + 21 - p);
+  return nish_str_new(p, tmp + 21 - p);
 }
 
-amrit_str *amrit_str_from_i64(int64_t v) {
+nish_str *nish_str_from_i64(int64_t v) {
   return str_from_digits(v < 0 ? -(uint64_t)v : (uint64_t)v, v < 0);
 }
-amrit_str *amrit_str_from_i32(int32_t v) { return amrit_str_from_i64(v); }
+nish_str *nish_str_from_i32(int32_t v) { return nish_str_from_i64(v); }
 /* The one unsigned formatter (WP15): u8/u16/u32 are zero-extended by the
    caller, so 0xFFFFFFFF prints as 4294967295 rather than -1. */
-amrit_str *amrit_str_from_u64(uint64_t v) { return str_from_digits(v, 0); }
+nish_str *nish_str_from_u64(uint64_t v) { return str_from_digits(v, 0); }
 
 
 /* ---- Shortest round-trip digits (Ryu)
@@ -260,10 +260,10 @@ amrit_str *amrit_str_from_u64(uint64_t v) { return str_from_digits(v, 0); }
    Ryu (Ulf Adams, PLDI 2018) computes the digits directly. The two tables are
    125-bit fixed-point approximations of 5^-i and 5^i, generated with exact
    integer arithmetic rather than transcribed. Read the paper before touching
-   the algorithm: the multipliers in `amrit_pow5bits`, `amrit_log10pow2` and
-   `amrit_log10pow5` are exact over the ranges a double's exponent can reach
+   the algorithm: the multipliers in `nish_pow5bits`, `nish_log10pow2` and
+   `nish_log10pow5` are exact over the ranges a double's exponent can reach
    and nowhere else. */
-static const uint64_t AMRIT_POW5_INV_SPLIT[292][2] = {
+static const uint64_t NISH_POW5_INV_SPLIT[292][2] = {
   { 1u, 2305843009213693952u },
   { 11068046444225730970u, 1844674407370955161u },
   { 5165088340638674453u, 1475739525896764129u },
@@ -558,7 +558,7 @@ static const uint64_t AMRIT_POW5_INV_SPLIT[292][2] = {
   { 3383947335406624054u, 1438154507889852726u },
 };
 
-static const uint64_t AMRIT_POW5_SPLIT[326][2] = {
+static const uint64_t NISH_POW5_SPLIT[326][2] = {
   { 0u, 1152921504606846976u },
   { 0u, 1441151880758558720u },
   { 0u, 1801439850948198400u },
@@ -886,14 +886,14 @@ static const uint64_t AMRIT_POW5_SPLIT[326][2] = {
   { 3278889188817135834u, 1424047269444608885u },
   { 8710297504448807696u, 1780059086805761106u },
 };
-#define AMRIT_POW5_BITS 125
+#define NISH_POW5_BITS 125
 
-static uint32_t amrit_pow5bits(int32_t e) { return (uint32_t)(((((uint32_t)e) * 1217359) >> 19) + 1); }
-static uint32_t amrit_log10pow2(int32_t e) { return (((uint32_t)e) * 78913) >> 18; }
-static uint32_t amrit_log10pow5(int32_t e) { return (((uint32_t)e) * 732923) >> 20; }
+static uint32_t nish_pow5bits(int32_t e) { return (uint32_t)(((((uint32_t)e) * 1217359) >> 19) + 1); }
+static uint32_t nish_log10pow2(int32_t e) { return (((uint32_t)e) * 78913) >> 18; }
+static uint32_t nish_log10pow5(int32_t e) { return (((uint32_t)e) * 732923) >> 20; }
 
 /* How many times 5 divides `v`; the trailing-zero tests below are its only users. */
-static uint32_t amrit_pow5factor(uint64_t v) {
+static uint32_t nish_pow5factor(uint64_t v) {
   uint32_t n = 0;
   for (;;) {
     uint64_t q = v / 5;
@@ -904,7 +904,7 @@ static uint32_t amrit_pow5factor(uint64_t v) {
 }
 
 /* (m * mul) >> j, with `mul` a 128-bit constant split into two 64-bit halves. */
-static uint64_t amrit_mulshift(uint64_t m, const uint64_t *mul, int32_t j) {
+static uint64_t nish_mulshift(uint64_t m, const uint64_t *mul, int32_t j) {
   __uint128_t b0 = (__uint128_t)m * mul[0];
   __uint128_t b2 = (__uint128_t)m * mul[1];
   return (uint64_t)(((b0 >> 64) + b2) >> (j - 64));
@@ -913,7 +913,7 @@ static uint64_t amrit_mulshift(uint64_t m, const uint64_t *mul, int32_t j) {
 /* The shortest digits of a finite, positive `v` into `digits` (no NUL), with
    `*exp10` set so the value is `0.<digits> * 10^*exp10` -- the form the
    ECMAScript layout below wants. Returns the digit count, 1 to 17. */
-static int amrit_shortest_digits(double v, char *digits, int *exp10) {
+static int nish_shortest_digits(double v, char *digits, int *exp10) {
   uint64_t bits;
   memcpy(&bits, &v, 8);
   const uint64_t mantissa = bits & ((1ull << 52) - 1);
@@ -938,31 +938,31 @@ static int amrit_shortest_digits(double v, char *digits, int *exp10) {
   int32_t e10;
   int vmIsTrailingZeros = 0, vrIsTrailingZeros = 0;
   if (e2 >= 0) {
-    const uint32_t q = amrit_log10pow2(e2) - (e2 > 3);
-    const int32_t k = AMRIT_POW5_BITS + (int32_t)amrit_pow5bits((int32_t)q) - 1;
+    const uint32_t q = nish_log10pow2(e2) - (e2 > 3);
+    const int32_t k = NISH_POW5_BITS + (int32_t)nish_pow5bits((int32_t)q) - 1;
     const int32_t j = -e2 + (int32_t)q + k;
     e10 = (int32_t)q;
-    vr = amrit_mulshift(mv, AMRIT_POW5_INV_SPLIT[q], j);
-    vp = amrit_mulshift(mv + 2, AMRIT_POW5_INV_SPLIT[q], j);
-    vm = amrit_mulshift(mv - 1 - mmShift, AMRIT_POW5_INV_SPLIT[q], j);
+    vr = nish_mulshift(mv, NISH_POW5_INV_SPLIT[q], j);
+    vp = nish_mulshift(mv + 2, NISH_POW5_INV_SPLIT[q], j);
+    vm = nish_mulshift(mv - 1 - mmShift, NISH_POW5_INV_SPLIT[q], j);
     if (q <= 21) {
       if (mv % 5 == 0) {
-        vrIsTrailingZeros = amrit_pow5factor(mv) >= q;
+        vrIsTrailingZeros = nish_pow5factor(mv) >= q;
       } else if (acceptBounds) {
-        vmIsTrailingZeros = amrit_pow5factor(mv - 1 - mmShift) >= q;
+        vmIsTrailingZeros = nish_pow5factor(mv - 1 - mmShift) >= q;
       } else {
-        vp -= amrit_pow5factor(mv + 2) >= q;
+        vp -= nish_pow5factor(mv + 2) >= q;
       }
     }
   } else {
-    const uint32_t q = amrit_log10pow5(-e2) - (-e2 > 1);
+    const uint32_t q = nish_log10pow5(-e2) - (-e2 > 1);
     const int32_t i = -e2 - (int32_t)q;
-    const int32_t k = (int32_t)amrit_pow5bits(i) - AMRIT_POW5_BITS;
+    const int32_t k = (int32_t)nish_pow5bits(i) - NISH_POW5_BITS;
     const int32_t j = (int32_t)q - k;
     e10 = (int32_t)q + e2;
-    vr = amrit_mulshift(mv, AMRIT_POW5_SPLIT[i], j);
-    vp = amrit_mulshift(mv + 2, AMRIT_POW5_SPLIT[i], j);
-    vm = amrit_mulshift(mv - 1 - mmShift, AMRIT_POW5_SPLIT[i], j);
+    vr = nish_mulshift(mv, NISH_POW5_SPLIT[i], j);
+    vp = nish_mulshift(mv + 2, NISH_POW5_SPLIT[i], j);
+    vm = nish_mulshift(mv - 1 - mmShift, NISH_POW5_SPLIT[i], j);
     if (q <= 1) {
       vrIsTrailingZeros = 1;
       if (acceptBounds) vmIsTrailingZeros = (mmShift == 1);
@@ -1031,7 +1031,7 @@ static int amrit_shortest_digits(double v, char *digits, int *exp10) {
 }
 
 /* JS Number#toString: shortest round-trip digits, e-form outside (-6, 21] */
-amrit_str *amrit_str_from_f64(double v) {
+nish_str *nish_str_from_f64(double v) {
   char digits[24], out[32], *o = out;
   int k, n, i, e = 0;
   if (v != v) { memcpy(o, "NaN", 3); o += 3; }
@@ -1040,40 +1040,40 @@ amrit_str *amrit_str_from_f64(double v) {
     if (v < 0) { *o++ = '-'; v = -v; }
     if (v == INFINITY) { memcpy(o, "Infinity", 8); o += 8; }
     else {
-      k = amrit_shortest_digits(v, digits, &n); /* value = 0.digits * 10^n */
+      k = nish_shortest_digits(v, digits, &n); /* value = 0.digits * 10^n */
       if (n > 21 || n <= -6) { e = n - 1; n = 1; }
       else if (n <= 0) { *o++ = '0'; *o++ = '.'; for (; n < 0; n++) *o++ = '0'; n = k; }
       for (i = 0; i < k || i < n; i++) { if (i == n) *o++ = '.'; *o++ = i < k ? digits[i] : '0'; }
       if (e) o += snprintf(o, 8, "e%+d", e);
     }
   }
-  return amrit_str_new(out, o - out);
+  return nish_str_new(out, o - out);
 }
 
 /* ---- Math.random: xorshift64*, seeded lazily from time and pid */
-static uint64_t amrit_rng;
+static uint64_t nish_rng;
 
-double amrit_random(void) {
-  uint64_t x = amrit_rng ? amrit_rng : ((uint64_t)time(0) << 32) ^ getpid() ^ 0x9E3779B97F4A7C15ull;
+double nish_random(void) {
+  uint64_t x = nish_rng ? nish_rng : ((uint64_t)time(0) << 32) ^ getpid() ^ 0x9E3779B97F4A7C15ull;
   x ^= x >> 12; x ^= x << 25; x ^= x >> 27;
-  amrit_rng = x;
+  nish_rng = x;
   return (double)((x * 0x2545F4914F6CDD1Dull) >> 11) * (1.0 / 9007199254740992.0);
 }
 
 /* ---- Process and files */
-void amrit_exit(int32_t code) { exit(code); }
-static AMRIT_COLD void amrit_io_fail(const char *what, const amrit_str *path) {
-  dprintf(2, "amritc: cannot %s%.*s\n", what, (int)path->len, path->data);
+void nish_exit(int32_t code) { exit(code); }
+static NISH_COLD void nish_io_fail(const char *what, const nish_str *path) {
+  dprintf(2, "nish: cannot %s%.*s\n", what, (int)path->len, path->data);
   _exit(1);
 }
 
 /* `readFileSyncOrNull(path)`: null rather than a message, so a program can
    turn a missing file into its own diagnostic and carry on. */
-amrit_str *amrit_read_file_or_null(const amrit_str *path) {
+nish_str *nish_read_file_or_null(const nish_str *path) {
   int fd = open(path->data, O_RDONLY);
   off_t len = fd < 0 ? -1 : lseek(fd, 0, SEEK_END);
   if (len < 0) return 0;
-  amrit_str *s = amrit_alloc_struct(8 + len + 1);
+  nish_str *s = nish_alloc_struct(8 + len + 1);
   uint64_t got = 0;
   ssize_t n;
   while ((n = pread(fd, s->data + got, len - got, got)) > 0) got += n;
@@ -1083,48 +1083,48 @@ amrit_str *amrit_read_file_or_null(const amrit_str *path) {
   return s;
 }
 
-amrit_str *amrit_read_file(const amrit_str *path) {
-  amrit_str *s = amrit_read_file_or_null(path);
-  if (!s) amrit_io_fail("read ", path);
+nish_str *nish_read_file(const nish_str *path) {
+  nish_str *s = nish_read_file_or_null(path);
+  if (!s) nish_io_fail("read ", path);
   return s;
 }
 
-static void amrit_put_file(const amrit_str *path, const amrit_str *data, int flags) {
+static void nish_put_file(const nish_str *path, const nish_str *data, int flags) {
   int fd = open(path->data, O_WRONLY | O_CREAT | flags, 0644);
-  if (fd < 0) amrit_io_fail("write ", path);
+  if (fd < 0) nish_io_fail("write ", path);
   for (uint64_t done = 0; done < data->len;) {
     ssize_t n = write(fd, data->data + done, data->len - done);
-    if (n <= 0) amrit_io_fail("write ", path);
+    if (n <= 0) nish_io_fail("write ", path);
     done += n;
   }
   close(fd);
 }
-void amrit_write_file(const amrit_str *path, const amrit_str *data) { amrit_put_file(path, data, O_TRUNC); }
-void amrit_append_file(const amrit_str *path, const amrit_str *data) { amrit_put_file(path, data, O_APPEND); }
+void nish_write_file(const nish_str *path, const nish_str *data) { nish_put_file(path, data, O_TRUNC); }
+void nish_append_file(const nish_str *path, const nish_str *data) { nish_put_file(path, data, O_APPEND); }
 
-/* ---- Arrays: %struct.amrit_array = type { i64, i64, i8* }, cold paths */
-typedef struct amrit_array { uint64_t len; uint64_t cap; char *data; } amrit_array;
+/* ---- Arrays: %struct.nish_array = type { i64, i64, i8* }, cold paths */
+typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array;
 
 /* Host entry (WP8): `len` uninitialised elements, len == cap */
-amrit_array *amrit_alloc_array(uint64_t elem_size, uint64_t len) {
-  amrit_array *a = amrit_alloc_struct(sizeof *a);
-  *a = (amrit_array){ len, len, amrit_alloc_struct(len * elem_size) };
+nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len) {
+  nish_array *a = nish_alloc_struct(sizeof *a);
+  *a = (nish_array){ len, len, nish_alloc_struct(len * elem_size) };
   return a;
 }
 
 /* process.argv: malloc, not the arena, so Arena.reset() cannot free it. Built once by @main. */
-amrit_array *amrit_argv;
+nish_array *nish_argv;
 
-void amrit_argv_init(int32_t argc, char **argv) {
-  amrit_array *a = malloc(sizeof *a + argc * sizeof(amrit_str *));
-  amrit_str **d = (amrit_str **)(a + 1);
-  if (!a) amrit_oom();
-  *a = (amrit_array){ argc, argc, (char *)d };
-  amrit_argv = a;
+void nish_argv_init(int32_t argc, char **argv) {
+  nish_array *a = malloc(sizeof *a + argc * sizeof(nish_str *));
+  nish_str **d = (nish_str **)(a + 1);
+  if (!a) nish_oom();
+  *a = (nish_array){ argc, argc, (char *)d };
+  nish_argv = a;
   while (argc-- > 0) {
     size_t len = strlen(*argv);
-    amrit_str *s = malloc(8 + len + 1);
-    if (!s) amrit_oom();
+    nish_str *s = malloc(8 + len + 1);
+    if (!s) nish_oom();
     s->len = len;
     strcpy(s->data, *argv++);
     *d++ = s;
@@ -1133,16 +1133,16 @@ void amrit_argv_init(int32_t argc, char **argv) {
 
 /* ---- Directories and subprocesses (WP14 D4): what a driver needs to create
    its own output directory and shell out for `--link`. Both answer a value
-   instead of exiting, as `amrit_read_file_or_null` does — there are no
+   instead of exiting, as `nish_read_file_or_null` does — there are no
    exceptions, so the caller owns the diagnostic — and so does the `stat`
    beside them (WP14 §7a), which is what tells `-o <dir>` from `-o <file>`.
-   Contracts: amritc.h. */
+   Contracts: nish.h. */
 
 /* `isDirectorySync(path)` (WP14 §7a): the one question a driver asks of a path
    it was handed — is there a directory here? A missing path, a plain file and
    a parent it cannot search are the same false, because they are the same
    answer to that question. */
-_Bool amrit_is_dir(const amrit_str *path) {
+_Bool nish_is_dir(const nish_str *path) {
   struct stat st;
   return stat(path->data, &st) == 0 && S_ISDIR(st.st_mode);
 }
@@ -1150,23 +1150,23 @@ _Bool amrit_is_dir(const amrit_str *path) {
 /* One directory, not recursive. The retry is the `stat` above rather than
    `errno == EEXIST` so that a plain file at the path answers false, which is
    what the promise "a directory is there afterwards" means. */
-_Bool amrit_mkdir(const amrit_str *path) {
-  return mkdir(path->data, 0777) == 0 || amrit_is_dir(path);
+_Bool nish_mkdir(const nish_str *path) {
+  return mkdir(path->data, 0777) == 0 || nish_is_dir(path);
 }
 
 /* `posix_spawnp` is one libc call where fork/execvp/waitpid would be three,
    it searches PATH, and glibc reports a failed exec through its return
    value rather than through a child that has already run. */
-int32_t amrit_spawn(const amrit_array *argv) {
+int32_t nish_spawn(const nish_array *argv) {
 #ifdef __wasi__
   (void)argv;
   return -1;
 #else
   if (!argv->len) return -1; /* argv[0] would read past an empty array */
-  amrit_str **s = (amrit_str **)argv->data;
+  nish_str **s = (nish_str **)argv->data;
   /* NULL-terminated, borrowing each string's bytes; the arena owns it, so no
      path out of here has anything to free. */
-  char **v = amrit_alloc_struct((argv->len + 1) * sizeof *v);
+  char **v = nish_alloc_struct((argv->len + 1) * sizeof *v);
   uint64_t i = 0;
   for (; i < argv->len; i++) v[i] = s[i]->data;
   v[i] = 0;
@@ -1187,12 +1187,12 @@ int32_t amrit_spawn(const amrit_array *argv) {
    same process may move or overwrite that block, so a string the program is
    still holding would change under it. Copying makes it an ordinary arena
    string with the lifetime every other one has. NULL for an unset variable,
-   which is the language's `string | null`. Contract: amritc.h. */
-amrit_str *amrit_getenv(const amrit_str *name) {
+   which is the language's `string | null`. Contract: nish.h. */
+nish_str *nish_getenv(const nish_str *name) {
   const char *v = getenv(name->data);
   if (!v) return 0;
   uint64_t len = strlen(v);
-  amrit_str *s = amrit_alloc_struct(8 + len + 1);
+  nish_str *s = nish_alloc_struct(8 + len + 1);
   s->len = len;
   memcpy(s->data, v, len + 1);
   return s;
@@ -1206,68 +1206,68 @@ amrit_str *amrit_getenv(const amrit_str *name) {
    the declaration (src/codegen/runtime.ts) is a fact rather than a hope. The
    spellings are Node's, so a program reads the same answer from this runtime
    and from `runtime/shim.mjs`; anything neither branch names is "unknown",
-   which is what `--target host` then refuses. Contracts: amritc.h.
+   which is what `--target host` then refuses. Contracts: nish.h.
 
    The static object is spelled with a sized array because a flexible array
-   member cannot be initialised, and handed out as an `amrit_str *`: the two
+   member cannot be initialised, and handed out as an `nish_str *`: the two
    layouts are the same bytes, and nothing anywhere writes through either
    pointer, so there is no aliasing question to answer. */
-#define AMRIT_TEXT(name, s) \
+#define NISH_TEXT(name, s) \
   static const struct { uint64_t len; char data[sizeof s]; } name = { sizeof s - 1, s }
 
 #if defined(__APPLE__)
-AMRIT_TEXT(amrit_platform_text, "darwin");
+NISH_TEXT(nish_platform_text, "darwin");
 #elif defined(__linux__)
-AMRIT_TEXT(amrit_platform_text, "linux");
+NISH_TEXT(nish_platform_text, "linux");
 #else
-AMRIT_TEXT(amrit_platform_text, "unknown");
+NISH_TEXT(nish_platform_text, "unknown");
 #endif
 
 #if defined(__x86_64__)
-AMRIT_TEXT(amrit_arch_text, "x64");
+NISH_TEXT(nish_arch_text, "x64");
 #elif defined(__aarch64__)
-AMRIT_TEXT(amrit_arch_text, "arm64");
+NISH_TEXT(nish_arch_text, "arm64");
 #else
-AMRIT_TEXT(amrit_arch_text, "unknown");
+NISH_TEXT(nish_arch_text, "unknown");
 #endif
 
-const amrit_str *amrit_platform(void) { return (const amrit_str *)&amrit_platform_text; }
-const amrit_str *amrit_arch(void) { return (const amrit_str *)&amrit_arch_text; }
+const nish_str *nish_platform(void) { return (const nish_str *)&nish_platform_text; }
+const nish_str *nish_arch(void) { return (const nish_str *)&nish_arch_text; }
 
-/* ---- String to number: mode 0 parseFloat, 1 Number, 2 parseInt (contract: amritc.h). ASCII
+/* ---- String to number: mode 0 parseFloat, 1 Number, 2 parseInt (contract: nish.h). ASCII
  * whitespace only; strtod parses once the inf/nan spellings JS rejects are ruled out, and its `0x`
  * hex stays accepted (documented). */
-#define AMRIT_SPACES " \t\n\v\f\r"
+#define NISH_SPACES " \t\n\v\f\r"
 
-double amrit_parse_number(const amrit_str *s, int32_t mode) {
+double nish_parse_number(const nish_str *s, int32_t mode) {
   const char *p, *q, *stop;
   char *end;
   double v;
   if (mode == 2) return strtoll(s->data, 0, 10);
-  p = s->data + strspn(s->data, AMRIT_SPACES);
+  p = s->data + strspn(s->data, NISH_SPACES);
   q = p + (*p == '+' || *p == '-');
   stop = s->data + s->len;
   if (!((*q >= '0' && *q <= '9') || *q == '.' || strncmp(q, "Infinity", 8) == 0)) return mode && p == stop ? 0 : NAN;
   v = strtod(p, &end);
   if (end == p) return NAN; /* "." alone */
-  return mode && end + strspn(end, AMRIT_SPACES) != stop ? NAN : v;
+  return mode && end + strspn(end, NISH_SPACES) != stop ? NAN : v;
 }
 
 /* push() when len == cap: double the capacity (4 from empty). */
-void amrit_array_grow(amrit_array *a, uint64_t elem_size) {
+void nish_array_grow(nish_array *a, uint64_t elem_size) {
   uint64_t cap = a->cap ? a->cap * 2 : 4;
-  char *data = amrit_alloc_struct(cap * elem_size);
+  char *data = nish_alloc_struct(cap * elem_size);
   if (a->len) memcpy(data, a->data, a->len * elem_size);
   a->data = data;
   a->cap = cap;
 }
 
-void amrit_panic_index(uint64_t idx, uint64_t len) {
+void nish_panic_index(uint64_t idx, uint64_t len) {
   dprintf(2, "index out of range: %" PRIu64 " >= %" PRIu64 "\n", idx, len);
   _exit(1);
 }
 
 /* ---- Checked division (Rust semantics): the failed-check path */
-void amrit_panic_div(_Bool by_zero) {
-  amrit_die(by_zero ? "attempt to divide by zero\n" : "attempt to divide with overflow\n");
+void nish_panic_div(_Bool by_zero) {
+  nish_die(by_zero ? "attempt to divide by zero\n" : "attempt to divide with overflow\n");
 }

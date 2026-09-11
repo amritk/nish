@@ -1,7 +1,7 @@
 // The driver for `self/symbols.ts` (docs/wp14-selfhost.md, milestone S3),
 // against `src/checker/scope.ts` through `tests/self/symbols_oracle.js`.
 //
-// The script below is one every AmritScript program with a nullable exercises:
+// The script below is one every Nish program with a nullable exercises:
 // shadowing in a nested block, a narrowing that holds through the chain, an
 // inner narrowing that wins over an outer one, and an assignment that drops
 // both. Getting any of those wrong is a program that compiles and reads a

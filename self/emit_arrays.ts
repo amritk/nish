@@ -1,10 +1,10 @@
 // Array lowering for stage1 (`src/codegen/emit/arrays.ts`,
 // docs/wp14-selfhost.md milestone S4).
 //
-// Layout (ABI, shared with `runtime/runtime.c`'s `struct amrit_array`): an array
-// value is a `%struct.amrit_array*` to an arena header
+// Layout (ABI, shared with `runtime/runtime.c`'s `struct nish_array`): an array
+// value is a `%struct.nish_array*` to an arena header
 //
-//   %struct.amrit_array = type { i64 len, i64 cap, i8* data }
+//   %struct.nish_array = type { i64 len, i64 cap, i8* data }
 //
 // `data` points at `cap` elements of `sizeof(T)` bytes, arena-allocated and
 // 8-byte aligned. The lowerings are `src/codegen/emit/arrays.ts`'s: literals
@@ -14,7 +14,7 @@
 // inline rather than added to `runtime.c`, which has a budget.
 //
 // The bounds check is `icmp ult i64 %idx, %len` and a branch to a cold block
-// that calls `amrit_panic_index` and never returns. Comparing *unsigned* makes a
+// that calls `nish_panic_index` and never returns. Comparing *unsigned* makes a
 // negative index fail too.
 
 import { parseIntegerLiteral } from "./constants";
@@ -33,7 +33,7 @@ import { ARRAY_TYPE } from "./runtime";
 import { ARRAY_STRUCT, isFloat, isUnsigned, T_F64, T_I32, T_STRING } from "./types";
 
 const HEADER: string = ARRAY_STRUCT;
-const HEADER_PTR: string = "%struct.amrit_array*";
+const HEADER_PTR: string = "%struct.nish_array*";
 const HEADER_BYTES: i32 = 24;
 const MEMSET: string = "llvm.memset.p0i8.i64";
 const MEMCPY: string = "llvm.memcpy.p0i8.p0i8.i64";
@@ -54,7 +54,7 @@ function elementSize(emitter: Emitter, elem: i32): i32 {
  * shapes it covers are written out in `src/codegen/emit/arrays.ts`.
  */
 function aliasScopeList(emitter: Emitter, wantHeader: boolean): string {
-  const domain = emitter.metadata(`!{!"amritc array"}`);
+  const domain = emitter.metadata(`!{!"nish array"}`);
   const header = emitter.metadata(`!{!"header", ${domain}}`);
   const element = emitter.metadata(`!{!"elements", ${domain}}`);
   const headerList = emitter.metadata(`!{${header}}`);
@@ -169,7 +169,7 @@ export function emitRangeCheck(emitter: Emitter, idx: string, len: string): void
   const okBlock = fn.newBlock("bounds.ok");
   fn.emit(`br i1 ${inRange}, label %${okBlock.label}, label %${failBlock.label}`);
   fn.placeBlock(failBlock);
-  fn.emit(`call void ${emitter.useRuntime("amrit_panic_index")}(i64 ${idx}, i64 ${len})`);
+  fn.emit(`call void ${emitter.useRuntime("nish_panic_index")}(i64 ${idx}, i64 ${len})`);
   fn.emit("unreachable");
   fn.placeBlock(okBlock);
 }
@@ -184,7 +184,7 @@ function emitBoundsCheck(emitter: Emitter, arr: string, idx: string): void {
 
 /**
  * Allocate a header with `len = cap = n`; `data` is stored by `storeData`.
- * Answers the `%struct.amrit_array*`: an alloca when `site` is on the stack.
+ * Answers the `%struct.nish_array*`: an alloca when `site` is on the stack.
  */
 function emitHeader(emitter: Emitter, n: string, site: Node): string {
   emitter.declareType(ARRAY_TYPE);
@@ -193,7 +193,7 @@ function emitHeader(emitter: Emitter, n: string, site: Node): string {
     arr = emitter.fn.emitAlloca("arr.hdr", HEADER, 8);
   } else {
     const raw = emitter.fn.emitValue(
-      `call i8* ${emitter.useRuntime("amrit_alloc_struct")}(i64 ${HEADER_BYTES})`
+      `call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${HEADER_BYTES})`
     );
     arr = emitter.fn.emitValue(`bitcast i8* ${raw} to ${HEADER_PTR}`);
   }
@@ -234,7 +234,7 @@ function emitData(emitter: Emitter, site: Node, elem: i32, count: i32, bytes: st
     const slot = emitter.fn.emitAlloca("arr.data", ty, 8);
     return emitter.fn.emitValue(`bitcast ${ty}* ${slot} to i8*`);
   }
-  return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("amrit_alloc_struct")}(i64 ${bytes})`);
+  return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${bytes})`);
 }
 
 function storeData(emitter: Emitter, arr: string, data: string): void {
@@ -375,7 +375,7 @@ function stringLength(emitter: Emitter, str: string): string {
 function emitElementEquals(emitter: Emitter, elem: i32, a: string, b: string): string {
   if (elem === T_STRING) {
     return emitter.fn.emitValue(
-      `call zeroext i1 ${emitter.useRuntime("amrit_str_eq")}(i8* ${a}, i8* ${b})`
+      `call zeroext i1 ${emitter.useRuntime("nish_str_eq")}(i8* ${a}, i8* ${b})`
     );
   }
   const opcode = isFloat(elem) ? "fcmp oeq" : "icmp eq";
@@ -396,7 +396,7 @@ function emitPush(emitter: Emitter, expr: Node, arr: string, elem: i32): string 
   fn.emit(`br i1 ${full}, label %${growBlock.label}, label %${storeBlock.label}`);
   fn.placeBlock(growBlock);
   fn.emit(
-    `call void ${emitter.useRuntime("amrit_array_grow")}(${HEADER_PTR} ${arr}, i64 ${elementSize(emitter, elem)})`
+    `call void ${emitter.useRuntime("nish_array_grow")}(${HEADER_PTR} ${arr}, i64 ${elementSize(emitter, elem)})`
   );
   fn.emit(`br label %${storeBlock.label}`);
   fn.placeBlock(storeBlock);
@@ -410,7 +410,7 @@ function emitPush(emitter: Emitter, expr: Node, arr: string, elem: i32): string 
 
 /**
  * `a.pop()`: the last element, with the length decremented. An empty array
- * panics through the same `amrit_panic_index` an index does — reported as
+ * panics through the same `nish_panic_index` an index does — reported as
  * `0 >= 0`, which is the access being attempted — because there is no
  * `undefined` to return and no second return type to widen to.
  */
@@ -424,7 +424,7 @@ function emitPop(emitter: Emitter, arr: string, elem: i32): string {
     const okBlock = fn.newBlock("pop.ok");
     fn.emit(`br i1 ${empty}, label %${failBlock.label}, label %${okBlock.label}`);
     fn.placeBlock(failBlock);
-    fn.emit(`call void ${emitter.useRuntime("amrit_panic_index")}(i64 0, i64 0)`);
+    fn.emit(`call void ${emitter.useRuntime("nish_panic_index")}(i64 0, i64 0)`);
     fn.emit("unreachable");
     fn.placeBlock(okBlock);
   }
@@ -538,7 +538,7 @@ function emitJoin(emitter: Emitter, expr: Node, arr: string): string {
   fn.placeBlock(copyBlock);
   const size = fn.emitValue(`load i64, i64* ${totalSlot}, align 8`);
   const bytes = fn.emitValue(`add i64 ${size}, 9`);
-  const out = fn.emitValue(`call i8* ${emitter.useRuntime("amrit_alloc_struct")}(i64 ${bytes})`);
+  const out = fn.emitValue(`call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${bytes})`);
   const outHeader = fn.emitValue(`bitcast i8* ${out} to i64*`);
   fn.emit(`store i64 ${size}, i64* ${outHeader}${emitter.align8()}`);
   const outData = fn.emitValue(`getelementptr inbounds i8, i8* ${out}, i64 8`);

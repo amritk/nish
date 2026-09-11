@@ -1,13 +1,13 @@
 # WP8: Interop: C headers, TypeScript declarations, N-API addons, wasm
 
-AmritScript never embeds a JavaScript engine. Interop runs the other way: a
+Nish never embeds a JavaScript engine. Interop runs the other way: a
 compiled module is *called from* C, from Node through a native addon, or
 from Node and browsers as WebAssembly. This package adds the host-side
 declarations for all three, generated from the same checked program the IR
 came from, and a build profile for the addon.
 
 ```
-amritc x.ts -o x.ll --emit-header x.h --emit-dts x.d.ts --emit-napi x_napi.c
+nish x.ts -o x.ll --emit-header x.h --emit-dts x.d.ts --emit-napi x_napi.c
                           C hosts          wasm hosts        Node addon
 ```
 
@@ -17,43 +17,43 @@ with the same bytes; `tests/self/interop_oracle.js` is what says so.
 
 ## The C ABI
 
-An AmritScript function is an ordinary C function: parameters by value, in
-order, no hidden context, no name mangling. `runtime/amritc.h` is the
+An Nish function is an ordinary C function: parameters by value, in
+order, no hidden context, no name mangling. `runtime/nish.h` is the
 public header for the runtime side of that ABI, and `--emit-header` writes
 the user side.
 
-| AmritScript | LLVM | C | N-API (JS) | wasm export (JS, through the generated loader) |
+| Nish | LLVM | C | N-API (JS) | wasm export (JS, through the generated loader) |
 | --- | --- | --- | --- | --- |
 | `number` (i32 mode), `i32` | `i32` | `int32_t` | `number`, converted with ToInt32 (`x \| 0`) | `number` |
 | `number` (f64 mode), `f64` | `double` | `double` | `number` | `number` |
 | `i64` | `i64` | `int64_t` | `bigint` | `bigint` |
 | `u8`, `u16`, `u32` | `i8`, `i16`, `i32` | `uint8_t`, `uint16_t`, `uint32_t` | `number`; in through ToUint32 and then the width's own modulus, out through `napi_create_uint32` so a `u32` above 2^31 stays positive | `number`, put back in range by the loader: `& 0xff` / `& 0xffff` on a narrow argument, and `& 0xff` / `& 0xffff` / `>>> 0` on every result |
 | `u64` | `i64` | `uint64_t` | `bigint`, through `napi_get_value_bigint_uint64` / `napi_create_bigint_uint64` | `bigint`, read back with `BigInt.asUintN(64, x)` |
-| `f32` | `float` | `float` | `number`; rounded to nearest on the way in through `amrit_napi_f32`, widened exactly on the way out | `number`, untouched: the call rounds an argument to f32 and every f32 is exact in the double a result arrives in |
+| `f32` | `float` | `float` | `number`; rounded to nearest on the way in through `nish_napi_f32`, widened exactly on the way out | `number`, untouched: the call rounds an argument to f32 and every f32 is exact in the double a result arrives in |
 | `boolean` | `i1` (`zeroext`) | `bool` | `boolean` | in: `boolean`; out: `0 \| 1` |
-| `string` | `i8*` | `const amrit_str *` in, `amrit_str *` out | `string`, copied into the arena in, copied out | not available (no WASI runtime) |
-| `i32[]` / `Int32Array`, `f32[]` / `Float32Array`, `f64[]` / `Float64Array`, `i64[]` / `BigInt64Array` | `%struct.amrit_array*` | `const amrit_array *` in (read-only), `amrit_array *` in (written through) and out | that typed array; borrowed in (zero-copy), fresh typed array out | that typed array; copied into the arena in, copied out |
-| other arrays (`string[]`, `boolean[]`, `T[][]`, `C[]`), classes, `T \| null` | pointers | `amrit_array *` for arrays; classes not declared | skipped | skipped |
+| `string` | `i8*` | `const nish_str *` in, `nish_str *` out | `string`, copied into the arena in, copied out | not available (no WASI runtime) |
+| `i32[]` / `Int32Array`, `f32[]` / `Float32Array`, `f64[]` / `Float64Array`, `i64[]` / `BigInt64Array` | `%struct.nish_array*` | `const nish_array *` in (read-only), `nish_array *` in (written through) and out | that typed array; borrowed in (zero-copy), fresh typed array out | that typed array; copied into the arena in, copied out |
+| other arrays (`string[]`, `boolean[]`, `T[][]`, `C[]`), classes, `T \| null` | pointers | `nish_array *` for arrays; classes not declared | skipped | skipped |
 | `void` | `void` | `void` | `undefined` | `void` |
 
-`amrit_str` is `{ uint64_t len; char data[]; }`: `len` is the UTF-8 byte
+`nish_str` is `{ uint64_t len; char data[]; }`: `len` is the UTF-8 byte
 length, `data` is NUL-terminated so it doubles as a C string. Strings are
-immutable and live in the arena: a string an AmritScript function returns stays
-valid until `amrit_reset_arena()` or `amrit_free_arena()`, and a host never frees
+immutable and live in the arena: a string an Nish function returns stays
+valid until `nish_reset_arena()` or `nish_free_arena()`, and a host never frees
 one. Literals live in the module's constant data and outlive resets.
 
-`amrit_array` is `{ uint64_t len; uint64_t cap; char *data; }`
+`nish_array` is `{ uint64_t len; uint64_t cap; char *data; }`
 ([wp4-arrays.md](wp4-arrays.md#layout-abi)): `data` holds `cap` elements of
 one fixed size (the header comment names the C element type). A C host
 passes its own buffer by building the header on the stack,
-`amrit_array a = { n, n, (char *)buf };`, and reads a returned array's `len`
-elements out of `data` before recycling the arena. `amrit_alloc_array(elemSize,
+`nish_array a = { n, n, (char *)buf };`, and reads a returned array's `len`
+elements out of `data` before recycling the arena. `nish_alloc_array(elemSize,
 len)` makes a fresh arena array for hosts that want the runtime to own the
-storage; it is what the wasm loader calls. A parameter is `const amrit_array *`
+storage; it is what the wasm loader calls. A parameter is `const nish_array *`
 when the function provably never stores through it, the same whole-program
-proof that gives the IR parameter `readonly`, and `amrit_array *` otherwise.
+proof that gives the IR parameter `readonly`, and `nish_array *` otherwise.
 
-`runtime/amritc.h` also declares `struct amrit_arena` with its global
+`runtime/nish.h` also declares `struct nish_arena` with its global
 (the compiled fast path bumps it directly, so the layout is ABI) and every
 runtime function from `src/codegen/runtime.ts`; `tests/run.js` fails if the
 two drift apart. The header is C11 and C++ clean under `-Wall -Wextra
@@ -66,13 +66,13 @@ node dist/index.js examples/add.ts -o build/add.ll --emit-header build/add.h
 ```
 
 ```c
-/* Generated by amritc --emit-header from examples/add.ts; do not edit. */
-#ifndef AMRITC_ADD_H
-#define AMRITC_ADD_H
+/* Generated by nish --emit-header from examples/add.ts; do not edit. */
+#ifndef NISH_ADD_H
+#define NISH_ADD_H
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "amritc.h"
+#include "nish.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -86,19 +86,19 @@ int32_t add(int32_t a, int32_t b);
 }
 #endif
 
-#endif /* AMRITC_ADD_H */
+#endif /* NISH_ADD_H */
 ```
 
 - Which functions: every external symbol of the link, i.e. the exported
   functions — plus, with `--no-strict-exports`, the non-exported ones too.
   Modules imported by the entry appear under their own `/* file.ts */`
   heading. The entry `export function main` is omitted: it is the process
-  entry (`@amrit_main` behind the C `main` wrapper), not a library call, and a
+  entry (`@nish_main` behind the C `main` wrapper), not a library call, and a
   C host owns `main`.
 - Keyword-named functions: `export function double(n: number)` is a fine
   LLVM symbol but C cannot spell it. The header declares
-  `int32_t double_(int32_t n) AMRIT_SYMBOL("double");`, an asm label from
-  `amritc.h` that binds the C name to the real symbol (`__USER_LABEL_PREFIX__`
+  `int32_t double_(int32_t n) NISH_SYMBOL("double");`, an asm label from
+  `nish.h` that binds the C name to the real symbol (`__USER_LABEL_PREFIX__`
   supplies the `_` Mach-O prepends). Parameters named after C keywords or
   `<stdbool.h>` macros get a trailing underscore; their names are documentation
   only.
@@ -106,11 +106,11 @@ int32_t add(int32_t a, int32_t b);
 
   ```c
   /* sumF64(xs: number[]): number -- xs: double elements */
-  double sumF64(const amrit_array *xs);
+  double sumF64(const nish_array *xs);
   /* fill(xs: number[], v: number): void -- xs: int32_t elements */
-  void fill(amrit_array *xs, int32_t v);
+  void fill(nish_array *xs, int32_t v);
   /* scale(xs: number[], k: number): number[] -- xs: double elements, returns double elements */
-  amrit_array *scale(const amrit_array *xs, double k);
+  nish_array *scale(const nish_array *xs, double k);
   ```
 
   `tests/run.js` links a `-Werror` driver that hands `sumI32` and `fill` a
@@ -122,11 +122,11 @@ int32_t add(int32_t a, int32_t b);
   out), after forward declarations of all of them so fields may point at
   structs defined later. A class without fields stays an incomplete type.
   Field types are spelled `int32_t`, `int64_t`, `double`, `bool`,
-  `amrit_str *`, `struct X *` (also for `X | null`, which may be NULL) and
-  `amrit_array *` for `T[]` (with the element type in a comment). Functions
+  `nish_str *`, `struct X *` (also for `X | null`, which may be NULL) and
+  `nish_array *` for `T[]` (with the element type in a comment). Functions
   taking or returning objects are declared with `struct X *` parameters, and
   methods and constructors are declared too, as
-  `void Point_constructor(struct Point *this_, int32_t x, int32_t y) AMRIT_SYMBOL("Point.constructor");`:
+  `void Point_constructor(struct Point *this_, int32_t x, int32_t y) NISH_SYMBOL("Point.constructor");`:
   the object pointer first, bound to the dotted symbol by the same asm-label
   mechanism. `tests/run.js` (`layout`) compiles the header for
   `tests/layout/structs.ts` and static-asserts every struct's size against
@@ -153,15 +153,15 @@ does not have, so functions that take or return a string are listed as
 comments:
 
 ```ts
-// Generated by amritc --emit-dts from examples/arrays.ts; do not edit.
+// Generated by nish --emit-dts from examples/arrays.ts; do not edit.
 export type WasmBool = 0 | 1;
 
 export interface Exports {
   /** Linear memory of the instance (the arena and string constants live here). */
   readonly memory: WebAssembly.Memory;
   /** runtime_wasm.c: recycle everything the module allocated (arrays passed and returned are already copies). */
-  amrit_reset_arena(): void;
-  amrit_free_arena(): void;
+  nish_reset_arena(): void;
+  nish_free_arena(): void;
   // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: argument 2 (a) is `string`, which needs ...
   /** examples/arrays.ts: scale(xs: number[], k: number): number[] */
   scale(xs: Float64Array, k: number): Float64Array;
@@ -188,8 +188,8 @@ the N-API shim's own note, which names the function and then the whole set the
 shim accepts):
 
 ```ts
-  // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: argument 2 (a) is `string`, which needs the AmritScript runtime the freestanding wasm profile does not include
-  // spell(n: number): string  -- not exported to JS: the result is `string`, which needs the AmritScript runtime the freestanding wasm profile does not include
+  // pick(flag: boolean, a: string, b: string): string  -- not exported to JS: argument 2 (a) is `string`, which needs the Nish runtime the freestanding wasm profile does not include
+  // spell(n: number): string  -- not exported to JS: the result is `string`, which needs the Nish runtime the freestanding wasm profile does not include
 ```
 
 The loader (`src/interop/wasm.ts`) instantiates the module and returns the
@@ -204,12 +204,12 @@ scale: (xs, k) => scoped(() => {
 }),
 ```
 
-1. `scoped` takes `amrit_arena_mark()` first and calls `amrit_arena_release(mark)`
+1. `scoped` takes `nish_arena_mark()` first and calls `nish_arena_release(mark)`
    in a `finally`, so every arena byte the call used is recycled even when
    the module traps.
 2. `arrayIn` checks `xs instanceof Float64Array` (a `TypeError` naming the
    function and parameter otherwise), asks the module for
-   `amrit_alloc_array(8n, len)`, reads the header's `data` pointer (offset 16;
+   `nish_alloc_array(8n, len)`, reads the header's `data` pointer (offset 16;
    `len` is the `i64` at offset 0, `cap` at 8), and `.set(xs)` through a
    `Float64Array` view on `memory.buffer`. The copy costs one `memcpy`
    (`bench/ffi.mjs`: about 0.6 ns per element on top of the loop).
@@ -218,7 +218,7 @@ scale: (xs, k) => scoped(() => {
    next `memory.grow` would detach a view and the release in step 1 would
    let the module overwrite it.
 4. A parameter the function writes through (`fill(xs, 7)`; the same fact
-   that makes it `amrit_array *` in the header) is copied back into the
+   that makes it `nish_array *` in the header) is copied back into the
    caller's typed array after the call, so the wasm and N-API builds agree
    on what the caller observes.
 
@@ -272,10 +272,10 @@ is exactly representable in the double a result comes back in.
 
 `memory.buffer` is re-read after every call into the module because
 `memory.grow` replaces the `ArrayBuffer`. The runtime the loader calls,
-`amrit_alloc_array` / `amrit_arena_mark` / `amrit_arena_release`, comes from
+`nish_alloc_array` / `nish_arena_mark` / `nish_arena_release`, comes from
 `runtime/runtime_wasm.c`, a freestanding subset of the runtime: linear
 memory past `__heap_base` is one arena chunk that grows with `memory.grow`,
-`amrit_array_grow` and the panics are there (`amrit_panic_index` is
+`nish_array_grow` and the panics are there (`nish_panic_index` is
 `unreachable`, which the host sees as a `RuntimeError`), and there are no
 strings or I/O. The wasm profile now passes `-mbulk-memory` so the
 `llvm.memset` of `new Array<T>(n)` and the `memcpy` of a `push` lower to
@@ -324,34 +324,34 @@ anything else throws a `TypeError` naming the function and the parameter),
 converts them (`napi_get_value_int32` in i32 mode, so `2.9` becomes `2` like
 `2.9 | 0`; `napi_get_value_double` in f64 mode; `napi_get_value_uint32` for
 the unsigned widths; `napi_get_value_bool`;
-`napi_get_value_bigint_{int,uint}64`), calls the AmritScript function through
+`napi_get_value_bigint_{int,uint}64`), calls the Nish function through
 its C ABI, and boxes the result:
 
 ```c
 /* examples/add.ts: add(a: number, b: number): number */
-static napi_value amrit_napi_add(napi_env env, napi_callback_info info) {
+static napi_value nish_napi_add(napi_env env, napi_callback_info info) {
   size_t argc = 2;
   napi_value argv[2];
   if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok)
-    return amrit_napi_fail(env, "add: cannot read arguments");
+    return nish_napi_fail(env, "add: cannot read arguments");
   if (argc < 2)
-    return amrit_napi_fail(env, "add expects 2 arguments");
+    return nish_napi_fail(env, "add expects 2 arguments");
   napi_valuetype type;
   int32_t a;
   if (napi_typeof(env, argv[0], &type) != napi_ok || type != napi_number)
-    return amrit_napi_fail(env, "add: argument 1 (a) must be a number");
+    return nish_napi_fail(env, "add: argument 1 (a) must be a number");
   if (napi_get_value_int32(env, argv[0], &a) != napi_ok)
-    return amrit_napi_fail(env, "add: argument 1 (a) could not be converted");
+    return nish_napi_fail(env, "add: argument 1 (a) could not be converted");
   ...
   napi_value out;
   int32_t result = add(a, b);
   if (napi_create_int32(env, result, &out) != napi_ok)
-    return amrit_napi_fail(env, "add: cannot create the result");
+    return nish_napi_fail(env, "add: cannot create the result");
   return out;
 }
 
 NAPI_MODULE_INIT() {
-  for (size_t i = 0; i < sizeof amrit_napi_exports / sizeof amrit_napi_exports[0]; i++) { ... }
+  for (size_t i = 0; i < sizeof nish_napi_exports / sizeof nish_napi_exports[0]; i++) { ... }
   return exports;
 }
 ```
@@ -369,7 +369,7 @@ then take the width's modulus. Nothing throws.
 | `u8` | `napi_get_value_uint32` (ToUint32), then `(uint8_t)` | 44 | 255 |
 | `u16` | `napi_get_value_uint32`, then `(uint16_t)` | 300 | 65535 |
 | `u32` | `napi_get_value_uint32` | 300 | 4294967295 |
-| `f32` | `napi_get_value_double`, then `amrit_napi_f32` | 300 | -1 |
+| `f32` | `napi_get_value_double`, then `nish_napi_f32` | 300 | -1 |
 | `i64`, `u64` | `napi_get_value_bigint_{int,uint}64` — a **bigint**, not a number | `TypeError` | `TypeError` |
 
 `a.echoU8(300) === new Uint8Array([300])[0]` and `a.echoU32(-1) === (-1 >>> 0)`,
@@ -387,7 +387,7 @@ Two details are decisions rather than defaults:
   `u8` and `u16` widen into the same constructor without changing value.
 - **`f32` never invokes undefined behaviour.** C leaves a double-to-float
   conversion undefined when the value is out of the float range, so the shim
-  emits `amrit_napi_f32`, which sends anything at or past `0x1.ffffffp127` —
+  emits `nish_napi_f32`, which sends anything at or past `0x1.ffffffp127` —
   the midpoint between `FLT_MAX` and 2^128, where round-to-nearest-even
   stops being finite — to an infinity of that sign, and converts everything
   else, NaN and the infinities included, directly. On the way out an `f32`
@@ -427,21 +427,21 @@ A typed-array argument is **borrowed, not copied**. The shim asks
 `napi_get_typedarray_info` for the element kind, length and data pointer,
 checks the kind against the parameter (`Float64Array` for `f64[]`,
 `Int32Array` for `i32[]`, `BigInt64Array` for `i64[]`), and builds the
-`amrit_array` header on the C stack over the typed array's own bytes:
+`nish_array` header on the C stack over the typed array's own bytes:
 
 ```c
 /* examples/arrays.ts: fill(xs: number[], v: number): void */
-static napi_value amrit_napi_fill(napi_env env, napi_callback_info info) {
+static napi_value nish_napi_fill(napi_env env, napi_callback_info info) {
   ...
-  uint64_t mark = amrit_arena_mark(); /* arena strings/arrays made for this call are released on return */
-  amrit_array xs_hdr; /* borrowed: the Int32Array's own bytes, for this call only */
-  if (!amrit_napi_array_arg(env, argv[0], napi_int32_array, &xs_hdr))
-    return amrit_napi_fail_at(env, mark, "fill: argument 1 (xs) must be an Int32Array");
-  amrit_array *xs = &xs_hdr;
+  uint64_t mark = nish_arena_mark(); /* arena strings/arrays made for this call are released on return */
+  nish_array xs_hdr; /* borrowed: the Int32Array's own bytes, for this call only */
+  if (!nish_napi_array_arg(env, argv[0], napi_int32_array, &xs_hdr))
+    return nish_napi_fail_at(env, mark, "fill: argument 1 (xs) must be an Int32Array");
+  nish_array *xs = &xs_hdr;
   ...
   fill(xs, v);
   ...
-  amrit_arena_release(mark);
+  nish_arena_release(mark);
   return out;
 }
 ```
@@ -450,7 +450,7 @@ So a 1M-element `Float64Array` crosses in the time it takes to read one
 pointer, and a function that writes through its parameter (`fill`) writes
 into the JS buffer the caller still holds. Two rules follow from the borrow:
 the callee must not retain the pointer beyond the call, because the arena
-does not own the bytes (AmritScript has no module-level state, so only a
+does not own the bytes (Nish has no module-level state, so only a
 returned alias could do that, and results are copied), and a `push` that
 grows a borrowed array moves it into the arena, invisibly to JS.
 
@@ -458,13 +458,13 @@ A returned array is copied into a fresh typed array
 (`napi_create_arraybuffer`, `memcpy`, `napi_create_typedarray`), and a
 returned string into a JS string (`napi_create_string_utf8`), so no JS value
 ever aliases the arena. A string argument is measured and copied into an
-arena `amrit_str` (`napi_get_value_string_utf8` twice: NUL-terminated, `len`
-the UTF-8 byte count, as `s.length` in AmritScript). Every function that
-touches the arena brackets the call with `amrit_arena_mark` /
-`amrit_arena_release`, on the failure paths too (`amrit_napi_fail_at`), so the
+arena `nish_str` (`napi_get_value_string_utf8` twice: NUL-terminated, `len`
+the UTF-8 byte count, as `s.length` in Nish). Every function that
+touches the arena brackets the call with `nish_arena_mark` /
+`nish_arena_release`, on the failure paths too (`nish_napi_fail_at`), so the
 arena is back where it was when the wrapper returns and a host never has to
 reset it for bridged calls. Two housekeeping exports remain for hosts that
-call `amrit_reset_arena()` between batches anyway, and `amrit_free_arena()`
+call `nish_reset_arena()` between batches anyway, and `nish_free_arena()`
 releases the chunks. Functions with a class, `T | null`, nested-array,
 `string[]` or `boolean[]` parameter or result are skipped with a comment.
 
@@ -540,7 +540,7 @@ What the table says:
 - A wasm crossing is about 13x cheaper (V8 inlines the trampolines and
   passes scalars in registers) but still 5x slower than the JS loop body.
 - One call that does the whole batch natively is measured in nanoseconds
-  in both builds. That is the design rule for every AmritScript boundary: pass
+  in both builds. That is the design rule for every Nish boundary: pass
   a whole array, string, or buffer in, process it in native memory, return
   one result.
 - With the data in the call, the addon reads the JS buffer in place and its
@@ -562,28 +562,28 @@ real pass over the buffer on top of the crossing.
 
 | File | Role |
 | --- | --- |
-| `runtime/amritc.h` | Public C header: `amrit_str`, `amrit_array`, `struct amrit_arena`, runtime prototypes (`amrit_alloc_array` included), `AMRIT_SYMBOL`. |
+| `runtime/nish.h` | Public C header: `nish_str`, `nish_array`, `struct nish_arena`, runtime prototypes (`nish_alloc_array` included), `NISH_SYMBOL`. |
 | `runtime/runtime_wasm.c` | Freestanding runtime for the wasm profile: arena over linear memory, arrays, trapping panics. |
 | `src/interop/abi.ts` | Which functions are external, C spelling of every type, `const` from the written-parameter facts, the typed-view table (`Int32Array` / `Float32Array` / `Float64Array` / `BigInt64Array`), keyword escaping. |
 | `src/interop/header.ts`, `dts.ts`, `wasm.ts`, `napi.ts` | The generators: header, `.d.ts`, its companion loader, the shim. |
 | `src/index.ts` | `--emit-header`, `--emit-dts` (writes the `.mjs` next to it), `--emit-napi`. |
-| `self/interop_abi.ts`, `interop_header.ts`, `interop_dts.ts`, `interop_wasm.ts`, `interop_napi.ts` | The same five, in AmritScript, for the self-hosted compiler (WP14 §7); `self/compile.ts` takes the same three flags and writes the same files. |
+| `self/interop_abi.ts`, `interop_header.ts`, `interop_dts.ts`, `interop_wasm.ts`, `interop_napi.ts` | The same five, in Nish, for the self-hosted compiler (WP14 §7); `self/compile.ts` takes the same three flags and writes the same files. |
 | `tests/self/interop_oracle.js` | Both compilers over the corpus below, all four generated files compared byte for byte. |
 | `tests/self/interop_payloads.ts`, `tests/self/interop_widths.ts`, `tests/self/interop_unsigned.ts` | The narrow numeric widths, which nothing else in the corpus mentions: inside a packed `Result`, at a plain parameter and return for the N-API shim, and as bare parameters and results for the wasm loader's masks. |
 | `scripts/build.sh` | `--profile napi`; `-mbulk-memory` in `--profile wasm`. |
 | `examples/arrays.ts`, `examples/node-addon.mjs`, `examples/node-host.mjs` | The typed-array module, loading the `.node` addon and the `.wasm` module. |
 | `bench/sum.ts`, `bench/ffi.mjs` | The batching benchmark. |
-| `tests/run.js` (`WP8: interop`) | Header/runtime.ts agreement, `-Werror` header compiles and C drivers (a stack-built `amrit_array` included), `tsc` on the `.d.ts`, addon builds, loads, type-check errors, `.node` versus `.wasm` agreement on scalars and on typed arrays, in-place `fill`, the wasm trap path, strings through the addon, that every function a `.d.ts` declares has an entry in its `.mjs`, the numeric widths through a built addon (boundaries, out-of-range truncation, a `u32` above 2^31), the unsigned widths through the loader at their boundaries, and the comment a skipped function leaves behind. |
+| `tests/run.js` (`WP8: interop`) | Header/runtime.ts agreement, `-Werror` header compiles and C drivers (a stack-built `nish_array` included), `tsc` on the `.d.ts`, addon builds, loads, type-check errors, `.node` versus `.wasm` agreement on scalars and on typed arrays, in-place `fill`, the wasm trap path, strings through the addon, that every function a `.d.ts` declares has an entry in its `.mjs`, the numeric widths through a built addon (boundaries, out-of-range truncation, a `u32` above 2^31), the unsigned widths through the loader at their boundaries, and the comment a skipped function leaves behind. |
 
 ## Not in this package
 
-- Strings and I/O from wasm: `runtime_wasm.c` has no `amrit_str_*`, `amrit_print`
+- Strings and I/O from wasm: `runtime_wasm.c` has no `nish_str_*`, `nish_print`
   or files, so string functions stay commented out in the `.d.ts`; a WASI
   build of `runtime.c` would lift that.
 - Zero-copy arrays in wasm: a JS buffer cannot be aliased from linear
   memory, so the loader copies; a host that wants to skip the copy can keep
   its data in `memory.buffer` and call the raw export with a header it
-  builds itself (`amrit_alloc_array` is exported for that).
+  builds itself (`nish_alloc_array` is exported for that).
 - Classes, `T | null`, `string[]`, `boolean[]` and nested arrays across
   either boundary: the generators report those functions as skipped rather
   than silently omitting them, naming the argument or the result, and the

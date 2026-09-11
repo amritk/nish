@@ -1,17 +1,17 @@
 @.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 
-declare noundef i64 @amrit_arena_mark() #0
-declare void @amrit_arena_release(i64 noundef) #0
-declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
-declare noundef double @amrit_random() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare noundef double @nish_random() #0
 declare double @llvm.floor.f64(double) #1
 declare i32 @llvm.fptosi.sat.i32.f64(double) #1
 
 define internal noundef i32 @bad() #0 {
 entry:
-  %0 = call double @amrit_random()
+  %0 = call double @nish_random()
   %1 = call double @llvm.floor.f64(double %0)
   %2 = call i32 @llvm.fptosi.sat.i32.f64(double %1)
   ret i32 %2
@@ -91,16 +91,16 @@ entry:
 
 define noundef i32 @test() #0 {
 entry:
-  %arena.mark = call i64 @amrit_arena_mark()
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @bad1000()
-  %1 = call i8* @amrit_str_from_i32(i32 %0)
-  call void @amrit_print(i8* %1)
-  %2 = call double @amrit_random()
-  %3 = call double @amrit_random()
+  %1 = call i8* @nish_str_from_i32(i32 %0)
+  call void @nish_print(i8* %1)
+  %2 = call double @nish_random()
+  %3 = call double @nish_random()
   %4 = fcmp une double %2, %3
   %5 = select i1 %4, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
-  call void @amrit_print(i8* %5)
-  call void @amrit_arena_release(i64 %arena.mark)
+  call void @nish_print(i8* %5)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 

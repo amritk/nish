@@ -1,5 +1,5 @@
 // Rust twin of sieve.ts: a Vec<bool> indexed with usize, so every store is
-// bounds-checked exactly as in AmritScript (LLVM hoists or drops what it can).
+// bounds-checked exactly as in Nish (LLVM hoists or drops what it can).
 const N: i32 = 10000000; // bench:n
 const PASSES: i32 = 20;
 

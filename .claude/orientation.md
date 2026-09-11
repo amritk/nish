@@ -10,9 +10,9 @@ Two compilers for one language.
 | | Source | Written in | Built by | Role |
 | --- | --- | --- | --- | --- |
 | **stage0** | `src/` | TypeScript on Node, parsing with the `typescript` package | `tsc` into `dist/` | the shipped compiler, the bootstrap seed, and the oracle |
-| **stage1** | `self/` | AmritScript (the language itself) | stage0 | the self-hosted compiler; it compiles itself to a fixed point |
+| **stage1** | `self/` | Nish (the language itself) | stage0 | the self-hosted compiler; it compiles itself to a fixed point |
 
-`amritc` compiles a strictly static subset of TypeScript to textual LLVM IR.
+`nish` compiles a strictly static subset of TypeScript to textual LLVM IR.
 The pipeline is parse → validate (Phase 0) → check (signatures, then bodies) →
 emit, and the shape is the same on both sides.
 
@@ -34,11 +34,11 @@ Read [`selfhost.md`](./selfhost.md) next if you are touching `self/`,
    an LLVM attribute the whole-program fixpoint justifies, with the reason
    written beside it.
 4. **Layout changes are two-sided.** A struct layout lives in
-   `src/codegen/runtime.ts` *and* `runtime/runtime.c` / `runtime/amritc.h`;
+   `src/codegen/runtime.ts` *and* `runtime/runtime.c` / `runtime/nish.h`;
    they change together and `tests/run.js` fails when they disagree.
 5. **The name lives in two files.** `src/branding.ts` and `self/branding.ts`
    are the only source files that spell the project's name; every string the
-   compiler prints builds it from `LANGUAGE` / `CLI` there. The `amrit_` prefix
+   compiler prints builds it from `LANGUAGE` / `CLI` there. The `nish_` prefix
    on the runtime's C symbols is ABI, not branding: it is frozen and a rename
    does not follow it.
 6. **`docs/LANGUAGE.md` is normative.** The `docs/wp*.md` notes are historical;
@@ -62,8 +62,8 @@ src/                the stage0 compiler
   codegen/          ir.ts, runtime.ts, target.ts, escape.ts, attributes.ts,
                     debug.ts, emitter.ts, emit/<family>.ts
   interop/          C header, wasm .d.ts, N-API shim
-self/               the stage1 compiler, in AmritScript — see .claude/selfhost.md
-runtime/            runtime.c, amritc.h, runtime_wasm.c, shim.mjs
+self/               the stage1 compiler, in Nish — see .claude/selfhost.md
+runtime/            runtime.c, nish.h, runtime_wasm.c, shim.mjs
 tests/              run.js + cases/ (goldens), link/, ir/, layout/,
                     differential/, self/ (the stage1 oracles)
 docs/               LANGUAGE, ARCHITECTURE, IR_COOKBOOK, MASTER_PLAN, wp*.md
@@ -78,7 +78,7 @@ npm test                    # build + the whole suite (~3 min with LLVM)
 node tests/run.js <sub>     # only checks whose name contains <sub>
 node tests/run.js self      # the WP14 self-hosting section alone
 npm run test:update         # write missing .ll goldens
-npm run bootstrap           # build the self-hosted compiler (build/amritc)
+npm run bootstrap           # build the self-hosted compiler (build/nish)
 npm run lint                # biome, advisory, never a compile gate
 ```
 

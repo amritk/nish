@@ -1,3 +1,3 @@
-@amrit_argv = external global %struct.amrit_array*, align 8
-call void @amrit_argv_init(i32 %argc, i8** %argv)
+@nish_argv = external global %struct.nish_array*, align 8
+call void @nish_argv_init(i32 %argc, i8** %argv)
 define noundef i32 @argumentCount() #0 {

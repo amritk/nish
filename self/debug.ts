@@ -81,7 +81,7 @@ const DEBUG_COMPILATION_DIR: string = ".";
 
 /**
  * The `!DIBasicType` of a scalar, named as the C ABI header
- * (`runtime/amritc.h`) names it. The unsigned widths carry `DW_ATE_unsigned`
+ * (`runtime/nish.h`) names it. The unsigned widths carry `DW_ATE_unsigned`
  * so a debugger prints 4294967295 rather than -1, which is the whole point of
  * having them (WP15).
  */
@@ -320,7 +320,7 @@ export class DebugInfo {
     return ref;
   }
 
-  /** The `%struct.amrit_array` header `{ i64 len, i64 cap, T* data }`, specialised per element type for the debugger's sake. */
+  /** The `%struct.nish_array` header `{ i64 len, i64 cap, T* data }`, specialised per element type for the debugger's sake. */
   arrayHeader(elem: i32, name: string): string {
     const ref = this.module.reserveMetadata();
     const long = this.typeRef(T_I64);
@@ -337,7 +337,7 @@ export class DebugInfo {
   }
 
   /**
-   * `%struct.amrit_result.<T>.<E>` with the layout the checker derived: the
+   * `%struct.nish_result.<T>.<E>` with the layout the checker derived: the
    * discriminant, the success payload (absent for `Result<void, E>`) and the
    * error payload, each at its computed byte offset. There is no declaration
    * to take a source line from, so the members carry none.

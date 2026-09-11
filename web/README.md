@@ -1,13 +1,13 @@
-# amritc in a browser worker
+# nish in a browser worker
 
 The compiler compiled to WebAssembly, driven from a Web Worker. `self/` is an
-AmritScript program, so stage0 compiles it and the `wasi` profile links it
+Nish program, so stage0 compiles it and the `wasi` profile links it
 against wasi-libc; the result is a 480 KB module (about 140 KB gzipped) that
 lexes, checks and emits LLVM IR with no server involved.
 
 ```bash
 npm run build
-node dist/index.js self/compile.ts --link web/amritc.wasm --profile wasi
+node dist/index.js self/compile.ts --link web/nish.wasm --profile wasi
 ```
 
 That needs a WASI sysroot and `wasm-ld` ([../docs/INSTALL.md](../docs/INSTALL.md), the WASI section). The module
@@ -18,14 +18,14 @@ is ignored by git: it is a build artefact like `build/`.
 Without a browser, through `node:worker_threads`:
 
 ```bash
-node web/compile.mjs web/amritc.wasm examples/add.ts
-node web/compile.mjs web/amritc.wasm examples/nbody.ts --number-mode f64
-node web/compile.mjs web/amritc.wasm self/compile.ts | head   # the compiler, compiled by itself, in wasm
+node web/compile.mjs web/nish.wasm examples/add.ts
+node web/compile.mjs web/nish.wasm examples/nbody.ts --number-mode f64
+node web/compile.mjs web/nish.wasm self/compile.ts | head   # the compiler, compiled by itself, in wasm
 ```
 
 `compile.mjs` reads the entry and every module it imports, hands them over as
 text, and prints the IR on stdout and the diagnostics on stderr — the same
-streams and the same exit code `amritc` itself would produce. The IR it writes
+streams and the same exit code `nish` itself would produce. The IR it writes
 is byte-identical to what stage0 writes for the same input; `tests/run.js`
 checks that on every run where the toolchain is present.
 
@@ -60,7 +60,7 @@ integration would read ([../AGENTS.md](../AGENTS.md)).
 
 ## What it cannot do
 
-- **It stops at the IR.** `amritc` emits textual LLVM IR and hands the rest to
+- **It stops at the IR.** `nish` emits textual LLVM IR and hands the rest to
   `clang` and `wasm-ld`, and neither exists in a page. So a playground shows
   the IR; running the compiled program in the browser needs the link step done
   somewhere else.

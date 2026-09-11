@@ -55,7 +55,7 @@
  * `mkdirSync` and `spawnSync` exist so that a self-hosted driver can create
  * `-o dir/` and run `bash scripts/build.sh` for `--link` itself; wp14-selfhost.md
  * §3a D4 named exactly these two as what stage1 would need before it could
- * stop leaning on `scripts/amritc.sh`.
+ * stop leaning on `scripts/nish.sh`.
  */
 import ts from "typescript";
 import { BOOL, F64, I32, STRING, VOID, arrayOf, nullableOf } from "../types.js";

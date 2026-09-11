@@ -15,7 +15,7 @@
 // status one program wants for its own bugs needs no new construct at all. The
 // first design would put a compiler's reporting policy — the version line, the
 // issue tracker, the word "internal" — inside the language that compiles it,
-// and every other AmritScript program would carry a builtin it has no use for.
+// and every other Nish program would carry a builtin it has no use for.
 // What it costs instead is one statement per site, and those sites are `self/`'s
 // own.
 //
@@ -31,13 +31,13 @@
 // **What it cannot say, and says so.** stage0 catches the failure in one
 // `try`/`catch` at the top of its driver, where the command line is still in
 // hand and the exception carries a stack; it prints both, the stack only under
-// `AMRITC_DEBUG=1`. stage1 has neither to give. The language has no exceptions,
+// `NISH_DEBUG=1`. stage1 has neither to give. The language has no exceptions,
 // so the report is made at the site instead of at the top: there is no stack to
 // unwind, and no `process.argv` to read either, because that builtin needs an
 // entry `main` and the modules that report internal errors are compiled on
 // their own as well (`tests/self/corpus.js`). Rather than print a line
 // promising a stack that a rerun would not produce, the report names
-// `AMRITC_DEBUG` and says there is nothing behind it here — and then asks, as
+// `NISH_DEBUG` and says there is nothing behind it here — and then asks, as
 // stage0 does, for the input file and the command line, which is the half
 // stage0 was echoing anyway.
 
@@ -58,14 +58,14 @@ export const EXIT_INTERNAL: i32 = 70;
  * to print whether or not it is set — so the report says so once, rather than
  * branching on a variable to print two versions of the same "nothing here".
  */
-const ENV_DEBUG: string = "AMRITC_DEBUG";
+const ENV_DEBUG: string = "NISH_DEBUG";
 
 /**
  * Report a broken compiler invariant and answer the exit status for it. Every
  * caller is `process.exit(internalError(...))`, which ends the path.
  */
 export function internalError(message: string): i32 {
-  // stage0 also prints the crash as a `--json` object (`AS0003`), and this does
+  // stage0 also prints the crash as a `--json` object (`NL0003`), and this does
   // not. It cannot: `process.argv` needs an `export function main` and this is
   // a library module, the language has no mutable module state to stash the
   // flag in, and threading it through all 39 callers would put a diagnostics
@@ -76,6 +76,6 @@ export function internalError(message: string): i32 {
   console.error(`  ${message}`);
   console.error(`  (this compiler is self-hosted: there is no stack behind this, so ${ENV_DEBUG}=1 adds nothing)`);
   console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`);
-  console.error("the command line at https://github.com/amritk/compiler/issues");
+  console.error("the command line at https://github.com/amritk/nish/issues");
   return EXIT_INTERNAL;
 }

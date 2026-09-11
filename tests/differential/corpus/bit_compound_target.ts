@@ -1,5 +1,5 @@
 // `p.f op= e` and `a[i] op= e` for the six bitwise operators. JavaScript and
-// AmritScript have to agree about three things at once here: the shift-count
+// Nish have to agree about three things at once here: the shift-count
 // mask (`<<= 33` is a shift by one on both), the sign-filling of `>>` against
 // the zero-filling of `>>>` on a negative value, and that the target
 // expression is evaluated exactly once — which the counter `next()` bumps

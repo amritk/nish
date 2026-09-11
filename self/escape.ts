@@ -8,8 +8,8 @@
 // is stored in, and the flow is `local`, `returned` or `leaks`. A stackable
 // site whose flow is `local` and whose holding locals are never reassigned
 // becomes an entry-block `alloca`; a function whose direct arena allocations
-// all flow `local` brackets its body with `amrit_arena_mark` /
-// `amrit_arena_release`.
+// all flow `local` brackets its body with `nish_arena_mark` /
+// `nish_arena_release`.
 //
 // The call-site reclaim (WP9) is stated there too: `leaks` merges a value the
 // caller can still reach with one merely assigned to a local of this frame, so
@@ -384,7 +384,7 @@ class EscapeAnalysis {
       const args = call.children[1];
       const type = args.children.length > 0 ? program.nodeTypes[args.children[0].id] : -1;
       if (type >= 0 && isNumeric(type)) {
-        // `amrit_str_from_*` allocates the text; `amrit_print` does not retain it.
+        // `nish_str_from_*` allocates the text; `nish_print` does not retain it.
         this.logsNumbers = true;
       }
     }

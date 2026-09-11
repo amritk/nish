@@ -1,48 +1,48 @@
 /**
  * Array lowering (WP4).
  *
- * Layout (ABI, shared with runtime/runtime.c `struct amrit_array`): an array
- * value is a `%struct.amrit_array*` to an arena header
+ * Layout (ABI, shared with runtime/runtime.c `struct nish_array`): an array
+ * value is a `%struct.nish_array*` to an arena header
  *
- *   %struct.amrit_array = type { i64 len, i64 cap, i8* data }
+ *   %struct.nish_array = type { i64 len, i64 cap, i8* data }
  *
  * `data` points at `cap` elements of `sizeof(T)` bytes, arena-allocated and
  * 8-byte aligned; it is `null` only for a `[]` literal (cap 0), and nothing
  * dereferences it before the first `push` grows the array. Element access
  * bitcasts `data` to `T*` and indexes with an `i64`.
  *
- *   [a, b]           two `amrit_alloc_struct` calls (24-byte header, n*sizeof(T)
+ *   [a, b]           two `nish_alloc_struct` calls (24-byte header, n*sizeof(T)
  *                    data), `len = cap = n`, one store per element.
  *   new Array<T>(n)  header + data as above, data cleared with `llvm.memset`.
  *                    When escape.ts proved the array does not outlive the
  *                    function (WP6) and its size is a literal, both become
- *                    entry-block allocas: `%arr.hdr = alloca %struct.amrit_array`
+ *                    entry-block allocas: `%arr.hdr = alloca %struct.nish_array`
  *                    and `%arr.data = alloca [n x T]`, 8-aligned like arena
  *                    memory. A later `push` moves the data into the arena
- *                    (`amrit_array_grow` only touches the header), which is
+ *                    (`nish_array_grow` only touches the header), which is
  *                    still correct: the header keeps pointing at live memory.
  *   a[i]             index widened to i64 (`sext` from i32, `fptosi` from
  *                    double), bounds check, `getelementptr` + `load`.
  *   a[i] = v         same address computation, then `store`; `op=` loads,
  *                    computes and stores.
  *   a.length         `load i64` of the header, then `trunc` to i32 / `sitofp`.
- *   a.push(v)        `len == cap` -> `amrit_array_grow`; store at `len`; `len + 1`.
- *   a.pop()          empty -> `amrit_panic_index(0, 0)`; else `len - 1` stored
+ *   a.push(v)        `len == cap` -> `nish_array_grow`; store at `len`; `len + 1`.
+ *   a.pop()          empty -> `nish_panic_index(0, 0)`; else `len - 1` stored
  *                    back and the element loaded. The capacity is untouched,
  *                    so the storage is reused by the next `push`.
  *   a.indexOf(v)     a scan (`idx.scan` / `idx.test` / `idx.next`) comparing
  *                    with `===` for the element type; -1 when it falls out.
  *   a.join(sep)      `string[]` only: one pass summing the lengths
- *                    (`join.sum`), one `amrit_alloc_struct`, then one
+ *                    (`join.sum`), one `nish_alloc_struct`, then one
  *                    `llvm.memcpy` per part and per separator (`join.copy`).
- *                    Never `amrit_str_concat` in a loop, which is quadratic in
+ *                    Never `nish_str_concat` in a loop, which is quadratic in
  *                    both time and arena (docs/wp14-selfhost.md §3).
  *   for (x of a)     index loop `forof.cond` / `forof.body` / `forof.inc` /
  *                    `forof.end`; `len` is re-read each iteration (a `push` in
  *                    the body extends the loop, as in JavaScript).
  *
  * Bounds check: `icmp ult i64 %idx, %len` and a branch to a cold block that
- * calls `amrit_panic_index(idx, len)` (noreturn) followed by `unreachable`.
+ * calls `nish_panic_index(idx, len)` (noreturn) followed by `unreachable`.
  * Comparing unsigned makes a negative index fail too. `--unchecked-indexing`
  * removes the check; an out-of-range index is then undefined behaviour.
  *
@@ -101,14 +101,14 @@ function align8(ctx: EmitContext): string {
  * (1205 ms against 763 ms, `--profile speed`).
  *
  * **The proof is about bytes, not allocations.** Every header the compiler
- * produces is either a 24-byte `amrit_alloc_struct` bump, an entry-block
- * `alloca %struct.amrit_array` (WP6), or the malloc'd block `amrit_argv_init`
+ * produces is either a 24-byte `nish_alloc_struct` bump, an entry-block
+ * `alloca %struct.nish_array` (WP6), or the malloc'd block `nish_argv_init`
  * builds; every element buffer is a separate bump, a separate `alloca [n x T]`,
  * or — for argv alone — the bytes *after* the header in that one block. In all
  * four shapes the header's three fields and the `cap * sizeof(T)` of element
  * storage occupy disjoint byte ranges, so no store through an element pointer
  * can reach a header field and no store to a header field can reach element
- * data. `amrit_array_grow` bumps a fresh buffer and writes `data`/`cap`, which
+ * data. `nish_array_grow` bumps a fresh buffer and writes `data`/`cap`, which
  * is a header write, and stays inside the same split.
  *
  * The domains cover *arrays* only. A string is one block whose length header
@@ -121,7 +121,7 @@ function align8(ctx: EmitContext): string {
  * which is exactly where the array traffic is.
  */
 function aliasDomains(ctx: EmitContext): { header: string; element: string } {
-  const domain = ctx.metadata(`!{!"amritc array"}`);
+  const domain = ctx.metadata(`!{!"nish array"}`);
   const header = ctx.metadata(`!{!"header", ${domain}}`);
   const element = ctx.metadata(`!{!"elements", ${domain}}`);
   return { header: ctx.metadata(`!{${header}}`), element: ctx.metadata(`!{${element}}`) };
@@ -214,7 +214,7 @@ export function emitRangeCheck(ctx: EmitContext, idx: string, len: string): void
   const okBlock = fn.newBlock("bounds.ok");
   fn.emit(`br i1 ${inRange}, label %${okBlock.label}, label %${failBlock.label}`);
   fn.placeBlock(failBlock);
-  fn.emit(`call void ${ctx.useRuntime("amrit_panic_index")}(i64 ${idx}, i64 ${len})`);
+  fn.emit(`call void ${ctx.useRuntime("nish_panic_index")}(i64 ${idx}, i64 ${len})`);
   fn.emit("unreachable");
   fn.placeBlock(okBlock);
 }
@@ -227,7 +227,7 @@ function emitBoundsCheck(ctx: EmitContext, arr: string, idx: string): void {
 
 /**
  * Allocate a header with `len = cap = n`; `data` is stored by `storeData`.
- * Returns the `%struct.amrit_array*`: an alloca when `site` is on the stack (WP6).
+ * Returns the `%struct.nish_array*`: an alloca when `site` is on the stack (WP6).
  */
 function emitHeader(ctx: EmitContext, n: string, site: ts.Node): string {
   ctx.declareType(ARRAY_TYPE);
@@ -235,7 +235,7 @@ function emitHeader(ctx: EmitContext, n: string, site: ts.Node): string {
   if (ctx.isStackSite(site)) {
     arr = ctx.fn.emitAlloca("arr.hdr", HEADER, 8);
   } else {
-    const raw = ctx.fn.emitValue(`call i8* ${ctx.useRuntime("amrit_alloc_struct")}(i64 ${HEADER_BYTES})`);
+    const raw = ctx.fn.emitValue(`call i8* ${ctx.useRuntime("nish_alloc_struct")}(i64 ${HEADER_BYTES})`);
     arr = ctx.fn.emitValue(`bitcast i8* ${raw} to ${HEADER_PTR}`);
   }
   storeHeaderField(ctx, arr, 0, n);
@@ -278,7 +278,7 @@ function emitData(
     const slot = ctx.fn.emitAlloca("arr.data", ty, 8);
     return ctx.fn.emitValue(`bitcast ${ty}* ${slot} to i8*`);
   }
-  return ctx.fn.emitValue(`call i8* ${ctx.useRuntime("amrit_alloc_struct")}(i64 ${bytes})`);
+  return ctx.fn.emitValue(`call i8* ${ctx.useRuntime("nish_alloc_struct")}(i64 ${bytes})`);
 }
 
 function storeData(ctx: EmitContext, arr: string, data: string): void {
@@ -442,7 +442,7 @@ function stringLength(ctx: EmitContext, str: string): string {
  */
 function emitElementEquals(ctx: EmitContext, elem: StaticType, a: string, b: string): string {
   if (elem.kind === "string") {
-    return ctx.fn.emitValue(`call zeroext i1 ${ctx.useRuntime("amrit_str_eq")}(i8* ${a}, i8* ${b})`);
+    return ctx.fn.emitValue(`call zeroext i1 ${ctx.useRuntime("nish_str_eq")}(i8* ${a}, i8* ${b})`);
   }
   const opcode = isFloat(elem) ? "fcmp oeq" : "icmp eq";
   return ctx.fn.emitValue(`${opcode} ${llvmType(elem)} ${a}, ${b}`);
@@ -461,7 +461,7 @@ function emitPush(ctx: EmitContext, expr: ts.CallExpression, arr: string, elem: 
   const storeBlock = fn.newBlock("push.store");
   fn.emit(`br i1 ${full}, label %${growBlock.label}, label %${storeBlock.label}`);
   fn.placeBlock(growBlock);
-  fn.emit(`call void ${ctx.useRuntime("amrit_array_grow")}(${HEADER_PTR} ${arr}, i64 ${elementSize(elem)})`);
+  fn.emit(`call void ${ctx.useRuntime("nish_array_grow")}(${HEADER_PTR} ${arr}, i64 ${elementSize(elem)})`);
   fn.emit(`br label %${storeBlock.label}`);
   fn.placeBlock(storeBlock);
   fn.emit(`store ${ty} ${value}, ${ty}* ${elementPointer(ctx, arr, elem, len)}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`);
@@ -472,7 +472,7 @@ function emitPush(ctx: EmitContext, expr: ts.CallExpression, arr: string, elem: 
 
 /**
  * `a.pop()`: the last element, with the length decremented. An empty array
- * panics through the same `amrit_panic_index` an index does — reported as
+ * panics through the same `nish_panic_index` an index does — reported as
  * `0 >= 0`, which is the access being attempted — because there is no
  * `undefined` to return and no second return type to widen to.
  */
@@ -486,7 +486,7 @@ function emitPop(ctx: EmitContext, arr: string, elem: StaticType): string {
     const okBlock = fn.newBlock("pop.ok");
     fn.emit(`br i1 ${empty}, label %${failBlock.label}, label %${okBlock.label}`);
     fn.placeBlock(failBlock);
-    fn.emit(`call void ${ctx.useRuntime("amrit_panic_index")}(i64 0, i64 0)`);
+    fn.emit(`call void ${ctx.useRuntime("nish_panic_index")}(i64 0, i64 0)`);
     fn.emit("unreachable");
     fn.placeBlock(okBlock);
   }
@@ -602,7 +602,7 @@ function emitJoin(ctx: EmitContext, expr: ts.CallExpression, arr: string): strin
   fn.placeBlock(copyBlock);
   const size = fn.emitValue(`load i64, i64* ${totalSlot}, align 8`);
   const bytes = fn.emitValue(`add i64 ${size}, 9`);
-  const out = fn.emitValue(`call i8* ${ctx.useRuntime("amrit_alloc_struct")}(i64 ${bytes})`);
+  const out = fn.emitValue(`call i8* ${ctx.useRuntime("nish_alloc_struct")}(i64 ${bytes})`);
   const outHeader = fn.emitValue(`bitcast i8* ${out} to i64*`);
   fn.emit(`store i64 ${size}, i64* ${outHeader}${align8(ctx)}`);
   const outData = fn.emitValue(`getelementptr inbounds i8, i8* ${out}, i64 8`);
@@ -742,11 +742,11 @@ function isElementAssignment(node: ts.Node): node is ts.BinaryExpression {
  * What each construct does to memory. Must mirror the emitters above:
  *   - element reads, `.length`, `for...of` and the address computation of a
  *     write load the header (and elements): `readsMemory`;
- *   - a checked `a[i]` may call `amrit_panic_index`, which is noreturn, so the
+ *   - a checked `a[i]` may call `nish_panic_index`, which is noreturn, so the
  *     function loses `willreturn` unless `--unchecked-indexing`;
  *   - literals, `new Array`, element writes and `push` store into the arena
  *     (the inline allocator itself is willreturn, so it is folded into the
- *     effect rather than listed as a callee); `push` may call `amrit_array_grow`;
+ *     effect rather than listed as a callee); `push` may call `nish_array_grow`;
  *   - a literal or `new Array` on the stack (WP6) stores into its own allocas
  *     and is no effect at all. Element accesses are still counted even
  *     through a stack local: a `push` may have moved the data into the arena.
@@ -758,20 +758,20 @@ const collectMethodFacts: FactCollector = (program, node, facts, opts) => {
   switch (arrayMethodName(program, node)) {
     case "push":
       facts.effect = "write";
-      facts.callees.add("amrit_array_grow");
+      facts.callees.add("nish_array_grow");
       break;
     case "pop":
       // Stores the shortened length back, and panics on an empty array.
       facts.effect = "write";
-      if (!opts.uncheckedIndexing) facts.callees.add("amrit_panic_index");
+      if (!opts.uncheckedIndexing) facts.callees.add("nish_panic_index");
       break;
     case "join":
       facts.effect = "write"; // one arena allocation
-      facts.callees.add("amrit_alloc_struct");
+      facts.callees.add("nish_alloc_struct");
       break;
     default:
       facts.readsMemory = true; // `indexOf` scans the elements
-      if (elem?.kind === "array" && elem.elem.kind === "string") facts.callees.add("amrit_str_eq");
+      if (elem?.kind === "array" && elem.elem.kind === "string") facts.callees.add("nish_str_eq");
       break;
   }
 };
@@ -779,7 +779,7 @@ const collectMethodFacts: FactCollector = (program, node, facts, opts) => {
 const collectArrayFacts: FactCollector = (program, node, facts, opts) => {
   if (ts.isElementAccessExpression(node) && isArray(program, node.expression)) {
     facts.readsMemory = true;
-    if (!opts.uncheckedIndexing) facts.callees.add("amrit_panic_index");
+    if (!opts.uncheckedIndexing) facts.callees.add("nish_panic_index");
   } else if (ts.isPropertyAccessExpression(node) && isArray(program, node.expression)) {
     facts.readsMemory = true; // `.length`
   } else if (ts.isForOfStatement(node)) {

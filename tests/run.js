@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * AmritScript test runner.
+ * Nish test runner.
  *
  *  A. Golden cases in tests/cases/  (one .ts per case, discovered automatically)
  *       <name>.ts    source
@@ -359,7 +359,7 @@ if (!only || "diagnostics".includes(only)) {
   // `branding.ts` must name the same language on both sides.
   const pairsOf = (file) => {
     const text = fs.readFileSync(path.join(root, file), "utf8");
-    return [...text.matchAll(/^ {4}("(?:[^"\\]|\\.)*"),\n {4}"(AS\d{4})",$/gm)].map((m) => `${m[2]} ${m[1]}`);
+    return [...text.matchAll(/^ {4}("(?:[^"\\]|\\.)*"),\n {4}"(NL\d{4})",$/gm)].map((m) => `${m[2]} ${m[1]}`);
   };
   const stage0Codes = pairsOf("src/codes.ts");
   const stage1Codes = pairsOf("self/codes.ts");
@@ -375,15 +375,15 @@ if (!only || "diagnostics".includes(only)) {
   const jsCode = JSON.parse(js.stdout.split("\n")[0]);
   check(
     `codes: --json carries a code (${jsCode.code}) and the human summary line does not`,
-    /^AS\d{4}$/.test(jsCode.code) &&
-      jsCode.code !== "AS0000" &&
+    /^NL\d{4}$/.test(jsCode.code) &&
+      jsCode.code !== "NL0000" &&
       !manyErr.includes(jsCode.code) &&
-      !many.stderr.includes("AS"),
+      !many.stderr.includes("NL"),
     `${js.stdout.split("\n")[0]}\n---\n${manyErr.split("\n")[0]}`
   );
   check(
-    "codes: a syntax error is AS0001, whatever the `typescript` package worded it as",
-    JSON.parse(jsSyn.stdout.split("\n")[0]).code === "AS0001",
+    "codes: a syntax error is NL0001, whatever the `typescript` package worded it as",
+    JSON.parse(jsSyn.stdout.split("\n")[0]).code === "NL0001",
     jsSyn.stdout
   );
 
@@ -413,7 +413,7 @@ if (!only || "diagnostics".includes(only)) {
       byMessage.set(o.message, o.code);
     }
   }
-  const uncoded = [...byMessage].filter(([, code]) => code === "AS0000");
+  const uncoded = [...byMessage].filter(([, code]) => code === "NL0000");
   const coverage = ((1 - uncoded.length / byMessage.size) * 100).toFixed(1);
   check(
     `codes: ${byMessage.size - uncoded.length}/${byMessage.size} distinct rejection messages carry a code (${coverage}%), ${uncoded.length} uncoded`,
@@ -892,7 +892,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   // WP15: the array header and the element buffer are separate alias domains, so an
   // element store cannot be read as a clobber of a header. The consequence a golden
   // cannot express is that LICM then hoists `len` and `data` out of a loop that writes
-  // elements: after `opt -O2` every `%struct.amrit_array` access in `@scale` must sit
+  // elements: after `opt -O2` every `%struct.nish_array` access in `@scale` must sit
   // in the preheader, none in the loop body. Without the domains all four were reloaded
   // per iteration, which measured 1.6x on the same shape.
   const aliasLl = path.join(buildDir, "arr_alias_domains.ll");
@@ -930,16 +930,16 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     );
     // The unchecked module must not declare the panic symbol at all.
     check(
-      "arr_sum with --unchecked-indexing references no amrit_panic_index",
-      c.status === 0 && !fs.readFileSync(uncheckedLl, "utf8").includes("amrit_panic_index"),
+      "arr_sum with --unchecked-indexing references no nish_panic_index",
+      c.status === 0 && !fs.readFileSync(uncheckedLl, "utf8").includes("nish_panic_index"),
       String(c.stderr)
     );
     const checkedLl = path.join(buildDir, "arr_sum.ll");
     if (fs.existsSync(checkedLl)) {
       const oc = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", checkedLl]);
       const outc = String(oc.stdout);
-      // The vector body lives in @amrit_main (inlined sum, constant length); @sum itself stays scalar.
-      const mainBody = outc.slice(outc.indexOf("@amrit_main("));
+      // The vector body lives in @nish_main (inlined sum, constant length); @sum itself stays scalar.
+      const mainBody = outc.slice(outc.indexOf("@nish_main("));
       check(
         "opt -O2 vectorises the checked arr_sum loop once inlined into main (bounds check folded)",
         oc.status === 0 && /<(4|8) x i32>/.test(mainBody),
@@ -952,14 +952,14 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
 // ---- WP6: memory --------------------------------------------------------------------
 // 1. Every mem_ module passes the IR verifier (allocas, scope calls, null compares).
 // 2. mem_stack_struct.ts has no arena allocation left: every object is an alloca, so the
-//    module never references amrit_alloc_struct (and therefore emits no arena prelude).
+//    module never references nish_alloc_struct (and therefore emits no arena prelude).
 // 3. mem_scope_dynamic_array.ts builds a `new Array<number>(n)` per call and is called
 //    100000 times: the function's automatic arena scope releases each one, so the two
 //    `Arena.used()` lines (before and after the loop) must be identical, with no
 //    OS-specific RSS tooling involved. mem_stack_loop / mem_scope_string_temp print
 //    their own `true` for the same property (checked by their .out files).
 // 4. --no-stack-alloc keeps every object in the arena: the same source then does
-//    reference amrit_alloc_struct, and still runs to the same output.
+//    reference nish_alloc_struct, and still runs to the same output.
 if (!only || "memory".includes(only) || only.startsWith("mem")) {
   if (HAS_OPT) {
     for (const name of cases.filter((c) => c.startsWith("mem_") && (!only || c.includes(only)))) {
@@ -973,9 +973,9 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
   if (fs.existsSync(stackLl)) {
     const ir = fs.readFileSync(stackLl, "utf8");
     check(
-      "mem_stack_struct: no amrit_alloc_struct and no arena prelude, five `alloca %struct.` objects",
-      !ir.includes("amrit_alloc_struct") &&
-        !ir.includes("@amrit_arena =") &&
+      "mem_stack_struct: no nish_alloc_struct and no arena prelude, five `alloca %struct.` objects",
+      !ir.includes("nish_alloc_struct") &&
+        !ir.includes("@nish_arena =") &&
         (ir.match(/= alloca %struct\.(Pair|Point|Counter), align 8/g) ?? []).length === 5,
       ir
     );
@@ -990,7 +990,7 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
   check(
     "--no-stack-alloc puts mem_stack_struct's objects back in the arena",
     ns.status === 0 &&
-      nsIr.includes("call i8* @amrit_alloc_struct(i64 8)") &&
+      nsIr.includes("call i8* @nish_alloc_struct(i64 8)") &&
       !/alloca %struct\.(Pair|Point|Counter), align/.test(nsIr),
     String(ns.stderr) || nsIr
   );
@@ -1024,7 +1024,7 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
 // tests/layout/structs.ts declares ten classes plus three derived ones (WP2b, whose
 // layout is the base's fields followed by their own); tests/layout/structs.c declares
 // the same C structs (flattened) with `_Static_assert(sizeof(struct X) == N)`. The
-// compiler's size for each class is read from the `amrit_alloc_struct(i64 N)` in its
+// compiler's size for each class is read from the `nish_alloc_struct(i64 N)` in its
 // `make<X>` function and must equal the C file's N; then the C program (built with
 // -std=c11 -Wall -Wextra -Werror, which validates the asserts against clang's own
 // layout) fills every struct through the C definition and reads each field back
@@ -1042,7 +1042,7 @@ if (!only || "layout".includes(only)) {
     const ir = fs.readFileSync(layoutLl, "utf8");
     const fromIr = new Map();
     for (const m of ir.matchAll(/^define [^\n]*@make(\w+)\([^\n]*\{\n([\s\S]*?)^\}/gm)) {
-      const alloc = m[2].match(/@amrit_alloc_struct\(i64 (\d+)\)/);
+      const alloc = m[2].match(/@nish_alloc_struct\(i64 (\d+)\)/);
       if (alloc) fromIr.set(m[1], Number(alloc[1]));
     }
     const fromC = new Map();
@@ -1224,7 +1224,7 @@ if (!only && HAS_CLANG) {
   }
 
   // The check above links for the host, so it only ever proved the layout on a 64-bit
-  // target. The IR is target-neutral — `%struct.amrit_arena = type { i8*, i64, i64, i8* }`
+  // target. The IR is target-neutral — `%struct.nish_arena = type { i8*, i64, i64, i8* }`
   // is what every compiled function inlines — so the C side has to hold those offsets
   // on wasm32 too, where a pointer is 4 bytes and `size_t` used to move `off` and `cap`
   // to bytes 4 and 8. That mismatch made the wasi profile hand out wild pointers for any
@@ -1237,15 +1237,15 @@ if (!only && HAS_CLANG) {
     [
       "/* Generated by tests/run.js: the runtime ABI layouts, asserted per target. */",
       "#include <stddef.h>",
-      '#include "amritc.h"',
-      '_Static_assert(sizeof(struct amrit_arena) == 32, "arena: %struct.amrit_arena = { i8*, i64, i64, i8* }");',
-      '_Static_assert(offsetof(struct amrit_arena, off) == 8, "arena.off is the field the inlined allocator bumps");',
-      '_Static_assert(offsetof(struct amrit_arena, cap) == 16, "arena.cap is the field the inlined allocator compares");',
-      '_Static_assert(offsetof(struct amrit_arena, chunks) == 24, "arena.chunks");',
-      '_Static_assert(offsetof(amrit_str, data) == 8, "amrit_str = { i64 len, bytes }");',
-      '_Static_assert(sizeof(amrit_array) == 24, "amrit_array = { i64, i64, i8* }");',
-      '_Static_assert(offsetof(amrit_array, cap) == 8, "amrit_array.cap");',
-      '_Static_assert(offsetof(amrit_array, data) == 16, "amrit_array.data, the offset the wasm loader reads");',
+      '#include "nish.h"',
+      '_Static_assert(sizeof(struct nish_arena) == 32, "arena: %struct.nish_arena = { i8*, i64, i64, i8* }");',
+      '_Static_assert(offsetof(struct nish_arena, off) == 8, "arena.off is the field the inlined allocator bumps");',
+      '_Static_assert(offsetof(struct nish_arena, cap) == 16, "arena.cap is the field the inlined allocator compares");',
+      '_Static_assert(offsetof(struct nish_arena, chunks) == 24, "arena.chunks");',
+      '_Static_assert(offsetof(nish_str, data) == 8, "nish_str = { i64 len, bytes }");',
+      '_Static_assert(sizeof(nish_array) == 24, "nish_array = { i64, i64, i8* }");',
+      '_Static_assert(offsetof(nish_array, cap) == 8, "nish_array.cap");',
+      '_Static_assert(offsetof(nish_array, data) == 16, "nish_array.data, the offset the wasm loader reads");',
       "",
     ].join("\n")
   );
@@ -1256,7 +1256,7 @@ if (!only && HAS_CLANG) {
       [...flags, "-std=c11", "-Wall", "-Wextra", "-Werror", abiInclude, "-fsyntax-only", abiSrc],
       { cwd: root }
     );
-    check(`amritc.h layouts match the IR types on ${target}`, a.status === 0, String(a.stderr));
+    check(`nish.h layouts match the IR types on ${target}`, a.status === 0, String(a.stderr));
   }
 
   const addLl = path.join(buildDir, "add.ll");
@@ -1328,14 +1328,14 @@ if (!only && HAS_CLANG) {
     // no playground. This is also the end-to-end guard on the arena ABI: the
     // compiler allocates from compiled code on every node it parses, so a wasm32
     // layout that disagrees with the IR traps here long before it prints anything.
-    const compilerWasm = path.join(buildDir, "amritc.wasm");
+    const compilerWasm = path.join(buildDir, "nish.wasm");
     const linked = spawnSync(
       "node",
       [cli, "self/compile.ts", "--link", compilerWasm, "--profile", "wasi"],
       { cwd: root }
     );
     check(
-      "web: self/ links into one wasi module (the compiler as amritc.wasm)",
+      "web: self/ links into one wasi module (the compiler as nish.wasm)",
       linked.status === 0,
       String(linked.stderr)
     );
@@ -1344,7 +1344,7 @@ if (!only && HAS_CLANG) {
       execFileSync("node", [cli, "examples/add.ts", "-o", referenceLl], { cwd: root, stdio: "pipe" });
       const worker = spawnSync("node", ["web/compile.mjs", compilerWasm, "examples/add.ts"], { cwd: root });
       check(
-        "web: amritc.wasm in a worker emits stage0's IR for examples/add.ts, byte for byte",
+        "web: nish.wasm in a worker emits stage0's IR for examples/add.ts, byte for byte",
         worker.status === 0 && String(worker.stdout) === fs.readFileSync(referenceLl, "utf8"),
         String(worker.stderr)
       );
@@ -1358,12 +1358,12 @@ if (!only && HAS_CLANG) {
 }
 
 // ---- WP8: interop ------------------------------------------------------------------
-// runtime/amritc.h is the public C ABI; --emit-header / --emit-dts / --emit-napi derive
+// runtime/nish.h is the public C ABI; --emit-header / --emit-dts / --emit-napi derive
 // host-side declarations from the same checked program the IR came from. Checks:
-//   - every function in src/codegen/runtime.ts has a prototype in amritc.h, and the
+//   - every function in src/codegen/runtime.ts has a prototype in nish.h, and the
 //     header is clean under -Wall -Wextra -Werror as C11 and as C++
 //   - generated headers compile under the same flags and link a C driver (including a
-//     function named `double`, bound through AMRIT_SYMBOL), strings map to amrit_str, and
+//     function named `double`, bound through NISH_SYMBOL), strings map to nish_str, and
 //     --strict-exports hides internal functions
 //   - the generated .d.ts type-checks with tsc; string functions are commented out
 //   - the N-API shim compiles warning-free, builds into a .node addon with the napi
@@ -1373,16 +1373,16 @@ if (!only || "interop".includes(only)) {
   const interopDir = path.join(buildDir, "interop");
   fs.mkdirSync(interopDir, { recursive: true });
   const runtimeDir = path.join(root, "runtime");
-  const publicHeader = fs.readFileSync(path.join(runtimeDir, "amritc.h"), "utf8");
+  const publicHeader = fs.readFileSync(path.join(runtimeDir, "nish.h"), "utf8");
   const { RUNTIME_FUNCTIONS } = await import(pathToFileURL(path.join(root, "dist", "codegen", "runtime.js")).href);
   const runtimeNames = [
     ...RUNTIME_FUNCTIONS.filter((f) => !f.intrinsic).map((f) => f.name),
-    "amrit_alloc_struct",
+    "nish_alloc_struct",
   ];
   const undeclared = runtimeNames.filter((n) => !new RegExp(`\\b${n}\\s*\\(`).test(publicHeader));
   check(
-    `amritc.h declares every runtime.ts function (${runtimeNames.length}) and the arena global`,
-    undeclared.length === 0 && publicHeader.includes("extern struct amrit_arena amrit_arena;"),
+    `nish.h declares every runtime.ts function (${runtimeNames.length}) and the arena global`,
+    undeclared.length === 0 && publicHeader.includes("extern struct nish_arena nish_arena;"),
     `missing: ${undeclared.join(", ")}`
   );
 
@@ -1424,10 +1424,10 @@ if (!only || "interop".includes(only)) {
   );
   const addHeader = fs.existsSync(sidecar("add", "h")) ? fs.readFileSync(sidecar("add", "h"), "utf8") : "";
   check(
-    "add.h declares `int32_t add(int32_t a, int32_t b);` with guards and amritc.h",
+    "add.h declares `int32_t add(int32_t a, int32_t b);` with guards and nish.h",
     addHeader.includes("int32_t add(int32_t a, int32_t b);") &&
-      addHeader.includes("#ifndef AMRITC_ADD_H") &&
-      addHeader.includes('#include "amritc.h"') &&
+      addHeader.includes("#ifndef NISH_ADD_H") &&
+      addHeader.includes('#include "nish.h"') &&
       addHeader.includes('extern "C"'),
     addHeader
   );
@@ -1442,9 +1442,9 @@ if (!only || "interop".includes(only)) {
   ]);
   const stringsHeader = strings.status === 0 ? fs.readFileSync(sidecar("strings", "h"), "utf8") : "";
   check(
-    "strings.h maps string to `amrit_str *` (const parameters) and boolean to bool",
-    stringsHeader.includes("amrit_str *pick(bool flag, const amrit_str *a, const amrit_str *b);") &&
-      stringsHeader.includes("int32_t len2(const amrit_str *s);"),
+    "strings.h maps string to `nish_str *` (const parameters) and boolean to bool",
+    stringsHeader.includes("nish_str *pick(bool flag, const nish_str *a, const nish_str *b);") &&
+      stringsHeader.includes("int32_t len2(const nish_str *s);"),
     stringsHeader || strings.stderr
   );
 
@@ -1465,7 +1465,7 @@ if (!only || "interop".includes(only)) {
   // A `readonly T[]` parameter *declares* the `const` that the whole-program
   // fixpoint otherwise has to prove, and the comment above the prototype shows
   // the annotation that earned it. The mutable `fill` beside it is the control:
-  // it writes, so it stays `amrit_array *` and its comment stays `number[]`.
+  // it writes, so it stays `nish_array *` and its comment stays `number[]`.
   const readonlyArrays = emit("tests/cases/arr_readonly_header.ts", [
     "--emit-header",
     sidecar("arr_readonly_header", "h"),
@@ -1473,11 +1473,11 @@ if (!only || "interop".includes(only)) {
   const readonlyHeader =
     readonlyArrays.status === 0 ? fs.readFileSync(sidecar("arr_readonly_header", "h"), "utf8") : "";
   check(
-    "a `readonly T[]` parameter is `const amrit_array *`, and the comment shows the annotation that promised it",
+    "a `readonly T[]` parameter is `const nish_array *`, and the comment shows the annotation that promised it",
     readonlyHeader.includes("/* sum(xs: readonly number[]): number -- xs: int32_t elements */") &&
-      readonlyHeader.includes("int32_t sum(const amrit_array *xs);") &&
+      readonlyHeader.includes("int32_t sum(const nish_array *xs);") &&
       readonlyHeader.includes("/* fill(xs: number[], v: number): void -- xs: int32_t elements */") &&
-      readonlyHeader.includes("void fill(amrit_array *xs, int32_t v);"),
+      readonlyHeader.includes("void fill(nish_array *xs, int32_t v);"),
     readonlyHeader || readonlyArrays.stderr
   );
 
@@ -1493,17 +1493,17 @@ if (!only || "interop".includes(only)) {
   check(
     "a `readonly T[]` that escapes (returned, stored in a field) keeps its `const`, and compiling it is not an internal error",
     escaped.status === 0 &&
-      escapedHeader.includes("amrit_array *first(const amrit_array *xs);") &&
-      escapedHeader.includes("int32_t hold(const amrit_array *xs);") &&
-      escapedHeader.includes("int32_t touch(const amrit_array *rows, int32_t v);"),
+      escapedHeader.includes("nish_array *first(const nish_array *xs);") &&
+      escapedHeader.includes("int32_t hold(const nish_array *xs);") &&
+      escapedHeader.includes("int32_t touch(const nish_array *rows, int32_t v);"),
     escapedHeader || escaped.stdout + escaped.stderr
   );
 
   const keyword = emit("tests/cases/export_fn.ts", ["--emit-header", sidecar("export_fn", "h")]);
   const keywordHeader = keyword.status === 0 ? fs.readFileSync(sidecar("export_fn", "h"), "utf8") : "";
   check(
-    'a function named `double` is declared as double_ bound with AMRIT_SYMBOL("double")',
-    keywordHeader.includes('int32_t double_(int32_t n) AMRIT_SYMBOL("double");') &&
+    'a function named `double` is declared as double_ bound with NISH_SYMBOL("double")',
+    keywordHeader.includes('int32_t double_(int32_t n) NISH_SYMBOL("double");') &&
       keywordHeader.includes("int32_t next(int32_t n);"),
     keywordHeader || keyword.stderr
   );
@@ -1560,7 +1560,7 @@ if (!only || "interop".includes(only)) {
       "-Wextra",
       "-Werror",
       "-fsyntax-only",
-      path.join(runtimeDir, "amritc.h"),
+      path.join(runtimeDir, "nish.h"),
     ]);
     const c11 = spawnSync("clang", [
       ...strictC,
@@ -1568,10 +1568,10 @@ if (!only || "interop".includes(only)) {
       "-fsyntax-only",
       "-x",
       "c",
-      path.join(runtimeDir, "amritc.h"),
+      path.join(runtimeDir, "nish.h"),
     ]);
     check(
-      "amritc.h compiles under -Wall -Wextra -Werror as C11 (-pedantic) and as C++17",
+      "nish.h compiles under -Wall -Wextra -Werror as C11 (-pedantic) and as C++17",
       cxx.status === 0 && c11.status === 0,
       String(cxx.stderr) + String(c11.stderr)
     );
@@ -1607,9 +1607,9 @@ if (!only || "interop".includes(only)) {
         '#include "add.h"',
         '#include "export_fn.h"',
         "int main(void) {",
-        "  amrit_str *s = amrit_str_from_i32(add(40, 2));",
+        "  nish_str *s = nish_str_from_i32(add(40, 2));",
         '  printf("add(40, 2) = %s; double_(21) = %d; next(20) = %d\\n", s->data, double_(21), next(20));',
-        "  amrit_free_arena();",
+        "  nish_free_arena();",
         "  return 0;",
         "}",
         "",
@@ -1673,18 +1673,18 @@ if (!only || "interop".includes(only)) {
     : "";
   check(
     "add.napi.c registers `add` with type checks and a NAPI_MODULE_INIT",
-    shim.includes('{"add", amrit_napi_add},') &&
+    shim.includes('{"add", nish_napi_add},') &&
       shim.includes("type != napi_number") &&
       shim.includes("NAPI_MODULE_INIT()"),
     shim
   );
   check(
-    "strings.napi.c bridges string functions (arena strings in, napi_create_string_utf8 out, released per call) and exposes amrit_reset_arena",
-    stringsShim.includes('{"pick", amrit_napi_pick},') &&
-      stringsShim.includes("amrit_napi_string_arg(env, argv[1])") &&
+    "strings.napi.c bridges string functions (arena strings in, napi_create_string_utf8 out, released per call) and exposes nish_reset_arena",
+    stringsShim.includes('{"pick", nish_napi_pick},') &&
+      stringsShim.includes("nish_napi_string_arg(env, argv[1])") &&
       stringsShim.includes("napi_create_string_utf8(env, result->data, result->len, &out)") &&
-      stringsShim.includes("uint64_t mark = amrit_arena_mark();") &&
-      stringsShim.includes('{"amrit_reset_arena", amrit_napi_reset_arena},'),
+      stringsShim.includes("uint64_t mark = nish_arena_mark();") &&
+      stringsShim.includes('{"nish_reset_arena", nish_napi_reset_arena},'),
     stringsShim
   );
   if (!HAS_CLANG) {
@@ -1781,13 +1781,13 @@ if (!only || "interop".includes(only)) {
   const resHeader = res.status === 0 ? fs.readFileSync(sidecar("res_export", "h"), "utf8") : "";
   check(
     "res_export.h declares the packed word a small Result travels in both ways, the arena object for the rest, and asserts the word is 8 bytes",
-    resHeader.includes("typedef struct amrit_result_i32_i32_word {") &&
+    resHeader.includes("typedef struct nish_result_i32_i32_word {") &&
       resHeader.includes("union { int32_t value; int32_t error; } as;") &&
-      resHeader.includes("AMRIT_RESULT_ASSERT(sizeof(amrit_result_i32_i32_word) == 8,") &&
-      resHeader.includes("amrit_result_i32_i32_word half(int32_t n);") &&
-      resHeader.includes("amrit_result_void_i32_word checkPort(int32_t port);") &&
-      resHeader.includes("struct amrit_result_i32__IoError *openFile(const amrit_str *path);") &&
-      resHeader.includes("int32_t describe(amrit_result_i32_i32_word r);"),
+      resHeader.includes("NISH_RESULT_ASSERT(sizeof(nish_result_i32_i32_word) == 8,") &&
+      resHeader.includes("nish_result_i32_i32_word half(int32_t n);") &&
+      resHeader.includes("nish_result_void_i32_word checkPort(int32_t port);") &&
+      resHeader.includes("struct nish_result_i32__IoError *openFile(const nish_str *path);") &&
+      resHeader.includes("int32_t describe(nish_result_i32_i32_word r);"),
     resHeader
   );
   const resDts = res.status === 0 ? fs.readFileSync(sidecar("res_export", "d.ts"), "utf8") : "";
@@ -1820,20 +1820,20 @@ if (!only || "interop".includes(only)) {
         '#include "res_export.h"',
         "int main(void) {",
         "  for (int32_t n = 8; n <= 9; n++) {",
-        "    amrit_result_i32_i32_word r = half(n);",
+        "    nish_result_i32_i32_word r = half(n);",
         '    printf("half(%d) %s %d via %d\\n", n, r.ok ? "ok" : "err",',
         "           r.ok ? r.as.value : r.as.error, describe(r));",
         "  }",
-        "  /* a Result the C side builds itself, handed to AmritScript by value */",
-        "  amrit_result_i32_i32_word made = { 1, { 41 } };",
+        "  /* a Result the C side builds itself, handed to Nish by value */",
+        "  nish_result_i32_i32_word made = { 1, { 41 } };",
         '  printf("C-built %d ", describe(made));',
         "  made.ok = 0; made.as.error = 5;",
         '  printf("%d\\n", describe(made));',
-        "  amrit_result_void_i32_word v = checkPort(0), w = checkPort(443);",
+        "  nish_result_void_i32_word v = checkPort(0), w = checkPort(443);",
         '  printf("checkPort %d %d %d\\n", v.ok, v.as.error, w.ok);',
-        "  struct amrit_result_i32__IoError *o = openFile(amrit_str_new(\"\", 0));",
+        "  struct nish_result_i32__IoError *o = openFile(nish_str_new(\"\", 0));",
         '  printf("openFile %d %d\\n", o->ok, o->error->code);',
-        "  amrit_free_arena();",
+        "  nish_free_arena();",
         "  return 0;",
         "}",
         "",
@@ -1857,10 +1857,10 @@ if (!only || "interop".includes(only)) {
   const resShim = res.status === 0 ? fs.readFileSync(sidecar("res_export", "napi.c"), "utf8") : "";
   check(
     "res_export.napi.c boxes a by-value Result as { ok, value } / { ok, error } and skips the pointer ones",
-    resShim.includes("static napi_status amrit_napi_result(napi_env env, bool ok, napi_value payload, napi_value *out)") &&
+    resShim.includes("static napi_status nish_napi_result(napi_env env, bool ok, napi_value payload, napi_value *out)") &&
       resShim.includes('napi_set_named_property(env, obj, ok ? "value" : "error", payload)') &&
-      resShim.includes('{"half", amrit_napi_half},') &&
-      resShim.includes('{"describe", amrit_napi_describe},') &&
+      resShim.includes('{"half", nish_napi_half},') &&
+      resShim.includes('{"describe", nish_napi_describe},') &&
       resShim.includes('napi_get_named_property(env, argv[0], r_flag ? "value" : "error", &r_arm)') &&
       resShim.includes(
         "openFile(path: string): Result<number, IoError> -- not bridged: it returns Result<number, IoError>"
@@ -1984,14 +1984,14 @@ if (!only || "interop".includes(only)) {
       // u32 needs no temporary: the getter already writes its type.
       widthsShim.includes("uint32_t x;\n  if (napi_typeof(env, argv[0], &type)") &&
       widthsShim.includes("napi_get_value_bigint_uint64(env, argv[0], &x, &lossless)") &&
-      widthsShim.includes("float x = amrit_napi_f32(x_raw);") &&
-      widthsShim.includes("static float amrit_napi_f32(double value) {") &&
+      widthsShim.includes("float x = nish_napi_f32(x_raw);") &&
+      widthsShim.includes("static float nish_napi_f32(double value) {") &&
       // The boxers: unsigned goes back through napi_create_uint32, f32 as a double.
       widthsShim.includes("uint32_t result = highBit();") &&
       widthsShim.includes("napi_create_uint32(env, result, &out)") &&
       widthsShim.includes("napi_create_bigint_uint64(env, result, &out)") &&
       // Both arms of Result<f32, u8> narrow, each through its own temporary.
-      widthsShim.includes("if (r_flag) r.as.value = amrit_napi_f32(r_value_raw);") &&
+      widthsShim.includes("if (r_flag) r.as.value = nish_napi_f32(r_value_raw);") &&
       widthsShim.includes("if (!r_flag) r.as.error = (uint8_t)r_error_raw;") &&
       !widthsShim.includes("not bridged"),
     widthsShim || widths.stderr
@@ -2219,8 +2219,8 @@ if (!only || "interop".includes(only)) {
 
   // ---- WP4/WP8: arrays and strings across the boundary ----------------------------
   // examples/arrays.ts takes and returns Int32Array / Float64Array / BigInt64Array. Checks:
-  //   - the header spells a read-only array parameter `const amrit_array *` and a written one
-  //     `amrit_array *`, compiles under -Werror, and a C driver passes a stack-built header
+  //   - the header spells a read-only array parameter `const nish_array *` and a written one
+  //     `nish_array *`, compiles under -Werror, and a C driver passes a stack-built header
   //   - the .d.ts declares typed-array signatures, type-checks, and its companion .mjs loader
   //     marshals typed arrays into the wasm build (linked with runtime/runtime_wasm.c),
   //     copies results out, copies written parameters back, and survives a trap
@@ -2228,10 +2228,10 @@ if (!only || "interop".includes(only)) {
   //     fresh typed arrays, bridges strings, and agrees with the wasm build value for value
   const arraysHeader = arrays.status === 0 ? fs.readFileSync(sidecar("arrays", "h"), "utf8") : "";
   check(
-    "arrays.h: read-only array parameters are `const amrit_array *`, written ones `amrit_array *`, results `amrit_array *`",
-    arraysHeader.includes("double sumF64(const amrit_array *xs);") &&
-      arraysHeader.includes("void fill(amrit_array *xs, int32_t v);") &&
-      arraysHeader.includes("amrit_array *scale(const amrit_array *xs, double k);") &&
+    "arrays.h: read-only array parameters are `const nish_array *`, written ones `nish_array *`, results `nish_array *`",
+    arraysHeader.includes("double sumF64(const nish_array *xs);") &&
+      arraysHeader.includes("void fill(nish_array *xs, int32_t v);") &&
+      arraysHeader.includes("nish_array *scale(const nish_array *xs, double k);") &&
       arraysHeader.includes("-- xs: int32_t elements, returns int64_t elements"),
     arraysHeader || arrays.stderr
   );
@@ -2241,7 +2241,7 @@ if (!only || "interop".includes(only)) {
     arraysDts.includes("  scale(xs: Float64Array, k: number): Float64Array;") &&
       arraysDts.includes("  sumI64(xs: BigInt64Array): bigint;") &&
       arraysDts.includes("  fill(xs: Int32Array, v: number): void;") &&
-      arraysDts.includes("  amrit_reset_arena(): void;"),
+      arraysDts.includes("  nish_reset_arena(): void;"),
     arraysDts || arrays.stderr
   );
   check(
@@ -2249,7 +2249,7 @@ if (!only || "interop".includes(only)) {
     fs.existsSync(sidecar("arrays", "mjs")) &&
       fs
         .readFileSync(sidecar("arrays", "mjs"), "utf8")
-        .includes("raw.amrit_alloc_array(BigInt(elemSize), BigInt(value.length))"),
+        .includes("raw.nish_alloc_array(BigInt(elemSize), BigInt(value.length))"),
     arrays.stderr
   );
   if (fs.existsSync(sidecar("arrays", "d.ts"))) {
@@ -2267,12 +2267,12 @@ if (!only || "interop".includes(only)) {
         '#include "arrays.h"',
         "int main(void) {",
         "  int32_t buf[4] = {1, 2, 3, 4};",
-        "  amrit_array xs = {4, 4, (char *)buf}; /* a host buffer, borrowed for the calls */",
+        "  nish_array xs = {4, 4, (char *)buf}; /* a host buffer, borrowed for the calls */",
         "  int32_t before = sumI32(&xs);",
         "  fill(&xs, 5);",
-        "  amrit_array *sq = squares(4); /* arena-owned */",
+        "  nish_array *sq = squares(4); /* arena-owned */",
         '  printf("sumI32 = %d; after fill buf[3] = %d, sum %d; squares len %llu last %d\\n", before, buf[3], sumI32(&xs), (unsigned long long)sq->len, ((int32_t *)sq->data)[3]);',
-        "  amrit_free_arena();",
+        "  nish_free_arena();",
         "  return 0;",
         "}",
         "",
@@ -2286,7 +2286,7 @@ if (!only || "interop".includes(only)) {
     );
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
-      "a -Werror C driver passes a stack-built amrit_array through arrays.h and reads a returned one",
+      "a -Werror C driver passes a stack-built nish_array through arrays.h and reads a returned one",
       run !== null &&
         String(run.stdout).trim() === "sumI32 = 10; after fill buf[3] = 5, sum 20; squares len 4 last 9",
       String(cc.stderr) + (run ? String(run.stdout) + String(run.stderr) : "")
@@ -2493,7 +2493,7 @@ if (!only) {
 }
 
 // ---- WP14: self-hosting ---------------------------------------------------------------
-// `self/` is the compiler being written in AmritScript (docs/wp14-selfhost.md). It is
+// `self/` is the compiler being written in Nish (docs/wp14-selfhost.md). It is
 // checked here rather than in tests/cases because it is a program, not a construct:
 // the property is that stage0 compiles every module of it cleanly, which is the
 // floor the staged bootstrap stands on. As phases land this section grows into the
@@ -2532,7 +2532,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     );
   }
 
-  // The DWARF `producer` string is "amritc <version>" on both sides, and stage1
+  // The DWARF `producer` string is "nish <version>" on both sides, and stage1
   // cannot read package.json to find the version, so it is a constant in
   // `self/branding.ts`. This is what stops that constant going stale: a
   // disagreement here is a byte of every `-g` module the two compilers would
@@ -2542,8 +2542,8 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     const branding = fs.readFileSync(brandingTs, "utf8");
     const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
     check(
-      `self/branding.ts names the CLI and version stage0 does (amritc ${pkg.version})`,
-      branding.includes(`export const CLI: string = "amritc";`) &&
+      `self/branding.ts names the CLI and version stage0 does (nish ${pkg.version})`,
+      branding.includes(`export const CLI: string = "nish";`) &&
         branding.includes(`export const VERSION: string = "${pkg.version}";`),
       branding
         .split("\n")
@@ -2589,7 +2589,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 
     // S2: the same shape one level up. Every positive program in the corpus
     // must parse to the tree the `typescript` parser builds, span for span;
-    // the files the oracle skips are the forbidden constructs AmritScript-0 has
+    // the files the oracle skips are the forbidden constructs Nish-0 has
     // no grammar for yet, and that count is the S2 gate's own measurement.
     const parserOracle = spawnSync("node", [path.join(root, "tests", "parser_oracle.js")], {
       cwd: root,
@@ -2850,7 +2850,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // recipe and the driver, not the equalities.
     const shipDir = path.join(buildDir, "selfhost");
     fs.rmSync(shipDir, { recursive: true, force: true });
-    const compiler = path.join(shipDir, "amritc");
+    const compiler = path.join(shipDir, "nish");
     const shipped = spawnSync(
       "bash",
       [
@@ -2886,7 +2886,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           fs.existsSync(`${hello}.ll`) &&
           ranHello !== null &&
           ranHello.status === 0 &&
-          ranHello.stdout === "hello from AmritScript\n",
+          ranHello.stdout === "hello from Nish\n",
         `${one.stdout}${one.stderr}${ranHello ? `ran: ${ranHello.status} ${JSON.stringify(ranHello.stdout)}` : ""}`
       );
 
@@ -2951,7 +2951,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         ourVersion.status === 0 &&
           ourVersion.stdout === theirVersion.stdout &&
           ourVersion.stdout.trim() ===
-            `amritc ${JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version}`,
+            `nish ${JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version}`,
         `ours ${JSON.stringify(ourVersion.stdout)} theirs ${JSON.stringify(theirVersion.stdout)}`
       );
 
@@ -3343,10 +3343,10 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         "the self-hosted compiler: an internal error exits 70 and says what it cannot show",
         ice !== null &&
           ice.status === 70 &&
-          ice.stderr.startsWith(`amritc ${iceVersion}: internal compiler error\n`) &&
+          ice.stderr.startsWith(`nish ${iceVersion}: internal compiler error\n`) &&
           ice.stderr.includes("  emitter: no callee recorded for `f`\n") &&
-          ice.stderr.includes("AMRITC_DEBUG=1 adds nothing") &&
-          ice.stderr.includes("This is a bug in amritc, not in your program."),
+          ice.stderr.includes("NISH_DEBUG=1 adds nothing") &&
+          ice.stderr.includes("This is a bug in nish, not in your program."),
         `${iceBuild.status}: ${iceBuild.stderr}${ice ? `ran ${ice.status}: ${ice.stderr}` : ""}`
       );
     }
@@ -3362,7 +3362,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
 
 // ---- WP9: bench --------------------------------------------------------------------
 // The benchmark programs in bench/ must keep printing identical checksums across
-// AmritScript, C and (when rustc is installed) Rust. `bench/run.mjs --validate` builds
+// Nish, C and (when rustc is installed) Rust. `bench/run.mjs --validate` builds
 // every variant (speed, --nsw, size profile, C, Rust, Rust native) at a small size and
 // compares the outputs; nothing is timed. Also: `--target host` pins a module to a
 // data layout, so `opt -O2` vectorises it without `-mtriple`, and `--nsw` flags
@@ -3382,7 +3382,7 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
       { cwd: root, encoding: "utf8" }
     );
     check(
-      "bench: fib(25) and sieve(1e5) print the same checksum from AmritScript, C and Rust (Rust skipped without rustc)",
+      "bench: fib(25) and sieve(1e5) print the same checksum from Nish, C and Rust (Rust skipped without rustc)",
       v.status === 0 &&
         v.stdout.includes("checksums agree") &&
         v.stdout.includes("fib: 75025") &&
@@ -3495,7 +3495,7 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
 // ---- WP12: exit codes --------------------------------------------------------------
 // The CLI's contract (docs/wp12-release.md): 0 ok, 1 compile error, 2 usage, 3 toolchain,
 // 70 internal compiler error. Each failure mode is driven from outside the compiler:
-// AMRITC_SIMULATE_ICE=1 is the test hook for the ICE path, an empty PATH stands in
+// NISH_SIMULATE_ICE=1 is the test hook for the ICE path, an empty PATH stands in
 // for a machine without clang, and CC=<stub> makes scripts/build.sh fail after the IR
 // was written.
 if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
@@ -3509,15 +3509,15 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
 
   const v = run(["--version"]);
   check(
-    `--version prints "amritc ${pkgVersion}" and exits 0`,
-    v.status === 0 && v.stdout.trim() === `amritc ${pkgVersion}`,
+    `--version prints "nish ${pkgVersion}" and exits 0`,
+    v.status === 0 && v.stdout.trim() === `nish ${pkgVersion}`,
     v.stdout + v.stderr
   );
 
   const noInputs = run([]);
   check(
     "no inputs: usage on stderr, exit 2",
-    noInputs.status === 2 && noInputs.stderr.includes("usage: amritc"),
+    noInputs.status === 2 && noInputs.stderr.includes("usage: nish"),
     noInputs.stderr
   );
 
@@ -3528,7 +3528,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   const help = run(["--help"]);
   check(
     "--help: usage on stdout, nothing on stderr, exit 0",
-    help.status === 0 && help.stdout.includes("usage: amritc") && help.stderr === "",
+    help.status === 0 && help.stdout.includes("usage: nish") && help.stderr === "",
     help.stdout + help.stderr
   );
   const shortHelp = run(["-h"]);
@@ -3564,7 +3564,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   // source span. A wrapper that asked for JSON and got an empty stdout plus a
   // non-zero exit has to scrape stderr to find out what happened, which is the
   // thing `--json` exists to avoid. Band 0 marks what is wrong with the run
-  // rather than with the program: AS0002 toolchain, AS0003 internal error.
+  // rather than with the program: NL0002 toolchain, NL0003 internal error.
   const jsonLine = (r) => {
     const first = r.stdout.split("\n").find((l) => l.startsWith("{"));
     try {
@@ -3575,27 +3575,27 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   };
 
   const iceJson = run([entry, "--json", "-o", path.join(wp12Dir, "ice_json.ll")], {
-    AMRITC_SIMULATE_ICE: "1",
+    NISH_SIMULATE_ICE: "1",
   });
   const iceObj = jsonLine(iceJson);
   check(
-    "--json: an internal compiler error is an AS0003 object on stdout, exit 70, human report still on stderr",
+    "--json: an internal compiler error is an NL0003 object on stdout, exit 70, human report still on stderr",
     iceJson.status === 70 &&
       iceObj !== null &&
-      iceObj.code === "AS0003" &&
+      iceObj.code === "NL0003" &&
       iceObj.severity === "error" &&
       iceObj.message.includes("internal compiler error") &&
-      iceJson.stderr.includes("This is a bug in amritc"),
+      iceJson.stderr.includes("This is a bug in nish"),
     iceJson.stdout + iceJson.stderr
   );
 
   const ccJson = run([entry, "--json", "--link", path.join(wp12Dir, "cc_json")], { CC: "/nonexistent-cc" });
   const ccObj = jsonLine(ccJson);
   check(
-    "--json: no usable C compiler is an AS0002 object on stdout, exit 3, nothing on stderr",
+    "--json: no usable C compiler is an NL0002 object on stdout, exit 3, nothing on stderr",
     ccJson.status === 3 &&
       ccObj !== null &&
-      ccObj.code === "AS0002" &&
+      ccObj.code === "NL0002" &&
       ccObj.message.includes("no usable C compiler") &&
       ccJson.stderr === "",
     ccJson.stdout + ccJson.stderr
@@ -3607,7 +3607,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--json: an unreadable input is an object on stdout with a code, exit 1",
     missingJson.status === 1 &&
       missingObj !== null &&
-      /^AS\d{4}$/.test(missingObj.code) &&
+      /^NL\d{4}$/.test(missingObj.code) &&
       missingObj.message.includes("ENOENT"),
     missingJson.stdout + missingJson.stderr
   );
@@ -3621,23 +3621,23 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     missing.stderr
   );
 
-  const ice = run([entry, "-o", path.join(wp12Dir, "ice.ll")], { AMRITC_SIMULATE_ICE: "1" });
+  const ice = run([entry, "-o", path.join(wp12Dir, "ice.ll")], { NISH_SIMULATE_ICE: "1" });
   check(
     "internal error: exit 70, names the file, asks for a bug report, no stack trace",
     ice.status === 70 &&
       ice.stderr.includes("internal compiler error while compiling " + entry) &&
       ice.stderr.includes("TypeError: simulated internal compiler error") &&
-      ice.stderr.includes("github.com/amritk/compiler/issues") &&
-      ice.stderr.includes("AMRITC_DEBUG=1") &&
+      ice.stderr.includes("github.com/amritk/nish/issues") &&
+      ice.stderr.includes("NISH_DEBUG=1") &&
       !/^\s+at /m.test(ice.stderr),
     ice.stderr
   );
   const iceDebug = run([entry, "-o", path.join(wp12Dir, "ice.ll")], {
-    AMRITC_SIMULATE_ICE: "1",
-    AMRITC_DEBUG: "1",
+    NISH_SIMULATE_ICE: "1",
+    NISH_DEBUG: "1",
   });
   check(
-    "internal error with AMRITC_DEBUG=1: exit 70 and the stack trace is printed",
+    "internal error with NISH_DEBUG=1: exit 70 and the stack trace is printed",
     iceDebug.status === 70 && /^\s+at /m.test(iceDebug.stderr),
     iceDebug.stderr
   );
@@ -3680,7 +3680,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
 }
 
 // ---- WP16: the ambient declarations -------------------------------------------------
-// `runtime/amritc.d.ts` is what makes an AmritScript program legal TypeScript to
+// `runtime/nish.d.ts` is what makes an Nish program legal TypeScript to
 // `tsc` and to an editor, not just to this compiler's parser. The claim is only
 // worth what it is tested against, so:
 //   - the file itself type-checks under --strict;
@@ -3697,7 +3697,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   try {
     tscBin = require.resolve("typescript/bin/tsc");
   } catch {}
-  const declarations = path.join(root, "runtime", "amritc.d.ts");
+  const declarations = path.join(root, "runtime", "nish.d.ts");
   /** Type-check `files` against the ambient declarations with a project of their own. */
   const typeCheck = (name, files) => {
     const config = path.join(ambientDir, `tsconfig.${name}.json`);
@@ -3720,7 +3720,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   };
 
   const own = typeCheck("self", []);
-  check("runtime/amritc.d.ts type-checks under tsc --strict", own.ok, own.output);
+  check("runtime/nish.d.ts type-checks under tsc --strict", own.ok, own.output);
 
   const resultCases = fs
     .readdirSync(casesDir)
@@ -3736,12 +3736,12 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   const unchecked = path.join(casesDir, "reject_result_value_unchecked.ts");
   const refused = typeCheck("narrowing", [unchecked]);
   check(
-    "tsc refuses `r.value` before the discriminant test, exactly as amritc does",
+    "tsc refuses `r.value` before the discriminant test, exactly as nish does",
     !refused.ok && refused.output.includes("Property 'value' does not exist"),
     refused.output
   );
 
-  // The declarations claim a direction, not a coincidence: a program amritc
+  // The declarations claim a direction, not a coincidence: a program nish
   // accepts should never be one tsc refuses. `res_*` above tests that claim on
   // the `Result` surface; this tests it on every accepted case there is, which
   // is the whole language. Two cases are listed because the divergence is real
@@ -3751,7 +3751,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       "arr_typed_views.ts",
       // `Int32Array` and friends name the element-typed array here and the JS
       // view in lib.es5; redeclaring them would break every other lib type.
-      "typed-array aliases (see the note at the foot of runtime/amritc.d.ts)",
+      "typed-array aliases (see the note at the foot of runtime/nish.d.ts)",
     ],
     [
       "cls_extends_chain.ts",
@@ -3765,12 +3765,12 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
     .filter((f) => f.endsWith(".ts") && !f.startsWith("reject_") && !AMBIENT_DIVERGENCES.has(f));
   const everyCase = typeCheck("accepted", acceptedCases.map((f) => path.join(casesDir, f)));
   check(
-    `tsc accepts every case amritc accepts, against the ambient declarations (${acceptedCases.length} cases, ${AMBIENT_DIVERGENCES.size} documented divergences)`,
+    `tsc accepts every case nish accepts, against the ambient declarations (${acceptedCases.length} cases, ${AMBIENT_DIVERGENCES.size} documented divergences)`,
     everyCase.ok,
     everyCase.output
   );
 
-  // And on the largest AmritScript program there is: the compiler itself.
+  // And on the largest Nish program there is: the compiler itself.
   const selfDir = path.join(root, "self");
   const selfModules = fs
     .readdirSync(selfDir)
@@ -3778,7 +3778,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
     .map((f) => path.join(selfDir, f));
   const selfCheck = typeCheck("stage1", selfModules);
   // `a.pop()` is `T` here and `T | undefined` in lib.es5 (the foot of
-  // runtime/amritc.d.ts says why it stays that way), so the one call in
+  // runtime/nish.d.ts says why it stays that way), so the one call in
   // `self/checker.ts` that pops without a null check is the only diagnostic
   // this may report. Anything else is a hole in the declarations.
   const selfErrors = selfCheck.output
@@ -3800,8 +3800,8 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
 
 // ---- WP12: package ------------------------------------------------------------------
 // The npm tarball must be self-contained: `npm pack`, install it into a temporary prefix,
-// and drive the installed `amritc` from an unrelated directory. That proves the `files`
-// whitelist ships runtime/runtime.c, runtime/amritc.h and scripts/build.sh, and that the
+// and drive the installed `nish` from an unrelated directory. That proves the `files`
+// whitelist ships runtime/runtime.c, runtime/nish.h and scripts/build.sh, and that the
 // CLI resolves them from its own package root rather than from the cwd.
 if (!only || "package".includes(only) || "wp12".includes(only)) {
   const pkgDir = path.join(buildDir, "wp12-package");
@@ -3836,16 +3836,16 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "dist/index.js",
       "dist/version.js",
       "runtime/runtime.c",
-      "runtime/amritc.h",
-      "runtime/amritc.d.ts",
-      "runtime/amritscript.mjs",
+      "runtime/nish.h",
+      "runtime/nish.d.ts",
+      "runtime/nish.mjs",
       "scripts/build.sh",
       "LICENSE",
       "docs/INSTALL.md",
     ];
     const absent = required.filter((f) => !files.includes(f));
     check(
-      "npm pack includes everything --link and `node --import` need (runtime.c, amritc.h, amritc.d.ts, amritscript.mjs, build.sh) plus LICENSE/INSTALL.md",
+      "npm pack includes everything --link and `node --import` need (runtime.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus LICENSE/INSTALL.md",
       absent.length === 0,
       absent.join("\n")
     );
@@ -3884,7 +3884,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
         install.stdout + install.stderr
       );
       if (install.status === 0) {
-        const bin = path.join(prefix, "node_modules", ".bin", "amritc");
+        const bin = path.join(prefix, "node_modules", ".bin", "nish");
         const work = path.join(pkgDir, "elsewhere");
         fs.mkdirSync(work, { recursive: true });
         fs.writeFileSync(
@@ -3893,13 +3893,13 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
         );
         const ver = spawnSync(bin, ["--version"], { cwd: work, encoding: "utf8" });
         check(
-          "installed amritc --version works from an unrelated cwd",
-          ver.status === 0 && ver.stdout.trim() === `amritc ${info.version}`,
+          "installed nish --version works from an unrelated cwd",
+          ver.status === 0 && ver.stdout.trim() === `nish ${info.version}`,
           ver.stdout + ver.stderr
         );
         const link = spawnSync(bin, ["hello.ts", "--link", "hello"], { cwd: work, encoding: "utf8" });
         check(
-          "installed amritc hello.ts --link works from an unrelated cwd",
+          "installed nish hello.ts --link works from an unrelated cwd",
           link.status === 0 && fs.existsSync(path.join(work, "hello")),
           link.stderr
         );
@@ -3916,7 +3916,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
           encoding: "utf8",
         });
         check(
-          "installed amritc compiles examples/add.ts to IR from an unrelated cwd",
+          "installed nish compiles examples/add.ts to IR from an unrelated cwd",
           ir.status === 0 && fs.existsSync(path.join(work, "add.ll")),
           ir.stderr
         );
@@ -3950,7 +3950,7 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
 
   // The smaller, unrewritten claim beside it: an f64-mode program run as the
   // TypeScript it is, under `node --experimental-strip-types` with
-  // runtime/amritscript.mjs supplying the globals Node lacks. Nothing is
+  // runtime/nish.mjs supplying the globals Node lacks. Nothing is
   // rewritten, so only the divergences listed in the runner may differ — they
   // live in the operators and the object model, where a prelude cannot reach.
   // docs/RUN_UNDER_NODE.md states the overlap.

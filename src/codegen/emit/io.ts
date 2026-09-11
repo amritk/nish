@@ -1,29 +1,29 @@
 /**
  * Process and file builtins (WP7), checked by `checker/io.ts`.
  *
- *   process.exit(code)          call void @amrit_exit(i32 code)   then `unreachable`
- *   readFileSync(path)          call i8* @amrit_read_file(i8* path)
- *   readFileSyncOrNull(path)    call i8* @amrit_read_file_or_null(i8* path)
- *   write(s) / writeError(s)    call void @amrit_write(i8* s, i32 fd, i1 false)
- *   panic(message)              call void @amrit_write(i8* m, i32 2, i1 true)
- *                               then @amrit_exit(i32 1) and `unreachable`
- *   writeFileSync(path, data)   call void @amrit_write_file(i8* path, i8* data)
- *   appendFileSync(path, data)  call void @amrit_append_file(i8* path, i8* data)
- *   mkdirSync(path)             call zeroext i1 @amrit_mkdir(i8* path)
- *   spawnSync(argv)             call i32 @amrit_spawn(%struct.amrit_array* argv)
- *   isDirectorySync(path)       call zeroext i1 @amrit_is_dir(i8* path)
- *   getenv(name)                call i8* @amrit_getenv(i8* name)
- *   process.argv                load %struct.amrit_array*, %struct.amrit_array** @amrit_argv
- *   process.platform            call i8* @amrit_platform()
- *   process.arch                call i8* @amrit_arch()
+ *   process.exit(code)          call void @nish_exit(i32 code)   then `unreachable`
+ *   readFileSync(path)          call i8* @nish_read_file(i8* path)
+ *   readFileSyncOrNull(path)    call i8* @nish_read_file_or_null(i8* path)
+ *   write(s) / writeError(s)    call void @nish_write(i8* s, i32 fd, i1 false)
+ *   panic(message)              call void @nish_write(i8* m, i32 2, i1 true)
+ *                               then @nish_exit(i32 1) and `unreachable`
+ *   writeFileSync(path, data)   call void @nish_write_file(i8* path, i8* data)
+ *   appendFileSync(path, data)  call void @nish_append_file(i8* path, i8* data)
+ *   mkdirSync(path)             call zeroext i1 @nish_mkdir(i8* path)
+ *   spawnSync(argv)             call i32 @nish_spawn(%struct.nish_array* argv)
+ *   isDirectorySync(path)       call zeroext i1 @nish_is_dir(i8* path)
+ *   getenv(name)                call i8* @nish_getenv(i8* name)
+ *   process.argv                load %struct.nish_array*, %struct.nish_array** @nish_argv
+ *   process.platform            call i8* @nish_platform()
+ *   process.arch                call i8* @nish_arch()
  *
- * `@amrit_argv` is a runtime global that the entry wrapper fills with
- * `amrit_argv_init(argc, argv)` before `amrit_main` runs (emitter.ts), so a
+ * `@nish_argv` is a runtime global that the entry wrapper fills with
+ * `nish_argv_init(argc, argv)` before `nish_main` runs (emitter.ts), so a
  * read is one load of a pointer that never changes afterwards; it still
  * counts as a memory read (the function is at most `readonly`, never
  * `readnone`). The array is an ordinary `string[]` from there on.
  *
- * `amrit_exit` is declared `noreturn`; the `unreachable` that follows closes
+ * `nish_exit` is declared `noreturn`; the `unreachable` that follows closes
  * the basic block, which is what lets a non-void function end with
  * `process.exit(n);` (the checker already treats it as a terminator). The
  * attribute analysis drops `willreturn` from every function that can reach
@@ -34,7 +34,7 @@
  * passing a parameter to them does not make it escape.
  *
  * `spawnSync` is the exception to that last sentence, and the only builtin
- * whose pointer argument the runtime keeps: `amrit_spawn` copies each
+ * whose pointer argument the runtime keeps: `nish_spawn` copies each
  * element's bytes pointer into an arena vector that outlives the call, so the
  * array escapes. `isSpawnCall` below is what tells `classifyUse` in
  * attributes.ts, which would otherwise hand the caller a `nocapture` it cannot
@@ -61,23 +61,23 @@ function stringArgs(ctx: EmitContext, expr: ts.CallExpression): string {
 const processExit: BuiltinCall = {
   emit: (ctx, expr) => {
     const code = ctx.emitExpression(expr.arguments[0]);
-    ctx.fn.emit(`call void ${ctx.useRuntime("amrit_exit")}(i32 ${code})`);
+    ctx.fn.emit(`call void ${ctx.useRuntime("nish_exit")}(i32 ${code})`);
     ctx.fn.emit("unreachable");
     return "void";
   },
-  callees: () => ["amrit_exit"],
+  callees: () => ["nish_exit"],
 };
 
 const readFileSync: BuiltinCall = {
   emit: (ctx, expr) =>
-    ctx.fn.emitValue(`call i8* ${ctx.useRuntime("amrit_read_file")}(${stringArgs(ctx, expr)})`),
-  callees: () => ["amrit_read_file"],
+    ctx.fn.emitValue(`call i8* ${ctx.useRuntime("nish_read_file")}(${stringArgs(ctx, expr)})`),
+  callees: () => ["nish_read_file"],
 };
 
 const readFileSyncOrNull: BuiltinCall = {
   emit: (ctx, expr) =>
-    ctx.fn.emitValue(`call i8* ${ctx.useRuntime("amrit_read_file_or_null")}(${stringArgs(ctx, expr)})`),
-  callees: () => ["amrit_read_file_or_null"],
+    ctx.fn.emitValue(`call i8* ${ctx.useRuntime("nish_read_file_or_null")}(${stringArgs(ctx, expr)})`),
+  callees: () => ["nish_read_file_or_null"],
 };
 
 /** `write` / `writeError`: the bytes as they are, on fd 1 or 2. */
@@ -85,29 +85,29 @@ function streamWriter(fd: 1 | 2): BuiltinCall {
   return {
     emit: (ctx, expr) => {
       const text = ctx.emitExpression(expr.arguments[0]);
-      ctx.fn.emit(`call void ${ctx.useRuntime("amrit_write")}(i8* ${text}, i32 ${fd}, i1 false)`);
+      ctx.fn.emit(`call void ${ctx.useRuntime("nish_write")}(i8* ${text}, i32 ${fd}, i1 false)`);
       return "void";
     },
-    callees: () => ["amrit_write"],
+    callees: () => ["nish_write"],
   };
 }
 
 /**
  * `panic(message)`: the message and a newline on stderr, then exit 1 — the
  * same observable ending as the index panic, so a program has one failure
- * mode rather than two. No runtime function of its own: `amrit_write` and
- * `amrit_exit` already exist, and `amrit_exit` is `noreturn`, which is what makes
+ * mode rather than two. No runtime function of its own: `nish_write` and
+ * `nish_exit` already exist, and `nish_exit` is `noreturn`, which is what makes
  * the `unreachable` legal and lets a non-void function end with a panic.
  */
 const panic: BuiltinCall = {
   emit: (ctx, expr) => {
     const message = ctx.emitExpression(expr.arguments[0]);
-    ctx.fn.emit(`call void ${ctx.useRuntime("amrit_write")}(i8* ${message}, i32 2, i1 true)`);
-    ctx.fn.emit(`call void ${ctx.useRuntime("amrit_exit")}(i32 1)`);
+    ctx.fn.emit(`call void ${ctx.useRuntime("nish_write")}(i8* ${message}, i32 2, i1 true)`);
+    ctx.fn.emit(`call void ${ctx.useRuntime("nish_exit")}(i32 1)`);
     ctx.fn.emit("unreachable");
     return "void";
   },
-  callees: () => ["amrit_write", "amrit_exit"],
+  callees: () => ["nish_write", "nish_exit"],
 };
 
 function fileWriter(symbol: string): BuiltinCall {
@@ -123,15 +123,15 @@ function fileWriter(symbol: string): BuiltinCall {
 /** `mkdirSync(path)`: the C answer is already the language's `boolean`. */
 const mkdirSync: BuiltinCall = {
   emit: (ctx, expr) =>
-    ctx.fn.emitValue(`call zeroext i1 ${ctx.useRuntime("amrit_mkdir")}(${stringArgs(ctx, expr)})`),
-  callees: () => ["amrit_mkdir"],
+    ctx.fn.emitValue(`call zeroext i1 ${ctx.useRuntime("nish_mkdir")}(${stringArgs(ctx, expr)})`),
+  callees: () => ["nish_mkdir"],
 };
 
 /** `isDirectorySync(path)` (WP14 §7a): one `stat`, and a `boolean` out of it. */
 const isDirectorySync: BuiltinCall = {
   emit: (ctx, expr) =>
-    ctx.fn.emitValue(`call zeroext i1 ${ctx.useRuntime("amrit_is_dir")}(${stringArgs(ctx, expr)})`),
-  callees: () => ["amrit_is_dir"],
+    ctx.fn.emitValue(`call zeroext i1 ${ctx.useRuntime("nish_is_dir")}(${stringArgs(ctx, expr)})`),
+  callees: () => ["nish_is_dir"],
 };
 
 /**
@@ -142,8 +142,8 @@ const isDirectorySync: BuiltinCall = {
  */
 const getenv: BuiltinCall = {
   emit: (ctx, expr) =>
-    ctx.fn.emitValue(`call i8* ${ctx.useRuntime("amrit_getenv")}(${stringArgs(ctx, expr)})`),
-  callees: () => ["amrit_getenv"],
+    ctx.fn.emitValue(`call i8* ${ctx.useRuntime("nish_getenv")}(${stringArgs(ctx, expr)})`),
+  callees: () => ["nish_getenv"],
 };
 
 /**
@@ -156,13 +156,13 @@ const spawnSync: BuiltinCall = {
     ctx.declareType(ARRAY_TYPE);
     const argv = ctx.emitExpression(expr.arguments[0]);
     const status = ctx.fn.emitValue(
-      `call i32 ${ctx.useRuntime("amrit_spawn")}(${ARRAY_STRUCT}* ${argv})`
+      `call i32 ${ctx.useRuntime("nish_spawn")}(${ARRAY_STRUCT}* ${argv})`
     );
     return ctx.typeOf(expr).kind === "f64"
       ? ctx.fn.emitValue(`sitofp i32 ${status} to double`)
       : status;
   },
-  callees: () => ["amrit_spawn"],
+  callees: () => ["nish_spawn"],
 };
 
 /**
@@ -182,8 +182,8 @@ export const ioBuiltinCallEmitters: Record<string, BuiltinCall> = {
 export const ioFunctionEmitters: Record<string, BuiltinCall> = {
   readFileSync,
   readFileSyncOrNull,
-  writeFileSync: fileWriter("amrit_write_file"),
-  appendFileSync: fileWriter("amrit_append_file"),
+  writeFileSync: fileWriter("nish_write_file"),
+  appendFileSync: fileWriter("nish_append_file"),
   write: streamWriter(1),
   writeError: streamWriter(2),
   panic,
@@ -195,18 +195,18 @@ export const ioFunctionEmitters: Record<string, BuiltinCall> = {
 
 // ---- process.argv -------------------------------------------------------------------
 
-/** `process.argv`: the array pointer the entry wrapper stored in `@amrit_argv`; mirrors `checkProcessArgv`. */
+/** `process.argv`: the array pointer the entry wrapper stored in `@nish_argv`; mirrors `checkProcessArgv`. */
 namespacePropertyEmitters["process.argv"] = (ctx) => {
   ctx.declareType(ARRAY_TYPE);
   ctx.declareGlobal(ARGV_GLOBAL);
   const align = ctx.opts.optimizeAttributes ? ", align 8" : "";
-  return ctx.fn.emitValue(`load ${ARRAY_STRUCT}*, ${ARRAY_STRUCT}** @amrit_argv${align}`);
+  return ctx.fn.emitValue(`load ${ARRAY_STRUCT}*, ${ARRAY_STRUCT}** @nish_argv${align}`);
 };
 
 const isArgvRead = (node: ts.Node): node is ts.PropertyAccessExpression =>
   ts.isPropertyAccessExpression(node) && dottedName(node) === "process.argv";
 
-/** The load of `@amrit_argv` reads memory the function does not own: at most `readonly`. */
+/** The load of `@nish_argv` reads memory the function does not own: at most `readonly`. */
 factCollectors.push((program, node, facts) => {
   if (isArgvRead(node) && !isValueReceiver(program, node.expression)) facts.readsMemory = true;
 });
@@ -224,8 +224,8 @@ function machineProperty(symbol: string): NamespacePropertyEmitter {
   return (ctx) => ctx.fn.emitValue(`call i8* ${ctx.useRuntime(symbol)}()`);
 }
 
-namespacePropertyEmitters["process.platform"] = machineProperty("amrit_platform");
-namespacePropertyEmitters["process.arch"] = machineProperty("amrit_arch");
+namespacePropertyEmitters["process.platform"] = machineProperty("nish_platform");
+namespacePropertyEmitters["process.arch"] = machineProperty("nish_arch");
 
 /**
  * The other half of the pair above. The call itself is `readnone willreturn`,
@@ -236,6 +236,6 @@ namespacePropertyEmitters["process.arch"] = machineProperty("amrit_arch");
 factCollectors.push((program, node, facts) => {
   if (!ts.isPropertyAccessExpression(node) || isValueReceiver(program, node.expression)) return;
   const dotted = dottedName(node);
-  if (dotted === "process.platform") facts.callees.add("amrit_platform");
-  else if (dotted === "process.arch") facts.callees.add("amrit_arch");
+  if (dotted === "process.platform") facts.callees.add("nish_platform");
+  else if (dotted === "process.arch") facts.callees.add("nish_arch");
 });

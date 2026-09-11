@@ -1,4 +1,4 @@
-# AmritScript release: on a `v*` tag, run the full CI workflow (Ubuntu + macOS
+# Nish release: on a `v*` tag, run the full CI workflow (Ubuntu + macOS
 # test matrix, lint, smoke), then build the npm tarball and attach it to a
 # GitHub release whose notes are the matching CHANGELOG.md section.
 #
@@ -54,7 +54,7 @@ jobs:
           echo "tarball=build/release/$file" >> "$GITHUB_OUTPUT"
           tar -tzf "build/release/$file" | sed 's#^package/##' | sort | tee build/release/files.txt
           # The tarball must be usable on its own: `--link` needs these three.
-          for f in dist/index.js runtime/runtime.c runtime/amritc.h scripts/build.sh; do
+          for f in dist/index.js runtime/runtime.c runtime/nish.h scripts/build.sh; do
             grep -qx "$f" build/release/files.txt || { echo "::error::$f missing from tarball"; exit 1; }
           done
 
@@ -66,7 +66,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" "${{ steps.pack.outputs.tarball }}" \
-            --title "amritc $GITHUB_REF_NAME" \
+            --title "nish $GITHUB_REF_NAME" \
             --notes-file build/release/notes.md \
             --verify-tag
 

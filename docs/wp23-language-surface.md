@@ -23,7 +23,7 @@ holding once a value outlives every frame.
 
 Six of the eight items below were found the same way: by reading `self/` for
 comments that say *the language has no X*, and then asking what X would cost.
-`self/` is the largest AmritScript program in existence (25,706 lines, 54
+`self/` is the largest Nish program in existence (25,706 lines, 54
 modules) and it is written by people who also write the compiler, so where it
 works around a gap it usually says so in a sentence. Those sentences are the
 evidence sections below cite, and they are quoted rather than paraphrased.
@@ -44,7 +44,7 @@ Exactly one item here is functional: §4. The rest are shapes.
 Today:
 
 ```
-$ amritc alias.ts
+$ nish alias.ts
 alias.ts:1:1: error: Only top-level function declarations are supported in
 Phase 1 (found TypeAliasDeclaration)
 ```
@@ -94,7 +94,7 @@ Today `enum Kind { If = 1, While = 2 }` fails identically, with
 `(found EnumDeclaration)`. Phase 0 has an opinion about enums already and it is
 narrow: `checkEnum` (`src/validator.ts:232`) refuses only a member whose
 initialiser is not a numeric literal, with `Enum members must be numeric
-literals in AmritScript (enums lower to plain integers)`. MASTER_PLAN §3.2
+literals in Nish (enums lower to plain integers)`. MASTER_PLAN §3.2
 forbids "enums with computed values", not enums.
 
 **The decision: an enum is a DISTINCT type with `i32` representation.** That is
@@ -148,10 +148,10 @@ detail, and because two of them are places the sibling work has to choose:
 3. **`biome.json` has `noEnum: "error"`** repo-wide, mirroring what the
    validator refuses. It lints `examples/**` as well as `src/`, so an example
    or cookbook entry that uses an enum needs the rule relaxed for the
-   AmritScript-program half. Mechanical, but it is a file the sibling work
+   Nish-program half. Mechanical, but it is a file the sibling work
    touches and this note is where it is written down.
 
-`self/` itself does not adopt enums when they land: AmritScript-0 excludes them
+`self/` itself does not adopt enums when they land: Nish-0 excludes them
 by name ([wp14-selfhost.md](wp14-selfhost.md) §2), and converting 171 constants
 would rewrite the discriminant of every dispatch in the compiler while the
 bootstrap is the only thing checking the rewrite. That is the same posture
@@ -177,7 +177,7 @@ consumer:
 > non-zero exit has to scrape stderr to find out what happened, which is the
 > thing `--json` exists to avoid.
 
-stage0 honours it: `AMRITC_SIMULATE_ICE=1` plus `--json` produces an `AS0003`
+stage0 honours it: `NISH_SIMULATE_ICE=1` plus `--json` produces an `NL0003`
 object on stdout with exit 70, and `tests/run.js` checks the object field by
 field. **stage1 does not.** `self/ice.ts`'s `internalError` prints the human
 report and nothing else, and says so in a comment on the line that would have
@@ -289,7 +289,7 @@ What is at stake, measured rather than asserted. Over the 173 golden `.ll`
 files in `tests/cases/`, 65 of the 470 function-attribute groups carry
 `readnone` and 30 carry `readonly`. Over `self/` compiled by stage0 — 54
 modules, 1,046 `define`s — 30 functions are `readnone` and 73 are `readonly`,
-so about one function in ten of the largest AmritScript program in existence
+so about one function in ten of the largest Nish program in existence
 carries an effect attribute that a badly-placed global would withdraw. WP6 §1
 makes the coupling explicit in the other direction too: stack promotion is
 what makes some of those `readnone` in the first place ("a stack object is the
@@ -298,7 +298,7 @@ like `swapped` below is `readnone`").
 
 **For the `--json` case specifically the cost is zero, and it is worth saying
 why rather than being relieved about it.** `internalError` calls
-`console.error`, whose runtime entry `amrit_print` is `effect: "write"`
+`console.error`, whose runtime entry `nish_print` is `effect: "write"`
 (`src/codegen/runtime.ts`), and every one of the 38 call sites is
 `process.exit(internalError(...))`. So `internalError` and every caller of it
 is already `write` and already unattributed. The flag poisons nothing because
@@ -307,7 +307,7 @@ case and not a property of the feature.
 
 There is also a new IR object. Today the compiler emits no writable data symbol
 for user code at all: string literals are `private unnamed_addr constant` and
-the only `global` in a golden is `@amrit_arena = external global`, defined in
+the only `global` in a golden is `@nish_arena = external global`, defined in
 `runtime.c`. A module `let` would be the first `internal global` the compiler
 *defines*, which means a name in the flat symbol namespace (WP21 §5a again), a
 linkage decision, and a new line in a golden for every module that has one.
@@ -331,11 +331,11 @@ Restriction 4 is the answer, and it has to be part of the feature rather than a
 WP20 follow-up, because a program written against a shared global and then
 recompiled against a thread-local one is a program whose meaning changed
 silently. So: the `let` is thread-local from the first commit, exactly as
-WP20 T0 makes `@amrit_arena` thread-local, and a program that wants two threads
+WP20 T0 makes `@nish_arena` thread-local, and a program that wants two threads
 to share a counter has to say so with something this note does not propose.
 Two consequences follow honestly:
 
-- **It is not free.** WP20 §3.1 costs a thread-local `@amrit_arena` at "about
+- **It is not free.** WP20 §3.1 costs a thread-local `@nish_arena` at "about
   one extra register on the hot path" under initial-exec, worse under `-fPIC`.
   A scalar flag read once per internal error will never notice; a counter in a
   loop would.
@@ -612,7 +612,7 @@ that way.
 `const n: number = c` is `TS2322: Type 'string' is not assignable to type
 'number'`. So a byte-yielding `for...of` would be a construct that compiles
 here and means something else under `tsc` — and "every other rule in this
-repository exists to keep an AmritScript program a TypeScript program that
+repository exists to keep an Nish program a TypeScript program that
 `tsc --strict` also accepts" ([wp16-results.md](wp16-results.md) §5, which
 tests the claim rather than asserting it).
 
@@ -626,7 +626,7 @@ diagnostic class exists to warn about exactly it. The compiler would be
 shipping a construct its own warnings would flag.
 
 **And it would diverge from Node.** JavaScript's string iterator yields code
-points; AmritScript is byte-oriented all the way down —
+points; Nish is byte-oriented all the way down —
 `s.length` is the UTF-8 byte length, `s.charCodeAt(i)` is "the **byte** at `i`
 ... No call: a `load i8`", and `String.fromCharCode(c)` is the one-byte string
 of `c & 0xFF`. `tests/differential/` already goes to considerable trouble to
@@ -661,7 +661,7 @@ different program under `tsc`, and would allocate.
 Already declined in LANGUAGE.md, with an argument this note agrees with:
 
 > Only an integer switch lowers to LLVM's `switch` and a jump table; a string
-> switch would have been a chain of `amrit_str_eq` calls wearing a switch's
+> switch would have been a chain of `nish_str_eq` calls wearing a switch's
 > clothes, and `if`/`else` says that honestly.
 
 `self/target.ts:13` is the decision being lived with rather than complained
@@ -724,7 +724,7 @@ change that rule; it would only save the two lines around it.
 
 **The blocker is `undefined`.** `a?.b` evaluates to `undefined` when `a` is
 null, and `undefined` is forbidden in this language by name — as a type
-(`` `undefined` is forbidden in AmritScript; use `null` with a `T | null`
+(`` `undefined` is forbidden in Nish; use `null` with a `T | null`
 type ``, `reject_undefined_value`), as a value, and as the reason `void expr`
 is refused. It is also why `a.pop()` on an empty array panics rather than
 answering anything (`self/emit_arrays.ts:415`: "there is no `undefined` to
@@ -779,7 +779,7 @@ reviewed before more code is written.
    trigger be a WP20 stage rather than a count — since restriction 4 means the
    feature's meaning is settled by the threading model?
 
-4. **Whether `--json` parity for `AS0003` should be closed before §4 is
+4. **Whether `--json` parity for `NL0003` should be closed before §4 is
    decided at all.** This note recommends yes and recommends the parameter, but
    it is a WP19-shaped decision (a stated contract two compilers disagree
    about) rather than a language one, and `tests/self/parity.js` is where it
@@ -811,13 +811,13 @@ reviewed before more code is written.
   §4's recommendation is that it does not land at all yet; §5 and §6 are gated
   on WP18, which is WP15 item 8, which is not before M4. The honest default is
   the same one [wp20-threads.md](wp20-threads.md) §7 takes: 1.1 scope.
-- **Anything about `self/` adopting §2 or §3.** AmritScript-0 excludes both by
+- **Anything about `self/` adopting §2 or §3.** Nish-0 excludes both by
   name and a construct enters the language before it enters `self/`
   ([`.claude/selfhost.md`](../.claude/selfhost.md), rule 1). Converting 171
   module constants to enums is a package with its own bootstrap risk, and it is
   the same shape as wp18 §14 question 8.
-- **The diagnostic codes.** Every rule §2 to §6 would add is an `AS1xxx`
-  (Phase 0) or `AS2xxx` (checker) entry generated by
+- **The diagnostic codes.** Every rule §2 to §6 would add is an `NL1xxx`
+  (Phase 0) or `NL2xxx` (checker) entry generated by
   `scripts/gen-diagnostic-codes.mjs`, which appends and never renumbers. There
   is nothing to design here and inventing numbers in a design note would only
   make them wrong.

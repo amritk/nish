@@ -1,9 +1,9 @@
 /**
- * AmritScript builtins for Node (WP13 differential testing).
+ * Nish builtins for Node (WP13 differential testing).
  *
- * The differential runner (tests/differential/run.js) rewrites an AmritScript
+ * The differential runner (tests/differential/run.js) rewrites an Nish
  * program into plain JavaScript and runs it under Node with this module as
- * `__amrit`. Every helper here reproduces the *runtime* semantics the compiled
+ * `__nish`. Every helper here reproduces the *runtime* semantics the compiled
  * binary has (runtime/runtime.c plus the intrinsics in docs/wp7-runtime.md)
  * where JavaScript's own semantics differ:
  *
@@ -26,7 +26,7 @@
  *   - `toI32/toI64` from f64 saturate (NaN -> 0), integer conversions wrap.
  *   - `console.log(x)` never prints the `n` suffix of an i64 and writes
  *     synchronously so `process.exit` cannot lose output.
- *   - file I/O errors print `amritc: cannot read <path>` and exit 1.
+ *   - file I/O errors print `nish: cannot read <path>` and exit 1.
  *   - `process.argv[0]` is the program (the script here, the executable
  *     natively); `parseInt` is base 10 only and saturates into i32 (0 for no
  *     digits); `parseFloat`/`Number` accept ASCII whitespace, decimal forms,
@@ -201,7 +201,7 @@ export function strLen(x) {
   return typeof x === "string" ? Buffer.byteLength(x, "utf8") : x.length;
 }
 
-/** The UTF-8 bytes of `s`, which is what an AmritScript string holds. */
+/** The UTF-8 bytes of `s`, which is what an Nish string holds. */
 function bytesOf(s) {
   return Buffer.from(s, "utf8");
 }
@@ -228,7 +228,7 @@ export function indexOf(s, sub) {
   return bytesOf(s).indexOf(bytesOf(sub));
 }
 
-/** `amrit_str_at`: whether `sub`'s bytes sit at byte offset `at`. */
+/** `nish_str_at`: whether `sub`'s bytes sit at byte offset `at`. */
 function occursAt(s, at, sub) {
   const bytes = bytesOf(s);
   const needle = bytesOf(sub);
@@ -288,7 +288,7 @@ class Propagate {
   }
 }
 
-class AmritResult {
+class NishResult {
   constructor(ok, value, error) {
     this.ok = ok;
     if (ok) this.value = value;
@@ -315,22 +315,22 @@ class AmritResult {
 
 /** `Ok(v)`; `Ok()` on a `Result<void, E>` carries nothing. */
 export function Ok(value) {
-  return new AmritResult(true, value, undefined);
+  return new NishResult(true, value, undefined);
 }
 
 /** `Err(e)`. */
 export function Err(error) {
-  return new AmritResult(false, undefined, error);
+  return new NishResult(false, undefined, error);
 }
 
 /**
  * The `catch` half of `orReturn`: re-raise anything that is not a propagation,
  * and answer the `Err` the enclosing function should return otherwise. The
- * rewriter emits `return __amrit.caught(e)` and nothing else, so a genuine
+ * rewriter emits `return __nish.caught(e)` and nothing else, so a genuine
  * runtime error still reaches Node unchanged.
  */
 export function caught(thrown) {
-  if (thrown instanceof Propagate) return new AmritResult(false, undefined, thrown.error);
+  if (thrown instanceof Propagate) return new NishResult(false, undefined, thrown.error);
   throw thrown;
 }
 
@@ -351,7 +351,7 @@ export function idx(a, i) {
   return a[k];
 }
 
-/** `a.pop()`: the last element, or the bounds panic — AmritScript has no `undefined` to return. */
+/** `a.pop()`: the last element, or the bounds panic — Nish has no `undefined` to return. */
 export function pop(a) {
   if (a.length === 0) panicIndex(0, 0);
   return a.pop();
@@ -386,7 +386,7 @@ export function exit(code) {
 
 
 function ioFail(verb, path) {
-  fs.writeSync(2, `amritc: cannot ${verb} ${path}\n`);
+  fs.writeSync(2, `nish: cannot ${verb} ${path}\n`);
   process.exit(1);
 }
 
@@ -497,7 +497,7 @@ export function argv() {
 }
 
 const SPACES = "[ \\t\\n\\v\\f\\r]*";
-/** What `amrit_parse_number` recognises: strtod's decimal and hex-integer forms, or an exact `Infinity`. */
+/** What `nish_parse_number` recognises: strtod's decimal and hex-integer forms, or an exact `Infinity`. */
 const LITERAL = new RegExp(`^${SPACES}([+-]?)(Infinity|0[xX][0-9a-fA-F]+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?)`);
 const BLANK = new RegExp(`^${SPACES}$`);
 const WHOLE = new RegExp(`${LITERAL.source}${SPACES}$`);

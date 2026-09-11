@@ -1,4 +1,4 @@
-declare void @amrit_panic_div(i1 noundef zeroext) #1
+declare void @nish_panic_div(i1 noundef zeroext) #1
 
 define noundef i32 @sumTo(i32 noundef %n) #0 {
 entry:
@@ -24,7 +24,7 @@ for.body:
   br i1 %8, label %div.fail, label %div.ok
 
 div.fail:
-  call void @amrit_panic_div(i1 zeroext %4)
+  call void @nish_panic_div(i1 zeroext %4)
   unreachable
 
 div.ok:

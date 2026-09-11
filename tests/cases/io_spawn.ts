@@ -19,7 +19,7 @@ export function main(): number {
   console.log(`ok: ${shell("exit 0")}`);
   console.log(`status: ${shell("exit 7")}`);
   console.log(`signal: ${shell("kill -9 $$")}`);
-  console.log(`missing: ${run(["amritc-no-such-program"])}`);
+  console.log(`missing: ${run(["nish-no-such-program"])}`);
   const empty: string[] = [];
   console.log(`empty: ${run(empty)}`);
   return 0;

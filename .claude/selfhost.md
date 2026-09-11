@@ -24,7 +24,7 @@ construct still enters the language (and `src/`) before it enters `self/`, and
 
 | | Deliverable | State |
 | --- | --- | --- |
-| S1 | `self/lexer.ts` tokenises AmritScript-0 | **done** — `tests/lexer_oracle.js`, 612/612 files |
+| S1 | `self/lexer.ts` tokenises Nish-0 | **done** — `tests/lexer_oracle.js`, 612/612 files |
 | S2 | `self/parser.ts` builds the tree | **done** — `tests/parser_oracle.js`, 574/574 files |
 | S3 | the checker: types, scopes, side tables | **done** — `tests/self/checked_oracle.js`, 314/314 whole programs; `reject_oracle.js`, 222/222 cases |
 | S4 | the emitter: IR text | **done** — `tests/self/ir_oracle.js`, 324/324 programs byte for byte, and `interop_oracle.js`, 60 sidecars |
@@ -36,7 +36,7 @@ construct still enters the language (and `src/`) before it enters `self/`, and
 the six gates of `docs/wp19-stage0-retirement.md` §3 close, every rule below
 holds as written: stage0 is the oracle, `self/` is frozen against it, and a
 construct enters the language before it enters `self/`. Retirement moves the
-freeze's reference point from stage0 to the last released `amritc`; it does not
+freeze's reference point from stage0 to the last released `nish`; it does not
 lift it. Do not delete anything stage0 owns without reading that document —
 six oracles and the `IR(stage0) == IR(stage1)` equality go with it.
 
@@ -46,12 +46,12 @@ The oracles build compilers into temporary directories and delete them. To get
 one you can keep:
 
 ```bash
-npm run bootstrap                   # build/amritc (stage2, speed)
+npm run bootstrap                   # build/nish (stage2, speed)
 scripts/bootstrap.sh --verify       # the three equalities, with cmp
-build/amritc hello.ts --link hello  # -o, --link, --profile, its own directories
+build/nish hello.ts --link hello  # -o, --link, --profile, its own directories
 ```
 
-There is no wrapper any more: `scripts/amritc.sh` is deleted and
+There is no wrapper any more: `scripts/nish.sh` is deleted and
 `self/compile.ts` drives the whole thing (§3a D4, reversed in
 `docs/wp14-selfhost.md` §7a). It plans `-o <file.ll>`, `-o <dir>/` and
 `--link <exe>` by stage0's rules, validates `--profile speed|size|debug|wasi`
@@ -88,17 +88,17 @@ own tree and is held to a golden rather than to stage0
 
 1. **A construct enters the language before it enters `self/`.** Wanting it for
    the port is not a reason to skip its `reject_*` case or its cookbook entry.
-2. **`self/` is an AmritScript program.** `function` declarations, `interface` for
+2. **`self/` is an Nish program.** `function` declarations, `interface` for
    structs, no arrow functions, no `type` aliases — the opposite of the house
    rules for `src/`, because the language has neither. `biome.json` exempts it.
 3. **stage0 is the oracle.** Every phase is tested by comparing it with the
    corresponding stage0 output over the corpus, never by a hand-written golden.
 4. **The runtime budget still holds.** Lower inline rather than growing
    `runtime.c`.
-5. **AmritScript-0 does not grow quietly.** Adding a construct to the subset is an
+5. **Nish-0 does not grow quietly.** Adding a construct to the subset is an
    edit to `docs/wp14-selfhost.md` and a line in `CHANGELOG.md`.
 
-## AmritScript-0, the subset `self/` is written in
+## Nish-0, the subset `self/` is written in
 
 No generics, arrow functions, closures, nested functions or function values; no
 `type` aliases, `enum`, `namespace`, `static` members, getters or setters; no

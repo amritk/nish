@@ -82,7 +82,7 @@ function firstLine(output) {
   return line.replace(/^[^:]*:\d+:\d+: /, "");
 }
 
-/** Every positive AmritScript program of the corpus, plus `self/` itself. */
+/** Every positive Nish program of the corpus, plus `self/` itself. */
 function corpus() {
   return programs();
 }

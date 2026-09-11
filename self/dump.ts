@@ -1,5 +1,5 @@
 // The `--emit-checked` dump: the side tables stage1's checker filled in, in
-// exactly the format `amritc --emit-checked` prints them (`src/dump.ts`).
+// exactly the format `nish --emit-checked` prints them (`src/dump.ts`).
 //
 // It lives apart from the two programs that print it because both do: the
 // `self/compile.ts` driver writes it for `--emit-checked`, and
