@@ -67,6 +67,21 @@ const HAS_CLANG = has("clang");
 /** `-g` end to end: the linked binary is read with the dumper when there is one. */
 const HAS_LLVM_DWARFDUMP = has("llvm-dwarfdump");
 
+/**
+ * The DWARF producer, with the version replaced by a placeholder.
+ *
+ * `-g` writes `producer: "nish <version>"` into the compile unit, so two
+ * goldens would otherwise have to be regenerated at every release for a change
+ * that is not a lowering at all -- and the release pull request, which is the
+ * commit that bumps the version, would be red at itself. Applied to the golden
+ * as well as to the emitted IR, so a golden written before this is still read
+ * correctly. `llvm-as` runs on the emitted file rather than the golden, so the
+ * placeholder never reaches a verifier.
+ */
+function normaliseProducer(ir) {
+  return ir.replace(/producer: "nish [^"]*"/g, 'producer: "nish <version>"');
+}
+
 /** Module body with the `; ModuleID` / `source_filename` header removed. */
 function stripHeader(ir) {
   return ir
@@ -139,7 +154,14 @@ for (const name of cases) {
   }
 
   // `-g` names the working directory in `DIFile`; keep the golden machine-independent.
-  const actual = stripHeader(fs.readFileSync(outLl, "utf8")).split(root).join("<root>");
+  // It also names the compiler's version in the DWARF producer, which changes
+  // at every release and is not a fact about the lowering -- so normalise it
+  // the same way, and for the same reason one step further out: without this
+  // the release pull request's own version bump turns `dbg_locals` and
+  // `dbg_result` red, and a release cannot go green on itself. The version is
+  // still pinned, by the `--version` checks and by the branding/package.json
+  // equality check above; it is just not pinned once per golden.
+  const actual = normaliseProducer(stripHeader(fs.readFileSync(outLl, "utf8")).split(root).join("<root>"));
   if (!fs.existsSync(side("ll"))) {
     if (process.env.UPDATE_GOLDENS) {
       fs.writeFileSync(side("ll"), actual + "\n");
@@ -149,7 +171,7 @@ for (const name of cases) {
       continue;
     }
   }
-  const expected = fs.readFileSync(side("ll"), "utf8").trim();
+  const expected = normaliseProducer(fs.readFileSync(side("ll"), "utf8").trim());
   check(
     `${name}: IR matches golden`,
     actual === expected,
@@ -2708,6 +2730,37 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       `${checkedOracle.stdout}${checkedOracle.stderr}`
     );
 
+    // WP19 G2.4: the same four comparisons, written down. The oracle above and
+    // the three before it — types, diagnostics, symbols — prove stage1 correct
+    // by holding it against stage0, and prove nothing at all once `src/` is
+    // deleted. They are green, so stage1's output *is* the agreed behaviour;
+    // `tests/self/goldens/` is that output checked in, and `goldens.js`
+    // compares stage1's live answer against it with stage0 nowhere in the
+    // picture. Both run while stage0 lives: this one survives it.
+    //
+    // The seed is passed in rather than looked up, because the *suite* still
+    // has stage0 and the tool must not: `NISH_BOOTSTRAP` when CI set one (G3),
+    // and today's default seed otherwise, which is the same answer
+    // `scripts/bootstrap.sh` gives. After R6 the variable is the only source
+    // and this line loses its second half.
+    const goldenSeed = process.env.NISH_BOOTSTRAP || path.relative(root, cli);
+    const goldens = spawnSync(
+      "node",
+      [
+        path.join(root, "tests", "self", "goldens.js"),
+        ...(process.env.UPDATE_GOLDENS === "1" ? ["--update"] : []),
+        "--seed",
+        goldenSeed,
+      ],
+      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+    );
+    const goldensSummary = goldens.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/ prints what tests/self/goldens/ records, with no stage0 in it (${goldensSummary})`,
+      goldens.status === 0,
+      `${goldens.stdout}${goldens.stderr}`
+    );
+
     // The other half of milestone S3: refusing the same programs for the same
     // reason. A dump comparison cannot see that, so every `reject_*` case and
     // every `tests/link/` negative is run through stage1 and its own expected
@@ -2742,6 +2795,39 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       irOracle.status === 0,
       `${irOracle.stdout}${irOracle.stderr}`
     );
+
+    // WP19 G2.1: the successor to the oracle above and to the interop oracle
+    // below, which both die with stage0 (`docs/wp19-stage0-retirement.md` §2B).
+    // `nish-cmp` compares the **last released** `nish` with HEAD over the same
+    // corpus, byte for byte — Go's `toolstash -cmp` — and a difference has to
+    // be named in `CHANGELOG.md` before it goes green.
+    //
+    // Nish has no release yet, so on every machine today this skips rather
+    // than runs, and the skip is counted and says why: a comparison against
+    // nothing that reported PASS would be exactly the green-run-proving-less
+    // problem the summary at the bottom of this file exists to expose. Set
+    // `NISH_BOOTSTRAP` to the seed — the variable `scripts/bootstrap.sh` reads
+    // — and it runs, which is what CI does once 0.1.0 is out. Budget about
+    // three minutes for it when it does: it is the whole corpus twice, which
+    // is the same shape and the same cost as the oracle above.
+    if (!process.env.NISH_BOOTSTRAP) {
+      skip(
+        "NISH_BOOTSTRAP is unset: there is no released nish to compare HEAD against, so " +
+          "tests/nish-cmp.js (WP19 G2) did not run"
+      );
+    } else {
+      const nishCmp = spawnSync("node", [path.join(root, "tests", "nish-cmp.js")], {
+        cwd: root,
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      const nishCmpSummary = nishCmp.stdout.trim().split("\n").pop() ?? "";
+      check(
+        `the released nish and HEAD write the same bytes (${nishCmpSummary})`,
+        nishCmp.status === 0,
+        `${nishCmp.stdout}${nishCmp.stderr}`
+      );
+    }
 
     // The same equality, on programs nobody wrote. The corpus the oracle above
     // reads is checked in and therefore finite and adapted-to; the WP13 fuzzer

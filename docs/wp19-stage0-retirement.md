@@ -227,6 +227,57 @@ property — it catches regressions rather than disagreements, and it cannot fin
 a bug both versions share — but it is the property Rust and Go actually run,
 and it is the only one available once there is one implementation.
 
+#### What each dying oracle covered, and what covers it now
+
+G2 item 4 asks for the numbers in this document on the day. Measured at the
+commit that added `tests/self/goldens.js`, with all four oracles green — so
+what the goldens record is the *agreed* behaviour of both implementations, not
+one implementation's opinion:
+
+| Dying oracle | Covered | Recovered as | Size |
+| --- | --- | --- | --- |
+| `checked_oracle.js` | 319 programs, 303,096 dump lines of `--emit-checked` | `goldens/checked.txt` (262 programs outside `self/`, verbatim) and `goldens/checked_self.txt` (57 `self/` programs, stored by module) | 283 KB + 1,057 KB |
+| `types_oracle.js` | 119 lines: every LLVM type, alignment, printed name, flag and assignable pair | `goldens/types.txt`, verbatim | 3.6 KB |
+| `diagnostics_oracle.js` | 570 lines: the line/column index over every offset, the excerpt rendering, the `--json` shape, the sink's order and its cut | `goldens/diagnostics.txt`, verbatim | 19 KB |
+| `symbols_oracle.js` | 25 lines: what a name resolves to, what it reads as, where a narrowing ends | `goldens/symbols.txt`, verbatim | 1.0 KB |
+
+The `self/` dumps are 19.9 MB raw because a `self/` program is loaded whole and
+each of the 57 entries re-dumps every module it imports; the distinct content
+is 1.0 MB. **Storing it by module is a storage decision and not a coverage
+one**: the check still runs all 57 programs and compares every one of those
+19.9 MB of bytes. A module that ever dumps differently under two entries is a
+hard error naming both, so the deduplication cannot quietly become a loss.
+`tests/self/goldens.js` names neither `src/` nor `dist/`, and it was watched
+passing with both moved aside while all four oracles failed to start.
+
+#### The wording gap, which these goldens do not close
+
+The gate singles out diagnostic wordings, "presently proved by comparison and
+otherwise proved by nothing". The honest measurement:
+
+- The registry has **344 codes** (342 rules and 2 performance warnings).
+- The `reject_*` cases and the `tests/link/` negatives — which `reject_oracle.js`
+  owns and which **survive**, because their fragments are checked in — exercise
+  **148** of them. **196 are exercised by nothing that outlives stage0.**
+- On the 265 `reject_*` cases alone the two compilers do not reach the same
+  set: stage1 names **144** codes where stage0 names **182**. That 38-code
+  difference is §A3's declared class — stage1's parser refuses the syntax as
+  `NL0001` before Phase 0 can name the rule — so those 38 wordings are proved
+  today only by a comparison that is going away, on top of the 196 that no
+  surviving case reaches at all.
+- **The four goldens above close none of that gap**, which was measured rather
+  than assumed: every registry fragment was matched against each file.
+  `checked.txt` contains one registry wording (`NL2099`) that a `reject_*` case
+  already covers; the other four contain none. `diagnostics.txt` pins the
+  diagnostic *machinery*, not any rule's words.
+
+Exposed and worth naming: all six `NL3xxx` driver wordings (`NL3003` internal
+compiler error and `NL3008` unknown option among them), all six `NL4xxx`
+interop wordings, and both `NL9xxx` performance warnings. Closing this means
+writing `reject_*` cases, which is ordinary work that needs no design — and it
+is the remaining half of G2 item 4 rather than a nice-to-have, because after
+R6 an unexercised wording is proved by nothing at all.
+
 ### C. Distribution
 
 `npm install -g nish` ships `dist/`. `--version` reads `package.json` at
@@ -322,6 +373,16 @@ nothing else. Nish has no conditional compilation and will not grow any:
 there is no `#[cfg(bootstrap)]` to write, so the discipline is "do not use it
 yet", and a discipline that CI does not check is a comment.
 
+**State: the script half is done, the CI half is one operating system short.**
+`scripts/bootstrap.sh` reads `NISH_BOOTSTRAP`, and the `bootstrap` job in
+`ci.yml` downloads the last release's binary and builds `self/` with it. It
+runs on Linux alone, because `macos-latest` is commented out of the test matrix
+(`ci.yml` says why: `scripts/build.sh` needed a bash 3.2 fix, which has landed,
+and `scripts/smoke.sh` still uses `mapfile`, a bash 4 builtin, which has not).
+Until a release exists the job has no seed and says so in an annotation rather
+than passing quietly — a freeze nobody checked must not read as a freeze that
+held.
+
 ### G4 — The seed policy is written before it is needed
 
 One sentence in `wp12-release.md`, decided now rather than at the first
@@ -349,6 +410,19 @@ retirement unchanged — only its subject changes, from stage0 to the seed.
 **Why it blocks.** Retiring stage0 without this does not remove Node from the
 compiler; it removes the compiler.
 
+**State: one binary of the four, and the npm package is unchanged.** The
+release workflow builds `nish-<version>-x86_64-linux` — stage2, `--verify`d,
+and smoke-tested before it ships, because it is also the seed every later
+release bootstraps from. The other three are not built: `aarch64-linux` needs
+an arm64 runner, and both darwin binaries need `macos-latest`, which is out of
+the matrix. The npm package is still the Node tarball rather than a thin
+installer, so `nish` today is Node-free only if you take the binary rather than
+`npm install`. `--version` already has a source that is not `package.json` —
+`VERSION` in `self/branding.ts`, which `tests/run.js` pins against
+`package.json` — so that bullet is met by the binary the moment it is the
+product. This gate closes when the remaining three binaries and the installer
+land; nothing here is a decision against them.
+
 ### G6 — The provenance is recorded before it is lost
 
 The last commit at which both `IR(stage0, self/) == IR(stage1, self/)` and the
@@ -357,6 +431,40 @@ re-verifying the property from that tag — check out, `npm ci`, `npm run build`
 `node tests/self/bootstrap.js` — is written down in this file. Zero maintenance
 cost: it is a tag and a paragraph. It is the difference between "we gave up
 diverse double-compiling" and "we can no longer say anything about it".
+
+**The procedure.** From a clone of the repository, on a machine with Node
+22.18 or newer (`package.json#engines` at the tag) and an LLVM 18 `clang` on
+`PATH`, because each stage is linked:
+
+1. `git checkout ddc-<version>` — a detached checkout of the tag. The tree
+   there still contains `src/`, the TypeScript implementation that R6 deleted
+   from the branch, which is why this runs at the tag and nowhere else.
+2. `npm ci` — the devDependencies as the lockfile at the tag pins them,
+   including the `typescript` package stage0 parses with.
+3. `npm run build` — `tsc` into `dist/`. That is stage0.
+4. `node tests/self/bootstrap.js` — builds stage1 with stage0, stage2 with
+   stage1 and stage3 with stage2, and compares every module byte for byte.
+   `--verbose` names each module as it is compared.
+
+The script exits 0 and prints one line — `<N> modules, <N> bytes of IR:
+IR(stage0)==IR(stage1)==IR(stage2), stage3 == stage2 (<N> bytes)` — or prints
+`FAIL <reason>` naming the first module and line that differ, and exits 1.
+
+**A pass** re-establishes diverse double-compiling at that commit: two
+independently written implementations of Nish emit identical IR for every
+module of `self/`, and the compiler built from that IR reaches its fixed point.
+The property is demonstrated again rather than taken on trust from the tag,
+which is the only reason the tag is worth having.
+
+**A failure does not mean the tag is wrong.** It means the demonstration is no
+longer reproducible and the claim that rests on it is lost. Read the
+environment first — the Node version, the LLVM version, what `npm ci` actually
+resolved — because the tree at the tag is fixed and everything around it is
+not. If the tree builds cleanly and the IR still differs, nothing on the branch
+can repair it: the property comes from a second implementation and
+re-establishing it means writing one again (§2D). What can be said afterwards
+is that we can no longer say anything about diverse double-compiling, which is
+a worse position than having given it up deliberately.
 
 **Why it blocks.** It costs nothing and it is unrecoverable afterwards.
 
@@ -401,10 +509,10 @@ gate nobody has opened is how a runtime budget dies.
 | | Milestone | Done when |
 | --- | --- | --- |
 | **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) |
-| **R2** | The seed protocol | `NISH_BOOTSTRAP` in `scripts/bootstrap.sh`; CI builds `self/` with the last release on both operating systems; the policy sentence is in `wp12-release.md` (G3, G4) |
-| **R3** | Oracle succession | `nish-cmp` green over the corpus; `fuzz.js --stage1` repointed; the four survivors repointed to the seed; the lost coverage recovered as goldens, with the numbers written into §2B (G2) |
-| **R4** | Distribution | four binaries per release; the npm package installs one; `--version` has a new source; INSTALL.md and wp12 rewritten (G5) |
-| **R5** | Provenance | the `ddc-<version>` tag and the re-verification procedure (G6) |
+| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. Outstanding: the job runs on Linux only, and it has no seed to use until 0.1.0 ships (G3, G4) |
+| **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. Outstanding: the four survivors repointed to the seed, and the 196 diagnostic wordings that no surviving case exercises (§2B, "The wording gap") — which is now the half that matters (G2) |
+| **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the npm package becoming an installer, and the INSTALL.md/wp12 rewrite (G5) |
+| **R5** | Provenance | the re-verification procedure is written (G6); the `ddc-<version>` tag is cut at release time |
 | **R6** | The deletion | `src/`, the `typescript` runtime dependency, the six dead oracles, and every rule that names stage0 |
 
 R1 through R5 are all reversible. R6 is not, which is why it is last and why it

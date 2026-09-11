@@ -1,0 +1,121 @@
+# `self/types.ts` over the type list `tests/self/types.ts` builds: every LLVM type, alignment, printed name, flag and assignable pair.
+# Generated from stage1 by `npm run test:update` (or `node tests/self/goldens.js --update`).
+# WP19 gate G2.4: the coverage that dies with stage0, written down. Do not edit by hand.
+type 0 i32 | i32 | 4 01001 32
+type 1 i64 | i64 | 8 01001 64
+type 2 u8 | i8 | 1 01101 8
+type 3 u16 | i16 | 2 01101 16
+type 4 u32 | i32 | 4 01101 32
+type 5 u64 | i64 | 8 01101 64
+type 6 f32 | float | 4 00011 0
+type 7 f64 | double | 8 00011 0
+type 8 boolean | i1 | 1 00000 0
+type 9 string | i8* | 8 10000 0
+type 10 void | void | 1 00000 0
+type 11 Node | %struct.Node* | 8 10000 0
+type 12 Lexer | %struct.Lexer* | 8 10000 0
+type 13 i32[] | %struct.nish_array* | 8 10000 0
+type 14 i64[] | %struct.nish_array* | 8 10000 0
+type 15 u8[] | %struct.nish_array* | 8 10000 0
+type 16 u16[] | %struct.nish_array* | 8 10000 0
+type 17 u32[] | %struct.nish_array* | 8 10000 0
+type 18 u64[] | %struct.nish_array* | 8 10000 0
+type 19 f32[] | %struct.nish_array* | 8 10000 0
+type 20 f64[] | %struct.nish_array* | 8 10000 0
+type 21 boolean[] | %struct.nish_array* | 8 10000 0
+type 22 string[] | %struct.nish_array* | 8 10000 0
+type 23 void[] | %struct.nish_array* | 8 10000 0
+type 24 Node[] | %struct.nish_array* | 8 10000 0
+type 25 Lexer[] | %struct.nish_array* | 8 10000 0
+type 26 string | null | i8* | 8 00000 0
+type 27 Node | null | %struct.Node* | 8 00000 0
+type 28 Lexer | null | %struct.Lexer* | 8 00000 0
+type 29 i32[] | null | %struct.nish_array* | 8 00000 0
+type 30 i64[] | null | %struct.nish_array* | 8 00000 0
+type 31 u8[] | null | %struct.nish_array* | 8 00000 0
+type 32 u16[] | null | %struct.nish_array* | 8 00000 0
+type 33 u32[] | null | %struct.nish_array* | 8 00000 0
+type 34 u64[] | null | %struct.nish_array* | 8 00000 0
+type 35 f32[] | null | %struct.nish_array* | 8 00000 0
+type 36 f64[] | null | %struct.nish_array* | 8 00000 0
+type 37 boolean[] | null | %struct.nish_array* | 8 00000 0
+type 38 string[] | null | %struct.nish_array* | 8 00000 0
+type 39 void[] | null | %struct.nish_array* | 8 00000 0
+type 40 Node[] | null | %struct.nish_array* | 8 00000 0
+type 41 Lexer[] | null | %struct.nish_array* | 8 00000 0
+type 42 i32[][] | %struct.nish_array* | 8 10000 0
+type 43 Node | null[] | %struct.nish_array* | 8 10000 0
+type 44 i32[][] | null | %struct.nish_array* | 8 00000 0
+assignable 0 0
+assignable 1 1
+assignable 2 2
+assignable 3 3
+assignable 4 4
+assignable 5 5
+assignable 6 6
+assignable 7 7
+assignable 8 8
+assignable 9 9
+assignable 9 26
+assignable 10 10
+assignable 11 11
+assignable 11 27
+assignable 12 12
+assignable 12 28
+assignable 13 13
+assignable 13 29
+assignable 14 14
+assignable 14 30
+assignable 15 15
+assignable 15 31
+assignable 16 16
+assignable 16 32
+assignable 17 17
+assignable 17 33
+assignable 18 18
+assignable 18 34
+assignable 19 19
+assignable 19 35
+assignable 20 20
+assignable 20 36
+assignable 21 21
+assignable 21 37
+assignable 22 22
+assignable 22 38
+assignable 23 23
+assignable 23 39
+assignable 24 24
+assignable 24 40
+assignable 25 25
+assignable 25 41
+assignable 26 26
+assignable 27 27
+assignable 28 28
+assignable 29 29
+assignable 30 30
+assignable 31 31
+assignable 32 32
+assignable 33 33
+assignable 34 34
+assignable 35 35
+assignable 36 36
+assignable 37 37
+assignable 38 38
+assignable 39 39
+assignable 40 40
+assignable 41 41
+assignable 42 42
+assignable 42 44
+assignable 43 43
+assignable 44 44
+intern array 1
+intern struct 1
+intern nullable 1
+strip 1
+strip plain 1
+distinct 0
+table size 46
+error name error
+error to i32 1
+error from i32 1
+error not i32 0

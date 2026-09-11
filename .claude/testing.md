@@ -115,10 +115,20 @@ to get green.
 
 ```bash
 node tests/run.js locals            # only cases whose name contains "locals"
-npm run test:update                 # write missing .ll goldens
+npm run test:update                 # write missing .ll goldens, and tests/self/goldens/
 npm run test:diff                   # the full differential set
 node tests/differential/fuzz.js --count 200
+node tests/self/goldens.js          # the stage1 goldens alone, ~13 s
 ```
+
+`tests/self/goldens/` is the other family of checked-in golden here: the
+`--emit-checked` dump of the whole corpus, and the stdout of the three driver
+programs, as **stage1** prints them (WP19 gate G2.4). They exist because the
+four oracles that presently prove those outputs compare stage1 with stage0 and
+will prove nothing once `src/` is deleted. `npm run test:update` rewrites them
+along with the `.ll` goldens, and `node tests/self/goldens.js --update` alone;
+read `.claude/selfhost.md` before regenerating one, because regenerating from
+the wrong compiler is how a golden records a bug as the specification.
 
 ## Example case
 

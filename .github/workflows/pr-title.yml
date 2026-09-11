@@ -1,0 +1,45 @@
+# The pull request title is the commit subject, so it is checked like one.
+#
+# This repository squash-merges, which means GitHub uses the pull request's
+# title as the subject of the single commit that lands on main. That subject is
+# what `scripts/changelog-gen.mjs` reads for the release-note heading and for
+# the version bump, so a title that is not a conventional commit does not just
+# look untidy -- it lands under "Uncategorised" and contributes nothing to the
+# semver decision.
+#
+# The rule is not duplicated here. The check shells out to the generator's own
+# `--check-subject`, so CI enforces exactly what the generator parses; a title
+# this job accepts can never be one the generator cannot classify.
+name: PR title
+
+on:
+  pull_request:
+    # `edited` matters as much as `opened`: a title is usually fixed rather
+    # than a pull request reopened, and without it the red check never clears.
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: conventional title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The title arrives through the environment, never interpolated into the
+      # shell: a title is attacker-controlled text and `${{ }}` inside a `run:`
+      # would splice it into the script.
+      - name: Check the title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: node scripts/changelog-gen.mjs --check-subject "$TITLE"

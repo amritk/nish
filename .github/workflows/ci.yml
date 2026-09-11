@@ -130,6 +130,83 @@ jobs:
             cat build/size-report.md
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # WP19 G3: build self/ with the LAST RELEASED nish rather than with stage0.
+  #
+  # This is the job that enforces the rolling freeze. Nish has no conditional
+  # compilation and will not grow any -- there is no #[cfg(bootstrap)] to
+  # write -- so "a construct added in 0.N cannot be used by self/ until
+  # 0.(N+1)" (docs/wp12-release.md, "The bootstrap seed") is a discipline, and
+  # a discipline CI does not check is a comment. Using a construct too early
+  # breaks here and nowhere else: `npm test` bootstraps with stage0, which
+  # always knows every construct the working tree does.
+  #
+  # Until 0.1.0 exists there is no seed, and this reports that and stops
+  # rather than inventing one. It is deliberately NOT a silent success: the
+  # step says which release it used, or that there was none, so a green run
+  # cannot be mistaken for a freeze that was actually checked.
+  #
+  # G3 asks for this on both operating systems. It runs on Linux alone today
+  # because macos-latest is out of the matrix above; see docs/wp19-stage0
+  # -retirement.md G3 for what that leaves open.
+  bootstrap:
+    name: bootstrap (from the last release)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install LLVM 18 + lld
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `gh release download` fails when the repository has no release at all,
+      # which is the state before 0.1.0 -- so ask first and record the answer,
+      # rather than reading a failed download as "no release".
+      - name: Find the last release
+        id: seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$(gh release list --limit 1 --json tagName --jq '.[0].tagName // ""')"
+          if [ -z "$tag" ]; then
+            echo "no release yet: nothing to seed from, so the freeze is unchecked" >&2
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          name="nish-${tag#v}-x86_64-linux"
+          gh release download "$tag" --pattern "$name.tar.gz" --dir "$RUNNER_TEMP"
+          tar -xzf "$RUNNER_TEMP/$name.tar.gz" -C "$RUNNER_TEMP"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "path=$RUNNER_TEMP/$name/bin/nish" >> "$GITHUB_OUTPUT"
+
+      - name: Build self/ with the seed
+        if: steps.seed.outputs.tag != ''
+        run: |
+          "${{ steps.seed.outputs.path }}" --version
+          NISH_BOOTSTRAP="${{ steps.seed.outputs.path }}" bash scripts/bootstrap.sh --verify
+
+      - name: Say what this proved
+        run: |
+          if [ -z "${{ steps.seed.outputs.tag }}" ]; then
+            echo "::notice::No release exists yet, so self/ was NOT built from a seed. The rolling freeze is unchecked until 0.1.0 ships."
+          else
+            echo "::notice::self/ built and verified with ${{ steps.seed.outputs.tag }} as the seed."
+          fi
+
   lint:
     name: lint
     runs-on: ubuntu-latest

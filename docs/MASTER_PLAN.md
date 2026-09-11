@@ -130,7 +130,7 @@ and nullish coalescing on non-nullable types, union types other than
 | --- | --- | --- |
 | Default `number` mode | `i32` (fast, current) vs `f64` (JS semantics) | Keep `i32` default; document loudly; `f64` via flag or per-file pragma. |
 | Overflow | wrap / trap / `nsw` UB | **Decided (WP15 §3): `nsw` UB by default, `--wrapping` to opt out.** A trap mode is still open. |
-| Class inheritance | none / single with prefix layout / interfaces only | Single inheritance via struct prefix, no virtual dispatch until needed. |
+| Class inheritance | none / single with prefix layout / interfaces only | **Decided (WP25): none.** `extends` was built and then removed; the field-prefix layout it bought survives as a prefix-checked `implements`. |
 | Object lifetime | arena only / arena + RC / escape-analysed stack | Arena + escape-analysed `alloca` (WP6); RC opt-in per class. |
 | String encoding | UTF-8 bytes (current) vs UTF-16 (JS) | UTF-8; `.length` is byte length, documented. |
 
@@ -177,9 +177,10 @@ Sizes: S = under a day of agent work, M = one to two days, L = several days.
 "Parallel-safe" means the WP mostly adds files rather than editing the shared
 `checker.ts`/`emitter.ts` hot spots (see WP-P).
 
-WP-P through WP11 are the original cut and have all landed; the one piece of
-them still outstanding is WP2b's virtual dispatch, which was deferred rather
-than built (§6). WP12 through WP17 were cut afterwards, as the work turned up,
+WP-P through WP11 are the original cut and have all landed. The one piece that
+was outstanding, WP2b's virtual dispatch, is no longer pending but withdrawn:
+inheritance has been removed and dispatch stays static
+([wp25-inheritance.md](wp25-inheritance.md), §6). WP12 through WP17 were cut afterwards, as the work turned up,
 and are recorded here in the same form so that this section says what happened
 rather than only what was planned: five of them have landed, and WP15 is the
 roadmap the project is on now. Each entry carries its state in its heading.
@@ -627,7 +628,7 @@ WP-P ─┬─► WP0 ───────────────────�
 | 0 | WP-P | one agent, lands first | done |
 | 1 | WP0, WP1, WP3, WP5, WP7, WP10 | six agents, disjoint files after WP-P | done |
 | 2 | WP2, WP4 (WP4 starts once WP2 fixes layout rules), WP8 | three agents | done |
-| 3 | WP6, WP9, WP2b | three agents | done, except virtual dispatch: single inheritance by struct prefix is in, and a method call resolves statically |
+| 3 | WP6, WP9, WP2b | three agents | done. WP2b's inheritance landed and has since been **removed** ([wp25-inheritance.md](wp25-inheritance.md)); the field-prefix half it was good for survives as a widened `implements`, and virtual dispatch was never built |
 | 4 | WP12, WP13 | two agents, both additive | done |
 | 5 | WP14, then WP16 and WP17 on both compilers | one agent at a time: `self/` is the whole tree | done |
 | 6 | WP15, in the order of §9 | one agent per numbered item; items 1 and 7 move the ABI, so they do not overlap | **open** |
@@ -686,7 +687,7 @@ Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 | M1 "Programs" | WP-P, WP0, WP1, WP3, WP5, WP10 | fib/gcd/string CLI builds with `nish --link`, under 20 KB. | done |
 | M2 "Data" | WP2, WP4, WP7 | nbody with structs and arrays, matches C output bit for bit. | done |
 | M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. | done as a package; four of the seven benchmarks are outside 1.10x today ([BENCHMARKS.md](BENCHMARKS.md)), which is what WP15 is for |
-| M4 "1.0" | WP2b, remaining docs, stabilised spec | tagged release, language reference frozen. | **open — the only one left.** Inheritance landed; virtual dispatch, the frozen reference and the tag have not |
+| M4 "1.0" | remaining docs, stabilised spec | tagged release, language reference frozen. | **open — the only one left.** WP2b has left the milestone rather than been finished: inheritance was removed and virtual dispatch is not coming ([wp25-inheritance.md](wp25-inheritance.md)), so what M4 still wants is the frozen reference and the tag |
 | M5 "Self-hosting" | WP14 ([wp14-selfhost.md](wp14-selfhost.md)) | `self/` compiles `self/`: `IR(stage1, self/) == IR(stage2, self/)` byte for byte, and stage3 is byte-identical to stage2 (`tests/self/bootstrap.js`). | done |
 | M6 "One compiler" | WP19 ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | stage0 is deleted rather than frozen. The six gates of §3 there are closed first: parity, oracle succession, the seed protocol, the seed policy, distribution without Node, and the provenance tag. | open — after M4 |
 
@@ -697,20 +698,21 @@ their own; releasing what they built is part of M4.
 
 M4 and WP15 are the near road and M6 is the far one, and none of the three
 is sequential with the others. The language reference cannot be frozen while
-most of the list below is still going to change it — items 1, 4, 5, 6 and 8
-each add or withdraw a rule — so the WP15 order *is* the road to 1.0 rather
-than a detour from it. The list is
+items 5, 6 and 8 below are each still going to add or withdraw a rule, so the
+WP15 order *is* the road to 1.0 rather than a detour from it; WP22's
+arrow-function migration and WP23's landing items change the reference too,
+and are the separate road described further down this section. The list is
 [wp15-performance.md](wp15-performance.md) §9, repeated here so that this
 document does not need a second one open beside it to be current:
 
 | | Item | Why in this position |
 | ---: | --- | --- |
 | 1 | Fast defaults: `--strict-exports` and `--nsw` on by default — **done** | small, and it moves the baseline everything after it is measured against. It is also what a private two-scalar ABI for `Result` needs (WP17 §4) |
-| 2 | The `performance` diagnostic class | the framework plus the two warnings that need no new analysis, so that every slow path the rest of the list attacks says so |
-| 3 | Slice iterators | the biggest speed win per line of emitter code, and no new syntax |
-| 4 | Unsigned types `u8`, `u16`, `u32`, `u64` | foundational for 6, and it touches every numeric path, so earlier is cheaper |
+| 2 | The `performance` diagnostic class — **done** | the framework — `--no-warn-performance` in `src/index.ts`, `PerformanceWarning` in `src/diagnostics.ts` — plus the two warnings that needed no new analysis, quadratic string building and allocation in a loop, ruled in `docs/LANGUAGE.md` and tested by `tests/cases/perf_*`. The other four warnings in WP15 §8 wait on the analyses that feed them |
+| 3 | Slice iterators — **closed by measurement, not built** | the array half was already bought by WP15 §2b: a `for (const x of xs)` loop and the bounds-checked indexed loop beside it compile to byte-identical binaries today (wp15 §2, §9), and `for...of` over a string is declined in [wp23-language-surface.md](wp23-language-surface.md) §7 |
+| 4 | Unsigned types `u8`, `u16`, `u32`, `u64` — **done** | specified in `docs/LANGUAGE.md`, carried through the N-API and wasm bridges, and tested by `tests/cases/u_*`. Foundational for 6, and it touched every numeric path, so earlier was cheaper |
 | 5 | The fast slice beside JavaScript's `substring` | |
-| 6 | Ranged types and length narrowing | a real flow-sensitive analysis; the surviving-check warning from 2 is its acceptance test |
+| 6 | Ranged types and length narrowing | a real flow-sensitive analysis; its acceptance test is the surviving-check warning item 2 held back, and item 3 measured at 1.094x on lexer-shaped code |
 | 7 | Contiguous struct arrays | the layout change, the escape rule that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI |
 | 8 | Generics by monomorphisation; discriminated unions deferred to their own note | the largest. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code — [wp18-generics.md](wp18-generics.md) §6.1 says why |
 

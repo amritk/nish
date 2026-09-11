@@ -89,20 +89,25 @@ esac
 # so the line table nish emitted survives into the binary.
 if [ "$debug" = 1 ]; then common+=(-g); strip_flag=(); fi
 
+# The ${arr[@]+"${arr[@]}"} spelling below is not a style tic: macOS ships bash
+# 3.2 (Apple will not ship GPLv3), where expanding an empty array as "${arr[@]}"
+# under `set -u` is a fatal "unbound variable" -- bash 4.4 made it legal, which is
+# why Linux never noticed. `pgo`, `elf`, `strip_flag` and `libs` are all empty on
+# ordinary builds, so please do not simplify these back.
 case "$profile" in
   debug)
     "$CC" "${common[@]}" "${inputs[@]}" -lm -o "$out" ;;
   speed)
-    "$CC" "${common[@]}" -O3 -flto -DNDEBUG "${pgo[@]}" \
+    "$CC" "${common[@]}" -O3 -flto -DNDEBUG ${pgo[@]+"${pgo[@]}"} \
       -ffunction-sections -fdata-sections -fomit-frame-pointer \
-      -fno-asynchronous-unwind-tables -fno-unwind-tables "${elf[@]}" \
-      "${gc[@]}" "${strip_flag[@]}" "${inputs[@]}" -lm -o "$out" ;;
+      -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"} \
+      "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
   size)
-    "$CC" "${common[@]}" -Oz -flto -DNDEBUG "${pgo[@]}" \
+    "$CC" "${common[@]}" -Oz -flto -DNDEBUG ${pgo[@]+"${pgo[@]}"} \
       -ffunction-sections -fdata-sections -fomit-frame-pointer \
-      -fno-asynchronous-unwind-tables -fno-unwind-tables "${elf[@]}" \
+      -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"} \
       -fno-stack-protector -fvisibility=hidden \
-      "${gc[@]}" "${strip_flag[@]}" "${inputs[@]}" -lm -o "$out" ;;
+      "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
   wasm)
     # clang resolves wasm-ld next to its own binary first, then on PATH; ask it
     # rather than probing PATH so a Homebrew llvm without a PATH entry still works.
@@ -153,7 +158,7 @@ case "$profile" in
     fi
     "$CC" -Wno-override-module --target=wasm32-wasi --sysroot="$sysroot" -Oz -DNDEBUG \
       -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,--strip-all \
-      "${inputs[@]}" "${libs[@]}" -o "$out" ;;
+      "${inputs[@]}" ${libs[@]+"${libs[@]}"} -o "$out" ;;
   napi)
     # Node ships its C headers next to the binary: <prefix>/bin/node and
     # <prefix>/include/node/node_api.h (official tarballs, nvm, fnm, volta).
@@ -175,10 +180,10 @@ case "$profile" in
     case "$(uname -s)" in Darwin) shared+=(-Wl,-undefined,dynamic_lookup) ;; esac
     # runtime/nish.h is the public ABI header the generated shim includes.
     runtime_inc="$(cd "$(dirname "$0")/../runtime" && pwd)"
-    "$CC" "${common[@]}" -O3 -flto -DNDEBUG "${pgo[@]}" -I"$node_inc" -I"$runtime_inc" \
+    "$CC" "${common[@]}" -O3 -flto -DNDEBUG ${pgo[@]+"${pgo[@]}"} -I"$node_inc" -I"$runtime_inc" \
       -ffunction-sections -fdata-sections -fomit-frame-pointer \
-      -fno-asynchronous-unwind-tables -fno-unwind-tables "${elf[@]}" \
-      "${shared[@]}" "${gc[@]}" "${strip_flag[@]}" "${inputs[@]}" -lm -o "$out" ;;
+      -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"} \
+      "${shared[@]}" "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
   *) echo "error: unknown profile '$profile'" >&2; exit 2 ;;
 esac
 

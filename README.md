@@ -14,9 +14,9 @@ TypeScript source ──▶ TS AST ──▶ validator + checker ──▶ LLVM 
 If it compiles, every value has one fixed, known memory layout; binaries are
 a few kilobytes; there is no interpreter and no GC anywhere in the pipeline.
 
-> **Nish is pre-alpha.** The version is `0.1.0`: the language, the CLI
-> flags and the IR that either compiler emits all change without notice until
-> 1.0. Every commit compiles, tests and bootstraps itself — see
+> **Nish is pre-alpha and unreleased.** There is no tag yet: the language, the
+> CLI flags and the IR that either compiler emits all change without notice
+> until 1.0. Every commit compiles, tests and bootstraps itself — see
 > [Project status](#project-status) for what is done and what is next — but
 > nothing here is frozen yet, so pin a commit rather than a range, expect to
 > fix your source when you move to a newer one, and read

@@ -97,11 +97,59 @@ if (data.length >= 4) {
 }
 ```
 
-**3. Slice iterators.** `for (const c of s)` lowers to pointer advancement —
-`p = start; end = start + len; while (p < end) { ... p++; }` — not to `s[i]`.
-Memory-safe by construction and check-free by construction, which makes the
-idiomatic loop also the fastest one. This is the mechanism the self-hosted
-lexer should be written against.
+**3. Slice iterators — measured, and not taken.** The proposal was that
+`for (const c of s)` lower to pointer advancement —
+`p = start; end = start + len; while (p < end) { ... p++; }` — rather than to
+`s[i]`, so that the idiomatic loop was also the check-free one. Measured at
+commit `c100f11` on x86-64 with LLVM 18 at the default `speed` profile, the
+loop it was written to beat already is that loop.
+
+Two whole programs sum a 20,000,000-element `i32[]` ten times, one written
+`for (const x of xs)`, the other
+`for (let i = 0; i < xs.length; i++) { sum += xs[i]; }`. Both link to
+**8,008 bytes** and the binaries are **byte-identical** — `cmp` reports no
+difference. After `opt -O3` the `for...of` length load is hoisted to `entry`
+and the data pointer to the preheader — the §2b alias domains are what prove
+an element store cannot clobber the header — leaving a body of
+`getelementptr` + `load` + `add` + `add` + `icmp`. That is the pointer
+advancement this mechanism describes, and the per-iteration `.length` re-read
+it was written to remove does not survive to the binary. Both loops vectorise
+8-wide once a target triple is given.
+
+A simple guarded byte loop is the same story:
+`for (let i = 0; i < s.length; i++) { acc += classify(s.charCodeAt(i)); }` over
+a 547 KB string builds to **7,008 bytes both with and without
+`--unchecked-indexing`, byte-identical**: LLVM relates the index to the length
+and drops the check unaided. Nor does a call in the loop body put the header
+back — a scanning loop that calls `push` on an array argument, so that
+`nish_array_grow` sits in the body, still hoists the string's length load to
+`entry`, because the attribute fixpoint gives the string parameter
+`noalias nocapture readonly` and the §2b domains separate the array's header
+from its elements.
+
+The string half of the proposal is declined on language grounds rather than
+measured: `wp23-language-surface.md` §7 rejects `for...of` over a string
+because it would not be what `tsc --strict` means, because the type-honest
+version allocates per character, and because it would diverge from Node's
+code-point iterator.
+
+**What is not free is a cursor that advances by a variable amount**, and that
+belongs to mechanisms 1 and 2 rather than here, because `for (const c of s)`
+cannot express one. A lexer-shaped program — `while (i < s.length)` around
+nested `while (i < s.length && isAlpha(s.charCodeAt(i))) { i = i + 1; }` scans,
+2000 passes over a 547 KB source — measures **1.40 s checked against 1.28 s
+unchecked** (best of 7 runs each), **1.094x**, and 216 bytes of code (6,664
+against 6,448). That is the ceiling for eliminating bounds checks on real lexer
+code, and it is the acceptance number for ranged types and length narrowing
+(§9 item 6), not for this mechanism. It is also what `self/lexer.ts` is made
+of: its scanning loops are all `while (... < this.source.length)` with a cursor
+the body advances by variable amounts. WP23 §7 makes the same observation about
+the lexer from the language side; this is the measured version of it.
+
+The numbers above are x86-64, LLVM 18, at the `speed` profile, and they are
+`-O3` numbers: a guarantee that holds at `debug` and on wasm's weaker
+vectoriser would be worth something these hide. Not enough to reopen the item,
+but worth stating.
 
 **4. An explicit opt-out — deliberately not built yet.** A scoped `trusted`
 region was considered and deferred: it is the escape hatch, and every check
@@ -354,8 +402,10 @@ lean lowering: length computation, one bump allocation, one `memcpy`, and a
 check that branches to a cold panic block rather than clamping. Out-of-range is
 a panic, not a silent clamp.
 
-Hot paths should use slice iterators (§2.3) and avoid materialising a slice at
-all where they can.
+Hot paths should avoid materialising a slice at all where they can — a counted
+loop over the original string, guarded by `i < s.length`, already emits no
+check at all (§2.3). A cursor the body advances by a variable amount does not
+get that for free; §2.1 and §2.2 are what it waits on.
 
 ---
 
@@ -591,8 +641,9 @@ and the hint column above is part of the specification rather than a nicety.
 
 ## 9. Sequencing
 
-Roughly dependency order; each row ships with the full construct checklist from
-`docs/ARCHITECTURE.md`.
+Roughly dependency order; each row that ships does so with the full construct
+checklist from `docs/ARCHITECTURE.md`. Some of them no longer ship: an item a
+measurement closed says so and says why.
 
 1. **Fast defaults** (§3) — **done**. Flag flips plus the honest re-pointing
    of every affected test and doc. Small, and it moves the baseline everything
@@ -613,12 +664,30 @@ Roughly dependency order; each row ships with the full construct checklist from
 1f. **Arena provenance** (§7d) — **measured and dropped**. The win WP9
    recorded is gone; the change would now cost a call per allocation for
    nothing.
-2. **`performance` diagnostics** (§8) — the framework plus the two warnings that
-   need no new analysis (quadratic string building, allocation in a loop).
-3. **Slice iterators** (§2.3) — the biggest speed win per line of emitter code,
-   and no new syntax.
-4. **Unsigned types** (§6) — foundational for §2.1, touches every numeric path,
-   so earlier is cheaper.
+2. **`performance` diagnostics** (§8) — **done**. The framework plus the two
+   warnings that need no new analysis: quadratic string building and allocation
+   in a loop. `--no-warn-performance` is in `src/index.ts` and
+   `self/compile.ts`, `PerformanceWarning` is in `src/diagnostics.ts`, both
+   warnings are specified in `docs/LANGUAGE.md`, and
+   `tests/cases/perf_str_concat_loop`, `perf_str_concat_quiet`,
+   `perf_alloc_loop` and `perf_alloc_quiet` pin them. Only those two shipped:
+   the other four rows of §8's table — bounds check not eliminated, not
+   inlinable, clamp not folded, wasteful struct padding — still wait on the
+   analyses that feed them.
+3. **Slice iterators** (§2.3) — **measured, and not taken**. The array half was
+   already banked by §2b: `for (const x of xs)` and the counted loop over
+   `xs[i]` link to byte-identical binaries, and a guarded byte loop is
+   byte-identical with and without `--unchecked-indexing`, so the per-iteration
+   `.length` re-read the mechanism was written to remove does not reach the
+   binary. The string half is declined on language grounds by
+   `wp23-language-surface.md` §7. What survives is the variable-advancing
+   cursor `for (const c of s)` cannot express, and its 1.094x on lexer-shaped
+   code is item 6's acceptance number, not this item's.
+4. **Unsigned types** (§6) — **done**. `u8`/`u16`/`u32`/`u64` are specified in
+   `docs/LANGUAGE.md`, carried through the N-API and wasm bridges, and tested
+   by `tests/cases/u_*` — `u_arith_wrap`, `u_compare_above_intmax`,
+   `u_conv_roundtrip` and `u_conv_f64` among them — plus
+   `reject_u_mixed_signedness`.
 5. **Fast slice** (§4).
 6. **Ranged types and length narrowing** (§2.1, §2.2) — a real flow-sensitive
    analysis; the `performance` warning for a check that survives is its

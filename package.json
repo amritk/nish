@@ -1,6 +1,6 @@
 {
   "name": "nish",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Nish: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
   "license": "MIT",
   "type": "module",
@@ -30,7 +30,8 @@
     "test:node": "npm run build && node tests/differential/unmodified.js",
     "lint": "biome check --formatter-enabled=false .",
     "format": "biome format --write .",
-    "prepublishOnly": "npm run check && npm run build && npm test"
+    "prepublishOnly": "npm run check && npm run build && npm test",
+    "changelog": "node scripts/changelog-gen.mjs"
   },
   "engines": {
     "node": ">=22.18.0"

@@ -1,8 +1,13 @@
 # WP22: Arrow functions as the declaration form
 
-**Proposed, not implemented.** Nothing here exists in the compiler today: an
-arrow function still fails in the checker, and every function in the corpus is
-a `function` declaration. It is the plan of record for one decision —
+**Stages A and B have landed; C and D have not.** Both compilers read
+`const f = (n: i32): i32 => n * 2` today, the two spellings emit byte-identical
+IR, and `tests/cases/fn_arrow` carries the golden, the `llvm-as` pass and the
+native round trip (§8 has what each stage cost). What has not happened is the
+migration: `self/` and the corpus are still written with the `function`
+keyword, and a `function` declaration is still accepted — whether stage D ever
+rejects it is open, and §10 is where that is argued. It is the plan of record
+for one decision —
 **`const f = (...) => ...` becomes how Nish declares a function, and
 `function` is legacy and eventually removed** — and for the order that
 decision has to happen in, which is forced by the bootstrap and is the only
