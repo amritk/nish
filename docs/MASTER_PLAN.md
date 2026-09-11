@@ -783,11 +783,16 @@ that says what it turned down is worth more than one that only says yes.
 
 `async`/`await` is the one question on this page whose plan of record is a
 **refusal**, and [wp24-async.md](wp24-async.md) is that note. The blocker is
-not the lowering: a hand-written coroutine in textual IR is split by LLVM 18's
-default pipeline, and when the handle does not escape its caller the frame, the
-allocation and both split functions are elided outright — measured, and the
-condition under which it is free is the one `src/codegen/escape.ts` already
-computes. The blocker is that there is nothing to await. Every I/O call in the
+not the lowering, and a coroutine is not a strategy for `async`/`await` but
+what `async`/`await` is — the only choice is who writes the state machine, and
+both answers were measured. A hand-written coroutine in textual IR is split by
+LLVM 18's default pipeline, and when the handle does not escape its caller the
+frame, the allocation and both split functions are elided outright, under the
+condition `src/codegen/escape.ts` already computes; rustc, meanwhile, uses none
+of those intrinsics and builds a 20-byte struct with a one-byte state
+discriminant and a `switch`, allocating nothing — which is the shape to copy,
+since a struct and a `switch` are constructs this language already has. The
+blocker is that there is nothing to await. Every I/O call in the
 language is synchronous and there is no socket, timer, sleep or poller in
 either compiler or either runtime, so the first deliverable of an async package
 would be a poller and a socket type rather than a keyword — a larger package

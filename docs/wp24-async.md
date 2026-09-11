@@ -30,12 +30,15 @@ Three findings, in the order they changed the answer:
    not "not yet implemented", but *not anywhere in the tree* (§2). An `async`
    function whose body cannot suspend is a `function` with a heap allocation
    in front of it.
-2. **The lowering everyone braces for is the cheap part.** LLVM 18 splits a
-   hand-written coroutine that arrives as textual IR, and elides the frame
-   entirely — allocation, layout, resume and destroy functions, all of it —
-   when the handle does not escape its caller. Measured, not predicted (§3).
-   The condition under which it is free is the condition
-   `src/codegen/escape.ts` already computes.
+2. **The lowering everyone braces for is the cheap part, whichever way it is
+   built.** LLVM 18 splits a hand-written coroutine that arrives as textual IR
+   and elides the frame entirely — allocation, layout, resume and destroy
+   functions, all of it — when the handle does not escape its caller, which is
+   the condition `src/codegen/escape.ts` already computes (§3a). And rustc
+   does not use those intrinsics at all: it builds a 20-byte struct with a
+   one-byte state discriminant and a `switch`, allocates nothing, and that is
+   the shape to copy if this is ever built (§3b). Both measured, not
+   predicted.
 3. **The two things people mean by "async here" both have answers already.**
    Overlapping work is threads, which WP20 designed and argued for on
    soundness grounds; not blocking *Node's* event loop from a Nish addon
@@ -91,6 +94,24 @@ sequencing decision rather than a taste one:
   single new rule in LANGUAGE.md.
 
 ## 3. The lowering is the cheap part, and here is the measurement
+
+First, a point of vocabulary, because "do we have to use coroutines" is the
+question this section is usually asked as. **A coroutine is not an
+implementation strategy for `async`/`await` — it is what `async`/`await` is.**
+A function that stops in the middle and resumes later has to put its live
+locals somewhere other than the stack frame it just left, and there are exactly
+three places:
+
+| Where suspended state lives | Cost | Who does it |
+| --- | --- | --- |
+| a frame holding just the live values (**stackless coroutine**) | one struct per suspended call | Rust, C++20, C#, JavaScript |
+| a whole stack per task (**stackful**) | a stack per task, and a moving one if it is to be cheap | Go, and OS threads |
+| nowhere: never suspend | a callback or a blocking thread instead | C, and this language today |
+
+The choice is not whether to have a coroutine. It is **who writes the state
+machine**, and there are two answers — LLVM, or us. Both were measured.
+
+### 3a. LLVM's answer: `llvm.coro.*`
 
 The reflex objection to coroutines in a language with no GC is that a
 coroutine's frame has to outlive the stack frame that created it. It does — and
@@ -155,16 +176,93 @@ Two caveats, recorded so that nobody reads the table as a green light:
   whose cost model inverts between profiles is one this project has not had
   before.
 
+### 3b. Rust's answer: build the state machine yourself, and never mention LLVM
+
+Rust is the comparison this project is held to everywhere else
+([BENCHMARKS.md](BENCHMARKS.md)), and its `async` is a stackless coroutine —
+the same category as §3a, reached a different way. **rustc does the transform
+itself, in MIR, and hands LLVM ordinary IR.** Measured with the rustc 1.94.1
+the benchmark suite already uses, on an `async fn` with two suspension points
+and a local live across both (§10 has the program):
+
+| Question | Answer |
+| --- | --- |
+| `llvm.coro.*` intrinsics in rustc's output | **0**, at `-C opt-level=0` and `2` alike |
+| what the generated `poll` does | loads a **one-byte discriminant** at offset 12 of the future and `switch`es on it into five resume points |
+| size of the future | **20 bytes**, a plain value with fields at offsets 4, 8, 12 and 16 (`size_of_val` folds to `ret i64 20`) |
+| heap allocations on the async path | **0** — no `malloc`, no `__rust_alloc` |
+
+```llvm
+; rustc's generated poll, -C opt-level=0: a state machine and nothing else
+%2   = getelementptr inbounds i8, ptr %_1, i64 12
+%3   = load i8, ptr %2, align 4
+%_27 = zext i8 %3 to i32
+switch i32 %_27, label %bb6 [ i32 0, label %bb1
+                              i32 1, label %bb21
+                              i32 2, label %bb20
+                              i32 3, label %bb18
+                              i32 4, label %bb19 ]
+```
+
+The future is a *value*: the caller decides where it lives, and an executor
+allocates once per task rather than once per `await`. Nothing in the language
+allocates.
+
+**If this feature is ever built here, this is the shape to build, not §3a.**
+Three reasons, and the third is the one that decides it:
+
+- A struct with a discriminant and a `switch` over it are constructs this
+  language already has, and WP23's numeric `enum` makes the discriminant a
+  distinct type rather than a loose `i32`. A state machine is checker and
+  emitter work in the vocabulary already in use.
+- No dependence on an intrinsic family whose lowering lives in an optimisation
+  pass — which is what makes §3a's cost model invert between `--profile debug`
+  and `speed`. rustc's output is the same shape at `-O0` and `-O2`.
+- The frame stops being special. It is an ordinary allocation site, so
+  `escape.ts` classifies it with the rule it already has rather than with
+  knowledge of what LLVM will do to `llvm.coro.begin`.
+
+**And Rust's hardest async problem does not arise here.** `Pin`, `Unpin` and
+the `unsafe` around them exist because Rust puts locals *in* the frame and lets
+a program take a reference to one, so moving the frame invalidates it. Here,
+`escape.ts` already decides whether a value is an entry-block `alloca` or arena
+memory; a value whose reference is live across a suspend is simply denied the
+`alloca`, which is the same judgment wp20 §3.3 needs for a spawn. The category
+of pain that dominates Rust's async design is one this memory model skips.
+
+What Rust does pay, and this language would pay identically, is §4.2's colour —
+and the runtime. `std` has no executor: an `async fn` that nobody polls is an
+inert 20-byte struct, and the reactor (epoll / kqueue, through `mio`) and the
+scheduler both arrive as a dependency. **That is §2's finding from the other
+side.** Rust demonstrates that the language half of async is cheap; it also
+demonstrates that the language half does nothing on its own, and that the half
+which does the work is the half this project does not have.
+
 ## 4. What it would cost, in the order it bites
 
-### 4.1 `Promise<T>` is a generic type, and generics are WP18
+### 4.1 A promise type, which is less of a blocker than it looks
 
-There is no monomorphisation today, and `Array<T>` and `Result<T, E>` are
-built-in rather than library types precisely because of that
-([wp18-generics.md](wp18-generics.md) §6.1, which also argues against adding a
-third such family by hand — the argument wp20 §4 accepted at stage T3 for
-channels). `Promise<T>` would be exactly that third family. WP15 item 8 is the
-prerequisite and this note does not route around it.
+**This section originally said `Promise<T>` is a generic and WP18 is therefore
+a hard prerequisite. §3b shows that is wrong, and the correction is kept here
+rather than quietly edited out, because it moves a gate.**
+
+Rust never names the type. An `async fn` returns `impl Future` — one
+*anonymous*, compiler-generated type per async function, unnameable in the
+source. The same is available here, and more cheaply: `await` would always
+apply to a known call site, so the checker knows statically which state machine
+it is resuming and the type never has to be spelled in a program at all. That
+is a compiler-generated struct per async function, which is what
+`src/checker/classes.ts` already builds for every class — not a generic, and
+not a third built-in family beside `Array<T>` and `Result<T, E>`
+([wp18-generics.md](wp18-generics.md) §6.1).
+
+What is genuinely lost without generics is every operation that holds pending
+work *as data*: no array of futures, so no general `join` or `select`, and no
+storing one in a field. A fixed-arity `awaitAll(a, b)` over known call sites is
+expressible; a work queue is not. That is a real restriction on how much
+concurrency the feature could express, and it is an argument about **A2's**
+value rather than a gate in front of **A3** — so WP15 item 8 stops being a
+prerequisite and becomes A4, an enhancement. §6's table is corrected to match.
 
 ### 4.2 The colour propagates to `main`, and there is no callback to stop it
 
@@ -315,14 +413,16 @@ package:
 
 | | Gate | Owner |
 | ---: | --- | --- |
-| A0 | the coroutine spike | **done, §3** |
+| A0 | the coroutine spike, both ways | **done, §3a and §3b** |
 | A1 | asynchronous N-API export | this note, after WP20 T0 |
 | A2 | a reason: sockets, timers, a poller, and the budget conversation | unowned; nobody has asked |
-| A3 | `Promise<T>` as a monomorphised type | WP15 item 8 / WP18 |
-| A4 | `async` / `await`, the colour rule, the suspend point, the frame flow | this note, and only after A2 and A3 |
+| A3 | `async` / `await` as a rustc-shaped state machine: the colour rule, the suspend point, the anonymous frame type, the frame's escape flow | this note, and only after A2 |
+| A4 | futures as data — an array of them, `join`, `select` | WP15 item 8 / WP18, an enhancement of A3 rather than a gate before it (§4.1) |
 
-A2 is the load-bearing link. Without it, A3 and A4 build a mechanism with
-nothing to drive it — which is the trap this note exists to name.
+A2 is the load-bearing link, and it is the only one. Without it, A3 builds a
+mechanism with nothing to drive it — which is the trap this note exists to
+name. Note what A3 does *not* wait for: generics were listed as a prerequisite
+in the first draft of this note and are not one (§4.1).
 
 ## 7. Declined, with the rule each one breaks
 
@@ -336,9 +436,11 @@ worth more than one that only says yes.
   `tests/differential/` exists to prevent, and it promises a concurrency the
   binary does not have. A rejection with a message is better than a lie with
   none.
-- **`Promise<T>`** — §4.1. A generic type in a compiler with no
-  monomorphisation is a third built-in family, which wp18 §6.1 argues against
-  by name.
+- **A user-nameable `Promise<T>`** — §4.1. Not because it is hard, but because
+  it is unnecessary: Rust's `impl Future` is anonymous and `await` always
+  applies to a known call site, so a promise type that a program can *spell*
+  buys only the operations §4.1 lists as lost, and each of those wants WP18
+  anyway.
 - **Callback-style async** (`readFile(path, cb)`) — needs a function value, and
   `Function` is Phase 0's, for the attribute-fixpoint reason in §4.2. This is
   the same refusal WP20 §2 counted as an *asset*.
@@ -368,8 +470,9 @@ re-argue the case. **The trigger is I/O, not syntax.**
 - A **wasm host** that wants a Nish module to yield mid-function, once JSPI
   is ordinary. That is a different design (the host owns the loop) and would be
   its own note, not this one.
-- WP18 landing and making A3 nearly free — necessary, and still not
-  sufficient: a promise with nothing to promise is still nothing.
+- WP18 landing, which would make A4 — futures held as data, `join`, `select` —
+  expressible. Worth having and still not a trigger: a promise with nothing to
+  promise is still nothing.
 
 None of this is pre-1.0. M4 freezes the language reference (MASTER_PLAN §9) and
 this note adds no rule to it: `async`, `await` and `yield` stay forbidden with
@@ -385,20 +488,26 @@ no language surface and can land whenever WP20 T0 does.
 - **Whether a `sleep(ms)` builtin should exist at all.** It is the only thing a
   program could await today, which is either the argument for a small async or
   the argument that this is what threads are for. It leans towards the second.
-- **What a debug build of a coroutine would cost**, if A4 is ever reached
-  (§3's second caveat): the frame elision is an `-O2` transform and
-  `--profile debug` is `-O0`.
+- **Nothing, about what a debug build of a coroutine would cost.** That was an
+  open question while §3a was the only plan; §3b answers it by not depending on
+  an optimisation pass, so a state machine built the way rustc builds one has
+  the same shape at `-O0` and `-O2`. It returns as a question only if anyone
+  argues for the intrinsics after all.
 - **Whether the fourth escape flow is WP20's or this note's.** Both need it,
   neither is building it, and whichever package gets there first should own it
   rather than inventing a parallel one.
 
-## 10. Appendix: the spike, in full
+## 10. Appendix: the spikes, in full
 
-§3's measurement is the only new fact in this note, so it is reproducible here
-rather than only reported. Save this as `coro.ll` and run
-`opt -O2 -S coro.ll -o -` (LLVM 18.1.3 above). For the second row, change
-`define ptr @counter` to `define internal ptr @counter`; for the third, replace
-the body of `@driver` with a `store` of the handle into a global.
+§3's measurements are the only new facts in this note, so both are reproducible
+here rather than only reported.
+
+### 10a. The LLVM spike (§3a)
+
+Save as `coro.ll` and run `opt -O2 -S coro.ll -o -` (LLVM 18.1.3). For the
+second row of §3a's table, change `define ptr @counter` to
+`define internal ptr @counter`; for the third, replace the body of `@driver`
+with a `store` of the handle into a global.
 
 ```llvm
 ; A minimal switch-resumed coroutine, hand-written, to answer two questions:
@@ -464,5 +573,64 @@ define i32 @driver() {
   call void @llvm.coro.resume(ptr %hdl)
   call void @llvm.coro.destroy(ptr %hdl)
   ret i32 0
+}
+```
+
+### 10b. The Rust spike (§3b)
+
+Save as `a.rs` and run, with the rustc the benchmark suite uses:
+
+```
+rustc --edition=2021 --crate-type=lib --emit=llvm-ir -C opt-level=0 a.rs -o a0.ll
+grep -c 'llvm\.coro' a0.ll                     # 0
+grep -n 'switch i32' a0.ll                     # the state machine
+rustc --edition=2021 --crate-type=lib --emit=llvm-ir -C opt-level=2 a.rs -o a2.ll
+sed -n '/define.*@future_size/,/^}/p' a2.ll     # ret i64 20
+```
+
+```rust
+// The smallest honest async fn: two suspension points and a live local
+// crossing both. No tokio, no executor -- just the state machine rustc builds.
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
+pub struct YieldOnce(bool);
+
+impl Future for YieldOnce {
+    type Output = i32;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<i32> {
+        if self.0 {
+            Poll::Ready(7)
+        } else {
+            self.0 = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    }
+}
+
+pub async fn counter(n: i32) -> i32 {
+    let a = YieldOnce(false).await;
+    let b = YieldOnce(false).await;
+    n + a + b
+}
+
+/// Forces codegen of the state machine: build the future, poll it once.
+#[no_mangle]
+pub extern "C" fn drive(n: i32, cx: &mut Context<'_>) -> i32 {
+    let mut f = counter(n);
+    // Safety: `f` is not moved again after this point in this toy driver.
+    let p = unsafe { Pin::new_unchecked(&mut f) };
+    match p.poll(cx) {
+        Poll::Ready(v) => v,
+        Poll::Pending => -1,
+    }
+}
+
+/// The size of the state machine rustc built, as a constant it folds.
+#[no_mangle]
+pub extern "C" fn future_size() -> usize {
+    core::mem::size_of_val(&counter(0))
 }
 ```

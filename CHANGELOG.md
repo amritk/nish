@@ -56,9 +56,9 @@ shipped, not a description of the tree as it stands.
   [`docs/wp20-threads.md`](docs/wp20-threads.md) §6 deferred without an owner,
   and it declines the feature for a reason that is not the expected one.
 
-  The lowering is the cheap part, and that is measured rather than argued: a
-  minimal switch-resumed coroutine written by hand in **textual IR** — no
-  clang, no C++ — is split by LLVM 18's default `opt -O2` pipeline, and when
+  The lowering is the cheap part, and that is measured rather than argued,
+  twice. A minimal switch-resumed coroutine written by hand in **textual IR** —
+  no clang, no C++ — is split by LLVM 18's default `opt -O2` pipeline, and when
   the handle is consumed by its caller and the coroutine is `internal`, the
   frame type, the allocation, `@f.resume` and `@f.destroy` are elided outright
   and the module is the caller's straight-line code. Store the handle into a
@@ -66,6 +66,20 @@ shipped, not a description of the tree as it stands.
   elision condition is the `local` / `returned` / `leaks` classification
   `src/codegen/escape.ts` already computes, and `--strict-exports` being on by
   default puts an ordinary program on the free row.
+
+  A coroutine is not a strategy for `async`/`await` — it is what
+  `async`/`await` is, and the only real choice is who writes the state machine.
+  **Rust writes its own**, and the note measures that too, with the rustc the
+  benchmark suite already uses: zero `llvm.coro.*` intrinsics at any
+  optimisation level, a `poll` that loads a one-byte state discriminant at
+  offset 12 and `switch`es into five resume points, a 20-byte future that is a
+  plain value, and no heap allocation anywhere on the async path. That is the
+  shape to copy if this is ever built — a struct plus a `switch` are constructs
+  the language already has, the cost model stops inverting between
+  `--profile debug` and `speed`, and the frame becomes an ordinary allocation
+  site `escape.ts` classifies with the rule it has. Rust's `Pin` problem does
+  not arise here at all, because escape analysis already decides whether a
+  value is an `alloca` or arena memory.
 
   What is missing is anything to await. Every I/O call in the language is
   synchronous, and `grep` over `src/`, `self/` and `runtime/` for
@@ -78,11 +92,13 @@ shipped, not a description of the tree as it stands.
   nobody has asked for a Nish server.
 
   The costs are written down anyway, since they decide the order if the answer
-  ever changes: `Promise<T>` is a generic (WP15 item 8 / WP18, and wp18 §6.1
-  argues against a third built-in family by hand); with no function values
-  there is no callback to stop the colour, so one `async` leaf propagates to
-  `main` and links an event loop into a binary whose premise is a 4,696-byte
-  hello world; `willreturn` dies at every suspend and `readnone` at every frame
+  ever changes — with one gate removed on review: a promise type is **not** a
+  WP18 prerequisite, because Rust's `impl Future` is anonymous and `await`
+  always applies to a known call site, so the state machine type need never be
+  spelled in a program (generics buy only futures-as-data: an array of them,
+  `join`, `select`). What remains: with no function values there is no callback
+  to stop the colour, so one `async` leaf propagates to `main` and links an
+  event loop into a binary whose premise is a 4,696-byte hello world; `willreturn` dies at every suspend and `readnone` at every frame
   spill, which is a correct loss no implementation effort recovers; the
   scheduler does not fit in the 244 bytes left of `runtime.c`'s 4,096-byte
   `.text` budget; and Node is the differential oracle, so microtask ordering
