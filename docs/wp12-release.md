@@ -93,10 +93,15 @@ step below is done by hand.
 1. **Merge pull requests as usual.** Every merge to `main` runs
    `.github/workflows/release-pr.yml`, which walks the commits since the last
    tag, computes the next version from their types, and opens or refreshes one
-   open **`Release <version>`** pull request carrying the version bump
+   open **`chore(release): <version>`** pull request carrying the version bump
    (`package.json`, `package-lock.json` and `self/branding.ts`, which must
    agree or `tests/run.js` fails), `changelog/<version>.json`, and the
    `CHANGELOG.md` section rendered from it.
+
+   The title is a conventional commit because it *is* one: the squash merge
+   makes it the subject of the commit that lands on `main`, so `pr-title.yml`
+   checks it like any other and the generator files it under "Chores" in the
+   next release rather than "Uncategorised".
 
    The notes are therefore reviewable *before* anyone can read them, in the
    pull request whose body is those notes. To fix a wording, edit the JSON on
