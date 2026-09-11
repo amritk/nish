@@ -41,16 +41,13 @@ export interface StructInfo {
   methods: Map<string, FunctionSig>;
   /** The explicit constructor, if any. Without one, `new` stores the field initializers inline. */
   ctor?: FunctionSig;
-  /** Interfaces named in the `implements` clause, checked to have the identical layout. */
-  implements: string[];
   /**
-   * The class named in `extends` (WP2b). Its fields are the prefix of
-   * `fields` (same indices and offsets), so a `%struct.<name>*` may be
-   * `bitcast` to `%struct.<base>*`. `methods` holds only the methods this
-   * class declares; inherited ones are found by walking `base`.
+   * Interfaces named in the `implements` clause. Each one's fields are the
+   * first fields of this struct, in order and with identical types (WP25), so
+   * a `%struct.<name>*` may be `bitcast` to `%struct.<interface>*`.
    */
-  base?: StructInfo;
-  /** Pass 1b progress, so a derived class can pull its base in first and a cycle is caught. */
+  implements: string[];
+  /** Pass 1b progress, so a struct's members are collected once. */
   collected?: "collecting" | "done";
   decl: ts.ClassDeclaration | ts.InterfaceDeclaration;
   exported: boolean;

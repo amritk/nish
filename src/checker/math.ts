@@ -351,12 +351,9 @@ function contextType(ctx: CheckContext, node: ts.Expression, scope: Scope): Stat
   if (ts.isNewExpression(parent) && ts.isIdentifier(parent.expression)) {
     const index = parent.arguments?.indexOf(expr) ?? -1;
     if (index < 0) return undefined;
-    // `new Pixel(255, 0, 0)`: the class's constructor, or the nearest ancestor's.
-    // `params[0]` is `this`, so the argument at `index` is `params[index + 1]`.
-    for (let c = ctx.program.structs.get(parent.expression.text); c; c = c.base) {
-      if (c.ctor) return c.ctor.params[index + 1]?.type;
-    }
-    return undefined;
+    // `new Pixel(255, 0, 0)`: `params[0]` is `this`, so the argument at
+    // `index` is `params[index + 1]`.
+    return ctx.program.structs.get(parent.expression.text)?.ctor?.params[index + 1]?.type;
   }
   if (ts.isCallExpression(parent)) {
     const index = parent.arguments.indexOf(expr);

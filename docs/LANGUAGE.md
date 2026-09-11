@@ -179,7 +179,7 @@ same position in f64 mode); nor is a `Result` payload, so `Ok(3)` for a
 (`reject_res_unwrap_or_f64`); and nor is a **method's** argument, which is why
 the table says a user *function* and a constructor — `b.get(-1)` on a method
 whose parameter is an `i32` is an f64 in f64 mode
-(`tests/cases/reject_method_arg_literal`), and so is `super`'s argument.
+(`tests/cases/reject_method_arg_literal`).
 `xs.push(3)` and `xs.indexOf(3)` are on the list only through a receiver that
 is a plain name: `b.xs.push(0)` is not (`reject_push_field_literal`). "Known type" means an already-checked
 left operand, a variable, a field or element of one of those, or a call to a
@@ -821,10 +821,7 @@ program twice, with one golden between them.
   (`tests/link/reachable_struct`). Only the layout travels, not the name: a
   type *annotation* still needs the import, and `const e: Entry` in that
   module is `` Unsupported type reference `Entry` ``
-  (`tests/link/reachable_struct_annotation`). A base class reached only
-  through `extends` is not brought in either — it is used through its pointer,
-  so the importer declares `%struct.Base = type opaque`
-  (`tests/link/extends_import`). An imported *function* brings its own
+  (`tests/link/reachable_struct_annotation`). An imported *function* brings its own
   signature's layouts the same way — `import { lex }` where `lex(): Token`
   gives this module `Token` values it never names
   (`tests/link/reachable_struct_return`) — and the layouts travel however many
@@ -936,68 +933,24 @@ class Point {
 - **Equality**: `===` / `!==` on two values of the same class compare
   identity (pointer equality) (`tests/cases/cls_this_method_call`, `Account.same`);
   `<` and friends are rejected (`tests/cases/reject_cls_ordering`). Both
-  operands must have the same declared type: comparing a `Base` with a
-  `Derived` is `` Operator `===` requires two operands of the same type, got Base and Derived ``
-  *(CLI only)*; assign the `Derived` to a `Base` variable first.
-- **Inheritance**: `class D extends B` for a class `B` declared in the same
-  module (`tests/cases/cls_extends_basic`, `cls_extends_chain`).
-  - *Layout*: `D` is `B`'s fields followed by `D`'s own, in order, at
-    natural alignment (`%struct.D = type { <B fields>, <D fields> }`), so a
-    `D` pointer is a valid `B` pointer; a chain of any depth flattens the
-    same way, and `implements` on a derived class checks the flattened
-    field list (`tests/layout/structs.ts`, classes `K`, `L`, `M`).
-  - *Upcast*: a `D` converts to `B`, or to any ancestor, wherever a `B` is
-    expected (initializer, assignment, argument, return, field store, `B[]`
-    literal element, `xs[i] = d` and `xs.push(d)` on a `B[]`, `B | null`)
-    by one `bitcast` (`tests/cases/cls_extends_upcast`). Nothing converts
-    back: there is no downcast, no `as`, no `instanceof`
-    (`reject_cls_downcast`: `Return type mismatch: function returns Derived but expression is Base`).
-  - *Fields*: inherited fields are read and written through the derived
-    value as its own (`d.x`, `this.x`); a derived class cannot redeclare an
-    inherited field (`` Field `count` of class `Derived` is already declared in base class `Base` ``,
-    `reject_cls_shadow_field`) nor assign an inherited `readonly` field, even
-    in its constructor (`reject_cls_readonly_inherited`).
-  - *Constructors*: a derived constructor starts with `super(args)`, checked
-    against the nearest ancestor constructor and lowered to a call of it with
-    `this` bitcast. It must be the first statement
-    (`` `super(...)` must be the first statement of the constructor of `Derived` ``,
-    `reject_cls_super_not_first`), it is required when that constructor takes
-    parameters (`` Constructor of `Derived` must start with `super(...)` ``,
-    `reject_cls_super_missing`), and `this` / `super` may not appear in its
-    arguments (`` `this` cannot be used before `super(...)` ``,
-    `reject_cls_this_before_super`). When no ancestor constructor takes
-    parameters the call may be omitted and runs implicitly before the body
-    (an extension: TypeScript itself demands the call). A class without a
-    constructor inherits the nearest ancestor's: `new D(args)` runs it after
-    storing `D`'s initializers. Definite assignment covers only the fields
-    `D` declares; the inherited ones count as assigned once `super(...)` ran.
-  - *Methods and static dispatch*: `d.m()` resolves at compile time to the
-    `m` of `d`'s **declared** type, or of its nearest ancestor that declares
-    one, and calls it with `this` bitcast to that class. A derived class may
-    override a method with an identical signature
-    (`` overrides `Base.scale` with a different signature ``,
-    `reject_cls_override_signature`), but the method chosen depends on the
-    declared type of the receiver, not the runtime class: with `class Square
-    extends Shape` overriding `area`, `sq.area()` is `Square.area` while
-    `areaOf(s: Shape)` and `const s: Shape = sq; s.area()` call `Shape.area`
-    on the same object, and `Shape.report()` calling `this.area()` always
-    reaches `Shape.area` (`tests/cases/cls_extends_override`). There is no
-    vtable and no virtual dispatch; this is the one place Nish knowingly
-    differs from JavaScript. `super.m(args)` inside a derived class calls the
-    base implementation; `super` has no other use (`` `super.x` is not supported ``,
-    `reject_cls_super_field`; `reject_cls_super_outside`, `reject_cls_super_in_method`).
-  - *Rejected*: extending an interface (`` cannot extend interface `Named`; use `implements Named` ``,
-    `reject_cls_extends_interface`), an unknown name (`reject_cls_extends_unknown`),
-    an imported class (`tests/link/extends_imported_base`), itself
-    (`reject_cls_extends_self`) or a cycle (`reject_cls_extends_cycle`); an
-    exported class extending a non-exported one (`reject_cls_extends_nonexported`);
-    `super(...)` with the wrong arguments (`reject_cls_super_args`).
+  operands must have the same declared type.
+- **No inheritance** (WP25). `extends` on a class is
+  `` `extends` is not supported: Nish has no inheritance ``
+  (`tests/cases/reject_cls_extends`), and `super` in every spelling —
+  `super(...)`, `super.m()`, a bare `super` — is
+  `` `super` is not supported: Nish has no inheritance ``
+  (`reject_cls_super`). A class is never a subtype of another class, so
+  every method call in a program names exactly one symbol and there is
+  nothing for a vtable to decide. The widening `extends` used to provide is
+  `implements`, below: repeat the fields you were going to inherit as the
+  class's first fields and name an interface that declares them. Shared
+  behaviour is a free function over that interface.
 - **Rejected**: `static` (`tests/cases/reject_cls_static`),
   getters/setters (`Getters and setters are not supported`), optional fields
   (`cannot be optional`), index signatures, `!` assertions, `abstract`,
   `declare class`, generics (`tests/cases/reject_generic_class`), decorators
   (`reject_decorator`), computed member names (`reject_computed_property`),
-  overloaded constructors, multiple `extends`.
+  overloaded constructors.
 
 ### Interfaces and object literals
 
@@ -1036,18 +989,31 @@ function swap(p: Pair): Pair {
   `tests/cases/reject_cls_readonly_interface`); literals still set it. The
   message drops the class form's "outside its constructor", because an
   interface has none to point at.
-- **`class C implements I`** requires `C` to declare exactly `I`'s fields
-  in the same order with identical types
-  (`` Class `Square` does not implement `Shape`: field 1 is ... ``,
-  `tests/cases/reject_cls_implements_mismatch`). A `C` then converts to `I`
-  wherever an `I` is expected (initializer, return, argument, assignment,
-  field store, ternary arm, `I[]` element) by one `bitcast`; a class with
-  identical fields that does not list `I` is not assignable
-  (`tests/cases/cls_implements`, `reject_cls_not_implements`). A derived
-  class (`class D extends B implements I`) is checked on its flattened
-  fields, and a class inherits its base's `implements`: a `D` converts to
-  every interface `B` implements, since `B`'s fields are its prefix
-  (`tests/cases/cls_extends_chain`).
+- **`class C implements I`** requires `I`'s fields to be `C`'s **first**
+  fields, in the same order and with identical types; `C` may declare more
+  after them (`tests/cases/cls_implements_prefix`). A missing one is
+  `` does not implement `Point3`: it lacks field `z: i32` ``
+  (`reject_cls_implements_short`) and a mismatched one is
+  `` field 1 is `width: i32` in `Shape` but `height: i32` in `Square` ``
+  (`reject_cls_implements_mismatch`); both end
+  `(the interface's fields must be the class's first fields, in order)`.
+
+  A `C` then converts to `I` wherever an `I` is expected (initializer,
+  return, argument, assignment, field store, ternary arm, `I[]` element) by
+  one `bitcast`, because the two address the same bytes at the same offsets
+  for every field `I` names; a class with the right fields that does not
+  list `I` is not assignable (`tests/cases/cls_implements`,
+  `reject_cls_not_implements`). Nothing converts back: there is no downcast,
+  no `as`, no `instanceof`. The class's own fields after the prefix reuse
+  its tail padding, exactly as clang lays out the same C struct
+  (`tests/layout/structs.ts`, classes `K`, `L`, `M`).
+
+  **This is the only widening in the language.** Since WP25 a class is a
+  prefix of nothing but the interfaces it names, which is what lets two
+  classes with different tails be held in one `I[]` and operated on by one
+  function (`tests/cases/cls_implements_prefix`,
+  `tests/differential/corpus/class_prefix`) — the job `extends` used to do,
+  without a dispatch rule to get wrong.
 
 ## Statements
 
@@ -1814,12 +1780,11 @@ compiler's own marks are never invalidated by user resets.
   length is read (`tests/cases/arr_push`).
 - **Arrays and objects are references**: `===` is identity; `const b = a;
   b.push(2)` is visible through `a` *(CLI only)*; assignment never copies.
-- **Method dispatch is static.** `x.m()` calls the `m` of `x`'s declared
-  type (or its nearest ancestor that declares one), decided at compile time;
-  an override in a derived class is reached only through a receiver whose
-  declared type is that class. There is no vtable, so `Base.report()`
-  calling `this.area()` always runs `Base.area` even on a derived object
-  (`tests/cases/cls_extends_override`; see [Classes](#classes)).
+- **Method dispatch is static.** `x.m()` calls the `m` declared by `x`'s
+  type, decided at compile time. There is no vtable and no virtual dispatch,
+  and since WP25 there is no inheritance either, so there is no override for
+  one to disagree about: every method call in a program names one symbol
+  (see [Classes](#classes)).
 - **Memory** is one global bump arena plus the stack, decided at compile
   time (see [Memory model](#memory-model)); nothing is freed individually;
   `main`'s wrapper releases everything on exit. Objects, arrays, and strings
@@ -2125,7 +2090,8 @@ messages are exact for the cases cited; other rows quote
 | I/O with the wrong type | `` `readFileSync` expects an argument of type string, got i32 `` | `reject_readfile_number` |
 | array errors | see [Arrays](#array-literals), [Element access](#element-access), [`for...of`](#for-const-x-of-a) | `reject_arr_*` |
 | class and interface errors | see [Classes](#classes), [Interfaces](#interfaces-and-object-literals) | `reject_cls_*` |
-| inheritance errors: `extends` on an interface, unknown or imported base, cycles, redeclared field, changed override signature, `super` misuse, downcast | `` Class `User` cannot extend interface `Named`; use `implements Named` `` / `` Inheritance cycle: class `Pong` extends `Ping`, which already extends `Pong` `` / `` `super(...)` must be the first statement of the constructor of `Derived` `` / ... (see [Classes](#classes)) | `reject_cls_extends_*`, `reject_cls_super_*`, `reject_cls_override_signature`, `reject_cls_shadow_field`, `reject_cls_this_before_super`, `reject_cls_readonly_inherited`, `reject_cls_downcast`, `tests/link/extends_imported_base` |
+| `extends` or `super` on a class (WP25: there is no inheritance) | `` `extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `Derived` and `implements` an interface to convert between them `` / `` `super` is not supported: Nish has no inheritance, so a class has no base class to reach `` | `reject_cls_extends`, `reject_cls_super` |
+| a class does not cover the interface it `implements` | `` Class `Point2` does not implement `Point3`: it lacks field `z: i32` (the interface's fields must be the class's first fields, in order) `` | `reject_cls_implements_short`, `reject_cls_implements_mismatch` |
 | module errors | see [`export` and `import`](#export-and-import), [`main`](#main) | `reject_bare_import`, `reject_default_import`, `reject_namespace_import`, `reject_side_effect_import`, `reject_missing_module`, `reject_export_*`, `reject_main_params`, `tests/link/*` |
 | unsupported syntax the validator allows | `Unsupported statement in Phase 1: <Kind>` / `Unsupported expression in Phase 1: <Kind>` / `` Unsupported binary operator `**` `` / `` Unsupported unary operator `+` `` / `` Unsupported type `...` `` | *(CLI only)* |
 

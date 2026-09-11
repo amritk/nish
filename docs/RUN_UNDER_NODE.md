@@ -72,9 +72,6 @@ no prelude can reach it. They are language decisions
 - **`a[i]` is unchecked.** Out of range is `undefined` here and an exit-1 panic
   natively, and `pop()` on an empty array likewise. Only a program that goes out
   of range can tell the difference.
-- **Method dispatch is virtual under Node**, static natively. An override
-  reached through a base-typed value runs the derived method here and the base
-  method natively (`tests/cases/cls_extends_override`).
 - **`orReturn()` does not propagate.** It throws a marker that the rewriter's
   `try`/`catch` turns into an early `return`; unmodified there is no `catch`, so
   it escapes as an uncaught exception. Every other part of `Result` works —
@@ -110,7 +107,7 @@ fails the run. It is wired into the WP13 block of `tests/run.js`:
 node tests/differential/unmodified.js --verbose
 ```
 
-Today: **6 of 10 agree, 4 known divergences, 0 unexpected.**
+Today: **7 of 11 agree, 4 known divergences, 0 unexpected.**
 
 That ratio reads worse than it is. The f64 corpus is adversarial by
 construction — `f64_libm`, `f64_minmax_nan`, `f64_round_negzero` and

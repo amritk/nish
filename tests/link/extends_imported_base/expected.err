@@ -1,1 +1,0 @@
-Class `Derived` cannot extend imported class `Base`: a base class must be declared in the same module

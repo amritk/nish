@@ -12,7 +12,6 @@
 import { checkArrayMethod, checkArrayProperty, checkNewArray } from "./arrays";
 import { checkBuiltinArity, checkNamespaceProperty, isNamespace } from "./builtins";
 import { checkResultMethod, checkResultProperty } from "./result";
-import { fieldOwner } from "./structs";
 import { CheckContext } from "./context";
 import { assignInto, checkExpression } from "./expressions";
 import {
@@ -68,14 +67,6 @@ function nullableHint(ctx: CheckContext, receiver: i32, receiverExpr: Node): str
 /** `receiver.name` where `receiver` is a value, or a dotted builtin otherwise. */
 export function checkMember(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   const receiverExpr = expr.children[0];
-  if (receiverExpr.kind === N_SUPER) {
-    // Reading through `super` is never right: an inherited field lives at the
-    // same offset in the derived layout, so `this.x` is the same load.
-    return ctx.errorType(
-      expr,
-      `\`super.${expr.text}\` is not supported: inherited fields are read and written as \`this.${expr.text}\` (only \`super.method(...)\` is allowed)`
-    );
-  }
   if (!isValueReceiver(ctx, receiverExpr, scope)) {
     return checkNamespaceProperty(ctx, expr, receiverExpr.text, expr.text);
   }
@@ -131,9 +122,6 @@ export function structOf(ctx: CheckContext, type: i32): StructInfo | null {
 export function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   const access = expr.children[0];
   const receiverExpr = access.children[0];
-  if (receiverExpr.kind === N_SUPER) {
-    return checkSuperMethodCall(ctx, expr, access, scope);
-  }
   const receiver = checkExpression(ctx, receiverExpr, scope, -1);
   if (receiver === T_ERROR) {
     return T_ERROR;
@@ -232,7 +220,7 @@ export function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   if (info.kind !== STRUCT_CLASS) {
     return ctx.errorType(expr, `Cannot \`new\` interface \`${name}\`; use an object literal: \`{ ... }\``);
   }
-  const ctor = info.effectiveConstructor(); // own, or the nearest ancestor's
+  const ctor = info.ctor;
   if (ctor !== null) {
     checkMethodArguments(ctx, expr, ctor, args, `new ${name}`, scope, true);
     ctx.program.nodeCallees[expr.id] = ctor;
@@ -386,20 +374,18 @@ export function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scop
     return T_ERROR;
   }
   if (field.readonly && !assignableReadonly(ctx, info, target, receiverExpr, expr.text)) {
-    const owner = fieldOwner(info, field.name);
-    const where = owner.kind === STRUCT_CLASS ? " outside its constructor" : "";
+    const where = info.kind === STRUCT_CLASS ? " outside its constructor" : "";
     return ctx.errorType(
       target,
-      `Cannot assign to readonly field \`${field.name}\` of \`${owner.name}\`${where}`
+      `Cannot assign to readonly field \`${field.name}\` of \`${info.name}\`${where}`
     );
   }
   return assignInto(ctx, expr, scope, null, field.type, field.name, "field");
 }
 
 /**
- * A `readonly` field may only be assigned by the constructor of the class
- * that *declares* it, through `this`, with a plain `=`. A derived
- * constructor cannot write an inherited one.
+ * A `readonly` field may only be assigned by the constructor of the class that
+ * declares it, through `this`, with a plain `=`.
  */
 function assignableReadonly(
   ctx: CheckContext,
@@ -415,81 +401,11 @@ function assignableReadonly(
   if (receiverExpr.kind !== N_THIS) {
     return false;
   }
-  const field = info.field(target.text);
-  if (field === null) {
+  if (info.field(target.text) === null) {
     return false;
   }
   const owner = current.owner;
-  return owner !== null && owner === fieldOwner(info, field.name);
-}
-
-/**
- * `super.m(...)`: `this` seen as the base type, so the method lookup starts at
- * the base and the call is static dispatch. Only a call — `super.field` is
- * read and written as `this.field`, and there is no other use for `super` as
- * a value.
- */
-function checkSuperMethodCall(ctx: CheckContext, expr: Node, access: Node, scope: Scope): i32 {
-  const current = ctx.current;
-  const self = scope.lookup("this");
-  const owner: StructInfo | null = current === null ? null : current.owner;
-  if (owner === null || self === null) {
-    return ctx.errorType(
-      access.children[0],
-      "`super` is only valid inside a method or constructor of a class that `extends` another class"
-    );
-  }
-  const base = owner.base;
-  if (base === null) {
-    return ctx.errorType(
-      access.children[0],
-      `\`super\` in class \`${owner.name}\`, which does not extend a class`
-    );
-  }
-  const method = base.method(access.text);
-  if (method === null) {
-    if (base.field(access.text) !== null) {
-      return ctx.errorType(
-        access,
-        `\`super.${access.text}\` is not supported: inherited fields are read and written as \`this.${access.text}\` (only \`super.method(...)\` is allowed)`
-      );
-    }
-    ctx.errorAtProperty(access, `Unknown method \`${access.text}\` on class \`${base.name}\``);
-    return T_ERROR;
-  }
-  // `super` is bound to the `this` local so the attribute analysis sees the
-  // pointer flow into the callee.
-  ctx.program.nodeLocals[access.children[0].id] = self;
-  ctx.program.nodeTypes[access.children[0].id] = base.type;
-  checkMethodArguments(ctx, expr, method, expr.children[1], `${base.name}.${access.text}`, scope, false);
-  ctx.program.nodeCallees[expr.id] = method;
-  return method.returnType;
-}
-
-/** `super(...)`: the base constructor, callable only from a derived constructor. */
-export function checkSuperCall(ctx: CheckContext, expr: Node, scope: Scope): i32 {
-  const current = ctx.current;
-  if (current === null || current.role !== ROLE_CONSTRUCTOR) {
-    return ctx.errorType(
-      expr,
-      "`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class"
-    );
-  }
-  const owner = current.owner;
-  const base: StructInfo | null = owner === null ? null : owner.base;
-  if (base === null) {
-    return ctx.errorType(expr, "`super(...)` requires a base class");
-  }
-  const ctor = base.effectiveConstructor();
-  if (ctor === null) {
-    if (expr.children[1].children.length > 0) {
-      ctx.error(expr, `\`super\` expects 0 argument(s) (\`${base.name}\` has no constructor)`);
-    }
-    return T_VOID;
-  }
-  checkMethodArguments(ctx, expr, ctor, expr.children[1], "super", scope, false);
-  ctx.program.nodeCallees[expr.id] = ctor;
-  return T_VOID;
+  return owner !== null && owner === info;
 }
 
 // ---- String members -----------------------------------------------------------------

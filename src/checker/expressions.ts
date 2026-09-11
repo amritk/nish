@@ -14,7 +14,7 @@ import { bitwiseBinaryCheckers, bitwiseUnaryCheckers } from "./bitwise.js";
 import { BuiltinCallChecker } from "./builtins.js";
 import { ioBuiltinFunctions } from "./io.js";
 import { contextualLiteralType, conversionBuiltins, parseBuiltins } from "./math.js";
-import { checkSuperCall, classExpressionCheckers, isAssignmentOperator } from "./classes.js";
+import { classExpressionCheckers, isAssignmentOperator } from "./classes.js";
 import {
   assignmentTargetCheckers,
   checkMethodCall,
@@ -223,7 +223,8 @@ export const builtinFunctions: Record<string, BuiltinCallChecker> = {
 
 const checkCall: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.CallExpression;
-  if (expr.expression.kind === ts.SyntaxKind.SuperKeyword) return checkSuperCall(ctx, expr, scope); // WP2b
+  // `super(...)`: checking the receiver reports it (WP25), so the rule is stated once.
+  if (expr.expression.kind === ts.SyntaxKind.SuperKeyword) ctx.checkExpression(expr.expression, scope);
   if (ts.isPropertyAccessExpression(expr.expression)) {
     // `value.method(...)` dispatches on the receiver type; `console.log(...)` is a dotted builtin.
     return isValueReceiver(ctx, expr.expression.expression, scope)

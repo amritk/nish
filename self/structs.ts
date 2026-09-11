@@ -1,18 +1,19 @@
 // Classes and interfaces for stage1 (`src/checker/classes.ts` pass 1,
 // docs/wp14-selfhost.md milestone S3): names, fields and their layout,
-// methods, the constructor, `extends` and `implements`.
+// methods, the constructor and `implements`.
 //
 // **The layout is the ABI.** A field's index is its position in the LLVM
 // struct body and its offset is where clang would put it in the equivalent C
 // struct, so `--emit-header` and a C caller agree without anyone writing the
-// layout down twice. Inheritance is a prefix: a derived class copies its
-// base's fields, indices and offsets included, which is what lets a
-// `%struct.Derived*` be `bitcast` to a `%struct.Base*` with no adjustment.
+// layout down twice. `implements` is a prefix rule (WP25): the interface's
+// fields are the class's first fields, indices and offsets included, which is
+// what lets a `%struct.Square*` be `bitcast` to a `%struct.Shape*` with no
+// adjustment. There is no inheritance, so that is the only widening there is.
 //
 // The parser has already refused generics, `abstract`, `declare`, `static`,
 // getters and setters and index signatures, so what is here is the semantic
-// half — duplicate members, an override that changes its signature, a base
-// that is an interface, a cycle.
+// half — duplicate members, `extends`, a class that does not cover the
+// interface it names.
 
 import { CheckContext } from "./context";
 import { resolveType } from "./annotations";
@@ -148,24 +149,6 @@ function literalInitializerType(ctx: CheckContext, expr: Node, want: i32): i32 {
 function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void {
   const name = decl.children[0].text;
   const what = `Field \`${name}\` of ${kindWord(owner)} \`${owner.name}\``;
-  const base = owner.base;
-  if (base !== null) {
-    const inherited = base.field(name);
-    if (inherited !== null) {
-      ctx.error(
-        decl.children[0],
-        `${what} is already declared in base class \`${fieldOwner(base, name).name}\`; a derived class cannot redeclare or shadow an inherited field`
-      );
-      return;
-    }
-    const method = base.method(name);
-    if (method !== null) {
-      const holder = method.owner;
-      const holderName = holder === null ? base.name : holder.name;
-      ctx.error(decl.children[0], `${what} clashes with method \`${name}\` inherited from \`${holderName}\``);
-      return;
-    }
-  }
   if (owner.field(name) !== null || owner.methodIndex.has(name)) {
     ctx.error(decl.children[0], `Duplicate member \`${name}\` in ${kindWord(owner)} \`${owner.name}\``);
     return;
@@ -198,41 +181,9 @@ function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void {
   owner.fields.push(field);
 }
 
-/** The class in `info`'s chain that declares `name`; `info` itself if none above does. */
-export function fieldOwner(info: StructInfo, name: string): StructInfo {
-  let owner = info;
-  let walk = info.base;
-  while (walk !== null) {
-    if (walk.field(name) !== null) {
-      owner = walk;
-    }
-    walk = walk.base;
-  }
-  return owner;
-}
-
-/** `(x: number): boolean` — the part of a method signature an override must keep. */
-function describeSignature(ctx: CheckContext, sig: FunctionSig): string {
-  const parts: string[] = [];
-  let i = 1; // skip `this`
-  while (i < sig.paramNames.length) {
-    parts.push(`${sig.paramNames[i]}: ${ctx.table.typeName(sig.paramTypes[i])}`);
-    i = i + 1;
-  }
-  return `(${parts.join(", ")}): ${ctx.table.typeName(sig.returnType)}`;
-}
-
 function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void {
   const name = decl.children[0].text;
   const what = `Method \`${name}\``;
-  const base = owner.base;
-  if (base !== null && base.field(name) !== null) {
-    ctx.error(
-      decl.children[0],
-      `${what} of class \`${owner.name}\` clashes with field \`${name}\` inherited from \`${fieldOwner(base, name).name}\``
-    );
-    return;
-  }
   if (owner.field(name) !== null || owner.methodIndex.has(name)) {
     ctx.error(decl.children[0], `Duplicate member \`${name}\` in class \`${owner.name}\``);
     return;
@@ -254,35 +205,9 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void {
   } else {
     sig.returnType = resolveType(returnAnnotation, ctx);
   }
-
-  // An override keeps the signature: a call resolves statically by the
-  // receiver's declared type, so the base and the derived method must accept
-  // and return the same types. There is no overloading to fall back on.
-  const overridden: FunctionSig | null = base === null ? null : base.method(name);
-  if (overridden !== null && !sameSignature(sig, overridden)) {
-    ctx.error(
-      decl.children[0],
-      `${what} of class \`${owner.name}\` overrides \`${overridden.sourceName}\` with a different signature: \`${overridden.sourceName}\` is ${describeSignature(ctx, overridden)}, \`${sig.sourceName}\` is ${describeSignature(ctx, sig)} (an override keeps the signature; there is no overloading)`
-    );
-  }
   owner.methodIndex.set(name, owner.methodSigs.length);
   owner.methodSigs.push(sig);
   ctx.program.functions.push(sig);
-}
-
-/** Same parameter types after `this`, and the same return type. */
-function sameSignature(a: FunctionSig, b: FunctionSig): boolean {
-  if (a.paramTypes.length !== b.paramTypes.length || a.returnType !== b.returnType) {
-    return false;
-  }
-  let i = 1;
-  while (i < a.paramTypes.length) {
-    if (a.paramTypes[i] !== b.paramTypes[i]) {
-      return false;
-    }
-    i = i + 1;
-  }
-  return true;
 }
 
 function collectConstructor(ctx: CheckContext, owner: StructInfo, decl: Node): void {
@@ -302,86 +227,27 @@ function collectConstructor(ctx: CheckContext, owner: StructInfo, decl: Node): v
   ctx.program.functions.push(sig);
 }
 
-/**
- * The class named by `extends`, fully collected so its fields can be copied.
- * Only a class declared in this module qualifies: an imported base would need
- * its layout before pass 1b binds imports, and an interface has no
- * constructor or methods to inherit — `implements` covers the layout.
- */
-function resolveBase(ctx: CheckContext, info: StructInfo, name: Node): StructInfo | null {
-  const base = ctx.program.struct(name.text);
-  if (base === null) {
-    let imported = false;
-    for (const imp of ctx.program.imports) {
-      if (imp.localName === name.text) {
-        imported = true;
-      }
-    }
-    ctx.error(
-      name,
-      imported
-        ? `Class \`${info.name}\` cannot extend imported class \`${name.text}\`: a base class must be declared in the same module`
-        : `Unknown base class \`${name.text}\` (\`extends\` must name a class declared in this module)`
-    );
-    return null;
-  }
-  if (base.kind === STRUCT_INTERFACE) {
-    ctx.error(
-      name,
-      `Class \`${info.name}\` cannot extend interface \`${name.text}\`; use \`implements ${name.text}\``
-    );
-    return null;
-  }
-  if (base === info) {
-    ctx.error(name, `Class \`${info.name}\` cannot extend itself`);
-    return null;
-  }
-  if (base.collecting) {
-    ctx.error(
-      name,
-      `Inheritance cycle: class \`${info.name}\` extends \`${name.text}\`, which already extends \`${info.name}\``
-    );
-    return null;
-  }
-  if (info.exported && !base.exported) {
-    ctx.error(
-      name,
-      `Exported class \`${info.name}\` cannot extend non-exported class \`${name.text}\` (the base's constructor and methods are part of \`${info.name}\`'s ABI; export \`${name.text}\` too)`
-    );
-    return null;
-  }
-  collectStructMembers(ctx, base);
-  return base;
-}
-
-/** The base's fields, indices and offsets included: they are the prefix of the derived layout. */
-function inheritFields(info: StructInfo, base: StructInfo): void {
-  for (const field of base.fields) {
-    const copy = new FieldInfo(field.name, field.type, field.decl);
-    copy.index = field.index;
-    copy.offset = field.offset;
-    copy.readonly = field.readonly;
-    copy.initializer = field.initializer;
-    info.fieldIndex.set(field.name, info.fields.length);
-    info.fields.push(copy);
-  }
-}
-
-/** The base class, fields, layout, methods and constructor of a declared struct. */
+/** The fields, layout, methods and constructor of a declared struct. */
 export function collectStructMembers(ctx: CheckContext, info: StructInfo): void {
   if (info.collected) {
-    return; // already pulled in as the base of an earlier class
+    return;
   }
-  info.collecting = true;
   const decl = info.decl;
   if (info.kind === STRUCT_CLASS) {
     const extendsName = decl.children[1];
     if (extendsName.kind !== N_EMPTY) {
-      info.base = resolveBase(ctx, info, extendsName);
-      const base = info.base;
-      if (base !== null) {
-        inheritFields(info, base);
-      }
+      // WP25. The rule lives in the checker rather than in Phase 0 because
+      // inheritance needs nothing Phase 0 exists to refuse — it compiled until
+      // WP25 — and the message names the rewrite, the way a removed spelling's
+      // should.
+      ctx.error(
+        extendsName,
+        `\`extends\` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of \`${info.name}\` and \`implements\` an interface to convert between them`
+      );
+      // Stop here, which is what stage0's `throw` out of pass 1b leaves
+      // behind: the struct is registered but has no members and no layout.
+      info.poisoned = true;
+      return;
     }
     for (const iface of decl.children[2].children) {
       const target = ctx.program.struct(iface.text);
@@ -408,14 +274,15 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
     }
   }
   computeLayout(ctx, info);
-  info.collecting = false;
   info.collected = true;
 }
 
 /**
  * `class C implements I` is a layout check, not a subtype relation: `I`'s
- * fields must be the first fields of `C`, in the same order, with the same
- * types, so a `%struct.C*` is a `%struct.I*` with no adjustment.
+ * fields must be the *first* fields of `C`, in the same order and with the
+ * same types, so a `%struct.C*` is a `%struct.I*` with no adjustment. `C` may
+ * declare more fields after them (WP25) — that prefix is what replaced
+ * inheritance as the way a wider struct is used as a narrower one.
  */
 export function checkImplements(ctx: CheckContext, cls: StructInfo): void {
   for (const name of cls.implementsNames) {
@@ -423,27 +290,24 @@ export function checkImplements(ctx: CheckContext, cls: StructInfo): void {
     if (iface === null) {
       continue;
     }
-    const count = cls.fields.length > iface.fields.length ? cls.fields.length : iface.fields.length;
     let i = 0;
-    while (i < count) {
-      const hasWant = i < iface.fields.length;
-      const hasGot = i < cls.fields.length;
-      if (hasWant && hasGot) {
-        const want = iface.fields[i];
+    while (i < iface.fields.length) {
+      const want = iface.fields[i];
+      if (i < cls.fields.length) {
         const got = cls.fields[i];
         if (want.name === got.name && want.type === got.type) {
           i = i + 1;
           continue;
         }
+        ctx.error(
+          cls.decl.children[0],
+          `Class \`${cls.name}\` does not implement \`${iface.name}\`: field ${i + 1} is ${describeField(ctx, want)} in \`${iface.name}\` but ${describeField(ctx, got)} in \`${cls.name}\` (the interface's fields must be the class's first fields, in order)`
+        );
+        return;
       }
-      const why = !hasGot
-        ? `it lacks field ${describeField(ctx, iface.fields[i])}`
-        : !hasWant
-          ? `it declares extra field ${describeField(ctx, cls.fields[i])}`
-          : `field ${i + 1} is ${describeField(ctx, iface.fields[i])} in \`${iface.name}\` but ${describeField(ctx, cls.fields[i])} in \`${cls.name}\``;
       ctx.error(
         cls.decl.children[0],
-        `Class \`${cls.name}\` does not implement \`${iface.name}\`: ${why} (fields must match exactly, in order)`
+        `Class \`${cls.name}\` does not implement \`${iface.name}\`: it lacks field ${describeField(ctx, want)} (the interface's fields must be the class's first fields, in order)`
       );
       return;
     }
@@ -454,13 +318,6 @@ function describeField(ctx: CheckContext, field: FieldInfo): string {
   return `\`${field.name}: ${ctx.table.typeName(field.type)}\``;
 }
 
-/**
- * Whether a class value may stand where `want` is expected without a
- * conversion the reader has to write: `want` is a class it extends, or an
- * interface it implements. Both are one pointer `bitcast` — an interface has
- * the identical layout and a base class is a layout prefix — so nothing is
- * checked at run time and nothing converts back.
- */
 /**
  * The struct names a type mentions, following `T[]` and `T | null` inwards.
  * A name reached this way is a *layout* this module needs even though it
@@ -504,22 +361,24 @@ export function signatureStructNames(table: TypeTable, sig: FunctionSig, out: St
  * inherited ones included. Its own name is not one of them.
  */
 export function referencedStructNames(table: TypeTable, info: StructInfo, out: StringSet): void {
-  let c: StructInfo | null = info;
-  while (c !== null) {
-    for (const field of c.fields) {
-      noteStructNames(table, field.type, out);
-    }
-    for (const method of c.methodSigs) {
-      signatureStructNames(table, method, out);
-    }
-    const ctor = c.ctor;
-    if (ctor !== null) {
-      signatureStructNames(table, ctor, out);
-    }
-    c = c.base;
+  for (const field of info.fields) {
+    noteStructNames(table, field.type, out);
+  }
+  for (const method of info.methodSigs) {
+    signatureStructNames(table, method, out);
+  }
+  const ctor = info.ctor;
+  if (ctor !== null) {
+    signatureStructNames(table, ctor, out);
   }
 }
 
+/**
+ * Whether a class value may stand where `want` is expected without a
+ * conversion the reader has to write: `want` is an interface it implements.
+ * That is one pointer `bitcast` — the interface's fields are the class's first
+ * fields — so nothing is checked at run time and nothing converts back.
+ */
 export function coercesTo(ctx: CheckContext, from: i32, want: i32): boolean {
   if (want < 0 || !ctx.table.isStruct(from)) {
     return false;
@@ -533,26 +392,13 @@ export function coercesTo(ctx: CheckContext, from: i32, want: i32): boolean {
   if (source === null || wanted === null) {
     return false;
   }
-  if (wanted.kind === STRUCT_INTERFACE) {
-    // An interface a base implements is implemented by the derived class too:
-    // the base's fields are the prefix, so the layout still matches.
-    let walk: StructInfo | null = source;
-    while (walk !== null) {
-      for (const name of walk.implementsNames) {
-        if (name === wanted.name) {
-          return true;
-        }
-      }
-      walk = walk.base;
-    }
+  if (wanted.kind !== STRUCT_INTERFACE) {
     return false;
   }
-  let base = source.base;
-  while (base !== null) {
-    if (base === wanted) {
+  for (const name of source.implementsNames) {
+    if (name === wanted.name) {
       return true;
     }
-    base = base.base;
   }
   return false;
 }

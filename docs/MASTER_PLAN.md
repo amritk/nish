@@ -781,3 +781,54 @@ deferred to WP18 rather than given syntax of their own, and `for...of` over a
 string, a string `switch` and `?.` are declined with the argument written out:
 each is refused by a rule the project already accepted, and a plan of record
 that says what it turned down is worth more than one that only says yes.
+
+`async`/`await` is the one question on this page whose plan of record is a
+**refusal**, and [wp24-async.md](wp24-async.md) is that note. The blocker is
+not the lowering, and a coroutine is not a strategy for `async`/`await` but
+what `async`/`await` is — the only choice is who writes the state machine, and
+both answers were measured. A hand-written coroutine in textual IR is split by
+LLVM 18's default pipeline, and when the handle does not escape its caller the
+frame, the allocation and both split functions are elided outright, under the
+condition `src/codegen/escape.ts` already computes; rustc, meanwhile, uses none
+of those intrinsics and builds a 20-byte struct with a one-byte state
+discriminant and a `switch`, allocating nothing — which is the shape to copy,
+since a struct and a `switch` are constructs this language already has. The
+blocker is that there is nothing to await. Every I/O call in the
+language is synchronous and there is no socket, timer, sleep or poller in
+either compiler or either runtime, so the first deliverable of an async package
+would be a poller and a socket type rather than a keyword — a larger package
+than the syntax, for a workload nobody has asked for. What an asker usually
+wants is one of two things that already have answers: overlapping work is
+WP20's threads, and "do not block Node's event loop" is a change to the
+generated N-API shim — `napi_create_async_work` plus a promise on the
+JavaScript side, with the Nish function left exactly as synchronous as it
+is — whose entire cost is WP20's T0 thread-local arena. That one item has no
+language surface and is the note's only recommendation to build. The rest is
+declined with the rule each refusal breaks, including the tempting one:
+accepting `async` as an erased no-op keyword would make a program mean
+something different under Node than it does here, in the direction
+[wp13-differential.md](wp13-differential.md) exists to prevent. Nothing here
+is pre-1.0 — LANGUAGE.md keeps the rejections it has, so M4's freeze is not
+waiting on any of it.
+
+The one thing that has *left* the language rather than entered it is
+inheritance, and [wp25-inheritance.md](wp25-inheritance.md) is the plan of
+record. `extends` gave three things: a field prefix, member reuse, and
+polymorphism — and the third is the reason hierarchies exist and the one Nish
+never had, because dispatch is static and a vtable is an indirect call the §3a
+fact pass cannot see through. So an override reached through a base-typed value
+ran the base method natively and the derived one under Node, which was the
+language's only knowing disagreement with JavaScript and the only by-design
+entry in `known-failures.txt` that was not a number. The removal keeps the half
+that was carrying weight by widening `implements` from an exact field match to
+a **prefix**: an interface's fields must be the class's first fields, the class
+may declare more after them, the conversion is still one `bitcast`, and the
+three layout classes that used to be derived are still 24, 16 and 32 bytes with
+the C twin unchanged. Two classes with different tails in one `I[]` is the job
+`extends` was doing, without a dispatch rule attached. It was affordable
+because `self/` — 25,911 lines, the largest Nish program there is — declared no
+derived class at all: WP14 §2.1 had already chosen one `Node` class with a
+`kind` discriminant over a hierarchy, and Nish-0 was defined as the language
+minus "inheritance and downcasts". Sixteen `reject_*` cases collapse into two
+rules, both in the checker rather than Phase 0, by the doctrine WP22 §6 states
+for a removed spelling.

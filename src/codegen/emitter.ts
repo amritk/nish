@@ -171,8 +171,7 @@ export class Emitter implements EmitContext {
       const object = unpackResult(this, p.type as ResultType, word, this.isStackParam(p.name));
       this.paramObjects.set(p.name, object);
     }
-    // A constructor stores the field initializers before its body runs (WP2),
-    // and a derived one without an explicit `super(...)` constructs its base part (WP2b).
+    // A constructor stores the field initializers before its body runs (WP2).
     if (sig.role === "constructor") emitConstructorPrologue(this, sig);
     // WP22 §4: a concise arrow body is the one `return` it means.
     if (ts.isBlock(sig.body)) this.emitBlock(sig.body);
