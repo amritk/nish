@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 347;
+export const RULE_COUNT: i32 = 351;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -755,6 +755,14 @@ export function performanceRules(): string[] {
     "NL9001",
     "is rebuilt from its own value on every iteration of this loop",
     "NL9002",
+    "already holds an allocation and this one drops it",
+    "NL9003",
+    "this computes with overflow: the result",
+    "NL9006",
+    "is computed in i32 and wraps before",
+    "NL9005",
+    "is at or beyond the",
+    "NL9004",
   ];
 }
 

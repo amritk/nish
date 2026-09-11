@@ -619,7 +619,23 @@ the same `DiagnosticSink`, carried in `--json`, and never affecting the exit
 code unless promoted.
 
 The compiler emits one whenever it *had* to take the slow path and a faster one
-was available:
+was available — and, since the arithmetic rules below, whenever it can *prove*
+that a piece of arithmetic does not compute what it was written to compute.
+Those are not performance advice, and the honest thing would be a severity of
+their own; they ride this class because it already has the shape they need (on
+by default, never fatal, filterable in `--json`) and a fourth severity is a
+change to a machine-readable contract, which is worth making once rather than
+per rule. What they share with the rest of the class is the bar: a concrete
+rewrite, named in the message.
+
+| Warning | Fires when | Hint |
+| --- | --- | --- |
+| allocation dropped by an assignment | `p = new Point(n)` where `p` was declared holding an allocation: the old value is unreachable, nothing frees it, and the assignment costs the function its arena scope as well | a `const` per value, or an explicit `Arena.mark()` / `Arena.release(m)` bracket |
+| constant computed with overflow | a `+`, `-` or `*` over decimal literals whose value does not fit the `i32` it is computed in, under the default `nsw` | widen the operands with `toI64`, or pass `--wrapping` if the wrap is intended |
+| product widened after wrapping | `toI64(a * b)` / `toF64(a * b)` where the multiplication is `i32`. Multiplication only: `+` and `-` overflow too, but `toI64(intBits(t) - 1)` is the same shape with nothing wrong with it | convert the operands first: `toI64(a) * toI64(b)` |
+| shift count at or beyond the width | `x << 32` on an `i32`, where the count is masked and the shift that runs is not the one written | mask deliberately, or shift a wider value |
+
+and the original six:
 
 | Warning | Fires when | Hint |
 | --- | --- | --- |

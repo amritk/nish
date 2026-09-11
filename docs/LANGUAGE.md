@@ -1892,8 +1892,9 @@ by the caller.
   so later uses do not cascade.
 - **Performance warnings are the one diagnostic that is not an error**
   (WP15 §8). The compiler reports one whenever it had to take a slow path and a
-  faster one was available, in the same anchored, excerpted shape an error has
-  but with `performance` where `error` would be:
+  faster one was available, or whenever it can prove that a piece of arithmetic
+  does not compute what it was written to compute, in the same anchored,
+  excerpted shape an error has but with `performance` where `error` would be:
   `file:line:col: performance: <text>`. They are **on by default**, print on
   stderr, and **never change the exit code**: a program that trips one still
   compiles and still exits 0. `--no-warn-performance` silences the class and
@@ -1901,7 +1902,7 @@ by the caller.
   that *failed* prints its errors and none of its warnings; a report of more
   than one warning is capped at 20, like the error report, with
   `...and N more performance warnings` and an `N performance warnings` line.
-  Two warnings exist today, and each names the rewrite:
+  Six warnings exist today, and each names the rewrite:
   - **quadratic string building** — `s = <something built from s>` where `s`
     is a string local declared outside the loop the assignment sits in, so
     every pass copies the whole accumulator. The hint is a `string[]` and one
@@ -1920,6 +1921,46 @@ by the caller.
     every pass, and not when the value is pushed, stored, returned or passed
     on, because then the program asked for one object per iteration
     (`tests/cases/perf_alloc_quiet`).
+  - **an allocation dropped by an assignment** — `p = new Point(n)` where `p`
+    was declared holding an allocation of its own. The value it held is
+    unreachable from there and nothing frees it, and assigning a local is also
+    what takes away the proof the automatic arena scope needs
+    ([Memory model](#memory-model)), so the whole body's allocations live until
+    the program exits. The hints are a `const` per value and, where the
+    assignment is the point, an explicit `Arena.mark()` / `Arena.release(m)`
+    bracket (`tests/cases/perf_arena_drop`). Not reported when the local was
+    declared holding a literal and is then given its one value in a branch
+    (`let what = "unbound"; if (...) what = \`long ${s}\`;`), which drops
+    nothing and has no rewrite; when the assigned value is not an allocation;
+    when the function returns a pointer, because then its caller owns the
+    memory; or when the quadratic-string rule is already reporting the same
+    line (`tests/cases/perf_arena_quiet`).
+  - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
+    literals whose exact value does not fit the `i32` it is computed in. The
+    default `nsw` makes that undefined behaviour rather than a wrap, so the
+    hint is to widen the operands with `toI64` or to pass `--wrapping`
+    (`tests/cases/perf_overflow_const`). Reported on the innermost expression
+    that overflows, so `100000 * 100000 + 1` warns once. Silent under
+    `--wrapping`, where the wrap is the defined answer
+    (`tests/cases/perf_overflow_wrapping`), silent for the unsigned widths,
+    which are defined to wrap in both modes, and silent for anything the
+    folder does not evaluate — a named `const`, a hexadecimal literal, or a
+    value large enough that the fold itself would have to overflow to find out
+    (`tests/cases/perf_overflow_quiet`). A *module-level* `const` needs no
+    warning: its fold is eager and an overflow there is a hard error.
+  - **a product widened after it has already wrapped** — `toI64(a * b)` or
+    `toF64(a * b)` where the operand expression is `i32`. The multiplication
+    happens in `i32` and has overflowed by the time the conversion sees it, so
+    the wider type never holds the value the reader expects; the hint is to
+    convert the operands first (`tests/cases/perf_overflow`). Not reported when
+    the arithmetic is already done in the wider type (`toI64(a) * toI64(b)`),
+    which is the rewrite itself, and not for `+` or `-`, which can overflow
+    too but whose shape is usually innocent: `toI64(intBits(t) - 1)` has
+    nothing wrong with it, and a warning there would be the un-actionable kind.
+  - **a shift count at or beyond the operand width** — `x << 32` on an `i32`.
+    The count is masked to the width, so the shift that runs is not the shift
+    that was written; the hint is to mask deliberately or to shift a wider
+    value (`tests/cases/perf_overflow`). A count inside the width is silent.
 - **`--json`** prints every diagnostic as one JSON object per line on stdout,
   `{"file","line","column","endLine","endColumn","severity","code","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in

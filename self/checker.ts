@@ -12,11 +12,12 @@
 
 import { aliasType, builtinTypeName, resolveType } from "./annotations";
 import { checkDefiniteAssignment } from "./assignment";
-import { foldConstant } from "./constants";
+import { foldConstant, parseIntegerLiteral } from "./constants";
 import { CheckContext } from "./context";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations";
 import {
+  FLAG_PREFIX,
   N_BINARY,
   N_BLOCK,
   N_CLASS,
@@ -32,12 +33,16 @@ import {
   N_INTERFACE,
   N_MEMBER,
   N_MODULE_CONST,
+  N_ARRAY,
+  N_CALL,
   N_NEW,
   N_NUMBER,
+  N_OBJECT,
   N_PAREN,
   N_TEMPLATE,
   N_TEMPLATE_TEXT,
   N_TYPE_ALIAS,
+  N_UNARY,
   N_VAR_DECL,
   N_WHILE,
   Node,
@@ -63,7 +68,7 @@ import {
   referencedStructNames,
   signatureStructNames,
 } from "./structs";
-import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING, T_VOID, TypeTable } from "./types";
+import { T_BOOL, T_ERROR, T_F64, T_I32, T_I64, T_STRING, T_VOID, TypeTable, intBits } from "./types";
 
 export class Checker {
   ctx: CheckContext;
@@ -320,7 +325,7 @@ export class Checker {
       // side tables. Only for a body that checked cleanly — advice about code
       // that does not compile is noise, and a poisoned body has incomplete
       // side tables anyway.
-      checkPerformance(this.ctx, body);
+      checkPerformance(this.ctx, sig, body);
     }
     // A body with a rejected statement may have lost its `return`; reporting
     // a missing one on top of that is a cascade, not a second bug.
@@ -593,15 +598,38 @@ function nameOf(sig: FunctionSig): Node {
  */
 class PerfWalk {
   ctx: CheckContext;
+  /** The function being walked: the arena rule reads its return type. */
+  sig: FunctionSig;
   loops: Node[];
   declared: Local[];
   declaredDepth: i32[];
+  /**
+   * Whether each declared local's initializer was itself a visible allocation.
+   * Parallel to `declared`, and the difference between "this assignment drops
+   * an allocation nobody can reach again" and "this local is being given its
+   * one value in a branch", which is ordinary code with nothing to fix.
+   */
+  declaredAllocates: boolean[];
 
-  constructor(ctx: CheckContext) {
+  constructor(ctx: CheckContext, sig: FunctionSig) {
     this.ctx = ctx;
+    this.sig = sig;
     this.loops = [];
     this.declared = [];
     this.declaredDepth = [];
+    this.declaredAllocates = [];
+  }
+
+  /** Whether `local` was declared holding an allocation. */
+  declaredHoldingAllocation(local: Local): boolean {
+    let i = 0;
+    while (i < this.declared.length) {
+      if (this.declared[i] === local) {
+        return this.declaredAllocates[i];
+      }
+      i = i + 1;
+    }
+    return false;
   }
 
   /** The loop depth `local` was declared at, or -1 when it was not declared inside a loop. */
@@ -623,8 +651,8 @@ class PerfWalk {
  * and only for a body that checked cleanly — advice about code that does not
  * compile is noise, and a poisoned body has incomplete side tables anyway.
  */
-export function checkPerformance(ctx: CheckContext, body: Node): void {
-  walkPerformance(new PerfWalk(ctx), body);
+export function checkPerformance(ctx: CheckContext, sig: FunctionSig, body: Node): void {
+  walkPerformance(new PerfWalk(ctx, sig), body);
 }
 
 /**
@@ -667,35 +695,57 @@ function walkPerformance(walk: PerfWalk, node: Node): void {
     if (local !== null) {
       walk.declared.push(local);
       walk.declaredDepth.push(walk.loops.length);
+      walk.declaredAllocates.push(perfAllocatesVisibly(walk.ctx, node.children[2]));
     }
     checkLoopAllocation(walk, node);
-  } else if (node.kind === N_BINARY && node.text === "=") {
-    checkStringAccumulation(walk, node);
+  } else if (node.kind === N_BINARY) {
+    if (node.text === "=") {
+      checkStringAccumulation(walk, node);
+      checkArenaReassignment(walk, node);
+    }
+    checkConstantOverflow(walk, node);
+    checkShiftCount(walk, node);
+  } else if (node.kind === N_CALL) {
+    checkWideningConversion(walk, node);
   }
   for (const child of node.children) {
     walkPerformance(walk, child);
   }
 }
 
-/** `s = <something built from s>` inside a loop that does not own `s`. */
-function checkStringAccumulation(walk: PerfWalk, expr: Node): void {
+/**
+ * `s = <something built from s>` inside a loop that does not own `s`. Split
+ * from the report below because the arena rule has to know whether this one is
+ * already speaking about the same assignment: one line gets one warning.
+ */
+function isQuadraticAccumulation(walk: PerfWalk, expr: Node): boolean {
   if (walk.loops.length === 0) {
-    return;
+    return false;
   }
   const left = expr.children[0];
   if (left.kind !== N_IDENT) {
-    return;
+    return false;
   }
   const target = walk.ctx.program.nodeLocals[left.id];
   if (target === null || target.type !== T_STRING) {
-    return;
+    return false;
   }
   // Declared inside the loop it is assigned in: the string is rebuilt from
   // empty every pass, so it is bounded by one iteration, not by the loop.
   if (walk.depthOf(target) === walk.loops.length) {
+    return false;
+  }
+  return accumulates(walk.ctx, expr.children[1], target);
+}
+
+/** `s = <something built from s>` inside a loop that does not own `s`. */
+function checkStringAccumulation(walk: PerfWalk, expr: Node): void {
+  if (!isQuadraticAccumulation(walk, expr)) {
     return;
   }
-  if (!accumulates(walk.ctx, expr.children[1], target)) {
+  const left = expr.children[0];
+  const target = walk.ctx.program.nodeLocals[left.id];
+  if (target === null) {
     return;
   }
   walk.ctx.performance(
@@ -851,4 +901,322 @@ function isLocalRef(ctx: CheckContext, expr: Node, local: Local): boolean {
   }
   const bound = ctx.program.nodeLocals[e.id];
   return bound !== null && bound === local;
+}
+
+
+// ---- Memory that is allocated and then never released ----------------------------
+//
+// The stage1 half of the same rule in `src/checker/performance.ts`, where the
+// measurement and the reasoning are written out. In short: WP6 releases a
+// function's arena temporaries on the way out only when it can prove they all
+// die with the frame, and assigning an allocation to a local takes that proof
+// away for the whole body — the stack rule needs a fixed binding, so the value
+// classifies as `leaks`, `allocLeaks` goes on, and the `nish_arena_mark` /
+// `nish_arena_release` bracket is not emitted at all.
+//
+// The rule fires only where an allocation is *dropped*: the local was declared
+// holding one, so the value it held is unreachable after the assignment and
+// nothing will ever free it. A local given its one value in a branch (`let
+// what = "unbound"` and three arms that assign a template) retains memory too,
+// but there is no rewrite worth naming there, and §8 is explicit that a
+// warning nobody can act on is worse than no warning.
+
+/** The builtins that hand back freshly allocated memory by plain identifier. */
+function perfIsReadBuiltin(name: string): boolean {
+  return name === "readFileSync" || name === "readFileSyncOrNull";
+}
+
+/**
+ * `expr` allocates from the arena in a way the checker can see for itself: a
+ * `new`, an object or array literal, a template with a hole, a string
+ * concatenation, or a `readFileSync`.
+ *
+ * A call to a user function is deliberately not counted even though it may
+ * allocate: whether it does is a whole-program fact the attribute fixpoint
+ * owns, and a guess that fires on a call that allocates nothing is the
+ * un-actionable kind of warning. A string literal is not counted either — it
+ * is constant data, not an allocation.
+ */
+function perfAllocatesVisibly(ctx: CheckContext, expr: Node): boolean {
+  const e = unwrapPerfParens(expr);
+  if (e.kind === N_NEW || e.kind === N_OBJECT || e.kind === N_ARRAY) {
+    return true;
+  }
+  if (e.kind === N_TEMPLATE) {
+    return true;
+  }
+  if (e.kind === N_CALL) {
+    const callee = unwrapPerfParens(e.children[0]);
+    return callee.kind === N_IDENT && perfIsReadBuiltin(callee.text) && !ctx.sigs.has(callee.text);
+  }
+  return e.kind === N_BINARY && e.text === "+" && ctx.program.nodeTypes[e.id] === T_STRING;
+}
+
+/**
+ * A type that is a pointer at run time, and so names memory somebody has to
+ * own. A `Result` is counted with them even though a small one travels in a
+ * register: the rule uses this to decide when to stay quiet, and counting a
+ * borderline type as a pointer only ever means one warning fewer.
+ */
+function perfIsPointerType(ctx: CheckContext, type: i32): boolean {
+  return ctx.table.isPointer(type) || ctx.table.isNullable(type) || ctx.table.isResult(type);
+}
+
+/**
+ * `s = <an allocation>` where `s` is a local that was declared holding one.
+ * Reported on the target, because the assignment is the thing to change. The
+ * guards are stage0's, in the same order.
+ */
+function checkArenaReassignment(walk: PerfWalk, expr: Node): void {
+  const left = expr.children[0];
+  if (left.kind !== N_IDENT) {
+    return;
+  }
+  const ctx = walk.ctx;
+  const target = ctx.program.nodeLocals[left.id];
+  if (target === null || target.storage === STORAGE_PARAM || !perfIsPointerType(ctx, target.type)) {
+    return;
+  }
+  const sig = walk.sig;
+  if (perfIsPointerType(ctx, sig.returnType)) {
+    return;
+  }
+  if (isQuadraticAccumulation(walk, expr)) {
+    return;
+  }
+  if (!walk.declaredHoldingAllocation(target) || !perfAllocatesVisibly(ctx, expr.children[1])) {
+    return;
+  }
+  ctx.performance(
+    left,
+    `\`${target.name}\` already holds an allocation and this one drops it: nothing can reach the old value from ` +
+      `here and nothing frees it, and assigning a local is also what stops this function from releasing its arena ` +
+      `memory at all, so both allocations live until the program exits. Give each value its own \`const\`, or ` +
+      `bracket the body with \`Arena.mark()\` and \`Arena.release(m)\``
+  );
+}
+
+// ---- Arithmetic that provably goes wrong (the overflow rules) --------------------
+//
+// The stage1 half of the same three rules in `src/checker/performance.ts`. The
+// reasoning for each one is written out there; what matters here is that every
+// guard and every word of every message is that file's, because the oracles
+// compare the two compilers byte for byte.
+//
+// Signed overflow is undefined behaviour by default, so warning wherever it is
+// *possible* would mean warning on every `+` and every `*` in the program,
+// which is the un-actionable class §8 forbids. These fire only where the
+// compiler can point at the value or at a shape whose rewrite is mechanical: a
+// constant that does not fit, `i32` arithmetic widened after it has already
+// wrapped, and a shift by a count at or beyond the operand width. The unsigned
+// widths are silent, because they are *defined* to wrap and a warning there
+// would argue with the type the program chose on purpose.
+
+/**
+ * Bounds on what the fold carries. Every intermediate stays inside them, so
+ * the fold itself can never overflow the `i64` it folds in -- which would be
+ * undefined behaviour inside the very check that reports it. A product needs
+ * both operands under 2^31 to stay inside an `i64`, and a sum needs both under
+ * 2^52, which is also the largest power of two either compiler can *write*: a
+ * literal past 2^53 cannot be spelled exactly.
+ */
+const FOLD_LIMIT: i64 = 2147483648;
+const FOLD_SUM_LIMIT: i64 = 4503599627370496;
+
+/**
+ * The range the rule reports against. Only `i32` is ever reported: the fold
+ * bounds above keep every value it carries well inside `i64`, so an `i64`
+ * constant it can evaluate is an `i64` constant that fits.
+ */
+const I32_MIN: i64 = -2147483648;
+const I32_MAX: i64 = 2147483647;
+
+/**
+ * A folded constant, or the absence of one. Stage0 answers `bigint |
+ * undefined`; Nish has no `undefined`, so the two halves of that answer travel
+ * together.
+ */
+class PerfConst {
+  ok: boolean;
+  value: i64;
+
+  constructor(ok: boolean, value: i64) {
+    this.ok = ok;
+    this.value = value;
+  }
+}
+
+function perfNoConst(): PerfConst {
+  return new PerfConst(false, 0);
+}
+
+function perfMagnitude(value: i64): i64 {
+  return value < 0 ? -value : value;
+}
+
+/**
+ * The exact value of a constant integer expression, or "not a constant". Only
+ * decimal literals joined by `+`, `-`, `*` and unary minus fold: stage0 has
+ * `Number` and this compiler does not, so a hexadecimal or exponent literal is
+ * left alone rather than folded differently on each side.
+ *
+ * A `const n = 8` is deliberately not followed even though the checker knows
+ * its value, and a module-level `const` needs nothing from here: `self/
+ * constants.ts` folds those eagerly and makes an overflow a hard error, so
+ * what is left for a warning is the arithmetic inside a function body.
+ */
+function perfConstantInt(expr: Node): PerfConst {
+  const e = unwrapPerfParens(expr);
+  if (e.kind === N_NUMBER) {
+    if (!isNonNegativeInteger(e.text)) {
+      return perfNoConst();
+    }
+    const value = parseIntegerLiteral(e.text);
+    return value > FOLD_LIMIT ? perfNoConst() : new PerfConst(true, value);
+  }
+  if (e.kind === N_UNARY && e.text === "-" && e.flags === FLAG_PREFIX) {
+    const operand = perfConstantInt(e.children[0]);
+    return operand.ok ? new PerfConst(true, -operand.value) : perfNoConst();
+  }
+  if (e.kind !== N_BINARY) {
+    return perfNoConst();
+  }
+  const left = perfConstantInt(e.children[0]);
+  const right = perfConstantInt(e.children[1]);
+  if (!left.ok || !right.ok) {
+    return perfNoConst();
+  }
+  if (e.text === "*") {
+    if (perfMagnitude(left.value) > FOLD_LIMIT || perfMagnitude(right.value) > FOLD_LIMIT) {
+      return perfNoConst();
+    }
+    return new PerfConst(true, left.value * right.value);
+  }
+  if (perfMagnitude(left.value) > FOLD_SUM_LIMIT || perfMagnitude(right.value) > FOLD_SUM_LIMIT) {
+    return perfNoConst();
+  }
+  if (e.text === "+") {
+    return new PerfConst(true, left.value + right.value);
+  }
+  if (e.text === "-") {
+    return new PerfConst(true, left.value - right.value);
+  }
+  return perfNoConst();
+}
+
+/** `expr` is a constant of a signed type whose value does not fit that type. */
+function perfOverflowsItsType(ctx: CheckContext, expr: Node): boolean {
+  const e = unwrapPerfParens(expr);
+  if (ctx.program.nodeTypes[e.id] !== T_I32) {
+    return false;
+  }
+  const folded = perfConstantInt(e);
+  return folded.ok && (folded.value < I32_MIN || folded.value > I32_MAX);
+}
+
+/**
+ * A constant `+`, `-` or `*` whose value does not fit the signed type it is
+ * computed in. Reported on the *innermost* expression that overflows, because
+ * that is the operation that actually goes wrong: in `(a * b) + 1` where the
+ * product already overflows, the `+` is a consequence and saying so twice
+ * would not tell the reader anything new.
+ *
+ * Silent under `--wrapping`, where the wrap is the defined answer rather than
+ * undefined behaviour and the warning would be arguing with a flag the author
+ * passed on purpose.
+ */
+function checkConstantOverflow(walk: PerfWalk, expr: Node): void {
+  if (walk.ctx.wrapping) {
+    return;
+  }
+  if (expr.text !== "+" && expr.text !== "-" && expr.text !== "*") {
+    return;
+  }
+  const ctx = walk.ctx;
+  if (ctx.program.nodeTypes[expr.id] !== T_I32) {
+    return;
+  }
+  const folded = perfConstantInt(expr);
+  if (!folded.ok || (folded.value >= I32_MIN && folded.value <= I32_MAX)) {
+    return;
+  }
+  if (perfOverflowsItsType(ctx, expr.children[0]) || perfOverflowsItsType(ctx, expr.children[1])) {
+    return;
+  }
+  ctx.performance(
+    expr,
+    `this computes with overflow: the result ${folded.value} does not fit in i32 (the range is ${I32_MIN} to ` +
+      `${I32_MAX}), and signed overflow is undefined behaviour rather than a wrap: widen the operands with ` +
+      `\`toI64\` first, or use --wrapping for two's-complement arithmetic`
+  );
+}
+
+/**
+ * `toI64(a * b)` and `toF64(a * b)` on `i32` operands: the multiplication is
+ * done in `i32` and has already overflowed by the time the conversion widens
+ * the result, so the wider type never sees the value the reader expects. The
+ * rewrite is mechanical, which is what earns this one its place under the §8
+ * bar.
+ *
+ * Multiplication only, though `+` and `-` can overflow too: this compiler's
+ * own `toI64(intBits(type) - 1)` is the shape with nothing wrong with it, and
+ * a warning that fires there is the un-actionable kind §8 forbids.
+ *
+ * A user function of the same name shadows the builtin, so a program that
+ * declares one is left alone: the call is not a conversion at all there.
+ */
+function checkWideningConversion(walk: PerfWalk, call: Node): void {
+  const callee = unwrapPerfParens(call.children[0]);
+  if (callee.kind !== N_IDENT || (callee.text !== "toI64" && callee.text !== "toF64")) {
+    return;
+  }
+  const args = call.children[1];
+  if (args.children.length !== 1) {
+    return;
+  }
+  const ctx = walk.ctx;
+  if (ctx.sigs.has(callee.text)) {
+    return;
+  }
+  const arg = unwrapPerfParens(args.children[0]);
+  if (arg.kind !== N_BINARY || arg.text !== "*") {
+    return;
+  }
+  if (ctx.program.nodeTypes[arg.id] !== T_I32) {
+    return;
+  }
+  ctx.performance(
+    arg,
+    `this \`${arg.text}\` is computed in i32 and wraps before \`${callee.text}\` widens the result, so the ` +
+      `conversion cannot recover an overflow that has already happened: convert the operands first, as ` +
+      `\`${callee.text}(a) ${arg.text} ${callee.text}(b)\``
+  );
+}
+
+/**
+ * A shift by a literal count at or beyond the operand's width. The count is
+ * masked to the width rather than left undefined, which matches JavaScript but
+ * means `x << 32` on an `i32` shifts by nothing at all -- never what the line
+ * was written to do.
+ */
+function checkShiftCount(walk: PerfWalk, expr: Node): void {
+  if (expr.text !== "<<" && expr.text !== ">>" && expr.text !== ">>>") {
+    return;
+  }
+  const ctx = walk.ctx;
+  const bits = intBits(ctx.program.nodeTypes[expr.id]);
+  if (bits === 0) {
+    return;
+  }
+  const count = perfConstantInt(expr.children[1]);
+  const width = toI64(bits);
+  if (!count.ok || count.value < 0 || count.value < width) {
+    return;
+  }
+  ctx.performance(
+    expr.children[1],
+    `the shift count ${count.value} is at or beyond the ${bits} bits of the operand, so it is masked to ` +
+      `${count.value % width} and this shifts by that instead: mask the count yourself if that is intended, or ` +
+      `shift a wider value — \`${expr.text}\` never shifts a value out of existence here`
+  );
 }
