@@ -13,59 +13,59 @@
 // thing in both number modes.
 
 /** Sum of a Float64Array: the host passes the whole buffer once. */
-export function sumF64(xs: Float64Array): f64 {
+export const sumF64 = (xs: Float64Array): f64 => {
   let total: f64 = 0;
   for (const x of xs) {
     total += x;
   }
   return total;
-}
+};
 
-export function sumI32(xs: Int32Array): i32 {
+export const sumI32 = (xs: Int32Array): i32 => {
   let total: i32 = 0;
   for (const x of xs) {
     total += x;
   }
   return total;
-}
+};
 
 /** A new array: the host gets a copy (wasm) or a fresh typed array (N-API). */
-export function scale(xs: Float64Array, k: f64): Float64Array {
+export const scale = (xs: Float64Array, k: f64): Float64Array => {
   const out = new Float64Array(xs.length);
   for (let i = 0; i < xs.length; i++) {
     out[i] = xs[i] * k;
   }
   return out;
-}
+};
 
-export function squares(n: i32): Int32Array {
+export const squares = (n: i32): Int32Array => {
   const out = new Int32Array(n);
   for (let i = 0; i < n; i++) {
     out[i] = i * i;
   }
   return out;
-}
+};
 
 /** Writes through its parameter: the header spells it `nish_array *`, and the host's buffer changes in place. */
-export function fill(xs: Int32Array, v: i32): void {
+export const fill = (xs: Int32Array, v: i32): void => {
   for (let i = 0; i < xs.length; i++) {
     xs[i] = v;
   }
-}
+};
 
-export function widen(xs: Int32Array): BigInt64Array {
+export const widen = (xs: Int32Array): BigInt64Array => {
   const out = new BigInt64Array(xs.length);
   for (let i = 0; i < xs.length; i++) {
     out[i] = toI64(xs[i]);
   }
   return out;
-}
+};
 
 /** i64 in and out: JS passes a bigint. */
-export function sumI64(xs: BigInt64Array): i64 {
+export const sumI64 = (xs: BigInt64Array): i64 => {
   let total: i64 = 0;
   for (const x of xs) {
     total += x;
   }
   return total;
-}
+};

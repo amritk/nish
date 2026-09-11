@@ -1,7 +1,3 @@
-function xor(a: boolean, b: boolean): boolean {
-  return a !== b;
-}
+const xor = (a: boolean, b: boolean): boolean => a !== b;
 
-function neither(a: boolean, b: boolean): boolean {
-  return !a && !b;
-}
+const neither = (a: boolean, b: boolean): boolean => !a && !b;

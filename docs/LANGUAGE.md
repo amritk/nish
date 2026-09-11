@@ -370,19 +370,19 @@ unwinding anywhere in the language (WP16;
 [wp16-results.md](wp16-results.md)).
 
 ```ts
-function half(n: i32): Result<i32, string> {
+const half = (n: i32): Result<i32, string> => {
   if (n % 2 !== 0) {
     return Err("odd");
   }
   return Ok(n / 2);
-}
+};
 
-function quarter(n: i32): Result<i32, string> {
+const quarter = (n: i32): Result<i32, string> => {
   const h = half(n).orReturn();   // Rust's `?`: propagate the error
   return half(h);
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   const outcome = quarter(8);
   if (outcome.isErr()) {
     console.log(outcome.error);
@@ -390,7 +390,7 @@ export function main(): i32 {
   }
   console.log(outcome.value);
   return 0;
-}
+};
 ```
 
 ### The type
@@ -579,8 +579,9 @@ may recycle.
 
 ### Program structure
 
-A module (one `.ts` file) may contain, at the top level, only `function`,
-`class`, and `interface` declarations, `const` declarations
+A module (one `.ts` file) may contain, at the top level, only function
+declarations (a `const` bound to an arrow, or the legacy `function` keyword),
+`class` and `interface` declarations, `const` declarations
 ([Module constants](#module-constants)), `type` aliases
 ([Type aliases](#type-aliases)), `import` statements, and `export` modifiers on
 those declarations. Any other top-level statement, including `let` and `enum`,
@@ -615,8 +616,15 @@ spelling; the two compile to identical IR, instruction for instruction
   the arrow itself. Annotating the `const` is
   `` Function `f` takes its signature from the arrow ``
   (`reject_arrow_annotated`), because the annotation would be a function type
-  and those are forbidden. A **concise body** (`=> n * 2`) means exactly what a
-  block with one `return` means, and a function returning `void` uses a block.
+  and those are forbidden. A function returning `void` uses a block.
+- A **concise body** (`=> n * 2`) means exactly what a block with one `return`
+  means, everywhere the difference could show. It takes the return type as its
+  contextual type, so an object literal gets its struct, a class value converts
+  to an interface it implements, a numeric literal takes the declared width and
+  `[]` takes its element type; and a value it allocates is returned rather than
+  local, so the caller brackets the call with the arena reclaim
+  ([Memory model](#memory-model)). `tests/cases/fn_arrow_concise` pins all five,
+  each of which the block form has always had.
 - **A function is not a value** in either spelling: a name bound to one may
   only be called, so `const alias = double` is `` Unknown identifier `double` ``
   (`tests/cases/reject_arrow_as_value`). Function types, and therefore
@@ -845,14 +853,14 @@ program twice, with one golden between them.
 ### `main`
 
 ```ts
-export function main(): number {   // or `: void`; `: i32` in f64 mode
+export const main = (): number => {   // or `: void`; `: i32` in f64 mode
   console.log("hello");
-  return 0;                          // the process exit code
-}
+  return 0;                             // the process exit code
+};
 ```
 
 - Only the entry module (the first file on the command line) may declare
-  `export function main` (`Only the entry module may declare`,
+  `export const main` (`Only the entry module may declare`,
   `tests/link/main_in_import`); `--link` requires it (`tests/link/no_main`).
 - It takes no parameters (`` `main` cannot take parameters ``,
   `tests/cases/reject_main_params`; the command line is
@@ -958,9 +966,7 @@ class Point {
 ```ts
 interface Pair { first: number; second: number; }
 
-function swap(p: Pair): Pair {
-  return { first: p.second, second: p.first };
-}
+const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
 ```
 
 - An interface is a struct type with the same layout rules as a class, with
@@ -1446,7 +1452,7 @@ program runs; every module of the program may read it, and each read is one
 `load` of the runtime global `@nish_argv` (a memory read: the function is at
 most `readonly`). The array lives outside the arena, so `Arena.reset()`
 never invalidates it. Storing into it (`process.argv[i] = s`, `op=`,
-`++`/`--`, `push`) is rejected. A program without `export function main`, as
+`++`/`--`, `push`) is rejected. A program without `export const main`, as
 for a wasm or N-API library, has nothing to build it from and rejects every
 use with `` `process.argv` requires a `main` entry point `` (`reject_argv_no_main`,
 `tests/link/argv_no_main`). Under the `wasi` build profile the WASI host

@@ -12,9 +12,13 @@ compiler that runs them differs:
   and every snippet in `docs/` and `README.md`. These are compiled by
   `nish`, and the language reference (`docs/LANGUAGE.md`) is the style
   guide: a construct the compiler refuses is not a style choice, it is a
-  compile error. **The two house rules below cannot apply here** — the
-  language has no arrow functions and no `type` aliases, so an Nish
-  program declares functions with `function` and structs with `interface`.
+  compile error. **The first of the two house rules below now holds here too**:
+  the language has arrow functions (`docs/wp22-arrow-functions.md`), so an Nish
+  program declares a function as a `const` bound to an arrow, exactly as `src/`
+  does. The second still cannot. The language has `type` aliases now, but an
+  alias only renames a type that already exists, so an Nish *struct* is a
+  `class` or an `interface` and "`type`, never `interface`" has nothing to say
+  about it.
 - **The compiler's own source** — `src/`, plus the JavaScript in `tests/`,
   `bench/` and `docs/`. This runs under Node through `tsc`, so the full
   language is available; the rule here is to write it *as if* Nish were
@@ -41,14 +45,15 @@ rejection. **Phase 0, the validator, is what Nish can never compile** —
 `any`, `eval`, prototypes, `try`, dynamic property access. **The checker's
 `Unsupported ... in Phase 1` fallback is what nobody has implemented yet**,
 and the validator's own header says a later work package makes those compile
-without touching Phase 0. Arrow functions, `type` aliases and `satisfies` are
-all in the second bucket: Phase 0 lets them through and only rejects generic
-type parameters on them. So "you must write `function` here" is a statement
-about today's checker, not a design decision that could never change. What
-*is* a design decision is the `Function` type, forbidden in Phase 0 as "no
+without touching Phase 0. Arrow functions and `type` aliases were both in that
+second bucket and have both come out of it; `satisfies` is still in it. Phase 0
+lets all three through and only rejects generic type parameters on them, so
+which list a rejection comes from tells you whether to expect it to change.
+What *is* a design decision is the `Function` type, forbidden in Phase 0 as "no
 dynamic function values": a function passed as a value needs a function
 pointer and an indirect call, and the whole-program pass cannot prove purity,
-termination or escape facts through an unknown callee.
+termination or escape facts through an unknown callee. That is what keeps a
+function from being a value whichever way it is spelled.
 
 **The paradigm is data-oriented and procedural**, and it is a deliberate
 "neither" rather than a compromise: pure OOP puts a pointer chase between the
@@ -62,13 +67,17 @@ the fast shape and a chain of small objects linked by pointers is not.
 
 The shape of the language, as a style guide:
 
-- **Declarations.** A module holds only `function`, `class`, `interface` and
-  `import` at the top level. No `type` aliases, no top-level `let`/`const`,
-  no `enum`, no `namespace`. `function` declarations only: no arrow
-  functions, function expressions, nested functions, generics, overloads,
-  optional / default / rest / destructured parameters. Every parameter and
-  every return type is annotated. `export function main(): number` is the
-  entry and its return value is the exit code.
+- **Declarations.** A module holds only function, `class`, `interface`, `type`
+  and `import` declarations at the top level, plus module `const`s. No
+  top-level `let`, no `enum`, no `namespace`. **A function is an arrow bound to
+  a module-level `const`** — `const add = (a: i32, b: i32): i32 => a + b`, with
+  a concise body where it has one `return`. The `function` keyword still
+  compiles and is the legacy spelling, so convert one when you open its file
+  and write new code as an arrow. No function expressions, nested functions,
+  generics, overloads, optional / default / rest / destructured parameters, and
+  a function is never a value. Every parameter and every return type is
+  annotated. `export const main = (): number => ...` is the entry and its
+  return value is the exit code.
 - **Types.** `number`, `i32`, `i64`, `f64`, `boolean`, `string`, `void`, `T[]`
   / `Array<T>`, the typed-array aliases, class and interface names, and
   `T | null` for a class, interface, array or string. Nothing else: no `any`,
@@ -222,10 +231,15 @@ compiler's own source, and are linted. Three things still differ:
   holds every class-related handler because they share the dispatch table they
   register into and the side tables they write. Splitting them one per file
   would scatter a table across a directory.
-- **Nish programs cannot follow the first two at all.** The language has
-  neither arrow functions nor `type` aliases, so `examples/`, `docs/cookbook/`
-  and `bench/*.ts` are exempt in `biome.json`, and the plugin does not run on
-  them.
+- **Nish programs now follow the arrow rule too**, since the language gained
+  arrows: `examples/`, `docs/cookbook/` and every snippet in `docs/` and
+  `README.md` are arrows already. `examples/`, `docs/cookbook/`, `bench/*.ts`
+  and `self/` are still exempt from the plugin in `biome.json`, and that
+  exemption is what lets the `function` declarations still in `self/`, `bench/`
+  and `tests/cases/` sit there until their file is opened
+  (`docs/wp22-arrow-functions.md` §8) — but new code in them is an arrow like
+  everywhere else. The `type`-over-`interface` rule still does not reach them,
+  for the reason at the top of this file.
 
 `satisfies` is welcome in `src/` wherever it helps — a dispatch table checked
 against its key type while keeping its literal value types is the obvious case.

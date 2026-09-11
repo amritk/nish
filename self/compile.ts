@@ -448,7 +448,7 @@ export function main(): number {
   // main` two steps later.
   if (link.length > 0 && compilation.entry().checker.program.entryMain === null) {
     console.error(
-      `--link: the entry module ${compilation.entry().path} must declare \`export function main(): number\` (or \`: void\`)`
+      `--link: the entry module ${compilation.entry().path} must declare \`export const main = (): number => ...\` (or \`(): void\`)`
     );
     return 1;
   }

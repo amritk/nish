@@ -73,9 +73,9 @@ for a readability win.
 Accepted:
 
 ```ts
-function identity<T>(x: T): T { return x; }
-function firstOf<T>(xs: T[]): T { return xs[0]; }
-function swap<A, B>(p: Pair<A, B>): Pair<B, A> { ... }
+const identity = <T>(x: T): T => x;
+const firstOf = <T>(xs: T[]): T => xs[0];
+const swap = <A, B>(p: Pair<A, B>): Pair<B, A> => ...;
 
 class Box<T> {
   value: T;
@@ -463,19 +463,18 @@ type the *program* never mentioned, which is what keeps the set finite.
 writes. Parameter-propagating recursion —
 
 ```ts
-function sumTree<T>(node: Node<T>): i32 {
-  return sumTree(node.left) + sumTree(node.right);   // Node<T> -> Node<T>
-}
+const sumTree = <T>(node: Node<T>): i32 =>
+  sumTree(node.left) + sumTree(node.right);          // Node<T> -> Node<T>
 ```
 
 — and ground recursion, where the recursive call binds the parameter to a
 concrete type:
 
 ```ts
-function countDown<T>(x: T, n: i32): i32 {
+const countDown = <T>(x: T, n: i32): i32 => {
   if (n === 0) { return 0; }
   return countDown(1, n - 1);       // inference binds T := i32: ground, accepted
-}
+};
 ```
 
 `countDown("hi", 3)` gives exactly two instantiations. `countDown$str`'s edge
@@ -488,10 +487,10 @@ that only admitted bare parameters.
 What is refused is the shape that grows:
 
 ```ts
-function grow<T>(x: T, n: i32): i32 {
+const grow = <T>(x: T, n: i32): i32 => {
   if (n === 0) { return 0; }
   return grow([x], n - 1);          // refused: `[x]` is `T[]`, so this asks for grow<T[]>
-}
+};
 
 class Nest<T> {
   inner: Nest<T[]> | null;          // refused: the field expands
@@ -533,13 +532,13 @@ goldens it is copied from. `llvm-as` accepts all of it.
 ### `identity<T>`
 
 ```ts
-function identity<T>(x: T): T { return x; }
+const identity = <T>(x: T): T => x;
 
-export function main(): i32 {
+export const main = (): i32 => {
   console.log(identity(7));
   console.log(identity("hi"));
   return 0;
-}
+};
 ```
 
 Two instantiations, `identity$i32` and `identity$str`:
@@ -573,7 +572,7 @@ check in `tests/run.js`.
 ### Purity is per instantiation
 
 ```ts
-function eq<T>(a: T, b: T): boolean { return a === b; }
+const eq = <T>(a: T, b: T): boolean => a === b;
 ```
 
 ```llvm
@@ -610,13 +609,13 @@ class Box<T> {
   get(): T { return this.value; }
 }
 
-export function main(): i32 {
+export const main = (): i32 => {
   const n = new Box<i32>(7);
   const s = new Box<string>("hi");
   console.log(n.get());
   console.log(s.get());
   return 0;
-}
+};
 ```
 
 Two structs, four functions:

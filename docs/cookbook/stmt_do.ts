@@ -1,4 +1,4 @@
-function sumDigits(n: number): number {
+const sumDigits = (n: number): number => {
   let sum = 0;
   let rest = n;
   do {
@@ -6,4 +6,4 @@ function sumDigits(n: number): number {
     rest = rest / 10;
   } while (rest > 0);
   return sum;
-}
+};

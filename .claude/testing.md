@@ -19,7 +19,8 @@ is **data, not code**: a source file next to the output it must produce.
     fail with exit 1 and every fragment must appear. No `.ll` is needed.
   - `<name>.out` — expected stdout once the case is linked with `<name>.c`
     (or `tests/driver.c`, which prints `test()`) and `runtime/runtime.c` and
-    run. A source with `export function main` is linked without the driver.
+    run. A source with `export const main` (or the legacy `export function
+    main`) is linked without the driver.
   - `<name>.args` — extra CLI flags, whitespace separated.
   - `<name>.env` — the environment the run is given, one `NAME=value` per line,
     layered over the inherited one (blank lines and `#` comments ignored;
@@ -72,7 +73,7 @@ PR adding a construct is not finished without all of them:
 1. A golden `.ll` that passes `llvm-as` (the runner assembles every compiled
    case).
 2. A native round trip: a `.out` file, driven by `tests/driver.c` or an
-   `export function main`.
+   `export const main`.
 3. At least one negative test: a `reject_*.ts` + `.err` naming the exact
    message.
 4. `.args` for any flag the case depends on.
@@ -143,7 +144,7 @@ tests/cases/
 // tests/cases/cf_while_break.ts
 // `break` inside `while` must jump to the loop exit block, not fall through to
 // the condition; the golden pins the block names so a regression reads as a diff.
-export function test(): number {
+export const test = (): number => {
   let i = 0;
   while (true) {
     i = i + 1;
@@ -152,5 +153,5 @@ export function test(): number {
     }
   }
   return i;
-}
+};
 ```

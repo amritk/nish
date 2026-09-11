@@ -12,8 +12,8 @@ class Point {
   }
 }
 
-function origin(): number {
+const origin = (): number => {
   const p = new Point(3, 4);
   p.x = 0;
   return p.manhattan();
-}
+};

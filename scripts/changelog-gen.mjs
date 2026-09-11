@@ -10,6 +10,15 @@
 // source and Markdown is a view of it, so the website and the repository
 // cannot drift: there is one account of a release, rendered twice.
 //
+// The two views are not the same shape. The JSON keeps everything a commit
+// said -- the prose, the `Measured:` numbers, the refs and the tests -- because
+// the website renders an entry as a page. The Markdown is an index: one line
+// per change, its title and a link to the pull request it landed in, grouped
+// under the type's heading. A reader scanning CHANGELOG.md or a release body
+// wants to know what changed and where to read the rest, and the pull request
+// is where the rest already lives; repeating each body inline turned one
+// release into pages of prose that nobody scrolled.
+//
 // Why the commits rather than a file maintained by hand: CHANGELOG.md is
 // written when a release is cut, and the thing that knows what went into a
 // release is the range of commits it contains. The subject line carries the
@@ -21,8 +30,8 @@
 //
 //   type(scope): imperative subject
 //
-//   The body, in prose. Markdown. This is what a reader of the release
-//   notes gets, so write it for them and not only for the reviewer.
+//   The body, in prose. Markdown. This is the entry's account on the
+//   website, so write it for a reader and not only for the reviewer.
 //
 //   Measured: 1.58x on an element loop
 //   Refs: docs/IR_COOKBOOK.md#arrays
@@ -39,15 +48,32 @@
 // commit -- the work-in-progress commits whose landed subject already has an
 // entry -- and the commits that predate the convention. Nothing is dropped
 // silently: every skipped subject is listed on stderr, and the
-// `--include-unconventional` flag files them under "Uncategorised" with their
-// bodies intact, the way this tool behaved before. Use it for the first
-// release after the convention lands, or write the history up by hand in
-// `changelog/<version>.intro.md`, which renders above the sections.
+// `--include-unconventional` flag files them under "Uncategorised" the way this
+// tool behaved before. Use it for the first release after the convention
+// lands, or write the history up by hand in `changelog/<version>.intro.md`,
+// which renders above the sections.
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
 const root = path.resolve(import.meta.dirname, "..");
+
+/**
+ * The repository the entries link into, from `package.json#repository`. Read
+ * from the manifest rather than hard-coded so a fork renders its own links,
+ * and optional: without it an entry names `#38` as text instead of claiming a
+ * URL it cannot know.
+ */
+const REPO_URL = (() => {
+  try {
+    const { repository } = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+    const url = typeof repository === "string" ? repository : repository?.url;
+    const m = /github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?$/.exec(url ?? "");
+    return m ? `https://github.com/${m[1]}` : undefined;
+  } catch {
+    return undefined;
+  }
+})();
 
 /** Conventional-commit types, in the order a release renders them. */
 const TYPES = [
@@ -235,36 +261,41 @@ function renderMarkdown(release) {
   const out = [];
   if (release.intro) out.push(release.intro.trim(), "");
 
-  const breaking = release.entries.filter((e) => e.breaking);
-  if (breaking.length > 0) {
-    out.push("### Breaking changes", "");
-    for (const e of breaking) out.push(...renderEntry(e, true));
-  }
+  const group = (predicate) => release.entries.filter(predicate).map(renderEntry);
+
+  const breaking = group((e) => e.breaking);
+  if (breaking.length > 0) out.push("### Breaking changes", "", ...breaking, "");
 
   for (const [type, heading] of TYPES) {
-    const group = release.entries.filter((e) => e.type === type && !e.breaking);
-    if (group.length === 0) continue;
-    out.push(`### ${heading}`, "");
-    for (const e of group) out.push(...renderEntry(e, false));
+    const lines = group((e) => e.type === type && !e.breaking);
+    if (lines.length === 0) continue;
+    out.push(`### ${heading}`, "", ...lines, "");
   }
   return `${out.join("\n").replace(/\n{3,}/g, "\n\n").trim()}\n`;
 }
 
-function renderEntry(e, withBreakingNote) {
-  // One bold run, not two: a conventional subject is lower case by convention
-  // and this file's entries read as sentences, so the scope and the title are
-  // joined and the first letter is raised. A title starting with `code` keeps
-  // its backtick and its case.
+/**
+ * Where to read the rest of an entry: the pull request it landed in, or the
+ * commit when it landed without one. Every line carries one, so the index
+ * always leads somewhere.
+ */
+function entryLink(e) {
+  if (e.pr) return REPO_URL ? `[#${e.pr}](${REPO_URL}/pull/${e.pr})` : `#${e.pr}`;
+  const sha = e.commits[0];
+  if (!sha) return undefined;
+  return REPO_URL ? `[\`${sha}\`](${REPO_URL}/commit/${sha})` : `\`${sha}\``;
+}
+
+/**
+ * One line: the scope, the title, and the link. A conventional subject is
+ * lower case by convention and these read as sentences, so the scope and the
+ * title are joined and the first letter is raised -- unless the title starts
+ * with `code`, which keeps its backtick and its case.
+ */
+function renderEntry(e) {
   const title = e.title.startsWith("`") ? e.title : e.title.charAt(0).toUpperCase() + e.title.slice(1);
-  const lines = [`- **${e.scope ? `${e.scope}: ` : ""}${title}**`];
-  if (withBreakingNote && e.breakingNote) lines.push("", `  ${e.breakingNote}`);
-  if (e.body) lines.push("", ...e.body.split("\n").map((l) => (l ? `  ${l}` : "")));
-  const facts = [];
-  if (e.metrics.length > 0) facts.push(`Measured: ${e.metrics.join("; ")}`);
-  if (e.tests.length > 0) facts.push(`Tests: ${e.tests.map((t) => `\`${t}\``).join(", ")}`);
-  if (facts.length > 0) lines.push("", `  ${facts.join(" · ")}`);
-  lines.push("");
-  return lines;
+  const link = entryLink(e);
+  return `- ${e.scope ? `${e.scope}: ` : ""}${title}${link ? ` (${link})` : ""}`;
 }
 
 /**

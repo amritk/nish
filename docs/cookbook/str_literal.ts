@@ -1,7 +1,3 @@
-function greeting(): string {
-  return "hello, world";
-}
+const greeting = (): string => "hello, world";
 
-function same(): string {
-  return "hello, world";
-}
+const same = (): string => "hello, world";

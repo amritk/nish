@@ -13,10 +13,6 @@ class Ordered implements Pair {
   }
 }
 
-function swap(p: Pair): Pair {
-  return { first: p.second, second: p.first };
-}
+const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
 
-function asPair(o: Ordered): Pair {
-  return o;
-}
+const asPair = (o: Ordered): Pair => o;

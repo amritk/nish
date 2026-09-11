@@ -1,15 +1,7 @@
-function constantCount(a: i32): i32 {
-  return a >> 3;
-}
+const constantCount = (a: i32): i32 => a >> 3;
 
-function variableCount(a: i32, n: i32): i32 {
-  return a << n;
-}
+const variableCount = (a: i32, n: i32): i32 => a << n;
 
-function fills(a: i32, n: i32): i32 {
-  return (a >> n) + (a >>> n);
-}
+const fills = (a: i32, n: i32): i32 => (a >> n) + (a >>> n);
 
-function wide(a: i64, n: i64): i64 {
-  return a << n;
-}
+const wide = (a: i64, n: i64): i64 => a << n;

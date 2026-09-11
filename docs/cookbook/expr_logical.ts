@@ -1,7 +1,3 @@
-function inRange(x: number, lo: number, hi: number): boolean {
-  return x >= lo && x < hi;
-}
+const inRange = (x: number, lo: number, hi: number): boolean => x >= lo && x < hi;
 
-function zeroOrSmallQuotient(x: number): boolean {
-  return x === 0 || 100 / x < 50;
-}
+const zeroOrSmallQuotient = (x: number): boolean => x === 0 || 100 / x < 50;

@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 57 programs, 292554 dump lines live, 57 distinct modules.
+# 57 programs, 291471 dump lines live, 57 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/symbols.ts self/types.ts self/ice.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/symbols.ts self/types.ts self/ice.ts self/builtins.ts self/expressions.ts self/result.ts self/structs.ts self/declarations.ts self/members.ts self/emit_util.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/symbols.ts self/types.ts self/ice.ts self/branding.ts
@@ -1402,7 +1402,7 @@ const R_UNKNOWN: i32 = 0 [exported]
 const R_OK: i32 = 1 [exported]
 const R_ERR: i32 = 2 [exported]
 const RESULT_PAYLOAD_SHIFT: i32 = 32 [exported]
-const RESULT_ARMS: string = "{ i1, i32, i32 }" [exported]
+const RESULT_PAIR: string = "{ i1, i32 }" [exported]
 const ARRAY_STRUCT: string = "%struct.nish_array" [exported]
 struct TypeTable (class) size=56 align=8 exported
   field kinds: i32[] index=0 offset=0
@@ -1462,21 +1462,21 @@ function isInteger(type: i32): boolean -> @isInteger [exported]
   escaping: type
   calls: intBits
   stackSites=0 stackLocals=0
-  callee 106:10 intBits -> @intBits
+  callee 105:10 intBits -> @intBits
 function isNumeric(type: i32): boolean -> @isNumeric [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   escaping: type
   calls: isFloat isInteger
   stackSites=0 stackLocals=0
-  callee 110:10 isInteger -> @isInteger
-  callee 110:29 isFloat -> @isFloat
+  callee 109:10 isInteger -> @isInteger
+  callee 109:29 isFloat -> @isFloat
 function TypeTable.constructor(this: TypeTable): void -> @TypeTable.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true
   calls: StringMap.constructor nish_alloc_struct nish_array_grow
   pointer this: size=56 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 148:18 new StringMap -> @StringMap.constructor
-  local 149:9 scalar: i32 (let)
+  callee 147:18 new StringMap -> @StringMap.constructor
+  local 148:9 scalar: i32 (let)
 function TypeTable.size(this: TypeTable): i32 -> @TypeTable.size [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   pointer this: size=56 writesThrough=false captured=false
@@ -1510,34 +1510,34 @@ function TypeTable.intern(this: TypeTable, kind: i32, ref: i32, name: string): i
   calls: TypeTable.internAll
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.internAll#0
   stackSites=0 stackLocals=0
-  callee 191:12 TypeTable.internAll -> @TypeTable.internAll
+  callee 190:12 TypeTable.internAll -> @TypeTable.internAll
 function TypeTable.internAll(this: TypeTable, kind: i32, ref: i32, name: string, err: i32, state: i32, ro: boolean): i32 -> @TypeTable.internAll [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: err kind name ref ro state
   calls: StringMap.get StringMap.set TypeTable.derivedKey nish_array_grow nish_str_concat nish_str_from_i32
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.derivedKey#0
   stackSites=0 stackLocals=0
-  local 199:11 base: string (const)
-  callee 199:73 TypeTable.derivedKey -> @TypeTable.derivedKey
-  local 200:11 key: string (const)
-  local 201:11 existing: i32 (const)
-  callee 201:22 StringMap.get -> @StringMap.get
-  local 205:11 id: i32 (const)
-  callee 212:5 StringMap.set -> @StringMap.set
+  local 198:11 base: string (const)
+  callee 198:73 TypeTable.derivedKey -> @TypeTable.derivedKey
+  local 199:11 key: string (const)
+  local 200:11 existing: i32 (const)
+  callee 200:22 StringMap.get -> @StringMap.get
+  local 204:11 id: i32 (const)
+  callee 211:5 StringMap.set -> @StringMap.set
 function TypeTable.arrayOf(this: TypeTable, elem: i32): i32 -> @TypeTable.arrayOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: elem
   calls: TypeTable.intern
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.intern#0
   stackSites=0 stackLocals=0
-  callee 217:12 TypeTable.intern -> @TypeTable.intern
+  callee 216:12 TypeTable.intern -> @TypeTable.intern
 function TypeTable.readonlyArrayOf(this: TypeTable, elem: i32): i32 -> @TypeTable.readonlyArrayOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: elem
   calls: TypeTable.internAll
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.internAll#0
   stackSites=0 stackLocals=0
-  callee 222:12 TypeTable.internAll -> @TypeTable.internAll
+  callee 221:12 TypeTable.internAll -> @TypeTable.internAll
 function TypeTable.isReadonlyArray(this: TypeTable, type: i32): boolean -> @TypeTable.isReadonlyArray [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: type
@@ -1550,14 +1550,14 @@ function TypeTable.structOf(this: TypeTable, name: string): i32 -> @TypeTable.st
   calls: TypeTable.intern
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.intern#0
   stackSites=0 stackLocals=0
-  callee 231:12 TypeTable.intern -> @TypeTable.intern
+  callee 230:12 TypeTable.intern -> @TypeTable.intern
 function TypeTable.nullableOf(this: TypeTable, inner: i32): i32 -> @TypeTable.nullableOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: inner
   calls: TypeTable.intern nish_panic_index
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.intern#0
   stackSites=0 stackLocals=0
-  callee 239:12 TypeTable.intern -> @TypeTable.intern
+  callee 238:12 TypeTable.intern -> @TypeTable.intern
 function TypeTable.stripNull(this: TypeTable, type: i32): i32 -> @TypeTable.stripNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: type
@@ -1570,7 +1570,7 @@ function TypeTable.resultOf(this: TypeTable, ok: i32, err: i32, state: i32): i32
   calls: TypeTable.internAll
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.internAll#0
   stackSites=0 stackLocals=0
-  callee 250:12 TypeTable.internAll -> @TypeTable.internAll
+  callee 249:12 TypeTable.internAll -> @TypeTable.internAll
 function TypeTable.isResult(this: TypeTable, type: i32): boolean -> @TypeTable.isResult [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: type
@@ -1601,33 +1601,33 @@ function TypeTable.withState(this: TypeTable, type: i32, state: i32): i32 -> @Ty
   calls: TypeTable.resultOf nish_panic_index
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.resultOf#0
   stackSites=0 stackLocals=0
-  callee 280:12 TypeTable.resultOf -> @TypeTable.resultOf
+  callee 279:12 TypeTable.resultOf -> @TypeTable.resultOf
 function TypeTable.mangle(this: TypeTable, type: i32): string -> @TypeTable.mangle [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
   calls: TypeTable.mangle TypeTable.scalarName nish_panic_index nish_str_concat
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.mangle#0 TypeTable.scalarName#0
   stackSites=0 stackLocals=0
-  callee 299:23 TypeTable.mangle -> @TypeTable.mangle
-  callee 301:23 TypeTable.mangle -> @TypeTable.mangle
-  callee 305:23 TypeTable.mangle -> @TypeTable.mangle
-  callee 305:55 TypeTable.mangle -> @TypeTable.mangle
-  callee 307:16 TypeTable.scalarName -> @TypeTable.scalarName
+  callee 298:23 TypeTable.mangle -> @TypeTable.mangle
+  callee 300:23 TypeTable.mangle -> @TypeTable.mangle
+  callee 304:23 TypeTable.mangle -> @TypeTable.mangle
+  callee 304:55 TypeTable.mangle -> @TypeTable.mangle
+  callee 306:16 TypeTable.scalarName -> @TypeTable.scalarName
 function TypeTable.resultStructName(this: TypeTable, type: i32): string -> @TypeTable.resultStructName [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
   calls: TypeTable.mangle nish_panic_index nish_str_concat
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.mangle#0 TypeTable.mangle#0
   stackSites=0 stackLocals=0
-  callee 313:27 TypeTable.mangle -> @TypeTable.mangle
-  callee 313:59 TypeTable.mangle -> @TypeTable.mangle
+  callee 312:27 TypeTable.mangle -> @TypeTable.mangle
+  callee 312:59 TypeTable.mangle -> @TypeTable.mangle
 function TypeTable.isPointer(this: TypeTable, type: i32): boolean -> @TypeTable.isPointer [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: type
   calls: nish_panic_index
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 318:11 kind: i32 (const)
+  local 317:11 kind: i32 (const)
 function TypeTable.isNullable(this: TypeTable, type: i32): boolean -> @TypeTable.isNullable [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: type
@@ -1652,33 +1652,33 @@ function TypeTable.packablePayload(this: TypeTable, type: i32): boolean -> @Type
   calls: nish_panic_index
   pointer this: size=56 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 342:11 kind: i32 (const)
+  local 341:11 kind: i32 (const)
 function TypeTable.resultByValue(this: TypeTable, type: i32): boolean -> @TypeTable.resultByValue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: type
   calls: TypeTable.isResult TypeTable.packablePayload nish_panic_index
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.isResult#0 TypeTable.packablePayload#0 TypeTable.packablePayload#0
   stackSites=0 stackLocals=0
-  callee 368:10 TypeTable.isResult -> @TypeTable.isResult
-  callee 371:12 TypeTable.packablePayload -> @TypeTable.packablePayload
-  callee 371:53 TypeTable.packablePayload -> @TypeTable.packablePayload
+  callee 367:10 TypeTable.isResult -> @TypeTable.isResult
+  callee 370:12 TypeTable.packablePayload -> @TypeTable.packablePayload
+  callee 370:53 TypeTable.packablePayload -> @TypeTable.packablePayload
 function TypeTable.llvmAbiType(this: TypeTable, type: i32, privateAbi: boolean): string -> @TypeTable.llvmAbiType [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
   calls: TypeTable.llvmType TypeTable.resultByValue
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 TypeTable.llvmType#0
   stackSites=0 stackLocals=0
-  callee 381:9 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 384:12 TypeTable.llvmType -> @TypeTable.llvmType
+  callee 380:9 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 383:12 TypeTable.llvmType -> @TypeTable.llvmType
 function TypeTable.llvmType(this: TypeTable, type: i32): string -> @TypeTable.llvmType [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
   calls: TypeTable.llvmType TypeTable.resultStructName internalError nish_exit nish_panic_index nish_str_concat nish_str_from_i32
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.llvmType#0 TypeTable.resultStructName#0
   stackSites=0 stackLocals=0
-  callee 419:16 TypeTable.llvmType -> @TypeTable.llvmType
-  callee 421:27 TypeTable.resultStructName -> @TypeTable.resultStructName
-  callee 423:22 internalError -> @internalError
+  callee 418:16 TypeTable.llvmType -> @TypeTable.llvmType
+  callee 420:27 TypeTable.resultStructName -> @TypeTable.resultStructName
+  callee 422:22 internalError -> @internalError
 function TypeTable.alignOf(this: TypeTable, type: i32): i32 -> @TypeTable.alignOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: type
@@ -1691,12 +1691,12 @@ function TypeTable.typeName(this: TypeTable, type: i32): string -> @TypeTable.ty
   calls: TypeTable.scalarName TypeTable.typeName nish_panic_index nish_str_concat
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.scalarName#0
   stackSites=0 stackLocals=0
-  callee 458:25 TypeTable.typeName -> @TypeTable.typeName
-  callee 459:16 TypeTable.typeName -> @TypeTable.typeName
-  callee 463:19 TypeTable.typeName -> @TypeTable.typeName
-  callee 467:26 TypeTable.typeName -> @TypeTable.typeName
-  callee 467:61 TypeTable.typeName -> @TypeTable.typeName
-  callee 469:16 TypeTable.scalarName -> @TypeTable.scalarName
+  callee 457:25 TypeTable.typeName -> @TypeTable.typeName
+  callee 458:16 TypeTable.typeName -> @TypeTable.typeName
+  callee 462:19 TypeTable.typeName -> @TypeTable.typeName
+  callee 466:26 TypeTable.typeName -> @TypeTable.typeName
+  callee 466:61 TypeTable.typeName -> @TypeTable.typeName
+  callee 468:16 TypeTable.scalarName -> @TypeTable.scalarName
 function TypeTable.scalarName(this: TypeTable, type: i32): string -> @TypeTable.scalarName [exported method]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   escaping: type
@@ -1708,15 +1708,15 @@ function TypeTable.assignable(this: TypeTable, from: i32, to: i32): boolean -> @
   calls: TypeTable.widensToReadonlyArray nish_panic_index
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.widensToReadonlyArray#0 TypeTable.widensToReadonlyArray#0
   stackSites=0 stackLocals=0
-  callee 524:9 TypeTable.widensToReadonlyArray -> @TypeTable.widensToReadonlyArray
-  callee 528:40 TypeTable.widensToReadonlyArray -> @TypeTable.widensToReadonlyArray
+  callee 523:9 TypeTable.widensToReadonlyArray -> @TypeTable.widensToReadonlyArray
+  callee 527:40 TypeTable.widensToReadonlyArray -> @TypeTable.widensToReadonlyArray
 function TypeTable.widensToReadonlyArray(this: TypeTable, from: i32, to: i32): boolean -> @TypeTable.widensToReadonlyArray [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: from to
   calls: TypeTable.isReadonlyArray nish_panic_index
   pointer this: size=56 writesThrough=false captured=false passedTo=TypeTable.isReadonlyArray#0
   stackSites=0 stackLocals=0
-  callee 540:10 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
+  callee 539:10 TypeTable.isReadonlyArray -> @TypeTable.isReadonlyArray
 module self/ice.ts
 import CLI from "./branding" -> const CLI
 import VERSION from "./branding" -> const VERSION
@@ -5010,35 +5010,33 @@ function functionAttributes(f: FunctionFacts): string[] -> @functionAttributes [
   pointer f: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local 1454:9 attrs: string[] (const)
-function paramAttributes(table: TypeTable, name: string, type: i32, f: FunctionFacts, privateAbi: boolean): string[] -> @paramAttributes [exported]
+function paramAttributes(table: TypeTable, name: string, type: i32, f: FunctionFacts): string[] -> @paramAttributes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: name type
   calls: FunctionFacts.pointerParam StringSet.has TypeTable.kindOf TypeTable.refOf TypeTable.resultByValue nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32
-  pointer table: size=56 writesThrough=false captured=false passedTo=TypeTable.resultByValue#0 TypeTable.kindOf#0 TypeTable.resultByValue#0 TypeTable.refOf#0
+  pointer table: size=56 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.resultByValue#0 TypeTable.refOf#0
   pointer f: size=96 writesThrough=false captured=false passedTo=FunctionFacts.pointerParam#0
   stackSites=0 stackLocals=0
-  local 1474:9 attrs: string[] (const)
-  callee 1478:23 TypeTable.resultByValue -> @TypeTable.resultByValue
-  local 1483:9 pointer: PointerParamFacts | null (const)
-  callee 1483:19 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
-  local 1484:9 kind: i32 (const)
-  callee 1484:16 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 1494:10 StringSet.has -> @StringSet.has
-  callee 1531:28 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 1555:9 TypeTable.refOf -> @TypeTable.refOf
-  local 1562:11 uncaptured: boolean (const)
-  callee 1562:64 StringSet.has -> @StringSet.has
-function returnAttributes(table: TypeTable, type: i32, deref: i32, privateAbi: boolean): string[] -> @returnAttributes [exported]
+  local 1468:9 attrs: string[] (const)
+  local 1472:9 pointer: PointerParamFacts | null (const)
+  callee 1472:19 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
+  local 1473:9 kind: i32 (const)
+  callee 1473:16 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 1483:10 StringSet.has -> @StringSet.has
+  callee 1520:28 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 1543:9 TypeTable.refOf -> @TypeTable.refOf
+  local 1550:11 uncaptured: boolean (const)
+  callee 1550:64 StringSet.has -> @StringSet.has
+function returnAttributes(table: TypeTable, type: i32, deref: i32): string[] -> @returnAttributes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
   calls: TypeTable.kindOf TypeTable.resultByValue nish_array_grow nish_str_concat nish_str_from_i32
-  pointer table: size=56 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.resultByValue#0 TypeTable.resultByValue#0
+  pointer table: size=56 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.resultByValue#0
   stackSites=0 stackLocals=0
-  local 1576:9 attrs: string[] (const)
-  local 1577:9 kind: i32 (const)
-  callee 1577:16 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 1584:21 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 1603:28 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local 1560:9 attrs: string[] (const)
+  local 1561:9 kind: i32 (const)
+  callee 1561:16 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 1581:28 TypeTable.resultByValue -> @TypeTable.resultByValue
 module self/emit_builtins.ts
 import isBuiltinFunction from "./builtins" -> function @isBuiltinFunction
 import Emitter from "./emit" -> struct Emitter
@@ -5487,14 +5485,16 @@ import emitUnary from "./emit_ops" -> function @emitUnary
 import numericConstant from "./emit_ops" -> function @numericConstant
 import declareResultTypes from "./emit_result" -> function @declareResultTypes
 import emitPackedResult from "./emit_result" -> function @emitPackedResult
+import unpackResult from "./emit_result" -> function @unpackResult
 import emitResultConstructor from "./emit_result" -> function @emitResultConstructor
 import emitResultMethod from "./emit_result" -> function @emitResultMethod
 import emitResultProperty from "./emit_result" -> function @emitResultProperty
+import emitResultArgument from "./emit_result" -> function @emitResultArgument
 import emitResultReturn from "./emit_result" -> function @emitResultReturn
 import emitResultReturningCall from "./emit_result" -> function @emitResultReturningCall
 import isResultConstructorCall from "./emit_result" -> function @isResultConstructorCall
 import privateResultAbi from "./emit_result" -> function @privateResultAbi
-import unpackReturnedResult from "./emit_result" -> function @unpackReturnedResult
+import resultPairToWord from "./emit_result" -> function @resultPairToWord
 import addStringConstant from "./emit_strings" -> function @addStringConstant
 import emitTemplate from "./emit_strings" -> function @emitTemplate
 import dottedName from "./emit_util" -> function @dottedName
@@ -5645,177 +5645,179 @@ function Emitter.constructor(this: Emitter, unit: AnalysisUnit, table: TypeTable
   pointer runtime: size=16 writesThrough=true captured=true
   pointer facts: size=16 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 191:19 new IRModule -> @IRModule.constructor
-  local 192:11 noParams: IRParam[] (const)
-  local 193:11 noNames: string[] (const)
-  callee 194:15 new IRFunction -> @IRFunction.constructor
-  callee 195:20 new FunctionFacts -> @FunctionFacts.constructor
-  callee 202:24 new StringSet -> @StringSet.constructor
-  callee 203:20 new StringMap -> @StringMap.constructor
-  callee 207:20 new DebugInfo -> @DebugInfo.constructor
-  local 211:13 target: Target | null (const)
-  callee 211:22 resolveTarget -> @resolveTarget
-  callee 213:22 internalError -> @internalError
-  callee 215:36 targetHeader -> @targetHeader
+  callee 193:19 new IRModule -> @IRModule.constructor
+  local 194:11 noParams: IRParam[] (const)
+  local 195:11 noNames: string[] (const)
+  callee 196:15 new IRFunction -> @IRFunction.constructor
+  callee 197:20 new FunctionFacts -> @FunctionFacts.constructor
+  callee 204:24 new StringSet -> @StringSet.constructor
+  callee 205:20 new StringMap -> @StringMap.constructor
+  callee 209:20 new DebugInfo -> @DebugInfo.constructor
+  local 213:13 target: Target | null (const)
+  callee 213:22 resolveTarget -> @resolveTarget
+  callee 215:22 internalError -> @internalError
+  callee 217:36 targetHeader -> @targetHeader
 function Emitter.emitModule(this: Emitter): string -> @Emitter.emitModule [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitEntryWrapper Emitter.emitFunction Emitter.emitImportDeclarations Emitter.emitRuntimePrelude FunctionSig.definedIn IRModule.addFunction IRModule.addTypeDecl IRModule.toText structTypeDeclarations
   pointer this: size=144 writesThrough=true captured=false passedTo=structTypeDeclarations#0 Emitter.emitFunction#0 Emitter.emitEntryWrapper#0 Emitter.emitImportDeclarations#0 Emitter.emitRuntimePrelude#0
   stackSites=0 stackLocals=0
-  local 222:16 decl: string (const)
-  callee 222:24 structTypeDeclarations -> @structTypeDeclarations
-  callee 223:7 IRModule.addTypeDecl -> @IRModule.addTypeDecl
-  local 225:16 sig: FunctionSig (const)
-  callee 226:11 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee 227:9 IRModule.addFunction -> @IRModule.addFunction
-  callee 227:33 Emitter.emitFunction -> @Emitter.emitFunction
-  local 230:11 entry: FunctionSig | null (const)
-  callee 232:7 IRModule.addFunction -> @IRModule.addFunction
-  callee 232:31 Emitter.emitEntryWrapper -> @Emitter.emitEntryWrapper
-  callee 234:5 Emitter.emitImportDeclarations -> @Emitter.emitImportDeclarations
-  callee 235:5 Emitter.emitRuntimePrelude -> @Emitter.emitRuntimePrelude
-  callee 236:12 IRModule.toText -> @IRModule.toText
+  local 224:16 decl: string (const)
+  callee 224:24 structTypeDeclarations -> @structTypeDeclarations
+  callee 225:7 IRModule.addTypeDecl -> @IRModule.addTypeDecl
+  local 227:16 sig: FunctionSig (const)
+  callee 228:11 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee 229:9 IRModule.addFunction -> @IRModule.addFunction
+  callee 229:33 Emitter.emitFunction -> @Emitter.emitFunction
+  local 232:11 entry: FunctionSig | null (const)
+  callee 234:7 IRModule.addFunction -> @IRModule.addFunction
+  callee 234:31 Emitter.emitEntryWrapper -> @Emitter.emitEntryWrapper
+  callee 236:5 Emitter.emitImportDeclarations -> @Emitter.emitImportDeclarations
+  callee 237:5 Emitter.emitRuntimePrelude -> @Emitter.emitRuntimePrelude
+  callee 238:12 IRModule.toText -> @IRModule.toText
 function Emitter.factsFor(this: Emitter, sig: FunctionSig): FunctionFacts -> @Emitter.factsFor [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false returnDeref=96
   calls: FactsTable.get internalError nish_arena_mark nish_arena_release nish_exit nish_str_concat
   pointer this: size=144 writesThrough=false captured=false
   pointer sig: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 242:11 facts: FunctionFacts | null (const)
-  callee 242:19 FactsTable.get -> @FactsTable.get
-  callee 246:18 internalError -> @internalError
+  local 244:11 facts: FunctionFacts | null (const)
+  callee 244:19 FactsTable.get -> @FactsTable.get
+  callee 248:18 internalError -> @internalError
 function Emitter.declareSignatureTypes(this: Emitter, sig: FunctionSig): void -> @Emitter.declareSignatureTypes [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: IRModule.addTypeDecl TypeTable.isArray declareResultTypes
   pointer this: size=144 writesThrough=false captured=false passedTo=declareResultTypes#0 declareResultTypes#0
   pointer sig: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 251:9 TypeTable.isArray -> @TypeTable.isArray
-  callee 252:7 IRModule.addTypeDecl -> @IRModule.addTypeDecl
-  callee 254:5 declareResultTypes -> @declareResultTypes
-  local 255:16 type: i32 (const)
-  callee 256:11 TypeTable.isArray -> @TypeTable.isArray
-  callee 257:9 IRModule.addTypeDecl -> @IRModule.addTypeDecl
-  callee 259:7 declareResultTypes -> @declareResultTypes
+  callee 253:9 TypeTable.isArray -> @TypeTable.isArray
+  callee 254:7 IRModule.addTypeDecl -> @IRModule.addTypeDecl
+  callee 256:5 declareResultTypes -> @declareResultTypes
+  local 257:16 type: i32 (const)
+  callee 258:11 TypeTable.isArray -> @TypeTable.isArray
+  callee 259:9 IRModule.addTypeDecl -> @IRModule.addTypeDecl
+  callee 261:7 declareResultTypes -> @declareResultTypes
 function Emitter.emitFunction(this: Emitter, sig: FunctionSig): IRFunction -> @Emitter.emitFunction [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=112
   escaping: sig
-  calls: DebugInfo.beginFunction Emitter.declareSignatureTypes Emitter.emitBlock Emitter.emitReturnValue Emitter.emitScopeExit Emitter.factsFor Emitter.llvmAbi Emitter.useRuntime FunctionFacts.isStackParam IRBlock.terminated IRFunction.constructor IRFunction.currentBlock IRFunction.emit IRModule.attrGroupFor IRParam.constructor TypeTable.resultByValue emitConstructorPrologue functionAttributes nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat paramAttributes privateResultAbi returnAttributes unpackReturnedResult
-  pointer this: size=144 writesThrough=true captured=false passedTo=Emitter.factsFor#0 Emitter.declareSignatureTypes#0 privateResultAbi#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 Emitter.useRuntime#0 unpackReturnedResult#0 emitConstructorPrologue#0 Emitter.emitBlock#0 Emitter.emitReturnValue#0 Emitter.emitScopeExit#0
+  calls: DebugInfo.beginFunction Emitter.declareSignatureTypes Emitter.emitBlock Emitter.emitReturnValue Emitter.emitScopeExit Emitter.factsFor Emitter.llvmAbi Emitter.useRuntime FunctionFacts.isStackParam IRBlock.terminated IRFunction.constructor IRFunction.currentBlock IRFunction.emit IRModule.attrGroupFor IRParam.constructor TypeTable.resultByValue emitConstructorPrologue functionAttributes nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat paramAttributes privateResultAbi resultPairToWord returnAttributes unpackResult
+  pointer this: size=144 writesThrough=true captured=false passedTo=Emitter.factsFor#0 Emitter.declareSignatureTypes#0 privateResultAbi#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 Emitter.useRuntime#0 resultPairToWord#0 unpackResult#0 emitConstructorPrologue#0 Emitter.emitBlock#0 Emitter.emitReturnValue#0 Emitter.emitScopeExit#0
   pointer sig: size=80 writesThrough=true captured=true passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1 DebugInfo.beginFunction#2 emitConstructorPrologue#1
   stackSites=0 stackLocals=0
-  local 264:11 facts: FunctionFacts (const)
-  callee 264:19 Emitter.factsFor -> @Emitter.factsFor
-  callee 265:5 Emitter.declareSignatureTypes -> @Emitter.declareSignatureTypes
-  local 266:11 optimize: boolean (const)
-  local 267:11 params: IRParam[] (const)
-  local 270:11 privateAbi: boolean (const)
-  callee 270:24 privateResultAbi -> @privateResultAbi
-  local 271:9 i: i32 (let)
-  local 273:13 name: string (const)
-  local 274:13 type: i32 (const)
-  local 275:11 attrs: string[] (let)
-  callee 277:17 paramAttributes -> @paramAttributes
-  callee 279:19 new IRParam -> @IRParam.constructor
-  callee 279:37 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee 282:15 new IRFunction -> @IRFunction.constructor
-  callee 282:48 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee 289:29 returnAttributes -> @returnAttributes
-  callee 290:27 IRModule.attrGroupFor -> @IRModule.attrGroupFor
-  callee 290:52 functionAttributes -> @functionAttributes
-  local 298:11 debug: DebugInfo | null (const)
-  callee 300:7 DebugInfo.beginFunction -> @DebugInfo.beginFunction
-  callee 305:7 IRFunction.emit -> @IRFunction.emit
-  callee 305:46 Emitter.useRuntime -> @Emitter.useRuntime
-  local 314:13 name: string (const)
-  callee 315:11 TypeTable.resultByValue -> @TypeTable.resultByValue
-  local 316:15 object: string (const)
-  callee 316:24 unpackReturnedResult -> @unpackReturnedResult
-  callee 320:11 FunctionFacts.isStackParam -> @FunctionFacts.isStackParam
-  callee 330:7 emitConstructorPrologue -> @emitConstructorPrologue
-  local 332:11 body: Node (const)
-  callee 335:7 Emitter.emitBlock -> @Emitter.emitBlock
-  callee 337:7 Emitter.emitReturnValue -> @Emitter.emitReturnValue
-  callee 341:10 IRBlock.terminated -> @IRBlock.terminated
-  callee 341:10 IRFunction.currentBlock -> @IRFunction.currentBlock
-  callee 342:7 Emitter.emitScopeExit -> @Emitter.emitScopeExit
-  callee 343:7 IRFunction.emit -> @IRFunction.emit
+  local 266:11 facts: FunctionFacts (const)
+  callee 266:19 Emitter.factsFor -> @Emitter.factsFor
+  callee 267:5 Emitter.declareSignatureTypes -> @Emitter.declareSignatureTypes
+  local 268:11 optimize: boolean (const)
+  local 269:11 params: IRParam[] (const)
+  local 272:11 privateAbi: boolean (const)
+  callee 272:24 privateResultAbi -> @privateResultAbi
+  local 273:9 i: i32 (let)
+  local 275:13 name: string (const)
+  local 276:13 type: i32 (const)
+  local 277:11 attrs: string[] (let)
+  callee 279:17 paramAttributes -> @paramAttributes
+  callee 281:19 new IRParam -> @IRParam.constructor
+  callee 281:37 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee 284:15 new IRFunction -> @IRFunction.constructor
+  callee 284:48 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee 291:29 returnAttributes -> @returnAttributes
+  callee 292:27 IRModule.attrGroupFor -> @IRModule.attrGroupFor
+  callee 292:52 functionAttributes -> @functionAttributes
+  local 300:11 debug: DebugInfo | null (const)
+  callee 302:7 DebugInfo.beginFunction -> @DebugInfo.beginFunction
+  callee 307:7 IRFunction.emit -> @IRFunction.emit
+  callee 307:46 Emitter.useRuntime -> @Emitter.useRuntime
+  local 315:13 name: string (const)
+  callee 316:11 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local 317:15 incoming: string (const)
+  callee 317:39 resultPairToWord -> @resultPairToWord
+  local 318:15 object: string (const)
+  callee 318:24 unpackResult -> @unpackResult
+  callee 318:72 FunctionFacts.isStackParam -> @FunctionFacts.isStackParam
+  callee 326:7 emitConstructorPrologue -> @emitConstructorPrologue
+  local 328:11 body: Node (const)
+  callee 331:7 Emitter.emitBlock -> @Emitter.emitBlock
+  callee 333:7 Emitter.emitReturnValue -> @Emitter.emitReturnValue
+  callee 337:10 IRBlock.terminated -> @IRBlock.terminated
+  callee 337:10 IRFunction.currentBlock -> @IRFunction.currentBlock
+  callee 338:7 Emitter.emitScopeExit -> @Emitter.emitScopeExit
+  callee 339:7 IRFunction.emit -> @IRFunction.emit
 function Emitter.isStackSite(this: Emitter, node: Node): boolean -> @Emitter.isStackSite [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: FunctionFacts.isStackSite
   pointer this: size=144 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=FunctionFacts.isStackSite#1
   stackSites=0 stackLocals=0
-  callee 349:12 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
+  callee 345:12 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
 function Emitter.beginReclaim(this: Emitter, callee: FunctionSig): string -> @Emitter.beginReclaim [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat reclaimsReturnedString
   pointer this: size=144 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   pointer callee: size=80 writesThrough=false captured=false passedTo=reclaimsReturnedString#0
   stackSites=0 stackLocals=0
-  callee 361:10 reclaimsReturnedString -> @reclaimsReturnedString
-  callee 364:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 364:42 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 357:10 reclaimsReturnedString -> @reclaimsReturnedString
+  callee 360:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 360:42 Emitter.useRuntime -> @Emitter.useRuntime
 function Emitter.endReclaim(this: Emitter, mark: string, value: string): string -> @Emitter.endReclaim [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: value
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat
   pointer this: size=144 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   stackSites=0 stackLocals=0
-  callee 377:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 377:42 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 373:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 373:42 Emitter.useRuntime -> @Emitter.useRuntime
 function Emitter.emitScopeExit(this: Emitter): void -> @Emitter.emitScopeExit [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.useRuntime IRFunction.emit nish_str_concat
   pointer this: size=144 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   stackSites=0 stackLocals=0
-  callee 384:5 IRFunction.emit -> @IRFunction.emit
-  callee 384:31 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 380:5 IRFunction.emit -> @IRFunction.emit
+  callee 380:31 Emitter.useRuntime -> @Emitter.useRuntime
 function Emitter.emitEntryWrapper(this: Emitter, userMain: FunctionSig): IRFunction -> @Emitter.emitEntryWrapper [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=112
   calls: DebugInfo.beginFunction Emitter.useRuntime IRFunction.constructor IRFunction.emit IRFunction.emitValue IRModule.attrGroupFor IRParam.constructor nish_alloc_struct nish_array_grow nish_str_concat
   pointer this: size=144 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0
   pointer userMain: size=80 writesThrough=false captured=false passedTo=DebugInfo.beginFunction#2
   stackSites=1 stackLocals=1
-  local 395:11 optimize: boolean (const)
-  local 396:11 attrs: string[] (const)
-  local 400:11 params: IRParam[] (const)
-  callee 401:17 new IRParam -> @IRParam.constructor
-  callee 402:17 new IRParam -> @IRParam.constructor
-  local 403:11 fn: IRFunction (const)
-  callee 403:16 new IRFunction -> @IRFunction.constructor
-  local 405:13 returnAttrs: string[] (const)
-  local 408:13 group: string[] (const)
-  callee 410:22 IRModule.attrGroupFor -> @IRModule.attrGroupFor
-  local 413:11 debug: DebugInfo | null (const)
-  callee 415:7 DebugInfo.beginFunction -> @DebugInfo.beginFunction
-  local 417:11 freeArena: string (const)
-  callee 417:23 Emitter.useRuntime -> @Emitter.useRuntime
+  local 391:11 optimize: boolean (const)
+  local 392:11 attrs: string[] (const)
+  local 396:11 params: IRParam[] (const)
+  callee 397:17 new IRParam -> @IRParam.constructor
+  callee 398:17 new IRParam -> @IRParam.constructor
+  local 399:11 fn: IRFunction (const)
+  callee 399:16 new IRFunction -> @IRFunction.constructor
+  local 401:13 returnAttrs: string[] (const)
+  local 404:13 group: string[] (const)
+  callee 406:22 IRModule.attrGroupFor -> @IRModule.attrGroupFor
+  local 409:11 debug: DebugInfo | null (const)
+  callee 411:7 DebugInfo.beginFunction -> @DebugInfo.beginFunction
+  local 413:11 freeArena: string (const)
+  callee 413:23 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 415:7 IRFunction.emit -> @IRFunction.emit
+  callee 415:28 Emitter.useRuntime -> @Emitter.useRuntime
+  local 417:9 code: string (let)
   callee 419:7 IRFunction.emit -> @IRFunction.emit
-  callee 419:28 Emitter.useRuntime -> @Emitter.useRuntime
-  local 421:9 code: string (let)
-  callee 423:7 IRFunction.emit -> @IRFunction.emit
-  callee 425:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 427:5 IRFunction.emit -> @IRFunction.emit
-  callee 428:5 IRFunction.emit -> @IRFunction.emit
+  callee 421:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 423:5 IRFunction.emit -> @IRFunction.emit
+  callee 424:5 IRFunction.emit -> @IRFunction.emit
 function Emitter.emitImportDeclarations(this: Emitter): void -> @Emitter.emitImportDeclarations [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.declareAll StringSet.constructor internalError nish_array_grow nish_exit nish_panic_index nish_str_concat structFunctions
   pointer this: size=144 writesThrough=false captured=false passedTo=Emitter.declareAll#0 Emitter.declareAll#0 Emitter.declareAll#0
   stackSites=2 stackLocals=2
-  local 442:11 seen: StringSet (const)
-  callee 442:18 new StringSet -> @StringSet.constructor
-  local 443:16 imp: ImportBinding (const)
-  local 447:13 struct: StructInfo | null (const)
-  local 448:13 sig: FunctionSig | null (const)
+  local 438:11 seen: StringSet (const)
+  callee 438:18 new StringSet -> @StringSet.constructor
+  local 439:16 imp: ImportBinding (const)
+  local 443:13 struct: StructInfo | null (const)
+  local 444:13 sig: FunctionSig | null (const)
+  callee 446:9 Emitter.declareAll -> @Emitter.declareAll
+  callee 446:25 structFunctions -> @structFunctions
+  local 448:15 one: FunctionSig[] (const)
   callee 450:9 Emitter.declareAll -> @Emitter.declareAll
-  callee 450:25 structFunctions -> @structFunctions
-  local 452:15 one: FunctionSig[] (const)
-  callee 454:9 Emitter.declareAll -> @Emitter.declareAll
-  callee 456:22 internalError -> @internalError
-  local 462:16 index: i32 (const)
-  callee 463:7 Emitter.declareAll -> @Emitter.declareAll
-  callee 463:23 structFunctions -> @structFunctions
+  callee 452:22 internalError -> @internalError
+  local 458:16 index: i32 (const)
+  callee 459:7 Emitter.declareAll -> @Emitter.declareAll
+  callee 459:23 structFunctions -> @structFunctions
 function Emitter.declareAll(this: Emitter, sigs: FunctionSig[], seen: StringSet): void -> @Emitter.declareAll [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.declarationFor IRModule.addDeclaration StringSet.add
@@ -5823,334 +5825,334 @@ function Emitter.declareAll(this: Emitter, sigs: FunctionSig[], seen: StringSet)
   pointer sigs: size=0 writesThrough=false captured=false
   pointer seen: size=8 writesThrough=false captured=false passedTo=StringSet.add#0
   stackSites=0 stackLocals=0
-  local 468:16 sig: FunctionSig (const)
-  callee 469:11 StringSet.add -> @StringSet.add
-  callee 470:9 IRModule.addDeclaration -> @IRModule.addDeclaration
-  callee 470:36 Emitter.declarationFor -> @Emitter.declarationFor
+  local 464:16 sig: FunctionSig (const)
+  callee 465:11 StringSet.add -> @StringSet.add
+  callee 466:9 IRModule.addDeclaration -> @IRModule.addDeclaration
+  callee 466:36 Emitter.declarationFor -> @Emitter.declarationFor
 function Emitter.declarationFor(this: Emitter, sig: FunctionSig): string -> @Emitter.declarationFor [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.declareSignatureTypes Emitter.factsFor Emitter.llvmAbi IRModule.attrGroupFor functionAttributes nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat paramAttributes returnAttributes
   pointer this: size=144 writesThrough=false captured=false passedTo=Emitter.factsFor#0 Emitter.declareSignatureTypes#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0
   pointer sig: size=80 writesThrough=false captured=false passedTo=Emitter.factsFor#1 Emitter.declareSignatureTypes#1
   stackSites=3 stackLocals=3
-  local 481:11 facts: FunctionFacts (const)
-  callee 481:19 Emitter.factsFor -> @Emitter.factsFor
-  callee 482:5 Emitter.declareSignatureTypes -> @Emitter.declareSignatureTypes
-  local 483:11 optimize: boolean (const)
-  local 484:11 params: string[] (const)
-  local 485:9 i: i32 (let)
-  local 487:13 parts: string[] (const)
-  callee 487:32 Emitter.llvmAbi -> @Emitter.llvmAbi
-  local 489:20 attr: string (const)
-  callee 489:28 paramAttributes -> @paramAttributes
-  local 496:11 ret: string[] (const)
-  local 498:18 attr: string (const)
-  callee 498:26 returnAttributes -> @returnAttributes
-  callee 502:14 Emitter.llvmAbi -> @Emitter.llvmAbi
-  local 503:11 group: string (const)
-  callee 503:34 IRModule.attrGroupFor -> @IRModule.attrGroupFor
-  callee 503:59 functionAttributes -> @functionAttributes
+  local 477:11 facts: FunctionFacts (const)
+  callee 477:19 Emitter.factsFor -> @Emitter.factsFor
+  callee 478:5 Emitter.declareSignatureTypes -> @Emitter.declareSignatureTypes
+  local 479:11 optimize: boolean (const)
+  local 480:11 params: string[] (const)
+  local 481:9 i: i32 (let)
+  local 483:13 parts: string[] (const)
+  callee 483:32 Emitter.llvmAbi -> @Emitter.llvmAbi
+  local 485:20 attr: string (const)
+  callee 485:28 paramAttributes -> @paramAttributes
+  local 492:11 ret: string[] (const)
+  local 494:18 attr: string (const)
+  callee 494:26 returnAttributes -> @returnAttributes
+  callee 498:14 Emitter.llvmAbi -> @Emitter.llvmAbi
+  local 499:11 group: string (const)
+  callee 499:34 IRModule.attrGroupFor -> @IRModule.attrGroupFor
+  callee 499:59 functionAttributes -> @functionAttributes
 function Emitter.useRuntime(this: Emitter, name: string): string -> @Emitter.useRuntime [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: name
   calls: StringSet.add nish_str_concat
   pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 510:5 StringSet.add -> @StringSet.add
+  callee 506:5 StringSet.add -> @StringSet.add
 function Emitter.stringConstant(this: Emitter, text: string): string -> @Emitter.stringConstant [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: text
   calls: StringMap.get StringMap.set addStringConstant nish_array_grow nish_panic_index
   pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 515:11 at: i32 (const)
-  callee 515:16 StringMap.get -> @StringMap.get
-  local 519:11 index: i32 (const)
-  local 520:11 ref: string (const)
-  callee 520:17 addStringConstant -> @addStringConstant
-  callee 521:5 StringMap.set -> @StringMap.set
+  local 511:11 at: i32 (const)
+  callee 511:16 StringMap.get -> @StringMap.get
+  local 515:11 index: i32 (const)
+  local 516:11 ref: string (const)
+  callee 516:17 addStringConstant -> @addStringConstant
+  callee 517:5 StringMap.set -> @StringMap.set
 function Emitter.declare(this: Emitter, text: string): void -> @Emitter.declare [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: text
   calls: IRModule.addDeclaration
   pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 527:5 IRModule.addDeclaration -> @IRModule.addDeclaration
+  callee 523:5 IRModule.addDeclaration -> @IRModule.addDeclaration
 function Emitter.declareType(this: Emitter, text: string): void -> @Emitter.declareType [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: text
   calls: IRModule.addTypeDecl
   pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 531:5 IRModule.addTypeDecl -> @IRModule.addTypeDecl
+  callee 527:5 IRModule.addTypeDecl -> @IRModule.addTypeDecl
 function Emitter.declareGlobal(this: Emitter, text: string): void -> @Emitter.declareGlobal [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: text
   calls: IRModule.addGlobal
   pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 535:5 IRModule.addGlobal -> @IRModule.addGlobal
+  callee 531:5 IRModule.addGlobal -> @IRModule.addGlobal
 function Emitter.metadata(this: Emitter, text: string): string -> @Emitter.metadata [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: text
   calls: IRModule.addMetadata
   pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 540:12 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 536:12 IRModule.addMetadata -> @IRModule.addMetadata
 function Emitter.emitRuntimePrelude(this: Emitter): void -> @Emitter.emitRuntimePrelude [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: IRModule.addDeclaration IRModule.addGlobal IRModule.addRawDefinition IRModule.addTypeDecl IRModule.attrGroupFor StringSet.add StringSet.has inlineAllocator inlineAllocatorAttrs nish_str_concat
   pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 544:11 all: boolean (const)
-  local 545:11 wantsAlloc: boolean (const)
-  callee 545:31 StringSet.has -> @StringSet.has
-  callee 547:7 StringSet.add -> @StringSet.add
-  callee 548:7 IRModule.addTypeDecl -> @IRModule.addTypeDecl
-  callee 549:7 IRModule.addGlobal -> @IRModule.addGlobal
-  callee 552:16 StringSet.has -> @StringSet.has
-  callee 553:7 IRModule.addTypeDecl -> @IRModule.addTypeDecl
-  callee 557:7 IRModule.addGlobal -> @IRModule.addGlobal
-  local 559:16 rt: RuntimeFunction (const)
-  callee 561:12 StringSet.has -> @StringSet.has
-  local 564:13 group: string (const)
-  callee 564:56 IRModule.attrGroupFor -> @IRModule.attrGroupFor
-  callee 565:7 IRModule.addDeclaration -> @IRModule.addDeclaration
-  callee 568:7 IRModule.addRawDefinition -> @IRModule.addRawDefinition
-  callee 568:36 inlineAllocator -> @inlineAllocator
-  callee 568:52 IRModule.attrGroupFor -> @IRModule.attrGroupFor
-  callee 568:77 inlineAllocatorAttrs -> @inlineAllocatorAttrs
+  local 540:11 all: boolean (const)
+  local 541:11 wantsAlloc: boolean (const)
+  callee 541:31 StringSet.has -> @StringSet.has
+  callee 543:7 StringSet.add -> @StringSet.add
+  callee 544:7 IRModule.addTypeDecl -> @IRModule.addTypeDecl
+  callee 545:7 IRModule.addGlobal -> @IRModule.addGlobal
+  callee 548:16 StringSet.has -> @StringSet.has
+  callee 549:7 IRModule.addTypeDecl -> @IRModule.addTypeDecl
+  callee 553:7 IRModule.addGlobal -> @IRModule.addGlobal
+  local 555:16 rt: RuntimeFunction (const)
+  callee 557:12 StringSet.has -> @StringSet.has
+  local 560:13 group: string (const)
+  callee 560:56 IRModule.attrGroupFor -> @IRModule.attrGroupFor
+  callee 561:7 IRModule.addDeclaration -> @IRModule.addDeclaration
+  callee 564:7 IRModule.addRawDefinition -> @IRModule.addRawDefinition
+  callee 564:36 inlineAllocator -> @inlineAllocator
+  callee 564:52 IRModule.attrGroupFor -> @IRModule.attrGroupFor
+  callee 564:77 inlineAllocatorAttrs -> @inlineAllocatorAttrs
 function Emitter.emitBlock(this: Emitter, block: Node): void -> @Emitter.emitBlock [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitStatement
   pointer this: size=144 writesThrough=false captured=false passedTo=Emitter.emitStatement#0
   pointer block: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 575:16 stmt: Node (const)
-  callee 576:7 Emitter.emitStatement -> @Emitter.emitStatement
+  local 571:16 stmt: Node (const)
+  callee 572:7 Emitter.emitStatement -> @Emitter.emitStatement
 function Emitter.emitStatement(this: Emitter, stmt: Node): void -> @Emitter.emitStatement [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitStatementKind Emitter.enterLocation IRFunction.setLocation
   pointer this: size=144 writesThrough=false captured=false passedTo=Emitter.enterLocation#0 Emitter.emitStatementKind#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=Emitter.enterLocation#1 Emitter.emitStatementKind#1
   stackSites=0 stackLocals=0
-  local 586:11 saved: string (const)
-  callee 586:19 Emitter.enterLocation -> @Emitter.enterLocation
-  callee 587:5 Emitter.emitStatementKind -> @Emitter.emitStatementKind
-  callee 588:5 IRFunction.setLocation -> @IRFunction.setLocation
+  local 582:11 saved: string (const)
+  callee 582:19 Emitter.enterLocation -> @Emitter.enterLocation
+  callee 583:5 Emitter.emitStatementKind -> @Emitter.emitStatementKind
+  callee 584:5 IRFunction.setLocation -> @IRFunction.setLocation
 function Emitter.emitStatementKind(this: Emitter, stmt: Node): void -> @Emitter.emitStatementKind [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitBlock Emitter.emitExpression Emitter.emitReturn Emitter.emitVariableDeclarations emitBreak emitContinue emitDo emitFor emitForOf emitIf emitSwitch emitThrow emitWhile internalError nish_exit nish_panic_index nish_str_concat nodeName
   pointer this: size=144 writesThrough=false captured=false passedTo=Emitter.emitReturn#0 Emitter.emitVariableDeclarations#0 Emitter.emitExpression#0 Emitter.emitBlock#0 emitIf#0 emitWhile#0 emitDo#0 emitFor#0 emitForOf#0 emitSwitch#0 emitBreak#0 emitContinue#0 emitThrow#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=Emitter.emitReturn#1 Emitter.emitBlock#1 emitIf#1 emitWhile#1 emitDo#1 emitFor#1 emitForOf#1 emitSwitch#1 emitThrow#1
   stackSites=0 stackLocals=0
-  callee 594:9 Emitter.emitReturn -> @Emitter.emitReturn
-  callee 597:9 Emitter.emitVariableDeclarations -> @Emitter.emitVariableDeclarations
-  callee 600:9 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 603:9 Emitter.emitBlock -> @Emitter.emitBlock
-  callee 606:9 emitIf -> @emitIf
-  callee 609:9 emitWhile -> @emitWhile
-  callee 612:9 emitDo -> @emitDo
-  callee 615:9 emitFor -> @emitFor
-  callee 618:9 emitForOf -> @emitForOf
-  callee 621:9 emitSwitch -> @emitSwitch
-  callee 624:9 emitBreak -> @emitBreak
-  callee 627:9 emitContinue -> @emitContinue
-  callee 630:9 emitThrow -> @emitThrow
-  callee 633:22 internalError -> @internalError
-  callee 633:69 nodeName -> @nodeName
+  callee 590:9 Emitter.emitReturn -> @Emitter.emitReturn
+  callee 593:9 Emitter.emitVariableDeclarations -> @Emitter.emitVariableDeclarations
+  callee 596:9 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 599:9 Emitter.emitBlock -> @Emitter.emitBlock
+  callee 602:9 emitIf -> @emitIf
+  callee 605:9 emitWhile -> @emitWhile
+  callee 608:9 emitDo -> @emitDo
+  callee 611:9 emitFor -> @emitFor
+  callee 614:9 emitForOf -> @emitForOf
+  callee 617:9 emitSwitch -> @emitSwitch
+  callee 620:9 emitBreak -> @emitBreak
+  callee 623:9 emitContinue -> @emitContinue
+  callee 626:9 emitThrow -> @emitThrow
+  callee 629:22 internalError -> @internalError
+  callee 629:69 nodeName -> @nodeName
 function Emitter.emitReturn(this: Emitter, stmt: Node): void -> @Emitter.emitReturn [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitReturnValue Emitter.emitScopeExit IRFunction.emit nish_panic_index
   pointer this: size=144 writesThrough=false captured=false passedTo=Emitter.emitScopeExit#0 Emitter.emitReturnValue#0
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 639:11 value: Node (const)
-  callee 641:7 Emitter.emitScopeExit -> @Emitter.emitScopeExit
-  callee 642:7 IRFunction.emit -> @IRFunction.emit
-  callee 645:5 Emitter.emitReturnValue -> @Emitter.emitReturnValue
+  local 635:11 value: Node (const)
+  callee 637:7 Emitter.emitScopeExit -> @Emitter.emitScopeExit
+  callee 638:7 IRFunction.emit -> @IRFunction.emit
+  callee 641:5 Emitter.emitReturnValue -> @Emitter.emitReturnValue
 function Emitter.emitReturnValue(this: Emitter, value: Node): void -> @Emitter.emitReturnValue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: Emitter.emitExpression Emitter.emitScopeExit Emitter.llvm Emitter.typeOf IRFunction.emit TypeTable.resultByValue emitPackedResult emitResultReturn internalError nish_exit nish_str_concat privateResultAbi
-  pointer this: size=144 writesThrough=false captured=false passedTo=emitPackedResult#0 privateResultAbi#0 Emitter.emitScopeExit#0 emitResultReturn#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitScopeExit#0 Emitter.llvm#0
+  calls: Emitter.emitExpression Emitter.emitScopeExit Emitter.llvm Emitter.typeOf IRFunction.emit TypeTable.resultByValue emitPackedResult emitResultReturn internalError nish_exit nish_str_concat
+  pointer this: size=144 writesThrough=false captured=false passedTo=emitPackedResult#0 Emitter.emitScopeExit#0 emitResultReturn#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitScopeExit#0 Emitter.llvm#0
   pointer value: size=40 writesThrough=false captured=false passedTo=emitPackedResult#1 Emitter.typeOf#1 Emitter.emitExpression#1
   stackSites=0 stackLocals=0
-  local 654:11 sig: FunctionSig | null (const)
-  callee 656:20 internalError -> @internalError
-  callee 661:9 TypeTable.resultByValue -> @TypeTable.resultByValue
-  local 662:13 packed: string (const)
-  callee 662:22 emitPackedResult -> @emitPackedResult
-  callee 662:68 privateResultAbi -> @privateResultAbi
-  callee 663:7 Emitter.emitScopeExit -> @Emitter.emitScopeExit
-  callee 664:7 emitResultReturn -> @emitResultReturn
-  local 667:11 type: i32 (const)
-  callee 667:18 Emitter.typeOf -> @Emitter.typeOf
-  local 668:11 result: string (const)
-  callee 668:20 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 669:5 Emitter.emitScopeExit -> @Emitter.emitScopeExit
-  callee 670:5 IRFunction.emit -> @IRFunction.emit
-  callee 670:25 Emitter.llvm -> @Emitter.llvm
+  local 650:11 sig: FunctionSig | null (const)
+  callee 652:20 internalError -> @internalError
+  callee 657:9 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local 658:13 word: string (const)
+  callee 658:20 emitPackedResult -> @emitPackedResult
+  callee 659:7 Emitter.emitScopeExit -> @Emitter.emitScopeExit
+  callee 660:7 emitResultReturn -> @emitResultReturn
+  local 663:11 type: i32 (const)
+  callee 663:18 Emitter.typeOf -> @Emitter.typeOf
+  local 664:11 result: string (const)
+  callee 664:20 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 665:5 Emitter.emitScopeExit -> @Emitter.emitScopeExit
+  callee 666:5 IRFunction.emit -> @IRFunction.emit
+  callee 666:25 Emitter.llvm -> @Emitter.llvm
 function Emitter.emitVariableDeclarations(this: Emitter, list: Node): void -> @Emitter.emitVariableDeclarations [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: DebugInfo.declareLocal Emitter.align Emitter.alignSuffix Emitter.emitExpression Emitter.llvm Emitter.setSlot IRFunction.emit IRFunction.emitAlloca internalError nish_exit nish_panic_index nish_str_concat
   pointer this: size=144 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.align#0 Emitter.setSlot#0 Emitter.emitExpression#0 Emitter.alignSuffix#0
   pointer list: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 679:16 decl: Node (const)
-  local 680:13 local: Local | null (const)
-  callee 682:22 internalError -> @internalError
-  local 684:15 ty: string (const)
-  callee 684:20 Emitter.llvm -> @Emitter.llvm
-  local 685:15 slot: string (const)
-  callee 685:22 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  callee 685:67 Emitter.align -> @Emitter.align
-  callee 686:9 Emitter.setSlot -> @Emitter.setSlot
-  local 687:15 init: string (const)
-  callee 687:22 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 688:9 IRFunction.emit -> @IRFunction.emit
-  callee 688:60 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local 689:15 debug: DebugInfo | null (const)
-  callee 691:11 DebugInfo.declareLocal -> @DebugInfo.declareLocal
+  local 675:16 decl: Node (const)
+  local 676:13 local: Local | null (const)
+  callee 678:22 internalError -> @internalError
+  local 680:15 ty: string (const)
+  callee 680:20 Emitter.llvm -> @Emitter.llvm
+  local 681:15 slot: string (const)
+  callee 681:22 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  callee 681:67 Emitter.align -> @Emitter.align
+  callee 682:9 Emitter.setSlot -> @Emitter.setSlot
+  local 683:15 init: string (const)
+  callee 683:22 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 684:9 IRFunction.emit -> @IRFunction.emit
+  callee 684:60 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local 685:15 debug: DebugInfo | null (const)
+  callee 687:11 DebugInfo.declareLocal -> @DebugInfo.declareLocal
 function Emitter.emitExpression(this: Emitter, expr: Node): string -> @Emitter.emitExpression [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitRawExpression Emitter.enterLocation Emitter.llvm Emitter.typeOf IRFunction.emitValue IRFunction.setLocation nish_panic_index nish_str_concat
   pointer this: size=144 writesThrough=false captured=false passedTo=Emitter.enterLocation#0 Emitter.emitRawExpression#0 Emitter.llvm#0 Emitter.llvm#0 Emitter.typeOf#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.enterLocation#1 Emitter.emitRawExpression#1 Emitter.typeOf#1
   stackSites=0 stackLocals=0
-  local 699:11 saved: string (const)
-  callee 699:19 Emitter.enterLocation -> @Emitter.enterLocation
-  local 700:11 value: string (const)
-  callee 700:19 Emitter.emitRawExpression -> @Emitter.emitRawExpression
-  local 703:11 from: i32 (const)
-  local 704:9 result: string (let)
-  callee 706:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 706:45 Emitter.llvm -> @Emitter.llvm
-  callee 706:76 Emitter.llvm -> @Emitter.llvm
-  callee 706:86 Emitter.typeOf -> @Emitter.typeOf
-  callee 708:5 IRFunction.setLocation -> @IRFunction.setLocation
+  local 695:11 saved: string (const)
+  callee 695:19 Emitter.enterLocation -> @Emitter.enterLocation
+  local 696:11 value: string (const)
+  callee 696:19 Emitter.emitRawExpression -> @Emitter.emitRawExpression
+  local 699:11 from: i32 (const)
+  local 700:9 result: string (let)
+  callee 702:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 702:45 Emitter.llvm -> @Emitter.llvm
+  callee 702:76 Emitter.llvm -> @Emitter.llvm
+  callee 702:86 Emitter.typeOf -> @Emitter.typeOf
+  callee 704:5 IRFunction.setLocation -> @IRFunction.setLocation
 function Emitter.enterLocation(this: Emitter, node: Node): string -> @Emitter.enterLocation [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: DebugInfo.locationOf IRFunction.location IRFunction.setLocation
   pointer this: size=144 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=DebugInfo.locationOf#1
   stackSites=0 stackLocals=0
-  local 720:11 saved: string (const)
-  callee 720:19 IRFunction.location -> @IRFunction.location
-  local 721:11 debug: DebugInfo | null (const)
-  callee 723:7 IRFunction.setLocation -> @IRFunction.setLocation
-  callee 723:27 DebugInfo.locationOf -> @DebugInfo.locationOf
+  local 716:11 saved: string (const)
+  callee 716:19 IRFunction.location -> @IRFunction.location
+  local 717:11 debug: DebugInfo | null (const)
+  callee 719:7 IRFunction.setLocation -> @IRFunction.setLocation
+  callee 719:27 DebugInfo.locationOf -> @DebugInfo.locationOf
 function Emitter.emitRawExpression(this: Emitter, expr: Node): string -> @Emitter.emitRawExpression [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitBinaryExpression Emitter.emitCall Emitter.emitExpression Emitter.emitIdentifier Emitter.emitMember Emitter.stringConstant Emitter.typeOf emitArrayLiteral emitConditional emitElementAccess emitNew emitObjectLiteral emitTemplate emitUnary internalError nish_exit nish_panic_index nish_str_concat nodeName numericConstant
   pointer this: size=144 writesThrough=false captured=false passedTo=Emitter.emitExpression#0 Emitter.typeOf#0 Emitter.stringConstant#0 emitTemplate#0 Emitter.emitIdentifier#0 emitUnary#0 Emitter.emitBinaryExpression#0 emitConditional#0 Emitter.emitCall#0 emitNew#0 Emitter.emitMember#0 emitElementAccess#0 emitArrayLiteral#0 emitObjectLiteral#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1 emitTemplate#1 Emitter.emitIdentifier#1 emitUnary#1 Emitter.emitBinaryExpression#1 emitConditional#1 Emitter.emitCall#1 emitNew#1 Emitter.emitMember#1 emitElementAccess#1 emitArrayLiteral#1 emitObjectLiteral#1
   stackSites=0 stackLocals=0
-  callee 731:16 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 733:16 numericConstant -> @numericConstant
-  callee 733:43 Emitter.typeOf -> @Emitter.typeOf
-  callee 741:16 Emitter.stringConstant -> @Emitter.stringConstant
-  callee 743:16 emitTemplate -> @emitTemplate
-  callee 745:16 Emitter.emitIdentifier -> @Emitter.emitIdentifier
-  callee 749:16 emitUnary -> @emitUnary
-  callee 751:16 Emitter.emitBinaryExpression -> @Emitter.emitBinaryExpression
-  callee 753:16 emitConditional -> @emitConditional
-  callee 755:16 Emitter.emitCall -> @Emitter.emitCall
-  callee 757:16 emitNew -> @emitNew
-  callee 759:16 Emitter.emitMember -> @Emitter.emitMember
-  callee 761:16 emitElementAccess -> @emitElementAccess
-  callee 763:16 emitArrayLiteral -> @emitArrayLiteral
-  callee 765:16 emitObjectLiteral -> @emitObjectLiteral
-  callee 767:22 internalError -> @internalError
-  callee 767:70 nodeName -> @nodeName
+  callee 727:16 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 729:16 numericConstant -> @numericConstant
+  callee 729:43 Emitter.typeOf -> @Emitter.typeOf
+  callee 737:16 Emitter.stringConstant -> @Emitter.stringConstant
+  callee 739:16 emitTemplate -> @emitTemplate
+  callee 741:16 Emitter.emitIdentifier -> @Emitter.emitIdentifier
+  callee 745:16 emitUnary -> @emitUnary
+  callee 747:16 Emitter.emitBinaryExpression -> @Emitter.emitBinaryExpression
+  callee 749:16 emitConditional -> @emitConditional
+  callee 751:16 Emitter.emitCall -> @Emitter.emitCall
+  callee 753:16 emitNew -> @emitNew
+  callee 755:16 Emitter.emitMember -> @Emitter.emitMember
+  callee 757:16 emitElementAccess -> @emitElementAccess
+  callee 759:16 emitArrayLiteral -> @emitArrayLiteral
+  callee 761:16 emitObjectLiteral -> @emitObjectLiteral
+  callee 763:22 internalError -> @internalError
+  callee 763:70 nodeName -> @nodeName
 function Emitter.emitIdentifier(this: Emitter, expr: Node): string -> @Emitter.emitIdentifier [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.alignSuffix Emitter.llvm Emitter.paramObject Emitter.slotOf IRFunction.emitValue constantText internalError nish_exit nish_panic_index nish_str_concat
   pointer this: size=144 writesThrough=false captured=false passedTo=constantText#0 Emitter.paramObject#0 Emitter.llvm#0 Emitter.slotOf#0 Emitter.alignSuffix#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 777:11 constant: ConstInfo | null (const)
-  callee 779:14 constantText -> @constantText
-  local 781:11 local: Local | null (const)
-  local 786:15 object: string (const)
-  callee 786:24 Emitter.paramObject -> @Emitter.paramObject
-  local 789:13 ty: string (const)
-  callee 789:18 Emitter.llvm -> @Emitter.llvm
-  callee 790:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 790:54 Emitter.slotOf -> @Emitter.slotOf
-  callee 790:75 Emitter.alignSuffix -> @Emitter.alignSuffix
-  callee 792:18 internalError -> @internalError
+  local 773:11 constant: ConstInfo | null (const)
+  callee 775:14 constantText -> @constantText
+  local 777:11 local: Local | null (const)
+  local 782:15 object: string (const)
+  callee 782:24 Emitter.paramObject -> @Emitter.paramObject
+  local 785:13 ty: string (const)
+  callee 785:18 Emitter.llvm -> @Emitter.llvm
+  callee 786:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 786:54 Emitter.slotOf -> @Emitter.slotOf
+  callee 786:75 Emitter.alignSuffix -> @Emitter.alignSuffix
+  callee 788:18 internalError -> @internalError
 function Emitter.emitBinaryExpression(this: Emitter, expr: Node): string -> @Emitter.emitBinaryExpression [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: emitAssignment emitBinary isAssignmentOperator
   pointer this: size=144 writesThrough=false captured=false passedTo=emitAssignment#0 emitBinary#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitAssignment#1 emitBinary#1
   stackSites=0 stackLocals=0
-  callee 796:12 isAssignmentOperator -> @isAssignmentOperator
-  callee 796:46 emitAssignment -> @emitAssignment
-  callee 796:75 emitBinary -> @emitBinary
+  callee 792:12 isAssignmentOperator -> @isAssignmentOperator
+  callee 792:46 emitAssignment -> @emitAssignment
+  callee 792:75 emitBinary -> @emitBinary
 function Emitter.emitMember(this: Emitter, expr: Node): string -> @Emitter.emitMember [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.typeOf TypeTable.isResult dottedName emitNamespaceProperty emitPropertyAccess emitResultProperty nish_panic_index receiverIsValue
   pointer this: size=144 writesThrough=false captured=false passedTo=emitNamespaceProperty#0 Emitter.typeOf#0 emitResultProperty#0 Emitter.typeOf#0 emitPropertyAccess#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitNamespaceProperty#1 dottedName#0 emitResultProperty#1 emitPropertyAccess#1
   stackSites=0 stackLocals=0
-  callee 800:10 receiverIsValue -> @receiverIsValue
-  callee 801:14 emitNamespaceProperty -> @emitNamespaceProperty
-  callee 801:48 dottedName -> @dottedName
-  callee 803:9 TypeTable.isResult -> @TypeTable.isResult
-  callee 803:29 Emitter.typeOf -> @Emitter.typeOf
-  callee 804:14 emitResultProperty -> @emitResultProperty
-  callee 804:45 Emitter.typeOf -> @Emitter.typeOf
-  callee 806:12 emitPropertyAccess -> @emitPropertyAccess
+  callee 796:10 receiverIsValue -> @receiverIsValue
+  callee 797:14 emitNamespaceProperty -> @emitNamespaceProperty
+  callee 797:48 dottedName -> @dottedName
+  callee 799:9 TypeTable.isResult -> @TypeTable.isResult
+  callee 799:29 Emitter.typeOf -> @Emitter.typeOf
+  callee 800:14 emitResultProperty -> @emitResultProperty
+  callee 800:45 Emitter.typeOf -> @Emitter.typeOf
+  callee 802:12 emitPropertyAccess -> @emitPropertyAccess
 function Emitter.emitCall(this: Emitter, expr: Node): string -> @Emitter.emitCall [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: Emitter.beginReclaim Emitter.emitExpression Emitter.endReclaim Emitter.llvmAbi Emitter.typeOf IRFunction.emit IRFunction.emitValue TypeTable.isResult TypeTable.resultByValue dottedName emitBuiltinCall emitIdentifierBuiltinCall emitMethodCall emitPackedResult emitResultConstructor emitResultMethod emitResultReturningCall internalError isIdentifierBuiltinCall isResultConstructorCall nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat privateResultAbi receiverIsValue
-  pointer this: size=144 writesThrough=false captured=false passedTo=emitBuiltinCall#0 Emitter.typeOf#0 emitResultMethod#0 emitMethodCall#0 emitResultConstructor#0 emitIdentifierBuiltinCall#0 privateResultAbi#0 emitPackedResult#0 Emitter.emitExpression#0 Emitter.llvmAbi#0 Emitter.beginReclaim#0 Emitter.llvmAbi#0 emitResultReturningCall#0 Emitter.endReclaim#0
+  calls: Emitter.beginReclaim Emitter.emitExpression Emitter.endReclaim Emitter.llvmAbi Emitter.typeOf IRFunction.emit IRFunction.emitValue TypeTable.isResult TypeTable.resultByValue dottedName emitBuiltinCall emitIdentifierBuiltinCall emitMethodCall emitPackedResult emitResultArgument emitResultConstructor emitResultMethod emitResultReturningCall internalError isIdentifierBuiltinCall isResultConstructorCall nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat privateResultAbi receiverIsValue
+  pointer this: size=144 writesThrough=false captured=false passedTo=emitBuiltinCall#0 Emitter.typeOf#0 emitResultMethod#0 emitMethodCall#0 emitResultConstructor#0 emitIdentifierBuiltinCall#0 privateResultAbi#0 emitPackedResult#0 Emitter.emitExpression#0 Emitter.llvmAbi#0 emitResultArgument#0 Emitter.beginReclaim#0 Emitter.llvmAbi#0 emitResultReturningCall#0 Emitter.endReclaim#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitBuiltinCall#1 emitResultMethod#1 emitMethodCall#1 isResultConstructorCall#2 emitResultConstructor#1 isIdentifierBuiltinCall#1 emitIdentifierBuiltinCall#1 emitResultReturningCall#3
   stackSites=1 stackLocals=1
-  local 810:11 callee: Node (const)
-  callee 812:12 receiverIsValue -> @receiverIsValue
-  callee 813:16 emitBuiltinCall -> @emitBuiltinCall
-  callee 813:44 dottedName -> @dottedName
-  local 815:13 receiver: i32 (const)
-  callee 815:24 Emitter.typeOf -> @Emitter.typeOf
-  callee 816:11 TypeTable.isResult -> @TypeTable.isResult
-  callee 817:16 emitResultMethod -> @emitResultMethod
-  callee 819:14 emitMethodCall -> @emitMethodCall
-  callee 821:9 isResultConstructorCall -> @isResultConstructorCall
-  callee 822:14 emitResultConstructor -> @emitResultConstructor
-  callee 824:9 isIdentifierBuiltinCall -> @isIdentifierBuiltinCall
-  callee 825:14 emitIdentifierBuiltinCall -> @emitIdentifierBuiltinCall
-  local 827:11 sig: FunctionSig | null (const)
-  callee 829:20 internalError -> @internalError
-  local 831:11 args: Node (const)
-  local 832:11 operands: string[] (const)
-  local 834:11 calleePrivate: boolean (const)
-  callee 834:27 privateResultAbi -> @privateResultAbi
-  local 835:9 i: i32 (let)
-  local 840:13 want: i32 (const)
-  local 841:13 value: string (const)
-  callee 841:21 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 842:11 emitPackedResult -> @emitPackedResult
-  callee 843:11 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 844:24 Emitter.llvmAbi -> @Emitter.llvmAbi
-  local 849:11 mark: string (const)
-  callee 849:18 Emitter.beginReclaim -> @Emitter.beginReclaim
-  local 850:11 call: string (const)
-  callee 850:26 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee 852:7 IRFunction.emit -> @IRFunction.emit
-  callee 857:9 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 858:14 emitResultReturningCall -> @emitResultReturningCall
-  callee 860:12 Emitter.endReclaim -> @Emitter.endReclaim
-  callee 860:34 IRFunction.emitValue -> @IRFunction.emitValue
+  local 806:11 callee: Node (const)
+  callee 808:12 receiverIsValue -> @receiverIsValue
+  callee 809:16 emitBuiltinCall -> @emitBuiltinCall
+  callee 809:44 dottedName -> @dottedName
+  local 811:13 receiver: i32 (const)
+  callee 811:24 Emitter.typeOf -> @Emitter.typeOf
+  callee 812:11 TypeTable.isResult -> @TypeTable.isResult
+  callee 813:16 emitResultMethod -> @emitResultMethod
+  callee 815:14 emitMethodCall -> @emitMethodCall
+  callee 817:9 isResultConstructorCall -> @isResultConstructorCall
+  callee 818:14 emitResultConstructor -> @emitResultConstructor
+  callee 820:9 isIdentifierBuiltinCall -> @isIdentifierBuiltinCall
+  callee 821:14 emitIdentifierBuiltinCall -> @emitIdentifierBuiltinCall
+  local 823:11 sig: FunctionSig | null (const)
+  callee 825:20 internalError -> @internalError
+  local 827:11 args: Node (const)
+  local 828:11 operands: string[] (const)
+  local 830:11 calleePrivate: boolean (const)
+  callee 830:27 privateResultAbi -> @privateResultAbi
+  local 831:9 i: i32 (let)
+  local 836:13 want: i32 (const)
+  local 837:13 value: string (const)
+  callee 837:21 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 838:11 emitPackedResult -> @emitPackedResult
+  callee 839:11 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 840:24 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee 840:61 emitResultArgument -> @emitResultArgument
+  local 845:11 mark: string (const)
+  callee 845:18 Emitter.beginReclaim -> @Emitter.beginReclaim
+  local 846:11 call: string (const)
+  callee 846:26 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee 848:7 IRFunction.emit -> @IRFunction.emit
+  callee 853:9 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 854:14 emitResultReturningCall -> @emitResultReturningCall
+  callee 856:12 Emitter.endReclaim -> @Emitter.endReclaim
+  callee 856:34 IRFunction.emitValue -> @IRFunction.emitValue
 function Emitter.slotOf(this: Emitter, local: Local): string -> @Emitter.slotOf [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
   calls: internalError nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_str_concat
   pointer this: size=144 writesThrough=false captured=false
   pointer local: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 866:9 i: i32 (let)
-  callee 873:18 internalError -> @internalError
+  local 862:9 i: i32 (let)
+  callee 869:18 internalError -> @internalError
 function Emitter.setSlot(this: Emitter, local: Local, slot: string): void -> @Emitter.setSlot [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: local slot
@@ -6164,44 +6166,44 @@ function Emitter.typeOf(this: Emitter, expr: Node): i32 -> @Emitter.typeOf [expo
   pointer this: size=144 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 882:11 type: i32 (const)
-  callee 884:20 internalError -> @internalError
-  callee 884:67 nodeName -> @nodeName
+  local 878:11 type: i32 (const)
+  callee 880:20 internalError -> @internalError
+  callee 880:67 nodeName -> @nodeName
 function Emitter.llvm(this: Emitter, type: i32): string -> @Emitter.llvm [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
   calls: TypeTable.llvmType
   pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 890:12 TypeTable.llvmType -> @TypeTable.llvmType
+  callee 886:12 TypeTable.llvmType -> @TypeTable.llvmType
 function Emitter.paramObject(this: Emitter, name: string): string -> @Emitter.paramObject [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index nish_str_eq
   pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 895:9 i: i32 (let)
+  local 891:9 i: i32 (let)
 function Emitter.llvmAbi(this: Emitter, type: i32, privateAbi: boolean): string -> @Emitter.llvmAbi [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: privateAbi type
   calls: TypeTable.llvmAbiType
   pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 907:12 TypeTable.llvmAbiType -> @TypeTable.llvmAbiType
+  callee 903:12 TypeTable.llvmAbiType -> @TypeTable.llvmAbiType
 function Emitter.align(this: Emitter, type: i32): i32 -> @Emitter.align [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: type
   calls: TypeTable.alignOf
   pointer this: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 912:43 TypeTable.alignOf -> @TypeTable.alignOf
+  callee 908:43 TypeTable.alignOf -> @TypeTable.alignOf
 function Emitter.alignSuffix(this: Emitter, type: i32): string -> @Emitter.alignSuffix [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
   calls: Emitter.align nish_str_concat nish_str_from_i32
   pointer this: size=144 writesThrough=false captured=false passedTo=Emitter.align#0
   stackSites=0 stackLocals=0
-  local 916:11 a: i32 (const)
-  callee 916:15 Emitter.align -> @Emitter.align
+  local 912:11 a: i32 (const)
+  callee 912:15 Emitter.align -> @Emitter.align
 function Emitter.align8(this: Emitter): string -> @Emitter.align8 [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   pointer this: size=144 writesThrough=false captured=false
@@ -6215,9 +6217,9 @@ function emitProgram(unit: AnalysisUnit, table: TypeTable, opts: Options, runtim
   pointer runtime: size=16 writesThrough=true captured=true passedTo=Emitter.constructor#4
   pointer facts: size=16 writesThrough=true captured=true passedTo=Emitter.constructor#5
   stackSites=1 stackLocals=1
-  local 934:9 emitter: Emitter (const)
-  callee 934:19 new Emitter -> @Emitter.constructor
-  callee 935:10 Emitter.emitModule -> @Emitter.emitModule
+  local 930:9 emitter: Emitter (const)
+  callee 930:19 new Emitter -> @Emitter.constructor
+  callee 931:10 Emitter.emitModule -> @Emitter.emitModule
 module self/debug.ts
 import CLI from "./branding" -> const CLI
 import VERSION from "./branding" -> const VERSION
@@ -6904,6 +6906,7 @@ import N_BINARY from "./nodes" -> const N_BINARY
 import N_CALL from "./nodes" -> const N_CALL
 import N_CONDITIONAL from "./nodes" -> const N_CONDITIONAL
 import N_EMPTY from "./nodes" -> const N_EMPTY
+import N_FUNCTION from "./nodes" -> const N_FUNCTION
 import N_IDENT from "./nodes" -> const N_IDENT
 import N_NEW from "./nodes" -> const N_NEW
 import N_NUMBER from "./nodes" -> const N_NUMBER
@@ -7000,7 +7003,7 @@ function EscapeResult.constructor(this: EscapeResult, nodeCount: i32): void -> @
   calls: StringSet.constructor nish_alloc_struct
   pointer this: size=40 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 118:24 new StringSet -> @StringSet.constructor
+  callee 119:24 new StringSet -> @StringSet.constructor
 function Site.constructor(this: Site, node: Node, stackable: boolean): void -> @Site.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
   escaping: node stackable
@@ -7029,14 +7032,14 @@ function EscapeAnalysis.constructor(this: EscapeAnalysis, unit: AnalysisUnit, ta
   pointer opts: size=56 writesThrough=true captured=true
   pointer sig: size=80 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 212:19 new EscapeResult -> @EscapeResult.constructor
+  callee 213:19 new EscapeResult -> @EscapeResult.constructor
 function EscapeAnalysis.paramLocal(this: EscapeAnalysis, name: string): Local | null -> @EscapeAnalysis.paramLocal [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index nish_str_eq
   pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 227:9 i: i32 (let)
-  local 229:13 v: Local (const)
+  local 228:9 i: i32 (let)
+  local 230:13 v: Local (const)
 function EscapeAnalysis.addRef(this: EscapeAnalysis, local: Local, node: Node): void -> @EscapeAnalysis.addRef [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: local node
@@ -7045,22 +7048,22 @@ function EscapeAnalysis.addRef(this: EscapeAnalysis, local: Local, node: Node): 
   pointer local: size=24 writesThrough=true captured=true
   pointer node: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 239:9 i: i32 (let)
-  local 247:11 list: Node[] (const)
+  local 240:9 i: i32 (let)
+  local 248:11 list: Node[] (const)
 function EscapeAnalysis.refsOf(this: EscapeAnalysis, local: Local): Node[] -> @EscapeAnalysis.refsOf [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: nish_panic_index
   pointer this: size=112 writesThrough=false captured=false
   pointer local: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 254:9 i: i32 (let)
+  local 255:9 i: i32 (let)
 function EscapeAnalysis.elementSize(this: EscapeAnalysis, elem: i32): i32 -> @EscapeAnalysis.elementSize [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: elem
   calls: TypeTable.alignOf
   pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 266:12 TypeTable.alignOf -> @TypeTable.alignOf
+  callee 267:12 TypeTable.alignOf -> @TypeTable.alignOf
 function EscapeAnalysis.visit(this: EscapeAnalysis, node: Node): void -> @EscapeAnalysis.visit [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: node
@@ -7068,42 +7071,42 @@ function EscapeAnalysis.visit(this: EscapeAnalysis, node: Node): void -> @Escape
   pointer this: size=112 writesThrough=true captured=false passedTo=EscapeAnalysis.addRef#0 EscapeAnalysis.visitNew#0 EscapeAnalysis.elementSize#0 EscapeAnalysis.visitCall#0 EscapeAnalysis.visit#0
   pointer node: size=40 writesThrough=true captured=true passedTo=EscapeAnalysis.addRef#2 EscapeAnalysis.visitNew#1 Site.constructor#1 Site.constructor#1 Site.constructor#1 isTemplateExpression#0 unwrapStringPassthrough#1 Site.constructor#1 EscapeAnalysis.visitCall#1
   stackSites=0 stackLocals=0
-  local 270:11 program: CheckedProgram (const)
-  local 272:13 local: Local | null (const)
-  callee 278:47 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 280:9 EscapeAnalysis.addRef -> @EscapeAnalysis.addRef
-  callee 285:7 EscapeAnalysis.visitNew -> @EscapeAnalysis.visitNew
-  callee 287:23 new Site -> @Site.constructor
-  local 289:13 type: i32 (const)
-  local 290:13 stackable: boolean (const)
-  callee 292:9 TypeTable.isArray -> @TypeTable.isArray
-  callee 293:32 EscapeAnalysis.elementSize -> @EscapeAnalysis.elementSize
-  callee 293:49 TypeTable.refOf -> @TypeTable.refOf
-  callee 294:23 new Site -> @Site.constructor
-  callee 297:25 new Site -> @Site.constructor
-  callee 299:16 isTemplateExpression -> @isTemplateExpression
-  callee 300:11 unwrapStringPassthrough -> @unwrapStringPassthrough
-  callee 301:25 new Site -> @Site.constructor
-  callee 304:7 EscapeAnalysis.visitCall -> @EscapeAnalysis.visitCall
-  local 306:16 child: Node (const)
-  callee 307:7 EscapeAnalysis.visit -> @EscapeAnalysis.visit
+  local 271:11 program: CheckedProgram (const)
+  local 273:13 local: Local | null (const)
+  callee 279:47 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 281:9 EscapeAnalysis.addRef -> @EscapeAnalysis.addRef
+  callee 286:7 EscapeAnalysis.visitNew -> @EscapeAnalysis.visitNew
+  callee 288:23 new Site -> @Site.constructor
+  local 290:13 type: i32 (const)
+  local 291:13 stackable: boolean (const)
+  callee 293:9 TypeTable.isArray -> @TypeTable.isArray
+  callee 294:32 EscapeAnalysis.elementSize -> @EscapeAnalysis.elementSize
+  callee 294:49 TypeTable.refOf -> @TypeTable.refOf
+  callee 295:23 new Site -> @Site.constructor
+  callee 298:25 new Site -> @Site.constructor
+  callee 300:16 isTemplateExpression -> @isTemplateExpression
+  callee 301:11 unwrapStringPassthrough -> @unwrapStringPassthrough
+  callee 302:25 new Site -> @Site.constructor
+  callee 305:7 EscapeAnalysis.visitCall -> @EscapeAnalysis.visitCall
+  local 307:16 child: Node (const)
+  callee 308:7 EscapeAnalysis.visit -> @EscapeAnalysis.visit
 function EscapeAnalysis.visitNew(this: EscapeAnalysis, node: Node): void -> @EscapeAnalysis.visitNew [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: EscapeAnalysis.elementSize Site.constructor TypeTable.isArray TypeTable.isStruct TypeTable.refOf literalLength nish_alloc_struct nish_array_grow nish_panic_index
   pointer this: size=112 writesThrough=false captured=false passedTo=EscapeAnalysis.elementSize#0
   pointer node: size=40 writesThrough=true captured=true passedTo=Site.constructor#1 Site.constructor#1
   stackSites=0 stackLocals=0
-  local 312:11 type: i32 (const)
-  callee 313:22 TypeTable.isStruct -> @TypeTable.isStruct
-  callee 314:23 new Site -> @Site.constructor
-  callee 317:22 TypeTable.isArray -> @TypeTable.isArray
-  local 320:11 args: Node (const)
-  local 321:11 n: i32 (const)
-  callee 321:42 literalLength -> @literalLength
-  local 322:11 stackable: boolean (const)
-  callee 322:37 EscapeAnalysis.elementSize -> @EscapeAnalysis.elementSize
-  callee 322:54 TypeTable.refOf -> @TypeTable.refOf
-  callee 323:21 new Site -> @Site.constructor
+  local 313:11 type: i32 (const)
+  callee 314:22 TypeTable.isStruct -> @TypeTable.isStruct
+  callee 315:23 new Site -> @Site.constructor
+  callee 318:22 TypeTable.isArray -> @TypeTable.isArray
+  local 321:11 args: Node (const)
+  local 322:11 n: i32 (const)
+  callee 322:42 literalLength -> @literalLength
+  local 323:11 stackable: boolean (const)
+  callee 323:37 EscapeAnalysis.elementSize -> @EscapeAnalysis.elementSize
+  callee 323:54 TypeTable.refOf -> @TypeTable.refOf
+  callee 324:21 new Site -> @Site.constructor
 function EscapeAnalysis.visitCall(this: EscapeAnalysis, call: Node): void -> @EscapeAnalysis.visitCall [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: call
@@ -7111,39 +7114,39 @@ function EscapeAnalysis.visitCall(this: EscapeAnalysis, call: Node): void -> @Es
   pointer this: size=112 writesThrough=true captured=false passedTo=EscapeAnalysis.isPointerResult#0
   pointer call: size=40 writesThrough=true captured=true passedTo=Site.constructor#1 Site.constructor#1 isPushCall#2 isStringAllocCall#1 isJoinCall#2 Site.constructor#1 resultMethodName#2 isResultConstructorCall#2 Site.constructor#1 Site.constructor#1
   stackSites=0 stackLocals=0
-  local 327:11 program: CheckedProgram (const)
-  local 328:11 callee: FunctionSig | null (const)
-  callee 330:11 EscapeAnalysis.isPointerResult -> @EscapeAnalysis.isPointerResult
-  local 331:15 site: Site (const)
-  callee 331:22 new Site -> @Site.constructor
-  callee 334:18 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 339:25 new Site -> @Site.constructor
-  callee 343:9 isPushCall -> @isPushCall
-  callee 350:9 isStringAllocCall -> @isStringAllocCall
-  callee 350:45 isJoinCall -> @isJoinCall
-  callee 351:23 new Site -> @Site.constructor
-  callee 359:9 resultMethodName -> @resultMethodName
-  local 365:11 target: Node (const)
-  callee 369:11 isResultConstructorCall -> @isResultConstructorCall
-  callee 370:25 new Site -> @Site.constructor
-  callee 374:25 new Site -> @Site.constructor
-  local 378:11 name: string (const)
-  callee 378:18 dottedName -> @dottedName
-  local 384:13 args: Node (const)
-  local 385:13 type: i32 (const)
-  callee 386:24 isNumeric -> @isNumeric
+  local 328:11 program: CheckedProgram (const)
+  local 329:11 callee: FunctionSig | null (const)
+  callee 331:11 EscapeAnalysis.isPointerResult -> @EscapeAnalysis.isPointerResult
+  local 332:15 site: Site (const)
+  callee 332:22 new Site -> @Site.constructor
+  callee 335:18 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 340:25 new Site -> @Site.constructor
+  callee 344:9 isPushCall -> @isPushCall
+  callee 351:9 isStringAllocCall -> @isStringAllocCall
+  callee 351:45 isJoinCall -> @isJoinCall
+  callee 352:23 new Site -> @Site.constructor
+  callee 360:9 resultMethodName -> @resultMethodName
+  local 366:11 target: Node (const)
+  callee 370:11 isResultConstructorCall -> @isResultConstructorCall
+  callee 371:25 new Site -> @Site.constructor
+  callee 375:25 new Site -> @Site.constructor
+  local 379:11 name: string (const)
+  callee 379:18 dottedName -> @dottedName
+  local 385:13 args: Node (const)
+  local 386:13 type: i32 (const)
+  callee 387:24 isNumeric -> @isNumeric
 function EscapeAnalysis.isPointerResult(this: EscapeAnalysis, type: i32): boolean -> @EscapeAnalysis.isPointerResult [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: type
   calls: TypeTable.isArray TypeTable.isResult TypeTable.isStruct TypeTable.resultByValue TypeTable.stripNull
   pointer this: size=112 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 394:11 inner: i32 (const)
-  callee 394:19 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 400:7 TypeTable.isStruct -> @TypeTable.isStruct
-  callee 401:7 TypeTable.isArray -> @TypeTable.isArray
-  callee 403:8 TypeTable.isResult -> @TypeTable.isResult
-  callee 403:39 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local 395:11 inner: i32 (const)
+  callee 395:19 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 401:7 TypeTable.isStruct -> @TypeTable.isStruct
+  callee 402:7 TypeTable.isArray -> @TypeTable.isArray
+  callee 404:8 TypeTable.isResult -> @TypeTable.isResult
+  callee 404:39 TypeTable.resultByValue -> @TypeTable.resultByValue
 function EscapeAnalysis.flowTarget(this: EscapeAnalysis, expr: Node): FlowTarget -> @EscapeAnalysis.flowTarget [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=16
   escaping: expr
@@ -7151,13 +7154,14 @@ function EscapeAnalysis.flowTarget(this: EscapeAnalysis, expr: Node): FlowTarget
   pointer this: size=112 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 411:9 node: Node (let)
-  local 413:13 parent: Node | null (const)
-  callee 413:22 ParentTable.parentOf -> @ParentTable.parentOf
-  callee 415:16 new FlowTarget -> @FlowTarget.constructor
-  callee 422:16 new FlowTarget -> @FlowTarget.constructor
-  callee 425:16 new FlowTarget -> @FlowTarget.constructor
-  callee 427:14 new FlowTarget -> @FlowTarget.constructor
+  local 412:9 node: Node (let)
+  local 414:13 parent: Node | null (const)
+  callee 414:22 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 416:16 new FlowTarget -> @FlowTarget.constructor
+  callee 423:16 new FlowTarget -> @FlowTarget.constructor
+  callee 426:16 new FlowTarget -> @FlowTarget.constructor
+  callee 433:16 new FlowTarget -> @FlowTarget.constructor
+  callee 435:14 new FlowTarget -> @FlowTarget.constructor
 function EscapeAnalysis.calleeCaptures(this: EscapeAnalysis, callee: FunctionSig, index: i32): boolean -> @EscapeAnalysis.calleeCaptures [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: index
@@ -7165,12 +7169,12 @@ function EscapeAnalysis.calleeCaptures(this: EscapeAnalysis, callee: FunctionSig
   pointer this: size=112 writesThrough=false captured=false
   pointer callee: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 433:11 g: FunctionFacts | null (const)
-  callee 433:15 FactsTable.get -> @FactsTable.get
-  local 437:11 name: string (const)
-  local 438:11 pointer: PointerParamFacts | null (const)
-  callee 438:21 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
-  callee 439:50 StringSet.has -> @StringSet.has
+  local 441:11 g: FunctionFacts | null (const)
+  callee 441:15 FactsTable.get -> @FactsTable.get
+  local 445:11 name: string (const)
+  local 446:11 pointer: PointerParamFacts | null (const)
+  callee 446:21 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
+  callee 447:50 StringSet.has -> @StringSet.has
 function EscapeAnalysis.assignedLocal(this: EscapeAnalysis, expr: Node): Local | null -> @EscapeAnalysis.assignedLocal [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: expr
@@ -7178,11 +7182,11 @@ function EscapeAnalysis.assignedLocal(this: EscapeAnalysis, expr: Node): Local |
   pointer this: size=112 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 452:9 node: Node (let)
-  local 454:13 parent: Node | null (const)
-  callee 454:22 ParentTable.parentOf -> @ParentTable.parentOf
-  callee 465:10 isAssignmentOperator -> @isAssignmentOperator
-  local 470:13 target: Local | null (const)
+  local 460:9 node: Node (let)
+  local 462:13 parent: Node | null (const)
+  callee 462:22 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 473:10 isAssignmentOperator -> @isAssignmentOperator
+  local 478:13 target: Local | null (const)
 function EscapeAnalysis.useOutcome(this: EscapeAnalysis, expr: Node, visiting: Local[]): Outcome -> @EscapeAnalysis.useOutcome [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=8
   calls: EscapeAnalysis.assignedLocal EscapeAnalysis.calleeCaptures EscapeAnalysis.localOutcome Outcome.constructor TypeTable.resultByValue classifyUse nish_alloc_struct nish_panic_index
@@ -7190,27 +7194,27 @@ function EscapeAnalysis.useOutcome(this: EscapeAnalysis, expr: Node, visiting: L
   pointer expr: size=40 writesThrough=true captured=true passedTo=classifyUse#2 EscapeAnalysis.assignedLocal#1
   pointer visiting: size=0 writesThrough=true captured=false passedTo=EscapeAnalysis.localOutcome#2
   stackSites=0 stackLocals=0
-  local 479:11 found: ParamUse (const)
-  callee 479:19 classifyUse -> @classifyUse
-  callee 481:14 new Outcome -> @Outcome.constructor
-  local 484:13 callee: FunctionSig | null (const)
-  callee 490:9 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 492:16 new Outcome -> @Outcome.constructor
-  local 494:13 captures: boolean (const)
-  callee 494:49 EscapeAnalysis.calleeCaptures -> @EscapeAnalysis.calleeCaptures
-  callee 495:14 new Outcome -> @Outcome.constructor
-  local 497:11 target: Local | null (const)
-  callee 497:20 EscapeAnalysis.assignedLocal -> @EscapeAnalysis.assignedLocal
-  local 498:11 escapes: boolean (const)
-  callee 498:46 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  callee 499:12 new Outcome -> @Outcome.constructor
+  local 487:11 found: ParamUse (const)
+  callee 487:19 classifyUse -> @classifyUse
+  callee 489:14 new Outcome -> @Outcome.constructor
+  local 492:13 callee: FunctionSig | null (const)
+  callee 498:9 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 500:16 new Outcome -> @Outcome.constructor
+  local 502:13 captures: boolean (const)
+  callee 502:49 EscapeAnalysis.calleeCaptures -> @EscapeAnalysis.calleeCaptures
+  callee 503:14 new Outcome -> @Outcome.constructor
+  local 505:11 target: Local | null (const)
+  callee 505:20 EscapeAnalysis.assignedLocal -> @EscapeAnalysis.assignedLocal
+  local 506:11 escapes: boolean (const)
+  callee 506:46 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  callee 507:12 new Outcome -> @Outcome.constructor
 function EscapeAnalysis.memoised(this: EscapeAnalysis, v: Local): Outcome | null -> @EscapeAnalysis.memoised [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index
   pointer this: size=112 writesThrough=false captured=false
   pointer v: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 503:9 i: i32 (let)
+  local 511:9 i: i32 (let)
 function EscapeAnalysis.localOutcome(this: EscapeAnalysis, v: Local, visiting: Local[]): Outcome -> @EscapeAnalysis.localOutcome [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=8
   escaping: v
@@ -7219,23 +7223,23 @@ function EscapeAnalysis.localOutcome(this: EscapeAnalysis, v: Local, visiting: L
   pointer v: size=24 writesThrough=true captured=true passedTo=EscapeAnalysis.memoised#1 EscapeAnalysis.refsOf#1
   pointer visiting: size=0 writesThrough=true captured=false passedTo=EscapeAnalysis.valueOutcome#2
   stackSites=0 stackLocals=0
-  local 514:11 known: Outcome | null (const)
-  callee 514:19 EscapeAnalysis.memoised -> @EscapeAnalysis.memoised
-  local 518:16 seen: Local (const)
-  callee 524:16 new Outcome -> @Outcome.constructor
-  local 528:9 flow: i32 (let)
-  local 529:9 stable: boolean (let)
-  local 530:9 escapes: boolean (let)
-  local 531:16 ref: Node (const)
-  callee 531:23 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
-  local 532:13 parent: Node | null (const)
-  callee 532:22 ParentTable.parentOf -> @ParentTable.parentOf
-  callee 533:88 isAssignmentOperator -> @isAssignmentOperator
-  local 539:13 step: Outcome (const)
-  callee 539:20 EscapeAnalysis.valueOutcome -> @EscapeAnalysis.valueOutcome
-  callee 540:14 worse -> @worse
-  local 544:11 outcome: Outcome (const)
-  callee 544:21 new Outcome -> @Outcome.constructor
+  local 522:11 known: Outcome | null (const)
+  callee 522:19 EscapeAnalysis.memoised -> @EscapeAnalysis.memoised
+  local 526:16 seen: Local (const)
+  callee 532:16 new Outcome -> @Outcome.constructor
+  local 536:9 flow: i32 (let)
+  local 537:9 stable: boolean (let)
+  local 538:9 escapes: boolean (let)
+  local 539:16 ref: Node (const)
+  callee 539:23 EscapeAnalysis.refsOf -> @EscapeAnalysis.refsOf
+  local 540:13 parent: Node | null (const)
+  callee 540:22 ParentTable.parentOf -> @ParentTable.parentOf
+  callee 541:88 isAssignmentOperator -> @isAssignmentOperator
+  local 547:13 step: Outcome (const)
+  callee 547:20 EscapeAnalysis.valueOutcome -> @EscapeAnalysis.valueOutcome
+  callee 548:14 worse -> @worse
+  local 552:11 outcome: Outcome (const)
+  callee 552:21 new Outcome -> @Outcome.constructor
 function EscapeAnalysis.valueOutcome(this: EscapeAnalysis, expr: Node, visiting: Local[]): Outcome -> @EscapeAnalysis.valueOutcome [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=8
   calls: EscapeAnalysis.flowTarget EscapeAnalysis.localOutcome EscapeAnalysis.useOutcome Outcome.constructor nish_alloc_struct
@@ -7243,93 +7247,93 @@ function EscapeAnalysis.valueOutcome(this: EscapeAnalysis, expr: Node, visiting:
   pointer expr: size=40 writesThrough=true captured=true passedTo=EscapeAnalysis.flowTarget#1 EscapeAnalysis.useOutcome#1
   pointer visiting: size=0 writesThrough=true captured=false passedTo=EscapeAnalysis.localOutcome#2 EscapeAnalysis.useOutcome#2
   stackSites=0 stackLocals=0
-  local 551:11 target: FlowTarget (const)
-  callee 551:20 EscapeAnalysis.flowTarget -> @EscapeAnalysis.flowTarget
-  callee 556:14 new Outcome -> @Outcome.constructor
-  local 558:11 local: Local | null (const)
-  callee 560:14 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  callee 562:12 EscapeAnalysis.useOutcome -> @EscapeAnalysis.useOutcome
+  local 559:11 target: FlowTarget (const)
+  callee 559:20 EscapeAnalysis.flowTarget -> @EscapeAnalysis.flowTarget
+  callee 564:14 new Outcome -> @Outcome.constructor
+  local 566:11 local: Local | null (const)
+  callee 568:14 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  callee 570:12 EscapeAnalysis.useOutcome -> @EscapeAnalysis.useOutcome
 function EscapeAnalysis.decide(this: EscapeAnalysis): void -> @EscapeAnalysis.decide [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CallSite.constructor EscapeAnalysis.calleeCaptures EscapeAnalysis.holdsStackObject EscapeAnalysis.localOutcome EscapeAnalysis.ownsSite EscapeAnalysis.paramLocal EscapeAnalysis.valueOutcome StringSet.add TypeTable.resultByValue constructorOf intrinsicType nish_alloc_struct nish_array_grow nish_panic_index unwrapParens
   pointer this: size=112 writesThrough=false captured=false passedTo=EscapeAnalysis.valueOutcome#0 EscapeAnalysis.calleeCaptures#0 EscapeAnalysis.paramLocal#0 EscapeAnalysis.localOutcome#0 EscapeAnalysis.holdsStackObject#0 EscapeAnalysis.localOutcome#0 EscapeAnalysis.ownsSite#0 EscapeAnalysis.localOutcome#0
   stackSites=4 stackLocals=4
-  local 568:16 site: Site (const)
-  local 569:13 fresh: Local[] (const)
-  local 570:13 outcome: Outcome (const)
-  callee 570:23 EscapeAnalysis.valueOutcome -> @EscapeAnalysis.valueOutcome
-  local 571:11 flow: i32 (let)
-  local 572:11 escapes: boolean (let)
-  local 577:15 ctor: FunctionSig | null (const)
-  callee 577:22 constructorOf -> @constructorOf
-  callee 577:67 intrinsicType -> @intrinsicType
-  callee 578:30 EscapeAnalysis.calleeCaptures -> @EscapeAnalysis.calleeCaptures
-  callee 588:36 new CallSite -> @CallSite.constructor
-  local 608:9 p: i32 (let)
-  callee 610:11 TypeTable.resultByValue -> @TypeTable.resultByValue
-  local 611:15 name: string (const)
-  local 612:15 v: Local | null (const)
-  callee 612:19 EscapeAnalysis.paramLocal -> @EscapeAnalysis.paramLocal
-  local 613:13 flow: i32 (let)
-  local 614:13 stable: boolean (let)
-  local 616:17 fresh: Local[] (const)
-  local 617:17 outcome: Outcome (const)
-  callee 617:27 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  callee 625:11 StringSet.add -> @StringSet.add
-  local 638:16 decl: Node (const)
-  local 639:13 v: Local | null (const)
-  local 643:13 init: Node (const)
-  callee 643:20 unwrapParens -> @unwrapParens
-  local 644:11 holds: boolean (let)
-  local 646:15 alias: Local | null (const)
-  callee 647:35 EscapeAnalysis.holdsStackObject -> @EscapeAnalysis.holdsStackObject
-  local 649:13 visiting: Local[] (const)
-  callee 650:20 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
-  local 658:16 push: Node (const)
-  local 659:13 receiver: Node (const)
-  callee 659:24 unwrapParens -> @unwrapParens
-  local 660:11 v: Local | null (let)
-  local 664:11 owned: boolean (let)
-  local 668:11 escapes: boolean (let)
-  callee 669:56 EscapeAnalysis.ownsSite -> @EscapeAnalysis.ownsSite
-  local 670:15 visiting: Local[] (const)
-  local 671:15 outcome: Outcome (const)
-  callee 671:25 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  local 576:16 site: Site (const)
+  local 577:13 fresh: Local[] (const)
+  local 578:13 outcome: Outcome (const)
+  callee 578:23 EscapeAnalysis.valueOutcome -> @EscapeAnalysis.valueOutcome
+  local 579:11 flow: i32 (let)
+  local 580:11 escapes: boolean (let)
+  local 585:15 ctor: FunctionSig | null (const)
+  callee 585:22 constructorOf -> @constructorOf
+  callee 585:67 intrinsicType -> @intrinsicType
+  callee 586:30 EscapeAnalysis.calleeCaptures -> @EscapeAnalysis.calleeCaptures
+  callee 596:36 new CallSite -> @CallSite.constructor
+  local 616:9 p: i32 (let)
+  callee 618:11 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local 619:15 name: string (const)
+  local 620:15 v: Local | null (const)
+  callee 620:19 EscapeAnalysis.paramLocal -> @EscapeAnalysis.paramLocal
+  local 621:13 flow: i32 (let)
+  local 622:13 stable: boolean (let)
+  local 624:17 fresh: Local[] (const)
+  local 625:17 outcome: Outcome (const)
+  callee 625:27 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  callee 633:11 StringSet.add -> @StringSet.add
+  local 646:16 decl: Node (const)
+  local 647:13 v: Local | null (const)
+  local 651:13 init: Node (const)
+  callee 651:20 unwrapParens -> @unwrapParens
+  local 652:11 holds: boolean (let)
+  local 654:15 alias: Local | null (const)
+  callee 655:35 EscapeAnalysis.holdsStackObject -> @EscapeAnalysis.holdsStackObject
+  local 657:13 visiting: Local[] (const)
+  callee 658:20 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
+  local 666:16 push: Node (const)
+  local 667:13 receiver: Node (const)
+  callee 667:24 unwrapParens -> @unwrapParens
+  local 668:11 v: Local | null (let)
+  local 672:11 owned: boolean (let)
+  local 676:11 escapes: boolean (let)
+  callee 677:56 EscapeAnalysis.ownsSite -> @EscapeAnalysis.ownsSite
+  local 678:15 visiting: Local[] (const)
+  local 679:15 outcome: Outcome (const)
+  callee 679:25 EscapeAnalysis.localOutcome -> @EscapeAnalysis.localOutcome
 function EscapeAnalysis.holdsStackObject(this: EscapeAnalysis, local: Local): boolean -> @EscapeAnalysis.holdsStackObject [method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   pointer this: size=112 writesThrough=false captured=false
   pointer local: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 690:16 candidate: Local (const)
+  local 698:16 candidate: Local (const)
 function EscapeAnalysis.ownsSite(this: EscapeAnalysis, v: Local): boolean -> @EscapeAnalysis.ownsSite [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: EscapeAnalysis.declarationOf EscapeAnalysis.ownsSite nish_panic_index unwrapParens
   pointer this: size=112 writesThrough=false captured=false passedTo=EscapeAnalysis.declarationOf#0 EscapeAnalysis.ownsSite#0
   pointer v: size=24 writesThrough=false captured=false passedTo=EscapeAnalysis.declarationOf#1
   stackSites=0 stackLocals=0
-  local 700:11 decl: Node | null (const)
-  callee 700:18 EscapeAnalysis.declarationOf -> @EscapeAnalysis.declarationOf
-  local 704:11 init: Node (const)
-  callee 704:18 unwrapParens -> @unwrapParens
-  local 705:16 site: Site (const)
-  local 713:11 alias: Local | null (const)
-  callee 714:80 EscapeAnalysis.ownsSite -> @EscapeAnalysis.ownsSite
+  local 708:11 decl: Node | null (const)
+  callee 708:18 EscapeAnalysis.declarationOf -> @EscapeAnalysis.declarationOf
+  local 712:11 init: Node (const)
+  callee 712:18 unwrapParens -> @unwrapParens
+  local 713:16 site: Site (const)
+  local 721:11 alias: Local | null (const)
+  callee 722:80 EscapeAnalysis.ownsSite -> @EscapeAnalysis.ownsSite
 function EscapeAnalysis.declarationOf(this: EscapeAnalysis, v: Local): Node | null -> @EscapeAnalysis.declarationOf [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index
   pointer this: size=112 writesThrough=false captured=false
   pointer v: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 718:16 decl: Node (const)
-  local 719:13 declared: Local | null (const)
+  local 726:16 decl: Node (const)
+  local 727:13 declared: Local | null (const)
 function reclaimsReturnedString(callee: FunctionSig, facts: FactsTable): boolean -> @reclaimsReturnedString [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: FactsTable.get
   pointer callee: size=80 writesThrough=false captured=false
   pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
   stackSites=0 stackLocals=0
-  local 753:9 g: FunctionFacts | null (const)
-  callee 753:13 FactsTable.get -> @FactsTable.get
+  local 761:9 g: FunctionFacts | null (const)
+  callee 761:13 FactsTable.get -> @FactsTable.get
 function analyzeEscapes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, facts: FactsTable, opts: Options): EscapeResult -> @analyzeEscapes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false returnDeref=40
   calls: EscapeAnalysis.constructor EscapeAnalysis.decide EscapeAnalysis.visit FunctionSig.body TypeTable.resultByValue
@@ -7339,13 +7343,13 @@ function analyzeEscapes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, 
   pointer facts: size=16 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#3
   pointer opts: size=56 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#4
   stackSites=1 stackLocals=1
-  local 764:9 analysis: EscapeAnalysis (const)
-  callee 764:20 new EscapeAnalysis -> @EscapeAnalysis.constructor
-  callee 771:5 TypeTable.resultByValue -> @TypeTable.resultByValue
-  local 773:9 body: Node | null (const)
-  callee 773:16 FunctionSig.body -> @FunctionSig.body
-  callee 777:3 EscapeAnalysis.visit -> @EscapeAnalysis.visit
-  callee 778:3 EscapeAnalysis.decide -> @EscapeAnalysis.decide
+  local 772:9 analysis: EscapeAnalysis (const)
+  callee 772:20 new EscapeAnalysis -> @EscapeAnalysis.constructor
+  callee 779:5 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local 781:9 body: Node | null (const)
+  callee 781:16 FunctionSig.body -> @FunctionSig.body
+  callee 785:3 EscapeAnalysis.visit -> @EscapeAnalysis.visit
+  callee 786:3 EscapeAnalysis.decide -> @EscapeAnalysis.decide
 module self/emit_arrays.ts
 import parseIntegerLiteral from "./constants" -> function @parseIntegerLiteral
 import Emitter from "./emit" -> struct Emitter
@@ -9094,6 +9098,7 @@ function emitIncDec(emitter: Emitter, expr: Node): string -> @emitIncDec [export
 module self/emit_classes.ts
 import Emitter from "./emit" -> struct Emitter
 import emitPackedResult from "./emit_result" -> function @emitPackedResult
+import emitResultArgument from "./emit_result" -> function @emitResultArgument
 import emitResultReturningCall from "./emit_result" -> function @emitResultReturningCall
 import privateResultAbi from "./emit_result" -> function @privateResultAbi
 import resultTypeDecl from "./emit_result" -> function @resultTypeDecl
@@ -9132,11 +9137,11 @@ function structInfoOf(emitter: Emitter, type: i32): StructInfo -> @structInfoOf 
   calls: CheckedProgram.struct TypeTable.nameOf internalError nish_arena_mark nish_arena_release nish_exit nish_str_concat
   pointer emitter: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 58:9 info: StructInfo | null (const)
-  callee 58:16 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 58:39 TypeTable.nameOf -> @TypeTable.nameOf
-  callee 62:16 internalError -> @internalError
-  callee 62:59 TypeTable.nameOf -> @TypeTable.nameOf
+  local 59:9 info: StructInfo | null (const)
+  callee 59:16 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 59:39 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 63:16 internalError -> @internalError
+  callee 63:59 TypeTable.nameOf -> @TypeTable.nameOf
 function structTypeName(info: StructInfo): string -> @structTypeName
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_str_concat
@@ -9149,9 +9154,9 @@ function structFieldPointer(emitter: Emitter, info: StructInfo, receiver: string
   pointer info: size=96 writesThrough=false captured=false passedTo=structTypeName#0
   pointer field: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 72:9 ty: string (const)
-  callee 72:14 structTypeName -> @structTypeName
-  callee 73:10 IRFunction.emitValue -> @IRFunction.emitValue
+  local 73:9 ty: string (const)
+  callee 73:14 structTypeName -> @structTypeName
+  callee 74:10 IRFunction.emitValue -> @IRFunction.emitValue
 function loadField(emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string -> @loadField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
@@ -9160,12 +9165,12 @@ function loadField(emitter: Emitter, info: StructInfo, receiver: string, field: 
   pointer info: size=96 writesThrough=false captured=false passedTo=structFieldPointer#1
   pointer field: size=40 writesThrough=false captured=false passedTo=structFieldPointer#3
   stackSites=0 stackLocals=0
-  local 79:9 ty: string (const)
-  callee 79:14 Emitter.llvm -> @Emitter.llvm
-  local 80:9 ptr: string (const)
-  callee 80:15 structFieldPointer -> @structFieldPointer
-  callee 81:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 81:59 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local 80:9 ty: string (const)
+  callee 80:14 Emitter.llvm -> @Emitter.llvm
+  local 81:9 ptr: string (const)
+  callee 81:15 structFieldPointer -> @structFieldPointer
+  callee 82:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 82:59 Emitter.alignSuffix -> @Emitter.alignSuffix
 function storeField(emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo, value: string): void -> @storeField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
@@ -9174,12 +9179,12 @@ function storeField(emitter: Emitter, info: StructInfo, receiver: string, field:
   pointer info: size=96 writesThrough=false captured=false passedTo=structFieldPointer#1
   pointer field: size=40 writesThrough=false captured=false passedTo=structFieldPointer#3
   stackSites=0 stackLocals=0
-  local 91:9 ty: string (const)
-  callee 91:14 Emitter.llvm -> @Emitter.llvm
-  local 92:9 ptr: string (const)
-  callee 92:15 structFieldPointer -> @structFieldPointer
-  callee 93:3 IRFunction.emit -> @IRFunction.emit
-  callee 93:57 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local 92:9 ty: string (const)
+  callee 92:14 Emitter.llvm -> @Emitter.llvm
+  local 93:9 ptr: string (const)
+  callee 93:15 structFieldPointer -> @structFieldPointer
+  callee 94:3 IRFunction.emit -> @IRFunction.emit
+  callee 94:57 Emitter.alignSuffix -> @Emitter.alignSuffix
 function allocate(emitter: Emitter, info: StructInfo, site: Node): string -> @allocate
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.isStackSite Emitter.useRuntime IRFunction.emitAlloca IRFunction.emitValue nish_str_concat nish_str_from_i32 structTypeName
@@ -9187,31 +9192,31 @@ function allocate(emitter: Emitter, info: StructInfo, site: Node): string -> @al
   pointer info: size=96 writesThrough=false captured=false passedTo=structTypeName#0 structTypeName#0
   pointer site: size=40 writesThrough=false captured=false passedTo=Emitter.isStackSite#1
   stackSites=0 stackLocals=0
-  callee 102:7 Emitter.isStackSite -> @Emitter.isStackSite
-  callee 103:12 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  callee 103:54 structTypeName -> @structTypeName
-  local 105:9 raw: string (const)
-  callee 105:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 106:17 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 108:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 108:56 structTypeName -> @structTypeName
+  callee 103:7 Emitter.isStackSite -> @Emitter.isStackSite
+  callee 104:12 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  callee 104:54 structTypeName -> @structTypeName
+  local 106:9 raw: string (const)
+  callee 106:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 107:17 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 109:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 109:56 structTypeName -> @structTypeName
 function initializerConstant(emitter: Emitter, field: FieldInfo): string -> @initializerConstant
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.stringConstant floatText internalError isFloat nish_exit nish_panic_index nish_parse_number nish_str_from_i32 nish_str_from_i64 parseIntegerLiteral
   pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.stringConstant#0 Emitter.stringConstant#0
   pointer field: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 118:9 init: Node | null (const)
-  callee 120:18 internalError -> @internalError
-  local 122:9 negated: boolean (const)
-  local 123:9 literal: Node (const)
-  callee 134:12 Emitter.stringConstant -> @Emitter.stringConstant
-  callee 138:12 Emitter.stringConstant -> @Emitter.stringConstant
-  callee 140:7 isFloat -> @isFloat
-  local 141:11 value: f64 (const)
-  callee 142:12 floatText -> @floatText
-  local 144:7 value: i64 (let)
-  callee 144:15 parseIntegerLiteral -> @parseIntegerLiteral
+  local 119:9 init: Node | null (const)
+  callee 121:18 internalError -> @internalError
+  local 123:9 negated: boolean (const)
+  local 124:9 literal: Node (const)
+  callee 135:12 Emitter.stringConstant -> @Emitter.stringConstant
+  callee 139:12 Emitter.stringConstant -> @Emitter.stringConstant
+  callee 141:7 isFloat -> @isFloat
+  local 142:11 value: f64 (const)
+  callee 143:12 floatText -> @floatText
+  local 145:7 value: i64 (let)
+  callee 145:15 parseIntegerLiteral -> @parseIntegerLiteral
 function emitFieldInitializers(emitter: Emitter, info: StructInfo, receiver: string): void -> @emitFieldInitializers [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
@@ -9219,9 +9224,9 @@ function emitFieldInitializers(emitter: Emitter, info: StructInfo, receiver: str
   pointer emitter: size=144 writesThrough=false captured=false passedTo=storeField#0 initializerConstant#0
   pointer info: size=96 writesThrough=false captured=false passedTo=storeField#1
   stackSites=0 stackLocals=0
-  local 153:14 field: FieldInfo (const)
-  callee 155:7 storeField -> @storeField
-  callee 155:50 initializerConstant -> @initializerConstant
+  local 154:14 field: FieldInfo (const)
+  callee 156:7 storeField -> @storeField
+  callee 156:50 initializerConstant -> @initializerConstant
 function constructObject(emitter: Emitter, info: StructInfo, receiver: string, args: Node[], site: Node): void -> @constructObject
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
@@ -9231,178 +9236,179 @@ function constructObject(emitter: Emitter, info: StructInfo, receiver: string, a
   pointer args: size=0 writesThrough=true captured=false passedTo=emitCall#3
   pointer site: size=40 writesThrough=false captured=false passedTo=emitCall#4
   stackSites=0 stackLocals=0
-  local 171:9 ctor: FunctionSig | null (const)
-  callee 173:5 emitCall -> @emitCall
-  callee 176:3 emitFieldInitializers -> @emitFieldInitializers
+  local 172:9 ctor: FunctionSig | null (const)
+  callee 174:5 emitCall -> @emitCall
+  callee 177:3 emitFieldInitializers -> @emitFieldInitializers
 function emitConstructorPrologue(emitter: Emitter, sig: FunctionSig): void -> @emitConstructorPrologue [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: emitFieldInitializers internalError nish_exit
   pointer emitter: size=144 writesThrough=false captured=false passedTo=emitFieldInitializers#0
   pointer sig: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 181:9 info: StructInfo | null (const)
-  callee 183:18 internalError -> @internalError
-  callee 185:3 emitFieldInitializers -> @emitFieldInitializers
+  local 182:9 info: StructInfo | null (const)
+  callee 184:18 internalError -> @internalError
+  callee 186:3 emitFieldInitializers -> @emitFieldInitializers
 function emitObjectLiteral(emitter: Emitter, expr: Node): string -> @emitObjectLiteral [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitExpression Emitter.typeOf StructInfo.field allocate internalError nish_exit nish_panic_index nish_str_concat storeField structInfoOf
   pointer emitter: size=144 writesThrough=false captured=false passedTo=structInfoOf#0 Emitter.typeOf#0 allocate#0 storeField#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1 allocate#2
   stackSites=0 stackLocals=0
-  local 191:9 info: StructInfo (const)
-  callee 191:16 structInfoOf -> @structInfoOf
-  callee 191:38 Emitter.typeOf -> @Emitter.typeOf
-  local 192:9 obj: string (const)
-  callee 192:15 allocate -> @allocate
-  local 193:14 prop: Node (const)
-  local 194:11 field: FieldInfo | null (const)
-  callee 194:19 StructInfo.field -> @StructInfo.field
-  callee 196:20 internalError -> @internalError
-  callee 198:7 storeField -> @storeField
-  callee 198:45 Emitter.emitExpression -> @Emitter.emitExpression
+  local 192:9 info: StructInfo (const)
+  callee 192:16 structInfoOf -> @structInfoOf
+  callee 192:38 Emitter.typeOf -> @Emitter.typeOf
+  local 193:9 obj: string (const)
+  callee 193:15 allocate -> @allocate
+  local 194:14 prop: Node (const)
+  local 195:11 field: FieldInfo | null (const)
+  callee 195:19 StructInfo.field -> @StructInfo.field
+  callee 197:20 internalError -> @internalError
+  callee 199:7 storeField -> @storeField
+  callee 199:45 Emitter.emitExpression -> @Emitter.emitExpression
 function emitNew(emitter: Emitter, expr: Node): string -> @emitNew [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.typeOf TypeTable.isArray allocate constructObject emitNewArray intrinsicType nish_panic_index structInfoOf
   pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.typeOf#0 emitNewArray#0 structInfoOf#0 allocate#0 constructObject#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1 emitNewArray#1 intrinsicType#1 allocate#2 constructObject#4
   stackSites=0 stackLocals=0
-  callee 206:7 TypeTable.isArray -> @TypeTable.isArray
-  callee 206:29 Emitter.typeOf -> @Emitter.typeOf
-  callee 207:12 emitNewArray -> @emitNewArray
-  local 210:9 info: StructInfo (const)
-  callee 210:16 structInfoOf -> @structInfoOf
-  callee 210:38 intrinsicType -> @intrinsicType
-  local 211:9 obj: string (const)
-  callee 211:15 allocate -> @allocate
-  callee 212:3 constructObject -> @constructObject
+  callee 207:7 TypeTable.isArray -> @TypeTable.isArray
+  callee 207:29 Emitter.typeOf -> @Emitter.typeOf
+  callee 208:12 emitNewArray -> @emitNewArray
+  local 211:9 info: StructInfo (const)
+  callee 211:16 structInfoOf -> @structInfoOf
+  callee 211:38 intrinsicType -> @intrinsicType
+  local 212:9 obj: string (const)
+  callee 212:15 allocate -> @allocate
+  callee 213:3 constructObject -> @constructObject
 function emitPropertyAccess(emitter: Emitter, expr: Node): string -> @emitPropertyAccess [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitExpression Emitter.typeOf StructInfo.field TypeTable.isArray emitArrayLength emitStringLength internalError loadField nish_exit nish_panic_index nish_str_concat structInfoOf
   pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.typeOf#0 emitStringLength#0 emitArrayLength#0 structInfoOf#0 loadField#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitStringLength#1 emitArrayLength#1
   stackSites=0 stackLocals=0
-  local 220:9 receiver: i32 (const)
-  callee 220:20 Emitter.typeOf -> @Emitter.typeOf
-  callee 222:12 emitStringLength -> @emitStringLength
-  callee 224:7 TypeTable.isArray -> @TypeTable.isArray
-  callee 225:12 emitArrayLength -> @emitArrayLength
-  local 227:9 info: StructInfo (const)
-  callee 227:16 structInfoOf -> @structInfoOf
-  local 228:9 field: FieldInfo | null (const)
-  callee 228:17 StructInfo.field -> @StructInfo.field
-  callee 230:12 loadField -> @loadField
-  callee 230:37 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 232:16 internalError -> @internalError
+  local 221:9 receiver: i32 (const)
+  callee 221:20 Emitter.typeOf -> @Emitter.typeOf
+  callee 223:12 emitStringLength -> @emitStringLength
+  callee 225:7 TypeTable.isArray -> @TypeTable.isArray
+  callee 226:12 emitArrayLength -> @emitArrayLength
+  local 228:9 info: StructInfo (const)
+  callee 228:16 structInfoOf -> @structInfoOf
+  local 229:9 field: FieldInfo | null (const)
+  callee 229:17 StructInfo.field -> @StructInfo.field
+  callee 231:12 loadField -> @loadField
+  callee 231:37 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 233:16 internalError -> @internalError
 function emitCall(emitter: Emitter, callee: FunctionSig, receiver: string, args: Node[], site: Node): string -> @emitCall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: Emitter.beginReclaim Emitter.emitExpression Emitter.endReclaim Emitter.llvm Emitter.llvmAbi IRFunction.emit IRFunction.emitValue TypeTable.resultByValue emitPackedResult emitResultReturningCall nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat privateResultAbi
-  pointer emitter: size=144 writesThrough=false captured=false passedTo=privateResultAbi#0 Emitter.llvm#0 emitPackedResult#0 Emitter.emitExpression#0 Emitter.llvmAbi#0 Emitter.beginReclaim#0 Emitter.llvmAbi#0 emitResultReturningCall#0 Emitter.endReclaim#0
+  calls: Emitter.beginReclaim Emitter.emitExpression Emitter.endReclaim Emitter.llvm Emitter.llvmAbi IRFunction.emit IRFunction.emitValue TypeTable.resultByValue emitPackedResult emitResultArgument emitResultReturningCall nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat privateResultAbi
+  pointer emitter: size=144 writesThrough=false captured=false passedTo=privateResultAbi#0 Emitter.llvm#0 emitPackedResult#0 Emitter.emitExpression#0 Emitter.llvmAbi#0 emitResultArgument#0 Emitter.beginReclaim#0 Emitter.llvmAbi#0 emitResultReturningCall#0 Emitter.endReclaim#0
   pointer callee: size=80 writesThrough=false captured=false passedTo=Emitter.beginReclaim#1
   pointer args: size=0 writesThrough=true captured=false
   pointer site: size=40 writesThrough=false captured=false passedTo=emitResultReturningCall#3
   stackSites=1 stackLocals=1
-  local 243:9 calleePrivate: boolean (const)
-  callee 243:25 privateResultAbi -> @privateResultAbi
-  local 244:9 operands: string[] (const)
-  callee 244:34 Emitter.llvm -> @Emitter.llvm
-  local 245:7 i: i32 (let)
-  local 248:11 want: i32 (const)
-  local 249:11 value: string (const)
-  callee 249:19 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 250:9 emitPackedResult -> @emitPackedResult
-  callee 251:9 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 252:22 Emitter.llvmAbi -> @Emitter.llvmAbi
-  local 257:9 mark: string (const)
-  callee 257:16 Emitter.beginReclaim -> @Emitter.beginReclaim
-  local 258:9 call: string (const)
-  callee 258:24 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee 260:5 IRFunction.emit -> @IRFunction.emit
-  callee 265:7 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 266:12 emitResultReturningCall -> @emitResultReturningCall
-  callee 268:10 Emitter.endReclaim -> @Emitter.endReclaim
-  callee 268:35 IRFunction.emitValue -> @IRFunction.emitValue
+  local 244:9 calleePrivate: boolean (const)
+  callee 244:25 privateResultAbi -> @privateResultAbi
+  local 245:9 operands: string[] (const)
+  callee 245:34 Emitter.llvm -> @Emitter.llvm
+  local 246:7 i: i32 (let)
+  local 249:11 want: i32 (const)
+  local 250:11 value: string (const)
+  callee 250:19 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 251:9 emitPackedResult -> @emitPackedResult
+  callee 252:9 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 253:22 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee 253:62 emitResultArgument -> @emitResultArgument
+  local 258:9 mark: string (const)
+  callee 258:16 Emitter.beginReclaim -> @Emitter.beginReclaim
+  local 259:9 call: string (const)
+  callee 259:24 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee 261:5 IRFunction.emit -> @IRFunction.emit
+  callee 266:7 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 267:12 emitResultReturningCall -> @emitResultReturningCall
+  callee 269:10 Emitter.endReclaim -> @Emitter.endReclaim
+  callee 269:35 IRFunction.emitValue -> @IRFunction.emitValue
 function emitMethodCall(emitter: Emitter, expr: Node): string -> @emitMethodCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitExpression Emitter.typeOf TypeTable.isArray emitArrayMethodCall emitCall emitStringMethodCall internalError nish_exit nish_panic_index nish_str_concat
   pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.typeOf#0 emitStringMethodCall#0 emitArrayMethodCall#0 Emitter.emitExpression#0 emitCall#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitStringMethodCall#1 emitArrayMethodCall#1 emitCall#4
   stackSites=0 stackLocals=0
-  local 273:9 access: Node (const)
-  local 274:9 receiverType: i32 (const)
-  callee 274:24 Emitter.typeOf -> @Emitter.typeOf
-  callee 276:12 emitStringMethodCall -> @emitStringMethodCall
-  callee 278:7 TypeTable.isArray -> @TypeTable.isArray
-  callee 279:12 emitArrayMethodCall -> @emitArrayMethodCall
-  local 281:9 callee: FunctionSig | null (const)
-  callee 283:18 internalError -> @internalError
-  local 285:9 receiver: string (const)
-  callee 285:20 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 286:10 emitCall -> @emitCall
+  local 274:9 access: Node (const)
+  local 275:9 receiverType: i32 (const)
+  callee 275:24 Emitter.typeOf -> @Emitter.typeOf
+  callee 277:12 emitStringMethodCall -> @emitStringMethodCall
+  callee 279:7 TypeTable.isArray -> @TypeTable.isArray
+  callee 280:12 emitArrayMethodCall -> @emitArrayMethodCall
+  local 282:9 callee: FunctionSig | null (const)
+  callee 284:18 internalError -> @internalError
+  local 286:9 receiver: string (const)
+  callee 286:20 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 287:10 emitCall -> @emitCall
 function emitFieldAssignment(emitter: Emitter, expr: Node): string -> @emitFieldAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.alignSuffix Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emit IRFunction.emitValue StructInfo.field compoundFloatOpcode compoundIntegerOpcode emitBitwiseCombine emitIntBinary internalError isBitwiseAssignment isFloat nish_exit nish_panic_index nish_str_concat nish_str_eq storeField structFieldPointer structInfoOf
   pointer emitter: size=144 writesThrough=false captured=false passedTo=structInfoOf#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 storeField#0 structFieldPointer#0 Emitter.llvm#0 Emitter.alignSuffix#0 emitBitwiseCombine#0 Emitter.emitExpression#0 emitIntBinary#0 Emitter.alignSuffix#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 291:9 target: Node (const)
-  local 292:9 info: StructInfo (const)
-  callee 292:16 structInfoOf -> @structInfoOf
-  callee 292:38 Emitter.typeOf -> @Emitter.typeOf
-  local 293:9 field: FieldInfo | null (const)
-  callee 293:17 StructInfo.field -> @StructInfo.field
-  callee 295:18 internalError -> @internalError
-  local 297:9 receiver: string (const)
-  callee 297:20 Emitter.emitExpression -> @Emitter.emitExpression
-  local 299:11 value: string (const)
-  callee 299:19 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 300:5 storeField -> @storeField
-  local 305:9 ptr: string (const)
-  callee 305:15 structFieldPointer -> @structFieldPointer
-  local 306:9 ty: string (const)
-  callee 306:14 Emitter.llvm -> @Emitter.llvm
-  local 307:9 old: string (const)
-  callee 307:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 307:64 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local 308:7 value: string (let)
-  callee 309:7 isBitwiseAssignment -> @isBitwiseAssignment
-  callee 310:13 emitBitwiseCombine -> @emitBitwiseCombine
-  local 312:11 rhs: string (const)
-  callee 312:17 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 313:13 isFloat -> @isFloat
-  callee 314:9 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 314:33 compoundFloatOpcode -> @compoundFloatOpcode
-  callee 315:9 emitIntBinary -> @emitIntBinary
-  callee 315:32 compoundIntegerOpcode -> @compoundIntegerOpcode
-  callee 317:3 IRFunction.emit -> @IRFunction.emit
-  callee 317:57 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local 292:9 target: Node (const)
+  local 293:9 info: StructInfo (const)
+  callee 293:16 structInfoOf -> @structInfoOf
+  callee 293:38 Emitter.typeOf -> @Emitter.typeOf
+  local 294:9 field: FieldInfo | null (const)
+  callee 294:17 StructInfo.field -> @StructInfo.field
+  callee 296:18 internalError -> @internalError
+  local 298:9 receiver: string (const)
+  callee 298:20 Emitter.emitExpression -> @Emitter.emitExpression
+  local 300:11 value: string (const)
+  callee 300:19 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 301:5 storeField -> @storeField
+  local 306:9 ptr: string (const)
+  callee 306:15 structFieldPointer -> @structFieldPointer
+  local 307:9 ty: string (const)
+  callee 307:14 Emitter.llvm -> @Emitter.llvm
+  local 308:9 old: string (const)
+  callee 308:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 308:64 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local 309:7 value: string (let)
+  callee 310:7 isBitwiseAssignment -> @isBitwiseAssignment
+  callee 311:13 emitBitwiseCombine -> @emitBitwiseCombine
+  local 313:11 rhs: string (const)
+  callee 313:17 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 314:13 isFloat -> @isFloat
+  callee 315:9 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 315:33 compoundFloatOpcode -> @compoundFloatOpcode
+  callee 316:9 emitIntBinary -> @emitIntBinary
+  callee 316:32 compoundIntegerOpcode -> @compoundIntegerOpcode
+  callee 318:3 IRFunction.emit -> @IRFunction.emit
+  callee 318:57 Emitter.alignSuffix -> @Emitter.alignSuffix
 function structTypeDeclarations(emitter: Emitter): string[] -> @structTypeDeclarations [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.llvm nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq noteSignature noteStruct
   pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.llvm#0 noteStruct#0 noteStruct#0 noteSignature#0 noteSignature#0 noteSignature#0 noteSignature#0
   stackSites=4 stackLocals=4
-  local 330:9 lines: string[] (const)
-  local 331:9 declared: string[] (const)
-  local 332:9 referenced: string[] (const)
-  local 336:9 results: string[] (const)
-  local 337:14 info: StructInfo (const)
-  local 342:11 types: string[] (const)
-  local 343:16 field: FieldInfo (const)
-  callee 344:18 Emitter.llvm -> @Emitter.llvm
-  local 346:11 body: string (const)
-  local 348:16 field: FieldInfo (const)
-  callee 349:7 noteStruct -> @noteStruct
-  callee 352:5 noteStruct -> @noteStruct
-  local 353:16 method: FunctionSig (const)
-  callee 354:7 noteSignature -> @noteSignature
-  local 356:11 ctor: FunctionSig | null (const)
-  callee 358:7 noteSignature -> @noteSignature
-  local 361:14 sig: FunctionSig (const)
-  callee 362:5 noteSignature -> @noteSignature
-  local 364:14 imp: ImportBinding (const)
-  local 365:11 sig: FunctionSig | null (const)
-  callee 367:7 noteSignature -> @noteSignature
-  local 370:14 name: string (const)
-  local 375:14 decl: string (const)
+  local 331:9 lines: string[] (const)
+  local 332:9 declared: string[] (const)
+  local 333:9 referenced: string[] (const)
+  local 337:9 results: string[] (const)
+  local 338:14 info: StructInfo (const)
+  local 343:11 types: string[] (const)
+  local 344:16 field: FieldInfo (const)
+  callee 345:18 Emitter.llvm -> @Emitter.llvm
+  local 347:11 body: string (const)
+  local 349:16 field: FieldInfo (const)
+  callee 350:7 noteStruct -> @noteStruct
+  callee 353:5 noteStruct -> @noteStruct
+  local 354:16 method: FunctionSig (const)
+  callee 355:7 noteSignature -> @noteSignature
+  local 357:11 ctor: FunctionSig | null (const)
+  callee 359:7 noteSignature -> @noteSignature
+  local 362:14 sig: FunctionSig (const)
+  callee 363:5 noteSignature -> @noteSignature
+  local 365:14 imp: ImportBinding (const)
+  local 366:11 sig: FunctionSig | null (const)
+  callee 368:7 noteSignature -> @noteSignature
+  local 371:14 name: string (const)
+  local 376:14 decl: string (const)
 function noteStruct(emitter: Emitter, referenced: string[], results: string[], type: i32): void -> @noteStruct
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
@@ -9411,21 +9417,21 @@ function noteStruct(emitter: Emitter, referenced: string[], results: string[], t
   pointer referenced: size=0 writesThrough=true captured=false passedTo=noteStruct#1 noteStruct#1 noteStruct#1
   pointer results: size=0 writesThrough=true captured=false passedTo=noteStruct#2 noteStruct#2 noteStruct#2
   stackSites=0 stackLocals=0
-  local 382:9 table: TypeTable (const)
-  callee 383:7 TypeTable.isArray -> @TypeTable.isArray
-  callee 383:30 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 384:5 noteStruct -> @noteStruct
-  callee 384:46 TypeTable.refOf -> @TypeTable.refOf
-  callee 387:7 TypeTable.isResult -> @TypeTable.isResult
-  callee 388:5 noteStruct -> @noteStruct
-  callee 388:46 TypeTable.okOf -> @TypeTable.okOf
+  local 383:9 table: TypeTable (const)
+  callee 384:7 TypeTable.isArray -> @TypeTable.isArray
+  callee 384:30 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 385:5 noteStruct -> @noteStruct
+  callee 385:46 TypeTable.refOf -> @TypeTable.refOf
+  callee 388:7 TypeTable.isResult -> @TypeTable.isResult
   callee 389:5 noteStruct -> @noteStruct
-  callee 389:46 TypeTable.errOf -> @TypeTable.errOf
-  local 390:11 decl: string (const)
-  callee 390:18 resultTypeDecl -> @resultTypeDecl
-  callee 396:8 TypeTable.isStruct -> @TypeTable.isStruct
-  local 399:9 name: string (const)
-  callee 399:16 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 389:46 TypeTable.okOf -> @TypeTable.okOf
+  callee 390:5 noteStruct -> @noteStruct
+  callee 390:46 TypeTable.errOf -> @TypeTable.errOf
+  local 391:11 decl: string (const)
+  callee 391:18 resultTypeDecl -> @resultTypeDecl
+  callee 397:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local 400:9 name: string (const)
+  callee 400:16 TypeTable.nameOf -> @TypeTable.nameOf
 function noteSignature(emitter: Emitter, referenced: string[], results: string[], sig: FunctionSig): void -> @noteSignature
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: noteStruct
@@ -9434,17 +9440,17 @@ function noteSignature(emitter: Emitter, referenced: string[], results: string[]
   pointer results: size=0 writesThrough=true captured=false passedTo=noteStruct#2 noteStruct#2
   pointer sig: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 406:14 type: i32 (const)
-  callee 407:5 noteStruct -> @noteStruct
-  callee 409:3 noteStruct -> @noteStruct
+  local 407:14 type: i32 (const)
+  callee 408:5 noteStruct -> @noteStruct
+  callee 410:3 noteStruct -> @noteStruct
 function structFunctions(info: StructInfo): FunctionSig[] -> @structFunctions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_array_grow
   pointer info: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 417:9 out: FunctionSig[] (const)
-  local 418:9 ctor: FunctionSig | null (const)
-  local 422:14 method: FunctionSig (const)
+  local 418:9 out: FunctionSig[] (const)
+  local 419:9 ctor: FunctionSig | null (const)
+  local 423:14 method: FunctionSig (const)
 module self/emit_result.ts
 import Emitter from "./emit" -> struct Emitter
 import internalError from "./ice" -> function @internalError
@@ -9457,7 +9463,7 @@ import CheckedProgram from "./program" -> struct CheckedProgram
 import K_ARRAY from "./types" -> const K_ARRAY
 import K_NULLABLE from "./types" -> const K_NULLABLE
 import K_RESULT from "./types" -> const K_RESULT
-import RESULT_ARMS from "./types" -> const RESULT_ARMS
+import RESULT_PAIR from "./types" -> const RESULT_PAIR
 import RESULT_PAYLOAD_SHIFT from "./types" -> const RESULT_PAYLOAD_SHIFT
 import T_BOOL from "./types" -> const T_BOOL
 import T_F32 from "./types" -> const T_F32
@@ -9665,11 +9671,11 @@ function packObject(emitter: Emitter, type: i32, object: string): string -> @pac
   local 270:9 tag: string (const)
   callee 270:15 IRFunction.emitValue -> @IRFunction.emitValue
   callee 271:10 IRFunction.emitValue -> @IRFunction.emitValue
-function emitPackedResult(emitter: Emitter, expr: Node, type: i32, privateAbi: boolean): string -> @emitPackedResult [exported]
+function emitPackedResult(emitter: Emitter, expr: Node, type: i32): string -> @emitPackedResult [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
-  calls: Emitter.emitExpression armsForArm armsForObject declareResultTypes isResultConstructorCall nish_panic_index nish_str_eq packArm packObject
-  pointer emitter: size=144 writesThrough=false captured=false passedTo=declareResultTypes#0 Emitter.emitExpression#0 armsForArm#0 packArm#0 Emitter.emitExpression#0 armsForObject#0 packObject#0
+  calls: Emitter.emitExpression declareResultTypes isResultConstructorCall nish_panic_index nish_str_eq packArm packObject
+  pointer emitter: size=144 writesThrough=false captured=false passedTo=declareResultTypes#0 Emitter.emitExpression#0 packArm#0 packObject#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=isResultConstructorCall#2 Emitter.emitExpression#1
   stackSites=0 stackLocals=0
   callee 283:3 declareResultTypes -> @declareResultTypes
@@ -9678,162 +9684,101 @@ function emitPackedResult(emitter: Emitter, expr: Node, type: i32, privateAbi: b
   local 286:11 hasPayload: boolean (const)
   local 287:11 payload: string (const)
   callee 287:34 Emitter.emitExpression -> @Emitter.emitExpression
-  local 288:11 isOk: boolean (const)
-  callee 290:14 armsForArm -> @armsForArm
-  callee 292:12 packArm -> @packArm
-  local 294:9 object: string (const)
-  callee 294:18 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 296:12 armsForObject -> @armsForObject
-  callee 298:10 packObject -> @packObject
+  callee 288:12 packArm -> @packArm
+  callee 290:10 packObject -> @packObject
+  callee 290:36 Emitter.emitExpression -> @Emitter.emitExpression
 function unpackResult(emitter: Emitter, type: i32, word: string, stack: boolean): string -> @unpackResult [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: stack type
   calls: Emitter.llvm IRFunction.emitValue allocateResultIn declareResultTypes nish_str_concat nish_str_eq nish_str_from_i32 resultLayout storeSlot wordToPayload
   pointer emitter: size=144 writesThrough=false captured=false passedTo=declareResultTypes#0 allocateResultIn#0 storeSlot#0 wordToPayload#0 storeSlot#0 Emitter.llvm#0 Emitter.llvm#0 wordToPayload#0 storeSlot#0
   stackSites=0 stackLocals=0
-  callee 317:3 declareResultTypes -> @declareResultTypes
-  local 318:9 layout: ResultLayout (const)
-  callee 318:18 resultLayout -> @resultLayout
-  local 319:9 object: string (const)
-  callee 319:18 allocateResultIn -> @allocateResultIn
-  local 320:9 ok: string (const)
-  callee 320:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 321:3 storeSlot -> @storeSlot
-  local 322:9 high: string (const)
-  callee 322:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local 323:7 value: string (let)
-  callee 325:13 wordToPayload -> @wordToPayload
-  callee 326:5 storeSlot -> @storeSlot
-  local 330:9 sameShape: boolean (const)
-  callee 331:24 Emitter.llvm -> @Emitter.llvm
-  callee 331:59 Emitter.llvm -> @Emitter.llvm
-  local 332:9 error: string (const)
-  callee 332:37 wordToPayload -> @wordToPayload
-  callee 333:3 storeSlot -> @storeSlot
+  callee 309:3 declareResultTypes -> @declareResultTypes
+  local 310:9 layout: ResultLayout (const)
+  callee 310:18 resultLayout -> @resultLayout
+  local 311:9 object: string (const)
+  callee 311:18 allocateResultIn -> @allocateResultIn
+  local 312:9 ok: string (const)
+  callee 312:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 313:3 storeSlot -> @storeSlot
+  local 314:9 high: string (const)
+  callee 314:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local 315:7 value: string (let)
+  callee 317:13 wordToPayload -> @wordToPayload
+  callee 318:5 storeSlot -> @storeSlot
+  local 322:9 sameShape: boolean (const)
+  callee 323:24 Emitter.llvm -> @Emitter.llvm
+  callee 323:59 Emitter.llvm -> @Emitter.llvm
+  local 324:9 error: string (const)
+  callee 324:37 wordToPayload -> @wordToPayload
+  callee 325:3 storeSlot -> @storeSlot
 function privateResultAbi(emitter: Emitter, exported: boolean): boolean -> @privateResultAbi [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   pointer emitter: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function armsFor(isOk: boolean): string -> @armsFor
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
-  calls: nish_str_concat
+function resultWordToPair(emitter: Emitter, word: string): string -> @resultWordToPair [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: IRFunction.emitValue nish_str_concat nish_str_from_i32
+  pointer emitter: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 350:9 flag: string (const)
-function payloadToSlot(emitter: Emitter, type: i32, value: string): string -> @payloadToSlot
+  local 352:9 tag: string (const)
+  callee 352:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local 353:9 high: string (const)
+  callee 353:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local 354:9 payload: string (const)
+  callee 354:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local 355:9 withTag: string (const)
+  callee 355:19 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 356:10 IRFunction.emitValue -> @IRFunction.emitValue
+function resultPairToWord(emitter: Emitter, pair: string): string -> @resultPairToWord [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: IRFunction.emitValue nish_str_concat nish_str_from_i32
+  pointer emitter: size=144 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 361:9 tag: string (const)
+  callee 361:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local 362:9 payload: string (const)
+  callee 362:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local 363:9 wide: string (const)
+  callee 363:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local 364:9 shifted: string (const)
+  callee 364:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local 365:9 low: string (const)
+  callee 365:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 366:10 IRFunction.emitValue -> @IRFunction.emitValue
+function emitResultArgument(emitter: Emitter, want: i32, value: string, privateAbi: boolean): string -> @emitResultArgument [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  escaping: type value
-  calls: Emitter.llvm IRFunction.emitValue TypeTable.kindOf nish_str_concat nish_str_eq
-  pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.llvm#0
+  escaping: value want
+  calls: TypeTable.resultByValue resultWordToPair
+  pointer emitter: size=144 writesThrough=false captured=false passedTo=resultWordToPair#0
   stackSites=0 stackLocals=0
-  callee 360:7 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 363:7 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 364:12 IRFunction.emitValue -> @IRFunction.emitValue
-  local 366:9 from: string (const)
-  callee 366:16 Emitter.llvm -> @Emitter.llvm
-  callee 370:10 IRFunction.emitValue -> @IRFunction.emitValue
-function slotToPayload(emitter: Emitter, type: i32, slot: string): string -> @slotToPayload
+  callee 371:21 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 372:12 resultWordToPair -> @resultWordToPair
+function emitResultReturn(emitter: Emitter, word: string): void -> @emitResultReturn [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  escaping: slot type
-  calls: Emitter.llvm IRFunction.emitValue TypeTable.kindOf nish_str_concat nish_str_eq
-  pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.llvm#0
+  escaping: word
+  calls: IRFunction.emit internalError nish_exit nish_str_concat privateResultAbi resultWordToPair
+  pointer emitter: size=144 writesThrough=false captured=false passedTo=privateResultAbi#0 resultWordToPair#0
   stackSites=0 stackLocals=0
-  local 375:9 isF32: boolean (const)
-  callee 375:17 TypeTable.kindOf -> @TypeTable.kindOf
-  local 376:9 to: string (const)
-  callee 376:30 Emitter.llvm -> @Emitter.llvm
-  local 377:9 bits: string (const)
-  callee 377:38 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 379:12 IRFunction.emitValue -> @IRFunction.emitValue
-function armsForArm(emitter: Emitter, type: i32, isOk: boolean, payload: string, hasPayload: boolean): string -> @armsForArm
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  escaping: isOk payload type
-  calls: IRFunction.emitValue TypeTable.errOf TypeTable.kindOf TypeTable.okOf armsFor nish_str_concat nish_str_from_i32 payloadToSlot
-  pointer emitter: size=144 writesThrough=false captured=false passedTo=payloadToSlot#0
-  stackSites=0 stackLocals=0
-  local 400:9 payloadType: i32 (const)
-  callee 400:30 TypeTable.okOf -> @TypeTable.okOf
-  callee 400:57 TypeTable.errOf -> @TypeTable.errOf
-  callee 401:22 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 402:12 armsFor -> @armsFor
-  local 404:9 slot: string (const)
-  callee 404:16 payloadToSlot -> @payloadToSlot
-  local 405:9 index: i32 (const)
-  callee 406:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 406:61 armsFor -> @armsFor
-function armsForObject(emitter: Emitter, type: i32, object: string): string -> @armsForObject
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  escaping: object type
-  calls: IRFunction.emitValue loadOk loadSlot nish_str_concat payloadToSlot resultLayout
-  pointer emitter: size=144 writesThrough=false captured=false passedTo=loadOk#0 payloadToSlot#0 loadSlot#0 payloadToSlot#0 loadSlot#0
-  stackSites=0 stackLocals=0
-  local 416:9 layout: ResultLayout (const)
-  callee 416:18 resultLayout -> @resultLayout
-  local 417:9 ok: string (const)
-  callee 417:14 loadOk -> @loadOk
-  local 418:7 arms: string (let)
-  callee 418:14 IRFunction.emitValue -> @IRFunction.emitValue
-  local 419:9 error: string (const)
-  callee 419:17 payloadToSlot -> @payloadToSlot
-  callee 422:5 loadSlot -> @loadSlot
-  local 425:11 value: string (const)
-  callee 425:19 payloadToSlot -> @payloadToSlot
-  callee 428:7 loadSlot -> @loadSlot
-  callee 430:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 432:10 IRFunction.emitValue -> @IRFunction.emitValue
-function unpackArms(emitter: Emitter, type: i32, arms: string, stack: boolean): string -> @unpackArms
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  escaping: stack type
-  calls: IRFunction.emitValue allocateResultIn declareResultTypes nish_str_concat resultLayout slotToPayload storeSlot
-  pointer emitter: size=144 writesThrough=false captured=false passedTo=declareResultTypes#0 allocateResultIn#0 storeSlot#0 slotToPayload#0 storeSlot#0 slotToPayload#0 storeSlot#0
-  stackSites=0 stackLocals=0
-  callee 442:3 declareResultTypes -> @declareResultTypes
-  local 443:9 layout: ResultLayout (const)
-  callee 443:18 resultLayout -> @resultLayout
-  local 444:9 object: string (const)
-  callee 444:18 allocateResultIn -> @allocateResultIn
-  local 445:9 ok: string (const)
-  callee 445:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 446:3 storeSlot -> @storeSlot
-  local 448:11 slot: string (const)
-  callee 448:18 IRFunction.emitValue -> @IRFunction.emitValue
-  local 449:11 value: string (const)
-  callee 449:19 slotToPayload -> @slotToPayload
-  callee 450:5 storeSlot -> @storeSlot
-  local 452:9 errSlot: string (const)
-  callee 452:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local 453:9 error: string (const)
-  callee 453:17 slotToPayload -> @slotToPayload
-  callee 454:3 storeSlot -> @storeSlot
-function unpackReturnedResult(emitter: Emitter, type: i32, value: string, stack: boolean, privateAbi: boolean): string -> @unpackReturnedResult [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  escaping: stack type value
-  calls: unpackArms unpackResult
-  pointer emitter: size=144 writesThrough=false captured=false passedTo=unpackArms#0 unpackResult#0
-  stackSites=0 stackLocals=0
-  callee 467:12 unpackArms -> @unpackArms
-  callee 469:10 unpackResult -> @unpackResult
-function emitResultReturn(emitter: Emitter, value: string): void -> @emitResultReturn [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: Emitter.llvmAbi IRFunction.emit internalError nish_exit nish_str_concat privateResultAbi
-  pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0 privateResultAbi#0
-  stackSites=0 stackLocals=0
-  local 475:9 sig: FunctionSig | null (const)
-  callee 477:18 internalError -> @internalError
-  local 479:9 abi: string (const)
-  callee 479:15 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee 479:47 privateResultAbi -> @privateResultAbi
-  callee 480:3 IRFunction.emit -> @IRFunction.emit
+  local 380:9 sig: FunctionSig | null (const)
+  callee 382:18 internalError -> @internalError
+  callee 384:8 privateResultAbi -> @privateResultAbi
+  callee 385:5 IRFunction.emit -> @IRFunction.emit
+  callee 388:3 IRFunction.emit -> @IRFunction.emit
+  callee 388:41 resultWordToPair -> @resultWordToPair
 function emitResultReturningCall(emitter: Emitter, call: string, type: i32, site: Node, privateAbi: boolean): string -> @emitResultReturningCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  escaping: call privateAbi type
-  calls: Emitter.isStackSite IRFunction.emitValue unpackReturnedResult
-  pointer emitter: size=144 writesThrough=false captured=false passedTo=unpackReturnedResult#0 Emitter.isStackSite#0
+  escaping: call type
+  calls: Emitter.isStackSite IRFunction.emitValue resultPairToWord unpackResult
+  pointer emitter: size=144 writesThrough=false captured=false passedTo=resultPairToWord#0 unpackResult#0 Emitter.isStackSite#0
   pointer site: size=40 writesThrough=false captured=false passedTo=Emitter.isStackSite#1
   stackSites=0 stackLocals=0
-  local 495:9 returned: string (const)
-  callee 495:20 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 496:10 unpackReturnedResult -> @unpackReturnedResult
-  callee 496:56 Emitter.isStackSite -> @Emitter.isStackSite
+  local 398:9 returned: string (const)
+  callee 398:20 IRFunction.emitValue -> @IRFunction.emitValue
+  local 399:9 word: string (const)
+  callee 399:29 resultPairToWord -> @resultPairToWord
+  callee 400:10 unpackResult -> @unpackResult
+  callee 400:44 Emitter.isStackSite -> @Emitter.isStackSite
 function emitResultProperty(emitter: Emitter, expr: Node, receiver: i32): string -> @emitResultProperty [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
@@ -9841,55 +9786,53 @@ function emitResultProperty(emitter: Emitter, expr: Node, receiver: i32): string
   pointer emitter: size=144 writesThrough=false captured=false passedTo=declareResultTypes#0 Emitter.emitExpression#0 loadOk#0 loadSlot#0 loadSlot#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 502:3 declareResultTypes -> @declareResultTypes
-  local 503:9 layout: ResultLayout (const)
-  callee 503:18 resultLayout -> @resultLayout
-  local 504:9 object: string (const)
-  callee 504:18 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 506:12 loadOk -> @loadOk
-  callee 509:12 loadSlot -> @loadSlot
-  callee 511:10 loadSlot -> @loadSlot
+  callee 406:3 declareResultTypes -> @declareResultTypes
+  local 407:9 layout: ResultLayout (const)
+  callee 407:18 resultLayout -> @resultLayout
+  local 408:9 object: string (const)
+  callee 408:18 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 410:12 loadOk -> @loadOk
+  callee 413:12 loadSlot -> @loadSlot
+  callee 415:10 loadSlot -> @loadSlot
 function emitOrReturn(emitter: Emitter, expr: Node, receiver: i32): string -> @emitOrReturn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
-  calls: Emitter.emitExpression Emitter.emitScopeExit Emitter.llvm IRFunction.emit IRFunction.newBlock IRFunction.placeBlock TypeTable.resultByValue armsForArm construct declareResultTypes emitResultReturn internalError loadOk loadSlot nish_exit nish_panic_index nish_str_concat packArm privateResultAbi resultLayout
-  pointer emitter: size=144 writesThrough=false captured=false passedTo=declareResultTypes#0 declareResultTypes#0 Emitter.emitExpression#0 loadOk#0 loadSlot#0 privateResultAbi#0 armsForArm#0 packArm#0 Emitter.emitScopeExit#0 emitResultReturn#0 construct#0 Emitter.emitScopeExit#0 Emitter.llvm#0 loadSlot#0
+  calls: Emitter.emitExpression Emitter.emitScopeExit Emitter.llvm IRFunction.emit IRFunction.newBlock IRFunction.placeBlock TypeTable.resultByValue construct declareResultTypes emitResultReturn internalError loadOk loadSlot nish_exit nish_panic_index nish_str_concat packArm resultLayout
+  pointer emitter: size=144 writesThrough=false captured=false passedTo=declareResultTypes#0 declareResultTypes#0 Emitter.emitExpression#0 loadOk#0 loadSlot#0 packArm#0 Emitter.emitScopeExit#0 emitResultReturn#0 construct#0 Emitter.emitScopeExit#0 Emitter.llvm#0 loadSlot#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 525:9 sig: FunctionSig | null (const)
-  callee 527:18 internalError -> @internalError
-  local 529:9 returnType: i32 (const)
-  callee 530:3 declareResultTypes -> @declareResultTypes
-  callee 531:3 declareResultTypes -> @declareResultTypes
-  local 532:9 layout: ResultLayout (const)
-  callee 532:18 resultLayout -> @resultLayout
-  local 533:9 access: Node (const)
-  local 534:9 object: string (const)
-  callee 534:18 Emitter.emitExpression -> @Emitter.emitExpression
-  local 535:9 okBlock: IRBlock (const)
-  callee 535:19 IRFunction.newBlock -> @IRFunction.newBlock
-  local 536:9 errBlock: IRBlock (const)
-  callee 536:20 IRFunction.newBlock -> @IRFunction.newBlock
-  local 537:9 flag: string (const)
-  callee 537:16 loadOk -> @loadOk
-  callee 538:3 IRFunction.emit -> @IRFunction.emit
-  callee 540:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 541:9 error: string (const)
-  callee 541:17 loadSlot -> @loadSlot
-  callee 542:7 TypeTable.resultByValue -> @TypeTable.resultByValue
-  local 543:11 propagated: string (const)
-  callee 543:24 privateResultAbi -> @privateResultAbi
-  callee 544:9 armsForArm -> @armsForArm
-  callee 545:9 packArm -> @packArm
-  callee 546:5 Emitter.emitScopeExit -> @Emitter.emitScopeExit
-  callee 547:5 emitResultReturn -> @emitResultReturn
-  local 549:11 propagated: string (const)
-  callee 549:24 construct -> @construct
-  callee 550:5 Emitter.emitScopeExit -> @Emitter.emitScopeExit
-  callee 551:5 IRFunction.emit -> @IRFunction.emit
-  callee 551:28 Emitter.llvm -> @Emitter.llvm
-  callee 554:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 558:10 loadSlot -> @loadSlot
+  local 429:9 sig: FunctionSig | null (const)
+  callee 431:18 internalError -> @internalError
+  local 433:9 returnType: i32 (const)
+  callee 434:3 declareResultTypes -> @declareResultTypes
+  callee 435:3 declareResultTypes -> @declareResultTypes
+  local 436:9 layout: ResultLayout (const)
+  callee 436:18 resultLayout -> @resultLayout
+  local 437:9 access: Node (const)
+  local 438:9 object: string (const)
+  callee 438:18 Emitter.emitExpression -> @Emitter.emitExpression
+  local 439:9 okBlock: IRBlock (const)
+  callee 439:19 IRFunction.newBlock -> @IRFunction.newBlock
+  local 440:9 errBlock: IRBlock (const)
+  callee 440:20 IRFunction.newBlock -> @IRFunction.newBlock
+  local 441:9 flag: string (const)
+  callee 441:16 loadOk -> @loadOk
+  callee 442:3 IRFunction.emit -> @IRFunction.emit
+  callee 444:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 445:9 error: string (const)
+  callee 445:17 loadSlot -> @loadSlot
+  callee 446:7 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local 447:11 word: string (const)
+  callee 447:18 packArm -> @packArm
+  callee 448:5 Emitter.emitScopeExit -> @Emitter.emitScopeExit
+  callee 449:5 emitResultReturn -> @emitResultReturn
+  local 451:11 propagated: string (const)
+  callee 451:24 construct -> @construct
+  callee 452:5 Emitter.emitScopeExit -> @Emitter.emitScopeExit
+  callee 453:5 IRFunction.emit -> @IRFunction.emit
+  callee 453:28 Emitter.llvm -> @Emitter.llvm
+  callee 456:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 460:10 loadSlot -> @loadSlot
 function emitUnwrapOr(emitter: Emitter, expr: Node, receiver: i32): string -> @emitUnwrapOr
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
@@ -9897,37 +9840,37 @@ function emitUnwrapOr(emitter: Emitter, expr: Node, receiver: i32): string -> @e
   pointer emitter: size=144 writesThrough=false captured=false passedTo=declareResultTypes#0 Emitter.emitExpression#0 loadOk#0 loadSlot#0 Emitter.emitExpression#0 Emitter.llvm#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 563:3 declareResultTypes -> @declareResultTypes
-  local 564:9 layout: ResultLayout (const)
-  callee 564:18 resultLayout -> @resultLayout
-  local 565:9 access: Node (const)
-  local 566:9 object: string (const)
-  callee 566:18 Emitter.emitExpression -> @Emitter.emitExpression
-  local 567:9 endBlock: IRBlock (const)
-  callee 567:20 IRFunction.newBlock -> @IRFunction.newBlock
-  local 568:9 okBlock: IRBlock (const)
-  callee 568:19 IRFunction.newBlock -> @IRFunction.newBlock
-  local 569:9 errBlock: IRBlock (const)
-  callee 569:20 IRFunction.newBlock -> @IRFunction.newBlock
-  local 570:9 flag: string (const)
-  callee 570:16 loadOk -> @loadOk
-  callee 571:3 IRFunction.emit -> @IRFunction.emit
-  callee 573:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 574:9 value: string (const)
-  callee 574:17 loadSlot -> @loadSlot
-  local 575:9 okEdge: string (const)
-  callee 575:18 IRFunction.currentBlock -> @IRFunction.currentBlock
-  callee 576:3 IRFunction.emit -> @IRFunction.emit
-  callee 578:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 579:9 fallback: string (const)
-  callee 579:20 Emitter.emitExpression -> @Emitter.emitExpression
-  local 580:9 errEdge: string (const)
-  callee 580:19 IRFunction.currentBlock -> @IRFunction.currentBlock
-  callee 581:3 IRFunction.emit -> @IRFunction.emit
-  callee 583:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 584:9 ty: string (const)
-  callee 584:14 Emitter.llvm -> @Emitter.llvm
-  callee 585:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 465:3 declareResultTypes -> @declareResultTypes
+  local 466:9 layout: ResultLayout (const)
+  callee 466:18 resultLayout -> @resultLayout
+  local 467:9 access: Node (const)
+  local 468:9 object: string (const)
+  callee 468:18 Emitter.emitExpression -> @Emitter.emitExpression
+  local 469:9 endBlock: IRBlock (const)
+  callee 469:20 IRFunction.newBlock -> @IRFunction.newBlock
+  local 470:9 okBlock: IRBlock (const)
+  callee 470:19 IRFunction.newBlock -> @IRFunction.newBlock
+  local 471:9 errBlock: IRBlock (const)
+  callee 471:20 IRFunction.newBlock -> @IRFunction.newBlock
+  local 472:9 flag: string (const)
+  callee 472:16 loadOk -> @loadOk
+  callee 473:3 IRFunction.emit -> @IRFunction.emit
+  callee 475:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 476:9 value: string (const)
+  callee 476:17 loadSlot -> @loadSlot
+  local 477:9 okEdge: string (const)
+  callee 477:18 IRFunction.currentBlock -> @IRFunction.currentBlock
+  callee 478:3 IRFunction.emit -> @IRFunction.emit
+  callee 480:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 481:9 fallback: string (const)
+  callee 481:20 Emitter.emitExpression -> @Emitter.emitExpression
+  local 482:9 errEdge: string (const)
+  callee 482:19 IRFunction.currentBlock -> @IRFunction.currentBlock
+  callee 483:3 IRFunction.emit -> @IRFunction.emit
+  callee 485:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 486:9 ty: string (const)
+  callee 486:14 Emitter.llvm -> @Emitter.llvm
+  callee 487:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitExpect(emitter: Emitter, expr: Node, receiver: i32): string -> @emitExpect
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
@@ -9935,29 +9878,29 @@ function emitExpect(emitter: Emitter, expr: Node, receiver: i32): string -> @emi
   pointer emitter: size=144 writesThrough=false captured=false passedTo=declareResultTypes#0 Emitter.emitExpression#0 loadOk#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 loadSlot#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 594:3 declareResultTypes -> @declareResultTypes
-  local 595:9 layout: ResultLayout (const)
-  callee 595:18 resultLayout -> @resultLayout
-  local 596:9 access: Node (const)
-  local 597:9 object: string (const)
-  callee 597:18 Emitter.emitExpression -> @Emitter.emitExpression
-  local 598:9 okBlock: IRBlock (const)
-  callee 598:19 IRFunction.newBlock -> @IRFunction.newBlock
-  local 599:9 errBlock: IRBlock (const)
-  callee 599:20 IRFunction.newBlock -> @IRFunction.newBlock
-  local 600:9 flag: string (const)
-  callee 600:16 loadOk -> @loadOk
-  callee 601:3 IRFunction.emit -> @IRFunction.emit
-  callee 603:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local 604:9 message: string (const)
-  callee 604:19 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 605:3 IRFunction.emit -> @IRFunction.emit
-  callee 605:32 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 606:3 IRFunction.emit -> @IRFunction.emit
-  callee 606:32 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 607:3 IRFunction.emit -> @IRFunction.emit
-  callee 609:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee 613:10 loadSlot -> @loadSlot
+  callee 496:3 declareResultTypes -> @declareResultTypes
+  local 497:9 layout: ResultLayout (const)
+  callee 497:18 resultLayout -> @resultLayout
+  local 498:9 access: Node (const)
+  local 499:9 object: string (const)
+  callee 499:18 Emitter.emitExpression -> @Emitter.emitExpression
+  local 500:9 okBlock: IRBlock (const)
+  callee 500:19 IRFunction.newBlock -> @IRFunction.newBlock
+  local 501:9 errBlock: IRBlock (const)
+  callee 501:20 IRFunction.newBlock -> @IRFunction.newBlock
+  local 502:9 flag: string (const)
+  callee 502:16 loadOk -> @loadOk
+  callee 503:3 IRFunction.emit -> @IRFunction.emit
+  callee 505:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local 506:9 message: string (const)
+  callee 506:19 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 507:3 IRFunction.emit -> @IRFunction.emit
+  callee 507:32 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 508:3 IRFunction.emit -> @IRFunction.emit
+  callee 508:32 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 509:3 IRFunction.emit -> @IRFunction.emit
+  callee 511:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee 515:10 loadSlot -> @loadSlot
 function emitDiscriminantTest(emitter: Emitter, expr: Node, receiver: i32, positive: boolean): string -> @emitDiscriminantTest
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
@@ -9965,14 +9908,14 @@ function emitDiscriminantTest(emitter: Emitter, expr: Node, receiver: i32, posit
   pointer emitter: size=144 writesThrough=false captured=false passedTo=declareResultTypes#0 loadOk#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 618:3 declareResultTypes -> @declareResultTypes
-  local 619:9 layout: ResultLayout (const)
-  callee 619:18 resultLayout -> @resultLayout
-  local 620:9 access: Node (const)
-  local 621:9 flag: string (const)
-  callee 621:16 loadOk -> @loadOk
-  callee 621:40 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 625:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 520:3 declareResultTypes -> @declareResultTypes
+  local 521:9 layout: ResultLayout (const)
+  callee 521:18 resultLayout -> @resultLayout
+  local 522:9 access: Node (const)
+  local 523:9 flag: string (const)
+  callee 523:16 loadOk -> @loadOk
+  callee 523:40 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 527:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitResultMethod(emitter: Emitter, expr: Node, receiver: i32): string -> @emitResultMethod [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
@@ -9980,12 +9923,12 @@ function emitResultMethod(emitter: Emitter, expr: Node, receiver: i32): string -
   pointer emitter: size=144 writesThrough=false captured=false passedTo=emitDiscriminantTest#0 emitOrReturn#0 emitUnwrapOr#0 emitExpect#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitDiscriminantTest#1 emitOrReturn#1 emitUnwrapOr#1 emitExpect#1
   stackSites=0 stackLocals=0
-  local 629:9 access: Node (const)
-  local 630:9 name: string (const)
-  callee 632:12 emitDiscriminantTest -> @emitDiscriminantTest
-  callee 635:12 emitOrReturn -> @emitOrReturn
-  callee 638:12 emitUnwrapOr -> @emitUnwrapOr
-  callee 640:10 emitExpect -> @emitExpect
+  local 531:9 access: Node (const)
+  local 532:9 name: string (const)
+  callee 534:12 emitDiscriminantTest -> @emitDiscriminantTest
+  callee 537:12 emitOrReturn -> @emitOrReturn
+  callee 540:12 emitUnwrapOr -> @emitUnwrapOr
+  callee 542:10 emitExpect -> @emitExpect
 function resultMethodName(program: CheckedProgram, table: TypeTable, call: Node): string -> @resultMethodName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: TypeTable.isResult nish_panic_index nish_str_eq
@@ -9993,9 +9936,9 @@ function resultMethodName(program: CheckedProgram, table: TypeTable, call: Node)
   pointer table: size=56 writesThrough=false captured=false passedTo=TypeTable.isResult#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 645:9 access: Node (const)
-  callee 649:8 TypeTable.isResult -> @TypeTable.isResult
-  local 652:9 name: string (const)
+  local 547:9 access: Node (const)
+  callee 551:8 TypeTable.isResult -> @TypeTable.isResult
+  local 554:9 name: string (const)
 module self/emit_strings.ts
 import Emitter from "./emit" -> struct Emitter
 import emitIndex from "./emit_arrays" -> function @emitIndex

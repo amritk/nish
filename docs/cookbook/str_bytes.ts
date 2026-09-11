@@ -1,11 +1,5 @@
-function firstByte(s: string): number {
-  return s.charCodeAt(0);
-}
+const firstByte = (s: string): number => s.charCodeAt(0);
 
-function head(s: string, n: number): string {
-  return s.substring(0, n);
-}
+const head = (s: string, n: number): string => s.substring(0, n);
 
-function has(s: string, sub: string): boolean {
-  return s.startsWith(sub) || s.endsWith(sub);
-}
+const has = (s: string, sub: string): boolean => s.startsWith(sub) || s.endsWith(sub);

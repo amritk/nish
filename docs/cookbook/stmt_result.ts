@@ -1,19 +1,19 @@
-function half(n: number): Result<number, string> {
+const half = (n: number): Result<number, string> => {
   if (n % 2 !== 0) {
     return Err("odd");
   }
   return Ok(n / 2);
-}
+};
 
-function quarter(n: number): Result<number, string> {
+const quarter = (n: number): Result<number, string> => {
   const h = half(n).orReturn();
   return half(h);
-}
+};
 
-function describe(n: number): string {
+const describe = (n: number): string => {
   const outcome = quarter(n);
   if (outcome.isErr()) {
     return outcome.error;
   }
   return `${outcome.value}`;
-}
+};
