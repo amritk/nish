@@ -4,19 +4,19 @@
 // would fold exactly the spellings stage1 refuses and the two compilers would
 // disagree about whether to warn. Both read the literal as written instead.
 //
-// Both values below are chosen so that folding them *would* warn: `0x20` is at
-// the width of an i32, and `1e5 * 1e5` does not fit one. Which is also why
-// there is no `.out` — the multiplication is an overflowing signed `*` under
-// the default `nsw`, and a golden that runs undefined behaviour pins whatever
-// LLVM happened to do that week.
+// `0x20` is chosen so that folding it *would* warn: it is exactly the width of
+// an i32, so a compiler that read the normalised text would report a masked
+// shift here. Neither does.
 //
-// A separator (`100_000`) belongs in this list and is missing from it on
-// purpose: `docs/LANGUAGE.md` accepts one, stage0 does too, and stage1 refuses
-// it with `Non-integer literal`. That divergence is older than this rule and
-// nothing to do with folding, so it is not pinned here — a case that fails for
-// an unrelated reason is a case nobody can read.
+// Three other spellings belong in this case and are missing from it on
+// purpose. `docs/LANGUAGE.md` accepts hexadecimal, binary, octal, exponent and
+// separated literals; stage1 handles decimal and hexadecimal, refuses `0b101`,
+// `0o17` and `1_000`, and — worse — reads `1e5` as `245`. Those divergences
+// are older than this rule and have nothing to do with folding, so they are
+// not pinned here: a case that fails for an unrelated reason is a case nobody
+// can read. They want their own change, in the number path, with its own
+// tests.
 export function test(): number {
   const hexShift = 1 << 0x20;
-  const exponent = 1e5 * 1e5;
-  return hexShift + exponent;
+  return hexShift;
 }
