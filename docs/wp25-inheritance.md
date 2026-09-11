@@ -1,4 +1,4 @@
-# WP24: Inheritance removed, `implements` widened
+# WP25: Inheritance removed, `implements` widened
 
 **Landed.** This note is the plan of record for two changes made in one
 commit, because neither is coherent without the other:

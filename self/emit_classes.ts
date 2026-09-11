@@ -8,7 +8,7 @@
 // arena, or an entry-block `alloca` when the escape analysis proved it does
 // not outlive the function.
 //
-// `implements` is the only widening (WP24): `%struct.Square` lists `Shape`'s
+// `implements` is the only widening (WP25): `%struct.Square` lists `Shape`'s
 // fields first, so every `Shape` operation works on a `Square` object through
 // one `bitcast`. There is no inheritance and no vtable — a method call
 // resolves to the method of the receiver's own type.

@@ -43,7 +43,7 @@ export interface StructInfo {
   ctor?: FunctionSig;
   /**
    * Interfaces named in the `implements` clause. Each one's fields are the
-   * first fields of this struct, in order and with identical types (WP24), so
+   * first fields of this struct, in order and with identical types (WP25), so
    * a `%struct.<name>*` may be `bitcast` to `%struct.<interface>*`.
    */
   implements: string[];

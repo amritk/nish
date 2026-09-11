@@ -55,7 +55,7 @@ function elementNotes(fn: ExternalFunction): string {
  * forward declarations first (a field may point at a struct defined later),
  * then the bodies in module order. The fields are exactly the compiled
  * `%struct.<Name>` at natural alignment, which is clang's layout for the same
- * C struct. A class that `implements` an interface (WP24) lists the
+ * C struct. A class that `implements` an interface (WP25) lists the
  * interface's fields first, flattened: nesting them as a member would not
  * match, since C never places a following member in a nested struct's tail
  * padding. A class without fields

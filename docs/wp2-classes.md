@@ -2,7 +2,7 @@
 
 > **WP2b is history.** Single inheritance — `extends`, `super`, method
 > overriding and the static-dispatch rule — was removed from the language by
-> [wp24-inheritance.md](wp24-inheritance.md), and `implements` became a
+> [wp25-inheritance.md](wp25-inheritance.md), and `implements` became a
 > *prefix* check in the same change. The [Inheritance](#inheritance-wp2b)
 > section below is kept as the record of what shipped and why, not as a
 > description of the language; [LANGUAGE.md](LANGUAGE.md) is normative.

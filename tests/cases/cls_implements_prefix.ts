@@ -1,4 +1,4 @@
-// `implements` is a prefix rule (WP24): the interface's fields are the class's
+// `implements` is a prefix rule (WP25): the interface's fields are the class's
 // *first* fields, and the class may declare more after them. That is what
 // replaced inheritance -- the layout is flat, the conversion is one `bitcast`,
 // and two classes with different tails are usable through one interface.

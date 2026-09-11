@@ -1,7 +1,7 @@
 // The syntax tree of the subset (docs/wp14-selfhost.md §2.1, milestone S2).
 //
 // **One `Node` class**, with a `kind` discriminant and the union of the fields
-// any node needs. The language has no inheritance at all since WP24, and a
+// any node needs. The language has no inheritance at all since WP25, and a
 // downcast would mean a runtime tag check, a `T | null` result and a new rule
 // in the checker for a cast that can fail; a bootstrap compiler needs none of
 // that. Field access is unchecked by the type system and guarded by `kind`

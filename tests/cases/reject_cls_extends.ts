@@ -1,4 +1,4 @@
-// Nish has no inheritance (WP24). The message names the rewrite: repeat the
+// Nish has no inheritance (WP25). The message names the rewrite: repeat the
 // base's fields as the first fields of the class and convert through an
 // interface instead.
 class Base {

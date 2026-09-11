@@ -1,4 +1,4 @@
-// The prefix rule that replaced inheritance (WP24): several classes whose
+// The prefix rule that replaced inheritance (WP25): several classes whose
 // first fields are one interface's, used through that interface in parameters,
 // variables and arrays. Every class keeps its own methods -- there is no
 // dispatch to disagree about, which is why this file agrees with Node where

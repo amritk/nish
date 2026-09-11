@@ -1022,7 +1022,7 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
 
 // ---- WP2: layout -------------------------------------------------------------------
 // tests/layout/structs.ts declares fifteen classes, three of which `implements` an
-// interface (WP24, whose layout is the interface's fields followed by their own);
+// interface (WP25, whose layout is the interface's fields followed by their own);
 // tests/layout/structs.c declares
 // the same C structs (flattened) with `_Static_assert(sizeof(struct X) == N)`. The
 // compiler's size for each class is read from the `nish_alloc_struct(i64 N)` in its
@@ -1061,7 +1061,7 @@ if (!only || "layout".includes(only)) {
       diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`
     );
     if (HAS_CLANG) {
-      // WP24: the C header lists every class with its flattened fields; one that
+      // WP25: the C header lists every class with its flattened fields; one that
       // `implements` an interface must therefore have the size the compiler (and
       // structs.c) computed.
       const headerCheck = path.join(buildDir, "layout_header_check.c");
@@ -3748,7 +3748,7 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   // the `Result` surface; this tests it on every accepted case there is, which
   // is the whole language. One case is listed because the divergence is real
   // and documented, not because the declarations are missing something. The
-  // second went with inheritance (WP24): an implicit `super()` was the only
+  // second went with inheritance (WP25): an implicit `super()` was the only
   // place an accepted program did something JavaScript would throw on.
   const AMBIENT_DIVERGENCES = new Map([
     [

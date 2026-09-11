@@ -5,7 +5,7 @@
 // **The layout is the ABI.** A field's index is its position in the LLVM
 // struct body and its offset is where clang would put it in the equivalent C
 // struct, so `--emit-header` and a C caller agree without anyone writing the
-// layout down twice. `implements` is a prefix rule (WP24): the interface's
+// layout down twice. `implements` is a prefix rule (WP25): the interface's
 // fields are the class's first fields, indices and offsets included, which is
 // what lets a `%struct.Square*` be `bitcast` to a `%struct.Shape*` with no
 // adjustment. There is no inheritance, so that is the only widening there is.
@@ -236,9 +236,9 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
   if (info.kind === STRUCT_CLASS) {
     const extendsName = decl.children[1];
     if (extendsName.kind !== N_EMPTY) {
-      // WP24. The rule lives in the checker rather than in Phase 0 because
+      // WP25. The rule lives in the checker rather than in Phase 0 because
       // inheritance needs nothing Phase 0 exists to refuse — it compiled until
-      // WP24 — and the message names the rewrite, the way a removed spelling's
+      // WP25 — and the message names the rewrite, the way a removed spelling's
       // should.
       ctx.error(
         extendsName,
@@ -281,7 +281,7 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
  * `class C implements I` is a layout check, not a subtype relation: `I`'s
  * fields must be the *first* fields of `C`, in the same order and with the
  * same types, so a `%struct.C*` is a `%struct.I*` with no adjustment. `C` may
- * declare more fields after them (WP24) — that prefix is what replaced
+ * declare more fields after them (WP25) — that prefix is what replaced
  * inheritance as the way a wider struct is used as a narrower one.
  */
 export function checkImplements(ctx: CheckContext, cls: StructInfo): void {

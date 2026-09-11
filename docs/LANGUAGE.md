@@ -934,7 +934,7 @@ class Point {
   identity (pointer equality) (`tests/cases/cls_this_method_call`, `Account.same`);
   `<` and friends are rejected (`tests/cases/reject_cls_ordering`). Both
   operands must have the same declared type.
-- **No inheritance** (WP24). `extends` on a class is
+- **No inheritance** (WP25). `extends` on a class is
   `` `extends` is not supported: Nish has no inheritance ``
   (`tests/cases/reject_cls_extends`), and `super` in every spelling —
   `super(...)`, `super.m()`, a bare `super` — is
@@ -1008,7 +1008,7 @@ function swap(p: Pair): Pair {
   its tail padding, exactly as clang lays out the same C struct
   (`tests/layout/structs.ts`, classes `K`, `L`, `M`).
 
-  **This is the only widening in the language.** Since WP24 a class is a
+  **This is the only widening in the language.** Since WP25 a class is a
   prefix of nothing but the interfaces it names, which is what lets two
   classes with different tails be held in one `I[]` and operated on by one
   function (`tests/cases/cls_implements_prefix`,
@@ -1782,7 +1782,7 @@ compiler's own marks are never invalidated by user resets.
   b.push(2)` is visible through `a` *(CLI only)*; assignment never copies.
 - **Method dispatch is static.** `x.m()` calls the `m` declared by `x`'s
   type, decided at compile time. There is no vtable and no virtual dispatch,
-  and since WP24 there is no inheritance either, so there is no override for
+  and since WP25 there is no inheritance either, so there is no override for
   one to disagree about: every method call in a program names one symbol
   (see [Classes](#classes)).
 - **Memory** is one global bump arena plus the stack, decided at compile
@@ -2090,7 +2090,7 @@ messages are exact for the cases cited; other rows quote
 | I/O with the wrong type | `` `readFileSync` expects an argument of type string, got i32 `` | `reject_readfile_number` |
 | array errors | see [Arrays](#array-literals), [Element access](#element-access), [`for...of`](#for-const-x-of-a) | `reject_arr_*` |
 | class and interface errors | see [Classes](#classes), [Interfaces](#interfaces-and-object-literals) | `reject_cls_*` |
-| `extends` or `super` on a class (WP24: there is no inheritance) | `` `extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `Derived` and `implements` an interface to convert between them `` / `` `super` is not supported: Nish has no inheritance, so a class has no base class to reach `` | `reject_cls_extends`, `reject_cls_super` |
+| `extends` or `super` on a class (WP25: there is no inheritance) | `` `extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `Derived` and `implements` an interface to convert between them `` / `` `super` is not supported: Nish has no inheritance, so a class has no base class to reach `` | `reject_cls_extends`, `reject_cls_super` |
 | a class does not cover the interface it `implements` | `` Class `Point2` does not implement `Point3`: it lacks field `z: i32` (the interface's fields must be the class's first fields, in order) `` | `reject_cls_implements_short`, `reject_cls_implements_mismatch` |
 | module errors | see [`export` and `import`](#export-and-import), [`main`](#main) | `reject_bare_import`, `reject_default_import`, `reject_namespace_import`, `reject_side_effect_import`, `reject_missing_module`, `reject_export_*`, `reject_main_params`, `tests/link/*` |
 | unsupported syntax the validator allows | `Unsupported statement in Phase 1: <Kind>` / `Unsupported expression in Phase 1: <Kind>` / `` Unsupported binary operator `**` `` / `` Unsupported unary operator `+` `` / `` Unsupported type `...` `` | *(CLI only)* |

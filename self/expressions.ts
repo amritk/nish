@@ -141,7 +141,7 @@ function computeType(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     case N_OBJECT:
       return checkObjectLiteral(ctx, expr, scope, want);
     case N_SUPER:
-      // WP24. Every spelling of `super` lands here -- `super(...)` and
+      // WP25. Every spelling of `super` lands here -- `super(...)` and
       // `super.m()` are routed through the callee and the receiver -- so the
       // rule is stated once, on the `super` token, as stage0 states it.
       return ctx.errorType(
@@ -882,7 +882,7 @@ export function assignInto(
 function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
   const callee = expr.children[0];
   if (callee.kind === N_SUPER) {
-    return checkExpression(ctx, callee, scope, -1); // WP24: reports on the `super` token
+    return checkExpression(ctx, callee, scope, -1); // WP25: reports on the `super` token
   }
   if (callee.kind === N_MEMBER) {
     // `value.method(...)` dispatches on the receiver's type; `console.log(...)`

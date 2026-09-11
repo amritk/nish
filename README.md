@@ -305,7 +305,7 @@ and the IR any of them lowers to are all still free to change.
 Not in the language yet, in the order they are likely to land: optional
 reference counting for objects that must outlive an arena reset, and dynamic
 dispatch — which would be a trait object over an interface, since inheritance
-was removed ([docs/wp24-inheritance.md](docs/wp24-inheritance.md)) and every
+was removed ([docs/wp25-inheritance.md](docs/wp25-inheritance.md)) and every
 method call names one symbol today.
 Generics, closures, `try`/`catch` and labelled `break`/`continue` are
 refusals rather than gaps, each with the message and the idiom to use

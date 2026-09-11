@@ -7,7 +7,7 @@
 // what lets `new C(...)` be one allocation and a store per field, with no
 // zeroing pass and no "uninitialised" state a later read has to allow for.
 //
-// There is no inheritance (WP24), so there is no inherited prefix and no
+// There is no inheritance (WP25), so there is no inherited prefix and no
 // `super(...)`: every field a class has is one it declares, and the whole of
 // the constructor body is what assigns them.
 

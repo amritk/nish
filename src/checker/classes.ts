@@ -7,7 +7,7 @@
  * Values of struct type are pointers to arena memory; there is no copy
  * semantics and no vtable.
  *
- * There is no inheritance (WP24) and so no subtyping between classes: a
+ * There is no inheritance (WP25) and so no subtyping between classes: a
  * method call resolves to the method the receiver's own type declares, which
  * makes every call site in a program one known symbol. The one widening is
  * `implements`: a class lists an interface whose fields are its own *first*
@@ -415,9 +415,9 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
   if (ts.isClassDeclaration(info.decl)) {
     for (const clause of info.decl.heritageClauses ?? []) {
       if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
-      // WP24. The rule lives in the checker rather than in Phase 0 because
+      // WP25. The rule lives in the checker rather than in Phase 0 because
       // inheritance needs nothing Phase 0 exists to refuse -- it compiled
-      // until WP24 -- and the message names the rewrite, the way a removed
+      // until WP25 -- and the message names the rewrite, the way a removed
       // spelling's should. The base *name* carries the caret, which is the
       // node stage1's parser keeps (`self/parser.ts`, `parseHeritageName`).
       throw ctx.error(
@@ -474,7 +474,7 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
 
 /**
  * The interface's fields must be the class's *first* fields, in order and with
- * identical types; the class may declare more after them (WP24). That prefix
+ * identical types; the class may declare more after them (WP25). That prefix
  * is what makes the conversion one `bitcast`: for every field the interface
  * names, an `I*` and a `C*` address the same bytes at the same offset. It is
  * also how a wider struct is used as a narrower one now that a class has no
@@ -778,7 +778,7 @@ const checkThis: ExpressionChecker = (ctx, node, scope) => {
 };
 
 /**
- * `super` in every position (WP24). A class has no base class, so `super(...)`,
+ * `super` in every position (WP25). A class has no base class, so `super(...)`,
  * `super.m()` and a bare `super` are all the same mistake and get the same
  * sentence. `checkCall` routes `super(...)` here rather than reporting its own,
  * so there is one rule and one code.

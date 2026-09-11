@@ -26,7 +26,7 @@
  *   class -> iface   `bitcast %struct.C* %v to %struct.I*` (the checker records
  *                    the conversion in `program.coercions`; the core emits it)
  *
- * That one `bitcast` is the only widening there is (WP24): a class that
+ * That one `bitcast` is the only widening there is (WP25): a class that
  * `implements` an interface lists the interface's fields first, so every `I`
  * operation works on a `C` object at the same offsets, and `c.x` is one
  * `getelementptr` into the flat layout either way. A class is a prefix of

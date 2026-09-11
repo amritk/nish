@@ -223,7 +223,7 @@ export const builtinFunctions: Record<string, BuiltinCallChecker> = {
 
 const checkCall: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.CallExpression;
-  // `super(...)`: checking the receiver reports it (WP24), so the rule is stated once.
+  // `super(...)`: checking the receiver reports it (WP25), so the rule is stated once.
   if (expr.expression.kind === ts.SyntaxKind.SuperKeyword) ctx.checkExpression(expr.expression, scope);
   if (ts.isPropertyAccessExpression(expr.expression)) {
     // `value.method(...)` dispatches on the receiver type; `console.log(...)` is a dotted builtin.

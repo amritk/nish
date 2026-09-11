@@ -240,7 +240,7 @@ export function J_f(p: J): string {
   return p.f;
 }
 
-// WP24: a class that `implements` an interface lays the interface's fields out
+// WP25: a class that `implements` an interface lays the interface's fields out
 // first and its own after them, so the C twin lists the flattened fields (not a
 // nested struct: L's own field reuses `Flipped`'s tail padding, which
 // `struct L { struct Flipped f; int32_t c; }` would not).
@@ -369,7 +369,7 @@ export function M_d(p: M): string {
   return p.d;
 }
 // An `M` read through the getter of the interface it implements: the prefix
-// layout in action, and the one widening the language has (WP24).
+// layout in action, and the one widening the language has (WP25).
 export function Widened_b(p: Widened): f64 {
   return p.b;
 }

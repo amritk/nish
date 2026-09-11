@@ -49,7 +49,7 @@
  *               Every struct value comes from the arena allocator: 8-aligned,
  *               at least `sizeof X` bytes, never null. `X` is the *declared*
  *               parameter type; a class passed where an interface it
- *               implements is expected (WP24) is at least as large, since
+ *               implements is expected (WP25) is at least as large, since
  *               the interface's fields are its prefix.
  *     noalias   Only on `this` of a constructor: `new` hands it a fresh
  *               allocation nothing else points at. Never elsewhere: two
