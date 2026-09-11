@@ -646,6 +646,15 @@ and the original six:
 | clamp not folded | a `substring` whose bounds could not be proven in range | use the fast slice, or narrow the index |
 | wasteful struct padding | reordering a struct's fields would shrink it | names the current size, the achievable size, and the field order that gets there |
 
+The bar cuts both ways, and the dropped-allocation rule is where it shows.
+A function that loses its arena scope to a local assigned in a branch retains
+its memory exactly as one that drops an allocation does, and is not reported,
+because the rewrite that would fix it does not exist. That gap is written down
+in [wp6-memory.md](wp6-memory.md) under "Left out", with the two ways to close
+it: a "captured only into one binding" fact in the escape analysis, or an
+opt-in `--report-arena` audit that reports placements without warning about
+them.
+
 They are **on by default and never affect the exit code**: visible to everyone,
 breaking nobody. That default carries an obligation — a performance warning
 must never fire on code that has no faster form. A warning nobody can act on

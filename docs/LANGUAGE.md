@@ -1931,7 +1931,10 @@ by the caller.
     bracket (`tests/cases/perf_arena_drop`). Not reported when the local was
     declared holding a literal and is then given its one value in a branch
     (`let what = "unbound"; if (...) what = \`long ${s}\`;`), which drops
-    nothing and has no rewrite; when the assigned value is not an allocation;
+    nothing and has no rewrite — that function still loses its arena scope and
+    still retains its memory, silently, which is a known gap rather than a
+    guarantee ([wp6-memory.md](wp6-memory.md), "Left out"); when the assigned
+    value is not an allocation;
     when the function returns a pointer, because then its caller owns the
     memory; or when the quadratic-string rule is already reporting the same
     line (`tests/cases/perf_arena_quiet`).
