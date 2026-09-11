@@ -11,6 +11,12 @@ commit's subject for the heading and its body for the prose, and writes
 reads — and the section below is rendered from it. To fix a wording, edit the
 JSON in the release pull request and re-render; editing here is overwritten.
 
+A section is an index rather than an account: one line per change, its title
+and a link to the pull request it landed in, under the heading its type gives.
+The prose each commit wrote is in the JSON and on the website, and the pull
+request has the diff and the discussion, so a reader scanning a release sees
+what changed and one click to the rest.
+
 The release pull request is where a release is reviewed: every merge to `main`
 refreshes it with the version bump, the JSON and this section, and merging it
 creates the tag. [docs/wp12-release.md](docs/wp12-release.md) has the
