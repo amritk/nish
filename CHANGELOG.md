@@ -51,6 +51,58 @@ shipped, not a description of the tree as it stands.
 
 ### Added
 
+- **A plan for `async`/`await` (WP24, `docs/wp24-async.md`), and it is a
+  refusal.** The note is the plan of record for a question
+  [`docs/wp20-threads.md`](docs/wp20-threads.md) §6 deferred without an owner,
+  and it declines the feature for a reason that is not the expected one.
+
+  The lowering is the cheap part, and that is measured rather than argued: a
+  minimal switch-resumed coroutine written by hand in **textual IR** — no
+  clang, no C++ — is split by LLVM 18's default `opt -O2` pipeline, and when
+  the handle is consumed by its caller and the coroutine is `internal`, the
+  frame type, the allocation, `@f.resume` and `@f.destroy` are elided outright
+  and the module is the caller's straight-line code. Store the handle into a
+  global and the 24-byte frame and both split functions come back. That
+  elision condition is the `local` / `returned` / `leaks` classification
+  `src/codegen/escape.ts` already computes, and `--strict-exports` being on by
+  default puts an ordinary program on the free row.
+
+  What is missing is anything to await. Every I/O call in the language is
+  synchronous, and `grep` over `src/`, `self/` and `runtime/` for
+  `setTimeout|sleep|poll|epoll|kqueue|socket` returns nothing: no timer, no
+  sleep, no poller, no socket. Regular-file reads do not benefit from
+  readiness polling, which is why Node's own `fs` async is a thread pool; the
+  one call in the language that waits on something outstanding is `spawnSync`,
+  and waiting on four children is four threads. So the first deliverable of an
+  async package would be a poller and a socket type rather than a keyword, and
+  nobody has asked for a Nish server.
+
+  The costs are written down anyway, since they decide the order if the answer
+  ever changes: `Promise<T>` is a generic (WP15 item 8 / WP18, and wp18 §6.1
+  argues against a third built-in family by hand); with no function values
+  there is no callback to stop the colour, so one `async` leaf propagates to
+  `main` and links an event loop into a binary whose premise is a 4,696-byte
+  hello world; `willreturn` dies at every suspend and `readnone` at every frame
+  spill, which is a correct loss no implementation effort recovers; the
+  scheduler does not fit in the 244 bytes left of `runtime.c`'s 4,096-byte
+  `.text` budget; and Node is the differential oracle, so microtask ordering
+  would become a declared difference for a construct users assume is identical.
+
+  The one item recommended for building has no language surface: an
+  **asynchronous N-API export**. `--emit-napi` writes a shim that calls the
+  function on the thread N-API handed it, so a Nish addon that runs for
+  200 ms blocks Node's event loop for 200 ms. `napi_create_async_work` plus
+  `napi_create_promise` moves it to libuv's pool with the Nish function left
+  exactly as synchronous as it is, and its entire prerequisite is WP20's T0
+  thread-local arena — a worker thread allocating through the inlined bump
+  allocator is a data race in the emitted IR, not merely in `runtime.c`.
+
+  Six refusals carry the rule each one breaks, including the tempting one:
+  accepting `async` as an erased no-op keyword would make a program mean
+  something different under Node than it does here, in the one direction
+  `tests/differential/` exists to prevent. Nothing here is pre-1.0 —
+  LANGUAGE.md keeps the rejections it has, so M4's freeze waits on none of it.
+
 - **Non-generic `type` aliases, in both compilers.** `type Byte = u8;` at
   module level is accepted now instead of
   `Only top-level function declarations are supported in Phase 1 (found TypeAliasDeclaration)`.

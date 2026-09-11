@@ -780,3 +780,27 @@ deferred to WP18 rather than given syntax of their own, and `for...of` over a
 string, a string `switch` and `?.` are declined with the argument written out:
 each is refused by a rule the project already accepted, and a plan of record
 that says what it turned down is worth more than one that only says yes.
+
+`async`/`await` is the one question on this page whose plan of record is a
+**refusal**, and [wp24-async.md](wp24-async.md) is that note. The blocker is
+not the lowering: a hand-written coroutine in textual IR is split by LLVM 18's
+default pipeline, and when the handle does not escape its caller the frame, the
+allocation and both split functions are elided outright — measured, and the
+condition under which it is free is the one `src/codegen/escape.ts` already
+computes. The blocker is that there is nothing to await. Every I/O call in the
+language is synchronous and there is no socket, timer, sleep or poller in
+either compiler or either runtime, so the first deliverable of an async package
+would be a poller and a socket type rather than a keyword — a larger package
+than the syntax, for a workload nobody has asked for. What an asker usually
+wants is one of two things that already have answers: overlapping work is
+WP20's threads, and "do not block Node's event loop" is a change to the
+generated N-API shim — `napi_create_async_work` plus a promise on the
+JavaScript side, with the Nish function left exactly as synchronous as it
+is — whose entire cost is WP20's T0 thread-local arena. That one item has no
+language surface and is the note's only recommendation to build. The rest is
+declined with the rule each refusal breaks, including the tempting one:
+accepting `async` as an erased no-op keyword would make a program mean
+something different under Node than it does here, in the direction
+[wp13-differential.md](wp13-differential.md) exists to prevent. Nothing here
+is pre-1.0 — LANGUAGE.md keeps the rejections it has, so M4's freeze is not
+waiting on any of it.
