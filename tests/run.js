@@ -67,6 +67,21 @@ const HAS_CLANG = has("clang");
 /** `-g` end to end: the linked binary is read with the dumper when there is one. */
 const HAS_LLVM_DWARFDUMP = has("llvm-dwarfdump");
 
+/**
+ * The DWARF producer, with the version replaced by a placeholder.
+ *
+ * `-g` writes `producer: "nish <version>"` into the compile unit, so two
+ * goldens would otherwise have to be regenerated at every release for a change
+ * that is not a lowering at all -- and the release pull request, which is the
+ * commit that bumps the version, would be red at itself. Applied to the golden
+ * as well as to the emitted IR, so a golden written before this is still read
+ * correctly. `llvm-as` runs on the emitted file rather than the golden, so the
+ * placeholder never reaches a verifier.
+ */
+function normaliseProducer(ir) {
+  return ir.replace(/producer: "nish [^"]*"/g, 'producer: "nish <version>"');
+}
+
 /** Module body with the `; ModuleID` / `source_filename` header removed. */
 function stripHeader(ir) {
   return ir
@@ -139,7 +154,14 @@ for (const name of cases) {
   }
 
   // `-g` names the working directory in `DIFile`; keep the golden machine-independent.
-  const actual = stripHeader(fs.readFileSync(outLl, "utf8")).split(root).join("<root>");
+  // It also names the compiler's version in the DWARF producer, which changes
+  // at every release and is not a fact about the lowering -- so normalise it
+  // the same way, and for the same reason one step further out: without this
+  // the release pull request's own version bump turns `dbg_locals` and
+  // `dbg_result` red, and a release cannot go green on itself. The version is
+  // still pinned, by the `--version` checks and by the branding/package.json
+  // equality check above; it is just not pinned once per golden.
+  const actual = normaliseProducer(stripHeader(fs.readFileSync(outLl, "utf8")).split(root).join("<root>"));
   if (!fs.existsSync(side("ll"))) {
     if (process.env.UPDATE_GOLDENS) {
       fs.writeFileSync(side("ll"), actual + "\n");
@@ -149,7 +171,7 @@ for (const name of cases) {
       continue;
     }
   }
-  const expected = fs.readFileSync(side("ll"), "utf8").trim();
+  const expected = normaliseProducer(fs.readFileSync(side("ll"), "utf8").trim());
   check(
     `${name}: IR matches golden`,
     actual === expected,

@@ -220,7 +220,7 @@ function aliasType(info: AliasInfo, ctx: CheckContext): i32 -> @aliasType [expor
 module self/branding.ts
 const LANGUAGE: string = "Nish" [exported]
 const CLI: string = "nish" [exported]
-const VERSION: string = "0.1.0" [exported]
+const VERSION: string = "<version>" [exported]
 const RUNTIME_HEADER: string = "nish.h" [exported]
 const HEADER_GUARD_PREFIX: string = "NISH" [exported]
 module self/context.ts

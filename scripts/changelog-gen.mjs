@@ -235,7 +235,13 @@ function renderEntry(e, withBreakingNote) {
  * because 0.x is the "anything may change" range and burning 1.0 on the first
  * breaking change would be a lie about stability. Reconsider at 1.0.
  */
-function nextVersion(current, entries) {
+function nextVersion(current, entries, previousTag) {
+  // The first release is 0.1.0 whatever the commits say. Every commit before
+  // the convention existed is typed `other`, so a type-driven bump would read
+  // the entire history as a patch and ship 0.0.1 — a number that would claim
+  // the compiler is a bug-fix on nothing. 0.1.0 is also what the seed policy
+  // already names as the base case (docs/wp12-release.md, "The bootstrap seed").
+  if (!previousTag) return "0.1.0";
   const [major, minor, patch] = current.split(".").map(Number);
   if (entries.some((e) => e.breaking)) return major === 0 ? `0.${minor + 1}.0` : `${major + 1}.0.0`;
   if (entries.some((e) => e.type === "feat")) return `${major}.${minor + 1}.0`;
@@ -303,7 +309,7 @@ const { entries, unconventional } = collect(from, to);
 // `--next` answers the version and nothing else, for the release PR to name
 // itself and to bump package.json with.
 if (argv.includes("--next")) {
-  process.stdout.write(`${nextVersion(pkgVersion, entries)}\n`);
+  process.stdout.write(`${nextVersion(pkgVersion, entries, from)}\n`);
   process.exit(0);
 }
 

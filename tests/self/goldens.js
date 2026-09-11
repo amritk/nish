@@ -136,9 +136,23 @@ function link(seed, source, stem) {
   };
 }
 
-/** The dump's lines, blanks dropped — `checked_oracle.js`'s normalisation. */
+/**
+ * The dump's lines, blanks dropped — `checked_oracle.js`'s normalisation —
+ * with `self/branding.ts`'s folded `VERSION` replaced by a placeholder.
+ *
+ * The checker folds module constants, so the dump records `VERSION`'s value,
+ * which is the compiler's version and changes at every release. Pinning it
+ * would mean the release pull request — the commit whose whole job is to bump
+ * the version — turns this golden red at itself. That the constant is folded
+ * at all is still pinned here, by this line's shape and by every other module
+ * constant in the corpus; only the digits are let go. `tests/run.js` does the
+ * same to the DWARF producer, for the same reason.
+ */
 function dumpLines(dump) {
-  return dump.split("\n").filter((line) => line.length > 0);
+  return dump
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => line.replace(/^(const VERSION: string = )"[^"]*"/, '$1"<version>"'));
 }
 
 /** `tests/cases/add.ts --number-mode f64`: the program as its record names it. */
