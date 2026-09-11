@@ -570,9 +570,9 @@ class EscapeAnalysis {
       const outcome = this.valueOutcome(site.node, fresh);
       let flow = outcome.flow;
       let escapes = outcome.escapes;
-      // A `new` object is also handed to its constructor as `this` (the own or
-      // the inherited one); a constructor that captures it makes the object
-      // escape however the local is used afterwards.
+      // A `new` object is also handed to its constructor as `this`; a
+      // constructor that captures it makes the object escape however the
+      // local is used afterwards.
       if (site.node.kind === N_NEW) {
         const ctor = constructorOf(this.unit.program, this.table, intrinsicType(this.unit.program, site.node));
         if (ctor !== null && this.calleeCaptures(ctor, 0)) {

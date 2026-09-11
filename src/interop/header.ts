@@ -55,9 +55,10 @@ function elementNotes(fn: ExternalFunction): string {
  * forward declarations first (a field may point at a struct defined later),
  * then the bodies in module order. The fields are exactly the compiled
  * `%struct.<Name>` at natural alignment, which is clang's layout for the same
- * C struct. A derived class (WP2b) lists its base's fields first, flattened:
- * nesting the base as a member would not match, since C never places a
- * following member in a nested struct's tail padding. A class without fields
+ * C struct. A class that `implements` an interface (WP25) lists the
+ * interface's fields first, flattened: nesting them as a member would not
+ * match, since C never places a following member in a nested struct's tail
+ * padding. A class without fields
  * stays an incomplete type (C has no empty structs); pointers to it still work.
  */
 function structDefinitions(compilation: Compilation): string[] {
@@ -71,14 +72,13 @@ function structDefinitions(compilation: Compilation): string[] {
   const lines = [
     "",
     "/* Classes and interfaces: the field layout of the compiled objects (natural",
-    " * alignment; a derived class lists its base's fields first). Objects live in",
-    " * the arena; a `T | null` parameter or field may be NULL. */",
+    " * alignment; a class that `implements` an interface lists its fields first).",
+    " * Objects live in the arena; a `T | null` parameter or field may be NULL. */",
   ];
   for (const { info } of structs) lines.push(`struct ${info.name};`);
   for (const { info, fileName } of structs) {
-    const heritage = info.base ? ` extends ${info.base.name}` : "";
     const ifaces = info.implements.length > 0 ? ` implements ${info.implements.join(", ")}` : "";
-    lines.push("", `/* ${fileName}: ${info.kind} ${info.name}${heritage}${ifaces} */`);
+    lines.push("", `/* ${fileName}: ${info.kind} ${info.name}${ifaces} */`);
     if (info.fields.length === 0) {
       lines.push(`/* struct ${info.name} has no fields; it stays incomplete (pointers only). */`);
       continue;

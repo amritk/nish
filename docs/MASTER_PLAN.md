@@ -809,3 +809,25 @@ something different under Node than it does here, in the direction
 [wp13-differential.md](wp13-differential.md) exists to prevent. Nothing here
 is pre-1.0 — LANGUAGE.md keeps the rejections it has, so M4's freeze is not
 waiting on any of it.
+
+The one thing that has *left* the language rather than entered it is
+inheritance, and [wp25-inheritance.md](wp25-inheritance.md) is the plan of
+record. `extends` gave three things: a field prefix, member reuse, and
+polymorphism — and the third is the reason hierarchies exist and the one Nish
+never had, because dispatch is static and a vtable is an indirect call the §3a
+fact pass cannot see through. So an override reached through a base-typed value
+ran the base method natively and the derived one under Node, which was the
+language's only knowing disagreement with JavaScript and the only by-design
+entry in `known-failures.txt` that was not a number. The removal keeps the half
+that was carrying weight by widening `implements` from an exact field match to
+a **prefix**: an interface's fields must be the class's first fields, the class
+may declare more after them, the conversion is still one `bitcast`, and the
+three layout classes that used to be derived are still 24, 16 and 32 bytes with
+the C twin unchanged. Two classes with different tails in one `I[]` is the job
+`extends` was doing, without a dispatch rule attached. It was affordable
+because `self/` — 25,911 lines, the largest Nish program there is — declared no
+derived class at all: WP14 §2.1 had already chosen one `Node` class with a
+`kind` discriminant over a hierarchy, and Nish-0 was defined as the language
+minus "inheritance and downcasts". Sixteen `reject_*` cases collapse into two
+rules, both in the checker rather than Phase 0, by the doctrine WP22 §6 states
+for a removed spelling.

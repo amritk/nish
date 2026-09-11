@@ -232,7 +232,7 @@ export function cType(table: TypeTable, t: i32, position: i32, written: boolean)
       return "void";
     case K_STRUCT:
       // A class or interface value is a pointer to its `struct` (declared in the
-      // header with the flattened fields, WP2/WP2b); a `T | null` is the same
+      // header with the flattened fields, WP2); a `T | null` is the same
       // pointer, possibly NULL.
       return `struct ${table.nameOf(t)} *`;
     case K_NULLABLE:

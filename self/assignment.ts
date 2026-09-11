@@ -7,11 +7,9 @@
 // what lets `new C(...)` be one allocation and a store per field, with no
 // zeroing pass and no "uninitialised" state a later read has to allow for.
 //
-// The inherited prefix is the base constructor's job: those fields count as
-// assigned once `super(...)` has run, which is before the body when the call
-// is implicit and after the first statement when it is written — and it must
-// be the first statement, with no `this` in its arguments, because the base
-// part of the object does not exist until it returns.
+// There is no inheritance (WP25), so there is no inherited prefix and no
+// `super(...)`: every field a class has is one it declares, and the whole of
+// the constructor body is what assigns them.
 
 import { CheckContext } from "./context";
 import { StringSet } from "./map";
@@ -256,64 +254,16 @@ function walkLoop(ctx: CheckContext, cls: StructInfo, head: Node, body: Node, as
   return assigned;
 }
 
-/** The first `super(...)` anywhere inside `node`, however deeply nested. */
-function findSuperCall(node: Node): Node | null {
-  if (node.kind === N_CALL && node.children[0].kind === N_SUPER) {
-    return node;
-  }
-  for (const child of node.children) {
-    const found = findSuperCall(child);
-    if (found !== null) {
-      return found;
-    }
-  }
-  return null;
-}
-
-/** `super(...)` written as the first statement of the constructor, or `null`. */
-export function explicitSuperCall(body: Node): Node | null {
-  if (body.children.length === 0) {
-    return null;
-  }
-  const first = body.children[0];
-  if (first.kind !== N_EXPR_STMT) {
-    return null;
-  }
-  const call = first.children[0];
-  return call.kind === N_CALL && call.children[0].kind === N_SUPER ? call : null;
-}
-
-/** The arguments of `super(...)` may not touch `this`: the base part does not exist yet. */
-function rejectThisBeforeSuper(ctx: CheckContext, cls: StructInfo, call: Node): void {
-  for (const arg of call.children[1].children) {
-    rejectThis(ctx, cls, arg);
-  }
-}
-
-function rejectThis(ctx: CheckContext, cls: StructInfo, node: Node): void {
-  if (node.kind === N_THIS || node.kind === N_SUPER) {
-    const what = node.kind === N_THIS ? "this" : "super";
-    ctx.error(node, `\`${what}\` cannot be used before \`super(...)\` in the constructor of \`${cls.name}\``);
-    return;
-  }
-  for (const child of node.children) {
-    rejectThis(ctx, cls, child);
-  }
-}
-
 /**
  * Every field of `cls` is assigned by the time its constructor returns, and
- * none is read before it is. Runs after the layouts are known, because the
- * inherited prefix decides what `super(...)` covers.
+ * none is read before it is. Runs after the layouts are known.
  */
 export function checkDefiniteAssignment(ctx: CheckContext, cls: StructInfo): void {
   if (cls.kind !== STRUCT_CLASS) {
     return;
   }
-  const base = cls.base;
-  const inherited = base === null ? 0 : base.fields.length;
   const assigned = new Assigned(false);
-  let i = inherited;
+  let i = 0;
   while (i < cls.fields.length) {
     if (cls.fields[i].initializer !== null) {
       assigned.fields.add(cls.fields[i].name);
@@ -323,7 +273,7 @@ export function checkDefiniteAssignment(ctx: CheckContext, cls: StructInfo): voi
 
   const ctor = cls.ctor;
   if (ctor === null) {
-    i = inherited;
+    i = 0;
     while (i < cls.fields.length) {
       if (!assigned.fields.has(cls.fields[i].name)) {
         ctx.error(
@@ -337,56 +287,7 @@ export function checkDefiniteAssignment(ctx: CheckContext, cls: StructInfo): voi
     return;
   }
 
-  const body = ctor.decl.children[1];
-  const written = findSuperCall(body);
-  const first = explicitSuperCall(body);
-  let statements = body.children;
-  if (base === null) {
-    if (written !== null) {
-      ctx.error(
-        written,
-        `\`super(...)\` in the constructor of \`${cls.name}\`, which does not extend a class`
-      );
-      return;
-    }
-  } else {
-    if (written !== null) {
-      // The only `super(...)` a constructor may hold is the one that opens it.
-      const opens = first !== null && first === written;
-      if (!opens) {
-        ctx.error(
-          written,
-          `\`super(...)\` must be the first statement of the constructor of \`${cls.name}\``
-        );
-        return;
-      }
-    }
-    const baseCtor = base.effectiveConstructor();
-    if (first === null && baseCtor !== null && baseCtor.paramTypes.length > 1) {
-      const owner = baseCtor.owner;
-      const name = owner === null ? base.name : owner.name;
-      ctx.error(
-        ctor.decl,
-        `Constructor of \`${cls.name}\` must start with \`super(...)\`: the constructor of \`${name}\` takes ${baseCtor.paramTypes.length - 1} argument(s)`
-      );
-      return;
-    }
-    if (first !== null) {
-      rejectThisBeforeSuper(ctx, cls, first);
-      const rest: Node[] = [];
-      let at = 1;
-      while (at < statements.length) {
-        rest.push(statements[at]);
-        at = at + 1;
-      }
-      statements = rest;
-    }
-    for (const field of base.fields) {
-      assigned.fields.add(field.name);
-    }
-  }
-
-  const result = walkStatements(ctx, cls, statements, assigned);
+  const result = walkStatements(ctx, cls, ctor.decl.children[1].children, assigned);
   if (result.terminated) {
     return;
   }

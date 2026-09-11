@@ -240,29 +240,51 @@ export function J_f(p: J): string {
   return p.f;
 }
 
-// Derived classes (WP2b): the base's fields come first, then the class's own,
-// so the C twin lists the flattened fields (not a nested struct: L's own field
-// reuses C's tail padding, which `struct L { struct C c; int32_t c2; }` would not).
-class K extends B {
+// WP25: a class that `implements` an interface lays the interface's fields out
+// first and its own after them, so the C twin lists the flattened fields (not a
+// nested struct: L's own field reuses `Flipped`'s tail padding, which
+// `struct L { struct Flipped f; int32_t c; }` would not).
+interface Widened {
+  a: number;
+  b: f64;
+}
+
+interface Flipped {
+  a: f64;
+  b: number;
+}
+
+class K implements Widened {
+  a: number;
+  b: f64;
   c: boolean;
   constructor(a: number, b: f64, c: boolean) {
-    super(a, b);
+    this.a = a;
+    this.b = b;
     this.c = c;
   }
 }
 
-class L extends C {
+class L implements Flipped {
+  a: f64;
+  b: number;
   c: number;
   constructor(a: f64, b: number, c: number) {
-    super(a, b);
+    this.a = a;
+    this.b = b;
     this.c = c;
   }
 }
 
-class M extends K {
+class M implements Widened {
+  a: number;
+  b: f64;
+  c: boolean;
   d: string;
   constructor(a: number, b: f64, c: boolean, d: string) {
-    super(a, b, c);
+    this.a = a;
+    this.b = b;
+    this.c = c;
     this.d = d;
   }
 }
@@ -346,9 +368,13 @@ export function M_c(p: M): boolean {
 export function M_d(p: M): string {
   return p.d;
 }
-// A derived object read through its base's getter: the prefix layout in action.
+// An `M` read through the getter of the interface it implements: the prefix
+// layout in action, and the one widening the language has (WP25).
+export function Widened_b(p: Widened): f64 {
+  return p.b;
+}
 export function M_as_B_b(p: M): f64 {
-  return B_b(p);
+  return Widened_b(p);
 }
 export function N_a(p: N): u8 {
   return p.a;

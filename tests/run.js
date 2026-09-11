@@ -1021,8 +1021,9 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
 }
 
 // ---- WP2: layout -------------------------------------------------------------------
-// tests/layout/structs.ts declares ten classes plus three derived ones (WP2b, whose
-// layout is the base's fields followed by their own); tests/layout/structs.c declares
+// tests/layout/structs.ts declares fifteen classes, three of which `implements` an
+// interface (WP25, whose layout is the interface's fields followed by their own);
+// tests/layout/structs.c declares
 // the same C structs (flattened) with `_Static_assert(sizeof(struct X) == N)`. The
 // compiler's size for each class is read from the `nish_alloc_struct(i64 N)` in its
 // `make<X>` function and must equal the C file's N; then the C program (built with
@@ -1060,8 +1061,9 @@ if (!only || "layout".includes(only)) {
       diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`
     );
     if (HAS_CLANG) {
-      // WP2b: the C header lists every class with its flattened fields; a derived
-      // struct must therefore have the size the compiler (and structs.c) computed.
+      // WP25: the C header lists every class with its flattened fields; one that
+      // `implements` an interface must therefore have the size the compiler (and
+      // structs.c) computed.
       const headerCheck = path.join(buildDir, "layout_header_check.c");
       fs.writeFileSync(
         headerCheck,
@@ -1087,7 +1089,7 @@ if (!only || "layout".includes(only)) {
         { cwd: root }
       );
       check(
-        `layout: --emit-header declares the ${fromC.size} structs (derived ones flattened) with the sizes structs.c asserts, under -Wall -Wextra -Werror`,
+        `layout: --emit-header declares the ${fromC.size} structs (flattened) with the sizes structs.c asserts, under -Wall -Wextra -Werror`,
         hc.status === 0 && fs.readFileSync(layoutH, "utf8").includes("struct M {"),
         String(hc.stderr)
       );
@@ -3744,20 +3746,16 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   // The declarations claim a direction, not a coincidence: a program nish
   // accepts should never be one tsc refuses. `res_*` above tests that claim on
   // the `Result` surface; this tests it on every accepted case there is, which
-  // is the whole language. Two cases are listed because the divergence is real
-  // and documented, not because the declarations are missing something.
+  // is the whole language. One case is listed because the divergence is real
+  // and documented, not because the declarations are missing something. The
+  // second went with inheritance (WP25): an implicit `super()` was the only
+  // place an accepted program did something JavaScript would throw on.
   const AMBIENT_DIVERGENCES = new Map([
     [
       "arr_typed_views.ts",
       // `Int32Array` and friends name the element-typed array here and the JS
       // view in lib.es5; redeclaring them would break every other lib type.
       "typed-array aliases (see the note at the foot of runtime/nish.d.ts)",
-    ],
-    [
-      "cls_extends_chain.ts",
-      // A derived constructor may omit `super(...)` when no ancestor
-      // constructor takes parameters; JavaScript throws at the first `this`.
-      "implicit `super()` (see docs/wp13-differential.md, rewrite rules)",
     ],
   ]);
   const acceptedCases = fs

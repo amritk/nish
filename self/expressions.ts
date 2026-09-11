@@ -26,7 +26,6 @@ import {
   checkMethodCall,
   checkNew,
   checkObjectLiteral,
-  checkSuperCall,
   isValueReceiver,
 } from "./members";
 import {
@@ -75,8 +74,8 @@ import {
 /**
  * The type an expression has, recorded on the node for the emitter to read.
  *
- * A class value sitting where a base class or an implemented interface is
- * expected is *coerced* here: the node records the target type, and the
+ * A class value sitting where an interface it implements is expected is
+ * *coerced* here: the node records the target type, and the
  * original goes in `nodeCoercions` so the emitter knows to insert the one
  * `bitcast`. Doing it in this one place is what stage0's `coerceToContext`
  * does from the checker core, and it is why no individual checker has to
@@ -142,7 +141,13 @@ function computeType(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
     case N_OBJECT:
       return checkObjectLiteral(ctx, expr, scope, want);
     case N_SUPER:
-      return ctx.errorType(expr, "`super` is only available as `super(...)` or `super.method(...)`");
+      // WP25. Every spelling of `super` lands here -- `super(...)` and
+      // `super.m()` are routed through the callee and the receiver -- so the
+      // rule is stated once, on the `super` token, as stage0 states it.
+      return ctx.errorType(
+        expr,
+        "`super` is not supported: Nish has no inheritance, so a class has no base class to reach"
+      );
     default:
       return ctx.errorType(expr, `Unsupported expression \`${ctx.textOf(expr)}\``);
   }
@@ -877,7 +882,7 @@ export function assignInto(
 function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
   const callee = expr.children[0];
   if (callee.kind === N_SUPER) {
-    return checkSuperCall(ctx, expr, scope);
+    return checkExpression(ctx, callee, scope, -1); // WP25: reports on the `super` token
   }
   if (callee.kind === N_MEMBER) {
     // `value.method(...)` dispatches on the receiver's type; `console.log(...)`

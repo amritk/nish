@@ -7,24 +7,19 @@
  * Values of struct type are pointers to arena memory; there is no copy
  * semantics and no vtable.
  *
- * Single inheritance (WP2b): `class D extends B` lays `D` out as `B`'s
- * fields followed by `D`'s own (`inheritFields`), so a `%struct.D*` is a
- * valid `%struct.B*` after one `bitcast`. A `D` value converts to `B` (or
- * any ancestor) wherever a `B` is expected, exactly like a class converts to
- * an interface it implements (`coerceToContext`); nothing converts back.
- * Methods are resolved by the *static* type of the receiver (`findMethod`
- * walks the chain; an override must keep the signature) and `super.m()`
- * names the base implementation; there is no virtual dispatch. A derived
- * constructor starts with `super(...)` (or an implicit `super()` when the
- * nearest ancestor constructor takes no parameters), which runs the nearest
- * ancestor constructor (`baseConstruction`); `this` may not be used before
- * it. A class without a constructor inherits the nearest ancestor's.
+ * There is no inheritance (WP25) and so no subtyping between classes: a
+ * method call resolves to the method the receiver's own type declares, which
+ * makes every call site in a program one known symbol. The one widening is
+ * `implements`: a class lists an interface whose fields are its own *first*
+ * fields, so a `%struct.C*` is a valid `%struct.I*` after one `bitcast` and
+ * a `C` value converts to `I` wherever an `I` is expected
+ * (`coerceToContext`). Nothing converts back.
  *
  * Signature collection runs in three sub-passes so declarations may refer to
  * each other in any order (see `Checker.collectSignatures`):
  *   1a. `declareStruct`        register the name (creates the StaticType)
- *   1b. `collectStructMembers` base class, fields, layout, method/constructor signatures
- *   1c. `finishStruct`         `implements` check, `super(...)` shape, definite assignment
+ *   1b. `collectStructMembers` fields, layout, method/constructor signatures
+ *   1c. `finishStruct`         `implements` check, definite assignment
  * Method and constructor bodies are then ordinary functions in
  * `CheckedProgram.functions` whose first parameter is `this`.
  *
@@ -34,14 +29,8 @@
  *   - no `static`, `abstract`, getters/setters, optional fields, index
  *     signatures, parameter properties, or class expressions;
  *     `public`/`private`/`protected` are accepted and ignored;
- *   - `extends` names one class declared in the same module (not an
- *     interface, not an import, not itself or a descendant); an exported
- *     class extends an exported class; a derived class neither redeclares an
- *     inherited field nor overrides a method with a different signature;
- *   - `super(...)` is the first statement of a derived constructor, is
- *     required when the nearest ancestor constructor has parameters, and
- *     `this` / `super` do not appear before it; `super` is otherwise only
- *     the receiver of a method call inside a derived class;
+ *   - `extends` on a class and `super` in any position are refused: the
+ *     language has no inheritance, and the messages name the rewrite;
  *   - `readonly` fields are assignable only as `this.f = ...` in the
  *     constructor of the class that declares them;
  *   - definite assignment: after the constructor runs every field has a
@@ -55,9 +44,10 @@
  *   - object literals need a contextual class/interface type
  *     (`const p: P = { ... }`, a return, an argument, a field store) and
  *     must set every field exactly once, with no extras;
- *   - a class that `implements` an interface has exactly the interface's
- *     fields, in order, with identical types; such a class value converts
- *     to the interface type implicitly (recorded in `program.coercions`).
+ *   - a class that `implements` an interface declares the interface's
+ *     fields as its first fields, in order, with identical types, and may
+ *     declare more after them; such a class value converts to the interface
+ *     type implicitly (recorded in `program.coercions`).
  */
 import ts from "typescript";
 import {
@@ -134,8 +124,8 @@ export function structOf(ctx: CheckContext, t: StaticType): StructInfo {
 
 /**
  * The struct names that appear in `info`'s *types*: its field types and the
- * parameter and return types of its methods and constructor — its own and
- * the ones it inherits — through arrays and nullables.
+ * parameter and return types of its methods and constructor, through arrays
+ * and nullables.
  *
  * An importer needs these even though it never names them. `import { Box }`
  * brings in a class whose `all(): Item[]` hands out `Item` values, and the
@@ -178,18 +168,15 @@ export function referencedStructNames(info: StructInfo): string[] {
       note(t.err);
     }
   };
-  // `this` is skipped: it is the owner or its base, which is reached through
-  // the `StructInfo` pointer rather than by name, and noting it would pull an
-  // inherited constructor's `%struct.Base` in behind a derived class.
+  // `this` is skipped: it is the owner, reached through the `StructInfo`
+  // pointer rather than by name.
   const noteSig = (sig: FunctionSig): void => {
     for (const p of sig.params.slice(sig.struct ? 1 : 0)) note(p.type);
     note(sig.returnType);
   };
-  for (let c: StructInfo | undefined = info; c; c = c.base) {
-    for (const f of c.fields) note(f.type);
-    for (const m of c.methods.values()) noteSig(m);
-    if (c.ctor) noteSig(c.ctor);
-  }
+  for (const f of info.fields) note(f.type);
+  for (const m of info.methods.values()) noteSig(m);
+  if (info.ctor) noteSig(info.ctor);
   names.delete(info.name);
   return [...names];
 }
@@ -200,85 +187,24 @@ function modifierKinds(node: ts.Node): ts.SyntaxKind[] {
 
 /**
  * True when `t` is a class type that lists interface `iface` in its
- * `implements` clause, or inherits such a clause: the base's fields are the
- * prefix of the derived layout, so the interface's fields are still there.
+ * `implements` clause. The interface's fields are the class's first fields
+ * (`checkImplements`), so the conversion is one `bitcast`.
  */
 export function implementsInterface(ctx: CheckContext, t: StaticType, iface: StaticType): boolean {
   if (t.kind !== "struct" || iface.kind !== "struct" || t.name === iface.name) return false;
   const cls = ctx.program.structs.get(t.name);
   const target = ctx.program.structs.get(iface.name);
   if (!cls || !target || cls.kind !== "class" || target.kind !== "interface") return false;
-  for (let c: StructInfo | undefined = cls; c; c = c.base) if (c.implements.includes(iface.name)) return true;
-  return false;
-}
-
-/** True when `t` is a class type whose `extends` chain reaches `ancestor` (WP2b). */
-export function isSubclassOf(ctx: CheckContext, t: StaticType, ancestor: StaticType): boolean {
-  if (t.kind !== "struct" || ancestor.kind !== "struct" || t.name === ancestor.name) return false;
-  const cls = ctx.program.structs.get(t.name);
-  for (let c = cls?.base; c; c = c.base) if (c.name === ancestor.name) return true;
-  return false;
-}
-
-/** The method `name` visible on `info`: its own, else the nearest ancestor's (static dispatch, WP2b). */
-export function findMethod(info: StructInfo, name: string): FunctionSig | undefined {
-  for (let c: StructInfo | undefined = info; c; c = c.base) {
-    const m = c.methods.get(name);
-    if (m) return m;
-  }
-  return undefined;
-}
-
-/** The constructor `new C(...)` runs: `C`'s own, else the nearest ancestor's (an inherited constructor, WP2b). */
-export function effectiveConstructor(info: StructInfo): FunctionSig | undefined {
-  for (let c: StructInfo | undefined = info; c; c = c.base) if (c.ctor) return c.ctor;
-  return undefined;
-}
-
-/** The class that declares `field` (the highest ancestor whose layout still contains it). */
-export function fieldOwner(info: StructInfo, field: FieldInfo): StructInfo {
-  let c = info;
-  while (c.base && field.index < c.base.fields.length) c = c.base;
-  return c;
+  return cls.implements.includes(iface.name);
 }
 
 /**
  * The type an expression produces before the coercion recorded on it, if any
- * (class -> interface, WP2; derived -> base, WP2b): `program.types` holds the
- * converted type, but `new C(...)` still allocates and constructs a `C`.
+ * (class -> interface, WP2): `program.types` holds the converted type, but
+ * `new C(...)` still allocates and constructs a `C`.
  */
 export function intrinsicType(program: CheckedProgram, expr: ts.Expression): StaticType | undefined {
   return program.coercions.get(expr)?.from ?? program.types.get(expr);
-}
-
-/** The fields `info` declares itself: everything after the inherited prefix. */
-export function ownFields(info: StructInfo): FieldInfo[] {
-  return info.fields.slice(info.base?.fields.length ?? 0);
-}
-
-/**
- * How the base part of a derived object is built (WP2b), shared by the
- * checker's definite-assignment rules, the emitter's `super(...)` lowering,
- * and the attribute analysis: walking up from `cls.base`, every ancestor
- * without a constructor has its own initializers stored directly
- * (`stores`), until the nearest ancestor constructor (`ctor`), which takes
- * the `super(...)` arguments and finishes the job.
- */
-export function baseConstruction(cls: StructInfo): { ctor?: FunctionSig; stores: boolean } {
-  let stores = false;
-  for (let c = cls.base; c; c = c.base) {
-    if (c.ctor) return { ctor: c.ctor, stores };
-    if (ownFields(c).some((f) => f.initializer)) stores = true;
-  }
-  return { stores };
-}
-
-/** The `super(...)` call when it is the first statement of a constructor body, syntactically. */
-export function explicitSuperCall(decl: ts.ConstructorDeclaration): ts.CallExpression | undefined {
-  const first = decl.body?.statements[0];
-  if (!first || !ts.isExpressionStatement(first)) return undefined;
-  const expr = first.expression;
-  return ts.isCallExpression(expr) && expr.expression.kind === ts.SyntaxKind.SuperKeyword ? expr : undefined;
 }
 
 // ---- Pass 1a: names --------------------------------------------------------------------
@@ -302,7 +228,8 @@ export function declareStruct(ctx: CheckContext, decl: ts.ClassDeclaration | ts.
     if (m === ts.SyntaxKind.DefaultKeyword) throw ctx.error("`export default` is not supported; use a named `export`", decl);
   }
   if (decl.typeParameters) throw ctx.error(`Generic ${kind === "class" ? "classes" : "interfaces"} are not supported`, decl);
-  // A class's `extends` is resolved in pass 1b (`resolveBase`), once every name is registered.
+  // A class's `extends` is refused in pass 1b, so the struct is registered
+  // first and a rejected class does not cascade into every use of its name.
   for (const clause of decl.heritageClauses ?? []) {
     if (clause.token === ts.SyntaxKind.ExtendsKeyword && kind === "interface") {
       throw ctx.error("Interface inheritance (`extends`) is not supported; list every field", clause);
@@ -354,17 +281,6 @@ function memberName(ctx: CheckContext, owner: StructInfo, name: ts.PropertyName)
 function collectField(ctx: CheckContext, owner: StructInfo, decl: ts.PropertyDeclaration | ts.PropertySignature): void {
   const name = memberName(ctx, owner, decl.name);
   const what = `Field \`${name}\` of ${owner.kind} \`${owner.name}\``;
-  if (owner.base) {
-    const inherited = owner.base.fieldsByName.get(name);
-    if (inherited) {
-      throw ctx.error(
-        `${what} is already declared in base class \`${fieldOwner(owner.base, inherited).name}\`; a derived class cannot redeclare or shadow an inherited field`,
-        decl.name
-      );
-    }
-    const method = findMethod(owner.base, name);
-    if (method) throw ctx.error(`${what} clashes with method \`${name}\` inherited from \`${method.struct!.name}\``, decl.name);
-  }
   if (owner.fieldsByName.has(name) || owner.methods.has(name)) {
     throw ctx.error(`Duplicate member \`${name}\` in ${owner.kind} \`${owner.name}\``, decl.name);
   }
@@ -443,22 +359,9 @@ function rejectMethodModifiers(ctx: CheckContext, owner: StructInfo, decl: ts.No
   }
 }
 
-/** `(x: number, y: string): boolean`, the part of a method signature an override must keep. */
-function describeSignature(sig: FunctionSig): string {
-  const params = sig.params.slice(1).map((p) => `${p.name}: ${typeToString(p.type)}`);
-  return `(${params.join(", ")}): ${typeToString(sig.returnType)}`;
-}
-
 function collectMethod(ctx: CheckContext, owner: StructInfo, decl: ts.MethodDeclaration): void {
   const name = memberName(ctx, owner, decl.name);
   const what = `Method \`${name}\``;
-  const inheritedField = owner.base?.fieldsByName.get(name);
-  if (inheritedField) {
-    throw ctx.error(
-      `${what} of class \`${owner.name}\` clashes with field \`${name}\` inherited from \`${fieldOwner(owner.base!, inheritedField).name}\``,
-      decl.name
-    );
-  }
   if (owner.fieldsByName.has(name) || owner.methods.has(name)) {
     throw ctx.error(`Duplicate member \`${name}\` in class \`${owner.name}\``, decl.name);
   }
@@ -480,21 +383,6 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: ts.MethodDecl
     struct: owner,
     role: "method",
   };
-  // An override keeps the signature: calls resolve statically by the receiver's
-  // declared type, so `B.m` and `D.m` must accept and return the same types.
-  const overridden = owner.base && findMethod(owner.base, name);
-  if (overridden) {
-    const same =
-      sig.params.length === overridden.params.length &&
-      sig.params.slice(1).every((p, i) => sameType(p.type, overridden.params[i + 1].type)) &&
-      sameType(sig.returnType, overridden.returnType);
-    if (!same) {
-      throw ctx.error(
-        `${what} of class \`${owner.name}\` overrides \`${overridden.sourceName}\` with a different signature: \`${overridden.sourceName}\` is ${describeSignature(overridden)}, \`${sig.sourceName}\` is ${describeSignature(sig)} (an override keeps the signature; there is no overloading)`,
-        decl.name
-      );
-    }
-  }
   owner.methods.set(name, sig);
   ctx.program.functions.push(sig);
 }
@@ -520,63 +408,23 @@ function collectConstructor(ctx: CheckContext, owner: StructInfo, decl: ts.Const
   ctx.program.functions.push(sig);
 }
 
-/**
- * The class named by `extends` (WP2b), fully collected so its fields can be
- * copied. Only a class declared in this module qualifies: an imported base
- * would need its layout before pass 1b binds imports, and an interface has
- * no constructor or methods to inherit (`implements` covers the layout).
- */
-function resolveBase(ctx: CheckContext, info: StructInfo, decl: ts.ClassDeclaration): StructInfo | undefined {
-  const clause = decl.heritageClauses?.find((c) => c.token === ts.SyntaxKind.ExtendsKeyword);
-  if (!clause) return undefined;
-  const target = clause.types[0];
-  if (clause.types.length !== 1 || !ts.isIdentifier(target.expression) || target.typeArguments) {
-    throw ctx.error("`extends` must name exactly one class declared in this module", clause);
-  }
-  const name = target.expression.text;
-  const base = ctx.program.structs.get(name);
-  if (!base) {
-    const imported = ctx.program.imports.some((imp) => imp.localName === name);
-    throw ctx.error(
-      imported
-        ? `Class \`${info.name}\` cannot extend imported class \`${name}\`: a base class must be declared in the same module`
-        : `Unknown base class \`${name}\` (\`extends\` must name a class declared in this module)`,
-      target.expression
-    );
-  }
-  if (base.kind === "interface") {
-    throw ctx.error(`Class \`${info.name}\` cannot extend interface \`${name}\`; use \`implements ${name}\``, target.expression);
-  }
-  if (base === info) throw ctx.error(`Class \`${info.name}\` cannot extend itself`, target.expression);
-  if (base.collected === "collecting") {
-    throw ctx.error(`Inheritance cycle: class \`${info.name}\` extends \`${name}\`, which already extends \`${info.name}\``, target.expression);
-  }
-  if (info.exported && !base.exported) {
-    throw ctx.error(
-      `Exported class \`${info.name}\` cannot extend non-exported class \`${name}\` (the base's constructor and methods are part of \`${info.name}\`'s ABI; export \`${name}\` too)`,
-      target.expression
-    );
-  }
-  collectStructMembers(ctx, base);
-  return base;
-}
-
-/** Copy the base's fields, indices and offsets included: they are the prefix of the derived layout. */
-function inheritFields(info: StructInfo, base: StructInfo): void {
-  for (const f of base.fields) {
-    const copy: FieldInfo = { ...f };
-    info.fields.push(copy);
-    info.fieldsByName.set(f.name, copy);
-  }
-}
-
-/** Resolve the base class, fields, layout, methods and the constructor of a registered struct. */
+/** Resolve the fields, layout, methods and constructor of a registered struct. */
 export function collectStructMembers(ctx: CheckContext, info: StructInfo): void {
-  if (info.collected === "done") return; // already pulled in as the base of an earlier class
+  if (info.collected === "done") return;
   info.collected = "collecting";
   if (ts.isClassDeclaration(info.decl)) {
-    info.base = resolveBase(ctx, info, info.decl);
-    if (info.base) inheritFields(info, info.base);
+    for (const clause of info.decl.heritageClauses ?? []) {
+      if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
+      // WP25. The rule lives in the checker rather than in Phase 0 because
+      // inheritance needs nothing Phase 0 exists to refuse -- it compiled
+      // until WP25 -- and the message names the rewrite, the way a removed
+      // spelling's should. The base *name* carries the caret, which is the
+      // node stage1's parser keeps (`self/parser.ts`, `parseHeritageName`).
+      throw ctx.error(
+        `\`extends\` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of \`${info.name}\` and \`implements\` an interface to convert between them`,
+        clause.types[0]?.expression ?? clause
+      );
+    }
     for (const clause of info.decl.heritageClauses ?? []) {
       if (clause.token !== ts.SyntaxKind.ImplementsKeyword) continue;
       for (const t of clause.types) {
@@ -624,22 +472,27 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
 
 // ---- Pass 1c: implements and definite assignment -------------------------------------------
 
+/**
+ * The interface's fields must be the class's *first* fields, in order and with
+ * identical types; the class may declare more after them (WP25). That prefix
+ * is what makes the conversion one `bitcast`: for every field the interface
+ * names, an `I*` and a `C*` address the same bytes at the same offset. It is
+ * also how a wider struct is used as a narrower one now that a class has no
+ * base class to be a prefix of.
+ */
 function checkImplements(ctx: CheckContext, cls: StructInfo): void {
   for (const ifaceName of cls.implements) {
     const iface = ctx.program.structs.get(ifaceName)!;
     const describe = (f: FieldInfo) => `\`${f.name}: ${typeToString(f.type)}\``;
-    const n = Math.max(cls.fields.length, iface.fields.length);
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < iface.fields.length; i++) {
       const want = iface.fields[i];
       const got = cls.fields[i];
-      if (want && got && want.name === got.name && sameType(want.type, got.type)) continue;
-      const why = !got
-        ? `it lacks field ${describe(want)}`
-        : !want
-          ? `it declares extra field ${describe(got)}`
-          : `field ${i + 1} is ${describe(want)} in \`${iface.name}\` but ${describe(got)} in \`${cls.name}\``;
+      if (got && want.name === got.name && sameType(want.type, got.type)) continue;
+      const why = got
+        ? `field ${i + 1} is ${describe(want)} in \`${iface.name}\` but ${describe(got)} in \`${cls.name}\``
+        : `it lacks field ${describe(want)}`;
       throw ctx.error(
-        `Class \`${cls.name}\` does not implement \`${iface.name}\`: ${why} (fields must match exactly, in order)`,
+        `Class \`${cls.name}\` does not implement \`${iface.name}\`: ${why} (the interface's fields must be the class's first fields, in order)`,
         cls.decl.name!
       );
     }
@@ -782,41 +635,14 @@ class DefiniteAssignment {
   }
 }
 
-/** The first `super(...)` call anywhere inside `node`, however deeply nested. */
-function findSuperCall(node: ts.Node): ts.CallExpression | undefined {
-  let found: ts.CallExpression | undefined;
-  const visit = (n: ts.Node): void => {
-    if (found) return;
-    if (ts.isCallExpression(n) && n.expression.kind === ts.SyntaxKind.SuperKeyword) found = n;
-    else ts.forEachChild(n, visit);
-  };
-  visit(node);
-  return found;
-}
-
-/** The arguments of `super(...)` may not touch `this` (or `super`): the base part of the object does not exist yet. */
-function rejectThisBeforeSuper(ctx: CheckContext, cls: StructInfo, call: ts.CallExpression): void {
-  const visit = (n: ts.Node): void => {
-    if (n.kind === ts.SyntaxKind.ThisKeyword || n.kind === ts.SyntaxKind.SuperKeyword) {
-      throw ctx.error(`\`${n.getText(ctx.sf)}\` cannot be used before \`super(...)\` in the constructor of \`${cls.name}\``, n);
-    }
-    ts.forEachChild(n, visit);
-  };
-  for (const arg of call.arguments) visit(arg);
-}
-
 /**
- * Definite assignment of the fields `cls` declares itself. The inherited
- * prefix is the base constructor's job (WP2b): it is treated as assigned once
- * `super(...)` has run, which is before the body when the call is implicit and
- * after the first statement when it is explicit (and it must be the first
- * statement, with no `this` in its arguments).
+ * After the constructor returns, every field holds a value. A class with no
+ * constructor has to initialise every field where it declares it.
  */
 function checkDefiniteAssignment(ctx: CheckContext, cls: StructInfo): void {
-  const own = ownFields(cls);
-  const initialised = new Set(own.filter((f) => f.initializer).map((f) => f.name));
+  const initialised = new Set(cls.fields.filter((f) => f.initializer).map((f) => f.name));
   if (!cls.ctor) {
-    const missing = own.find((f) => !initialised.has(f.name));
+    const missing = cls.fields.find((f) => !initialised.has(f.name));
     if (missing) {
       throw ctx.error(
         `Field \`${missing.name}\` of class \`${cls.name}\` has no initializer and no constructor assigns it`,
@@ -826,29 +652,7 @@ function checkDefiniteAssignment(ctx: CheckContext, cls: StructInfo): void {
     return;
   }
   const decl = cls.ctor.decl as ts.ConstructorDeclaration;
-  const superCall = explicitSuperCall(decl);
-  const anySuper = findSuperCall(decl.body!);
-  let statements: readonly ts.Statement[] = decl.body!.statements;
-  if (!cls.base) {
-    if (anySuper) throw ctx.error(`\`super(...)\` in the constructor of \`${cls.name}\`, which does not extend a class`, anySuper);
-  } else {
-    if (anySuper && anySuper !== superCall) {
-      throw ctx.error(`\`super(...)\` must be the first statement of the constructor of \`${cls.name}\``, anySuper);
-    }
-    const base = baseConstruction(cls);
-    if (!superCall && base.ctor && base.ctor.params.length > 1) {
-      throw ctx.error(
-        `Constructor of \`${cls.name}\` must start with \`super(...)\`: the constructor of \`${base.ctor.struct!.name}\` takes ${base.ctor.params.length - 1} argument(s)`,
-        decl
-      );
-    }
-    if (superCall) {
-      rejectThisBeforeSuper(ctx, cls, superCall);
-      statements = statements.slice(1);
-    }
-    for (const f of cls.base.fields) initialised.add(f.name);
-  }
-  const result = new DefiniteAssignment(ctx, cls).statements(statements, initialised);
+  const result = new DefiniteAssignment(ctx, cls).statements(decl.body!.statements, initialised);
   if (result === "terminated") return;
   const missing = cls.fields.find((f) => !result.has(f.name));
   if (missing) {
@@ -928,11 +732,7 @@ function calleeSignature(ctx: CheckContext, call: ts.CallExpression | ts.NewExpr
   if (ts.isNewExpression(call)) {
     if (!ts.isIdentifier(call.expression)) return undefined;
     const info = ctx.program.structs.get(call.expression.text);
-    return info && effectiveConstructor(info);
-  }
-  if (call.expression.kind === ts.SyntaxKind.SuperKeyword) {
-    const base = ctx.current.struct?.base; // `super(...)`: the nearest ancestor constructor
-    return base && effectiveConstructor(base);
+    return info?.ctor;
   }
   if (ts.isIdentifier(call.expression)) return ctx.sigs.get(call.expression.text);
   if (ts.isPropertyAccessExpression(call.expression)) {
@@ -940,7 +740,7 @@ function calleeSignature(ctx: CheckContext, call: ts.CallExpression | ts.NewExpr
     const receiver = ctx.program.types.get(call.expression.expression);
     if (receiver?.kind !== "struct") return undefined;
     const info = ctx.program.structs.get(receiver.name);
-    return info && findMethod(info, call.expression.name.text);
+    return info?.methods.get(call.expression.name.text);
   }
   return undefined;
 }
@@ -955,16 +755,15 @@ function pushElementType(ctx: CheckContext, call: ts.CallExpression | ts.NewExpr
 
 /**
  * Called by the checker core for every expression: when a class value sits
- * where an interface it implements, or a class it extends (WP2b), is
- * expected, record the conversion and report the expected type so the
- * existing `sameType` checks accept it. Both are one pointer `bitcast`: the
- * interface has the identical layout, the base class is a layout prefix.
+ * where an interface it implements is expected, record the conversion and
+ * report the expected type so the existing `sameType` checks accept it. It is
+ * one pointer `bitcast` -- the interface's fields are the class's first fields.
  */
 export function coerceToContext(ctx: CheckContext, expr: ts.Expression, type: StaticType, scope: Scope): StaticType {
   if (type.kind !== "struct") return type;
   const want = contextualType(ctx, expr, scope);
   const target = want && stripNull(want); // a class converts to `I | null` as it does to `I` (WP6)
-  if (!target || !(implementsInterface(ctx, type, target) || isSubclassOf(ctx, type, target))) return type;
+  if (!target || !implementsInterface(ctx, type, target)) return type;
   ctx.program.coercions.set(expr, { from: type, to: target });
   return target;
 }
@@ -979,60 +778,14 @@ const checkThis: ExpressionChecker = (ctx, node, scope) => {
 };
 
 /**
- * `super` as a value (WP2b): only as the receiver of `super.m(...)` inside a
- * method or constructor of a derived class. It denotes `this` seen as the
- * base type, so the method lookup starts at the base (static dispatch) and
- * the emitter passes `this` bitcast. It is bound to the `this` local so the
- * attribute analysis sees the pointer flow to the callee.
+ * `super` in every position (WP25). A class has no base class, so `super(...)`,
+ * `super.m()` and a bare `super` are all the same mistake and get the same
+ * sentence. `checkCall` routes `super(...)` here rather than reporting its own,
+ * so there is one rule and one code.
  */
-const checkSuper: ExpressionChecker = (ctx, node, scope) => {
-  const cls = ctx.current.struct;
-  const self = scope.lookup("this");
-  if (!cls || !self) throw ctx.error("`super` is only valid inside a method or constructor of a class that `extends` another class", node);
-  if (!cls.base) throw ctx.error(`\`super\` in class \`${cls.name}\`, which does not extend a class`, node);
-  const parent = node.parent;
-  if (ts.isPropertyAccessExpression(parent) && parent.expression === node) {
-    const called = ts.isCallExpression(parent.parent) && parent.parent.expression === parent;
-    if (!called) {
-      throw ctx.error(
-        `\`super.${parent.name.text}\` is not supported: inherited fields are read and written as \`this.${parent.name.text}\` (only \`super.method(...)\` is allowed)`,
-        parent
-      );
-    }
-  } else {
-    throw ctx.error("`super` can only be used as `super.method(...)`, or as `super(...)` at the start of a constructor", node);
-  }
-  ctx.program.bindings.set(node as unknown as ts.Identifier, self);
-  return cls.base.type;
+const checkSuper: ExpressionChecker = (ctx, node) => {
+  throw ctx.error("`super` is not supported: Nish has no inheritance, so a class has no base class to reach", node);
 };
-
-/**
- * `super(args)` (WP2b), reached from `checkCall`: the first statement of a
- * derived constructor (pass 1c checked the placement and that `this` is not
- * used in the arguments). The arguments are checked against the nearest
- * ancestor constructor, which is recorded in `callees`; without one the
- * call takes no arguments and only stores the ancestors' initializers.
- */
-export function checkSuperCall(ctx: CheckContext, expr: ts.CallExpression, scope: Scope): StaticType {
-  const cls = ctx.current.struct;
-  if (!cls || ctx.current.role !== "constructor") {
-    throw ctx.error("`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class", expr);
-  }
-  if (!cls.base) throw ctx.error(`\`super(...)\` in the constructor of \`${cls.name}\`, which does not extend a class`, expr);
-  if (explicitSuperCall(ctx.current.decl as ts.ConstructorDeclaration) !== expr) {
-    throw ctx.error(`\`super(...)\` must be the first statement of the constructor of \`${cls.name}\``, expr);
-  }
-  const { ctor } = baseConstruction(cls);
-  if (ctor) {
-    checkMethodArguments(ctx, expr, ctor, expr.arguments, "super", scope);
-    ctx.program.callees.set(expr, ctor);
-  } else if (expr.arguments.length > 0) {
-    throw ctx.error(`\`super\` expects 0 argument(s) (\`${cls.base.name}\` has no constructor), got ${expr.arguments.length}`, expr);
-  }
-  // The `this` pointer flows to the base constructor; attributes.ts reads this binding.
-  ctx.program.bindings.set(expr.expression as unknown as ts.Identifier, scope.lookup("this")!);
-  return VOID;
-}
 
 const checkObjectLiteral: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.ObjectLiteralExpression;
@@ -1121,7 +874,7 @@ function checkMethodArguments(
 methodCallCheckers.struct = (ctx, expr, receiver, scope) => {
   const access = expr.expression as ts.PropertyAccessExpression;
   const info = structOf(ctx, receiver);
-  const method = findMethod(info, access.name.text); // own first, then the base chain (static dispatch, WP2b)
+  const method = info.methods.get(access.name.text);
   if (!method) {
     const hint = info.fieldsByName.has(access.name.text) ? " (it is a field, not a method)" : "";
     throw ctx.error(`Unknown method \`${access.name.text}\` on ${info.kind} \`${info.name}\`${hint}`, access.name);
@@ -1141,7 +894,7 @@ newCheckers["*"] = (ctx, expr, scope) => {
   }
   if (expr.typeArguments) throw ctx.error("Generic classes are not supported", expr);
   const args = expr.arguments ?? [];
-  const ctor = effectiveConstructor(info); // own, or inherited from the nearest ancestor (WP2b)
+  const ctor = info.ctor;
   if (ctor) {
     checkMethodArguments(ctx, expr, ctor, args, `new ${name}`, scope);
   } else if (args.length > 0) {
@@ -1184,17 +937,15 @@ const checkFieldAssignment: BinaryChecker = (ctx, expr, scope) => {
   const field = info.fieldsByName.get(target.name.text);
   if (!field) throw ctx.error(`Unknown field \`${target.name.text}\` on ${info.kind} \`${info.name}\``, target.name);
   if (field.readonly) {
-    // Only the constructor of the class that *declares* the field (WP2b: a
-    // derived constructor cannot assign an inherited readonly field).
-    const owner = fieldOwner(info, field);
+    // Only `this.f = v` in the constructor of the class that declares it.
     const inOwnCtor =
       ctx.current.role === "constructor" &&
-      ctx.current.struct === owner &&
+      ctx.current.struct === info &&
       target.expression.kind === ts.SyntaxKind.ThisKeyword &&
       op === ts.SyntaxKind.EqualsToken;
     if (!inOwnCtor) {
       throw ctx.error(
-        `Cannot assign to readonly field \`${field.name}\` of \`${owner.name}\`${owner.kind === "class" ? " outside its constructor" : ""}`,
+        `Cannot assign to readonly field \`${field.name}\` of \`${info.name}\`${info.kind === "class" ? " outside its constructor" : ""}`,
         target
       );
     }

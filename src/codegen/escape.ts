@@ -72,7 +72,7 @@
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker/index.js";
 import { dottedName } from "../checker/builtins.js";
-import { effectiveConstructor, intrinsicType, isAssignmentOperator } from "../checker/classes.js";
+import { intrinsicType, isAssignmentOperator } from "../checker/classes.js";
 import { CompilerOptions, StaticType, alignOf, isNumeric, resultByValue, stripNull } from "../types.js";
 import { FunctionFacts, classifyUse } from "./attributes.js";
 import { isJoinCall, isPushCall, literalLength } from "./emit/arrays.js";
@@ -461,12 +461,12 @@ export function analyzeEscapes(
 
   for (const site of sites) {
     let { flow, stable, escapes } = valueOutcome(site.node, new Set());
-    // A `new` object is also handed to its constructor as `this` (the own or
-    // the inherited one, WP2b); a constructor that captures it (`r.last =
-    // this`) makes the object escape however the local is used afterwards.
+    // A `new` object is also handed to its constructor as `this`; a
+    // constructor that captures it (`r.last = this`) makes the object escape
+    // however the local is used afterwards.
     if (ts.isNewExpression(site.node)) {
       const t = intrinsicType(program, site.node);
-      const ctor = t?.kind === "struct" ? effectiveConstructor(program.structs.get(t.name)!) : undefined;
+      const ctor = t?.kind === "struct" ? program.structs.get(t.name)!.ctor : undefined;
       if (ctor && calleeCaptures(ctor, 0)) {
         flow = "leaks";
         escapes = true; // the constructor stored `this` somewhere the caller may reach

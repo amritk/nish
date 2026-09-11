@@ -3284,123 +3284,95 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 ```
 <!-- cookbook:end cls_interface -->
 
-### Inheritance: `extends`, `super`, static dispatch
+### Widening: `implements` as a prefix
 
 `%struct.Square` starts with `%struct.Shape`'s fields, so a `Square` becomes a
-`Shape` with one `bitcast` (the argument of `areaOf`, the `this` of
-`Shape.constructor` and `Shape.area`). Every call is resolved by the
-receiver's declared type: `sq.area()` is `Square.area`, `s.area()` inside
-`areaOf` is `Shape.area` even when the object is a `Square`, and
-`super.area()` names the base implementation.
+`Shape` with one `bitcast` — the argument of `originDistance` here, and the
+elements of a `Shape[]` elsewhere. It is the only widening the language has:
+there is no inheritance, so a class is never a prefix of another class. A
+`Shape` operation reads and writes the `Square`'s own bytes at the same
+offsets, the class keeps its own methods, and nothing converts back.
 
-<!-- cookbook:begin cls_inheritance -->
+<!-- cookbook:begin cls_prefix -->
 ```ts
-class Shape {
+interface Shape {
   x: number;
-
-  constructor(x: number) {
-    this.x = x;
-  }
-
-  area(): number {
-    return 0;
-  }
+  y: number;
 }
 
-class Square extends Shape {
+class Square implements Shape {
+  x: number;
+  y: number;
   side: number;
 
-  constructor(x: number, side: number) {
-    super(x);
+  constructor(x: number, y: number, side: number) {
+    this.x = x;
+    this.y = y;
     this.side = side;
   }
 
   area(): number {
     return this.side * this.side;
   }
-
-  baseArea(): number {
-    return super.area();
-  }
 }
 
-// Static dispatch: `s` is declared a Shape, so this is always Shape.area.
-function areaOf(s: Shape): number {
-  return s.area() + s.x;
+function originDistance(s: Shape): number {
+  return s.x + s.y;
 }
 
-function squareArea(sq: Square): number {
-  return sq.area() + areaOf(sq) + sq.baseArea();
+function describe(sq: Square): number {
+  return originDistance(sq) + sq.area();
 }
 ```
 
 ```llvm
-%struct.Shape = type { i32 }
-%struct.Square = type { i32, i32 }
+%struct.Shape = type { i32, i32 }
+%struct.Square = type { i32, i32, i32 }
 
-define internal void @Shape.constructor(%struct.Shape* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %x) #0 {
+define internal void @Square.constructor(%struct.Square* noundef nonnull noalias align 8 dereferenceable(12) nocapture %this, i32 noundef %x, i32 noundef %y, i32 noundef %side) #0 {
 entry:
-  %0 = getelementptr inbounds %struct.Shape, %struct.Shape* %this, i32 0, i32 0
+  %0 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 0
   store i32 %x, i32* %0, align 4
-  ret void
-}
-
-define internal noundef i32 @Shape.area(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this) #1 {
-entry:
-  ret i32 0
-}
-
-define internal void @Square.constructor(%struct.Square* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %side) #0 {
-entry:
-  %0 = bitcast %struct.Square* %this to %struct.Shape*
-  call void @Shape.constructor(%struct.Shape* %0, i32 %x)
   %1 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 1
-  store i32 %side, i32* %1, align 4
+  store i32 %y, i32* %1, align 4
+  %2 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 2
+  store i32 %side, i32* %2, align 4
   ret void
 }
 
-define internal noundef i32 @Square.area(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #2 {
+define internal noundef i32 @Square.area(%struct.Square* noundef nonnull readonly align 8 dereferenceable(12) nocapture %this) #1 {
 entry:
-  %0 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 1
+  %0 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 2
   %1 = load i32, i32* %0, align 4
-  %2 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 1
+  %2 = getelementptr inbounds %struct.Square, %struct.Square* %this, i32 0, i32 2
   %3 = load i32, i32* %2, align 4
   %4 = mul nsw i32 %1, %3
   ret i32 %4
 }
 
-define internal noundef i32 @Square.baseArea(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
+define internal noundef i32 @originDistance(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(8) nocapture %s) #1 {
 entry:
-  %0 = bitcast %struct.Square* %this to %struct.Shape*
-  %1 = call i32 @Shape.area(%struct.Shape* %0)
-  ret i32 %1
+  %0 = getelementptr inbounds %struct.Shape, %struct.Shape* %s, i32 0, i32 0
+  %1 = load i32, i32* %0, align 4
+  %2 = getelementptr inbounds %struct.Shape, %struct.Shape* %s, i32 0, i32 1
+  %3 = load i32, i32* %2, align 4
+  %4 = add nsw i32 %1, %3
+  ret i32 %4
 }
 
-define internal noundef i32 @areaOf(%struct.Shape* noundef nonnull readonly align 8 dereferenceable(4) nocapture %s) #2 {
+define internal noundef i32 @describe(%struct.Square* noundef nonnull readonly align 8 dereferenceable(12) nocapture %sq) #1 {
 entry:
-  %0 = call i32 @Shape.area(%struct.Shape* %s)
-  %1 = getelementptr inbounds %struct.Shape, %struct.Shape* %s, i32 0, i32 0
-  %2 = load i32, i32* %1, align 4
-  %3 = add nsw i32 %0, %2
+  %0 = bitcast %struct.Square* %sq to %struct.Shape*
+  %1 = call i32 @originDistance(%struct.Shape* %0)
+  %2 = call i32 @Square.area(%struct.Square* %sq)
+  %3 = add nsw i32 %1, %2
   ret i32 %3
 }
 
-define internal noundef i32 @squareArea(%struct.Square* noundef nonnull readonly align 8 dereferenceable(8) nocapture %sq) #2 {
-entry:
-  %0 = call i32 @Square.area(%struct.Square* %sq)
-  %1 = bitcast %struct.Square* %sq to %struct.Shape*
-  %2 = call i32 @areaOf(%struct.Shape* %1)
-  %3 = add nsw i32 %0, %2
-  %4 = call i32 @Square.baseArea(%struct.Square* %sq)
-  %5 = add nsw i32 %3, %4
-  ret i32 %5
-}
-
 attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind willreturn readonly }
+attributes #1 = { nounwind willreturn readonly }
 ```
-<!-- cookbook:end cls_inheritance -->
+<!-- cookbook:end cls_prefix -->
 
 ## Memory
 

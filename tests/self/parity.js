@@ -99,21 +99,6 @@ const DECLARED = [
     why: "the parser refuses before Phase 0 gets to name the rule. `.claude/selfhost.md` states the habit — lex and parse what is written, refuse in the phase that owns the rule — and stage1's grammar is Nish-0's, so syntax the language forbids stops at the parser with `expected `;`` where stage0 parses it with the `typescript` package and refuses it in Phase 0 by name. 43 cases of the corpus are this, and `reject_oracle.js` counts them apart for the same reason. What is *not* declared here is the outcome: the exit status, the stdout and every file written are still compared, and stage0 accepting a program stage1 refuses is a failure, not this.",
   },
   {
-    // No `flag`: about the program, not how it was compiled.
-    surface: "stderr",
-    matches: (want, got) => {
-      const cycle = / error: Inheritance cycle: class /;
-      const lines = (t) => t.split("\n").filter((l) => cycle.test(l));
-      const zero = lines(want);
-      const one = lines(got);
-      // Every other line has to match as it stands: only the *repetition* of
-      // the cycle line is declared, and only when stage1 reported one of them.
-      const rest = (t) => t.split("\n").filter((l) => !cycle.test(l)).join("\n");
-      return zero.length > one.length && one.length > 0 && rest(want) === rest(got);
-    },
-    why: "stage0 reports an inheritance cycle once per class in it and stage1 once. The second report is an artefact of the throw: `collectStructMembers` sets `collected = \"collecting\"` and the `CompileError` leaves the function without ever clearing it, so the next class of the cycle finds a stale marker and reports itself too. stage1 has no throw to leave the marker behind, and reproducing it by hand — returning early and leaving `collecting` set — makes the compiler *loop*, because `resolveBase` collects the base recursively and the pair then re-enter each other. A caret is not worth an infinite loop in the self-hosted compiler; the first diagnostic is identical and refuses the program on both sides (`tests/cases/reject_cls_extends_cycle`).",
-  },
-  {
     surface: "exit",
     matches: (want, got, run) => {
       const syntax = firstDiagnostic(run.one.stderr).includes(": syntax error: ");
