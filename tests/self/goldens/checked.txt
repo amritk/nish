@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 262 programs, 4594 dump lines.
+# 259 programs, 4340 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -904,286 +904,6 @@ function main(): i32 -> @nish_main [exported entry]
   callee 25:3 Stats.add -> @Stats.add
   callee 26:3 Stats.add -> @Stats.add
   callee 28:3 halve -> @halve
-program tests/cases/cls_extends_basic.ts
-module tests/cases/cls_extends_basic.ts (entry)
-struct Animal (class) size=16 align=8
-  field legs: i32 index=0 offset=0
-  field name: string index=1 offset=8
-  constructor -> @Animal.constructor
-  method describe -> @Animal.describe
-struct Dog (class) size=24 align=8
-  field legs: i32 index=0 offset=0
-  field name: string index=1 offset=8
-  field tricks: i32 index=2 offset=16 initialized
-  constructor -> @Dog.constructor
-  method learn -> @Dog.learn
-function Animal.constructor(this: Animal, legs: i32, name: string): void -> @Animal.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
-  escaping: legs name
-  pointer this: size=16 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function Animal.describe(this: Animal): string -> @Animal.describe [method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
-  calls: nish_str_concat nish_str_from_i32
-  pointer this: size=16 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function Dog.constructor(this: Dog, name: string): void -> @Dog.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
-  escaping: name
-  calls: Animal.constructor
-  pointer this: size=24 writesThrough=true captured=false passedTo=Animal.constructor#0
-  stackSites=0 stackLocals=0
-  callee 19:5 Animal.constructor -> @Animal.constructor
-function Dog.learn(this: Dog): i32 -> @Dog.learn [method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  pointer this: size=24 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
-  calls: Animal.describe Dog.constructor Dog.learn nish_arena_mark nish_arena_release nish_print nish_str_from_i32
-  stackSites=1 stackLocals=1
-  local 29:9 d: Dog (const)
-  callee 29:13 new Dog -> @Dog.constructor
-  callee 30:15 Animal.describe -> @Animal.describe
-  callee 31:15 Dog.learn -> @Dog.learn
-  callee 32:15 Dog.learn -> @Dog.learn
-  callee 35:15 Animal.describe -> @Animal.describe
-program tests/cases/cls_extends_chain.ts
-module tests/cases/cls_extends_chain.ts (entry)
-struct Stats (interface) size=16 align=8
-  field name: string index=0 offset=0
-  field hits: i32 index=1 offset=8
-  field hp: i32 index=2 offset=12
-struct Entity (class) size=16 align=8
-  field name: string index=0 offset=0
-  field hits: i32 index=1 offset=8 initialized
-  constructor -> @Entity.constructor
-  method hit -> @Entity.hit
-struct Mob (class) size=16 align=8
-  implements Stats
-  field name: string index=0 offset=0
-  field hits: i32 index=1 offset=8 initialized
-  field hp: i32 index=2 offset=12 initialized
-  method damage -> @Mob.damage
-struct Boss (class) size=24 align=8
-  field name: string index=0 offset=0
-  field hits: i32 index=1 offset=8 initialized
-  field hp: i32 index=2 offset=12 initialized
-  field phase: i32 index=3 offset=16
-  constructor -> @Boss.constructor
-  method enrage -> @Boss.enrage
-struct Minion (class) size=16 align=8
-  field name: string index=0 offset=0
-  field hits: i32 index=1 offset=8 initialized
-  field hp: i32 index=2 offset=12 initialized
-  constructor -> @Minion.constructor
-struct Ghost (class) size=24 align=8
-  field name: string index=0 offset=0
-  field hits: i32 index=1 offset=8 initialized
-  field hp: i32 index=2 offset=12 initialized
-  field visible: boolean index=3 offset=16 initialized
-struct Wisp (class) size=24 align=8
-  field name: string index=0 offset=0
-  field hits: i32 index=1 offset=8 initialized
-  field hp: i32 index=2 offset=12 initialized
-  field visible: boolean index=3 offset=16 initialized
-  field speed: i32 index=4 offset=20
-  constructor -> @Wisp.constructor
-function Entity.constructor(this: Entity, name: string): void -> @Entity.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
-  escaping: name
-  pointer this: size=16 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function Entity.hit(this: Entity): i32 -> @Entity.hit [method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  pointer this: size=16 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function Mob.damage(this: Mob, amount: i32): i32 -> @Mob.damage [method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  escaping: amount
-  pointer this: size=16 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function Boss.constructor(this: Boss, name: string, phase: i32): void -> @Boss.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
-  escaping: name phase
-  calls: Entity.constructor
-  pointer this: size=24 writesThrough=true captured=false passedTo=Entity.constructor#0
-  stackSites=0 stackLocals=0
-  callee 36:5 Entity.constructor -> @Entity.constructor
-function Boss.enrage(this: Boss): i32 -> @Boss.enrage [method]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  calls: Mob.damage
-  pointer this: size=24 writesThrough=true captured=false passedTo=Mob.damage#0
-  stackSites=0 stackLocals=0
-  callee 42:12 Mob.damage -> @Mob.damage
-function Minion.constructor(this: Minion): void -> @Minion.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
-  calls: Entity.constructor
-  pointer this: size=16 writesThrough=true captured=false passedTo=Entity.constructor#0
-  stackSites=0 stackLocals=0
-  callee 48:5 Entity.constructor -> @Entity.constructor
-function Wisp.constructor(this: Wisp, speed: i32): void -> @Wisp.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
-  escaping: speed
-  calls: Minion.constructor
-  pointer this: size=24 writesThrough=true captured=false passedTo=Minion.constructor#0
-  stackSites=0 stackLocals=0
-function describe(s: Stats): string -> @describe
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
-  calls: nish_str_concat nish_str_from_i32
-  pointer s: size=16 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
-  calls: Boss.constructor Boss.enrage Entity.constructor Entity.hit Minion.constructor Mob.damage Wisp.constructor describe nish_arena_mark nish_arena_release nish_print nish_str_from_i32
-  stackSites=4 stackLocals=4
-  local 71:9 m: Mob (const)
-  callee 72:15 Entity.hit -> @Entity.hit
-  callee 73:15 Mob.damage -> @Mob.damage
-  callee 74:15 describe -> @describe
-  local 75:9 b: Boss (const)
-  callee 75:13 new Boss -> @Boss.constructor
-  callee 76:3 Entity.hit -> @Entity.hit
-  callee 77:3 Entity.hit -> @Entity.hit
-  callee 78:15 Boss.enrage -> @Boss.enrage
-  callee 79:15 describe -> @describe
-  local 80:9 g: Ghost (const)
-  callee 81:15 describe -> @describe
-  callee 83:15 Entity.hit -> @Entity.hit
-  local 84:9 w: Wisp (const)
-  callee 84:13 new Wisp -> @Wisp.constructor
-  callee 85:15 describe -> @describe
-program tests/cases/cls_extends_override.ts
-module tests/cases/cls_extends_override.ts (entry)
-struct Shape (class) size=4 align=4
-  field x: i32 index=0 offset=0
-  constructor -> @Shape.constructor
-  method area -> @Shape.area
-  method report -> @Shape.report
-struct Square (class) size=8 align=4
-  field x: i32 index=0 offset=0
-  field side: i32 index=1 offset=4
-  constructor -> @Square.constructor
-  method area -> @Square.area
-  method report -> @Square.report
-function Shape.constructor(this: Shape, x: i32): void -> @Shape.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
-  escaping: x
-  pointer this: size=4 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function Shape.area(this: Shape): i32 -> @Shape.area [method]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  pointer this: size=4 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function Shape.report(this: Shape): i32 -> @Shape.report [method]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  calls: Shape.area
-  pointer this: size=4 writesThrough=false captured=false passedTo=Shape.area#0
-  stackSites=0 stackLocals=0
-  callee 14:12 Shape.area -> @Shape.area
-function Square.constructor(this: Square, x: i32, side: i32): void -> @Square.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
-  escaping: side x
-  calls: Shape.constructor
-  pointer this: size=8 writesThrough=true captured=false passedTo=Shape.constructor#0
-  stackSites=0 stackLocals=0
-  callee 22:5 Shape.constructor -> @Shape.constructor
-function Square.area(this: Square): i32 -> @Square.area [method]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  pointer this: size=8 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function Square.report(this: Square): i32 -> @Square.report [method]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  calls: Shape.report Square.area
-  pointer this: size=8 writesThrough=false captured=false passedTo=Shape.report#0 Square.area#0
-  stackSites=0 stackLocals=0
-  callee 31:12 Shape.report -> @Shape.report
-  callee 31:29 Square.area -> @Square.area
-function areaOf(s: Shape): i32 -> @areaOf
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  calls: Shape.area
-  pointer s: size=4 writesThrough=false captured=false passedTo=Shape.area#0
-  stackSites=0 stackLocals=0
-  callee 36:10 Shape.area -> @Shape.area
-function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
-  calls: Shape.area Shape.report Square.area Square.constructor Square.report areaOf nish_arena_mark nish_arena_release nish_print nish_str_from_i32
-  stackSites=1 stackLocals=2
-  local 40:9 sq: Square (const)
-  callee 40:14 new Square -> @Square.constructor
-  callee 41:15 Square.area -> @Square.area
-  callee 42:15 areaOf -> @areaOf
-  local 43:9 s: Shape (const)
-  callee 44:15 Shape.area -> @Shape.area
-  callee 45:15 Square.report -> @Square.report
-  callee 46:15 Shape.report -> @Shape.report
-program tests/cases/cls_extends_upcast.ts
-module tests/cases/cls_extends_upcast.ts (entry)
-struct Base (class) size=4 align=4
-  field id: i32 index=0 offset=0
-  constructor -> @Base.constructor
-  method tag -> @Base.tag
-struct Derived (class) size=8 align=4
-  field id: i32 index=0 offset=0
-  field extra: i32 index=1 offset=4
-  constructor -> @Derived.constructor
-function Base.constructor(this: Base, id: i32): void -> @Base.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
-  escaping: id
-  pointer this: size=4 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function Base.tag(this: Base): i32 -> @Base.tag [method]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  pointer this: size=4 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function Derived.constructor(this: Derived, id: i32, extra: i32): void -> @Derived.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
-  escaping: extra id
-  calls: Base.constructor
-  pointer this: size=8 writesThrough=true captured=false passedTo=Base.constructor#0
-  stackSites=0 stackLocals=0
-  callee 17:5 Base.constructor -> @Base.constructor
-function sumIds(items: Base[]): i32 -> @sumIds
-  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  pointer items: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local 23:7 total: i32 (let)
-  local 24:14 b: Base (const)
-function lower(a: Base, b: Base): Base -> @lower
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false returnDeref=4
-  escaping: a b
-  pointer a: size=4 writesThrough=true captured=true
-  pointer b: size=4 writesThrough=true captured=true
-  stackSites=0 stackLocals=0
-function maybe(flag: boolean, d: Derived): Base | null -> @maybe
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  escaping: d
-  pointer d: size=8 writesThrough=true captured=true
-  stackSites=0 stackLocals=0
-function widen(d: Derived): Base -> @widen
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false returnDeref=4
-  escaping: d
-  pointer d: size=8 writesThrough=true captured=true
-  stackSites=0 stackLocals=0
-function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: Base.tag Derived.constructor lower maybe nish_alloc_struct nish_array_grow nish_panic_index nish_print nish_str_from_i32 sumIds widen
-  stackSites=1 stackLocals=1
-  local 43:9 d: Derived (const)
-  callee 43:13 new Derived -> @Derived.constructor
-  local 44:9 e: Derived (const)
-  callee 44:13 new Derived -> @Derived.constructor
-  callee 45:15 lower -> @lower
-  local 46:9 items: Base[] (const)
-  callee 47:14 new Derived -> @Derived.constructor
-  callee 48:14 new Derived -> @Derived.constructor
-  callee 49:15 sumIds -> @sumIds
-  local 50:7 b: Base (let)
-  callee 52:15 Base.tag -> @Base.tag
-  local 53:9 m: Base | null (const)
-  callee 53:13 maybe -> @maybe
-  callee 57:15 Base.tag -> @Base.tag
-  callee 57:15 widen -> @widen
 program tests/cases/cls_field_bitwise_assign.ts
 module tests/cases/cls_field_bitwise_assign.ts (entry)
 struct Flags (class) size=12 align=4
@@ -1270,6 +990,49 @@ function main(): i32 -> @nish_main [exported entry]
   callee 38:15 widest -> @widest
   callee 39:15 grow -> @grow
   callee 40:15 Rect.area -> @Rect.area
+program tests/cases/cls_implements_prefix.ts
+module tests/cases/cls_implements_prefix.ts (entry)
+struct Shape (interface) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+struct Square (class) size=12 align=4
+  implements Shape
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+  field side: i32 index=2 offset=8
+  constructor -> @Square.constructor
+struct Circle (class) size=16 align=4
+  implements Shape
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+  field radius: i32 index=2 offset=8
+  field filled: boolean index=3 offset=12
+  constructor -> @Circle.constructor
+function Square.constructor(this: Square, x: i32, y: i32, side: i32): void -> @Square.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: side x y
+  pointer this: size=12 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Circle.constructor(this: Circle, x: i32, y: i32, radius: i32): void -> @Circle.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: radius x y
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function shift(s: Shape, dx: i32): i32 -> @shift
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer s: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Circle.constructor Square.constructor nish_alloc_struct nish_panic_index nish_print nish_str_from_i32 shift
+  stackSites=1 stackLocals=1
+  local 43:9 sq: Square (const)
+  callee 43:14 new Square -> @Square.constructor
+  local 44:9 c: Circle (const)
+  callee 44:13 new Circle -> @Circle.constructor
+  local 45:9 shapes: Shape[] (const)
+  callee 46:15 shift -> @shift
+  callee 47:15 shift -> @shift
 program tests/cases/cls_initializers.ts
 module tests/cases/cls_initializers.ts (entry)
 struct Defaults (class) size=24 align=8
@@ -3882,58 +3645,6 @@ function load(path: string): i32 -> @load
   calls: nish_arena_mark nish_arena_release nish_exit nish_read_file_or_null nish_str_concat nish_write
   stackSites=0 stackLocals=0
   local 8:9 text: string | null (const)
-program docs/cookbook/cls_inheritance.ts
-module docs/cookbook/cls_inheritance.ts (entry)
-struct Shape (class) size=4 align=4
-  field x: i32 index=0 offset=0
-  constructor -> @Shape.constructor
-  method area -> @Shape.area
-struct Square (class) size=8 align=4
-  field x: i32 index=0 offset=0
-  field side: i32 index=1 offset=4
-  constructor -> @Square.constructor
-  method area -> @Square.area
-  method baseArea -> @Square.baseArea
-function Shape.constructor(this: Shape, x: i32): void -> @Shape.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
-  escaping: x
-  pointer this: size=4 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function Shape.area(this: Shape): i32 -> @Shape.area [method]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  pointer this: size=4 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function Square.constructor(this: Square, x: i32, side: i32): void -> @Square.constructor [constructor]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
-  escaping: side x
-  calls: Shape.constructor
-  pointer this: size=8 writesThrough=true captured=false passedTo=Shape.constructor#0
-  stackSites=0 stackLocals=0
-  callee 17:5 Shape.constructor -> @Shape.constructor
-function Square.area(this: Square): i32 -> @Square.area [method]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  pointer this: size=8 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-function Square.baseArea(this: Square): i32 -> @Square.baseArea [method]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  calls: Shape.area
-  pointer this: size=8 writesThrough=false captured=false passedTo=Shape.area#0
-  stackSites=0 stackLocals=0
-  callee 26:12 Shape.area -> @Shape.area
-function areaOf(s: Shape): i32 -> @areaOf
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  calls: Shape.area
-  pointer s: size=4 writesThrough=false captured=false passedTo=Shape.area#0
-  stackSites=0 stackLocals=0
-  callee 32:10 Shape.area -> @Shape.area
-function squareArea(sq: Square): i32 -> @squareArea
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
-  calls: Square.area Square.baseArea areaOf
-  pointer sq: size=8 writesThrough=false captured=false passedTo=Square.area#0 areaOf#0 Square.baseArea#0
-  stackSites=0 stackLocals=0
-  callee 36:10 Square.area -> @Square.area
-  callee 36:22 areaOf -> @areaOf
-  callee 36:35 Square.baseArea -> @Square.baseArea
 program docs/cookbook/cls_initializers.ts
 module docs/cookbook/cls_initializers.ts (entry)
 struct Defaults (class) size=16 align=8
@@ -3992,6 +3703,38 @@ function origin(): i32 -> @origin
   local 16:9 p: Point (const)
   callee 16:13 new Point -> @Point.constructor
   callee 18:10 Point.manhattan -> @Point.manhattan
+program docs/cookbook/cls_prefix.ts
+module docs/cookbook/cls_prefix.ts (entry)
+struct Shape (interface) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+struct Square (class) size=12 align=4
+  implements Shape
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+  field side: i32 index=2 offset=8
+  constructor -> @Square.constructor
+  method area -> @Square.area
+function Square.constructor(this: Square, x: i32, y: i32, side: i32): void -> @Square.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: side x y
+  pointer this: size=12 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Square.area(this: Square): i32 -> @Square.area [method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=12 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function originDistance(s: Shape): i32 -> @originDistance
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer s: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function describe(sq: Square): i32 -> @describe
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Square.area originDistance
+  pointer sq: size=12 writesThrough=false captured=false passedTo=originDistance#0 Square.area#0
+  stackSites=0 stackLocals=0
+  callee 27:10 originDistance -> @originDistance
+  callee 27:31 Square.area -> @Square.area
 program docs/cookbook/decl_const.ts
 module docs/cookbook/decl_const.ts (entry)
 const WIDTH: i32 = 8

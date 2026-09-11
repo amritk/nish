@@ -4,7 +4,7 @@
   "tag": "v0.1.0",
   "range": {
     "from": null,
-    "to": "edda845"
+    "to": "e7fefa1"
   },
   "entries": [
     {
@@ -2663,6 +2663,21 @@
       "date": "2026-09-11"
     },
     {
+      "id": "write-down-the-plan-for-async-which-is",
+      "type": "other",
+      "breaking": false,
+      "title": "Write down the plan for async, which is a refusal",
+      "body": "WP20 section 6 deferred \"how does Nish do async/await\" to a note that did\nnot exist. docs/wp24-async.md is that note, and it declines the feature for\na reason that is not the expected one.\n\nThe lowering is the cheap part, and this is measured rather than argued. A\nminimal switch-resumed coroutine written by hand in textual IR -- no clang,\nno C++, which is the shape this compiler emits -- is split by LLVM 18.1.3's\ndefault `opt -O2` pipeline. When the handle is consumed by its caller and the\ncoroutine is internal, the frame type, the 24-byte allocation, @f.resume and\n@f.destroy are all elided and the module is the caller's straight-line code;\nstore the handle into a global and every one of them comes back. That\nelision condition is the local / returned / leaks classification\nsrc/codegen/escape.ts already computes, and --strict-exports on by default\nputs an ordinary program on the free row. The whole spike is in section 10\nso the measurement can be re-run.\n\nWhat is missing is anything to await. Every I/O call in the language is\nsynchronous, and a grep over src/, self/ and runtime/ for\nsetTimeout|sleep|poll|epoll|kqueue|socket returns nothing: no timer, no\nsleep, no poller, no socket. Readiness polling does not help a regular file,\nwhich is why Node's own fs async is a thread pool; the one call that waits\non something outstanding is spawnSync, and waiting on four children is four\nthreads. So the first deliverable of an async package would be a poller and\na socket type rather than a keyword -- a larger package than the syntax, for\na workload nobody has asked for.\n\nThe costs are written down anyway, because they fix the order if the answer\never changes: Promise<T> is a generic (WP15 item 8, and wp18 section 6.1\nargues against a third built-in family by hand); with no function values\nthere is no callback to stop the colour, so one async leaf reaches main and\nlinks an event loop into a binary whose premise is a 4,696-byte hello world;\nwillreturn dies at every suspend and readnone at every frame spill, which is\na correct loss no effort recovers; a scheduler does not fit in the 244 bytes\nleft of runtime.c's budget; wasm's loop belongs to the host; and Node is the\ndifferential oracle, so microtask ordering would become a declared\ndifference for a construct users assume is identical.\n\nOne item is recommended for building and it has no language surface: an\nasynchronous N-API export. --emit-napi writes a shim that calls the function\non the thread N-API handed it, so an addon that runs for 200 ms blocks Node's\nevent loop for 200 ms. napi_create_async_work plus napi_create_promise moves\nit to libuv's pool with the Nish function left exactly as synchronous as it\nis, and its entire prerequisite is WP20's T0 thread-local arena -- a worker\nallocating through the inlined bump allocator is a data race in the emitted\nIR, not merely in runtime.c.\n\nSix refusals carry the rule each one breaks, including the tempting one:\naccepting async as an erased no-op keyword would make a program mean\nsomething different under Node than it does here, in the one direction\ntests/differential/ exists to prevent.\n\nNothing here is pre-1.0 -- LANGUAGE.md keeps the rejections it has, so M4's\nfreeze waits on none of it. MASTER_PLAN section 9, docs/README.md and WP20\nsection 6 point at the note.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "0d3aaba"
+      ],
+      "author": "Claude",
+      "date": "2026-09-11"
+    },
+    {
       "id": "close-slice-iterators-by-measurement-and-correct-four",
       "type": "other",
       "breaking": false,
@@ -2673,6 +2688,36 @@
       "tests": [],
       "commits": [
         "abfff77"
+      ],
+      "author": "Claude",
+      "date": "2026-09-11"
+    },
+    {
+      "id": "correct-wp24-rust-builds-its-own-state-machine",
+      "type": "other",
+      "breaking": false,
+      "title": "Correct WP24: Rust builds its own state machine, and generics are not a gate",
+      "body": "Two corrections to the async note, both from asking what Rust actually does\nrather than assuming.\n\nFirst, vocabulary the note should have led with: a coroutine is not a strategy\nfor async/await, it is what async/await is. A function that suspends has to\nput its live locals somewhere other than the frame it left, and there are three\nplaces -- a struct holding just the live values, a whole stack per task, or\nnowhere because you never suspend. The only real choice is who writes the state\nmachine, and the note measured just one of the two answers.\n\nThe other answer is Rust's, measured here with the rustc the benchmark suite\nalready uses (1.94.1), on an async fn with two suspension points and a local\nlive across both: zero llvm.coro.* intrinsics at -C opt-level=0 and 2 alike, a\ngenerated poll that loads a one-byte state discriminant at offset 12 of the\nfuture and switches into five resume points, a 20-byte future that is a plain\nvalue with fields at 4/8/12/16, and no heap allocation anywhere on the async\npath -- size_of_val folds to `ret i64 20`. rustc does the transform in MIR and\nhands LLVM ordinary IR.\n\nThat is the shape to build if this is ever built, not the llvm.coro.* one the\nnote spiked. A struct with a discriminant and a switch over it are constructs\nthis language already has, and WP23's numeric enum makes the discriminant a\ndistinct type; there is no dependence on an intrinsic family whose lowering\nlives in an optimisation pass, so the cost model stops inverting between\n--profile debug and speed; and the frame becomes an ordinary allocation site\nthat escape.ts classifies with the rule it already has. Section 9's open\nquestion about what a debug build of a coroutine would cost is answered by not\ndepending on the pass.\n\nRust's hardest async problem does not arise here. Pin, Unpin and the unsafe\naround them exist because Rust puts locals in the frame and lets a program take\na reference to one, so moving the frame invalidates it. Here escape.ts already\ndecides alloca versus arena, and a value whose reference is live across a\nsuspend is simply denied the alloca -- the same judgment wp20 section 3.3 needs\nfor a spawn.\n\nSecond, and this moves a gate: section 4.1 claimed Promise<T> is a generic and\nWP18 is a hard prerequisite. It is not. Rust's impl Future is anonymous -- one\nunnameable compiler-generated type per async fn -- and await here would always\napply to a known call site, so the state machine type need never be spelled in\na program. What generics actually buy is futures held as data: an array of\nthem, join, select, storing one in a field. So WP18 stops being a prerequisite\nin front of the feature and becomes an enhancement after it. The section keeps\nthe wrong claim visible rather than quietly editing it out, and section 6's\ngate table is renumbered to match: A3 is the feature and waits only on A2, A4\nis futures-as-data.\n\nWhat does not change is the conclusion. Rust demonstrates that the language\nhalf of async is cheap and that the language half does nothing alone: std has\nno executor, an async fn nobody polls is an inert struct, and the reactor and\nscheduler arrive as a dependency. That is section 2's finding from the other\nside.\n\nBoth spikes are in section 10 so either measurement can be re-run.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b545368"
+      ],
+      "author": "Claude",
+      "date": "2026-09-11"
+    },
+    {
+      "id": "add-wp24-section-9-what-the-refusal-costs",
+      "type": "other",
+      "breaking": false,
+      "title": "Add WP24 section 9: what the refusal costs, and what survives it",
+      "body": "Two questions a decision to not build something has to answer, and the note\nanswered neither: does waiting foreclose anything, and which parts of the\nfeature are still reachable when the trigger arrives.\n\nWaiting forecloses nothing in the language, and this is checked rather than\nassumed. `async` and `await` are contextual in TypeScript's grammar and this\ncompiler inherits that grammar, so both are ordinary identifiers now and stay\nordinary identifiers after. Verified against the typescript package's own\nparser and against the compiler: `export function async(n: i32): i32` compiles\ntoday and still parses once the modifier exists, since `async function async()\n{}` is valid TypeScript; a local named `await` is fine in a synchronous\nfunction and is rejected inside an async one exactly as JavaScript rejects it.\nSo no keyword needs reserving before the M4 freeze and no migration note is\nowed.\n\nWhat waiting does cost is four small things, the second of which was not\nwritten down anywhere. WP6's automatic scopes and WP9's call-site reclaim both\nbracket a contiguous dynamic extent with arena mark/release/keep, and a suspend\npoint in the middle of such a bracket is what those brackets are not built for\n-- a coroutine suspending inside a scoped function would have its memory\nreleased underneath it. The rule an async package needs is that a function\nwhich can suspend gets no automatic scope and an awaited call gets no\ncall-site reclaim bracket. Cheap to state now and more expensive the more later\noptimisations assume that extent is contiguous, so whoever writes the next\narena optimisation should know there is a future customer for the assumption.\n\nWhat survives is Rust's arrangement rather than JavaScript's, and the table\nsays so row by row: async/await and sequential suspension yes, with no generics\nneeded; fixed-arity awaitAll over known call sites yes for the same reason; a\nhomogeneous awaitAll over an array yes after WP18; Promise.all typed as a tuple\nof mixed types no, since that wants tuples and variadic generics and wp23\nsection 5 stops at Pair; and the promise as a first-class value no.\n\nThat last row is the only entry refused by a decision the project has already\nmade and already lives with rather than by work nobody has done. Result has no\nmap, andThen or orElse because they need function values and the whole-program\npass cannot prove purity, termination or escape through an unknown callee\n(wp16 section 6), and .then is andThen wearing a promise. A language that\nrejected Result.map and then accepted Promise.prototype.then would be trading\nthe attribute fixpoint for a spelling.\n\nOpen and the appendix renumber to 10 and 11.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "0db7042"
       ],
       "author": "Claude",
       "date": "2026-09-11"
@@ -2718,6 +2763,37 @@
       "tests": [],
       "commits": [
         "edda845"
+      ],
+      "author": "Claude",
+      "date": "2026-09-11"
+    },
+    {
+      "id": "remove-inheritance-widen-implements-to-a-prefix-check",
+      "type": "other",
+      "breaking": false,
+      "title": "Remove inheritance; widen `implements` to a prefix check",
+      "body": "`class D extends B`, `super(...)`, `super.m()` and method overriding are gone\nfrom the language, and `class C implements I` now requires `I`'s fields to be\n`C`'s *first* fields rather than all of them. The two go together: the second\nkeeps the only thing the first was buying.\n\n`extends` gave three things. A field prefix -- `%struct.D` was `B`'s fields\nfollowed by `D`'s own, so a `D*` was a valid `B*` after one `bitcast`. Member\nreuse. And polymorphism, which is the reason hierarchies exist and the one\nthing this language never had, because dispatch is static: `d.m()` resolves to\nthe `m` of `d`'s *declared* type. Holding a `Base[]` and calling `m()` -- the\nclassic use -- silently ran the base method. Inheritance without virtual\ndispatch is the syntax of a hierarchy with none of the payoff.\n\nThe prefix keeps working, through `implements` instead:\n\n  %struct.Shape  = type { i32, i32 }\n  %struct.Square = type { i32, i32, i32 }\n  %struct.Circle = type { i32, i32, i32, i1 }\n\nA `Square*` becomes a `Shape*` with one `bitcast`, a `Shape` operation reads\nand writes the `Square`'s own bytes at the same offsets, and two classes with\ndifferent tails live in one `Shape[]`. No IR moved: not one golden changed\nexcept the ones whose programs were deleted, and tests/layout/structs.ts\ndeclares `K`, `L` and `M` -- the three classes that used to be derived -- as\nclasses implementing an interface, still 24, 16 and 32 bytes, with the C twin's\n_Static_asserts untouched. A class's own fields reuse the prefix's tail\npadding, which a nested struct member would not.\n\nWhat the removal buys is the language's only knowing divergence from\nJavaScript. An override reached through a base-typed value ran the base method\nnatively and the derived one under Node:\n\n                          Node    native\n  areaOf(sq)                 9        0\n  sq.report()              100       10\n\nRUN_UNDER_NODE.md listed it among the four things no prelude can reach and\nknown-failures.txt carried cls_extends_override as a by-design failure. Both\nentries are deleted rather than explained. Two smaller declarations went too:\nthe parity oracle's inheritance-cycle entry (stage0 reported a cycle once per\nclass, stage1 once, because stage0's throw left a `collecting` marker set), and\nthe last `tsc` ambient divergence but one, an implicit `super()` that\nJavaScript throws on.\n\nSixteen `reject_*` cases collapse into two, because sixteen rules collapse into\ntwo: `extends` is refused and `super` is refused, in every spelling. Both live\nin the checker rather than Phase 0 -- inheritance needed nothing Phase 0 exists\nto refuse, it compiled until now -- and both messages name the rewrite, by the\ndoctrine wp22 section 6 states for a removed spelling. The registry appended\nNL2277-NL2279 and renumbered nothing.\n\nself/ did not change: 25,911 lines over 57 modules and not one derived class,\nbecause wp14 section 2.1 had already chosen a single `Node` class with a `kind`\ndiscriminant over a hierarchy, and Nish-0 was defined as the language minus\n\"inheritance and downcasts\". The largest Nish program there is had declined the\nfeature years before this commit removed it.\n\ndocs/wp24-inheritance.md is the plan of record.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "bd0440a"
+      ],
+      "author": "Claude",
+      "date": "2026-09-11"
+    },
+    {
+      "id": "generate-releases-from-commits-on-a-release-train",
+      "type": "build",
+      "scope": "release",
+      "breaking": false,
+      "title": "generate releases from commits, on a release train",
+      "body": "The account of what changed moves from a file maintained by hand to the\ncommits themselves, because the commits are what a release contains and a\nhand-maintained file drifts from them.\n\nscripts/changelog-gen.mjs walks the log since the last tag and writes\nchangelog/<version>.json: one file per release, carrying every entry's type,\nscope, breaking flag, title, prose body, measurements, refs, tests, commits,\nauthor and date, plus the release's range and artifacts. That JSON is the\nrecord and the website reads it; CHANGELOG.md and the GitHub release notes are\nrendered from it, so there is one account of a release and two views of it,\nwhich cannot drift.\n\nThe subject gives the heading and the version bump, the body gives the prose.\nSubject-only generators throw the body away, which is the half worth keeping\nhere -- the explanation of why a lowering is the way it is. `Measured:`,\n`Refs:` and `Tests:` trailers become structured fields, and `Release-Note:`\nreplaces a body written for the reviewer rather than the reader. Co-authorship\nand session trailers are stripped from every body: they are bookkeeping, not\nwhat changed. A subject that is not conventional is filed under\n\"Uncategorised\" with its body intact and reported, because a release that\nsilently omits a change is worse than one with an untidy heading.\n\nThe train: every merge to main refreshes one open \"Release <version>\" pull\nrequest carrying the bump, the JSON and the rendered section; merging it\ncreates the tag; the tag builds and publishes. The notes are reviewed in the\npull request whose body is those notes, before anyone can read them. The bump\ntouches self/branding.ts as well as package.json, because tests/run.js fails\nwhen the two disagree and the release PR would otherwise be red at itself.\n\nrelease.yml now publishes from the reviewed JSON rather than a fresh walk of\nthe log, caps a body over 120,000 characters at a paragraph boundary, and\nfails on an empty one. That last check is not hypothetical: with CHANGELOG.md\nemptied, `changelog-section.sh 0.1.0` fell back to an empty [Unreleased] and\nexited 0, so the release would have shipped a blank body.\n\npr-title.yml checks the pull request title, since squash-merge makes it the\ncommit subject. It shells out to the generator's own --check-subject so CI\nenforces exactly what the generator parses, rather than a second copy of the\nrule that can drift from it; the title is passed through the environment\nrather than interpolated into the shell.\n\nchangelog/0.1.0.json is generated from the 181 commits behind this branch.\nAll 181 predate the convention and are filed as \"Uncategorised\" with their\nbodies intact, which is the migration working as intended rather than a gap.\n\nnpm run check and npm test green: 1212 passed, 0 failed, 2 skipped.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "8ac1728"
       ],
       "author": "Claude",
       "date": "2026-09-11"
