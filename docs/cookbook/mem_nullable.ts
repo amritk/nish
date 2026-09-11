@@ -7,11 +7,9 @@ class Node {
   }
 }
 
-function valueOr(n: Node | null, fallback: number): number {
-  return n !== null ? n.value : fallback;
-}
+const valueOr = (n: Node | null, fallback: number): number => (n !== null ? n.value : fallback);
 
-function sum(head: Node | null): number {
+const sum = (head: Node | null): number => {
   let total = 0;
   let cur: Node | null = head;
   while (cur !== null) {
@@ -19,12 +17,12 @@ function sum(head: Node | null): number {
     cur = cur.next;
   }
   return total;
-}
+};
 
 // `(Node | null)[]`, which is where a type needs its parentheses: `Node |
 // null[]` would group the other way. The element loads as a nullable and
 // narrows like any local once it is bound to one.
-function firstValue(slots: (Node | null)[]): number {
+const firstValue = (slots: (Node | null)[]): number => {
   const head = slots[0];
   return head !== null ? head.value : 0;
-}
+};

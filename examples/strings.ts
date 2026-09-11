@@ -1,11 +1,5 @@
-export function identity(s: string): string {
-  return s;
-}
+export const identity = (s: string): string => s;
 
-export function pick(flag: boolean, a: string, b: string): string {
-  return identity(a);
-}
+export const pick = (flag: boolean, a: string, b: string): string => identity(a);
 
-export function len2(s: string): number {
-  return 2;
-}
+export const len2 = (s: string): number => 2;

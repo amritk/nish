@@ -241,7 +241,9 @@ The `--json` case fits inside all four. `self/ice.ts` gains
 
 ```ts
 let jsonMode: boolean = false;
-export function setJsonMode(on: boolean): void { jsonMode = on; }
+export const setJsonMode = (on: boolean): void => {
+  jsonMode = on;
+};
 ```
 
 and `main` in `self/compile.ts` calls the setter after parsing the flag. Note

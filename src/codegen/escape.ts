@@ -72,6 +72,7 @@
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker/index.js";
 import { dottedName } from "../checker/builtins.js";
+import { isFunctionResult } from "../checker/declarations.js";
 import { intrinsicType, isAssignmentOperator } from "../checker/classes.js";
 import { CompilerOptions, StaticType, alignOf, isNumeric, resultByValue, stripNull } from "../types.js";
 import { FunctionFacts, classifyUse } from "./attributes.js";
@@ -337,7 +338,9 @@ export function analyzeEscapes(
         continue;
       }
       if (ts.isVariableDeclaration(parent) && parent.initializer === node) return program.locals.get(parent);
-      if (ts.isReturnStatement(parent)) return "return";
+      // A concise arrow body is the one `return` it means, so the value it
+      // builds is returned rather than local (WP22 §4).
+      if (isFunctionResult(node)) return "return";
       return undefined;
     }
   };

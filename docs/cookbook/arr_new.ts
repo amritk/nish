@@ -1,7 +1,3 @@
-function zeros(n: number): number[] {
-  return new Array<number>(n);
-}
+const zeros = (n: number): number[] => new Array<number>(n);
 
-function len(xs: number[]): number {
-  return xs.length;
-}
+const len = (xs: number[]): number => xs.length;

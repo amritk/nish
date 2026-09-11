@@ -3367,11 +3367,11 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         { cwd: root, encoding: "utf8" }
       );
       check(
-        "the self-hosted compiler: --link without `export function main` is refused, as stage0 refuses it",
+        "the self-hosted compiler: --link without `export const main` is refused, as stage0 refuses it",
         noMain.status === 1 &&
-          noMain.stderr.includes("export function main") &&
+          noMain.stderr.includes("export const main") &&
           noMain0.status === 1 &&
-          noMain0.stderr.includes("export function main"),
+          noMain0.stderr.includes("export const main"),
         `stage1 ${noMain.status}: ${noMain.stderr}stage0 ${noMain0.status}: ${noMain0.stderr}`
       );
 

@@ -111,7 +111,7 @@ const usageText = (): string =>
     "  -o, --output <file.ll>     output path for a single module (default: <input>.ll)",
     "  -o, --output <dir>/        output directory: one <dir>/<module>.ll per module",
     "  --link <exe>               build a native binary from every module + runtime/runtime.c",
-    "                             (entry module must declare `export function main`)",
+    "                             (entry module must declare `export const main`)",
     "  --profile speed|size|debug|wasi",
     "                             build profile for --link (default: speed); wasi needs a WASI sysroot",
     "  --no-strict-exports        every function is an external symbol (default: non-exported",
@@ -354,7 +354,7 @@ function main(argv: string[]): number {
     }
     if (link !== undefined && !compilation.entry.checker.program.entryMain) {
       throw new CliError(
-        `--link: the entry module ${compilation.entry.fileName} must declare \`export function main(): number\` (or \`: void\`)`
+        `--link: the entry module ${compilation.entry.fileName} must declare \`export const main = (): number => ...\` (or \`(): void\`)`
       );
     }
     modules = compilation.emit();

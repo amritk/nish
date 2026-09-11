@@ -48,7 +48,7 @@ python3 -m http.server -d web 8000     # or any static server
 The worker protocol is one message in, one message out, matched by `id`:
 
 ```js
-{ id, files: { "main.ts": "export function main(): number { return 0; }" },
+{ id, files: { "main.ts": "export const main = (): number => 0;" },
   args: ["--number-mode", "f64"], entry: "main.ts", output: "main.ll" }
 
 { id, status: 0, stdout: "", stderr: "wrote main.ll\n", files: { "main.ll": "; ModuleID = …" } }

@@ -158,7 +158,7 @@ The checklist every work package has followed (MASTER_PLAN.md §7):
    proof for; write the reason next to the code.
 8. **Tests.** A golden `tests/cases/<name>.ts` + `.ll` (`npm run test:update`
    writes a missing golden), a native round trip (`.out`, using
-   `tests/driver.c`'s `test()` or an `export function main`), at least one
+   `tests/driver.c`'s `test()` or an `export const main`), at least one
    `reject_*` case, and `.args` for flags.
 9. **Docs.** Add the rule to [LANGUAGE.md](LANGUAGE.md) with the test-case
    citation, a snippet to `docs/cookbook/` with a marker in
@@ -457,8 +457,8 @@ toolchain-dependent steps when LLVM is not installed:
   fragment; otherwise the IR (module header stripped) must equal `<name>.ll`,
   pass `llvm-as`, and, when `<name>.out` exists, be linked with
   `<name>.c` or `tests/driver.c` plus `runtime/runtime.c -lm`, run, and
-  match stdout. A source containing `export function main` is linked without
-  the driver. `node tests/run.js <substring>` runs a subset;
+  match stdout. A source declaring `main` — `export const main`, or the legacy
+  `export function main` — is linked without the driver. `node tests/run.js <substring>` runs a subset;
   `npm run test:update` writes missing goldens.
 - **Diagnostics** (WP10): the caret excerpt format, syntax errors.
 - **Link tests** (`tests/link/<name>/`): whole programs built with `--link`,
@@ -487,8 +487,8 @@ toolchain-dependent steps when LLVM is not installed:
   in every variant (speed, `--nsw`, size, C, Rust) and requires identical
   checksums (Rust is skipped without `rustc`).
 - **Differential** (WP13, needs clang): `tests/differential/run.js --quick`
-  compiles every whole program in `tests/cases` (those with
-  `export function main` and no `.err`) and the 50-program corpus with
+  compiles every whole program in `tests/cases` (those declaring `main` and
+  no `.err`) and the 50-program corpus with
   `--link`, runs the binary, rewrites the same program to JavaScript with
   `tests/differential/rewrite.js` (the checker's recorded types choose the
   rewrite: `(a + b) | 0` and `Math.imul` for `i32`, `BigInt.asIntN(64, ...)`

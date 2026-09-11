@@ -1,11 +1,5 @@
-function hypot(a: number, b: number): number {
-  return Math.sqrt(a * a + b * b);
-}
+const hypot = (a: number, b: number): number => Math.sqrt(a * a + b * b);
 
-function roundHalfUp(x: number): number {
-  return Math.round(x);
-}
+const roundHalfUp = (x: number): number => Math.round(x);
 
-function clamp01(x: number): number {
-  return Math.min(Math.max(x, 0), 1);
-}
+const clamp01 = (x: number): number => Math.min(Math.max(x, 0), 1);

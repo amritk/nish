@@ -35,14 +35,12 @@
     </header>
     <main>
       <textarea id="source" spellcheck="false">
-export function add(a: number, b: number): number {
-  return a + b;
-}
+export const add = (a: number, b: number): number => a + b;
 
-export function main(): number {
+export const main = (): number => {
   console.log(`2 + 3 = ${add(2, 3)}`);
   return 0;
-}
+};
 </textarea>
       <pre id="output"></pre>
     </main>

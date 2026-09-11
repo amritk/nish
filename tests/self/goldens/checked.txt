@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 266 programs, 4413 dump lines.
+# 267 programs, 4464 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -1821,6 +1821,58 @@ function main(): i32 -> @nish_main [exported entry]
   callee 17:15 describe -> @describe
   callee 18:15 describe -> @describe
   callee 19:18 sumTo -> @sumTo
+program tests/cases/fn_arrow_concise.ts
+module tests/cases/fn_arrow_concise.ts (entry)
+struct Pair (interface) size=8 align=4
+  field first: i32 index=0 offset=0
+  field second: i32 index=1 offset=4
+struct Ordered (class) size=8 align=4
+  implements Pair
+  field first: i32 index=0 offset=0
+  field second: i32 index=1 offset=4
+  constructor -> @Ordered.constructor
+function Ordered.constructor(this: Ordered, a: i32, b: i32): void -> @Ordered.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: a b
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function asPair(o: Ordered): Pair -> @asPair
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false returnDeref=8
+  escaping: o
+  pointer o: size=8 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function swap(p: Pair): Pair -> @swap
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=8
+  calls: nish_alloc_struct
+  pointer p: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function full(): u8 -> @full
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function empty(): i32[] -> @empty
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function label(n: i32): string -> @label
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function shout(n: i32): string -> @shout
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  escaping: n
+  calls: label nish_str_concat
+  stackSites=0 stackLocals=0
+  callee 31:35 label -> @label
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: Ordered.constructor asPair empty full nish_alloc_struct nish_print nish_str_concat nish_str_from_i32 nish_str_from_u64 shout swap
+  stackSites=0 stackLocals=0
+  local 34:9 p: Pair (const)
+  callee 34:13 swap -> @swap
+  callee 34:18 asPair -> @asPair
+  callee 34:25 new Ordered -> @Ordered.constructor
+  callee 36:18 full -> @full
+  callee 37:18 empty -> @empty
+  callee 38:15 shout -> @shout
 program tests/cases/i64_basic.ts --wrapping
 module tests/cases/i64_basic.ts (entry)
 function square(x: i64): i64 -> @square
@@ -3482,9 +3534,9 @@ function polynomial(x: i32, k: i32): i32 -> @polynomial
   escaping: x
   calls: square
   stackSites=0 stackLocals=0
-  local 6:7 acc: i32 (let)
-  callee 6:21 square -> @square
-  local 8:9 bias: i32 (const)
+  local 4:7 acc: i32 (let)
+  callee 4:21 square -> @square
+  local 6:9 bias: i32 (const)
 function isPositive(n: i32): boolean -> @isPositive
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
@@ -3567,7 +3619,7 @@ function pick(flag: boolean, a: string, b: string): string -> @pick [exported]
   escaping: a
   calls: identity
   stackSites=0 stackLocals=0
-  callee 6:10 identity -> @identity
+  callee 3:70 identity -> @identity
 function len2(s: string): i32 -> @len2 [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
@@ -3813,8 +3865,8 @@ function describe(sq: Square): i32 -> @describe
   calls: Square.area originDistance
   pointer sq: size=12 writesThrough=false captured=false passedTo=originDistance#0 Square.area#0
   stackSites=0 stackLocals=0
-  callee 27:10 originDistance -> @originDistance
-  callee 27:31 Square.area -> @Square.area
+  callee 24:42 originDistance -> @originDistance
+  callee 24:63 Square.area -> @Square.area
 program docs/cookbook/decl_const.ts
 module docs/cookbook/decl_const.ts (entry)
 const WIDTH: i32 = 8
@@ -3844,7 +3896,7 @@ function double(n: i32): i32 -> @double [exported]
   escaping: n
   calls: helper
   stackSites=0 stackLocals=0
-  callee 2:10 helper -> @helper
+  callee 1:46 helper -> @helper
 function helper(n: i32): i32 -> @helper
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
@@ -3855,7 +3907,7 @@ function double(n: i32): i32 -> @double [exported]
   escaping: n
   calls: helper
   stackSites=0 stackLocals=0
-  callee 2:10 helper -> @helper
+  callee 1:46 helper -> @helper
 function helper(n: i32): i32 -> @helper
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
@@ -3868,10 +3920,10 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
   calls: nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_from_i32 widen
   stackSites=1 stackLocals=1
-  local 10:9 data: u8[] (const)
-  local 11:9 label: string (const)
-  callee 12:26 widen -> @widen
-  callee 12:43 widen -> @widen
+  local 8:9 data: u8[] (const)
+  local 9:9 label: string (const)
+  callee 10:26 widen -> @widen
+  callee 10:43 widen -> @widen
 program docs/cookbook/expr_bitwise.ts
 module docs/cookbook/expr_bitwise.ts (entry)
 function mix(a: i32, b: i32): i32 -> @mix
@@ -3995,8 +4047,8 @@ module docs/cookbook/fn_add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
-program docs/cookbook/fn_add_arrow.ts
-module docs/cookbook/fn_add_arrow.ts (entry)
+program docs/cookbook/fn_add_function.ts
+module docs/cookbook/fn_add_function.ts (entry)
 function add(a: i32, b: i32): i32 -> @add
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
@@ -4054,14 +4106,14 @@ function sum(head: Node | null): i32 -> @sum
   escaping: head
   pointer head: size=16 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 15:7 total: i32 (let)
-  local 16:7 cur: Node | null (let)
+  local 13:7 total: i32 (let)
+  local 14:7 cur: Node | null (let)
 function firstValue(slots: Node | null[]): i32 -> @firstValue
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index
   pointer slots: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 28:9 head: Node | null (const)
+  local 26:9 head: Node | null (const)
 program docs/cookbook/mem_reclaim.ts
 module docs/cookbook/mem_reclaim.ts (entry)
 struct Box (class) size=8 align=8
@@ -4075,9 +4127,9 @@ function join(n: i32): string -> @join
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_str_concat piece
   stackSites=0 stackLocals=0
-  local 12:7 s: string (let)
-  local 13:12 i: i32 (let)
-  callee 14:13 piece -> @piece
+  local 10:7 s: string (let)
+  local 11:12 i: i32 (let)
+  callee 12:13 piece -> @piece
 function Box.constructor(this: Box, text: string): void -> @Box.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
   escaping: text
@@ -4088,15 +4140,15 @@ function fill(b: Box, i: i32): string -> @fill
   calls: nish_str_concat nish_str_from_i32
   pointer b: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 29:9 s: string (const)
+  local 27:9 s: string (const)
 function report(b: Box, n: i32): string -> @report
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: n
   calls: fill join nish_str_concat
   pointer b: size=8 writesThrough=true captured=false passedTo=fill#0
   stackSites=0 stackLocals=0
-  callee 35:10 join -> @join
-  callee 35:20 fill -> @fill
+  callee 32:47 join -> @join
+  callee 32:57 fill -> @fill
 program docs/cookbook/mem_stack_object.ts
 module docs/cookbook/mem_stack_object.ts (entry)
 struct Pair (interface) size=8 align=4
@@ -4168,7 +4220,7 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: square
   stackSites=0 stackLocals=0
-  callee 4:10 square -> @square
+  callee 3:35 square -> @square
 module docs/cookbook/mod_math.ts
 function square(n: i32): i32 -> @square [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false

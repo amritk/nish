@@ -1,1 +1,1 @@
-must declare `export function main(): number` (or `: void`)
+must declare `export const main = (): number => ...` (or `(): void`)

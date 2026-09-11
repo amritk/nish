@@ -1,3 +1,1 @@
-export function helper(): number {
-  return 1;
-}
+export const helper = (): number => 1;

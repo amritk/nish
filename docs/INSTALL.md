@@ -181,13 +181,13 @@ package installs.
 Create `hello.ts`:
 
 ```ts
-export function main(): number {
+export const main = (): number => {
   console.log("hello from Nish");
   return 0;
-}
+};
 ```
 
-`export function main` is the process entry; its return value is the exit code
+`export const main` is the process entry; its return value is the exit code
 (`main(): void` exits 0). Compile and link it:
 
 ```bash

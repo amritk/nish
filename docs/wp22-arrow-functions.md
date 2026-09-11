@@ -1,13 +1,16 @@
 # WP22: Arrow functions as the declaration form
 
-**Stages A and B have landed; C and D have not.** Both compilers read
-`const f = (n: i32): i32 => n * 2` today, the two spellings emit byte-identical
-IR, and `tests/cases/fn_arrow` carries the golden, the `llvm-as` pass and the
-native round trip (§8 has what each stage cost). What has not happened is the
-migration: `self/` and the corpus are still written with the `function`
-keyword, and a `function` declaration is still accepted — whether stage D ever
-rejects it is open, and §10 is where that is argued. It is the plan of record
-for one decision —
+**Stages A and B have landed; C is half done and D has not started.** Both
+compilers read `const f = (n: i32): i32 => n * 2` today, the two spellings emit
+byte-identical IR, and `tests/cases/fn_arrow` carries the golden, the `llvm-as`
+pass and the native round trip (§8 has what each stage cost). C's **docs half**
+has landed: `README.md`, `docs/LANGUAGE.md`, every `docs/cookbook/` snippet (so
+every listing in `docs/IR_COOKBOOK.md`), `examples/`, the playground and the
+`.claude/` rules are arrows, and §8a records the two concise-body bugs the
+rewrite found. What is still `function` is `self/` and `tests/cases/`, the two
+surfaces the bootstrap and the goldens gate; a `function` declaration is still
+accepted — whether stage D ever rejects it is open, and §10 is where that is
+argued. It is the plan of record for one decision —
 **`const f = (...) => ...` becomes how Nish declares a function, and
 `function` is legacy and eventually removed** — and for the order that
 decision has to happen in, which is forced by the bootstrap and is the only
@@ -132,8 +135,8 @@ the rewrite:
 | Surface | Count | Note |
 | --- | --- | --- |
 | `self/` | 603 declarations, 25,008 lines | the bootstrap; must be migrated before stage D |
-| `examples/`, `docs/cookbook/`, `bench/`, `tests/cases/` | 798 declarations | goldens unchanged, so the `.ll` files verify the rewrite |
-| `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `README.md` | every snippet | the real cost centre; IR blocks beside them stay as they are |
+| `examples/`, `docs/cookbook/`, `bench/`, `tests/cases/` | 798 declarations | goldens unchanged, so the `.ll` files verify the rewrite. `examples/` and `docs/cookbook/` are done, and both were verified that way |
+| `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `README.md` | every snippet | the real cost centre; IR blocks beside them stay as they are. Done |
 | `src/checker` | 2 new rules, 1 desugaring | `FunctionSig.decl` gains a fourth member |
 | `self/lexer.ts` | none | `TOK_ARROW` is already emitted (`self/lexer.ts:772`) |
 | `self/parser.ts` | arrow parsing | the token exists and is imported; nothing consumes it yet |
@@ -149,7 +152,7 @@ them. That forces four stages, and no two of them can be merged:
 | --- | --- | --- |
 | **A** | Stage0 accepts arrows: §5's rules, the concise-body branch, negative tests | `npm test` green; the two spellings of one program emit byte-identical IR |
 | **B** | Stage1 accepts arrows: the lookahead and `parseArrowFunction` in `self/parser.ts`, the concise-body branch in its checker and emitter | the parser oracle builds the same tree with the same spans, and `IR(stage0) == IR(stage1)` byte for byte |
-| **C** | The migration: `self/` first, then the corpus, then the docs | goldens unchanged; the bootstrap reproduces stage1 byte for byte |
+| **C** | The migration: the docs and `examples/` first (done), then `self/`, then the corpus | goldens unchanged; the bootstrap reproduces stage1 byte for byte |
 | **D** | a `function` *definition* is rejected, with §6's message and its `reject_function_declaration` case; `declare function` stays legal (§9) | `npm test` green with no `function` declaration left in any Nish source |
 
 **A cannot carry its own positive golden, and that is the plan's one real
@@ -167,6 +170,60 @@ in the corpus yet.
 Stage C is where the risk is, and it is worth doing `self/` in one commit of
 its own: the bootstrap comparing stage1's output against itself is the only
 check that the 603 rewrites were all meaning-preserving.
+
+The order inside C turned out to be the other way round from the row above, and
+for a reason worth keeping: the docs and `examples/` were done first *because*
+they are the cheap surface to verify. Every `docs/cookbook/*.ts` is compiled by
+`regen.sh`, so rewriting all 68 of them and diffing the emitted `.ll` against
+the previous run is one command — and that diff is what found both bugs in §8a.
+Doing `self/` first would have put 603 rewrites and two latent stage0 bugs in
+the same commit.
+
+### 8a. What C's first half cost: two concise-body bugs
+
+§4 said a concise body "is checked and emitted exactly as the block form with
+one `return`". That was true of the checker's own `checkReturnValue` and false
+twice over, because two kinds of pass decide what a `return` is by looking at
+the *parent node* rather than by being told:
+
+1. **Contextual typing.** Three walks climb the parent chain to ask what the
+   enclosing construct expects — `contextualType` in `src/checker/classes.ts`
+   (object literals, and a class value where an interface is wanted),
+   `contextualType` in `src/checker/arrays.ts` (the element type of `[]`), and
+   `contextType` in `src/checker/math.ts` (the width of a numeric literal).
+   Each stopped at `ts.isReturnStatement(parent)`, and a concise body's parent
+   is the arrow. So `const swap = (p: Pair): Pair => ({ first: p.second,
+   second: p.first })` was `Object literal needs a contextual class or
+   interface type` and `const asPair = (o: Ordered): Pair => o` was `Return
+   type mismatch`, while both block-bodied twins compiled.
+
+2. **The call-site reclaim.** `flowTarget` in `src/codegen/escape.ts` and its
+   twin in `self/escape.ts` decided where a freshly allocated value goes by the
+   same test, so a concise body that returns an allocation was read as
+   producing a *local*. That made `allocates` false for the callee, and WP9's
+   `nish_arena_mark` / `nish_arena_keep` bracket disappeared from every call to
+   it — quietly worse code rather than an error, which is why
+   `docs/cookbook/mem_reclaim` catching it in a byte-for-byte IR diff
+   mattered.
+
+Both are one predicate on this side, `isFunctionResult` in
+`src/checker/declarations.ts`: the operand of a `return`, or the body an arrow
+*is*.
+
+**Stage1 had exactly one of the two**, and which one is the useful part.
+Its checker threads the wanted type down as `want` (`checkReturnValue` in
+`self/statements.ts`) rather than climbing to a parent, so bug 1 was never
+reachable there — for a while the two compilers silently disagreed about
+programs no test had written. Its `flowTarget` (`self/escape.ts`) *does* climb,
+so it had bug 2, and `tests/self/ir_oracle.js` caught it the moment
+`docs/cookbook/mem_reclaim.ts` became an arrow: stage0 emitted the bracket,
+stage1 did not.
+
+The general lesson for the rest of C: the gap is never in the code that reads
+`sig.body`, which sees the expression either way. It is in the code that reads
+`node.parent` and expects to find a statement there. `tests/cases/fn_arrow_concise`
+pins all five behaviours, and `--emit-checked` will not show you any of them —
+only the IR diff and the type errors will.
 
 ### What B cost, measured
 
@@ -236,11 +293,12 @@ Generator<i32> { ... } }` parses as TypeScript and is a generator method, not a
 generator function. So the escape hatch is the same exception §3 already keeps
 for an unrelated reason.
 
-**WP18's surface has to be restated.** [wp18-generics.md](wp18-generics.md) is
-the plan of record for user generics and every example in it is written
-`function identity<T>(x: T): T`. Nothing technical is lost — the arrow form
-parses — but that rewrite belongs in stage C alongside the rest of the docs,
-not deferred until generics land and the two notes contradict each other.
+**WP18's surface has been restated.** [wp18-generics.md](wp18-generics.md) is
+the plan of record for user generics and every example in it was written
+`function identity<T>(x: T): T`. Nothing technical was lost — `const identity =
+<T>(x: T): T => x` parses in a `.ts` file, the `<T,>` disambiguation being a
+`.tsx` problem only — and the rewrite went in with the rest of C's docs rather
+than waiting for generics to land and the two notes to contradict each other.
 
 **Ambient declarations are the live hazard, and D's rule should be narrower
 than "no `function`".** `declare function` is refused by the checker today as
@@ -258,10 +316,14 @@ it.
 
 ## 10. Open
 
-- **The entry point.** `export const main = (): number => ...` is the
-  consequence of §1, and it changes the first line of every example, every
-  README and every cookbook entry. Nothing technical objects; it is the single
-  most visible edit in the repo and should be confirmed before stage C.
+- ~~**The entry point.**~~ **Settled, and taken.** `export const main =
+  (): number => ...` is the consequence of §1 and is now the first line of
+  every example, of the README quickstart, of `docs/INSTALL.md`'s hello world
+  and of `decl_main` in the cookbook. The diagnostics that name the entry still
+  say `export function main`: their text is what
+  `scripts/gen-diagnostic-codes.mjs` keys a stable code on, so rewording them
+  retires `NL2229` and `NL2149` for a spelling change. They are stage D's to
+  change, alongside the rejection that makes the other spelling wrong.
 - **Whether stage D happens at all.** A and B are cheap and strictly additive.
   C and D are 1,401 rewrites for zero expressiveness. Shipping A and B, letting
   new code use arrows and converting a file when it is opened for another

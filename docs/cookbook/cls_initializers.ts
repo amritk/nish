@@ -4,6 +4,4 @@ class Defaults {
   name: string = "anon";
 }
 
-function make(): Defaults {
-  return new Defaults();
-}
+const make = (): Defaults => new Defaults();

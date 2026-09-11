@@ -7,7 +7,7 @@
 // count as the exit code (0 without arguments).
 // smoke: argv 3 4 five
 // smoke: exit 3
-export function main(): number {
+export const main = (): number => {
   const args = process.argv;
   console.log(`program: ${args[0].length > 0 ? "named" : "unnamed"}, ${args.length - 1} argument(s)`);
   let sum = 0;
@@ -21,4 +21,4 @@ export function main(): number {
   }
   console.log(`sum of the integers: ${sum}`);
   return args.length - 1;
-}
+};

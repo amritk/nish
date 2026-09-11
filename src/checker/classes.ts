@@ -62,7 +62,7 @@ import {
   typeToString,
 } from "../types.js";
 import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context.js";
-import { hasExportModifier } from "./declarations.js";
+import { hasExportModifier, isFunctionResult } from "./declarations.js";
 import { assignmentTargetCheckers, methodCallCheckers, newCheckers, propertyCheckers } from "./members.js";
 import { checkBitwiseAssignOperands, isBitwiseCompoundOperator } from "./bitwise.js";
 import { CheckedProgram, FieldInfo, FunctionSig, LocalVar, Param, StructInfo } from "./program.js";
@@ -688,7 +688,7 @@ export function contextualType(ctx: CheckContext, expr: ts.Expression, scope: Sc
   if (ts.isVariableDeclaration(parent)) {
     return parent.type && parent.initializer === expr ? resolveTypeNode(parent.type, ctx.sf, ctx.opts) : undefined;
   }
-  if (ts.isReturnStatement(parent)) return ctx.current.returnType;
+  if (isFunctionResult(expr)) return ctx.current.returnType;
   if (ts.isBinaryExpression(parent)) {
     if (parent.right !== expr || parent.operatorToken.kind !== ts.SyntaxKind.EqualsToken) return undefined;
     let target = parent.left;

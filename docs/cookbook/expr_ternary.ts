@@ -1,3 +1,1 @@
-function max(a: number, b: number): number {
-  return a > b ? a : b;
-}
+const max = (a: number, b: number): number => (a > b ? a : b);

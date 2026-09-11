@@ -1,6 +1,6 @@
 const KIND_CALL: i32 = 4;
 
-function classify(kind: number): number {
+const classify = (kind: number): number => {
   switch (kind) {
     case 0:
       return 10;
@@ -12,4 +12,4 @@ function classify(kind: number): number {
     default:
       return 40;
   }
-}
+};

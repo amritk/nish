@@ -1,3 +1,1 @@
-function identity(s: string): string {
-  return s;
-}
+const identity = (s: string): string => s;
