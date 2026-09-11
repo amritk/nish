@@ -19,10 +19,6 @@ class Square implements Shape {
   }
 }
 
-function originDistance(s: Shape): number {
-  return s.x + s.y;
-}
+const originDistance = (s: Shape): number => s.x + s.y;
 
-function describe(sq: Square): number {
-  return originDistance(sq) + sq.area();
-}
+const describe = (sq: Square): number => originDistance(sq) + sq.area();

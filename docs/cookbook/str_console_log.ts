@@ -1,5 +1,5 @@
-function report(): void {
+const report = (): void => {
   console.log("text");
   console.log(7);
   console.log(false);
-}
+};

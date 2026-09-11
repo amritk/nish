@@ -1,3 +1,1 @@
-function div(a: number, b: number): number {
-  return a / b;
-}
+const div = (a: number, b: number): number => a / b;

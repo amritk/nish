@@ -1,11 +1,5 @@
-function join(a: string, b: string): string {
-  return a + b;
-}
+const join = (a: string, b: string): string => a + b;
 
-function same(a: string, b: string): boolean {
-  return a === b;
-}
+const same = (a: string, b: string): boolean => a === b;
 
-function len(s: string): number {
-  return s.length;
-}
+const len = (s: string): number => s.length;

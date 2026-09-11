@@ -1,7 +1,3 @@
-function report(parts: string[]): string {
-  return parts.join(", ");
-}
+const report = (parts: string[]): string => parts.join(", ");
 
-function firstAt(names: string[], name: string): number {
-  return names.indexOf(name);
-}
+const firstAt = (names: string[], name: string): number => names.indexOf(name);

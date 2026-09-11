@@ -75,9 +75,9 @@ export type StatementChecker = (ctx: CheckContext, stmt: ts.Statement, scope: Sc
  * an attribute the checker cannot justify is a miscompile, not an
  * optimisation.
  */
-export function analyzeFunctions(units: ModuleUnit[]): Map<symbol, FunctionFacts> {
+export const analyzeFunctions = (units: ModuleUnit[]): Map<symbol, FunctionFacts> => {
   /* ... */
-}
+};
 ```
 
 - If the type is temporary or will change later, leave a TODO comment. In this repo a TODO names the work package it belongs to (`TODO(WP8): ...`), because scope that belongs to another package is left for it rather than widened into.

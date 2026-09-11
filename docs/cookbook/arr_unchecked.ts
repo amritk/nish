@@ -1,3 +1,1 @@
-function get(a: number[], i: number): number {
-  return a[i];
-}
+const get = (a: number[], i: number): number => a[i];

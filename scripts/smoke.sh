@@ -5,7 +5,7 @@
 #   scripts/smoke.sh [examples-dir]      (default: examples/)
 #   npm run smoke                        (builds dist/ first)
 #
-# A program is any examples/**/*.ts that declares `export function main`. It
+# A program is any examples/**/*.ts that declares `export const main`. It
 # is expected to exit 0 unless it carries a `// smoke: exit <n>` comment; a
 # `// smoke: argv <args>` comment passes those arguments on its command line
 # (process.argv). The script exits non-zero if any program fails to compile,
@@ -23,9 +23,12 @@ if ! command -v clang >/dev/null 2>&1 && [ -z "${CC:-}" ]; then
   exit 3
 fi
 
-mapfile -t programs < <(grep -rl --include='*.ts' -E '^export function main\b' "$examples" | sort)
+# Either spelling declares the entry (docs/wp22-arrow-functions.md): the arrow
+# `export const main = (...) => ...` is the form the corpus is written in, and
+# `export function main` is still legal.
+mapfile -t programs < <(grep -rl --include='*.ts' -E '^export (function main\b|const main[[:space:]]*=)' "$examples" | sort)
 if [ ${#programs[@]} -eq 0 ]; then
-  echo "error: no examples with \`export function main\` under $examples" >&2
+  echo "error: no examples with \`export const main\` under $examples" >&2
   exit 1
 fi
 

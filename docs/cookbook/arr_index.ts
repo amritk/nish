@@ -1,7 +1,5 @@
-function get(a: number[], i: number): number {
-  return a[i];
-}
+const get = (a: number[], i: number): number => a[i];
 
-function set(a: number[], i: number, v: number): void {
+const set = (a: number[], i: number, v: number): void => {
   a[i] = v;
-}
+};

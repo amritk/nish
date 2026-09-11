@@ -34,10 +34,10 @@ npm install -g nish          # or: git clone, npm install, npm run build, node d
 `hello.ts`:
 
 ```ts
-export function main(): number {
+export const main = (): number => {
   console.log("hello from Nish");
   return 0;                          // the process exit code
-}
+};
 ```
 
 ```bash
@@ -70,7 +70,7 @@ there cites the test case that proves it.
 | Feature | Summary | Reference |
 | --- | --- | --- |
 | Types | `number` (`i32` by default, `double` with `--number-mode f64`), `i32`, `i64`, `f64`, `boolean`, `string`, `T[]`, classes, interfaces, `T \| null`, `void`; 1:1 LLVM mapping, no implicit conversions | [Types](docs/LANGUAGE.md#types) |
-| Functions and modules | annotated signatures, calls in any order, `export`/named relative `import`, whole-program attribute facts, `export function main` as the entry, `internal` linkage for everything not exported | [Declarations](docs/LANGUAGE.md#declarations) |
+| Functions and modules | annotated signatures, calls in any order, `export`/named relative `import`, whole-program attribute facts, `export const main` as the entry, `internal` linkage for everything not exported | [Declarations](docs/LANGUAGE.md#declarations) |
 | Control flow | `if`/`else`, `while`, `do`, `for`, `for...of`, `break`/`continue`, boolean-only conditions, definite return, unreachable-code errors | [Statements](docs/LANGUAGE.md#statements) |
 | Expressions | `+ - * / %` (integer `/` and `%` checked: zero divisor or `MIN / -1` panics), numeric-only ordering, `=== !==` (strings by content), `&& \|\|`, `?:`, `op=`, `++`/`--`, template literals, contextual numeric literals | [Expressions](docs/LANGUAGE.md#expressions) |
 | Strings | immutable UTF-8 (`.length` is the byte length), literals as constant data, `+`, `===`, templates, `console.log` | [Builtins](docs/LANGUAGE.md#builtins), [Semantics](docs/LANGUAGE.md#semantics-decisions) |
@@ -178,7 +178,7 @@ nish <entry.ts> [more.ts ...] [options]
   -o, --output <file.ll>     output path for a single module (default: <input>.ll)
   -o, --output <dir>/        output directory: one <dir>/<module>.ll per module
   --link <exe>               build a native binary from every module + runtime/runtime.c
-                             (entry module must declare `export function main`)
+                             (entry module must declare `export const main`)
   --profile speed|size|debug build profile for --link (default: speed)
   --no-strict-exports        every function is an external symbol (default: non-exported
                              functions get `internal` linkage)

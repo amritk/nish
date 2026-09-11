@@ -1,19 +1,9 @@
-function divide(a: u32, b: u32): u32 {
-  return a / b;
-}
+const divide = (a: u32, b: u32): u32 => a / b;
 
-function below(a: u32, b: u32): boolean {
-  return a < b;
-}
+const below = (a: u32, b: u32): boolean => a < b;
 
-function halve(a: u32): u32 {
-  return a >> 1;
-}
+const halve = (a: u32): u32 => a >> 1;
 
-function widen(a: u32): u64 {
-  return toU64(a);
-}
+const widen = (a: u32): u64 => toU64(a);
 
-function reinterpret(a: i32): u32 {
-  return toU32(a);
-}
+const reinterpret = (a: i32): u32 => toU32(a);
