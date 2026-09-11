@@ -602,10 +602,86 @@ if (!only || "performance".includes(only)) {
     alloc.stderr
   );
 
+  // Memory that is allocated and then dropped. The function loses its arena
+  // scope as well, so both the dropped value and everything else the body
+  // allocated live until the program exits.
+  const drop = compile("perf_arena_drop", "perf_arena_drop.ll");
+  const dropLines = summaries(drop.stderr);
+  check(
+    "performance: an allocation assigned over an allocation warns once per dropped value, naming both rewrites",
+    drop.status === 0 &&
+      dropLines.length === 3 &&
+      dropLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") === "15:3,17:3,21:3" &&
+      dropLines[0].includes(
+        "`p` already holds an allocation and this one drops it: nothing can reach the old value from here and " +
+          "nothing frees it, and assigning a local is also what stops this function from releasing its arena " +
+          "memory at all, so both allocations live until the program exits. Give each value its own `const`, or " +
+          "bracket the body with `Arena.mark()` and `Arena.release(m)`"
+      ) &&
+      dropLines[1].includes("`xs` already holds an allocation") &&
+      dropLines[2].includes("`s` already holds an allocation"),
+    drop.stderr
+  );
+
+  // The arithmetic rules. These are not advice about speed: each one is a
+  // program that does not compute what it was written to compute, and the
+  // message has to name the rewrite all the same.
+  const over = compile("perf_overflow", "perf_overflow.ll");
+  const overLines = summaries(over.stderr);
+  check(
+    "performance: `toI64(a * b)` and a shift count at the operand width both warn, each naming its rewrite",
+    over.status === 0 &&
+      overLines.length === 2 &&
+      overLines[0].includes(
+        "this `*` is computed in i32 and wraps before `toI64` widens the result, so the conversion cannot recover " +
+          "an overflow that has already happened: convert the operands first, as `toI64(a) * toI64(b)`"
+      ) &&
+      overLines[1].includes(
+        "the shift count 32 is at or beyond the 32 bits of the operand, so it is masked to 0 and this shifts by that instead"
+      ),
+    over.stderr
+  );
+
+  // Reported on the innermost expression that overflows: the third constant
+  // here is `100000 * 100000 + 1`, and only the `*` is named, because the `+`
+  // merely inherits a value that has already gone wrong.
+  const consts = compile("perf_overflow_const", "perf_overflow_const.ll");
+  const constLines = summaries(consts.stderr);
+  check(
+    "performance: a constant that does not fit its i32 warns once per innermost overflow, naming the value and the range",
+    consts.status === 0 &&
+      constLines.length === 3 &&
+      constLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") === "8:15,9:19,12:18" &&
+      constLines[0].includes(
+        "this computes with overflow: the result 2147483648 does not fit in i32 (the range is -2147483648 to " +
+          "2147483647), and signed overflow is undefined behaviour rather than a wrap: widen the operands with " +
+          "`toI64` first, or use --wrapping for two's-complement arithmetic"
+      ) &&
+      constLines[2].includes("the result 10000000000 does not fit in i32"),
+    consts.stderr
+  );
+
+  // `--wrapping` makes the wrap the defined answer, so the constant rule has
+  // nothing left to say and must not argue with the flag.
+  const wrapped = compile("perf_overflow_wrapping", "perf_overflow_wrapping.ll", ["--wrapping"]);
+  check(
+    "performance: --wrapping silences the constant-overflow warning, which is only about undefined behaviour",
+    wrapped.status === 0 && summaries(wrapped.stderr).length === 0,
+    wrapped.stderr
+  );
+
   // The false-positive guards. Each of these compiles loops that concatenate or
   // allocate where the faster form is already what the compiler emits, or where the
   // program genuinely asked for the memory, so it must say nothing at all.
-  for (const name of ["perf_str_concat_quiet", "perf_alloc_quiet"]) {
+  for (const name of [
+    "perf_str_concat_quiet",
+    "perf_alloc_quiet",
+    "perf_overflow_quiet",
+    "perf_arena_quiet",
+    // Literal spellings neither compiler folds: normalising them in stage0 would
+    // fold exactly what stage1 refuses, and only one of the two would warn.
+    "perf_overflow_spelling",
+  ]) {
     const quiet = compile(name, `${name}.ll`);
     check(
       `performance: ${name} takes no slow path with a faster form to name, so nothing is reported`,
@@ -4007,6 +4083,110 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       }
     }
   }
+}
+
+// ---- WP12: changelog ----------------------------------------------------------------
+// The release notes are generated from the commits, so what the generator keeps and what
+// it drops is a released artifact rather than a convenience. Driven against a throwaway
+// repository whose log is known: a conventional commit, one that predates the convention,
+// and a branch merged rather than squashed -- which is where the noise came from, because
+// every work-in-progress commit behind the merge used to become an entry of its own.
+if (!only || "changelog".includes(only) || "wp12".includes(only)) {
+  const gen = path.join(root, "scripts", "changelog-gen.mjs");
+  const repo = path.join(buildDir, "wp12-changelog");
+  fs.rmSync(repo, { recursive: true, force: true });
+  fs.mkdirSync(repo, { recursive: true });
+  const g = (...args) =>
+    spawnSync("git", args, {
+      cwd: repo,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: "T",
+        GIT_AUTHOR_EMAIL: "t@example.com",
+        GIT_COMMITTER_NAME: "T",
+        GIT_COMMITTER_EMAIL: "t@example.com",
+        GIT_AUTHOR_DATE: "2026-01-01T00:00:00Z",
+        GIT_COMMITTER_DATE: "2026-01-01T00:00:00Z",
+      },
+    });
+  /** Make a commit and return its sha, so a range can name it rather than guess it. */
+  const commit = (message) => {
+    fs.appendFileSync(path.join(repo, "f.txt"), `${message}\n`);
+    g("add", "-A");
+    g("commit", "-m", message);
+    return g("rev-parse", "HEAD").stdout.trim();
+  };
+
+  g("init", "-q", "-b", "main");
+  const feat = commit("feat(cli): accept a second input file");
+  const wip = commit("wip: still poking at it");
+  g("checkout", "-q", "-b", "side");
+  commit("fix(codegen): widen the index before the bounds check");
+  commit("more wip");
+  g("checkout", "-q", "main");
+  const merge = g("merge", "--no-ff", "-m", "Merge branch 'side'", "side");
+  check("changelog fixture: the throwaway repository builds", merge.status === 0, merge.stderr);
+
+  // The generator walks the log of the repository it lives in, so it is copied beside the
+  // fixture: `--from`/`--to` choose a range, never a repository.
+  const genDir = path.join(repo, "scripts");
+  fs.mkdirSync(genDir, { recursive: true });
+  fs.copyFileSync(gen, path.join(genDir, "changelog-gen.mjs"));
+  fs.writeFileSync(path.join(repo, "package.json"), '{ "name": "fixture", "version": "0.1.0" }\n');
+  fs.writeFileSync(path.join(repo, "CHANGELOG.md"), "# Changelog\n\n## [Unreleased]\n");
+  const run = (...args) =>
+    spawnSync(process.execPath, [path.join(genDir, "changelog-gen.mjs"), ...args], {
+      cwd: repo,
+      encoding: "utf8",
+    });
+
+  const md = run("--version", "0.1.0");
+  check("changelog: the generator succeeds over the fixture", md.status === 0, md.stderr);
+  const headings = [...md.stdout.matchAll(/^### (.+)$/gm)].map((m) => m[1]);
+  check(
+    "changelog: only the two conventional commits become entries",
+    headings.join(",") === "Added,Fixed",
+    `headings: ${headings.join(", ") || "(none)"}\n${md.stdout}`
+  );
+  check(
+    "changelog: the merge commit and the work-in-progress commits are not entries",
+    !/wip|Merge branch/i.test(md.stdout),
+    md.stdout
+  );
+  check(
+    "changelog: every skipped subject is named on stderr, so nothing goes missing quietly",
+    md.stderr.includes("skipped 2 commits") &&
+      md.stderr.includes("wip: still poking at it") &&
+      md.stderr.includes("more wip"),
+    md.stderr
+  );
+
+  const all = run("--version", "0.1.0", "--include-unconventional");
+  const allHeadings = [...all.stdout.matchAll(/^### (.+)$/gm)].map((m) => m[1]);
+  check(
+    "changelog: --include-unconventional files the rest under Uncategorised",
+    all.status === 0 && allHeadings.join(",") === "Added,Fixed,Uncategorised",
+    `headings: ${allHeadings.join(", ")}\n${all.stderr}`
+  );
+
+  // The negative: a range whose commits all predate the convention is an error rather than
+  // an empty release section, because a silently empty set of notes is the failure mode
+  // the filter could otherwise introduce.
+  const none = run("--version", "0.1.0", "--from", feat, "--to", wip);
+  check(
+    "changelog: a range with no conventional commit fails rather than rendering nothing",
+    none.status === 1 && /no commit in .* carries a conventional subject/.test(none.stderr),
+    `exit ${none.status}\n${none.stderr}`
+  );
+
+  const bad = run("--check-subject", "Add arrays");
+  const ok = run("--check-subject", "perf(codegen)!: hoist the array header");
+  check(
+    "changelog: --check-subject is the same rule pr-title.yml enforces",
+    bad.status === 1 && ok.status === 0,
+    `bad exit ${bad.status}, ok exit ${ok.status}\n${bad.stderr}${ok.stderr}`
+  );
 }
 
 // ---- WP13: differential -------------------------------------------------------------

@@ -62,6 +62,9 @@ Tests: tests/cases/arr_alias_domains
 - **`Release-Note:`** replaces the body in public notes, for when the body is
   about the review rather than about the change.
 
-A subject that is not conventional is not dropped — it lands under
-"Uncategorised" with its body intact — but it is reported, and it is a
-reviewable defect.
+Only conventional subjects become release entries. A subject that is not one
+is skipped and named on stderr, so a change worth reading about has to say what
+it was — which is why `pr-title.yml` checks the pull request title, the subject
+a squash merge lands. Work-in-progress commits behind a merge therefore cost
+nothing; `--include-unconventional` files them all under "Uncategorised" when a
+release really needs the raw history.

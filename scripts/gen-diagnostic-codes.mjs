@@ -60,14 +60,19 @@ const bandOf = (file) => {
 };
 
 /**
- * The two WP15 section 8 rules. Their message opens with the interpolated name
- * of the variable it is about, so there is no literal prefix to match; these
- * fragments are the distinctive middle of each message and are matched with
- * `indexOf` rather than `startsWith`.
+ * The WP15 section 8 rules. `src/checker/performance.ts` is skipped by the
+ * scan below, so this list is the whole of the class: a message there opens
+ * with the interpolated name of the variable it is about as often as not, and
+ * `codeFor` matches these with `indexOf` rather than `startsWith`. Keep each
+ * fragment distinctive and inside one literal run of its message.
  */
 const PERFORMANCE = [
   "is rebuilt from its own value on every iteration of this loop",
   "allocates a dynamically sized array on every iteration of this loop",
+  "already holds an allocation and this one drops it",
+  "this computes with overflow: the result",
+  "is computed in i32 and wraps before",
+  "is at or beyond the",
 ];
 
 /** Every `.ts` under a directory, in a stable order. */
@@ -102,6 +107,11 @@ const collect = () => {
     // Not its own output: the generated header quotes the very patterns this
     // scans for, and a generator that reads what it wrote grows a rule per run.
     if (file === "src/codes.ts") continue;
+    // Every message in this file is a WP15 section 8 warning, and `codeFor`
+    // looks those up in their own table; extracting them here would put a
+    // second, unreachable entry for each in the error table. The hand-written
+    // list above is where they are registered.
+    if (file === "src/checker/performance.ts") continue;
     const text = fs.readFileSync(abs, "utf8");
     for (const m of [...text.matchAll(call), ...text.matchAll(table)]) {
       let lit = m[1];

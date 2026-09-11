@@ -48,6 +48,7 @@
 import ts from "typescript";
 import { CheckContext } from "./context.js";
 import { CheckedProgram, FunctionSig, LocalVar } from "./program.js";
+import { StaticType, intBits } from "../types.js";
 
 /**
  * The state the walk carries. `loops` is the enclosing loop *statements*,
@@ -60,9 +61,18 @@ import { CheckedProgram, FunctionSig, LocalVar } from "./program.js";
  */
 type Walk = {
   ctx: CheckContext;
+  /** The function being walked: the arena rule reads its return type. */
+  sig: FunctionSig;
   loops: ts.Statement[];
   declared: LocalVar[];
   declaredDepth: number[];
+  /**
+   * Whether each declared local's initializer was itself a visible allocation.
+   * Parallel to `declared`, and the difference between "this assignment drops
+   * an allocation nobody can reach again" and "this local is being given its
+   * one value in a branch", which is ordinary code with nothing to fix.
+   */
+  declaredAllocates: boolean[];
 };
 
 /** Strip parentheses; every shape test below is about the expression inside them. */
@@ -175,6 +185,14 @@ const usedOnlyWithinIteration = (
   return confined;
 };
 
+/** Whether `local` was declared holding an allocation. False for one declared elsewhere. */
+const declaredHoldingAllocation = (walk: Walk, local: LocalVar): boolean => {
+  for (let i = 0; i < walk.declared.length; i++) {
+    if (walk.declared[i] === local) return walk.declaredAllocates[i];
+  }
+  return false;
+};
+
 /** The loop depth `local` was declared at, or `-1` when it was not declared inside a loop. */
 const depthOf = (walk: Walk, local: LocalVar): number => {
   for (let i = 0; i < walk.declared.length; i++) {
@@ -183,16 +201,26 @@ const depthOf = (walk: Walk, local: LocalVar): number => {
   return -1;
 };
 
-/** `s = <something built from s>` inside a loop that does not own `s`. */
-const checkStringAccumulation = (walk: Walk, expr: ts.BinaryExpression): void => {
-  if (walk.loops.length === 0) return;
-  if (!ts.isIdentifier(expr.left)) return;
+/**
+ * `s = <something built from s>` inside a loop that does not own `s`. Split
+ * from the report below because the arena rule has to know whether this one is
+ * already speaking about the same assignment: one line gets one warning.
+ */
+const isQuadraticAccumulation = (walk: Walk, expr: ts.BinaryExpression): boolean => {
+  if (walk.loops.length === 0) return false;
+  if (!ts.isIdentifier(expr.left)) return false;
   const target = walk.ctx.program.bindings.get(expr.left);
-  if (!target || target.type.kind !== "string") return;
+  if (!target || target.type.kind !== "string") return false;
   // Declared inside the loop it is assigned in: the string is rebuilt from
   // empty every pass, so it is bounded by one iteration, not by the loop.
-  if (depthOf(walk, target) === walk.loops.length) return;
-  if (!accumulates(walk.ctx.program, expr.right, target)) return;
+  if (depthOf(walk, target) === walk.loops.length) return false;
+  return accumulates(walk.ctx.program, expr.right, target);
+};
+
+/** `s = <something built from s>` inside a loop that does not own `s`. */
+const checkStringAccumulation = (walk: Walk, expr: ts.BinaryExpression): void => {
+  if (!isQuadraticAccumulation(walk, expr)) return;
+  const target = walk.ctx.program.bindings.get(expr.left as ts.Identifier)!;
   walk.ctx.reportPerformance(
     `\`${target.name}\` is rebuilt from its own value on every iteration of this loop, so every pass copies all ` +
       `of it (quadratic in time and in arena bytes): collect the pieces in a \`string[]\` and \`join\` them after the loop`,
@@ -213,6 +241,412 @@ const checkLoopAllocation = (walk: Walk, decl: ts.VariableDeclaration): void => 
       `past the iteration, so the arena grows once per pass: hoist the allocation above the loop and reuse it, ` +
       `or bracket the loop body with \`Arena.mark()\` and \`Arena.release(m)\``,
     decl.name
+  );
+};
+
+
+
+// ---- Memory that is allocated and then never released --------------------------------
+//
+// WP6 releases a function's arena temporaries on the way out, but only when it
+// can prove that every allocation the body made dies with the frame. One
+// syntactic shape takes that proof away, and it is easy to write by accident:
+// assigning an allocation to a local that already exists.
+//
+//   let p = new Point(1);
+//   p = new Point(n);      // <- both Points now live until the program exits
+//
+// The stack rule needs a fixed binding, so an assignment classifies the value
+// as `leaks` (`src/codegen/escape.ts`), `allocLeaks` goes on, and the whole
+// function loses its `nish_arena_mark` / `nish_arena_release` bracket -- not
+// just the assigned value, but *every* allocation in the body, including the
+// ones that were going to be stack slots. Measured on the two-line function
+// above: two `nish_alloc_struct` calls and no scope at all, where the same
+// function written with two `const`s allocates nothing.
+//
+// This is the warning that answers "the compiler could not prove it, so the
+// memory is simply never freed" with a line number. What keeps it inside the
+// section 8 bar is that both rewrites are always available: a fresh `const`
+// per value, and failing that, an explicit `Arena.mark()` / `Arena.release(m)`
+// bracket, which is what the explicit-control builtins are for.
+
+/**
+ * `expr` allocates from the arena in a way the checker can see for itself: a
+ * `new`, an object or array literal, a template with a hole, a string
+ * concatenation, or a `readFileSync`.
+ *
+ * A call to a user function is deliberately not counted even though it may
+ * allocate: whether it does is a whole-program fact the fixpoint in
+ * `src/codegen/attributes.ts` owns, the checker would have to guess, and a
+ * guess that fires on a call that allocates nothing is the un-actionable kind
+ * of warning. A string literal is not counted either -- it is constant data,
+ * not an allocation.
+ */
+const READ_BUILTINS = ["readFileSync", "readFileSyncOrNull"];
+
+const allocatesVisibly = (program: CheckedProgram, expr: ts.Expression): boolean => {
+  const e = unwrapParens(expr);
+  if (ts.isNewExpression(e) || ts.isObjectLiteralExpression(e) || ts.isArrayLiteralExpression(e)) return true;
+  if (ts.isTemplateExpression(e)) return true; // a template *with* holes; a plain one is a literal
+  if (ts.isCallExpression(e)) {
+    const callee = unwrapParens(e.expression);
+    return (
+      ts.isIdentifier(callee) &&
+      READ_BUILTINS.includes(callee.text) &&
+      !program.functions.some((f) => f.sourceName === callee.text)
+    );
+  }
+  return (
+    ts.isBinaryExpression(e) &&
+    e.operatorToken.kind === ts.SyntaxKind.PlusToken &&
+    program.types.get(e)?.kind === "string"
+  );
+};
+
+/**
+ * A type that is a pointer at run time, and so names memory somebody has to
+ * own. `result` is counted with them even though WP17 passes a small one in a
+ * register: the rule uses this to decide when to stay quiet, and counting a
+ * borderline type as a pointer only ever means one warning fewer.
+ */
+const isPointerType = (t: StaticType | undefined): boolean =>
+  t !== undefined &&
+  (t.kind === "string" || t.kind === "array" || t.kind === "struct" || t.kind === "nullable" || t.kind === "result");
+
+/**
+ * A use of `local` that can let the value it holds outlive the statement it
+ * appears in: an argument (a `push` is one), a `return`, an element of an
+ * array or object literal, the right-hand side of an assignment, or the
+ * initializer of another binding. Everything else -- an operand, a field or
+ * element read or write through it, `.length`, a `for...of` source --
+ * consumes the value where it stands and cannot keep it.
+ */
+const capturesLocal = (program: CheckedProgram, node: ts.Node, local: LocalVar): boolean => {
+  const refers = (e: ts.Expression): boolean => {
+    const inner = unwrapParens(e);
+    return ts.isIdentifier(inner) && program.bindings.get(inner) === local;
+  };
+  if (ts.isCallExpression(node)) return node.arguments.some(refers);
+  if (ts.isReturnStatement(node)) return node.expression !== undefined && refers(node.expression);
+  if (ts.isArrayLiteralExpression(node)) return node.elements.some(refers);
+  if (ts.isPropertyAssignment(node)) return refers(node.initializer);
+  if (ts.isVariableDeclaration(node)) return node.initializer !== undefined && refers(node.initializer);
+  return (
+    ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && refers(node.right)
+  );
+};
+
+/**
+ * Whether the value `local` holds *when `expr` runs* may already be reachable
+ * from somewhere else, which is what decides whether the assignment really
+ * drops it.
+ *
+ * The question is about order, not about existence, and this compiler's own
+ * `astLines` is why. It builds a line, replaces it in a branch, and only then
+ * pushes it: the replaced value is dead and the warning is right. Turn the two
+ * around -- push, then reassign, in a loop -- and every pushed value is still
+ * reachable through the array and the warning would be wrong.
+ *
+ * So: inside a loop, any capture anywhere in the outermost enclosing loop
+ * counts, because control comes back around to the assignment with the capture
+ * behind it. Outside one, only a capture that finishes before the assignment
+ * starts can have taken a value the assignment is about to drop.
+ */
+const heldValueMayBeReachable = (walk: Walk, expr: ts.BinaryExpression, local: LocalVar): boolean => {
+  const inLoop = walk.loops.length > 0;
+  const root: ts.Node = inLoop ? walk.loops[0] : walk.sig.body;
+  const before = expr.getStart(expr.getSourceFile());
+  let reachable = false;
+  const scan = (node: ts.Node): void => {
+    if (reachable) return;
+    if ((inLoop || node.end <= before) && capturesLocal(walk.ctx.program, node, local)) {
+      reachable = true;
+      return;
+    }
+    ts.forEachChild(node, scan);
+  };
+  scan(root);
+  return reachable;
+};
+
+/**
+ * `s = <an allocation>` where `s` is a local that was *declared* holding an
+ * allocation: the value it held is unreachable from here on, and nothing frees
+ * it. Reported on the target, because the assignment is the thing to change.
+ *
+ * Five guards keep the message true, and the first two are what the rule turns
+ * on. Running an earlier draft over this compiler's own source found `let what
+ * = "unbound"` followed by three branches that each assign a template -- real
+ * retention, one allocation, and no rewrite worth naming, because assigning a
+ * local in a branch is how a language without a match expression computes a
+ * value. Requiring the declaration to allocate as well leaves exactly the case
+ * where an allocation is *dropped*, which is the one with something to fix:
+ *
+ *   - the declaration's initializer must itself be a visible allocation;
+ *   - the function must not return a pointer, because a function that hands
+ *     memory back was never getting a scope and its caller owns what it made
+ *     (WP9's call-site reclaim is the mechanism there, not this one);
+ *   - the quadratic-string rule must not already be reporting this very
+ *     assignment, which it does for an accumulator in a loop -- one line
+ *     deserves one warning, and that message names a rewrite that fixes this
+ *     as well;
+ *   - the right-hand side has to be an allocation the checker can see, not a
+ *     call it would be guessing about;
+ *   - and the value being dropped must not already be reachable from
+ *     somewhere else, which `heldValueMayBeReachable` decides.
+ */
+const checkArenaReassignment = (walk: Walk, expr: ts.BinaryExpression): void => {
+  if (!ts.isIdentifier(expr.left)) return;
+  const program = walk.ctx.program;
+  const target = program.bindings.get(expr.left);
+  if (!target || target.storage !== "local" || !isPointerType(target.type)) return;
+  if (isPointerType(walk.sig.returnType)) return;
+  if (isQuadraticAccumulation(walk, expr)) return;
+  if (!declaredHoldingAllocation(walk, target)) return;
+  if (!allocatesVisibly(program, expr.right)) return;
+  if (heldValueMayBeReachable(walk, expr, target)) return;
+  walk.ctx.reportPerformance(
+    `\`${target.name}\` already holds an allocation and this one drops it: nothing can reach the old value from ` +
+      `here and nothing frees it, and assigning a local is also what stops this function from releasing its arena ` +
+      `memory at all, so both allocations live until the program exits. Give each value its own \`const\`, or ` +
+      `bracket the body with \`Arena.mark()\` and \`Arena.release(m)\``,
+    expr.left
+  );
+};
+
+// ---- Arithmetic that provably goes wrong (the overflow rules) -------------------------
+//
+// Signed overflow is undefined behaviour by default (`--wrapping` opts out,
+// `docs/LANGUAGE.md` -> "Semantics decisions"), so a program that overflows an
+// `i32` by accident has no defined meaning at all. The temptation is to warn
+// wherever overflow is *possible*, but on an `i32` that is every `+` and every
+// `*` in the program, which is the un-actionable kind of warning section 8
+// rules out in as many words. So these three rules fire only where the
+// compiler can point at the value, or at a shape whose rewrite is mechanical:
+//
+//   1. a constant that does not fit the type it is computed in,
+//   2. `i32` arithmetic widened *after* the fact by `toI64` / `toF64`, which
+//      is the classic overflow bug: the multiply has already wrapped by the
+//      time the conversion sees it,
+//   3. a shift by a literal count at or beyond the operand width, which is
+//      masked and therefore never the shift that was written.
+//
+// Unsigned widths are deliberately silent. `u8`, `u16`, `u32` and `u64` are
+// *defined* to wrap (`(255: u8) + 1` is `0`), so wrapping there is the
+// language working as documented rather than a program with a bug, and a
+// warning would fire on the very code that chose an unsigned type to get it.
+
+/**
+ * The source spelling of an arithmetic or shift operator. Spelled out rather
+ * than taken from the token's source text so that the message is the same in
+ * both compilers: stage1 has its own token kinds and no `getText`.
+ */
+const operatorText = (kind: ts.SyntaxKind): string => {
+  switch (kind) {
+    case ts.SyntaxKind.PlusToken:
+      return "+";
+    case ts.SyntaxKind.MinusToken:
+      return "-";
+    case ts.SyntaxKind.AsteriskToken:
+      return "*";
+    case ts.SyntaxKind.LessThanLessThanToken:
+      return "<<";
+    case ts.SyntaxKind.GreaterThanGreaterThanToken:
+      return ">>";
+    default:
+      return ">>>";
+  }
+};
+
+/**
+ * The range the constant rule reports against. Only `i32` is ever reported:
+ * the fold bounds below keep every value the fold carries well inside `i64`,
+ * so an `i64` constant it can evaluate is an `i64` constant that fits.
+ */
+const I32_MIN = -2147483648n;
+const I32_MAX = 2147483647n;
+
+/** `t` is the one type the constant rule reports against. */
+const isI32 = (t: StaticType | undefined): boolean => t?.kind === "i32";
+
+/**
+ * Bounds on what the fold will carry. Every intermediate stays inside them, so
+ * the fold itself can never be the thing that overflows -- which matters far
+ * more than it looks: stage1 folds in `i64`, and a fold that overflowed there
+ * would be undefined behaviour inside the very check that reports it. A
+ * product needs both operands under 2^31 to stay inside an `i64`, and a sum
+ * needs both under 2^52 -- which is also the largest power of two either
+ * compiler can *write*, since a literal past 2^53 cannot be spelled exactly
+ * (`docs/LANGUAGE.md`, NL2055). Anything larger is answered "not a constant",
+ * which costs a warning nobody was going to get anyway.
+ */
+const FOLD_LIMIT = 2147483648n; // 2^31
+const FOLD_SUM_LIMIT = 4503599627370496n; // 2^52
+
+/**
+ * A run of decimal digits, which is the only literal shape both compilers fold
+ * the same way. Stage1 has no `Number`, so hexadecimal, binary, octal,
+ * exponent and separated literals are left alone rather than folded
+ * differently on each side.
+ *
+ * This has to be asked of the literal *as written*. `ts.NumericLiteral.text`
+ * is normalised -- `0x20` arrives as `"32"` and `100_000` as `"100000"` --
+ * so testing it would fold exactly the spellings stage1 refuses, and the two
+ * compilers would disagree about whether to warn.
+ */
+const isDecimalInteger = (text: string): boolean => {
+  if (text.length === 0) return false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c < 48 || c > 57) return false;
+  }
+  return true;
+};
+
+const magnitude = (value: bigint): bigint => (value < 0n ? -value : value);
+
+/**
+ * The exact value of a constant integer expression, or `undefined` for
+ * anything that is not one. Only decimal literals joined by `+`, `-`, `*` and
+ * unary minus are folded.
+ *
+ * A `const n = 8` is deliberately not followed even though the checker knows
+ * its value: the warning below names a value the reader can see on the line
+ * the caret points at, and chasing bindings would start naming values that are
+ * not written there. A module-level `const` needs no help from here either --
+ * `src/checker/constants.ts` folds those eagerly and makes an overflow a hard
+ * error, so what is left for a warning is exactly the arithmetic inside a
+ * function body.
+ */
+const constantInt = (expr: ts.Expression): bigint | undefined => {
+  const e = unwrapParens(expr);
+  if (ts.isNumericLiteral(e)) {
+    const written = e.getText(e.getSourceFile());
+    if (!isDecimalInteger(written)) return undefined;
+    const value = BigInt(written);
+    return value > FOLD_LIMIT ? undefined : value;
+  }
+  if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.MinusToken) {
+    const operand = constantInt(e.operand);
+    return operand === undefined ? undefined : -operand;
+  }
+  if (!ts.isBinaryExpression(e)) return undefined;
+  const left = constantInt(e.left);
+  const right = constantInt(e.right);
+  if (left === undefined || right === undefined) return undefined;
+  const kind = e.operatorToken.kind;
+  if (kind === ts.SyntaxKind.AsteriskToken) {
+    if (magnitude(left) > FOLD_LIMIT || magnitude(right) > FOLD_LIMIT) return undefined;
+    return left * right;
+  }
+  if (magnitude(left) > FOLD_SUM_LIMIT || magnitude(right) > FOLD_SUM_LIMIT) return undefined;
+  if (kind === ts.SyntaxKind.PlusToken) return left + right;
+  if (kind === ts.SyntaxKind.MinusToken) return left - right;
+  return undefined;
+};
+
+/** `expr` is a constant of a signed type whose value does not fit that type. */
+const overflowsItsType = (program: CheckedProgram, expr: ts.Expression): boolean => {
+  const e = unwrapParens(expr);
+  if (!isI32(program.types.get(e))) return false;
+  const value = constantInt(e);
+  return value !== undefined && (value < I32_MIN || value > I32_MAX);
+};
+
+/**
+ * A constant `+`, `-` or `*` whose value does not fit the signed type it is
+ * computed in. Reported on the *innermost* expression that overflows, because
+ * that is the operation that actually goes wrong: in `(a * b) + 1` where the
+ * product already overflows, the `+` is a consequence and warning about both
+ * would say the same thing twice.
+ *
+ * Silent under `--wrapping`, where the wrap is the defined answer rather than
+ * undefined behaviour. A program compiled that way has said that it wants
+ * `2147483647 + 1` to be `-2147483648`, and the warning would be arguing with
+ * a flag the author passed on purpose.
+ */
+const checkConstantOverflow = (walk: Walk, expr: ts.BinaryExpression): void => {
+  if (!walk.ctx.opts.nsw) return;
+  const kind = expr.operatorToken.kind;
+  if (kind !== ts.SyntaxKind.PlusToken && kind !== ts.SyntaxKind.MinusToken && kind !== ts.SyntaxKind.AsteriskToken)
+    return;
+  const program = walk.ctx.program;
+  if (!isI32(program.types.get(expr))) return;
+  const value = constantInt(expr);
+  if (value === undefined || (value >= I32_MIN && value <= I32_MAX)) return;
+  if (overflowsItsType(program, expr.left) || overflowsItsType(program, expr.right)) return;
+  walk.ctx.reportPerformance(
+    `this computes with overflow: the result ${value} does not fit in i32 (the range is ${I32_MIN} to ` +
+      `${I32_MAX}), and signed overflow is undefined behaviour rather than a wrap: widen the operands with ` +
+      `\`toI64\` first, or use --wrapping for two's-complement arithmetic`,
+    expr
+  );
+};
+
+/**
+ * `toI64(a * b)` and `toF64(a * b)` on `i32` operands: the multiplication is
+ * done in `i32` and has already overflowed by the time the conversion widens
+ * the result, so the wider type never sees the value the reader expects. The
+ * rewrite is mechanical — convert the operands and multiply in the wider type
+ * — which is what earns this one its place under the section 8 bar.
+ *
+ * **Multiplication only**, though `+` and `-` can overflow too. The bar is
+ * that the warning must not fire on code with nothing wrong with it, and the
+ * compiler's own source settled the question the first time this rule ran over
+ * it: `toI64(intBits(type) - 1)` is the shape, and there is nothing to fix,
+ * because a width minus one has no way to reach the end of an `i32`. A
+ * product of two values the compiler knows nothing about does, and that is the
+ * bug this rule is named after.
+ *
+ * A user function named `toI64` shadows the builtin (`docs/LANGUAGE.md` ->
+ * "Builtins"), so a program that declares one is left alone: the call is not a
+ * conversion at all there.
+ */
+const WIDENING_CONVERSIONS = ["toI64", "toF64"];
+
+const checkWideningConversion = (walk: Walk, call: ts.CallExpression): void => {
+  const callee = unwrapParens(call.expression);
+  if (!ts.isIdentifier(callee) || !WIDENING_CONVERSIONS.includes(callee.text)) return;
+  if (call.arguments.length !== 1) return;
+  const program = walk.ctx.program;
+  if (program.functions.some((f) => f.sourceName === callee.text)) return;
+  const arg = unwrapParens(call.arguments[0]);
+  if (!ts.isBinaryExpression(arg)) return;
+  if (arg.operatorToken.kind !== ts.SyntaxKind.AsteriskToken) return;
+  if (program.types.get(arg)?.kind !== "i32") return;
+  const op = operatorText(arg.operatorToken.kind);
+  walk.ctx.reportPerformance(
+    `this \`${op}\` is computed in i32 and wraps before \`${callee.text}\` widens the result, so the conversion cannot ` +
+      `recover an overflow that has already happened: convert the operands first, as ` +
+      `\`${callee.text}(a) ${op} ${callee.text}(b)\``,
+    arg
+  );
+};
+
+/**
+ * A shift by a literal count at or beyond the operand's width. The count is
+ * masked to the width rather than left undefined (`docs/LANGUAGE.md` ->
+ * "Shifts"), which matches JavaScript but means `x << 32` on an `i32` shifts
+ * by nothing at all — never what the line was written to do.
+ */
+const SHIFT_OPERATORS = [
+  ts.SyntaxKind.LessThanLessThanToken,
+  ts.SyntaxKind.GreaterThanGreaterThanToken,
+  ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
+];
+
+const checkShiftCount = (walk: Walk, expr: ts.BinaryExpression): void => {
+  if (!SHIFT_OPERATORS.includes(expr.operatorToken.kind)) return;
+  const bits = intBits(walk.ctx.program.types.get(expr) ?? { kind: "void" });
+  if (bits === 0) return;
+  const count = constantInt(expr.right);
+  if (count === undefined || count < 0n || count < BigInt(bits)) return;
+  const op = operatorText(expr.operatorToken.kind);
+  walk.ctx.reportPerformance(
+    `the shift count ${count} is at or beyond the ${bits} bits of the operand, so it is masked to ` +
+      `${count % BigInt(bits)} and this shifts by that instead: mask the count yourself if that is intended, or ` +
+      `shift a wider value — \`${op}\` never shifts a value out of existence here`,
+    expr.right
   );
 };
 
@@ -264,10 +698,20 @@ const walkNode = (walk: Walk, node: ts.Node): void => {
     if (local) {
       walk.declared.push(local);
       walk.declaredDepth.push(walk.loops.length);
+      walk.declaredAllocates.push(
+        node.initializer !== undefined && allocatesVisibly(walk.ctx.program, node.initializer)
+      );
     }
     checkLoopAllocation(walk, node);
-  } else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-    checkStringAccumulation(walk, node);
+  } else if (ts.isBinaryExpression(node)) {
+    if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      checkStringAccumulation(walk, node);
+      checkArenaReassignment(walk, node);
+    }
+    checkConstantOverflow(walk, node);
+    checkShiftCount(walk, node);
+  } else if (ts.isCallExpression(node)) {
+    checkWideningConversion(walk, node);
   }
   ts.forEachChild(node, (child) => walkNode(walk, child));
 };
@@ -281,5 +725,5 @@ const walkNode = (walk: Walk, node: ts.Node): void => {
 export const checkPerformance = (ctx: CheckContext, sig: FunctionSig): void => {
   const body = sig.body;
   if (!body) return;
-  walkNode({ ctx, loops: [], declared: [], declaredDepth: [] }, body);
+  walkNode({ ctx, sig, loops: [], declared: [], declaredDepth: [], declaredAllocates: [] }, body);
 };

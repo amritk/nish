@@ -514,3 +514,22 @@ object, so the `nish_alloc_struct(i64 N)` the layout test reads is still there.
 - Arena scopes are per function; a temporary allocated inside a loop is
   released when the function returns, not per iteration (write the loop
   body as a function to get per-iteration release).
+- A function that loses its scope to a **branch-assigned local** retains its
+  memory and the compiler says nothing about it. `let what = "unbound"` and
+  three arms that each assign a template is one allocation, not a dropped one,
+  so the WP15 §8 rule that reports a dropped allocation (`NL9003`) is silent
+  by design — but `allocLeaks` is on all the same, the scope is not emitted,
+  and everything the body allocated lives until `main` returns. The rule stays
+  silent because a warning has to name a rewrite and there is none here:
+  assigning a local in a branch is how a language without a match expression
+  computes a value. Closing the gap properly means one of two things, and
+  both are larger than a warning:
+  - a **"captured only into one binding" fact**, which would let the scope
+    survive an assignment whose value never leaves the frame — the escape
+    analysis already computes `escapes` separately from `allocLeaks` for the
+    call-site reclaim (§2a), so the fact exists; what is missing is a stack
+    rule that does not need a fixed binding;
+  - an **opt-in audit flag** (`--report-arena`), printing every allocation
+    site with its placement — stack, scoped, reclaimed, or retained — and the
+    fact that decided it. That reports without warning, which is the right
+    shape for something a reader cannot act on line by line.
