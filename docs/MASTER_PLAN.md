@@ -606,9 +606,11 @@ hand-written IR that mimics each lowering because (c) was never built; a
 by-parameter `Result`s through the generated header; and the oracles agreeing
 byte for byte before the bootstrap was allowed to close.
 [wp17-result-abi.md](wp17-result-abi.md). What it did *not* close is
-`bench/result`, which is 2.59x behind Rust because the two arms never become
-separate SSA values inside one word — the fix is a private two-scalar ABI for
-internal functions, which needs WP15's item 1.
+`bench/result`, which was 2.59x behind Rust because the two arms never become
+separate SSA values inside one word — the fix is a private ABI for internal
+functions, which needs WP15's item 1. It shipped as WP15 §7b, in two steps
+(the discriminant out of the word, then one payload slot per arm), and the row
+is 1.00x.
 
 ## 6. Dependency graph and waves
 

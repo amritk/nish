@@ -2731,10 +2731,10 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
   calls: half nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=2 stackLocals=2
-  local 15:9 good: Result<i32, i32> (const)
-  callee 15:16 half -> @half
-  local 22:9 bad: Result<i32, i32> (const)
-  callee 22:15 half -> @half
+  local 20:9 good: Result<i32, i32> (const)
+  callee 20:16 half -> @half
+  local 27:9 bad: Result<i32, i32> (const)
+  callee 27:15 half -> @half
 program tests/cases/res_by_value_param.ts
 module tests/cases/res_by_value_param.ts (entry)
 struct Box (interface) size=8 align=8
@@ -2756,14 +2756,14 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: boxed describe half nish_print nish_str_from_i32
   stackSites=4 stackLocals=0
-  callee 36:15 describe -> @describe
-  callee 37:15 describe -> @describe
-  callee 37:24 half -> @half
   callee 38:15 describe -> @describe
-  callee 38:24 half -> @half
-  local 40:9 kept: Box (const)
-  callee 40:16 boxed -> @boxed
-  local 41:9 inner: Result<i32, i32> (const)
+  callee 39:15 describe -> @describe
+  callee 39:24 half -> @half
+  callee 40:15 describe -> @describe
+  callee 40:24 half -> @half
+  local 42:9 kept: Box (const)
+  callee 42:16 boxed -> @boxed
+  local 43:9 inner: Result<i32, i32> (const)
 program tests/cases/res_by_value_payloads.ts
 module tests/cases/res_by_value_payloads.ts (entry)
 function scale(x: f32): Result<f32, boolean> -> @scale
@@ -2776,12 +2776,12 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   calls: narrow nish_arena_mark nish_arena_release nish_print nish_str_from_f64 nish_str_from_u64 scale
   stackSites=4 stackLocals=2
-  callee 22:15 scale -> @scale
   callee 23:15 scale -> @scale
-  local 25:9 small: Result<u8, u16> (const)
-  callee 25:17 narrow -> @narrow
-  local 29:9 big: Result<u8, u16> (const)
-  callee 29:15 narrow -> @narrow
+  callee 24:15 scale -> @scale
+  local 26:9 small: Result<u8, u16> (const)
+  callee 26:17 narrow -> @narrow
+  local 30:9 big: Result<u8, u16> (const)
+  callee 30:15 narrow -> @narrow
 program tests/cases/res_by_value_propagate.ts
 module tests/cases/res_by_value_propagate.ts (entry)
 function checkPort(port: i32): Result<void, i32> -> @checkPort
@@ -2798,27 +2798,27 @@ function quarter(n: i32): Result<i32, i32> -> @quarter
   escaping: n
   calls: firstHalf
   stackSites=2 stackLocals=0
-  local 22:9 h: i32 (const)
-  callee 22:13 firstHalf -> @firstHalf
-  callee 23:10 firstHalf -> @firstHalf
+  local 24:9 h: i32 (const)
+  callee 24:13 firstHalf -> @firstHalf
+  callee 25:10 firstHalf -> @firstHalf
 function again(n: i32): Result<i32, i32> -> @again
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false returnDeref=12
   escaping: n
   calls: firstHalf
   stackSites=1 stackLocals=1
-  local 27:9 r: Result<i32, i32> (const)
-  callee 27:13 firstHalf -> @firstHalf
+  local 29:9 r: Result<i32, i32> (const)
+  callee 29:13 firstHalf -> @firstHalf
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
   calls: again checkPort nish_arena_mark nish_arena_release nish_print nish_str_from_i32 quarter
   stackSites=6 stackLocals=1
-  local 32:9 bad: Result<void, i32> (const)
-  callee 32:15 checkPort -> @checkPort
-  callee 36:3 checkPort -> @checkPort
-  callee 38:15 quarter -> @quarter
-  callee 39:15 quarter -> @quarter
-  callee 40:15 again -> @again
-  callee 41:15 again -> @again
+  local 34:9 bad: Result<void, i32> (const)
+  callee 34:15 checkPort -> @checkPort
+  callee 38:3 checkPort -> @checkPort
+  callee 40:15 quarter -> @quarter
+  callee 41:15 quarter -> @quarter
+  callee 42:15 again -> @again
+  callee 43:15 again -> @again
 program tests/cases/res_export.ts
 module tests/cases/res_export.ts (entry)
 struct IoError (interface) size=16 align=8

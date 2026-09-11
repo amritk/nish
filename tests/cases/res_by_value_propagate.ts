@@ -1,9 +1,11 @@
-// The other three shapes the packed word has to cover. `Result<void, i32>` has
-// no success payload, so `Ok()` is the constant word `1` and `Err(e)` needs no
-// `or` (its tag is zero). `orReturn()` in a by-value function packs the
-// propagated error straight into the return register instead of building an
-// `Err` object. And `return r` on a variable is the `select` path: both arms
-// are loaded and the discriminant picks the live one.
+// The other three shapes a by-value `Result` has to cover. `Result<void, i32>`
+// has no success payload, so `Ok()` is the bare constant
+// `{ i1 true, i32 undef, i32 undef }` and needs no instruction at all.
+// `orReturn()` in a by-value function builds the propagated error straight into
+// the return registers instead of building an `Err` object. And `return r` on a
+// variable loads all three slots and carries both arms: under the private ABI
+// (WP15 §7b) there is no `select`, because each arm has a slot of its own and
+// whoever ignores the dead one discards it.
 function checkPort(port: i32): Result<void, i32> {
   if (port <= 0) {
     return Err(port);

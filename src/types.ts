@@ -343,26 +343,36 @@ export function llvmType(t: StaticType): string {
  */
 export function llvmAbiType(t: StaticType, privateAbi = false): string {
   if (!resultByValue(t)) return llvmType(t);
-  return privateAbi ? RESULT_PAIR : "i64";
+  return privateAbi ? RESULT_ARMS : "i64";
 }
 
 /**
  * WP15: the private ABI a *non-exported* function may use for a by-value
- * `Result` — the discriminant and the payload as two values instead of one
- * packed word, which is rustc's `ScalarPair`.
+ * `Result` — the discriminant and **one slot per arm**, instead of the one
+ * packed word a host has to see.
  *
- * The packed word is what a C or wasm host has to see, and it costs something
- * a host never pays for: with both halves inside one `i64`, the `select` that
- * picks the live arm happens on the word, and instcombine can no longer fold
- * the arithmetic around it. Splitting the halves at the call boundary of a
- * function no host can name gets that back — measured at 650 ms to 464 ms on
- * `bench/result`, which is C's 444 ms.
+ * The packed word costs something a host never pays for, and it costs it
+ * twice. With both halves inside one `i64`, the `select` that picks the live
+ * arm happens on the word and instcombine can no longer fold the arithmetic
+ * around it; splitting the tag out was worth 650 ms to 464 ms on
+ * `bench/result`. What a single payload slot still forced is subtler: the two
+ * arms share it, so the dead arm's payload joins the live one in a `phi` at
+ * every merge, and an `Err(n)` keeps `n` alive inside the ok path's
+ * arithmetic. On `bench/result` that phi is `odd ? n : n >> 1`, which
+ * instcombine folds to a *variable* shift `n >> (1 - odd)` — after which the
+ * enclosing `select` can no longer recover the constant one, because nothing
+ * propagates "this arm has `odd == 0`" into the shift amount. One slot per
+ * arm removes the phi rather than the fold: the dead slot is `undef`, so
+ * `phi(undef, n >> 1)` is `n >> 1` and the shift stays constant. That takes
+ * `bench/result` from 1.84x behind Rust `-O3` to **1.00x** — 218 ms against
+ * Rust's 218 ms, with the program's own C twin at 405 ms.
  *
- * The payload slot is `i32` for every payload `resultByValue` admits (`void`,
- * `boolean`, `u8`, `u16`, `i32`, `u32`, `f32`), for the same reason the word
- * gives it a fixed 32-bit half: one shape rather than one per alignment.
+ * Each payload slot is `i32` for every payload `resultByValue` admits
+ * (`void`, `boolean`, `u8`, `u16`, `i32`, `u32`, `f32`), for the same reason
+ * the word gives it a fixed 32-bit half: one shape rather than one per
+ * alignment.
  */
-export const RESULT_PAIR = "{ i1, i32 }";
+export const RESULT_ARMS = "{ i1, i32, i32 }";
 
 /** Natural alignment in bytes, as clang and rustc use for the same LLVM types. */
 export function alignOf(t: StaticType): number {

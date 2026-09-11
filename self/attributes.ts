@@ -1464,9 +1464,20 @@ export function functionAttributes(f: FunctionFacts): string[] {
   return attrs;
 }
 
-export function paramAttributes(table: TypeTable, name: string, type: i32, f: FunctionFacts): string[] {
+export function paramAttributes(
+  table: TypeTable,
+  name: string,
+  type: i32,
+  f: FunctionFacts,
+  privateAbi: boolean
+): string[] {
   const attrs: string[] = [];
-  attrs.push("noundef");
+  // `noundef` on everything except a by-value `Result` under the private ABI
+  // (WP15 §7b), whose dead arm's slot is deliberately `undef` — and `noundef`
+  // on an aggregate is about every element of it, not just the live one.
+  if (!privateAbi || !table.resultByValue(type)) {
+    attrs.push("noundef");
+  }
   // See the header comment: every pointer fact here is proved by `collectFacts`
   // plus the `pointerParams` fixpoint in `analyzeFunctions`.
   const pointer = f.pointerParam(name);
@@ -1519,7 +1530,8 @@ export function paramAttributes(table: TypeTable, name: string, type: i32, f: Fu
   }
   if (kind === K_RESULT && table.resultByValue(type)) {
     // WP17: a small `Result` arrives packed in an `i64`, so none of the
-    // pointer facts are about it; `noundef` alone, as for any scalar.
+    // pointer facts are about it; `noundef` alone, as for any scalar — or
+    // nothing at all under the private ABI, as above.
     return attrs;
   }
   if (kind === K_RESULT) {
@@ -1555,11 +1567,21 @@ export function paramAttributes(table: TypeTable, name: string, type: i32, f: Fu
   return attrs;
 }
 
-/** `deref` is the struct size for struct-returning functions, 0 otherwise. */
-export function returnAttributes(table: TypeTable, type: i32, deref: i32): string[] {
+/**
+ * `deref` is the struct size for struct-returning functions, 0 otherwise;
+ * `privateAbi` is whether this function answers a by-value `Result` as the
+ * arms rather than the word (WP15 §7b).
+ */
+export function returnAttributes(table: TypeTable, type: i32, deref: i32, privateAbi: boolean): string[] {
   const attrs: string[] = [];
   const kind = table.kindOf(type);
   if (type === T_VOID) {
+    return attrs;
+  }
+  // The private ABI's arms are the one shape in the language that is not
+  // fully defined: the arm that is not live is `undef` by construction, so
+  // they carry no `noundef` at all (WP15 §7b).
+  if (privateAbi && table.resultByValue(type)) {
     return attrs;
   }
   attrs.push("noundef");

@@ -526,33 +526,56 @@ implementation.
 
 The third measured win, and the one that needed no new analysis at all: just
 the observation that a function no host can name does not owe anyone its
-calling convention.
+calling convention — nor, it turned out, the *shape* of its values.
 
 WP17 packs a small `Result` into one `i64` because that is what a C or wasm
 host must see. Inside a module nobody is looking, and the word costs
-something: with the discriminant and the payload in one register the `select`
-that picks the live arm happens on the *word*, so instcombine cannot fold the
-arithmetic around it. Giving a non-exported function the two-scalar
-`{ i1, i32 }` shape instead — rustc's `ScalarPair` — takes `bench/result` from
-**650 ms to 464 ms**, which is C's 444 rather than 1.46x behind it.
+something. It took two steps to stop paying for it, and the second one is
+where the benchmark's remaining gap was.
 
-Two decisions worth keeping:
+**Step one: the tag leaves the word.** With the discriminant and the payload
+in one register the `select` that picks the live arm happens on the *word*, so
+instcombine cannot fold the arithmetic around it. Giving a non-exported
+function the two-scalar `{ i1, i32 }` shape instead — rustc's `ScalarPair` —
+takes `bench/result` from **650 ms to 464 ms**, which is C's 444 rather than
+1.46x behind it. That step moved no packing code: `packArm`, `packObject` and
+`unpackResult` still built and read the word, the pair was made from it at the
+boundary and taken apart on the other side, and LLVM folded the round trip
+away entirely — a hand-written two-scalar lowering measured 467 ms against
+464, the same within noise.
 
-- **The packing code did not move.** `packArm`, `packObject` and
-  `unpackResult` still build and read the same word; the pair is made from it
-  at the boundary and taken apart on the other side. LLVM folds the round trip
-  away entirely — a hand-written two-scalar lowering measures 467 ms against
-  464, the same within noise — so one packing path was worth more than the
-  instructions the conversion appears to cost. The change is a predicate and a
-  boundary, not a rewrite.
-- **The condition is the linkage condition.** `strictExports && !exported`,
-  the same test that writes `internal`, because the private shape is safe only
-  while no host can name the symbol. The two must not drift, which is why the
-  comment at each site says so. `--no-strict-exports` turns both off together.
+**Step two: the two arms stop sharing a slot.** 464 ms was C's number, and
+Rust was at 253. One payload slot means the ok arm and the error arm are still not
+separate SSA values, which is exactly what
+[wp17-result-abi.md](wp17-result-abi.md) §4's four-way table blamed: `half`'s
+two `return`s meet in one `i32`, so after inlining the value the ok path reads
+is `phi(n, n >> 1)`, and instcombine folds that to the *variable* shift
+`n >> (1 - odd)`. The enclosing `select` cannot undo it — nothing propagates
+"on this arm `odd` is 0" into a shift amount — so the loop carries a shift
+whose count is a data dependency. Widening the private ABI to `{ i1, i32, i32 }`,
+one slot per arm with the dead one `undef`, removes the `phi` instead of
+fighting the fold: `phi(undef, n >> 1)` is `n >> 1`, and the shift is constant
+again. `bench/result` goes from **1.84x behind Rust `-O3` to 1.00x** — 218 ms
+against Rust's 218 ms in [BENCHMARKS.md](BENCHMARKS.md), with the program's own
+C twin at 405 ms — and leaves the WP9 gap table.
+
+This step *did* move the packing code — `armsForArm`, `armsForObject` and
+`unpackArms` in `emit/result.ts` build and read the arms directly, rather than
+routing through a word that has only one slot to route through. That is the
+one thing step one got wrong about itself: the word round trip was free, but
+the *shape* it round-tripped through was not.
+
+**The condition is the linkage condition**, in both steps.
+`strictExports && !exported`, the same test that writes `internal`, because
+the private shape is safe only while no host can name the symbol. The two must
+not drift, which is why the comment at each site says so.
+`--no-strict-exports` turns both off together.
 
 This is what §3 meant when it said `--strict-exports` "does not buy a second
-namespace": it does not, but it does buy a second *calling convention*, and
-that turned out to be worth 1.40x on the shape the benchmark exists to measure.
+namespace": it does not, but it does buy a second *calling convention* — and
+then a second *value shape* to go with it. On the shape the benchmark exists
+to measure that was worth **1.40x** in the first half and **1.8x again** in
+the second.
 
 ## 7c. `indexOf` gets a real algorithm — **done**
 

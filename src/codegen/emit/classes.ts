@@ -46,7 +46,6 @@ import { emitIntBinary } from "./arithmetic.js";
 import { emitBitwiseCombine, isBitwiseCompoundOperator } from "./bitwise.js";
 import {
   emitPackedResult,
-  emitResultArgument,
   emitResultReturningCall,
   privateResultAbi,
   resultTypeDecl,
@@ -208,9 +207,9 @@ function emitMethodCall(
     // WP17: as in `emitCall`, a `Result` argument the ABI packs travels as the word.
     const want = callee.params[i + 1].type;
     const value = resultByValue(want)
-      ? emitPackedResult(ctx, arg, want as ResultType)
+      ? emitPackedResult(ctx, arg, want as ResultType, privateAbi)
       : ctx.emitExpression(arg);
-    operands.push(`${llvmAbiType(want, privateAbi)} ${emitResultArgument(ctx, want, value, privateAbi)}`);
+    operands.push(`${llvmAbiType(want, privateAbi)} ${value}`);
   });
   // WP9: after the receiver and the arguments, so the bracket holds only what
   // the method itself allocates (emit/arena.ts, `beginReclaim`).

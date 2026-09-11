@@ -21,7 +21,6 @@
 import { Emitter } from "./emit";
 import {
   emitPackedResult,
-  emitResultArgument,
   emitResultReturningCall,
   privateResultAbi,
   resultTypeDecl,
@@ -248,9 +247,9 @@ function emitCall(
     // WP17: as in the plain call, a `Result` argument the ABI packs travels as the word.
     const want = callee.paramTypes[i + 1];
     const value = emitter.table.resultByValue(want)
-      ? emitPackedResult(emitter, args[i], want)
+      ? emitPackedResult(emitter, args[i], want, calleePrivate)
       : emitter.emitExpression(args[i]);
-    operands.push(`${emitter.llvmAbi(want, calleePrivate)} ${emitResultArgument(emitter, want, value, calleePrivate)}`);
+    operands.push(`${emitter.llvmAbi(want, calleePrivate)} ${value}`);
     i = i + 1;
   }
   // WP9: after the receiver and the arguments, so the bracket holds only what

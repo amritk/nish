@@ -48,7 +48,7 @@ import {
   K_ARRAY,
   K_NULLABLE,
   K_RESULT,
-  RESULT_PAIR,
+  RESULT_ARMS,
   RESULT_PAYLOAD_SHIFT,
   T_BOOL,
   T_F32,
@@ -279,15 +279,23 @@ function packObject(emitter: Emitter, type: i32, object: string): string {
  * runs before the arena scope is released, because the object it may be read
  * out of is arena memory the release reclaims.
  */
-export function emitPackedResult(emitter: Emitter, expr: Node, type: i32): string {
+export function emitPackedResult(emitter: Emitter, expr: Node, type: i32, privateAbi: boolean): string {
   declareResultTypes(emitter, type);
   if (expr.kind === N_CALL && isResultConstructorCall(emitter.program, emitter.table, expr)) {
     const args = expr.children[1];
     const hasPayload = args.children.length > 0;
     const payload = hasPayload ? emitter.emitExpression(args.children[0]) : "";
-    return packArm(emitter, type, expr.children[0].text === "Ok", payload, hasPayload);
+    const isOk = expr.children[0].text === "Ok";
+    if (privateAbi) {
+      return armsForArm(emitter, type, isOk, payload, hasPayload);
+    }
+    return packArm(emitter, type, isOk, payload, hasPayload);
   }
-  return packObject(emitter, type, emitter.emitExpression(expr));
+  const object = emitter.emitExpression(expr);
+  if (privateAbi) {
+    return armsForObject(emitter, type, object);
+  }
+  return packObject(emitter, type, object);
 }
 
 /**
@@ -327,12 +335,7 @@ export function unpackResult(emitter: Emitter, type: i32, word: string, stack: b
 }
 
 /**
- * Wrap a call that answers a by-value `Result`: the call itself, then the
- * unpack. The finished `call` text is handed in, because who builds the
- * operand list differs between a plain call and a method call.
- */
-/**
- * Whether `sig` may use the private two-scalar `Result` ABI rather than the
+ * Whether `sig` may use the private per-arm `Result` ABI rather than the
  * packed word. The condition is exactly the one that decides `internal`
  * linkage in `emit.ts`, and the two must not drift: the private shape is safe
  * only because no host can name the symbol. An imported function is exported
@@ -342,52 +345,146 @@ export function privateResultAbi(emitter: Emitter, exported: boolean): boolean {
   return emitter.opts.strictExports && !exported;
 }
 
+/** The tag with both payload slots still `undef`; the live arm fills one in. */
+function armsFor(isOk: boolean): string {
+  const flag = isOk ? "true" : "false";
+  return `{ i1 ${flag}, i32 undef, i32 undef }`;
+}
+
 /**
- * Split the packed word into the pair at a boundary using the private ABI.
- * The word is still built exactly as the packed ABI builds it: LLVM folds the
- * round trip away entirely, and keeping one packing path is worth more than
- * the instructions this appears to cost (`src/codegen/emit/result.ts`).
+ * Widen one payload to its own slot. `f32` goes through a bitcast rather than
+ * a conversion, for the same reason `payloadToWord` does: the slot carries the
+ * bits the caller stored, not a number the ABI is free to round.
  */
-export function resultWordToPair(emitter: Emitter, word: string): string {
-  const tag = emitter.fn.emitValue(`trunc i64 ${word} to i1`);
-  const high = emitter.fn.emitValue(`lshr i64 ${word}, ${RESULT_PAYLOAD_SHIFT}`);
-  const payload = emitter.fn.emitValue(`trunc i64 ${high} to i32`);
-  const withTag = emitter.fn.emitValue(`insertvalue ${RESULT_PAIR} undef, i1 ${tag}, 0`);
-  return emitter.fn.emitValue(`insertvalue ${RESULT_PAIR} ${withTag}, i32 ${payload}, 1`);
-}
-
-/** The inverse, on the other side of the same boundary. */
-export function resultPairToWord(emitter: Emitter, pair: string): string {
-  const tag = emitter.fn.emitValue(`extractvalue ${RESULT_PAIR} ${pair}, 0`);
-  const payload = emitter.fn.emitValue(`extractvalue ${RESULT_PAIR} ${pair}, 1`);
-  const wide = emitter.fn.emitValue(`zext i32 ${payload} to i64`);
-  const shifted = emitter.fn.emitValue(`shl i64 ${wide}, ${RESULT_PAYLOAD_SHIFT}`);
-  const low = emitter.fn.emitValue(`zext i1 ${tag} to i64`);
-  return emitter.fn.emitValue(`or i64 ${shifted}, ${low}`);
-}
-
-/** A by-value `Result` argument, in whichever ABI the callee uses. */
-export function emitResultArgument(emitter: Emitter, want: i32, value: string, privateAbi: boolean): string {
-  if (privateAbi && emitter.table.resultByValue(want)) {
-    return resultWordToPair(emitter, value);
+function payloadToSlot(emitter: Emitter, type: i32, value: string): string {
+  if (emitter.table.kindOf(type) === T_VOID) {
+    return "undef";
   }
-  return value;
+  if (emitter.table.kindOf(type) === T_F32) {
+    return emitter.fn.emitValue(`bitcast float ${value} to i32`);
+  }
+  const from = emitter.llvm(type);
+  if (from === "i32") {
+    return value;
+  }
+  return emitter.fn.emitValue(`zext ${from} ${value} to i32`);
+}
+
+/** The inverse: the low bits of a slot, read back as the payload type. */
+function slotToPayload(emitter: Emitter, type: i32, slot: string): string {
+  const isF32 = emitter.table.kindOf(type) === T_F32;
+  const to = isF32 ? "i32" : emitter.llvm(type);
+  const bits = to === "i32" ? slot : emitter.fn.emitValue(`trunc i32 ${slot} to ${to}`);
+  if (isF32) {
+    return emitter.fn.emitValue(`bitcast i32 ${bits} to float`);
+  }
+  return bits;
+}
+
+/**
+ * The private ABI's value for an arm built here and now — the counterpart of
+ * `packArm`, and the reason the two spellings are not one. `packArm` has a
+ * single payload half to put the payload in; this has two, and leaves the one
+ * the arm does not use `undef`. That `undef` is the whole optimisation:
+ * `phi(undef, x)` is `x`, so where two arms meet the live slot carries the
+ * live arm's expression and nothing else. `RESULT_ARMS` in `src/types.ts` has
+ * the measurement.
+ */
+function armsForArm(
+  emitter: Emitter,
+  type: i32,
+  isOk: boolean,
+  payload: string,
+  hasPayload: boolean
+): string {
+  const payloadType = isOk ? emitter.table.okOf(type) : emitter.table.errOf(type);
+  if (!hasPayload || emitter.table.kindOf(payloadType) === T_VOID) {
+    return armsFor(isOk);
+  }
+  const slot = payloadToSlot(emitter, payloadType, payload);
+  const index = isOk ? 1 : 2;
+  return emitter.fn.emitValue(`insertvalue ${RESULT_ARMS} ${armsFor(isOk)}, i32 ${slot}, ${index}`);
+}
+
+/**
+ * The private ABI's value for a `Result` that already exists in memory — the
+ * counterpart of `packObject`. Both payloads are loaded and both are carried:
+ * where the word needs a `select` to choose which half to keep, two slots keep
+ * each where it belongs and the dead one is discarded by whoever ignores it.
+ */
+function armsForObject(emitter: Emitter, type: i32, object: string): string {
+  const layout = resultLayout(emitter.table, type);
+  const ok = loadOk(emitter, layout, object);
+  let arms = emitter.fn.emitValue(`insertvalue ${RESULT_ARMS} undef, i1 ${ok}, 0`);
+  const error = payloadToSlot(
+    emitter,
+    layout.errorType,
+    loadSlot(emitter, layout, object, layout.errorIndex, layout.errorType)
+  );
+  if (layout.hasValue) {
+    const value = payloadToSlot(
+      emitter,
+      layout.valueType,
+      loadSlot(emitter, layout, object, layout.valueIndex, layout.valueType)
+    );
+    arms = emitter.fn.emitValue(`insertvalue ${RESULT_ARMS} ${arms}, i32 ${value}, 1`);
+  }
+  return emitter.fn.emitValue(`insertvalue ${RESULT_ARMS} ${arms}, i32 ${error}, 2`);
+}
+
+/**
+ * The caller's half under the private ABI: materialise the arms as the object
+ * every other construct reads, exactly as `unpackResult` does for the word.
+ * Each slot goes to its own field, so unlike the word's unpack there is no
+ * dead slot to fill with a copy of the live one.
+ */
+function unpackArms(emitter: Emitter, type: i32, arms: string, stack: boolean): string {
+  declareResultTypes(emitter, type);
+  const layout = resultLayout(emitter.table, type);
+  const object = allocateResultIn(emitter, layout, stack);
+  const ok = emitter.fn.emitValue(`extractvalue ${RESULT_ARMS} ${arms}, 0`);
+  storeSlot(emitter, layout, object, layout.okIndex, T_BOOL, ok);
+  if (layout.hasValue) {
+    const slot = emitter.fn.emitValue(`extractvalue ${RESULT_ARMS} ${arms}, 1`);
+    const value = slotToPayload(emitter, layout.valueType, slot);
+    storeSlot(emitter, layout, object, layout.valueIndex, layout.valueType, value);
+  }
+  const errSlot = emitter.fn.emitValue(`extractvalue ${RESULT_ARMS} ${arms}, 2`);
+  const error = slotToPayload(emitter, layout.errorType, errSlot);
+  storeSlot(emitter, layout, object, layout.errorIndex, layout.errorType, error);
+  return object;
+}
+
+/** `unpackResult` or `unpackArms`, by which ABI the value arrived in. */
+export function unpackReturnedResult(
+  emitter: Emitter,
+  type: i32,
+  value: string,
+  stack: boolean,
+  privateAbi: boolean
+): string {
+  if (privateAbi) {
+    return unpackArms(emitter, type, value, stack);
+  }
+  return unpackResult(emitter, type, value, stack);
 }
 
 /** `ret` a by-value `Result`, in whichever ABI the enclosing function uses. */
-export function emitResultReturn(emitter: Emitter, word: string): void {
+export function emitResultReturn(emitter: Emitter, value: string): void {
   // Only a local narrows, so the enclosing signature is bound before it is read.
   const sig = emitter.currentSig;
   if (sig === null) {
     process.exit(internalError("emitter: a `Result` return outside a function"));
   }
-  if (!privateResultAbi(emitter, sig.exported)) {
-    emitter.fn.emit(`ret i64 ${word}`);
-    return;
-  }
-  emitter.fn.emit(`ret ${RESULT_PAIR} ${resultWordToPair(emitter, word)}`);
+  const abi = emitter.llvmAbi(sig.returnType, privateResultAbi(emitter, sig.exported));
+  emitter.fn.emit(`ret ${abi} ${value}`);
 }
 
+/**
+ * Wrap a call that answers a by-value `Result`: the call itself, then the
+ * unpack. The finished `call` text is handed in, because who builds the
+ * operand list differs between a plain call and a method call.
+ */
 export function emitResultReturningCall(
   emitter: Emitter,
   call: string,
@@ -396,8 +493,7 @@ export function emitResultReturningCall(
   privateAbi: boolean
 ): string {
   const returned = emitter.fn.emitValue(call);
-  const word = privateAbi ? resultPairToWord(emitter, returned) : returned;
-  return unpackResult(emitter, type, word, emitter.isStackSite(site));
+  return unpackReturnedResult(emitter, type, returned, emitter.isStackSite(site), privateAbi);
 }
 
 // ---- `r.ok` / `r.value` / `r.error` ---------------------------------------
@@ -423,7 +519,7 @@ export function emitResultProperty(emitter: Emitter, expr: Node, receiver: i32):
  * object rather than the callee's being handed on — the two monomorphisations
  * are different structs even when the error types agree. When this function
  * returns by value (WP17) there is no object at all: the propagated error is
- * packed into the word and `ret`urned, so propagation costs a shift.
+ * packed into the return ABI and `ret`urned, so propagation costs a shift.
  */
 function emitOrReturn(emitter: Emitter, expr: Node, receiver: i32): string {
   const sig = emitter.currentSig;
@@ -444,9 +540,11 @@ function emitOrReturn(emitter: Emitter, expr: Node, receiver: i32): string {
   emitter.fn.placeBlock(errBlock);
   const error = loadSlot(emitter, layout, object, layout.errorIndex, layout.errorType);
   if (emitter.table.resultByValue(returnType)) {
-    const word = packArm(emitter, returnType, false, error, true);
+    const propagated = privateResultAbi(emitter, sig.exported)
+      ? armsForArm(emitter, returnType, false, error, true)
+      : packArm(emitter, returnType, false, error, true);
     emitter.emitScopeExit();
-    emitResultReturn(emitter, word);
+    emitResultReturn(emitter, propagated);
   } else {
     const propagated = construct(emitter, returnType, false, error, true, null);
     emitter.emitScopeExit();

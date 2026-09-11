@@ -16,7 +16,6 @@ import { ioFunctionEmitters } from "./io.js";
 import { conversionEmitters, parseEmitters } from "./math.js";
 import {
   emitPackedResult,
-  emitResultArgument,
   emitResultReturningCall,
   privateResultAbi,
   resultFunctionEmitters,
@@ -213,16 +212,16 @@ const emitCall: ExpressionEmitter = (ctx, node) => {
   if (builtin) return builtin.emit(ctx, expr);
   const callee = ctx.program.callees.get(expr)!;
   // WP17: an argument feeding a `Result` parameter the ABI packs is passed as
-  // the word, exactly as a `return` of one is — or as the two-scalar pair when
-  // the callee is non-exported and uses the private ABI (WP15).
+  // the word, exactly as a `return` of one is — or as the arms when the callee
+  // is non-exported and uses the private ABI (WP15).
   const privateAbi = privateResultAbi(ctx, callee);
   const args = expr.arguments
     .map((arg, i) => {
       const want = callee.params[i].type;
       const value = resultByValue(want)
-        ? emitPackedResult(ctx, arg, want as ResultType)
+        ? emitPackedResult(ctx, arg, want as ResultType, privateAbi)
         : ctx.emitExpression(arg);
-      return `${llvmAbiType(want, privateAbi)} ${emitResultArgument(ctx, want, value, privateAbi)}`;
+      return `${llvmAbiType(want, privateAbi)} ${value}`;
     })
     .join(", ");
   // WP9: the mark goes after the arguments, so only the callee's own bumps

@@ -60,10 +60,11 @@ export const RESULT_PAYLOAD_SHIFT: i32 = 32;
 
 /**
  * The private ABI a non-exported function may use for a by-value `Result`:
- * the discriminant and the payload as two values rather than one packed word.
- * The reasoning and the measurement are in `src/types.ts`.
+ * the discriminant and one slot per arm rather than one packed word. The dead
+ * arm's slot is `undef`, which is what keeps it out of the live arm's
+ * arithmetic. The reasoning and the measurement are in `src/types.ts`.
  */
-export const RESULT_PAIR: string = "{ i1, i32 }";
+export const RESULT_ARMS: string = "{ i1, i32, i32 }";
 
 /** The one header type every array shares; `ARRAY_TYPE` in `src/codegen/runtime.ts`. */
 export const ARRAY_STRUCT: string = "%struct.nish_array";
@@ -378,7 +379,7 @@ export class TypeTable {
    */
   llvmAbiType(type: i32, privateAbi: boolean): string {
     if (this.resultByValue(type)) {
-      return privateAbi ? RESULT_PAIR : "i64";
+      return privateAbi ? RESULT_ARMS : "i64";
     }
     return this.llvmType(type);
   }

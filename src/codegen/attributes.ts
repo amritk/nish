@@ -26,7 +26,11 @@
  *               element read, or a call to a reading callee (e.g.
  *               `nish_str_eq`). Never with `readnone`.
  *   noundef     Every value is initialised, so no param or return
- *               value is ever undef/poison.
+ *               value is ever undef/poison -- with one exception, and it is
+ *               deliberate: the arms of a by-value `Result` under the private
+ *               ABI, where the arm that is not live is `undef` by
+ *               construction (WP15 §7b). `noundef` on an aggregate is about
+ *               every element of it, so that shape carries none.
  *   zeroext     `boolean` is i1; the C ABI wants it zero-extended in a register.
  *   String params (`i8*`):
  *     nonnull   The language has no null.
@@ -787,8 +791,11 @@ export function functionAttributes(f: FunctionFacts): string[] {
   return attrs;
 }
 
-export function paramAttributes(p: Param, f: FunctionFacts): string[] {
-  const attrs = ["noundef"];
+export function paramAttributes(p: Param, f: FunctionFacts, privateAbi: boolean): string[] {
+  // `noundef` on everything except a by-value `Result` under the private ABI
+  // (WP15 §7b), whose dead arm's slot is deliberately `undef` — and `noundef`
+  // on an aggregate is about every element of it, not just the live one.
+  const attrs = privateAbi && resultByValue(p.type) ? [] : ["noundef"];
   // See the header comment: every pointer fact here is proved by `collectFacts`
   // plus the `pointerParams` fixpoint in `analyzeFunctions`.
   const pointer = f.pointerParams.get(p.name);
@@ -818,7 +825,8 @@ export function paramAttributes(p: Param, f: FunctionFacts): string[] {
       break;
     case "result":
       // WP17: a small `Result` arrives packed in an `i64`, so none of the
-      // pointer facts are about it; `noundef` alone, as for any scalar.
+      // pointer facts are about it; `noundef` alone, as for any scalar —
+      // or nothing at all under the private ABI, as above.
       if (resultByValue(p.type)) break;
       // WP16: every `Result` comes from `ok(...)` / `err(...)`, so the object
       // is whole and never null, and nothing in the language can store through
@@ -839,8 +847,12 @@ export function paramAttributes(p: Param, f: FunctionFacts): string[] {
   return attrs;
 }
 
-/** `deref` is the struct size for struct-returning functions (`FunctionFacts.returnDeref`). */
-export function returnAttributes(t: StaticType, deref?: number): string[] {
+/**
+ * `deref` is the struct size for struct-returning functions
+ * (`FunctionFacts.returnDeref`); `privateAbi` is whether this function answers
+ * a by-value `Result` as the arms rather than the word (WP15 §7b).
+ */
+export function returnAttributes(t: StaticType, deref: number | undefined, privateAbi: boolean): string[] {
   switch (t.kind) {
     case "void":
       return [];
@@ -853,9 +865,12 @@ export function returnAttributes(t: StaticType, deref?: number): string[] {
     case "result":
       // WP17: a small `Result` comes back packed in an `i64`, so none of the
       // pointer facts are about it; the word is always fully defined, because
-      // the dead arm is discarded by a `select` before it is shifted in. A
-      // pointer `Result` is exactly a struct here, as it was in WP16.
-      if (resultByValue(t)) return ["noundef"];
+      // the dead arm is discarded by a `select` before it is shifted in. The
+      // private ABI's arms are the one shape in the language that is *not*
+      // fully defined — the arm that is not live is `undef` by construction
+      // (WP15 §7b) — so they carry no `noundef` at all. A pointer `Result` is
+      // exactly a struct here, as it was in WP16.
+      if (resultByValue(t)) return privateAbi ? [] : ["noundef"];
       return ["noundef", "nonnull", "align 8", ...(deref ? [`dereferenceable(${deref})`] : [])];
     case "struct": // WP16: a whole, never-null object
       return ["noundef", "nonnull", "align 8", ...(deref ? [`dereferenceable(${deref})`] : [])];

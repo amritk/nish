@@ -44,7 +44,7 @@ import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, r
 import { DebugInfo } from "./debug.js";
 import { reclaimsReturnedString } from "./escape.js";
 import { emitConstructorPrologue, importedStructFunctions, structFunctions, structTypeDeclarations } from "./emit/classes.js";
-import { privateResultAbi, resultPairToWord, unpackResult } from "./emit/result.js";
+import { privateResultAbi, unpackReturnedResult } from "./emit/result.js";
 import { EmitContext, LoopTarget } from "./emit/context.js";
 import { expressionEmitters } from "./emit/expressions.js";
 import { declareResultTypes } from "./emit/result.js";
@@ -135,7 +135,7 @@ export class Emitter implements EmitContext {
     this.currentSig = sig;
     this.declareSignatureTypes(sig);
     const optimize = this.opts.optimizeAttributes;
-    // WP15: a non-exported function uses the private two-scalar `Result` ABI.
+    // WP15: a non-exported function uses the private per-arm `Result` ABI.
     // The condition is the linkage one below, and the two must not drift.
     const privateAbi = privateResultAbi(this, sig);
     this.fn = new IRFunction(
@@ -143,7 +143,7 @@ export class Emitter implements EmitContext {
       sig.params.map((p) => ({
         name: p.name,
         type: llvmAbiType(p.type, privateAbi),
-        attrs: optimize ? paramAttributes(p, facts) : [],
+        attrs: optimize ? paramAttributes(p, facts, privateAbi) : [],
       })),
       llvmAbiType(sig.returnType, privateAbi)
     );
@@ -151,7 +151,7 @@ export class Emitter implements EmitContext {
     // ABI). Every other function is `internal` unless --no-strict-exports.
     if (this.opts.strictExports && !sig.exported) this.fn.linkage = "internal";
     if (optimize) {
-      this.fn.returnAttrs = returnAttributes(sig.returnType, facts.returnDeref);
+      this.fn.returnAttrs = returnAttributes(sig.returnType, facts.returnDeref, privateAbi);
       this.fn.attrGroup = this.module.attrGroup(functionAttributes(facts));
     }
     this.slots = new WeakMap();
@@ -162,13 +162,18 @@ export class Emitter implements EmitContext {
     // WP6: an automatic arena scope remembers the bump position before anything is allocated.
     if (facts.arenaScope) this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("nish_arena_mark")}()`);
     // WP17: a `Result` parameter small enough to pack arrives as an `i64`, or
-    // as the two-scalar pair under the private ABI. Either way it is turned
-    // into the object every construct reads, once, before the body.
+    // as the tag and one slot per arm under the private ABI. Either way it is
+    // turned into the object every construct reads, once, before the body.
     this.paramObjects = new Map();
     for (const p of sig.params) {
       if (!resultByValue(p.type)) continue;
-      const word = privateAbi ? resultPairToWord(this, `%${p.name}`) : `%${p.name}`;
-      const object = unpackResult(this, p.type as ResultType, word, this.isStackParam(p.name));
+      const object = unpackReturnedResult(
+        this,
+        p.type as ResultType,
+        `%${p.name}`,
+        this.isStackParam(p.name),
+        privateAbi
+      );
       this.paramObjects.set(p.name, object);
     }
     // A constructor stores the field initializers before its body runs (WP2).
@@ -282,9 +287,9 @@ export class Emitter implements EmitContext {
     this.declareSignatureTypes(sig);
     const optimize = this.opts.optimizeAttributes;
     const params = sig.params
-      .map((p) => [llvmAbiType(p.type), ...(optimize ? paramAttributes(p, facts) : [])].join(" "))
+      .map((p) => [llvmAbiType(p.type), ...(optimize ? paramAttributes(p, facts, false) : [])].join(" "))
       .join(", ");
-    const ret = [...(optimize ? returnAttributes(sig.returnType, facts.returnDeref) : []), llvmAbiType(sig.returnType)].join(" ");
+    const ret = [...(optimize ? returnAttributes(sig.returnType, facts.returnDeref, false) : []), llvmAbiType(sig.returnType)].join(" ");
     const group = optimize ? ` ${this.module.attrGroup(functionAttributes(facts))}` : "";
     return `declare ${ret} @${sig.name}(${params})${group}`;
   }

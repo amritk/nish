@@ -1,6 +1,8 @@
 // WP17: a `Result` small enough to pack travels by value in *both* directions,
-// so `describe` is `define ... i32 @describe(i64 %r)` and the caller packs the
-// argument the same way a `return` packs. The word is unpacked once, in the
+// so `describe` is `define ... i32 @describe({ i1, i32, i32 } %r)` and the
+// caller builds the argument the same way a `return` builds one. (That shape is
+// the private ABI of WP15 §7b, because nothing here is exported; an exported
+// `describe` would take the packed `i64`.) It is unpacked once, in the
 // prologue, into the object every WP16 construct reads.
 //
 // Which memory that object lives in is the escape analysis's decision, exactly

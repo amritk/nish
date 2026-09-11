@@ -275,9 +275,9 @@ about half of it.
 
 `bench/result` is the same program as a benchmark, against C and Rust twins
 that use the shape each language would use anyway — a two-word C struct (the
-one `--emit-header` declares) and Rust's own `Result<i32, i32>`. Nish is
-**1.46x behind C and 2.6x behind Rust** there, and the reason is not the
-encoding but *how the two halves reach the optimiser*:
+one `--emit-header` declares) and Rust's own `Result<i32, i32>`. Nish was
+**1.46x behind C and 2.6x behind Rust** there when this was written, and the
+reason is not the encoding but *how the two halves reach the optimiser*:
 
 | the same program, written three ways | time |
 | --- | --- |
@@ -305,24 +305,99 @@ ABI of two scalars, the way rustc's `ScalarPair` does, and pack only where a
 host can see. That needs `--strict-exports` to be more than advisory and is
 the natural next step rather than something to bolt on here.
 
-### That step has since been taken (WP15)
+### That step has since been taken (WP15), in two halves
 
 A non-exported function now takes and answers a by-value `Result` as
-`{ i1, i32 }` rather than the packed word, on exactly the condition that gives
-it `internal` linkage. `bench/result` goes from **650 ms to 464 ms**, against
-C's 444: the row above that reads "C, an eight-byte struct clang coerces at
-the boundary" is the one we now sit next to, and the 1.46x behind C is 1.04x.
+**the tag and one slot per arm**, `{ i1, i32, i32 }`, rather than the packed
+word — on exactly the condition that gives it `internal` linkage. It arrived
+as two changes, and reading them in order is the whole lesson of this section.
 
-Two things about how it was done are worth keeping.
+**Half one: the tag leaves the word.** `{ i1, i32 }` — rustc's `ScalarPair` —
+took `bench/result` from **650 ms to 464 ms**, against C's 444: the row above
+that reads "C, an eight-byte struct clang coerces at the boundary" is the one
+we then sat next to, and the 1.46x behind C became 1.04x. That change moved no
+packing code. `packArm`, `packObject` and `unpackResult` still built and read
+the same `i64`; the pair was made from that word at the call boundary and
+taken apart again on the other side. LLVM folded the round trip away
+completely, and a hand-written two-scalar lowering of this benchmark measured
+**467 ms against 464 ms** — the same, within noise.
 
-**The packing code did not move.** `packArm`, `packObject` and `unpackResult`
-still build and read the same `i64`; the pair is made from that word at the
-call boundary and taken apart again on the other side. That reads like waste
-and is not: LLVM folds the round trip away completely, and a hand-written
-two-scalar lowering of this benchmark measures **467 ms against 464 ms** —
-the same, within noise. Keeping one packing path was worth more than the
-instructions the conversion appears to cost, and it is why the change is a
-boundary and a predicate rather than a rewrite of §1.
+**Half two: the two arms stop sharing a slot.** 464 ms was C's number and not
+Rust's 253, and the four-way table above says why in a sentence it was easy to
+read as being only about the word: *what separates the fast columns from the
+slow ones is whether the ok arm and the error arm are ever separate SSA
+values.* One payload slot means they are not. `half`'s two `return`s put `n`
+and `n / 2` in the same `i32`, so once it is inlined the value the ok path
+reads is `phi(n, n >> 1)` — and instcombine folds that to a *variable* shift:
+
+```llvm
+  %2 = and i32 %0, 1                      ; odd?
+  %3 = xor i32 %2, 1
+  %spec.select1.i = lshr i32 %1, %3       ; n >> (1 - odd)
+  %4 = select i1 %ok, i32 %spec.select1.i, i32 65535
+```
+
+The `select` cannot undo it. Nothing in LLVM propagates "on this arm `odd` is
+0" into a shift amount, so the loop carries a shift whose count is a data
+dependency, three instructions to compute and discard on the arm that never
+uses it. That is the whole remaining gap, and one edit proves it: patching
+exactly that instruction to `lshr i32 %1, 1` in the optimised `.ll` and
+changing nothing else takes the benchmark from 472 ms to 256 ms (minimum of
+15 interleaved runs) — Rust's 277 ms, from a one-word patch.
+
+The fix is not to fight the fold but to remove the `phi`. With one slot per
+arm the dead slot is `undef`, `phi(undef, n >> 1)` is `n >> 1`, and the shift
+is constant again:
+
+```llvm
+  %4 = lshr exact i32 %1, 1
+  %5 = insertvalue { i1, i32, i32 } { i1 true, i32 undef, i32 undef }, i32 %4, 1
+```
+```asm
+.LBB0_1:                     ; 9 instructions; the shift count is a constant
+      leal   1(%r15,%r14), %ecx
+      movzwl %cx, %edx
+      shrl   %edx
+      testb  $1, %cl
+      cmovnel %eax, %edx
+      addl   %r14d, %edx
+      movzwl %dx, %r14d
+      incl   %r15d
+      cmpl   $199999999, %r15d
+      jb     .LBB0_1
+```
+
+The program this package is named for is now **exactly level with Rust and
+1.9x ahead of its own C twin**: 218 / 263 ms against Rust's 218 / 263 and C's
+405 / 485 (minimum / median) in [BENCHMARKS.md](BENCHMARKS.md). `bench/result`
+goes from **1.84x behind Rust `-O3` to 1.00x**, and leaves the WP9 gap table.
+
+The same program written five ways, all in one batch on the machine in that
+report's header — 25 runs interleaved, so the VM's drift falls on every column
+alike:
+
+| | min | median |
+| --- | ---: | ---: |
+| C, a three-member struct clang coerces at the boundary | 169 ms | 208 ms |
+| Rust `Result<i32, i32>` | 218 ms | 275 ms |
+| **Nish, one slot per arm** | **220 ms** | **271 ms** |
+| C, an eight-byte struct clang coerces at the boundary | 398 ms | 496 ms |
+| Nish, tag split out but one payload slot | 401 ms | 498 ms |
+
+The first row is a check on the diagnosis rather than a target: it is
+`result.c` with `ok`, `value` and `error` as three separate members, which is
+the C spelling of what this change does, and clang reaches the same constant
+shift from it. The last two rows are the two spellings of one shared payload
+slot, and they are the same program at the same speed — which is what said the
+gap was the shape and not the code generation.
+
+**This half did move the packing code, and it had to.** `armsForArm`,
+`armsForObject` and `unpackArms` build and read the arms directly rather than
+routing through a word with only one slot to route through. Half one's "the
+packing code did not move" was true and was not the point: the round trip
+through the word was free, and the *shape* it round-tripped through was not.
+`packArm`, `packObject` and `unpackResult` are untouched and still serve every
+packed boundary.
 
 **The condition is the linkage condition, and must stay that way.** The
 private shape is safe only because no host can name the symbol, so

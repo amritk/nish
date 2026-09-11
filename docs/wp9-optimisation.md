@@ -55,25 +55,36 @@ has since gained a seventh program — `result`, added with WP17 — and been
 regenerated more than once; its header records the date, the machine and the
 toolchain versions of the run it holds.
 
-On the run recorded there — regenerated after WP15 §3 turned `--nsw` and
-`--strict-exports` on by default — **four of the seven programs are inside the
-1.10x target** against Rust `-O3` (sieve 0.85x, strbuild 0.90x, vec3 0.93x, and
-fib at 1.10x on the line) and **three are outside it**:
+On the run recorded there — regenerated after `Result` gained a private ABI
+with one slot per arm (WP15 §7b) — **six of the seven programs are inside the
+1.10x target** against Rust `-O3` (sieve 0.89x, strbuild 0.92x, vec3 0.93x,
+spectral 1.00x, `result` 1.00x and fib 1.03x) and **one is outside it**:
 
 | Benchmark | Nish / Rust `-O3` | Where it is diagnosed |
 | --- | ---: | --- |
-| result | 2.49x | "result" below, and [wp17-result-abi.md](wp17-result-abi.md) §4 for the four-way table: the ok arm and the error arm are never separate SSA values once they are halves of one packed word. The fix it names — a private two-scalar ABI for internal functions — is unblocked now that `--strict-exports` is the default |
-| nbody | 1.22x | not at this ratio. "nbody: 1.24x" below is the last diagnosis; the WP6 note at the top measured 1.11x after stack allocation, and [wp15-performance.md](wp15-performance.md) §3 records that the fast defaults left nbody with 13 % fewer instructions and about 2.6 % more time — the one row where they changed the code and did not pay |
-| spectral | 1.12x | nowhere. It met the target in both rows above, so nothing here explains the ratio; see [BENCHMARKS.md](BENCHMARKS.md) for the run |
+| nbody | 1.23x | not at this ratio, and the spread below says not to read this one as a number either: Rust's own minimum and median on that row are 765 ms and 944 ms. "nbody: 1.24x" below is the last diagnosis; the WP6 note at the top measured 1.11x after stack allocation, and [wp15-performance.md](wp15-performance.md) §3 records that the fast defaults left nbody with 13 % fewer instructions and about 2.6 % more time — the one row where they changed the code and did not pay |
+
+**result left this table**: 2.49x to **1.00x**, in the two steps
+[wp17-result-abi.md](wp17-result-abi.md) §4 sets out — the discriminant out of
+the packed word, and then one payload slot per arm, so the dead arm stops
+joining the live one in a `phi` and the ok path's shift stops being a variable
+one. It is the only gap in this table whose cause was the *ABI* rather than
+the memory model, and it is the only one closed by changing what a value looks
+like rather than where it lives. Nish and Rust now print the same minimum and
+the same median on that row — the four columns really are the same code, which
+is what the benchmark was written to check.
+
+**spectral left it too**, at 1.12x to 1.00x with nothing done to it — which is
+the spread below, not a fix.
 
 **strbuild left this table**: 1.64x to **0.90x**, which is
 ["The call-site reclaim"](#the-call-site-reclaim) below. It is now faster than
 Rust's and than plain C's string building, and 0.82x against the naive C twin.
 
 **The suite has since gained a Go column** (seven `.go` twins, the same rules
-as the C and Rust ones). Against Go, Nish is ahead on six of the seven
-programs and behind on `result` alone; the two columns agree about which
-program is the outlier, which is the useful thing they say together.
+as the C and Rust ones). Nish is now ahead of Go on all seven, `result`
+included — that row was 0.78x when a `Result` was one shared payload slot and
+is 0.39x with one slot per arm.
 
 **Read the ratios on that machine with the run-to-run spread in mind.** The
 report is regenerated on whatever host the run happens on, and on a shared
@@ -82,8 +93,9 @@ by about that much between two back-to-back runs of the same binaries — fib
 1.01x then 0.83x against Rust, nbody 1.24x then 1.03x, spectral 1.09x then
 0.86x, vec3 0.94x then 1.10x. Only three rows were stable across both:
 sieve at about 0.82x, strbuild at about 0.96x, and `result` at about 2.8x.
-So a single run of this suite resolves a gap the size of `result`'s and does
-not resolve the difference between 0.95x and 1.15x; a row near the 1.10x line
+So a single run of this suite resolves a gap the size of `result`'s — and
+resolved its closing, which moved that row by a factor, not by a spread — and
+does not resolve the difference between 0.95x and 1.15x; a row near the 1.10x line
 needs several runs before it means anything, and the entries below that read a
 single run's ratio as a miss should be read that way.
 
@@ -380,6 +392,14 @@ ABI of two scalars — rustc's `ScalarPair` — and pack only where a host can
 see the signature. That makes `--strict-exports` load-bearing rather than
 advisory, which is already one of the two open questions below.
 `docs/wp17-result-abi.md` §4 has the four-way table.
+
+**Both halves of that fix have since shipped, and the second one was the
+larger.** `{ i1, i32 }` took this program to 464 ms, which is the C column,
+and no further: one payload slot still means the two arms are not separate SSA
+values, so the `phi` that joins `Err(n)` to `Ok(n / 2)` still becomes a
+variable shift in the ok path. `{ i1, i32, i32 }` — one slot per arm, the dead
+one `undef` — removes the `phi`, and the row is 1.00x against Rust.
+[wp17-result-abi.md](wp17-result-abi.md) §4 measures both halves.
 
 ## What the number mode costs
 

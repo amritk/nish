@@ -66,16 +66,14 @@ import { constantText, emitAssignment, emitBinary, emitUnary, numericConstant } 
 import {
   declareResultTypes,
   emitPackedResult,
-  unpackResult,
   emitResultConstructor,
   emitResultMethod,
   emitResultProperty,
-  emitResultArgument,
   emitResultReturn,
   emitResultReturningCall,
   isResultConstructorCall,
   privateResultAbi,
-  resultPairToWord,
+  unpackReturnedResult,
 } from "./emit_result";
 import { addStringConstant, emitTemplate } from "./emit_strings";
 import { dottedName, isAssignmentOperator, receiverIsValue } from "./emit_util";
@@ -267,7 +265,7 @@ export class Emitter {
     this.declareSignatureTypes(sig);
     const optimize = this.opts.optimizeAttributes;
     const params: IRParam[] = [];
-    // A non-exported function uses the private two-scalar `Result` ABI; the
+    // A non-exported function uses the private per-arm `Result` ABI; the
     // condition is the linkage one below, and the two must not drift.
     const privateAbi = privateResultAbi(this, sig.exported);
     let i = 0;
@@ -276,7 +274,7 @@ export class Emitter {
       const type = sig.paramTypes[i];
       let attrs: string[] = [];
       if (optimize) {
-        attrs = paramAttributes(this.table, name, type, facts);
+        attrs = paramAttributes(this.table, name, type, facts, privateAbi);
       }
       params.push(new IRParam(name, this.llvmAbi(type, privateAbi), attrs));
       i = i + 1;
@@ -288,7 +286,7 @@ export class Emitter {
       this.fn.linkage = "internal";
     }
     if (optimize) {
-      this.fn.returnAttrs = returnAttributes(this.table, sig.returnType, facts.returnDeref);
+      this.fn.returnAttrs = returnAttributes(this.table, sig.returnType, facts.returnDeref, privateAbi);
       this.fn.attrGroup = this.module.attrGroupFor(functionAttributes(facts));
     }
     this.slotLocals = [];
@@ -306,16 +304,22 @@ export class Emitter {
     if (facts.arenaScope) {
       this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("nish_arena_mark")}()`);
     }
-    // WP17: a `Result` parameter small enough to pack arrives as an `i64`.
-    // Unpack it once, before the body, into the object every construct reads.
+    // WP17: a `Result` parameter small enough to pack arrives as an `i64`, or
+    // as the tag and one slot per arm under the private ABI. Either way it is
+    // unpacked once, before the body, into the object every construct reads.
     this.paramObjectNames = [];
     this.paramObjectValues = [];
     i = 0;
     while (i < sig.paramNames.length) {
       const name = sig.paramNames[i];
       if (this.table.resultByValue(sig.paramTypes[i])) {
-        const incoming = privateAbi ? resultPairToWord(this, `%${name}`) : `%${name}`;
-        const object = unpackResult(this, sig.paramTypes[i], incoming, facts.isStackParam(name));
+        const object = unpackReturnedResult(
+          this,
+          sig.paramTypes[i],
+          `%${name}`,
+          facts.isStackParam(name),
+          privateAbi
+        );
         this.paramObjectNames.push(name);
         this.paramObjectValues.push(object);
       }
@@ -482,7 +486,7 @@ export class Emitter {
     while (i < sig.paramNames.length) {
       const parts: string[] = [this.llvmAbi(sig.paramTypes[i], false)];
       if (optimize) {
-        for (const attr of paramAttributes(this.table, sig.paramNames[i], sig.paramTypes[i], facts)) {
+        for (const attr of paramAttributes(this.table, sig.paramNames[i], sig.paramTypes[i], facts, false)) {
           parts.push(attr);
         }
       }
@@ -491,7 +495,7 @@ export class Emitter {
     }
     const ret: string[] = [];
     if (optimize) {
-      for (const attr of returnAttributes(this.table, sig.returnType, facts.returnDeref)) {
+      for (const attr of returnAttributes(this.table, sig.returnType, facts.returnDeref, false)) {
         ret.push(attr);
       }
     }
@@ -651,13 +655,13 @@ export class Emitter {
     if (sig === null) {
       process.exit(internalError("emitter: `return` outside a function"));
     }
-    // WP17: a small `Result` leaves in a register. The word is built before the
+    // WP17: a small `Result` leaves in a register. It is built before the
     // scope release, because the object it may be read out of is arena memory
     // the release reclaims.
     if (this.table.resultByValue(sig.returnType)) {
-      const word = emitPackedResult(this, value, sig.returnType);
+      const packed = emitPackedResult(this, value, sig.returnType, privateResultAbi(this, sig.exported));
       this.emitScopeExit();
-      emitResultReturn(this, word);
+      emitResultReturn(this, packed);
       return;
     }
     const type = this.typeOf(value);
@@ -826,18 +830,18 @@ export class Emitter {
     }
     const args = expr.children[1];
     const operands: string[] = [];
-    // A non-exported callee takes and answers the two-scalar pair (WP15).
+    // A non-exported callee takes and answers one slot per arm (WP15).
     const calleePrivate = privateResultAbi(this, sig.exported);
     let i = 0;
     while (i < args.children.length) {
       // WP17: an argument feeding a `Result` parameter the ABI packs is passed
-      // as the word, exactly as a `return` of one is — or as the pair when the
+      // as the word, exactly as a `return` of one is — or as the arms when the
       // callee uses the private ABI.
       const want = sig.paramTypes[i];
       const value = this.table.resultByValue(want)
-        ? emitPackedResult(this, args.children[i], want)
+        ? emitPackedResult(this, args.children[i], want, calleePrivate)
         : this.emitExpression(args.children[i]);
-      operands.push(`${this.llvmAbi(want, calleePrivate)} ${emitResultArgument(this, want, value, calleePrivate)}`);
+      operands.push(`${this.llvmAbi(want, calleePrivate)} ${value}`);
       i = i + 1;
     }
     // WP9: the mark goes after the arguments, so only the callee's own bumps
