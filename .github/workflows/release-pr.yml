@@ -3,11 +3,19 @@
 #   a normal push to main  -> open or refresh the Release PR
 #   the Release PR's merge -> create the tag, which starts release.yml
 #
-# The shape: every merged pull request accumulates into one open "Release
-# <version>" pull request that carries the version bump, `changelog/<version>.json`
-# and the rendered CHANGELOG.md section. Merging that pull request is the act
-# of releasing -- it is the review step for the release notes, before anyone
-# can read them, rather than after.
+# The shape: every merged pull request accumulates into one open
+# "chore(release): <version>" pull request that carries the version bump,
+# `changelog/<version>.json` and the rendered CHANGELOG.md section. Merging that
+# pull request is the act of releasing -- it is the review step for the release
+# notes, before anyone can read them, rather than after.
+#
+# One repository switch has to be on for that to happen unattended: Settings >
+# Actions > General > Workflow permissions > "Allow GitHub Actions to create and
+# approve pull requests". Without it the API refuses `gh pr create` outright,
+# whatever this workflow's `permissions:` say. The branch is pushed either way,
+# so the step warns and links the compare page instead of failing -- a release
+# that needs one click is not a reason to paint main red on every merge. A
+# RELEASE_PR_TOKEN secret (a PAT or app token with `repo`) also lifts it.
 #
 # Why the tag is created here and not by the merge itself: a tag pushed by a
 # workflow using the default GITHUB_TOKEN does not start another workflow, so
@@ -98,10 +106,18 @@ jobs:
       - name: Open or refresh the Release pull request
         if: steps.path.outputs.mode == 'pr'
         env:
-          GH_TOKEN: ${{ github.token }}
+          # RELEASE_PR_TOKEN, when the repository has one, is a token the
+          # create-pull-request switch does not apply to; the default token is
+          # the fallback, and the step below degrades rather than fails when it
+          # turns out to be refused.
+          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
         run: |
           next="${{ steps.next.outputs.next }}"
           branch="release/next"
+          # The title is the squash-merge subject, so it is a conventional
+          # commit: pr-title.yml checks it like any other, and the merge lands
+          # under "Chores" in the next release instead of "Uncategorised".
+          title="chore(release): $next"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$branch"
@@ -110,16 +126,28 @@ jobs:
             echo "::notice::nothing to release"
             exit 0
           fi
-          git commit -m "chore: release $next"
+          git commit -m "$title"
           git push --force origin "$branch"
 
           body="$(printf 'Merging this pull request releases **%s**: it creates the `v%s` tag, which builds the artifacts and publishes the release.\n\nThe notes below are the release notes. They are generated from the commits since the last tag -- subject for the heading, body for the prose -- and stored in `changelog/%s.json`, which is the file the website reads. Edit that file in this pull request to fix a wording; do not edit `CHANGELOG.md` by hand, it is rendered from the JSON.\n\n---\n\n' "$next" "$next" "$next")"
           body="$body$(node scripts/changelog-gen.mjs --from-json "changelog/$next.json" | head -c 50000)"
 
           if existing="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')" && [ -n "$existing" ]; then
-            gh pr edit "$existing" --title "Release $next" --body "$body"
+            gh pr edit "$existing" --title "$title" --body "$body"
             echo "::notice::refreshed release PR #$existing for $next"
-          else
-            gh pr create --head "$branch" --base main --title "Release $next" --body "$body"
+          elif out="$(gh pr create --head "$branch" --base main --title "$title" --body "$body" 2>&1)"; then
+            echo "$out"
             echo "::notice::opened the release PR for $next"
+          elif printf '%s' "$out" | grep -qF 'not permitted to create or approve pull requests'; then
+            # The branch is pushed and the notes are on it; the only thing
+            # missing is the pull request, and the reason is a repository
+            # switch rather than anything about this commit. Failing here would
+            # paint main red on every merge and say nothing new, so say it once
+            # as a warning and hand over the link that opens it in one click.
+            echo "$out"
+            url="${{ github.server_url }}/${{ github.repository }}/compare/main...$branch?expand=1"
+            echo "::warning title=Release pull request not opened::Pushed $branch for $next, but this repository does not let GitHub Actions open pull requests. Turn on Settings > Actions > General > Workflow permissions > \"Allow GitHub Actions to create and approve pull requests\", or add a RELEASE_PR_TOKEN secret. Until then, open it here: $url"
+          else
+            echo "$out" >&2
+            exit 1
           fi

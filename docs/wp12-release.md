@@ -93,15 +93,31 @@ step below is done by hand.
 1. **Merge pull requests as usual.** Every merge to `main` runs
    `.github/workflows/release-pr.yml`, which walks the commits since the last
    tag, computes the next version from their types, and opens or refreshes one
-   open **`Release <version>`** pull request carrying the version bump
+   open **`chore(release): <version>`** pull request carrying the version bump
    (`package.json`, `package-lock.json` and `self/branding.ts`, which must
    agree or `tests/run.js` fails), `changelog/<version>.json`, and the
    `CHANGELOG.md` section rendered from it.
+
+   The title is a conventional commit because it *is* one: the squash merge
+   makes it the subject of the commit that lands on `main`, so `pr-title.yml`
+   checks it like any other and the generator files it under "Chores" in the
+   next release rather than "Uncategorised".
 
    The notes are therefore reviewable *before* anyone can read them, in the
    pull request whose body is those notes. To fix a wording, edit the JSON on
    that branch: `CHANGELOG.md` is rendered from it and editing it directly is
    overwritten on the next merge.
+
+   Opening that pull request needs one repository switch: **Settings > Actions
+   > General > Workflow permissions > "Allow GitHub Actions to create and
+   approve pull requests"**. GitHub refuses `gh pr create` from a workflow
+   without it, whatever the workflow's `permissions:` block says, and no token
+   in the `permissions:` block can grant it. A `RELEASE_PR_TOKEN` secret (a PAT
+   or app token carrying `repo`) lifts it too, and the workflow prefers it when
+   it exists. With neither, the train still pushes the `release/next` branch
+   with everything on it and the job warns with the link that opens the pull
+   request by hand -- the release is one click rather than blocked, and `main`
+   stays green.
 
 2. **Merge the Release pull request.** That is the act of releasing. The same
    workflow sees `changelog/<version>.json` present and `v<version>` absent,
