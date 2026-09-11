@@ -87,34 +87,27 @@ operating systems, so the table for each is in the job log.
 
 ## Release procedure
 
-Releases are tag-driven; nothing is published from a developer machine.
+Releases ride a train; nothing is published from a developer machine, and no
+step below is done by hand.
 
-1. **Bump the version** on a branch:
+1. **Merge pull requests as usual.** Every merge to `main` runs
+   `.github/workflows/release-pr.yml`, which walks the commits since the last
+   tag, computes the next version from their types, and opens or refreshes one
+   open **`Release <version>`** pull request carrying the version bump
+   (`package.json`, `package-lock.json` and `self/branding.ts`, which must
+   agree or `tests/run.js` fails), `changelog/<version>.json`, and the
+   `CHANGELOG.md` section rendered from it.
 
-   ```bash
-   npm version 0.2.0 --no-git-tag-version     # edits package.json + package-lock.json
-   ```
+   The notes are therefore reviewable *before* anyone can read them, in the
+   pull request whose body is those notes. To fix a wording, edit the JSON on
+   that branch: `CHANGELOG.md` is rendered from it and editing it directly is
+   overwritten on the next merge.
 
-2. **Update `CHANGELOG.md`**: rename `## [Unreleased]` to `## [0.2.0] - YYYY-MM-DD`,
-   start a fresh empty `## [Unreleased]` above it, and update the compare
-   links at the bottom. The release notes are generated from this section by
-   `scripts/changelog-section.sh 0.2.0`; run it locally to preview them.
+2. **Merge the Release pull request.** That is the act of releasing. The same
+   workflow sees `changelog/<version>.json` present and `v<version>` absent,
+   and creates the tag.
 
-3. **Verify** the tree the tag will point at:
-
-   ```bash
-   npm run check && npm run lint && npm test && npm run smoke
-   npm pack --dry-run          # only dist/, runtime/, scripts/, README.md, LICENSE, docs/INSTALL.md
-   ```
-
-4. **Merge** the branch to `main`, then **tag and push the tag**:
-
-   ```bash
-   git tag -a v0.2.0 -m "nish 0.2.0"
-   git push origin v0.2.0
-   ```
-
-5. **The `Release` workflow** (`.github/workflows/release.yml`) runs on the
+3. **The `Release` workflow** (`.github/workflows/release.yml`) runs on the
    tag:
    - calls the `CI` workflow (`workflow_call`): typecheck, tests, smoke and
      size report on Ubuntu, the bootstrap-from-the-last-release job, lint;
@@ -125,8 +118,12 @@ Releases are tag-driven; nothing is published from a developer machine.
    - bootstraps the native compiler to
      `build/release/nish-0.2.0-x86_64-linux` with `--verify`, then smoke-tests
      it: `--version`, and linking and running `examples/hello.ts`;
-   - `gh release create v0.2.0 nish-0.2.0.tgz nish-0.2.0-x86_64-linux` with
-     the CHANGELOG section as the notes.
+   - `gh release create v0.2.0 nish-0.2.0.tgz nish-0.2.0-x86_64-linux.tar.gz`
+     with the notes rendered from `changelog/0.2.0.json` — the file the
+     release pull request was reviewed with, not a fresh walk of the log, so
+     what is published is what somebody approved. A body over 120,000
+     characters is cut at a paragraph and points at the JSON; an empty one
+     fails the job rather than shipping a blank release.
 
    The binary is not only a convenience for people without Node: it is the
    **seed** the next release is built from, which is why it is verified and
@@ -135,7 +132,7 @@ Releases are tag-driven; nothing is published from a developer machine.
    latest release, so renaming the asset breaks the freeze check rather than
    the release.
 
-6. **npm publish is manual** for now. When ready:
+4. **npm publish is manual** for now. When ready:
 
    ```bash
    git checkout v0.2.0
@@ -148,6 +145,15 @@ Releases are tag-driven; nothing is published from a developer machine.
 
 If a release is wrong, delete the GitHub release and the tag, fix, and tag
 again with a *new* patch version; never move a tag that CI has already built.
+
+To preview what the train would produce, without pushing anything:
+
+```bash
+npm run changelog -- --next             # the version the commits imply
+npm run changelog -- --version 0.2.0    # those notes, on stdout
+npm run check && npm run lint && npm test && npm run smoke
+npm pack --dry-run   # only dist/, runtime/, scripts/, README.md, LICENSE, docs/INSTALL.md
+```
 
 ## The bootstrap seed
 

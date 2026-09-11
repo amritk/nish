@@ -131,8 +131,30 @@ jobs:
             grep -qx "$f" build/release/files.txt || { echo "::error::$f missing from tarball"; exit 1; }
           done
 
+      # From the JSON the release pull request was reviewed with, not from a
+      # fresh walk of the log: what gets published must be what someone
+      # approved. changelog-section.sh remains for a tag cut by hand, and is
+      # the fallback when a release predates the generator.
       - name: Release notes
-        run: bash scripts/changelog-section.sh "$GITHUB_REF_NAME" > build/release/notes.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [ -f "changelog/$version.json" ]; then
+            node scripts/changelog-gen.mjs --from-json "changelog/$version.json" > build/release/notes.md
+          else
+            echo "::warning::no changelog/$version.json; falling back to the CHANGELOG.md section"
+            bash scripts/changelog-section.sh "$GITHUB_REF_NAME" > build/release/notes.md
+          fi
+          # A GitHub release body is capped at 125,000 characters and
+          # `gh release create` fails outright above it -- at the last step,
+          # with the tag already pushed. Cut at a paragraph boundary and point
+          # at the file that holds all of it.
+          if [ "$(wc -m < build/release/notes.md)" -gt 120000 ]; then
+            head -c 120000 build/release/notes.md > build/release/notes.cut
+            printf '\n\n*These notes are truncated. The full record for this release is [changelog/%s.json](https://github.com/amritk/nish/blob/%s/changelog/%s.json).*\n' \
+              "$version" "$GITHUB_REF_NAME" "$version" >> build/release/notes.cut
+            mv build/release/notes.cut build/release/notes.md
+          fi
+          test -s build/release/notes.md || { echo "::error::release notes are empty"; exit 1; }
 
       - name: Create GitHub release
         env:

@@ -32,5 +32,36 @@ PR adds to the tests.
 
 NEVER include Claude session links, tracking IDs, model names, or platform
 attributions in commits, code, or PR text. Keep all PR descriptions strictly
-focused on the code changes. Commit messages: imperative subject, body
-explaining the lowering.
+focused on the code changes.
+
+**Commit messages are the changelog.** `scripts/changelog-gen.mjs` builds each
+release from the commits it contains, so the subject is the heading a reader
+sees and the body is the prose underneath it. Write the body for someone
+reading the release notes, not only for the reviewer:
+
+```
+type(scope): imperative subject
+
+The explanation, in prose and in Markdown. What changed, and why this
+way rather than another.
+
+Measured: 1.58x on an element loop
+Refs: docs/IR_COOKBOOK.md#arrays
+Tests: tests/cases/arr_alias_domains
+```
+
+- **type** is one of `feat` `fix` `perf` `refactor` `docs` `test` `build` `ci`
+  `chore`, and decides both the heading and the version bump: `feat` moves the
+  minor, everything else the patch.
+- **`type!`** or a `BREAKING CHANGE:` trailer marks a break. Before 1.0 that
+  moves the minor, not the major.
+- **scope** is the part of the compiler — `checker`, `codegen`, `runtime`,
+  `self`, `cli`, `interop` — and is what the website filters on.
+- **`Measured:`** carries a number, because this project's claims are measured.
+  `Refs:` and `Tests:` link the rule and the golden that pins it.
+- **`Release-Note:`** replaces the body in public notes, for when the body is
+  about the review rather than about the change.
+
+A subject that is not conventional is not dropped — it lands under
+"Uncategorised" with its body intact — but it is reported, and it is a
+reviewable defect.
