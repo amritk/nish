@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 265 programs, 4408 dump lines.
+# 266 programs, 4414 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -2732,7 +2732,13 @@ function test(): i32 -> @test [exported]
   local 14:7 n: i32 (let)
   local 18:9 fits: i32 (const)
   local 22:9 shifted: i32 (const)
-reject tests/cases/perf_overflow_spelling.ts: error: Non-integer literal `100_000` in i32 number mode (use --number-mode f64)
+program tests/cases/perf_overflow_spelling.ts
+module tests/cases/perf_overflow_spelling.ts (entry)
+function test(): i32 -> @test [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+  local 19:9 hexShift: i32 (const)
+  local 20:9 exponent: i32 (const)
 program tests/cases/perf_overflow_wrapping.ts --wrapping
 module tests/cases/perf_overflow_wrapping.ts (entry)
 function test(): i32 -> @test [exported]
