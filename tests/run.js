@@ -2741,6 +2741,39 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       `${irOracle.stdout}${irOracle.stderr}`
     );
 
+    // WP19 G2.1: the successor to the oracle above and to the interop oracle
+    // below, which both die with stage0 (`docs/wp19-stage0-retirement.md` §2B).
+    // `nish-cmp` compares the **last released** `nish` with HEAD over the same
+    // corpus, byte for byte — Go's `toolstash -cmp` — and a difference has to
+    // be named in `CHANGELOG.md` before it goes green.
+    //
+    // Nish has no release yet, so on every machine today this skips rather
+    // than runs, and the skip is counted and says why: a comparison against
+    // nothing that reported PASS would be exactly the green-run-proving-less
+    // problem the summary at the bottom of this file exists to expose. Set
+    // `NISH_BOOTSTRAP` to the seed — the variable `scripts/bootstrap.sh` reads
+    // — and it runs, which is what CI does once 0.1.0 is out. Budget about
+    // three minutes for it when it does: it is the whole corpus twice, which
+    // is the same shape and the same cost as the oracle above.
+    if (!process.env.NISH_BOOTSTRAP) {
+      skip(
+        "NISH_BOOTSTRAP is unset: there is no released nish to compare HEAD against, so " +
+          "tests/nish-cmp.js (WP19 G2) did not run"
+      );
+    } else {
+      const nishCmp = spawnSync("node", [path.join(root, "tests", "nish-cmp.js")], {
+        cwd: root,
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      const nishCmpSummary = nishCmp.stdout.trim().split("\n").pop() ?? "";
+      check(
+        `the released nish and HEAD write the same bytes (${nishCmpSummary})`,
+        nishCmp.status === 0,
+        `${nishCmp.stdout}${nishCmp.stderr}`
+      );
+    }
+
     // The same equality, on programs nobody wrote. The corpus the oracle above
     // reads is checked in and therefore finite and adapted-to; the WP13 fuzzer
     // generates random straight-line programs, and here both compilers are

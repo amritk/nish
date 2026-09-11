@@ -1,0 +1,560 @@
+#!/usr/bin/env node
+/**
+ * `nish-cmp` — one corpus, two compilers, byte for byte (WP19 §3 gate G2.1).
+ *
+ *   node tests/nish-cmp.js --help
+ *   node tests/nish-cmp.js --reference dist/index.js --candidate build/self/compile
+ *   NISH_BOOTSTRAP=/usr/local/bin/nish node tests/nish-cmp.js
+ *   node tests/nish-cmp.js -r <ref> -c <cand> tests/cases/str_concat.ts
+ *   node tests/nish-cmp.js -r <ref> -c <cand> --verbose --lines 10
+ *
+ * This is Go's `toolstash -cmp`. Compile the whole corpus with the compiler
+ * that is trusted — the last released `nish` — and with the compiler HEAD
+ * builds, and require every byte of every file they write to be the same. It
+ * is the successor to `tests/self/ir_oracle.js` and
+ * `tests/self/interop_oracle.js`, which compare stage0 with stage1 and die
+ * with stage0 (`docs/wp19-stage0-retirement.md` §2B), so it compares what the
+ * two of them compare together: the IR of every module of every program, and
+ * the four WP8 sidecars derived from the same checked program.
+ *
+ * **Both compilers are parameters, and neither is assumed to exist.** Nish has
+ * never been tagged — 0.1.0 is about to be its first release — so a tool that
+ * assumed a released `nish` was on disk could not run at all today, and one
+ * that quietly compared HEAD with itself would be worse than not running.
+ * `--reference` therefore defaults to `$NISH_BOOTSTRAP`, the variable
+ * `scripts/bootstrap.sh` reads for the seed (G3), and when there is no seed
+ * anywhere the run **skips and says why**, in the runner's own words, because
+ * a green line that proved nothing is the failure mode `.claude/orientation.md`
+ * warns about.
+ *
+ * Either compiler may be a native binary or a Node entry point: the seed after
+ * 0.1.0 is a binary and today's compiler is a Node program, so both have to be
+ * spellable. The rule is the file's extension — `.js`, `.mjs` and `.cjs` run
+ * under `node`, anything else is executed directly.
+ *
+ * **What is compared, and what is deliberately not.**
+ *
+ *   - every file the compilers write, byte for byte: one `.ll` per module, and
+ *     `<stem>.h`, `<stem>.d.ts`, its companion `<stem>.mjs` and `<stem>.napi.c`
+ *     unless `--no-sidecars`. The *set* of files counts too, so a version that
+ *     wrote one module fewer has not agreed about the rest;
+ *   - whether the program compiles at all. A program the reference accepts and
+ *     the candidate refuses is the regression this tool exists to catch, and a
+ *     program the reference refuses and the candidate accepts is a language
+ *     change, which is a CHANGELOG line rather than a silent improvement;
+ *   - not the wording of diagnostics, and not the dumps. A program both
+ *     compilers refuse is counted and named apart (there is no artefact on
+ *     either side); its message is pinned by the `.err` fragments checked in
+ *     beside it, which `tests/self/reject_oracle.js` reads and which survive
+ *     stage0. A program compiled with `--emit-ast` or `--emit-checked` writes
+ *     no artefact either, and its stdout is pinned by the `<name>.stdout`
+ *     golden beside it. Both are counted in the summary rather than folded
+ *     into a skip count.
+ *
+ * **A difference must be named in `CHANGELOG.md`.** `DECLARED` below is how:
+ * an entry names the program and the file that may differ, the sentence saying
+ * why, and the words `CHANGELOG.md` has to carry for the declaration to hold.
+ * A difference no entry covers fails the run; an entry whose CHANGELOG words
+ * have gone fails the run as well, so the release note and the tool cannot
+ * drift apart. The list is empty, and the intent is that it stays nearly so:
+ * it is a record of intended output changes for one release, not an allowlist
+ * to grow.
+ */
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
+
+/**
+ * Output differences that are decided rather than broken, each with the words
+ * `CHANGELOG.md` must carry before this run can go green. Shape:
+ *
+ *   {
+ *     program: "tests/cases/str_concat.ts",  // omit for every program
+ *     file: "str_concat.ll",                 // omit for every file of it
+ *     changelog: "string concatenation now calls `nish_str_concat2`",
+ *     why: "one sentence somebody is willing to sign, in their own words",
+ *   }
+ *
+ * A declaration is deliberately narrow — one program, one file — so that the
+ * *next* difference in the same place is still reported. A release that
+ * changes the IR of the whole corpus is a declaration with no `program` and a
+ * paragraph in `CHANGELOG.md` to match, and it should feel like a bigger thing
+ * to write than five narrow ones, because it is.
+ */
+const DECLARED = [];
+
+/** Differing files printed in full before the rest are only counted. */
+const MAX_ROWS = 20;
+
+/** The dump flags: they print instead of writing IR, so there is no artefact to compare. */
+const DUMP_FLAGS = new Set(["--emit-ast", "--emit-checked"]);
+
+/**
+ * `.js` / `.mjs` / `.cjs` is a Node entry point and everything else is a
+ * native binary. This is `scripts/bootstrap.sh`'s rule for `NISH_BOOTSTRAP`
+ * (WP19 G3), character for character, so that one path spells a seed in both
+ * places: the kind is the suffix, deliberately not the executable bit, because
+ * the bit describes the download — `dist/index.js` ships 0644 and a binary out
+ * of a release tarball can arrive without `+x` — and the suffix is what
+ * whoever built the seed chose.
+ */
+const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
+
+/**
+ * A compiler as something spawnable: `cmd` plus the arguments that come before
+ * the program's own. `label` is what the report calls it — the path as the
+ * caller spelled it rather than the absolute one, so a summary line stays
+ * readable and can be pasted back.
+ *
+ * A compiler that cannot answer `--version` is refused here rather than three
+ * hundred compilations later: a binary built for another platform or a `.js`
+ * that is not a compiler fails in a way that names the path the caller gave.
+ */
+function resolveCompiler(spec, role) {
+  const file = path.resolve(root, spec);
+  const refuse = (why) => ({ error: `${role} ${spec} ${why}` });
+  if (!fs.existsSync(file)) return refuse("does not exist");
+  if (!fs.statSync(file).isFile()) return refuse("is not a file");
+  const compiler = NODE_ENTRY.test(file)
+    ? { label: spec, cmd: process.execPath, prefix: [file] }
+    : { label: spec, cmd: file, prefix: [] };
+  if (compiler.prefix.length === 0) {
+    try {
+      fs.accessSync(file, fs.constants.X_OK);
+    } catch {
+      return refuse("is not executable (only .js/.mjs/.cjs are run under node)");
+    }
+  }
+  if (compile(compiler, ["--version"]).status !== 0) return refuse("is not runnable (`--version` failed)");
+  return compiler;
+}
+
+/**
+ * The seed `NISH_BOOTSTRAP` names, or null when there is none. An empty value
+ * counts as none: `NISH_BOOTSTRAP= npm test` is how a caller turns the seed
+ * off for one run, and reading it as a path would refuse to start instead.
+ */
+function seedFromEnvironment() {
+  const seed = process.env.NISH_BOOTSTRAP;
+  return seed === undefined || seed === "" ? null : seed;
+}
+
+/** Both compilers, or the first error. */
+function resolvePair(referenceSpec, candidateSpec) {
+  const reference = resolveCompiler(referenceSpec, "reference");
+  if (reference.error !== undefined) return { error: reference.error };
+  const candidate = resolveCompiler(candidateSpec, "candidate");
+  if (candidate.error !== undefined) return { error: candidate.error };
+  return { reference, candidate };
+}
+
+function compile(compiler, args) {
+  return spawnSync(compiler.cmd, [...compiler.prefix, ...args], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+}
+
+/** `--emit-header <dir>/<stem>.h ...`: the flags that ask for all four WP8 sidecars. */
+function sidecarFlags(dir, stem) {
+  return [
+    "--emit-header",
+    path.join(dir, `${stem}.h`),
+    "--emit-dts",
+    path.join(dir, `${stem}.d.ts`),
+    "--emit-napi",
+    path.join(dir, `${stem}.napi.c`),
+  ];
+}
+
+function fresh(dir) {
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/** Every file under `dir` as `relative path -> bytes`, so a missing file is a difference too. */
+function tree(dir) {
+  const out = new Map();
+  const walk = (at, prefix) => {
+    for (const entry of fs.readdirSync(at, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const full = path.join(at, entry.name);
+      const rel = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(full, rel);
+      else out.set(rel, fs.readFileSync(full));
+    }
+  };
+  if (fs.existsSync(dir)) walk(dir, "");
+  return out;
+}
+
+/** The first diagnostic of a compiler's stderr, without its file:line:col prefix. */
+function firstLine(output) {
+  const line = output.trim().split("\n")[0] ?? "";
+  return line.replace(/^[^:]*:\d+:\d+: /, "");
+}
+
+/**
+ * Where two texts differ, as at most `limit` lines with both spellings — the
+ * shape `ir_oracle.js` reports, bounded because a release that changes one
+ * attribute changes it in every module and the useful part of that report is
+ * the first line of it, not the two million after.
+ */
+function excerpt(want, got, limit) {
+  const wantLines = want.split("\n");
+  const gotLines = got.split("\n");
+  const total = Math.max(wantLines.length, gotLines.length);
+  const shown = [];
+  let differing = 0;
+  for (let i = 0; i < total; i++) {
+    if (wantLines[i] === gotLines[i]) continue;
+    differing++;
+    if (shown.length < limit) {
+      shown.push(
+        `line ${i + 1}: reference \`${wantLines[i] ?? "<end>"}\`\n` +
+          `${" ".repeat(String(i + 1).length + 7)}candidate \`${gotLines[i] ?? "<end>"}\``
+      );
+    }
+  }
+  if (differing === 0) return { differing, total, text: "the bytes differ but no line does" };
+  const more = differing > shown.length ? `\n... ${differing - shown.length} more differing line(s)` : "";
+  return { differing, total, text: `${shown.join("\n")}${more}` };
+}
+
+/**
+ * Compile one program with both compilers and compare everything they wrote.
+ *
+ * Returns exactly one of:
+ *   `{ dump }`         — its own flags ask for a dump, so neither side writes an artefact
+ *   `{ refused }`      — both compilers refuse it; the message is `reject_oracle.js`'s
+ *   `{ differences }`  — `[{ surface, detail }]`, where `surface` is the file name or "exit"
+ *   `{ files, lines }` — they agree, over this many files and IR lines
+ *
+ * The program is given the flags it is compiled with everywhere else, from its
+ * `.args` sidecar or its `// smoke: args` line (`tests/self/corpus.js`): two
+ * versions of one compiler disagree about a flag exactly as readily as about a
+ * construct, and a program nobody compiles the way it is meant to be compiled
+ * is not in the comparison at all.
+ */
+function compare(pair, work, file, options = {}) {
+  const limit = options.lines ?? 3;
+  const flags = extraArgs(file);
+  const dump = flags.find((flag) => DUMP_FLAGS.has(flag));
+  if (dump !== undefined) return { dump: `${dump}: no artefact; the <name>.stdout golden pins it` };
+
+  // Both compilers name each module by the path they resolved it to and write
+  // that path into the module header, so the entry has to be spelled the same
+  // for both. The output directories differ and may: nothing either compiler
+  // writes carries the directory it was written to.
+  const named = path.relative(root, file);
+  const stem = path.basename(file, ".ts");
+  const referenceDir = fresh(path.join(work, "reference"));
+  const candidateDir = fresh(path.join(work, "candidate"));
+  const argv = (dir) => [
+    named,
+    "-o",
+    `${dir}${path.sep}`,
+    ...flags,
+    ...(options.sidecars === false ? [] : sidecarFlags(dir, stem)),
+  ];
+
+  const reference = compile(pair.reference, argv(referenceDir));
+  const candidate = compile(pair.candidate, argv(candidateDir));
+  if (reference.status !== 0 && candidate.status !== 0) {
+    return { refused: firstLine(reference.stderr) || `exit ${reference.status}` };
+  }
+  if (reference.status !== 0) {
+    return {
+      differences: [
+        {
+          surface: "exit",
+          detail:
+            `the candidate compiles it and the reference refuses it ` +
+            `(reference: ${firstLine(reference.stderr) || `exit ${reference.status}`})`,
+        },
+      ],
+    };
+  }
+  if (candidate.status !== 0) {
+    return {
+      differences: [
+        {
+          surface: "exit",
+          detail: `the candidate refuses it: ${firstLine(candidate.stderr) || `exit ${candidate.status}`}`,
+        },
+      ],
+    };
+  }
+
+  const want = tree(referenceDir);
+  const got = tree(candidateDir);
+  if (want.size === 0) return { refused: "the reference wrote no files" };
+  const differences = [];
+  let lines = 0;
+  for (const name of [...new Set([...want.keys(), ...got.keys()])].sort()) {
+    const a = want.get(name);
+    const b = got.get(name);
+    if (a === undefined) {
+      differences.push({ surface: name, detail: "the candidate wrote it and the reference did not" });
+      continue;
+    }
+    if (b === undefined) {
+      differences.push({ surface: name, detail: "the reference wrote it and the candidate did not" });
+      continue;
+    }
+    if (a.equals(b)) {
+      if (name.endsWith(".ll")) lines += a.toString("utf8").split("\n").length;
+      continue;
+    }
+    const where = excerpt(a.toString("utf8"), b.toString("utf8"), limit);
+    differences.push({
+      surface: name,
+      detail: `differs (${where.differing} of ${where.total} lines)\n${where.text}`,
+    });
+  }
+  if (differences.length > 0) return { differences };
+  return { files: want.size, lines };
+}
+
+/**
+ * The declaration covering one difference, or null. Keyed on the program and
+ * the file, both optional, so a declaration says exactly as much as its author
+ * meant it to and no more.
+ */
+function declaredFor(program, surface) {
+  for (const entry of DECLARED) {
+    if (entry.program !== undefined && entry.program !== program) continue;
+    if (entry.file !== undefined && entry.file !== surface) continue;
+    return entry;
+  }
+  return null;
+}
+
+/**
+ * Every positive whole program of the corpus, plus the whole programs of
+ * `tests/link/`, which is where the multi-module shapes live — the same set
+ * `ir_oracle.js` walks, from the same module, so the successor compares no
+ * less than the oracle it replaces.
+ */
+function corpus() {
+  return [...programs(), ...linkPrograms().map((program) => program.main)];
+}
+
+/**
+ * The compiler HEAD builds: `self/compile.ts` linked into `build/self/compile`
+ * by the seed when there is one and by stage0 until then, which is the
+ * arrangement G3 puts in `scripts/bootstrap.sh`. Always rebuilt rather than
+ * reused: a stale binary from an earlier checkout would be compared against
+ * the release and reported as agreement, which is the one answer this tool
+ * must never give by accident. Pass `--candidate` to compare a binary you
+ * built yourself and skip this.
+ */
+function buildCandidate(seedSpec) {
+  const out = path.join(root, "build", "self", "compile");
+  const builder = resolveCompiler(seedSpec ?? path.join("dist", "index.js"), "candidate builder");
+  if (builder.error !== undefined) return { error: builder.error };
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  const built = compile(builder, [path.join("self", "compile.ts"), "--link", out]);
+  if (built.status !== 0) return { error: `could not build the candidate with ${builder.label}\n${built.stderr}` };
+  return { path: path.relative(root, out) };
+}
+
+const HELP = `nish-cmp — compile the corpus with two compilers and compare every byte.
+
+usage: node tests/nish-cmp.js [options] [program.ts ...]
+
+  -r, --reference <compiler>  the compiler that is trusted: the last released
+                              nish (default: $NISH_BOOTSTRAP; without one the
+                              run skips, because there is nothing to compare to)
+  -c, --candidate <compiler>  the compiler under test (default: self/ built into
+                              build/self/compile by the reference, or by stage0
+                              when the reference is not a released nish)
+      --changelog <file>      where a declared difference must be named
+                              (default: CHANGELOG.md)
+      --no-sidecars           compare only the IR, not the four WP8 sidecars
+      --lines <n>             differing lines to print per file (default: 3)
+      --verbose               name every program, not only the differences
+  -h, --help                  this text
+
+A compiler is a native binary, or a .js/.mjs/.cjs entry point run under node —
+the same rule scripts/bootstrap.sh applies to NISH_BOOTSTRAP.
+
+With no programs named, the whole corpus is compared (tests/self/corpus.js).
+
+exit codes: 0 agreed (or skipped for want of a seed), 1 undeclared difference,
+2 usage or a compiler that would not build`;
+
+function main(argv) {
+  const options = { lines: 3, sidecars: true };
+  let referenceSpec = seedFromEnvironment();
+  let candidateSpec = null;
+  let changelog = "CHANGELOG.md";
+  let verbose = false;
+  const named = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "-h" || arg === "--help") {
+      process.stdout.write(`${HELP}\n`);
+      return 0;
+    } else if (arg === "-r" || arg === "--reference") referenceSpec = argv[++i];
+    else if (arg === "-c" || arg === "--candidate") candidateSpec = argv[++i];
+    else if (arg === "--changelog") changelog = argv[++i];
+    else if (arg === "--no-sidecars") options.sidecars = false;
+    else if (arg === "--lines") options.lines = Number(argv[++i]);
+    else if (arg === "--verbose") verbose = true;
+    else if (arg.startsWith("-")) {
+      process.stderr.write(`nish-cmp: unknown option: ${arg}\n${HELP}\n`);
+      return 2;
+    } else named.push(arg);
+  }
+  if (referenceSpec === undefined || candidateSpec === undefined || Number.isNaN(options.lines)) {
+    process.stderr.write(`nish-cmp: an option is missing its value\n${HELP}\n`);
+    return 2;
+  }
+
+  // The skip, in the runner's own idiom (`tests/run.js`'s `skip`): one SKIP
+  // line carrying the reason, and a summary that counts it rather than
+  // reporting a comparison that did not happen as a pass. Nish has no release
+  // yet, so this is the answer on every machine until 0.1.0 is tagged.
+  if (referenceSpec === null) {
+    process.stdout.write(
+      "SKIP  nish-cmp: no seed available (no --reference and NISH_BOOTSTRAP is unset), " +
+        "so HEAD was compared against nothing\n"
+    );
+    process.stdout.write("nish-cmp: 0 programs compared, 1 skipped (no seed available)\n");
+    return 0;
+  }
+
+  // The corpus is settled before a compiler is built, so that a mistyped
+  // program name costs a message rather than the link that precedes it.
+  const inputs = named.length > 0 ? named.map((file) => path.resolve(file)) : corpus();
+  const missing = inputs.filter((file) => !fs.existsSync(file));
+  if (missing.length > 0) {
+    process.stderr.write(`nish-cmp: no such program: ${missing.map((f) => path.relative(root, f)).join(", ")}\n`);
+    return 2;
+  }
+
+  if (candidateSpec === null) {
+    // The seed builds HEAD: that is the arrangement G3 wires into CI, and it
+    // is why the reference is what gets passed on here. A seed too old to
+    // compile HEAD's `self/` fails here, naming itself, which is the G4 policy
+    // being enforced rather than discovered halfway through a comparison.
+    const built = buildCandidate(referenceSpec);
+    if (built.error !== undefined) {
+      process.stderr.write(`nish-cmp: ${built.error}\n`);
+      return 2;
+    }
+    candidateSpec = built.path;
+  }
+  const pair = resolvePair(referenceSpec, candidateSpec);
+  if (pair.error !== undefined) {
+    process.stderr.write(`nish-cmp: ${pair.error}\n`);
+    return 2;
+  }
+
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-cmp-"));
+  const undeclared = [];
+  const declared = [];
+  const dumps = [];
+  const refused = [];
+  let agreed = 0;
+  let files = 0;
+  let lines = 0;
+  for (const file of inputs) {
+    const program = path.relative(root, file);
+    const result = compare(pair, work, file, options);
+    if (result.dump !== undefined) {
+      dumps.push(`${program}: ${result.dump}`);
+    } else if (result.refused !== undefined) {
+      refused.push(`${program}: both refuse it: ${result.refused}`);
+    } else if (result.differences !== undefined) {
+      for (const difference of result.differences) {
+        const entry = declaredFor(program, difference.surface);
+        const row = { program, ...difference, declared: entry };
+        (entry === null ? undeclared : declared).push(row);
+      }
+    } else {
+      agreed++;
+      files += result.files;
+      lines += result.lines;
+      if (verbose) process.stdout.write(`  ok   ${program} (${result.files} files)\n`);
+    }
+  }
+  fs.rmSync(work, { recursive: true, force: true });
+
+  // A release that changes one attribute changes it in every module, so the
+  // report is bounded twice over: `--lines` lines per file, and this many
+  // files before the rest are counted rather than printed. The summary still
+  // counts every one of them, and naming one program with a larger `--lines`
+  // is how to look at a single difference closely.
+  for (const row of undeclared.slice(0, MAX_ROWS)) {
+    process.stdout.write(`  FAIL ${row.program}: ${row.surface} ${row.detail}\n`.replace(/\n(?=.)/g, "\n       "));
+  }
+  if (undeclared.length > MAX_ROWS) {
+    process.stdout.write(`  ... ${undeclared.length - MAX_ROWS} more differing file(s), not printed\n`);
+  }
+  // A declaration is a claim that `CHANGELOG.md` names the difference. The
+  // claim is checked here rather than trusted, because the whole point of G2's
+  // sentence is that the release note and the compiler's output cannot drift
+  // apart: a declaration whose words have gone fails the run exactly as an
+  // undeclared difference does.
+  const changelogText = fs.existsSync(path.resolve(root, changelog))
+    ? fs.readFileSync(path.resolve(root, changelog), "utf8")
+    : "";
+  const unnamed = [];
+  const byReason = new Map();
+  for (const row of declared) {
+    byReason.set(row.declared, (byReason.get(row.declared) ?? 0) + 1);
+    if (!changelogText.includes(row.declared.changelog) && !unnamed.includes(row.declared)) {
+      unnamed.push(row.declared);
+    }
+  }
+  for (const [reason, count] of byReason) {
+    const where = `${reason.program ?? "every program"} ${reason.file ?? ""}`.trim();
+    process.stdout.write(`declared: ${count} × ${where} — ${reason.why}\n`);
+  }
+  for (const reason of unnamed) {
+    process.stdout.write(
+      `  FAIL ${changelog} does not name this difference: the declaration asks it for ` +
+        `"${reason.changelog}"\n`
+    );
+  }
+  // A declaration that covers nothing is not a failure — a single-program run
+  // is entitled to match none of them — but it is worth saying on a full run,
+  // because an allowlist nobody prunes is how the next real difference gets
+  // waved through.
+  if (named.length === 0) {
+    for (const entry of DECLARED) {
+      if (!byReason.has(entry)) {
+        const where = `${entry.program ?? "every program"} ${entry.file ?? ""}`.trim();
+        process.stdout.write(`note: nothing differs at ${where}; the declaration can go\n`);
+      }
+    }
+  }
+  if (verbose) {
+    for (const row of refused) process.stdout.write(`  refused ${row}\n`);
+    for (const row of dumps) process.stdout.write(`  dump ${row}\n`);
+  }
+
+  const compared = inputs.length - refused.length - dumps.length;
+  // Each outcome is counted apart and named, for the reason the oracles count
+  // their skips apart (`.claude/selfhost.md`): a program neither compiler
+  // compiles proves nothing about either, and must not be able to hide inside
+  // a number that reads like agreement.
+  const refusedNote = refused.length > 0 ? `, ${refused.length} refused by both` : "";
+  const dumpNote = dumps.length > 0 ? `, ${dumps.length} dumps (no artefact)` : "";
+  const declaredNote = declared.length > 0 ? `, ${declared.length} declared difference(s)` : "";
+  process.stdout.write(
+    `nish-cmp: ${agreed}/${compared} programs agree (${files} files, ${lines} IR lines) — ` +
+      `reference ${pair.reference.label}, candidate ${pair.candidate.label}` +
+      `${refusedNote}${dumpNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
+  );
+  return undeclared.length === 0 && unnamed.length === 0 ? 0 : 1;
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+export { buildCandidate, compare, corpus, resolveCompiler, resolvePair, seedFromEnvironment };

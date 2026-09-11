@@ -139,6 +139,30 @@ Releases are tag-driven; nothing is published from a developer machine.
 If a release is wrong, delete the GitHub release and the tag, fix, and tag
 again with a *new* patch version; never move a tag that CI has already built.
 
+## The bootstrap seed
+
+**`nish` 0.N is built by the last patch release of 0.(N−1).** The seed is a
+released binary one minor version back, never the working tree, and the whole
+0.N line — 0.N.0 and every patch after it — is built by that same seed.
+`scripts/bootstrap.sh` selects it with `NISH_BOOTSTRAP`, and CI's bootstrap job
+passes the last release, which is what enforces the rule rather than hoping for
+it ([wp19-stage0-retirement.md](wp19-stage0-retirement.md) §3, G3). Go
+publishes a rule of the same shape; the reason to write ours down now is that a
+policy decided in the abstract costs nobody an argument during a release.
+
+0.1.0 is the base case the rule needs. It is the first release and has no
+predecessor to be built by, so it is built by stage0, and it is the release
+that creates the first seed. From 0.2.0 on the seed is the previous line's last
+patch release.
+
+The consequence for contributors: **a construct added in 0.N cannot be used by
+`self/` until 0.(N+1)**. While 0.N is in development the compiler that has to
+compile `self/` is a 0.(N−1) binary, and it has never heard of the construct.
+Rule 1 of [wp14-selfhost.md](wp14-selfhost.md) §6 — a construct enters the
+language before it enters `self/` — therefore survives stage0's retirement
+unchanged, and only its subject changes, from stage0 to the seed. Add the
+construct to the language, ship the release, then use it in `self/`.
+
 ## Open decision: which compiler the package ships
 
 The position this project is run on: **the compiled native binary is what
@@ -170,7 +194,8 @@ Three ways to close it, and what each costs:
 
 The options are not exclusive: (c) is about which binary is `nish`, and (a)
 or (b) is about how it gets onto the machine. What is not open is stage0's
-role — it is the seed and the oracle in all three.
+role — it is the oracle in all three, and the seed in all three until the
+policy above hands that job to the previous release.
 
 Nothing here has been implemented, and this note is deliberately not a plan:
 `package.json` is unchanged, and the numbers above are what a decision would

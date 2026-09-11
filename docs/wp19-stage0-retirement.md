@@ -358,6 +358,40 @@ re-verifying the property from that tag — check out, `npm ci`, `npm run build`
 cost: it is a tag and a paragraph. It is the difference between "we gave up
 diverse double-compiling" and "we can no longer say anything about it".
 
+**The procedure.** From a clone of the repository, on a machine with Node
+22.18 or newer (`package.json#engines` at the tag) and an LLVM 18 `clang` on
+`PATH`, because each stage is linked:
+
+1. `git checkout ddc-<version>` — a detached checkout of the tag. The tree
+   there still contains `src/`, the TypeScript implementation that R6 deleted
+   from the branch, which is why this runs at the tag and nowhere else.
+2. `npm ci` — the devDependencies as the lockfile at the tag pins them,
+   including the `typescript` package stage0 parses with.
+3. `npm run build` — `tsc` into `dist/`. That is stage0.
+4. `node tests/self/bootstrap.js` — builds stage1 with stage0, stage2 with
+   stage1 and stage3 with stage2, and compares every module byte for byte.
+   `--verbose` names each module as it is compared.
+
+The script exits 0 and prints one line — `<N> modules, <N> bytes of IR:
+IR(stage0)==IR(stage1)==IR(stage2), stage3 == stage2 (<N> bytes)` — or prints
+`FAIL <reason>` naming the first module and line that differ, and exits 1.
+
+**A pass** re-establishes diverse double-compiling at that commit: two
+independently written implementations of Nish emit identical IR for every
+module of `self/`, and the compiler built from that IR reaches its fixed point.
+The property is demonstrated again rather than taken on trust from the tag,
+which is the only reason the tag is worth having.
+
+**A failure does not mean the tag is wrong.** It means the demonstration is no
+longer reproducible and the claim that rests on it is lost. Read the
+environment first — the Node version, the LLVM version, what `npm ci` actually
+resolved — because the tree at the tag is fixed and everything around it is
+not. If the tree builds cleanly and the IR still differs, nothing on the branch
+can repair it: the property comes from a second implementation and
+re-establishing it means writing one again (§2D). What can be said afterwards
+is that we can no longer say anything about diverse double-compiling, which is
+a worse position than having given it up deliberately.
+
 **Why it blocks.** It costs nothing and it is unrecoverable afterwards.
 
 ---

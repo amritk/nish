@@ -13,6 +13,26 @@ shipped, not a description of the tree as it stands.
 
 ### Changed
 
+- **`scripts/build.sh` survives bash 3.2, which unblocks macOS.** The script
+  runs under `set -u`, and macOS ships bash 3.2 (Apple will not ship GPLv3),
+  where expanding an empty array as `"${arr[@]}"` is a fatal "unbound
+  variable" — bash 4.4 made it legal, which is why no Linux runner ever
+  noticed and why `test (macos-latest)` has been commented out of the CI
+  matrix. Every `--link` at the speed, size and napi profiles died on macOS
+  with `pgo[@]: unbound variable`.
+
+  Ten sites now use `${arr[@]+"${arr[@]}"}`, which behaves identically on 3.2,
+  4.x and 5.x: `pgo` (empty unless `--pgo-generate`/`--pgo-use`), `elf` (empty
+  on exactly the platform that cannot tolerate it, since it is filled only in
+  the non-Darwin branch), `strip_flag` (emptied by `-g`) and `libs` (empty
+  whenever clang's resource directory already has the wasm builtins).
+  `common`, `inputs`, `gc` and `shared` are provably non-empty on every path
+  and are left alone. The emitted command lines are byte-identical on Linux,
+  argument for argument, at every profile and flag combination.
+
+  The CI comment predicted nine sites; there are ten. It undercounts because
+  `strip_flag` and `gc` sit on the same source line and read as one.
+
 - **Slice iterators are closed by measurement, and four stale status claims are
   corrected (WP15 §2.3, §9).** WP15 item 3 proposed lowering `for (const c of
   s)` to pointer advancement so that the idiomatic loop would also be the
@@ -78,6 +98,45 @@ shipped, not a description of the tree as it stands.
   across a rename, so it is frozen by design instead of following the name.
 
 ### Added
+
+- **The bootstrap seed is a parameter: `NISH_BOOTSTRAP` (WP19 G3).**
+  `scripts/bootstrap.sh` no longer assumes `dist/index.js`. The seed is either a
+  released `nish`, executed directly, or a Node entry point run as
+  `node <path>`, chosen by extension — the executable bit describes the
+  download rather than the file, and `dist/index.js` is `0644` in a fresh
+  checkout. Whichever kind it is, it must answer `--version` before a stage
+  runs, so a binary for the wrong platform fails under the variable's own name
+  instead of three stages later. Unset, the seed is stage0 and every line the
+  script prints is what it printed before.
+
+  The header says what the chain now proves, because it changed: with stage0 as
+  the seed, `IR(seed) == IR(stage1)` is WP14's strong claim that two
+  independently written implementations agree; with a released `nish` it is the
+  weaker claim that a release and HEAD agree. That is the property G3 buys, and
+  it is worth naming rather than letting the same line stand for both.
+
+- **`nish-cmp`: the released compiler against HEAD, byte for byte (WP19 G2).**
+  `tests/nish-cmp.js` is the successor to `ir_oracle.js` and
+  `interop_oracle.js`, which both die with stage0 — Go's `toolstash -cmp` by
+  another name. It reuses `tests/self/corpus.js`, so it compiles the same
+  programs with the same flags every other oracle does, and it compares every
+  file either compiler writes: one `.ll` per module, the four WP8 sidecars, the
+  file *set*, and the exit status, since a program one side refuses is a
+  difference too. A difference must be named in `CHANGELOG.md` to go green, and
+  a declaration whose words are absent from the changelog fails as loudly as an
+  undeclared difference, so the two cannot drift apart.
+
+  It agrees with the oracle it replaces where they overlap: 329 of 329
+  programs, 2,332,971 IR lines. It has also been seen to *fail* — against a
+  candidate differing by a single flag it names the program, the file and a
+  bounded excerpt — because a comparison tool nobody has watched fail is not
+  evidence.
+
+  **Today it skips**, and says so: Nish has no release yet, so there is nothing
+  to compare HEAD against. The skip is counted in the suite's summary rather
+  than reported as a pass, which is the whole point — a green run with a silent
+  skip proves less than it looks. `fuzz.js --stage1` takes the same pair, and
+  falls back to stage0 versus stage1 when no seed is set.
 
 - **Non-generic `type` aliases, in both compilers.** `type Byte = u8;` at
   module level is accepted now instead of

@@ -17,13 +17,18 @@
  *   - the default mode (WP13) builds each program natively and runs the same
  *     program under Node through the rewrite (lib.js), and compares stdout,
  *     exit status and signal;
- *   - `--stage1` (WP14) compiles each program with stage0 *and* with the
- *     self-hosted compiler and compares the emitted IR byte for byte, module
- *     set included, reusing the build and comparison of
- *     `tests/self/ir_oracle.js`. The stage1 binary is linked once per run.
+ *   - `--stage1` (WP14, repointed by WP19 G2.2) compiles each program with two
+ *     compilers and compares the emitted IR byte for byte, module set
+ *     included, reusing the comparison of `tests/nish-cmp.js` so that the
+ *     generated corpus is held to exactly what the checked-in one is. The
+ *     pair is the seed release against HEAD when there is a seed
+ *     (`NISH_BOOTSTRAP`, or `--reference`), and stage0 against the
+ *     self-hosted compiler until there is one, which is what it has always
+ *     been. The candidate is linked once per run.
  *
  * Usage: node tests/differential/fuzz.js [--count N] [--seed S] [--jobs J] [--depth D]
  *        node tests/differential/fuzz.js --stage1 [--count N] [--seed S] [--depth D]
+ *                                        [--reference <compiler>] [--candidate <compiler>]
  *
  * Program i of a run uses seed S + i; a mismatching program is saved as
  * build/test/differential/fuzz-fail-<S + i>.ts (`fuzz-stage1-fail-<S + i>.ts`
@@ -34,7 +39,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as lib from "./lib.js";
-import * as irOracle from "../self/ir_oracle.js";
+import * as cmp from "../nish-cmp.js";
 import ts from "typescript";
 import { fileURLToPath } from "node:url";
 
@@ -304,52 +309,79 @@ async function fuzzRun({ count = 50, seed = 1, jobs = 4, depth = 3, log = () => 
 }
 
 /**
- * The stage1 mode: generate `count` programs and require
- * `IR(stage0, p) == IR(stage1, p)` for each, byte for byte and module set
- * included — the same equality `tests/self/ir_oracle.js` asserts over the
- * checked-in corpus, on programs neither compiler has ever seen. stage0 is the
- * oracle; there is no golden anywhere in this path.
+ * The reference and the candidate this mode compares, resolved the way
+ * `tests/nish-cmp.js` resolves them — a native binary or a `.js` entry point,
+ * `NISH_BOOTSTRAP` naming the seed — with one difference that matters: the
+ * tool skips when there is no seed and this mode falls back to **stage0**.
+ * There is no released `nish` yet, and the equality this fuzzer has asserted
+ * since WP14, `IR(stage0, p) == IR(stage1, p)`, is worth keeping until there
+ * is one. On the day a seed exists, `NISH_BOOTSTRAP` alone repoints this at
+ * seed-release-versus-HEAD and nothing here changes (WP19 G2.2).
  *
- * The stage1 binary is linked once (about 15 s) and every program reuses it;
- * the programs themselves are compared one at a time, because the oracle's
- * `compare` is synchronous and empties the directory it works in, so `--jobs`
- * does not apply to this mode.
- * Returns `{ seed, count, agreed, modules, lines, disagreements }`, where a
- * disagreement is `{ seed, verdict, detail, file }` and `file` is the saved
- * reproducer. `binary === null` means the link failed and nothing was compared.
+ * Returns `{ reference, candidate }` or `{ error }`.
  */
-function stage1Run({ count = 20, seed = 1, depth = 3, log = () => {} } = {}) {
-  const binary = irOracle.build();
-  if (binary === null) return { seed, count, binary, agreed: 0, modules: 0, lines: 0, disagreements: [] };
+function stage1Pair({ reference = null, candidate = null } = {}) {
+  const referenceSpec = reference ?? cmp.seedFromEnvironment() ?? path.join("dist", "index.js");
+  let candidateSpec = candidate;
+  if (candidateSpec === null) {
+    const built = cmp.buildCandidate(referenceSpec);
+    if (built.error !== undefined) return { error: built.error };
+    candidateSpec = built.path;
+  }
+  return cmp.resolvePair(referenceSpec, candidateSpec);
+}
+
+/**
+ * The stage1 mode: generate `count` programs and require `IR(reference, p) ==
+ * IR(candidate, p)` for each, byte for byte and module set included — the same
+ * equality `tests/nish-cmp.js` asserts over the checked-in corpus, on programs
+ * neither compiler has ever seen. There is no golden anywhere in this path:
+ * the reference is the oracle.
+ *
+ * The candidate is linked once (about 15 s) and every program reuses it; the
+ * programs themselves are compared one at a time, because `compare` is
+ * synchronous and empties the directory it works in, so `--jobs` does not
+ * apply to this mode. The sidecars are left out of the comparison: what this
+ * mode is for is the emitter on shapes nobody wrote, and the WP8 generators
+ * read the same checked program the corpus run already puts them through.
+ *
+ * Returns `{ seed, count, pair, agreed, files, lines, disagreements }`, where a
+ * disagreement is `{ seed, verdict, detail, file }` and `file` is the saved
+ * reproducer. `pair === null` means a compiler was missing or would not link
+ * and nothing was compared.
+ */
+function stage1Run({ count = 20, seed = 1, depth = 3, reference = null, candidate = null, log = () => {} } = {}) {
+  const pair = stage1Pair({ reference, candidate });
+  if (pair.error !== undefined) {
+    return { seed, count, pair: null, error: pair.error, agreed: 0, files: 0, lines: 0, disagreements: [] };
+  }
   const dir = path.join(lib.buildDir, "fuzz");
   fs.mkdirSync(dir, { recursive: true });
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-fuzz-ir-"));
   const disagreements = [];
   let agreed = 0;
-  let modules = 0;
+  let files = 0;
   let lines = 0;
   for (let i = 0; i < count; i++) {
     const s = (seed + i) >>> 0;
     const file = path.join(dir, `fuzz-${s}.ts`);
     fs.writeFileSync(file, generateProgram(s, { depth }));
     const t0 = Date.now();
-    const result = irOracle.compare(binary, work, file);
+    const result = cmp.compare(pair, work, file, { sidecars: false, lines: 3 });
     // A generated program carries no `.args` and stays inside the language, so
-    // the oracle's "skipped" outcomes cannot happen here for a benign reason:
-    // every verdict other than an agreement is a failure worth saving.
+    // none of the outcomes below can happen for a benign reason: every verdict
+    // other than an agreement is a failure worth saving.
     const entry = { seed: s, name: `fuzz/${s}`, verdict: "agree", detail: "", ms: Date.now() - t0, file };
-    if (result.failed !== undefined) {
-      entry.verdict = "ir-mismatch";
-      entry.detail = result.failed;
-    } else if (result.rejected !== undefined) {
-      entry.verdict = "stage1-rejected";
-      entry.detail = result.rejected;
-    } else if (result.skipped !== undefined) {
-      entry.verdict = "stage0-error";
-      entry.detail = result.skipped;
+    if (result.differences !== undefined) {
+      const first = result.differences[0];
+      entry.verdict = first.surface === "exit" ? "refusal-differs" : "ir-mismatch";
+      entry.detail = `${first.surface}: ${first.detail}`;
+    } else if (result.refused !== undefined) {
+      entry.verdict = "refused-by-both";
+      entry.detail = result.refused;
     } else {
       agreed++;
-      modules += result.modules;
+      files += result.files;
       lines += result.lines;
     }
     if (entry.verdict !== "agree") {
@@ -361,7 +393,7 @@ function stage1Run({ count = 20, seed = 1, depth = 3, log = () => {} } = {}) {
     log(entry);
   }
   fs.rmSync(work, { recursive: true, force: true });
-  return { seed, count, binary, agreed, modules, lines, disagreements };
+  return { seed, count, pair, agreed, files, lines, disagreements };
 }
 
 export { generateProgram, fuzzRun, stage1Run };
@@ -374,6 +406,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let depth = 3;
   let printOnly = false;
   let stage1 = false;
+  let reference = null;
+  let candidate = null;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--count") count = Number(argv[++i]);
     else if (argv[i] === "--seed") seed = Number(argv[++i]) >>> 0;
@@ -381,6 +415,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     else if (argv[i] === "--depth") depth = Number(argv[++i]);
     else if (argv[i] === "--print") printOnly = true;
     else if (argv[i] === "--stage1") stage1 = true;
+    else if (argv[i] === "--reference") reference = argv[++i];
+    else if (argv[i] === "--candidate") candidate = argv[++i];
     else {
       console.error(`unknown option: ${argv[i]}`);
       process.exit(2);
@@ -395,28 +431,39 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(2);
   }
   if (stage1) {
-    console.log(`fuzz: stage1 seed=${seed} count=${count} depth=${depth} (linking stage1)`);
+    const seedName = reference ?? cmp.seedFromEnvironment() ?? "dist/index.js (no seed yet: stage0)";
+    console.log(`fuzz: stage1 seed=${seed} count=${count} depth=${depth} reference=${seedName} (linking the candidate)`);
     const tStage1 = Date.now();
     const res = stage1Run({
       count,
       seed,
       depth,
+      reference,
+      candidate,
       log: (e) => {
         const tag = e.verdict === "agree" ? "ok  " : e.verdict.toUpperCase();
-        console.log(`${tag}  ${e.name}  ${e.ms} ms${e.detail ? `  ${e.detail}` : ""}`);
+        // The detail is a bounded diff excerpt and therefore several lines;
+        // indenting its continuations keeps one program to one visual block.
+        const detail = e.detail ? `  ${e.detail.replace(/\n/g, "\n      ")}` : "";
+        console.log(`${tag}  ${e.name}  ${e.ms} ms${detail}`);
       },
     });
-    if (res.binary === null) {
-      console.error("fuzz: stage1 did not link; nothing compared");
+    if (res.pair === null) {
+      console.error(`fuzz: ${res.error}\nfuzz: nothing compared`);
       process.exit(2);
     }
     console.log(
-      `\nfuzz: stage1 seed=${res.seed} count=${res.count} agree=${res.agreed} disagreements=${res.disagreements.length} (${res.modules} modules, ${res.lines} IR lines, ${((Date.now() - tStage1) / 1000).toFixed(1)} s)`
+      `\nfuzz: stage1 seed=${res.seed} count=${res.count} agree=${res.agreed} disagreements=${res.disagreements.length} (${res.files} files, ${res.lines} IR lines, ${((Date.now() - tStage1) / 1000).toFixed(1)} s, reference ${res.pair.reference.label}, candidate ${res.pair.candidate.label})`
     );
+    // The pair is part of the reproduction now that it is a parameter: a
+    // failure against one seed release says nothing about another, and the
+    // seed a run used is the first thing somebody reading the saved program
+    // will want back.
+    const pairArgs = `${reference === null ? "" : ` --reference ${reference}`}${candidate === null ? "" : ` --candidate ${candidate}`}`;
     for (const d of res.disagreements) {
       console.log(`  ${d.verdict}: seed ${d.seed} saved to ${d.file}`);
-      console.log(`      ${d.detail}`);
-      console.log(`      reproduce: node tests/differential/fuzz.js --stage1 --seed ${d.seed} --count 1`);
+      console.log(`      ${d.detail.replace(/\n/g, "\n      ")}`);
+      console.log(`      reproduce: node tests/differential/fuzz.js --stage1 --seed ${d.seed} --count 1${pairArgs}`);
     }
     process.exit(res.disagreements.length === 0 ? 0 : 1);
   }
