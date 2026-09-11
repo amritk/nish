@@ -108,6 +108,17 @@ step below is done by hand.
    that branch: `CHANGELOG.md` is rendered from it and editing it directly is
    overwritten on the next merge.
 
+   Opening that pull request needs one repository switch: **Settings > Actions
+   > General > Workflow permissions > "Allow GitHub Actions to create and
+   approve pull requests"**. GitHub refuses `gh pr create` from a workflow
+   without it, whatever the workflow's `permissions:` block says, and no token
+   in the `permissions:` block can grant it. A `RELEASE_PR_TOKEN` secret (a PAT
+   or app token carrying `repo`) lifts it too, and the workflow prefers it when
+   it exists. With neither, the train still pushes the `release/next` branch
+   with everything on it and the job warns with the link that opens the pull
+   request by hand -- the release is one click rather than blocked, and `main`
+   stays green.
+
 2. **Merge the Release pull request.** That is the act of releasing. The same
    workflow sees `changelog/<version>.json` present and `v<version>` absent,
    and creates the tag.
