@@ -22,16 +22,6 @@ a few kilobytes; there is no interpreter and no GC anywhere in the pipeline.
 > fix your source when you move to a newer one, and read
 > [CHANGELOG.md](CHANGELOG.md) before you upgrade.
 
-> **Nish is a working title.** The name is a placeholder and is expected
-> to change; treat the language name and the `nish` CLI as unstable, and pin
-> a commit rather than a name if you depend on either. Nothing in the compiler
-> is built around it: every string either compiler prints is composed from
-> `LANGUAGE` and `CLI` in [`src/branding.ts`](src/branding.ts) and
-> [`self/branding.ts`](self/branding.ts), so a rename is an edit to those two
-> files. The one exception is the `nish_` prefix on the runtime's C symbols,
-> which is ABI rather than branding and stays put through a rename — see
-> [Where the name lives](docs/ARCHITECTURE.md#where-the-name-lives).
-
 ## Quickstart
 
 Requirements: Node.js 22.18+ and, to produce binaries, clang (LLVM 18) + lld;
