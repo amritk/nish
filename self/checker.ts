@@ -39,6 +39,8 @@ import {
   N_NUMBER,
   N_OBJECT,
   N_PAREN,
+  N_PROPERTY,
+  N_RETURN,
   N_TEMPLATE,
   N_TEMPLATE_TEXT,
   N_TYPE_ALIAS,
@@ -600,6 +602,8 @@ class PerfWalk {
   ctx: CheckContext;
   /** The function being walked: the arena rule reads its return type. */
   sig: FunctionSig;
+  /** Its body, which is the search root when an assignment is not inside a loop. */
+  body: Node;
   loops: Node[];
   declared: Local[];
   declaredDepth: i32[];
@@ -611,9 +615,10 @@ class PerfWalk {
    */
   declaredAllocates: boolean[];
 
-  constructor(ctx: CheckContext, sig: FunctionSig) {
+  constructor(ctx: CheckContext, sig: FunctionSig, body: Node) {
     this.ctx = ctx;
     this.sig = sig;
+    this.body = body;
     this.loops = [];
     this.declared = [];
     this.declaredDepth = [];
@@ -652,7 +657,7 @@ class PerfWalk {
  * compile is noise, and a poisoned body has incomplete side tables anyway.
  */
 export function checkPerformance(ctx: CheckContext, sig: FunctionSig, body: Node): void {
-  walkPerformance(new PerfWalk(ctx, sig), body);
+  walkPerformance(new PerfWalk(ctx, sig, body), body);
 }
 
 /**
@@ -942,8 +947,17 @@ function perfAllocatesVisibly(ctx: CheckContext, expr: Node): boolean {
   if (e.kind === N_NEW || e.kind === N_OBJECT || e.kind === N_ARRAY) {
     return true;
   }
+  // A template *with a hole* builds a new string; one without is a literal and
+  // allocates nothing. The parser gives both `N_TEMPLATE`, where stage0's
+  // `ts.isTemplateExpression` already excludes the hole-less form, so the test
+  // has to be made here or the two compilers disagree.
   if (e.kind === N_TEMPLATE) {
-    return true;
+    for (const part of e.children) {
+      if (part.kind !== N_TEMPLATE_TEXT) {
+        return true;
+      }
+    }
+    return false;
   }
   if (e.kind === N_CALL) {
     const callee = unwrapPerfParens(e.children[0]);
@@ -960,6 +974,74 @@ function perfAllocatesVisibly(ctx: CheckContext, expr: Node): boolean {
  */
 function perfIsPointerType(ctx: CheckContext, type: i32): boolean {
   return ctx.table.isPointer(type) || ctx.table.isNullable(type) || ctx.table.isResult(type);
+}
+
+/**
+ * A use of `local` that can let the value it holds outlive the statement it
+ * appears in: an argument (a `push` is one), a `return`, an element of an
+ * array or object literal, the right-hand side of an assignment, or the
+ * initializer of another binding. Everything else — an operand, a field or
+ * element read or write through it, `.length`, a `for...of` source — consumes
+ * the value where it stands and cannot keep it.
+ */
+function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean {
+  if (node.kind === N_CALL) {
+    for (const arg of node.children[1].children) {
+      if (isLocalRef(ctx, arg, local)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  if (node.kind === N_ARRAY) {
+    for (const element of node.children) {
+      if (isLocalRef(ctx, element, local)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  if (node.kind === N_RETURN || node.kind === N_PROPERTY) {
+    return isLocalRef(ctx, node.children[0], local);
+  }
+  if (node.kind === N_VAR_DECL) {
+    return isLocalRef(ctx, node.children[2], local);
+  }
+  return node.kind === N_BINARY && node.text === "=" && isLocalRef(ctx, node.children[1], local);
+}
+
+/**
+ * Whether the value `local` holds *when `expr` runs* may already be reachable
+ * from somewhere else, which is what decides whether the assignment really
+ * drops it.
+ *
+ * The question is about order, not about existence, and this compiler's own
+ * `astLines` is why. It builds a line, replaces it in a branch, and only then
+ * pushes it: the replaced value is dead and the warning is right. Turn the two
+ * around — push, then reassign, in a loop — and every pushed value is still
+ * reachable through the array and the warning would be wrong.
+ *
+ * So: inside a loop, any capture anywhere in the outermost enclosing loop
+ * counts, because control comes back around to the assignment with the capture
+ * behind it. Outside one, only a capture that finishes before the assignment
+ * starts can have taken a value the assignment is about to drop.
+ */
+function perfHeldValueMayBeReachable(walk: PerfWalk, expr: Node, local: Local): boolean {
+  const inLoop = walk.loops.length > 0;
+  const root = inLoop ? walk.loops[0] : walk.body;
+  return perfScanForCapture(walk.ctx, root, local, inLoop, expr.start);
+}
+
+function perfScanForCapture(ctx: CheckContext, node: Node, local: Local, inLoop: boolean, before: i32): boolean {
+  if ((inLoop || node.end <= before) && perfCapturesLocal(ctx, node, local)) {
+    return true;
+  }
+  for (const child of node.children) {
+    if (perfScanForCapture(ctx, child, local, inLoop, before)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -985,6 +1067,9 @@ function checkArenaReassignment(walk: PerfWalk, expr: Node): void {
     return;
   }
   if (!walk.declaredHoldingAllocation(target) || !perfAllocatesVisibly(ctx, expr.children[1])) {
+    return;
+  }
+  if (perfHeldValueMayBeReachable(walk, expr, target)) {
     return;
   }
   ctx.performance(

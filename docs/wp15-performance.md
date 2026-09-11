@@ -630,7 +630,7 @@ rewrite, named in the message.
 
 | Warning | Fires when | Hint |
 | --- | --- | --- |
-| allocation dropped by an assignment | `p = new Point(n)` where `p` was declared holding an allocation: the old value is unreachable, nothing frees it, and the assignment costs the function its arena scope as well | a `const` per value, or an explicit `Arena.mark()` / `Arena.release(m)` bracket |
+| allocation dropped by an assignment | `p = new Point(n)` where `p` was declared holding an allocation and nothing captured that value first: the old value is unreachable, nothing frees it, and the assignment costs the function its arena scope as well | a `const` per value, or an explicit `Arena.mark()` / `Arena.release(m)` bracket |
 | constant computed with overflow | a `+`, `-` or `*` over decimal literals whose value does not fit the `i32` it is computed in, under the default `nsw` | widen the operands with `toI64`, or pass `--wrapping` if the wrap is intended |
 | product widened after wrapping | `toI64(a * b)` / `toF64(a * b)` where the multiplication is `i32`. Multiplication only: `+` and `-` overflow too, but `toI64(intBits(t) - 1)` is the same shape with nothing wrong with it | convert the operands first: `toI64(a) * toI64(b)` |
 | shift count at or beyond the width | `x << 32` on an `i32`, where the count is masked and the shift that runs is not the one written | mask deliberately, or shift a wider value |

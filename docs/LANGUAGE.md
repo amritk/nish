@@ -1936,8 +1936,12 @@ by the caller.
     guarantee ([wp6-memory.md](wp6-memory.md), "Left out"); when the assigned
     value is not an allocation;
     when the function returns a pointer, because then its caller owns the
-    memory; or when the quadratic-string rule is already reporting the same
-    line (`tests/cases/perf_arena_quiet`).
+    memory; when the value being dropped may already be reachable from
+    somewhere else, which is a question of order — a capture anywhere in the
+    enclosing loop, or one that finishes before the assignment starts, leaves
+    the old value reachable and the `const` rewrite inapplicable; or when the
+    quadratic-string rule is already reporting the same line
+    (`tests/cases/perf_arena_quiet`).
   - **a constant computed with overflow** — a `+`, `-` or `*` over decimal
     literals whose exact value does not fit the `i32` it is computed in. The
     default `nsw` makes that undefined behaviour rather than a wrap, so the

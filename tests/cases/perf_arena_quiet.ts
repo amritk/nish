@@ -29,5 +29,21 @@ export function test(): number {
   let s = "a" + "b";
   s = "literal";
 
-  return b.length + what.length + s.length + build(1).length;
+  // A template with no hole is a literal: nothing is allocated and nothing is
+  // dropped. Stage0 spells this `ts.isTemplateExpression`; stage1 has to ask
+  // whether any part is a hole, because its parser gives both forms one kind.
+  let plain = `hello`;
+  plain = `world`;
+
+  // Captured before the assignment, and in a loop, so control comes back
+  // around with the capture behind it: every value this drops is still
+  // reachable through `rows`, and the `const` rewrite does not apply.
+  const rows: string[] = [];
+  let row = "a" + "b";
+  for (let i = 0; i < 2; i = i + 1) {
+    rows.push(row);
+    row = "c" + "d";
+  }
+
+  return b.length + what.length + s.length + build(1).length + plain.length + rows.length + row.length;
 }

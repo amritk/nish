@@ -314,11 +314,67 @@ const isPointerType = (t: StaticType | undefined): boolean =>
   (t.kind === "string" || t.kind === "array" || t.kind === "struct" || t.kind === "nullable" || t.kind === "result");
 
 /**
+ * A use of `local` that can let the value it holds outlive the statement it
+ * appears in: an argument (a `push` is one), a `return`, an element of an
+ * array or object literal, the right-hand side of an assignment, or the
+ * initializer of another binding. Everything else -- an operand, a field or
+ * element read or write through it, `.length`, a `for...of` source --
+ * consumes the value where it stands and cannot keep it.
+ */
+const capturesLocal = (program: CheckedProgram, node: ts.Node, local: LocalVar): boolean => {
+  const refers = (e: ts.Expression): boolean => {
+    const inner = unwrapParens(e);
+    return ts.isIdentifier(inner) && program.bindings.get(inner) === local;
+  };
+  if (ts.isCallExpression(node)) return node.arguments.some(refers);
+  if (ts.isReturnStatement(node)) return node.expression !== undefined && refers(node.expression);
+  if (ts.isArrayLiteralExpression(node)) return node.elements.some(refers);
+  if (ts.isPropertyAssignment(node)) return refers(node.initializer);
+  if (ts.isVariableDeclaration(node)) return node.initializer !== undefined && refers(node.initializer);
+  return (
+    ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && refers(node.right)
+  );
+};
+
+/**
+ * Whether the value `local` holds *when `expr` runs* may already be reachable
+ * from somewhere else, which is what decides whether the assignment really
+ * drops it.
+ *
+ * The question is about order, not about existence, and this compiler's own
+ * `astLines` is why. It builds a line, replaces it in a branch, and only then
+ * pushes it: the replaced value is dead and the warning is right. Turn the two
+ * around -- push, then reassign, in a loop -- and every pushed value is still
+ * reachable through the array and the warning would be wrong.
+ *
+ * So: inside a loop, any capture anywhere in the outermost enclosing loop
+ * counts, because control comes back around to the assignment with the capture
+ * behind it. Outside one, only a capture that finishes before the assignment
+ * starts can have taken a value the assignment is about to drop.
+ */
+const heldValueMayBeReachable = (walk: Walk, expr: ts.BinaryExpression, local: LocalVar): boolean => {
+  const inLoop = walk.loops.length > 0;
+  const root: ts.Node = inLoop ? walk.loops[0] : walk.sig.body;
+  const before = expr.getStart(expr.getSourceFile());
+  let reachable = false;
+  const scan = (node: ts.Node): void => {
+    if (reachable) return;
+    if ((inLoop || node.end <= before) && capturesLocal(walk.ctx.program, node, local)) {
+      reachable = true;
+      return;
+    }
+    ts.forEachChild(node, scan);
+  };
+  scan(root);
+  return reachable;
+};
+
+/**
  * `s = <an allocation>` where `s` is a local that was *declared* holding an
  * allocation: the value it held is unreachable from here on, and nothing frees
  * it. Reported on the target, because the assignment is the thing to change.
  *
- * Four guards keep the message true, and the first one is what the rule turns
+ * Five guards keep the message true, and the first two are what the rule turns
  * on. Running an earlier draft over this compiler's own source found `let what
  * = "unbound"` followed by three branches that each assign a template -- real
  * retention, one allocation, and no rewrite worth naming, because assigning a
@@ -335,7 +391,9 @@ const isPointerType = (t: StaticType | undefined): boolean =>
  *     deserves one warning, and that message names a rewrite that fixes this
  *     as well;
  *   - the right-hand side has to be an allocation the checker can see, not a
- *     call it would be guessing about.
+ *     call it would be guessing about;
+ *   - and the value being dropped must not already be reachable from
+ *     somewhere else, which `heldValueMayBeReachable` decides.
  */
 const checkArenaReassignment = (walk: Walk, expr: ts.BinaryExpression): void => {
   if (!ts.isIdentifier(expr.left)) return;
@@ -346,6 +404,7 @@ const checkArenaReassignment = (walk: Walk, expr: ts.BinaryExpression): void => 
   if (isQuadraticAccumulation(walk, expr)) return;
   if (!declaredHoldingAllocation(walk, target)) return;
   if (!allocatesVisibly(program, expr.right)) return;
+  if (heldValueMayBeReachable(walk, expr, target)) return;
   walk.ctx.reportPerformance(
     `\`${target.name}\` already holds an allocation and this one drops it: nothing can reach the old value from ` +
       `here and nothing frees it, and assigning a local is also what stops this function from releasing its arena ` +
@@ -426,8 +485,14 @@ const FOLD_SUM_LIMIT = 4503599627370496n; // 2^52
 
 /**
  * A run of decimal digits, which is the only literal shape both compilers fold
- * the same way. Stage1 has no `Number`, so hexadecimal and exponent literals
- * are left alone rather than folded differently on each side.
+ * the same way. Stage1 has no `Number`, so hexadecimal, binary, octal,
+ * exponent and separated literals are left alone rather than folded
+ * differently on each side.
+ *
+ * This has to be asked of the literal *as written*. `ts.NumericLiteral.text`
+ * is normalised -- `0x20` arrives as `"32"` and `100_000` as `"100000"` --
+ * so testing it would fold exactly the spellings stage1 refuses, and the two
+ * compilers would disagree about whether to warn.
  */
 const isDecimalInteger = (text: string): boolean => {
   if (text.length === 0) return false;
@@ -456,8 +521,9 @@ const magnitude = (value: bigint): bigint => (value < 0n ? -value : value);
 const constantInt = (expr: ts.Expression): bigint | undefined => {
   const e = unwrapParens(expr);
   if (ts.isNumericLiteral(e)) {
-    if (!isDecimalInteger(e.text)) return undefined;
-    const value = BigInt(e.text);
+    const written = e.getText(e.getSourceFile());
+    if (!isDecimalInteger(written)) return undefined;
+    const value = BigInt(written);
     return value > FOLD_LIMIT ? undefined : value;
   }
   if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.MinusToken) {

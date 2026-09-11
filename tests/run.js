@@ -673,7 +673,15 @@ if (!only || "performance".includes(only)) {
   // The false-positive guards. Each of these compiles loops that concatenate or
   // allocate where the faster form is already what the compiler emits, or where the
   // program genuinely asked for the memory, so it must say nothing at all.
-  for (const name of ["perf_str_concat_quiet", "perf_alloc_quiet", "perf_overflow_quiet", "perf_arena_quiet"]) {
+  for (const name of [
+    "perf_str_concat_quiet",
+    "perf_alloc_quiet",
+    "perf_overflow_quiet",
+    "perf_arena_quiet",
+    // Literal spellings neither compiler folds: normalising them in stage0 would
+    // fold exactly what stage1 refuses, and only one of the two would warn.
+    "perf_overflow_spelling",
+  ]) {
     const quiet = compile(name, `${name}.ll`);
     check(
       `performance: ${name} takes no slow path with a faster form to name, so nothing is reported`,
