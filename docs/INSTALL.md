@@ -111,7 +111,7 @@ attaches `nish-<version>-x86_64-linux.tar.gz` — the self-hosted compiler, the
 binary `self/` produces by compiling itself:
 
 ```bash
-curl -LO https://github.com/amritk/compiler/releases/download/v0.1.0/nish-0.1.0-x86_64-linux.tar.gz
+curl -LO https://github.com/amritk/nish/releases/download/v0.1.0/nish-0.1.0-x86_64-linux.tar.gz
 tar -xzf nish-0.1.0-x86_64-linux.tar.gz
 nish-0.1.0-x86_64-linux/bin/nish --version
 ```
@@ -132,7 +132,7 @@ From a checkout:
 
 ```bash
 git clone https://github.com/amritk/nish.git
-cd compiler
+cd nish
 npm install
 npm run build       # src/ -> dist/
 npm link            # optional: puts `nish` on PATH

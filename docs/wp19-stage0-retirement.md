@@ -227,6 +227,57 @@ property — it catches regressions rather than disagreements, and it cannot fin
 a bug both versions share — but it is the property Rust and Go actually run,
 and it is the only one available once there is one implementation.
 
+#### What each dying oracle covered, and what covers it now
+
+G2 item 4 asks for the numbers in this document on the day. Measured at the
+commit that added `tests/self/goldens.js`, with all four oracles green — so
+what the goldens record is the *agreed* behaviour of both implementations, not
+one implementation's opinion:
+
+| Dying oracle | Covered | Recovered as | Size |
+| --- | --- | --- | --- |
+| `checked_oracle.js` | 319 programs, 303,096 dump lines of `--emit-checked` | `goldens/checked.txt` (262 programs outside `self/`, verbatim) and `goldens/checked_self.txt` (57 `self/` programs, stored by module) | 283 KB + 1,057 KB |
+| `types_oracle.js` | 119 lines: every LLVM type, alignment, printed name, flag and assignable pair | `goldens/types.txt`, verbatim | 3.6 KB |
+| `diagnostics_oracle.js` | 570 lines: the line/column index over every offset, the excerpt rendering, the `--json` shape, the sink's order and its cut | `goldens/diagnostics.txt`, verbatim | 19 KB |
+| `symbols_oracle.js` | 25 lines: what a name resolves to, what it reads as, where a narrowing ends | `goldens/symbols.txt`, verbatim | 1.0 KB |
+
+The `self/` dumps are 19.9 MB raw because a `self/` program is loaded whole and
+each of the 57 entries re-dumps every module it imports; the distinct content
+is 1.0 MB. **Storing it by module is a storage decision and not a coverage
+one**: the check still runs all 57 programs and compares every one of those
+19.9 MB of bytes. A module that ever dumps differently under two entries is a
+hard error naming both, so the deduplication cannot quietly become a loss.
+`tests/self/goldens.js` names neither `src/` nor `dist/`, and it was watched
+passing with both moved aside while all four oracles failed to start.
+
+#### The wording gap, which these goldens do not close
+
+The gate singles out diagnostic wordings, "presently proved by comparison and
+otherwise proved by nothing". The honest measurement:
+
+- The registry has **344 codes** (342 rules and 2 performance warnings).
+- The `reject_*` cases and the `tests/link/` negatives — which `reject_oracle.js`
+  owns and which **survive**, because their fragments are checked in — exercise
+  **148** of them. **196 are exercised by nothing that outlives stage0.**
+- On the 265 `reject_*` cases alone the two compilers do not reach the same
+  set: stage1 names **144** codes where stage0 names **182**. That 38-code
+  difference is §A3's declared class — stage1's parser refuses the syntax as
+  `NL0001` before Phase 0 can name the rule — so those 38 wordings are proved
+  today only by a comparison that is going away, on top of the 196 that no
+  surviving case reaches at all.
+- **The four goldens above close none of that gap**, which was measured rather
+  than assumed: every registry fragment was matched against each file.
+  `checked.txt` contains one registry wording (`NL2099`) that a `reject_*` case
+  already covers; the other four contain none. `diagnostics.txt` pins the
+  diagnostic *machinery*, not any rule's words.
+
+Exposed and worth naming: all six `NL3xxx` driver wordings (`NL3003` internal
+compiler error and `NL3008` unknown option among them), all six `NL4xxx`
+interop wordings, and both `NL9xxx` performance warnings. Closing this means
+writing `reject_*` cases, which is ordinary work that needs no design — and it
+is the remaining half of G2 item 4 rather than a nice-to-have, because after
+R6 an unexercised wording is proved by nothing at all.
+
 ### C. Distribution
 
 `npm install -g nish` ships `dist/`. `--version` reads `package.json` at
@@ -459,7 +510,7 @@ gate nobody has opened is how a runtime budget dies.
 | --- | --- | --- |
 | **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) |
 | **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. Outstanding: the job runs on Linux only, and it has no seed to use until 0.1.0 ships (G3, G4) |
-| **R3** | Oracle succession | **begun.** `tests/nish-cmp.js` exists, agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed. Outstanding: the four survivors repointed to the seed, and the lost coverage recovered as goldens with the numbers written into §2B — which is the half that matters (G2) |
+| **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. Outstanding: the four survivors repointed to the seed, and the 196 diagnostic wordings that no surviving case exercises (§2B, "The wording gap") — which is now the half that matters (G2) |
 | **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the npm package becoming an installer, and the INSTALL.md/wp12 rewrite (G5) |
 | **R5** | Provenance | the re-verification procedure is written (G6); the `ddc-<version>` tag is cut at release time |
 | **R6** | The deletion | `src/`, the `typescript` runtime dependency, the six dead oracles, and every rule that names stage0 |

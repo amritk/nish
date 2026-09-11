@@ -169,6 +169,7 @@ wired into the WP14 section of `tests/run.js` and skipped without clang.
 | `tests/self/diagnostics_oracle.js` | `self/diagnostics.ts` against `src/diagnostics.ts` |
 | `tests/self/symbols_oracle.js` | the scope chain and the narrowing rules |
 | `tests/self/checked_oracle.js` | the `--emit-checked` dump of every positive program in the corpus, whole program by whole program — every line of it, the attribute pass's `facts:` / `escaping:` / `calls:` / `pointer` / `stackSites=` included since WP19 R1 |
+| `tests/self/goldens.js` | stage1 against `tests/self/goldens/`, and against **nothing else**: the coverage of the four oracles that die with stage0, checked in ahead of them (WP19 G2.4) |
 | `tests/self/reject_oracle.js` | every `reject_*` case and every `tests/link/` negative, against its own expected fragments |
 | `tests/self/ir_oracle.js` | the emitted IR, byte for byte, over every whole program in the corpus |
 | `tests/self/interop_oracle.js` | the WP8 sidecars — `.h`, `.d.ts`, its `.mjs` loader, `.napi.c` — byte for byte over the interop corpus (`--all` for the whole one) |
@@ -219,6 +220,29 @@ node tests/self/checked_oracle.js tests/cases/cls_fields.ts
 node tests/differential/fuzz.js --stage1 --count 300
 node tests/run.js self                 # all of them, as the suite runs them
 ```
+
+### The goldens that outlive the oracles
+
+Four of the comparisons above are a comparison with stage0 and nothing else:
+`checked_oracle.js`, `types_oracle.js`, `diagnostics_oracle.js` and
+`symbols_oracle.js`. They are green, which means stage1's output *is* the
+behaviour the two implementations agree on, so `tests/self/goldens/` holds that
+output and `tests/self/goldens.js` compares stage1's live answer against it
+with stage0 nowhere in the picture (WP19 G2.4).
+
+```bash
+node tests/self/goldens.js                  # verify all four, ~13 s
+node tests/self/goldens.js checked --verbose
+npm run test:update                         # regenerate, with the .ll goldens
+node tests/self/goldens.js --update         # regenerate these alone
+```
+
+Regenerate from **stage1**, never from stage0: stage1 is what survives, and the
+four oracles are what say the two agree. The seed that builds stage1 is
+`--seed`, then `NISH_BOOTSTRAP`, then `build/nish`; there is deliberately no
+fourth answer, because reaching for stage0 is the dependency the gate exists to
+remove. `self/`'s dump is stored deduplicated by module — 19.9 MB of live text,
+1.0 MB of distinct text — and the comparison still reads every byte of it.
 
 ## Habits that have paid off
 

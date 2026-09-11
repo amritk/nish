@@ -1,0 +1,27 @@
+# `self/symbols.ts` over the scope script: what each name resolves to, what it reads as, and where every narrowing stops.
+# Generated from stage1 by `npm run test:update` (or `node tests/self/goldens.js --update`).
+# WP19 gate G2.4: the coverage that dies with stage0, written down. Do not edit by hand.
+declare a 1
+declare b 1
+declare c 1
+declare a again 0
+root a i32 reads i32
+root b string | null reads string | null
+root c Node | null reads Node | null
+root missing absent
+shadow 1
+inner a f64 reads f64
+inner b string | null reads string | null
+storage 1 1
+mutable 1 0
+declares here 1 0
+narrowed b string | null reads string
+root after narrow b string | null reads string | null
+deeper b string | null reads string
+renarrowed b string | null reads string | null
+outer still b string | null reads string
+cleared deeper b string | null reads string | null
+cleared inner b string | null reads string | null
+c narrowed at root c Node | null reads Node
+c cleared from deeper c Node | null reads Node | null
+clear absent -1

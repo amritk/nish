@@ -7,3 +7,9 @@ web/*.wasm
 *.bc
 a.out
 .claude/worktrees/
+
+# tests/link/no_main is a negative case: the compiler writes the IR beside the
+# source before it reports the missing `main`, so every run of the link section
+# leaves this behind. Two .ll files under tests/link ARE checked in
+# (two_file/), so this names the one that leaks rather than ignoring the glob.
+tests/link/no_main/main.ll

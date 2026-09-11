@@ -1,0 +1,572 @@
+# `self/diagnostics.ts` over the fixtures: the line/column index, every summary line and excerpt, the `--json` object, the sink's order and its `...and N more` cut.
+# Generated from stage1 by `npm run test:update` (or `node tests/self/goldens.js --update`).
+# WP19 gate G2.4: the coverage that dies with stage0, written down. Do not edit by hand.
+pos 0 1 1
+pos 1 1 2
+pos 2 1 3
+pos 3 1 4
+pos 4 1 5
+pos 5 1 6
+pos 6 1 7
+pos 7 1 8
+pos 8 1 9
+pos 9 1 10
+pos 10 1 11
+pos 11 1 12
+pos 12 1 13
+pos 13 1 14
+pos 14 1 15
+pos 15 1 16
+pos 16 1 17
+pos 17 1 18
+pos 18 1 19
+pos 19 1 20
+pos 20 1 21
+pos 21 1 22
+pos 22 1 23
+pos 23 1 24
+pos 24 1 25
+pos 25 1 26
+pos 26 1 27
+pos 27 1 28
+pos 28 1 29
+pos 29 1 30
+pos 30 1 31
+pos 31 1 32
+pos 32 1 33
+pos 33 1 34
+pos 34 1 35
+pos 35 1 36
+pos 36 1 37
+pos 37 1 38
+pos 38 1 39
+pos 39 1 40
+pos 40 1 41
+pos 41 1 42
+pos 42 1 43
+pos 43 1 44
+pos 44 1 45
+pos 45 1 46
+pos 46 1 47
+pos 47 1 48
+pos 48 1 49
+pos 49 1 50
+pos 50 1 51
+pos 51 1 52
+pos 52 2 1
+pos 53 2 2
+pos 54 2 3
+pos 55 2 4
+pos 56 2 5
+pos 57 2 6
+pos 58 2 7
+pos 59 2 8
+pos 60 2 9
+pos 61 2 10
+pos 62 2 11
+pos 63 2 12
+pos 64 2 13
+pos 65 2 14
+pos 66 2 15
+pos 67 3 1
+pos 68 3 2
+pos 69 4 1
+pos 70 5 1
+pos 71 5 2
+pos 72 5 3
+pos 73 5 4
+pos 74 5 5
+pos 75 5 6
+pos 76 5 7
+pos 77 5 8
+pos 78 5 9
+pos 79 5 10
+pos 80 5 11
+pos 81 5 12
+pos 82 5 13
+pos 83 5 14
+pos 84 5 15
+pos 85 5 16
+pos 86 5 17
+pos 87 5 18
+pos 88 5 19
+pos 89 5 20
+pos 90 5 21
+pos 91 5 22
+pos 92 5 23
+pos 93 5 24
+pos 94 5 25
+pos 95 5 26
+pos 96 5 27
+pos 97 5 28
+pos 98 5 29
+pos 99 5 30
+pos 100 5 31
+pos 101 5 32
+pos 102 5 33
+pos 103 6 1
+pos 104 6 2
+pos 105 6 3
+pos 106 6 4
+pos 107 6 5
+pos 108 6 6
+pos 109 6 7
+pos 110 6 8
+pos 111 6 9
+pos 112 6 10
+pos 113 6 11
+pos 114 6 12
+pos 115 6 13
+pos 116 6 14
+pos 117 6 15
+pos 118 6 16
+pos 119 6 17
+pos 120 6 18
+pos 121 6 19
+pos 122 6 20
+pos 123 6 21
+pos 124 6 22
+pos 125 6 23
+pos 126 6 24
+pos 127 6 25
+pos 128 6 26
+pos 129 6 27
+pos 130 7 1
+pos 131 7 2
+pos 132 7 3
+pos 133 7 4
+pos 134 7 5
+pos 135 7 6
+pos 136 7 7
+pos 137 7 8
+pos 138 7 9
+pos 139 7 10
+pos 140 7 11
+pos 141 7 12
+pos 142 7 13
+pos 143 7 14
+pos 144 7 15
+pos 145 7 16
+pos 146 7 17
+pos 147 7 18
+pos 148 7 19
+pos 149 7 20
+pos 150 7 21
+pos 151 7 22
+pos 152 7 23
+pos 153 7 24
+pos 154 7 25
+pos 155 7 26
+pos 156 7 27
+pos 157 7 28
+pos 158 7 29
+pos 159 7 30
+pos 160 7 31
+pos 161 7 32
+pos 162 7 33
+pos 163 7 34
+pos 164 8 1
+pos 165 8 2
+pos 166 8 3
+pos 167 8 4
+pos 168 8 5
+pos 169 8 6
+pos 170 8 7
+pos 171 8 8
+pos 172 8 9
+pos 173 8 10
+pos 174 8 11
+pos 175 8 12
+pos 176 8 13
+pos 177 8 14
+pos 178 8 15
+pos 179 8 16
+pos 180 9 1
+pos 181 9 2
+pos 182 10 1
+pos 183 11 1
+pos 184 11 2
+pos 185 11 3
+pos 186 11 4
+pos 187 11 5
+pos 188 11 6
+pos 189 11 7
+pos 190 11 8
+pos 191 11 9
+pos 192 11 10
+pos 193 11 11
+pos 194 11 12
+pos 195 11 13
+pos 196 11 14
+pos 197 11 15
+pos 198 11 16
+pos 199 11 17
+pos 200 11 18
+pos 201 11 19
+pos 202 11 20
+pos 203 11 21
+pos 204 11 22
+pos 205 11 23
+pos 206 11 24
+pos 207 11 25
+pos 208 11 26
+pos 209 11 27
+pos 210 11 28
+pos 211 11 29
+pos 212 11 30
+pos 213 11 31
+pos 214 11 32
+pos 215 11 33
+pos 216 11 34
+pos 217 11 35
+pos 218 11 36
+pos 219 11 37
+pos 220 11 38
+pos 221 11 39
+pos 222 11 40
+pos 223 11 41
+pos 224 11 42
+pos 225 11 43
+pos 226 11 44
+pos 227 11 45
+pos 228 11 46
+pos 229 11 47
+pos 230 11 48
+pos 231 11 49
+pos 232 11 50
+pos 233 11 51
+pos 234 11 52
+pos 235 11 53
+pos 236 11 54
+pos 237 11 55
+pos 238 11 56
+pos 239 11 57
+pos 240 11 58
+pos 241 11 59
+pos 242 11 60
+pos 243 11 61
+pos 244 11 62
+pos 245 11 63
+pos 246 11 64
+pos 247 11 65
+pos 248 11 66
+pos 249 11 67
+pos 250 11 68
+pos 251 11 69
+pos 252 11 70
+pos 253 11 71
+pos 254 11 72
+pos 255 11 73
+pos 256 11 74
+pos 257 11 75
+pos 258 11 76
+pos 259 11 77
+pos 260 11 78
+pos 261 11 79
+pos 262 11 80
+pos 263 11 81
+pos 264 11 82
+pos 265 11 83
+pos 266 11 84
+pos 267 11 85
+pos 268 11 86
+pos 269 11 87
+pos 270 11 88
+pos 271 11 89
+pos 272 11 90
+pos 273 11 91
+pos 274 11 92
+pos 275 11 93
+pos 276 11 94
+pos 277 11 95
+pos 278 11 96
+pos 279 11 97
+pos 280 11 98
+pos 281 11 99
+pos 282 11 100
+pos 283 11 101
+pos 284 11 102
+pos 285 11 103
+pos 286 11 104
+pos 287 12 1
+pos 288 13 1
+pos 289 13 2
+pos 290 13 3
+pos 291 13 4
+pos 292 13 5
+pos 293 13 6
+pos 294 13 7
+pos 295 13 8
+pos 296 13 9
+pos 297 13 10
+pos 298 13 11
+pos 299 13 12
+pos 300 13 13
+pos 301 13 14
+pos 302 13 15
+pos 303 13 16
+pos 304 13 17
+pos 305 13 18
+pos 306 13 19
+pos 307 13 20
+pos 308 13 21
+pos 309 13 22
+pos 310 13 23
+pos 311 13 24
+pos 312 13 25
+pos 313 13 26
+pos 314 13 27
+pos 315 13 28
+pos 316 13 29
+pos 317 13 30
+pos 318 13 31
+pos 319 13 32
+pos 320 13 33
+pos 321 13 34
+pos 322 13 35
+pos 323 13 36
+pos 324 13 37
+pos 325 13 38
+pos 326 13 39
+pos 327 13 40
+pos 328 13 41
+pos 329 13 42
+pos 330 13 43
+pos 331 13 44
+pos 332 13 45
+pos 333 14 1
+line 0 export function add(a: number, b: number): number {
+line 1 	return a + b;
+line 2 }
+line 3 
+line 4 export function main(): number {
+line 5   const total = add(1, 2);
+line 6   console.log(`total ${total}`);
+line 7   return total;
+line 8 }
+line 9 
+line 10 // a deliberately long line so the caret has somewhere to run: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+line 11 
+line 12 export function last(): number { return 0; }
+line 13 
+count 35 errors 1
+tests/self/diagnostics_second.txt:1:1: error: second at 0
+  1 | export function helper(): void {
+    | ^~~~~~~~~
+{"file":"tests/self/diagnostics_second.txt","line":1,"column":1,"endLine":1,"endColumn":10,"severity":"error","code":"NL0000","message":"second at 0"}
+tests/self/diagnostics_second.txt:1:14: error: second at 13
+  1 | export function helper(): void {
+    |              ^~~~~~~~~
+{"file":"tests/self/diagnostics_second.txt","line":1,"column":14,"endLine":1,"endColumn":23,"severity":"error","code":"NL0000","message":"second at 13"}
+tests/self/diagnostics_second.txt:1:27: error: second at 26
+  1 | export function helper(): void {
+    |                           ^~~~~~
+{"file":"tests/self/diagnostics_second.txt","line":1,"column":27,"endLine":2,"endColumn":3,"severity":"error","code":"NL0000","message":"second at 26"}
+tests/self/diagnostics_second.txt:2:7: error: second at 39
+  2 |   console.log("second file");
+    |       ^~~~~~~~~
+{"file":"tests/self/diagnostics_second.txt","line":2,"column":7,"endLine":2,"endColumn":16,"severity":"error","code":"NL0000","message":"second at 39"}
+tests/self/diagnostics_second.txt:2:20: error: second at 52
+  2 |   console.log("second file");
+    |                    ^~~~~~~~~
+{"file":"tests/self/diagnostics_second.txt","line":2,"column":20,"endLine":2,"endColumn":29,"severity":"error","code":"NL0000","message":"second at 52"}
+tests/self/diagnostics_fixture.txt:1:1: error: error at 0
+  1 | export function add(a: number, b: number): number {
+    | ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":1,"column":1,"endLine":1,"endColumn":10,"severity":"error","code":"NL0000","message":"error at 0"}
+tests/self/diagnostics_fixture.txt:1:1: error: empty span
+  1 | export function add(a: number, b: number): number {
+    | ^
+{"file":"tests/self/diagnostics_fixture.txt","line":1,"column":1,"endLine":1,"endColumn":1,"severity":"error","code":"NL0000","message":"empty span"}
+tests/self/diagnostics_fixture.txt:1:2: syntax error: a syntax error keeps its kind
+  1 | export function add(a: number, b: number): number {
+    |  ^~
+{"file":"tests/self/diagnostics_fixture.txt","line":1,"column":2,"endLine":1,"endColumn":4,"severity":"error","code":"NL0001","message":"syntax error: a syntax error keeps its kind"}
+tests/self/diagnostics_fixture.txt:1:6: error: runs past the end of the line
+  1 | export function add(a: number, b: number): number {
+    |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":1,"column":6,"endLine":14,"endColumn":1,"severity":"error","code":"NL0000","message":"runs past the end of the line"}
+tests/self/diagnostics_fixture.txt:1:14: error: error at 13
+  1 | export function add(a: number, b: number): number {
+    |              ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":1,"column":14,"endLine":1,"endColumn":23,"severity":"error","code":"NL0000","message":"error at 13"}
+tests/self/diagnostics_fixture.txt:1:27: error: error at 26
+  1 | export function add(a: number, b: number): number {
+    |                           ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":1,"column":27,"endLine":1,"endColumn":36,"severity":"error","code":"NL0000","message":"error at 26"}
+tests/self/diagnostics_fixture.txt:1:40: error: error at 39
+  1 | export function add(a: number, b: number): number {
+    |                                        ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":1,"column":40,"endLine":1,"endColumn":49,"severity":"error","code":"NL0000","message":"error at 39"}
+tests/self/diagnostics_fixture.txt:2:1: error: error at 52
+  2 | 	return a + b;
+    | ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":2,"column":1,"endLine":2,"endColumn":10,"severity":"error","code":"NL0000","message":"error at 52"}
+tests/self/diagnostics_fixture.txt:2:14: error: error at 65
+  2 | 	return a + b;
+    | 	            ^
+{"file":"tests/self/diagnostics_fixture.txt","line":2,"column":14,"endLine":5,"endColumn":5,"severity":"error","code":"NL0000","message":"error at 65"}
+tests/self/diagnostics_fixture.txt:5:9: error: error at 78
+  5 | export function main(): number {
+    |         ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":5,"column":9,"endLine":5,"endColumn":18,"severity":"error","code":"NL0000","message":"error at 78"}
+tests/self/diagnostics_fixture.txt:5:22: error: error at 91
+  5 | export function main(): number {
+    |                      ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":5,"column":22,"endLine":5,"endColumn":31,"severity":"error","code":"NL0000","message":"error at 91"}
+tests/self/diagnostics_fixture.txt:6:2: error: error at 104
+  6 |   const total = add(1, 2);
+    |  ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":6,"column":2,"endLine":6,"endColumn":11,"severity":"error","code":"NL0000","message":"error at 104"}
+tests/self/diagnostics_fixture.txt:6:15: error: error at 117
+  6 |   const total = add(1, 2);
+    |               ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":6,"column":15,"endLine":6,"endColumn":24,"severity":"error","code":"NL0000","message":"error at 117"}
+tests/self/diagnostics_fixture.txt:7:1: error: error at 130
+  7 |   console.log(`total ${total}`);
+    | ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":7,"column":1,"endLine":7,"endColumn":10,"severity":"error","code":"NL0000","message":"error at 130"}
+tests/self/diagnostics_fixture.txt:7:14: error: error at 143
+  7 |   console.log(`total ${total}`);
+    |              ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":7,"column":14,"endLine":7,"endColumn":23,"severity":"error","code":"NL0000","message":"error at 143"}
+tests/self/diagnostics_fixture.txt:7:27: error: error at 156
+  7 |   console.log(`total ${total}`);
+    |                           ^~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":7,"column":27,"endLine":8,"endColumn":2,"severity":"error","code":"NL0000","message":"error at 156"}
+tests/self/diagnostics_fixture.txt:8:6: error: error at 169
+  8 |   return total;
+    |      ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":8,"column":6,"endLine":8,"endColumn":15,"severity":"error","code":"NL0000","message":"error at 169"}
+tests/self/diagnostics_fixture.txt:10:1: error: error at 182
+  10 | 
+     | ^
+{"file":"tests/self/diagnostics_fixture.txt","line":10,"column":1,"endLine":11,"endColumn":9,"severity":"error","code":"NL0000","message":"error at 182"}
+tests/self/diagnostics_fixture.txt:11:13: error: error at 195
+  11 | // a deliberately long line so the caret has somewhere to run: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+     |             ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":11,"column":13,"endLine":11,"endColumn":22,"severity":"error","code":"NL0000","message":"error at 195"}
+tests/self/diagnostics_fixture.txt:11:26: error: error at 208
+  11 | // a deliberately long line so the caret has somewhere to run: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+     |                          ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":11,"column":26,"endLine":11,"endColumn":35,"severity":"error","code":"NL0000","message":"error at 208"}
+tests/self/diagnostics_fixture.txt:11:39: error: error at 221
+  11 | // a deliberately long line so the caret has somewhere to run: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+     |                                       ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":11,"column":39,"endLine":11,"endColumn":48,"severity":"error","code":"NL0000","message":"error at 221"}
+tests/self/diagnostics_fixture.txt:11:52: error: error at 234
+  11 | // a deliberately long line so the caret has somewhere to run: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+     |                                                    ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":11,"column":52,"endLine":11,"endColumn":61,"severity":"error","code":"NL0000","message":"error at 234"}
+tests/self/diagnostics_fixture.txt:11:65: error: error at 247
+  11 | // a deliberately long line so the caret has somewhere to run: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+     |                                                                 ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":11,"column":65,"endLine":11,"endColumn":74,"severity":"error","code":"NL0000","message":"error at 247"}
+tests/self/diagnostics_fixture.txt:11:78: error: error at 260
+  11 | // a deliberately long line so the caret has somewhere to run: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+     |                                                                              ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":11,"column":78,"endLine":11,"endColumn":87,"severity":"error","code":"NL0000","message":"error at 260"}
+tests/self/diagnostics_fixture.txt:11:91: error: error at 273
+  11 | // a deliberately long line so the caret has somewhere to run: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+     |                                                                                           ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":11,"column":91,"endLine":11,"endColumn":100,"severity":"error","code":"NL0000","message":"error at 273"}
+tests/self/diagnostics_fixture.txt:11:104: error: error at 286
+  11 | // a deliberately long line so the caret has somewhere to run: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+     |                                                                                                        ^
+{"file":"tests/self/diagnostics_fixture.txt","line":11,"column":104,"endLine":13,"endColumn":8,"severity":"error","code":"NL0000","message":"error at 286"}
+tests/self/diagnostics_fixture.txt:13:12: error: error at 299
+  13 | export function last(): number { return 0; }
+     |            ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":13,"column":12,"endLine":13,"endColumn":21,"severity":"error","code":"NL0000","message":"error at 299"}
+tests/self/diagnostics_fixture.txt:13:25: error: error at 312
+  13 | export function last(): number { return 0; }
+     |                         ^~~~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":13,"column":25,"endLine":13,"endColumn":34,"severity":"error","code":"NL0000","message":"error at 312"}
+tests/self/diagnostics_fixture.txt:13:38: error: error at 325
+  13 | export function last(): number { return 0; }
+     |                                      ^~~~~~~
+{"file":"tests/self/diagnostics_fixture.txt","line":13,"column":38,"endLine":14,"endColumn":2,"severity":"error","code":"NL0000","message":"error at 325"}
+tests/self/diagnostics_fixture.txt:14:1: error: at end of file
+  14 | 
+     | ^
+{"file":"tests/self/diagnostics_fixture.txt","line":14,"column":1,"endLine":14,"endColumn":1,"severity":"error","code":"NL0000","message":"at end of file"}
+---- report ----
+tests/self/diagnostics_second.txt:1:1: error: second at 0
+  1 | export function helper(): void {
+    | ^~~~~~~~~
+tests/self/diagnostics_second.txt:1:14: error: second at 13
+  1 | export function helper(): void {
+    |              ^~~~~~~~~
+tests/self/diagnostics_second.txt:1:27: error: second at 26
+  1 | export function helper(): void {
+    |                           ^~~~~~
+tests/self/diagnostics_second.txt:2:7: error: second at 39
+  2 |   console.log("second file");
+    |       ^~~~~~~~~
+tests/self/diagnostics_second.txt:2:20: error: second at 52
+  2 |   console.log("second file");
+    |                    ^~~~~~~~~
+tests/self/diagnostics_fixture.txt:1:1: error: error at 0
+  1 | export function add(a: number, b: number): number {
+    | ^~~~~~~~~
+tests/self/diagnostics_fixture.txt:1:1: error: empty span
+  1 | export function add(a: number, b: number): number {
+    | ^
+tests/self/diagnostics_fixture.txt:1:2: syntax error: a syntax error keeps its kind
+  1 | export function add(a: number, b: number): number {
+    |  ^~
+tests/self/diagnostics_fixture.txt:1:6: error: runs past the end of the line
+  1 | export function add(a: number, b: number): number {
+    |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+tests/self/diagnostics_fixture.txt:1:14: error: error at 13
+  1 | export function add(a: number, b: number): number {
+    |              ^~~~~~~~~
+tests/self/diagnostics_fixture.txt:1:27: error: error at 26
+  1 | export function add(a: number, b: number): number {
+    |                           ^~~~~~~~~
+tests/self/diagnostics_fixture.txt:1:40: error: error at 39
+  1 | export function add(a: number, b: number): number {
+    |                                        ^~~~~~~~~
+tests/self/diagnostics_fixture.txt:2:1: error: error at 52
+  2 | 	return a + b;
+    | ^~~~~~~~~
+tests/self/diagnostics_fixture.txt:2:14: error: error at 65
+  2 | 	return a + b;
+    | 	            ^
+tests/self/diagnostics_fixture.txt:5:9: error: error at 78
+  5 | export function main(): number {
+    |         ^~~~~~~~~
+tests/self/diagnostics_fixture.txt:5:22: error: error at 91
+  5 | export function main(): number {
+    |                      ^~~~~~~~~
+tests/self/diagnostics_fixture.txt:6:2: error: error at 104
+  6 |   const total = add(1, 2);
+    |  ^~~~~~~~~
+tests/self/diagnostics_fixture.txt:6:15: error: error at 117
+  6 |   const total = add(1, 2);
+    |               ^~~~~~~~~
+tests/self/diagnostics_fixture.txt:7:1: error: error at 130
+  7 |   console.log(`total ${total}`);
+    | ^~~~~~~~~
+tests/self/diagnostics_fixture.txt:7:14: error: error at 143
+  7 |   console.log(`total ${total}`);
+    |              ^~~~~~~~~
+...and 15 more errors
+35 errors
+---- report of 3 ----
+tests/self/diagnostics_second.txt:1:1: error: second at 0
+  1 | export function helper(): void {
+    | ^~~~~~~~~
+tests/self/diagnostics_second.txt:1:14: error: second at 13
+  1 | export function helper(): void {
+    |              ^~~~~~~~~
+tests/self/diagnostics_second.txt:1:27: error: second at 26
+  1 | export function helper(): void {
+    |                           ^~~~~~
+...and 32 more errors
+35 errors
+---- lone ----
+tests/self/diagnostics_fixture.txt:2:9: error: the only error
+  2 | 	return a + b;
+    | 	       ^~~~~~
+empty 0

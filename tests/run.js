@@ -2706,6 +2706,37 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       `${checkedOracle.stdout}${checkedOracle.stderr}`
     );
 
+    // WP19 G2.4: the same four comparisons, written down. The oracle above and
+    // the three before it — types, diagnostics, symbols — prove stage1 correct
+    // by holding it against stage0, and prove nothing at all once `src/` is
+    // deleted. They are green, so stage1's output *is* the agreed behaviour;
+    // `tests/self/goldens/` is that output checked in, and `goldens.js`
+    // compares stage1's live answer against it with stage0 nowhere in the
+    // picture. Both run while stage0 lives: this one survives it.
+    //
+    // The seed is passed in rather than looked up, because the *suite* still
+    // has stage0 and the tool must not: `NISH_BOOTSTRAP` when CI set one (G3),
+    // and today's default seed otherwise, which is the same answer
+    // `scripts/bootstrap.sh` gives. After R6 the variable is the only source
+    // and this line loses its second half.
+    const goldenSeed = process.env.NISH_BOOTSTRAP || path.relative(root, cli);
+    const goldens = spawnSync(
+      "node",
+      [
+        path.join(root, "tests", "self", "goldens.js"),
+        ...(process.env.UPDATE_GOLDENS === "1" ? ["--update"] : []),
+        "--seed",
+        goldenSeed,
+      ],
+      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+    );
+    const goldensSummary = goldens.stdout.trim().split("\n").pop() ?? "";
+    check(
+      `self/ prints what tests/self/goldens/ records, with no stage0 in it (${goldensSummary})`,
+      goldens.status === 0,
+      `${goldens.stdout}${goldens.stderr}`
+    );
+
     // The other half of milestone S3: refusing the same programs for the same
     // reason. A dump comparison cannot see that, so every `reject_*` case and
     // every `tests/link/` negative is run through stage1 and its own expected
