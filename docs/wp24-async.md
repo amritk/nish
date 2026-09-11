@@ -139,7 +139,7 @@ loop:
 }
 ```
 
-with a caller that resumes it twice and destroys it; §10 has the whole file, so
+with a caller that resumes it twice and destroys it; §11 has the whole file, so
 the measurement can be re-run rather than believed. Three variants, one command
 (`opt -O2`), LLVM 18.1.3:
 
@@ -183,7 +183,7 @@ Rust is the comparison this project is held to everywhere else
 the same category as §3a, reached a different way. **rustc does the transform
 itself, in MIR, and hands LLVM ordinary IR.** Measured with the rustc 1.94.1
 the benchmark suite already uses, on an `async fn` with two suspension points
-and a local live across both (§10 has the program):
+and a local live across both (§11 has the program):
 
 | Question | Answer |
 | --- | --- |
@@ -388,7 +388,7 @@ asynchrony is entirely in generated C.
   inlined into the IR (wp20 §3.1). Without T0 this is a data race in the
   emitted IR, not merely in the runtime. **T0 is the whole cost of A1**, which
   is another reason T0 is worth landing on its own.
-- Surface: a flag (`--emit-napi-async`) or a per-function opt-in; §9 leaves
+- Surface: a flag (`--emit-napi-async`) or a per-function opt-in; §10 leaves
   that open, because it should be decided against a real addon.
 - Acceptance: the `napi` profile still builds and the WP8 batching benchmark
   is unchanged; event-loop latency measured under a long call, before and
@@ -479,7 +479,91 @@ this note adds no rule to it: `async`, `await` and `yield` stay forbidden with
 the messages they have, so the freeze is not waiting on anything here. A1 has
 no language surface and can land whenever WP20 T0 does.
 
-## 9. Open
+## 9. What the refusal costs, and what survives it
+
+The two questions a decision to not build something has to answer: does waiting
+foreclose anything, and which parts of the feature are still reachable when the
+trigger arrives.
+
+### 9.1 Waiting forecloses nothing in the language, and that is checked
+
+**Adding `async` later breaks no program that compiles today.** `async` and
+`await` are *contextual* in TypeScript's grammar, and this compiler inherits
+that grammar, so both are ordinary identifiers now and stay ordinary
+identifiers after. Checked against the `typescript` package's own parser and
+against the compiler:
+
+| Program | Today | After `async` exists |
+| --- | --- | --- |
+| `export function async(n: i32): i32` | compiles | still parses — `async function async() {}` is valid TypeScript |
+| `let async: i32 = 41;` | compiles | unaffected |
+| `let await: i32 = 0;` in a **sync** function | compiles | unaffected |
+| `let await = 1;` inside an **async** function | n/a | rejected, exactly as JavaScript rejects it |
+
+So there is no keyword to reserve before the M4 freeze, and no migration note
+to write. The only programs that could break are ones whose author has just
+added `async` to the enclosing function, which is their edit and their
+rejection.
+
+### 9.2 What waiting does cost
+
+Four things, none of them large, listed so that whoever picks this up later
+knows what drifted:
+
+- **The N-API defect stays until A1, and that cost is A1's rather than
+  async's.** An addon that runs for 200 ms blocks Node's event loop for 200 ms
+  today (§5.1). Nothing about deferring the *language* feature defers that fix.
+- **The arena bracket quietly accumulates an assumption.** WP6's automatic
+  scopes and WP9's call-site reclaim both bracket a *contiguous dynamic extent*
+  with `nish_arena_mark` / `release` / `keep`. A suspend point in the middle of
+  such a bracket is precisely what those brackets are not built for: a
+  coroutine that suspends inside a scoped function would have its memory
+  released underneath it. The rule an async package needs is therefore "a
+  function that can suspend gets no automatic scope, and an awaited call gets
+  no call-site reclaim bracket" — cheap to state now, and more expensive the
+  more later optimisations assume that extent is contiguous. Whoever writes the
+  next arena optimisation should know there is a future customer for the
+  assumption.
+- **The fourth escape flow may get built narrowly.** §10 already carries this:
+  if WP20 T1 lands "escapes to another thread" rather than the general
+  "outlives its creator", async re-derives it.
+- **Everything lands twice, and `self/` keeps growing.** §4.8's multiplier is
+  applied to whatever the language is on the day the work starts, not to what
+  it is today.
+
+### 9.3 What survives: `async`/`await` yes, the promise *object* no
+
+This is the useful shape of the answer, and it is Rust's shape rather than
+JavaScript's. **The syntax and the semantics of sequential suspension survive.
+The promise as a first-class value does not.**
+
+| What a JavaScript programmer expects | Reachable? | What it needs |
+| --- | --- | --- |
+| `async function f()` and `await g()` | **yes** | A2, then A3. No generics (§4.1) |
+| `await` on a known call site, sequentially | **yes** | the same |
+| fixed-arity `awaitAll(f(), g())` over known calls | **yes** | the same — both callees are static, so no type is named |
+| homogeneous `awaitAll(fs)` over an array of pending calls | **yes, after WP18** | futures held as data — A4 |
+| `Promise.all([a, b])` typed as a *tuple* of mixed types | **no, not in that form** | tuples plus variadic generics; wp23 §5 proposes `Pair<A, B>` as a library interface under WP18 rather than tuple syntax, and stops at two |
+| `p.then(x => ...)` with an inline callback | **no** | a function value, which Phase 0 forbids — and the prohibition is load-bearing, not incidental |
+| `p.then(namedFunction)` | **conceivable, speculative** | wp23 §6's compile-time function parameters, itself after WP18 and explicitly not a relaxation of function values |
+| storing a promise in a field, passing it around, attaching a handler later | **no** | the same function-value prohibition, plus futures-as-data |
+
+The `.then` row is the one worth being plain about, because it is the only
+entry here refused by a decision the project has **already made and already
+lives with** rather than by work nobody has done. `Result` has no `map`,
+`andThen` or `orElse` for exactly this reason — "they need function values,
+which Nish forbids: the whole-program pass cannot prove purity, termination or
+escape through an unknown callee" ([wp16-results.md](wp16-results.md) §"Left
+out") — and `.then` is `andThen` wearing a promise. A language that rejected
+`Result.map` and then accepted `Promise.prototype.then` would be trading the
+attribute fixpoint for a spelling.
+
+What that leaves is the Rust arrangement, which is a coherent language rather
+than a diminished one: you get `async` and `await`, suspension is sequential
+and reads like straight-line code, and the state machine is anonymous. What you
+do not get is the promise as a thing you hold.
+
+## 10. Open
 
 - **How an asynchronous N-API export is spelled.** A `--emit-napi-async` flag
   for the whole module, a per-function opt-in in the source, or a rule based on
@@ -497,12 +581,12 @@ no language surface and can land whenever WP20 T0 does.
   neither is building it, and whichever package gets there first should own it
   rather than inventing a parallel one.
 
-## 10. Appendix: the spikes, in full
+## 11. Appendix: the spikes, in full
 
 §3's measurements are the only new facts in this note, so both are reproducible
 here rather than only reported.
 
-### 10a. The LLVM spike (§3a)
+### 11a. The LLVM spike (§3a)
 
 Save as `coro.ll` and run `opt -O2 -S coro.ll -o -` (LLVM 18.1.3). For the
 second row of §3a's table, change `define ptr @counter` to
@@ -576,7 +660,7 @@ define i32 @driver() {
 }
 ```
 
-### 10b. The Rust spike (§3b)
+### 11b. The Rust spike (§3b)
 
 Save as `a.rs` and run, with the rustc the benchmark suite uses:
 

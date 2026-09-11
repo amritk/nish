@@ -116,8 +116,21 @@ shipped, not a description of the tree as it stands.
   Six refusals carry the rule each one breaks, including the tempting one:
   accepting `async` as an erased no-op keyword would make a program mean
   something different under Node than it does here, in the one direction
-  `tests/differential/` exists to prevent. Nothing here is pre-1.0 —
-  LANGUAGE.md keeps the rejections it has, so M4's freeze waits on none of it.
+  `tests/differential/` exists to prevent.
+
+  Waiting forecloses nothing, and the note checks rather than assumes it:
+  `async` and `await` are contextual in the grammar this compiler inherits, so
+  `export function async(n: i32): i32` and a local named `await` in a
+  synchronous function compile today **and** would still parse once `async`
+  exists (`async function async() {}` is valid TypeScript). No keyword needs
+  reserving before the M4 freeze and no migration note is owed. What survives
+  if it is ever built is Rust's arrangement rather than JavaScript's:
+  `async`/`await` and sequential suspension yes, futures-as-data after WP18,
+  and the promise as a first-class value **no** — `p.then(cb)` needs a function
+  value, and `Result` already has no `map` / `andThen` / `orElse` for exactly
+  that reason (wp16 §6), so accepting `.then` would trade the attribute
+  fixpoint for a spelling. Nothing here is pre-1.0 — LANGUAGE.md keeps the
+  rejections it has, so M4's freeze waits on none of it.
 
 - **Non-generic `type` aliases, in both compilers.** `type Byte = u8;` at
   module level is accepted now instead of
