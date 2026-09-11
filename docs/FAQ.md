@@ -1,4 +1,4 @@
-# AmritScript FAQ
+# Nish FAQ
 
 Short answers with pointers into the reference. See
 [LANGUAGE.md](LANGUAGE.md) for the rules and [ARCHITECTURE.md](ARCHITECTURE.md)
@@ -6,11 +6,11 @@ for the machinery.
 
 ### Why is there no `any`?
 
-Because every AmritScript value has exactly one fixed LLVM type and memory
+Because every Nish value has exactly one fixed LLVM type and memory
 layout, decided at compile time. `any` (and `unknown`, unions other than
 `T | null`, `typeof`, `instanceof`, prototypes, `eval`, ...) would need
 runtime type tags, boxing, and dynamic dispatch, which is what a JavaScript
-engine provides and what AmritScript deliberately leaves out. The full list,
+engine provides and what Nish deliberately leaves out. The full list,
 with the guarantee each construct would break, is in
 [LANGUAGE.md: Forbidden constructs](LANGUAGE.md#forbidden-constructs-phase-0-validator)
 and [wp0-validator.md](wp0-validator.md). If it compiles, the layout is
@@ -18,7 +18,7 @@ known.
 
 ### Why is `number` a 32-bit integer by default?
 
-Loop and index code is the common case in the programs AmritScript targets,
+Loop and index code is the common case in the programs Nish targets,
 and `i32` is what C and Rust use for it: one machine word, exact, vectorisable,
 and the natural type for array indices and exit codes. Treating every
 `number` as a double would make `i % 2`, `a[i]`, and `for (let i ...)`
@@ -52,11 +52,11 @@ modulo 2^32, and `Math.min`/`max` with a NaN operand return the other operand
 
 A collector needs a runtime that knows where every pointer is, and it costs
 binary size, memory, and unpredictable pauses; the whole point of compiling
-ahead of time is to avoid that. AmritScript uses one bump-allocated arena
+ahead of time is to avoid that. Nish uses one bump-allocated arena
 (`runtime/runtime.c`, about 3 KB of machine code): allocation is a load, an
 add, a compare and a store inlined into the caller; nothing is freed
 individually; the entry wrapper frees everything when `main` returns, and a
-C or Node host can call `amrit_reset_arena()` between batches to recycle
+C or Node host can call `nish_reset_arena()` between batches to recycle
 memory in O(1). Objects, arrays, and strings built at run time live there;
 string literals are constant data. On top of that the compiler places
 memory statically ([LANGUAGE.md: Memory model](LANGUAGE.md#memory-model),
@@ -130,7 +130,7 @@ is listed with a reproducer in
 `sin`/`cos`/`log`/`pow`, `Math.min`/`max` with NaN, `Math.round(-0.3)`,
 and the division panics above.
 
-### How do I call AmritScript code from Node?
+### How do I call Nish code from Node?
 
 Two ways, both generated from the same signatures as the IR
 ([wp8-interop.md](wp8-interop.md)):
@@ -156,12 +156,12 @@ not one call per element. `node bench/ffi.mjs` measures the difference
 
 ### Why not embed a JavaScript engine for npm packages?
 
-Calling npm packages *from* an AmritScript binary would mean embedding a JS
+Calling npm packages *from* an Nish binary would mean embedding a JS
 engine (QuickJS adds about 2 MB, V8 tens of MB), marshalling every value
 across the boundary at hundreds of cycles per call, and running a second,
 garbage-collected heap next to the arena. That erases the reasons to compile
-in the first place, so AmritScript deliberately has no such bridge. The
-supported direction is the reverse: Node does I/O, HTTP, and npm; AmritScript
+in the first place, so Nish deliberately has no such bridge. The
+supported direction is the reverse: Node does I/O, HTTP, and npm; Nish
 does math, parsing, data transforms, and hot loops; they meet once per batch.
 
 ### What does an error look like?
@@ -181,7 +181,7 @@ the first error. The message texts are catalogued in
 [LANGUAGE.md](LANGUAGE.md#forbidden-constructs-phase-0-validator) and the
 format in [wp10-ci.md](wp10-ci.md#diagnostic-format).
 
-### Which exit codes does `amritc` use?
+### Which exit codes does `nish` use?
 
 `0` success; `1` your program was rejected (or an input path is missing);
 `2` usage error (unknown flag, no inputs); `3` toolchain error (`--link`
@@ -192,10 +192,10 @@ written and named); `70` internal compiler error. Details in
 ### How do I report a bug?
 
 - **Exit code 70** means the compiler itself crashed, not that your program
-  is wrong. It prints `amritc <version>: internal compiler error while
-  compiling <files>` and the exception; re-run with `AMRITC_DEBUG=1` for
+  is wrong. It prints `nish <version>: internal compiler error while
+  compiling <files>` and the exception; re-run with `NISH_DEBUG=1` for
   the stack trace, then open an issue at
-  <https://github.com/amritk/compiler/issues> with the input file, the
+  <https://github.com/amritk/nish/issues> with the input file, the
   command line, and that output.
 - **Wrong IR or wrong native output** for a program that compiles: attach
   the `.ts`, the `.ll` (`-o out.ll`), the flags, and what you expected.

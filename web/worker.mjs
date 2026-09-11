@@ -1,5 +1,5 @@
-// The compile worker: one AmritScript compilation per message, each in a fresh
-// instance of `amritc.wasm` over an in-memory filesystem.
+// The compile worker: one Nish compilation per message, each in a fresh
+// instance of `nish.wasm` over an in-memory filesystem.
 //
 // The worker is written against the browser Worker API (`self.onmessage`,
 // `postMessage`) and bridged onto `node:worker_threads` at the bottom, so the
@@ -37,7 +37,7 @@ const load = async (source) => {
 const compile = async (request) => {
   const { id, files, args = [], entry = "main.ts", output = "main.ll" } = request;
   const fs = new MemoryFileSystem(files);
-  const host = new WasiHost({ args: ["amritc", entry, "-o", output, ...args], fs });
+  const host = new WasiHost({ args: ["nish", entry, "-o", output, ...args], fs });
   // `instantiate` given a Module (rather than bytes) resolves to the Instance itself.
   const instance = await WebAssembly.instantiate(compiled, host.imports());
   let status;
@@ -50,7 +50,7 @@ const compile = async (request) => {
       id,
       status: 70,
       stdout: host.stdoutText,
-      stderr: `${host.stderrText}amritc.wasm trapped: ${error?.message ?? error}\n`,
+      stderr: `${host.stderrText}nish.wasm trapped: ${error?.message ?? error}\n`,
       files: {},
     };
   }

@@ -849,7 +849,7 @@ export function assignInto(
   // The target is still checked, in the order and with the hints
   // `checkOperator` used, because that is what records its type — and
   // `collectDivisionFacts` reads exactly that to decide whether `x /= k` can
-  // reach `amrit_panic_div` (`tests/cases/div_compound_attributes`).
+  // reach `nish_panic_div` (`tests/cases/div_compound_attributes`).
   const target = checkExpression(ctx, expr.children[0], scope, slot);
   const rhs = checkExpression(
     ctx,

@@ -1,6 +1,6 @@
-# Installing amritc
+# Installing nish
 
-`amritc` compiles a static subset of TypeScript to LLVM IR and, with
+`nish` compiles a static subset of TypeScript to LLVM IR and, with
 `--link`, to a native binary. The compiler itself only needs Node.js; the
 `--link` step (and anything else that turns `.ll` into machine code) needs an
 LLVM toolchain.
@@ -11,7 +11,7 @@ LLVM toolchain.
   Node strips TypeScript types without a flag, which the compiler is written in
   and `docs/RUN_UNDER_NODE.md` relies on.
 - **clang** (LLVM 18 recommended) and **lld**, for `--link`. Without them
-  `amritc` still writes the `.ll` files and exits 3 with the install
+  `nish` still writes the `.ll` files and exits 3 with the install
   command for your platform when you ask for `--link`.
 
 ### Ubuntu / Debian
@@ -22,7 +22,7 @@ sudo apt-get install -y clang-18 lld-18 llvm-18
 ```
 
 Debian ships versioned binaries (`clang-18`, `ld.lld-18`, ...). Either point
-`amritc` at the versioned compiler with `CC=clang-18`, or expose the plain
+`nish` at the versioned compiler with `CC=clang-18`, or expose the plain
 names on `PATH`:
 
 ```bash
@@ -75,7 +75,7 @@ resource directory, next to the sysroot (as the tarball above unpacks it),
 in `<sysroot>/lib/wasm32-wasi/`, or at `WASI_BUILTINS=<file>`. Then:
 
 ```bash
-amritc examples/argv.ts --link build/argv.wasm --profile wasi
+nish examples/argv.ts --link build/argv.wasm --profile wasi
 node examples/wasi-host.mjs build/argv.wasm 3 4 five     # or: wasmtime build/argv.wasm 3 4 five
 ```
 
@@ -95,63 +95,63 @@ the Ubuntu steps inside it.
 From npm (once published; see [docs/wp12-release.md](wp12-release.md)):
 
 ```bash
-npm install -g amritc
-amritc --version
+npm install -g nish
+nish --version
 ```
 
 From a release tarball on GitHub (the `Release` workflow attaches
-`amritc-<version>.tgz` to every `v*` tag):
+`nish-<version>.tgz` to every `v*` tag):
 
 ```bash
-npm install -g ./amritc-0.1.0.tgz
+npm install -g ./nish-0.1.0.tgz
 ```
 
 From a checkout:
 
 ```bash
-git clone https://github.com/amritk/compiler.git
+git clone https://github.com/amritk/nish.git
 cd compiler
 npm install
 npm run build       # src/ -> dist/
-npm link            # optional: puts `amritc` on PATH
+npm link            # optional: puts `nish` on PATH
 # or run it in place: node dist/index.js ...
 ```
 
 The package ships `dist/` (the compiler), `runtime/` (the C runtime and its
-header), and `scripts/build.sh` (the link pipeline). `amritc` locates the
+header), and `scripts/build.sh` (the link pipeline). `nish` locates the
 runtime and the script relative to its own install directory, so a global
 install works from any working directory.
 
 ## 2a. Building the self-hosted compiler (optional)
 
-`self/` is the same compiler written in AmritScript, and it compiles itself
+`self/` is the same compiler written in Nish, and it compiles itself
 ([docs/wp14-selfhost.md](wp14-selfhost.md)). From a checkout, with clang on
 `PATH`:
 
 ```bash
-npm run bootstrap                  # dist/ -> stage1 -> build/amritc
-build/amritc hello.ts --link hello
+npm run bootstrap                  # dist/ -> stage1 -> build/nish
+build/nish hello.ts --link hello
 ./hello
 ```
 
 `scripts/bootstrap.sh` builds stage1 with the Node compiler, then stage2 with
-stage1, and installs stage2 as `build/amritc`. `--verify` also builds stage3
+stage1, and installs stage2 as `build/nish`. `--verify` also builds stage3
 and compares the IR and the binaries byte for byte; `--stages 1` stops one link
-sooner. `build/amritc` is then the compiler you run: it takes the same `-o`,
-`--link` and `--profile` spellings as `amritc` and makes every directory in the
+sooner. `build/nish` is then the compiler you run: it takes the same `-o`,
+`--link` and `--profile` spellings as `nish` and makes every directory in the
 way of the IR, a sidecar or the binary itself. It looks for `scripts/build.sh`
 and `runtime/runtime.c` one level up from wherever it was invoked, then in the
 working directory, so it wants a checkout or an installed package around it the
-way `amritc` does.
+way `nish` does.
 
 The native compiler is about eight times faster than the Node one and needs no
 Node at all. It writes the interop sidecars (`--emit-header`, `--emit-dts`,
-`--emit-napi`) and the DWARF `-g` asks for byte for byte as `amritc` does, and
+`--emit-napi`) and the DWARF `-g` asks for byte for byte as `nish` does, and
 passes `-g` on to `scripts/build.sh`, so the debug info survives into the
-binary. It answers every flag `amritc` answers, `--emit-ast` and
+binary. It answers every flag `nish` answers, `--emit-ast` and
 `--target host` included; the one thing that differs is what `--emit-ast`
-prints, because each compiler dumps its own syntax tree and only `amritc` has
-the `typescript` package's node names to print. `amritc` is also what the npm
+prints, because each compiler dumps its own syntax tree and only `nish` has
+the `typescript` package's node names to print. `nish` is also what the npm
 package installs.
 
 ## 3. Hello world
@@ -160,7 +160,7 @@ Create `hello.ts`:
 
 ```ts
 export function main(): number {
-  console.log("hello from AmritScript");
+  console.log("hello from Nish");
   return 0;
 }
 ```
@@ -169,21 +169,21 @@ export function main(): number {
 (`main(): void` exits 0). Compile and link it:
 
 ```bash
-amritc hello.ts --link hello
+nish hello.ts --link hello
 # wrote hello.ll
 # linked hello: 5104 bytes (speed)
 ./hello
-# hello from AmritScript
+# hello from Nish
 ```
 
 `hello.ll` is the LLVM IR, kept next to the binary. To only get the IR:
 
 ```bash
-amritc hello.ts -o hello.ll
+nish hello.ts -o hello.ll
 ```
 
 Other build profiles: `--profile size` (smallest binary), `--profile debug`
-(no optimisation, symbols kept). Run `amritc --help` for every flag, and
+(no optimisation, symbols kept). Run `nish --help` for every flag, and
 see the [README](../README.md) for the language subset.
 
 ## 4. Exit codes
@@ -194,7 +194,7 @@ see the [README](../README.md) for the language subset.
 | 1 | the program was rejected: compile error (`file:line:col: error: ...`), missing input file, or an `-o` layout that does not fit the module count |
 | 2 | usage error: unknown flag, missing argument, no input files |
 | 3 | toolchain error: `--link` found no `clang` (`CC` overrides), or `scripts/build.sh` failed (its output is shown; the `.ll` files are still written) |
-| 70 | internal compiler error: an unexpected exception. Please report it at <https://github.com/amritk/compiler/issues> with the input and command line; `AMRITC_DEBUG=1` prints the stack trace |
+| 70 | internal compiler error: an unexpected exception. Please report it at <https://github.com/amritk/nish/issues> with the input and command line; `NISH_DEBUG=1` prints the stack trace |
 
 ## Troubleshooting
 

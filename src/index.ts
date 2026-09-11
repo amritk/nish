@@ -4,7 +4,7 @@
  * below is spelled out because a usage line is read, not printed; every name
  * this file *prints* comes from `./branding`.
  *
- *   amritc <entry.ts> [more.ts ...] [-o <out.ll | out-dir/>] [--link <exe>] [options]
+ *   nish <entry.ts> [more.ts ...] [-o <out.ll | out-dir/>] [--link <exe>] [options]
  *
  * The first input is the entry module. Files it imports are compiled too, so
  * a program that spans several modules needs `-o <dir>/` (one `.ll` per
@@ -429,7 +429,7 @@ function main(argv: string[]): number {
 }
 
 /**
- * Anything that escapes `main` is a bug in amritc, not in the user's
+ * Anything that escapes `main` is a bug in nish, not in the user's
  * program: report it as such (EX_SOFTWARE, 70) naming the input files, and
  * show the stack only on request so users are not buried in frames.
  */
@@ -453,7 +453,7 @@ function reportInternalError(err: unknown, argv: string[]): number {
     console.error(`  (re-run with ${ENV_DEBUG}=1 for the stack trace)`);
   }
   console.error(`This is a bug in ${CLI}, not in your program. Please report it with the input file and`);
-  console.error("the command line at https://github.com/amritk/compiler/issues");
+  console.error("the command line at https://github.com/amritk/nish/issues");
   return EXIT_INTERNAL;
 }
 

@@ -111,11 +111,11 @@ The point of (a) is that the header does not have to explain a private
 convention. `--emit-header` writes the encoding as a C type:
 
 ```c
-typedef struct amrit_result_i32_i32_word {
+typedef struct nish_result_i32_i32_word {
   int32_t ok;                                   /* 1 = value, 0 = error */
   union { int32_t value; int32_t error; } as;   /* the arm `ok` selects */
-} amrit_result_i32_i32_word;
-AMRIT_RESULT_ASSERT(sizeof(amrit_result_i32_i32_word) == 8, "...");
+} nish_result_i32_i32_word;
+NISH_RESULT_ASSERT(sizeof(nish_result_i32_i32_word) == 8, "...");
 ```
 
 and clang, told to return that type, produces the declaration the module
@@ -135,7 +135,7 @@ the same declaration. The WP17 block of `tests/run.js` proves it end to end: a
 calls `half` (by value), `openFile` (an arena pointer, because its error arm
 carries a struct) and `describe` (a `Result` *parameter*, which is a pointer
 whatever its size) against the compiled `tests/cases/res_export.ts`.
-`AMRIT_RESULT_ASSERT` — `_Static_assert` where the host compiler has it — pins
+`NISH_RESULT_ASSERT` — `_Static_assert` where the host compiler has it — pins
 `sizeof(...) == 8` in the header itself, so a compiler that disagreed would
 fail to build rather than mis-read a register.
 
@@ -182,15 +182,15 @@ use:  pushq  %r14
       pushq  %rbx
       pushq  %rax
       movl   %edi, %ebx
-      callq  amrit_arena_mark@PLT       ; the scope
+      callq  nish_arena_mark@PLT       ; the scope
       testb  $1, %bl
       jne    .LBB1_1
       sarl   %ebx
-      movq   amrit_arena@GOTPCREL(%rip), %rdx
+      movq   nish_arena@GOTPCREL(%rip), %rdx
       movq   8(%rdx), %rcx            ; arena.off
       leaq   16(%rcx), %rsi
       cmpq   16(%rdx), %rsi           ; arena.cap
-      ja     .LBB1_8                  ; -> callq amrit_arena_grow
+      ja     .LBB1_8                  ; -> callq nish_arena_grow
       movq   %rsi, 8(%rdx)            ; publish the new bump
       addq   (%rdx), %rcx
 .LBB1_9:
@@ -220,8 +220,8 @@ use:  movq   %rdi, %rax
       retq                            ; 14 instructions, 1 block, no calls
 ```
 
-**aarch64, before** (50 instructions, 8 blocks, 3 calls — `bl amrit_arena_mark`,
-`bl amrit_arena_release`, and the cold `bl amrit_arena_grow`) **and after:**
+**aarch64, before** (50 instructions, 8 blocks, 3 calls — `bl nish_arena_mark`,
+`bl nish_arena_release`, and the cold `bl nish_arena_grow`) **and after:**
 
 ```asm
 use:  asr  w9, w0, #1
@@ -259,7 +259,7 @@ The compiler does not implement (c), so this last comparison is three
 hand-written `.ll` files that mimic exactly what each lowering emits, with
 `half` marked `noinline` so the call boundary is real (2 × 10^8 calls, x86-64,
 `clang -O3`, three runs; the arena stub is `runtime.c`'s bump and the pointer
-version carries the caller's `amrit_arena_mark` / `amrit_arena_release`):
+version carries the caller's `nish_arena_mark` / `nish_arena_release`):
 
 | lowering | time | vs. WP16 |
 | --- | --- | --- |
@@ -275,7 +275,7 @@ about half of it.
 
 `bench/result` is the same program as a benchmark, against C and Rust twins
 that use the shape each language would use anyway — a two-word C struct (the
-one `--emit-header` declares) and Rust's own `Result<i32, i32>`. AmritScript is
+one `--emit-header` declares) and Rust's own `Result<i32, i32>`. Nish is
 **1.46x behind C and 2.6x behind Rust** there, and the reason is not the
 encoding but *how the two halves reach the optimiser*:
 
@@ -284,9 +284,9 @@ encoding but *how the two halves reach the optimiser*:
 | Rust `Result<i32, i32>` (two SSA values throughout) | 251 ms |
 | C, an eight-byte struct clang coerces at the boundary | 444 ms |
 | C, the word assembled by hand with `<< 32` and `\|` | 653 ms |
-| **AmritScript** | **650 ms** |
+| **Nish** | **650 ms** |
 
-The third row is the important one: C written the way `amritc` emits is
+The third row is the important one: C written the way `nish` emits is
 *exactly* our number, so this is not a code-generation defect on our side.
 What separates the first two rows from the last two is whether the ok arm and
 the error arm are ever separate SSA values. When they are, instcombine folds
@@ -348,7 +348,7 @@ still emits `i64` for all four of its shapes.
   `EscapeResult.stackParams` is that decision, and it is the same
   `localOutcome` walk WP6 already used for a local holding an allocation
   (`tests/cases/res_by_value_param` pins both halves in one golden).
-- **The in-memory layout.** `%struct.amrit_result.<T>.<E>` is unchanged from
+- **The in-memory layout.** `%struct.nish_result.<T>.<E>` is unchanged from
   WP16, and so is every construct that reads it. The packed word exists only
   at the return boundary: the callee packs where it would have allocated, and
   the caller unpacks into the entry-block object the rest of the lowering
@@ -374,11 +374,11 @@ point: **274 of 274 programs, 941 modules, 1,286,495 lines of IR**, with
 `IR(stage1) == IR(stage2)` and stage3 byte-identical to stage2 still holding
 over the 43 modules of `self/`.
 
-**AmritScript-0 did not grow.** Rule 5 of [wp14-selfhost.md](wp14-selfhost.md)
+**Nish-0 did not grow.** Rule 5 of [wp14-selfhost.md](wp14-selfhost.md)
 §6 — the subset `self/` is written in does not grow quietly — did not fire:
 the packing is shifts, `zext`, `trunc`, `select` and one `bitcast`, all of
 which `self/` could already express, and no construct entered the language
-either. What this package adds to AmritScript is a *lowering* of a type that was
+either. What this package adds to Nish is a *lowering* of a type that was
 already there, which is why it ships no new surface syntax and its `reject_*`
 case pins that the WP16 rules still hold on the new shape rather than a new
 rule of its own.

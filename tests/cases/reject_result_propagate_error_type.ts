@@ -1,6 +1,6 @@
 // Rule 3 again: the propagated error has to fit the enclosing function's error
 // arm. There is no implicit conversion (Rust's `From<E>` needs a trait, and
-// AmritScript has none), so the mismatch is named rather than papered over.
+// Nish has none), so the mismatch is named rather than papered over.
 interface IoError {
   code: i32;
 }

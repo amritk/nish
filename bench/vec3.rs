@@ -1,5 +1,5 @@
 // Rust twin of vec3.ts: the same methods on a Box<Vec3> (heap objects, like
-// the arena objects in AmritScript), same expression order.
+// the arena objects in Nish), same expression order.
 const N: i32 = 50000000; // bench:n
 
 struct Vec3 {

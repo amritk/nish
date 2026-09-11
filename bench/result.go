@@ -1,7 +1,7 @@
 // Go twin of result.ts. Go has no Result type, so this is the same eight-byte
-// two-word struct `amritc --emit-header` declares for `Result<number, number>`
+// two-word struct `nish --emit-header` declares for `Result<number, number>`
 // and result.c uses; Go's register ABI returns and passes it in registers for
-// the same reason AmritScript does since WP17. (Go's own idiom, a `(value, ok)`
+// the same reason Nish does since WP17. (Go's own idiom, a `(value, ok)`
 // pair of results, is the same two words in the same registers.)
 package main
 

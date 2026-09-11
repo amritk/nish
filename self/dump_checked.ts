@@ -1,5 +1,5 @@
 // `dump_checked <file>`: the side tables stage1's checker filled in, printed in
-// the format `amritc --emit-checked` prints them.
+// the format `nish --emit-checked` prints them.
 //
 // It takes the two flags the *checker* reads — `--number-mode`, which decides
 // what `number` is, and `--wrapping`, which the constant folder reads — and

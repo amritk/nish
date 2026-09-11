@@ -3,7 +3,7 @@
  * Differential test runner (WP13): every whole program in tests/cases (those
  * with `export function main` and no `.err`) and tests/differential/corpus is
  *
- *   1. compiled and linked with amritc (`.args` respected), run, stdout and
+ *   1. compiled and linked with nish (`.args` respected), run, stdout and
  *      exit status captured;
  *   2. rewritten to JavaScript (rewrite.js) and run under Node with
  *      runtime/shim.mjs, stdout and exit status captured;

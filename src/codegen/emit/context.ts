@@ -53,7 +53,7 @@ export interface EmitContext {
   align(t: StaticType): number | undefined;
   /** `", align N"` or `""`. */
   alignSuffix(t: StaticType): string;
-  /** Reference a runtime symbol (`@amrit_...`), ensuring its declaration is emitted. */
+  /** Reference a runtime symbol (`@nish_...`), ensuring its declaration is emitted. */
   useRuntime(name: string): string;
   /** `i8*` constant expression for a string literal; identical texts share one `@.str.N`. */
   stringConstant(text: string): string;
@@ -61,7 +61,7 @@ export interface EmitContext {
   declare(text: string): void;
   /** Add a module-level named type (`%struct.x = type {...}`); duplicates are ignored. */
   declareType(text: string): void;
-  /** Add a module-level global (`@amrit_argv = external global ...`); duplicates are ignored. */
+  /** Add a module-level global (`@nish_argv = external global ...`); duplicates are ignored. */
   declareGlobal(text: string): void;
   /**
    * Intern a module metadata node and return its `!N` reference. Identical

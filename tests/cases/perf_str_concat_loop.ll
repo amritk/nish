@@ -4,7 +4,7 @@
 @.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"#\00" }, align 8
 @.str.4 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"z\00" }, align 8
 
-declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 
 define noundef i32 @test() #0 {
 entry:
@@ -29,7 +29,7 @@ for.cond:
 
 for.body:
   %2 = load i8*, i8** %out.addr, align 8
-  %3 = call i8* @amrit_str_concat(i8* %2, i8* bitcast ({ i64, [3 x i8] }* @.str.1 to i8*))
+  %3 = call i8* @nish_str_concat(i8* %2, i8* bitcast ({ i64, [3 x i8] }* @.str.1 to i8*))
   store i8* %3, i8** %out.addr, align 8
   br label %for.inc
 
@@ -51,7 +51,7 @@ while.cond:
 
 while.body:
   %8 = load i8*, i8** %tagged.addr, align 8
-  %9 = call i8* @amrit_str_concat(i8* %8, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
+  %9 = call i8* @nish_str_concat(i8* %8, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
   store i8* %9, i8** %tagged.addr, align 8
   %10 = load i32, i32* %n.addr, align 4
   %11 = add nsw i32 %10, 1
@@ -80,7 +80,7 @@ for.cond.2:
 
 for.body.2:
   %16 = load i8*, i8** %row.addr, align 8
-  %17 = call i8* @amrit_str_concat(i8* %16, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
+  %17 = call i8* @nish_str_concat(i8* %16, i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
   store i8* %17, i8** %row.addr, align 8
   br label %for.inc.2
 
@@ -113,7 +113,7 @@ for.end.1:
 
 do.body:
   %28 = load i8*, i8** %tail.addr, align 8
-  %29 = call i8* @amrit_str_concat(i8* %28, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
+  %29 = call i8* @nish_str_concat(i8* %28, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
   store i8* %29, i8** %tail.addr, align 8
   %30 = load i32, i32* %k.addr, align 4
   %31 = add nsw i32 %30, 1

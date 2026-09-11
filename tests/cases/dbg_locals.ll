@@ -1,16 +1,16 @@
 %struct.Point = type { i32, i32 }
-%struct.amrit_array = type { i64, i64, i8* }
+%struct.nish_array = type { i64, i64, i8* }
 
 @.str.0 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c": \00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"p\00" }, align 8
 
 declare void @llvm.dbg.value(metadata, metadata, metadata)
 declare void @llvm.dbg.declare(metadata, metadata, metadata)
-declare noundef i64 @amrit_arena_mark() #0
-declare void @amrit_arena_release(i64 noundef) #0
-declare noundef nonnull align 8 i8* @amrit_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
-declare noalias noundef nonnull align 8 i8* @amrit_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 
 define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 !dbg !12 {
 entry:
@@ -39,19 +39,19 @@ define internal noundef nonnull align 8 i8* @label(%struct.Point* noundef nonnul
 entry:
   call void @llvm.dbg.value(metadata %struct.Point* %p, metadata !35, metadata !DIExpression()), !dbg !34
   call void @llvm.dbg.value(metadata i8* %name, metadata !36, metadata !DIExpression()), !dbg !34
-  %0 = call i8* @amrit_str_concat(i8* %name, i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*)), !dbg !38
+  %0 = call i8* @nish_str_concat(i8* %name, i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*)), !dbg !38
   %1 = call i32 @Point.sum(%struct.Point* %p), !dbg !40
-  %2 = call i8* @amrit_str_from_i32(i32 %1), !dbg !38
-  %3 = call i8* @amrit_str_concat(i8* %0, i8* %2), !dbg !38
+  %2 = call i8* @nish_str_from_i32(i32 %1), !dbg !38
+  %3 = call i8* @nish_str_concat(i8* %0, i8* %2), !dbg !38
   ret i8* %3, !dbg !37
 }
 
-define internal noundef i32 @total(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %values) #1 !dbg !51 {
+define internal noundef i32 @total(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %values) #1 !dbg !51 {
 entry:
   %acc.addr = alloca i32, align 4
   %v.addr = alloca i32, align 4
   %forof.idx = alloca i64, align 8
-  call void @llvm.dbg.value(metadata %struct.amrit_array* %values, metadata !53, metadata !DIExpression()), !dbg !52
+  call void @llvm.dbg.value(metadata %struct.nish_array* %values, metadata !53, metadata !DIExpression()), !dbg !52
   store i32 0, i32* %acc.addr, align 4, !dbg !54
   call void @llvm.dbg.declare(metadata i32* %acc.addr, metadata !56, metadata !DIExpression()), !dbg !54
   call void @llvm.dbg.declare(metadata i32* %v.addr, metadata !58, metadata !DIExpression()), !dbg !57
@@ -60,13 +60,13 @@ entry:
 
 forof.cond:
   %0 = load i64, i64* %forof.idx, align 8, !dbg !57
-  %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %values, i64 0, i32 0, !dbg !57
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %values, i64 0, i32 0, !dbg !57
   %2 = load i64, i64* %1, align 8, !alias.scope !63, !noalias !64, !dbg !57
   %3 = icmp ult i64 %0, %2, !dbg !57
   br i1 %3, label %forof.body, label %forof.end, !dbg !57
 
 forof.body:
-  %4 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %values, i64 0, i32 2, !dbg !57
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %values, i64 0, i32 2, !dbg !57
   %5 = load i8*, i8** %4, align 8, !alias.scope !63, !noalias !64, !dbg !57
   %6 = bitcast i8* %5 to i32*, !dbg !57
   %7 = getelementptr inbounds i32, i32* %6, i64 %0, !dbg !57
@@ -98,9 +98,9 @@ entry:
   %ratio.addr = alloca double, align 8
   %s.addr = alloca i8*, align 8
   %t.addr = alloca i32, align 4
-  %arr.hdr = alloca %struct.amrit_array, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
   %arr.data = alloca [3 x i32], align 8
-  %arena.mark = call i64 @amrit_arena_mark(), !dbg !73
+  %arena.mark = call i64 @nish_arena_mark(), !dbg !73
   call void @Point.constructor(%struct.Point* %Point.obj, i32 3, i32 4), !dbg !75
   store %struct.Point* %Point.obj, %struct.Point** %p.addr, align 8, !dbg !74
   call void @llvm.dbg.declare(metadata %struct.Point** %p.addr, metadata !78, metadata !DIExpression()), !dbg !74
@@ -114,17 +114,17 @@ entry:
   store double 0x4004000000000000, double* %ratio.addr, align 8, !dbg !87
   call void @llvm.dbg.declare(metadata double* %ratio.addr, metadata !90, metadata !DIExpression()), !dbg !87
   %3 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !93
-  %4 = call i64 @amrit_arena_mark(), !dbg !92
+  %4 = call i64 @nish_arena_mark(), !dbg !92
   %5 = call i8* @label(%struct.Point* %3, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*)), !dbg !92
-  %6 = call i8* @amrit_arena_keep(i64 %4, i8* %5), !dbg !92
+  %6 = call i8* @nish_arena_keep(i64 %4, i8* %5), !dbg !92
   store i8* %6, i8** %s.addr, align 8, !dbg !91
   call void @llvm.dbg.declare(metadata i8** %s.addr, metadata !95, metadata !DIExpression()), !dbg !91
-  %7 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0, !dbg !98
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0, !dbg !98
   store i64 3, i64* %7, align 8, !alias.scope !63, !noalias !64, !dbg !98
-  %8 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1, !dbg !98
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1, !dbg !98
   store i64 3, i64* %8, align 8, !alias.scope !63, !noalias !64, !dbg !98
   %9 = bitcast [3 x i32]* %arr.data to i8*, !dbg !98
-  %10 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 2, !dbg !98
+  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2, !dbg !98
   store i8* %9, i8** %10, align 8, !alias.scope !63, !noalias !64, !dbg !98
   %11 = bitcast i8* %9 to i32*, !dbg !98
   %12 = getelementptr inbounds i32, i32* %11, i64 0, !dbg !98
@@ -133,7 +133,7 @@ entry:
   store i32 2, i32* %13, align 4, !alias.scope !64, !noalias !63, !dbg !98
   %14 = getelementptr inbounds i32, i32* %11, i64 2, !dbg !98
   store i32 3, i32* %14, align 4, !alias.scope !64, !noalias !63, !dbg !98
-  %15 = call i32 @total(%struct.amrit_array* %arr.hdr), !dbg !97
+  %15 = call i32 @total(%struct.nish_array* %arr.hdr), !dbg !97
   store i32 %15, i32* %t.addr, align 4, !dbg !96
   call void @llvm.dbg.declare(metadata i32* %t.addr, metadata !102, metadata !DIExpression()), !dbg !96
   %16 = load i1, i1* %ok.addr, align 1, !dbg !104
@@ -174,11 +174,11 @@ if.then:
   %30 = load %struct.Point*, %struct.Point** %p.addr, align 8, !dbg !114
   %31 = call i32 @Point.sum(%struct.Point* %30), !dbg !114
   %32 = add nsw i32 %29, %31, !dbg !113
-  call void @amrit_arena_release(i64 %arena.mark), !dbg !112
+  call void @nish_arena_release(i64 %arena.mark), !dbg !112
   ret i32 %32, !dbg !112
 
 if.end:
-  call void @amrit_arena_release(i64 %arena.mark), !dbg !115
+  call void @nish_arena_release(i64 %arena.mark), !dbg !115
   ret i32 0, !dbg !115
 }
 
@@ -187,7 +187,7 @@ attributes #1 = { nounwind willreturn readonly }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}
-!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "amritc 0.1.0", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
+!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "nish 0.1.0", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
 !1 = !DIFile(filename: "<root>/tests/cases/dbg_locals.ts", directory: ".")
 !2 = !{i32 7, !"Dwarf Version", i32 5}
 !3 = !{i32 2, !"Debug Info Version", i32 3}
@@ -247,7 +247,7 @@ attributes #1 = { nounwind willreturn readonly }
 !57 = !DILocation(line: 21, column: 3, scope: !51)
 !58 = !DILocalVariable(name: "v", scope: !51, file: !1, line: 21, type: !6)
 !59 = !DILocation(line: 21, column: 19, scope: !51)
-!60 = !{!"amritc array"}
+!60 = !{!"nish array"}
 !61 = !{!"header", !60}
 !62 = !{!"elements", !60}
 !63 = !{!61}

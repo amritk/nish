@@ -13,33 +13,33 @@
  * Prose is exempt: comments and `docs/` are written for humans and read badly
  * full of constants. The rule is only about strings the program itself prints.
  *
- * What deliberately does not live here is the `amrit_` prefix on the runtime's
+ * What deliberately does not live here is the `nish_` prefix on the runtime's
  * C symbols. That prefix is ABI — it is in every golden `.ll`, in `runtime.c`,
  * and in every binary linked against the runtime. Treat it as opaque: it is
- * frozen, and a rename does not follow it. (It was `sts_` before the
- * AmritScript rename. Rewriting it was the last step of that rename, done
- * while nothing had been released and every golden could be regenerated, and
- * "Where the name lives" in `docs/ARCHITECTURE.md` says why that does not
- * happen again.)
+ * frozen, and a rename does not follow it. (It has been rewritten twice, as
+ * the last step of each rename: `sts_` became `amrit_`, and `amrit_` became
+ * `nish_`. Both were affordable only because nothing had been released and
+ * every golden could be regenerated, and "Where the name lives" in
+ * `docs/ARCHITECTURE.md` says why that stops at the first release.)
  */
 
-/** The language, as a diagnostic names it: "`eval` is forbidden in AmritScript". */
-export const LANGUAGE = "AmritScript";
+/** The language, as a diagnostic names it: "`eval` is forbidden in Nish". */
+export const LANGUAGE = "Nish";
 
 /**
  * The compiler: the npm package, the `bin` entry, and the word a message uses
- * when it talks about itself ("amritc: cannot register the addon exports").
+ * when it talks about itself ("nish: cannot register the addon exports").
  */
-export const CLI = "amritc";
+export const CLI = "nish";
 
-/** `AMRITC_DEBUG=1` prints the stack behind an internal compiler error. */
+/** `NISH_DEBUG=1` prints the stack behind an internal compiler error. */
 export const ENV_DEBUG = `${CLI.toUpperCase()}_DEBUG`;
 
-/** `AMRITC_SIMULATE_ICE=1` is the test hook for that same path. */
+/** `NISH_SIMULATE_ICE=1` is the test hook for that same path. */
 export const ENV_SIMULATE_ICE = `${CLI.toUpperCase()}_SIMULATE_ICE`;
 
 /** The public C ABI header in `runtime/`; every generated header includes it. */
 export const RUNTIME_HEADER = `${CLI}.h`;
 
-/** Include guard on a generated header: `AMRITC_ADD_H` for `build/add.h`. */
+/** Include guard on a generated header: `NISH_ADD_H` for `build/add.h`. */
 export const HEADER_GUARD_PREFIX = CLI.toUpperCase();

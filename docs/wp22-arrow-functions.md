@@ -3,7 +3,7 @@
 **Proposed, not implemented.** Nothing here exists in the compiler today: an
 arrow function still fails in the checker, and every function in the corpus is
 a `function` declaration. It is the plan of record for one decision —
-**`const f = (...) => ...` becomes how AmritScript declares a function, and
+**`const f = (...) => ...` becomes how Nish declares a function, and
 `function` is legacy and eventually removed** — and for the order that
 decision has to happen in, which is forced by the bootstrap and is the only
 hard part.
@@ -56,7 +56,7 @@ A first attempt at that measurement said arrows were 7.6x slower, and the
 reason it was wrong is worth keeping: it passed both forms through one
 `bench(f)` helper, so the second form made the call site polymorphic and
 deoptimised it. The declaration then measured 10.5 s too. What costs 7x in
-JavaScript is an indirect call site with more than one callee — and AmritScript
+JavaScript is an indirect call site with more than one callee — and Nish
 forbids function values outright (`Function` is a Phase 0 error, "no dynamic
 function values"), so every call site is monomorphic by construction. The
 prohibition is doing the work; the spelling is doing none.
@@ -118,7 +118,7 @@ a deprecated spelling, which is the checker's business, and its message names
 the rewrite:
 
 ```
-`function double` is not how AmritScript declares a function; write
+`function double` is not how Nish declares a function; write
 `const double = (n: i32): i32 => ...`
 ```
 
@@ -135,7 +135,7 @@ the rewrite:
 
 ## 8. The order, and why it is forced
 
-The bootstrap is the constraint. `self/` is AmritScript compiled by stage0, and
+The bootstrap is the constraint. `self/` is Nish compiled by stage0, and
 stage1 compiles itself. So `function` cannot be removed from the language
 before `self/` is arrows, and `self/` cannot *be* arrows before stage1 parses
 them. That forces four stages, and no two of them can be merged:
@@ -145,7 +145,7 @@ them. That forces four stages, and no two of them can be merged:
 | **A** | Stage0 accepts arrows: §5's rules, the concise-body branch, negative tests | `npm test` green; the two spellings of one program emit byte-identical IR |
 | **B** | Stage1 accepts arrows: the lookahead and `parseArrowFunction` in `self/parser.ts`, the concise-body branch in its checker and emitter | the parser oracle builds the same tree with the same spans, and `IR(stage0) == IR(stage1)` byte for byte |
 | **C** | The migration: `self/` first, then the corpus, then the docs | goldens unchanged; the bootstrap reproduces stage1 byte for byte |
-| **D** | a `function` *definition* is rejected, with §6's message and its `reject_function_declaration` case; `declare function` stays legal (§9) | `npm test` green with no `function` declaration left in any AmritScript source |
+| **D** | a `function` *definition* is rejected, with §6's message and its `reject_function_declaration` case; `declare function` stays legal (§9) | `npm test` green with no `function` declaration left in any Nish source |
 
 **A cannot carry its own positive golden, and that is the plan's one real
 correction.** *(Resolved in B: `tests/cases/fn_arrow` ships there, with its
@@ -203,7 +203,7 @@ the source, and `tests/differential/{lib,unmodified}.js` did the same — so an
 arrow entry point linked against `tests/driver.c` and failed with *multiple
 definition of `main`*. Three regexes, each now accepting either spelling. This
 is the shape of what stage C will keep finding: not the compiler, but the
-tooling around it that reads AmritScript with a regex.
+tooling around it that reads Nish with a regex.
 
 ## 9. What stage D forecloses
 

@@ -1,7 +1,7 @@
-# The AmritScript language
+# The Nish language
 
-This is the normative reference for AmritScript, the subset of TypeScript that
-`amritc` compiles to LLVM IR. It describes what the compiler accepts today,
+This is the normative reference for Nish, the subset of TypeScript that
+`nish` compiles to LLVM IR. It describes what the compiler accepts today,
 what each construct means, and how every rejection is worded. The design
 notes (`docs/wp*.md`) explain *why*; this page says *what*.
 
@@ -32,7 +32,7 @@ Contents: [Lexical rules](#lexical-rules) · [Types](#types) ·
 
 ## Lexical rules
 
-AmritScript source is TypeScript syntax, parsed by the official TypeScript
+Nish source is TypeScript syntax, parsed by the official TypeScript
 parser (`ts.createSourceFile`), so tokens, comments, and ASI behave exactly as
 in TypeScript. Syntax errors are reported as `syntax error:` in the same
 `file:line:col` shape (`tests/run.js`, WP10 block).
@@ -58,12 +58,12 @@ in TypeScript. Syntax errors are reported as `syntax error:` in the same
 - **`null`** is a value only where a `T | null` type is expected (see
   [Nullable types](#nullable-types)); with no contextual type it is
   `` `null` needs a contextual `T | null` type `` *(CLI only)*.
-  **`undefined`** is forbidden (`` `undefined` is forbidden in AmritScript; use `null` with a `T | null` type ``,
+  **`undefined`** is forbidden (`` `undefined` is forbidden in Nish; use `null` with a `T | null` type ``,
   `tests/cases/reject_undefined_value`).
 - **Bigint** literals (`10n`) and regex literals are forbidden
   (`tests/cases/reject_bigint_literal`, `reject_regex`).
 - **Reserved prefix.** Function, class, and interface names starting with
-  `amrit_` are reserved for the runtime: `` Function names starting with `amrit_` are reserved for the runtime ``
+  `nish_` are reserved for the runtime: `` Function names starting with `nish_` are reserved for the runtime ``
   *(CLI only; `src/checker/declarations.ts`)*.
 - **Identifiers** that may never appear as values: `eval`, `Function`,
   `Proxy`, `Reflect`, `Symbol`, `globalThis`, `arguments`, `undefined`
@@ -71,12 +71,12 @@ in TypeScript. Syntax errors are reported as `syntax error:` in the same
 
 ## Types
 
-Every AmritScript type maps 1:1 onto one LLVM first-class type. There is no
+Every Nish type maps 1:1 onto one LLVM first-class type. There is no
 boxing, no runtime type tag, no structural subtyping (except
 `implements`, below), and no implicit conversion of any kind: two values are
 compatible only when their types are identical (`src/types.ts`, `sameType`).
 
-| AmritScript | LLVM | Size / align | C ABI (`--emit-header`) | Notes |
+| Nish | LLVM | Size / align | C ABI (`--emit-header`) | Notes |
 | --- | --- | --- | --- | --- |
 | `number` (i32 mode), `i32` | `i32` | 4 / 4 | `int32_t` | Two's-complement; signed overflow is undefined (`--wrapping` wraps). |
 | `number` (f64 mode), `f64` | `double` | 8 / 8 | `double` | IEEE-754; `f64` is always available, in both modes. |
@@ -87,13 +87,13 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 | `u32` | `i32` | 4 / 4 | `uint32_t` | Shares `i32`'s LLVM type; `u32 + i32` is still a type error. |
 | `u64` | `i64` | 8 / 8 | `uint64_t` | Shares `i64`'s LLVM type; crosses to JavaScript as a `bigint`, like `i64`. |
 | `boolean` | `i1` | 1 / 1 | `bool` | `zeroext` at the ABI boundary. |
-| `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }` | 8 / 8 (pointer) | `const amrit_str *` in, `amrit_str *` out | Immutable, 8-aligned, NUL-terminated (so `data` is a C string; sharing a pointer is always safe, nothing is ever copied); literals are module constants, everything else lives in the arena; `len` is the UTF-8 byte length. |
-| `T[]`, `Array<T>` | `%struct.amrit_array*` to `{ i64 len, i64 cap, i8* data }` | 8 / 8 (pointer); header 24 bytes | `const amrit_array *` in (read-only), `amrit_array *` in (written through) and out | One element type; `data` holds `cap` elements of `sizeof(T)`; bounds-checked. |
-| `readonly T[]`, `ReadonlyArray<T>` | the same as `T[]` | as `T[]` | `const amrit_array *` in | The same array, with every write refused: [Readonly arrays](#readonly-arrays). |
+| `string` | `i8*` to `{ i64 len, i8 data[len], i8 0 }` | 8 / 8 (pointer) | `const nish_str *` in, `nish_str *` out | Immutable, 8-aligned, NUL-terminated (so `data` is a C string; sharing a pointer is always safe, nothing is ever copied); literals are module constants, everything else lives in the arena; `len` is the UTF-8 byte length. |
+| `T[]`, `Array<T>` | `%struct.nish_array*` to `{ i64 len, i64 cap, i8* data }` | 8 / 8 (pointer); header 24 bytes | `const nish_array *` in (read-only), `nish_array *` in (written through) and out | One element type; `data` holds `cap` elements of `sizeof(T)`; bounds-checked. |
+| `readonly T[]`, `ReadonlyArray<T>` | the same as `T[]` | as `T[]` | `const nish_array *` in | The same array, with every write refused: [Readonly arrays](#readonly-arrays). |
 | `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). |
 | `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, and narrowing: [Nullable types](#nullable-types). |
-| `Result<T, E>` | `%struct.amrit_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32 }` between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `amrit_result_<T>_<E>_word` by value, `struct amrit_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
+| `Result<T, E>` | `%struct.nish_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32 }` between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `nish_result_<T>_<E>_word` by value, `struct nish_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
 | `void` | `void` | – | `void` | Return type only. |
 
 Sources: `src/types.ts` (`llvmType`, `alignOf`), `src/interop/abi.ts`
@@ -226,7 +226,7 @@ tightly as a C `uint8_t` does.
 | to / from `f64` | `sitofp` / `llvm.fptosi.sat` | `uitofp` / `llvm.fptoui.sat` |
 | `Math.abs` | `llvm.abs` | nothing: the value is already its own magnitude |
 | `Math.min` / `Math.max` | `llvm.smin` / `llvm.smax` | `llvm.umin` / `llvm.umax` |
-| `console.log(x)`, `` `${x}` `` | `amrit_str_from_i32` / `_i64` | `zext` to i64, then `amrit_str_from_u64` |
+| `console.log(x)`, `` `${x}` `` | `nish_str_from_i32` / `_i64` | `zext` to i64, then `nish_str_from_u64` |
 | overflow (WP9, WP15 §3) | `add nsw` … unless `--wrapping` | nothing, in either mode: unsigned overflow is defined as wrapping |
 
 The consequences worth knowing:
@@ -278,7 +278,7 @@ doubles alone would be 24 (`tests/cases/f32_struct`).
   not the `f64` spelling `0x3FB999999999999A` (`tests/cases/f32_constant`).
 - **Printing gives JavaScript's digits for the float's value.**
   `console.log(x)` and `` `${x}` `` widen with `fpext` and reuse
-  `amrit_str_from_f64`, so `const tenth: f32 = 0.1` prints
+  `nish_str_from_f64`, so `const tenth: f32 = 0.1` prints
   `0.10000000149011612` where the same literal as an `f64` prints `0.1`
   (`tests/cases/f32_print`; `tests/differential/corpus/f32_round`).
 - **The f64-only `Math` functions stay f64-only.** `Math.sqrt(x)` on an `f32`
@@ -396,7 +396,7 @@ export function main(): i32 {
 ### The type
 
 `Result<T, E>` is a built-in type constructor with exactly two arguments — the
-same kind of thing `Array<T>` is, not a user generic, which AmritScript still does
+same kind of thing `Array<T>` is, not a user generic, which Nish still does
 not have (`` `Result` needs exactly two type arguments, e.g. `Result<number, string>` ``,
 `tests/cases/reject_result_type_args`).
 
@@ -413,7 +413,7 @@ not have (`` `Result` needs exactly two type arguments, e.g. `Result<number, str
   being falsified under it.
 
 Each distinct pair of payload types gets one monomorphised struct,
-`%struct.amrit_result.<T>.<E> = type { i1, <T>, <E> }`, held by pointer and
+`%struct.nish_result.<T>.<E> = type { i1, <T>, <E> }`, held by pointer and
 allocated exactly as a class is — so a `Result` costs what a small object
 costs, and one that does not outlive its function becomes an entry-block
 `alloca` with no allocator call at all (`tests/cases/res_stack`).
@@ -473,7 +473,7 @@ still costs something against C and Rust, are in
 
 There is deliberately no `unwrap()`: `expect(message)` says the same thing and
 insists on a reason. There is no `map` / `andThen` / `orElse` either — they
-need function values, which AmritScript forbids because the whole-program pass
+need function values, which Nish forbids because the whole-program pass
 cannot prove purity, termination or escape through an unknown callee.
 Narrowing plus `orReturn()` covers what those combinators are for.
 
@@ -516,14 +516,14 @@ function that itself returns a `Result` whose error arm accepts `E`
 (it returns i32) ``, and `` `orReturn()` would propagate IoError but `read`
 returns Result<i32, string> ``). A function that propagates a callee's failure
 therefore has to admit it in its own signature. There is no implicit error
-conversion — Rust's `From<E>` needs a trait and AmritScript has none — so a
+conversion — Rust's `From<E>` needs a trait and Nish has none — so a
 mismatch is named rather than papered over; convert it by hand with
 `if (r.isErr()) { return Err(...); }`.
 
 ### It is still TypeScript
 
 Every line above parses as TypeScript, and with
-[`runtime/amritc.d.ts`](../runtime/amritc.d.ts) on the include path it
+[`runtime/nish.d.ts`](../runtime/nish.d.ts) on the include path it
 type-checks under plain `tsc --strict` and in an editor too. The declarations
 model `Result` as the tagged union TypeScript would use anyway, intersected
 with the method surface, so `if (r.ok)` and `if (r.isOk())` narrow `r` in
@@ -531,7 +531,7 @@ with the method surface, so `if (r.ok)` and `if (r.isOk())` narrow `r` in
 refuses `r.value` before the test just as this compiler does (`tests/run.js`,
 "WP16: the ambient declarations").
 
-`amritc` remains the authority: `tsc` cannot see that a `Result` may not be
+`nish` remains the authority: `tsc` cannot see that a `Result` may not be
 dropped, that `orReturn()` returns early, or that the enclosing function has
 to return a `Result` for it to be legal at all. A program `tsc` accepts may
 still be rejected here; the reverse is a bug in the declarations.
@@ -545,18 +545,18 @@ A `Result` crosses the host boundary. `--emit-header` writes two C types per
 /* Result<number, number> */
 
 /* the arena object: a `Result` too large to pack, and what a field holds */
-struct amrit_result_i32_i32 {
+struct nish_result_i32_i32 {
   bool ok; /* 1 = value, 0 = error */
   int32_t value;
   int32_t error;
 };
 
 /* the by-value form, in either direction: one 64-bit word */
-typedef struct amrit_result_i32_i32_word {
+typedef struct nish_result_i32_i32_word {
   int32_t ok; /* 1 = value, 0 = error */
   union { int32_t value; int32_t error; } as;
-} amrit_result_i32_i32_word;
-AMRIT_RESULT_ASSERT(sizeof(amrit_result_i32_i32_word) == 8, "...");
+} nish_result_i32_i32_word;
+NISH_RESULT_ASSERT(sizeof(nish_result_i32_i32_word) == 8, "...");
 ```
 
 The word is not a description of the ABI, it is the ABI: clang lowers a
@@ -672,7 +672,7 @@ having no top-level code and therefore no initialisation order.
   An array, class, or interface constant would need an allocation, and there is
   no code to run it (`` must be a number, boolean, or string ``,
   `tests/cases/reject_const_array`).
-- **The initialiser is an ordinary AmritScript expression restricted to literals
+- **The initialiser is an ordinary Nish expression restricted to literals
   and other constants**: the operators of [Operators](#operators) over numeric,
   boolean, and string literals, other module constants (declared anywhere in
   the module, or imported), and parentheses. Anything else — a call, a `new`, a
@@ -754,7 +754,7 @@ program twice, with one golden between them.
   side is reported where it is written rather than never.
 - **Generic aliases are forbidden**, as every other generic is:
   `type Box<T> = T[]` is
-  `` Generic type parameters are forbidden in AmritScript (no monomorphisation yet) ``
+  `` Generic type parameters are forbidden in Nish (no monomorphisation yet) ``
   (`tests/cases/reject_type_alias_generic`).
 - **A built-in type name may not be aliased.** `type string = i32` is
   `` `string` is a built-in type name and cannot be used for a type alias ``
@@ -864,9 +864,9 @@ export function main(): number {   // or `: void`; `: i32` in f64 mode
   In f64 mode declare `main(): i32`; `main(): number` is rejected with
   `` `main` must return void or an i32 number ... under --number-mode f64 declare `main(): i32` ``
   *(CLI only)*.
-- The user's function is emitted as `@amrit_main`; the compiler adds a C
+- The user's function is emitted as `@nish_main`; the compiler adds a C
   `@main(i32 %argc, i8** %argv)` wrapper that builds `process.argv` when the
-  program reads it (`call void @amrit_argv_init(i32 %argc, i8** %argv)`,
+  program reads it (`call void @nish_argv_init(i32 %argc, i8** %argv)`,
   `tests/cases/argv_echo`, `tests/link/argv_import`), calls it, frees the
   arena, and returns the code. A non-exported `function main` is an ordinary
   function named `@main` (for C drivers such as `tests/driver.c`).
@@ -982,7 +982,7 @@ class Point {
     `areaOf(s: Shape)` and `const s: Shape = sq; s.area()` call `Shape.area`
     on the same object, and `Shape.report()` calling `this.area()` always
     reaches `Shape.area` (`tests/cases/cls_extends_override`). There is no
-    vtable and no virtual dispatch; this is the one place AmritScript knowingly
+    vtable and no virtual dispatch; this is the one place Nish knowingly
     differs from JavaScript. `super.m(args)` inside a derived class calls the
     base implementation; `super` has no other use (`` `super.x` is not supported ``,
     `reject_cls_super_field`; `reject_cls_super_outside`, `reject_cls_super_in_method`).
@@ -1092,7 +1092,7 @@ The expression's type must equal the declared return type
 ### `if` / `else`
 
 The condition must be `boolean`: there is no truthiness
-(`Condition must be boolean, got i32 (AmritScript has no truthiness)`,
+(`Condition must be boolean, got i32 (Nish has no truthiness)`,
 `tests/cases/reject_cf_nonbool_cond`). `else if` chains are nested `if`s
 (`tests/cases/cf_if`, `cf_if_else_chain`).
 
@@ -1140,7 +1140,7 @@ switch (node.kind) {
   other type is `` `switch` requires an integer discriminant, got <type> ``
   (`tests/cases/reject_switch_string`). Only an integer switch lowers to
   LLVM's `switch` and a jump table; a string switch would have been a chain
-  of `amrit_str_eq` calls wearing a switch's clothes, and `if`/`else` says that
+  of `nish_str_eq` calls wearing a switch's clothes, and `if`/`else` says that
   honestly.
 - Every `case` label is an **integer constant expression** of the
   discriminant's type: a literal, its negation, or a module constant
@@ -1239,15 +1239,15 @@ under [Semantics decisions](#semantics-decisions).
 
 | Operator | Operand types | Result | Lowering | Test |
 | --- | --- | --- | --- | --- |
-| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); `nsw` on the signed integer widths unless `--wrapping`, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `amrit_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
-| `+` | two `string` | `string` | `amrit_str_concat` | `str_concat`; `reject_str_plus_number` (`no implicit string conversion`) |
+| `+ - * / %` | two numbers of one type (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, or `f64`) | that type | `add sub mul` / `fadd fsub fmul fdiv frem` (on `float` for an `f32`, `double` for an `f64`); `nsw` on the signed integer widths unless `--wrapping`, never `nuw`; integer `sdiv` / `srem` (`udiv` / `urem` on an unsigned type) are preceded by a divisor check that branches to `nish_panic_div` ([Checked integer division](#checked-integer-division)) | `add`, `locals`, `i64_basic`, `f64_mode`, `div_checked`, `u_arith_wrap`, `u_udiv_urem`, `f32_arith`; `reject_type_mismatch`, `reject_u_mixed_signedness`, `reject_f32_mixed` |
+| `+` | two `string` | `string` | `nish_str_concat` | `str_concat`; `reject_str_plus_number` (`no implicit string conversion`) |
 | unary `-` | any numeric type | same | `sub <T> 0, x` for an integer, `fneg float` / `fneg double` for a float | `cf_if` (`-x`), `i64_basic`, `f32_arith`; `f64` *(CLI only)* |
 | unary `!` | `boolean` | `boolean` | `xor i1 x, true` | `cf_logical`; `!s` on a string is `` Unsupported unary operator `!` on string `` *(CLI only)* |
 | `& \| ^` | two integers of one type | that type | `and` / `or` / `xor`, one instruction, no panic path | `bit_and_or_xor`, `bit_i64`, `bit_attributes`; `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_boolean` (`` Operator `&` is not available on boolean (use `&&`) ``) |
 | `<< >> >>>` | two integers of one type | that type | `shl`; `>>` is `ashr` (sign-filling) on a signed type and `lshr` (zero-filling) on an unsigned one, so `>>` and `>>>` are the same instruction there; `>>>` is always `lshr`. The count is masked to the operand width (31, 63, or 7/15 on the narrow unsigned widths); a constant count is masked at compile time and emits no `and` (see [Shifts](#shifts)) | `bit_shifts`, `bit_shift_const`, `bit_shift_fill`, `bit_shift_narrow`, `bit_i64`, `u_shift_logical`; `reject_u_shift_mixed`; `tests/differential/corpus/bit_shifts` |
 | unary `~` | any integer type | same | `xor x, -1` (LLVM has no `not`) | `bit_not`; `reject_bit_not` (`` Operator `~` requires an integer operand, got f64 ``) |
 | `< <= > >=` | two numbers of one type (`i32`, `i64`, the unsigned widths, `f32`, or `f64`); nothing else | `boolean` | `icmp slt ...` signed, `icmp ult ...` unsigned, `fcmp olt ...` for both float widths | `cf_if`, `f64_mode`, `u_compare_above_intmax`, `f32_arith`; booleans (`reject_bool_ordering`), strings (`reject_str_lt`, `reject_str_lt_str`), and structs (`reject_cls_ordering`) are `` Operator `<` requires two numeric operands, got boolean and boolean `` |
-| `=== !==` | any two values of the same type except `void`; a `T \| null` only against the literal `null` | `boolean` | integers and booleans: `icmp eq` / `icmp ne`; `f64`: `fcmp oeq` / `fcmp une` (so `x !== x` is true for NaN); strings: `amrit_str_eq` (content); arrays and objects: `icmp eq` on the pointer (identity); `p === null`: `icmp eq` against `null` | `str_eq`, `cls_this_method_call`, `conversions`, `mem_nullable`; arrays *(CLI only)*; `reject_null_compare_two` |
+| `=== !==` | any two values of the same type except `void`; a `T \| null` only against the literal `null` | `boolean` | integers and booleans: `icmp eq` / `icmp ne`; `f64`: `fcmp oeq` / `fcmp une` (so `x !== x` is true for NaN); strings: `nish_str_eq` (content); arrays and objects: `icmp eq` on the pointer (identity); `p === null`: `icmp eq` against `null` | `str_eq`, `cls_this_method_call`, `conversions`, `mem_nullable`; arrays *(CLI only)*; `reject_null_compare_two` |
 | `== !=` | – | – | forbidden | `reject_loose_equality`, `reject_loose_inequality` |
 | `&& \|\|` | two `boolean` | `boolean` | short-circuit: `br` + `phi` | `cf_logical`; `reject_cf_logical_numbers` (`requires boolean operands`) |
 | `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch` |
@@ -1270,7 +1270,7 @@ and exits with status 1 (`tests/cases/div_checked`, `div_zero_panic`,
 `int_div_overflow`). Otherwise the result is the truncating `sdiv` / `srem`:
 `-7 / 2` is `-3`, `-7 % 3` is `-1`, `-2147483648 / 1` is `-2147483648`. The
 check is two compares and a branch to a cold `div.fail` block that calls the
-`noreturn` `amrit_panic_div`; because that path exists, a function containing
+`noreturn` `nish_panic_div`; because that path exists, a function containing
 an integer division is neither `willreturn` nor `readnone`, exactly like one
 containing a checked `a[i]`. The rule applies to `/`, `%`, `/=`, and `%=` on
 locals, fields, and elements, with constant divisors too (LLVM folds the
@@ -1416,7 +1416,7 @@ shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
 | `Math.round(x: f64): f64` | JavaScript's round-half-up (`floor` + compare + `select`): `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0` | none | `math_intrinsics` |
 | `Math.abs(x: T): T` for any numeric `T` | `llvm.abs.*` (wrapping for `INT_MIN`) / `llvm.fabs.f32` / `llvm.fabs.f64`; on an unsigned type, no instruction at all (the value is its own magnitude) | none | `math_i32`, `math_intrinsics`; `i64`, `f32` and the unsigned widths *(CLI only)* |
 | `Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T` | exactly two operands of one numeric type; signed integers: `llvm.smin/smax`; unsigned: `llvm.umin/umax`; floats: `llvm.minnum/maxnum.<f32\|f64>` | none | `math_i32`, `math_intrinsics`; `reject_math_min_arity` (`` `Math.min` expects exactly 2 arguments, got 1 ``) |
-| `Math.random(): f64` | xorshift64\* in the runtime (`amrit_random`), 53 random bits in `[0, 1)`, seeded from time and pid | write | `math_random` |
+| `Math.random(): f64` | xorshift64\* in the runtime (`nish_random`), 53 random bits in `[0, 1)`, seeded from time and pid | write | `math_random` |
 | `Math.PI: f64`, `Math.E: f64` | constants, also in i32 mode | none | `math_i32`, `math_intrinsics` |
 
 The f64-only functions reject `i32`/`i64` arguments; `number` in i32 mode is
@@ -1447,7 +1447,7 @@ then requires the whole string to be one literal: `Number("")` and
 are `NaN`, `Number("0x1A")` is `26` (as in JavaScript; hex floats such as
 `0x1p3` are also accepted by `strtod`, which JavaScript rejects), and the
 `0b`/`0o` prefixes are `NaN` (JavaScript reads them). All three lower to
-`amrit_parse_number(s, mode)` in the runtime (mode 0 `parseFloat`, 1 `Number`,
+`nish_parse_number(s, mode)` in the runtime (mode 0 `parseFloat`, 1 `Number`,
 2 `parseInt`, the last followed by `llvm.fptosi.sat.i32.f64`); their effect
 is write (`strtod`/`strtoll` may set `errno`), so a function that parses is
 never `readonly` ([wp7-runtime.md](wp7-runtime.md#string-to-number)).
@@ -1456,7 +1456,7 @@ never `readonly` ([wp7-runtime.md](wp7-runtime.md#string-to-number)).
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `process.exit(code: i32): void` | `amrit_exit` -> libc `exit(code)` (stdio buffers of linked C code are flushed; the arena is abandoned); statement position; a terminator | write, `noreturn` | `process_exit`, `reject_exit_unreachable` |
+| `process.exit(code: i32): void` | `nish_exit` -> libc `exit(code)` (stdio buffers of linked C code are flushed; the arena is abandoned); statement position; a terminator | write, `noreturn` | `process_exit`, `reject_exit_unreachable` |
 | `process.argv: string[]` | the command line: `process.argv[0]` is the program path (C's `argv[0]`, one index earlier than Node, whose `argv[0]` is the `node` binary and `argv[1]` the script) and the rest are the arguments as UTF-8 byte strings; read-only | read | `argv_echo` (run with `argv_echo.argv`), `link/argv_import`; `reject_argv_assign`, `reject_argv_push` (`` `process.argv` is read-only ``) |
 | `process.platform: string` | the operating system the **program** is running on, spelled as Node spells it: `"linux"`, `"darwin"`, or `"unknown"` for anything this compiler has no target triple for (every WASI build included) | none | `io_host`; `reject_platform_assign` (`` Cannot assign to `process.platform` ``) |
 | `process.arch: string` | the architecture, likewise: `"x64"`, `"arm64"`, or `"unknown"` | none | `io_host`; `reject_arch_call` (`` Unknown builtin `process.arch` ``) |
@@ -1474,9 +1474,9 @@ a wasm or N-API library may read them too. Neither can be assigned to.
 
 `process.argv` is an ordinary `string[]` value (`length`, `a[i]`, `for...of`,
 passing it to functions, aliasing it with `const args = process.argv`) that
-the `@main` wrapper builds once with `amrit_argv_init(argc, argv)` before the
+the `@main` wrapper builds once with `nish_argv_init(argc, argv)` before the
 program runs; every module of the program may read it, and each read is one
-`load` of the runtime global `@amrit_argv` (a memory read: the function is at
+`load` of the runtime global `@nish_argv` (a memory read: the function is at
 most `readonly`). The array lives outside the arena, so `Arena.reset()`
 never invalidates it. Storing into it (`process.argv[i] = s`, `op=`,
 `++`/`--`, `push`) is rejected. A program without `export function main`, as
@@ -1489,7 +1489,7 @@ supplies the arguments (`examples/wasi-host.mjs`).
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `readFileSync(path: string): string` | whole file as one arena string; failure prints `amritc: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects an argument of type string, got i32 ``) |
+| `readFileSync(path: string): string` | whole file as one arena string; failure prints `nish: cannot read <path>` to stderr and exits 1 | write | `io_files`; `reject_readfile_number` (`` `readFileSync` expects an argument of type string, got i32 ``) |
 | `readFileSyncOrNull(path: string): string \| null` | the same read, `null` where the other exits, so a program can report the missing file itself and carry on with the rest (WP14 B3). It subsumes an `existsSync` and has no time-of-check race. The result is narrowed with `if (text !== null)` like any other nullable | write | `io_streams`; `reject_readfile_or_null_unchecked` |
 | `writeFileSync(path: string, data: string): void` | create/truncate (`0644`) and write; statement position | write | `io_files` |
 | `appendFileSync(path: string, data: string): void` | create/append and write; statement position | write | `io_files` |
@@ -1510,7 +1510,7 @@ wins, as it does for every identifier builtin.
 All three answer a value where they could have exited, for the reason
 `readFileSyncOrNull` answers `null` (WP14 B3): the language has no exceptions,
 so a driver has to be able to turn the failure into its own diagnostic. They
-exist so that a compiler written in AmritScript can create its own `-o dir/`,
+exist so that a compiler written in Nish can create its own `-o dir/`,
 tell `-o out` meaning a directory from `-o out` meaning a file, and shell out
 for `--link` — `mkdirSync` and `spawnSync` are the calls
 [wp14-selfhost.md](wp14-selfhost.md) §3a D4 named as the price of a
@@ -1572,15 +1572,15 @@ something that is not valid UTF-8 comes back as those bytes, exactly as
 | Member | Semantics | Test |
 | --- | --- | --- |
 | `a.length` | `number`; read-only | `arr_length`, `reject_arr_length_assign` |
-| `a.push(v: T): number` | appends; grows capacity by doubling (4 from 0) through `amrit_array_grow`; returns the new length | `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`) |
+| `a.push(v: T): number` | appends; grows capacity by doubling (4 from 0) through `nish_array_grow`; returns the new length | `arr_push`; `reject_arr_push_type` (`Cannot push string onto i32[]`) |
 | `a.pop(): T` | removes and returns the last element. An empty array **panics** and exits 1 (`index out of range: 0 >= 0`) — there is no `undefined` to return. The capacity is untouched, so the next `push` reuses the storage | `arr_pop_index`; `reject_arr_pop_arity` |
 | `a.indexOf(v: T): number` | the first index whose element is `=== v`, or `-1`: strings by content, classes / interfaces / arrays by identity, floats with `fcmp oeq` (a `NaN` element is never found, as in JavaScript). A scan in the emitted code | `arr_pop_index`; `reject_arr_index_of_type` |
 | `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3) | `arr_join`; `reject_arr_join_elem` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
-| `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`amrit_str_new`) | `str_bytes`; `reject_str_substring_arity` |
-| `s.indexOf(sub: string): number` | the first **byte** offset at which `sub` occurs, or `-1`; `s.indexOf("")` is `0`. One `amrit_str_index_of` call: the search is the runtime's, so it is the libc's vectorised one rather than a probe per offset (WP15 §7c) | `str_search`; `reject_str_index_of_type` |
-| `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`amrit_str_at`) | `str_search` |
+| `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`) | `str_bytes`; `reject_str_substring_arity` |
+| `s.indexOf(sub: string): number` | the first **byte** offset at which `sub` occurs, or `-1`; `s.indexOf("")` is `0`. One `nish_str_index_of` call: the search is the runtime's, so it is the libc's vectorised one rather than a probe per offset (WP15 §7c) | `str_search`; `reject_str_index_of_type` |
+| `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`nish_str_at`) | `str_search` |
 | `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
 | `String.fromCharCode(c: number): string` | the one-byte string of `c & 0xFF`, the inverse of `charCodeAt`. A value above 127 makes a byte that is not valid UTF-8 on its own; nothing validates it | `str_search` |
 
@@ -1628,7 +1628,7 @@ and not a value.
   supported — a program that used it would not be TypeScript either.
 
 The reason to write one is the C ABI. `--emit-header` already spells an array
-parameter `const amrit_array *` when the whole-program fixpoint proves nothing
+parameter `const nish_array *` when the whole-program fixpoint proves nothing
 stores through it, which makes `const` a *consequence* that can quietly
 disappear when a callee three levels down starts writing. On a `readonly T[]`
 it is the signature keeping a promise instead, and the comment above the
@@ -1638,9 +1638,9 @@ prototype shows the annotation that earned it
 
 ```c
 /* sum(xs: readonly number[]): number -- xs: int32_t elements */
-int32_t sum(const amrit_array *xs);
+int32_t sum(const nish_array *xs);
 /* fill(xs: number[], v: number): void -- xs: int32_t elements */
-void fill(amrit_array *xs, int32_t v);
+void fill(nish_array *xs, int32_t v);
 ```
 
 The fixpoint is not consulted for a `readonly T[]` at all, and that is
@@ -1676,10 +1676,10 @@ batches itself. All four are available in both number modes.
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `Arena.mark(): i64` | the current bump address (`amrit_arena_mark`; `0` while the arena is empty) | write | `mem_arena_builtins` |
-| `Arena.release(m: i64): void` | free everything allocated since `m` (`amrit_arena_release`); statement position; an integer literal argument is typed `i64` by context; `m == 0` behaves like `Arena.reset()`; a stale mark is ignored | write | `mem_arena_builtins`; `reject_arena_release_type` (`` `Arena.release` expects an argument of type i64, got i32 ``) |
-| `Arena.reset(): void` | recycle everything in O(1), keeping the newest chunk (`amrit_reset_arena`); statement position | write | `mem_arena_builtins`; `` `Arena.reset` returns void and can only be used as a statement `` *(CLI only)* |
-| `Arena.used(): i64` | bytes bumped in the current chunk (`amrit_arena_used`); the number the memory tests watch | write | `mem_arena_builtins`, `mem_scope_dynamic_array` |
+| `Arena.mark(): i64` | the current bump address (`nish_arena_mark`; `0` while the arena is empty) | write | `mem_arena_builtins` |
+| `Arena.release(m: i64): void` | free everything allocated since `m` (`nish_arena_release`); statement position; an integer literal argument is typed `i64` by context; `m == 0` behaves like `Arena.reset()`; a stale mark is ignored | write | `mem_arena_builtins`; `reject_arena_release_type` (`` `Arena.release` expects an argument of type i64, got i32 ``) |
+| `Arena.reset(): void` | recycle everything in O(1), keeping the newest chunk (`nish_reset_arena`); statement position | write | `mem_arena_builtins`; `` `Arena.reset` returns void and can only be used as a statement `` *(CLI only)* |
+| `Arena.used(): i64` | bytes bumped in the current chunk (`nish_arena_used`); the number the memory tests watch | write | `mem_arena_builtins`, `mem_scope_dynamic_array` |
 
 `mark` and `used` only read the arena, but they are recorded as writes so
 that a caller is never hoisted across an allocation. **Safety rule**:
@@ -1778,7 +1778,7 @@ compiler's own marks are never invalidated by user resets.
   `ToInt32`. Integer-to-integer conversions wrap (`toI32(5000000000)` ->
   `705032704`) (`tests/cases/conversions`).
 - **A program can be run under Node** as the TypeScript it is, in f64 mode and
-  within a stated overlap, with `runtime/amritscript.mjs` supplying the globals
+  within a stated overlap, with `runtime/nish.mjs` supplying the globals
   Node lacks and nothing rewritten
   ([RUN_UNDER_NODE.md](RUN_UNDER_NODE.md)). Every decision on this page is a
   reason it is an overlap and not an equivalence.
@@ -1860,14 +1860,14 @@ where its memory lives and when it is reused.
    string concatenation or template, a number printed by `console.log`, a
    callee's returned allocation), that neither returns nor leaks an
    allocation, has no callee that leaks one, and never calls `Arena.reset` /
-   `Arena.release`, calls `amrit_arena_mark` on entry and `amrit_arena_release`
+   `Arena.release`, calls `nish_arena_mark` on entry and `nish_arena_release`
    before every `ret` (`tests/cases/mem_scope_dynamic_array`,
    `mem_scope_string_temp`: 100000 calls leave `Arena.used()` unchanged).
    Scopes are per function, not per loop iteration.
 3. **A reclaim at the call site.** A function that *returns* a string can have
    no scope of its own — the string has to outlive it — so its caller takes the
-   mark instead: `amrit_arena_mark` after the arguments, then
-   `amrit_arena_keep(mark, s)`, which moves the returned string down onto the
+   mark instead: `nish_arena_mark` after the arguments, then
+   `nish_arena_keep(mark, s)`, which moves the returned string down onto the
    mark and releases every temporary the callee bumped underneath it. Emitted
    only when the callee returns a plain `string`, allocates, never calls
    `Arena.reset` / `Arena.release`, and never lets an allocation out of its
@@ -1880,7 +1880,7 @@ where its memory lives and when it is reused.
    changes when memory is reused, never what it holds
    ([wp6-memory.md](wp6-memory.md) §2a).
 4. **Explicit control** with the [`Arena`](#arena) builtins, and
-   `amrit_reset_arena()` / `amrit_arena_mark()` / `amrit_arena_release()` for a C
+   `nish_reset_arena()` / `nish_arena_mark()` / `nish_arena_release()` for a C
    or Node host ([wp8-interop.md](wp8-interop.md)).
 
 Everything else is bumped from the arena by the inlined fast path, and the
@@ -1961,7 +1961,7 @@ by the caller.
   `message`), nothing else on stdout and nothing on stderr, with the same exit
   code. `severity` is `"error"` for every error and `"performance"` for a
   WP15 §8 warning, which is the field a tool filters on; `code` is the stable
-  identifier for the rule (`AS1013`, `AS2231`, ...) and is the field to key on,
+  identifier for the rule (`NL1013`, `NL2231`, ...) and is the field to key on,
   because the prose may improve between releases and the code may not. A
   failure with no source position — an unusable C toolchain, an internal
   compiler error, a bad `-o` layout — is `{"severity","code","message"}`. The
@@ -2005,77 +2005,77 @@ fragment `tests/run.js` matches and the case that proves it.
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| `any` anywhere, including nested type arguments | `` `any` is forbidden in AmritScript `` | `reject_any_param`, `reject_any_nested` |
-| `unknown` | `` `unknown` is forbidden in AmritScript `` | `reject_unknown_param`, `reject_unknown_nested` |
-| `symbol` type | `` `symbol` type is forbidden in AmritScript (no symbol type) `` | `reject_symbol_type` |
-| `bigint` type | `` `bigint` type is forbidden in AmritScript (use number, i32, or f64) `` | `reject_bigint_type` |
-| `undefined` type | `` `undefined` is forbidden in AmritScript; use `null` with a `T \| null` type `` | `reject_union_undefined` (via the union rule) |
-| union types other than `T \| null` / `null \| T` | `` Union types other than `T \| null` are forbidden in AmritScript (values have one fixed layout) `` | `reject_union_type`, `reject_union_undefined` |
-| `Function`, `Symbol`, `Proxy` as type names | `` `Function` type is forbidden in AmritScript (no dynamic function values) `` (and analogous) | `reject_function_type` |
-| `import("x").T` | `` Dynamic `import()` is forbidden in AmritScript (modules are resolved at compile time) `` | `reject_dynamic_import` |
-| `x as any`, `<any>x` | `` Type assertion to `any` is forbidden in AmritScript `` | `reject_as_any` |
-| `x as unknown`, `<unknown>x` | `` Type assertion to `unknown` is forbidden in AmritScript `` | `reject_as_unknown` |
+| `any` anywhere, including nested type arguments | `` `any` is forbidden in Nish `` | `reject_any_param`, `reject_any_nested` |
+| `unknown` | `` `unknown` is forbidden in Nish `` | `reject_unknown_param`, `reject_unknown_nested` |
+| `symbol` type | `` `symbol` type is forbidden in Nish (no symbol type) `` | `reject_symbol_type` |
+| `bigint` type | `` `bigint` type is forbidden in Nish (use number, i32, or f64) `` | `reject_bigint_type` |
+| `undefined` type | `` `undefined` is forbidden in Nish; use `null` with a `T \| null` type `` | `reject_union_undefined` (via the union rule) |
+| union types other than `T \| null` / `null \| T` | `` Union types other than `T \| null` are forbidden in Nish (values have one fixed layout) `` | `reject_union_type`, `reject_union_undefined` |
+| `Function`, `Symbol`, `Proxy` as type names | `` `Function` type is forbidden in Nish (no dynamic function values) `` (and analogous) | `reject_function_type` |
+| `import("x").T` | `` Dynamic `import()` is forbidden in Nish (modules are resolved at compile time) `` | `reject_dynamic_import` |
+| `x as any`, `<any>x` | `` Type assertion to `any` is forbidden in Nish `` | `reject_as_any` |
+| `x as unknown`, `<unknown>x` | `` Type assertion to `unknown` is forbidden in Nish `` | `reject_as_unknown` |
 
 ### Declarations
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| type parameters on functions, methods, arrows, classes, interfaces, type aliases | `` Generic type parameters are forbidden in AmritScript (no monomorphisation yet) `` | `reject_generic_function`, `reject_generic_class`, `reject_type_alias_generic` |
-| generators (`function*`) | `` Generators are forbidden in AmritScript (no coroutine runtime) `` | `reject_generator` |
-| `async` functions, methods, arrows | `` `async` functions are forbidden in AmritScript (no event loop or promises) `` | `reject_async_function` |
+| type parameters on functions, methods, arrows, classes, interfaces, type aliases | `` Generic type parameters are forbidden in Nish (no monomorphisation yet) `` | `reject_generic_function`, `reject_generic_class`, `reject_type_alias_generic` |
+| generators (`function*`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator` |
+| `async` functions, methods, arrows | `` `async` functions are forbidden in Nish (no event loop or promises) `` | `reject_async_function` |
 | `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |
-| enum members that are not numeric literals | `` Enum members must be numeric literals in AmritScript (enums lower to plain integers) `` | `reject_enum_string`, `reject_enum_computed` (numeric enums then fail in the checker as top-level statements) |
-| `namespace` / `module` blocks | `` `namespace` and `module` blocks are forbidden in AmritScript (use ES module files) `` | `reject_namespace` |
-| `declare global` | `` `declare global` is forbidden in AmritScript (no global object to augment) `` | `reject_declare_global` |
-| decorators | `` Decorators are forbidden in AmritScript (no runtime metadata or class rewriting) `` | `reject_decorator` |
-| computed property names | `` Computed property names are forbidden in AmritScript (object layout is fixed at compile time) `` | `reject_computed_property` |
+| enum members that are not numeric literals | `` Enum members must be numeric literals in Nish (enums lower to plain integers) `` | `reject_enum_string`, `reject_enum_computed` (numeric enums then fail in the checker as top-level statements) |
+| `namespace` / `module` blocks | `` `namespace` and `module` blocks are forbidden in Nish (use ES module files) `` | `reject_namespace` |
+| `declare global` | `` `declare global` is forbidden in Nish (no global object to augment) `` | `reject_declare_global` |
+| decorators | `` Decorators are forbidden in Nish (no runtime metadata or class rewriting) `` | `reject_decorator` |
+| computed property names | `` Computed property names are forbidden in Nish (object layout is fixed at compile time) `` | `reject_computed_property` |
 
 ### Statements
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| `with` | `` `with` is forbidden in AmritScript (no dynamic scope) `` | `reject_with_statement` |
-| `try` / `catch` / `finally` | `` `try`/`catch`/`finally` is forbidden in AmritScript (no unwinding; use `Result<T, E>`) `` | `reject_try_catch` |
-| `throw` | `` `throw` is forbidden in AmritScript (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process `` | `reject_throw` |
-| `debugger` | `` `debugger` is forbidden in AmritScript (no debugger hook) `` | `reject_debugger` |
-| labeled statements | `` Labeled statements are forbidden in AmritScript (use structured loops) `` | `reject_labeled_statement` |
+| `with` | `` `with` is forbidden in Nish (no dynamic scope) `` | `reject_with_statement` |
+| `try` / `catch` / `finally` | `` `try`/`catch`/`finally` is forbidden in Nish (no unwinding; use `Result<T, E>`) `` | `reject_try_catch` |
+| `throw` | `` `throw` is forbidden in Nish (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process `` | `reject_throw` |
+| `debugger` | `` `debugger` is forbidden in Nish (no debugger hook) `` | `reject_debugger` |
+| labeled statements | `` Labeled statements are forbidden in Nish (use structured loops) `` | `reject_labeled_statement` |
 
 ### Expressions
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| `eval(...)`, `eval` as a value | `` `eval` is forbidden in AmritScript (no interpreter at runtime) `` | `reject_eval` |
-| `Function(...)` | `` `Function` constructor is forbidden in AmritScript (no interpreter at runtime) `` | (validator; no case) |
-| `new Function(...)` | `` `new Function` is forbidden in AmritScript (no interpreter at runtime) `` | `reject_new_function` |
-| `Function` as a value | `` `Function` is forbidden in AmritScript (no interpreter at runtime) `` | (validator; no case) |
-| `new Proxy(...)` | `` `new Proxy` is forbidden in AmritScript (no dynamic property interception) `` | `reject_proxy` |
-| `Proxy` as a value | `` `Proxy` is forbidden in AmritScript (no dynamic property interception) `` | (validator; no case) |
-| `Reflect` | `` `Reflect` is forbidden in AmritScript (no runtime reflection) `` | `reject_reflect` |
-| `Symbol(...)`, `Symbol` as a value | `` `Symbol` is forbidden in AmritScript (no symbol type) `` | `reject_symbol_value` |
-| `globalThis` | `` `globalThis` is forbidden in AmritScript (no global object) `` | `reject_globalthis` |
-| `arguments` | `` `arguments` is forbidden in AmritScript (functions have fixed arity) `` | `reject_arguments` |
-| `undefined` as a value | `` `undefined` is forbidden in AmritScript; use `null` with a `T \| null` type `` | `reject_undefined_value` |
-| `void expr` | `` `void` expressions are forbidden in AmritScript (no `undefined` value) `` | `reject_void_expression` |
+| `eval(...)`, `eval` as a value | `` `eval` is forbidden in Nish (no interpreter at runtime) `` | `reject_eval` |
+| `Function(...)` | `` `Function` constructor is forbidden in Nish (no interpreter at runtime) `` | (validator; no case) |
+| `new Function(...)` | `` `new Function` is forbidden in Nish (no interpreter at runtime) `` | `reject_new_function` |
+| `Function` as a value | `` `Function` is forbidden in Nish (no interpreter at runtime) `` | (validator; no case) |
+| `new Proxy(...)` | `` `new Proxy` is forbidden in Nish (no dynamic property interception) `` | `reject_proxy` |
+| `Proxy` as a value | `` `Proxy` is forbidden in Nish (no dynamic property interception) `` | (validator; no case) |
+| `Reflect` | `` `Reflect` is forbidden in Nish (no runtime reflection) `` | `reject_reflect` |
+| `Symbol(...)`, `Symbol` as a value | `` `Symbol` is forbidden in Nish (no symbol type) `` | `reject_symbol_value` |
+| `globalThis` | `` `globalThis` is forbidden in Nish (no global object) `` | `reject_globalthis` |
+| `arguments` | `` `arguments` is forbidden in Nish (functions have fixed arity) `` | `reject_arguments` |
+| `undefined` as a value | `` `undefined` is forbidden in Nish; use `null` with a `T \| null` type `` | `reject_undefined_value` |
+| `void expr` | `` `void` expressions are forbidden in Nish (no `undefined` value) `` | `reject_void_expression` |
 | `==`, `!=` | `Loose equality is forbidden; use === / !==` | `reject_loose_equality`, `reject_loose_inequality` |
-| `in` | `` `in` operator is forbidden in AmritScript (no dynamic property lookup) `` | `reject_in_operator` |
-| `a?.b`, `a?.[i]`, `f?.()` | `` Optional chaining `?.` is forbidden in AmritScript (narrow with `!== null` instead) `` | `reject_optional_chain` |
-| `a ?? b` | `` Nullish coalescing `??` is forbidden in AmritScript (narrow with `!== null` instead) `` | `reject_nullish` |
-| `instanceof` | `` `instanceof` is forbidden in AmritScript (no prototype chain) `` | `reject_instanceof` |
-| comma expressions | `Comma expressions are forbidden in AmritScript (write separate statements)` | `reject_comma_expression` |
-| `typeof x` | `` `typeof` is forbidden in AmritScript (no runtime type tags) `` | `reject_typeof_operator` |
-| `delete x.y` | `` `delete` is forbidden in AmritScript (object layout is fixed) `` | `reject_delete` |
-| `await` | `` `await` is forbidden in AmritScript (no event loop or promises) `` | `reject_await` |
-| `yield` | `` `yield` is forbidden in AmritScript (no coroutine runtime) `` | (validator; generators are rejected first, `reject_generator`) |
-| regex literals | `Regular expression literals are forbidden in AmritScript (no regex engine in the runtime)` | `reject_regex` |
-| `bigint` literals (`10n`) | `` `bigint` literals are forbidden in AmritScript (use number, i32, or f64) `` | `reject_bigint_literal` |
-| object spread `{ ...a }` | `Object spread is forbidden in AmritScript (object layout is fixed at compile time)` | `reject_object_spread` |
-| `{ __proto__: x }` | `` `__proto__` is forbidden in AmritScript (no prototype chain) `` | `reject_proto_literal` |
-| `x.__proto__` | `` `__proto__` access is forbidden in AmritScript (no prototype chain) `` | `reject_proto_access` |
-| `x.prototype` | `` `.prototype` access is forbidden in AmritScript (no prototype chain) `` | `reject_prototype_access` |
-| `Object.assign/create/defineProperty/defineProperties/setPrototypeOf/getPrototypeOf` | `` `Object.assign` is forbidden in AmritScript (object layout is fixed at compile time) `` (and analogous) | `reject_object_assign`, `reject_object_define_property`, `reject_object_set_prototype` |
-| `o["x"]`, `` o[`x`] `` | `` String-keyed element access is forbidden in AmritScript; use `obj.name` (no dynamic property lookup) `` | `reject_string_key_access` |
-| `o[true]`, `o[{}]`, ... (non-numeric-shaped key) | `Element access requires a numeric index in AmritScript (no dynamic property lookup)` | `reject_non_numeric_index` |
-| dynamic `import(...)` | `` Dynamic `import()` is forbidden in AmritScript (modules are resolved at compile time) `` | `reject_dynamic_import` |
+| `in` | `` `in` operator is forbidden in Nish (no dynamic property lookup) `` | `reject_in_operator` |
+| `a?.b`, `a?.[i]`, `f?.()` | `` Optional chaining `?.` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_optional_chain` |
+| `a ?? b` | `` Nullish coalescing `??` is forbidden in Nish (narrow with `!== null` instead) `` | `reject_nullish` |
+| `instanceof` | `` `instanceof` is forbidden in Nish (no prototype chain) `` | `reject_instanceof` |
+| comma expressions | `Comma expressions are forbidden in Nish (write separate statements)` | `reject_comma_expression` |
+| `typeof x` | `` `typeof` is forbidden in Nish (no runtime type tags) `` | `reject_typeof_operator` |
+| `delete x.y` | `` `delete` is forbidden in Nish (object layout is fixed) `` | `reject_delete` |
+| `await` | `` `await` is forbidden in Nish (no event loop or promises) `` | `reject_await` |
+| `yield` | `` `yield` is forbidden in Nish (no coroutine runtime) `` | (validator; generators are rejected first, `reject_generator`) |
+| regex literals | `Regular expression literals are forbidden in Nish (no regex engine in the runtime)` | `reject_regex` |
+| `bigint` literals (`10n`) | `` `bigint` literals are forbidden in Nish (use number, i32, or f64) `` | `reject_bigint_literal` |
+| object spread `{ ...a }` | `Object spread is forbidden in Nish (object layout is fixed at compile time)` | `reject_object_spread` |
+| `{ __proto__: x }` | `` `__proto__` is forbidden in Nish (no prototype chain) `` | `reject_proto_literal` |
+| `x.__proto__` | `` `__proto__` access is forbidden in Nish (no prototype chain) `` | `reject_proto_access` |
+| `x.prototype` | `` `.prototype` access is forbidden in Nish (no prototype chain) `` | `reject_prototype_access` |
+| `Object.assign/create/defineProperty/defineProperties/setPrototypeOf/getPrototypeOf` | `` `Object.assign` is forbidden in Nish (object layout is fixed at compile time) `` (and analogous) | `reject_object_assign`, `reject_object_define_property`, `reject_object_set_prototype` |
+| `o["x"]`, `` o[`x`] `` | `` String-keyed element access is forbidden in Nish; use `obj.name` (no dynamic property lookup) `` | `reject_string_key_access` |
+| `o[true]`, `o[{}]`, ... (non-numeric-shaped key) | `Element access requires a numeric index in Nish (no dynamic property lookup)` | `reject_non_numeric_index` |
+| dynamic `import(...)` | `` Dynamic `import()` is forbidden in Nish (modules are resolved at compile time) `` | `reject_dynamic_import` |
 
 "Numeric-shaped" index keys pass the validator (identifiers, numeric
 literals, parentheses, unary `+`/`-`, `+ - * / %` over those, calls,
@@ -2111,7 +2111,7 @@ messages are exact for the cases cited; other rows quote
 | `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned` |
 | `Arena.release` with a non-`i64` argument | `` `Arena.release` expects an argument of type i64, got i32 `` | `reject_arena_release_type` |
 | non-integer literal in i32 mode | `` Non-integer literal `1.5` in i32 number mode (use --number-mode f64) `` | `reject_float_in_i32` |
-| non-boolean condition | `Condition must be boolean, got i32 (AmritScript has no truthiness)` | `reject_cf_nonbool_cond` |
+| non-boolean condition | `Condition must be boolean, got i32 (Nish has no truthiness)` | `reject_cf_nonbool_cond` |
 | `&&`/`\|\|` on numbers | `` Operator `&&` requires boolean operands, got i32 and i32 `` | `reject_cf_logical_numbers` |
 | ternary arm mismatch | `Ternary branches must have the same type, got i32 and boolean` | `reject_cf_ternary_mismatch` |
 | assignment to `const` / parameter | `` Cannot assign to `x` because it is a const `` / `... a parameter` | `reject_assign_const`, `reject_assign_param`, `reject_cf_compound_const`, `reject_cf_incdec_param` |
@@ -2140,7 +2140,7 @@ listed: inverted boolean ordering, silently accepted `?.`, the rejected
 `Math.pow(1, NaN)`.)
 
 All four discrepancies found by the documentation audit (the `main`
-parameter message, the `%.17g` comment in `amritc.h`, the exclusive
+parameter message, the `%.17g` comment in `nish.h`, the exclusive
 `i64` literal bound, and the generic message for comparing `T | null` with
 `T`) are fixed; `2^53` is accepted as an `i64` literal and the nullable
 comparison names the nullable side.

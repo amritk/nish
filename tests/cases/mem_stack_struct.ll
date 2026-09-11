@@ -2,11 +2,11 @@
 %struct.Point = type { i32, i32 }
 %struct.Counter = type { i32, i32 }
 
-declare void @amrit_free_arena() #0
-declare noundef i64 @amrit_arena_mark() #0
-declare void @amrit_arena_release(i64 noundef) #0
-declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #0
-declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #0
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 
 define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
@@ -109,26 +109,26 @@ entry:
   ret i32 %8
 }
 
-define noundef i32 @amrit_main() #0 {
+define noundef i32 @nish_main() #0 {
 entry:
-  %arena.mark = call i64 @amrit_arena_mark()
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @swapped(i32 1, i32 2)
-  %1 = call i8* @amrit_str_from_i32(i32 %0)
-  call void @amrit_print(i8* %1)
+  %1 = call i8* @nish_str_from_i32(i32 %0)
+  call void @nish_print(i8* %1)
   %2 = call i32 @count(i32 4)
-  %3 = call i8* @amrit_str_from_i32(i32 %2)
-  call void @amrit_print(i8* %3)
+  %3 = call i8* @nish_str_from_i32(i32 %2)
+  call void @nish_print(i8* %3)
   %4 = call i32 @nearest()
-  %5 = call i8* @amrit_str_from_i32(i32 %4)
-  call void @amrit_print(i8* %5)
-  call void @amrit_arena_release(i64 %arena.mark)
+  %5 = call i8* @nish_str_from_i32(i32 %4)
+  call void @nish_print(i8* %5)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #3 {
 entry:
-  %0 = call i32 @amrit_main()
-  call void @amrit_free_arena()
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
   ret i32 %0
 }
 

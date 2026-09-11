@@ -6,7 +6,7 @@
  * computed by `checker/classes.ts` exactly as clang does for the same C
  * struct. A value of struct type is a `%struct.<Name>*` into the arena.
  *
- *   new P(a, b)      `%0 = call i8* @amrit_alloc_struct(i64 <size>)`
+ *   new P(a, b)      `%0 = call i8* @nish_alloc_struct(i64 <size>)`
  *                    `%1 = bitcast i8* %0 to %struct.P*`
  *                    `call void @P.constructor(%struct.P* %1, i32 %a, i32 %b)`
  *                    Without an explicit constructor the field initializers
@@ -46,7 +46,7 @@
  *                    constructor is called with `args` (inherited constructor)
  *
  * `collectClassFacts` reports field reads (`readsMemory`), field stores and
- * allocations (`write`, callee `amrit_alloc_struct`, plus the constructor) to
+ * allocations (`write`, callee `nish_alloc_struct`, plus the constructor) to
  * `attributes.ts`, which owns the per-parameter pointer facts.
  */
 import ts from "typescript";
@@ -114,7 +114,7 @@ function storeField(ctx: EmitContext, info: StructInfo, receiver: string, field:
  */
 function allocate(ctx: EmitContext, info: StructInfo, site: ts.Node): string {
   if (ctx.isStackSite(site)) return ctx.fn.emitAlloca(`${info.name}.obj`, structTypeName(info), 8);
-  const raw = ctx.fn.emitValue(`call i8* ${ctx.useRuntime("amrit_alloc_struct")}(i64 ${info.size})`);
+  const raw = ctx.fn.emitValue(`call i8* ${ctx.useRuntime("nish_alloc_struct")}(i64 ${info.size})`);
   return ctx.fn.emitValue(`bitcast i8* ${raw} to ${structTypeName(info)}*`);
 }
 
@@ -436,13 +436,13 @@ export const collectClassFacts = (program: CheckedProgram, node: ts.Node, facts:
   } else if (ts.isNewExpression(node) && program.types.get(node)?.kind === "struct") {
     if (!facts.stackSites.has(node)) {
       facts.effect = "write";
-      facts.callees.add("amrit_alloc_struct");
+      facts.callees.add("nish_alloc_struct");
     }
     const ctor = effectiveConstructor(structInfo(program, intrinsicType(program, node)!)); // own or inherited (WP2b)
     if (ctor) facts.callees.add(ctor.name);
   } else if (ts.isObjectLiteralExpression(node) && !facts.stackSites.has(node)) {
     facts.effect = "write";
-    facts.callees.add("amrit_alloc_struct");
+    facts.callees.add("nish_alloc_struct");
   }
 };
 

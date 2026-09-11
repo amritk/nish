@@ -1,11 +1,11 @@
-%struct.amrit_result.i32.i32 = type { i1, i32, i32 }
+%struct.nish_result.i32.i32 = type { i1, i32, i32 }
 
-declare void @amrit_free_arena() #1
-declare noundef i64 @amrit_arena_mark() #1
-declare void @amrit_arena_release(i64 noundef) #1
-declare void @amrit_print(i8* noundef nonnull readonly align 8 nocapture) #1
-declare noalias noundef nonnull align 8 i8* @amrit_str_from_i32(i32 noundef) #1
-declare void @amrit_panic_div(i1 noundef zeroext) #2
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare void @nish_panic_div(i1 noundef zeroext) #2
 
 define internal noundef { i1, i32 } @half(i32 noundef %n) #0 {
 entry:
@@ -17,7 +17,7 @@ entry:
   br i1 %4, label %div.fail, label %div.ok
 
 div.fail:
-  call void @amrit_panic_div(i1 zeroext %0)
+  call void @nish_panic_div(i1 zeroext %0)
   unreachable
 
 div.ok:
@@ -44,7 +44,7 @@ if.end:
   br i1 %18, label %div.fail.1, label %div.ok.1
 
 div.fail.1:
-  call void @amrit_panic_div(i1 zeroext %14)
+  call void @nish_panic_div(i1 zeroext %14)
   unreachable
 
 div.ok.1:
@@ -60,13 +60,13 @@ div.ok.1:
   ret { i1, i32 } %27
 }
 
-define noundef i32 @amrit_main() #0 {
+define noundef i32 @nish_main() #0 {
 entry:
-  %good.addr = alloca %struct.amrit_result.i32.i32*, align 8
-  %amrit_result.i32.i32.obj = alloca %struct.amrit_result.i32.i32, align 8
-  %bad.addr = alloca %struct.amrit_result.i32.i32*, align 8
-  %amrit_result.i32.i32.obj.1 = alloca %struct.amrit_result.i32.i32, align 8
-  %arena.mark = call i64 @amrit_arena_mark()
+  %good.addr = alloca %struct.nish_result.i32.i32*, align 8
+  %nish_result.i32.i32.obj = alloca %struct.nish_result.i32.i32, align 8
+  %bad.addr = alloca %struct.nish_result.i32.i32*, align 8
+  %nish_result.i32.i32.obj.1 = alloca %struct.nish_result.i32.i32, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = call { i1, i32 } @half(i32 8)
   %1 = extractvalue { i1, i32 } %0, 0
   %2 = extractvalue { i1, i32 } %0, 1
@@ -75,36 +75,36 @@ entry:
   %5 = zext i1 %1 to i64
   %6 = or i64 %4, %5
   %7 = trunc i64 %6 to i1
-  %8 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 0
+  %8 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 0
   store i1 %7, i1* %8, align 1
   %9 = lshr i64 %6, 32
   %10 = trunc i64 %9 to i32
-  %11 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 1
+  %11 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 1
   store i32 %10, i32* %11, align 4
-  %12 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, i32 0, i32 2
+  %12 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 2
   store i32 %10, i32* %12, align 4
-  store %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj, %struct.amrit_result.i32.i32** %good.addr, align 8
-  %13 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %good.addr, align 8
-  %14 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %13, i32 0, i32 0
+  store %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, %struct.nish_result.i32.i32** %good.addr, align 8
+  %13 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %good.addr, align 8
+  %14 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %13, i32 0, i32 0
   %15 = load i1, i1* %14, align 1
   %16 = xor i1 %15, true
   br i1 %16, label %if.then, label %if.end
 
 if.then:
-  %17 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %good.addr, align 8
-  %18 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %17, i32 0, i32 2
+  %17 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %good.addr, align 8
+  %18 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %17, i32 0, i32 2
   %19 = load i32, i32* %18, align 4
-  %20 = call i8* @amrit_str_from_i32(i32 %19)
-  call void @amrit_print(i8* %20)
-  call void @amrit_arena_release(i64 %arena.mark)
+  %20 = call i8* @nish_str_from_i32(i32 %19)
+  call void @nish_print(i8* %20)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 1
 
 if.end:
-  %21 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %good.addr, align 8
-  %22 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %21, i32 0, i32 1
+  %21 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %good.addr, align 8
+  %22 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %21, i32 0, i32 1
   %23 = load i32, i32* %22, align 4
-  %24 = call i8* @amrit_str_from_i32(i32 %23)
-  call void @amrit_print(i8* %24)
+  %24 = call i8* @nish_str_from_i32(i32 %23)
+  call void @nish_print(i8* %24)
   %25 = call { i1, i32 } @half(i32 7)
   %26 = extractvalue { i1, i32 } %25, 0
   %27 = extractvalue { i1, i32 } %25, 1
@@ -113,43 +113,43 @@ if.end:
   %30 = zext i1 %26 to i64
   %31 = or i64 %29, %30
   %32 = trunc i64 %31 to i1
-  %33 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 0
+  %33 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 0
   store i1 %32, i1* %33, align 1
   %34 = lshr i64 %31, 32
   %35 = trunc i64 %34 to i32
-  %36 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 1
+  %36 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 1
   store i32 %35, i32* %36, align 4
-  %37 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, i32 0, i32 2
+  %37 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 2
   store i32 %35, i32* %37, align 4
-  store %struct.amrit_result.i32.i32* %amrit_result.i32.i32.obj.1, %struct.amrit_result.i32.i32** %bad.addr, align 8
-  %38 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %bad.addr, align 8
-  %39 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %38, i32 0, i32 0
+  store %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, %struct.nish_result.i32.i32** %bad.addr, align 8
+  %38 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %bad.addr, align 8
+  %39 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %38, i32 0, i32 0
   %40 = load i1, i1* %39, align 1
   br i1 %40, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %41 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %bad.addr, align 8
-  %42 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %41, i32 0, i32 1
+  %41 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %bad.addr, align 8
+  %42 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %41, i32 0, i32 1
   %43 = load i32, i32* %42, align 4
-  %44 = call i8* @amrit_str_from_i32(i32 %43)
-  call void @amrit_print(i8* %44)
-  call void @amrit_arena_release(i64 %arena.mark)
+  %44 = call i8* @nish_str_from_i32(i32 %43)
+  call void @nish_print(i8* %44)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 1
 
 if.end.1:
-  %45 = load %struct.amrit_result.i32.i32*, %struct.amrit_result.i32.i32** %bad.addr, align 8
-  %46 = getelementptr inbounds %struct.amrit_result.i32.i32, %struct.amrit_result.i32.i32* %45, i32 0, i32 2
+  %45 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %bad.addr, align 8
+  %46 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %45, i32 0, i32 2
   %47 = load i32, i32* %46, align 4
-  %48 = call i8* @amrit_str_from_i32(i32 %47)
-  call void @amrit_print(i8* %48)
-  call void @amrit_arena_release(i64 %arena.mark)
+  %48 = call i8* @nish_str_from_i32(i32 %47)
+  call void @nish_print(i8* %48)
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
 entry:
-  %0 = call i32 @amrit_main()
-  call void @amrit_free_arena()
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
   ret i32 %0
 }
 

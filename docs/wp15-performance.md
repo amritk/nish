@@ -50,7 +50,7 @@ mutation, and functional idioms only where they remove runtime work** — the
 value-based `Result<T, E>` of §5 being the example, since it replaces unwinding
 tables with one `i1` and a branch.
 
-Most of this is already what AmritScript is, which is why it is written down here
+Most of this is already what Nish is, which is why it is written down here
 as a frame rather than a change:
 
 | Feature | Status | Why |
@@ -108,7 +108,7 @@ region was considered and deferred: it is the escape hatch, and every check
 mechanisms 1-3 eliminate is one nobody needs to escape. Build the proofs first,
 measure how many checks actually survive them, and only then decide whether an
 opt-out earns its keep. (For the record, `#trusted { }` could not have been the
-spelling: AmritScript parses with the TypeScript parser, which rejects it. A
+spelling: Nish parses with the TypeScript parser, which rejects it. A
 labelled block `trusted: { ... }` or a `/* @trusted */` pragma would be the
 candidates.)
 
@@ -161,7 +161,7 @@ and their tests move with it.
 
 The largest measured win in this note, and it needed no language change at all.
 
-An array is a `%struct.amrit_array*` to `{ i64 len, i64 cap, i8* data }`, and
+An array is a `%struct.nish_array*` to `{ i64 len, i64 cap, i8* data }`, and
 `data` points somewhere else. Nothing in the IR said those two regions are
 disjoint, so LLVM had to assume `a[i] = v` might land on some array's `len` or
 `data`. The consequence is not a missed peephole — it is that **the header is
@@ -186,12 +186,12 @@ The cost was the aliasing, and the checks only looked expensive because the
 `len` they compare against was being reloaded with everything else.
 
 **The proof is about bytes, not allocations.** Every header the compiler
-produces is a 24-byte `amrit_alloc_struct` bump, an entry-block
-`alloca %struct.amrit_array` (WP6), or the `malloc` block `amrit_argv_init`
+produces is a 24-byte `nish_alloc_struct` bump, an entry-block
+`alloca %struct.nish_array` (WP6), or the `malloc` block `nish_argv_init`
 builds; every element buffer is a separate bump, a separate `alloca [n x T]`,
 or — for argv alone — the bytes *after* the header in that one block. In all
 four shapes the two occupy disjoint byte ranges, so no store through an element
-pointer reaches a header field and none the other way. `amrit_array_grow` bumps
+pointer reaches a header field and none the other way. `nish_array_grow` bumps
 a fresh buffer and writes `data`/`cap`, which is a header write, and stays
 inside the same split. The argument lives beside the code in
 `src/codegen/emit/arrays.ts`, per the "no attribute without a proof" rule.
@@ -361,7 +361,7 @@ all where they can.
 
 ## 5. Error handling: `Result<T, E>`, not exceptions
 
-AmritScript has no `try`/`catch` and `throw` aborts, but the answer is not to
+Nish has no `try`/`catch` and `throw` aborts, but the answer is not to
 thread sentinels by hand. It is a discriminated union:
 
 ```ts
@@ -436,7 +436,7 @@ The rule in §7 is that the runtime budget yields to a measured win. This is the
 first one to claim it, and it turned out to be a correctness fix as well.
 
 `String(x)` prints the fewest digits that read back as the same double. The old
-`amrit_str_from_f64` looked for that length by asking `snprintf` for k digits
+`nish_str_from_f64` looked for that length by asking `snprintf` for k digits
 and `strtod` whether they round-trip, walking k up from 1. Two things were
 wrong with it:
 
@@ -509,14 +509,14 @@ that turned out to be worth 1.40x on the shape the benchmark exists to measure.
 The second claim on §7's rule, and the plainest one: the budget said the
 string search had to be inline, and inline meant a byte at a time.
 
-`s.indexOf(sub)` was a loop over `amrit_str_at`, one probe per offset, emitted
+`s.indexOf(sub)` was a loop over `nish_str_at`, one probe per offset, emitted
 at every call site so that `runtime.c` stayed small. Scanning an 880 KB
 haystack sixty times over:
 
 | | needle absent, rare first byte | needle absent, common first byte |
 | --- | ---: | ---: |
 | the inline probe loop | 53.7 ms | 53.7 ms |
-| **`amrit_str_index_of`, this change** | **2.9 ms** | **3.1 ms** |
+| **`nish_str_index_of`, this change** | **2.9 ms** | **3.1 ms** |
 | glibc `memmem`, for scale | 2.5 ms | 2.5 ms |
 
 **About 17x**, and within a quarter of `memmem` even on the shape that suits
@@ -529,7 +529,7 @@ GNU extension glibc hides behind `_GNU_SOURCE`, and defining that macro makes
 `<string.h>` include `<strings.h>` — which any `-I` directory containing a file
 of that name then shadows. This project *generates* exactly such a header from
 `examples/strings.ts`, and the interop tests caught it immediately: `runtime.c`
-picked up the generated `strings.h`, inherited `amritc.h` through it, and
+picked up the generated `strings.h`, inherited `nish.h` through it, and
 failed to compile with four redefinitions. A C host passing `-I` at its own
 generated headers would hit the same. A fifth of the time is not worth making
 the runtime sensitive to its includer's include path, so the portable

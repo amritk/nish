@@ -18,7 +18,7 @@ cases listed at the end.
 | Shared plumbing (`dottedName`, arity checks, `BuiltinCall` shape) | `src/checker/builtins.ts` | `src/codegen/emit/builtins.ts` |
 | `Math.*`, `toI32/toI64/toF64`, `parseInt/parseFloat/Number`, literal typing | `src/checker/math.ts` | `src/codegen/emit/math.ts` |
 | `process.exit`, `process.argv`, `readFileSync`, `writeFileSync`, `appendFileSync` | `src/checker/io.ts` | `src/codegen/emit/io.ts` |
-| The `@main` wrapper (`amrit_argv_init` call), `@amrit_argv` in the `--runtime-decls` prelude | `src/compilation.ts` (`usesArgv`, `hasEntryMain`) | `src/codegen/emitter.ts` |
+| The `@main` wrapper (`nish_argv_init` call), `@nish_argv` in the `--runtime-decls` prelude | `src/compilation.ts` (`usesArgv`, `hasEntryMain`) | `src/codegen/emitter.ts` |
 | The `wasi` profile and the runtime's `__wasi__` guards | `scripts/build.sh` | `runtime/runtime.c` |
 
 Dotted callees (`Math.sqrt`, `process.exit`) are spread into the existing
@@ -103,9 +103,9 @@ are single instructions on every target.
 
 | Signature | Lowering | Callee attributes | Effect |
 | --- | --- | --- | --- |
-| `Math.random(): f64` | `call double @amrit_random()` | `nounwind willreturn` | write |
+| `Math.random(): f64` | `call double @nish_random()` | `nounwind willreturn` | write |
 
-`amrit_random` is xorshift64\* over one global state word, seeded lazily from
+`nish_random` is xorshift64\* over one global state word, seeded lazily from
 `time(0)`, `getpid()`, and a constant, returning the top 53 bits scaled into
 `[0, 1)`. It mutates the state, hence `write`: a function that draws random
 numbers is never `readnone`/`readonly`, which is exactly right (two calls must
@@ -131,18 +131,18 @@ is `705032704`). Same-type calls emit nothing.
 
 | Signature | Lowering | Callee attributes | Effect |
 | --- | --- | --- | --- |
-| `process.exit(code: i32): void` | `call void @amrit_exit(i32 code)` then `unreachable` | `noreturn nounwind` | write, `noreturn` |
+| `process.exit(code: i32): void` | `call void @nish_exit(i32 code)` then `unreachable` | `noreturn nounwind` | write, `noreturn` |
 
 Statement position only. The checker treats `process.exit(n);` as a
 terminator for definite-return analysis, so a `number`-returning function may
 end with it and nothing may follow it in the same block (`Unreachable code
 after return`, the same diagnostic as after `return`). The emitter closes the
-block with `unreachable` after the `noreturn` call. `amrit_exit` calls libc
+block with `unreachable` after the `noreturn` call. `nish_exit` calls libc
 `exit`, so `atexit` handlers and stdio buffers of any C code in the binary are
 flushed; the arena is simply abandoned to the OS.
 
 `willreturn` promises that a call comes back, so every function that can
-reach `amrit_exit`, directly or through callees, loses it. `FunctionFacts` gained
+reach `nish_exit`, directly or through callees, loses it. `FunctionFacts` gained
 `callsNoReturn`, propagated over the call graph in the same fixpoint as the
 memory effects (`RuntimeFunction.noreturn` seeds it). In `process_exit.ts`
 both `finish` (calls it) and `main` (calls `finish`) are emitted with just
@@ -152,24 +152,24 @@ both `finish` (calls it) and `main` (calls `finish`) are emitted with just
 
 | Signature | Lowering | Callee attributes | Effect |
 | --- | --- | --- | --- |
-| `readFileSync(path: string): string` | `call i8* @amrit_read_file(i8* path)` | `nounwind`; param `nonnull readonly align 8 nocapture`; result `noalias nonnull align 8` | write |
-| `writeFileSync(path: string, data: string): void` | `call void @amrit_write_file(i8* path, i8* data)` | `nounwind`; params as above | write |
-| `appendFileSync(path: string, data: string): void` | `call void @amrit_append_file(i8* path, i8* data)` | same | write |
+| `readFileSync(path: string): string` | `call i8* @nish_read_file(i8* path)` | `nounwind`; param `nonnull readonly align 8 nocapture`; result `noalias nonnull align 8` | write |
+| `writeFileSync(path: string, data: string): void` | `call void @nish_write_file(i8* path, i8* data)` | `nounwind`; params as above | write |
+| `appendFileSync(path: string, data: string): void` | `call void @nish_append_file(i8* path, i8* data)` | same | write |
 
-These are globals, not `import { readFileSync } from "fs"`: AmritScript has no
+These are globals, not `import { readFileSync } from "fs"`: Nish has no
 package resolution and rejects bare specifiers. Paths are relative to the
-working directory. `amrit_read_file` opens the file, sizes it with `lseek`,
+working directory. `nish_read_file` opens the file, sizes it with `lseek`,
 allocates one arena string, and fills it with `pread`; the writers open with
 `O_CREAT | O_TRUNC` (or `O_APPEND`) and mode `0644` and loop over `write`.
 No stdio. A failure (missing file, permission denied, short write) prints
-`amritc: cannot read <path>` / `cannot write <path>` to stderr and exits
+`nish: cannot read <path>` / `cannot write <path>` to stderr and exits
 with status 1; there are no exceptions to throw. The string parameters are
 `nocapture` in the declaration, so passing a parameter to them does not make
 it escape (it keeps `nocapture` in the caller's signature).
 
 `readFileSync` allocates in the arena and the writers do I/O, so all three
 are `write`. Note on `willreturn`: like every allocating runtime call (which
-can hit the out-of-memory `_exit` in `amrit_arena_grow`), the file functions
+can hit the out-of-memory `_exit` in `nish_arena_grow`), the file functions
 can terminate the process on a fatal error and callers still keep
 `willreturn`. That is the convention this compiler has used since WP3 for
 fatal runtime errors; only the *intended* non-return of `process.exit` clears
@@ -179,8 +179,8 @@ the attribute.
 
 | Signature | Lowering | Callee attributes | Effect |
 | --- | --- | --- | --- |
-| `process.argv: string[]` | `load %struct.amrit_array*, %struct.amrit_array** @amrit_argv, align 8` | n/a (a global, `@amrit_argv = external global %struct.amrit_array*, align 8`) | read |
-| (entry wrapper) | `call void @amrit_argv_init(i32 %argc, i8** %argv)` as the first statement of `@main` | `nounwind willreturn`; the `i8**` is `nocapture readonly` | write |
+| `process.argv: string[]` | `load %struct.nish_array*, %struct.nish_array** @nish_argv, align 8` | n/a (a global, `@nish_argv = external global %struct.nish_array*, align 8`) | read |
+| (entry wrapper) | `call void @nish_argv_init(i32 %argc, i8** %argv)` as the first statement of `@main` | `nounwind willreturn`; the `i8**` is `nocapture readonly` | write |
 
 `process.argv` is a namespace property (`namespaceProperties["process.argv"]`
 next to `Math.PI`) typed `string[]`, so everything an array supports applies
@@ -188,14 +188,14 @@ to it and lowers through the array emitters unchanged: `.length`, `a[i]`
 with the bounds check, `for...of`, passing it to a function whose parameter
 is `string[]`. The checker records `usesArgv` on the module; the Compilation
 copies it onto the entry module so `emitEntryWrapper` inserts the
-`amrit_argv_init` call, which is why `tests/link/argv_import` (only the
+`nish_argv_init` call, which is why `tests/link/argv_import` (only the
 imported module reads it) still gets the call in `main.ll`. Programs that
 never read it keep the wrapper they had.
 
 The runtime builds the array once, with `malloc` rather than the arena:
-`amrit_argv_init` allocates the 24-byte header plus one `amrit_str *` per
+`nish_argv_init` allocates the 24-byte header plus one `nish_str *` per
 argument, then each string as its own `{ len, bytes, 0 }` block, so
-`Arena.reset()` / `amrit_arena_release` can never invalidate it. Index 0 is
+`Arena.reset()` / `nish_arena_release` can never invalidate it. Index 0 is
 `argv[0]` as C sees it, the program path (Node's `process.argv[1]`-style
 convention shifted by one, since there is no interpreter in front); the
 differential shim maps it to `process.argv.slice(1)` for the same shape.
@@ -214,28 +214,28 @@ Three rules, all in `checkProcessArgv` (`src/checker/io.ts`):
   (`mutatesArgv` walks up from the property access through parentheses to
   the consuming construct; `reject_argv_assign`, `reject_argv_push`).
   Aliasing it (`const args = process.argv`) and then storing through the
-  alias is not caught; the array is a real `amrit_array` with `cap == len`, so
+  alias is not caught; the array is a real `nish_array` with `cap == len`, so
   such a store works and a `push` would copy the data into the arena, which
   is the documented behaviour of any array.
 - **It is a memory read.** `factCollectors` marks the load, so a function
   reading it is at most `readonly` (`count()` in `argv_echo.ll` is
-  `nounwind willreturn readonly`); `amrit_argv` is written exactly once,
+  `nounwind willreturn readonly`); `nish_argv` is written exactly once,
   before any user code runs, so LLVM may still hoist and CSE the load.
 
 ### String to number
 
 | Signature | Lowering | Callee attributes | Effect |
 | --- | --- | --- | --- |
-| `parseFloat(s: string): f64` | `call double @amrit_parse_number(i8* s, i32 0)` | `nounwind willreturn`; param `nonnull readonly align 8 nocapture` | write |
-| `Number(s: string): f64` | `call double @amrit_parse_number(i8* s, i32 1)` | same | write |
+| `parseFloat(s: string): f64` | `call double @nish_parse_number(i8* s, i32 0)` | `nounwind willreturn`; param `nonnull readonly align 8 nocapture` | write |
+| `Number(s: string): f64` | `call double @nish_parse_number(i8* s, i32 1)` | same | write |
 | `Number(x: i32 \| i64): f64` | `sitofp <T> x to double` | n/a | none |
 | `Number(b: boolean): f64` | `uitofp i1 b to double` | n/a | none |
 | `Number(x: f64): f64` | nothing | n/a | none |
-| `parseInt(s: string): i32` | `%d = call double @amrit_parse_number(i8* s, i32 2)` then `call i32 @llvm.fptosi.sat.i32.f64(double %d)` | as above; the intrinsic `nounwind willreturn readnone` | write |
+| `parseInt(s: string): i32` | `%d = call double @nish_parse_number(i8* s, i32 2)` then `call i32 @llvm.fptosi.sat.i32.f64(double %d)` | as above; the intrinsic `nounwind willreturn readnone` | write |
 
 One runtime symbol with a mode instead of three, because every function in
 `runtime.c` costs an unwind-table entry against the size budget (below).
-The semantics, implemented in `amrit_parse_number`:
+The semantics, implemented in `nish_parse_number`:
 
 - **Whitespace** is ASCII only (`" \t\n\v\f\r"`, skipped with `strspn`),
   not the Unicode `StrWhiteSpaceChar` set JavaScript trims.
@@ -244,7 +244,7 @@ The semantics, implemented in `amrit_parse_number`:
   `[+-] . digits [exponent]`, or `[+-] Infinity`), `NaN` when there is none
   (`""`, `"abc"`, `"."`, `"+"`, `"inf"`, `"nan"`). The conversion itself is
   `strtod`, which is correctly rounded and already linked for
-  `amrit_str_from_f64`; it accepts a superset of the JavaScript grammar, so the
+  `nish_str_from_f64`; it accepts a superset of the JavaScript grammar, so the
   function first rules out the spellings JavaScript rejects (a first
   character that is neither a digit nor `.` must start exactly `Infinity`,
   checked with `strncmp`, which also excludes `inf`, `infinity`, `nan`) and
@@ -286,12 +286,12 @@ implements the runtime's grammar rather than JavaScript's built-ins.
 ### Strings and console.log with i64
 
 `console.log(x)` and template holes accept `i64` (`isStringifiable` covers
-every numeric type) and lower through `amrit_str_from_i64(i64)` (`nounwind`,
-effect write), which is also what `amrit_str_from_i32` now delegates to.
+every numeric type) and lower through `nish_str_from_i64(i64)` (`nounwind`,
+effect write), which is also what `nish_str_from_i32` now delegates to.
 
 ## The `i64` type
 
-| AmritScript | LLVM | Align |
+| Nish | LLVM | Align |
 | --- | --- | --- |
 | `i64` | `i64` | 8 |
 
@@ -355,7 +355,7 @@ Emission: an `i64` literal is printed as a plain integer (`store i64
 
 ## JavaScript number formatting
 
-`amrit_str_from_f64` now produces exactly what `Number.prototype.toString`
+`nish_str_from_f64` now produces exactly what `Number.prototype.toString`
 produces (WP3 used `%.17g`, which printed `0.1` as `0.10000000000000001`).
 The algorithm, in `runtime/runtime.c`:
 
@@ -375,7 +375,7 @@ The algorithm, in `runtime/runtime.c`:
 Checked against Node in `tests/runtime_test.c` (expected strings are
 `node -p "String(x)"`):
 
-| Value | Node | `amrit_str_from_f64` |
+| Value | Node | `nish_str_from_f64` |
 | --- | --- | --- |
 | `0.1` | `0.1` | `0.1` |
 | `1/3` | `0.3333333333333333` | `0.3333333333333333` |
@@ -407,10 +407,10 @@ faster but does not fit the runtime budget.
 
 ## Runtime additions and budget
 
-`runtime/runtime.c` gained `amrit_str_from_i64`, the new `amrit_str_from_f64`,
-`amrit_random`, `amrit_exit`, `amrit_read_file`, `amrit_write_file`, and
-`amrit_append_file`, and defines `_POSIX_C_SOURCE` for `pread`; the second
-round added `amrit_argv` / `amrit_argv_init` and `amrit_parse_number`. Measured
+`runtime/runtime.c` gained `nish_str_from_i64`, the new `nish_str_from_f64`,
+`nish_random`, `nish_exit`, `nish_read_file`, `nish_write_file`, and
+`nish_append_file`, and defines `_POSIX_C_SOURCE` for `pread`; the second
+round added `nish_argv` / `nish_argv_init` and `nish_parse_number`. Measured
 with `clang -Oz -c runtime/runtime.c && size runtime.o` (the `text` column
 of `size`, which also counts the read-only constants and the `.eh_frame`
 unwind entries that the `size` build profile strips):
@@ -428,13 +428,13 @@ figure and is not the number D4 grew.
 The budget is `.text` now, and the two rows above it are history rather than
 limits (`docs/MASTER_PLAN.md` §2): `.text` is what a linked binary pays, the
 other two measure comments and unwind tables that never reach one. WP14 D4's
-`amrit_mkdir` and `amrit_spawn` cost 257 bytes of it, and cost a program that
+`nish_mkdir` and `nish_spawn` cost 257 bytes of it, and cost a program that
 calls neither exactly nothing — `examples/hello.ts` at the `size` profile is
 4,696 bytes with them and 4,696 without, because `-ffunction-sections
 -Wl,--gc-sections` drops both.
 
-The 595 bytes of the second round are `amrit_argv_init` (162 bytes),
-`amrit_parse_number` (249), their two unwind entries and the constants
+The 595 bytes of the second round are `nish_argv_init` (162 bytes),
+`nish_parse_number` (249), their two unwind entries and the constants
 (`" \t\n\v\f\r"`, `"Infinity"`, NaN). Getting there from a first draft of
 about 1,000 bytes: `strtoll` and `strtod` replace hand-written digit loops
 (a hand-written double parser cannot be correctly rounded in that budget
@@ -446,9 +446,9 @@ length-carrying `memcpy`, and the `0x` guard in `parseFloat` was dropped
 feature has to pay for itself.
 
 `tests/runtime_test.c` covers the integer and double formatting cases above,
-1,000 draws of `amrit_random` in `[0, 1)`, a write/append/read/truncate cycle
-on `build/test/runtime_test.txt`, `amrit_argv_init` (an empty argument, a UTF-8
-one, survival of `amrit_reset_arena`, `argc == 0`), and the 45 parsing inputs.
+1,000 draws of `nish_random` in `[0, 1)`, a write/append/read/truncate cycle
+on `build/test/runtime_test.txt`, `nish_argv_init` (an empty argument, a UTF-8
+one, survival of `nish_reset_arena`, `argc == 0`), and the 45 parsing inputs.
 
 ## Attributes
 
@@ -458,23 +458,23 @@ one, survival of `amrit_reset_arena`, `argc == 0`), and the 45 parsing inputs.
   `llvm-as`/`opt -passes=verify` accept them. A function whose body is
   arithmetic plus Math intrinsics is `readnone willreturn` (`hypot`, `trig`,
   `clamp`, `square` in the goldens).
-- `amrit_random`, `amrit_exit`, and the file functions are `write`; `amrit_exit`
+- `nish_random`, `nish_exit`, and the file functions are `write`; `nish_exit`
   is additionally `noreturn`, and `callsNoReturn` removes `willreturn` from
   every function that can reach it.
 - `Math.PI`/`Math.E` are constants: no memory read, `readnone` preserved.
 - Identifier builtins are not user callees, so `noteEscape` in
   `attributes.ts` does not run for their arguments; that is correct because
   every runtime function they lower to declares its string parameters
-  `nocapture` (`amrit_parse_number` included). `collectBuiltinFacts` (in
+  `nocapture` (`nish_parse_number` included). `collectBuiltinFacts` (in
   `emit/expressions.ts`) reports their callees to the fixpoint; dotted
   builtins are already covered by `collectStringFacts` through
   `builtinCallEmitters`.
-- `amrit_parse_number` is `write` (errno, see above), never `readonly`; a
+- `nish_parse_number` is `write` (errno, see above), never `readonly`; a
   function whose only impurity is parsing loses `readonly`, which is the
   honest attribute. `Number` on a numeric or boolean argument reports no
   callee and keeps the caller `readnone`.
 - `process.argv` is a load of a global: `readsMemory`, hence `readonly` at
-  best; the `@main` wrapper that calls `amrit_argv_init` stays `nounwind`
+  best; the `@main` wrapper that calls `nish_argv_init` stays `nounwind`
   only, as before.
 
 ## Linking
@@ -494,7 +494,7 @@ under wasm needs the runtime compiled against a libc, which the freestanding
 `scripts/build.sh` builds a command module:
 
 ```
-amritc examples/argv.ts --link build/argv.wasm --profile wasi
+nish examples/argv.ts --link build/argv.wasm --profile wasi
 node examples/wasi-host.mjs build/argv.wasm 3 4 five      # or wasmtime build/argv.wasm 3 4 five
 ```
 
@@ -518,12 +518,12 @@ node examples/wasi-host.mjs build/argv.wasm 3 4 five      # or wasmtime build/ar
   libm). Flags otherwise: `-Oz -DNDEBUG -ffunction-sections
   -fdata-sections -Wl,--gc-sections -Wl,--strip-all`. `examples/argv.ts`
   is 42,228 bytes this way, most of it wasi-libc's `printf`/`strtod`
-  machinery behind `amrit_str_from_f64`.
+  machinery behind `nish_str_from_f64`.
 - **Entry.** wasi-libc's `_start` calls `__main_void`, which calls
   `__main_argc_argv`, the name clang gives a C `main(int, char **)`. The
   compiler's wrapper is a plain `@main`, so `runtime.c` bridges the two
   under `#ifdef __wasi__` with a weak asm-labelled declaration
-  (`int amrit_c_main(int, char **) __asm__("main")`) and a two-line
+  (`int nish_c_main(int, char **) __asm__("main")`) and a two-line
   `__main_argc_argv`; weak so that a reactor build without an entry still
   links. `process.argv` then comes from `args_get`: index 0 is whatever the
   host names the module (`examples/wasi-host.mjs` passes the file path, like
@@ -553,7 +553,7 @@ native `.out` round trip):
 | `conversions` | every `toI32/toI64/toF64` direction, saturation and wrapping |
 | `io_files` | write, append, read back, `.length` |
 | `process_exit` | `noreturn` + `unreachable`, terminator analysis, `willreturn` dropped transitively |
-| `argv_echo` (run with `argv_echo.argv`) | the `@amrit_argv` load, the `amrit_argv_init` call in `@main`, a `readonly` reader, indexing, `for...of`, byte lengths of a UTF-8 argument, `parseInt` over the arguments |
+| `argv_echo` (run with `argv_echo.argv`) | the `@nish_argv` load, the `nish_argv_init` call in `@main`, a `readonly` reader, indexing, `for...of`, byte lengths of a UTF-8 argument, `parseInt` over the arguments |
 | `parse_numbers` | every `parseInt` / `parseFloat` / `Number` form above including the deviations, `Number` on `i32`/`i64`/`f64`/`boolean` |
 | `link/argv_import` | the import reads `process.argv`, the entry gets the init call (`expected.ir`), runs with no arguments |
 

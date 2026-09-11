@@ -1,11 +1,53 @@
 # Changelog
 
-All notable changes to `amritc` are recorded here. The format follows
+All notable changes to `nish` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/). The release procedure (bump,
 changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
 
+Entries below the rename to Nish keep the names they were written with
+(`AmritScript`, `amritc`, `amrit_`, `AS####`); they are a record of what
+shipped, not a description of the tree as it stands.
+
 ## [Unreleased]
+
+### Changed
+
+- **Renamed to Nish.** The language is **Nish** and the compiler is **`nish`**
+  — the npm package, the `bin` entry, `runtime/nish.h`, `runtime/nish.d.ts`,
+  `runtime/nish.mjs`, `NISH_DEBUG` / `NISH_SIMULATE_ICE`, and the
+  `NISH_<STEM>_H` guard on a generated header. `Nish Lang` is the longer form
+  for places a bare name is ambiguous, the way Rust writes `rust-lang`; nothing
+  the compiler prints uses it.
+
+  The rename cost two constants, as
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ("Where the name lives")
+  promised it would: `LANGUAGE` and `CLI` in `src/branding.ts` and
+  `self/branding.ts`. Every string either compiler prints — the Phase 0
+  messages, `--help`, the banner, include guard and `#include` of a generated
+  header, the DWARF producer string, the internal-error report — builds its
+  name from those, so no diagnostic was edited to change what it says.
+
+- **The `amrit_` prefix on the runtime's C symbols is now `nish_`.**
+  `amrit_str_concat` → `nish_str_concat` and its siblings, `AMRIT_SYMBOL` /
+  `AMRIT_COLD` / `AMRIT_RESULT_ASSERT` → `NISH_*`, the `%struct.amrit_arena` /
+  `amrit_array` / `amrit_str` / `amrit_result_*` layouts, and the Node shim's
+  `__amrit` namespace → `__nish`. **This is a C ABI break**: a host that links
+  `runtime/runtime.c` or includes `runtime/nish.h` must use the new names.
+  Nothing has been released, so nothing linked the old ones.
+
+  This is the second and last time that prefix moves. It is ABI rather than
+  branding, and the two things that made rewriting it affordable — no release,
+  and ~200 goldens that are generated rather than written — do not survive a
+  first release. `docs/ARCHITECTURE.md` records both rewrites and why a third
+  rename stops at `LANGUAGE` and `CLI`.
+
+- **Diagnostic codes are `NL####` rather than `AS####`.** `AS1013` → `NL1013`,
+  and so on for all 342 rules; the numbers and their meanings are unchanged, so
+  only the two letters move. `NL` is for Nish Lang and is a literal in
+  `scripts/gen-diagnostic-codes.mjs` rather than a value read from
+  `branding.ts`: a code is matched on by tooling that has to keep working
+  across a rename, so it is frozen by design instead of following the name.
 
 ### Added
 
@@ -2264,4 +2306,4 @@ changelog, tag, workflow) is in [docs/wp12-release.md](docs/wp12-release.md).
   unchanged; see the "Runtime budget" section of
   [docs/wp9-optimisation.md](docs/wp9-optimisation.md).
 
-[Unreleased]: https://github.com/amritk/compiler/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/amritk/nish/compare/v0.1.0...HEAD

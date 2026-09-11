@@ -10,14 +10,14 @@
  *        u8 u16 u32  a JS number through ToUint32 (`napi_get_value_uint32`),
  *                 then the width's own modulus, so 300 reaches a `u8` as 44
  *                 exactly as `new Uint8Array([300])[0]` does
- *        f32      a JS number rounded to nearest through `amrit_napi_f32`
+ *        f32      a JS number rounded to nearest through `nish_napi_f32`
  *        boolean  a JS boolean
  *        i64 u64  a JS bigint (`napi_get_value_bigint_{int,uint}64`)
- *        string   a JS string, copied into an arena `amrit_str`
+ *        string   a JS string, copied into an arena `nish_str`
  *                 (`napi_get_value_string_utf8`, measured first, then copied)
  *        Int32Array / Float32Array / Float64Array / BigInt64Array
  *                 a JS typed array of exactly that kind, *borrowed*: the
- *                 `amrit_array` header is built on the C stack over the typed
+ *                 `nish_array` header is built on the C stack over the typed
  *                 array's own bytes (`napi_get_typedarray_info`), so nothing
  *                 is copied and writes through the parameter land in the
  *                 caller's buffer. The callee must not retain the pointer
@@ -33,10 +33,10 @@
  * A violated check throws a TypeError naming the function and parameter.
  *
  * Functions that touch the arena (a string or array parameter or result)
- * bracket the call with `amrit_arena_mark` / `amrit_arena_release`: every arena
+ * bracket the call with `nish_arena_mark` / `nish_arena_release`: every arena
  * string or array made for the call is recycled before the wrapper returns,
- * so a host never has to reset the arena for bridged calls. `amrit_reset_arena`
- * / `amrit_free_arena` are still exported for hosts that want to.
+ * so a host never has to reset the arena for bridged calls. `nish_reset_arena`
+ * / `nish_free_arena` are still exported for hosts that want to.
  *
  * Build: scripts/build.sh <modules.ll> runtime/runtime.c <shim.c> -o x.node --profile napi
  */
@@ -74,7 +74,7 @@ interface Reader {
   usesTypeof: boolean;
   /** Allocates in the arena or borrows JS memory: the call is arena-scoped. */
   arena: boolean;
-  /** Reads an `f32` somewhere, so the shim needs the `amrit_napi_f32` helper. */
+  /** Reads an `f32` somewhere, so the shim needs the `nish_napi_f32` helper. */
   usesF32: boolean;
 }
 
@@ -116,7 +116,7 @@ type ScalarReader = {
 };
 
 /** The double-to-float conversion: a call rather than a cast, defined by the shim itself. */
-const F32_HELPER = "amrit_napi_f32";
+const F32_HELPER = "nish_napi_f32";
 
 const directReader = (jsType: string, tag: string, getter: string, c: string, lossless = false): ScalarReader => ({
   jsType,
@@ -203,10 +203,10 @@ function reader(t: StaticType, written: boolean): Reader | undefined {
       arena: true,
       usesF32: false,
       lines: (c, i, fail) => [
-        `const amrit_str *${c};`,
+        `const nish_str *${c};`,
         `if (napi_typeof(env, argv[${i}], &type) != napi_ok || type != napi_string)`,
         `  return ${fail("must be a string")};`,
-        `if ((${c} = amrit_napi_string_arg(env, argv[${i}])) == NULL)`,
+        `if ((${c} = nish_napi_string_arg(env, argv[${i}])) == NULL)`,
         `  return ${fail("could not be converted")};`,
       ],
     };
@@ -224,8 +224,8 @@ function reader(t: StaticType, written: boolean): Reader | undefined {
       arena: true,
       usesF32: false,
       lines: (c, i, fail) => [
-        `amrit_array ${c}_hdr; /* borrowed: the ${view.ctor}'s own bytes, for this call only */`,
-        `if (!amrit_napi_array_arg(env, argv[${i}], ${view.napiType}, &${c}_hdr))`,
+        `nish_array ${c}_hdr; /* borrowed: the ${view.ctor}'s own bytes, for this call only */`,
+        `if (!nish_napi_array_arg(env, argv[${i}], ${view.napiType}, &${c}_hdr))`,
         `  return ${fail(`must be ${withArticle(view.ctor)}`)};`,
         `${cType(t, "param", written)}${c} = &${c}_hdr;`,
       ],
@@ -280,7 +280,7 @@ function boxer(t: StaticType): Boxer | undefined {
   if (scalar) return { call: (v) => scalar(v, "&out"), arena: false };
   if (k === "string") return { call: (v) => `napi_create_string_utf8(env, ${v}->data, ${v}->len, &out)`, arena: true };
   const view = typedView(t);
-  if (view) return { call: (v) => `amrit_napi_array_result(env, ${v}, ${view.napiType}, ${view.elemSize}, &out)`, arena: true };
+  if (view) return { call: (v) => `nish_napi_array_result(env, ${v}, ${view.napiType}, ${view.elemSize}, &out)`, arena: true };
   // WP17: a `Result` returned in a register becomes the tagged object JS
   // already models — `{ ok: true, value }` or `{ ok: false, error }`. Only the
   // arm the discriminant selects is boxed, because only that one was written.
@@ -292,7 +292,7 @@ function boxer(t: StaticType): Boxer | undefined {
 
 /**
  * `{ ok: true, value }` / `{ ok: false, error }`: box the arm the discriminant
- * selects into `payload`, then wrap it with `amrit_napi_result`. `undefined`
+ * selects into `payload`, then wrap it with `nish_napi_result`. `undefined`
  * when either payload has no scalar constructor, which now means only a
  * payload that is not a scalar at all: every numeric width has one.
  */
@@ -308,7 +308,7 @@ function resultBoxer(t: ResultType): Boxer | undefined {
       "napi_value payload;",
       `if ((${v}.ok ? ${okArm(v)} : ${error(`${v}.as.error`, "&payload")}) != napi_ok)`,
     ],
-    call: (v) => `amrit_napi_result(env, ${v}.ok != 0, payload, &out)`,
+    call: (v) => `nish_napi_result(env, ${v}.ok != 0, payload, &out)`,
   };
 }
 
@@ -406,8 +406,8 @@ function wrapper({ fn, readers, box, scoped }: Plan): string[] {
   const { sig } = fn;
   const name = sig.name;
   const n = sig.params.length;
-  const fail = (msg: string) => (scoped ? `amrit_napi_fail_at(env, mark, "${msg}")` : `amrit_napi_fail(env, "${msg}")`);
-  const lines: string[] = [`static napi_value amrit_napi_${name}(napi_env env, napi_callback_info info) {`];
+  const fail = (msg: string) => (scoped ? `nish_napi_fail_at(env, mark, "${msg}")` : `nish_napi_fail(env, "${msg}")`);
+  const lines: string[] = [`static napi_value nish_napi_${name}(napi_env env, napi_callback_info info) {`];
   if (n === 0) {
     lines.push("  (void)info;");
   } else {
@@ -415,14 +415,14 @@ function wrapper({ fn, readers, box, scoped }: Plan): string[] {
       `  size_t argc = ${n};`,
       `  napi_value argv[${n}];`,
       "  if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok)",
-      `    return amrit_napi_fail(env, "${name}: cannot read arguments");`,
+      `    return nish_napi_fail(env, "${name}: cannot read arguments");`,
       `  if (argc < ${n})`,
-      `    return amrit_napi_fail(env, "${name} expects ${n} argument${n === 1 ? "" : "s"}");`
+      `    return nish_napi_fail(env, "${name} expects ${n} argument${n === 1 ? "" : "s"}");`
     );
     if (readers.some((r) => r.usesTypeof)) lines.push("  napi_valuetype type;");
     if (sig.params.some((p) => needsLossless(p.type))) lines.push("  bool lossless;");
   }
-  if (scoped) lines.push("  uint64_t mark = amrit_arena_mark(); /* arena strings/arrays made for this call are released on return */");
+  if (scoped) lines.push("  uint64_t mark = nish_arena_mark(); /* arena strings/arrays made for this call are released on return */");
   readers.forEach((r, i) => {
     const p = sig.params[i];
     const what = `${name}: argument ${i + 1} (${p.name})`;
@@ -439,7 +439,7 @@ function wrapper({ fn, readers, box, scoped }: Plan): string[] {
       `    return ${fail(`${name}: cannot create the result`)};`
     );
   lines.push(`  if (${box.call("result")} != napi_ok)`, `    return ${fail(`${name}: cannot create the result`)};`);
-  if (scoped) lines.push("  amrit_arena_release(mark);");
+  if (scoped) lines.push("  nish_arena_release(mark);");
   lines.push("  return out;", "}", "");
   return lines;
 }
@@ -510,7 +510,7 @@ export function generateNapiShim(compilation: Compilation): string {
   if (plans.length > 0) {
     lines.push(
       "/* Throw a TypeError; returning NULL hands `undefined` back while the exception is pending. */",
-      "static napi_value amrit_napi_fail(napi_env env, const char *message) {",
+      "static napi_value nish_napi_fail(napi_env env, const char *message) {",
       "  napi_throw_type_error(env, NULL, message);",
       "  return NULL;",
       "}",
@@ -520,9 +520,9 @@ export function generateNapiShim(compilation: Compilation): string {
   if (needs.scoped) {
     lines.push(
       "/* The same, from a call that already marked the arena: release first. */",
-      "static napi_value amrit_napi_fail_at(napi_env env, uint64_t mark, const char *message) {",
-      "  amrit_arena_release(mark);",
-      "  return amrit_napi_fail(env, message);",
+      "static napi_value nish_napi_fail_at(napi_env env, uint64_t mark, const char *message) {",
+      "  nish_arena_release(mark);",
+      "  return nish_napi_fail(env, message);",
       "}",
       ""
     );
@@ -546,10 +546,10 @@ export function generateNapiShim(compilation: Compilation): string {
   if (needs.string) {
     lines.push(
       "/* A JS string as an arena string: the first call measures, the second copies (NUL included). */",
-      "static amrit_str *amrit_napi_string_arg(napi_env env, napi_value value) {",
+      "static nish_str *nish_napi_string_arg(napi_env env, napi_value value) {",
       "  size_t len;",
       "  if (napi_get_value_string_utf8(env, value, NULL, 0, &len) != napi_ok) return NULL;",
-      "  amrit_str *s = (amrit_str *)amrit_alloc_struct(sizeof(uint64_t) + len + 1);",
+      "  nish_str *s = (nish_str *)nish_alloc_struct(sizeof(uint64_t) + len + 1);",
       "  if (napi_get_value_string_utf8(env, value, s->data, len + 1, &len) != napi_ok) return NULL;",
       "  s->len = len;",
       "  return s;",
@@ -559,8 +559,8 @@ export function generateNapiShim(compilation: Compilation): string {
   }
   if (needs.arrayArg) {
     lines.push(
-      "/* A typed array of the expected kind as a borrowed amrit_array header over its own bytes. */",
-      "static bool amrit_napi_array_arg(napi_env env, napi_value value, napi_typedarray_type want, amrit_array *out) {",
+      "/* A typed array of the expected kind as a borrowed nish_array header over its own bytes. */",
+      "static bool nish_napi_array_arg(napi_env env, napi_value value, napi_typedarray_type want, nish_array *out) {",
       "  bool is_typedarray;",
       "  napi_typedarray_type type;",
       "  size_t len;",
@@ -577,7 +577,7 @@ export function generateNapiShim(compilation: Compilation): string {
   if (needs.arrayResult) {
     lines.push(
       "/* An arena array as a fresh typed array: copied, because the arena is released when the call returns. */",
-      "static napi_status amrit_napi_array_result(napi_env env, const amrit_array *a, napi_typedarray_type type, size_t elem_size, napi_value *out) {",
+      "static napi_status nish_napi_array_result(napi_env env, const nish_array *a, napi_typedarray_type type, size_t elem_size, napi_value *out) {",
       "  void *data;",
       "  napi_value buffer;",
       "  napi_status status = napi_create_arraybuffer(env, a->len * elem_size, &data, &buffer);",
@@ -592,7 +592,7 @@ export function generateNapiShim(compilation: Compilation): string {
     lines.push(
       "/* WP17: a `Result` as the object JS models it with — `{ ok, value }` or",
       " * `{ ok, error }`. The dead arm is never written, so it is never read. */",
-      "static napi_status amrit_napi_result(napi_env env, bool ok, napi_value payload, napi_value *out) {",
+      "static napi_status nish_napi_result(napi_env env, bool ok, napi_value payload, napi_value *out) {",
       "  napi_value obj, flag;",
       "  napi_status status = napi_create_object(env, &obj);",
       "  if (status != napi_ok) return status;",
@@ -609,23 +609,23 @@ export function generateNapiShim(compilation: Compilation): string {
     );
   }
   lines.push(
-    "static napi_value amrit_napi_undefined(napi_env env) {",
+    "static napi_value nish_napi_undefined(napi_env env) {",
     "  napi_value out;",
     "  return napi_get_undefined(env, &out) == napi_ok ? out : NULL;",
     "}",
     "",
-    "/* amrit_reset_arena(): recycle every string/object the module allocated since the last reset. */",
-    "static napi_value amrit_napi_reset_arena(napi_env env, napi_callback_info info) {",
+    "/* nish_reset_arena(): recycle every string/object the module allocated since the last reset. */",
+    "static napi_value nish_napi_reset_arena(napi_env env, napi_callback_info info) {",
     "  (void)info;",
-    "  amrit_reset_arena();",
-    "  return amrit_napi_undefined(env);",
+    "  nish_reset_arena();",
+    "  return nish_napi_undefined(env);",
     "}",
     "",
-    "/* amrit_free_arena(): release every arena chunk back to the OS. */",
-    "static napi_value amrit_napi_free_arena(napi_env env, napi_callback_info info) {",
+    "/* nish_free_arena(): release every arena chunk back to the OS. */",
+    "static napi_value nish_napi_free_arena(napi_env env, napi_callback_info info) {",
     "  (void)info;",
-    "  amrit_free_arena();",
-    "  return amrit_napi_undefined(env);",
+    "  nish_free_arena();",
+    "  return nish_napi_undefined(env);",
     "}",
     ""
   );
@@ -637,17 +637,17 @@ export function generateNapiShim(compilation: Compilation): string {
     "static const struct {",
     "  const char *name;",
     "  napi_callback callback;",
-    "} amrit_napi_exports[] = {",
-    ...plans.map((p) => `  {"${p.fn.sig.sourceName}", amrit_napi_${p.fn.sig.name}},`),
-    '  {"amrit_reset_arena", amrit_napi_reset_arena},',
-    '  {"amrit_free_arena", amrit_napi_free_arena},',
+    "} nish_napi_exports[] = {",
+    ...plans.map((p) => `  {"${p.fn.sig.sourceName}", nish_napi_${p.fn.sig.name}},`),
+    '  {"nish_reset_arena", nish_napi_reset_arena},',
+    '  {"nish_free_arena", nish_napi_free_arena},',
     "};",
     "",
     "NAPI_MODULE_INIT() {",
-    "  for (size_t i = 0; i < sizeof amrit_napi_exports / sizeof amrit_napi_exports[0]; i++) {",
+    "  for (size_t i = 0; i < sizeof nish_napi_exports / sizeof nish_napi_exports[0]; i++) {",
     "    napi_value fn;",
-    "    if (napi_create_function(env, amrit_napi_exports[i].name, NAPI_AUTO_LENGTH, amrit_napi_exports[i].callback, NULL, &fn) != napi_ok ||",
-    "        napi_set_named_property(env, exports, amrit_napi_exports[i].name, fn) != napi_ok) {",
+    "    if (napi_create_function(env, nish_napi_exports[i].name, NAPI_AUTO_LENGTH, nish_napi_exports[i].callback, NULL, &fn) != napi_ok ||",
+    "        napi_set_named_property(env, exports, nish_napi_exports[i].name, fn) != napi_ok) {",
     `      napi_throw_error(env, NULL, "${CLI}: cannot register the addon exports");`,
     "      return NULL;",
     "    }",

@@ -8,7 +8,7 @@
 // Two things this deliberately does not cover:
 //   - Class methods. They stay methods; an arrow property would change `this`
 //     binding and put the function on the instance rather than the prototype.
-//   - AmritScript programs (examples/, docs/cookbook/, bench/*.ts). The language
+//   - Nish programs (examples/, docs/cookbook/, bench/*.ts). The language
 //     has no arrow functions at all, so `function` is the only spelling there.
 //     `biome.json` turns this plugin off for those directories.
 //

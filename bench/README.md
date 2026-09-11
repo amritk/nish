@@ -1,7 +1,7 @@
-# AmritScript benchmark suite
+# Nish benchmark suite
 
 Seven programs, each written four times with the same data layout and the same
-expression order (so the floating-point results agree bit for bit): AmritScript
+expression order (so the floating-point results agree bit for bit): Nish
 (`.ts`), C (`.c`, `clang -O3`), Go (`.go`, `go build`) and Rust (`.rs`,
 `rustc -C opt-level=3 -C panic=abort -C codegen-units=1`). `bench/run.mjs`
 builds them all, checks that every binary prints the same checksum, times them
@@ -28,7 +28,7 @@ Build products go to `build/bench/`.
 
 ## The programs
 
-| Name | What it measures | AmritScript flags | Size (`bench:n`) | Checksum |
+| Name | What it measures | Nish flags | Size (`bench:n`) | Checksum |
 | --- | --- | --- | --- | --- |
 | `fib` | recursive calls, integer add | | fib(40) | `102334155` |
 | `nbody` | a class with seven `f64` fields in an array, `Math.sqrt`, field read/write in a nested loop | `--number-mode f64` | 2e7 steps | energy before and after |
@@ -45,12 +45,12 @@ noise of a VM. The `bench:n` comment marks the one line the runner rewrites
 for `--n`; the twins carry the same marker.
 
 `result`'s twins are the shapes each language would use anyway: a C struct of
-two words — the one `amritc --emit-header` declares for
+two words — the one `nish --emit-header` declares for
 `Result<number, number>` — and Rust's own `Result<i32, i32>`. Go has no such
 type, so `result.go` uses the same two-word struct as the C twin; Go's register
 ABI returns and passes it in registers, exactly as Go's own `(value, ok)` pair
 of results would be. All four are returned and passed in registers, so the four
-columns should be the same code; an AmritScript column well behind them means a
+columns should be the same code; an Nish column well behind them means a
 `Result` went back to being a pointer into the arena. What the gap it currently shows is about, and the
 respelling that did *not* close it, is in
 [docs/wp17-result-abi.md](../docs/wp17-result-abi.md) §4.
@@ -58,7 +58,7 @@ respelling that did *not* close it, is in
 `strbuild` has one more version, `strbuild_naive.c`: the same immutable-string
 algorithm with a `malloc` per string and a `free` as soon as a string has been
 copied into its successor. Against `strbuild.c` (a bump arena that never
-frees, i.e. the AmritScript runtime's model) it isolates what the arena costs and
+frees, i.e. the Nish runtime's model) it isolates what the arena costs and
 saves. The Rust version allocates a fresh `String` per concatenation, the same
 work as the naive C; the Go version does the same with `s + piece`, except that
 a garbage collector, not `free` or an arena, reclaims the intermediates — so
@@ -75,19 +75,19 @@ a garbage collector, not `free` or an arena, reclaims the intermediates — so
   programmer ships.
 - **Same memory model where the language allows it.** C, Go and Rust objects
   are heap allocated (`malloc`, `&T{…}`, `Box`) like the arena objects in
-  AmritScript; arrays are indexed with a 32-bit index converted to the native
+  Nish; arrays are indexed with a 32-bit index converted to the native
   width. Rust's and Go's bounds checks stay on (`Vec` and slice indexing), like
-  AmritScript's — no `-gcflags=-B`. Go's garbage collector runs at its default
+  Nish's — no `-gcflags=-B`. Go's garbage collector runs at its default
   `GOGC=100`; only `strbuild` allocates enough for that to show.
 - **Constants fold the same way.** A Go untyped constant expression is folded
-  in arbitrary precision and rounded once, where C, Rust and AmritScript round
+  in arbitrary precision and rounded once, where C, Rust and Nish round
   every step to `f64`; `nbody.go` therefore spells its constants as typed
   variables, or one ULP in `SOLAR_MASS` would move the last digits of a
   chaotic system's final energy. Go does not fuse multiply-add on amd64, so no
   version needs to suppress FMA.
 - **One checksum per program.** Outputs are compared token by token; numeric
   tokens must agree to 1e-9 relative, which lets `%.17g`, Rust's `{}`, Go's
-  `%v` and AmritScript's JavaScript-style shortest round-trip formatting print
+  `%v` and Nish's JavaScript-style shortest round-trip formatting print
   the same double differently. A mismatch fails the run, and the CI test in
   `tests/run.js` (`WP9: bench`) validates `fib` and `sieve` at small sizes on
   every push.
@@ -95,9 +95,9 @@ a garbage collector, not `free` or an arena, reclaims the intermediates — so
   around `spawnSync`, one warm-up run then five timed runs; the table shows
   minimum and median. Process start-up (about 1 ms) is included and identical
   for every column.
-- **Sizes.** Every binary is stripped: AmritScript through `scripts/build.sh`
+- **Sizes.** Every binary is stripped: Nish through `scripts/build.sh`
   (`-s`, section GC, LTO), C with `-s`, Rust with `-C strip=symbols`, Go with
-  `-ldflags=-s -w`. The AmritScript `size` profile (`-Oz`) gets its own column.
+  `-ldflags=-s -w`. The Nish `size` profile (`-Oz`) gets its own column.
   A Go binary still carries the runtime, the scheduler and the collector, so
   its floor is about a megabyte and the column is not a like-for-like one.
 - **Memory.** Peak RSS of one run, from `wait4`'s `ru_maxrss` via
@@ -107,16 +107,16 @@ a garbage collector, not `free` or an arena, reclaims the intermediates — so
 
 | Column | Build |
 | --- | --- |
-| AmritScript | `amritc <src> [--number-mode f64] --link <exe> --profile speed` |
-| AmritScript `--nsw` | as above plus `--nsw` (integer benchmarks only): signed overflow becomes undefined, as in C |
-| AmritScript (size profile) | `--profile size`, size table only |
+| Nish | `nish <src> [--number-mode f64] --link <exe> --profile speed` |
+| Nish `--nsw` | as above plus `--nsw` (integer benchmarks only): signed overflow becomes undefined, as in C |
+| Nish (size profile) | `--profile size`, size table only |
 | C `-O3` | `clang -O3 -s <src> -lm` |
 | C `-O3` naive | `strbuild_naive.c` only |
 | Go | `go build -trimpath -ldflags=-s -w` |
 | Rust `-O3` | `rustc -C opt-level=3 -C panic=abort -C codegen-units=1 -C strip=symbols` |
 | Rust native | as above plus `-C target-cpu=native` |
 
-The `AmritScript / Go` and `AmritScript / Rust` columns divide the AmritScript
+The `Nish / Go` and `Nish / Rust` columns divide the Nish
 minimum by that language's minimum. The WP9 target is 1.10x or better for loop
 and math code, and it is set against Rust: Go is reported for scale, not as a
 gate.

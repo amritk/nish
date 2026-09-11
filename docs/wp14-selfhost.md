@@ -1,7 +1,7 @@
 # WP14 — Self-hosting
 
-The goal that closes the project: **a compiler for AmritScript, written in
-AmritScript, that compiles its own source.** Everything below is the definition
+The goal that closes the project: **a compiler for Nish, written in
+Nish, that compiles its own source.** Everything below is the definition
 of that claim, the proof we will accept for it, and the ordered list of what
 is missing today.
 
@@ -18,12 +18,12 @@ Two compilers exist by the end, and only the second one is self-hosted.
 | | Source | Written in | Built by |
 | --- | --- | --- | --- |
 | **stage0** | `src/` | TypeScript on Node, parsing with the `typescript` package | `tsc` |
-| **stage1** | `self/` | AmritScript | stage0 |
-| **stage2** | `self/` | AmritScript | stage1 |
-| **stage3** | `self/` | AmritScript | stage2 |
+| **stage1** | `self/` | Nish | stage0 |
+| **stage2** | `self/` | Nish | stage1 |
+| **stage3** | `self/` | Nish | stage2 |
 
 stage0 is not going away. It is the bootstrap seed, it is what `npm install
--g amritc` ships today, and it stays the reference implementation: a
+-g nish` ships today, and it stays the reference implementation: a
 program that stage0 and stage1 disagree about is a bug in one of them, and
 saying which is a diff.
 
@@ -47,7 +47,7 @@ on:
 IR(stage0, self/)  ==  IR(stage1, self/)
 ```
 
-That says the TypeScript implementation and the AmritScript implementation agree
+That says the TypeScript implementation and the Nish implementation agree
 on the IR for the self-hosted compiler's own source. It only holds while
 `self/` uses no construct the two lower differently, so it was a check to
 enable per file as the port landed rather than a milestone. **It holds for
@@ -67,14 +67,14 @@ which is rule 1 of §5 enforced by the suite rather than by good intentions.
 
 ---
 
-## 2. AmritScript-0: the subset `self/` is written in
+## 2. Nish-0: the subset `self/` is written in
 
 The trap in every bootstrap is writing the compiler in more language than the
-compiler implements. **AmritScript-0** is the fixed, deliberately small subset
-that `self/` may use, and the closure condition is that AmritScript-0 is a subset
+compiler implements. **Nish-0** is the fixed, deliberately small subset
+that `self/` may use, and the closure condition is that Nish-0 is a subset
 of what `self/` compiles. Every line of `self/` is checked against that.
 
-AmritScript-0 is today's language plus §3, minus everything `self/` does not need.
+Nish-0 is today's language plus §3, minus everything `self/` does not need.
 Notably `self/` is written **without**:
 
 - generics, arrow functions, closures, nested functions, function values;
@@ -86,7 +86,7 @@ Notably `self/` is written **without**:
 
 ### 2.1 One `Node` class, not a class hierarchy
 
-AmritScript has single inheritance (WP2b) but no downcast, and adding one would
+Nish has single inheritance (WP2b) but no downcast, and adding one would
 mean a runtime tag check, a `T | null` result, and a new rule in the checker
 for a cast that can fail. A bootstrap compiler does not need any of that.
 
@@ -131,7 +131,7 @@ golden `.ll`, an `llvm-as` pass, a native round trip, a `reject_*` case, a
 **Every row below is now done**, and so is the `panic(msg)` of D1. The
 language gap is closed, and wave C below has landed too, so what remains
 between here and S5 is the port itself and the four decisions of §3a, which
-are about how `self/` is written rather than about what AmritScript can
+are about how `self/` is written rather than about what Nish can
 express.
 
 ### Wave A — the front end cannot be written without these
@@ -155,17 +155,17 @@ one allocation, one `memcpy` per part.
 
 | # | Addition | Evidence |
 | --- | --- | --- |
-| B1 | `f64ToBits(x: f64): i64` (and `bitsToF64`) **Done.** | **A blocker, and the least obvious one.** LLVM only accepts decimal float literals that round-trip exactly, so the emitter writes `double 0x400921FB54442D18` — today via `Buffer.writeDoubleBE`. AmritScript has no way to see a double's bits, so without this the self-hosted emitter cannot emit any `f64` constant. One `bitcast` in the IR: zero instructions, zero runtime. |
+| B1 | `f64ToBits(x: f64): i64` (and `bitsToF64`) **Done.** | **A blocker, and the least obvious one.** LLVM only accepts decimal float literals that round-trip exactly, so the emitter writes `double 0x400921FB54442D18` — today via `Buffer.writeDoubleBE`. Nish has no way to see a double's bits, so without this the self-hosted emitter cannot emit any `f64` constant. One `bitcast` in the IR: zero instructions, zero runtime. |
 | B2 | `console.error(x)` and a newline-free write **Done.** | Every one of the 16 diagnostic writes goes to **stderr**, and two dumps write without a trailing newline. `console.log` is stdout-and-newline only. Without these, every `.err` golden and the runner's stream expectations have to be re-baselined — a worse outcome than two five-line runtime functions. |
 | B3 | A file read that can fail **Done.** | `readFileSync` **exits the process** on a missing file, so a compiler cannot turn it into its own `` Cannot find module `./x` `` diagnostic and carry on loading the other imports. Smallest fix: `readFileSyncOrNull(path): string \| null` — it subsumes `existsSync`, has no time-of-check race, and needs no new type. |
 | B4 | Contextual `[]` in a field assignment | **Done.** `this.children = []` in a constructor did not take its element type from the field, which every container class hits on its first line. |
 
 ### Wave C — library code in `self/`, no language change
 
-Written once in AmritScript and then just there. Listed so nobody mistakes them
+Written once in Nish and then just there. Listed so nobody mistakes them
 for language work: `StringMap` / `StringSet` (~200 `Map`/`Set` sites),
 `StringBuilder` (§2.3), a **stable** sort (the diagnostic order is
-golden-compared) and a byte-wise `compareStrings` (AmritScript has no `<` on
+golden-compared) and a byte-wise `compareStrings` (Nish has no `<` on
 strings, deliberately), `jsonQuote` matching JSON escaping exactly, hex
 formatting for B1, and a `resolvePath` that normalises `.` and `..` the way
 Node does — see D3.
@@ -223,7 +223,7 @@ and caught in six, every one load-bearing: `DiagnosticSink.recover` (10 call
 sites, per-declaration recovery), per-statement recovery in `checkStatements`,
 and `checkVariableDeclarationList`, which catches, *declares the variable with
 its annotated type anyway*, and rethrows so later statements do not cascade
-`Unknown identifier`. AmritScript `throw` traps and discards the value.
+`Unknown identifier`. Nish `throw` traps and discards the value.
 
 The plan is error-value threading: a diagnostic array, an `ERROR` sentinel type,
 and status returns. Be honest that this is **genuinely worse** than
@@ -247,7 +247,7 @@ the absolute resolved path; a hand-written `resolve` that normalises `..`
 differently from Node makes one file load twice, cycles stop terminating, and
 bogus duplicate-symbol errors appear. Separately, `src/` imports *directories*
 (`from "../checker"` at 15 sites) and re-exports (`export * from`) — neither of
-which AmritScript resolves, so the barrels must go.
+which Nish resolves, so the barrels must go.
 
 **D4. stage1 should not link.** `--link` shells out to `bash scripts/build.sh`
 and `-o dir/` creates directories, which would mean `spawnSync` and `mkdirSync`
@@ -263,7 +263,7 @@ cost of the two builtins is 249 bytes of runtime, and what they buy is the last
 sentence of §1. A compiler that cannot produce an executable without a shell
 script beside it is self-hosting in the IR and not in the artifact, and
 "`self/` compiles `self/`" then means a `.ll` a third program has to finish.
-It now means `amritc self/compile.ts --link amritc`. The two builtins are
+It now means `nish self/compile.ts --link nish`. The two builtins are
 `mkdirSync` and `spawnSync`, exactly the two D4 named, and they are ordinary
 language now rather than compiler plumbing: rule 1 of §6 applies to them like
 anything else, with their goldens, their negatives, their `docs/LANGUAGE.md`
@@ -284,8 +284,8 @@ this size.*
 
 | | Deliverable | Proof |
 | --- | --- | --- |
-| **S1 Lexer** | `self/lexer.ts` tokenises AmritScript-0 **Done.** | Its token stream agrees with the `typescript` scanner's over every `tests/cases/*.ts`; the lexer built by stage0 runs natively |
-| **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 **Done.** | Its tree matches the `typescript` parser's, span for span, for every program in the corpus that AmritScript-0's grammar covers |
+| **S1 Lexer** | `self/lexer.ts` tokenises Nish-0 **Done.** | Its token stream agrees with the `typescript` scanner's over every `tests/cases/*.ts`; the lexer built by stage0 runs natively |
+| **S2 Parser** | `self/parser.ts` builds the `Node` tree of §2.1 **Done.** | Its tree matches the `typescript` parser's, span for span, for every program in the corpus that Nish-0's grammar covers |
 | **S3 Checker** | `self/checker.ts` — types, scopes, the side tables **Done.** | Every `reject_*` case in `tests/cases/` is rejected by both compilers with the same message |
 | **S4 Emitter** | `self/emit.ts` — IR text **Done.** | `IR(stage0, p) == IR(stage1, p)`; it holds for the whole corpus rather than a whitelist |
 | **S5 Bootstrap** | `self/` compiles `self/` **Done.** | `IR(stage1, self/) == IR(stage2, self/)`, and stage3 is byte-identical to stage2 |
@@ -312,11 +312,11 @@ stage3            == stage2                byte for byte, as files
 
 The middle line is the proof §1 defined. The first is the stronger equality §1
 said was worth aiming at and not worth blocking on: it holds for every module,
-so the TypeScript implementation and the AmritScript one are the same compiler and
+so the TypeScript implementation and the Nish one are the same compiler and
 not merely two compilers that agree about the tests. The third compares the
 binaries rather than the text.
 
-**S5 needed one addition to AmritScript-0, and it was grammar rather than
+**S5 needed one addition to Nish-0, and it was grammar rather than
 semantics: the parenthesised type.** `self/program.ts` writes
 `(Local | null)[]`, and it has to, because `Local | null[]` groups the other
 way. stage0 has always accepted it (`ParenthesizedType` in `src/types.ts`);
@@ -431,7 +431,7 @@ compilers have been compared on input neither of them was written against.
 
 ### What S4 cost
 
-`self/` is 16,496 lines of AmritScript, and the emitter half of it — the IR
+`self/` is 16,496 lines of Nish, and the emitter half of it — the IR
 builder, the runtime ABI table, the targets, the escape analysis, the
 attribute fixpoint, the six construct families, the module assembly and the
 driver — is 6,761 of them, against the 5,686 lines of `src/codegen/` it
@@ -450,7 +450,7 @@ a dump flag stage1 does not have.
 
 Four things are worth carrying into S5:
 
-1. **AmritScript-0 held for the fourth time.** Nothing was added to the language
+1. **Nish-0 held for the fourth time.** Nothing was added to the language
    for the emitter either. The one place the subset genuinely pushed back was
    `src/`'s `factCollectors` array — a list of *functions* each `emit/*.ts`
    registers into — which became one collector class in `self/attributes.ts`.
@@ -470,7 +470,7 @@ Four things are worth carrying into S5:
    at catching: `readFileSyncOrNull` was not an allocation site, so a function
    returning the bytes could still get an arena scope that released them; and a
    compound integer division (`x /= k`, `p.f %= k`) contributed no
-   `amrit_panic_div` callee, so its caller kept `willreturn` and `readnone` over
+   `nish_panic_div` callee, so its caller kept `willreturn` and `readnone` over
    a call that writes and never returns. Both are fixed with cases in
    `tests/cases/`. Three S3 leftovers came out too — `p.f++`, `p.f |= 1` and
    `a[i] &= 1` were accepted by stage1 and refused by stage0 — and they are
@@ -482,7 +482,7 @@ Four things are worth carrying into S5:
 
 ### What S3 cost
 
-`self/` is 9,702 lines of AmritScript, and the checker half of it — types,
+`self/` is 9,702 lines of Nish, and the checker half of it — types,
 diagnostics, scopes, the side tables, annotations, declarations, structs,
 constants, expressions, statements, members, arrays, builtins, definite
 assignment and Phase 0 — is about 5,000 of them, against the ~5,100 lines of
@@ -508,7 +508,7 @@ half a dump cannot see:
 
 Three decisions are worth carrying into S4:
 
-1. **AmritScript-0 still held.** Nothing was added to the language for the
+1. **Nish-0 still held.** Nothing was added to the language for the
    checker either. Two stage0 bugs and one contextual-typing gap came out of
    writing it — an imported class's or function's layouts not reaching the
    importer, a reachability closure that depended on module order, and a
@@ -525,9 +525,9 @@ Three decisions are worth carrying into S4:
 ### What S1 cost, and what it says
 
 `self/tokens.ts`, `self/lexer.ts` and `self/dump_tokens.ts` are **1,222 lines
-of AmritScript**, and the four numbers the gate wants are already forming:
+of Nish**, and the four numbers the gate wants are already forming:
 
-- **AmritScript-0 held.** The lexer needed no language addition beyond the ones
+- **Nish-0 held.** The lexer needed no language addition beyond the ones
   §3 already lists. It is written with `switch`, `charCodeAt`, `substring`,
   `push`/`pop`, `join`, the bitwise operators and module constants — that is,
   with wave A, which is the first evidence that the census measured the right
@@ -548,7 +548,7 @@ of AmritScript**, and the four numbers the gate wants are already forming:
   forbidden; narrow with `!== null`" rather than a complaint about a stray
   `?`). One divergence stands by design: the scanner hands back a bare `>` so
   the parser can close nested type arguments one at a time, and this lexer
-  merges `>>` and `>>>` because AmritScript-0 has no nested type argument list —
+  merges `>>` and `>>>` because Nish-0 has no nested type argument list —
   the oracle asks for `reScanGreaterToken` to match, and the parser will have
   to split a `>>` where it wants two closers.
 - **It is not slow.** Over 129 KB of the compiler's own source, the native
@@ -559,7 +559,7 @@ of AmritScript**, and the four numbers the gate wants are already forming:
 ### What S2 cost, and the gate's four numbers
 
 `self/nodes.ts`, `self/parser.ts` and `self/dump_ast.ts` bring `self/` to
-**2,817 lines of AmritScript**. `tests/parser_oracle.js` is the lexer oracle one
+**2,817 lines of Nish**. `tests/parser_oracle.js` is the lexer oracle one
 level up: it walks the `typescript` tree, prints it in `dump_ast`'s format and
 diffs, so what is compared is not "did it parse" but "is it the same tree, out
 of the same pieces, with the same spans".
@@ -571,7 +571,7 @@ is a `reject_*` case.** Every positive program in `tests/cases/`, `examples/`,
 
 So the gate's questions have answers:
 
-1. **Did AmritScript-0 hold?** Yes, again, and this time under more pressure: a
+1. **Did Nish-0 hold?** Yes, again, and this time under more pressure: a
    recursive-descent parser with no exceptions, no closures, no generics and
    no `Map`. The one-`Node`-class decision of §2.1 paid for itself — a fixed
    child layout per kind with `N_LIST` for the variable-length groups and
@@ -598,7 +598,7 @@ So the gate's questions have answers:
    the 258 ms it costs to load.
 
 The 43 skips are the honest remainder, and they are all one thing: **grammar
-for constructs AmritScript forbids**. Stage0 rejects those by name in its
+for constructs Nish forbids**. Stage0 rejects those by name in its
 Phase 0 validator, *after* the `typescript` package has parsed them, so for
 stage1 to produce the same message this parser must read them and turn them
 down itself. The tally, largest first: `try` (1), `enum` (2), `namespace` (2),
@@ -616,7 +616,7 @@ about how much of TypeScript `self/` ends up parsing.
 S1 and S2 are done first and the project is re-decided there, because they
 carry the risk the other three do not. S3, S4 and S5 are a *port*: `src/`
 already contains a checker and an emitter, and the question is only whether
-AmritScript-0 can express them. S1 and S2 are **new code** — `src/` has no lexer
+Nish-0 can express them. S1 and S2 are **new code** — `src/` has no lexer
 and no parser, because the `typescript` package is the parser, and 1,558 of
 the references in `src/` are calls into it. That code has to be written from
 nothing and then made to agree with a 60,000-line scanner well enough for the
@@ -624,13 +624,13 @@ IR equality of §1 to mean anything.
 
 So the sequencing puts the unknown first, and both artifacts are worth having
 whichever way the gate goes: a lexer and a recursive-descent parser are the
-largest AmritScript program in existence, which is the dogfooding evidence the
+largest Nish program in existence, which is the dogfooding evidence the
 language wants, and they belong in `bench/` as a workload that is neither
 numeric nor synthetic.
 
 At the gate, three things decide it:
 
-1. **Did AmritScript-0 hold?** If S1 and S2 needed language additions beyond §3,
+1. **Did Nish-0 hold?** If S1 and S2 needed language additions beyond §3,
    S3–S5 will need more, and each one is something stage1 must then implement
    in order to compile itself.
 2. **How far off was the line count?** `src/` is 13,757 lines. If the lexer and
@@ -653,7 +653,7 @@ tax finite, and it is why §1's "stage0 is not going away" means *kept*, not
 **Frozen is not the end state, and the sequel has its own plan.** The day the
 freeze becomes a deletion — `src/`, the `typescript` dependency and Node out of
 the compiler, the bootstrap seed moved from a second implementation to the
-previous released `amritc`, which is rustc's arrangement and Go's — is
+previous released `nish`, which is rustc's arrangement and Go's — is
 [WP19](wp19-stage0-retirement.md). It lists what stage0 still owns beyond
 compiling (the oracles, the npm package, the diverse-double-compiling
 property), the six gates that must close before any of it is deleted, and the
@@ -682,7 +682,7 @@ a register ([wp17-result-abi.md](wp17-result-abi.md)) — is an *ABI* change
 rather than a construct, and that turned out to be the cheaper kind to
 mirror. It touched the same five files on each side (`types.ts`,
 `result.ts`/`emit_result.ts`, `emit.ts`/`emitter.ts`, `escape.ts`,
-`attributes.ts`), added nothing to AmritScript-0 — rule 5 of §6 did not fire, and
+`attributes.ts`), added nothing to Nish-0 — rule 5 of §6 did not fire, and
 `self/` is written in exactly the subset it was written in before — and the
 IR oracle caught the divergences the same way: the two sides have to agree on
 every SSA number of the pack and the unpack, so a shift emitted in a
@@ -762,7 +762,7 @@ rule is only worth stating if it changes something:
   mask in hardware and the backend drops the `and`. Free, so it stays.
 - **`switch` is integer-only**, so it lowers to LLVM's `switch` instruction and
   the backend builds a jump table. A string `switch` would have been a chain of
-  `amrit_str_eq` calls wearing a `switch`'s clothes; `if`/`else` says that
+  `nish_str_eq` calls wearing a `switch`'s clothes; `if`/`else` says that
   honestly.
 - **String methods lower inline, not to calls.** `charCodeAt` is a bounds check
   and a `load i8`; `substring` is a length computation, a bump allocation and a
@@ -788,8 +788,8 @@ These are in addition to `docs/MASTER_PLAN.md` §7, not instead of it.
 1. **A construct enters the language before it enters `self/`.** Wanting it
    for the port is not a reason to skip its `reject_*` case or its cookbook
    entry. `self/` is the customer, not the exception.
-2. **`self/` is an AmritScript program.** It follows `docs/LANGUAGE.md` and the
-   AmritScript half of `.claude/typescript.md` — `function` declarations,
+2. **`self/` is an Nish program.** It follows `docs/LANGUAGE.md` and the
+   Nish half of `.claude/typescript.md` — `function` declarations,
    `interface` for structs, no arrow functions, no `type` aliases. The house
    rules for `src/` do not apply to it, and `biome.json` must exempt it the
    way it already exempts `examples/` and `bench/`.
@@ -798,7 +798,7 @@ These are in addition to `docs/MASTER_PLAN.md` §7, not instead of it.
    written by hand. A disagreement is triaged before the next phase starts.
 4. **The runtime budget still holds.** Self-hosting is not a licence to grow
    `runtime.c` past §2 of the master plan. Lower inline instead.
-5. **AmritScript-0 does not grow quietly.** Adding a construct to the subset in
+5. **Nish-0 does not grow quietly.** Adding a construct to the subset in
    §2 is an edit to this file and a line in `CHANGELOG.md`, because every
    addition is something stage1 must then implement in order to compile
    itself.
@@ -825,8 +825,8 @@ holds" and "the self-hosted compiler is the one you run" is a build recipe that
 is not a test, and the command line D4 said a wrapper would supply.
 
 ```bash
-npm run bootstrap                         # build/amritc, stage2, speed profile
-scripts/amritc.sh hello.ts --link hello && ./hello   # the wrapper; deleted in §7a
+npm run bootstrap                         # build/nish, stage2, speed profile
+scripts/nish.sh hello.ts --link hello && ./hello   # the wrapper; deleted in §7a
 ```
 
 **`scripts/bootstrap.sh` builds the chain.** stage0 (`dist/index.js`) builds
@@ -838,7 +838,7 @@ sooner — and `--verify` runs the three equalities of §1 with `cmp` rather tha
 with the suite's reporting, which makes the script self-checking for anyone
 building it outside a checkout of the tests.
 
-**`scripts/amritc.sh` is the command line.** D4 kept `--link`, `--profile`
+**`scripts/nish.sh` is the command line.** D4 kept `--link`, `--profile`
 and directory creation out of stage1, on the grounds that a wrapper could
 supply them for nothing; this is that wrapper, and D4's bet is settled at 120
 lines of `bash` with no runtime growth at all. It mirrors stage0's spelling
@@ -898,14 +898,14 @@ One stage rather than three, because what is being tested here is the
 deployment path and not the fixed point — the bootstrap check above owns that,
 and this one would only pay for the same two links again.
 
-**stage0 stays the published package.** `npm install -g amritc` still ships
+**stage0 stays the published package.** `npm install -g nish` still ships
 `dist/`, and it has to: it is the seed every bootstrap starts from and the
 oracle every `self/` phase is compared against. What it is no longer is the
 only one that emits DWARF or the interop sidecars; what is still only stage0's
 is the AST dump, and the `--json` object for an *internal compiler error*
-(`AS0003`). The second is a language limit rather than a decision to skip work:
+(`NL0003`). The second is a language limit rather than a decision to skip work:
 `self/ice.ts` is a library module, so `process.argv` is out of reach there —
-it needs an `export function main` — and AmritScript has no mutable module
+it needs an `export function main` — and Nish has no mutable module
 state to stash the flag in, so the only way to get it to `internalError` is a
 parameter on all 39 of its callers, which are broken invariants scattered
 through every phase. Both compilers print the same human report; only stage0
@@ -920,16 +920,16 @@ programs about eight times faster (§4, D5).
 
 ## 7a. D4 reversed: the compiler links its own output
 
-`scripts/amritc.sh` is deleted. `mkdirSync` and `spawnSync` — the two builtins
+`scripts/nish.sh` is deleted. `mkdirSync` and `spawnSync` — the two builtins
 §3a D4 named as the reason not to do this — are in the language, and with them
 `self/compile.ts` plans its output, makes every directory in the way and runs
 `bash scripts/build.sh` for `--link`, which is the same script `src/index.ts`
 spawns and has always been.
 
 ```bash
-npm run bootstrap                       # build/amritc, stage2, no wrapper after it
-build/amritc self/compile.ts --link amritc
-cmp amritc build/amritc                 # the fixed point, reached by the artifact
+npm run bootstrap                       # build/nish, stage2, no wrapper after it
+build/nish self/compile.ts --link nish
+cmp nish build/nish                 # the fixed point, reached by the artifact
 ```
 
 **What D4 got right, and what it was measuring.** Dropping the link step was
@@ -950,7 +950,7 @@ entered `src/` first with a golden, a native round trip, two negatives, a
 | `spawnSync(argv: string[]): number` | `argv[0]` run through `PATH` with `argv` as its vector, waited for; the exit status, `128 + n` for a signal, `-1` for an empty vector or a program that would not start | as above; a linker that is not installed is a message, not a crash |
 
 `spawnSync` is the first builtin whose pointer argument the runtime keeps:
-`amrit_spawn` copies each element's bytes pointer into an arena vector that
+`nish_spawn` copies each element's bytes pointer into an arena vector that
 outlives the call, so `classifyUse` in `attributes.ts` reports `USE_ESCAPE` for
 it and the declaration carries no `nocapture`. It is also the first that is
 *not* `willreturn` — the child may never exit, and `waitpid` waits — which is a
@@ -981,7 +981,7 @@ the binary; `<module>.ll` beside the source when nothing is named, which is
 stage0's default and replaces stage1's older "one module to stdout"; and the
 `--link` refusal for a program with no `export function main`, before the emit
 rather than after the linker. It finds `scripts/build.sh` and `runtime.c` from
-the path it was invoked by (`<prefix>/bin/amritc` and `build/amritc` both put
+the path it was invoked by (`<prefix>/bin/nish` and `build/nish` both put
 the root one level up), falling back to the working directory, and says which
 two it looked in when neither has them.
 
@@ -1011,8 +1011,8 @@ which is not the same thing:
 | --- | --- | --- |
 | `--emit-ast` | §7: the dump prints the `typescript` package's node names, and this compiler's tree is its own. **Closed by WP19 R1** — not by mirroring the names, which stays refused, but by answering the flag with stage1's own tree and a golden of its own | a mirror of `ts.SyntaxKind` inside the self-hosted compiler, which is the opposite of what §1 means |
 | `--target host` | it asked the machine what it is, and nothing in the language did. **Done** | `process.platform` and `process.arch` as builtins, **8 bytes of `.text` each** as costed; `self/target.ts` composes the triple exactly as `src/codegen/target.ts` does |
-| exit **70** for an internal error, and `AMRITC_DEBUG` | a broken invariant reached `panic(msg)`, which the language defines as the message and exit 1. **Done**, with `process.exit(internalError(...))` and `self/ice.ts` | 28 sites edited and no language change; the two the design costed are weighed below |
-| `-o <dir>` for an existing directory **without** the trailing slash | stage0 `stat`s the path; the trailing slash was the only spelling here. **Done** | `isDirectorySync(path)`, the smallest `stat` that answers the question, and one byte of `.text` net once `amrit_mkdir` was rewritten to call it |
+| exit **70** for an internal error, and `NISH_DEBUG` | a broken invariant reached `panic(msg)`, which the language defines as the message and exit 1. **Done**, with `process.exit(internalError(...))` and `self/ice.ts` | 28 sites edited and no language change; the two the design costed are weighed below |
+| `-o <dir>` for an existing directory **without** the trailing slash | stage0 `stat`s the path; the trailing slash was the only spelling here. **Done** | `isDirectorySync(path)`, the smallest `stat` that answers the question, and one byte of `.text` net once `nish_mkdir` was rewritten to call it |
 
 ### The three builtins, and the runtime they cost
 
@@ -1031,8 +1031,8 @@ constant data, so nothing is allocated and nothing is loaded: the declarations
 carry `readnone willreturn`, a function built only from them stays pure, and
 two reads in one function fold into one. Deliberately **not** `noalias` — every
 call answers the same pointer, and `noalias` promises the opposite.
-`amrit_is_dir` is `nounwind willreturn` and `effect: "write"`, the same as
-`amrit_mkdir` and for the reason `amrit_parse_number` is not `readonly`: a
+`nish_is_dir` is `nounwind willreturn` and `effect: "write"`, the same as
+`nish_mkdir` and for the reason `nish_parse_number` is not `readonly`: a
 failed `stat` stores `errno`, and the file system is not memory LLVM may
 reason about, so a caller must not be hoisted across anything that could change
 it.
@@ -1044,8 +1044,8 @@ it.
 | `.text` | 2,544 | 2,561 | 4,096 |
 | source bytes | 12,707 | 14,797 | — |
 
-Eight bytes each for `amrit_platform` and `amrit_arch` (a `lea` and a `ret`),
-and one byte net for `amrit_is_dir`, because `amrit_mkdir` lost its own copy of
+Eight bytes each for `nish_platform` and `nish_arch` (a `lea` and a `ret`),
+and one byte net for `nish_is_dir`, because `nish_mkdir` lost its own copy of
 the `stat` to it.
 
 ### Exit 70: which design costs the language less
@@ -1058,7 +1058,7 @@ decides it, and by a wide margin:
 - `panic(m)` already means "this message, then exit 1", and `process.exit(n)`
   already means "this code, now". The status one program wants for its own bugs
   needs no new construct: the language is already complete for it, and every
-  other AmritScript program would carry a builtin it has no use for.
+  other Nish program would carry a builtin it has no use for.
 - A second panic would have to bake this compiler's *reporting policy* — the
   version line, the issue tracker, the word "internal" — into the language that
   compiles it, or else print a bare message and lose the report.
@@ -1073,13 +1073,13 @@ decides it, and by a wide margin:
 **What stage1 honestly cannot say.** stage0 catches the failure in one
 `try`/`catch` at the top of its driver, where the command line is still in hand
 and the exception carries a stack, and prints both — the stack only under
-`AMRITC_DEBUG=1`. stage1 has neither, for one reason: with no exceptions the
+`NISH_DEBUG=1`. stage1 has neither, for one reason: with no exceptions the
 report is made *at the site* instead of at the top. There is no stack to
 unwind, and no `process.argv` to read either, because that builtin requires an
 entry `main` and the modules that report internal errors (`self/types.ts`,
 `self/emit.ts`, ...) are compiled on their own as well, as whole programs of
 the corpus. So the report names the compiler and its version, the invariant
-that broke, and `AMRITC_DEBUG` — saying there is nothing behind it here rather
+that broke, and `NISH_DEBUG` — saying there is nothing behind it here rather
 than promising a stack a rerun would not produce — and then asks, in stage0's
 own words, for the input file and the command line, which is the half stage0
 was echoing anyway. `tests/self/ice.ts` and the WP14 block of `tests/run.js`

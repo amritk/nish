@@ -1,7 +1,7 @@
 /**
- * AmritScript -> JavaScript rewrite for differential testing (WP13).
+ * Nish -> JavaScript rewrite for differential testing (WP13).
  *
- * An AmritScript program is valid TypeScript, but its *semantics* are not
+ * An Nish program is valid TypeScript, but its *semantics* are not
  * JavaScript's: `number` is a wrapping 32-bit integer in the default mode,
  * `i64` is a wrapping 64-bit integer, `u8`/`u16`/`u32`/`u64` are unsigned and
  * JavaScript has no unsigned integers at all, `f32` is a 32-bit float and
@@ -16,7 +16,7 @@
  *   3. print the transformed AST back to TypeScript and hand it to
  *      `ts.transpileModule` to strip the types and produce an ES module.
  *
- * The output modules import runtime/shim.mjs as `__amrit`; a generated
+ * The output modules import runtime/shim.mjs as `__nish`; a generated
  * `__entry.mjs` calls `main()` and turns its return value into the exit code.
  * Type information comes from the compiler, never from `typescript`'s own
  * checker, so the rewrite agrees with what was actually compiled: a
@@ -33,7 +33,7 @@ const SHIM = path.join(root, "runtime", "shim.mjs");
 const { Compilation } = await import(pathToFileURL(path.join(root, "dist", "compiler.js")).href);
 
 const f = ts.factory;
-const SHIM_NS = "__amrit";
+const SHIM_NS = "__nish";
 
 const shimCall = (name, args) =>
   f.createCallExpression(
@@ -138,7 +138,7 @@ const SHIFT_OPS = new Set([
  * `& | ^` are JavaScript's own once the result is wrapped back into the width.
  * The shifts need two adjustments:
  *
- *   - **The count.** AmritScript masks it to the operand width. JavaScript's
+ *   - **The count.** Nish masks it to the operand width. JavaScript's
  *     number shifts already mask to 31, which is that rule at 32 bits, so only
  *     `u8` and `u16` need the mask spelled out.
  *   - **The opcode.** `>>` is arithmetic on a signed type and logical on an
@@ -192,13 +192,13 @@ const BITWISE = new Set([
   ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
 ]);
 
-/** `a op b` with the AmritScript semantics of `kind`, whichever family `op` belongs to. */
+/** `a op b` with the Nish semantics of `kind`, whichever family `op` belongs to. */
 const apply = (kind, op, a, b) => (BITWISE.has(op) ? bitwise(kind, op, a, b) : arith(kind, op, a, b));
 
 /**
  * The numeric conversion builtins and the StaticType each produces. A
  * conversion with an unsigned type or an `f32` on either side goes through
- * `__amrit.convert`, which takes both kinds; the plain signed/f64 ones keep
+ * `__nish.convert`, which takes both kinds; the plain signed/f64 ones keep
  * their own shim helpers.
  */
 const CONVERSION_TARGETS = {
@@ -243,7 +243,7 @@ const IDENTIFIER_BUILTINS = new Map([
  * `orReturn()` returns from the *enclosing* function, and no JavaScript
  * expression can do that. The shim's method throws a sentinel instead and the
  * body that contains the call is wrapped in the `try`/`catch` this predicate
- * selects; `__amrit.caught` turns the sentinel back into the `Err` the function
+ * selects; `__nish.caught` turns the sentinel back into the `Err` the function
  * should have returned, and re-raises anything else.
  */
 function propagates(body) {
@@ -264,7 +264,7 @@ function propagates(body) {
   return found;
 }
 
-/** `{ try { <body> } catch (e) { return __amrit.caught(e); } }` */
+/** `{ try { <body> } catch (e) { return __nish.caught(e); } }` */
 function wrapPropagation(body) {
   const thrown = f.createIdentifier("__propagated");
   return f.createBlock(
@@ -290,7 +290,7 @@ function zeroOf(elem) {
 }
 
 /**
- * The JavaScript literal for a folded module constant (WP14). An AmritScript
+ * The JavaScript literal for a folded module constant (WP14). An Nish
  * module constant *is* its folded value — the compiler emits no global and no
  * initialiser — so substituting the value is the faithful rewrite, and it
  * carries the wrapping, the i64 width and the constant-folded string concat
@@ -346,7 +346,7 @@ function makeTransformer(unit, stems) {
       }
 
       // ---- implicit super() (WP2b) ----
-      // AmritScript lets a derived constructor omit `super()` when no ancestor
+      // Nish lets a derived constructor omit `super()` when no ancestor
       // constructor takes parameters and calls it before the body; JavaScript
       // throws on the first `this` instead, so the call is made explicit.
       if (ts.isConstructorDeclaration(node) && node.body && ts.isClassDeclaration(node.parent)) {
@@ -452,7 +452,7 @@ function makeTransformer(unit, stems) {
           const r = ts.visitNode(node.right, visit);
           const binop = COMPOUND_TO_BINARY[op];
           if (ts.isElementAccessExpression(node.left)) {
-            // a[i] op= v  ->  __amrit.updIdx(a, i, (old) => wrap(old op v))
+            // a[i] op= v  ->  __nish.updIdx(a, i, (old) => wrap(old op v))
             const a = ts.visitNode(node.left.expression, visit);
             const i = ts.visitNode(node.left.argumentExpression, visit);
             const old = f.createIdentifier("__old");

@@ -38,7 +38,7 @@ export const STRUCT_INTERFACE: i32 = 1;
  * per parameter. For a method or constructor `params[0]` is `this`.
  */
 export class FunctionSig {
-  /** The LLVM symbol (`@name`). `main` in the entry module is `@amrit_main`. */
+  /** The LLVM symbol (`@name`). `main` in the entry module is `@nish_main`. */
   name: string;
   /** The identifier as written; for a method it reads `Owner.method`. */
   sourceName: string;
@@ -388,7 +388,7 @@ export class CheckedProgram {
 
   /** Set when this module declares `export function main`; the entry wrapper wraps it. */
   entryMain: FunctionSig | null;
-  /** Some function reads `process.argv`, so the `@main` wrapper calls `amrit_argv_init`. */
+  /** Some function reads `process.argv`, so the `@main` wrapper calls `nish_argv_init`. */
   usesArgv: boolean;
 
   /** Node id -> resolved type, or -1 where nothing was recorded. */

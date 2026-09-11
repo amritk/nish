@@ -1,12 +1,12 @@
-// Import an AmritScript module compiled to WebAssembly from ordinary Node.js.
-// This is the recommended interop direction: keep hot loops in AmritScript,
+// Import an Nish module compiled to WebAssembly from ordinary Node.js.
+// This is the recommended interop direction: keep hot loops in Nish,
 // let Node handle I/O and npm packages, and cross the boundary rarely.
 //
 //   scripts/build.sh build/add.ll -o build/add.wasm --profile wasm
 //   node examples/node-host.mjs build/add.wasm              # add(2, 3) = 5
 //   node examples/node-host.mjs build/add.wasm add 40 2     # add(40, 2) = 42
 //
-// Arrays cross as typed arrays (examples/arrays.ts). `amritc --emit-dts
+// Arrays cross as typed arrays (examples/arrays.ts). `nish --emit-dts
 // build/arrays.d.ts` writes the typings and, next to them, `build/arrays.mjs`,
 // a loader that copies Int32Array / Float64Array / BigInt64Array arguments
 // into the module's arena and copies results out; when that companion sits
@@ -22,7 +22,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-/** Instantiate a freestanding AmritScript wasm module and return its exports (scalars only). */
+/** Instantiate a freestanding Nish wasm module and return its exports (scalars only). */
 export async function load(bytes) {
   const { instance } = await WebAssembly.instantiate(bytes, {});
   return instance.exports;

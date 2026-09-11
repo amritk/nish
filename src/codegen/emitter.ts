@@ -24,7 +24,7 @@
  *     exactly the attributes their exporter's `define` carries, taken from
  *     the program-wide facts table handed in by the Compilation.
  *   - Non-exported functions get `internal` linkage (`--no-strict-exports` opts out).
- *   - The entry module's `export function main` is emitted as `@amrit_main`
+ *   - The entry module's `export function main` is emitted as `@nish_main`
  *     and wrapped by `define i32 @main(i32 %argc, i8** %argv)`, which calls
  *     it, releases the arena, and returns the exit code (0 for a void main).
  *
@@ -32,8 +32,8 @@
  *   - Allocations in `facts.stackSites` become entry-block allocas (the
  *     class and array emitters ask `isStackSite`).
  *   - A function with `facts.arenaScope` starts with
- *     `%arena.mark = call i64 @amrit_arena_mark()` and calls
- *     `@amrit_arena_release(i64 %arena.mark)` before every `ret`
+ *     `%arena.mark = call i64 @nish_arena_mark()` and calls
+ *     `@nish_arena_release(i64 %arena.mark)` before every `ret`
  *     (`emitScopeExit`, invoked by the return emitter and by the implicit
  *     `ret void`). `unreachable` paths (`process.exit`, `throw`) need none.
  */
@@ -160,7 +160,7 @@ export class Emitter implements EmitContext {
     this.debug?.beginFunction(this.fn, sig, privateAbi);
 
     // WP6: an automatic arena scope remembers the bump position before anything is allocated.
-    if (facts.arenaScope) this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("amrit_arena_mark")}()`);
+    if (facts.arenaScope) this.fn.emit(`%arena.mark = call i64 ${this.useRuntime("nish_arena_mark")}()`);
     // WP17: a `Result` parameter small enough to pack arrives as an `i64`, or
     // as the two-scalar pair under the private ABI. Either way it is turned
     // into the object every construct reads, once, before the body.
@@ -205,13 +205,13 @@ export class Emitter implements EmitContext {
 
   emitScopeExit(): void {
     if (!this.current.arenaScope) return;
-    this.fn.emit(`call void ${this.useRuntime("amrit_arena_release")}(i64 %arena.mark)`);
+    this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 %arena.mark)`);
   }
 
   /**
    * The C-ABI process entry, with the signature every libc start-up code
    * expects. When the program reads `process.argv` (WP7, `usesArgv` is set
-   * program-wide by the Compilation), `amrit_argv_init(argc, argv)` builds the
+   * program-wide by the Compilation), `nish_argv_init(argc, argv)` builds the
    * string array before the user's `main` runs; otherwise the arguments are
    * ignored. Attributes are deliberately minimal: the wrapper calls the
    * runtime, so it is neither pure nor provably returning.
@@ -233,8 +233,8 @@ export class Emitter implements EmitContext {
     }
     // `-g`: an artificial subprogram at the user's `main`, so `break main` lands somewhere sensible.
     this.debug?.beginFunction(fn, userMain, false, { artificial: true, name: "main" });
-    const freeArena = this.useRuntime("amrit_free_arena");
-    if (this.program.usesArgv) fn.emit(`call void ${this.useRuntime("amrit_argv_init")}(i32 %argc, i8** %argv)`);
+    const freeArena = this.useRuntime("nish_free_arena");
+    if (this.program.usesArgv) fn.emit(`call void ${this.useRuntime("nish_argv_init")}(i32 %argc, i8** %argv)`);
     let code = "0";
     if (userMain.returnType.kind === "void") fn.emit(`call void @${userMain.name}()`);
     else code = fn.emitValue(`call i32 @${userMain.name}()`);
@@ -324,15 +324,15 @@ export class Emitter implements EmitContext {
 
   private emitRuntimePrelude(): void {
     const all = this.opts.runtimeDecls;
-    const wantsAlloc = all || this.usedRuntime.has("amrit_alloc_struct");
+    const wantsAlloc = all || this.usedRuntime.has("nish_alloc_struct");
     if (wantsAlloc) {
-      this.usedRuntime.add("amrit_arena_grow");
+      this.usedRuntime.add("nish_arena_grow");
       this.module.addTypeDecl(ARENA_TYPE);
       this.module.addGlobal(ARENA_GLOBAL);
     }
-    // The array header type is referenced by `amrit_array_grow`'s declaration (WP4).
-    if (all || this.usedRuntime.has("amrit_array_grow")) this.module.addTypeDecl(ARRAY_TYPE);
-    // `@amrit_argv` is part of the C ABI too (WP7); modules that read `process.argv` declared it already.
+    // The array header type is referenced by `nish_array_grow`'s declaration (WP4).
+    if (all || this.usedRuntime.has("nish_array_grow")) this.module.addTypeDecl(ARRAY_TYPE);
+    // `@nish_argv` is part of the C ABI too (WP7); modules that read `process.argv` declared it already.
     if (all) this.module.addGlobal(ARGV_GLOBAL);
     for (const rt of RUNTIME_FUNCTIONS) {
       // Intrinsics are not part of the C ABI prelude: declared only when used.

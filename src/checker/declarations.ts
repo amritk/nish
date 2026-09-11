@@ -8,7 +8,7 @@
  *     rejected here with a specific message.
  *   - `export function main` in the entry module is the program entry. It
  *     takes no parameters (argv arrives in WP7) and returns `void` or an
- *     `i32`-lowered `number`; its symbol becomes `@amrit_main` so the emitter's
+ *     `i32`-lowered `number`; its symbol becomes `@nish_main` so the emitter's
  *     C-ABI wrapper can be `@main`.
  */
 import ts from "typescript";
@@ -18,7 +18,7 @@ import { ConstInfo } from "./constants.js";
 import { FunctionSig, ImportBinding, Param } from "./program.js";
 
 /** Symbol the entry module's `export function main` is emitted under. */
-export const ENTRY_MAIN_SYMBOL = "amrit_main";
+export const ENTRY_MAIN_SYMBOL = "nish_main";
 
 export function hasExportModifier(node: ts.Node): boolean {
   return !!ts.canHaveModifiers(node) && !!ts.getModifiers(node)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
@@ -49,8 +49,8 @@ export function collectFunctionSignature(
       sf
     );
   }
-  if (decl.name.text.startsWith("amrit_")) {
-    throw new CompileError("Function names starting with `amrit_` are reserved for the runtime", decl.name, sf);
+  if (decl.name.text.startsWith("nish_")) {
+    throw new CompileError("Function names starting with `nish_` are reserved for the runtime", decl.name, sf);
   }
 
   return {
@@ -127,8 +127,8 @@ export function collectArrowSignature(
   if (!arrow.type) {
     throw new CompileError(`Function \`${name}\` needs an explicit return type annotation`, decl.name, sf);
   }
-  if (name.startsWith("amrit_")) {
-    throw new CompileError("Function names starting with `amrit_` are reserved for the runtime", decl.name, sf);
+  if (name.startsWith("nish_")) {
+    throw new CompileError("Function names starting with `nish_` are reserved for the runtime", decl.name, sf);
   }
   return {
     name,

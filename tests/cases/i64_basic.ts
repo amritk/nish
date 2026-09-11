@@ -1,5 +1,5 @@
 // i64: a 64-bit multiply whose result overflows i32, printed through console.log
-// (amrit_str_from_i64) and a template literal. Literals take the i64 type from
+// (nish_str_from_i64) and a template literal. Literals take the i64 type from
 // context: the annotated initializer, the parameter, and the other operand.
 //
 // Compiled with `--wrapping` (see .args) because `sq * 2` overflows i64 and the

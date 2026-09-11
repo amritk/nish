@@ -129,7 +129,7 @@ recover hands its `CompileError`s to one `DiagnosticSink`
 | Phase | Recovery unit | Where |
 | --- | --- | --- |
 | Parser | every parse diagnostic of the file | `parseSource` |
-| Phase 0 validator | every forbidden construct (a rejected node's subtree is skipped, so `Array<any>` is one error) | `validateAmritScript` |
+| Phase 0 validator | every forbidden construct (a rejected node's subtree is skipped, so `Array<any>` is one error) | `validateNish` |
 | Pass 1 (signatures) | per declaration: class/interface (marked `poisoned`, its layout checks skipped), import, function signature, module resolution | `Checker.collectSignatures`, `Compilation.load` |
 | Pass 1b/1c | per import binding; every symbol clash | `Checker.bindImports`, `Compilation.rejectSymbolClashes` |
 | Pass 2 (bodies) | per statement, at the innermost statement list; the enclosing function is marked `poisoned` and its definite-return check is skipped | `checkStatements` |
@@ -153,11 +153,11 @@ Tests: `tests/cases/reject_multi_error` (three body errors), `reject_multi_forbi
 
 ## `--json`
 
-`amritc --json file.ts` prints one JSON object per error on stdout, nothing
+`nish --json file.ts` prints one JSON object per error on stdout, nothing
 else on stdout and nothing on stderr, with the same exit code:
 
 ```
-{"file":"tests/cases/reject_multi_error.ts","line":2,"column":10,"endLine":2,"endColumn":18,"severity":"error","code":"AS2231","message":"Operator `+` requires two operands of the same numeric type or two strings, got i32 and boolean"}
+{"file":"tests/cases/reject_multi_error.ts","line":2,"column":10,"endLine":2,"endColumn":18,"severity":"error","code":"NL2231","message":"Operator `+` requires two operands of the same numeric type or two strings, got i32 and boolean"}
 ```
 
 `line`/`column` are 1-based, `endLine`/`endColumn` exclusive. `severity` was
@@ -179,21 +179,21 @@ The band says which phase refused the program:
 
 | Band | Meaning |
 | --- | --- |
-| `AS0000` | no rule matched this message yet (see the backlog below) |
-| `AS0001` | a syntax error; the text is the `typescript` package's, so all of them share one code |
-| `AS0002` | the C toolchain `--link` needs could not be used (exit 3) |
-| `AS0003` | an internal compiler error (exit 70) |
-| `AS1xxx` | Phase 0, the forbidden-syntax sweep (`src/validator.ts`) |
-| `AS2xxx` | the checker: signatures, bodies, types |
-| `AS3xxx` | the driver and module loading |
-| `AS4xxx` | the interop sidecar generators |
-| `AS9xxx` | a WP15 §8 performance warning |
+| `NL0000` | no rule matched this message yet (see the backlog below) |
+| `NL0001` | a syntax error; the text is the `typescript` package's, so all of them share one code |
+| `NL0002` | the C toolchain `--link` needs could not be used (exit 3) |
+| `NL0003` | an internal compiler error (exit 70) |
+| `NL1xxx` | Phase 0, the forbidden-syntax sweep (`src/validator.ts`) |
+| `NL2xxx` | the checker: signatures, bodies, types |
+| `NL3xxx` | the driver and module loading |
+| `NL4xxx` | the interop sidecar generators |
+| `NL9xxx` | a WP15 §8 performance warning |
 
 A code is matched against the longest literal run of the message's template —
 the rule stated in words, with the interpolated names, types and counts
 removed. A handful of messages are built entirely out of interpolations
 (`` `${fn}` expects ${a}, got ${b} ``) and have no run long enough to identify
-a rule; those report `AS0000`. `tests/run.js` pins how many there are, so the
+a rule; those report `NL0000`. `tests/run.js` pins how many there are, so the
 backlog can shrink but not grow. Giving one a code is a matter of giving the
 message words of its own, not of editing the table.
 
@@ -208,12 +208,12 @@ span, so a wrapper that asked for JSON is never left with an empty stdout and
 an exit code to guess about:
 
 ```
-{"severity":"error","code":"AS0002","message":"--link: no usable C compiler found (...)"}
-{"severity":"error","code":"AS0003","message":"internal compiler error while compiling a.ts: ..."}
+{"severity":"error","code":"NL0002","message":"--link: no usable C compiler found (...)"}
+{"severity":"error","code":"NL0003","message":"internal compiler error while compiling a.ts: ..."}
 ```
 
 A driver error (a bad `-o` layout, an unreadable input) has the same shape and
-takes whatever code the registry resolves for its text, or `AS0000`. The human
+takes whatever code the registry resolves for its text, or `NL0000`. The human
 report still goes to stderr in the internal-error case, because a crash is
 worth seeing twice.
 
@@ -244,7 +244,7 @@ Goldens: `tests/cases/dump_ast.stdout`, `tests/cases/dump_checked.stdout`
 appends as `, !dbg !N`, set by the emitter around every statement and
 expression and restored afterwards. Emitted: `!llvm.dbg.cu`, the
 `Dwarf Version`/`Debug Info Version` module flags, a `DICompileUnit`
-(`DW_LANG_C99`, producer `amritc <version>`), a `DIFile` per source file a
+(`DW_LANG_C99`, producer `nish <version>`), a `DIFile` per source file a
 declaration comes from (name as given, directory `.`), one `distinct
 DISubprogram` per function (methods are
 `Owner.method`; the `@main` wrapper is an artificial `main` at the user's

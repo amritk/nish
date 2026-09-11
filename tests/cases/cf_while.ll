@@ -1,4 +1,4 @@
-declare void @amrit_panic_div(i1 noundef zeroext) #2
+declare void @nish_panic_div(i1 noundef zeroext) #2
 
 define internal noundef i32 @countDigits(i32 noundef %n) #0 {
 entry:
@@ -23,7 +23,7 @@ while.body:
   br i1 %7, label %div.fail, label %div.ok
 
 div.fail:
-  call void @amrit_panic_div(i1 zeroext %3)
+  call void @nish_panic_div(i1 zeroext %3)
   unreachable
 
 div.ok:

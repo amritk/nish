@@ -1,6 +1,6 @@
 // Rust twin of result.ts: same shape, same checksum line. `Result<i32, i32>`
 // is returned and passed in a register here for the same reason it is in
-// AmritScript since WP17 — it is two four-byte payloads and a discriminant.
+// Nish since WP17 — it is two four-byte payloads and a discriminant.
 const N: i32 = 200000000; // bench:n
 
 fn half(n: i32) -> Result<i32, i32> {

@@ -20,7 +20,7 @@
  *      therefore has to admit it in its own signature.
  *
  * The surface is Rust's, in the spelling TypeScript already has — every line
- * below parses as TypeScript and type-checks against `runtime/amritc.d.ts`:
+ * below parses as TypeScript and type-checks against `runtime/nish.d.ts`:
  *
  *   Result<T, E>       the type; `T` may be `void`, `E` may not
  *   Ok(v) / Ok()       the success value; takes its type from the context,
@@ -44,7 +44,7 @@
  * pass cannot prove purity, termination or escape through an unknown callee.
  * Narrowing plus `orReturn()` covers what those combinators are for.
  *
- * Representation in memory: one monomorphised `%struct.amrit_result.<T>.<E>`
+ * Representation in memory: one monomorphised `%struct.nish_result.<T>.<E>`
  * per distinct pair of payload types, laid out exactly as `class` structs are,
  * and held by pointer. That is deliberate rather than a compromise — it means
  * a `Result` costs what a small object costs, the WP6 escape analysis turns

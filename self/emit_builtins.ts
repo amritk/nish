@@ -45,7 +45,7 @@ import {
   TypeTable,
 } from "./types";
 
-const PARSE_RUNTIME: string = "amrit_parse_number";
+const PARSE_RUNTIME: string = "nish_parse_number";
 const SAT_I32: string = "llvm.fptosi.sat.i32.f64";
 
 function callIntrinsic(emitter: Emitter, name: string, ret: string, args: string): string {
@@ -244,25 +244,25 @@ function stringArgs(emitter: Emitter, expr: Node): string {
 /** `write` / `writeError`: the bytes as they are, on fd 1 or 2. */
 function emitStreamWrite(emitter: Emitter, expr: Node, fd: i32): string {
   const text = emitter.emitExpression(firstArgument(expr));
-  emitter.fn.emit(`call void ${emitter.useRuntime("amrit_write")}(i8* ${text}, i32 ${fd}, i1 false)`);
+  emitter.fn.emit(`call void ${emitter.useRuntime("nish_write")}(i8* ${text}, i32 ${fd}, i1 false)`);
   return "void";
 }
 
 /**
  * `panic(message)`: the message and a newline on stderr, then exit 1 — the
  * same observable ending as the index panic, so a program has one failure mode
- * rather than two. `amrit_exit` is `noreturn`, which is what makes the
+ * rather than two. `nish_exit` is `noreturn`, which is what makes the
  * `unreachable` legal and lets a non-void function end with a panic.
  */
 function emitPanic(emitter: Emitter, expr: Node): string {
   const message = emitter.emitExpression(firstArgument(expr));
-  emitter.fn.emit(`call void ${emitter.useRuntime("amrit_write")}(i8* ${message}, i32 2, i1 true)`);
-  emitter.fn.emit(`call void ${emitter.useRuntime("amrit_exit")}(i32 1)`);
+  emitter.fn.emit(`call void ${emitter.useRuntime("nish_write")}(i8* ${message}, i32 2, i1 true)`);
+  emitter.fn.emit(`call void ${emitter.useRuntime("nish_exit")}(i32 1)`);
   emitter.fn.emit("unreachable");
   return "void";
 }
 
-/** `call double @amrit_parse_number(i8* s, i32 mode)`: 0 parseFloat, 1 Number, 2 parseInt. */
+/** `call double @nish_parse_number(i8* s, i32 mode)`: 0 parseFloat, 1 Number, 2 parseInt. */
 function emitParseCall(emitter: Emitter, s: string, mode: i32): string {
   return emitter.fn.emitValue(
     `call double ${emitter.useRuntime(PARSE_RUNTIME)}(i8* ${s}, i32 ${mode})`
@@ -298,7 +298,7 @@ export function emitBuiltinCall(emitter: Emitter, expr: Node, name: string): str
     return emitMathMinMax(emitter, expr, "max");
   }
   if (name === "Math.random") {
-    return emitter.fn.emitValue(`call double ${emitter.useRuntime("amrit_random")}()`);
+    return emitter.fn.emitValue(`call double ${emitter.useRuntime("nish_random")}()`);
   }
   if (name.startsWith("Math.")) {
     const intrinsic = f64UnaryIntrinsic(name.substring(5, name.length));
@@ -308,24 +308,24 @@ export function emitBuiltinCall(emitter: Emitter, expr: Node, name: string): str
   }
   if (name === "process.exit") {
     const code = emitter.emitExpression(firstArgument(expr));
-    emitter.fn.emit(`call void ${emitter.useRuntime("amrit_exit")}(i32 ${code})`);
+    emitter.fn.emit(`call void ${emitter.useRuntime("nish_exit")}(i32 ${code})`);
     emitter.fn.emit("unreachable");
     return "void";
   }
   if (name === "Arena.reset") {
-    emitter.fn.emit(`call void ${emitter.useRuntime("amrit_reset_arena")}()`);
+    emitter.fn.emit(`call void ${emitter.useRuntime("nish_reset_arena")}()`);
     return "void";
   }
   if (name === "Arena.release") {
     const mark = emitter.emitExpression(firstArgument(expr));
-    emitter.fn.emit(`call void ${emitter.useRuntime("amrit_arena_release")}(i64 ${mark})`);
+    emitter.fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${mark})`);
     return "void";
   }
   if (name === "Arena.mark") {
-    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("amrit_arena_mark")}()`);
+    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`);
   }
   if (name === "Arena.used") {
-    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("amrit_arena_used")}()`);
+    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_used")}()`);
   }
   process.exit(internalError(`emitter: unexpected builtin \`${name}\``));
 }
@@ -341,7 +341,7 @@ export function builtinCallees(program: CheckedProgram, table: TypeTable, call: 
   const args = call.children[1];
   const firstType = args.children.length > 0 ? program.nodeTypes[args.children[0].id] : -1;
   if (name === "console.log" || name === "console.error") {
-    out.push(name === "console.log" ? "amrit_print" : "amrit_write");
+    out.push(name === "console.log" ? "nish_print" : "nish_write");
     const callee = firstType >= 0 ? stringifyCallee(firstType) : "";
     if (callee.length > 0) {
       out.push(callee);
@@ -349,7 +349,7 @@ export function builtinCallees(program: CheckedProgram, table: TypeTable, call: 
     return out;
   }
   if (name === "String.fromCharCode") {
-    out.push("amrit_str_new");
+    out.push("nish_str_new");
     return out;
   }
   if (name === "Math.pow") {
@@ -377,7 +377,7 @@ export function builtinCallees(program: CheckedProgram, table: TypeTable, call: 
     return out;
   }
   if (name === "Math.random") {
-    out.push("amrit_random");
+    out.push("nish_random");
     return out;
   }
   if (name.startsWith("Math.")) {
@@ -388,23 +388,23 @@ export function builtinCallees(program: CheckedProgram, table: TypeTable, call: 
     return out;
   }
   if (name === "process.exit") {
-    out.push("amrit_exit");
+    out.push("nish_exit");
     return out;
   }
   if (name === "Arena.reset") {
-    out.push("amrit_reset_arena");
+    out.push("nish_reset_arena");
     return out;
   }
   if (name === "Arena.release") {
-    out.push("amrit_arena_release");
+    out.push("nish_arena_release");
     return out;
   }
   if (name === "Arena.mark") {
-    out.push("amrit_arena_mark");
+    out.push("nish_arena_mark");
     return out;
   }
   if (name === "Arena.used") {
-    out.push("amrit_arena_used");
+    out.push("nish_arena_used");
     return out;
   }
   return out;
@@ -453,25 +453,25 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
   }
   if (name === "readFileSync") {
     return emitter.fn.emitValue(
-      `call i8* ${emitter.useRuntime("amrit_read_file")}(${stringArgs(emitter, expr)})`
+      `call i8* ${emitter.useRuntime("nish_read_file")}(${stringArgs(emitter, expr)})`
     );
   }
   if (name === "readFileSyncOrNull") {
     return emitter.fn.emitValue(
-      `call i8* ${emitter.useRuntime("amrit_read_file_or_null")}(${stringArgs(emitter, expr)})`
+      `call i8* ${emitter.useRuntime("nish_read_file_or_null")}(${stringArgs(emitter, expr)})`
     );
   }
   if (name === "writeFileSync") {
-    emitter.fn.emit(`call void ${emitter.useRuntime("amrit_write_file")}(${stringArgs(emitter, expr)})`);
+    emitter.fn.emit(`call void ${emitter.useRuntime("nish_write_file")}(${stringArgs(emitter, expr)})`);
     return "void";
   }
   if (name === "appendFileSync") {
-    emitter.fn.emit(`call void ${emitter.useRuntime("amrit_append_file")}(${stringArgs(emitter, expr)})`);
+    emitter.fn.emit(`call void ${emitter.useRuntime("nish_append_file")}(${stringArgs(emitter, expr)})`);
     return "void";
   }
   // WP14 D4: the two host calls a self-hosted driver needs to link its output.
   if (name === "mkdirSync") {
-    return emitter.fn.emitValue(`call zeroext i1 ${emitter.useRuntime("amrit_mkdir")}(${stringArgs(emitter, expr)})`);
+    return emitter.fn.emitValue(`call zeroext i1 ${emitter.useRuntime("nish_mkdir")}(${stringArgs(emitter, expr)})`);
   }
   // The array header goes straight to the runtime, which builds the C vector
   // from it. The status is an `i32`, so `--number-mode f64` widens it the way
@@ -479,7 +479,7 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
   if (name === "spawnSync") {
     emitter.declareType(ARRAY_TYPE);
     const argv = emitter.emitExpression(firstArgument(expr));
-    const status = emitter.fn.emitValue(`call i32 ${emitter.useRuntime("amrit_spawn")}(${ARRAY_STRUCT}* ${argv})`);
+    const status = emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_spawn")}(${ARRAY_STRUCT}* ${argv})`);
     if (emitter.typeOf(expr) === T_F64) {
       return emitter.fn.emitValue(`sitofp i32 ${status} to double`);
     }
@@ -487,12 +487,12 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
   }
   // WP14 §7a: one `stat`, and the C answer is already the language's `boolean`.
   if (name === "isDirectorySync") {
-    return emitter.fn.emitValue(`call zeroext i1 ${emitter.useRuntime("amrit_is_dir")}(${stringArgs(emitter, expr)})`);
+    return emitter.fn.emitValue(`call zeroext i1 ${emitter.useRuntime("nish_is_dir")}(${stringArgs(emitter, expr)})`);
   }
   // WP19 R1: one call, and the runtime's null is already the language's — the
   // same shape as `readFileSyncOrNull` down to the LLVM type.
   if (name === "getenv") {
-    return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("amrit_getenv")}(${stringArgs(emitter, expr)})`);
+    return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_getenv")}(${stringArgs(emitter, expr)})`);
   }
   if (name === "write") {
     return emitStreamWrite(emitter, expr, 1);
@@ -511,7 +511,7 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
  * A call of the `spawnSync` builtin (not of a user function that happens to be
  * called `spawnSync`, which wins the name as every identifier builtin loses
  * it). `attributes.ts` asks, because the argument escapes into the runtime:
- * `amrit_spawn` copies each element's bytes pointer into an arena vector that
+ * `nish_spawn` copies each element's bytes pointer into an arena vector that
  * outlives the call.
  */
 export function isSpawnCall(program: CheckedProgram, call: Node): boolean {
@@ -551,44 +551,44 @@ export function identifierBuiltinCallees(program: CheckedProgram, table: TypeTab
     return out;
   }
   if (name === "readFileSync") {
-    out.push("amrit_read_file");
+    out.push("nish_read_file");
     return out;
   }
   if (name === "readFileSyncOrNull") {
-    out.push("amrit_read_file_or_null");
+    out.push("nish_read_file_or_null");
     return out;
   }
   if (name === "writeFileSync") {
-    out.push("amrit_write_file");
+    out.push("nish_write_file");
     return out;
   }
   if (name === "appendFileSync") {
-    out.push("amrit_append_file");
+    out.push("nish_append_file");
     return out;
   }
   if (name === "mkdirSync") {
-    out.push("amrit_mkdir");
+    out.push("nish_mkdir");
     return out;
   }
   if (name === "spawnSync") {
-    out.push("amrit_spawn");
+    out.push("nish_spawn");
     return out;
   }
   if (name === "isDirectorySync") {
-    out.push("amrit_is_dir");
+    out.push("nish_is_dir");
     return out;
   }
   if (name === "getenv") {
-    out.push("amrit_getenv");
+    out.push("nish_getenv");
     return out;
   }
   if (name === "write" || name === "writeError") {
-    out.push("amrit_write");
+    out.push("nish_write");
     return out;
   }
   if (name === "panic") {
-    out.push("amrit_write");
-    out.push("amrit_exit");
+    out.push("nish_write");
+    out.push("nish_exit");
     return out;
   }
   return out; // f64ToBits / bitsToF64: one bitcast, no call
@@ -605,20 +605,20 @@ export function emitNamespaceProperty(emitter: Emitter, expr: Node, name: string
     return f64Hex(Math.E);
   }
   if (name === "process.argv") {
-    // The array pointer the entry wrapper stored in `@amrit_argv`.
+    // The array pointer the entry wrapper stored in `@nish_argv`.
     emitter.declareType(ARRAY_TYPE);
     emitter.declareGlobal(ARGV_GLOBAL);
     const align = emitter.opts.optimizeAttributes ? ", align 8" : "";
-    return emitter.fn.emitValue(`load ${ARRAY_STRUCT}*, ${ARRAY_STRUCT}** @amrit_argv${align}`);
+    return emitter.fn.emitValue(`load ${ARRAY_STRUCT}*, ${ARRAY_STRUCT}** @nish_argv${align}`);
   }
   // WP14 §7a. One call to the runtime, which answers the address of a string
   // in its own constant data: nothing is read and nothing is allocated, so
   // unlike `process.argv` this leaves a function `readnone`.
   if (name === "process.platform") {
-    return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("amrit_platform")}()`);
+    return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_platform")}()`);
   }
   if (name === "process.arch") {
-    return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("amrit_arch")}()`);
+    return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_arch")}()`);
   }
   process.exit(internalError(`emitter: unexpected builtin property \`${name}\``));
 }

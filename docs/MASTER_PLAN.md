@@ -1,17 +1,17 @@
-# AmritScript Master Plan
+# Nish Master Plan
 
-The single source of truth for what AmritScript is, what exists, what remains,
+The single source of truth for what Nish is, what exists, what remains,
 and how the remaining work is cut into packages that independent agents can
 build in parallel. Every work package (WP) below is self-contained: goal,
 scope, files, dependencies, acceptance tests, and a ready-to-use agent brief.
 
-Repo: `amritk/compiler`, default branch `main`.
+Repo: `amritk/nish`, default branch `main`.
 
 ---
 
 ## 1. Vision
 
-AmritScript is an ahead-of-time compiler for a strictly static subset of
+Nish is an ahead-of-time compiler for a strictly static subset of
 TypeScript. It parses source with the official TypeScript compiler API, hard
 fails on anything dynamic, and emits LLVM IR that clang/LLVM turn into native
 binaries for x86_64, ARM64, and WebAssembly.
@@ -24,8 +24,8 @@ Targets, in priority order:
    `-O3` loop/math speed, zero-cost abstractions, LTO and dead-stripping.
 3. **Zero-GC memory.** Arena/bump allocation by default, explicit reset,
    optional reference counting only for objects that must outlive an arena.
-4. **Node/npm interop in one direction only.** AmritScript exports `.wasm` /
-   native addons that Node imports. AmritScript never embeds a JS engine.
+4. **Node/npm interop in one direction only.** Nish exports `.wasm` /
+   native addons that Node imports. Nish never embeds a JS engine.
 
 Non-goals: running arbitrary TypeScript, JS semantics for `number` overflow,
 prototypes, `eval`, reflection, exceptions as control flow.
@@ -43,7 +43,7 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │ 2. Compiler frontend (this repo, src/)                           │
 │    Phase 0  validator.ts   forbidden-syntax sweep, hard fail     │
 │    Phase A  parser.ts      ts.createSourceFile                   │
-│    Phase B  checker/       AmritScript types, scopes, side tables│
+│    Phase B  checker/       Nish types, scopes, side tables│
 └───────────────────────────────┬──────────────────────────────────┘
                                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
@@ -75,15 +75,15 @@ Design rules that every WP must respect:
   column of `size`, which counts the `.eh_frame` unwind entries the `size`
   build profile strips — measuring the bytes that never ship. `.text` is what
   a linked binary pays, and `-ffunction-sections -Wl,--gc-sections` means it
-  pays only for the functions it calls: adding WP14's `amrit_mkdir` and
-  `amrit_spawn` left `examples/hello.ts` at 4,696 bytes, the same number to the
+  pays only for the functions it calls: adding WP14's `nish_mkdir` and
+  `nish_spawn` left `examples/hello.ts` at 4,696 bytes, the same number to the
   byte. Today: 2,544 of 4,096 (`size` text 4,297, source 12,707).
 
-## 3. Consolidated language specification (AmritScript)
+## 3. Consolidated language specification (Nish)
 
 ### 3.1 Types
 
-| AmritScript | LLVM | Notes |
+| Nish | LLVM | Notes |
 | --- | --- | --- |
 | `number` | `i32` (default) or `double` (`--number-mode f64`) | Wrapping integer arithmetic, no `nsw`. |
 | `i32`, `f64` | `i32`, `double` | Explicit, always available. |
@@ -138,7 +138,7 @@ and nullish coalescing on non-nullable types, union types other than
 
 There are now **two compilers for one language**, and the second is written in
 the language they both compile: `src/` (stage0, TypeScript on Node, 16,210
-lines) and `self/` (stage1, the same compiler in AmritScript, 22,395 lines).
+lines) and `self/` (stage1, the same compiler in Nish, 22,395 lines).
 They agree byte for byte on the IR of every program in the corpus, which is
 what WP14 below means by self-hosting. `.claude/orientation.md` is the
 ninety-second map; the table below is the inventory.
@@ -152,14 +152,14 @@ ninety-second map; the table below is the inventory.
 | Attributes and escape analysis: the whole-program purity / termination / escape fixpoint behind `nounwind`, `willreturn`, `readnone`/`readonly`, `noundef`, `zeroext`, `noalias`, `nonnull`, `nocapture`, `dereferenceable`, `align`, `nsw` | done (WP9) | `src/codegen/attributes.ts`, `escape.ts` |
 | Debug info: a compile unit, a `DISubprogram` per function, `DILocation` on every instruction, `llvm.dbg.value`/`declare`, `-g` carried on to the link | done (WP10, WP17) | `src/codegen/debug.ts` |
 | Interop sidecars: C header, `.d.ts` plus its `.mjs` loader, N-API shim, the `napi` build profile — a `Result` included (WP17) | done (WP8) | `src/interop/` (`abi`, `header`, `dts`, `wasm`, `napi`) |
-| Runtime: chunked arena with O(1) reset and mark/release, strings, `Math`, I/O, `process.*`, `mkdirSync`, `spawnSync`; the wasm/WASI twin and the Node shim the differential tests run against | done | `runtime/runtime.c` (340 lines), `runtime_wasm.c`, `amritc.h`, `shim.mjs` |
+| Runtime: chunked arena with O(1) reset and mark/release, strings, `Math`, I/O, `process.*`, `mkdirSync`, `spawnSync`; the wasm/WASI twin and the Node shim the differential tests run against | done | `runtime/runtime.c` (340 lines), `runtime_wasm.c`, `nish.h`, `shim.mjs` |
 | Inline `alwaysinline` bump allocator in IR, the runtime ABI table both sides agree on | done | `src/codegen/runtime.ts` |
 | Build profiles `debug`, `speed`, `size`, `wasm`, `wasi`, `napi`, the PGO recipe, the size report | done (WP9) | `scripts/build.sh`, `scripts/size-report.sh` |
 | The self-hosted compiler: lexer, parser, checker, emitter, interop sidecars, DWARF, and its own driver — it plans its output, makes its directories and runs `scripts/build.sh` for `--link` | done (WP14) | `self/` (54 modules), `scripts/bootstrap.sh` |
 | Tests: 382 golden cases (229 of them `reject_*`), 24 `tests/link/` programs, `llvm-as`, native round trips, runtime unit tests, IR/C layout smoke, size and wasm builds, interop, exit codes, packaging, bench checksums | done | `tests/run.js` and `tests/cases/`, `link/`, `ir/`, `layout/` |
 | Differential testing against Node: 50 corpus programs plus `tests/cases`, rewritten from the checker's own types, and a fuzzer that prints its seed | done (WP13) | `tests/differential/`, `runtime/shim.mjs` |
 | The stage1 oracles: lexer, parser, support, types, diagnostics, symbols, checked dump, rejections, IR, interop sidecars, and the bootstrap | done (WP14) | `tests/lexer_oracle.js`, `tests/parser_oracle.js`, `tests/self/` |
-| Benchmarks: seven programs in AmritScript, C and Rust, with wall time, binary size, peak RSS and checksums | done (WP9) | `bench/`, `docs/BENCHMARKS.md` |
+| Benchmarks: seven programs in Nish, C and Rust, with wall time, binary size, peak RSS and checksums | done (WP9) | `bench/`, `docs/BENCHMARKS.md` |
 | Docs: the normative reference, the regenerated IR cookbook, the architecture, the FAQ, install, and one design note per package | done (WP11) | `docs/` |
 
 Measured today: `examples/hello.ts` links to 4,696 bytes at the `size` profile
@@ -206,7 +206,7 @@ Acceptance: `npm test` unchanged and green; existing goldens byte-identical.
 Goal: a dedicated, un-bypassable forbidden-syntax sweep that runs before the
 checker, plus Biome configured purely as a formatter/linter for humans.
 
-- `src/validator.ts`: `validateAmritScript(sourceFile)` walks the whole tree
+- `src/validator.ts`: `validateNish(sourceFile)` walks the whole tree
   with `ts.forEachChild` and throws `CompileError` for everything in §3.2.
   It must catch things the checker never reaches (e.g. `any` nested in a
   type argument, `delete` inside an unreachable branch).
@@ -239,7 +239,7 @@ ternary `?:`, short-circuit `&&`/`||`, compound assignment `+= -= *= /= %=`,
   trip count (`for (let i = 0; i < n; i++)` with `n` unmodified in body)
   may keep `willreturn`; otherwise drop it. Add `mustprogress` never (JS
   allows infinite loops).
-- Runtime: `amrit_abort(msg)` for `throw`.
+- Runtime: `nish_abort(msg)` for `throw`.
 
 Acceptance: goldens for each construct; native round trips for fib, gcd,
 collatz, nested loops; `opt -O2` output vectorises a simple sum loop
@@ -253,7 +253,7 @@ Goal: `class` and `interface` as LLVM struct types with fixed fields.
 
 - `%struct.User = type { i32, double }`; field order as declared; natural
   alignment; `align 8` on allocations.
-- `new User(...)` lowers to the inline `amrit_alloc_struct` (size from
+- `new User(...)` lowers to the inline `nish_alloc_struct` (size from
   datalayout-independent constant computed by the compiler) then a
   constructor call. Constructors and methods become functions with `this`
   as the first parameter: `@User.greet(%struct.User* noalias nonnull align 8 %this, ...)`.
@@ -285,15 +285,15 @@ literals, `console.log`, number-to-string.
 - Literals: `@.str.N = private unnamed_addr constant { i64, [N x i8] } { i64 len, c"...\00" }, align 8`,
   referenced as `i8*` via `getelementptr`. Deduplicate identical literals.
   UTF-8 bytes, escaped for LLVM (`\XX` hex).
-- `a + b` on strings lowers to `amrit_str_concat`; `a === b` to `amrit_str_eq`;
+- `a + b` on strings lowers to `nish_str_concat`; `a === b` to `nish_str_eq`;
   `s.length` to a direct `load i64` from the header (no call).
-- Template literals: fold constant parts, `amrit_str_from_i32/f64` for holes,
-  chain concat (or a `amrit_str_concat_n` runtime addition).
-- `console.log(x)` accepts string, number, boolean; lowers to `amrit_print`.
-- Number to string: `amrit_str_from_f64` must match JS `Number.prototype.toString`
+- Template literals: fold constant parts, `nish_str_from_i32/f64` for holes,
+  chain concat (or a `nish_str_concat_n` runtime addition).
+- `console.log(x)` accepts string, number, boolean; lowers to `nish_print`.
+- Number to string: `nish_str_from_f64` must match JS `Number.prototype.toString`
   (shortest round-trip). Port Ryu or Grisu-style shortest formatting to
   `runtime.c` within budget, or accept `%.17g` and document until WP7.
-- Mark functions that only call `amrit_str_len` as `readonly` (already
+- Mark functions that only call `nish_str_len` as `readonly` (already
   handled by the effect fixpoint; verify with a test).
 
 Acceptance: goldens; native round trip printing concatenations and
@@ -309,7 +309,7 @@ Goal: `number[]`, `string[]`, `User[]` with fixed element type.
   header + pointer so slices are cheap later.
 - Array literals allocate in the arena; `new Array<T>(n)` zero-initialises.
 - `a[i]` with numeric index only; bounds check emits `br` to a cold
-  `amrit_abort("index out of range")` block; `--unchecked-indexing` flag
+  `nish_abort("index out of range")` block; `--unchecked-indexing` flag
   removes it for benchmarks.
 - `.length`, `for (const x of arr)`, `for` with index; `push` deferred
   (needs growth strategy; arena realloc doubling is fine).
@@ -317,7 +317,7 @@ Goal: `number[]`, `string[]`, `User[]` with fixed element type.
   layout so Node can pass buffers (WP8).
 
 Acceptance: goldens; native round trip summing an array and sorting one
-(insertion sort in AmritScript); bounds failure exits non-zero with message;
+(insertion sort in Nish); bounds failure exits non-zero with message;
 `opt -O2` vectorises the sum loop with checks hoisted or removed.
 
 ### WP5: Modules, entry point, linkage (M, parallel-safe)
@@ -329,16 +329,16 @@ Goal: multi-file programs and runnable binaries without a hand-written C driver.
   (`--no-strict-exports` is now the opt-out).
 - `import { f } from "./other"`: compile each file to its own `.ll`, emit
   `declare` for imported symbols with the same attributes the exporter
-  computed (write a `.d.amrit.json` sidecar with signatures and attributes),
+  computed (write a `.d.nish.json` sidecar with signatures and attributes),
   link them with `build.sh`. Cycles are allowed at link time.
 - `export function main(): number` becomes the process entry: emit
   `@main` wrapper that initialises nothing (arena is lazy), calls user
-  `main`, calls `amrit_free_arena`, returns the code. Process args exposed
+  `main`, calls `nish_free_arena`, returns the code. Process args exposed
   later (WP7).
-- CLI: `amritc a.ts b.ts -o out/` and `amritc --link a.ts b.ts -o app`
+- CLI: `nish a.ts b.ts -o out/` and `nish --link a.ts b.ts -o app`
   which shells out to `scripts/build.sh`.
 
-Acceptance: two-file example builds and runs with `amritc --link`;
+Acceptance: two-file example builds and runs with `nish --link`;
 attributes on imported declarations match the exporter's definitions
 (test compares the sidecar with the `.ll`).
 
@@ -353,9 +353,9 @@ Goal: make the zero-GC model ergonomic and fast.
 - Arena scopes in the language: `arena.scope(() => { ... })` or a block
   pragma; compiles to save-offset / restore-offset around the block, so
   temporary objects are reclaimed without a full reset. Runtime gets
-  `amrit_arena_mark()` / `amrit_arena_release(mark)`.
+  `nish_arena_mark()` / `nish_arena_release(mark)`.
 - Optional reference counting per class (`@refcounted` decorator or
-  `class X extends Rc`): 8-byte header, `amrit_rc_retain/release`, release
+  `class X extends Rc`): 8-byte header, `nish_rc_retain/release`, release
   on scope exit, no cycles collection (documented). Only for objects that
   must outlive resets. Off by default.
 - `T | null` for pointer types with `null` checks required before use
@@ -383,9 +383,9 @@ with the `size` profile.
 
 ### WP8: Interop: wasm, N-API, headers (M, depends on WP5)
 
-- `amritc --emit-header` writes a C header for exported functions and
+- `nish --emit-header` writes a C header for exported functions and
   structs from the same signature data the emitter uses.
-- `amritc --emit-dts` writes `.d.ts` for the wasm exports (scalars now,
+- `nish --emit-dts` writes `.d.ts` for the wasm exports (scalars now,
   arrays via `Int32Array` views over wasm memory after WP4).
 - `scripts/build.sh --profile napi` builds a `.node` addon: generated C
   shim registers each exported scalar function; `examples/node-addon.mjs`
@@ -400,7 +400,7 @@ same module and gets identical results; header compiles with `-Wall
 ### WP9: Optimisation and benchmarking (M, after WP1/WP2/WP4)
 
 - Benchmark suite `bench/`: fib, nbody, spectral-norm, string building,
-  struct-heavy loop; each in AmritScript, C, and Rust; `hyperfine` runner and
+  struct-heavy loop; each in Nish, C, and Rust; `hyperfine` runner and
   a table in `docs/BENCHMARKS.md`. Target: within 10 % of Rust `-O3` for
   loop/math, sizes within the Rust range.
 - Attribute phase 2: `nsw` under an opt-in flag; `noalias` on struct
@@ -430,7 +430,7 @@ three; `lldb` shows a `.ts` line on a breakpoint in the fib example.
 
 ### WP11: Documentation (S, continuous)
 
-- `docs/LANGUAGE.md`: the normative AmritScript reference (from §3, kept in
+- `docs/LANGUAGE.md`: the normative Nish reference (from §3, kept in
   sync by every WP that adds a construct).
 - `docs/IR_COOKBOOK.md`: for each construct, the `.ts` and the exact `.ll`.
 - README stays the tour; deep material moves to `docs/`.
@@ -456,7 +456,7 @@ Dependencies: WP10 (the release workflow calls CI).
 
 Acceptance (met): the packaging block of `tests/run.js` runs `npm pack`,
 installs the tarball into a temporary prefix and links a hello-world from an
-unrelated directory with the installed `amritc`; every exit code above has its
+unrelated directory with the installed `nish`; every exit code above has its
 own check, including the internal-error path through a test hook.
 [wp12-release.md](wp12-release.md) is the note, and it carries the one decision
 this package left open: *which* compiler the package should ship.
@@ -491,12 +491,12 @@ where `--stage1` compares the two compilers' IR instead of Node.
 
 ### WP14: Self-hosting (L, after WP8) — landed
 
-Goal: the compiler compiles itself. `self/` is `src/` rewritten in AmritScript,
+Goal: the compiler compiles itself. `self/` is `src/` rewritten in Nish,
 and the claim is an equality rather than a demo:
 `IR(stage1, self/) == IR(stage2, self/)` byte for byte, with stage3 identical
 to stage2.
 
-- **AmritScript-0**, the subset `self/` is written in — no generics, closures,
+- **Nish-0**, the subset `self/` is written in — no generics, closures,
   nested functions, `type` aliases, `static` members, `try`/`catch` or
   downcasts — and what it forces: one `Node` class with a `kind` discriminant,
   interned integer types, `StringMap` over parallel arrays, error-value
@@ -508,11 +508,11 @@ to stage2.
   the checked dump, the rejections, the IR, the interop sidecars), each
   comparing stage1 against stage0 over the whole corpus rather than against a
   hand-written golden.
-- `scripts/bootstrap.sh` builds the chain and leaves `build/amritc` behind;
+- `scripts/bootstrap.sh` builds the chain and leaves `build/nish` behind;
   `--verify` runs the three equalities with `cmp`.
 - §7a reversed decision D4: `mkdirSync` and `spawnSync` entered the language,
   so stage1 plans its own output, makes its own directories and runs
-  `scripts/build.sh` itself. The wrapper `scripts/amritc.sh` is deleted.
+  `scripts/build.sh` itself. The wrapper `scripts/nish.sh` is deleted.
 
 Dependencies: WP0 through WP8; WP16 and WP17 were implemented on both sides
 for the same reason.
@@ -566,10 +566,10 @@ failure.
   second, invisible way to report a failure. It never unwound: it was an abort
   wearing the syntax of error handling. `panic(message)` is the replacement for
   a broken invariant.
-- One monomorphised `%struct.amrit_result.<T>.<E>` per payload pair, laid out
+- One monomorphised `%struct.nish_result.<T>.<E>` per payload pair, laid out
   as a `class` is, without generics in the language: the checker instantiates
   the pair it sees.
-- The ambient declarations in `runtime/amritc.d.ts` keep an AmritScript program
+- The ambient declarations in `runtime/nish.d.ts` keep an Nish program
   type-checkable by `tsc`.
 
 Dependencies: WP6 (the escape analysis and the narrowing engine `T | null`
@@ -662,7 +662,7 @@ it left. What the diagram would show for them is a line.
 ## 8. Agent brief template
 
 ```
-You are implementing <WP-N: title> for AmritScript, a TypeScript-to-LLVM-IR AOT
+You are implementing <WP-N: title> for Nish, a TypeScript-to-LLVM-IR AOT
 compiler. Read docs/MASTER_PLAN.md (§2 design rules, §3 spec, §5 your WP,
 §7 conventions) and README.md first. Run `npm test` before changing anything.
 
@@ -683,7 +683,7 @@ Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 
 | Milestone | Contents | Proof | State |
 | --- | --- | --- | --- |
-| M1 "Programs" | WP-P, WP0, WP1, WP3, WP5, WP10 | fib/gcd/string CLI builds with `amritc --link`, under 20 KB. | done |
+| M1 "Programs" | WP-P, WP0, WP1, WP3, WP5, WP10 | fib/gcd/string CLI builds with `nish --link`, under 20 KB. | done |
 | M2 "Data" | WP2, WP4, WP7 | nbody with structs and arrays, matches C output bit for bit. | done |
 | M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. | done as a package; four of the seven benchmarks are outside 1.10x today ([BENCHMARKS.md](BENCHMARKS.md)), which is what WP15 is for |
 | M4 "1.0" | WP2b, remaining docs, stabilised spec | tagged release, language reference frozen. | **open — the only one left.** Inheritance landed; virtual dispatch, the frozen reference and the tag have not |
@@ -721,7 +721,7 @@ and not a prediction: [BENCHMARKS.md](BENCHMARKS.md), regenerated by
 its seven programs are outside the 1.10x target today.
 
 Threads are not on that list and not in the waves above. The design question
-"how does AmritScript do true multithreading, like Go or Rust" has an answer
+"how does Nish do true multithreading, like Go or Rust" has an answer
 that the zero-GC model and the attribute fixpoint force rather than leave
 open — 1:1 OS threads with data races rejected at compile time, not
 goroutines — and [wp20-threads.md](wp20-threads.md) is the plan of record for
@@ -731,10 +731,10 @@ convenient; the four stages that add rules to LANGUAGE.md cannot land before
 M4 without delaying the freeze, and are 1.1 scope by default.
 
 Packages are not on that list either, and the question "how does one
-AmritScript package depend on another" turns out to have the same character:
+Nish package depend on another" turns out to have the same character:
 the answer is forced by whole-program compilation rather than chosen. A
 foreign host — JavaScript on Node, JavaScript in a browser, C — takes a built
-artifact across the ABI, which is what WP8 already generates; an AmritScript
+artifact across the ABI, which is what WP8 already generates; an Nish
 consumer takes **source**, compiled as part of its own program, because a
 prebuilt library cannot carry the attribute fixpoint of §3a, cannot contain a
 generic that nobody has instantiated yet, and would have to be built once per
@@ -747,7 +747,7 @@ symbols are its first stage, have no language surface, and are worth landing
 early: the diff is mechanical and grows with every new golden.
 
 The declaration form is not on that list either, and it is the one entry here
-that is pure spelling: **arrow functions become how AmritScript declares a
+that is pure spelling: **arrow functions become how Nish declares a
 function, and `function` becomes legacy**.
 [wp22-arrow-functions.md](wp22-arrow-functions.md) is the plan of record. The
 change cannot alter a byte of IR — the emitter reads `FunctionSig`s and never

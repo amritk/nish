@@ -1,6 +1,6 @@
 # WP5: Modules, entry point, linkage
 
-AmritScript programs can span several files. Each file is one module and becomes
+Nish programs can span several files. Each file is one module and becomes
 one LLVM IR module (`.ll`); `scripts/build.sh` links them with the C runtime
 into a native binary. This document is the reference for how modules resolve,
 how the process entry is produced, which functions are visible to the linker,
@@ -33,7 +33,7 @@ import { square, cube as pow3 } from "./math";
 ```
 
 - The specifier must start with `./` or `../`. Bare specifiers (`"math"`,
-  `"lodash"`) are rejected: AmritScript has no package resolution.
+  `"lodash"`) are rejected: Nish has no package resolution.
 - The `.ts` extension is optional. `./math.js` is also accepted and mapped to
   `./math.ts`, matching the TypeScript convention for ESM-style sources.
 - The path is resolved relative to the *importing* file, not the working
@@ -102,28 +102,28 @@ export function main(): number { ... }   // or  export function main(): void
 
 gets a C-ABI entry. The chosen scheme is **rename + wrapper**:
 
-- The user's function is emitted under the symbol `@amrit_main`
+- The user's function is emitted under the symbol `@nish_main`
   (`FunctionSig.name`; the source name stays `main` for diagnostics).
 - The emitter adds
 
   ```llvm
   define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
   entry:
-    %0 = call i32 @amrit_main()
-    call void @amrit_free_arena()
+    %0 = call i32 @nish_main()
+    call void @nish_free_arena()
     ret i32 %0
   }
   attributes #1 = { nounwind }
   ```
 
   For a `void` main the wrapper returns `0`. The arena is lazy, so nothing is
-  initialised; `amrit_free_arena` releases every chunk on the way out.
+  initialised; `nish_free_arena` releases every chunk on the way out.
 
 Why rename rather than keep `@main` and skip the wrapper? One scheme covers
 both return types, the arena is always released, the wrapper's signature is
 the one every libc start-up code expects (`argc`/`argv` are accepted now and
 exposed in WP7), and an importer that does `import { main } from "./main"`
-simply calls `@amrit_main` like any other symbol.
+simply calls `@nish_main` like any other symbol.
 
 Rules:
 
@@ -135,7 +135,7 @@ Rules:
 - A non-exported `function main` is not an entry: it is emitted as `@main`
   with its own signature, exactly as before WP5 (so C drivers such as
   `tests/driver.c` keep working with library-style modules).
-- `amrit_` is a reserved prefix for function names.
+- `nish_` is a reserved prefix for function names.
 
 `--link` requires the entry module to declare `export function main`.
 
@@ -145,7 +145,7 @@ Rules:
 | --- | --- | --- |
 | `export function f` | external (`define ... @f`) | external |
 | `function f` | `define internal ... @f` | external |
-| entry `export function main` | external `@amrit_main` + external `@main` wrapper | same |
+| entry `export function main` | external `@nish_main` + external `@main` wrapper | same |
 | inline arena allocator | `internal` | `internal` |
 
 This table was the other way round until WP15 §3: default linkage used to be
@@ -172,7 +172,7 @@ name clashes up front:
 ## CLI
 
 ```
-amritc <entry.ts> [more.ts ...] [options]
+nish <entry.ts> [more.ts ...] [options]
   -o, --output <file.ll>     output path for a single module (default: <input>.ll)
   -o, --output <dir>/        output directory: one <dir>/<module>.ll per module
   --link <exe>               build a native binary from every module + runtime/runtime.c
@@ -199,7 +199,7 @@ Output rules:
 `--link` runs `bash scripts/build.sh <every .ll> runtime/runtime.c -o <exe>
 --profile <profile>` and prints the binary path and size that the script
 reports. The runtime is always linked because the entry wrapper calls
-`amrit_free_arena`.
+`nish_free_arena`.
 
 Example (`examples/multi/`):
 
@@ -234,7 +234,7 @@ node dist/index.js examples/multi/main.ts --link build/multi && ./build/multi; e
 
 ## Not in this package
 
-- `.d.amrit.json` sidecars from the master plan are unnecessary: the
+- `.d.nish.json` sidecars from the master plan are unnecessary: the
   Compilation has every module in memory, so the importer's `declare` is
   rendered from the exporter's actual signature and facts. Separate
   compilation of a library against a sidecar can be added when a use case

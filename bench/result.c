@@ -1,5 +1,5 @@
 /* C twin of result.ts: same shape, same checksum line. `Result` is the
- * eight-byte struct `amritc --emit-header` declares for
+ * eight-byte struct `nish --emit-header` declares for
  * `Result<number, number>`, which clang returns and passes in one register. */
 #include <stdbool.h>
 #include <stdint.h>

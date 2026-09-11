@@ -104,7 +104,7 @@ import {
   TypeTable,
 } from "./types";
 
-/** `sizeof(%struct.amrit_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout). */
+/** `sizeof(%struct.nish_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout). */
 const ARRAY_HEADER_BYTES: i32 = 24;
 
 /** One module and the parent links its analyses walk. */
@@ -186,7 +186,7 @@ export class FunctionFacts {
   stackLocals: Local[];
   /** WP17: by-value `Result` parameters whose unpacked object is an entry-block alloca. */
   stackParams: StringSet;
-  /** Bracket the body with `amrit_arena_mark` / `amrit_arena_release`. Decided after the fixpoint. */
+  /** Bracket the body with `nish_arena_mark` / `nish_arena_release`. Decided after the fixpoint. */
   arenaScope: boolean;
   /** Performs an arena allocation, directly or through a callee (fixpoint). */
   allocates: boolean;
@@ -783,9 +783,9 @@ class FactCollector {
     if (node.kind === N_BINARY && program.nodeTypes[node.children[0].id] === T_STRING) {
       const op = node.text;
       if (op === "+") {
-        this.facts.callees.add("amrit_str_concat");
+        this.facts.callees.add("nish_str_concat");
       } else if (op === "===" || op === "!==") {
-        this.facts.callees.add("amrit_str_eq");
+        this.facts.callees.add("nish_str_eq");
       }
       return;
     }
@@ -802,7 +802,7 @@ class FactCollector {
     if (isTemplateExpression(node)) {
       const parts = templateParts(node);
       if (parts.length > 1) {
-        this.facts.callees.add("amrit_str_concat");
+        this.facts.callees.add("nish_str_concat");
       }
       for (const part of parts) {
         if (part.kind !== N_TEMPLATE_TEXT) {
@@ -853,7 +853,7 @@ class FactCollector {
       }
       if (!this.facts.isStackSite(node)) {
         this.facts.effect = EFFECT_WRITE;
-        this.facts.callees.add("amrit_alloc_struct");
+        this.facts.callees.add("nish_alloc_struct");
       }
       const ctor = constructorOf(program, table, intrinsicType(program, node));
       if (ctor !== null) {
@@ -863,7 +863,7 @@ class FactCollector {
     }
     if (node.kind === N_OBJECT && !this.facts.isStackSite(node)) {
       this.facts.effect = EFFECT_WRITE;
-      this.facts.callees.add("amrit_alloc_struct");
+      this.facts.callees.add("nish_alloc_struct");
     }
   }
 
@@ -888,7 +888,7 @@ class FactCollector {
       if (callee !== null) {
         if (table.resultByValue(callee.returnType)) {
           if (!this.facts.isStackSite(node)) {
-            this.facts.callees.add("amrit_alloc_struct");
+            this.facts.callees.add("nish_alloc_struct");
           }
           this.facts.effect = EFFECT_WRITE;
         }
@@ -902,10 +902,10 @@ class FactCollector {
         this.facts.readsMemory = true;
         if (method === "orReturn") {
           this.facts.effect = EFFECT_WRITE;
-          this.facts.callees.add("amrit_alloc_struct");
+          this.facts.callees.add("nish_alloc_struct");
         } else if (method === "expect") {
-          this.facts.callees.add("amrit_write");
-          this.facts.callees.add("amrit_exit");
+          this.facts.callees.add("nish_write");
+          this.facts.callees.add("nish_exit");
         }
         return;
       }
@@ -915,7 +915,7 @@ class FactCollector {
         return;
       }
       if (!this.facts.isStackSite(node)) {
-        this.facts.callees.add("amrit_alloc_struct");
+        this.facts.callees.add("nish_alloc_struct");
       }
       this.facts.effect = EFFECT_WRITE;
       return;
@@ -943,7 +943,7 @@ class FactCollector {
     if (node.kind === N_INDEX && this.isArrayValued(node.children[0])) {
       this.facts.readsMemory = true;
       if (!this.opts.uncheckedIndexing) {
-        this.facts.callees.add("amrit_panic_index");
+        this.facts.callees.add("nish_panic_index");
       }
       return;
     }
@@ -980,20 +980,20 @@ class FactCollector {
   collectMethodFacts(call: Node, method: string): void {
     if (method === "push") {
       this.facts.effect = EFFECT_WRITE;
-      this.facts.callees.add("amrit_array_grow");
+      this.facts.callees.add("nish_array_grow");
       return;
     }
     if (method === "pop") {
       // Stores the shortened length back, and panics on an empty array.
       this.facts.effect = EFFECT_WRITE;
       if (!this.opts.uncheckedIndexing) {
-        this.facts.callees.add("amrit_panic_index");
+        this.facts.callees.add("nish_panic_index");
       }
       return;
     }
     if (method === "join") {
       this.facts.effect = EFFECT_WRITE; // one arena allocation
-      this.facts.callees.add("amrit_alloc_struct");
+      this.facts.callees.add("nish_alloc_struct");
       return;
     }
     this.facts.readsMemory = true; // `indexOf` scans the elements
@@ -1003,7 +1003,7 @@ class FactCollector {
     }
     const type = this.unit.program.nodeTypes[receiver.id];
     if (type >= 0 && this.table.isArray(type) && this.table.refOf(type) === T_STRING) {
-      this.facts.callees.add("amrit_str_eq");
+      this.facts.callees.add("nish_str_eq");
     }
   }
 
@@ -1018,12 +1018,12 @@ class FactCollector {
     }
     const left = this.unit.program.nodeTypes[node.children[0].id];
     if (left >= 0 && isInteger(left)) {
-      this.facts.callees.add("amrit_panic_div");
+      this.facts.callees.add("nish_panic_div");
     }
   }
 
   /**
-   * The namespace properties that are not constants. The load of `@amrit_argv`
+   * The namespace properties that are not constants. The load of `@nish_argv`
    * reads memory the function does not own, so the caller is at most
    * `readonly`; `process.platform` and `process.arch` are one `readnone`
    * runtime call each (WP14 §7a), which changes no attribute today. The call
@@ -1041,9 +1041,9 @@ class FactCollector {
     if (name === "process.argv") {
       this.facts.readsMemory = true;
     } else if (name === "process.platform") {
-      this.facts.callees.add("amrit_platform");
+      this.facts.callees.add("nish_platform");
     } else if (name === "process.arch") {
-      this.facts.callees.add("amrit_arch");
+      this.facts.callees.add("nish_arch");
     }
   }
 
@@ -1173,8 +1173,8 @@ export function analyzeFunctions(
     f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl;
     if (f.arenaScope) {
       // Both are `willreturn` and the function already writes (it allocates), so nothing else moves.
-      f.callees.add("amrit_arena_mark");
-      f.callees.add("amrit_arena_release");
+      f.callees.add("nish_arena_mark");
+      f.callees.add("nish_arena_release");
     }
   }
   return facts;
@@ -1296,7 +1296,7 @@ function propagateCallee(facts: FactsTable, runtime: RuntimeTable, f: FunctionFa
   // The inline arena allocator is not in the runtime table (it is emitted as
   // an IR definition), but callers must still see it as a writing, willreturn
   // callee.
-  const isAllocator = callee === "amrit_alloc_struct";
+  const isAllocator = callee === "nish_alloc_struct";
   let calleeEffect = EFFECT_WRITE;
   let calleeReturns = false;
   let calleeNoReturn = false;

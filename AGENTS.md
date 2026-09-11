@@ -6,16 +6,16 @@ this repository**. For Claude Code the same rules live in
 [`.claude/`](./.claude/) — read the one that matches your task:
 
 - [`.claude/orientation.md`](./.claude/orientation.md) — **start here**: the two compilers, the code map, the commands, what is always true
-- [`.claude/selfhost.md`](./.claude/selfhost.md) — working in `self/`: AmritScript-0, the module map, the oracles, the milestones
+- [`.claude/selfhost.md`](./.claude/selfhost.md) — working in `self/`: Nish-0, the module map, the oracles, the milestones
 - [`.claude/architecture.md`](./.claude/architecture.md) — the pipeline, the rules that shape every change, where to read next
-- [`.claude/typescript.md`](./.claude/typescript.md) — TypeScript style: the AmritScript rules for every program in the repo, and the static-friendly rules for the compiler source
+- [`.claude/typescript.md`](./.claude/typescript.md) — TypeScript style: the Nish rules for every program in the repo, and the static-friendly rules for the compiler source
 - [`.claude/node.md`](./.claude/node.md) — Node runtime, npm scripts, the LLVM toolchain, Biome
 - [`.claude/testing.md`](./.claude/testing.md) — the golden-test harness, what every construct ships with
 - [`.claude/comments.md`](./.claude/comments.md) — comment and JSDoc guidelines
 
 ## What this is
 
-`amritc` (**AmritScript**) is an ahead-of-time compiler from a strictly static
+`nish` (**Nish**) is an ahead-of-time compiler from a strictly static
 subset of TypeScript to LLVM IR, published to npm as a single package. It is a
 **Node.js + npm** project with one runtime dependency (`typescript`); the
 sibling repos' Bun rules do not apply here. The reference documents are
@@ -48,11 +48,11 @@ them.
 
 | Ask | Command | Answer |
 | --- | --- | --- |
-| what the CLI accepts | `amritc --help` | usage text on **stdout**, exit **0**. A usage *error* prints the same text on stderr with exit 2, so the stream and the code tell a request apart from a refusal |
-| what is wrong with a program | `amritc --json <files>` | one JSON object per line on stdout, nothing on stderr, exit unchanged |
-| the version | `amritc --version` | `amritc <semver>` on stdout, exit 0 |
-| what the compiler parsed | `amritc --emit-ast <file>` | the syntax tree, one node per line |
-| what the checker recorded | `amritc --emit-checked <file>` | the side tables the emitter reads |
+| what the CLI accepts | `nish --help` | usage text on **stdout**, exit **0**. A usage *error* prints the same text on stderr with exit 2, so the stream and the code tell a request apart from a refusal |
+| what is wrong with a program | `nish --json <files>` | one JSON object per line on stdout, nothing on stderr, exit unchanged |
+| the version | `nish --version` | `nish <semver>` on stdout, exit 0 |
+| what the compiler parsed | `nish --emit-ast <file>` | the syntax tree, one node per line |
+| what the checker recorded | `nish --emit-checked <file>` | the side tables the emitter reads |
 
 Every `--json` object is flat:
 `{"file","line","column","endLine","endColumn","severity","code","message"}`,
@@ -60,11 +60,11 @@ Every `--json` object is flat:
 
 - **`severity`** is `"error"` or `"performance"`. A performance warning never
   changes the exit code.
-- **`code`** is the stable rule identifier — `AS1013`, `AS2231` — and is the
+- **`code`** is the stable rule identifier — `NL1013`, `NL2231` — and is the
   field to key on. The prose in `message` may improve between releases; the
-  code may not. `AS0000` means the message has no rule yet. The bands
-  (`AS1xxx` Phase 0, `AS2xxx` checker, `AS3xxx` driver, `AS4xxx` interop,
-  `AS9xxx` performance, `AS0001`–`AS0003` syntax / toolchain / internal) and
+  code may not. `NL0000` means the message has no rule yet. The bands
+  (`NL1xxx` Phase 0, `NL2xxx` checker, `NL3xxx` driver, `NL4xxx` interop,
+  `NL9xxx` performance, `NL0001`–`NL0003` syntax / toolchain / internal) and
   the registry are documented in
   [`docs/wp10-ci.md`](./docs/wp10-ci.md#code). The registry lives in
   `src/codes.ts` and `self/codes.ts` and is **generated** by
@@ -77,7 +77,7 @@ Every `--json` object is flat:
 
 Exit codes (`docs/wp12-release.md`): **0** ok, **1** the program was rejected,
 **2** usage, **3** toolchain (clang or `scripts/build.sh`), **70** internal
-compiler error — a bug in `amritc`, not in the input.
+compiler error — a bug in `nish`, not in the input.
 
 ## Trusting a test run
 
@@ -110,7 +110,7 @@ this does not happen silently.
 - **In the compiler's own source, declare types with `type` and functions as
   arrows bound to a `const`.** Both are linted at `warn` while the existing
   code is migrated, so the warning count is the backlog rather than a failure.
-  Class methods stay methods. An AmritScript program is exempt and must use
+  Class methods stay methods. An Nish program is exempt and must use
   `function` and `interface`, because the language has neither arrow functions
   nor `type` aliases.
 - Match the surrounding code's style, comment density, and naming. Biome

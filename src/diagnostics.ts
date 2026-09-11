@@ -305,7 +305,7 @@ export function formatWarningReport(
  * The machine-readable form of one diagnostic (`--json`): one flat object, no
  * excerpt. `severity` is `"error"` for every `CompileError` and
  * `"performance"` for a WP15 §8 warning, which is the field a tool filters
- * on; `code` is the stable identifier from `./codes` (`AS0000` when no rule
+ * on; `code` is the stable identifier from `./codes` (`NL0000` when no rule
  * matches the message yet), and is the field to key on rather than the prose,
  * because the prose is allowed to improve and the code is not. The
  * `syntax error: ` prefix stays in `message` because the severity of a syntax

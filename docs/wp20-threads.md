@@ -1,7 +1,7 @@
 # WP20: Threads
 
 **Proposed, not implemented.** Nothing in this note exists in the compiler
-today; it is the plan of record for the question "how does AmritScript do true
+today; it is the plan of record for the question "how does Nish do true
 multithreading, like Go or Rust", and the shape of the answer is forced by
 decisions the project has already made rather than chosen freely. The
 normative rules would land in [LANGUAGE.md](LANGUAGE.md) as each stage does;
@@ -23,7 +23,7 @@ preference.
 
 Green threads are cheap because the runtime can grow a stack by relocating it,
 and it can relocate a stack because a precise garbage collector knows which
-words in the frame are pointers. AmritScript's first vision bullet is zero GC
+words in the frame are pointers. Nish's first vision bullet is zero GC
 (MASTER_PLAN §1), and WP6 spends that budget immediately: an allocation site
 whose value provably does not outlive its function becomes an entry-block
 `alloca`, and a site inside a loop is allocated *once* with the slot reused on
@@ -38,7 +38,7 @@ design with a different memory model underneath it.
 ### Go's tolerance for races is not available to this compiler
 
 Go treats a data race as a bug you find with a detector at runtime.
-AmritScript cannot, because it has already spent the assumption such a
+Nish cannot, because it has already spent the assumption such a
 detector would have to preserve. `src/codegen/attributes.ts` emits `readnone`,
 `readonly` and the pointer-parameter facts only where a fixpoint over the
 whole program's call graph proves them, and the rule is that a wrong attribute
@@ -70,10 +70,10 @@ Unusually much, and all of it by accident of other decisions.
 
 ### 3.1 The arena is one global, and the bump is inlined into the IR
 
-`struct amrit_arena amrit_arena;` is a single process-wide object
-(`runtime/runtime.c:35`, `runtime/amritc.h`), and — the sharp part — the fast
+`struct nish_arena nish_arena;` is a single process-wide object
+(`runtime/runtime.c:35`, `runtime/nish.h`), and — the sharp part — the fast
 path is not a call. `inlineAllocator()` (`src/codegen/runtime.ts:385`) emits
-an `alwaysinline` function that GEPs into `@amrit_arena` and does a plain
+an `alwaysinline` function that GEPs into `@nish_arena` and does a plain
 non-atomic `load` / `add` / `store` on the bump offset, and every `new`,
 object literal, array literal, string concatenation and template with a hole
 goes through it.
@@ -81,10 +81,10 @@ goes through it.
 Two threads allocating is therefore a data race **in the emitted IR**, not
 merely in the C runtime. It cannot be fixed in `runtime.c` alone.
 
-The fix is a thread-local arena: `@amrit_arena` becomes `thread_local`, the
+The fix is a thread-local arena: `@nish_arena` becomes `thread_local`, the
 allocator's GEPs go through it, and each thread bumps its own chunks. That
-touches the ABI (`%struct.amrit_arena` in `src/codegen/runtime.ts` and
-`runtime/amritc.h` and `runtime/runtime.c`, which change together by rule 4 of
+touches the ABI (`%struct.nish_arena` in `src/codegen/runtime.ts` and
+`runtime/nish.h` and `runtime/runtime.c`, which change together by rule 4 of
 the orientation), and it rewrites the allocator prologue in the golden `.ll`
 of every test that allocates. The exact IR spelling — a `thread_local`
 global referenced directly, or `@llvm.threadlocal.address` — is for T0 to pin
@@ -95,18 +95,18 @@ extra register on the hot path, and `-fPIC` shared objects are worse. That is
 a benchmark question, not an argument, which is why T0 stands alone and is
 gated on [BENCHMARKS.md](BENCHMARKS.md).
 
-`amrit_arena_mark` / `amrit_arena_release` / `amrit_arena_keep` become
+`nish_arena_mark` / `nish_arena_release` / `nish_arena_keep` become
 per-thread and get *better*, not worse: WP6's automatic scopes and WP9's
 call-site reclaim are per-thread by construction, so a worker that allocates
 and returns leaves the parent's arena untouched.
 
 ### 3.2 The other runtime globals
 
-`static uint64_t amrit_rng` (`runtime/runtime.c:222`) is mutable process-wide
+`static uint64_t nish_rng` (`runtime/runtime.c:222`) is mutable process-wide
 state, so `Math.random()` from two threads is a race today; it becomes
 thread-local with a per-thread seed, which also makes a parallel program's
-random stream reproducible per worker instead of interleaved. `amrit_argv`
-(`runtime/runtime.c:284`) is written once by `amrit_argv_init` before `main`
+random stream reproducible per worker instead of interleaved. `nish_argv`
+(`runtime/runtime.c:284`) is written once by `nish_argv_init` before `main`
 runs and read-only afterwards, so it is safe as it stands provided no thread
 is spawned before initialisation — a fact worth writing down rather than
 relying on.
@@ -116,7 +116,7 @@ relying on.
 Today an object's lifetime is bounded by a frame: WP6 proves a value does not
 outlive its function and puts it on the stack or inside a scope that releases
 it. A spawned thread can outlive the frame that spawned it, and a pointer
-bumped on thread A is reclaimed by A's `amrit_arena_release` while B may still
+bumped on thread A is reclaimed by A's `nish_arena_release` while B may still
 hold it. Neither the stack rule nor the scope rule is sound across a spawn
 without a new fact.
 
@@ -147,8 +147,8 @@ plan.**
 variable do not fit inside the remaining 1,552 bytes as unconditional cost,
 and threads also add `-lpthread` to the link line.
 
-They must therefore be pay-for-what-you-use, exactly as WP14's `amrit_mkdir`
-and `amrit_spawn` are: adding them left `examples/hello.ts` at 4,696 bytes,
+They must therefore be pay-for-what-you-use, exactly as WP14's `nish_mkdir`
+and `nish_spawn` are: adding them left `examples/hello.ts` at 4,696 bytes,
 the same number to the byte, because `-ffunction-sections -Wl,--gc-sections`
 means a program pays only for the functions it calls. A program that never
 spawns must keep paying nothing, and that is an acceptance test, not a hope.

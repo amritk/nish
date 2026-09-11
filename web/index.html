@@ -1,12 +1,12 @@
 <!doctype html>
-<!-- A playground for amritc compiled to wasm: type AmritScript, get LLVM IR.
+<!-- A playground for nish compiled to wasm: type Nish, get LLVM IR.
      Everything runs in the worker next door; this page only moves text. Serve
-     the directory (any static server) with amritc.wasm beside these files. -->
+     the directory (any static server) with nish.wasm beside these files. -->
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>amritc in the browser</title>
+    <title>nish in the browser</title>
     <style>
       :root { color-scheme: light dark; }
       body {
@@ -28,10 +28,10 @@
   </head>
   <body>
     <header>
-      <h1>amritc &rarr; LLVM IR</h1>
+      <h1>nish &rarr; LLVM IR</h1>
       <label>flags <input id="flags" value="" size="24" placeholder="--number-mode f64" /></label>
       <button id="compile" disabled>Compile</button>
-      <span id="status">loading amritc.wasm…</span>
+      <span id="status">loading nish.wasm…</span>
     </header>
     <main>
       <textarea id="source" spellcheck="false">
@@ -66,7 +66,7 @@ export function main(): number {
 
       // The worker fetches and compiles the module once; every later request
       // only instantiates it, which is why a compile feels instant.
-      await send({ wasm: new URL("./amritc.wasm", import.meta.url).href });
+      await send({ wasm: new URL("./nish.wasm", import.meta.url).href });
       el("status").textContent = "ready";
       el("compile").disabled = false;
 

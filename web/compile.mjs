@@ -2,12 +2,12 @@
 // `node:worker_threads` worker, so the browser path can be exercised (and
 // tested) without a browser.
 //
-//   node dist/index.js self/compile.ts --link build/amritc.wasm --profile wasi
-//   node web/compile.mjs build/amritc.wasm examples/add.ts
-//   node web/compile.mjs build/amritc.wasm examples/nbody.ts --number-mode f64
+//   node dist/index.js self/compile.ts --link build/nish.wasm --profile wasi
+//   node web/compile.mjs build/nish.wasm examples/add.ts
+//   node web/compile.mjs build/nish.wasm examples/nbody.ts --number-mode f64
 //
 // The IR goes to stdout and the compiler's diagnostics to stderr, so the exit
-// code and the streams are the ones `amritc` itself would have produced. Files
+// code and the streams are the ones `nish` itself would have produced. Files
 // are read here and handed over as text: the worker has no filesystem, which is
 // the point — in a page the sources come from an editor buffer instead.
 import fs from "node:fs";
@@ -16,7 +16,7 @@ import { Worker } from "node:worker_threads";
 
 const [wasmPath, entry, ...flags] = process.argv.slice(2);
 if (!wasmPath || !entry) {
-  console.error("usage: node web/compile.mjs <amritc.wasm> <entry.ts> [flags...]");
+  console.error("usage: node web/compile.mjs <nish.wasm> <entry.ts> [flags...]");
   process.exit(2);
 }
 

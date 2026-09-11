@@ -2,10 +2,10 @@
  * Explicit arena control (WP6), as dotted builtins next to `console.log`.
  * Lowering lives in `codegen/emit/arena.ts`.
  *
- *   Arena.reset(): void          recycle everything (`amrit_reset_arena`)
- *   Arena.mark(): i64            the current bump position (`amrit_arena_mark`)
- *   Arena.release(m: i64): void  rewind to a mark (`amrit_arena_release`)
- *   Arena.used(): i64            bytes used in the current chunk (`amrit_arena_used`)
+ *   Arena.reset(): void          recycle everything (`nish_reset_arena`)
+ *   Arena.mark(): i64            the current bump position (`nish_arena_mark`)
+ *   Arena.release(m: i64): void  rewind to a mark (`nish_arena_release`)
+ *   Arena.used(): i64            bytes used in the current chunk (`nish_arena_used`)
  *
  * Safety rule (docs/wp6-memory.md): releasing or resetting while an object,
  * array or string allocated after the mark is still referenced is undefined

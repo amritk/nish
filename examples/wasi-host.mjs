@@ -1,7 +1,7 @@
-// Run an AmritScript program built with `scripts/build.sh --profile wasi` under
+// Run an Nish program built with `scripts/build.sh --profile wasi` under
 // Node's WASI implementation (no wasmtime needed):
 //
-//   amritc examples/argv.ts --link build/argv.wasm --profile wasi
+//   nish examples/argv.ts --link build/argv.wasm --profile wasi
 //   node examples/wasi-host.mjs build/argv.wasm 3 4 five
 //
 // The module's `_start` runs the C `main`, so stdout, process.exit codes, the

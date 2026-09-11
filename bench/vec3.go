@@ -1,5 +1,5 @@
 // Go twin of vec3.ts: the same methods on a heap-allocated *Vec3 (like the
-// arena objects in AmritScript and the Box<Vec3> in the Rust twin), the same
+// arena objects in Nish and the Box<Vec3> in the Rust twin), the same
 // expression order. Nothing is allocated inside the loop.
 package main
 

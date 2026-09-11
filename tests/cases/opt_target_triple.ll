@@ -1,7 +1,7 @@
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
-declare void @amrit_panic_div(i1 noundef zeroext) #1
+declare void @nish_panic_div(i1 noundef zeroext) #1
 
 define noundef i32 @sumTo(i32 noundef %n) #0 {
 entry:
@@ -27,7 +27,7 @@ for.body:
   br i1 %8, label %div.fail, label %div.ok
 
 div.fail:
-  call void @amrit_panic_div(i1 zeroext %4)
+  call void @nish_panic_div(i1 zeroext %4)
   unreachable
 
 div.ok:

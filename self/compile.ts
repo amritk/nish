@@ -490,8 +490,8 @@ export function main(): number {
 /**
  * The package root: the directory holding `scripts/` and `runtime/`. stage0
  * reads it from `__dirname` (`src/version.ts`); this compiler is a binary, so
- * it derives it from the path it was invoked by — `<prefix>/bin/amritc` and
- * `build/amritc` both put it one level up — and falls back to the working
+ * it derives it from the path it was invoked by — `<prefix>/bin/nish` and
+ * `build/nish` both put it one level up — and falls back to the working
  * directory, which is what a checkout wants. Empty when neither has the
  * script, so the caller can say which two it looked in.
  */
@@ -537,7 +537,7 @@ function linkProgram(outputs: string[], link: string, profile: string, debugInfo
   argv.push("bash");
   argv.push("-c");
   argv.push('exec "$@" >/dev/null');
-  argv.push("amritc");
+  argv.push("nish");
   argv.push("bash");
   argv.push(script);
   for (const file of outputs) {

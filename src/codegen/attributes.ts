@@ -24,7 +24,7 @@
  *   readonly    As above, but the body reads memory it does not own: a
  *               `.length` load through a string or array pointer, a field or
  *               element read, or a call to a reading callee (e.g.
- *               `amrit_str_eq`). Never with `readnone`.
+ *               `nish_str_eq`). Never with `readnone`.
  *   noundef     Every value is initialised, so no param or return
  *               value is ever undef/poison.
  *   zeroext     `boolean` is i1; the C ABI wants it zero-extended in a register.
@@ -62,7 +62,7 @@
  *               function cannot even obtain such a pointer from this one.
  *     nocapture As for strings, with a fixpoint: passing the pointer to a
  *               callee that captures its parameter captures it here too.
- *   Array params (`%struct.amrit_array*`, WP4): the same `pointerParams` model
+ *   Array params (`%struct.nish_array*`, WP4): the same `pointerParams` model
  *   as structs, with the array constructs classified as follows:
  *     nonnull   The language has no null.
  *     align 8   Headers come from the arena (8-byte rounded) only.
@@ -93,7 +93,7 @@
  *
  * Memory strategy (WP6, `escape.ts`): the analysis also decides which
  * allocation sites become entry-block allocas (`stackSites`) and which
- * functions bracket their body with `amrit_arena_mark` / `amrit_arena_release`
+ * functions bracket their body with `nish_arena_mark` / `nish_arena_release`
  * (`arenaScope`). Both need the `pointerParams` fixpoint (does a callee
  * capture the object?), so `analyzeFunctions` runs the fixpoint, decides,
  * then re-collects the facts with the decisions applied (an allocation that
@@ -153,7 +153,7 @@ export interface FunctionFacts {
   /** Returns on every input (modulo stack exhaustion); refined by the call-graph fixpoint. */
   willReturn: boolean;
   /**
-   * Can reach a `noreturn` runtime call (`process.exit`, WP7; `amrit_panic_index`,
+   * Can reach a `noreturn` runtime call (`process.exit`, WP7; `nish_panic_index`,
    * WP4), directly or through a callee; such a function must not carry `willreturn`.
    */
   callsNoReturn: boolean;
@@ -176,7 +176,7 @@ export interface FunctionFacts {
   stackLocals: Set<LocalVar>;
   /** WP17: by-value `Result` parameters whose unpacked object is an entry-block alloca. */
   stackParams: Set<string>;
-  /** Bracket the body with `amrit_arena_mark` / `amrit_arena_release`. Decided after the fixpoint. */
+  /** Bracket the body with `nish_arena_mark` / `nish_arena_release`. Decided after the fixpoint. */
   arenaScope: boolean;
   /** Performs an arena allocation, directly or through a callee (fixpoint). */
   allocates: boolean;
@@ -218,7 +218,7 @@ interface CalleeFacts {
 const INLINE_ALLOCATOR: CalleeFacts = { effect: "write", attrs: INLINE_ALLOCATOR_ATTRS };
 
 function runtimeFacts(callee: string): CalleeFacts | undefined {
-  return callee === "amrit_alloc_struct" ? INLINE_ALLOCATOR : RUNTIME_BY_NAME.get(callee);
+  return callee === "nish_alloc_struct" ? INLINE_ALLOCATOR : RUNTIME_BY_NAME.get(callee);
 }
 
 /**
@@ -258,8 +258,8 @@ export function analyzeFunctions(
     f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl;
     if (f.arenaScope) {
       // Both are `willreturn` and the function already writes (it allocates), so nothing else moves.
-      f.callees.add("amrit_arena_mark");
-      f.callees.add("amrit_arena_release");
+      f.callees.add("nish_arena_mark");
+      f.callees.add("nish_arena_release");
     }
   }
   return facts;
@@ -802,7 +802,7 @@ function bodyDisturbs(body: ts.Node, names: Set<string>): boolean {
 
 // ---- Attribute rendering ----------------------------------------------------
 
-/** `sizeof(%struct.amrit_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout, `ARRAY_TYPE` in runtime.ts). */
+/** `sizeof(%struct.nish_array)`: `{ i64 len, i64 cap, i8* data }` (WP4 layout, `ARRAY_TYPE` in runtime.ts). */
 const ARRAY_HEADER_BYTES = 24;
 
 export function functionAttributes(f: FunctionFacts): string[] {
@@ -828,7 +828,7 @@ export function paramAttributes(p: Param, f: FunctionFacts): string[] {
       break;
     case "array":
       // dereferenceable(24) (WP9): every array value points at a full
-      // `%struct.amrit_array` header (len, cap, data: 24 bytes) allocated by
+      // `%struct.nish_array` header (len, cap, data: 24 bytes) allocated by
       // the arena or built by a literal; there is no null and no partial header.
       attrs.push("nonnull", "align 8", `dereferenceable(${ARRAY_HEADER_BYTES})`);
       if (pointer && !pointer.writesThrough && !pointer.captured) attrs.push("readonly");

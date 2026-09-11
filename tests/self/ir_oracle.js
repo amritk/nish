@@ -174,7 +174,7 @@ function firstLine(output) {
 }
 
 /**
- * Every positive AmritScript program of the corpus, plus `self/` itself, plus
+ * Every positive Nish program of the corpus, plus `self/` itself, plus
  * the whole programs of `tests/link/`, which is where the multi-module shapes
  * live: cycles, diamonds, re-exported classes, reachable structs.
  */
@@ -207,7 +207,7 @@ function main(argv) {
   const named = argv.filter((a) => !a.startsWith("--"));
   const binary = build();
   if (binary === null) return 1;
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), "amrit-ir-"));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-ir-"));
   const inputs = named.length > 0 ? named.map((f) => path.resolve(f)) : corpus();
   const negatives = negativePrograms();
   let agreed = 0;

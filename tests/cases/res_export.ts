@@ -1,6 +1,6 @@
 // The four `Result` shapes the interop generators have to spell (WP17).
 // `half` and `checkPort` are small enough to travel in a register, so the C
-// header returns them by value as `amrit_result_..._word`; `describe` takes one
+// header returns them by value as `nish_result_..._word`; `describe` takes one
 // the same way, because the packing is symmetric; `openFile` carries a struct
 // in its error arm and stays the arena pointer WP16 has always used.
 // This case is compiled with `--emit-header`, `--emit-napi` and `--emit-dts` in

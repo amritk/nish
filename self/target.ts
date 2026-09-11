@@ -11,7 +11,7 @@
 //
 // `src/` keeps two `Record<string, Target>` tables. Here they are two `if`
 // chains: `switch` is integer-only in the language, deliberately, because a string
-// switch would be a chain of `amrit_str_eq` calls wearing a `switch`'s clothes
+// switch would be a chain of `nish_str_eq` calls wearing a `switch`'s clothes
 // (docs/wp14-selfhost.md §5). There are six triples and ten aliases and the
 // lookup happens once per compilation, so the chain is the honest shape.
 //

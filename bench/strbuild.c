@@ -1,4 +1,4 @@
-/* C twin of strbuild.ts with the AmritScript memory model: length-prefixed
+/* C twin of strbuild.ts with the Nish memory model: length-prefixed
  * immutable strings, every one a fresh bump-arena allocation (64 KB chunks,
  * never freed), the same 32-way join tree. */
 #include <stdint.h>
@@ -18,7 +18,7 @@ static void *arena_alloc(size_t size) {
   size = (size + 7) & ~(size_t)7;
   if (arena_off + size > arena_cap) {
     arena_cap = size > 65536 ? size : 65536;
-    arena_buf = malloc(arena_cap); /* old chunks are abandoned, as amrit_arena_grow does */
+    arena_buf = malloc(arena_cap); /* old chunks are abandoned, as nish_arena_grow does */
     arena_off = 0;
   }
   void *p = arena_buf + arena_off;

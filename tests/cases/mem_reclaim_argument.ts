@@ -1,5 +1,5 @@
 // WP9: the returned temporary does not have to be concatenated for the reclaim
-// to be sound. It is *kept*, not freed — `amrit_arena_keep` relocates it and
+// to be sound. It is *kept*, not freed — `nish_arena_keep` relocates it and
 // answers its new address — so what the caller does with it afterwards is its
 // own business: pass it on, store it, return it. Only the bytes the callee
 // bumped underneath it are released, and `allocEscapes` is what proves those

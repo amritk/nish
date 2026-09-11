@@ -81,7 +81,7 @@ PR adding a construct is not finished without all of them:
    `node scripts/gen-diagnostic-codes.mjs` so `src/codes.ts` and `self/codes.ts`
    pick the new message up. The generator appends and never renumbers, and
    `npm test` fails while either file is stale. A message built entirely out of
-   interpolations gets `AS0000`; giving it a code means giving it words of its
+   interpolations gets `NL0000`; giving it a code means giving it words of its
    own, not editing the table by hand.
 
 A golden is only worth what a human can read in it: keep each case small and
@@ -90,7 +90,7 @@ accepting whatever `test:update` wrote. A golden that changes for an unrelated
 construct is a regression until proven otherwise.
 
 Structural guards (`runtime.c` size budget, the runtime symbol table agreeing
-across `runtime.ts`, `runtime.c` and `amritc.h`, `opt -O2` vectorising
+across `runtime.ts`, `runtime.c` and `nish.h`, `opt -O2` vectorising
 `cf_sum_loop`) pin properties that have been broken before. When one fails, the
 change is what is wrong, not the test. Do not raise a budget or delete a guard
 to get green.

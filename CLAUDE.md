@@ -8,9 +8,9 @@ commands. If the work touches `self/`, read
 Developer guidelines live in the `.claude/` directory:
 
 - **orientation.md** — start here: what the repo is, where the code is, what to run
-- **selfhost.md** — the `self/` compiler: AmritScript-0, the module map, the oracles
+- **selfhost.md** — the `self/` compiler: Nish-0, the module map, the oracles
 - **node.md** — Node runtime, npm scripts, the LLVM toolchain, Biome
-- **typescript.md** — TypeScript style: the AmritScript rules for every program in the repo, and the static-friendly rules for the compiler source
+- **typescript.md** — TypeScript style: the Nish rules for every program in the repo, and the static-friendly rules for the compiler source
 - **comments.md** — Comment guidelines and JSDoc
 - **testing.md** — The golden-test harness, what every construct ships with
 - **architecture.md** — The pipeline, the rules that shape every change, where to read next

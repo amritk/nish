@@ -1,8 +1,8 @@
 /**
- * Run an AmritScript program under Node, unmodified.
+ * Run an Nish program under Node, unmodified.
  *
  * ```
- * node --experimental-strip-types --import ./runtime/amritscript.mjs prog.ts
+ * node --experimental-strip-types --import ./runtime/nish.mjs prog.ts
  * ```
  *
  * This is a *different* claim from the one WP13 tests, and a much smaller one.
@@ -11,7 +11,7 @@
  * reproduce wrapping arithmetic, byte-length strings and bounds checks exactly.
  * Nothing is rewritten here: the source runs as the TypeScript it is, with the
  * type annotations stripped. All this module can do is supply the globals
- * AmritScript has and Node does not, and fix `console.log`'s formatting.
+ * Nish has and Node does not, and fix `console.log`'s formatting.
  *
  * That is enough for a real and useful subset — **f64 mode**, where JavaScript's
  * `+ - * / %` on doubles *are* `fadd/fsub/fmul/fdiv/frem` and `Math.*` are the
@@ -38,7 +38,7 @@
  *   - **`Number(s)` keeps JavaScript's parsing.** `Number` is a constructor
  *     carrying statics (`Number.isNaN` among them) that this module and Node
  *     both need, so it is left alone; `parseInt` and `parseFloat` are plain
- *     functions and do get AmritScript's semantics.
+ *     functions and do get Nish's semantics.
  *   - **`Arena.*` reports zero.** There is no arena, and a program that prints
  *     `Arena.used()` is measuring the native allocator by definition.
  *   - **`i64` and `u64` are out**, for the same reason i32 mode is. The shim
@@ -73,7 +73,7 @@ globalThis.console = {
   error: shim.error,
 };
 
-// Streams and files. These are globals in AmritScript rather than imports from
+// Streams and files. These are globals in Nish rather than imports from
 // `node:fs`, which is why they have to be installed at all.
 provide("write", shim.write);
 provide("writeError", shim.writeError);

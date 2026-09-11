@@ -96,7 +96,7 @@ const DECLARED = [
         !syntax(zero) && diagnosticFile(one) !== "" && diagnosticFile(one) === diagnosticFile(zero)
       );
     },
-    why: "the parser refuses before Phase 0 gets to name the rule. `.claude/selfhost.md` states the habit — lex and parse what is written, refuse in the phase that owns the rule — and stage1's grammar is AmritScript-0's, so syntax the language forbids stops at the parser with `expected `;`` where stage0 parses it with the `typescript` package and refuses it in Phase 0 by name. 43 cases of the corpus are this, and `reject_oracle.js` counts them apart for the same reason. What is *not* declared here is the outcome: the exit status, the stdout and every file written are still compared, and stage0 accepting a program stage1 refuses is a failure, not this.",
+    why: "the parser refuses before Phase 0 gets to name the rule. `.claude/selfhost.md` states the habit — lex and parse what is written, refuse in the phase that owns the rule — and stage1's grammar is Nish-0's, so syntax the language forbids stops at the parser with `expected `;`` where stage0 parses it with the `typescript` package and refuses it in Phase 0 by name. 43 cases of the corpus are this, and `reject_oracle.js` counts them apart for the same reason. What is *not* declared here is the outcome: the exit status, the stdout and every file written are still compared, and stage0 accepting a program stage1 refuses is a failure, not this.",
   },
   {
     // No `flag`: about the program, not how it was compiled.
@@ -171,7 +171,7 @@ function diagnosticFile(line) {
  * The stage1 compiler this compares against: `build/self/compile`, linked from
  * `self/compile.ts` by stage0, which is what every other oracle builds too.
  * Reused when it is already there, so a run of the mode after `npm test` does
- * not pay for it twice. `AMRITC_PARITY_COMPILER` points at another one.
+ * not pay for it twice. `NISH_PARITY_COMPILER` points at another one.
  */
 async function build() {
   const out = path.join(root, "build", "self", "compile");
@@ -412,7 +412,7 @@ async function main(argv) {
   const flagsOnly = argv.includes("--flags-only");
   const onlyAt = argv.indexOf("--only");
   const only = onlyAt >= 0 ? argv[onlyAt + 1] : null;
-  const compiler = process.env.AMRITC_PARITY_COMPILER ?? (await build());
+  const compiler = process.env.NISH_PARITY_COMPILER ?? (await build());
   if (compiler === null) return 1;
   fresh(workRoot);
 

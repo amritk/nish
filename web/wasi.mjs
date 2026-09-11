@@ -128,7 +128,7 @@ class OpenFile {
 /**
  * A WASI preview1 host bound to one module instance.
  *
- *   const host = new WasiHost({ args: ["amritc", "main.ts"], fs });
+ *   const host = new WasiHost({ args: ["nish", "main.ts"], fs });
  *   const { instance } = await WebAssembly.instantiate(module, host.imports());
  *   const status = host.start(instance);
  *

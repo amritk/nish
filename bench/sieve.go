@@ -1,5 +1,5 @@
 // Go twin of sieve.ts: a []bool indexed with an int32, so every store is
-// bounds-checked exactly as it is in AmritScript and in the Rust twin (the
+// bounds-checked exactly as it is in Nish and in the Rust twin (the
 // compiler hoists or drops what it can prove).
 package main
 

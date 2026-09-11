@@ -1,6 +1,6 @@
-# Running an AmritScript program under Node
+# Running an Nish program under Node
 
-An AmritScript program is TypeScript, so a reasonable question is whether Node
+An Nish program is TypeScript, so a reasonable question is whether Node
 can just run it. The answer is *yes, in f64 mode, within an overlap this page
 states exactly* — and **no in i32 mode, ever**.
 
@@ -9,7 +9,7 @@ you are using:
 
 | | What it does | Fidelity |
 | --- | --- | --- |
-| **The prelude** (`runtime/amritscript.mjs`) | Supplies the globals AmritScript has and Node does not. **Rewrites nothing.** | f64 mode, minus the list below |
+| **The prelude** (`runtime/nish.mjs`) | Supplies the globals Nish has and Node does not. **Rewrites nothing.** | f64 mode, minus the list below |
 | **The rewriter** ([wp13-differential.md](wp13-differential.md)) | Loads the program through the compiler's own checker and rewrites every expression from the recorded types | Both modes, minus [`known-failures.txt`](../tests/differential/known-failures.txt) |
 
 The rewriter is the testing oracle: it is exact because it can see the type of
@@ -20,10 +20,10 @@ replace *globals* — never operators, never the object model.
 ## Using it
 
 ```bash
-node --experimental-strip-types --import ./runtime/amritscript.mjs prog.ts
+node --experimental-strip-types --import ./runtime/nish.mjs prog.ts
 ```
 
-The program must be an ES module to Node, which an AmritScript program always
+The program must be an ES module to Node, which an Nish program always
 is — the language has `import`/`export` and no CommonJS at all. This package is
 `"type": "module"`, so an in-tree `.ts` is read that way and
 `node --experimental-strip-types examples/nbody.ts` works from the repository
@@ -43,13 +43,13 @@ the same commit.
   `0` and appends `n` to a BigInt; both would be wrong.
 - `write`, `writeError`, `panic`
 - `readFileSync`, `readFileSyncOrNull`, `writeFileSync`, `appendFileSync`,
-  `mkdirSync`, `isDirectorySync`, `spawnSync` — globals in AmritScript, not
+  `mkdirSync`, `isDirectorySync`, `spawnSync` — globals in Nish, not
   imports from `node:fs`
 - `getenv` — `process.env[name] ?? null`, because Node answers `undefined`
   where the language has only `null`
 - `toI32`, `toI64`, `toF32`, `toF64`, `toU8`…`toU64`, `f64ToBits`, `bitsToF64`
 - `Ok`, `Err`
-- `parseInt`, `parseFloat` — AmritScript's, whose deviations from JavaScript are
+- `parseInt`, `parseFloat` — Nish's, whose deviations from JavaScript are
   documented rules
 - `process.argv` — reindexed so `argv[0]` is the program on both sides
 - `Arena` — no-ops, `used()` answering zero
@@ -81,7 +81,7 @@ no prelude can reach it. They are language decisions
   `Ok`, `Err`, `isOk`, `isErr`, `.value`, `.error`, `unwrapOr`, `expect`.
 - **`Number(s)` keeps JavaScript's parsing.** `Number` is a constructor carrying
   statics (`Number.isNaN` among them) that both Node and the prelude itself
-  need, so it is left alone; it differs from AmritScript's on the `0b` and `0o`
+  need, so it is left alone; it differs from Nish's on the `0b` and `0o`
   prefixes.
 - **`Arena.used()` reports zero**, because there is no arena. A program printing
   it is measuring the native allocator by definition.

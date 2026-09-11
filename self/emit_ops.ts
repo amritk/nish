@@ -162,7 +162,7 @@ export function emitIntBinary(emitter: Emitter, opcode: string, type: i32, lhs: 
   const okBlock = fn.newBlock("div.ok");
   fn.emit(`br i1 ${bad}, label %${failBlock.label}, label %${okBlock.label}`);
   fn.placeBlock(failBlock);
-  fn.emit(`call void ${emitter.useRuntime("amrit_panic_div")}(i1 zeroext ${byZero})`);
+  fn.emit(`call void ${emitter.useRuntime("nish_panic_div")}(i1 zeroext ${byZero})`);
   fn.emit("unreachable");
   fn.placeBlock(okBlock);
   return fn.emitValue(`${op} ${ty} ${lhs}, ${rhs}`);

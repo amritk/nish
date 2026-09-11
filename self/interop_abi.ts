@@ -94,7 +94,7 @@ export class ExternalFunction {
  * Every function that is an external symbol of the final link, in module and
  * source order: exported functions always, non-exported ones unless
  * `--strict-exports` made them `internal`. The entry `export function main`
- * is excluded: it is emitted as `@amrit_main` behind the process entry wrapper
+ * is excluded: it is emitted as `@nish_main` behind the process entry wrapper
  * and is not a library call.
  *
  * An imported signature is skipped as well. Pass 1b appends it to the
@@ -223,11 +223,11 @@ export function cType(table: TypeTable, t: i32, position: i32, written: boolean)
     case T_STRING:
       // Strings are immutable, so a callee can promise not to write through
       // a parameter; a returned string is arena-owned and not const.
-      return position === POS_PARAM ? "const amrit_str *" : "amrit_str *";
+      return position === POS_PARAM ? "const nish_str *" : "nish_str *";
     case K_ARRAY:
       // One header type for every element type (the comment above the
       // prototype names it). `const` is the `readonly` proof from attributes.ts.
-      return position === POS_PARAM && !written ? "const amrit_array *" : "amrit_array *";
+      return position === POS_PARAM && !written ? "const nish_array *" : "nish_array *";
     case T_VOID:
       return "void";
     case K_STRUCT:
@@ -251,8 +251,8 @@ export function cType(table: TypeTable, t: i32, position: i32, written: boolean)
 }
 
 /**
- * The LLVM struct name as a C identifier: `amrit_result.i32.$IoError` becomes
- * `amrit_result_i32__IoError`. Both `.` and `$` become `_`, and that stays
+ * The LLVM struct name as a C identifier: `nish_result.i32.$IoError` becomes
+ * `nish_result_i32__IoError`. Both `.` and `$` become `_`, and that stays
  * unambiguous because `mangle` only ever writes `$` straight after a
  * separator: `Result<i32, string>` is `..._i32_str` and a `Result` over a
  * class called `str` is `..._i32__str`, since its `.$` collapses to two.
@@ -276,12 +276,12 @@ export function cResultWord(table: TypeTable, t: i32): string {
 
 /**
  * C spelling of a struct field. Everything a field can hold has one: the
- * scalars, `amrit_str *`, a pointer to another struct, and `amrit_array *` for
- * `T[]` (the header type from amritc.h; the element type is a comment).
+ * scalars, `nish_str *`, a pointer to another struct, and `nish_array *` for
+ * `T[]` (the header type from nish.h; the element type is a comment).
  */
 export function cFieldType(table: TypeTable, t: i32): string {
   if (table.kindOf(t) === K_ARRAY) {
-    return "amrit_array *";
+    return "nish_array *";
   }
   // A field holds the in-memory `Result`, never the packed return word.
   if (table.kindOf(t) === K_RESULT) {
@@ -500,9 +500,9 @@ export function isCReserved(name: string): boolean {
     name === "using" ||
     name === "virtual" ||
     name === "xor" ||
-    name === "amrit_str" ||
-    name === "amrit_arena" ||
-    name === "amrit_array" ||
+    name === "nish_str" ||
+    name === "nish_arena" ||
+    name === "nish_array" ||
     name === "env" ||
     name === "info" ||
     name === "argv" ||
@@ -521,7 +521,7 @@ export function cParamName(name: string): string {
 /** A C identifier and the asm label that binds it to the real LLVM symbol. */
 export class CName {
   ident: string;
-  /** ` AMRIT_SYMBOL("...")`, or the empty string when the identifier is already the symbol. */
+  /** ` NISH_SYMBOL("...")`, or the empty string when the identifier is already the symbol. */
   label: string;
 
   constructor(ident: string, label: string) {
@@ -534,7 +534,7 @@ export class CName {
  * C identifier for a compiled function. A name that is a C keyword (`double`,
  * `int`, ...) is a perfectly good LLVM symbol but cannot be spelled in C, so
  * it is declared as `name_` bound to the real symbol with an asm label
- * (`AMRIT_SYMBOL`, from amritc.h; it adds the `_` prefix Mach-O needs).
+ * (`NISH_SYMBOL`, from nish.h; it adds the `_` prefix Mach-O needs).
  * Methods and constructors (`Point.shifted`, `Point.constructor`, WP2) are
  * declared the same way as `Point_shifted` / `Point_constructor`, taking the
  * object pointer first: a C host may call them on objects it holds.
@@ -548,12 +548,12 @@ export function cFunctionName(symbol: string): CName {
       ident.addChar(c === CHAR_DOT ? CHAR_UNDERSCORE : c);
       i = i + 1;
     }
-    return new CName(ident.toText(), ` AMRIT_SYMBOL("${symbol}")`);
+    return new CName(ident.toText(), ` NISH_SYMBOL("${symbol}")`);
   }
   if (!isCReserved(symbol)) {
     return new CName(symbol, "");
   }
-  return new CName(`${symbol}_`, ` AMRIT_SYMBOL("${symbol}")`);
+  return new CName(`${symbol}_`, ` NISH_SYMBOL("${symbol}")`);
 }
 
 /** `int32_t add(int32_t a, int32_t b)` for a signature, or `""` when a type has no C spelling. */
@@ -645,7 +645,7 @@ function foldByte(c: i32): i32 {
   return c >= CHAR_UPPER_A && c <= CHAR_UPPER_Z ? c + CASE_SHIFT : c;
 }
 
-/** `// Generated by amritc --emit-x from main.ts; do not edit.` (the CLI names itself). */
+/** `// Generated by nish --emit-x from main.ts; do not edit.` (the CLI names itself). */
 export function banner(compilation: Compilation, flag: string, comment: string): string {
   return `${comment}Generated by ${CLI} ${flag} from ${compilation.entry().path}; do not edit.`;
 }
@@ -654,11 +654,11 @@ export function banner(compilation: Compilation, flag: string, comment: string):
  * `Result` definitions (WP17). Two shapes, and a signature uses whichever its
  * position calls for:
  *
- *   `struct amrit_result_<T>_<E>`      the arena object WP16 has always had —
+ *   `struct nish_result_<T>_<E>`      the arena object WP16 has always had —
  *                                    `{ ok, value, error }` at the offsets the
  *                                    checker derived, which is exactly what
  *                                    clang lays this same declaration out as
- *   `amrit_result_<T>_<E>_word`        the packed by-value form, in either
+ *   `nish_result_<T>_<E>_word`        the packed by-value form, in either
  *                                    direction: a 32-bit discriminant and the
  *                                    arm it selects, one 64-bit word
  *
@@ -679,14 +679,14 @@ export function resultDefinitions(table: TypeTable, fns: ExternalFunction[], fie
   lines.push("/* `Result<T, E>` (WP16/WP17). A `Result` small enough to travel in a");
   lines.push(" * register — returned or passed — is the `_word` struct: read `ok`, then");
   lines.push(" * `as.value` or `as.error`. Every other `Result` is a pointer to the arena");
-  lines.push(" * object, valid until amrit_reset_arena() / amrit_arena_release() like every");
+  lines.push(" * object, valid until nish_reset_arena() / nish_arena_release() like every");
   lines.push(" * other arena value. */");
   lines.push("#if defined(__cplusplus)");
-  lines.push("#define AMRIT_RESULT_ASSERT(c, m) static_assert(c, m)");
+  lines.push("#define NISH_RESULT_ASSERT(c, m) static_assert(c, m)");
   lines.push("#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L");
-  lines.push("#define AMRIT_RESULT_ASSERT(c, m) _Static_assert(c, m)");
+  lines.push("#define NISH_RESULT_ASSERT(c, m) _Static_assert(c, m)");
   lines.push("#else");
-  lines.push("#define AMRIT_RESULT_ASSERT(c, m) /* pre-C11: no static assertion available */");
+  lines.push("#define NISH_RESULT_ASSERT(c, m) /* pre-C11: no static assertion available */");
   lines.push("#endif");
   for (const use of uses) {
     lines.push("");
@@ -720,7 +720,7 @@ function resultDefinition(table: TypeTable, use: ResultUse): string[] {
     lines.push(`  union { ${arms.join(" ")} } as; /* the arm \`ok\` selects; the other is not written */`);
     lines.push(`} ${name};`);
     lines.push(
-      `AMRIT_RESULT_ASSERT(sizeof(${name}) == 8, "${tsKeyword(table, use.type)} travels in one 64-bit register");`
+      `NISH_RESULT_ASSERT(sizeof(${name}) == 8, "${tsKeyword(table, use.type)} travels in one 64-bit register");`
     );
   }
   return lines;

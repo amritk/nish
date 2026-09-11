@@ -4,8 +4,8 @@
  * `run.js` rewrites a program from the checker's type table before Node sees
  * it, and that is what lets it reproduce every documented semantic exactly.
  * This runner rewrites nothing: it runs the `.ts` as the TypeScript it is,
- * under `node --experimental-strip-types` with `runtime/amritscript.mjs`
- * supplying the globals AmritScript has and Node does not.
+ * under `node --experimental-strip-types` with `runtime/nish.mjs`
+ * supplying the globals Nish has and Node does not.
  *
  * The claim it tests is the one `docs/RUN_UNDER_NODE.md` states: an f64-mode
  * program agrees with its compiled self, up to a listed set of divergences that
@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
 const cli = path.join(root, "dist", "index.js");
-const prelude = path.join(root, "runtime", "amritscript.mjs");
+const prelude = path.join(root, "runtime", "nish.mjs");
 const work = path.join(root, "build", "test", "unmodified");
 
 /**

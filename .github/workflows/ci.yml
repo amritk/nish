@@ -1,4 +1,4 @@
-# AmritScript continuous integration.
+# Nish continuous integration.
 #
 # test: typecheck + the full golden/native test suite on Linux and macOS with
 #       LLVM 18 (clang, llc, llvm-as, opt, ld.lld, wasm-ld), then a binary size

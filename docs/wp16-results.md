@@ -1,6 +1,6 @@
 # WP16: Result and the end of `throw`
 
-Rust-style error handling for AmritScript: a function that can fail says so in
+Rust-style error handling for Nish: a function that can fail says so in
 its return type, hands the caller a `Result<T, E>`, and the caller cannot
 reach the success value without first deciding what happens to the failure.
 `throw` is removed in the same package, because leaving it in would have left
@@ -26,7 +26,7 @@ pointer facts), `src/validator.ts` (Phase 0 refuses `throw`).
 Stage1, mirroring each: `self/types.ts`, `self/annotations.ts`,
 `self/result.ts`, `self/expressions.ts` (`narrow`), `self/emit_result.ts`,
 `self/escape.ts`, `self/attributes.ts`, `self/validator.ts`.
-Shared: `runtime/amritc.d.ts` (the ambient declarations),
+Shared: `runtime/nish.d.ts` (the ambient declarations),
 `runtime/shim.mjs` and `tests/differential/rewrite.js` (the Node twin).
 Tests: `tests/cases/res_*`, `tests/cases/reject_result_*`,
 `tests/cases/reject_throw`, `tests/link/result_import`, the
@@ -35,7 +35,7 @@ oracles in `tests/self/`.
 
 ## 1. Why `throw` had to go
 
-AmritScript's `throw` never unwound. It evaluated its operand, discarded it, and
+Nish's `throw` never unwound. It evaluated its operand, discarded it, and
 executed `llvm.trap`, which is a SIGILL and no message. That is an *abort*
 wearing the syntax of error handling, and it had three costs:
 
@@ -66,7 +66,7 @@ LLVM does not lower aggregates to a platform's calling convention — the
 frontend does. clang decides, per target, whether a small struct goes in
 registers, in a register pair, or through an `sret` pointer; emitting
 `define { i32, i8* } @f()` and hoping is how a frontend produces something
-that links but does not interoperate. AmritScript's whole point is that its
+that links but does not interoperate. Nish's whole point is that its
 output is C-ABI-compatible (`--emit-header`, `--emit-napi`, a `.ll` a C
 program links against), so an ABI it cannot describe in a header is not an
 option.
@@ -101,15 +101,15 @@ The reasoning, the six-target table and the measurements are in
 
 ## 3. Monomorphisation without generics
 
-AmritScript has no user generics and this package does not add them.
+Nish has no user generics and this package does not add them.
 `Result<T, E>` is a built-in type constructor, in the same way `Array<T>` is:
 `resolveTypeNode` recognises the name, resolves the two arguments, and returns
 a `{ kind: "result", ok, err, state }`.
 
 Each distinct pair gets one LLVM struct, named by a prefix-coded mangling of
 the two payload types (`src/types.ts`, `mangleType`): `Result<i32, string>` is
-`%struct.amrit_result.i32.str`, `Result<i32, IoError>` is
-`%struct.amrit_result.i32.$IoError`. Writing each constructor's tag before its
+`%struct.nish_result.i32.str`, `Result<i32, IoError>` is
+`%struct.nish_result.i32.$IoError`. Writing each constructor's tag before its
 operands makes the encoding unambiguous without separators of its own —
 `res.res.i32.str.str` can only be read one way — and the `$` on a named type
 cannot appear in a TypeScript identifier, so a class called `res` cannot
@@ -154,22 +154,22 @@ dropped before a loop that assigns it.
 **Propagation is contagious.** `orReturn()` is this language's `?`. It is
 legal only inside a function returning a `Result` whose error arm accepts the
 propagated one, which is exactly the contagion `?` enforces in Rust — minus
-the `From<E>` conversion, because AmritScript has no trait to hang one on, so a
+the `From<E>` conversion, because Nish has no trait to hang one on, so a
 mismatched error type is named rather than silently widened.
 
 It is a method rather than an operator because TypeScript has no postfix
 operator to spare that would still parse and still mean something sane. `!`
-was available syntactically (AmritScript never accepted a non-null assertion) and
+was available syntactically (Nish never accepted a non-null assertion) and
 was rejected on purpose: it means "trust me, not null" to a TypeScript reader
 and "panic" to a Rust one, and it would have meant neither here.
 
 ## 5. It has to stay TypeScript
 
-An AmritScript program has always been parseable TypeScript. This package makes
-one stronger claim, and tests it: with `runtime/amritc.d.ts` on the include
+An Nish program has always been parseable TypeScript. This package makes
+one stronger claim, and tests it: with `runtime/nish.d.ts` on the include
 path, a `Result` program **type-checks** under plain `tsc --strict`.
 
-That is not decoration. It is what keeps an editor useful on an AmritScript file,
+That is not decoration. It is what keeps an editor useful on an Nish file,
 and it is a design constraint on the surface: every spelling here had to be
 one TypeScript can model. `Result` is declared as the tagged union TypeScript
 would use anyway, intersected with the method surface —
@@ -185,7 +185,7 @@ asserts both directions: every `res_*` case type-checks, and
 `Property 'value' does not exist` — which is the check that proves the
 declarations model the *narrowing* and not just the names.
 
-`amritc` is still the authority. `tsc` cannot see that a `Result` may not
+`nish` is still the authority. `tsc` cannot see that a `Result` may not
 be dropped, that `orReturn()` returns early, or that the enclosing function
 has to return a `Result` at all; and the integer widths are aliases of
 `number` there. A program `tsc` accepts may still be rejected here. The
@@ -196,7 +196,7 @@ reverse would be a bug in the declarations.
 - **`unwrap()`.** `expect(message)` says the same thing and insists on a
   reason. An unwrap with no message is the one call that turns a careful error
   type back into `throw`.
-- **`map` / `andThen` / `orElse`.** They need function values, which AmritScript
+- **`map` / `andThen` / `orElse`.** They need function values, which Nish
   forbids: the whole-program pass cannot prove purity, termination or escape
   through an unknown callee. Narrowing plus `orReturn()` covers what they are
   for.

@@ -66,7 +66,7 @@ const CORPUS = [
   // `u8`, `u16`, `u32`, and the loader's bit-view helpers they pull in.
   { file: "tests/self/interop_payloads.ts" },
   // The same widths at a plain parameter and return, where the N-API shim
-  // narrows what N-API has no getter for and emits its `amrit_napi_f32` helper.
+  // narrows what N-API has no getter for and emits its `nish_napi_f32` helper.
   { file: "tests/self/interop_widths.ts" },
   // Every unsigned width as a bare parameter and result, which is where the
   // loader's masks live; the WP8 section of tests/run.js builds this one to
@@ -238,7 +238,7 @@ const main = (argv) => {
   const named = argv.filter((a) => !a.startsWith("--"));
   const binary = build();
   if (binary === null) return 1;
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), "amrit-interop-"));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-interop-"));
   let inputs = CORPUS;
   if (argv.includes("--all")) inputs = wideCorpus();
   if (named.length > 0)

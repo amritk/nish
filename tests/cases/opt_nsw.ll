@@ -1,8 +1,8 @@
 %struct.Acc = type { i32 }
-%struct.amrit_array = type { i64, i64, i8* }
+%struct.nish_array = type { i64, i64, i8* }
 
-declare void @amrit_panic_index(i64 noundef, i64 noundef) #3
-declare void @amrit_panic_div(i1 noundef zeroext) #3
+declare void @nish_panic_index(i64 noundef, i64 noundef) #3
+declare void @nish_panic_div(i1 noundef zeroext) #3
 
 define internal void @Acc.constructor(%struct.Acc* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this) #0 {
 entry:
@@ -21,7 +21,7 @@ entry:
   ret i32 %4
 }
 
-define internal noundef i32 @sum(%struct.amrit_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, %struct.Acc* noundef nonnull align 8 dereferenceable(4) nocapture %acc) #2 {
+define internal noundef i32 @sum(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %xs, %struct.Acc* noundef nonnull align 8 dereferenceable(4) nocapture %acc) #2 {
 entry:
   %s.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
@@ -31,7 +31,7 @@ entry:
 
 for.cond:
   %0 = load i32, i32* %i.addr, align 4
-  %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
   %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
   %3 = trunc i64 %2 to i32
   %4 = icmp slt i32 %0, %3
@@ -41,17 +41,17 @@ for.body:
   %5 = load i32, i32* %s.addr, align 4
   %6 = load i32, i32* %i.addr, align 4
   %7 = sext i32 %6 to i64
-  %8 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
   %9 = load i64, i64* %8, align 8, !alias.scope !3, !noalias !4
   %10 = icmp ult i64 %7, %9
   br i1 %10, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @amrit_panic_index(i64 %7, i64 %9)
+  call void @nish_panic_index(i64 %7, i64 %9)
   unreachable
 
 bounds.ok:
-  %11 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
   %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4
   %13 = bitcast i8* %12 to i32*
   %14 = getelementptr inbounds i32, i32* %13, i64 %7
@@ -60,17 +60,17 @@ bounds.ok:
   store i32 %16, i32* %s.addr, align 4
   %17 = load i32, i32* %i.addr, align 4
   %18 = sext i32 %17 to i64
-  %19 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
+  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
   %20 = load i64, i64* %19, align 8, !alias.scope !3, !noalias !4
   %21 = icmp ult i64 %18, %20
   br i1 %21, label %bounds.ok.1, label %bounds.fail.1
 
 bounds.fail.1:
-  call void @amrit_panic_index(i64 %18, i64 %20)
+  call void @nish_panic_index(i64 %18, i64 %20)
   unreachable
 
 bounds.ok.1:
-  %22 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
+  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
   %23 = load i8*, i8** %22, align 8, !alias.scope !3, !noalias !4
   %24 = bitcast i8* %23 to i32*
   %25 = getelementptr inbounds i32, i32* %24, i64 %18
@@ -81,17 +81,17 @@ bounds.ok.1:
   %29 = load i32, i32* %28, align 4
   %30 = load i32, i32* %i.addr, align 4
   %31 = sext i32 %30 to i64
-  %32 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 0
+  %32 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
   %33 = load i64, i64* %32, align 8, !alias.scope !3, !noalias !4
   %34 = icmp ult i64 %31, %33
   br i1 %34, label %bounds.ok.2, label %bounds.fail.2
 
 bounds.fail.2:
-  call void @amrit_panic_index(i64 %31, i64 %33)
+  call void @nish_panic_index(i64 %31, i64 %33)
   unreachable
 
 bounds.ok.2:
-  %35 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %xs, i64 0, i32 2
+  %35 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
   %36 = load i8*, i8** %35, align 8, !alias.scope !3, !noalias !4
   %37 = bitcast i8* %36 to i32*
   %38 = getelementptr inbounds i32, i32* %37, i64 %31
@@ -104,7 +104,7 @@ bounds.ok.2:
   br i1 %44, label %div.fail, label %div.ok
 
 div.fail:
-  call void @amrit_panic_div(i1 zeroext %40)
+  call void @nish_panic_div(i1 zeroext %40)
   unreachable
 
 div.ok:
@@ -129,7 +129,7 @@ for.end:
   br i1 %54, label %div.fail.1, label %div.ok.1
 
 div.fail.1:
-  call void @amrit_panic_div(i1 zeroext %50)
+  call void @nish_panic_div(i1 zeroext %50)
   unreachable
 
 div.ok.1:
@@ -157,18 +157,18 @@ define noundef i32 @test() #2 {
 entry:
   %acc.addr = alloca %struct.Acc*, align 8
   %Acc.obj = alloca %struct.Acc, align 8
-  %xs.addr = alloca %struct.amrit_array*, align 8
-  %arr.hdr = alloca %struct.amrit_array, align 8
+  %xs.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
   %arr.data = alloca [4 x i32], align 8
   %n.addr = alloca i32, align 4
   call void @Acc.constructor(%struct.Acc* %Acc.obj)
   store %struct.Acc* %Acc.obj, %struct.Acc** %acc.addr, align 8
-  %0 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 0
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
   store i64 4, i64* %0, align 8, !alias.scope !3, !noalias !4
-  %1 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 1
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
   store i64 4, i64* %1, align 8, !alias.scope !3, !noalias !4
   %2 = bitcast [4 x i32]* %arr.data to i8*
-  %3 = getelementptr inbounds %struct.amrit_array, %struct.amrit_array* %arr.hdr, i64 0, i32 2
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
   store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4
   %4 = bitcast i8* %2 to i32*
   %5 = getelementptr inbounds i32, i32* %4, i64 0
@@ -179,7 +179,7 @@ entry:
   store i32 3, i32* %7, align 4, !alias.scope !4, !noalias !3
   %8 = getelementptr inbounds i32, i32* %4, i64 3
   store i32 4, i32* %8, align 4, !alias.scope !4, !noalias !3
-  store %struct.amrit_array* %arr.hdr, %struct.amrit_array** %xs.addr, align 8
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %xs.addr, align 8
   %9 = call i32 @poly(i32 5, i32 2)
   store i32 %9, i32* %n.addr, align 4
   %10 = load i32, i32* %n.addr, align 4
@@ -189,9 +189,9 @@ entry:
   %13 = sub nsw i32 %12, 1
   store i32 %13, i32* %n.addr, align 4
   %14 = load i32, i32* %n.addr, align 4
-  %15 = load %struct.amrit_array*, %struct.amrit_array** %xs.addr, align 8
+  %15 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %16 = load %struct.Acc*, %struct.Acc** %acc.addr, align 8
-  %17 = call i32 @sum(%struct.amrit_array* %15, %struct.Acc* %16)
+  %17 = call i32 @sum(%struct.nish_array* %15, %struct.Acc* %16)
   %18 = add nsw i32 %14, %17
   %19 = load %struct.Acc*, %struct.Acc** %acc.addr, align 8
   %20 = getelementptr inbounds %struct.Acc, %struct.Acc* %19, i32 0, i32 0
@@ -207,7 +207,7 @@ attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind }
 attributes #3 = { nounwind noreturn cold }
 
-!0 = !{!"amritc array"}
+!0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
 !3 = !{!1}

@@ -3,7 +3,7 @@
 **Proposed, not implemented, and rough.** Nothing here exists in the compiler
 today. It is the plan of record for two questions that arrived together —
 "what would an extra `exports` condition alongside `cjs` and `esm` look like",
-and "how should an AmritScript package depend on another AmritScript package" —
+and "how should an Nish package depend on another Nish package" —
 and the first thing it decides is that they are *different* questions with
 different answers. Sections 5 and 6 are firm because they follow from
 decisions already made; sections 7 and 8 are sketches and are expected to move.
@@ -20,19 +20,19 @@ already generates.
 | Consumer | Wants | Crosses |
 | --- | --- | --- |
 | **A foreign host** — JavaScript on Node, JavaScript in a browser, C | a built artifact it can load and call | the C ABI, or the N-API / wasm bridges over it ([wp8-interop.md](wp8-interop.md)) |
-| **Another AmritScript program** | the package's *functions*, checked and optimised as if they were its own | nothing: there is no boundary to cross |
+| **Another Nish program** | the package's *functions*, checked and optimised as if they were its own | nothing: there is no boundary to cross |
 
 Giving both the same answer is the mistake this note exists to avoid. A
 foreign host is calling across a wire whose type vocabulary is narrow by
 construction — numbers, `boolean`, bigint, `string`, four typed arrays, and
-nothing else (WP8's table). An AmritScript consumer is not calling across
+nothing else (WP8's table). An Nish consumer is not calling across
 anything; it is compiling one program that happens to have been written by two
 people.
 
 ## 2. The decision
 
-**Source is the distribution format for AmritScript. Built artifacts are for
-foreign hosts, and — for an AmritScript consumer — a cache, never a package
+**Source is the distribution format for Nish. Built artifacts are for
+foreign hosts, and — for an Nish consumer — a cache, never a package
 format.**
 
 An `exports` map states both, because Node's resolution algorithm is worth
@@ -43,7 +43,7 @@ these five things did you come here for":
 {
   "exports": {
     ".": {
-      "amrit":   "./src/index.ts",      // an AmritScript consumer: source
+      "nish":   "./src/index.ts",      // an Nish consumer: source
       "node":    "./build/index.node",  // JS on Node: the N-API addon
       "browser": "./build/index.mjs",   // JS in a browser: the wasm loader
       "import":  "./dist/index.js",     // plain tsc output
@@ -53,18 +53,18 @@ these five things did you come here for":
 }
 ```
 
-Conditions match in declaration order, so `amrit` leads and `node` precedes
-`import`. Only `amritc` ever asks for the `amrit` condition, so a bundler, a
+Conditions match in declaration order, so `nish` leads and `node` precedes
+`import`. Only `nish` ever asks for the `nish` condition, so a bundler, a
 type-checker and Node each keep resolving the package exactly as they do
 today. The last three rows are what WP8's `--emit-napi`, `--emit-dts` and
 `tsc` already produce; the first row is a path, not an artifact, and building
 it is the whole of this note.
 
-The `amrit` row also carries the number mode, by spelling — `amrit-f64`,
-`amrit-i32`, or plain `amrit` for a package correct under either. §6 says why
+The `nish` row also carries the number mode, by spelling — `nish-f64`,
+`nish-i32`, or plain `nish` for a package correct under either. §6 says why
 that is the right place for it and why nothing else needs a manifest.
 
-`"amrit"` is a placeholder. Whatever it ends up being is a spelling of the
+`"nish"` is a placeholder. Whatever it ends up being is a spelling of the
 project's name, so it belongs in `src/branding.ts` and `self/branding.ts` with
 the rest of them (orientation rule 5), and both compilers have to agree on it
 before either can resolve a bare specifier.
@@ -139,14 +139,14 @@ fall out of the existing design:
 - **A library package must not declare `export function main`.** Only the
   entry module may, and a package is never the entry.
 - **Internals are unrestricted.** The ABI narrowness of §1 constrains the
-  three *artifact* rows of the exports map, not the `amrit` row. A package
+  three *artifact* rows of the exports map, not the `nish` row. A package
   consumed as source may take and return classes, `T | null`, `string[]`,
   `Result<T, E>` — anything the language has — because nothing is crossing a
   boundary.
 
 That second point is the payoff, and it is worth being loud about: the
 package a JS host sees through `--emit-napi` is a narrowed projection of the
-package an AmritScript consumer sees.
+package an Nish consumer sees.
 
 ## 5. What blocks this today
 
@@ -175,9 +175,9 @@ interesting.
 ### 5b. `import` has no bare specifiers
 
 The only import form is a named import from a relative specifier; a bare one
-is rejected with "AmritScript has no package resolution". Adding it means
+is rejected with "Nish has no package resolution". Adding it means
 resolving `import { blake3 } from "@scope/hash"` through Node's own algorithm
-with `--conditions=amrit` — deliberately *not* inventing a resolver, a lockfile
+with `--conditions=nish` — deliberately *not* inventing a resolver, a lockfile
 or a registry, all of which npm already has and none of which this project
 should own.
 
@@ -188,13 +188,13 @@ pulling an f64-only package gets an error naming both sides and the field that
 said so. The same check covers a package that requires a newer compiler than
 the one compiling it.
 
-## 6. How a package says it is AmritScript
+## 6. How a package says it is Nish
 
-The `amrit` condition is the whole answer, and the first draft of this section
+The `nish` condition is the whole answer, and the first draft of this section
 was wrong to reach for a manifest beside it. Its presence is the claim, its
 value is the entry module, and its *absence* is what lets a bare import of an
-ordinary npm package fail with "package `lodash` has no AmritScript entry
-point" (a new `AS3xxx` code) rather than a module-not-found that reads like
+ordinary npm package fail with "package `lodash` has no Nish entry
+point" (a new `NL3xxx` code) rather than a module-not-found that reads like
 the consumer's own mistake.
 
 ### The number mode goes in the condition
@@ -230,20 +230,20 @@ rest of the mode comparison, including what i32 buys to be worth the split.
 So the mode rides in the condition rather than in metadata:
 
 ```jsonc
-"exports": { ".": { "amrit-f64": "./src/index.ts" } }   // f64 only
-"exports": { ".": { "amrit":     "./src/index.ts" } }   // correct under either
+"exports": { ".": { "nish-f64": "./src/index.ts" } }   // f64 only
+"exports": { ".": { "nish":     "./src/index.ts" } }   // correct under either
 ```
 
-`amritc --number-mode f64` asks for `["amrit-f64", "amrit"]` and `--number-mode
-i32` for `["amrit-i32", "amrit"]`, so a both-modes package matches either, a
+`nish --number-mode f64` asks for `["nish-f64", "nish"]` and `--number-mode
+i32` for `["nish-i32", "nish"]`, so a both-modes package matches either, a
 single-mode package matches one, and a mismatch is a *resolution* failure at
 the package boundary — before a byte of the dependency is checked, and with no
 new file format, sidecar or manifest key to keep in sync. A package that needs
 genuinely different source per mode gets that for free by listing both.
 
-One implementation note: `amritc`'s resolver has to read the `exports` object
+One implementation note: `nish`'s resolver has to read the `exports` object
 itself rather than delegating blindly, because the good message —
-"`@scope/hash` supports AmritScript in f64 mode only; this program is
+"`@scope/hash` supports Nish in f64 mode only; this program is
 compiling in i32" — needs to know which conditions the package *does* offer.
 A plain resolver would only be able to say "unresolved".
 
@@ -256,7 +256,7 @@ A plain resolver would only be able to say "unresolved".
   without `--runtime-decls`). "`@scope/hash` calls `readFileSync`, which the
   freestanding wasm profile has no runtime for" is a whole-program diagnostic,
   not a manifest field.
-- **A compiler version floor** goes in `"engines": { "amritc": ">=x" }`, the
+- **A compiler version floor** goes in `"engines": { "nish": ">=x" }`, the
   slot npm already has for exactly this.
 
 Which leaves an `--emit-manifest` sidecar with nothing left to carry, and it
@@ -267,7 +267,7 @@ true of the mode (it selects the file) and false of everything else here.
 
 ### Why none of this is a trust boundary
 
-Unlike "is this package really ESM", AmritScript-safety needs no trust,
+Unlike "is this package really ESM", Nish-safety needs no trust,
 because the consumer's own build re-establishes it from source every time and
 the compiler is the verifier. A package whose condition lies, or whose source
 has drifted, is caught on the first compile that uses it. Everything above is
@@ -290,10 +290,10 @@ should not look alike.
   needs a diagnostic that says so in those words rather than a type error
   about two identically-named classes.
 - **Whether the compiler or a separate tool resolves.** §5b assumes the
-  compiler reads `node_modules`. A thin resolver that hands `amritc` a flat
+  compiler reads `node_modules`. A thin resolver that hands `nish` a flat
   list of files is the alternative and is less coupled.
 - **Prebuilt closed-source distribution.** If it is ever needed, the shape is
-  the `.d.amrit.json` sidecar that MASTER_PLAN §5 WP5 specified and
+  the `.d.nish.json` sidecar that MASTER_PLAN §5 WP5 specified and
   [wp5-modules.md](wp5-modules.md) set aside as unnecessary ("separate
   compilation of a library against a sidecar can be added when a use case
   needs it") — signatures *plus* the proven attributes, so the importer's
@@ -309,8 +309,8 @@ should not look alike.
 | | Stage | Depends on | Notes |
 | ---: | --- | --- | --- |
 | S1 | Package-scoped symbols | — | §5a. No language surface; a large mechanical diff across the checker, the fact table, the mangling and the goldens. Landable on its own merits. |
-| S2 | Bare specifiers and the `amrit` condition | S1 | §5b. The condition name lands in `branding.ts` on both sides. |
-| S3 | The boundary diagnostics | S2 | §5c, §6. No new artifact: the `AS3xxx` entries for a missing or mode-mismatched `amrit` condition, a version floor from `engines.amritc`, a builtin the target has no runtime for, and a compile error attributed to a dependency rather than to the consumer. |
+| S2 | Bare specifiers and the `nish` condition | S1 | §5b. The condition name lands in `branding.ts` on both sides. |
+| S3 | The boundary diagnostics | S2 | §5c, §6. No new artifact: the `NL3xxx` entries for a missing or mode-mismatched `nish` condition, a version floor from `engines.nish`, a builtin the target has no runtime for, and a compile error attributed to a dependency rather than to the consumer. |
 | S4 | The build cache | S2 | Content-addressed by (package version, number mode, target, profile, compiler version). Invisible to the package author; a pure compile-time optimisation, and the answer to §3's stated cost. |
 | S5 | Prebuilt distribution | S4 | §7. Deferred, possibly permanently. |
 
