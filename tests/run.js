@@ -4009,6 +4009,110 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
   }
 }
 
+// ---- WP12: changelog ----------------------------------------------------------------
+// The release notes are generated from the commits, so what the generator keeps and what
+// it drops is a released artifact rather than a convenience. Driven against a throwaway
+// repository whose log is known: a conventional commit, one that predates the convention,
+// and a branch merged rather than squashed -- which is where the noise came from, because
+// every work-in-progress commit behind the merge used to become an entry of its own.
+if (!only || "changelog".includes(only) || "wp12".includes(only)) {
+  const gen = path.join(root, "scripts", "changelog-gen.mjs");
+  const repo = path.join(buildDir, "wp12-changelog");
+  fs.rmSync(repo, { recursive: true, force: true });
+  fs.mkdirSync(repo, { recursive: true });
+  const g = (...args) =>
+    spawnSync("git", args, {
+      cwd: repo,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: "T",
+        GIT_AUTHOR_EMAIL: "t@example.com",
+        GIT_COMMITTER_NAME: "T",
+        GIT_COMMITTER_EMAIL: "t@example.com",
+        GIT_AUTHOR_DATE: "2026-01-01T00:00:00Z",
+        GIT_COMMITTER_DATE: "2026-01-01T00:00:00Z",
+      },
+    });
+  /** Make a commit and return its sha, so a range can name it rather than guess it. */
+  const commit = (message) => {
+    fs.appendFileSync(path.join(repo, "f.txt"), `${message}\n`);
+    g("add", "-A");
+    g("commit", "-m", message);
+    return g("rev-parse", "HEAD").stdout.trim();
+  };
+
+  g("init", "-q", "-b", "main");
+  const feat = commit("feat(cli): accept a second input file");
+  const wip = commit("wip: still poking at it");
+  g("checkout", "-q", "-b", "side");
+  commit("fix(codegen): widen the index before the bounds check");
+  commit("more wip");
+  g("checkout", "-q", "main");
+  const merge = g("merge", "--no-ff", "-m", "Merge branch 'side'", "side");
+  check("changelog fixture: the throwaway repository builds", merge.status === 0, merge.stderr);
+
+  // The generator walks the log of the repository it lives in, so it is copied beside the
+  // fixture: `--from`/`--to` choose a range, never a repository.
+  const genDir = path.join(repo, "scripts");
+  fs.mkdirSync(genDir, { recursive: true });
+  fs.copyFileSync(gen, path.join(genDir, "changelog-gen.mjs"));
+  fs.writeFileSync(path.join(repo, "package.json"), '{ "name": "fixture", "version": "0.1.0" }\n');
+  fs.writeFileSync(path.join(repo, "CHANGELOG.md"), "# Changelog\n\n## [Unreleased]\n");
+  const run = (...args) =>
+    spawnSync(process.execPath, [path.join(genDir, "changelog-gen.mjs"), ...args], {
+      cwd: repo,
+      encoding: "utf8",
+    });
+
+  const md = run("--version", "0.1.0");
+  check("changelog: the generator succeeds over the fixture", md.status === 0, md.stderr);
+  const headings = [...md.stdout.matchAll(/^### (.+)$/gm)].map((m) => m[1]);
+  check(
+    "changelog: only the two conventional commits become entries",
+    headings.join(",") === "Added,Fixed",
+    `headings: ${headings.join(", ") || "(none)"}\n${md.stdout}`
+  );
+  check(
+    "changelog: the merge commit and the work-in-progress commits are not entries",
+    !/wip|Merge branch/i.test(md.stdout),
+    md.stdout
+  );
+  check(
+    "changelog: every skipped subject is named on stderr, so nothing goes missing quietly",
+    md.stderr.includes("skipped 2 commits") &&
+      md.stderr.includes("wip: still poking at it") &&
+      md.stderr.includes("more wip"),
+    md.stderr
+  );
+
+  const all = run("--version", "0.1.0", "--include-unconventional");
+  const allHeadings = [...all.stdout.matchAll(/^### (.+)$/gm)].map((m) => m[1]);
+  check(
+    "changelog: --include-unconventional files the rest under Uncategorised",
+    all.status === 0 && allHeadings.join(",") === "Added,Fixed,Uncategorised",
+    `headings: ${allHeadings.join(", ")}\n${all.stderr}`
+  );
+
+  // The negative: a range whose commits all predate the convention is an error rather than
+  // an empty release section, because a silently empty set of notes is the failure mode
+  // the filter could otherwise introduce.
+  const none = run("--version", "0.1.0", "--from", feat, "--to", wip);
+  check(
+    "changelog: a range with no conventional commit fails rather than rendering nothing",
+    none.status === 1 && /no commit in .* carries a conventional subject/.test(none.stderr),
+    `exit ${none.status}\n${none.stderr}`
+  );
+
+  const bad = run("--check-subject", "Add arrays");
+  const ok = run("--check-subject", "perf(codegen)!: hoist the array header");
+  check(
+    "changelog: --check-subject is the same rule pr-title.yml enforces",
+    bad.status === 1 && ok.status === 0,
+    `bad exit ${bad.status}, ok exit ${ok.status}\n${bad.stderr}${ok.stderr}`
+  );
+}
+
 // ---- WP13: differential -------------------------------------------------------------
 // Every whole program in tests/cases and tests/differential/corpus is compiled, linked,
 // and run natively, then rewritten to JavaScript (tests/differential/rewrite.js, types

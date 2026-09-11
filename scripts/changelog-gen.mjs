@@ -3,6 +3,7 @@
 //
 //   node scripts/changelog-gen.mjs --version 0.2.0 [--from <ref>] [--to <ref>]
 //                                  [--write] [--stdout md|json]
+//                                  [--include-unconventional]
 //
 // Writes `changelog/<version>.json` — the structured record — and renders
 // Markdown from it for CHANGELOG.md and the GitHub release notes. JSON is the
@@ -29,10 +30,19 @@
 //   Release-Note: overrides the body for public notes, when the body is
 //     about the review rather than about the change
 //
-// `type!` or a `BREAKING CHANGE:` trailer marks a breaking change. A subject
-// that does not parse as a conventional commit is NOT dropped — it lands under
-// `other` with its body intact, because a release that silently omits a change
-// is worse than one with an untidy heading. The count of those is reported.
+// `type!` or a `BREAKING CHANGE:` trailer marks a breaking change.
+//
+// Only conventional subjects become entries. The release notes are the account
+// of what a release changed, and a commit that did not say what it changed is
+// not that account: `pr-title.yml` makes every squash-merge subject
+// conventional, so what the filter removes is the history behind a merge
+// commit -- the work-in-progress commits whose landed subject already has an
+// entry -- and the commits that predate the convention. Nothing is dropped
+// silently: every skipped subject is listed on stderr, and the
+// `--include-unconventional` flag files them under "Uncategorised" with their
+// bodies intact, the way this tool behaved before. Use it for the first
+// release after the convention lands, or write the history up by hand in
+// `changelog/<version>.intro.md`, which renders above the sections.
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -50,8 +60,13 @@ const TYPES = [
   ["build", "Build"],
   ["ci", "CI"],
   ["chore", "Internal"],
+  // Only reachable under --include-unconventional; ordinarily a subject that
+  // does not classify is skipped rather than filed here.
   ["other", "Uncategorised"],
 ];
+
+/** The types a subject may name. `other` is this tool's bucket, not a type. */
+const CONVENTIONAL_TYPES = TYPES.filter(([k]) => k !== "other").map(([k]) => k);
 
 /**
  * Trailers that are bookkeeping rather than content. They are stripped from
@@ -62,6 +77,14 @@ const DROPPED_TRAILERS = /^(Co-Authored-By|Claude-Session|Signed-off-by|Reviewed
 
 /** Trailers this tool reads. Everything else is left in the body. */
 const KNOWN_TRAILERS = /^(Measured|Refs|Tests|Release-Note|BREAKING[ -]CHANGE):\s*(.*)$/i;
+
+/**
+ * GitHub ends a squashed body with a rule when the branch had more than one
+ * commit. It renders as an `<hr>` in the middle of the notes and says nothing,
+ * so it goes the way the bookkeeping trailers do. It sits above the
+ * co-authorship trailers rather than at the end, so it comes off the prose.
+ */
+const SQUASH_RULE = /\n[ \t]*\n[ \t]*-{3,}[ \t]*$/;
 
 function git(args, quiet = false) {
   return execFileSync("git", args, {
@@ -150,7 +173,18 @@ function slug(title, taken) {
   return id;
 }
 
-function collect(from, to) {
+/**
+ * The entries a release contains, and the subjects that did not become one.
+ *
+ * A subject that does not classify is skipped: `pr-title.yml` makes every
+ * squash-merge subject conventional, so what is left over is the branch
+ * history behind a merge commit -- already represented by the subject that
+ * landed -- or a commit from before the convention. Both are noise in the
+ * notes rather than content, and both used to be most of the file. The skipped
+ * subjects are returned so the caller can report them; `includeUnconventional`
+ * restores the old behaviour and files them under "Uncategorised".
+ */
+function collect(from, to, includeUnconventional = false) {
   const range = from ? `${from}..${to}` : to;
   // \x00 between fields and \x1e between records: a commit body contains
   // newlines and may contain anything else, so the separators must be bytes
@@ -158,23 +192,28 @@ function collect(from, to) {
   const raw = git(["log", "--no-merges", "--reverse", `--format=%H%x00%an%x00%aI%x00%s%x00%b%x1e`, range]);
   const taken = new Set();
   const entries = [];
-  let unconventional = 0;
+  const skipped = [];
 
   for (const record of raw.split("\x1e")) {
     const text = record.replace(/^\n/, "");
     if (!text.trim()) continue;
     const [sha, author, date, subject, body = ""] = text.split("\x00");
     const parsed = parseSubject(subject);
-    if (!parsed) unconventional += 1;
+    const classified = parsed !== undefined && CONVENTIONAL_TYPES.includes(parsed.type);
+    if (!classified) {
+      skipped.push(`${sha.slice(0, 7)} ${subject}`);
+      if (!includeUnconventional) continue;
+    }
 
-    const { prose, trailers } = splitTrailers(body);
+    const { prose: rawProse, trailers } = splitTrailers(body);
+    const prose = rawProse.replace(SQUASH_RULE, "");
     const t = parseTrailers(trailers);
     const title = parsed ? parsed.title : subject;
     const pr = /\(#(\d+)\)\s*$/.exec(subject)?.[1];
 
     entries.push({
       id: slug(title, taken),
-      type: parsed?.type && TYPES.some(([k]) => k === parsed.type) ? parsed.type : "other",
+      type: classified ? parsed.type : "other",
       scope: parsed?.scope,
       breaking: Boolean(parsed?.bang || t.breaking),
       breakingNote: t.breaking,
@@ -189,7 +228,7 @@ function collect(from, to) {
       date: date.slice(0, 10),
     });
   }
-  return { entries, unconventional };
+  return { entries, skipped };
 }
 
 function renderMarkdown(release) {
@@ -263,19 +302,18 @@ function flag(name, fallback) {
 const checkSubject = flag("check-subject", undefined);
 if (checkSubject !== undefined) {
   const parsed = parseSubject(checkSubject);
-  const types = TYPES.filter(([k]) => k !== "other").map(([k]) => k);
   if (!parsed) {
     console.error(`not a conventional commit subject:\n\n    ${checkSubject}\n`);
-    console.error(`Expected \`type(scope): subject\`, where type is one of: ${types.join(", ")}.`);
+    console.error(`Expected \`type(scope): subject\`, where type is one of: ${CONVENTIONAL_TYPES.join(", ")}.`);
     console.error(`A \`!\` after the type or scope marks a breaking change.\n`);
     console.error(`Examples:\n    feat(checker): accept non-generic type aliases`);
     console.error(`    perf(codegen)!: hoist the array header out of element loops`);
     console.error(`\nThe subject becomes the heading in the release notes, so write it for a reader.`);
     process.exit(1);
   }
-  if (!types.includes(parsed.type)) {
+  if (!CONVENTIONAL_TYPES.includes(parsed.type)) {
     console.error(`unknown type \`${parsed.type}\` in:\n\n    ${checkSubject}\n`);
-    console.error(`Use one of: ${types.join(", ")}.`);
+    console.error(`Use one of: ${CONVENTIONAL_TYPES.join(", ")}.`);
     process.exit(1);
   }
   if (/[.]$/.test(parsed.title)) {
@@ -303,8 +341,9 @@ const from = flag("from", lastTag());
 const to = flag("to", "HEAD");
 const stdoutKind = flag("stdout", "md");
 const write = argv.includes("--write");
+const includeUnconventional = argv.includes("--include-unconventional");
 
-const { entries, unconventional } = collect(from, to);
+const { entries, skipped } = collect(from, to, includeUnconventional);
 
 // `--next` answers the version and nothing else, for the release PR to name
 // itself and to bump package.json with.
@@ -313,9 +352,25 @@ if (argv.includes("--next")) {
   process.exit(0);
 }
 
-if (entries.length === 0) {
+// Skipped is not silent: the subjects are named, because a change that belongs
+// in the notes and was written without a type is a defect to fix in the
+// commit, not something for a reader of the notes to discover missing.
+if (skipped.length > 0 && !includeUnconventional) {
+  const shown = skipped.slice(0, 20);
   console.error(
-    `changelog-gen: no commits in ${from ? `${from}..${to}` : to}; a release with no changes is a mistake, not an empty section`
+    `changelog-gen: skipped ${skipped.length} commit${skipped.length === 1 ? "" : "s"} whose subject is not a conventional commit:`
+  );
+  for (const line of shown) console.error(`  ${line}`);
+  if (skipped.length > shown.length) console.error(`  ... and ${skipped.length - shown.length} more`);
+  console.error("Pass --include-unconventional to file them under \"Uncategorised\" instead.");
+}
+
+if (entries.length === 0) {
+  const range = from ? `${from}..${to}` : to;
+  console.error(
+    skipped.length > 0
+      ? `changelog-gen: no commit in ${range} carries a conventional subject (${skipped.length} skipped, listed above), so the release has no entries; fix the subjects or pass --include-unconventional`
+      : `changelog-gen: no commits in ${range}; a release with no changes is a mistake, not an empty section`
   );
   process.exit(1);
 }
@@ -356,9 +411,9 @@ if (write) {
   console.error(`changelog-gen: wrote changelog/${version}.json and the CHANGELOG.md section`);
 }
 
-if (unconventional > 0) {
+if (includeUnconventional && skipped.length > 0) {
   console.error(
-    `changelog-gen: ${unconventional} of ${entries.length} commits are not conventional and landed under "Uncategorised"`
+    `changelog-gen: ${skipped.length} of ${entries.length} commits are not conventional and landed under "Uncategorised"`
   );
 }
 
