@@ -697,20 +697,21 @@ their own; releasing what they built is part of M4.
 
 M4 and WP15 are the near road and M6 is the far one, and none of the three
 is sequential with the others. The language reference cannot be frozen while
-most of the list below is still going to change it — items 1, 4, 5, 6 and 8
-each add or withdraw a rule — so the WP15 order *is* the road to 1.0 rather
-than a detour from it. The list is
+items 5, 6 and 8 below are each still going to add or withdraw a rule, so the
+WP15 order *is* the road to 1.0 rather than a detour from it; WP22's
+arrow-function migration and WP23's landing items change the reference too,
+and are the separate road described further down this section. The list is
 [wp15-performance.md](wp15-performance.md) §9, repeated here so that this
 document does not need a second one open beside it to be current:
 
 | | Item | Why in this position |
 | ---: | --- | --- |
 | 1 | Fast defaults: `--strict-exports` and `--nsw` on by default — **done** | small, and it moves the baseline everything after it is measured against. It is also what a private two-scalar ABI for `Result` needs (WP17 §4) |
-| 2 | The `performance` diagnostic class | the framework plus the two warnings that need no new analysis, so that every slow path the rest of the list attacks says so |
-| 3 | Slice iterators | the biggest speed win per line of emitter code, and no new syntax |
-| 4 | Unsigned types `u8`, `u16`, `u32`, `u64` | foundational for 6, and it touches every numeric path, so earlier is cheaper |
+| 2 | The `performance` diagnostic class — **done** | the framework — `--no-warn-performance` in `src/index.ts`, `PerformanceWarning` in `src/diagnostics.ts` — plus the two warnings that needed no new analysis, quadratic string building and allocation in a loop, ruled in `docs/LANGUAGE.md` and tested by `tests/cases/perf_*`. The other four warnings in WP15 §8 wait on the analyses that feed them |
+| 3 | Slice iterators — **closed by measurement, not built** | the array half was already bought by WP15 §2b: a `for (const x of xs)` loop and the bounds-checked indexed loop beside it compile to byte-identical binaries today (wp15 §2, §9), and `for...of` over a string is declined in [wp23-language-surface.md](wp23-language-surface.md) §7 |
+| 4 | Unsigned types `u8`, `u16`, `u32`, `u64` — **done** | specified in `docs/LANGUAGE.md`, carried through the N-API and wasm bridges, and tested by `tests/cases/u_*`. Foundational for 6, and it touched every numeric path, so earlier was cheaper |
 | 5 | The fast slice beside JavaScript's `substring` | |
-| 6 | Ranged types and length narrowing | a real flow-sensitive analysis; the surviving-check warning from 2 is its acceptance test |
+| 6 | Ranged types and length narrowing | a real flow-sensitive analysis; its acceptance test is the surviving-check warning item 2 held back, and item 3 measured at 1.094x on lexer-shaped code |
 | 7 | Contiguous struct arrays | the layout change, the escape rule that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI |
 | 8 | Generics by monomorphisation; discriminated unions deferred to their own note | the largest. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code — [wp18-generics.md](wp18-generics.md) §6.1 says why |
 

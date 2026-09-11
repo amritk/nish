@@ -13,6 +13,34 @@ shipped, not a description of the tree as it stands.
 
 ### Changed
 
+- **Slice iterators are closed by measurement, and four stale status claims are
+  corrected (WP15 §2.3, §9).** WP15 item 3 proposed lowering `for (const c of
+  s)` to pointer advancement so that the idiomatic loop would also be the
+  check-free one. Measured, the loop it was written to beat already is that
+  loop: two programs summing a 20,000,000-element `i32[]`, one written
+  `for (const x of xs)` and one as a counted loop over `xs[i]`, link to
+  **8,008 bytes and byte-identical binaries**, because §2b's alias domains let
+  LICM hoist the length and the data pointer out of the loop. A guarded byte
+  loop is **7,008 bytes with and without `--unchecked-indexing`, byte-identical**
+  — LLVM drops the check unaided. The string half of the proposal is declined
+  on language grounds by [wp23-language-surface.md](docs/wp23-language-surface.md) §7.
+
+  What is not free is a cursor the body advances by a variable amount, which
+  `for...of` cannot express: a lexer-shaped program measures **1.40 s checked
+  against 1.28 s unchecked, 1.094x and 216 bytes**. That is the ceiling for
+  eliminating bounds checks on real lexer code and it is the acceptance number
+  for ranged types and length narrowing (item 6), not for item 3 — and it is
+  what `self/lexer.ts` is made of.
+
+  The status lists went stale around it, so four claims are now true again:
+  WP15 items **2** (the `performance` diagnostic class) and **4** (unsigned
+  types) had both shipped while `docs/MASTER_PLAN.md` §9 and WP15 §9 still
+  listed them as remaining; `docs/wp20-threads.md` §2 still said arrow
+  functions are rejected, which WP22 stages A and B changed — a function is
+  still not a *value*, which is what that row's argument actually rests on;
+  and `docs/wp22-arrow-functions.md` still opened "Proposed, not implemented"
+  above its own table recording stages A and B as landed.
+
 - **Renamed to Nish.** The language is **Nish** and the compiler is **`nish`**
   — the npm package, the `bin` entry, `runtime/nish.h`, `runtime/nish.d.ts`,
   `runtime/nish.mjs`, `NISH_DEBUG` / `NISH_SIMULATE_ICE`, and the
