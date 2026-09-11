@@ -749,10 +749,18 @@ const PERFORMANCE_RULES: string[] = [
     "NL9001",
     "is rebuilt from its own value on every iteration of this loop",
     "NL9002",
+    "already holds an allocation and this one drops it",
+    "NL9003",
+    "this computes with overflow: the result",
+    "NL9006",
+    "is computed in i32 and wraps before",
+    "NL9005",
+    "is at or beyond the",
+    "NL9004",
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 347;
+export const RULE_COUNT = 351;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

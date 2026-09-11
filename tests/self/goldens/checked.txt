@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 259 programs, 4340 dump lines.
+# 266 programs, 4413 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -2664,6 +2664,86 @@ function test(): i32 -> @test [exported]
   local 32:12 i: i32 (let)
   local 33:11 row: i32[] (const)
   local 39:9 once: i32[] (const)
+program tests/cases/perf_arena_drop.ts
+module tests/cases/perf_arena_drop.ts (entry)
+struct Point (class) size=4 align=4
+  field x: i32 index=0 offset=0
+  constructor -> @Point.constructor
+function Point.constructor(this: Point, x: i32): void -> @Point.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: x
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: Point.constructor nish_alloc_struct nish_panic_index nish_str_concat
+  stackSites=0 stackLocals=0
+  local 14:7 p: Point (let)
+  callee 14:11 new Point -> @Point.constructor
+  callee 15:7 new Point -> @Point.constructor
+  local 16:7 xs: i32[] (let)
+  local 20:7 s: string (let)
+program tests/cases/perf_arena_quiet.ts
+module tests/cases/perf_arena_quiet.ts (entry)
+function build(n: i32): string -> @build
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+  local 6:7 s: string (let)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: build nish_array_grow nish_str_concat
+  stackSites=1 stackLocals=1
+  local 14:9 a: string (const)
+  local 15:9 b: string (const)
+  local 20:7 what: string (let)
+  local 29:7 s: string (let)
+  local 35:7 plain: string (let)
+  local 41:9 rows: string[] (const)
+  local 42:7 row: string (let)
+  local 43:12 i: i32 (let)
+  callee 48:46 build -> @build
+program tests/cases/perf_overflow.ts
+module tests/cases/perf_overflow.ts (entry)
+function test(): i32 -> @test [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+  local 9:9 a: i32 (const)
+  local 10:9 b: i32 (const)
+  local 11:9 widened: i64 (const)
+  local 14:9 shifted: i32 (const)
+program tests/cases/perf_overflow_const.ts
+module tests/cases/perf_overflow_const.ts (entry)
+function test(): i32 -> @test [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+  local 8:9 big: i32 (const)
+  local 9:9 product: i32 (const)
+  local 12:9 nested: i32 (const)
+program tests/cases/perf_overflow_quiet.ts
+module tests/cases/perf_overflow_quiet.ts (entry)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_div
+  stackSites=0 stackLocals=0
+  local 7:9 a: i32 (const)
+  local 8:9 b: i32 (const)
+  local 9:9 wide: i64 (const)
+  local 14:7 n: i32 (let)
+  local 18:9 fits: i32 (const)
+  local 22:9 shifted: i32 (const)
+program tests/cases/perf_overflow_spelling.ts
+module tests/cases/perf_overflow_spelling.ts (entry)
+function test(): i32 -> @test [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+  local 20:9 hexShift: i32 (const)
+program tests/cases/perf_overflow_wrapping.ts --wrapping
+module tests/cases/perf_overflow_wrapping.ts (entry)
+function test(): i32 -> @test [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+  local 5:9 wrapped: i32 (const)
 program tests/cases/perf_str_concat_loop.ts
 module tests/cases/perf_str_concat_loop.ts (entry)
 function test(): i32 -> @test [exported]

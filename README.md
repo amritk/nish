@@ -91,6 +91,85 @@ yielding `0`, `.length` counts bytes, there is no `throw` and no unwinding,
 lists everything the differential test suite found that still differs from
 Node.
 
+## Memory safety
+
+There is no garbage collector and no `free`, so the bugs that need one cannot
+be written. What is left — an index out of range, a null dereference — is
+checked, and every way to give a check up is a flag you pass or a builtin you
+call on purpose.
+
+| Bug class | What Nish does | Reference |
+| --- | --- | --- |
+| Use-after-free, double free | Not expressible: nothing is freed individually. Four compile-time mechanisms decide where a value lives — a stack `alloca` when escape analysis proves it dies with the frame, an automatic arena scope when a function's temporaries do, a `nish_arena_keep` reclaim at the call site for a returned string, the bump arena otherwise — and the arena goes back when `main` returns | [Memory model](docs/LANGUAGE.md#memory-model), [wp6-memory.md](docs/wp6-memory.md) |
+| Out-of-bounds read or write | Every `a[i]`, `a[i] op= v`, `s.charCodeAt(i)` and `a.pop()` is bounds-checked, with an unsigned compare, so a negative index fails too; the failure prints `index out of range: <i> >= <len>` and exits 1 | [Element access](docs/LANGUAGE.md#element-access), `tests/cases/arr_bounds_panic` |
+| Null dereference | `T \| null` is a separate type, for pointers only; member access needs a narrowing the checker accepts and `?.` is forbidden — which is what lets the emitter put `nonnull dereferenceable` on every pointer that is not one | [Nullable types](docs/LANGUAGE.md#nullable-types) |
+| Uninitialised memory | `new Array<T>(n)` zero-fills and rejects pointer element types, because a zeroed pointer would be a null nobody declared; class fields are definitely assigned | [Classes](docs/LANGUAGE.md#classes), `tests/cases/arr_new_zeroed` |
+| Unwinding past a release | There is none. Every function is `nounwind`; a failure a caller should handle is a `Result<T, E>` and one it should not is `panic(message)` — stderr, exit 1 | [Result](docs/LANGUAGE.md#result-and-error-handling) |
+
+### What happens when the proof fails
+
+This is where designs actually differ. Asked to place a value it cannot show
+dies with its frame, Rust refuses to compile it, Go falls back to the garbage
+collector, and Zig hands the question back to you and an allocator. Nish
+leaves the value in the arena, where it stays until `main` returns.
+
+So [`src/codegen/escape.ts`](src/codegen/escape.ts) and the whole-program fact
+fixpoint are optimisations and nothing else: a refusal costs memory and never
+correctness, and no program is rejected for a lifetime reason. The compiler
+says so out loud where the cost is real: assigning an allocation to a local
+that already holds one drops the old value where nothing can free it *and*
+costs the whole function its arena scope, and that is a `performance`
+diagnostic naming both rewrites ([Diagnostics](docs/LANGUAGE.md#diagnostics-and-debugging-flags), on by
+default, never fatal). That is the
+trade the whole memory design rests on — the arena discipline a compiler pass
+or a frame loop would otherwise be written around by hand, moved into the
+compiler. `tests/cases/mem_*` pin the placements, and `Arena.used()` either
+side of a 100000-iteration loop is how the suite checks that a scope really
+does recycle.
+
+### Which language is this like
+
+Not any one of them; it is more useful to say which piece came from where.
+
+| Concern | Closest to | Not |
+| --- | --- | --- |
+| Lifetimes | Go's escape analysis, over a Zig-style arena discipline the compiler writes for you | Rust: no ownership, no borrow checker, no lifetime annotations |
+| Bounds and panics | Rust with `panic=abort` | C |
+| Null | Kotlin and C# nullable reference types: flow narrowing, not a wrapper type | Rust's `Option<T>` |
+| Errors | Rust: `Result<T, E>`, and `orReturn()` is `?` | exceptions, or Go's second return value |
+| Signed overflow | C: undefined by default, `--wrapping` to opt out | Rust, where it is defined in both profiles |
+| Syntax | TypeScript | |
+
+The older relative is region inference as in Cyclone and MLKit: regions the
+compiler infers, bracketed by a mark and a release, which is exactly what the
+arena scopes and the call-site reclaim are. This version is deliberately
+weaker: one global arena, per-function granularity, no region polymorphism.
+
+### Where it is not safe
+
+Four holes, every one of them asked for:
+
+- **`Arena.reset()` / `Arena.release(m)`** release or recycle in O(1), and
+  doing either while anything allocated after the mark is still referenced is
+  undefined behaviour. The compiler protects its own marks — a function that
+  touches either, directly or through a callee, never gets an automatic
+  scope — and not yours ([`Arena`](docs/LANGUAGE.md#arena)).
+- **`--unchecked-indexing`** drops the bounds checks, after which an
+  out-of-range index is undefined behaviour. It is there for benchmarks
+  (`tests/cases/arr_unchecked`).
+- **Signed integer overflow is undefined** by default, so LLVM may widen
+  induction variables and strength-reduce loops; `--wrapping` restores
+  two's-complement wrapping for a hash or an LCG that overflows on purpose
+  ([Semantics](docs/LANGUAGE.md#semantics-decisions)).
+- **Interop** hands a pointer to a C, wasm or N-API host, and what happens to
+  it there is the host's business
+  ([wp8-interop.md](docs/wp8-interop.md)).
+
+Memory-safe like Go, allocated like Zig, errors like Rust, nulls like Kotlin,
+overflow like C — with two C-shaped holes you have to ask for by name. What it
+buys is the output: no GC, no runtime, and the sizes under
+[Performance and binary size](#performance-and-binary-size).
+
 ## Command line
 
 ```
