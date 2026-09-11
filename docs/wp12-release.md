@@ -117,13 +117,23 @@ Releases are tag-driven; nothing is published from a developer machine.
 5. **The `Release` workflow** (`.github/workflows/release.yml`) runs on the
    tag:
    - calls the `CI` workflow (`workflow_call`): typecheck, tests, smoke and
-     size report on Ubuntu and macOS, lint;
+     size report on Ubuntu, the bootstrap-from-the-last-release job, lint;
    - refuses to continue if the tag does not equal `package.json#version`;
    - `npm ci && npm run build && npm pack`, and checks the tarball contains
      `dist/index.js`, `runtime/runtime.c`, `runtime/nish.h` and
      `scripts/build.sh`;
-   - `gh release create v0.2.0 nish-0.2.0.tgz` with the CHANGELOG
-     section as the notes.
+   - bootstraps the native compiler to
+     `build/release/nish-0.2.0-x86_64-linux` with `--verify`, then smoke-tests
+     it: `--version`, and linking and running `examples/hello.ts`;
+   - `gh release create v0.2.0 nish-0.2.0.tgz nish-0.2.0-x86_64-linux` with
+     the CHANGELOG section as the notes.
+
+   The binary is not only a convenience for people without Node: it is the
+   **seed** the next release is built from, which is why it is verified and
+   smoke-tested before it ships and why its name is fixed. `ci.yml`'s
+   `bootstrap` job downloads exactly `nish-<version>-x86_64-linux` from the
+   latest release, so renaming the asset breaks the freeze check rather than
+   the release.
 
 6. **npm publish is manual** for now. When ready:
 

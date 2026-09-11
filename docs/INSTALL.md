@@ -106,6 +106,28 @@ From a release tarball on GitHub (the `Release` workflow attaches
 npm install -g ./nish-0.1.0.tgz
 ```
 
+As a native compiler, which needs no Node at all. Every `v*` release also
+attaches `nish-<version>-x86_64-linux.tar.gz` — the self-hosted compiler, the
+binary `self/` produces by compiling itself:
+
+```bash
+curl -LO https://github.com/amritk/compiler/releases/download/v0.1.0/nish-0.1.0-x86_64-linux.tar.gz
+tar -xzf nish-0.1.0-x86_64-linux.tar.gz
+nish-0.1.0-x86_64-linux/bin/nish --version
+```
+
+Unpack it and run `bin/nish` from wherever you like; put that on `PATH` if you
+want it there. Keep the directory intact rather than moving the binary out of
+it: `--link` runs `scripts/build.sh` and compiles `runtime/runtime.c`, and the
+compiler finds both relative to its own location — `bin/nish` alone in a
+directory can still emit IR with `-o`, but `--link` will tell you it cannot
+find `scripts/build.sh`.
+
+It still needs `clang` and `lld` on `PATH` for `--link` (§1), because linking
+is the C toolchain's job in either compiler; what it does not need is Node.
+x86_64 Linux is the only platform built today — on anything else, take the npm
+package or build from a checkout.
+
 From a checkout:
 
 ```bash

@@ -322,6 +322,16 @@ nothing else. Nish has no conditional compilation and will not grow any:
 there is no `#[cfg(bootstrap)]` to write, so the discipline is "do not use it
 yet", and a discipline that CI does not check is a comment.
 
+**State: the script half is done, the CI half is one operating system short.**
+`scripts/bootstrap.sh` reads `NISH_BOOTSTRAP`, and the `bootstrap` job in
+`ci.yml` downloads the last release's binary and builds `self/` with it. It
+runs on Linux alone, because `macos-latest` is commented out of the test matrix
+(`ci.yml` says why: `scripts/build.sh` needed a bash 3.2 fix, which has landed,
+and `scripts/smoke.sh` still uses `mapfile`, a bash 4 builtin, which has not).
+Until a release exists the job has no seed and says so in an annotation rather
+than passing quietly — a freeze nobody checked must not read as a freeze that
+held.
+
 ### G4 — The seed policy is written before it is needed
 
 One sentence in `wp12-release.md`, decided now rather than at the first
@@ -348,6 +358,19 @@ retirement unchanged — only its subject changes, from stage0 to the seed.
 
 **Why it blocks.** Retiring stage0 without this does not remove Node from the
 compiler; it removes the compiler.
+
+**State: one binary of the four, and the npm package is unchanged.** The
+release workflow builds `nish-<version>-x86_64-linux` — stage2, `--verify`d,
+and smoke-tested before it ships, because it is also the seed every later
+release bootstraps from. The other three are not built: `aarch64-linux` needs
+an arm64 runner, and both darwin binaries need `macos-latest`, which is out of
+the matrix. The npm package is still the Node tarball rather than a thin
+installer, so `nish` today is Node-free only if you take the binary rather than
+`npm install`. `--version` already has a source that is not `package.json` —
+`VERSION` in `self/branding.ts`, which `tests/run.js` pins against
+`package.json` — so that bullet is met by the binary the moment it is the
+product. This gate closes when the remaining three binaries and the installer
+land; nothing here is a decision against them.
 
 ### G6 — The provenance is recorded before it is lost
 
@@ -435,10 +458,10 @@ gate nobody has opened is how a runtime budget dies.
 | | Milestone | Done when |
 | --- | --- | --- |
 | **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) |
-| **R2** | The seed protocol | `NISH_BOOTSTRAP` in `scripts/bootstrap.sh`; CI builds `self/` with the last release on both operating systems; the policy sentence is in `wp12-release.md` (G3, G4) |
-| **R3** | Oracle succession | `nish-cmp` green over the corpus; `fuzz.js --stage1` repointed; the four survivors repointed to the seed; the lost coverage recovered as goldens, with the numbers written into §2B (G2) |
-| **R4** | Distribution | four binaries per release; the npm package installs one; `--version` has a new source; INSTALL.md and wp12 rewritten (G5) |
-| **R5** | Provenance | the `ddc-<version>` tag and the re-verification procedure (G6) |
+| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. Outstanding: the job runs on Linux only, and it has no seed to use until 0.1.0 ships (G3, G4) |
+| **R3** | Oracle succession | **begun.** `tests/nish-cmp.js` exists, agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed. Outstanding: the four survivors repointed to the seed, and the lost coverage recovered as goldens with the numbers written into §2B — which is the half that matters (G2) |
+| **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the npm package becoming an installer, and the INSTALL.md/wp12 rewrite (G5) |
+| **R5** | Provenance | the re-verification procedure is written (G6); the `ddc-<version>` tag is cut at release time |
 | **R6** | The deletion | `src/`, the `typescript` runtime dependency, the six dead oracles, and every rule that names stage0 |
 
 R1 through R5 are all reversible. R6 is not, which is why it is last and why it

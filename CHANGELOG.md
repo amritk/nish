@@ -99,6 +99,37 @@ shipped, not a description of the tree as it stands.
 
 ### Added
 
+- **A release ships the self-hosted compiler, and CI bootstraps from it
+  (WP19 G3, G5, partly).** Every `v*` tag now attaches
+  `nish-<version>-x86_64-linux.tar.gz` beside the npm tarball: `bin/nish`
+  (stage2, `--verify`d), `runtime/`, `scripts/build.sh`, LICENSE and
+  INSTALL.md. 441 KB, and it needs no Node.
+
+  **A tarball rather than a bare binary, because a bare binary is half a
+  compiler.** `--link` shells out to `scripts/build.sh` and compiles
+  `runtime/runtime.c`, and the compiler looks for both in *its own directory's
+  parent* and in the working directory — so `bin/nish` one level below them is
+  the layout that works, the same shape `dist/index.js` has in the npm package.
+  Shipped flat beside `runtime/`, it links only while the working directory
+  happens to be the unpacked folder, which is a trap rather than a
+  distribution. The release smoke step unpacks the real tarball in one
+  directory and drives it from a third, so neither the repository nor the
+  unpack directory can be what makes it work.
+
+  `ci.yml` gains a `bootstrap` job that downloads that asset from the latest
+  release and builds `self/` with it as `NISH_BOOTSTRAP` — the job that
+  enforces the rolling freeze, since using a construct too early breaks there
+  and nowhere else (`npm test` seeds from stage0, which always knows every
+  construct the working tree does). With no release yet it has no seed, and it
+  says so in an annotation instead of passing quietly.
+
+  **Both gates stay partly open, by choice.** G5 asks for four binaries;
+  darwin needs `macos-latest`, which stays out of the matrix, and `aarch64`
+  needs an arm64 runner. G3 asks for the bootstrap check on both operating
+  systems; it runs on Linux. The npm package is still the Node tarball rather
+  than a thin installer. `docs/wp19-stage0-retirement.md` records what each
+  gate has and what it is missing rather than claiming either is closed.
+
 - **The bootstrap seed is a parameter: `NISH_BOOTSTRAP` (WP19 G3).**
   `scripts/bootstrap.sh` no longer assumes `dist/index.js`. The seed is either a
   released `nish`, executed directly, or a Node entry point run as

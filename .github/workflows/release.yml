@@ -1,6 +1,14 @@
-# Nish release: on a `v*` tag, run the full CI workflow (Ubuntu + macOS
-# test matrix, lint, smoke), then build the npm tarball and attach it to a
-# GitHub release whose notes are the matching CHANGELOG.md section.
+# Nish release: on a `v*` tag, run the full CI workflow (test matrix, lint,
+# smoke), then build the npm tarball and the native compiler and attach both to
+# a GitHub release whose notes are the matching CHANGELOG.md section.
+#
+# Two artifacts, for two audiences:
+#   nish-<version>.tgz            the npm package; needs Node
+#   nish-<version>-x86_64-linux   the self-hosted compiler; needs nothing
+#
+# The binary is also the seed: ci.yml's `bootstrap` job downloads it from the
+# last release and builds self/ with it (WP19 G3), so its name is a contract
+# between the two workflows. One platform for now -- WP19 G5 wants four.
 #
 # Publishing to npm is deliberately NOT automated yet; see the commented step
 # at the end and docs/wp12-release.md.
@@ -40,11 +48,76 @@ jobs:
             exit 1
           fi
 
+      # The native binary is linked by clang, so the release job needs the same
+      # toolchain the test matrix installs.
+      - name: Install LLVM 18 + lld
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
       - name: Install dependencies
         run: npm ci
 
       - name: Build
         run: npm run build
+
+      # The self-hosted compiler, as something that needs no Node. This is also
+      # the artifact the NEXT release bootstraps from: ci.yml's `bootstrap` job
+      # downloads exactly this asset, so its name and its layout are a contract
+      # between the two workflows, not a label.
+      #
+      # A tarball rather than a bare binary, because a bare binary is half a
+      # compiler. `--link` shells out to scripts/build.sh and compiles
+      # runtime/runtime.c, and the compiler looks for both in <its own dir>/..
+      # and in the working directory -- so `nish` must sit one level down from
+      # them, exactly as `dist/index.js` does in the npm package. Ship it flat
+      # beside runtime/ and it links only while the working directory happens
+      # to be the unpacked folder, which is a trap rather than a distribution.
+      #
+      # x86_64 linux only for now. WP19 G5 asks for four (x86_64 and aarch64,
+      # linux and darwin); darwin needs macos-latest, which is out of the CI
+      # matrix. See docs/wp19-stage0-retirement.md G5 for what stays open.
+      #
+      # stage2, not stage1: it is the first binary in the chain that no part of
+      # stage0 emitted, and --verify is what says the stages agree.
+      - name: Build the native compiler
+        id: binary
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          name="nish-$version-x86_64-linux"
+          stage="build/release/$name"
+          mkdir -p "$stage/bin" "$stage/scripts"
+          bash scripts/bootstrap.sh -o "$stage/bin/nish" --profile speed --verify
+          cp -r runtime "$stage/runtime"
+          cp scripts/build.sh "$stage/scripts/build.sh"
+          cp LICENSE docs/INSTALL.md "$stage/"
+          tar -czf "build/release/$name.tar.gz" -C build/release "$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "asset=build/release/$name.tar.gz" >> "$GITHUB_OUTPUT"
+
+      # A released compiler that does not work is worse than no release: it is
+      # the seed every later release is built from. Unpack the actual tarball
+      # somewhere unrelated and drive it from a third directory, so neither the
+      # repository nor the unpack directory can be what makes it work.
+      - name: Smoke the native compiler
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          unpack="$RUNNER_TEMP/unpack"; work="$RUNNER_TEMP/work"
+          mkdir -p "$unpack" "$work"
+          tar -xzf "${{ steps.binary.outputs.asset }}" -C "$unpack"
+          nish="$unpack/${{ steps.binary.outputs.name }}/bin/nish"
+          test "$("$nish" --version)" = "nish $version"
+          cp examples/hello.ts "$work/hello.ts"
+          cd "$work"
+          "$nish" hello.ts --link hello
+          test "$(./hello)" = "hello from Nish"
+          echo "native compiler works from an unrelated directory"
 
       - name: Pack
         id: pack
@@ -65,7 +138,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "${{ steps.pack.outputs.tarball }}" \
+          gh release create "$GITHUB_REF_NAME" \
+            "${{ steps.pack.outputs.tarball }}" \
+            "${{ steps.binary.outputs.asset }}" \
             --title "nish $GITHUB_REF_NAME" \
             --notes-file build/release/notes.md \
             --verify-tag
