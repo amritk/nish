@@ -129,8 +129,13 @@ jobs:
           git commit -m "$title"
           git push --force origin "$branch"
 
-          body="$(printf 'Merging this pull request releases **%s**: it creates the `v%s` tag, which builds the artifacts and publishes the release.\n\nThe notes below are the release notes. They are generated from the commits since the last tag -- subject for the heading, body for the prose -- and stored in `changelog/%s.json`, which is the file the website reads. Edit that file in this pull request to fix a wording; do not edit `CHANGELOG.md` by hand, it is rendered from the JSON.\n\n---\n\n' "$next" "$next" "$next")"
-          body="$body$(node scripts/changelog-gen.mjs --from-json "changelog/$next.json" | head -c 50000)"
+          # The notes are a `$(...)` away from the prose, and command
+          # substitution eats trailing newlines: appending them to a preamble
+          # that ends in a rule is what once rendered `---### Fixed` as one
+          # line of literal text. So the notes are an argument to a single
+          # printf, which is the only thing here that puts the blank lines in.
+          notes="$(node scripts/changelog-gen.mjs --from-json "changelog/$next.json" | head -c 50000)"
+          body="$(printf 'Merging this pull request releases **%s**: it creates the `v%s` tag, which builds the artifacts and publishes the release.\n\nThe notes below are the release notes — one line per change, linking the pull request it landed in. They are generated from the commits since the last tag and stored in `changelog/%s.json`, which is the file the website reads, bodies and all. Edit that file in this pull request to fix a wording; do not edit `CHANGELOG.md` by hand, it is rendered from the JSON.\n\n---\n\n%s\n' "$next" "$next" "$next" "$notes")"
 
           if existing="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')" && [ -n "$existing" ]; then
             gh pr edit "$existing" --title "$title" --body "$body"

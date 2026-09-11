@@ -113,6 +113,13 @@ step below is done by hand.
    wants the raw history. Prose that belongs above the sections goes in
    `changelog/<version>.intro.md`.
 
+   The rendered section is an index: one line per change -- the scope, the
+   subject, and a link to the pull request it landed in (or to the commit,
+   when it landed without one). The commit bodies, the `Measured:` numbers and
+   the refs stay in the JSON, which is what the website renders an entry from;
+   inlining them turned a release into pages of prose above the next heading,
+   and the pull request is already where the rest is.
+
    The notes are therefore reviewable *before* anyone can read them, in the
    pull request whose body is those notes. To fix a wording, edit the JSON on
    that branch: `CHANGELOG.md` is rendered from it and editing it directly is

@@ -4123,6 +4123,14 @@ if (!only || "changelog".includes(only) || "wp12".includes(only)) {
   const wip = commit("wip: still poking at it");
   g("checkout", "-q", "-b", "side");
   commit("fix(codegen): widen the index before the bounds check");
+  // A squash merge's subject ends in `(#N)` and its body is the prose. The
+  // record keeps that prose; the rendered index does not, and links the pull
+  // request instead -- which is the pair the checks below pin.
+  commit(
+    "perf(codegen): hoist the array header out of element loops (#12)\n\n" +
+      "The header load moved out of the loop, so the body indexes a register.\n\n" +
+      "Measured: 1.58x on an element loop\n"
+  );
   commit("more wip");
   g("checkout", "-q", "main");
   const merge = g("merge", "--no-ff", "-m", "Merge branch 'side'", "side");
@@ -4133,7 +4141,14 @@ if (!only || "changelog".includes(only) || "wp12".includes(only)) {
   const genDir = path.join(repo, "scripts");
   fs.mkdirSync(genDir, { recursive: true });
   fs.copyFileSync(gen, path.join(genDir, "changelog-gen.mjs"));
-  fs.writeFileSync(path.join(repo, "package.json"), '{ "name": "fixture", "version": "0.1.0" }\n');
+  fs.writeFileSync(
+    path.join(repo, "package.json"),
+    `${JSON.stringify(
+      { name: "fixture", version: "0.1.0", repository: { type: "git", url: "git+https://github.com/n/fix.git" } },
+      null,
+      2
+    )}\n`
+  );
   fs.writeFileSync(path.join(repo, "CHANGELOG.md"), "# Changelog\n\n## [Unreleased]\n");
   const run = (...args) =>
     spawnSync(process.execPath, [path.join(genDir, "changelog-gen.mjs"), ...args], {
@@ -4145,9 +4160,64 @@ if (!only || "changelog".includes(only) || "wp12".includes(only)) {
   check("changelog: the generator succeeds over the fixture", md.status === 0, md.stderr);
   const headings = [...md.stdout.matchAll(/^### (.+)$/gm)].map((m) => m[1]);
   check(
-    "changelog: only the two conventional commits become entries",
-    headings.join(",") === "Added,Fixed",
+    "changelog: only the conventional commits become entries",
+    headings.join(",") === "Added,Fixed,Performance",
     `headings: ${headings.join(", ") || "(none)"}\n${md.stdout}`
+  );
+
+  // The rendered notes are an index, not the prose: one line per change, the
+  // title and a link to where the rest is. The body still has to survive into
+  // the JSON, which is what the website renders, so both halves are checked --
+  // a renderer that dropped the prose from the record would pass the first.
+  const bullets = md.stdout.split("\n").filter((l) => l.startsWith("- "));
+  check(
+    "changelog: an entry renders as one line, its title and its pull request",
+    bullets.length === 3 &&
+      bullets.includes(
+        "- codegen: Hoist the array header out of element loops ([#12](https://github.com/n/fix/pull/12))"
+      ),
+    bullets.join("\n") || "(no entries)"
+  );
+  check(
+    "changelog: an entry that landed without a pull request links its commit",
+    /^- cli: Accept a second input file \(\[`[0-9a-f]{7}`\]\(https:\/\/github\.com\/n\/fix\/commit\/[0-9a-f]{7}\)\)$/m.test(
+      md.stdout
+    ),
+    md.stdout
+  );
+  check(
+    "changelog: the commit body and its Measured: number stay out of the rendered index",
+    !md.stdout.includes("indexes a register") && !md.stdout.includes("1.58x"),
+    md.stdout
+  );
+  const record = run("--version", "0.1.0", "--stdout", "json");
+  const entry = JSON.parse(record.stdout).entries.find((e) => e.pr === 12);
+  check(
+    "changelog: the record keeps the prose and the number the index leaves out",
+    entry !== undefined &&
+      entry.body.includes("indexes a register") &&
+      entry.metrics.includes("1.58x on an element loop"),
+    record.stdout
+  );
+  check(
+    "changelog: the rendered notes open with a heading and end in one newline",
+    md.stdout.startsWith("### ") && md.stdout.endsWith("\n") && !md.stdout.endsWith("\n\n"),
+    JSON.stringify(md.stdout.slice(0, 40))
+  );
+
+  // The release pull request pastes those notes under a `---` rule, and `$(...)`
+  // eats trailing newlines: appending the notes to a preamble that ends in the
+  // rule is what rendered `---### Fixed` as one line of literal text. The fix is
+  // structural -- the notes are an argument to the one printf that writes the
+  // blank lines -- so that is what is checked, in the workflow rather than here.
+  const trainYml = fs.readFileSync(path.join(root, ".github", "workflows", "release-pr.yml"), "utf8");
+  check(
+    "changelog: the release pull request separates the `---` rule from the notes it pastes",
+    /\\n\\n---\\n\\n%s/.test(trainYml) && !/body="\$body\$\(/.test(trainYml),
+    trainYml
+      .split("\n")
+      .filter((l) => l.includes("---") || l.includes("body="))
+      .join("\n")
   );
   check(
     "changelog: the merge commit and the work-in-progress commits are not entries",
@@ -4166,7 +4236,7 @@ if (!only || "changelog".includes(only) || "wp12".includes(only)) {
   const allHeadings = [...all.stdout.matchAll(/^### (.+)$/gm)].map((m) => m[1]);
   check(
     "changelog: --include-unconventional files the rest under Uncategorised",
-    all.status === 0 && allHeadings.join(",") === "Added,Fixed,Uncategorised",
+    all.status === 0 && allHeadings.join(",") === "Added,Fixed,Performance,Uncategorised",
     `headings: ${allHeadings.join(", ")}\n${all.stderr}`
   );
 

@@ -35,9 +35,10 @@ attributions in commits, code, or PR text. Keep all PR descriptions strictly
 focused on the code changes.
 
 **Commit messages are the changelog.** `scripts/changelog-gen.mjs` builds each
-release from the commits it contains, so the subject is the heading a reader
-sees and the body is the prose underneath it. Write the body for someone
-reading the release notes, not only for the reviewer:
+release from the commits it contains, so the subject is the line a reader sees
+in `CHANGELOG.md` and in the release notes, and the body is that entry's prose
+in `changelog/<version>.json` — the record the website renders. Write the body
+for someone reading the release notes, not only for the reviewer:
 
 ```
 type(scope): imperative subject
