@@ -48,6 +48,7 @@ import {
 import { checkBitwiseAssignOperands, isBitwiseCompoundOperator } from "./bitwise.js";
 import { checkArgumentType, checkArity } from "./builtins.js";
 import { structOf } from "./classes.js";
+import { isFunctionResult } from "./declarations.js";
 import { isValueReceiver, methodCallCheckers, newCheckers, propertyCheckers } from "./members.js";
 import { invalidateNarrowings } from "./narrowing.js";
 import { LocalVar } from "./program.js";
@@ -94,7 +95,7 @@ function contextualType(ctx: CheckContext, expr: ts.Expression, scope: Scope): S
   if (ts.isVariableDeclaration(parent) && parent.initializer === node) {
     return parent.type ? resolveTypeNode(parent.type, ctx.sf, ctx.opts) : undefined;
   }
-  if (ts.isReturnStatement(parent)) return ctx.current.returnType;
+  if (isFunctionResult(node)) return ctx.current.returnType;
   if (
     ts.isBinaryExpression(parent) &&
     parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&

@@ -70,6 +70,7 @@ import { CheckContext } from "./context.js";
 import { Scope } from "./scope.js";
 import { lookup } from "../lookup.js";
 import { structOf } from "./classes.js";
+import { isFunctionResult } from "./declarations.js";
 
 // ---- Math.* -------------------------------------------------------------------
 
@@ -328,7 +329,7 @@ function contextType(ctx: CheckContext, node: ts.Expression, scope: Scope): Stat
   if (ts.isConditionalExpression(parent) && parent.condition !== expr) {
     return contextType(ctx, parent, scope);
   }
-  if (ts.isReturnStatement(parent)) return ctx.current.returnType;
+  if (isFunctionResult(expr)) return ctx.current.returnType;
   // `case 3:` takes the width of the discriminant (WP14), which the checker
   // has already typed: `switch (kind)` on an `i64` makes its labels `i64`.
   if (ts.isCaseClause(parent) && parent.expression === expr) {

@@ -149,6 +149,29 @@ export function arrowFunctionOf(decl: ts.VariableDeclaration): ts.ArrowFunction 
 }
 
 /**
+ * `node` is the value its function answers with: the operand of a `return`, or
+ * the concise body of an arrow (`=> n * 2`), which is the one `return` it means
+ * (WP22 §4).
+ *
+ * Every pass that decides what a value is *for* by climbing to its parent has
+ * to ask this rather than `ts.isReturnStatement`, because a concise body's
+ * parent is the arrow. Four do: the contextual-type walks `contextualType` in
+ * `classes.ts` (an object literal's struct, a class value converting to an
+ * interface) and `arrays.ts` (the element type of `[]`), `contextType` in
+ * `math.ts` (a numeric literal's width), and `flowTarget` in
+ * `codegen/escape.ts`, where getting it wrong reads a returned allocation as a
+ * local and silently drops WP9's call-site reclaim. Stage1's checker threads
+ * the wanted type down as `want` and never needed the first three; its
+ * `flowTarget` walks parents like this one and needed the fourth
+ * (`tests/cases/fn_arrow_concise`, WP22 §8a).
+ */
+export const isFunctionResult = (node: ts.Node): boolean => {
+  const parent = node.parent;
+  if (!parent) return false;
+  return ts.isReturnStatement(parent) || (ts.isArrowFunction(parent) && parent.body === node);
+};
+
+/**
  * Validate the entry module's `export function main` and rename its symbol.
  * The wrapper hands an `i32` to the OS, so `main` returns `void` or an
  * `i32`-lowered number (`main(): i32` under `--number-mode f64`).

@@ -52,6 +52,7 @@ import {
   N_CALL,
   N_CONDITIONAL,
   N_EMPTY,
+  N_FUNCTION,
   N_IDENT,
   N_NEW,
   N_NUMBER,
@@ -422,6 +423,13 @@ class EscapeAnalysis {
         return new FlowTarget(this.unit.program.nodeLocals[parent.id], false);
       }
       if (parent.kind === N_RETURN) {
+        return new FlowTarget(null, true);
+      }
+      // A concise arrow body is the one `return` it means, so what it builds
+      // is returned rather than local. The parser normalises the arrow into an
+      // N_FUNCTION whose body slot holds the expression itself, which is the
+      // only place a body is not a block: a method's never is.
+      if (parent.kind === N_FUNCTION && parent.children[3] === node) {
         return new FlowTarget(null, true);
       }
       return new FlowTarget(null, false);
