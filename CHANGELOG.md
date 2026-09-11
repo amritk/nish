@@ -11,7 +11,52 @@ shipped, not a description of the tree as it stands.
 
 ## [Unreleased]
 
+### Removed
+
+- **Inheritance.** `class D extends B`, `super(...)`, `super.m()` and method
+  overriding are gone from the language. `extends` on a class is now
+  `` `extends` is not supported: Nish has no inheritance. Declare the base's
+  fields as the first fields of `D` and `implements` an interface to convert
+  between them `` (`NL2278`), and every spelling of `super` is
+  `` `super` is not supported: Nish has no inheritance, so a class has no base
+  class to reach `` (`NL2279`). Both rules live in the checker rather than in
+  Phase 0, because inheritance needed nothing Phase 0 exists to refuse.
+
+  **What this buys.** Static dispatch through an inherited method was the one
+  place the language knowingly disagreed with JavaScript: an override reached
+  through a base-typed value ran the base method natively and the derived one
+  under Node. `docs/RUN_UNDER_NODE.md` listed it among the four things no
+  prelude can reach, and `tests/differential/known-failures.txt` carried
+  `cls_extends_override` as a by-design failure. With no overriding there is
+  nothing to disagree about: every method call in a program names one symbol.
+  Two other declared divergences went with it — the parity oracle's
+  inheritance-cycle declaration (stage0 reported the cycle once per class,
+  stage1 once), and the `tsc` ambient divergence for an implicit `super()`,
+  which was the only accepted program that JavaScript would have thrown on.
+
+  Nothing in `self/` changed: the self-hosted compiler is 25,911 lines and
+  declared no derived class, because `docs/wp14-selfhost.md` §2.1 had already
+  chosen one `Node` class with a `kind` discriminant over a hierarchy.
+
 ### Changed
+
+- **`implements` is a prefix rule, not an exact match.** A class that lists an
+  interface must declare that interface's fields as its **first** fields, in
+  order and with identical types, and may now declare more after them
+  (`tests/cases/cls_implements_prefix`). The conversion is still one
+  `bitcast`, because an `I*` and a `C*` address the same bytes at the same
+  offsets for every field `I` names, and the class's own fields reuse the
+  prefix's tail padding exactly as clang lays out the equivalent C struct —
+  `tests/layout/structs.ts` pins `K`, `L` and `M` at 24, 16 and 32 bytes,
+  the same sizes they had as derived classes.
+
+  This is what replaced inheritance: two classes with different tails can be
+  held in one `I[]` and operated on by one function, which is the job
+  `extends` was doing, without a dispatch rule attached. A class that does not
+  cover the interface is `` does not implement `Point3`: it lacks field
+  `z: i32` `` and a mismatched one names the position; both now end
+  `(the interface's fields must be the class's first fields, in order)`
+  (`NL2277`, replacing the `fields must match exactly` wording).
 
 - **Renamed to Nish.** The language is **Nish** and the compiler is **`nish`**
   — the npm package, the `bin` entry, `runtime/nish.h`, `runtime/nish.d.ts`,

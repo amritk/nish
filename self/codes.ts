@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 344;
+export const RULE_COUNT: i32 = 347;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -73,6 +73,8 @@ export function diagnosticRules(): string[] {
     "NL2224",
     "Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it",
     "NL2234",
+    "`extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `",
+    "NL2278",
     "A `case` clause cannot declare a variable directly; wrap the clause body in a block (`case 1: { ... }`)",
     "NL2165",
     "`export { ... }` / `export * from` are not supported; put `export` on the function declaration itself",
@@ -105,6 +107,8 @@ export function diagnosticRules(): string[] {
     "NL2149",
     "`Result<T, void>` is not supported: an error must carry a value (use `Result<T, string>`)",
     "NL2152",
+    "`super` is not supported: Nish has no inheritance, so a class has no base class to reach",
+    "NL2279",
     "` is not a module constant, and a module constant's value must be known at compile time",
     "NL2080",
     "Only functions can be exported for now, plus classes and interfaces (found `export` on ",
@@ -151,6 +155,8 @@ export function diagnosticRules(): string[] {
     "NL2230",
     "The `for...of` variable takes the element type; remove the annotation",
     "NL2242",
+    " (the interface's fields must be the class's first fields, in order)",
+    "NL2277",
     "Interface inheritance (`extends`) is not supported; list every field",
     "NL2215",
     " (use `if` / `else`; only an integer switch lowers to a jump table)",

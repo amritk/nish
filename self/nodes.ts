@@ -1,9 +1,9 @@
 // The syntax tree of the subset (docs/wp14-selfhost.md §2.1, milestone S2).
 //
 // **One `Node` class**, with a `kind` discriminant and the union of the fields
-// any node needs. The language has single inheritance but no downcast, and adding
-// one would mean a runtime tag check, a `T | null` result and a new rule in
-// the checker for a cast that can fail; a bootstrap compiler needs none of
+// any node needs. The language has no inheritance at all since WP24, and a
+// downcast would mean a runtime tag check, a `T | null` result and a new rule
+// in the checker for a cast that can fail; a bootstrap compiler needs none of
 // that. Field access is unchecked by the type system and guarded by `kind`
 // instead, exactly as `switch (node.kind)` already reads. It costs memory
 // nobody here is counting and it removes downcasting from the critical path.

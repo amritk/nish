@@ -1,1 +1,0 @@
-Class `User` cannot extend interface `Named`; use `implements Named`

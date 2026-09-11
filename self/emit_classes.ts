@@ -8,18 +8,16 @@
 // arena, or an entry-block `alloca` when the escape analysis proved it does
 // not outlive the function.
 //
-// Inheritance: `%struct.D` lists `B`'s fields first, so every `B` operation
-// works on a `D` object through one `bitcast`. There is no vtable — a method
-// call resolves to the method of the receiver's *static* type or its nearest
-// ancestor — and `super.m()` is the same cast against `this`.
+// `implements` is the only widening (WP24): `%struct.Square` lists `Shape`'s
+// fields first, so every `Shape` operation works on a `Square` object through
+// one `bitcast`. There is no inheritance and no vtable — a method call
+// resolves to the method of the receiver's own type.
 //
 // The member dispatch that `src/` spreads over three tables keyed by the
 // receiver's type kind is the `if` chain in `emitPropertyAccess` and
 // `emitMethodCall` here, which is D2 again: the tables needed a registration
 // per family and the language has no function values to register.
 
-import { explicitSuperCall } from "./assignment";
-import { ownFields } from "./attributes";
 import { Emitter } from "./emit";
 import {
   emitPackedResult,
@@ -114,8 +112,8 @@ function allocate(emitter: Emitter, info: StructInfo, site: Node): string {
 /**
  * The LLVM constant for a field initializer, from its syntax and the field's
  * type alone. The checker only admits literals here, and the node may belong
- * to another module (an imported class `new`ed without a constructor, or an
- * inherited constructor), whose type table this emitter does not have.
+ * to another module (an imported class `new`ed without a constructor), whose
+ * type table this emitter does not have.
  */
 function initializerConstant(emitter: Emitter, field: FieldInfo): string {
   const init = field.initializer;
@@ -153,28 +151,16 @@ function initializerConstant(emitter: Emitter, field: FieldInfo): string {
 
 /** Store the literal initializers of the fields `info` declares itself. */
 export function emitFieldInitializers(emitter: Emitter, info: StructInfo, receiver: string): void {
-  for (const field of ownFields(info)) {
+  for (const field of info.fields) {
     if (field.initializer !== null) {
       storeField(emitter, info, receiver, field, initializerConstant(emitter, field));
     }
   }
 }
 
-/** `%struct.<from>*` -> `%struct.<to>*` for an ancestor `to`: the base fields are a layout prefix. */
-export function upcast(emitter: Emitter, value: string, from: StructInfo, to: StructInfo): string {
-  if (from === to) {
-    return value;
-  }
-  return emitter.fn.emitValue(
-    `bitcast ${structTypeName(from)}* ${value} to ${structTypeName(to)}*`
-  );
-}
-
 /**
  * Run the construction of `info` on the object at `receiver` with `args`: its
- * constructor when it has one; otherwise its own initializers, then the same
- * for the base class, which ends at the nearest ancestor constructor (the one
- * the checker matched `args` against) or at the root.
+ * constructor when it has one, otherwise its literal initializers.
  */
 function constructObject(
   emitter: Emitter,
@@ -189,62 +175,15 @@ function constructObject(
     return;
   }
   emitFieldInitializers(emitter, info, receiver);
-  const base = info.base;
-  if (base !== null) {
-    constructObject(emitter, base, upcast(emitter, receiver, info, base), args, site);
-  }
 }
 
-/**
- * Constructor prologue: own initializer stores, then, for a derived class
- * whose body does not start with `super(...)`, the implicit `super()` (the
- * checker allowed the omission only when no ancestor constructor takes
- * parameters).
- */
+/** Constructor prologue: the literal initializer stores, before the body runs. */
 export function emitConstructorPrologue(emitter: Emitter, sig: FunctionSig): void {
   const info = sig.owner;
   if (info === null) {
     process.exit(internalError("emitter: a constructor with no owning class"));
   }
   emitFieldInitializers(emitter, info, "%this");
-  const base = info.base;
-  if (base !== null && explicitSuperCall(sig.decl.children[1]) === null) {
-    constructObject(emitter, base, upcast(emitter, "%this", info, base), [], sig.decl);
-  }
-}
-
-/** `super(args)`: construct the base part of `this`. */
-export function emitSuperCall(emitter: Emitter, expr: Node): string {
-  const self = selfStruct(emitter);
-  const base = self.base;
-  if (base === null) {
-    process.exit(internalError(`emitter: \`super(...)\` in \`${self.name}\`, which has no base class`));
-  }
-  constructObject(emitter, base, upcast(emitter, "%this", self, base), expr.children[1].children, expr);
-  return "void";
-}
-
-/** `super` as the receiver of `super.m()`: `this` seen as the base type. */
-export function emitSuperReceiver(emitter: Emitter, expr: Node): string {
-  const self = selfStruct(emitter);
-  return upcast(emitter, "%this", self, structInfoOf(emitter, emitter.typeOf(expr)));
-}
-
-/**
- * The class whose method or constructor is being emitted, which is what
- * `super` is relative to. `src/` asks the binding it recorded on the `super`
- * keyword; the emitter already knows which signature it is in, so it asks
- * that instead and needs no binding on a keyword.
- */
-function selfStruct(emitter: Emitter): StructInfo {
-  const sig = emitter.currentSig;
-  if (sig !== null) {
-    const owner = sig.owner;
-    if (owner !== null) {
-      return owner;
-    }
-  }
-  process.exit(internalError("emitter: `super` outside a method or constructor"));
 }
 
 // ---- Expressions ----------------------------------------------------------------------
@@ -344,13 +283,7 @@ export function emitMethodCall(emitter: Emitter, expr: Node): string {
   if (callee === null) {
     process.exit(internalError(`emitter: no method recorded for \`${access.text}\``));
   }
-  let receiver = emitter.emitExpression(access.children[0]);
-  // An inherited method takes `this` as its declaring class.
-  const info = structInfoOf(emitter, receiverType);
-  const owner = callee.owner;
-  if (owner !== null && owner !== info) {
-    receiver = upcast(emitter, receiver, info, owner);
-  }
+  const receiver = emitter.emitExpression(access.children[0]);
   return emitCall(emitter, callee, receiver, expr.children[1].children, expr);
 }
 
@@ -417,18 +350,13 @@ export function structTypeDeclarations(emitter: Emitter): string[] {
       noteStruct(emitter, referenced, results, field.type);
     }
     // Inherited constructors and methods are called through the base type,
-    // which an importer of the derived class alone only points at.
-    let c: StructInfo | null = info;
-    while (c !== null) {
-      noteStruct(emitter, referenced, results, c.type);
-      for (const method of c.methodSigs) {
-        noteSignature(emitter, referenced, results, method);
-      }
-      const ctor = c.ctor;
-      if (ctor !== null) {
-        noteSignature(emitter, referenced, results, ctor);
-      }
-      c = c.base;
+    noteStruct(emitter, referenced, results, info.type);
+    for (const method of info.methodSigs) {
+      noteSignature(emitter, referenced, results, method);
+    }
+    const ctor = info.ctor;
+    if (ctor !== null) {
+      noteSignature(emitter, referenced, results, ctor);
     }
   }
   for (const sig of emitter.program.functions) {
@@ -483,22 +411,17 @@ function noteSignature(emitter: Emitter, referenced: string[], results: string[]
 }
 
 /**
- * The constructor and methods an importer of `info` may call, inherited ones
- * included (`new D()` may run `B.constructor`, `d.m()` may be `B.m`); each
- * gets a `declare`.
+ * The constructor and methods an importer of `info` may call; each gets a
+ * `declare`.
  */
 export function structFunctions(info: StructInfo): FunctionSig[] {
   const out: FunctionSig[] = [];
-  let c: StructInfo | null = info;
-  while (c !== null) {
-    const ctor = c.ctor;
-    if (ctor !== null) {
-      out.push(ctor);
-    }
-    for (const method of c.methodSigs) {
-      out.push(method);
-    }
-    c = c.base;
+  const ctor = info.ctor;
+  if (ctor !== null) {
+    out.push(ctor);
+  }
+  for (const method of info.methodSigs) {
+    out.push(method);
   }
   return out;
 }

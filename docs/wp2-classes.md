@@ -1,5 +1,12 @@
 # WP2: Classes, interfaces, structs
 
+> **WP2b is history.** Single inheritance — `extends`, `super`, method
+> overriding and the static-dispatch rule — was removed from the language by
+> [wp24-inheritance.md](wp24-inheritance.md), and `implements` became a
+> *prefix* check in the same change. The [Inheritance](#inheritance-wp2b)
+> section below is kept as the record of what shipped and why, not as a
+> description of the language; [LANGUAGE.md](LANGUAGE.md) is normative.
+
 What `class` and `interface` compile to, the layout rules, the checks the
 compiler enforces (definite assignment, `readonly`, `implements`), single
 inheritance (`extends`, `super`, static dispatch; WP2b, see

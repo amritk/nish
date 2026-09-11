@@ -59,8 +59,6 @@ import {
   emitNew,
   emitObjectLiteral,
   emitPropertyAccess,
-  emitSuperCall,
-  emitSuperReceiver,
   structFunctions,
   structTypeDeclarations,
 } from "./emit_classes";
@@ -168,7 +166,7 @@ export class Emitter {
   fn: IRFunction;
   /** Its facts: stack sites and the arena scope. */
   current: FunctionFacts;
-  /** Its signature, which is how `super` finds the class `this` belongs to. */
+  /** Its signature, which is how the prologue finds the class `this` belongs to. */
   currentSig: FunctionSig | null;
   /** Enclosing loops, innermost last. */
   loops: LoopTarget[];
@@ -323,8 +321,7 @@ export class Emitter {
       }
       i = i + 1;
     }
-    // A constructor stores the field initializers before its body runs, and a
-    // derived one without an explicit `super(...)` constructs its base part.
+    // A constructor stores the field initializers before its body runs.
     if (sig.role === ROLE_CONSTRUCTOR) {
       emitConstructorPrologue(this, sig);
     }
@@ -697,8 +694,8 @@ export class Emitter {
   emitExpression(expr: Node): string {
     const saved = this.enterLocation(expr);
     const value = this.emitRawExpression(expr);
-    // A class value used as an interface it implements, or as a base class:
-    // same layout, so the conversion the checker recorded is a pointer bitcast.
+    // A class value used as an interface it implements: the interface's fields
+    // are its first fields, so the recorded conversion is a pointer bitcast.
     const from = this.program.nodeCoercions[expr.id];
     let result = value;
     if (from >= 0) {
@@ -744,8 +741,6 @@ export class Emitter {
         return this.emitIdentifier(expr);
       case N_THIS:
         return "%this";
-      case N_SUPER:
-        return emitSuperReceiver(this, expr);
       case N_UNARY:
         return emitUnary(this, expr);
       case N_BINARY:
@@ -809,9 +804,6 @@ export class Emitter {
 
   emitCall(expr: Node): string {
     const callee = expr.children[0];
-    if (callee.kind === N_SUPER) {
-      return emitSuperCall(this, expr);
-    }
     if (callee.kind === N_MEMBER) {
       if (!receiverIsValue(this.program, callee.children[0])) {
         return emitBuiltinCall(this, expr, dottedName(callee));

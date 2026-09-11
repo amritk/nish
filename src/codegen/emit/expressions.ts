@@ -22,7 +22,7 @@ import {
   resultFunctionEmitters,
 } from "./result.js";
 import { isAssignmentOperator } from "../../checker/classes.js";
-import { classExpressionEmitters, emitSuperCall } from "./classes.js";
+import { classExpressionEmitters } from "./classes.js";
 import { assignmentTargetEmitters, emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members.js";
 import { emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from "./strings.js";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, UnaryEmitter, intOpcode } from "./context.js";
@@ -204,7 +204,6 @@ export function collectBuiltinFacts(program: CheckedProgram, node: ts.Node, fact
 
 const emitCall: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.CallExpression;
-  if (expr.expression.kind === ts.SyntaxKind.SuperKeyword) return emitSuperCall(ctx, expr); // WP2b
   if (ts.isPropertyAccessExpression(expr.expression)) {
     return isValueReceiver(ctx.program, expr.expression.expression)
       ? emitMethodCall(ctx, expr)

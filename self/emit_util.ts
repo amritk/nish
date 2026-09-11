@@ -58,7 +58,7 @@ export function receiverIsValue(program: CheckedProgram, receiver: Node): boolea
 
 /**
  * The type an expression produces *before* the coercion recorded on it
- * (class -> interface, derived -> base): `nodeTypes` holds the converted
+ * (class -> interface): `nodeTypes` holds the converted
  * type, but `new C(...)` still allocates and constructs a `C`.
  */
 export function intrinsicType(program: CheckedProgram, expr: Node): i32 {

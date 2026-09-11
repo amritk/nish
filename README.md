@@ -303,8 +303,10 @@ and the IR any of them lowers to are all still free to change.
 | M5 "Self-hosting" | `self/`: the compiler, written in Nish, compiling itself | done |
 
 Not in the language yet, in the order they are likely to land: optional
-reference counting for objects that must outlive an arena reset, and virtual
-dispatch (single inheritance is in; method calls resolve statically).
+reference counting for objects that must outlive an arena reset, and dynamic
+dispatch — which would be a trait object over an interface, since inheritance
+was removed ([docs/wp24-inheritance.md](docs/wp24-inheritance.md)) and every
+method call names one symbol today.
 Generics, closures, `try`/`catch` and labelled `break`/`continue` are
 refusals rather than gaps, each with the message and the idiom to use
 instead ([docs/LANGUAGE.md](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)).

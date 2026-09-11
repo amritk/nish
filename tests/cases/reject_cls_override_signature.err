@@ -1,1 +1,0 @@
-Method `scale` of class `Derived` overrides `Base.scale` with a different signature: `Base.scale` is (by: i32): i32, `Derived.scale` is (by: string): i32

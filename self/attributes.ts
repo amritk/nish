@@ -549,16 +549,15 @@ function classifyElementUse(unit: AnalysisUnit, table: TypeTable, access: Node):
 }
 
 /**
- * The constructor `new` runs for a struct type: the class's own, or the
- * nearest ancestor's. `null` when the type is not a struct or nothing
- * constructs it.
+ * The constructor `new` runs for a struct type. `null` when the type is not
+ * a struct or nothing constructs it.
  */
 export function constructorOf(program: CheckedProgram, table: TypeTable, type: i32): FunctionSig | null {
   if (type < 0 || !table.isStruct(type)) {
     return null;
   }
   const info = program.struct(table.nameOf(type));
-  return info === null ? null : info.effectiveConstructor();
+  return info === null ? null : info.ctor;
 }
 
 /** `` `${s}` ``: a template that lowers to its single string hole unchanged. */
@@ -608,54 +607,6 @@ function isPointerParam(table: TypeTable, type: i32): boolean {
   return table.isStruct(inner) || table.isArray(inner);
 }
 
-/** The fields `info` declares itself: everything after the inherited prefix. */
-export function ownFields(info: StructInfo): FieldInfo[] {
-  const base = info.base;
-  const start = base === null ? 0 : base.fields.length;
-  const out: FieldInfo[] = [];
-  let i = start;
-  while (i < info.fields.length) {
-    out.push(info.fields[i]);
-    i = i + 1;
-  }
-  return out;
-}
-
-/**
- * How the base part of a derived object is built: walking up from `cls.base`,
- * every ancestor without a constructor has its own initializers stored
- * directly, until the nearest ancestor constructor, which takes the
- * `super(...)` arguments and finishes the job.
- */
-export class BaseConstruction {
-  ctor: FunctionSig | null;
-  stores: boolean;
-
-  constructor() {
-    this.ctor = null;
-    this.stores = false;
-  }
-}
-
-export function baseConstruction(cls: StructInfo): BaseConstruction {
-  const result = new BaseConstruction();
-  let c = cls.base;
-  while (c !== null) {
-    const ctor = c.ctor;
-    if (ctor !== null) {
-      result.ctor = ctor;
-      return result;
-    }
-    for (const field of ownFields(c)) {
-      if (field.initializer !== null) {
-        result.stores = true;
-      }
-    }
-    c = c.base;
-  }
-  return result;
-}
-
 class FactCollector {
   unit: AnalysisUnit;
   table: TypeTable;
@@ -673,7 +624,7 @@ class FactCollector {
 
   /** A reference to one of this function's parameters (`this` and `super` included), by name. */
   paramRef(node: Node): string {
-    if (node.kind !== N_IDENT && node.kind !== N_THIS && node.kind !== N_SUPER) {
+    if (node.kind !== N_IDENT && node.kind !== N_THIS) {
       return "";
     }
     const local = this.unit.program.nodeLocals[node.id];
@@ -1107,26 +1058,6 @@ export function collectFacts(
   const body = sig.body();
   if (body !== null) {
     collector.visit(body);
-  }
-
-  // WP2b: a derived constructor builds its base part (`super(...)`, written or
-  // implicit): `this` is handed to the nearest ancestor constructor, and the
-  // initializers of constructor-less ancestors are stored through it. Recorded
-  // from the class, not from the statement, so an implicit call is not missed.
-  const owner = sig.owner;
-  if (sig.role === ROLE_CONSTRUCTOR && owner !== null && owner.base !== null) {
-    const base = baseConstruction(owner);
-    const self = facts.pointerParam("this");
-    const baseCtor = base.ctor;
-    if (baseCtor !== null && self !== null) {
-      facts.callees.add(baseCtor.name);
-      self.passedToCallees.push(baseCtor.name);
-      self.passedToIndices.push(0);
-    }
-    if (base.stores && self !== null) {
-      self.writesThrough = true;
-      facts.effect = EFFECT_WRITE;
-    }
   }
 
   if (facts.readsMemory) {

@@ -26,24 +26,12 @@
  *   class -> iface   `bitcast %struct.C* %v to %struct.I*` (the checker records
  *                    the conversion in `program.coercions`; the core emits it)
  *
- * Inheritance (WP2b, `class D extends B`): `%struct.D` lists `B`'s fields
- * first, so every `B` operation works on a `D` object through one bitcast.
- *   D -> B           `bitcast %struct.D* %v to %struct.B*`, the same coercion
- *                    mechanism as class -> interface
- *   d.x (inherited)  `getelementptr inbounds %struct.D, ...` with the field's
- *                    index in the flattened layout: no cast, no base access
- *   d.m() (B's m)    `call @B.m(%struct.B* <bitcast d>, ...)`: the callee is the
- *                    method of the receiver's *static* type or its nearest
- *                    ancestor (no vtable); an override on the derived class is
- *                    chosen only when the receiver's declared type is that class
- *   super.m()        `call @B.m(%struct.B* <bitcast this>, ...)`
- *   super(args)      `call @B.constructor(%struct.B* <bitcast this>, args)`;
- *                    ancestors without a constructor get their initializers
- *                    stored instead (`constructObject`). The call is emitted
- *                    in the constructor prologue when the source omits it.
- *   new D(args)      as before; without a constructor of its own, `D`'s
- *                    initializers are stored and the nearest ancestor
- *                    constructor is called with `args` (inherited constructor)
+ * That one `bitcast` is the only widening there is (WP24): a class that
+ * `implements` an interface lists the interface's fields first, so every `I`
+ * operation works on a `C` object at the same offsets, and `c.x` is one
+ * `getelementptr` into the flat layout either way. A class is a prefix of
+ * nothing but the interfaces it names, so `c.m()` is always `@C.m` and there
+ * is no vtable, no `super`, and nothing for a call site to choose between.
  *
  * `collectClassFacts` reports field reads (`readsMemory`), field stores and
  * allocations (`write`, callee `nish_alloc_struct`, plus the constructor) to
@@ -51,7 +39,7 @@
  */
 import ts from "typescript";
 import { CheckedProgram, FieldInfo, FunctionSig, ImportBinding, StructInfo } from "../../checker/index.js";
-import { effectiveConstructor, explicitSuperCall, intrinsicType, isAssignmentOperator, ownFields } from "../../checker/classes.js";
+import { intrinsicType, isAssignmentOperator } from "../../checker/classes.js";
 import { ResultType, StaticType, isFloat, llvmAbiType, llvmType, resultByValue } from "../../types.js";
 import { beginReclaim, endReclaim } from "./arena.js";
 import { emitIntBinary } from "./arithmetic.js";
@@ -122,8 +110,7 @@ function allocate(ctx: EmitContext, info: StructInfo, site: ts.Node): string {
  * The LLVM constant for a field initializer, from its syntax and the field's
  * type alone. The checker only admits literals here (`isLiteralInitializer`),
  * and the node may belong to another module (an imported class `new`ed
- * without a constructor, or an inherited constructor, WP2b), whose type
- * table this emitter does not have.
+ * without a constructor), whose type table this emitter does not have.
  */
 function initializerConstant(ctx: EmitContext, field: FieldInfo): string {
   const init = field.initializer!;
@@ -147,24 +134,16 @@ function initializerConstant(ctx: EmitContext, field: FieldInfo): string {
   }
 }
 
-/** Store the literal initializers of the fields `info` declares itself into the object at `receiver` (a `%struct.<info>*`). */
+/** Store the literal initializers of `info`'s fields into the object at `receiver` (a `%struct.<info>*`). */
 export function emitFieldInitializers(ctx: EmitContext, info: StructInfo, receiver: string): void {
-  for (const field of ownFields(info)) {
+  for (const field of info.fields) {
     if (field.initializer) storeField(ctx, info, receiver, field, initializerConstant(ctx, field));
   }
 }
 
-/** `%struct.<from>*` -> `%struct.<to>*` for an ancestor `to` (WP2b): the base fields are a layout prefix. */
-export function upcast(ctx: EmitContext, value: string, from: StructInfo, to: StructInfo): string {
-  if (from === to) return value;
-  return ctx.fn.emitValue(`bitcast ${structTypeName(from)}* ${value} to ${structTypeName(to)}*`);
-}
-
 /**
- * Run the construction of `info` on the object at `receiver` with `args`:
- * its constructor when it has one; otherwise its own initializers, then the
- * same for the base class (WP2b), which ends at the nearest ancestor
- * constructor (the one the checker matched `args` against) or at the root.
+ * Run the construction of `info` on the object at `receiver` with `args`: its
+ * constructor when it has one, otherwise its literal initializers.
  */
 function constructObject(
   ctx: EmitContext,
@@ -178,39 +157,16 @@ function constructObject(
     return;
   }
   emitFieldInitializers(ctx, info, receiver);
-  if (info.base) constructObject(ctx, info.base, upcast(ctx, receiver, info, info.base), args, site);
 }
 
-/**
- * Constructor prologue: own initializer stores, then, for a derived class
- * whose body does not start with `super(...)`, the implicit `super()`
- * (the checker allowed the omission only when no ancestor constructor takes
- * parameters).
- */
+/** Constructor prologue: the literal initializer stores, before the body runs. */
 export function emitConstructorPrologue(ctx: EmitContext, sig: FunctionSig): void {
-  const info = sig.struct!;
-  emitFieldInitializers(ctx, info, "%this");
-  if (info.base && !explicitSuperCall(sig.decl as ts.ConstructorDeclaration)) {
-    constructObject(ctx, info.base, upcast(ctx, "%this", info, info.base), [], sig.decl);
-  }
-}
-
-/** `super(args)` (WP2b): construct the base part of `this`. */
-export function emitSuperCall(ctx: EmitContext, expr: ts.CallExpression): string {
-  const info = structInfo(ctx.program, ctx.program.bindings.get(expr.expression as unknown as ts.Identifier)!.type);
-  constructObject(ctx, info.base!, upcast(ctx, "%this", info, info.base!), expr.arguments, expr);
-  return "void";
+  emitFieldInitializers(ctx, sig.struct!, "%this");
 }
 
 // ---- Expressions ----------------------------------------------------------------------
 
 const emitThis: ExpressionEmitter = () => "%this";
-
-/** `super` as the receiver of `super.m()` (WP2b): `this` seen as the base type. */
-const emitSuper: ExpressionEmitter = (ctx, node) => {
-  const self = structInfo(ctx.program, ctx.program.bindings.get(node as unknown as ts.Identifier)!.type);
-  return upcast(ctx, "%this", self, structInfo(ctx.program, ctx.typeOf(node)));
-};
 
 const emitObjectLiteral: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.ObjectLiteralExpression;
@@ -227,7 +183,6 @@ const emitObjectLiteral: ExpressionEmitter = (ctx, node) => {
 
 export const classExpressionEmitters: EmitterTable<ExpressionEmitter> = {
   [ts.SyntaxKind.ThisKeyword]: emitThis,
-  [ts.SyntaxKind.SuperKeyword]: emitSuper,
   [ts.SyntaxKind.ObjectLiteralExpression]: emitObjectLiteral,
 };
 
@@ -274,10 +229,7 @@ function emitMethodCall(
 methodCallEmitters.struct = (ctx, expr, receiverType) => {
   const access = expr.expression as ts.PropertyAccessExpression;
   const callee = ctx.program.callees.get(expr)!;
-  let receiver = ctx.emitExpression(access.expression);
-  // An inherited method takes `this` as its declaring class (WP2b).
-  const info = structInfo(ctx.program, receiverType);
-  if (callee.struct !== info) receiver = upcast(ctx, receiver, info, callee.struct!);
+  const receiver = ctx.emitExpression(access.expression);
   return emitMethodCall(ctx, callee, receiver, expr.arguments, expr);
 };
 
@@ -373,13 +325,9 @@ export function structTypeDeclarations(program: CheckedProgram): string[] {
     const body = info.fields.map((f) => llvmType(f.type)).join(", ");
     lines.push(`%struct.${info.name} = type {${body ? ` ${body} ` : ""}}`);
     for (const f of info.fields) note(f.type);
-    // Inherited constructors and methods (WP2b) are called through the base
-    // type, which an importer of the derived class alone only points at.
-    for (let c: StructInfo | undefined = info; c; c = c.base) {
-      note(c.type);
-      for (const m of c.methods.values()) noteSig(m);
-      if (c.ctor) noteSig(c.ctor);
-    }
+    note(info.type);
+    for (const m of info.methods.values()) noteSig(m);
+    if (info.ctor) noteSig(info.ctor);
   }
   for (const sig of program.functions) noteSig(sig);
   for (const imp of program.imports) if (imp.sig) noteSig(imp.sig);
@@ -388,18 +336,10 @@ export function structTypeDeclarations(program: CheckedProgram): string[] {
   return lines;
 }
 
-/**
- * Constructor and methods an importer of `imp.struct` may call, inherited
- * ones included (WP2b: `new D()` may run `B.constructor`, `d.m()` may be
- * `B.m`); each gets a `declare`.
- */
+/** Constructor and methods an importer of `imp.struct` may call; each gets a `declare`. */
 export function structFunctions(info: StructInfo | undefined): FunctionSig[] {
-  const out: FunctionSig[] = [];
-  for (let c = info; c; c = c.base) {
-    if (c.ctor) out.push(c.ctor);
-    out.push(...c.methods.values());
-  }
-  return out;
+  if (!info) return [];
+  return [...(info.ctor ? [info.ctor] : []), ...info.methods.values()];
 }
 
 export function importedStructFunctions(imp: ImportBinding): FunctionSig[] {
@@ -438,7 +378,7 @@ export const collectClassFacts = (program: CheckedProgram, node: ts.Node, facts:
       facts.effect = "write";
       facts.callees.add("nish_alloc_struct");
     }
-    const ctor = effectiveConstructor(structInfo(program, intrinsicType(program, node)!)); // own or inherited (WP2b)
+    const ctor = structInfo(program, intrinsicType(program, node)!).ctor;
     if (ctor) facts.callees.add(ctor.name);
   } else if (ts.isObjectLiteralExpression(node) && !facts.stackSites.has(node)) {
     facts.effect = "write";

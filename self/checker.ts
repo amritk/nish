@@ -130,8 +130,7 @@ export class Checker {
     this.ctx.errored = false;
 
     // The checks that need every layout: `implements` compares field lists,
-    // and definite assignment needs the inherited prefix to know what
-    // `super(...)` covers.
+    // and definite assignment needs the fields.
     for (const info of declared) {
       this.ctx.errored = false;
       if (info.kind === STRUCT_CLASS) {

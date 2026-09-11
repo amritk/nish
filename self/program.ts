@@ -136,24 +136,19 @@ export class StructInfo {
   methodSigs: FunctionSig[];
   /** The explicit constructor; without one, `new` stores the field initializers inline. */
   ctor: FunctionSig | null;
-  /** Interfaces named in `implements`, checked to have the identical layout. */
-  implementsNames: string[];
   /**
-   * The class named in `extends`. Its fields are the prefix of `fields` — same
-   * indices, same offsets — so a `%struct.<name>*` may be `bitcast` to the
-   * base's. `methodSigs` holds only what this class declares; an inherited
-   * method is found by walking `base`.
+   * Interfaces named in `implements`. Each one's fields are the *first* fields
+   * of this struct — same order, same types, same offsets — so a
+   * `%struct.<name>*` may be `bitcast` to the interface's with no adjustment.
    */
-  base: StructInfo | null;
+  implementsNames: string[];
   decl: Node;
   /** The module that declares it, so an importer can tell it from a re-export. */
   origin: SourceFile;
   exported: boolean;
   /** A member or heritage clause was rejected: the layout is incomplete. */
   poisoned: boolean;
-  /** Pass 1b progress, so a derived class can pull its base in first... */
-  collecting: boolean;
-  /** ...and so a base pulled in twice is collected once. */
+  /** Pass 1b progress, so a struct is collected once. */
   collected: boolean;
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
@@ -169,39 +164,24 @@ export class StructInfo {
     this.methodSigs = [];
     this.ctor = null;
     this.implementsNames = [];
-    this.base = null;
     this.decl = decl;
     this.exported = false;
     this.poisoned = false;
-    this.collecting = false;
     this.collected = false;
   }
 
-  /** The field called `name` on this struct, or `null`. Base fields are already in `fields`. */
+  /** The field called `name` on this struct, or `null`. */
   field(name: string): FieldInfo | null {
     const at = this.fieldIndex.get(name, -1);
     return at < 0 ? null : this.fields[at];
   }
 
-  /** The method called `name`, declared here or inherited; `null` when there is none. */
+  /** The method called `name`, or `null` when there is none. */
   method(name: string): FunctionSig | null {
     const at = this.methodIndex.get(name, -1);
-    if (at >= 0) {
-      return this.methodSigs[at];
-    }
-    const base = this.base;
-    return base === null ? null : base.method(name);
+    return at < 0 ? null : this.methodSigs[at];
   }
 
-  /** The constructor that `new` calls: this class's, else the nearest inherited one. */
-  effectiveConstructor(): FunctionSig | null {
-    const own = this.ctor;
-    if (own !== null) {
-      return own;
-    }
-    const base = this.base;
-    return base === null ? null : base.effectiveConstructor();
-  }
 }
 
 /**

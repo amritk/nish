@@ -48,8 +48,9 @@
  *     nonnull align 8 dereferenceable(sizeof X)
  *               Every struct value comes from the arena allocator: 8-aligned,
  *               at least `sizeof X` bytes, never null. `X` is the *declared*
- *               parameter type; a derived object passed in its place (WP2b)
- *               is at least as large, since the base fields are its prefix.
+ *               parameter type; a class passed where an interface it
+ *               implements is expected (WP24) is at least as large, since
+ *               the interface's fields are its prefix.
  *     noalias   Only on `this` of a constructor: `new` hands it a fresh
  *               allocation nothing else points at. Never elsewhere: two
  *               struct params may well be the same object.
@@ -112,8 +113,6 @@
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar, Param } from "../checker/index.js";
 import {
-  baseConstruction,
-  effectiveConstructor,
   intrinsicType,
   isAssignmentOperator,
 } from "../checker/classes.js";
@@ -428,8 +427,6 @@ export function classifyUse(program: CheckedProgram, ref: ts.Expression): ParamU
       return isAssignmentTarget(parent) ? USE_WRITE : USE_READ; // `p.f = v` / `p.f`, `p.length`
     }
     if (ts.isCallExpression(parent)) {
-      // `super(...)` (WP2b): the flow of `this` into the base construction is
-      // recorded per constructor by `collectFacts`, explicit call or not.
       if (parent.expression === node) return USE_NONE;
       const index = parent.arguments.indexOf(node);
       if (index < 0) return USE_ESCAPE;
@@ -454,7 +451,7 @@ export function classifyUse(program: CheckedProgram, ref: ts.Expression): ParamU
       const index = parent.arguments?.indexOf(node) ?? -1;
       const target = intrinsicType(program, parent); // the class constructed, whatever it converts to
       const info = target?.kind === "struct" ? program.structs.get(target.name) : undefined;
-      const ctor = info && effectiveConstructor(info); // own or inherited (WP2b)
+      const ctor = info?.ctor;
       if (index < 0 || !ctor) return USE_ESCAPE;
       return { kind: "argument", callee: ctor, index: index + 1 };
     }
@@ -582,15 +579,9 @@ function collectFacts(
     }
   }
 
-  /** A reference to one of this function's parameters (`this` included, also as `super`, WP2b), by name. */
+  /** A reference to one of this function's parameters (`this` included), by name. */
   const paramRef = (node: ts.Node): string | undefined => {
-    if (
-      !ts.isIdentifier(node) &&
-      node.kind !== ts.SyntaxKind.ThisKeyword &&
-      node.kind !== ts.SyntaxKind.SuperKeyword
-    ) {
-      return undefined;
-    }
+    if (!ts.isIdentifier(node) && node.kind !== ts.SyntaxKind.ThisKeyword) return undefined;
     const v = program.bindings.get(node as ts.Identifier);
     return v?.storage === "param" && paramNames.has(v.name) ? v.name : undefined;
   };
@@ -638,23 +629,6 @@ function collectFacts(
     ts.forEachChild(node, visit);
   };
   visit(sig.decl.body!);
-
-  // WP2b: a derived constructor builds its base part (`super(...)`, written or
-  // implicit): `this` is handed to the nearest ancestor constructor, and the
-  // initializers of constructor-less ancestors are stored through it. Recorded
-  // from the class, not from the statement, so an implicit call is not missed.
-  if (sig.role === "constructor" && sig.struct?.base) {
-    const base = baseConstruction(sig.struct);
-    const self = facts.pointerParams.get("this")!;
-    if (base.ctor) {
-      facts.callees.add(base.ctor.name);
-      self.passedTo.push({ callee: base.ctor.name, index: 0 });
-    }
-    if (base.stores) {
-      self.writesThrough = true;
-      facts.effect = "write";
-    }
-  }
 
   if (facts.readsMemory) facts.effect = maxEffect(facts.effect, "read");
   if (facts.hasTrap) facts.effect = "write";
