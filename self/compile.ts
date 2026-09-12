@@ -62,7 +62,7 @@ import { codeFor, TOOLCHAIN } from "./codes";
 import { resolveTarget, supportedTargets } from "./target";
 
 const USAGE: string =
-  "usage: compile <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile -v, --version | -h, --help";
+  "usage: compile <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile -v, --version | -h, --help";
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -350,6 +350,8 @@ export function main(): number {
       opts.nsw = false;
     } else if (value === "--no-stack-alloc") {
       opts.stackAlloc = false;
+    } else if (value === "--threads") {
+      opts.threads = true;
     } else if (value === "--no-warn-performance") {
       warnPerformance = false;
     } else if (value === "--runtime-decls") {
@@ -484,7 +486,7 @@ export function main(): number {
   if (link.length === 0) {
     return 0;
   }
-  return linkProgram(outputs, link, profile, opts.debugInfo, json);
+  return linkProgram(outputs, link, profile, opts.debugInfo, opts.threads, json);
 }
 
 /**
@@ -517,7 +519,14 @@ function packageRoot(): string {
  * same stream. Its stderr is inherited, so a clang diagnostic reaches the
  * caller as it happens rather than after the link has finished.
  */
-function linkProgram(outputs: string[], link: string, profile: string, debugInfo: boolean, json: boolean): number {
+function linkProgram(
+  outputs: string[],
+  link: string,
+  profile: string,
+  debugInfo: boolean,
+  threads: boolean,
+  json: boolean
+): number {
   const root = packageRoot();
   if (root.length === 0) {
     reportToolchainFailure(
@@ -552,6 +561,13 @@ function linkProgram(outputs: string[], link: string, profile: string, debugInfo
   // strip the binary, which is what keeps the DWARF the IR already carries.
   if (debugInfo) {
     argv.push("-g");
+  }
+  // `--threads` likewise: it compiles runtime.c with -DNISH_THREADS, which is
+  // what makes its `nish_arena` thread-local. The two halves cannot disagree
+  // silently — ELF refuses a non-TLS reference to a TLS definition — so a
+  // mismatch is a link error rather than a program with two arenas.
+  if (threads) {
+    argv.push("--threads");
   }
   const status = spawnSync(argv);
   if (status !== 0) {

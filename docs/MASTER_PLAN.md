@@ -736,10 +736,14 @@ Threads are not on that list and not in the waves above. The design question
 that the zero-GC model and the attribute fixpoint force rather than leave
 open — 1:1 OS threads with data races rejected at compile time, not
 goroutines — and [wp20-threads.md](wp20-threads.md) is the plan of record for
-it. Its first stage, a thread-local arena, has no language surface and is a
-prerequisite for every version of the design, so it can land whenever it is
-convenient; the four stages that add rules to LANGUAGE.md cannot land before
-M4 without delaying the freeze, and are 1.1 scope by default.
+it. Its first stage T0, a thread-local arena behind `--threads`, **has landed**:
+it has no language surface and is a prerequisite for every version of the
+design, so nothing about the freeze argued against it, and with the flag off it
+changed no byte of IR, no golden and no binary — `runtime.c` is 4,670 of its
+4,864-byte `.text*` budget either way. What it costs when a program does ask is
+measured in [wp20-threads.md](wp20-threads.md) §4 T0. The four stages that add
+rules to LANGUAGE.md cannot land before M4 without delaying the freeze, and are
+1.1 scope by default.
 
 Packages are not on that list either, and the question "how does one
 Nish package depend on another" turns out to have the same character:
