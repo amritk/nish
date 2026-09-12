@@ -15,8 +15,22 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Thread-local storage for the arena (WP20 T0), mirroring runtime.c and
+ * nish.h so the three definitions of this macro cannot drift. A wasm module
+ * built this way still has exactly one thread: wasm threads need shared memory
+ * plus the atomics and bulk-memory features and a worker on the host side, and
+ * WP20 §6 defers all of that. The macro is here so that `nish --threads`
+ * targeting wasm still links — `_Thread_local` in a non-shared memory is one
+ * ordinary block of linear memory — rather than failing over a storage class
+ * that means nothing here. */
+#ifdef NISH_THREADS
+#define NISH_TLS _Thread_local
+#else
+#define NISH_TLS
+#endif
+
 struct nish_arena { char *buf; uint64_t off; uint64_t cap; void *chunks; };
-struct nish_arena nish_arena;
+NISH_TLS struct nish_arena nish_arena;
 
 _Static_assert(sizeof(struct nish_arena) == 32, "arena layout is ABI: runtime.ts, nish.h");
 _Static_assert(offsetof(struct nish_arena, off) == 8, "the inlined allocator bumps field 1");

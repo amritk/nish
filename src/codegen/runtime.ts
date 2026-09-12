@@ -8,6 +8,11 @@
  * emitted as an `alwaysinline` IR function that bumps `@nish_arena` directly,
  * so after inlining an allocation is a load, an add, a compare, and a store.
  * Only the overflow path calls `@nish_arena_grow` in runtime.c.
+ *
+ * That is also why threads are a codegen question rather than a runtime one
+ * (WP20 §3.1): two threads bumping one arena race in the *emitted IR*, not in
+ * `runtime.c`. `--threads` answers it by declaring `@nish_arena` thread-local
+ * (`ARENA_GLOBAL_TLS`); the allocator body does not change.
  */
 
 /** Global arena state, must match `struct nish_arena` in runtime.c. */
@@ -16,6 +21,26 @@ export const ARENA_TYPE = "%struct.nish_arena = type { i8*, i64, i64, i8* }";
 export const ARRAY_TYPE = "%struct.nish_array = type { i64, i64, i8* }";
 
 export const ARENA_GLOBAL = "@nish_arena = external global %struct.nish_arena, align 8";
+/**
+ * The same global under `--threads` (WP20 T0): one arena per thread instead of
+ * one per process. Only the storage class moves — the allocator below GEPs the
+ * declaration it is given, and LLVM turns each of its three field accesses into
+ * a thread-pointer-relative one — so a thread-local build differs from an
+ * ordinary one by exactly this line.
+ *
+ * `initialexec` rather than the default general-dynamic model is the whole
+ * reason the fast path stays a fast path. General dynamic lowers an access to a
+ * `__tls_get_addr` call whenever the module is built `-fPIC`, which is a call
+ * *inside* the inlined bump allocator; initial-exec is one load of the offset
+ * from the GOT and then `%fs`-relative addressing, which is what
+ * `clang -Oz` gives the C copy of the same code. The cost of naming the model
+ * is that a build which `dlopen`s compiled Nish after start-up spends from
+ * glibc's static TLS surplus; 40 bytes of arena and seed is well inside it, and
+ * the `napi` profile — the one host that dlopens — is the case WP24 §5.1 wants
+ * this for.
+ */
+export const ARENA_GLOBAL_TLS =
+  "@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8";
 /**
  * `process.argv` (WP7): the `string[]` the entry wrapper builds once with
  * `nish_argv_init(argc, argv)`; every module that reads it loads this global.

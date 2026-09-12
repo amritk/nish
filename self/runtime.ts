@@ -12,6 +12,11 @@
 // so after inlining an allocation is a load, an add, a compare and a store.
 // Only the overflow path calls `@nish_arena_grow` in runtime.c.
 //
+// That is also why threads are a codegen question rather than a runtime one
+// (wp20-threads.md §3.1): two threads bumping one arena race in the emitted IR,
+// not in `runtime.c`. `--threads` answers it by declaring `@nish_arena`
+// thread-local (`ARENA_GLOBAL_TLS`); the allocator body does not change.
+//
 // `src/` keeps the table as an array of object literals and a `Map` beside it.
 // Here it is a class built once per compilation: the same array, with a
 // `StringMap` from symbol to index so the attribute fixpoint can ask about a
@@ -25,6 +30,21 @@ export const ARENA_TYPE: string = "%struct.nish_arena = type { i8*, i64, i64, i8
 export const ARRAY_TYPE: string = "%struct.nish_array = type { i64, i64, i8* }";
 
 export const ARENA_GLOBAL: string = "@nish_arena = external global %struct.nish_arena, align 8";
+/**
+ * The same global under `--threads` (WP20 T0): one arena per thread rather than
+ * one per process. Only the storage class moves — `inlineAllocator` GEPs
+ * whichever declaration the prelude wrote, and LLVM turns each field access
+ * into a thread-pointer-relative one — so a thread-local module differs from an
+ * ordinary one by exactly this line.
+ *
+ * `initialexec` rather than the default general-dynamic model is what keeps the
+ * fast path fast: general dynamic lowers an access to a `__tls_get_addr` call
+ * in any `-fPIC` build, which would be a call inside the inlined bump
+ * allocator, where initial-exec is one load of the offset and then
+ * thread-pointer-relative addressing.
+ */
+export const ARENA_GLOBAL_TLS: string =
+  "@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8";
 /**
  * `process.argv` (WP7): the `string[]` the entry wrapper builds once with
  * `nish_argv_init(argc, argv)`; every module that reads it loads this global.

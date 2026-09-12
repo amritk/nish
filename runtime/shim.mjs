@@ -640,6 +640,12 @@ export function number(x) {
 // Arena introspection has no JS counterpart: the stubs keep programs that only
 // compare `Arena.used()` before/after (a "stayed flat" check) in agreement, while
 // programs that print raw byte counts are listed as known differences.
+//
+// `nish --threads` makes the native arena thread-local (WP20 T0) and nothing
+// here moves with it: a rewritten program runs on the one thread Node gives it,
+// so "the arena of the calling thread" and "the arena" are the same object, and
+// these stubs answer for both. If T1 ever lands a spawn the rewrite can reach,
+// that is when this file grows a second arena to keep count of.
 export function arenaUsed() { return 0; }
 export function arenaMark() { return 0; }
 export function arenaRelease() {}
