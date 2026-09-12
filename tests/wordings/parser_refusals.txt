@@ -7,7 +7,7 @@
 # found `{`` — before Phase 0 or the checker can state the rule that stage0
 # states. That is the declared parity class of
 # `docs/wp19-stage0-retirement.md` §A3 (602 rows), and closing it in code is
-# grammar for 43 constructs that never compile.
+# grammar for 45 constructs that never compile.
 #
 # The consequence for this corpus is exact and worth saying plainly: **these
 # wordings do not survive R6.** They are stage0's, they are pinned here while
@@ -49,7 +49,7 @@ nl2213_class_index_signature
 nl2214_interface_index_signature
 nl2215_interface_extends
 nl2223_string_object_key
-nl2226_export_enum
+nl2226_export_import_equals
 nl2233_optional_parameter
 nl2234_parameter_property
 nl2235_rest_parameter
@@ -62,3 +62,4 @@ nl2256_satisfies_expression
 nl2257_interface_construct_signature
 nl2258_object_literal_method
 nl2274_two_names_one_declaration
+nl2286_declare_enum

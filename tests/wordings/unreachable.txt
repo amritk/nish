@@ -31,6 +31,7 @@ NL2094  retired: inheritance, removed
 NL2110  retired: inheritance, removed
 NL2111  retired: inheritance, removed
 NL2112  retired: inheritance, removed
+NL2123  retired: the `case` label rule before WP23 admitted an enum member; the live one is NL2284
 NL2132  retired: inheritance, removed
 NL2154  retired: `super(...)`, removed with inheritance
 NL2155  retired: `super(...)`, removed with inheritance
@@ -38,6 +39,7 @@ NL2156  retired: `super(...)`, removed with inheritance
 NL2157  retired: `super`, removed with inheritance
 NL2158  retired: `super`, removed with inheritance
 NL2159  retired: `super`, removed with inheritance
+NL2287  retired before it ever fired: WP23 reserved the number, and no message in either compiler produces the fragment
 
 # --- Shadowed: a longer fragment of the same message always wins. ------------
 # `codeFor` walks the table longest fragment first, so a fragment that is a
