@@ -154,10 +154,26 @@ declare function appendFileSync(path: string, data: string): void;
 declare function mkdirSync(path: string): boolean;
 /** Whether a directory is at `path` right now. One `stat`, and never an exit. */
 declare function isDirectorySync(path: string): boolean;
+/**
+ * The directory's entries, sorted ascending by bytes and without `.` or `..`,
+ * or `null` when it cannot be read. An empty directory is an empty array, so
+ * the null check is about the directory and not about its contents.
+ */
+declare function readdirSync(path: string): string[] | null;
 /** Run `argv[0]` through `PATH` and wait: the exit status, `128 + n` for a signal, `-1` for a failure. */
 declare function spawnSync(argv: string[]): number;
+/**
+ * The same run with each non-empty path receiving that stream, created or
+ * truncated; an empty string leaves that stream inherited.
+ */
+declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
 /** One environment variable, or `null` when it is unset (an empty value is a set variable). */
 declare function getenv(name: string): string | null;
+/**
+ * A monotonic clock in nanoseconds, for timing a region of a program. The
+ * origin is arbitrary, so only the difference between two reads is meaningful.
+ */
+declare function monotonicNanos(): i64;
 
 // ---- The builtin modules (`nish:`) ---------------------------------------------
 //
@@ -179,6 +195,11 @@ declare module "nish:fs" {
   /** `true` when the directory was created, `false` when it already existed. */
   export function mkdirSync(path: string): boolean;
   export function isDirectorySync(path: string): boolean;
+  /**
+   * The directory's entries, sorted ascending by bytes and without `.` or
+   * `..`, or `null` when it cannot be read.
+   */
+  export function readdirSync(path: string): string[] | null;
 }
 
 declare module "nish:process" {
@@ -186,6 +207,16 @@ declare module "nish:process" {
   export function exit(code: i32): never;
   export function getenv(name: string): string | null;
   export function spawnSync(argv: string[]): number;
+  /**
+   * The same run with each non-empty path receiving that stream, created or
+   * truncated; an empty string leaves that stream inherited.
+   */
+  export function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
+  /**
+   * A monotonic clock in nanoseconds. The origin is arbitrary, so only the
+   * difference between two reads is meaningful.
+   */
+  export function monotonicNanos(): i64;
   /** The command line; `argv[0]` is the program path, as in C. Read-only. */
   export const argv: readonly string[];
   /** The operating system the program runs on: `"linux"`, `"darwin"`, or `"unknown"`. */

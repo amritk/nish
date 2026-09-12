@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 271 programs, 4497 dump lines.
+# 280 programs, 4597 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -1946,6 +1946,15 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 7:9 dir: string (const)
   local 11:9 file: string (const)
+program tests/cases/io_monotonic.ts
+module tests/cases/io_monotonic.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_monotonic_nanos nish_print nish_str_concat
+  stackSites=0 stackLocals=0
+  local 10:9 first: i64 (const)
+  local 11:7 later: i64 (let)
+  local 12:7 spins: i32 (let)
 program tests/cases/io_nish_import.ts
 module tests/cases/io_nish_import.ts (entry)
 import readFileSync from "nish:fs" -> builtin readFileSync
@@ -1973,6 +1982,21 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
   calls: nish_arena_mark nish_arena_release nish_exit nish_read_file nish_str_concat nish_write nish_write_file
   stackSites=0 stackLocals=0
+program tests/cases/io_readdir.ts
+module tests/cases/io_readdir.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_alloc_struct nish_arena_mark nish_arena_release nish_mkdir nish_print nish_readdir nish_str_concat nish_str_from_i32 nish_write_file
+  stackSites=0 stackLocals=0
+  local 9:9 dir: string (const)
+  local 16:9 entries: string[] | null (const)
+  local 26:9 empty: string[] | null (const)
+program tests/cases/io_readdir_null.ts
+module tests/cases/io_readdir_null.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_mkdir nish_print nish_readdir nish_str_concat nish_write_file
+  stackSites=0 stackLocals=0
 program tests/cases/io_spawn.ts
 module tests/cases/io_spawn.ts (entry)
 function run(argv: string[]): i32 -> @run
@@ -1997,6 +2021,27 @@ function main(): i32 -> @nish_main [exported entry]
   callee 22:27 run -> @run
   local 23:9 empty: string[] (const)
   callee 24:25 run -> @run
+program tests/cases/io_spawn_to.ts
+module tests/cases/io_spawn_to.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_mkdir nish_print nish_read_file_or_null nish_spawn_to nish_str_concat nish_str_from_i32 nish_str_new
+  stackSites=0 stackLocals=0
+  local 6:9 dir: string (const)
+  local 8:9 out: string (const)
+  local 9:9 err: string (const)
+  local 11:9 status: i32 (const)
+  local 12:9 captured: string | null (const)
+  local 13:9 diagnostic: string | null (const)
+  local 23:9 again: string | null (const)
+program tests/cases/io_spawn_to_inherit.ts
+module tests/cases/io_spawn_to_inherit.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_mkdir nish_print nish_spawn_to nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 9:9 err: string (const)
+  local 12:9 empty: string[] (const)
 program tests/cases/io_streams.ts
 module tests/cases/io_streams.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
@@ -2134,6 +2179,21 @@ function main(): i32 -> @nish_main [exported entry]
   callee 24:14 fill -> @fill
   local 29:9 ys: Blob[] (const)
   callee 29:14 fill -> @fill
+program tests/cases/mem_getenv_scope.ts
+module tests/cases/mem_getenv_scope.ts (entry)
+function fromEnv(name: string): string | null -> @fromEnv
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_getenv nish_print nish_str_concat
+  stackSites=0 stackLocals=0
+  local 12:9 label: string (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: fromEnv nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 18:9 value: string | null (const)
+  callee 18:17 fromEnv -> @fromEnv
+  local 23:7 filler: string (let)
+  local 24:12 i: i32 (let)
 program tests/cases/mem_nullable.ts
 module tests/cases/mem_nullable.ts (entry)
 struct Node (class) size=16 align=8
@@ -2206,6 +2266,22 @@ function load(path: string): string | null -> @load [exported]
   calls: nish_print nish_read_file_or_null nish_str_concat
   stackSites=0 stackLocals=0
   local 8:9 label: string (const)
+program tests/cases/mem_readdir_scope.ts
+module tests/cases/mem_readdir_scope.ts (entry)
+function listOf(dir: string): string[] | null -> @listOf
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_print nish_readdir nish_str_concat
+  stackSites=0 stackLocals=0
+  local 6:9 label: string (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: listOf nish_mkdir nish_panic_index nish_print nish_str_concat nish_str_from_i32 nish_write_file
+  stackSites=0 stackLocals=0
+  local 13:9 dir: string (const)
+  local 16:9 entries: string[] | null (const)
+  callee 16:19 listOf -> @listOf
+  local 21:7 filler: string (let)
+  local 22:12 i: i32 (let)
 program tests/cases/mem_reclaim_argument.ts
 module tests/cases/mem_reclaim_argument.ts (entry)
 function tag(i: i32): string -> @tag
@@ -2586,6 +2662,30 @@ function main(): i32 -> @nish_main [exported entry]
   callee 55:15 swapped -> @swapped
   callee 56:15 count -> @count
   callee 57:15 nearest -> @nearest
+program tests/cases/mem_threads_arena.ts
+module tests/cases/mem_threads_arena.ts (entry)
+struct Point (class) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+  constructor -> @Point.constructor
+function Point.constructor(this: Point, x: i32, y: i32): void -> @Point.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: x y
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function makePoints(n: i32): Point[] -> @makePoints
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: Point.constructor nish_alloc_struct nish_array_grow
+  stackSites=0 stackLocals=0
+  local 25:9 xs: Point[] (const)
+  local 26:12 i: i32 (let)
+  callee 27:13 new Point -> @Point.constructor
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: makePoints nish_panic_index nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 33:9 xs: Point[] (const)
+  callee 33:14 makePoints -> @makePoints
 program tests/cases/opt_nsw.ts
 module tests/cases/opt_nsw.ts (entry)
 struct Acc (class) size=4 align=4
@@ -3731,6 +3831,15 @@ function narrow(x: f64): i32 -> @narrow
 function toDouble(n: i32): f64 -> @toDouble
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
+program docs/cookbook/builtin_driver.ts
+module docs/cookbook/builtin_driver.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_exit nish_monotonic_nanos nish_print nish_readdir nish_spawn_to nish_str_concat nish_str_from_i32 nish_str_from_i64 nish_write
+  stackSites=0 stackLocals=0
+  local 2:9 cases: string[] | null (const)
+  local 6:9 started: i64 (const)
+  local 7:9 status: i32 (const)
 program docs/cookbook/builtin_env.ts
 module docs/cookbook/builtin_env.ts (entry)
 function main(): i32 -> @nish_main [exported entry]

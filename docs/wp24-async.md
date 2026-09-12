@@ -305,8 +305,11 @@ built once.
 
 ### 4.5 The loop does not fit in the runtime budget
 
-`runtime.c` has a hard 4,096-byte `.text` budget and stands at 3,852
-(MASTER_PLAN §4). A poller, a timer heap and a ready queue are not 244 bytes.
+`runtime.c` had a hard 4,096-byte `.text` budget and stood at 3,852 when this
+note was written (MASTER_PLAN §4); the ceiling is now 4,864 bytes summed over
+every `.text*` section, leaving 194 bytes of headroom (`docs/wp7-runtime.md`
+§"Runtime additions and budget"). A poller, a timer heap and a ready queue are
+not 244 bytes.
 
 They would have to be pay-for-what-you-use, exactly as `nish_mkdir` and
 `nish_spawn` are — `-ffunction-sections -Wl,--gc-sections` kept
@@ -383,11 +386,14 @@ thread pool, `napi_create_promise` / `napi_resolve_deferred` so JavaScript gets
 a promise. The Nish function stays exactly as synchronous as it is now; the
 asynchrony is entirely in generated C.
 
-- **Prerequisite: WP20 T0, the thread-local arena.** The worker thread
+- **Prerequisite: WP20 T0, the thread-local arena — landed, so this is now
+  buildable.** ([wp20-threads.md](wp20-threads.md) §4 T0: `nish --threads`
+  plus `scripts/build.sh --threads`.) The worker thread
   allocates, and `@nish_arena` is one process-wide object whose bump is
-  inlined into the IR (wp20 §3.1). Without T0 this is a data race in the
-  emitted IR, not merely in the runtime. **T0 is the whole cost of A1**, which
-  is another reason T0 is worth landing on its own.
+  inlined into the IR (wp20 §3.1). Without T0 this was a data race in the
+  emitted IR, not merely in the runtime. **T0 was the whole cost of A1**, which
+  was the argument for landing it on its own, and the argument held: the shim
+  and the `napi` profile's build line are all that is left of this item.
 - Surface: a flag (`--emit-napi-async`) or a per-function opt-in; §10 leaves
   that open, because it should be decided against a real addon.
 - Acceptance: the `napi` profile still builds and the WP8 batching benchmark
@@ -399,8 +405,8 @@ asynchrony is entirely in generated C.
 
 Overlapping `spawnSync` waits, parallelism across cores, a long computation
 that must not stall a caller: all WP20, all designed, and all argued from the
-same zero-GC constraints. The four benchmark programs outside the 1.10x target
-are not waiting on I/O — they are waiting on one core.
+same zero-GC constraints. The benchmark programs that have ever sat outside the
+1.10x target were not waiting on I/O — they were waiting on one core.
 
 ### 5.3 Nothing, for the rest
 

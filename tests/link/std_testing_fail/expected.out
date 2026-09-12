@@ -1,0 +1,19 @@
+FAIL  ok
+      expected true, got false
+FAIL  eqBool
+      expected false, got true
+FAIL  eqI32
+      expected 2, got 1
+FAIL  eqI64
+      expected 2, got 1
+FAIL  eqF64
+      expected 0.25, got 0.5
+FAIL  nearF64
+      expected 0.25 +/- 0.01, got 0.5
+FAIL  eqStr
+      expected " ", got ""
+FAIL  fail with no detail
+PASS  pass
+SKIP  skip (nothing to run)
+failed: ok, eqBool, eqI32, eqI64, eqF64, nearF64, eqStr, fail with no detail
+failures: 1 passed, 8 failed, 1 skipped

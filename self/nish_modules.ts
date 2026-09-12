@@ -65,10 +65,10 @@ export const nishModuleNames = (): string => "nish:fs, nish:process, nish:io";
 /** The names one module exports, in table order, for the diagnostic that lists them. */
 export const nishModuleExports = (specifier: string): string => {
   if (specifier === "nish:fs") {
-    return "readFileSync, readFileSyncOrNull, writeFileSync, appendFileSync, mkdirSync, isDirectorySync";
+    return "readFileSync, readFileSyncOrNull, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync";
   }
   if (specifier === "nish:process") {
-    return "exit, getenv, spawnSync, argv, platform, arch";
+    return "exit, getenv, spawnSync, spawnSyncTo, monotonicNanos, argv, platform, arch";
   }
   return "write, writeError, panic";
 };
@@ -82,7 +82,8 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "writeFileSync" ||
       name === "appendFileSync" ||
       name === "mkdirSync" ||
-      name === "isDirectorySync"
+      name === "isDirectorySync" ||
+      name === "readdirSync"
     ) {
       return new BuiltinExport("", name, false);
     }
@@ -92,7 +93,7 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
     if (name === "exit") {
       return new BuiltinExport("process", "exit", false);
     }
-    if (name === "getenv" || name === "spawnSync") {
+    if (name === "getenv" || name === "spawnSync" || name === "spawnSyncTo" || name === "monotonicNanos") {
       return new BuiltinExport("", name, false);
     }
     if (name === "argv" || name === "platform" || name === "arch") {

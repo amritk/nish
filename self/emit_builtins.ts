@@ -500,6 +500,37 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
     }
     return status;
   }
+  // The same call with the two paths after the vector. The arguments are
+  // emitted left to right, as every call's are, so a path expression that
+  // allocates does so before the child starts.
+  if (name === "spawnSyncTo") {
+    emitter.declareType(ARRAY_TYPE);
+    const args = expr.children[1].children;
+    const argv = emitter.emitExpression(args[0]);
+    const out = emitter.emitExpression(args[1]);
+    const err = emitter.emitExpression(args[2]);
+    const status = emitter.fn.emitValue(
+      `call i32 ${emitter.useRuntime("nish_spawn_to")}(${ARRAY_STRUCT}* ${argv}, i8* ${out}, i8* ${err})`
+    );
+    if (emitter.typeOf(expr) === T_F64) {
+      return emitter.fn.emitValue(`sitofp i32 ${status} to double`);
+    }
+    return status;
+  }
+  // One call answering the array header, which may be null. The same shape as
+  // `readFileSyncOrNull` one type up: the checker typed it `string[] | null` and
+  // an ordinary null compare narrows it, so nothing here has to know that a
+  // nullable array is a nullable pointer.
+  if (name === "readdirSync") {
+    emitter.declareType(ARRAY_TYPE);
+    return emitter.fn.emitValue(
+      `call ${ARRAY_STRUCT}* ${emitter.useRuntime("nish_readdir")}(${stringArgs(emitter, expr)})`
+    );
+  }
+  // One call, an `i64`, and no arguments to emit.
+  if (name === "monotonicNanos") {
+    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_monotonic_nanos")}()`);
+  }
   // WP14 §7a: one `stat`, and the C answer is already the language's `boolean`.
   if (name === "isDirectorySync") {
     return emitter.fn.emitValue(`call zeroext i1 ${emitter.useRuntime("nish_is_dir")}(${stringArgs(emitter, expr)})`);
@@ -523,15 +554,19 @@ export function emitIdentifierBuiltinCall(emitter: Emitter, expr: Node, name: st
 
 /** The other half of the pair above, in the same order. */
 /**
- * A call of the `spawnSync` builtin (not of a user function that happens to be
- * called `spawnSync`, which wins the name as every identifier builtin loses
- * it). `attributes.ts` asks, because the argument escapes into the runtime:
- * `nish_spawn` copies each element's bytes pointer into an arena vector that
- * outlives the call.
+ * A call of the `spawnSync` or `spawnSyncTo` builtin (not of a user function
+ * that happens to be called either, which wins the name as every identifier
+ * builtin loses it). `attributes.ts` asks, because the argument escapes into
+ * the runtime: the spawn path copies each element's bytes pointer into an arena
+ * vector that outlives the call. It answers for both names, because both reach
+ * that same C.
  */
 export function isSpawnCall(program: CheckedProgram, call: Node): boolean {
   const callee = call.children[0];
-  return callee.kind === N_IDENT && callee.text === "spawnSync" && program.nodeCallees[call.id] === null;
+  if (callee.kind !== N_IDENT || program.nodeCallees[call.id] !== null) {
+    return false;
+  }
+  return callee.text === "spawnSync" || callee.text === "spawnSyncTo";
 }
 
 export function identifierBuiltinCallees(program: CheckedProgram, table: TypeTable, call: Node): string[] {
@@ -596,6 +631,18 @@ export function identifierBuiltinCalleesNamed(
   }
   if (name === "spawnSync") {
     out.push("nish_spawn");
+    return out;
+  }
+  if (name === "spawnSyncTo") {
+    out.push("nish_spawn_to");
+    return out;
+  }
+  if (name === "readdirSync") {
+    out.push("nish_readdir");
+    return out;
+  }
+  if (name === "monotonicNanos") {
+    out.push("nish_monotonic_nanos");
     return out;
   }
   if (name === "isDirectorySync") {

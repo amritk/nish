@@ -27,6 +27,10 @@
  *   - `console.log(x)` never prints the `n` suffix of an i64 and writes
  *     synchronously so `process.exit` cannot lose output.
  *   - file I/O errors print `nish: cannot read <path>` and exit 1.
+ *   - a directory listing is sorted by UTF-8 bytes, which is `strcmp`'s order
+ *     and not `Array#sort`'s UTF-16 one; `monotonicNanos` reads a clock whose
+ *     origin is arbitrary, so two readings can agree with a native run and a
+ *     single reading never can.
  *   - `process.argv[0]` is the program (the script here, the executable
  *     natively); `parseInt` is base 10 only and saturates into i32 (0 for no
  *     digits); `parseFloat`/`Number` accept ASCII whitespace, decimal forms,
@@ -455,6 +459,31 @@ export function isDirectorySync(path) {
 }
 
 /**
+ * `readdirSync(path)`: the entries, sorted ascending by bytes, or `null` when
+ * the directory cannot be read. Node throws where the runtime answers a value,
+ * so the `catch` is what makes the two agree, and a directory that exists and
+ * is empty answers an empty array on both sides. Node's readdir never yields
+ * `.` or `..` — the pair `runtime.c` skips explicitly — so there is nothing to
+ * filter out here.
+ *
+ * The sort is the semantic point. `runtime.c` orders the names with `strcmp`,
+ * which compares UTF-8 bytes, and `Array#sort` compares UTF-16 code units. The
+ * two agree on ASCII names and part company above the BMP, where a surrogate
+ * pair sorts below `U+E000`..`U+FFFF` in UTF-16 and above them in UTF-8. So the
+ * comparison is over the encoded bytes, which is the native order exactly
+ * rather than the native order for the names that happen to be ASCII.
+ */
+export function readdirSync(path) {
+  let names;
+  try {
+    names = fs.readdirSync(path);
+  } catch {
+    return null;
+  }
+  return names.sort((a, b) => Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8")));
+}
+
+/**
  * `process.platform` / `process.arch` (WP14 §7a). Node's spellings are the
  * ones `runtime.c` answers with, so on any machine this compiler has a triple
  * for the two runtimes give the same string; elsewhere the native build says
@@ -479,16 +508,72 @@ export function getenv(name) {
 }
 
 /**
- * `spawnSync(argv)` (WP14 D4): the child's exit status, 128 + n when signal n
- * killed it, -1 for an empty vector or a program that would not start. The
- * child inherits this process's streams, as it does natively.
+ * `spawnSync(argv)` and `spawnSyncTo(argv, out, err)` (WP14 D4), which are one
+ * run with its streams answered differently: the child's exit status, 128 + n
+ * when signal n killed it, -1 for an empty vector or a program that would not
+ * start. `runtime.c` puts one `static nish_spawn_impl` behind both builtins for
+ * the same reason this module puts one function behind both helpers — the
+ * argument vector, the wait and the signal convention are written once and
+ * cannot drift between the two.
+ *
+ * `out` and `err` are paths for the child's stdout and stderr, and an **empty**
+ * string leaves that stream inherited. Each file is created or truncated at
+ * 0644, which is what `"w"` asks `open(2)` for (`O_WRONLY | O_CREAT | O_TRUNC`)
+ * and what the runtime's file actions ask for. The descriptors opened here are
+ * closed again whichever way the child went; natively the child opens them and
+ * its exit drops them.
  */
-export function spawnSync(argv) {
+function spawnImpl(argv, out, err) {
   if (argv.length === 0) return -1;
-  const r = child_process.spawnSync(argv[0], argv.slice(1), { stdio: "inherit" });
-  if (r.error !== undefined) return -1;
-  if (r.signal !== null && r.signal !== undefined) return 128 + (os.constants.signals[r.signal] ?? 0);
-  return r.status === null ? -1 : r.status;
+  const opened = [];
+  const stream = (target) => {
+    if (target.length === 0) return "inherit";
+    const fd = fs.openSync(target, "w", 0o644);
+    opened.push(fd);
+    return fd;
+  };
+  try {
+    const r = child_process.spawnSync(argv[0], argv.slice(1), {
+      stdio: ["inherit", stream(out), stream(err)],
+    });
+    if (r.error !== undefined) return -1;
+    if (r.signal !== null && r.signal !== undefined) return 128 + (os.constants.signals[r.signal] ?? 0);
+    return r.status === null ? -1 : r.status;
+  } catch {
+    // A path that cannot be opened is, natively, a file action the child could
+    // not perform, and `posix_spawnp` reports that through its return value:
+    // -1, with no child having run. Opening the second path is what can fail
+    // after the first file was already created, so the truncation a caller can
+    // observe happens on both sides.
+    return -1;
+  } finally {
+    for (const fd of opened) fs.closeSync(fd);
+  }
+}
+
+/** `spawnSync(argv)`: the child inherits this process's streams, as it does natively. */
+export function spawnSync(argv) {
+  return spawnImpl(argv, "", "");
+}
+
+/** `spawnSyncTo(argv, stdoutPath, stderrPath)`: the same run with a stream sent to a file. */
+export function spawnSyncTo(argv, out, err) {
+  return spawnImpl(argv, out, err);
+}
+
+/**
+ * `monotonicNanos()`: `process.hrtime.bigint()`, a monotonic clock in
+ * nanoseconds (`CLOCK_MONOTONIC` on every platform that has it, which is the
+ * one `runtime.c` reads). The value is a BigInt because that is how an `i64` is
+ * held on this side.
+ *
+ * No rewrite can make a *reading* agree with a native run: both origins are
+ * arbitrary and neither is the other's. Only the difference between two reads
+ * means anything, so a differential program may compare two readings and must
+ * never print one.
+ */
+export function monotonicNanos() {
+  return process.hrtime.bigint();
 }
 
 /** `process.argv`: index 0 is the program (the script here, the executable natively), then the arguments. */
@@ -533,6 +618,12 @@ export function number(x) {
 // Arena introspection has no JS counterpart: the stubs keep programs that only
 // compare `Arena.used()` before/after (a "stayed flat" check) in agreement, while
 // programs that print raw byte counts are listed as known differences.
+//
+// `nish --threads` makes the native arena thread-local (WP20 T0) and nothing
+// here moves with it: a rewritten program runs on the one thread Node gives it,
+// so "the arena of the calling thread" and "the arena" are the same object, and
+// these stubs answer for both. If T1 ever lands a spawn the rewrite can reach,
+// that is when this file grows a second arena to keep count of.
 export function arenaUsed() { return 0; }
 export function arenaMark() { return 0; }
 export function arenaRelease() {}

@@ -7,7 +7,7 @@ without over-engineering.
 Two kinds of TypeScript live in this repo, and the rules differ because the
 compiler that runs them differs:
 
-- **Nish programs** — `examples/`, `tests/cases/`, `tests/link/`,
+- **Nish programs** — `std/`, `examples/`, `tests/cases/`, `tests/link/`,
   `tests/layout/`, `tests/differential/corpus/`, `docs/cookbook/`, `bench/*.ts`,
   and every snippet in `docs/` and `README.md`. These are compiled by
   `nish`, and the language reference (`docs/LANGUAGE.md`) is the style

@@ -8,6 +8,11 @@
  * emitted as an `alwaysinline` IR function that bumps `@nish_arena` directly,
  * so after inlining an allocation is a load, an add, a compare, and a store.
  * Only the overflow path calls `@nish_arena_grow` in runtime.c.
+ *
+ * That is also why threads are a codegen question rather than a runtime one
+ * (WP20 §3.1): two threads bumping one arena race in the *emitted IR*, not in
+ * `runtime.c`. `--threads` answers it by declaring `@nish_arena` thread-local
+ * (`ARENA_GLOBAL_TLS`); the allocator body does not change.
  */
 
 /** Global arena state, must match `struct nish_arena` in runtime.c. */
@@ -16,6 +21,26 @@ export const ARENA_TYPE = "%struct.nish_arena = type { i8*, i64, i64, i8* }";
 export const ARRAY_TYPE = "%struct.nish_array = type { i64, i64, i8* }";
 
 export const ARENA_GLOBAL = "@nish_arena = external global %struct.nish_arena, align 8";
+/**
+ * The same global under `--threads` (WP20 T0): one arena per thread instead of
+ * one per process. Only the storage class moves — the allocator below GEPs the
+ * declaration it is given, and LLVM turns each of its three field accesses into
+ * a thread-pointer-relative one — so a thread-local build differs from an
+ * ordinary one by exactly this line.
+ *
+ * `initialexec` rather than the default general-dynamic model is the whole
+ * reason the fast path stays a fast path. General dynamic lowers an access to a
+ * `__tls_get_addr` call whenever the module is built `-fPIC`, which is a call
+ * *inside* the inlined bump allocator; initial-exec is one load of the offset
+ * from the GOT and then `%fs`-relative addressing, which is what
+ * `clang -Oz` gives the C copy of the same code. The cost of naming the model
+ * is that a build which `dlopen`s compiled Nish after start-up spends from
+ * glibc's static TLS surplus; 40 bytes of arena and seed is well inside it, and
+ * the `napi` profile — the one host that dlopens — is the case WP24 §5.1 wants
+ * this for.
+ */
+export const ARENA_GLOBAL_TLS =
+  "@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8";
 /**
  * `process.argv` (WP7): the `string[]` the entry wrapper builds once with
  * `nish_argv_init(argc, argv)`; every module that reads it loads this global.
@@ -286,6 +311,41 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     name: "nish_spawn",
     signature: "declare noundef i32 @nish_spawn(%struct.nish_array* noundef nonnull align 8)",
     attrs: ["nounwind"],
+    effect: "write",
+  },
+  {
+    // `nish_spawn` with one or both of the child's streams pointed at a file,
+    // and therefore the same conservative answers: the child still runs
+    // arbitrary code, the vector is still captured, and `waitpid` still waits.
+    // The two paths are read and never retained (`STR_NOCAP`); an empty one
+    // means "inherit that stream", which is a value and not a null, so both
+    // stay `nonnull`.
+    name: "nish_spawn_to",
+    signature: `declare noundef i32 @nish_spawn_to(%struct.nish_array* noundef nonnull align 8, ${STR_NOCAP}, ${STR_NOCAP})`,
+    attrs: ["nounwind"],
+    effect: "write",
+  },
+  {
+    // A fresh `string[]` per call, so `noalias`, and null when the directory
+    // cannot be read, so no `nonnull`. `effect: "write"` because it allocates
+    // (the arena moves) and because the directory is not memory LLVM tracks:
+    // two listings either side of a `mkdirSync` must not fold into one.
+    // `willreturn` is a fact rather than a hope: the loop runs once per entry
+    // and a directory has finitely many. The path is read and never retained.
+    name: "nish_readdir",
+    signature: `declare noalias align 8 %struct.nish_array* @nish_readdir(${STR_NOCAP})`,
+    attrs: ["nounwind", "willreturn"],
+    effect: "write",
+  },
+  {
+    // The clock is not memory either, and that is the whole reason this is not
+    // `readnone`: two reads with work between them are two different answers,
+    // and a `readnone` pair would fold into one and measure zero. `willreturn`
+    // holds — one `clock_gettime` and some arithmetic — and there is nothing to
+    // capture, so the only argument-free entry here needs no parameter facts.
+    name: "nish_monotonic_nanos",
+    signature: "declare i64 @nish_monotonic_nanos()",
+    attrs: ["nounwind", "willreturn"],
     effect: "write",
   },
   // ---- WP19 R1: the environment, so a self-hosted driver can honour `CC`

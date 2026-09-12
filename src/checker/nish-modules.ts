@@ -52,11 +52,16 @@ export const NISH_MODULES: Record<string, Record<string, BuiltinExport>> = {
     appendFileSync: call("appendFileSync"),
     mkdirSync: call("mkdirSync"),
     isDirectorySync: call("isDirectorySync"),
+    readdirSync: call("readdirSync"),
   },
   "nish:process": {
     exit: call("process.exit"),
     getenv: call("getenv"),
     spawnSync: call("spawnSync"),
+    spawnSyncTo: call("spawnSyncTo"),
+    // Node spells the monotonic clock `process.hrtime.bigint()`, so this is
+    // where a reader looks for it, and one clock function is not a module.
+    monotonicNanos: call("monotonicNanos"),
     argv: property("process.argv"),
     platform: property("process.platform"),
     arch: property("process.arch"),

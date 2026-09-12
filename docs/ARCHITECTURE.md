@@ -149,8 +149,12 @@ The checklist every work package has followed (MASTER_PLAN.md §7):
    to `runtime/runtime.c`, and to `runtime/nish.h`; `tests/run.js`
    fails if the three disagree. Any struct layout change touches `runtime.ts`
    and `runtime.c` in the same commit and extends a layout test. Keep
-   `runtime.c` within the budget (§2 of the master plan: 8 KB source, 4 KB
-   `.text` at `-Oz`; run `clang -Oz -c runtime/runtime.c && size runtime.o`).
+   `runtime.c` within the budget — every `.text*` section summed, under 4,864
+   bytes at `-Oz` (§2 of the master plan, and
+   [wp7-runtime.md](wp7-runtime.md) for each measurement and why the ceiling
+   moved). `node tests/run.js budget` measures it, so this is a check you can
+   run rather than a number to remember; `clang -Oz -c runtime/runtime.c &&
+   size -A runtime.o` is the same measurement by hand.
 7. **Attributes.** Tell the fact collector what the construct does:
    memory effect (`readsMemory`, callee symbols via `collectStringFacts` /
    `collectBuiltinFacts` / `factCollectors`), escapes (`classifyUse`), loop
@@ -191,8 +195,8 @@ a layout smoke test.
 
 ### Runtime symbols
 
-`runtime/runtime.c` (3,852 bytes of `.text` at `-Oz` against the
-MASTER_PLAN.md §2 budget of 4 KB, plus 9,920 bytes of `.rodata` that is almost
+`runtime/runtime.c` (4,670 bytes of `.text*` at `-Oz` against the
+MASTER_PLAN.md §2 budget of 4,864, plus 9,920 bytes of `.rodata` that is almost
 all Ryu's two power-of-five tables; measure with
 `clang -Oz -c runtime/runtime.c && size -A runtime.o`, or
 `scripts/size-report.sh`, which reports both rows) provides, in the order
@@ -550,6 +554,7 @@ frozen, and a third rename stops at `LANGUAGE` and `CLI`.
 | `src/` | the compiler (see the pipeline table); `branding.ts` holds the project's name |
 | `runtime/` | `runtime.c`, `nish.h`, `runtime_wasm.c` (freestanding arena + arrays for the wasm profile), `shim.mjs` (the Node-side runtime for the differential tests) |
 | `scripts/` | `build.sh`, `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
+| `std/` | the standard library, in Nish rather than about Nish: `testing.ts`, the `Suite` a program drives to check itself. Source is the distribution format (wp21 §2), so an import of one compiles with the program. `std/README.md` has the rules for adding a module |
 | `tests/` | `run.js`, `cases/`, `link/`, `ir/`, `layout/`, `differential/` (`run.js`, `lib.js`, `rewrite.js`, `fuzz.js`, `corpus/`, `known-failures.txt`), `runtime_test.c`, `driver.c` |
 | `examples/` | `add.ts`, `hello.ts`, `math.ts`, `strings.ts`, `arrays.ts` (typed arrays across the boundary), `nbody.ts`, `multi/`, `main.c`, `node-host.mjs`, `node-addon.mjs` |
 | `bench/` | `run.mjs`, `README.md`, `{fib,nbody,spectral,sieve,strbuild,vec3}.{ts,c,rs}`, `strbuild_naive.c`, `rss.c`; `sum.ts` and `ffi.mjs` (the WP8 FFI benchmark) |

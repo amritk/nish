@@ -68,16 +68,22 @@ Design rules that every WP must respect:
   (see `tests/ir/alloc_smoke.ll`).
 - **Every construct ships with a golden test** (`.ts` in, `.ll` out) and a
   native round trip (link with clang, run, compare stdout).
-- **Runtime stays tiny.** Budget: `runtime.c` under 4 KB of `.text` compiled
-  at `-Oz` (`clang -Oz -c runtime/runtime.c && size -A runtime.o`). No stdio on
-  hot paths. The two figures this replaces were the *source* bytes, over
-  budget since WP4 and left there because comments are not code, and the `text`
+- **Runtime stays tiny.** Budget: `runtime.c` under 4,864 bytes of compiled
+  code, counted as every `.text*` section summed
+  (`clang -Oz -c runtime/runtime.c && size -A runtime.o`). No stdio on hot
+  paths. The two figures this replaces were the *source* bytes, over budget
+  since WP4 and left there because comments are not code, and the `text`
   column of `size`, which counts the `.eh_frame` unwind entries the `size`
-  build profile strips — measuring the bytes that never ship. `.text` is what
-  a linked binary pays, and `-ffunction-sections -Wl,--gc-sections` means it
-  pays only for the functions it calls: adding WP14's `nish_mkdir` and
-  `nish_spawn` left `examples/hello.ts` at 4,696 bytes, the same number to the
-  byte. Today: 2,544 of 4,096 (`size` text 4,297, source 12,707).
+  build profile strips — measuring the bytes that never ship. The sum rather
+  than the `.text` line alone is what a linked binary pays: `clang -Oz` puts
+  cold code in `.text.unlikely.`, so a ceiling on `.text` by itself can be met
+  by moving code into another section instead of by making it smaller. And
+  `-ffunction-sections -Wl,--gc-sections` means a binary pays only for the
+  functions it calls: adding WP14's `nish_mkdir` and `nish_spawn` left
+  `examples/hello.ts` at 4,696 bytes, the same number to the byte. Today:
+  4,670 of 4,864, measured by `tests/run.js` rather than by a reviewer
+  (`node tests/run.js budget`); `docs/wp7-runtime.md` §"Runtime additions and
+  budget" records each measurement and why the ceiling moved.
 
 ## 3. Consolidated language specification (Nish)
 
@@ -162,8 +168,9 @@ ninety-second map; the table below is the inventory.
 | Benchmarks: seven programs in Nish, C and Rust, with wall time, binary size, peak RSS and checksums | done (WP9) | `bench/`, `docs/BENCHMARKS.md` |
 | Docs: the normative reference, the regenerated IR cookbook, the architecture, the FAQ, install, and one design note per package | done (WP11) | `docs/` |
 
-Measured today: `examples/hello.ts` links to 4,696 bytes at the `size` profile
-and `runtime.c` costs 3,852 of its 4,096-byte `.text` budget, beside 9,920
+Measured today: `examples/hello.ts` links to 4,680 bytes at the `size` profile
+and `runtime.c` costs 4,670 of its 4,864-byte `.text*` budget
+(`docs/wp7-runtime.md` §"Runtime additions and budget"), beside 9,920
 bytes of `.rodata` that Ryu's tables dominate and that only a binary formatting
 a double links (WP15 §7a)
 (`docs/wp14-selfhost.md` §7a); the benchmark binaries are 5.5-12 KB against
@@ -688,7 +695,7 @@ Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 | --- | --- | --- | --- |
 | M1 "Programs" | WP-P, WP0, WP1, WP3, WP5, WP10 | fib/gcd/string CLI builds with `nish --link`, under 20 KB. | done |
 | M2 "Data" | WP2, WP4, WP7 | nbody with structs and arrays, matches C output bit for bit. | done |
-| M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. | done as a package; four of the seven benchmarks are outside 1.10x today ([BENCHMARKS.md](BENCHMARKS.md)), which is what WP15 is for |
+| M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. | done as a package; one of the seven benchmarks is outside 1.10x today — fib at 1.15x, which the run's own analysis reads as spread rather than the program ([BENCHMARKS.md](BENCHMARKS.md), [wp9-optimisation.md](wp9-optimisation.md#summary)). The other three closed: the causes were named rather than guessed, and each section below the gap table says what the measurement was before the change |
 | M4 "1.0" | remaining docs, stabilised spec | tagged release, language reference frozen. | **open — the only one left.** WP2b has left the milestone rather than been finished: inheritance was removed and virtual dispatch is not coming ([wp25-inheritance.md](wp25-inheritance.md)), so what M4 still wants is the frozen reference and the tag |
 | M5 "Self-hosting" | WP14 ([wp14-selfhost.md](wp14-selfhost.md)) | `self/` compiles `self/`: `IR(stage1, self/) == IR(stage2, self/)` byte for byte, and stage3 is byte-identical to stage2 (`tests/self/bootstrap.js`). | done |
 | M6 "One compiler" | WP19 ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | stage0 is deleted rather than frozen. The six gates of §3 there are closed first: parity, oracle succession, the seed protocol, the seed policy, distribution without Node, and the provenance tag. | open — after M4 |
@@ -721,18 +728,27 @@ document does not need a second one open beside it to be current:
 An explicit bounds-check opt-out is deferred until 6 has landed and the checks
 that survive it have been counted. What each item is worth is a measurement
 and not a prediction: [BENCHMARKS.md](BENCHMARKS.md), regenerated by
-`node bench/run.mjs`, is the only place the numbers are current, and four of
-its seven programs are outside the 1.10x target today.
+`node bench/run.mjs`, is the only place the numbers are current, and one of
+its seven programs is outside the 1.10x target today: fib at 1.15x against
+Rust `-O3`, a row the same suite re-measures at 261 ms against Rust's 262 when
+the runs are interleaved, so it is the spread and not the program
+([wp9-optimisation.md](wp9-optimisation.md#summary)). The remaining work on
+that list is therefore worth what it is worth for its own reasons, not because
+a gap table is waiting on it.
 
 Threads are not on that list and not in the waves above. The design question
 "how does Nish do true multithreading, like Go or Rust" has an answer
 that the zero-GC model and the attribute fixpoint force rather than leave
 open — 1:1 OS threads with data races rejected at compile time, not
 goroutines — and [wp20-threads.md](wp20-threads.md) is the plan of record for
-it. Its first stage, a thread-local arena, has no language surface and is a
-prerequisite for every version of the design, so it can land whenever it is
-convenient; the four stages that add rules to LANGUAGE.md cannot land before
-M4 without delaying the freeze, and are 1.1 scope by default.
+it. Its first stage T0, a thread-local arena behind `--threads`, **has landed**:
+it has no language surface and is a prerequisite for every version of the
+design, so nothing about the freeze argued against it, and with the flag off it
+changed no byte of IR, no golden and no binary — `runtime.c` is 4,670 of its
+4,864-byte `.text*` budget either way. What it costs when a program does ask is
+measured in [wp20-threads.md](wp20-threads.md) §4 T0. The four stages that add
+rules to LANGUAGE.md cannot land before M4 without delaying the freeze, and are
+1.1 scope by default.
 
 Packages are not on that list either, and the question "how does one
 Nish package depend on another" turns out to have the same character:

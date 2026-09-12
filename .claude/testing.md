@@ -90,11 +90,72 @@ about one thing, and hand-check the IR before committing it rather than
 accepting whatever `test:update` wrote. A golden that changes for an unrelated
 construct is a regression until proven otherwise.
 
-Structural guards (`runtime.c` size budget, the runtime symbol table agreeing
-across `runtime.ts`, `runtime.c` and `nish.h`, `opt -O2` vectorising
-`cf_sum_loop`) pin properties that have been broken before. When one fails, the
-change is what is wrong, not the test. Do not raise a budget or delete a guard
-to get green.
+Structural guards (`runtime.c`'s `.text*` budget — every `.text*` section of
+`clang -Oz -c runtime/runtime.c` summed, which is neither the source file's size
+nor `size`'s text column — the runtime symbol table agreeing across
+`runtime.ts`, `runtime.c` and `nish.h`, and `opt -O2` vectorising `cf_sum_loop`)
+pin properties that have been broken before. When one fails, the change is what
+is wrong, not the test. Never delete a guard, and never move a number to turn a
+red line green; a budget is raised only deliberately, by a commit that carries
+the fresh measurement and the reason for it (`docs/wp7-runtime.md`
+§"Runtime additions and budget").
+
+## Testing a Nish program in Nish
+
+Everything above is the harness that tests the *compiler*. A program the
+compiler produced can also test itself, with [`std/testing`](../std/README.md):
+
+```typescript
+import { Suite } from "../std/testing";
+
+export const main = (): number => {
+  const t = new Suite("stats");
+  t.eqI32("sumOf", sumOf([3, 9, 4, 9]), 25);
+  return t.done();            // 0 when nothing failed, 1 otherwise
+};
+```
+
+It prints the `PASS` / `FAIL` / `SKIP` lines and the `N passed, M failed, K
+skipped` summary this suite prints, for the reason this suite counts skips: a
+green run that skipped half its checks should not look like one that proved
+everything. Two rules of the language shape how it is used, and both are worth
+knowing before writing a case with it:
+
+- **A function is not a value**, so there is no `test(name, () => ...)`. The
+  suite is driven by straight-line calls.
+- **Every assertion answers a `boolean`**, because a failure cannot throw and be
+  caught: an out-of-range index *panics* and ends the process, so a check that a
+  later read depends on is a branch —
+  `if (!t.eqI32("len", a.length, 3)) { return t.done(); }`.
+
+Use it for a whole program whose behaviour is the point (`tests/link/`), not for
+the golden cases: a `tests/cases/<name>.ts` asserts through its `.ll` and `.out`
+sidecars, and a suite inside one would put the assertion in the program instead
+of in the data. `tests/link/std_testing` and `tests/link/std_testing_fail` are
+the two cases that pin the library itself, one per outcome.
+
+### The golden runner in Nish
+
+[`tests/nish/run.ts`](../tests/nish/run.ts) is this suite's section A written in
+the language: it discovers `tests/cases/` with `readdirSync`, spawns the compiler
+per case, links and runs the ones with a `.out`, diffs the emitted IR against the
+golden line by line, and reports through a `Suite`.
+
+```bash
+npm run test:nish                 # the whole corpus, about four and a half minutes
+build/nish-runner pop             # only cases whose name contains "pop"
+```
+
+`npm test` builds it and runs it over the `pop` cases — one golden, one native
+round trip and three rejections — rather than over the corpus, because it spawns
+a compiler per case and a second full pass would double the suite to prove what
+those five prove. It is also the only place `readdirSync`, `spawnSyncTo` and
+`monotonicNanos` are exercised together on a real workload.
+
+It is not a replacement for this file's subject. It implements the golden cases
+and none of the pipeline checks, and it skips `.env`, `.argv` and `.stdout` by
+name — counted, as everything here is counted. `tests/run.js` is still what
+proves the compiler; the runner proves the language can host a harness.
 
 ## Style & Best Practices
 

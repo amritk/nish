@@ -48,7 +48,9 @@ Requirements: Node.js 22.18+ and, to produce binaries, clang (LLVM 18) + lld;
 per-OS install commands are in [docs/INSTALL.md](docs/INSTALL.md).
 
 ```bash
-npm install -g nish
+# the npm name `nish` belongs to an unrelated package; install the release tarball
+curl -LO https://github.com/amritk/nish/releases/download/v0.1.1/nish-0.1.1.tgz
+npm install -g ./nish-0.1.1.tgz
 ```
 
 > [!TIP]
@@ -117,6 +119,38 @@ yielding `0`, `.length` counts bytes, there is no `throw` and no unwinding,
 [FAQ](docs/FAQ.md); [docs/wp13-differential.md](docs/wp13-differential.md)
 lists everything the differential test suite found that still differs from
 Node.
+
+### The standard library
+
+[`std/`](std/README.md) is Nish written in Nish, for Nish programs to import:
+[`std/testing`](std/testing.ts), a test runner, so a compiled program can check
+itself and answer an exit code with no Node in the picture, and
+[`std/text`](std/text.ts), the string operations a program would otherwise write
+inline — the language has no `split`, `trim` or regular expression, because each
+of those allocates and some need a character table the runtime has no room for.
+
+```ts
+import { Suite } from "../std/testing";
+
+export const main = (): number => {
+  const t = new Suite("stats");
+  t.eqI32("sumOf", sumOf([3, 9, 4, 9]), 25);
+  return t.done();          // prints the report; 0 when nothing failed
+};
+```
+
+A library module is source, not a built artifact, so it compiles with the
+program that imports it and the whole-program pass sees straight through it
+([docs/wp21-packages.md](docs/wp21-packages.md)). There is no bare specifier
+yet — imports are relative, as everywhere else in the language — and no
+callbacks, which is what makes a suite a value with methods rather than a
+`test("name", () => ...)`: a function is never a value here.
+
+The suite's own golden cases are run by [`tests/nish/run.ts`](tests/nish/run.ts),
+which is this repository's test harness written in the language it tests:
+`readdirSync` finds the cases, `spawnSyncTo` captures each compile and each run,
+and the IR is diffed against the golden line by line. `npm run test:nish` runs it
+over the whole corpus.
 
 ---
 
@@ -228,6 +262,9 @@ nish <entry.ts> [more.ts ...] [options]
   --wrapping                 signed integer add/sub/mul wrap two's-complement (default: they
                              carry `nsw`, so signed overflow is undefined, like C)
   --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)
+  --threads                  give every thread its own arena and random seed; the runtime is
+                             built to match by --link (no language surface: nothing in the
+                             language spawns a thread yet)
   --no-warn-performance      do not report the `performance` diagnostics (they are on by default,
                              print on stderr, and never change the exit code)
   -g                         emit DWARF debug info (!dbg locations, variables); kept by --link
@@ -385,7 +422,7 @@ npm run bootstrap                   # build/nish, built by itself
 build/nish hello.ts --link hello  # -o, --link, --profile, its own directories
 ```
 
-`npm install -g nish` still ships the Node compiler: it is the seed every
+The released `.tgz` still ships the Node compiler: it is the seed every
 bootstrap starts from and the oracle every `self/` phase is compared against.
 What it is no longer is the only one that can emit DWARF, write the interop
 sidecars or link an executable — the self-hosted compiler does all three, the

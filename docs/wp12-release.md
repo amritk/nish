@@ -14,14 +14,16 @@ User-facing install instructions are in [INSTALL.md](INSTALL.md).
 | `scripts/` | `build.sh` (the `--link` pipeline), `bootstrap.sh` (the self-hosted compiler), `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
 | `README.md`, `LICENSE`, `docs/INSTALL.md` | documentation |
 
-`package.json` is always included by npm (134 files in total at 0.1.0).
+`package.json` is always included by npm (146 files in total at 0.1.1).
 Sources, tests, examples, benchmarks, `CHANGELOG.md` (it lives on GitHub and
 becomes the release notes), the other docs and CI configuration are not in
 the tarball. Check with `npm pack --dry-run`.
 
 `src/index.ts` resolves `scripts/build.sh` and `runtime/runtime.c` from the
 package root (`PKG_ROOT` in `src/version.ts`, i.e. `dist/..`), never from the
-working directory, so `npm install -g nish` works from anywhere. The
+working directory, so a global install works from any directory — today
+`npm install -g ./nish-<version>.tgz` from the release, because the registry
+name is not ours (see "Open decision: the npm name is taken"). The
 `// ---- WP12: package` block of `tests/run.js` proves it: it runs `npm pack`,
 installs the tarball into a temporary prefix, and links a hello-world from an
 unrelated directory with the installed `nish`.
@@ -178,7 +180,11 @@ step below is done by hand.
    latest release, so renaming the asset breaks the freeze check rather than
    the release.
 
-4. **npm publish is manual** for now. When ready:
+4. **npm publish is manual, and is blocked on the name.** `nish` on the
+   public registry is somebody else's package — see "Open decision: the npm
+   name is taken" below — so there is nothing to publish under that name yet
+   and the recipe here is written against whichever name that decision lands
+   on. Settle the name first; then releasing to the registry is
 
    ```bash
    git checkout v0.2.0
@@ -187,7 +193,15 @@ step below is done by hand.
 
    To automate it, add an `NPM_TOKEN` repository secret and uncomment the
    `Publish to npm` step at the end of `release.yml` (it uses
-   `NODE_AUTH_TOKEN` and `--provenance`).
+   `NODE_AUTH_TOKEN` and `--provenance`). `--access public` stays on that
+   command line whichever name wins, because a scoped package is private by
+   default and a private publish on a free account fails at the registry
+   rather than in the workflow.
+
+   Until the name is settled the release is the distribution, and it already
+   works: `release.yml` attaches `nish-<version>.tgz` to every release, and
+   `npm install -g ./nish-<version>.tgz` installs exactly what `npm publish`
+   would have uploaded ([INSTALL.md](INSTALL.md), §2).
 
 If a release is wrong, delete the GitHub release and the tag, fix, and tag
 again with a *new* patch version; never move a tag that CI has already built.
@@ -225,6 +239,46 @@ language before it enters `self/` — therefore survives stage0's retirement
 unchanged, and only its subject changes, from stage0 to the seed. Add the
 construct to the language, ship the release, then use it in `self/`.
 
+## Open decision: the npm name is taken
+
+`npm install -g nish` does not install this compiler and never has. The name
+`nish` on the public registry belongs to somebody else and has since 2014:
+
+| | |
+| --- | --- |
+| Package | `nish` — "A Node.js Interactive shell." |
+| Maintainer | `stdarg` (Edmond Meinfelder) |
+| Versions | `0.0.0` (2014-02-16) and `0.0.1` (2014-02-20), and nothing since |
+| Deprecated | both versions, by the author, with the message `It was a bad idea` |
+| Last registry change | 2022-06-21 |
+
+Verify it rather than trusting this table, because the registry can change
+under it:
+
+```bash
+curl -s https://registry.npmjs.org/nish | node -p \
+  "const j = JSON.parse(require('fs').readFileSync(0, 'utf8')); \
+   [j.description, j.maintainers.map((m) => m.name).join(), Object.keys(j.versions).join(), j.time.modified].join(' | ')"
+```
+
+**Which name to take instead is not decided here.** The name reaches
+`package.json#name`, `bin.nish`, every install line in `README.md` and
+[INSTALL.md](INSTALL.md), the `Publish to npm` step at the end of
+`release.yml`, and — if the decision changes the *binary's* name rather than
+only the package's — `src/branding.ts` and `self/branding.ts`, the two files
+the whole compiler reads its name from. The options, and what each costs:
+
+| | What it means | What it costs |
+| --- | --- | --- |
+| **(a) a scope**, such as `@amritk/nish` | `package.json#name` becomes the scoped name and `bin.nish` is untouched, so the command a user types is still `nish` | available immediately, uncontestable afterwards, and no rename reaches the compiler. But `npm publish` needs `--access public` on every publish, because a scoped package is private by default and a private publish on a free account fails at the registry rather than in the workflow. The name in the install line and the name on the command line stop being one string, which is one more thing every README has to explain |
+| **(b) a different bare name** | a free name on the registry, and the project renames with it if the binary is to match | one search and it is settled, with no scope to explain and no dispute to wait on. The cost is where the name lives: `src/branding.ts` and `self/branding.ts` spell it for every diagnostic, the runtime's `nish_*` C symbols are ABI and a rename deliberately does not follow them ([ARCHITECTURE.md](ARCHITECTURE.md#where-the-name-lives)), and `NISH_DEBUG`, `NISH_BOOTSTRAP`, the release asset names and the goldens that record the `--version` line all carry it. Renaming the *package* is cheap; renaming the *project* is not |
+| **(c) npm's dispute process** | npm's package-name dispute policy covers this shape exactly — a name held by a package nobody maintains — and it begins by contacting the owner | slow, and its outcome is npm's to decide rather than ours: it is the only option here that can still fail after the waiting. The courteous first move is the same one it starts with anyway, which is to ask the author directly. Worth opening *in parallel* with (a), never instead of it |
+
+(a) is reversible into (b) or (c) and neither of the others is reversible into
+it; that ordering is the only thing this note claims. Nothing has been chosen,
+`package.json#name` is still `nish`, and that is why `npm publish` has not been
+run and why step 4 of the release procedure says so.
+
 ## Open decision: which compiler the package ships
 
 The position this project is run on: **the compiled native binary is what
@@ -250,7 +304,7 @@ Three ways to close it, and what each costs:
 
 | | What ships | What it costs |
 | --- | --- | --- |
-| **(a) ship `self/`** | the 54 modules of the self-hosted compiler, 791,835 bytes of TypeScript, so an installed package can run `scripts/bootstrap.sh` | the user builds the compiler: clang on `PATH`, and `self/` compiled twice for the default stage2 (three times under `--verify`). The unpacked package grows from 1.3 MB to about 2.1 MB, and `self/` becomes a published surface rather than a checkout-only one |
+| **(a) ship `self/`** | the 58 modules of the self-hosted compiler, 944,676 bytes of TypeScript, so an installed package can run `scripts/bootstrap.sh` | the user builds the compiler: clang on `PATH`, and `self/` compiled twice for the default stage2 (three times under `--verify`). The unpacked package grows from 1.5 MB to about 2.4 MB, and `self/` becomes a published surface rather than a checkout-only one |
 | **(b) per-platform prebuilt binaries** | `nish-<os>-<arch>` packages declared as `optionalDependencies` with `os`/`cpu` — the esbuild pattern — with the main package resolving whichever one npm installed | a release build matrix that does not exist. `release.yml` runs one `ubuntu-latest` job and attaches one tarball; every supported triple would need its own runner and its own artefact, macOS needs an answer for both architectures, and each release publishes N+1 packages instead of one. It also needs a fallback for a platform with no binary, and that fallback is (a) |
 | **(c) make stage2 the compiler, stage0 the seed** | `bin.nish` runs the native binary; `dist/` stays, as the seed and the oracle | **all four of the things [wp14-selfhost.md](wp14-selfhost.md) §7a listed as still stage0's have since closed** — `--target host` and `--emit-ast` are answered, `-o <dir>` is stated, and an internal error exits 70 with its own report — so the objection this row recorded no longer stands, and what remains for (c) is [wp19-stage0-retirement.md](wp19-stage0-retirement.md)'s later gates (the seed protocol, oracle succession, distribution) rather than the compiler's own surface. It is also not a delivery mechanism on its own — the binary still arrives by (a) or (b) |
 

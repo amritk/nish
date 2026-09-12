@@ -53,6 +53,7 @@ import { addStringConstant } from "./emit/strings.js";
 import { IRFunction, IRModule } from "./ir.js";
 import {
   ARENA_GLOBAL,
+  ARENA_GLOBAL_TLS,
   ARENA_TYPE,
   ARGV_GLOBAL,
   ARRAY_TYPE,
@@ -336,7 +337,9 @@ export class Emitter implements EmitContext {
     if (wantsAlloc) {
       this.usedRuntime.add("nish_arena_grow");
       this.module.addTypeDecl(ARENA_TYPE);
-      this.module.addGlobal(ARENA_GLOBAL);
+      // WP20 T0: `--threads` gives every thread its own arena, and the only
+      // thing that changes in the IR is this declaration.
+      this.module.addGlobal(this.opts.threads ? ARENA_GLOBAL_TLS : ARENA_GLOBAL);
     }
     // The array header type is referenced by `nish_array_grow`'s declaration (WP4).
     if (all || this.usedRuntime.has("nish_array_grow")) this.module.addTypeDecl(ARRAY_TYPE);

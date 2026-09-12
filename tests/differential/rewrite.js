@@ -231,8 +231,18 @@ const IDENTIFIER_BUILTINS = new Map([
   ["appendFileSync", "appendFileSync"],
   ["mkdirSync", "mkdirSync"],
   ["spawnSync", "spawnSync"],
+  // `spawnSyncTo` redirects a stream to a file and `readdirSync` sorts its
+  // listing by UTF-8 bytes; neither is Node's own behaviour, so both are the
+  // shim's (`runtime/shim.mjs` says why the sort cannot be `Array#sort`'s).
+  ["spawnSyncTo", "spawnSyncTo"],
   ["isDirectorySync", "isDirectorySync"],
+  ["readdirSync", "readdirSync"],
   ["getenv", "getenv"],
+  // `monotonicNanos()` is an `i64`, so the shim answers the BigInt this side
+  // holds one in. It is also the one builtin here whose value is not a function
+  // of the program: two readings can be compared, and a printed reading cannot
+  // agree with a native run.
+  ["monotonicNanos", "monotonicNanos"],
   // WP16: natively these bump a struct out of the arena; in JavaScript they
   // build the object with the same three field names (`runtime/shim.mjs`).
   ["Ok", "Ok"],
@@ -380,28 +390,18 @@ function makeTransformer(unit, stems) {
       }
 
       // ---- top-level `const` -> its folded value (WP14) ----
+      // A declaration the checker folded becomes its literal. One it did not is
+      // visited like any other node, and that is not a detail: since WP22 a
+      // *function* is an arrow bound to a top-level `const`, so returning such a
+      // declaration unvisited swallowed every arrow-declared function body — the
+      // builtins inside it were left as bare `mkdirSync(...)` and `console.log`,
+      // which either threw `ReferenceError` under Node or, worse, silently ran
+      // JavaScript's own version of a call the shim exists to emulate. Every
+      // arrow-written program in the corpus was being compared that way.
       if (ts.isVariableStatement(node) && ts.isSourceFile(node.parent)) {
         const declarations = node.declarationList.declarations.map((decl) => {
           const info = program.constants.get(decl.name.text);
-          if (!info || info.value === undefined) {
-            // Not a module constant, so it is a function: `export const main =
-            // (): number => { ... }` is how the language spells one now (WP22),
-            // and its body needs every rewrite a `function` body gets. Returning
-            // the declaration untouched here left the whole body as plain
-            // TypeScript — no `| 0` wrapping, no shim call — so an arrow-form
-            // program was compared against itself rather than against Nish
-            // semantics. Only the initialiser is visited: the name and the type
-            // annotation are not expressions and have nothing to rewrite.
-            return decl.initializer === undefined
-              ? decl
-              : f.updateVariableDeclaration(
-                  decl,
-                  decl.name,
-                  undefined,
-                  decl.type,
-                  ts.visitNode(decl.initializer, visit)
-                );
-          }
+          if (!info || info.value === undefined) return ts.visitEachChild(decl, visit, context);
           return f.updateVariableDeclaration(
             decl,
             decl.name,

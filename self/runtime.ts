@@ -12,6 +12,11 @@
 // so after inlining an allocation is a load, an add, a compare and a store.
 // Only the overflow path calls `@nish_arena_grow` in runtime.c.
 //
+// That is also why threads are a codegen question rather than a runtime one
+// (wp20-threads.md §3.1): two threads bumping one arena race in the emitted IR,
+// not in `runtime.c`. `--threads` answers it by declaring `@nish_arena`
+// thread-local (`ARENA_GLOBAL_TLS`); the allocator body does not change.
+//
 // `src/` keeps the table as an array of object literals and a `Map` beside it.
 // Here it is a class built once per compilation: the same array, with a
 // `StringMap` from symbol to index so the attribute fixpoint can ask about a
@@ -25,6 +30,21 @@ export const ARENA_TYPE: string = "%struct.nish_arena = type { i8*, i64, i64, i8
 export const ARRAY_TYPE: string = "%struct.nish_array = type { i64, i64, i8* }";
 
 export const ARENA_GLOBAL: string = "@nish_arena = external global %struct.nish_arena, align 8";
+/**
+ * The same global under `--threads` (WP20 T0): one arena per thread rather than
+ * one per process. Only the storage class moves — `inlineAllocator` GEPs
+ * whichever declaration the prelude wrote, and LLVM turns each field access
+ * into a thread-pointer-relative one — so a thread-local module differs from an
+ * ordinary one by exactly this line.
+ *
+ * `initialexec` rather than the default general-dynamic model is what keeps the
+ * fast path fast: general dynamic lowers an access to a `__tls_get_addr` call
+ * in any `-fPIC` build, which would be a call inside the inlined bump
+ * allocator, where initial-exec is one load of the offset and then
+ * thread-pointer-relative addressing.
+ */
+export const ARENA_GLOBAL_TLS: string =
+  "@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8";
 /**
  * `process.argv` (WP7): the `string[]` the entry wrapper builds once with
  * `nish_argv_init(argc, argv)`; every module that reads it loads this global.
@@ -322,6 +342,39 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     );
+    // `nish_spawn` with one or both of the child's streams pointed at a file,
+    // and therefore the same conservative answers: the child still runs
+    // arbitrary code, the vector is still captured, and `waitpid` still waits.
+    // The two paths are read and never retained (`STR_NOCAP`); an empty one
+    // means "inherit that stream", which is a value and not a null, so both
+    // stay `nonnull`.
+    this.add(
+      new RuntimeFunction(
+        "nish_spawn_to",
+        `declare noundef i32 @nish_spawn_to(%struct.nish_array* noundef nonnull align 8, ${STR_NOCAP}, ${STR_NOCAP})`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    );
+    // A fresh `string[]` per call, so `noalias`, and null when the directory
+    // cannot be read, so no `nonnull`. `EFFECT_WRITE` because it allocates (the
+    // arena moves) and because the directory is not memory LLVM tracks: two
+    // listings either side of a `mkdirSync` must not fold into one.
+    // `willreturn` is a fact rather than a hope: the loop runs once per entry
+    // and a directory has finitely many. The path is read and never retained.
+    this.add(
+      plain(
+        "nish_readdir",
+        `declare noalias align 8 %struct.nish_array* @nish_readdir(${STR_NOCAP})`,
+        EFFECT_WRITE
+      )
+    );
+    // The clock is not memory either, and that is the whole reason this is not
+    // `readnone`: two reads with work between them are two different answers,
+    // and a `readnone` pair would fold into one and measure zero. `willreturn`
+    // holds — one `clock_gettime` and some arithmetic — and there is nothing to
+    // capture, so the only argument-free entry here needs no parameter facts.
+    this.add(plain("nish_monotonic_nanos", "declare i64 @nish_monotonic_nanos()", EFFECT_WRITE));
     // WP19 R1: the environment, so a self-hosted driver can honour `CC` before
     // it spawns `scripts/build.sh` the way stage0's preflight does.
     // `EFFECT_WRITE` and no `readnone`, for two reasons that each suffice: the

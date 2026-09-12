@@ -63,9 +63,11 @@ src/                the stage0 compiler
                     debug.ts, emitter.ts, emit/<family>.ts
   interop/          C header, wasm .d.ts, N-API shim
 self/               the stage1 compiler, in Nish — see .claude/selfhost.md
+std/                the standard library, in Nish — testing.ts, text.ts, std/README.md
 runtime/            runtime.c, nish.h, runtime_wasm.c, shim.mjs
 tests/              run.js + cases/ (goldens), link/, ir/, layout/,
-                    differential/, self/ (the stage1 oracles)
+                    differential/, self/ (the stage1 oracles),
+                    nish/run.ts (the golden runner, in Nish: npm run test:nish)
 docs/               LANGUAGE, ARCHITECTURE, IR_COOKBOOK, MASTER_PLAN, wp*.md
 ```
 
