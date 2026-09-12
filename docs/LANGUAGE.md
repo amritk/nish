@@ -2041,12 +2041,20 @@ by the caller.
   on the command line, with `.` for the directory, so the metadata depends only
   on the command line and not on where the build ran — a `DISubprogram` per
   function, a `DILocation` on every instruction (each statement's and
-  expression's start; the function's own line for the prologue),
+  expression's start; the function's own position for the prologue),
   `llvm.dbg.value` for parameters and
   `llvm.dbg.declare` for `let`/`const` slots. `number` is `int`, `i64`
   `long`, `f64` `double`, `boolean` `bool`, `string` `char*`, a class or
   interface a pointer to a `DICompositeType` with the checker's layout, `T[]`
-  a pointer to `{ long len; long cap; T* data; }`. Without `-g` the IR is
+  a pointer to `{ long len; long cap; T* data; }`. A function's own position —
+  its `DISubprogram`'s `line` and `scopeLine`, its parameters'
+  `DILocalVariable`s and the `DILocation` the prologue carries — is where its
+  **declaration** starts, which is the `export` or the `const` and never the
+  arrow's parameter list, so the two spellings of one function describe it
+  identically (`tests/cases/dbg_arrow`). A `DILocation` column is a 1-based
+  **byte** offset into its line, as `clang -g` writes it, so a position after a
+  multi-byte character is counted in bytes and not in UTF-16 code units
+  (`tests/cases/dbg_utf8`). Without `-g` the IR is
   byte-identical. `--link -g` passes `-g` to `scripts/build.sh`, which
   compiles `runtime.c` with `-g` and skips the strip step of every profile
   (`tests/cases/dbg_locals`; the `-g` block of `tests/run.js` checks the

@@ -270,6 +270,14 @@ export class DebugInfo {
    * function's own line as the default location (so the prologue and any
    * instruction the emitter does not tie to a node still has one), and
    * describe the parameters with `llvm.dbg.value`.
+   *
+   * The position comes from `sig.declSite`, the node the *declaration* begins
+   * at, and never from `sig.decl`: an arrow's own start is its parameter list,
+   * which would put `export const add = (a: i32): i32 => ...` several columns
+   * into the line and, when the arrow sits on a later line than the `const`,
+   * on the wrong line entirely. A debugger asked where `add` is should answer
+   * where a reader would say it is declared, and the answer may not depend on
+   * which of the two spellings (WP22) was used.
    */
   beginFunction(
     fn: IRFunction,
@@ -277,7 +285,7 @@ export class DebugInfo {
     privateAbi: boolean,
     options: { artificial?: boolean; name?: string } = {}
   ): void {
-    const line = this.lineOf(sig.decl);
+    const line = this.lineOf(sig.declSite);
     // The artificial entry wrapper is `int main(int, char**)`; its parameters are not described.
     const types = options.artificial
       ? [this.typeRef({ kind: "i32" })]
@@ -290,7 +298,7 @@ export class DebugInfo {
       `distinct !DISubprogram(name: ${quote(name)}, linkageName: ${quote(fn.name)}, scope: ${this.file}, file: ${this.file}, line: ${line}, type: ${signature}, scopeLine: ${line}, flags: ${flags}, spFlags: ${spFlags}, unit: ${this.cu})`
     );
     fn.subprogram = this.subprogram;
-    fn.setLocation(this.locationOf(sig.decl));
+    fn.setLocation(this.locationOf(sig.declSite));
     if (options.artificial) return;
 
     this.module.addDeclaration("declare void @llvm.dbg.value(metadata, metadata, metadata)");
@@ -306,8 +314,10 @@ export class DebugInfo {
 
   /** `!N` of the `DILocation` for the start of `node` in the current function; identical positions share one. */
   locationOf(node: ts.Node): string {
-    const { line, character } = this.sourceFile.getLineAndCharacterOfPosition(node.getStart(this.sourceFile));
-    return this.module.addMetadata(`!DILocation(line: ${line + 1}, column: ${character + 1}, scope: ${this.subprogram})`);
+    const start = node.getStart(this.sourceFile);
+    const { line, character } = this.sourceFile.getLineAndCharacterOfPosition(start);
+    const column = byteColumn(this.sourceFile.text, start - character, start);
+    return this.module.addMetadata(`!DILocation(line: ${line + 1}, column: ${column}, scope: ${this.subprogram})`);
   }
 
   /** `llvm.dbg.declare` for a `let`/`const` slot, at the current location. */
@@ -319,6 +329,30 @@ export class DebugInfo {
     fn.emit(`call void @llvm.dbg.declare(metadata ${llvmType(local.type)}* ${slot}, metadata ${variable}, metadata !DIExpression())`);
   }
 }
+
+/**
+ * The 1-based column a `DILocation` carries: the number of **UTF-8 bytes** of
+ * `text` between `lineStart` and `pos`, plus one.
+ *
+ * It is bytes rather than the UTF-16 code units the `typescript` API counts
+ * because that is what clang writes and what a debugger reads the column back
+ * against — `clang -g` puts `return` at column 13 on a line whose comment holds
+ * a three-byte em dash, where a code-unit count says 11. It is also what
+ * `self/debug.ts` has always emitted, since every offset in `self/` is a byte
+ * offset, so counting code units here made the two compilers disagree about
+ * every position that follows a non-ASCII character on its own line
+ * (`tests/cases/dbg_utf8`; `docs/wp19-stage0-retirement.md` §A5). Stage0's
+ * *diagnostic* columns are unchanged and stay code units: an editor is the
+ * consumer there, a debugger is the consumer here.
+ */
+const byteColumn = (text: string, lineStart: number, pos: number): number => {
+  let bytes = 0;
+  for (const ch of text.slice(lineStart, pos)) {
+    const code = ch.codePointAt(0) ?? 0;
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+  }
+  return bytes + 1;
+};
 
 /** Storage size of a field, for `DW_TAG_member`; pointers are 64-bit on every supported target. */
 function bitsOf(t: StaticType): number {
