@@ -1,4 +1,8 @@
 node_modules/
+# ...except the ones that are test data. WP21 S1 derives a module's package
+# from the `node_modules/<name>` directory it sits in, so the fixture for two
+# packages compiling together has to be laid out the way npm lays one out.
+!tests/link/*/node_modules/
 dist/
 build/
 web/*.wasm

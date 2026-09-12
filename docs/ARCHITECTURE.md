@@ -180,6 +180,7 @@ host is a contract that a test enforces:
 | String `{ i64 len, i8 data[len], i8 0 }`, 8-aligned, immutable | `codegen/emit/strings.ts`, `runtime.c` (`nish_str`), `nish.h` | `tests/runtime_test.c` (concat, eq, formatting), every `str_*` golden and native round trip |
 | Array header `%struct.nish_array = { i64 len, i64 cap, i8* data }` | `codegen/runtime.ts` (`ARRAY_TYPE`), `runtime.c`, `runtime_wasm.c`, `nish.h`, `interop/wasm.ts` (offsets 0 / 16 on wasm32) | `tests/runtime_test.c` (`nish_array_grow`, `nish_alloc_array`), `arr_*` native round trips, `arr_bounds_panic` (exit 1 and message), the WP4/WP8 block of `tests/run.js` (a C driver's stack-built header, the wasm loader and the N-API addon agreeing on `examples/arrays.ts`) |
 | Class/interface layout = clang's layout of the same C struct | `checker/classes.ts` (offsets, size, align) | **layout test** (`tests/layout/structs.ts` + `structs.c`): the runner reads each `nish_alloc_struct(i64 N)` from the IR and compares it with `_Static_assert(sizeof(struct X) == N)`; the C program is built with `-Wall -Wextra -Werror`, fills every struct through the C definition, and reads each field back through compiled getters |
+| Element storage of an array: `sizeof(T)` per slot, and for a *record* element type (an `interface` nobody implements, WP15 §2a) the records themselves end to end, at clang's array stride | `checker/program.ts` (`inlineElementStruct`, `elementStride`), `codegen/emit/arrays.ts`, `runtime.c` (`nish_array_grow`, `nish_alloc_array` take `elem_size`), `nish.h`, `interop/header.ts` (the element note per prototype) | the same **layout test**: `buildPs` hands C a grown `P[]`, which `structs.c` walks as a `struct P *`, checking the stride and every field of every element, plus `tests/cases/arr_struct_*` for the IR and the native round trip |
 | Every runtime function has a prototype in the public header | `codegen/runtime.ts`, `runtime/nish.h` | **header test** (`tests/run.js`, WP8 section): every name in `RUNTIME_FUNCTIONS` (minus intrinsics) plus `nish_arena` must appear in `nish.h`, which must compile as C11 `-pedantic` and as C++17 under `-Wall -Wextra -Werror` |
 | Generated C header matches the IR's signatures | `interop/header.ts` | `add.h` content check; a C driver compiled against it with `-Werror` and run |
 | Generated `.d.ts` is valid TypeScript | `interop/dts.ts` | `tsc` over the generated file |
@@ -219,6 +220,7 @@ of `RUNTIME_FUNCTIONS`:
 | `nish_getenv(name)` | `getenv` (WP19 R1): the value of one environment variable, copied into the arena, or NULL when it is unset — the `string \| null` a driver reads `CC` with before it spawns `scripts/build.sh`. The copy is what makes the answer an ordinary arena string: libc hands back a pointer into `environ`, which a later `setenv` may move. `noalias` on the declaration for that reason and `readnone` on none of it: it allocates, and the environment is not memory LLVM tracks. |
 | `nish_array_grow(hdr, elemSize)` | `push` when `len == cap`: doubles `cap` (4 from 0) and moves the elements to fresh arena storage. |
 | `nish_panic_index(idx, len)` | Failed bounds check: `index out of range: <idx> >= <len>` on stderr, `_exit(1)`. |
+| `nish_panic_slice(start, end, len)` | Failed `slice` range check (`cold noreturn`): `slice out of range: [<start>, <end>) of length <len>` on stderr, `_exit(1)`. Its own symbol because a reversed pair is as common a mistake as an end past the string, and `index out of range` describes neither (WP15 §4). |
 | `nish_panic_div(by_zero)` | Failed integer-division check (`cold noreturn`): `attempt to divide by zero` or `attempt to divide with overflow` on stderr, `_exit(1)`. |
 
 `Math.sqrt`, `Math.floor`, `Math.abs`, `Math.min`, ... are not runtime calls
@@ -397,10 +399,15 @@ is still a pointer: [wp16-results.md](wp16-results.md).
   `export` gets `internal` linkage (`emitter.ts`) and is left out of the
   `--emit-header` / `--emit-dts` / `--emit-napi` surface (`interop/abi.ts`,
   `externalFunctions`); `--no-strict-exports` puts both back. What it does
-  *not* change is `rejectSymbolClashes` (`compilation.ts`): a function name is
-  unique across the program in either mode, because `analyzeFunctions` keys the
-  fact fixpoint by symbol name and two functions sharing one would be emitted
-  with each other's attributes.
+  *not* change is `rejectSymbolClashes` (`compilation.ts`): a function *symbol*
+  is unique across the program in either mode, because `analyzeFunctions` keys
+  the fact fixpoint by that symbol and two functions sharing one would be
+  emitted with each other's attributes. Since WP21 S1 a symbol carries its
+  module's package prefix (`packages.ts`), so the *name* has to be unique only
+  within the package that declares it — which is what lets two dependencies
+  each keep a private `helper()`. The root package's prefix is empty, so for a
+  single-package program the symbol, the rule and the message are all exactly
+  what they were.
 - **`--target`** (WP9): `targetHeader` writes `target datalayout` and
   `target triple` after `source_filename`, from the table in
   `codegen/target.ts` (strings copied from `clang --target=<triple> -S

@@ -298,7 +298,7 @@ export class Emitter {
       this.fn.linkage = "internal";
     }
     if (optimize) {
-      this.fn.returnAttrs = returnAttributes(this.table, sig.returnType, facts.returnDeref, privateAbi);
+      this.fn.returnAttrs = returnAttributes(this.table, sig.returnType, facts.returnDeref, privateAbi, facts.returnAlign);
       this.fn.attrGroup = this.module.attrGroupFor(functionAttributes(facts));
     }
     this.slotLocals = [];
@@ -507,7 +507,7 @@ export class Emitter {
     }
     const ret: string[] = [];
     if (optimize) {
-      for (const attr of returnAttributes(this.table, sig.returnType, facts.returnDeref, false)) {
+      for (const attr of returnAttributes(this.table, sig.returnType, facts.returnDeref, false, facts.returnAlign)) {
         ret.push(attr);
       }
     }
@@ -816,6 +816,11 @@ export class Emitter {
 
   emitMember(expr: Node): string {
     if (!receiverIsValue(this.program, expr.children[0])) {
+      // WP23: `Kind.If` was folded by the checker, so it lowers to its integer
+      // with no global and no load — the arrangement a module constant has.
+      if (this.program.isEnumMember(this.table, expr)) {
+        return `${this.program.nodeEnumValues[expr.id]}`;
+      }
       return emitNamespaceProperty(this, expr, dottedName(expr));
     }
     if (this.table.isResult(this.typeOf(expr.children[0]))) {

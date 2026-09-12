@@ -18,8 +18,10 @@
  *   - `s.length` is the UTF-8 byte length, and so is every index the string
  *     methods take or return: `charCodeAt` yields a byte (and bounds-checks
  *     instead of returning `NaN`), `substring` cuts on byte offsets, and
- *     `indexOf` answers with one. `String.fromCharCode` builds a one-byte
- *     string from the low 8 bits.
+ *     `indexOf` answers with one. `slice` cuts on byte offsets too and panics
+ *     on a range the string does not contain, where JavaScript would clamp and
+ *     read a negative offset from the end. `String.fromCharCode` builds a
+ *     one-byte string from the low 8 bits.
  *   - `a[i]` is bounds-checked: out of range prints
  *     `index out of range: <i> >= <len>` to stderr and exits 1, and so is
  *     `a.pop()` on an empty array, which has no `undefined` to return.
@@ -227,6 +229,20 @@ export function substring(s, a, b) {
   return bytes.subarray(Math.min(from, to), Math.max(from, to)).toString("utf8");
 }
 
+/**
+ * `s.slice(a, b)`: the bytes of `[a, b)` with no clamp, `b` defaulting to the
+ * byte length (WP15 §4). Out of range panics rather than clamping, so the two
+ * compares the native code emits are reproduced here rather than JavaScript's
+ * negative-from-the-end rule.
+ */
+export function slice(s, a, b) {
+  const bytes = bytesOf(s);
+  const from = toIndex(a);
+  const to = b === undefined ? bytes.length : toIndex(b);
+  if (!(from >= 0 && from <= to && to <= bytes.length)) panicSlice(from, to, bytes.length);
+  return bytes.subarray(from, to).toString("utf8");
+}
+
 /** `s.indexOf(sub)`: the first *byte* offset, or -1. */
 export function indexOf(s, sub) {
   return bytesOf(s).indexOf(bytesOf(sub));
@@ -345,6 +361,12 @@ function toIndex(i) {
 
 function panicIndex(i, len) {
   fs.writeSync(2, `index out of range: ${i} >= ${len}\n`);
+  process.exit(1);
+}
+
+/** `nish_panic_slice`: the failed range check of `s.slice(start, end)`; the offsets print signed. */
+function panicSlice(start, end, len) {
+  fs.writeSync(2, `slice out of range: [${start}, ${end}) of length ${len}\n`);
   process.exit(1);
 }
 

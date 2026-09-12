@@ -160,7 +160,11 @@ export function dumpChecked(compilation: Compilation): string {
   const lines: string[] = [];
   for (const unit of compilation.modules) {
     const program = unit.checker.program;
-    lines.push(`module ${displayName(unit.fileName)}${unit.isEntry ? " (entry)" : ""}`);
+    // The package is printed only when there is one to print (WP21 S1): the
+    // root package has no name, and a single-package program's dump is
+    // therefore the same text it has always been.
+    const pkg = program.packageName === "" ? "" : ` [package ${program.packageName}]`;
+    lines.push(`module ${displayName(unit.fileName)}${unit.isEntry ? " (entry)" : ""}${pkg}`);
     for (const imp of program.imports) {
       const what = imp.struct
         ? `struct ${imp.struct.name}`

@@ -27,6 +27,7 @@ import {
   thisLocal,
 } from "./classes.js";
 import { AliasInfo, aliasType, collectAlias } from "./aliases.js";
+import { EnumInfo, collectEnum } from "./enums.js";
 import { ConstInfo, constValue } from "./constants.js";
 import {
   arrowFunctionOf,
@@ -56,7 +57,9 @@ import {
   swapTables,
 } from "./generics.js";
 import { expressionCheckers } from "./expressions.js";
+import { ROOT_PACKAGE, packageSymbolPrefix } from "../packages.js";
 import { CheckedProgram, FunctionSig, ImportBinding, LocalVar, Param, StructInfo } from "./program.js";
+import { checkElementReferences } from "./arrays.js";
 import { checkPerformance } from "./performance.js";
 import { checkResultLocalsHandled } from "./result.js";
 import { Scope } from "./scope.js";
@@ -70,6 +73,12 @@ export type { CheckContext, StatementChecker, ExpressionChecker, BinaryChecker, 
 export interface CheckerModuleOptions {
   /** The entry module may (and with `--link` must) declare `export function main`. */
   isEntry: boolean;
+  /**
+   * The package this module belongs to (WP21 S1). The Compilation derives it
+   * from the module's name; a module checked on its own is in the root
+   * package, whose prefix is empty, so nothing it emits moves.
+   */
+  packageName?: string;
   /**
    * Where errors are collected (WP10). Shared by every module of a
    * Compilation, which decides between phases whether to go on. Without one
@@ -146,6 +155,8 @@ export class Checker implements CheckContext {
     this.sink = module.sink ?? new DiagnosticSink();
     this.program = {
       sourceFile,
+      packageName: module.packageName ?? ROOT_PACKAGE,
+      symbolPrefix: packageSymbolPrefix(module.packageName ?? ROOT_PACKAGE),
       functions: [],
       imports: [],
       exports: new Map(),
@@ -161,6 +172,8 @@ export class Checker implements CheckContext {
       coercions: new WeakMap(),
       caseValues: new WeakMap(),
       aliases: new Map(),
+      enums: new Map(),
+      enumRefs: new WeakMap(),
       templates: new Map(),
       instantiations: new Map(),
     };
@@ -176,6 +189,9 @@ export class Checker implements CheckContext {
       // learns that a name was involved (WP23).
       const alias = this.program.aliases.get(name);
       if (alias) return aliasType(alias, this.opts);
+      // An enum is a type of its own, and the only way to name it (WP23).
+      const declaredEnum = this.program.enums.get(name);
+      if (declaredEnum) return declaredEnum.type;
       if (this.program.imports.some((imp) => imp.localName === name)) {
         this.importsUsedAsTypes.add(name);
         return { kind: "struct", name };
@@ -229,11 +245,18 @@ export class Checker implements CheckContext {
           const info = collectAlias(stmt, this.sf);
           this.declareAlias(info);
           aliases.push(info);
+        } else if (ts.isEnumDeclaration(stmt)) {
+          // An enum is complete the moment it is read — its members are
+          // literals, not a right-hand side that can name something later —
+          // so unlike an alias there is no second pass for it (WP23).
+          this.declareEnum(collectEnum(stmt, this.sf));
         }
       });
     }
     for (const stmt of this.sf.statements) {
-      if (ts.isImportDeclaration(stmt) || ts.isTypeAliasDeclaration(stmt)) continue;
+      if (ts.isImportDeclaration(stmt) || ts.isTypeAliasDeclaration(stmt) || ts.isEnumDeclaration(stmt)) {
+        continue;
+      }
       if (isStructDeclaration(stmt)) {
         const info = stmt.name && this.program.structs.get(stmt.name.text);
         if (info && info.decl === stmt && !this.sink.recover(() => collectStructMembers(this, info))) {
@@ -257,6 +280,27 @@ export class Checker implements CheckContext {
     // right-hand side and a cycle are reported where they are written rather
     // than at the first use — or never.
     for (const info of aliases) this.sink.recover(() => aliasType(info, this.opts));
+    this.qualifySymbols();
+  }
+
+  /**
+   * WP21 S1: put every symbol this module declares inside its package.
+   *
+   * One place, and after every signature exists, so that a free function, a
+   * method (`Owner.method`) and a constructor are scoped by the same line of
+   * code and nothing can be added later that forgets to be. The root package's
+   * prefix is empty, which is why a single-package program — every program
+   * that could be compiled before this existed — emits exactly the symbols it
+   * always did.
+   *
+   * `main` needs no exception: only the entry module may declare it, and the
+   * entry module is the root package by construction (`Compilation` derives
+   * every other module's package by comparing it with the entry's own).
+   */
+  private qualifySymbols(): void {
+    const prefix = this.program.symbolPrefix;
+    if (prefix === "") return;
+    for (const sig of this.program.functions) sig.name = prefix + sig.name;
   }
 
   /**
@@ -265,15 +309,34 @@ export class Checker implements CheckContext {
    * every clash reads the same way whichever came first.
    */
   private declareAlias(info: AliasInfo): void {
-    if (
-      this.program.aliases.has(info.name) ||
-      this.program.structs.has(info.name) ||
-      this.sigs.has(info.name) ||
-      this.program.constants.has(info.name)
-    ) {
+    if (this.nameTaken(info.name)) {
       this.error(`\`${info.name}\` is already declared in this module`, info.decl.name);
     }
     this.program.aliases.set(info.name, info);
+  }
+
+  /**
+   * Register an enum under its name (WP23). An enum declares a type and shares
+   * the one declaration namespace every other top-level name is in, so the
+   * clash reads the same way whichever declaration came first.
+   */
+  private declareEnum(info: EnumInfo): void {
+    if (this.nameTaken(info.name)) {
+      this.error(`\`${info.name}\` is already declared in this module`, info.decl.name);
+    }
+    this.program.enums.set(info.name, info);
+  }
+
+  /** Whether a top-level declaration has already claimed `name` in this module. */
+  private nameTaken(name: string): boolean {
+    return (
+      this.program.aliases.has(name) ||
+      this.program.enums.has(name) ||
+      this.program.structs.has(name) ||
+      this.sigs.has(name) ||
+      this.templates.has(name) ||
+      this.program.constants.has(name)
+    );
   }
 
   /**
@@ -284,12 +347,7 @@ export class Checker implements CheckContext {
   private collectConstants(stmt: ts.VariableStatement): void {
     for (const decl of stmt.declarationList.declarations) {
       const info = collectConstant(stmt, decl, this.sf, this.opts, this.program.constants);
-      if (
-        this.program.constants.has(info.name) ||
-        this.sigs.has(info.name) ||
-        this.program.structs.has(info.name) ||
-        this.program.aliases.has(info.name)
-      ) {
+      if (this.nameTaken(info.name)) {
         this.error(`\`${info.name}\` is already declared in this module`, decl.name);
       }
       this.program.constants.set(info.name, info);
@@ -338,7 +396,7 @@ export class Checker implements CheckContext {
     if (this.program.structs.has(sig.sourceName)) {
       this.error(`\`${sig.sourceName}\` is already declared as a class or interface`, sig.nameNode);
     }
-    if (this.program.aliases.has(sig.sourceName)) {
+    if (this.program.aliases.has(sig.sourceName) || this.program.enums.has(sig.sourceName)) {
       this.error(`\`${sig.sourceName}\` is already declared in this module`, sig.nameNode);
     }
     if (sig.exported && sig.sourceName === "main") {
@@ -364,7 +422,7 @@ export class Checker implements CheckContext {
     if (this.program.structs.has(name)) {
       this.error(`\`${name}\` is already declared as a class or interface`, template.nameNode);
     }
-    if (this.program.aliases.has(name) || this.program.constants.has(name)) {
+    if (this.program.aliases.has(name) || this.program.constants.has(name) || this.program.enums.has(name)) {
       this.error(`\`${name}\` is already declared in this module`, template.nameNode);
     }
     if (template.exported && name === "main") {
@@ -399,7 +457,12 @@ export class Checker implements CheckContext {
    * makes the order the discovery order in both compilers.
    */
   instantiate(template: TemplateInfo, args: StaticType[], at: ts.Node): FunctionSig {
-    const symbol = instanceSymbol(template.sourceName, args);
+    // WP21 S1: inside the package that declares the template. `qualifySymbols`
+    // runs at the end of pass 1 and instantiations are appended during pass 2,
+    // so an instantiation never passes through it -- the prefix has to be part
+    // of the symbol from the moment it is minted, or a generic would be the one
+    // declaration in the language whose symbol escaped its package.
+    const symbol = instanceSymbol(this.program.symbolPrefix + template.sourceName, args);
     const existing = this.program.instantiations.get(symbol);
     if (existing) return existing.sig;
 
@@ -743,6 +806,10 @@ export class Checker implements CheckContext {
       // that does not compile is noise, and a poisoned body has incomplete
       // side tables anyway.
       checkPerformance(this, sig);
+      // WP15 §2a: an element reference into contiguous record storage may not
+      // be held across a `push`. Same placement and same reason as the line
+      // above — the walk reads types and bindings pass 2 has just written.
+      checkElementReferences(this, sig);
     }
     // A body with a rejected statement may have lost its `return`: no definite-return cascade.
     if (sig.returnType.kind !== "void" && !terminates && !sig.poisoned) {

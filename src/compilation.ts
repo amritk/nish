@@ -28,6 +28,7 @@ import { CheckedProgram, Checker, FunctionSig, ImportBinding, StructInfo } from 
 import { FunctionFacts, analyzeFunctions } from "./codegen/attributes.js";
 import { emitProgram } from "./codegen/emitter.js";
 import { CompileError, DiagnosticSink } from "./diagnostics.js";
+import { ROOT_PACKAGE, packageDirOf, packageNameOf } from "./packages.js";
 import { parseSource } from "./parser.js";
 import { validateSyntax } from "./validator.js";
 import { CompilerOptions, DEFAULT_OPTIONS } from "./types.js";
@@ -37,6 +38,14 @@ export interface ModuleUnit {
   path: string;
   /** Name in diagnostics and the IR header: as given for roots, cwd-relative for imports. */
   fileName: string;
+  /**
+   * The package this module belongs to (WP21 S1, `src/packages.ts`); `""` for
+   * the root package, which is where every module of a single-package program
+   * lives. Derived from `fileName` rather than from `path`, because that is
+   * the name stage1 keys on too and the emitted IR must not depend on the
+   * directory the compiler ran in (WP19 §A3).
+   */
+  packageName: string;
   sourceFile: ts.SourceFile;
   /** The first root; the only module allowed to declare `export function main`. */
   isEntry: boolean;
@@ -78,6 +87,13 @@ export class Compilation {
   readonly sink = new DiagnosticSink();
   private checked = false;
   private facts?: Map<string, FunctionFacts>;
+  /**
+   * The package directory the entry lives in, and so the one that *is* the
+   * root package (WP21 S1). Set by the first `addRoot`; a module sharing it is
+   * the program's own code and carries no prefix, and a module under some
+   * other `node_modules/<name>` is a dependency and carries that package's.
+   */
+  private rootPackageDir = "";
 
   constructor(options: Partial<CompilerOptions> = {}) {
     this.opts = { ...DEFAULT_OPTIONS, ...options };
@@ -90,7 +106,24 @@ export class Compilation {
 
   /** Add a root file (the first one is the entry). `sourceText` defaults to the file's contents. */
   addRoot(fileName: string, sourceText?: string): ModuleUnit {
-    return this.load(path.resolve(fileName), fileName, sourceText, this.modules.length === 0);
+    const isEntry = this.modules.length === 0;
+    if (isEntry) this.rootPackageDir = packageDirOf(fileName);
+    return this.load(path.resolve(fileName), fileName, sourceText, isEntry);
+  }
+
+  /**
+   * Which package a module is in (WP21 S1). Everything that shares the entry's
+   * package directory is the root package — for an ordinary program that is
+   * "no package directory at all", so every module of it is — and everything
+   * under some other `node_modules/<name>` is that package.
+   *
+   * Comparing directories rather than names is what stops a compiler invoked
+   * on a file that is itself inside `node_modules/<pkg>` from treating its own
+   * entry as one of its dependencies.
+   */
+  private packageOf(fileName: string): string {
+    const dir = packageDirOf(fileName);
+    return dir === this.rootPackageDir ? ROOT_PACKAGE : packageNameOf(fileName);
   }
 
   private load(
@@ -104,8 +137,17 @@ export class Compilation {
 
     const text = sourceText ?? fs.readFileSync(absPath, "utf8");
     const sourceFile = parseModule(fileName, text, this.sink);
-    const checker = new Checker(sourceFile, this.opts, { isEntry, sink: this.sink });
-    const unit: ModuleUnit = { path: absPath, fileName, sourceFile, isEntry, checker, resolved: new Map() };
+    const packageName = this.packageOf(fileName);
+    const checker = new Checker(sourceFile, this.opts, { isEntry, packageName, sink: this.sink });
+    const unit: ModuleUnit = {
+      path: absPath,
+      fileName,
+      packageName,
+      sourceFile,
+      isEntry,
+      checker,
+      resolved: new Map(),
+    };
     this.byPath.set(absPath, unit);
     this.modules.push(unit);
 
@@ -178,27 +220,57 @@ export class Compilation {
    */
   private declaredStructs(): Map<string, StructInfo> {
     const declared = new Map<string, StructInfo>();
+    const owner = new Map<string, ModuleUnit>();
     for (const unit of this.modules) {
       for (const info of unit.checker.program.structs.values()) {
         if (info.decl.getSourceFile() !== unit.sourceFile) continue;
-        if (!declared.has(info.name)) declared.set(info.name, info);
+        const first = owner.get(info.name);
+        if (first === undefined) {
+          owner.set(info.name, unit);
+          declared.set(info.name, info);
+          continue;
+        }
+        // WP21 S1 stops at functions. A struct's identity is still its bare
+        // name — `%struct.<name>`, and `StaticType` equality compares names —
+        // so two packages that both declare `Node` would be silently treated
+        // as declaring one type. Say so, in the words `docs/wp21-packages.md`
+        // §7 uses, rather than letting the layouts merge.
+        // TODO(WP21 §7): package-scoped struct layouts, and the diagnostic for
+        // two versions of one package meeting in a diamond, are that stage's.
+        if (first.packageName !== unit.packageName) {
+          this.sink.report(
+            new CompileError(
+              `${info.kind === "class" ? "Class" : "Interface"} \`${info.name}\` is declared in package ${describePackage(first.packageName)} and again in package ${describePackage(unit.packageName)}; a class or interface name is still program-wide, so two packages cannot both declare one`,
+              info.decl.name ?? info.decl,
+              unit.sourceFile
+            )
+          );
+        }
       }
     }
     return declared;
   }
 
   /**
-   * A function name must be unique across the whole program, exported or not,
-   * and the entry wrapper reserves `main` as well.
+   * A function's *symbol* must be unique across the whole program, exported or
+   * not, and the entry wrapper reserves `main` as well.
    *
    * Two reasons, and only the first goes away with `internal` linkage: an
    * external symbol is global to the link, so a duplicate is a duplicate
    * definition; and `analyzeFunctions` keys the whole-program fact fixpoint by
    * `FunctionSig.name` (`src/codegen/attributes.ts`), so two functions sharing
-   * a name would share one set of facts and each would be emitted with the
+   * a symbol would share one set of facts and each would be emitted with the
    * other's attributes. That is a miscompile, not a link error, which is why
    * this check does not consult `--strict-exports`: `internal` linkage buys
    * inlining and dead-stripping, not a second namespace.
+   *
+   * WP21 S1 is what turned "name" into "symbol" in that paragraph. A symbol
+   * carries its package's prefix, so the *name* now has to be unique only
+   * within its package — which is what lets two packages each keep a private
+   * `helper()` — while the check itself is unchanged, because two packages can
+   * no longer produce one symbol from one name. A program of one package is
+   * every program that existed before packages did, and for it the rule, the
+   * message and the emitted symbol are all exactly what they were.
    */
   private rejectSymbolClashes(): void {
     const owners = new Map<string, { unit: ModuleUnit; sig?: FunctionSig }>();
@@ -210,10 +282,20 @@ export class Compilation {
       // modules declaring the same generic would produce the same symbols. The
       // template's own name is what has to be unique, and it is checked here
       // with the functions because the rule is the same rule (WP18 §3b).
+      //
+      // Keyed by the *package-scoped* symbol, like every other entry in this
+      // map. An instantiation carries its package's prefix (`checker/index.ts`,
+      // `instantiate`), so `pkg_a.identity$i32` and `identity$i32` are two
+      // symbols and two packages may each keep a private `identity<T>` exactly
+      // as they may each keep a private `helper()`. Keying this loop by the
+      // bare name while the loop below keys by the symbol would put two
+      // different namespaces in one map, and would refuse a root `dup` beside
+      // a `pkg_a` `dup<T>` that cannot collide with it.
       for (const template of unit.checker.program.templates.values()) {
-        const prev = owners.get(template.sourceName);
+        const symbol = unit.checker.program.symbolPrefix + template.sourceName;
+        const prev = owners.get(symbol);
         if (!prev) {
-          owners.set(template.sourceName, { unit });
+          owners.set(symbol, { unit });
           continue;
         }
         this.sink.report(
@@ -231,12 +313,9 @@ export class Compilation {
           owners.set(sig.name, { unit, sig });
           continue;
         }
-        const where = `\`${sig.sourceName}\` is also defined in ${prev.unit.fileName}`;
         const message = !prev.sig
           ? `Function \`main\` in ${unit.fileName} collides with the entry wrapper \`@main\` that ${prev.unit.fileName} needs; rename it`
-          : sig.exported && prev.sig.exported
-            ? `Exported function ${where}; exported names must be unique across the program`
-            : `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`;
+          : clashMessage(sig, prev.sig, prev.unit.fileName, unit.packageName);
         // Constructors have no name node. Reported, not thrown: every clash is listed.
         this.sink.report(new CompileError(message, sig.decl.name ?? sig.decl, unit.sourceFile));
       }
@@ -312,4 +391,37 @@ export class Compilation {
 function importedName(importer: ModuleUnit, target: string): string {
   const rel = path.relative(path.dirname(importer.path), target);
   return path.join(path.dirname(importer.fileName), rel);
+}
+
+/** How a diagnostic names a package: the program's own has no name to give. */
+function describePackage(packageName: string): string {
+  return packageName === ROOT_PACKAGE ? "the program itself" : `\`${packageName}\``;
+}
+
+/**
+ * The wording of a duplicate-symbol rejection (WP21 S1).
+ *
+ * Two spellings of one rule, and the split is not decoration: in a program of
+ * one package "unique across the program" is the whole truth and is the
+ * sentence this compiler has always printed, while in a program of several it
+ * would be wrong — the point of package-scoped symbols is that the *other*
+ * package may use the name freely. Each spelling is written out in full rather
+ * than assembled from a shared fragment, because a diagnostic's literal run is
+ * what `scripts/gen-diagnostic-codes.mjs` keys its stable `NL` code on.
+ */
+function clashMessage(
+  sig: FunctionSig,
+  previous: FunctionSig,
+  previousFile: string,
+  packageName: string
+): string {
+  const where = `\`${sig.sourceName}\` is also defined in ${previousFile}`;
+  if (sig.exported && previous.exported) {
+    return packageName === ROOT_PACKAGE
+      ? `Exported function ${where}; exported names must be unique across the program`
+      : `Exported function ${where}; exported names must be unique within the package that declares them`;
+  }
+  return packageName === ROOT_PACKAGE
+    ? `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`
+    : `Function ${where}; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol`;
 }

@@ -1,0 +1,1 @@
+Unsupported type `keyof Point` (Phase 1 supports number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void)

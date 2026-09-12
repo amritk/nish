@@ -92,6 +92,10 @@ function printTypeScriptTree(source, sf) {
   /** `const` rather than `let`, which Nish spells as a flag on the statement. */
   const isConst = (declarationList) => (declarationList.flags & ts.NodeFlags.Const) !== 0;
 
+  /** The two modifiers stage1's grammar reads on an `enum`; `declare` is not one (WP23). */
+  const isEnumModifier = (m) =>
+    m.kind === ts.SyntaxKind.ExportKeyword || m.kind === ts.SyntaxKind.ConstKeyword;
+
   const identifier = (node, depth) => {
     const [s, e] = span(node);
     emit(depth, "IDENT", s, e, node.text);
@@ -493,6 +497,28 @@ function printTypeScriptTree(source, sf) {
         emit(depth, `TYPE_ALIAS${exported(node)}`, s, e);
         identifier(node.name, depth + 1);
         type(node.type, depth + 1);
+        return;
+      }
+      // `enum X { A = 1, B }` (WP23). stage1 reads the members as a LIST of
+      // ENUM_MEMBER, each one a name and an initialiser that is EMPTY when the
+      // member is auto-numbered — which is TypeScript's shape flattened.
+      // `const enum` is read too, and refused by the checker rather than the
+      // grammar, so the `const` is a flag here exactly as it is on a module
+      // constant; `declare enum` is the parser's to refuse and is skipped.
+      case ts.SyntaxKind.EnumDeclaration: {
+        const modifiers = node.modifiers ?? [];
+        if (modifiers.some((m) => !isEnumModifier(m))) unsupported(node);
+        const constEnum = modifiers.some((m) => m.kind === ts.SyntaxKind.ConstKeyword) ? "+const" : "";
+        emit(depth, `ENUM${exported(node)}${constEnum}`, s, e);
+        identifier(node.name, depth + 1);
+        list(depth + 1, node.members, (m, d) => {
+          if (!ts.isIdentifier(m.name)) unsupported(m);
+          const [ms, me] = span(m);
+          emit(d, "ENUM_MEMBER", ms, me);
+          identifier(m.name, d + 1);
+          if (m.initializer !== undefined) expression(m.initializer, d + 1);
+          else empty(d + 1);
+        });
         return;
       }
       case ts.SyntaxKind.VariableStatement: {

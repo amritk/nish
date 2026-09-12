@@ -1,0 +1,5 @@
+define internal noundef i32 @pick$i32(i32 noundef %a, i32 noundef %b)
+define internal noundef i32 @pkg_a.pick$i32(i32 noundef %a, i32 noundef %b)
+define internal noundef i32 @pkg_b.pick$i32(i32 noundef %a, i32 noundef %b)
+define noundef i32 @pkg_a.chooseA()
+define noundef i32 @pkg_b.chooseB()

@@ -148,7 +148,18 @@ void nish_append_file(const nish_str *path, const nish_str *data);
  *   %struct.nish_array = type { i64 len, i64 cap, i8* data }
  * `data` holds `cap` elements of one fixed size (int32_t 4, double 8,
  * int64_t 8, bool 1, pointers 8), 8-byte aligned when the runtime allocated
- * it. A generated header spells a parameter the callee only reads as
+ * it.
+ *
+ * WP15 section 2a: when the element type is an Nish `interface` — a record,
+ * fields and nothing else — `data` holds the records *themselves*, end to end,
+ * at exactly the stride and alignment clang gives the matching C struct. A
+ * `Point[]` is therefore a `struct Point *` and `((struct Point *)a->data)[i]`
+ * is element `i`, which is what lets a C host walk one with no marshalling.
+ * A `class` element, and a `T | null` element of any kind, is still one
+ * pointer per slot. `--emit-header` names the element type above each
+ * prototype and says which of the two it is.
+ *
+ * A generated header spells a parameter the callee only reads as
  * `const nish_array *` and one it writes through (`a[i] = v`, `push`) as
  * `nish_array *`; the element type is in the comment above each prototype.
  *
@@ -160,11 +171,23 @@ void nish_append_file(const nish_str *path, const nish_str *data);
  * copy `len` elements out of `data` before recycling. */
 typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array;
 /* A fresh arena array of `len` uninitialised elements (`len == cap`), for a
- * host that wants the runtime to own the storage (the wasm loader does). */
+ * host that wants the runtime to own the storage (the wasm loader does).
+ * `elem_size` is `sizeof` one element, so for a record element type it is
+ * `sizeof(struct Point)` and the block is a C array of them. */
 nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len);
-/* The cold paths compiled code calls: `push` when len == cap, a failed bounds check. */
+/* The cold paths compiled code calls: `push` when len == cap, a failed bounds
+ * check. `nish_array_grow` moves `cap * elem_size` bytes into a fresh arena
+ * block and writes `data`/`cap`, so for a record element type it relocates the
+ * elements themselves — which is why the checker refuses to let a program hold
+ * a pointer to one across a `push` (WP15 section 2a). */
 void nish_array_grow(nish_array *a, uint64_t elem_size);
 void nish_panic_index(uint64_t idx, uint64_t len);
+/* The failed range check of `s.slice(start, end)` (WP15 section 4): prints the
+   half-open interval that was asked for and the byte length it left, then
+   exits 1. Signed, although the check itself compares unsigned, so that an
+   offset that went negative reads as `-1` and not as 2^64 - 1. `substring`
+   clamps instead and never reaches this. */
+void nish_panic_slice(int64_t start, int64_t end, int64_t len);
 
 /* `process.argv` (WP7): a `string[]` (elements are `nish_str *`) that the entry
  * wrapper `main` builds once from argc/argv before calling the program; index 0

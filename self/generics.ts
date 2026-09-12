@@ -294,7 +294,12 @@ export function instantiate(
   args: i32[],
   at: Node
 ): FunctionSig | null {
-  const symbol = instanceSymbol(ctx.table, template.sourceName, args);
+  // WP21 S1: inside the package that declares the template. `qualifySymbols`
+  // runs at the end of pass 1 and instantiations are appended during pass 2, so
+  // an instantiation never passes through it -- the prefix has to be part of the
+  // symbol from the moment it is minted, or a generic would be the one
+  // declaration in the language whose symbol escaped its package.
+  const symbol = instanceSymbol(ctx.table, ctx.program.symbolPrefix + template.sourceName, args);
   const existing = ctx.program.instantiation(symbol);
   if (existing !== null) {
     return existing.sig;

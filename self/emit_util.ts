@@ -11,7 +11,7 @@
 // collector is a wrong attribute, not a missed optimisation), and a single
 // definition of "is this a `push`" is the cheapest way to keep them agreeing.
 
-import { CheckedProgram } from "./program";
+import { CheckedProgram, inlineElementStruct } from "./program";
 import {
   N_BINARY,
   N_CALL,
@@ -113,6 +113,21 @@ export function isPushCall(program: CheckedProgram, table: TypeTable, node: Node
   return arrayMethodName(program, table, node) === "push";
 }
 
+/**
+ * WP15 §2a: `expr` is an array whose slots hold their elements *inline*, so a
+ * value stored into one is copied into the slot rather than pointed at from
+ * it. `attributes.ts` reads this to keep `nocapture` exact: a struct handed to
+ * `xs.push(p)` or written with `xs[i] = p` is read, not retained, and an
+ * object built only to be stored into such an array does not escape its frame.
+ */
+export function storesInlineElements(program: CheckedProgram, table: TypeTable, expr: Node): boolean {
+  const type = program.nodeTypes[expr.id];
+  if (type < 0 || !table.isArray(type)) {
+    return false;
+  }
+  return inlineElementStruct(program, table, table.refOf(type)) !== null;
+}
+
 /** `parts.join(sep)` bumps one string out of the arena, so it is an allocation site. */
 export function isJoinCall(program: CheckedProgram, table: TypeTable, node: Node): boolean {
   return arrayMethodName(program, table, node) === "join";
@@ -123,6 +138,7 @@ export function isStringMethod(name: string): boolean {
   return (
     name === "charCodeAt" ||
     name === "substring" ||
+    name === "slice" ||
     name === "indexOf" ||
     name === "startsWith" ||
     name === "endsWith"
@@ -138,7 +154,7 @@ export function isStringMethodCall(program: CheckedProgram, call: Node): boolean
   return program.nodeTypes[receiver.id] === T_STRING;
 }
 
-/** `call` allocates a string: `s.substring(...)` or `String.fromCharCode(c)`. */
+/** `call` allocates a string: `s.substring(...)`, `s.slice(...)` or `String.fromCharCode(c)`. */
 export function isStringAllocCall(program: CheckedProgram, call: Node): boolean {
   if (call.kind !== N_CALL) {
     return false;
@@ -147,7 +163,10 @@ export function isStringAllocCall(program: CheckedProgram, call: Node): boolean 
   if (dottedName(callee) === "String.fromCharCode" && !receiverIsValue(program, callee.children[0])) {
     return true;
   }
-  return isStringMethodCall(program, call) && callee.text === "substring";
+  if (!isStringMethodCall(program, call)) {
+    return false;
+  }
+  return callee.text === "substring" || callee.text === "slice";
 }
 
 /**

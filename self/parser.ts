@@ -79,6 +79,8 @@ import {
   N_THROW,
   N_TRUE,
   N_UNARY,
+  N_ENUM,
+  N_ENUM_MEMBER,
   N_TYPE_ALIAS,
   N_TYPE_ARRAY,
   N_TYPE_NULL,
@@ -416,16 +418,29 @@ export class Parser {
     if (this.at(TOK_CONST) && this.startsArrowDeclaration()) {
       return this.exportable(this.parseArrowFunction(start), exported);
     }
+    // `const enum` is read rather than refused where it stands, so the checker
+    // can say why an enum member needs no `const` instead of the parser saying
+    // that `enum` is not a variable name (WP23).
+    if (this.at(TOK_CONST) && this.startsConstEnum()) {
+      this.advance(); // `const`
+      const declaration = this.parseEnum(start);
+      declaration.flags = declaration.flags | FLAG_CONST;
+      return this.exportable(declaration, exported);
+    }
     if (this.at(TOK_CONST) || this.at(TOK_LET)) {
       return this.exportable(this.parseModuleConst(start), exported);
     }
-    // `type` is a contextual keyword, an ordinary identifier everywhere else,
-    // so it is matched by text here exactly as `from` and `of` are.
+    // `type` and `enum` are contextual keywords, ordinary identifiers
+    // everywhere else, so they are matched by text here exactly as `from` and
+    // `of` are — which is what leaves the lexer and its oracle untouched.
     if (this.at(TOK_IDENT) && this.value === "type") {
       return this.exportable(this.parseTypeAlias(start), exported);
     }
+    if (this.at(TOK_IDENT) && this.value === "enum") {
+      return this.exportable(this.parseEnum(start), exported);
+    }
     return this.fail(
-      `a module holds only \`function\`, \`class\`, \`interface\`, \`const\`, \`type\` and \`import\`, found \`${tokenName(this.kind)}\``
+      `a module holds only \`function\`, \`class\`, \`interface\`, \`const\`, \`type\`, \`enum\` and \`import\`, found \`${tokenName(this.kind)}\``
     );
   }
 
@@ -777,6 +792,54 @@ export class Parser {
     this.expectSemicolon();
     node.end = this.previousEnd;
     return node;
+  }
+
+  /**
+   * Whether the `const` about to be parsed introduces a `const enum` rather
+   * than a value. `enum` is a contextual keyword, so this is one token of
+   * lookahead over the same source, the shape `startsArrowDeclaration` uses.
+   */
+  startsConstEnum(): boolean {
+    const scan = new Lexer(this.file.text);
+    scan.pos = this.start;
+    scan.next(); // `const`
+    scan.next();
+    return scan.kind === TOK_IDENT && scan.value === "enum";
+  }
+
+  /**
+   * `enum X { A = 1, B }` — a distinct type with `i32` representation (WP23).
+   * The grammar is deliberately narrower than TypeScript's: the checker wants
+   * to say *why* a member is not a literal, so anything is parsed here as an
+   * expression and Phase 0 is what turns `B = A + 1` down by name.
+   */
+  parseEnum(start: i32): Node {
+    this.advance(); // `enum`
+    const node = this.node(N_ENUM, start, this.end);
+    node.children.push(this.parseIdentifier());
+    const members = this.list();
+    if (this.expect(TOK_LBRACE)) {
+      while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
+        const before = this.start;
+        members.children.push(this.parseEnumMember());
+        if (!this.eat(TOK_COMMA)) break;
+        if (this.start === before && !this.at(TOK_RBRACE) && !this.at(TOK_END)) this.advance();
+      }
+      this.expect(TOK_RBRACE);
+    }
+    node.children.push(this.closeList(members));
+    node.end = this.previousEnd;
+    return node;
+  }
+
+  /** `A` or `A = 1`; an absent initialiser is `N_EMPTY` and means "one more than the last". */
+  parseEnumMember(): Node {
+    const start = this.start;
+    const member = this.node(N_ENUM_MEMBER, start, this.end);
+    member.children.push(this.parseIdentifier());
+    member.children.push(this.eat(TOK_ASSIGN) ? this.parseExpression() : this.empty());
+    member.end = this.previousEnd;
+    return member;
   }
 
   parseModuleConst(start: i32): Node {

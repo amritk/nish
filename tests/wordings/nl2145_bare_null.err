@@ -1,0 +1,1 @@
+`null` needs a contextual `T | null` type (annotate the variable, e.g. `let p: P | null = null`)

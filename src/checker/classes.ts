@@ -221,7 +221,9 @@ export function declareStruct(ctx: CheckContext, decl: ts.ClassDeclaration | ts.
   if (name.startsWith("nish_")) throw ctx.error("Names starting with `nish_` are reserved for the runtime", decl.name);
   rejectDollarInSymbolName(name, kind, decl.name, ctx.sf);
   if (ctx.program.structs.has(name)) throw ctx.error(`Duplicate declaration of \`${name}\``, decl.name);
-  if (ctx.program.aliases.has(name)) throw ctx.error(`\`${name}\` is already declared in this module`, decl.name);
+  if (ctx.program.aliases.has(name) || ctx.program.enums.has(name)) {
+    throw ctx.error(`\`${name}\` is already declared in this module`, decl.name);
+  }
   if (ctx.sigs.has(name)) throw ctx.error(`\`${name}\` is already declared as a function`, decl.name);
   for (const m of modifierKinds(decl)) {
     if (m === ts.SyntaxKind.AbstractKeyword) throw ctx.error("Abstract classes are not supported", decl);
@@ -491,6 +493,12 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
 function checkImplements(ctx: CheckContext, cls: StructInfo): void {
   for (const ifaceName of cls.implements) {
     const iface = ctx.program.structs.get(ifaceName)!;
+    // WP15 §2a: an interface with an implementer is a *view*, not a record —
+    // an `I[]` may hold any implementer and they are all longer than `I`, so
+    // its elements stay one pointer per slot. `StructInfo` objects are shared
+    // across the modules of a compilation, so marking the one here is what
+    // makes every module lay `I[]` out the same way (`inlineElementStruct`).
+    iface.implemented = true;
     const describe = (f: FieldInfo) => `\`${f.name}: ${typeToString(f.type)}\``;
     for (let i = 0; i < iface.fields.length; i++) {
       const want = iface.fields[i];

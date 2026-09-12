@@ -63,7 +63,10 @@ as a frame rather than a change:
 | `prototype`, dynamic property mutation | **forbidden (Phase 0)** | Breaks the fixed layout the whole model rests on. |
 
 The one place the language was **not** data-oriented is arrays of structs, and
-that is being fixed — see §2a.
+§2a fixed the half of it that can be fixed without changing what a `class`
+means: an array of *records* (an `interface`) is contiguous storage. An array
+of classes is still one pointer per slot, and §2a says why and what the
+measurement was.
 
 ---
 
@@ -169,22 +172,65 @@ much it gets on its own before hand-building analysis that duplicates it.
 
 ---
 
-## 2a. Arrays of structs are contiguous
+## 2a. Arrays of records are contiguous — **done**
 
 `Point[]` stored **one pointer per element**: the array data was
 `%struct.Point**`, each entry pointing somewhere in the arena. Iterating it
 chased a pointer per element and scattered the fields across memory — the exact
 pattern §1a exists to avoid, sitting in the middle of the language.
 
-Struct arrays become **contiguous values**: `N` structs end to end, one
-allocation, `ps[i]` an interior `getelementptr` rather than a load-then-chase.
-That is what makes a loop over `Point[]` vectorisable and what makes a struct
-array a cache line's worth of useful data instead of a cache line's worth of
-pointers.
+An array of **records** is now **contiguous values**: `N` structs end to end,
+one allocation, `ps[i]` an interior `getelementptr` rather than a
+load-then-chase, at exactly the stride and alignment clang gives the matching C
+array (`tests/layout/structs.c` walks one through a C `struct P *`).
 
-The hazard this introduces is real and is not being waved away. Growing an
-array reallocates, so an interior pointer taken before a `push` dangles
-afterwards:
+### A record is an `interface` nobody implements, and this is where the item changed shape
+
+The plan said "arrays of structs". The language has two struct kinds, and only
+one of them can be given value semantics without changing what the language
+means:
+
+- An **`interface`** is fields and nothing else — no constructor, no methods,
+  no `this`. The only thing a program can observe about one is its fields, so
+  copying it into a slot is indistinguishable from pointing at it. This is the
+  flat record §1a is written about.
+- A **`class`** has identity. A constructor runs on one object, a method
+  mutates the `this` it was handed, and every other position in the language —
+  a parameter, a field, a return, a local — passes a class value by reference.
+  Making an array the single place a class is *copied* would give
+  `xs.push(c); c.m()` a different meaning from `xs.push(c); xs[n].m()`, and
+  nothing else in the language works that way.
+
+That is not a conservative guess; it was measured on the largest Nish program
+there is. `self/` keeps one `FunctionSig` in `program.functions`, in
+`StructInfo.methodSigs` and in `StructInfo.ctor` at the same time and then
+writes `sig.poisoned` through one of them; `declareStruct` registers a
+`StructInfo` and goes on filling in the object the registry now holds. With
+value slots those are separate objects and every such write is lost. A stage1
+built with class arrays as values rejects `self/` with 41 errors of the form
+"`Field ctor of class StructInfo` has no initializer and no constructor assigns
+it" — the registry handing back a copy whose constructor never ran. Every
+registry in that compiler is built the same way, so **contiguous class arrays
+are a separate change with a migration of its own**, and the migration is the
+work, not the layout.
+
+An **interface some class `implements` is not a record either**: that array is
+the language's only polymorphic container — a `Shape[]` holding a `Square` and
+a `Circle` — and both implementers are longer than `Shape`, so a value slot
+would slice them. The property is recorded on the shared `StructInfo` by
+`checkImplements`, which runs for every module before any body is checked, so
+one compilation has one layout for `Shape[]` everywhere in it. That is also why
+there is no anti-slicing diagnostic: nothing that could be sliced is ever
+stored inline.
+
+`C | null` stays a pointer too, whichever kind `C` is: a null element has no
+bytes to be. That spelling is how a program asks for a sparse array of records
+and is the way out of the copy semantics.
+
+### The hazard, and the rule that closes it
+
+Growing an array reallocates, so an interior pointer taken before a `push`
+dangles afterwards:
 
 ```ts
 const p = ps[0];    // interior pointer into the array data
@@ -192,18 +238,52 @@ ps.push(other);     // may reallocate and move the data
 p.x = 1.0;          // would write to freed memory
 ```
 
-Today that is safe, because `p` is an independent heap object. Under
-contiguous storage it is a use-after-free, so **the checker rejects it**: an
-element reference may not be held across a mutation of the array it came from.
-The rule reuses the flow-sensitive machinery the narrowing analysis already
-has, and it will reject some programs that would have been fine — that is the
-accepted cost of the layout, and the message names the fix (index again after
-the push, or hoist the push).
+**The checker rejects it** (`NL2290`): an element reference may not be held
+across a mutation of the array it came from. The reference is a `const` bound
+to `a[i]` or `a.pop()`, or the variable of a `for (const p of a)`; the mutation
+is a `push` or a `pop` on the same array, or any call handed that array as a
+non-`readonly` parameter. A loop is checked as a whole, because a `push` at the
+bottom of the body reaches a reference taken at the top on the next pass.
+`ps.push(ps[i])` has a message of its own (`NL2291`) — the argument is read
+after the growth has already moved the block. It rejects some programs that
+would have been fine, and that is the accepted cost of the layout; the message
+names the fix.
 
-This changes the array ABI, so the C header, the wasm bridge, the N-API shim
-and their tests move with it.
+The analysis is `codegen/escape.ts`'s, run in the phase that is allowed to
+report — a source-order walk of one body, references followed from the
+declaration that binds them through every identifier that names them, blocks
+popped when they end. It lives in `checker/arrays.ts` and `self/arrays.ts`
+beside the array family it belongs to, hung off `checkFunctionBody` next to the
+§8 performance warnings, because the emitter reports no user errors at all.
 
----
+### Measured
+
+x86-64, LLVM 18, `--profile speed --number-mode f64`, min of 7 runs, the same
+program twice with `Point` spelled `interface` and `class` — which is exactly
+the two layouts.
+
+| Shape | pointers | contiguous | |
+| --- | ---: | ---: | --- |
+| 200k records, a second array built in the same loop, 2000 passes | 1864 ms | **820 ms** | **2.27x** |
+| 1M records built in traversal order, 200 passes | 588 ms | 579 ms | 1.02x, noise |
+| 8192 records, `d.x = s.x * 2.0` elementwise, 150k passes | 1501 ms | 1500 ms | none |
+
+**Read the last two rows before quoting the first.** A bump allocator lays
+objects out in allocation order, so when a program builds an array and then
+walks it in the same order, the old pointer layout was *already* contiguous
+underneath and the extra load costs nothing the out-of-order core cannot hide;
+and when the working set is L2-resident the extra load is free whatever the
+order. The 2.27x is what the layout buys when allocation order and traversal
+order differ — which is what happens the moment a program builds two arrays in
+one loop, or allocates anything else between elements. That is the common case
+in real code and it is the case §1a is about, but "arrays of structs were
+chasing pointers across memory" was only true for some of them.
+
+This changes the array ABI, so the C header, the runtime's own documentation
+and the layout test move with it. The wasm bridge and the N-API shim decline
+these functions exactly as before: the missing half was never the layout, it is
+that JS has no typed array of a struct, so a host would need a per-field unpack
+loop and a JS object per element — marshalling rather than a view.
 
 ## 2b. The array header is not the array's elements — **done**
 
@@ -391,16 +471,79 @@ rather than averaged away.
 
 ---
 
-## 4. Two string slices, not one compromise
+## 4. Two string slices, not one compromise — **done**
 
 `substring` keeps **exact JavaScript semantics** — both arguments clamped to
 `[0, len]`, swapped when reversed — so code ported from TypeScript behaves the
 way its author expects and the Node differential suite stays meaningful.
 
-Alongside it, a **fast slice** (`sliceFast` / `subarray`, name open) with the
-lean lowering: length computation, one bump allocation, one `memcpy`, and a
-check that branches to a cold panic block rather than clamping. Out-of-range is
-a panic, not a silent clamp.
+Alongside it, a **fast slice** with the lean lowering: length computation, one
+bump allocation, one `memcpy`, and a check that branches to a cold panic block
+rather than clamping. Out-of-range is a panic, not a silent clamp.
+
+**The name is `slice`, and the two this note proposed could not have been it.**
+`sliceFast` and `subarray` are both `TS2339: Property '...' does not exist on
+type 'string'` under `tsc --strict` (verified, not assumed), and the rule
+[wp23-language-surface.md](wp23-language-surface.md) §7 declines `for...of`
+over a string to protect is that an Nish program is a TypeScript program
+`tsc --strict` also accepts. A method nobody else has is a worse break of it
+than a loop that means something else, because it does not even compile.
+`slice` is in `lib.es5.d.ts` as `slice(start?: number, end?: number): string`,
+so the language gains no name of its own and a reader's editor already knows
+what it returns.
+
+What `slice` does *not* keep is JavaScript's argument handling, and that is the
+point of having two: `0 <= start <= end <= s.length` or it panics, where
+JavaScript counts a negative offset from the end and answers `""` for a
+reversed pair. That is the same shape of divergence `charCodeAt` already
+carries — JavaScript answers `NaN` out of range and Nish panics — and it is
+recorded the same way, in `docs/LANGUAGE.md`'s method table and in
+[wp13-differential.md](wp13-differential.md).
+
+The lowering is two `icmp ule` against a cold `nish_panic_slice` block, one
+`sub`, one `getelementptr` and one `nish_str_new`. Two compares are the whole
+range test because a negative offset sign-extends to a value above any byte
+length, which is the trick the array bounds check already uses. With no `end`,
+`end` *is* `len` and only the ordering compare is emitted.
+
+**Measured**, x86-64, LLVM 18, `--profile speed`. A lexer-shaped scan slices
+every word out of a 300 KB source, 2,000 passes — 40,000,000 slices of 14
+bytes each:
+
+| | min wall | |
+| --- | ---: | --- |
+| `substring` | 734 ms | six `llvm.smin` / `llvm.smax` per slice |
+| **`slice`** | **618 ms** | **1.18x** |
+
+Wall time on a loaded machine is the weaker half of that, so the number the
+claim rests on is instructions retired, which does not care what else is
+running: over 100 passes of the same scan, `callgrind` counts **339,516,079**
+against **313,516,079**, 8.3% of the whole program and exactly
+**13 x86-64 instructions per slice**. `llc -O3` bears that out statically: the
+scan function is 74 instructions with `substring` and 65 with `slice`, and the
+six `cmov` the clamp leaves behind are zero in the `slice` build. The copy is
+identical in both, which is why the win is a constant per call rather than a
+factor: `slice` is worth reaching for where slices are small and many, and
+worth nothing where one slice copies a megabyte.
+
+The other half of the argument is not about instruction counts at all. **A
+check is provable and a clamp is not.** `tests/cases/str_slice` slices constant
+offsets out of a literal and `opt -O2` deletes every compare, branch and panic
+block in the module — a golden cannot express that, so `tests/run.js` asserts
+no `nish_panic_slice` survives. No optimiser can do the same to `substring`,
+because its `smin`/`smax` are not a check that might be redundant but part of
+the answer it is defined to give. That is what makes this two constructs rather
+than one replacing the other, and it is what §2.1's ranged types will extend:
+every proof they add removes a `slice` check and none of them can remove a
+clamp.
+
+`slice` costs one runtime symbol, `nish_panic_slice`, rather than reusing
+`nish_panic_index`: a reversed pair is as common a mistake as an end past the
+string and `index out of range: i >= len` describes neither. It prints the two
+offsets signed although the check compares them unsigned, so someone who wrote
+`s.slice(i - 1)` is told `-1` rather than 18446744073709551615. That is 113
+bytes of `.text` at `-Oz` (16,844 to 16,957), spent under §7's rule on the
+measurement above.
 
 Hot paths should avoid materialising a slice at all where they can — a counted
 loop over the original string, guarded by `i < s.length`, already emits no
@@ -736,13 +879,27 @@ measurement closed says so and says why.
    by `tests/cases/u_*` — `u_arith_wrap`, `u_compare_above_intmax`,
    `u_conv_roundtrip` and `u_conv_f64` among them — plus
    `reject_u_mixed_signedness`.
-5. **Fast slice** (§4).
+5. **Fast slice** (§4) — **done**. `slice`, not `sliceFast` or `subarray`:
+   both names this note proposed are `TS2339` under `tsc --strict`, and
+   `wp23-language-surface.md` §7's rule is what settles it. 1.18x on a
+   lexer-shaped scan and 8.3% fewer instructions retired whole-program, which
+   is 13 x86-64 instructions per slice; and, unlike a clamp, the check folds
+   away entirely where the bounds are provable, which is the half of the case
+   that item 6 compounds. `tests/cases/str_slice`, `str_slice_panic`,
+   `reject_str_slice_arity`, `reject_str_slice_type` and
+   `tests/differential/corpus/str_slice` pin it.
 6. **Ranged types and length narrowing** (§2.1, §2.2) — a real flow-sensitive
    analysis; the `performance` warning for a check that survives is its
    acceptance test.
-7. **Contiguous struct arrays** (§2a) — the layout change plus the
-   escape rule that makes the dangling case a compile error, and the interop
-   surfaces that move with the ABI.
+7. **Contiguous record arrays** (§2a) — **done for `interface` elements**.
+   2.27x on a loop whose allocation order and traversal order differ, and
+   nothing at all when they agree — the measurement that re-scoped the item.
+   The layout, the escape rule (`NL2290`/`NL2291`) that makes the dangling
+   interior pointer a compile error, and the C header and layout test that move
+   with the ABI, in both compilers. **Class elements are not part of it**: a class has identity, and
+   `self/` keeps one `FunctionSig` in three places at once and writes through
+   whichever it has to hand, so value slots lose the write. That migration is
+   its own item.
 8. **Generics, discriminated unions, `Result<T, E>`** (§5) — the largest, and
    the one self-hosting most depends on.
 

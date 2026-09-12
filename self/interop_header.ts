@@ -34,34 +34,50 @@ import {
   tsKeyword,
   tsSignature,
 } from "./interop_abi";
-import { StructInfo, STRUCT_CLASS } from "./program";
+import { CheckedProgram, inlineElementStruct, StructInfo, STRUCT_CLASS } from "./program";
 import { K_ARRAY, TypeTable } from "./types";
 
-/** ` -- xs: double elements, returns int32_t elements`: what an `nish_array` holds, per array in the signature. */
+/**
+ * ` -- xs: double elements, returns int32_t elements`: what an `nish_array`
+ * holds, per array in the signature.
+ *
+ * WP15 §2a made this two answers rather than one. A record element type (an
+ * `interface`) is stored *inline*: `data` is a C array of the structs
+ * themselves, so the note spells the element `struct Point` with no `*` and
+ * says `inline`, which is a host's cue that `((struct Point *)a->data)[i]` is
+ * element `i` and needs no marshalling. Every other element type is one
+ * pointer per slot and keeps the pointer spelling it always had.
+ */
 function elementNotes(table: TypeTable, fn: ExternalFunction): string {
   const notes: string[] = [];
+  const program = fn.unit.checker.program;
   let i = 0;
   while (i < fn.sig.paramNames.length) {
-    const elem = elementType(table, fn.sig.paramTypes[i]);
+    const elem = elementNote(program, table, fn.sig.paramTypes[i]);
     if (elem.length > 0) {
-      notes.push(`${fn.sig.paramNames[i]}: ${elem} elements`);
+      notes.push(`${fn.sig.paramNames[i]}: ${elem}`);
     }
     i = i + 1;
   }
-  const returned = elementType(table, fn.sig.returnType);
+  const returned = elementNote(program, table, fn.sig.returnType);
   if (returned.length > 0) {
-    notes.push(`returns ${returned} elements`);
+    notes.push(`returns ${returned}`);
   }
   return notes.length > 0 ? ` -- ${notes.join(", ")}` : "";
 }
 
-/** The C element type of an array, or `""` when the type is not an array. */
-function elementType(table: TypeTable, t: i32): string {
+/** What an array's elements are, or `""` when the type is not an array. */
+function elementNote(program: CheckedProgram, table: TypeTable, t: i32): string {
   if (table.kindOf(t) !== K_ARRAY) {
     return "";
   }
-  const c = cType(table, table.refOf(t), POS_RETURN, false);
-  return c.length > 0 ? c : "nish_array *";
+  const elem = table.refOf(t);
+  const inline = inlineElementStruct(program, table, elem);
+  if (inline !== null) {
+    return `struct ${inline.name} elements, inline`;
+  }
+  const c = cType(table, elem, POS_RETURN, false);
+  return c.length > 0 ? `${c} elements` : "nish_array * elements";
 }
 
 /**
@@ -152,7 +168,10 @@ export function generateHeader(compilation: Compilation, fns: ExternalFunction[]
   lines.push(" * data }) live in the arena: a returned value is valid until");
   lines.push(" * nish_reset_arena() / nish_arena_release(). A `const nish_array *` parameter");
   lines.push(" * is only read; an `nish_array *` one is written through. To pass your own");
-  lines.push(" * buffer build a header on the stack: nish_array a = { n, n, (char *)buf }. */");
+  lines.push(" * buffer build a header on the stack: nish_array a = { n, n, (char *)buf }.");
+  lines.push(" * An array of records (an interface below) holds them inline, so its data is");
+  lines.push(" * a C array of that struct; every other element type is one pointer per");
+  lines.push(" * slot. The comment above each prototype says which. */");
   lines.push(`#ifndef ${guard}`);
   lines.push(`#define ${guard}`);
   lines.push("");
@@ -191,10 +210,16 @@ export function generateHeader(compilation: Compilation, fns: ExternalFunction[]
       continue;
     }
     const name = cFunctionName(fn.sig.name);
-    const alias =
-      name.label.length > 0
-        ? ` (${fn.sig.owner !== null ? "a method" : "a C keyword"}: call it as ${name.ident})`
-        : "";
+    // Three reasons a symbol cannot be spelled in C, and the comment says
+    // which: a method (`Point.shifted`), a symbol inside a package
+    // (`hash.helper`, WP21 S1), or a name that is a C keyword.
+    let why = "a C keyword";
+    if (fn.sig.owner !== null) {
+      why = "a method";
+    } else if (fn.sig.name.indexOf(".") >= 0) {
+      why = "in a package";
+    }
+    const alias = name.label.length > 0 ? ` (${why}: call it as ${name.ident})` : "";
     lines.push(`/* ${source}${alias}${elementNotes(table, fn)} */`);
     lines.push(`${proto};`);
   }

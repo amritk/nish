@@ -163,6 +163,8 @@ const checkComparison: BinaryChecker = (ctx, expr, scope) => {
   // kinds are handled by their own overrides (strings by content, structs by identity).
   // Ordering (`<`, `<=`, `>`, `>=`) is numeric only: an `i1` compare would have to
   // pick signed or unsigned, and JS's `true > false` has no use worth that trap.
+  // An enum is not numeric, so it never orders (WP23): `<` on a discriminant
+  // asks a question about the numbering rather than about the value.
   const op = expr.operatorToken.kind;
   const equality =
     op === ts.SyntaxKind.EqualsEqualsEqualsToken || op === ts.SyntaxKind.ExclamationEqualsEqualsToken;
