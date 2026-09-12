@@ -325,7 +325,7 @@ a claim about the corpus quietly read as a claim about the language.
 #### The gate, green again
 
 ```
-parity: 8708 runs over 622 programs (3455.5 s); 0 undeclared difference(s), 1617 declared
+parity: 9345 runs over 623 programs (2304.0 s); 0 undeclared difference(s), 1669 declared
 ```
 
 The declarations are §A4's five, unchanged in kind and larger only because the
@@ -340,10 +340,12 @@ wiring it up is a WP10 change and this correction is a debug-info fix; the
 costs, so the decision is made on numbers rather than on the fright of finding
 this:
 
-- **What it costs.** A full run is 8,400-odd compilations by each compiler over
-  597 programs, plus linking a stage1 binary first — about half an hour on this
-  machine, against roughly three minutes for `npm test`. On a hosted runner it
-  is the longest single thing in the repository.
+- **What it costs.** A full run is 9,000-odd compilations by each compiler over
+  623 programs, plus linking a stage1 binary first — about forty minutes on
+  this machine, against roughly three minutes for `npm test`. It grows with
+  every flag: WP20's `--threads` added a fifteenth variation and 637 runs to
+  the cross product on its own. On a hosted runner it is the longest single
+  thing in the repository.
 - **Where it fits.** Not in `test`, which every push waits on. The `bootstrap`
   job already links a stage1 compiler and already runs on its own schedule of
   patience, and `--flags-only` — the half that found `--no-warn-performance`
