@@ -142,10 +142,13 @@ plan.**
 
 ### 3.5 The runtime budget
 
-`runtime.c` is under a hard budget of 4 KB of `.text` at `-Oz`, and stands at
-2,544 today (MASTER_PLAN §2). `pthread_create`, a mutex and a condition
-variable do not fit inside the remaining 1,552 bytes as unconditional cost,
-and threads also add `-lpthread` to the link line.
+`runtime.c` was under a hard budget of 4 KB of `.text` at `-Oz` when this note
+was written, and stood at 2,544 then (MASTER_PLAN §2). The live ceiling is
+4,864 bytes, counted over every `.text*` section; `docs/wp7-runtime.md`
+§"Runtime additions and budget" carries it and the current measurement.
+`pthread_create`, a mutex and a condition variable do not fit inside the
+remaining 1,552 bytes as unconditional cost, and threads also add `-lpthread`
+to the link line.
 
 They must therefore be pay-for-what-you-use, exactly as WP14's `nish_mkdir`
 and `nish_spawn` are: adding them left `examples/hello.ts` at 4,696 bytes,

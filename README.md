@@ -118,6 +118,38 @@ yielding `0`, `.length` counts bytes, there is no `throw` and no unwinding,
 lists everything the differential test suite found that still differs from
 Node.
 
+### The standard library
+
+[`std/`](std/README.md) is Nish written in Nish, for Nish programs to import:
+[`std/testing`](std/testing.ts), a test runner, so a compiled program can check
+itself and answer an exit code with no Node in the picture, and
+[`std/text`](std/text.ts), the string operations a program would otherwise write
+inline — the language has no `split`, `trim` or regular expression, because each
+of those allocates and some need a character table the runtime has no room for.
+
+```ts
+import { Suite } from "../std/testing";
+
+export const main = (): number => {
+  const t = new Suite("stats");
+  t.eqI32("sumOf", sumOf([3, 9, 4, 9]), 25);
+  return t.done();          // prints the report; 0 when nothing failed
+};
+```
+
+A library module is source, not a built artifact, so it compiles with the
+program that imports it and the whole-program pass sees straight through it
+([docs/wp21-packages.md](docs/wp21-packages.md)). There is no bare specifier
+yet — imports are relative, as everywhere else in the language — and no
+callbacks, which is what makes a suite a value with methods rather than a
+`test("name", () => ...)`: a function is never a value here.
+
+The suite's own golden cases are run by [`tests/nish/run.ts`](tests/nish/run.ts),
+which is this repository's test harness written in the language it tests:
+`readdirSync` finds the cases, `spawnSyncTo` captures each compile and each run,
+and the IR is diffed against the golden line by line. `npm run test:nish` runs it
+over the whole corpus.
+
 ---
 
 ## Memory safety

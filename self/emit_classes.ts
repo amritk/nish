@@ -50,6 +50,7 @@ import {
   Node,
 } from "./nodes";
 import { FieldInfo, FunctionSig, StructInfo } from "./program";
+import { ARRAY_TYPE } from "./runtime";
 import { isFloat, T_I32, T_STRING, T_VOID } from "./types";
 
 // ---- Helpers ------------------------------------------------------------------------
@@ -328,6 +329,13 @@ export function emitFieldAssignment(emitter: Emitter, expr: Node): string {
  * `type opaque` for struct types the module only points at (a field or a
  * parameter of an imported declaration whose class was not imported here).
  * Pointers to opaque types are legal; only field access needs the body.
+ *
+ * The array header is declared here too when a layout or a signature mentions
+ * an array, because `%struct.nish_array*` in a struct body is a reference like
+ * any other and the module that writes it has to define it. An importer of a
+ * class with an array field is the case that needs saying: it emits the whole
+ * body — arrays and all — while its own code may never touch an array, so
+ * nothing else in the module would ever ask for the header.
  */
 export function structTypeDeclarations(emitter: Emitter): string[] {
   const lines: string[] = [];
@@ -337,6 +345,9 @@ export function structTypeDeclarations(emitter: Emitter): string[] {
   // emitted here rather than looked up: a field or signature that mentions one
   // is enough to need it in this module.
   const results: string[] = [];
+  // The array header, as a list rather than the flag `src/` uses, because
+  // `noteStruct` is a free function here and has nothing to close over.
+  const headers: string[] = [];
   for (const info of emitter.program.structList) {
     if (declared.indexOf(info.name) >= 0) {
       continue;
@@ -349,25 +360,25 @@ export function structTypeDeclarations(emitter: Emitter): string[] {
     const body = types.length > 0 ? ` ${types.join(", ")} ` : "";
     lines.push(`%struct.${info.name} = type {${body}}`);
     for (const field of info.fields) {
-      noteStruct(emitter, referenced, results, field.type);
+      noteStruct(emitter, referenced, results, headers, field.type);
     }
     // Inherited constructors and methods are called through the base type,
-    noteStruct(emitter, referenced, results, info.type);
+    noteStruct(emitter, referenced, results, headers, info.type);
     for (const method of info.methodSigs) {
-      noteSignature(emitter, referenced, results, method);
+      noteSignature(emitter, referenced, results, headers, method);
     }
     const ctor = info.ctor;
     if (ctor !== null) {
-      noteSignature(emitter, referenced, results, ctor);
+      noteSignature(emitter, referenced, results, headers, ctor);
     }
   }
   for (const sig of emitter.program.functions) {
-    noteSignature(emitter, referenced, results, sig);
+    noteSignature(emitter, referenced, results, headers, sig);
   }
   for (const imp of emitter.program.imports) {
     const sig = imp.sig;
     if (sig !== null) {
-      noteSignature(emitter, referenced, results, sig);
+      noteSignature(emitter, referenced, results, headers, sig);
     }
   }
   for (const name of referenced) {
@@ -378,18 +389,37 @@ export function structTypeDeclarations(emitter: Emitter): string[] {
   for (const decl of results) {
     lines.push(decl);
   }
+  // Last, so that a module which also declares the header for a signature or an
+  // array operation puts it in the same place it always did: `addTypeDecl`
+  // dedupes by first insertion, and these lines precede both.
+  for (const decl of headers) {
+    lines.push(decl);
+  }
   return lines;
 }
 
-function noteStruct(emitter: Emitter, referenced: string[], results: string[], type: i32): void {
+function noteStruct(
+  emitter: Emitter,
+  referenced: string[],
+  results: string[],
+  headers: string[],
+  type: i32
+): void {
   const table = emitter.table;
-  if (table.isArray(type) || table.isNullable(type)) {
-    noteStruct(emitter, referenced, results, table.refOf(type));
+  if (table.isArray(type)) {
+    if (headers.indexOf(ARRAY_TYPE) < 0) {
+      headers.push(ARRAY_TYPE);
+    }
+    noteStruct(emitter, referenced, results, headers, table.refOf(type));
+    return;
+  }
+  if (table.isNullable(type)) {
+    noteStruct(emitter, referenced, results, headers, table.refOf(type));
     return;
   }
   if (table.isResult(type)) {
-    noteStruct(emitter, referenced, results, table.okOf(type));
-    noteStruct(emitter, referenced, results, table.errOf(type));
+    noteStruct(emitter, referenced, results, headers, table.okOf(type));
+    noteStruct(emitter, referenced, results, headers, table.errOf(type));
     const decl = resultTypeDecl(table, type);
     if (results.indexOf(decl) < 0) {
       results.push(decl);
@@ -405,11 +435,17 @@ function noteStruct(emitter: Emitter, referenced: string[], results: string[], t
   }
 }
 
-function noteSignature(emitter: Emitter, referenced: string[], results: string[], sig: FunctionSig): void {
+function noteSignature(
+  emitter: Emitter,
+  referenced: string[],
+  results: string[],
+  headers: string[],
+  sig: FunctionSig
+): void {
   for (const type of sig.paramTypes) {
-    noteStruct(emitter, referenced, results, type);
+    noteStruct(emitter, referenced, results, headers, type);
   }
-  noteStruct(emitter, referenced, results, sig.returnType);
+  noteStruct(emitter, referenced, results, headers, sig.returnType);
 }
 
 /**

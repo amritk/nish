@@ -1,0 +1,66 @@
+PASS  splitLines: a trailing newline adds no phantom line
+PASS  splitLines: first line
+PASS  splitLines: last line
+PASS  splitLines: a trailing newline makes no difference to the line list
+PASS  splitLines: a CRLF text has two lines
+PASS  splitLines: a CRLF line keeps its carriage return
+PASS  splitLines: trimEnd is how a caller drops that carriage return
+PASS  splitLines: the line after a CRLF ending is intact
+PASS  splitLines: an empty text has no lines
+PASS  splitLines: a lone newline is one line
+PASS  splitLines: and that line is empty
+PASS  splitLines: an interior blank line is kept
+PASS  splitLines: the blank line is empty, not dropped
+PASS  splitLines: a text with no newline at all is one line
+PASS  splitLines: a trailing CRLF is one line, not two
+PASS  splitLines: and that line still carries the carriage return
+PASS  splitLines: UTF-8 text splits on its newlines
+PASS  splitLines: a multi-byte line passes through untouched
+PASS  splitWhitespace: leading, trailing and repeated blanks add no empty elements
+PASS  splitWhitespace: first word
+PASS  splitWhitespace: last word
+PASS  splitWhitespace: tab, newline and carriage return separate too
+PASS  splitWhitespace: the word after a tab
+PASS  splitWhitespace: the word after a carriage return
+PASS  splitWhitespace: an all-blank text has no words
+PASS  splitWhitespace: an empty text has no words
+PASS  splitWhitespace: one word with no blanks is one element
+PASS  splitWhitespace: that one element is the whole text
+PASS  splitWhitespace: multi-byte words split on the blanks between them
+PASS  splitWhitespace: a multi-byte word is not cut mid-sequence
+PASS  trimStart: only the leading blanks go
+PASS  trimEnd: only the trailing blanks go
+PASS  trim: both ends go
+PASS  trim: interior blanks are not touched
+PASS  trim: an all-blank string trims to empty
+PASS  trim: an empty string trims to itself
+PASS  trim: a string with nothing to trim is unchanged
+PASS  trimStart: an all-blank string trims to empty
+PASS  trimEnd: a CRLF terminator counts as blank
+PASS  contains: an interior occurrence
+PASS  contains: a needle that does not occur
+PASS  contains: the empty needle is in every string
+PASS  contains: the empty needle is in the empty string too
+PASS  contains: nothing else is in the empty string
+PASS  contains: a string contains itself
+PASS  contains: a needle longer than the haystack
+PASS  replaceAll: every occurrence, not just the first
+PASS  replaceAll: an empty needle answers the input unchanged
+PASS  replaceAll: a needle that does not occur answers the input
+PASS  replaceAll: overlapping candidates match leftmost, once each
+PASS  replaceAll: and an even run matches twice
+PASS  replaceAll: adjacent occurrences
+PASS  replaceAll: an empty replacement deletes the needle
+PASS  replaceAll: a needle at both ends
+PASS  replaceAll: the whole string as the needle
+PASS  replaceAll: an empty text answers empty
+PASS  replaceAll: a multi-character replacement is copied whole, and the needle is literal
+PASS  firstDifference: equal line lists answer -1
+PASS  firstDifference: the index of the first differing line
+PASS  firstDifference: a difference on the very first line
+PASS  firstDifference: a prefix answers the shorter length
+PASS  firstDifference: the same answer with the arguments swapped
+PASS  firstDifference: two empty lists are equal
+PASS  firstDifference: an empty list against a non-empty one differs at 0
+PASS  firstDifference: a trailing blank line is a difference
+text: 65 passed, 0 failed, 0 skipped

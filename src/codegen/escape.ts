@@ -85,6 +85,23 @@ export const STACK_ARRAY_BYTES = 4096;
 
 export type Flow = "local" | "returned" | "leaks";
 
+/**
+ * The identifier builtins whose result is fresh arena memory, and therefore an
+ * allocation site of the function that calls one.
+ *
+ * A builtin belongs here when it answers a `string`, an array or a struct that
+ * the runtime allocated during the call — every one of these does. A builtin that
+ * answers a number does not, and neither does one that answers memory it did not
+ * just allocate: `process.platform` hands back the same static string on every
+ * call, and `process.argv` is `malloc`ed once by the entry wrapper rather than
+ * bumped, which is why neither is here.
+ *
+ * Adding an allocating builtin to `checker/io.ts` and forgetting this set is a
+ * use-after-free and not a missed optimisation, so the three `mem_*_scope` cases
+ * pin one each.
+ */
+const ALLOCATING_BUILTINS = new Set(["readFileSync", "readFileSyncOrNull", "getenv", "readdirSync"]);
+
 /** What happens to the allocations a user callee returns, from the caller's side. */
 export interface CallSite {
   callee: string;
@@ -305,12 +322,16 @@ export function analyzeEscapes(
         sites.push({ node: call, stackable: true });
         return;
       }
-      // Both file readers bump their result out of the arena, so both are
-      // allocation sites. Missing the `OrNull` half gave a function that
-      // returns it an automatic arena scope, which released the bytes before
-      // the caller could read them (`tests/cases/mem_read_or_null_scope`).
-      const name = call.expression.text;
-      if (name === "readFileSync" || name === "readFileSyncOrNull") {
+      // An identifier builtin that bumps its result out of the arena is an
+      // allocation site of its caller, and missing one is not a lost
+      // optimisation: the function gets an automatic arena scope whose
+      // `nish_arena_release` rewinds past the bytes the caller is about to read.
+      // Missing the `OrNull` half did exactly that
+      // (`tests/cases/mem_read_or_null_scope`), and `getenv` and `readdirSync`
+      // were missing for the same reason (`mem_getenv_scope`,
+      // `mem_readdir_scope`), which is why the list is now a named set with the
+      // rule for extending it written beside it.
+      if (ALLOCATING_BUILTINS.has(call.expression.text)) {
         sites.push({ node: call, stackable: false });
       }
       return;

@@ -3,7 +3,7 @@
 //
 //   node docs/check-links.mjs            exit 1 and list every broken link
 //
-// Scans README.md, CHANGELOG.md, and docs/**/*.md. For each `[text](target)` or
+// Scans README.md, CHANGELOG.md, std/README.md, and docs/**/*.md. For each `[text](target)` or
 // `[ref]: target` outside a fenced code block: http(s)/mailto targets are
 // skipped; a relative path must exist; a `#fragment` must match a heading of
 // the target file (GitHub slug rules: lower-case, punctuation removed, spaces
@@ -27,7 +27,7 @@ function listMarkdown(dir) {
   return out;
 }
 
-const files = ["README.md", "CHANGELOG.md"]
+const files = ["README.md", "CHANGELOG.md", "std/README.md"]
   .map((f) => path.join(root, f))
   .filter((f) => fs.existsSync(f))
   .concat(listMarkdown(path.join(root, "docs")));

@@ -74,7 +74,10 @@ globalThis.console = {
 };
 
 // Streams and files. These are globals in Nish rather than imports from
-// `node:fs`, which is why they have to be installed at all.
+// `node:fs`, which is why they have to be installed at all. `readdirSync` is
+// the one whose answer is not simply Node's: the language sorts the listing by
+// UTF-8 bytes, so the shim sorts on the encoded bytes rather than leaving
+// `Array#sort`'s UTF-16 order — the two agree on ASCII names only.
 provide("write", shim.write);
 provide("writeError", shim.writeError);
 provide("panic", shim.panic);
@@ -84,8 +87,20 @@ provide("writeFileSync", shim.writeFileSync);
 provide("appendFileSync", shim.appendFileSync);
 provide("mkdirSync", shim.mkdirSync);
 provide("isDirectorySync", shim.isDirectorySync);
+provide("readdirSync", shim.readdirSync);
 provide("spawnSync", shim.spawnSync);
+provide("spawnSyncTo", shim.spawnSyncTo);
 provide("getenv", shim.getenv);
+
+// The clock. `monotonicNanos()` answers an `i64`, so the value is a BigInt here
+// as it is in the rewritten runner — and unusually for the i64 surface that is
+// enough on its own: `t1 - t0` on two BigInts is the `sub i64` the native build
+// performs, and an elapsed time is nowhere near the width where BigInt's
+// arbitrary precision and the native wrap would part. It is only mixing a
+// reading with a plain `number` that throws, which is the failure the header
+// describes. A printed reading can never match a native run: the two origins are
+// both arbitrary, and only the difference between two reads means anything.
+provide("monotonicNanos", shim.monotonicNanos);
 
 // Conversions. In f64 mode `toF64` is the identity and `toI32` is the one that
 // matters (it saturates, where a JavaScript cast would not).
