@@ -20,6 +20,19 @@ node bench/run.mjs --no-rust              # skip Rust even when rustc is install
 node bench/run.mjs --no-go                # skip Go even when the go tool is installed
 ```
 
+The report's header describes the **run**, not the checkout that happens to
+hold it: the date, the machine, the toolchain versions, and the compiler's own
+`--version` line and commit. The checked-in report therefore reads
+`nish 0.0.0 (commit c72a68f)` — it was measured before the first release moved
+`package.json` off `0.0.0`, and the commit it names is the working commit of
+that run. The numbers are still the current compiler's: nothing in `src/`,
+`self/`, `runtime/` or `bench/` has changed since that run, only the release
+plumbing and the version string. Do not correct the header by hand;
+`docs/BENCHMARKS.md` is generated, and a header edited to say something the run
+did not is worse than a stale one. The next `node bench/run.mjs` on a quiet
+machine rewrites the whole file, version line included — which is the only way
+to refresh it, since a timing run on a busy machine measures the machine.
+
 `rustc` is looked up on `PATH` and in `~/.cargo/bin`; `RUSTC=<path>` overrides
 it and without one the Rust columns are skipped. `go` is looked up on `PATH`,
 in `/usr/local/go/bin` and in `~/go/bin`, with `GO=<path>` the override and the
