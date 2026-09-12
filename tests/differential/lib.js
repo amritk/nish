@@ -8,6 +8,11 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { rewriteProgram } from "./rewrite.js";
+// `pool` moved to tests/pool.js when the WP14 oracles needed it too; it is
+// still re-exported below, so the runners that import it from here are
+// unchanged. `run` below stays local: it is this harness's specialisation,
+// with a cwd and a kill timeout the oracles do not want.
+import { pool } from "../pool.js";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
 const cli = path.join(root, "dist", "index.js");
@@ -151,20 +156,6 @@ async function runProgram(prog) {
 
   const same = native.status === node.status && native.signal === node.signal && native.stdout.equals(node.stdout);
   return { prog, verdict: same ? "match" : "mismatch", native, node, ms: Date.now() - t0, work };
-}
-
-/** Run `fn` over `items` with at most `n` in flight; results keep the input order. */
-async function pool(items, n, fn) {
-  const results = new Array(items.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++;
-      results[i] = await fn(items[i], i);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(n, items.length)) }, worker));
-  return results;
 }
 
 function readKnownFailures() {

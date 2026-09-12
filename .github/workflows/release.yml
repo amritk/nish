@@ -12,14 +12,35 @@
 #
 # Publishing to npm is deliberately NOT automated yet; see the commented step
 # at the end and docs/wp12-release.md.
+#
+# Two ways in, because one of them does not work unattended. A tag pushed by a
+# workflow using the default GITHUB_TOKEN raises no `push` event -- that is
+# GitHub's loop guard, and it is why v0.1.0 was tagged and never built. So
+# release-pr.yml pushes the tag and then *dispatches* this workflow at it:
+# `workflow_dispatch` and `repository_dispatch` are the two events GITHUB_TOKEN
+# is allowed to raise, which is what makes the train run end to end without a
+# personal access token. The `push` trigger stays for a tag pushed by a human,
+# whose credentials do start a workflow.
+#
+# Either way the ref is the tag, so GITHUB_REF_NAME is `v<version>` and every
+# step below reads the same. Running this on a branch is a mistake rather than
+# a release, and the first step says so.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+# Two triggers means two ways to land on one tag. Serialise rather than cancel:
+# a half-published release is worse than a queued one, and the second run fails
+# honestly at `gh release create` instead of racing the first.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   ci:
@@ -39,8 +60,16 @@ jobs:
           cache: npm
           registry-url: https://registry.npmjs.org
 
-      - name: Tag must match package.json version
+      # `workflow_dispatch` can be aimed at any ref, so the ref type is checked
+      # before the version is: dispatched at `main`, every step below would
+      # read GITHUB_REF_NAME as a branch name and the comparison underneath
+      # would report a version mismatch for what is really a mis-aimed run.
+      - name: Ref must be a v* tag matching package.json version
         run: |
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "::error::release.yml releases a tag; it was run on $GITHUB_REF_TYPE \`$GITHUB_REF_NAME\`. Re-run it with the tag as the ref."
+            exit 1
+          fi
           tag="${GITHUB_REF_NAME#v}"
           pkg="$(node -p "require('./package.json').version")"
           if [ "$tag" != "$pkg" ]; then

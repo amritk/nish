@@ -2719,14 +2719,37 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
         .sort()
     : [];
   check("self/ has at least one module", modules.length > 0, `${modules.length} modules`);
-  for (const m of modules) {
-    const out = path.join(buildDir, "self");
-    fs.mkdirSync(out, { recursive: true });
-    const r = spawnSync("node", [cli, path.join(selfDir, m), "-o", `${out}/`], {
+  // The property is "stage0 accepts every module of self/", and one root per
+  // module proved it at the price of 58 process starts and 58 walks of the
+  // module graph -- about a minute of every run. Named together they are one
+  // walk and prove the same thing, so the batch is the fast path and the loop
+  // below is the fallback that says *which* module failed: a green batch is
+  // reported as the same 58 checks under the same names, and a red one is
+  // re-run module by module so the failure is attributed rather than dumped.
+  //
+  // The entry points are compiled apart from the rest because only the entry
+  // module may declare `export function main`, so naming two of them in one
+  // command produces that diagnostic instead of a build. They are found the
+  // way scripts/smoke.sh finds them, and for the same reason: both spellings
+  // are legal (docs/wp22-arrow-functions.md).
+  const out = path.join(buildDir, "self");
+  fs.mkdirSync(out, { recursive: true });
+  const compileSelf = (names) =>
+    spawnSync("node", [cli, ...names.map((m) => path.join(selfDir, m)), "-o", `${out}/`], {
       cwd: root,
       encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
     });
-    check(`self/${m} compiles`, r.status === 0, r.stderr);
+  const declaresMain = (m) =>
+    /^export (function main\b|const main\s*=)/m.test(fs.readFileSync(path.join(selfDir, m), "utf8"));
+  const entries = modules.filter(declaresMain);
+  const groups = [modules.filter((m) => !declaresMain(m)), ...entries.map((m) => [m])];
+  const batched = groups.every((g) => g.length === 0 || compileSelf(g).status === 0);
+  for (const m of modules) {
+    // `batched` is the whole answer when it is true; when it is false one of
+    // the groups failed and every module is compiled alone to find out which.
+    const r = batched ? null : compileSelf([m]);
+    check(`self/${m} compiles`, batched || r.status === 0, batched ? "" : r.stderr);
   }
   // Module constants are the reason `self/` can name its token kinds at all: if
   // one ever became a global, every kind would cost a load on the lexer's hot path.

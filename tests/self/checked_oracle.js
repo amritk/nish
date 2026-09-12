@@ -5,6 +5,13 @@
  *   node tests/self/checked_oracle.js              the whole corpus
  *   node tests/self/checked_oracle.js <file>...    just those files
  *   node tests/self/checked_oracle.js --verbose    name every skip
+ *   node tests/self/checked_oracle.js --jobs N     compare N programs at once
+ *
+ * Each program is a dump from each compiler and a line-by-line diff of the
+ * two, independent of every other program, so they are compared `--jobs` at a
+ * time (one per core, capped; `tests/pool.js`). The results are walked in
+ * corpus order regardless of the order they finished in, so a parallel run
+ * prints exactly what `--jobs 1` prints.
  *
  * `self/dump_checked.ts` prints what the checker collected in exactly the
  * format `src/dump.ts` prints it, so what is compared is not "it accepted the
@@ -34,6 +41,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { checkerArgs, programs, root } from "./corpus.js";
+import { jobsFrom, pool, run } from "../pool.js";
 import { fileURLToPath } from "node:url";
 
 const cli = path.join(root, "dist", "index.js");
@@ -43,7 +51,7 @@ function dumpLines(dump) {
   return dump.split("\n").filter((line) => line.length > 0);
 }
 
-function compare(binary, file) {
+async function compare(binary, file) {
   // The flags the dump depends on -- what `number` is, and whether the
   // constant folder wraps -- and no others: the rest change the IR, which is
   // `ir_oracle.js`'s half of the comparison.
@@ -52,17 +60,15 @@ function compare(binary, file) {
   // dump is relative to the working directory, so the entry must be too.
   const named = path.relative(root, file);
 
-  const stage0 = spawnSync("node", [cli, named, "--emit-checked", ...flags], {
+  const stage0 = await run("node", [cli, named, "--emit-checked", ...flags], {
     cwd: root,
     encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
   });
   if (stage0.status !== 0) return { skipped: `stage0 rejects it: ${firstLine(stage0.stderr)}` };
 
-  const stage1 = spawnSync(binary, [...flags, named], {
+  const stage1 = await run(binary, [...flags, named], {
     cwd: root,
     encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
   });
   if (stage1.status !== 0) return { rejected: firstLine(stage1.stderr) };
 
@@ -101,9 +107,14 @@ function build() {
   return out;
 }
 
-function main(argv) {
+async function main(argv) {
   const verbose = argv.includes("--verbose");
-  const named = argv.filter((a) => !a.startsWith("--"));
+  const jobs = jobsFrom(argv);
+  // `--jobs N` takes a value, so its number is not a file even though it does
+  // not start with a dash. Guarded on the flag being present: an `indexOf` of
+  // -1 would make `jobsAt + 1` index 0 and drop the first file named.
+  const jobsAt = argv.indexOf("--jobs");
+  const named = argv.filter((a, i) => !a.startsWith("--") && !(jobsAt >= 0 && i === jobsAt + 1));
   const binary = build();
   if (binary === null) return 1;
   const inputs = named.length > 0 ? named.map((f) => path.resolve(f)) : corpus();
@@ -112,8 +123,12 @@ function main(argv) {
   const skipped = [];
   const rejected = [];
   const failed = [];
-  for (const file of inputs) {
-    const result = compare(binary, file);
+  const t0 = Date.now();
+  const results = await pool(inputs, jobs, (file) => compare(binary, file));
+  // Walked in corpus order, whatever order they finished in: every count and
+  // every name below is what a sequential run produced.
+  for (const [i, file] of inputs.entries()) {
+    const result = results[i];
     const name = path.relative(root, file);
     if (result.skipped !== undefined) skipped.push(`${name}: ${result.skipped}`);
     else if (result.rejected !== undefined) rejected.push(`${name}: ${result.rejected}`);
@@ -134,10 +149,21 @@ function main(argv) {
   // of this milestone, and it must not be able to hide inside a skip count.
   const note = rejected.length > 0 ? `, ${rejected.length} rejected by stage1` : "";
   process.stdout.write(
-    `${agreed}/${compared} files agree (${lines} dump lines), ${skipped.length} skipped${note}\n`
+    `${agreed}/${compared} files agree (${lines} dump lines, ` +
+      `${((Date.now() - t0) / 1000).toFixed(1)} s, ${jobs} jobs), ${skipped.length} skipped${note}\n`
   );
   return failed.length === 0 ? 0 : 1;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  // `process.exitCode`, not `process.exit`: stdout is a pipe when tests/run.js
+  // spawns this, writes to a pipe are asynchronous, and `process.exit` does not
+  // wait for them. The summary this prints is the whole result, so losing its
+  // tail to a forced exit would read as an oracle that said nothing. Every
+  // child is awaited by then, so the loop drains and the process ends on its
+  // own with this status.
+  main(process.argv.slice(2)).then((code) => {
+    process.exitCode = code;
+  });
+}
 export { compare, corpus, build };

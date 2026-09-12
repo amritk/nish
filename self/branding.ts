@@ -41,7 +41,7 @@ export const CLI: string = "nish";
  * `package.json` disagree, which is the check that keeps a `npm version` bump
  * from going stale here.
  */
-export const VERSION: string = "0.1.0";
+export const VERSION: string = "0.1.1";
 
 /** The public C ABI header in `runtime/`; every generated header includes it. */
 export const RUNTIME_HEADER: string = "nish.h";
