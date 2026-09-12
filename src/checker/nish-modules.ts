@@ -16,6 +16,7 @@
  * intrinsic and `toI32` to a single instruction: they cost no runtime at all,
  * read as language rather than as library, and stay global.
  */
+import { BUILTIN_SCHEME } from "../branding.js";
 import { lookup } from "../lookup.js";
 
 /** One name a `nish:` module exports, and the builtin it stands for. */
@@ -45,7 +46,7 @@ const property = (canonical: string): BuiltinExport => ({ canonical, kind: "prop
  * `nish:child_process` that would hold one function.
  */
 export const NISH_MODULES: Record<string, Record<string, BuiltinExport>> = {
-  "nish:fs": {
+  [`${BUILTIN_SCHEME}fs`]: {
     readFileSync: call("readFileSync"),
     readFileSyncOrNull: call("readFileSyncOrNull"),
     writeFileSync: call("writeFileSync"),
@@ -54,7 +55,7 @@ export const NISH_MODULES: Record<string, Record<string, BuiltinExport>> = {
     isDirectorySync: call("isDirectorySync"),
     readdirSync: call("readdirSync"),
   },
-  "nish:process": {
+  [`${BUILTIN_SCHEME}process`]: {
     exit: call("process.exit"),
     getenv: call("getenv"),
     spawnSync: call("spawnSync"),
@@ -66,15 +67,12 @@ export const NISH_MODULES: Record<string, Record<string, BuiltinExport>> = {
     platform: property("process.platform"),
     arch: property("process.arch"),
   },
-  "nish:io": {
+  [`${BUILTIN_SCHEME}io`]: {
     write: call("write"),
     writeError: call("writeError"),
     panic: call("panic"),
   },
 };
-
-/** The `nish:` prefix, matched before the specifier is treated as a path. */
-export const NISH_SPECIFIER_PREFIX = "nish:";
 
 /**
  * Whether a specifier names a builtin module. A specifier that starts with
@@ -83,7 +81,7 @@ export const NISH_SPECIFIER_PREFIX = "nish:";
  * missing file, which is what it would become if it fell through to path
  * resolution.
  */
-export const isNishSpecifier = (specifier: string): boolean => specifier.startsWith(NISH_SPECIFIER_PREFIX);
+export const isNishSpecifier = (specifier: string): boolean => specifier.startsWith(BUILTIN_SCHEME);
 
 /** The exports of a `nish:` module, or undefined when the module does not exist. */
 export const nishModule = (specifier: string): Record<string, BuiltinExport> | undefined =>

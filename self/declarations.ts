@@ -12,6 +12,7 @@
 
 import { CheckContext } from "./context";
 import { isNishSpecifier, nishModuleNames } from "./nish_modules";
+import { STD_PREFIX } from "./branding";
 import { resolveType } from "./annotations";
 import { FLAG_EXPORTED, N_EMPTY, N_FUNCTION, N_IMPORT, N_LIST, Node } from "./nodes";
 import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program";
@@ -125,10 +126,19 @@ export function collectImports(ctx: CheckContext, decl: Node): void {
   // one reads as a bad module instead of a missing file. The hint goes after
   // the interpolation deliberately, so the longest literal run of this
   // template — and with it the code the rule has always had — is unchanged.
-  if (!isNishSpecifier(specifier) && !specifier.startsWith("./") && !specifier.startsWith("../")) {
+  // Two bare forms are legal. `nish:` names a builtin and resolves to no file;
+  // `nish/` names a standard-library module, which is ordinary source resolved
+  // like any other file, only from beside the compiler. Everything else is
+  // still refused: there is no package resolution (wp21 §5b).
+  if (
+    !isNishSpecifier(specifier) &&
+    !specifier.startsWith(STD_PREFIX) &&
+    !specifier.startsWith("./") &&
+    !specifier.startsWith("../")
+  ) {
     ctx.errorAtSpecifier(
       decl,
-      `Only relative import specifiers are supported (\`./x\` or \`../x\`), got \`${specifier}\` (the builtin modules are ${nishModuleNames()})`
+      `Only relative import specifiers are supported (\`./x\` or \`../x\`), got \`${specifier}\` (the bare forms are ${nishModuleNames()} and ${STD_PREFIX}<module>)`
     );
     return;
   }

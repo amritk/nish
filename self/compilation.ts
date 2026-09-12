@@ -39,6 +39,8 @@ import { ParentTable } from "./parents";
 import { Parser } from "./parser";
 import { CheckedProgram, FunctionSig, StructRegistry } from "./program";
 import { basenameWithout, dirname, relativePath, resolveModule } from "./paths";
+import { STD_PREFIX } from "./branding";
+import { stdModuleNames, stdModulePath } from "./std_modules";
 import { RuntimeTable } from "./runtime";
 import { splitByte } from "./strings";
 import { TypeTable } from "./types";
@@ -224,13 +226,17 @@ export class Compilation {
       if (unit.resolved.has(imp.specifier)) {
         continue;
       }
-      const target = resolveModule(dir, imp.specifier);
+      const target = imp.specifier.startsWith(STD_PREFIX)
+        ? stdModulePath(imp.specifier)
+        : resolveModule(dir, imp.specifier);
       if (readFileSyncOrNull(target) === null) {
         // At the module specifier, where stage0 points
         // (`imp.node.moduleSpecifier` in `src/compilation.ts`).
         checker.ctx.errorAtSpecifier(
           imp.decl,
-          `Cannot find module \`${imp.specifier}\` (looked for ${target})`
+          imp.specifier.startsWith(STD_PREFIX)
+            ? `Module \`${imp.specifier}\` is not part of the standard library (it has: ${stdModuleNames()})`
+            : `Cannot find module \`${imp.specifier}\` (looked for ${target})`
         );
         checker.ctx.errored = false;
         continue;

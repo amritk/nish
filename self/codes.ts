@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 357;
+export const RULE_COUNT: i32 = 358;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -277,6 +277,8 @@ export function diagnosticRules(): string[] {
     "NL2003",
     "` is not definitely assigned in the constructor",
     "NL2082",
+    "` is not part of the standard library (it has: ",
+    "NL3009",
     " values; build it with `[]` and `push` instead",
     "NL2022",
     "` has more than one constructor (no overloads)",

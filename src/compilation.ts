@@ -32,6 +32,9 @@ import { CompileError, DiagnosticSink } from "./diagnostics.js";
 import { parseSource } from "./parser.js";
 import { validateSyntax } from "./validator.js";
 import { CompilerOptions, DEFAULT_OPTIONS } from "./types.js";
+import { STD_PREFIX } from "./branding.js";
+import { STD_DIR, stdModuleNames } from "./std-modules.js";
+import { PKG_ROOT } from "./version.js";
 
 export interface ModuleUnit {
   /** Absolute path: the module's identity. */
@@ -125,6 +128,7 @@ export class Compilation {
   }
 
   private resolveSpecifier(importer: ModuleUnit, imp: ImportBinding): string {
+    if (imp.specifier.startsWith(STD_PREFIX)) return this.resolveStdSpecifier(importer, imp);
     let resolved = path.resolve(path.dirname(importer.path), imp.specifier);
     if (resolved.endsWith(".js")) resolved = resolved.slice(0, -3) + ".ts";
     else if (!resolved.endsWith(".ts")) resolved += ".ts";
@@ -139,6 +143,37 @@ export class Compilation {
       );
     }
     return resolved;
+  }
+
+  /**
+   * `nish/text` -> `std/text.ts` beside this compiler.
+   *
+   * The standard library is *source*, not a builtin: the module is compiled
+   * into the program that imports it and reaches the emitter like any other,
+   * which is the whole of `docs/wp21-packages.md` §3. So this answers a path
+   * and everything downstream is the ordinary module path — the only thing
+   * that differs from `./text` is where the file is looked for.
+   *
+   * It is looked for beside the compiler rather than through `node_modules`,
+   * and that is the one deliberate narrowing of §5b: for the compiler's *own*
+   * package there is exactly one right answer — the `std/` that shipped with
+   * this binary — and no version of it can be skewed against the compiler
+   * reading it, because the two are one package. A third-party bare specifier
+   * is still refused, and gaining one is what WP21 is for.
+   *
+   * The diagnostic lists the library rather than the path it tried, for the
+   * reason the missing-module one is phrased against the importer: where the
+   * compiler is installed is not a fact about the program.
+   */
+  private resolveStdSpecifier(importer: ModuleUnit, imp: ImportBinding): string {
+    const name = imp.specifier.slice(STD_PREFIX.length);
+    const resolved = path.join(PKG_ROOT, STD_DIR, `${name}.ts`);
+    if (name.length > 0 && fs.existsSync(resolved) && fs.statSync(resolved).isFile()) return resolved;
+    throw new CompileError(
+      `Module \`${imp.specifier}\` is not part of the standard library (it has: ${stdModuleNames().join(", ")})`,
+      imp.node.moduleSpecifier,
+      importer.sourceFile
+    );
   }
 
   /**

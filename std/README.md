@@ -13,30 +13,55 @@ and subject to the same rules as `examples/` or `self/`
 
 ## How a program imports it
 
-By relative specifier, because that is the only import form the language has
-(`Only relative import specifiers are supported`):
+By its package specifier:
 
 ```ts
-import { Suite } from "../std/testing";
+import { Suite } from "nish/testing";
 ```
+
+`nish/<module>` resolves to `<module>.ts` in this directory, found beside the
+compiler that is running — not relative to the importing file, so the same
+specifier works at any depth and from outside this repository.
 
 **Source is the distribution format** ([`docs/wp21-packages.md`](../docs/wp21-packages.md)
 §2), so an import of a `std/` module is not a link against a built library: the
 module is compiled with the program that imports it, and the whole-program
 attribute pass sees through it exactly as it sees through the program's own
 functions. A `std/` function is inlined, specialised or dropped on the same
-terms as a local one.
+terms as a local one — and a module you import but never call is dropped
+whole. Measured at the `speed` and `size` profiles, both of which link with
+`-flto -Wl,--gc-sections`: a program importing three `std/text` functions and
+calling none is **byte-identical** to the same program without the import.
+(`debug` keeps them, which is what `debug` is for.)
 
-A bare specifier — `import { Suite } from "nish/testing"` — is what WP21 would
-buy and is deliberately not faked in the meantime: a resolver that special-cased
-this directory would be a second module system, and the one that is coming has
-to agree with Node's.
+A relative specifier still works and means the same thing —
+`import { Suite } from "../std/testing"` — but it hard-codes the depth of the
+importing file and only reaches an installed library by the path the install
+put it at, so `nish/` is the form to write.
 
-`std/` is in the package's `files`, so an installed compiler has the library
-beside it, and a program outside this repository reaches it by the path the
-install put it at — `node_modules/nish/std/testing` for a local install. That
-path is the honest form of "no resolution yet", and it is the one thing WP21
-replaces first.
+### Why this is not the second module system this file used to warn about
+
+An earlier version of this section said a bare specifier was "deliberately not
+faked", because a resolver that special-cased this directory would be a second
+module system and the one WP21 is bringing has to agree with Node's. That
+reasoning still holds for third-party packages, which are still refused
+(`docs/wp21-packages.md` §5b). It does not hold for *this* package, for two
+reasons that are only true of it:
+
+- There is exactly one right answer. `std/` ships inside the compiler's own
+  package and is versioned with it, so "the `std/` beside this binary" is not a
+  guess a resolver makes — it is the only `std/` that can be correct for the
+  compiler reading it. No version can be skewed against it.
+- It **is** what Node resolves. `package.json` declares
+  `"./*": "./std/*.ts"` in `exports`, so `nish/text` is a package
+  self-reference: `import.meta.resolve("nish/text")` answers `std/text.ts`, and
+  `tsc` under `moduleResolution: node16` resolves it to the same file, which is
+  what gives an editor go-to-definition into the real source. The compiler
+  short-circuits to that answer rather than walking `node_modules` to reach it.
+
+So this is WP21's first slice rather than a detour around it: the spelling is
+the one WP21 specifies, and what is still missing is resolution for specifiers
+that are *not* this package.
 
 ## Writing a module here
 

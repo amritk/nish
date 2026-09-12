@@ -800,15 +800,28 @@ program twice, with one golden between them.
   `tests/cases/reject_export_default`).
 - The only import form is a named import from a relative specifier:
   `import { square, cube as pow3 } from "./math"` (`tests/link/two_file`).
-  The specifier must start with `./` or `../`, or be one of the three builtin
-  modules below (`Only relative import specifiers are supported`,
-  `tests/cases/reject_bare_import`); `.ts` is optional and `./x.js` maps to
+  The specifier must start with `./` or `../`, name one of the three builtin
+  modules below, or name a standard-library module as `nish/<module>`
+  (`Only relative import specifiers are supported`,
+  `tests/cases/reject_bare_import`, `tests/cases/reject_bare_package`); `.ts` is optional and `./x.js` maps to
   `./x.ts`; paths resolve relative to the importing file. Default imports
   (`Default imports are not supported`, `reject_default_import`), namespace
   imports (`Namespace imports`, `reject_namespace_import`), side-effect
   imports (`Side-effect imports`, `reject_side_effect_import`), and
   type-only imports are rejected. A missing file is
   `` Cannot find module `./does_not_exist` `` (`reject_missing_module`).
+- **The standard library is imported as `nish/<module>`**
+  (`tests/link/std_bare_specifier`). It resolves to `std/<module>.ts` beside
+  the running compiler rather than relative to the importing file, so the same
+  specifier works at any depth. A module the library does not have is
+  `` Module `nish/json` is not part of the standard library (it has: testing,
+  text) `` (`reject_std_unknown_module`). Unlike a `nish:` builtin this is
+  ordinary Nish source: it is compiled into the program that imports it and is
+  subject to every rule in this document. What it costs is what you call —
+  `speed` and `size` link with `--gc-sections`, and a module imported but never
+  called is byte-for-byte free (`std/README.md`).
+- Every other bare specifier is refused: there is no package resolution
+  (`reject_bare_package`, `docs/wp21-packages.md` §5b).
 - An imported constant contributes no `declare` and no relocation: it is
   folded into every use site in the importing module exactly as it is in the
   exporting one (`tests/link/const_export`,

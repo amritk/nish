@@ -273,6 +273,8 @@ const RULES: string[] = [
     "NL2003",
     "` is not definitely assigned in the constructor",
     "NL2082",
+    "` is not part of the standard library (it has: ",
+    "NL3009",
     " values; build it with `[]` and `push` instead",
     "NL2022",
     "` has more than one constructor (no overloads)",
@@ -772,7 +774,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 357;
+export const RULE_COUNT = 358;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

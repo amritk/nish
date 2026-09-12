@@ -56,7 +56,7 @@ import { generateHeader } from "./interop_header";
 import { generateNapiShim } from "./interop_napi";
 import { generateWasmLoader, wasmLoaderPath } from "./interop_wasm";
 import { Options } from "./options";
-import { dirname } from "./paths";
+import { dirname, packageRoot } from "./paths";
 import { jsonQuote } from "./strings";
 import { codeFor, TOOLCHAIN } from "./codes";
 import { resolveTarget, supportedTargets } from "./target";
@@ -487,24 +487,6 @@ export function main(): number {
     return 0;
   }
   return linkProgram(outputs, link, profile, opts.debugInfo, opts.threads, json);
-}
-
-/**
- * The package root: the directory holding `scripts/` and `runtime/`. stage0
- * reads it from `__dirname` (`src/version.ts`); this compiler is a binary, so
- * it derives it from the path it was invoked by — `<prefix>/bin/nish` and
- * `build/nish` both put it one level up — and falls back to the working
- * directory, which is what a checkout wants. Empty when neither has the
- * script, so the caller can say which two it looked in.
- */
-function packageRoot(): string {
-  const candidates: string[] = [`${dirname(process.argv[0])}/..`, "."];
-  for (const root of candidates) {
-    if (readFileSyncOrNull(`${root}/scripts/build.sh`) !== null) {
-      return root;
-    }
-  }
-  return "";
 }
 
 /**

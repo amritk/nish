@@ -14,6 +14,8 @@
 // to stay in the same order as stage0's table — the `.err` goldens match on
 // the whole sentence.
 
+import { BUILTIN_SCHEME } from "./branding";
+
 /** One name a `nish:` module exports, and the builtin it stands for. */
 export class BuiltinExport {
   /**
@@ -53,21 +55,24 @@ export class BuiltinExport {
  * unknown `nish:sqlite` has to be reported as a bad module rather than as the
  * missing file it would become if it fell through to path resolution.
  */
-export const isNishSpecifier = (specifier: string): boolean => specifier.startsWith("nish:");
+export const isNishSpecifier = (specifier: string): boolean => specifier.startsWith(BUILTIN_SCHEME);
 
 /** Whether the specifier is a module that exists. */
 export const isNishModule = (specifier: string): boolean =>
-  specifier === "nish:fs" || specifier === "nish:process" || specifier === "nish:io";
+  specifier === `${BUILTIN_SCHEME}fs` ||
+  specifier === `${BUILTIN_SCHEME}process` ||
+  specifier === `${BUILTIN_SCHEME}io`;
 
 /** Every module name, for the diagnostic that lists them. */
-export const nishModuleNames = (): string => "nish:fs, nish:process, nish:io";
+export const nishModuleNames = (): string =>
+  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io`;
 
 /** The names one module exports, in table order, for the diagnostic that lists them. */
 export const nishModuleExports = (specifier: string): string => {
-  if (specifier === "nish:fs") {
+  if (specifier === `${BUILTIN_SCHEME}fs`) {
     return "readFileSync, readFileSyncOrNull, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync";
   }
-  if (specifier === "nish:process") {
+  if (specifier === `${BUILTIN_SCHEME}process`) {
     return "exit, getenv, spawnSync, spawnSyncTo, monotonicNanos, argv, platform, arch";
   }
   return "write, writeError, panic";
@@ -75,7 +80,7 @@ export const nishModuleExports = (specifier: string): string => {
 
 /** The builtin `specifier` exports under `name`, or null when it exports no such name. */
 export const nishExport = (specifier: string, name: string): BuiltinExport | null => {
-  if (specifier === "nish:fs") {
+  if (specifier === `${BUILTIN_SCHEME}fs`) {
     if (
       name === "readFileSync" ||
       name === "readFileSyncOrNull" ||
@@ -89,7 +94,7 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
     }
     return null;
   }
-  if (specifier === "nish:process") {
+  if (specifier === `${BUILTIN_SCHEME}process`) {
     if (name === "exit") {
       return new BuiltinExport("process", "exit", false);
     }
@@ -101,7 +106,7 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
     }
     return null;
   }
-  if (specifier === "nish:io") {
+  if (specifier === `${BUILTIN_SCHEME}io`) {
     if (name === "write" || name === "writeError" || name === "panic") {
       return new BuiltinExport("", name, false);
     }
