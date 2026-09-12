@@ -1,0 +1,1 @@
+`Result<void, string>` has no `value`: its success arm carries nothing

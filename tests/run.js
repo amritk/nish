@@ -416,38 +416,56 @@ if (!only || "diagnostics".includes(only)) {
     jsSyn.stdout
   );
 
-  // Coverage over every rejection the suite exercises. The uncoded remainder is
-  // the backlog, pinned so it can shrink but not grow: such a message is built
-  // entirely out of interpolations and has no literal run long enough to
-  // identify a rule. Adding one is a matter of giving the message words of its
-  // own, not of editing the table -- which is what took this from 8 to 1:
-  // `` `${fn}` expects ${a}, got ${b} `` was eight of them, and now reads
-  // `expects an argument of type ${a}`, a run a code can be derived from.
-  // The one left is `Unknown base class ...`, whose leading run is shorter
-  // than the parenthetical that actually states the rule.
-  const UNCODED_BACKLOG = 1;
-  const rejectCases = fs
-    .readdirSync(casesDir)
-    .filter((f) => f.startsWith("reject_") && f.endsWith(".ts"));
-  const byMessage = new Map();
-  for (const c of rejectCases) {
-    const args = [path.join("tests", "cases", c), "--json"];
-    const argsFile = path.join(casesDir, `${c.slice(0, -3)}.args`);
-    if (fs.existsSync(argsFile))
-      args.push(...fs.readFileSync(argsFile, "utf8").trim().split(/\s+/).filter(Boolean));
-    const r = spawnSync("node", [cli, ...args], { cwd: root, encoding: "utf8" });
-    for (const line of r.stdout.split("\n")) {
-      if (!line.startsWith("{")) continue;
-      const o = JSON.parse(line);
-      byMessage.set(o.message, o.code);
-    }
-  }
-  const uncoded = [...byMessage].filter(([, code]) => code === "NL0000");
-  const coverage = ((1 - uncoded.length / byMessage.size) * 100).toFixed(1);
+  // Coverage over every code in the registry, not only over the ones some
+  // rejection happens to reach (WP19 G2.4). `tests/diagnostic_coverage.js`
+  // compiles the negatives, the `perf_*` positives and its own
+  // `tests/wordings/` corpus, reads the `code` out of every `--json` object,
+  // and requires each of the registry's codes to be either provoked or named
+  // in `tests/wordings/unreachable.txt` with a reason. It replaces the loop
+  // that used to live here, which spawned the same compilers one at a time and
+  // could only report what the corpus already reached; this one is pooled and
+  // says what it does *not* reach, which is the number the gate is about.
+  //
+  // The uncoded remainder is still the backlog, pinned so it can shrink but not
+  // grow: such a message is built entirely out of interpolations and has no
+  // literal run long enough to identify a rule. Adding one is a matter of
+  // giving the message words of its own, not of editing the table -- which is
+  // what took this from 8 to 1 over `tests/cases`: `` `${fn}` expects ${a}, got
+  // ${b} `` was eight of them, and now reads `expects an argument of type
+  // ${a}`, a run a code can be derived from. The one left there is `Unknown
+  // base class ...`, whose leading run is shorter than the parenthetical that
+  // actually states the rule.
+  //
+  // Five rather than one, because the loop this replaced walked
+  // `tests/cases/reject_*` alone and the tool walks the `tests/link/` negatives
+  // too: the whole-program rules -- a duplicate export, a duplicate import, a
+  // duplicate internal name and an export a module does not have -- are
+  // uncoded and always were, and nothing was counting them. They are named on
+  // stdout by the run, so shrinking this backlog means giving one of those
+  // messages a literal run of its own.
+  const UNCODED_BACKLOG = 5;
+  const wordings = spawnSync(
+    "node",
+    [
+      path.join(root, "tests", "diagnostic_coverage.js"),
+      "--compiler",
+      path.relative(root, cli),
+      "--require-coverage",
+      ...(process.env.UPDATE_GOLDENS === "1" ? ["--update"] : []),
+    ],
+    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+  );
+  const wordingsSummary = wordings.stdout.trim().split("\n").pop() ?? "";
   check(
-    `codes: ${byMessage.size - uncoded.length}/${byMessage.size} distinct rejection messages carry a code (${coverage}%), ${uncoded.length} uncoded`,
-    byMessage.size > 200 && uncoded.length <= UNCODED_BACKLOG,
-    uncoded.map(([m]) => `  uncoded: ${m}`).join("\n")
+    `codes: every registry code is provoked by a program or explained (${wordingsSummary})`,
+    wordings.status === 0,
+    `${wordings.stdout}${wordings.stderr}`
+  );
+  const uncodedCount = Number(/uncoded=(\d+)/.exec(wordingsSummary)?.[1] ?? NaN);
+  check(
+    `codes: the uncoded backlog is ${uncodedCount} message(s), and may not grow past ${UNCODED_BACKLOG}`,
+    Number.isFinite(uncodedCount) && uncodedCount <= UNCODED_BACKLOG,
+    wordings.stdout
   );
   const jsOk = spawnSync(
     "node",
@@ -3541,6 +3559,33 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           ourJson.stdout === theirJson.stdout &&
           ourJson.stdout.split("\n").filter(Boolean).length === 3,
         `ours:\n${ourJson.stdout}${ourJson.stderr}\ntheirs:\n${theirJson.stdout}`
+      );
+
+      // WP19 G2.4, the wording gap: the same coverage run, through the
+      // compiler that survives stage0. `tests/wordings/` pins stage0's wording
+      // for each code, and this asks stage1 for the same sentence. Two
+      // outcomes are declared per case rather than in general:
+      // `parser_refusals.txt` for the constructs stage1's parser turns down
+      // before the phase that owns the rule can word it (§A3), and
+      // `stage1_divergence.txt` for the eleven programs the two compilers do
+      // not yet answer the same way at all. `--strict-refusals` is what makes
+      // both lists shrink-only: a case that starts agreeing fails until the
+      // line naming it is deleted.
+      const stage1Wordings = spawnSync(
+        "node",
+        [
+          path.join(root, "tests", "diagnostic_coverage.js"),
+          "--compiler",
+          path.relative(root, compiler),
+          "--strict-refusals",
+        ],
+        { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+      );
+      const stage1WordingsSummary = stage1Wordings.stdout.trim().split("\n").pop() ?? "";
+      check(
+        `the self-hosted compiler: the diagnostic wordings are stage1's too (${stage1WordingsSummary})`,
+        stage1Wordings.status === 0,
+        `${stage1Wordings.stdout}${stage1Wordings.stderr}`
       );
 
       // WP15 §8 through the driver (WP19 G1). The analysis is compared word

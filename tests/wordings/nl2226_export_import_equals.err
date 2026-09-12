@@ -1,0 +1,1 @@
+Only functions can be exported for now, plus classes and interfaces (found `export` on ImportEqualsDeclaration)

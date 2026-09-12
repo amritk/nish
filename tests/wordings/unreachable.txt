@@ -1,0 +1,89 @@
+# Registry codes no program can provoke, one `CODE  reason` per line.
+#
+# `tests/diagnostic_coverage.js` requires every code in `self/codes.ts` to be
+# either provoked by the corpus or named here, so a diagnostic cannot quietly
+# arrive without a test. A code listed here that turns out to be reachable is a
+# failure as well: the list may shrink, and it may not rot.
+#
+# An unreachable diagnostic is a finding about the compiler rather than a test
+# nobody wrote, which is why each line says which kind it is. None of them is a
+# bug in what the compiler *does*; between them they say that `RULE_COUNT` is
+# about fifteen percent larger than the number of rules a user can actually be
+# shown.
+
+# --- Retired: the fragment no longer matches anything the compiler prints. ----
+# `scripts/gen-diagnostic-codes.mjs` keeps a number after its rule is gone, on
+# purpose: a released compiler handed that number to a rule, so it may never be
+# handed to another one. The entry costs a string and matches nothing.
+NL2001  retired: the overload/override rule the inheritance work removed
+NL2004  retired: the `implements` field-order rule, reworded since
+NL2017  retired: a field clashing with a method, reworded since
+NL2028  retired: the lower-case `ok(...)`/`err(...)` spelling of the immutable-`Result` rule
+NL2040  retired: inheritance, removed
+NL2042  retired: the long form of the WP15 §8 allocation warning; the live one is NL9001
+NL2047  retired: inheritance, removed
+NL2049  retired: inheritance, removed
+NL2050  retired: inheritance, removed
+NL2051  retired: inheritance, removed
+NL2085  retired: inheritance, removed
+NL2087  retired: the long form of the WP15 §8 string warning; the live one is NL9002
+NL2094  retired: inheritance, removed
+NL2110  retired: inheritance, removed
+NL2111  retired: inheritance, removed
+NL2112  retired: inheritance, removed
+NL2123  retired: the `case` label rule before WP23 admitted an enum member; the live one is NL2284
+NL2132  retired: inheritance, removed
+NL2154  retired: `super(...)`, removed with inheritance
+NL2155  retired: `super(...)`, removed with inheritance
+NL2156  retired: `super(...)`, removed with inheritance
+NL2157  retired: `super`, removed with inheritance
+NL2158  retired: `super`, removed with inheritance
+NL2159  retired: `super`, removed with inheritance
+NL2287  retired before it ever fired: WP23 reserved the number, and no message in either compiler produces the fragment
+
+# --- Shadowed: a longer fragment of the same message always wins. ------------
+# `codeFor` walks the table longest fragment first, so a fragment that is a
+# substring of another fragment of the *same* message is never the answer.
+NL1022  shadowed by NL1005, which is the longer run of the same sentence
+NL1041  shadowed by NL1007, which is the longer run of the same sentence
+NL2019  shadowed by NL2095, the same words with the closing backtick before them
+NL2031  shadowed by NL2118, the same words with the colon before them
+
+# --- Preempted: an earlier phase or a nearer rule refuses it first. ----------
+NL1039  the generator holding the `yield` is refused before the `yield` is reached
+NL2011  `Generic interfaces are not supported` needs a type parameter, which Phase 0 refuses (NL1045)
+NL2075  a class name is registered before any function signature, so NL2074 is the one that fires
+NL2109  the single-module `check()` path is not the driver's; the loader reports NL3006 instead
+NL2173  `async` functions are Phase 0's (NL1015)
+NL2174  `async` methods are Phase 0's (NL1015)
+NL2205  generators are Phase 0's (NL1044)
+NL2207  generic functions are Phase 0's (NL1045)
+NL2208  generic methods are Phase 0's (NL1045)
+NL2217  labelled `break` is Phase 0's (NL1046)
+NL2218  labelled `continue` is Phase 0's (NL1046)
+
+# --- Structurally unreachable. -----------------------------------------------
+NL2211  no import syntax produces a clause with neither a name nor named bindings
+NL2216  an internal invariant: the array method table is only reached for an array receiver
+NL2252  the `new` dispatch has a `*` fallback, so the table never misses and NL2245 answers instead
+
+# --- Not a diagnostic: the generator collected text that never reaches a sink.
+# `console.error` in the driver and the `fail(...)` helper that writes the
+# N-API shim's *generated C* both match the scan in
+# `scripts/gen-diagnostic-codes.mjs`. The wordings are real and are worth
+# pinning; they are simply not diagnostics, so no `--json` object ever carries
+# these codes. The driver's usage errors are pinned by the WP12 block of
+# `tests/run.js`; the sidecar text is pinned byte for byte by the interop
+# checks and, after stage0, by `tests/nish-cmp.js`.
+NL3001  `--target: unsupported target` is a usage error (exit 2), not a diagnostic
+NL3002  a line of the exit-70 report, printed beside the diagnostic rather than as one
+NL3003  the internal-error diagnostic carries the INTERNAL constant NL0003, not this fragment
+NL3005  a line of the exit-70 report
+NL3007  a line of the exit-70 report
+NL3008  `unknown option:` is a usage error (exit 2), not a diagnostic
+NL4001  a comment in the C header `--emit-napi` writes
+NL4002  a comment in the C header `--emit-header` writes
+NL4003  an error string in the generated N-API shim
+NL4004  a sentence in the `--emit-dts` loader's marshalling report
+NL4005  an error string in the generated N-API shim
+NL4006  an error string in the generated N-API shim
