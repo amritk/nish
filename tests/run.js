@@ -1531,6 +1531,43 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   }
 }
 
+// ---- The golden runner written in Nish ---------------------------------------------
+// `tests/nish/run.ts` is the suite's section A — the golden cases — implemented in
+// the language instead of in Node, on top of `std/testing`, `std/text` and the three
+// builtins that made it possible (`readdirSync`, `spawnSyncTo`, `monotonicNanos`).
+// It is the only thing here that exercises those three together on a real workload
+// rather than in a case written to pin one rule.
+//
+// This runs it over the `pop` cases and not over the corpus, deliberately: the
+// runner spawns a compiler per case, so a full pass costs about four and a half
+// minutes, and paying that on every `npm test` would double the suite to prove
+// what a handful of cases already prove — one golden, one native round trip and
+// three rejections. `npm run test:nish` is the full pass.
+if (!only || "nish-runner".includes(only)) {
+  if (!HAS_CLANG) {
+    skip("the golden runner written in Nish (clang not found, and it links)");
+  } else {
+    const irDir = path.join(buildDir, "nish-runner.ir") + path.sep;
+    const runnerExe = path.join(buildDir, "nish-runner");
+    const built = spawnSync("node", [cli, path.join("tests", "nish", "run.ts"), "-o", irDir, "--link", runnerExe], {
+      cwd: root,
+    });
+    if (check("tests/nish/run.ts compiles and links", built.status === 0, String(built.stderr))) {
+      // cwd is the repository root because the runner addresses `tests/cases` and
+      // `dist/index.js` by relative path: there is no `cwd` builtin for it to
+      // build an absolute one from, which is also why it folds `<root>/` out of a
+      // golden rather than into its own output.
+      const ran = spawnSync(runnerExe, ["pop"], { cwd: root });
+      const report = String(ran.stdout);
+      check(
+        "the Nish runner agrees with the goldens over the `pop` cases (one golden, one native run, three rejections)",
+        ran.status === 0 && / 0 failed, /.test(report),
+        report + String(ran.stderr)
+      );
+    }
+  }
+}
+
 // ---- WP8: interop ------------------------------------------------------------------
 // runtime/nish.h is the public C ABI; --emit-header / --emit-dts / --emit-napi derive
 // host-side declarations from the same checked program the IR came from. Checks:

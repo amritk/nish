@@ -9,6 +9,7 @@ and subject to the same rules as `examples/` or `self/`
 | Module | What it is |
 | --- | --- |
 | [`testing.ts`](./testing.ts) | a test runner: a `Suite` a program drives with straight-line assertions, printing the `PASS` / `FAIL` / `SKIP` lines the repository's own harness prints, and answering the exit code |
+| [`text.ts`](./text.ts) | the string operations a program would otherwise write inline: `splitLines`, `splitWhitespace`, `trim` and its halves, `contains`, `replaceAll`, and `firstDifference` over two arrays of lines |
 
 ## How a program imports it
 
@@ -54,24 +55,38 @@ replaces first.
   importer in `tests/link/` is compiled by neither compiler on any run.
   `testing.ts` has two, one per outcome — `tests/link/std_testing` (exit 0) and
   `tests/link/std_testing_fail` (exit 1, and the wording of every failure
-  message).
+  message) — and `text.ts` has `tests/link/std_text`, which uses `Suite` to check
+  it, the way a user would.
 - **`std/` is not on the compiler's dependency list.** Nothing in `src/` or
   `self/` imports it, and nothing should: the compiler is the thing that has to
   build before the library means anything.
 
-## What `std/testing` is not
+## What `std/testing` is not, and what closed
 
-It is a test *library*, not a replacement for `tests/run.js`. The Node harness
-compiles the corpus, assembles it with `llvm-as`, links it, runs it and diffs
-stdout against a golden, and three of those need something the language does not
-have yet:
+`std/testing` is a test *library*: it is how a compiled program checks itself.
+Driving the compiler — compiling a corpus, assembling it, linking it, running it
+and diffing stdout against a golden — needed three things the language did not
+have, and all three have since landed as builtins:
 
-| Missing | Why the harness needs it |
+| Was missing | Now |
 | --- | --- |
-| a directory listing (`readdirSync`) | `tests/cases/` is discovered, not listed in a manifest. Today a Nish driver would have to read a checked-in list of its cases |
-| a child's **output** (`spawnSync` answers an exit status and nothing else) | comparing a program's stdout with its `.out` is the whole of a golden run. A driver can redirect through `sh -c` into a file and read that back, which is a shell dependency the harness does not have |
-| a clock | `tests/run.js` reports how long a section took; nothing in the language can read the time |
+| a directory listing | `readdirSync(path): string[] \| null`, sorted by bytes, because there is no `sort` for a caller to reach for |
+| a child's **output** — `spawnSync` answers a status and nothing else | `spawnSyncTo(argv, stdoutPath, stderrPath)`, each stream to a file, an empty path inheriting |
+| a clock | `monotonicNanos(): i64` |
 
-Those are three builtins and a design decision each, not a work package that is
-underway. Until they land, the split is the honest one: the Node harness drives
-the compiler, and `std/testing` is how a compiled program checks itself.
+So the driver exists, in the language, and it is
+[`tests/nish/run.ts`](../tests/nish/run.ts): it discovers the golden cases with
+`readdirSync`, compiles each one by spawning the compiler, links and runs the ones
+with a `.out`, diffs the IR against the golden line by line, and reports through a
+`Suite`. It passes over the whole corpus — `npm run test:nish` — and `npm test`
+runs it over a handful of cases so that the three builtins are exercised together
+on a real workload on every run.
+
+It is still not a replacement for `tests/run.js`, and the difference is worth
+being precise about: it covers section A, the golden cases, and none of the
+pipeline checks — no interop sidecars, no layout assertions, no wasm profiles, no
+packaging, no self-hosting oracles, and none of the fourteen flag variations
+`tests/self/parity.js` runs. It also skips, by name and counted, the three
+sidecars it does not implement (`.env`, `.argv`, `.stdout`). What it demonstrates
+is that the language can host its own harness; what `tests/run.js` does is prove
+the compiler.
