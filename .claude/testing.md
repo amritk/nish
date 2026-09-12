@@ -192,6 +192,31 @@ along with the `.ll` goldens, and `node tests/self/goldens.js --update` alone;
 read `.claude/selfhost.md` before regenerating one, because regenerating from
 the wrong compiler is how a golden records a bug as the specification.
 
+`tests/wordings/` is the third: one small program per **diagnostic code**,
+named for the code it pins (`nl2200_empty_import_list.ts`), with the whole
+message in its `.err`. It exists because a `reject_*` case proves a rule and a
+wording gets proved only where somebody happened to write one down — 176 of the
+registry's 351 codes were reached by nothing that outlives stage0 (WP19 §2B,
+"The wording gap"). `tests/diagnostic_coverage.js` runs it, and requires every
+registry code to be **either provoked by a program or named in
+`tests/wordings/unreachable.txt` with a reason**, so a new diagnostic arrives
+with a case or with a sentence saying why it cannot have one.
+
+```bash
+node tests/diagnostic_coverage.js                       # the default compiler
+node tests/diagnostic_coverage.js --compiler build/nish --strict-refusals
+node tests/diagnostic_coverage.js --report              # every code, covered or not
+node tests/diagnostic_coverage.js --update              # rewrite the .err pins
+```
+
+Two lists sit beside the corpus and both shrink rather than grow:
+`parser_refusals.txt` names the cases whose wording is stage0's because
+stage1's parser refuses the syntax first (§A3's declared class, and those
+wordings do not survive R6), and `stage1_divergence.txt` names the eleven where
+the two compilers do not agree at all. `npm test` runs the tool over both
+compilers, the second with `--strict-refusals`, so a case that starts agreeing
+fails until its line is deleted.
+
 ## Example case
 
 ```

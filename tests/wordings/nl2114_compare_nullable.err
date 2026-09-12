@@ -1,0 +1,1 @@
+Cannot compare string | null with string using `===`; check the nullable side against `null` first, then compare the narrowed values

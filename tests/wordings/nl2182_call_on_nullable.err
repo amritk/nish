@@ -1,0 +1,1 @@
+Cannot call `scale` on `Point | null`; check for null first: `if (p !== null) { ... }` narrows `Point | null` to `Point`
