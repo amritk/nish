@@ -4,7 +4,20 @@
  * Everything emitted here must be a *guarantee*, never a hope: a wrong
  * attribute is undefined behaviour, not a missed optimisation. The rules:
  *
- *   nounwind    The language has no exceptions; nothing can unwind.
+ *   nounwind    The language has no exceptions; nothing can unwind. WP27 S1
+ *               adds the one frame this does not prove on its own — a
+ *               `declare function` whose C body this compiler never sees — and
+ *               resolves it by declaration rather than by dropping the
+ *               attribute: **unwinding out of a foreign call is undefined in
+ *               this language.** That is the same position clang takes
+ *               compiling C, where a C++ exception crossing a C frame is
+ *               undefined, and it is the only position available to a language
+ *               with no `throw`, no landing pad and no way to spell a handler:
+ *               a caller that dropped `nounwind` could not do anything with
+ *               the unwind it admitted, so the whole call graph would pay for
+ *               a hazard none of it can respond to. `docs/wp27-ffi.md` §2
+ *               records it as a decision, which is what keeps it from being
+ *               an inherited assumption that quietly stopped being true.
  *   willreturn  The function cannot fail to return: every loop is a counted
  *               loop with a finite trip count (`isCountedLoop`), the body
  *               has no `throw` (which traps and never returns), it cannot
@@ -262,7 +275,11 @@ export function analyzeFunctions(
   propagate(first);
   const escapes = new Map<string, EscapeResult>();
   for (const program of list) {
-    for (const sig of program.functions) escapes.set(sig.name, analyzeEscapes(program, sig, first, opts));
+    for (const sig of program.functions) {
+      // WP27 S1: no body, so no allocation sites and nothing to escape.
+      if (sig.foreign) continue;
+      escapes.set(sig.name, analyzeEscapes(program, sig, first, opts));
+    }
   }
   // Round 2: the same facts with stack allocations applied, then the scope decision.
   const facts = collect(escapes);
@@ -579,6 +596,26 @@ function collectFacts(
     usesArenaControl: memory?.usesArenaControl ?? false,
     callSites: memory?.callSites ?? [],
   };
+  // WP27 S1: a `declare function` has no body, and the defaults above are the
+  // *pure* ones — `effect: "none"`, `willReturn: true` — because purity here is
+  // discovered by walking a body and finding nothing impure in it. An absent
+  // body is not an empty one: returning early with those defaults would mark
+  // every caller of a C function `readnone willreturn`, which is the one
+  // outcome that miscompiles rather than merely pessimises. So a foreign
+  // function asserts the worst of everything it cannot be seen to avoid, and
+  // the fixpoint carries that to its callers like any other impurity.
+  //
+  // `escaping` and `pointerParams` stay empty because S1's boundary is scalars
+  // only: with no pointer among the arguments or the result there is nothing
+  // for a foreign callee to capture. §3 of `docs/wp27-ffi.md` is why that
+  // restriction is the reason this is sound rather than a limitation of it, and
+  // why S2 cannot simply widen the type check without revisiting this block.
+  if (sig.foreign) {
+    facts.effect = "write";
+    facts.willReturn = false;
+    facts.readsMemory = true;
+    return facts;
+  }
   // A `returned` or `leaked` allocation is still an allocation.
   if (facts.returnsAllocation || facts.allocLeaks) facts.allocates = true;
   const paramNames = new Set(facts.paramNames);

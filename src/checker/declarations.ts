@@ -14,6 +14,7 @@
 import ts from "typescript";
 import { CompileError } from "../diagnostics.js";
 import { CompilerOptions, resolveTypeNode, typeToString } from "../types.js";
+import { isScalar } from "../interop/abi.js";
 import { ConstInfo } from "./constants.js";
 import { FunctionSig, ImportBinding, Param } from "./program.js";
 
@@ -30,7 +31,18 @@ export function collectFunctionSignature(
   opts: CompilerOptions
 ): FunctionSig {
   if (!decl.name) throw new CompileError("Functions must be named", decl, sf);
-  if (!decl.body) throw new CompileError("Functions must have a body", decl, sf);
+  const foreign = !!decl.modifiers?.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword);
+  // A `declare function` is the one function with no body that is not a
+  // mistake (WP27 S1), so the body rule is the foreign rule's mirror rather
+  // than a check it skips: exactly one of the two must hold.
+  if (!foreign && !decl.body) throw new CompileError("Functions must have a body", decl, sf);
+  if (foreign && decl.body) {
+    throw new CompileError(
+      "`declare function` declares a C function this program calls, so it must have no body",
+      decl,
+      sf
+    );
+  }
   if (decl.typeParameters) throw new CompileError("Generic functions are not supported", decl, sf);
   if (decl.asteriskToken) throw new CompileError("Generators are not supported", decl, sf);
   if (decl.modifiers?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) {
@@ -38,9 +50,6 @@ export function collectFunctionSignature(
   }
   if (decl.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) {
     throw new CompileError("`export default` is not supported; use a named `export function`", decl, sf);
-  }
-  if (decl.modifiers?.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)) {
-    throw new CompileError("`declare function` is not supported yet", decl, sf);
   }
   if (!decl.type) {
     throw new CompileError(
@@ -53,15 +62,50 @@ export function collectFunctionSignature(
     throw new CompileError("Function names starting with `nish_` are reserved for the runtime", decl.name, sf);
   }
 
+  const params = collectPlainParams(decl.parameters, sf, opts);
+  const returnType = resolveTypeNode(decl.type, sf, opts);
+
+  if (foreign) {
+    // S1 crosses the boundary with scalars only. That is not timidity about C:
+    // with no pointer among the arguments or the result there is nothing for
+    // escape analysis to be wrong about, which is the whole reason S1 can be
+    // sound without answering WP27 §3's questions. `isScalar` is the same
+    // predicate `--emit-header` uses, so one ABI serves both directions.
+    if (hasExportModifier(decl)) {
+      throw new CompileError(
+        `\`declare function ${decl.name.text}\` cannot be exported: it is a C function this program calls, not one it defines`,
+        decl.name,
+        sf
+      );
+    }
+    for (const p of params) {
+      if (!isScalar(p.type)) {
+        throw new CompileError(
+          `Parameter \`${p.name}\` of \`declare function ${decl.name.text}\` is ${typeToString(p.type)}, and a declared C function takes scalars only`,
+          decl,
+          sf
+        );
+      }
+    }
+    if (!isScalar(returnType)) {
+      throw new CompileError(
+        `\`declare function ${decl.name.text}\` returns ${typeToString(returnType)}, and a declared C function returns a scalar only`,
+        decl.type,
+        sf
+      );
+    }
+  }
+
   return {
     name: decl.name.text,
     sourceName: decl.name.text,
-    params: collectPlainParams(decl.parameters, sf, opts),
-    returnType: resolveTypeNode(decl.type, sf, opts),
+    params,
+    returnType,
     decl,
     nameNode: decl.name,
     declSite: decl,
     body: decl.body,
+    foreign: foreign || undefined,
     exported: hasExportModifier(decl),
   };
 }
