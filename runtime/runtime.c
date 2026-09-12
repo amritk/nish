@@ -31,6 +31,23 @@ int __main_argc_argv(int argc, char **argv) { return nish_c_main(argc, argv); }
 
 #define NISH_COLD __attribute__((noreturn, cold, noinline))
 
+/* ---- Thread-local state (WP20 T0)
+   The arena and the RNG seed are the only mutable process-wide objects here,
+   and both are a data race the moment a second thread runs compiled code. With
+   `-DNISH_THREADS` each thread gets its own, which is what `nish --threads`
+   compiles against: the flag makes the compiler emit `@nish_arena` as a
+   `thread_local(initialexec)` global, and a build that disagreed with this
+   file would not link at all, because ELF refuses a non-TLS reference to a TLS
+   definition. Off by default so the ordinary build pays nothing.
+
+   The same definition is in runtime/nish.h (for a host that includes it) and
+   runtime/runtime_wasm.c; they are one contract and move together. */
+#ifdef NISH_THREADS
+#define NISH_TLS _Thread_local
+#else
+#define NISH_TLS
+#endif
+
 /* ---- Arena: %struct.nish_arena = type { i8*, i64, i64, i8* }
 
    The widths are fixed rather than `size_t` for the reason runtime_wasm.c
@@ -44,7 +61,9 @@ int __main_argc_argv(int argc, char **argv) { return nish_c_main(argc, argv); }
    wherever this file is compiled. */
 typedef struct nish_chunk { struct nish_chunk *next; uint64_t cap; } nish_chunk;
 struct nish_arena { char *buf; uint64_t off; uint64_t cap; nish_chunk *chunks; };
-struct nish_arena nish_arena;
+/* One per thread under -DNISH_THREADS, one per process otherwise; the layout is
+   the same either way, which is why nothing else in this file has to know. */
+NISH_TLS struct nish_arena nish_arena;
 
 _Static_assert(sizeof(struct nish_arena) == 32, "arena layout is ABI: runtime.ts, nish.h");
 _Static_assert(offsetof(struct nish_arena, off) == 8, "the inlined allocator bumps field 1");
@@ -1051,8 +1070,13 @@ nish_str *nish_str_from_f64(double v) {
   return nish_str_new(out, o - out);
 }
 
-/* ---- Math.random: xorshift64*, seeded lazily from time and pid */
-static uint64_t nish_rng;
+/* ---- Math.random: xorshift64*, seeded lazily from time and pid.
+   Thread-local under -DNISH_THREADS (WP20 T0 §3.2): a shared seed word is a
+   race, and a per-thread one also makes each worker's stream its own rather
+   than an interleaving of everyone's. Two threads that start in the same
+   second still salt from the same time and pid, so a program that needs
+   distinct streams per thread seeds them itself. */
+static NISH_TLS uint64_t nish_rng;
 
 double nish_random(void) {
   uint64_t x = nish_rng ? nish_rng : ((uint64_t)time(0) << 32) ^ getpid() ^ 0x9E3779B97F4A7C15ull;
@@ -1113,7 +1137,12 @@ nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len) {
   return a;
 }
 
-/* process.argv: malloc, not the arena, so Arena.reset() cannot free it. Built once by @main. */
+/* process.argv: malloc, not the arena, so Arena.reset() cannot free it. Built once by @main.
+   Deliberately *not* NISH_TLS (WP20 T0 §3.2): `nish_argv_init` writes it once
+   before the program's `main` body runs and nothing writes it afterwards, so
+   every thread may read the one copy. That holds only while no thread is
+   spawned before initialisation, which the entry wrapper guarantees by calling
+   this first. */
 nish_array *nish_argv;
 
 void nish_argv_init(int32_t argc, char **argv) {

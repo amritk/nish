@@ -262,6 +262,25 @@ own* `DIFile` and line numbers rather than the importing module's, which is why
 there is more than one `DIFile` in a program with imports
 (`tests/link/reachable_struct`).
 
+A function's own position — the `DISubprogram`'s `line` and `scopeLine`, its
+parameters' `DILocalVariable`s, and the `DILocation` the prologue and any
+untied instruction carry — is where the **declaration** starts: `export`, or
+`const`, or `function`. Not the arrow. stage0 used to read it off the
+`ArrowFunction`, whose own start is its parameter list, which put the same
+function at two different positions depending on which of WP22's two spellings
+declared it and named the wrong line whenever the arrow sat below its `const`;
+`FunctionSig.declSite` is the node the checker records for it now
+(`tests/cases/dbg_arrow`, `docs/wp19-stage0-retirement.md` §A5). Stage1 never
+had the bug, because its parser normalises both spellings into one node that
+spans the declaration.
+
+A `DILocation` column is a **byte** offset into its line, plus one — what
+`clang -g` writes and what a debugger reads it back against. stage0 used to
+count the UTF-16 code units the `typescript` API hands it, which differs from
+stage1's byte count for every position after a non-ASCII character on the same
+line (`tests/cases/dbg_utf8`). Diagnostic columns are a separate question and
+are still code units on stage0: the consumer there is an editor.
+
 **Both compilers emit it.** `self/debug.ts` is the stage1 port, `-g` is a flag
 of `self/compile.ts` as it is of `src/index.ts`, and `tests/self/ir_oracle.js`
 compares the two byte for byte, metadata numbering included.

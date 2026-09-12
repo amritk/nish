@@ -27,6 +27,20 @@ extern "C" {
 #define NISH_STRINGIFY(x) NISH_STRINGIFY_(x)
 #define NISH_SYMBOL(name) __asm__(NISH_STRINGIFY(__USER_LABEL_PREFIX__) name)
 
+/* Thread-local storage for the arena and the RNG seed (WP20 T0). A host that
+ * includes this header must be compiled with the same `-DNISH_THREADS` the
+ * runtime was, because the storage class is part of the ABI: modules compiled
+ * with `nish --threads` reference `@nish_arena` as a `thread_local` global and
+ * ELF refuses to link that against a non-TLS definition. `scripts/build.sh
+ * --threads` passes the macro to every input, which is how `nish --threads
+ * --link` keeps the two halves in step. The same definition is in
+ * runtime/runtime.c and runtime/runtime_wasm.c. */
+#ifdef NISH_THREADS
+#define NISH_TLS _Thread_local
+#else
+#define NISH_TLS
+#endif
+
 /* ---- Strings ------------------------------------------------------------
  * An Nish `string` is a pointer to this header: { u64 len, bytes[len], 0 }.
  * `len` is the UTF-8 byte length (`s.length` in Nish). The bytes are
@@ -43,7 +57,9 @@ typedef struct nish_str {
 } nish_str;
 
 /* ---- Arena --------------------------------------------------------------
- * One global bump allocator. Compiled modules read this struct directly
+ * One bump allocator per process, or one per thread under `-DNISH_THREADS`
+ * (WP20 T0; the layout and every function below are the same either way).
+ * Compiled modules read this struct directly
  * (the fast path is inlined into the IR), so its layout is ABI:
  *   %struct.nish_arena = type { i8*, i64, i64, i8* }
  * Fields: current chunk buffer, bump offset, chunk capacity, chunk list.
@@ -57,7 +73,7 @@ struct nish_arena {
   uint64_t cap;
   void *chunks;
 };
-extern struct nish_arena nish_arena;
+extern NISH_TLS struct nish_arena nish_arena;
 
 /* Bump allocation: 8-byte rounded and aligned, uninitialised. */
 void *nish_alloc_struct(uint64_t size);
@@ -116,7 +132,8 @@ nish_str *nish_str_from_i64(int64_t v);
 nish_str *nish_str_from_u64(uint64_t v);
 
 /* Process and file I/O (WP7). `nish_exit` never returns; the file functions
- * print a message to stderr and exit(1) on a fatal error. */
+ * print a message to stderr and exit(1) on a fatal error. `nish_random` keeps
+ * one seed word, per process or — under `-DNISH_THREADS` — per thread. */
 double nish_random(void);
 void nish_exit(int32_t code);
 nish_str *nish_read_file(const nish_str *path);
