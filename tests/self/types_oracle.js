@@ -35,7 +35,18 @@ function buildTypes() {
     types.STRING,
     types.VOID,
   ];
-  const list = [...scalars, { kind: "struct", name: "Node" }, { kind: "struct", name: "Lexer" }];
+  const list = [
+    ...scalars,
+    { kind: "struct", name: "Node" },
+    { kind: "struct", name: "Lexer" },
+    // WP23: a distinct type with i32 representation, so it prints as an i32
+    // and assigns to nothing but itself.
+    { kind: "enum", name: "Kind" },
+    { kind: "enum", name: "Level" },
+    // An enum and a struct of one name are two types, which is what keeps
+    // `derivedKey` keying on the kind as well as the name.
+    { kind: "enum", name: "Node" },
+  ];
   const arrays = list.map((t) => types.arrayOf(t));
   list.push(...arrays);
   list.push(types.nullableOf(types.STRING));
@@ -58,13 +69,16 @@ function expectedTableSize(list) {
   const key = (t) => {
     if (t.kind === "array") return `12:${key(t.elem)}`;
     if (t.kind === "struct") return `13:${t.name}`;
+    if (t.kind === "enum") return `16:${t.name}`;
     if (t.kind === "nullable") return `14:${key(t.inner)}`;
     return t.kind;
   };
   const walk = (t) => {
     if (t.kind === "array") walk(t.elem);
     if (t.kind === "nullable") walk(t.inner);
-    if (t.kind === "array" || t.kind === "struct" || t.kind === "nullable") keys.add(key(t));
+    if (t.kind === "array" || t.kind === "struct" || t.kind === "nullable" || t.kind === "enum") {
+      keys.add(key(t));
+    }
   };
   for (const t of list) walk(t);
   return 12 + keys.size;
@@ -95,6 +109,8 @@ function expected() {
   }
   out.push("intern array 1");
   out.push("intern struct 1");
+  out.push("intern enum 1");
+  out.push("enum not struct 0");
   out.push("intern nullable 1");
   out.push("strip 1");
   out.push("strip plain 1");

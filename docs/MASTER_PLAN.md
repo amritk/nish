@@ -787,11 +787,15 @@ The rest of the language surface has no owner either, and a review of the
 corpus for the sentence *the language has no X* turned up eight candidates
 that belong to nobody: [wp23-language-surface.md](wp23-language-surface.md) is
 the plan of record, and its most useful half is the three it **refuses**.
-Non-generic `type` aliases and a numeric `enum` are being built now — both are
-pure checker work that changes no byte of IR, the alias because `Int32Array`
+Non-generic `type` aliases and a numeric `enum` have both landed — both were
+pure checker work that changed no byte of IR, the alias because `Int32Array`
 already establishes that an alias is the type it names, the enum because
-`self/` stands 171 module constants in for three of them and nothing stops
-passing a token kind where a node kind belongs. Module-level mutable state is
+`self/` stands 171 module constants in for three of them and nothing stopped
+passing a token kind where a node kind belongs. An enum is a *distinct* type
+with `i32` representation, so `tests/cases/enum_ir` and `enum_expanded` are one
+program written with and without it and their goldens are byte-identical files;
+`self/` does not adopt them until the next minor, by the bootstrap seed policy
+([wp19-stage0-retirement.md](wp19-stage0-retirement.md) G4). Module-level mutable state is
 the one functional gap, since stage1 cannot emit the `--json` object for an
 internal compiler error and orientation rule 7 says every failure is one of
 those objects; the note designs the narrow version — module-private, scalar,

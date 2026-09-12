@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 278 programs, 4589 dump lines.
+# 282 programs, 4669 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -1446,6 +1446,18 @@ function main(): i32 -> @nish_main [exported entry]
   callee 30:18 add -> @add
   callee 31:18 span -> @span
   callee 32:18 scaled -> @scaled
+program tests/cases/dbg_enum.ts
+module tests/cases/dbg_enum.ts (entry)
+function weight(k: Kind): i32 -> @weight
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: k
+  stackSites=0 stackLocals=0
+  local 17:9 w: Kind (const)
+function test(): i32 -> @test [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: weight
+  stackSites=0 stackLocals=0
+  callee 29:10 weight -> @weight
 program tests/cases/dbg_locals.ts
 module tests/cases/dbg_locals.ts (entry)
 struct Point (class) size=8 align=4
@@ -1672,6 +1684,66 @@ function main(): void -> @nish_main [exported entry]
   calls: side
   stackSites=0 stackLocals=0
   callee 6:3 side -> @side
+program tests/cases/enum_expanded.ts
+module tests/cases/enum_expanded.ts (entry)
+const KIND_IF: i32 = 1
+const KIND_WHILE: i32 = 2
+const KIND_RETURN: i32 = 3
+const LEVEL_LOW: i32 = 0
+const LEVEL_MID: i32 = 1
+const LEVEL_HIGH: i32 = 2
+function weight(k: i32): i32 -> @weight
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: k
+  stackSites=0 stackLocals=0
+function scale(l: i32): i32 -> @scale
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function heaviest(kinds: i32[]): i32 -> @heaviest
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: weight
+  pointer kinds: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 32:7 best: i32 (let)
+  local 33:14 k: i32 (const)
+  local 34:11 w: i32 (const)
+  callee 34:15 weight -> @weight
+function test(): i32 -> @test [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: heaviest scale weight
+  stackSites=1 stackLocals=1
+  local 43:9 kinds: i32[] (const)
+  local 44:9 total: i32 (const)
+  callee 44:17 heaviest -> @heaviest
+  callee 44:35 scale -> @scale
+  callee 44:55 weight -> @weight
+program tests/cases/enum_ir.ts
+module tests/cases/enum_ir.ts (entry)
+function weight(k: Kind): i32 -> @weight
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: k
+  stackSites=0 stackLocals=0
+function scale(l: Level): i32 -> @scale
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function heaviest(kinds: Kind[]): i32 -> @heaviest
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: weight
+  pointer kinds: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 39:7 best: i32 (let)
+  local 40:14 k: Kind (const)
+  local 41:11 w: i32 (const)
+  callee 41:15 weight -> @weight
+function test(): i32 -> @test [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: heaviest scale weight
+  stackSites=1 stackLocals=1
+  local 50:9 kinds: Kind[] (const)
+  local 51:9 total: i32 (const)
+  callee 51:17 heaviest -> @heaviest
+  callee 51:35 scale -> @scale
+  callee 51:55 weight -> @weight
 program tests/cases/export_fn.ts
 module tests/cases/export_fn.ts (entry)
 function double(n: i32): i32 -> @double [exported]
@@ -4012,6 +4084,18 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
   calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
+program docs/cookbook/decl_enum.ts
+module docs/cookbook/decl_enum.ts (entry)
+function weight(k: Kind): i32 -> @weight
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: k
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 weight
+  stackSites=0 stackLocals=0
+  local 19:9 k: Kind (const)
+  callee 20:27 weight -> @weight
 program docs/cookbook/decl_locals.ts
 module docs/cookbook/decl_locals.ts (entry)
 function polynomial(x: i32, k: i32): i32 -> @polynomial

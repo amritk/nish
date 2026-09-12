@@ -1,0 +1,1 @@
+`const enum` is not supported: an enum member is already folded to its integer

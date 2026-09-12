@@ -26,13 +26,13 @@ export type AliasInfo = {
 };
 
 /**
- * The names an alias may not take. A type keyword (`string`, `number`) is
- * resolved by `resolveTypeNode` from the syntax alone and a type reference
- * (`i32`, `Result`) before the module's own names are consulted, so an alias
- * spelled with one of these would simply never be looked at — silently, which
- * is the part worth refusing.
+ * The names a declared type may not take, shared with `enums.ts` (WP23). A
+ * type keyword (`string`, `number`) is resolved by `resolveTypeNode` from the
+ * syntax alone and a type reference (`i32`, `Result`) before the module's own
+ * names are consulted, so an alias or an enum spelled with one of these would
+ * simply never be looked at — silently, which is the part worth refusing.
  */
-const BUILTIN_TYPE_NAMES: ReadonlySet<string> = new Set([
+export const BUILTIN_TYPE_NAMES: ReadonlySet<string> = new Set([
   // resolved from the keyword's SyntaxKind, never as a name
   "number",
   "boolean",

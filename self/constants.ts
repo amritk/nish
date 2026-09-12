@@ -25,6 +25,7 @@ import {
   N_BINARY,
   N_FALSE,
   N_IDENT,
+  N_MEMBER,
   N_NUMBER,
   N_PAREN,
   N_STRING,
@@ -573,6 +574,26 @@ export class CaseValue {
 }
 
 /**
+ * The integer a numeric `enum` member's initialiser denotes, and whether there
+ * was one (WP23). Phase 0 has already refused everything but a numeric literal
+ * and its negation, so the only thing left to turn down here is a literal that
+ * is not an integer — and, for a caller that runs the checker without Phase 0,
+ * whatever else it let through.
+ */
+export function enumMemberValue(expr: Node): CaseValue {
+  if (expr.kind === N_NUMBER) {
+    return isFractional(expr.text)
+      ? new CaseValue(false, toI64(0))
+      : new CaseValue(true, parseIntegerLiteral(expr.text));
+  }
+  if (expr.kind === N_UNARY && expr.text === "-") {
+    const operand = enumMemberValue(expr.children[0]);
+    return new CaseValue(operand.known, -operand.value);
+  }
+  return new CaseValue(false, toI64(0));
+}
+
+/**
  * The value a `case` label selects on. It has to be known at compile time,
  * because LLVM's `switch` table holds constants: an integer literal, its
  * negation, or a module constant — which is where a program's token and node
@@ -581,6 +602,13 @@ export class CaseValue {
 export function caseValue(ctx: CheckContext, expr: Node): CaseValue {
   if (expr.kind === N_PAREN) {
     return caseValue(ctx, expr.children[0]);
+  }
+  // WP23: `case Kind.If:`. An enum member is a compile-time integer, and a
+  // `switch` over a discriminant is the reason the language has enums at all.
+  if (expr.kind === N_MEMBER) {
+    return ctx.program.isEnumMember(ctx.table, expr)
+      ? new CaseValue(true, toI64(ctx.program.nodeEnumValues[expr.id]))
+      : new CaseValue(false, toI64(0));
   }
   if (expr.kind === N_NUMBER) {
     return isFractional(expr.text)

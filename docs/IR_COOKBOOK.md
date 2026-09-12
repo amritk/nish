@@ -502,6 +502,96 @@ attributes #3 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end decl_type_alias -->
 
+### Numeric `enum`
+
+An enum is a **distinct type with `i32` representation**, so the type system
+keeps `Kind` apart from every other integer and the IR keeps nothing at all:
+`Kind.While` is the constant `2`, a `Kind` parameter is an `i32` parameter, and
+the `switch` is the jump table an integer discriminant has always produced.
+There is no symbol, no table and no `%struct` for the enum, which is why the
+same program written with `i32` module constants compiles to a byte-identical
+module (`tests/cases/enum_ir` and `enum_expanded`).
+
+<!-- cookbook:begin decl_enum -->
+```ts
+enum Kind {
+  If = 1,
+  While = 2,
+  Return = 3,
+}
+
+const weight = (k: Kind): i32 => {
+  switch (k) {
+    case Kind.If:
+      return 10;
+    case Kind.While:
+      return 20;
+    default:
+      return 30;
+  }
+};
+
+export const main = (): number => {
+  const k: Kind = Kind.While;
+  console.log(`weight = ${weight(k)}`);
+  return 0;
+};
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"weight = \00" }, align 8
+
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+
+define internal noundef i32 @weight(i32 noundef %k) #0 {
+entry:
+  switch i32 %k, label %sw.default [
+    i32 1, label %sw.case
+    i32 2, label %sw.case.1
+  ]
+
+sw.case:
+  ret i32 10
+
+sw.case.1:
+  ret i32 20
+
+sw.default:
+  ret i32 30
+}
+
+define noundef i32 @nish_main() #1 {
+entry:
+  %k.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  store i32 2, i32* %k.addr, align 4
+  %0 = load i32, i32* %k.addr, align 4
+  %1 = call i32 @weight(i32 %0)
+  %2 = call i8* @nish_str_from_i32(i32 %1)
+  %3 = call i8* @nish_str_concat(i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*), i8* %2)
+  call void @nish_print(i8* %3)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readnone }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind }
+```
+<!-- cookbook:end decl_enum -->
+
 ### `export const main` and the entry wrapper
 
 The user's `main` becomes `@nish_main`; the compiler adds a C-ABI `@main` that
