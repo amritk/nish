@@ -517,7 +517,10 @@ to stage2.
   comparing stage1 against stage0 over the whole corpus rather than against a
   hand-written golden.
 - `scripts/bootstrap.sh` builds the chain and leaves `build/nish` behind;
-  `--verify` runs the three equalities with `cmp`.
+  `--verify` runs the three equalities with `cmp` — all three for a stage0
+  seed, and the two that do not mention the seed for any other, since
+  `IR(seed) == IR(stage1)` is diverse double-compiling only when the seed is
+  the second implementation (`docs/wp19-stage0-retirement.md` G3).
 - §7a reversed decision D4: `mkdirSync` and `spawnSync` entered the language,
   so stage1 plans its own output, makes its own directories and runs
   `scripts/build.sh` itself. The wrapper `scripts/nish.sh` is deleted.
