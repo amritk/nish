@@ -214,6 +214,13 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
     return aliasType(declared, ctx);
   }
 
+  // An enum is a type of its own, and its name is the only way to spell it
+  // (docs/LANGUAGE.md, Enums).
+  const declaredEnum = ctx.program.enumNamed(name);
+  if (declaredEnum !== null) {
+    return declaredEnum.type;
+  }
+
   // A class or interface: one this module declares or imports. A name that is
   // imported but not yet bound resolves provisionally, exactly as stage0 does,
   // and pass 1b rejects it if it turns out to name a function or a constant.

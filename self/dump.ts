@@ -263,7 +263,11 @@ function walkBody(
 function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: string[]): void {
   const program = unit.checker.program;
   const source = unit.source;
-  out.push(`module ${unit.path}${unit.isEntry ? " (entry)" : ""}`);
+  // The package is printed only when there is one to print (WP21 S1): the root
+  // package has no name, so a single-package program's dump is the same text
+  // it has always been.
+  const pkg = program.packageName.length === 0 ? "" : ` [package ${program.packageName}]`;
+  out.push(`module ${unit.path}${unit.isEntry ? " (entry)" : ""}${pkg}`);
   for (const imp of program.imports) {
     const struct = imp.struct;
     const constant = imp.constant;

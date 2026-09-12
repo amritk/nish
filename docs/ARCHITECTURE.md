@@ -398,10 +398,15 @@ is still a pointer: [wp16-results.md](wp16-results.md).
   `export` gets `internal` linkage (`emitter.ts`) and is left out of the
   `--emit-header` / `--emit-dts` / `--emit-napi` surface (`interop/abi.ts`,
   `externalFunctions`); `--no-strict-exports` puts both back. What it does
-  *not* change is `rejectSymbolClashes` (`compilation.ts`): a function name is
-  unique across the program in either mode, because `analyzeFunctions` keys the
-  fact fixpoint by symbol name and two functions sharing one would be emitted
-  with each other's attributes.
+  *not* change is `rejectSymbolClashes` (`compilation.ts`): a function *symbol*
+  is unique across the program in either mode, because `analyzeFunctions` keys
+  the fact fixpoint by that symbol and two functions sharing one would be
+  emitted with each other's attributes. Since WP21 S1 a symbol carries its
+  module's package prefix (`packages.ts`), so the *name* has to be unique only
+  within the package that declares it — which is what lets two dependencies
+  each keep a private `helper()`. The root package's prefix is empty, so for a
+  single-package program the symbol, the rule and the message are all exactly
+  what they were.
 - **`--target`** (WP9): `targetHeader` writes `target datalayout` and
   `target triple` after `source_filename`, from the table in
   `codegen/target.ts` (strings copied from `clang --target=<triple> -S

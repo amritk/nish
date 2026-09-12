@@ -33,6 +33,7 @@
 import ts from "typescript";
 import { CLI } from "../branding.js";
 import { CheckedProgram, FunctionSig, LocalVar, StructInfo } from "../checker/index.js";
+import { EnumInfo } from "../checker/enums.js";
 import { ResultLayout, ResultSlot, resultLayout } from "../checker/result.js";
 import { StaticType, intBits, isInteger, llvmAbiType, llvmType, resultByValue, typeToString } from "../types.js";
 import { packageVersion } from "../version.js";
@@ -132,6 +133,12 @@ export class DebugInfo {
       ref = this.pointerTo(this.arrayHeader(t.elem, key));
     } else if (t.kind === "struct") {
       ref = this.pointerTo(this.composite(this.program.structs.get(t.name)!));
+    } else if (t.kind === "enum") {
+      // WP23: an enum is an `i32` with names attached, which is exactly what
+      // DWARF's enumeration type is for — so a debugger prints `Kind::While`
+      // rather than `2`, and the distinctness the checker enforces survives
+      // into the debugger.
+      ref = this.enumeration(this.program.enums.get(t.name)!);
     } else if (t.kind === "result") {
       // WP17: a `Result` has no `StructInfo` — its layout is derived from the
       // type — but `resultLayout` knows everything a `DW_TAG_structure_type`
@@ -180,6 +187,18 @@ export class DebugInfo {
       `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(info.name)}, file: ${file}, line: ${this.lineOf(info.decl)}, size: ${info.size * 8}, align: ${info.align * 8}, elements: ${elements})`
     );
     return ref;
+  }
+
+  /** `enum Kind { ... }` as DWARF sees it: a 32-bit signed enumeration with one enumerator per member (WP23). */
+  private enumeration(info: EnumInfo): string {
+    const file = this.fileOf(info.decl.getSourceFile());
+    const enumerators = [...info.members].map(([name, value]) =>
+      this.module.addMetadata(`!DIEnumerator(name: ${quote(name)}, value: ${value})`)
+    );
+    const elements = this.module.addMetadata(`!{${enumerators.join(", ")}}`);
+    return this.module.addMetadata(
+      `!DICompositeType(tag: DW_TAG_enumeration_type, name: ${quote(info.name)}, file: ${file}, line: ${this.lineOf(info.decl)}, size: 32, align: 32, elements: ${elements}, baseType: ${this.typeRef({ kind: "i32" })})`
+    );
   }
 
   /** The `%struct.nish_array` header `{ i64 len, i64 cap, T* data }`, specialised per element type for the debugger's sake. */
@@ -359,6 +378,7 @@ function bitsOf(t: StaticType): number {
   if (isInteger(t)) return intBits(t);
   switch (t.kind) {
     case "f32":
+    case "enum": // WP23: an enum is an i32
       return 32;
     case "bool":
       return 8;
