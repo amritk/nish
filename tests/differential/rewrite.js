@@ -375,10 +375,18 @@ function makeTransformer(unit, stems) {
       }
 
       // ---- top-level `const` -> its folded value (WP14) ----
+      // A declaration the checker folded becomes its literal. One it did not is
+      // visited like any other node, and that is not a detail: since WP22 a
+      // *function* is an arrow bound to a top-level `const`, so returning such a
+      // declaration unvisited swallowed every arrow-declared function body — the
+      // builtins inside it were left as bare `mkdirSync(...)` and `console.log`,
+      // which either threw `ReferenceError` under Node or, worse, silently ran
+      // JavaScript's own version of a call the shim exists to emulate. Every
+      // arrow-written program in the corpus was being compared that way.
       if (ts.isVariableStatement(node) && ts.isSourceFile(node.parent)) {
         const declarations = node.declarationList.declarations.map((decl) => {
           const info = program.constants.get(decl.name.text);
-          if (!info || info.value === undefined) return decl;
+          if (!info || info.value === undefined) return ts.visitEachChild(decl, visit, context);
           return f.updateVariableDeclaration(
             decl,
             decl.name,
