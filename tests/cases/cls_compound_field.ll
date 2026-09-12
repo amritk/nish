@@ -10,11 +10,11 @@ declare void @nish_panic_div(i1 noundef zeroext) #2
 define internal void @Stats.constructor(%struct.Stats* noundef nonnull noalias align 8 dereferenceable(12) nocapture %this) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Stats, %struct.Stats* %this, i32 0, i32 2
-  store i32 0, i32* %0, align 4
+  store i32 0, i32* %0, align 4, !tbaa !4
   %1 = getelementptr inbounds %struct.Stats, %struct.Stats* %this, i32 0, i32 0
-  store i32 0, i32* %1, align 4
+  store i32 0, i32* %1, align 4, !tbaa !5
   %2 = getelementptr inbounds %struct.Stats, %struct.Stats* %this, i32 0, i32 1
-  store i32 8, i32* %2, align 4
+  store i32 8, i32* %2, align 4, !tbaa !6
   ret void
 }
 
@@ -29,7 +29,7 @@ entry:
   %5 = add nsw i32 %4, %v
   store i32 %5, i32* %3, align 4
   %6 = getelementptr inbounds %struct.Stats, %struct.Stats* %this, i32 0, i32 0
-  %7 = load i32, i32* %6, align 4
+  %7 = load i32, i32* %6, align 4, !tbaa !5
   ret i32 %7
 }
 
@@ -54,7 +54,7 @@ div.ok:
   %8 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 0
   %9 = load i32, i32* %8, align 4
   %10 = getelementptr inbounds %struct.Stats, %struct.Stats* %s, i32 0, i32 0
-  %11 = load i32, i32* %10, align 4
+  %11 = load i32, i32* %10, align 4, !tbaa !5
   %12 = icmp eq i32 2, 0
   %13 = icmp eq i32 %11, -2147483648
   %14 = icmp eq i32 2, -1
@@ -93,17 +93,17 @@ entry:
   call void @halve(%struct.Stats* %8)
   %9 = load %struct.Stats*, %struct.Stats** %s.addr, align 8
   %10 = getelementptr inbounds %struct.Stats, %struct.Stats* %9, i32 0, i32 0
-  %11 = load i32, i32* %10, align 4
+  %11 = load i32, i32* %10, align 4, !tbaa !5
   %12 = call i8* @nish_str_from_i32(i32 %11)
   call void @nish_print(i8* %12)
   %13 = load %struct.Stats*, %struct.Stats** %s.addr, align 8
   %14 = getelementptr inbounds %struct.Stats, %struct.Stats* %13, i32 0, i32 2
-  %15 = load i32, i32* %14, align 4
+  %15 = load i32, i32* %14, align 4, !tbaa !4
   %16 = call i8* @nish_str_from_i32(i32 %15)
   call void @nish_print(i8* %16)
   %17 = load %struct.Stats*, %struct.Stats** %s.addr, align 8
   %18 = getelementptr inbounds %struct.Stats, %struct.Stats* %17, i32 0, i32 1
-  %19 = load i32, i32* %18, align 4
+  %19 = load i32, i32* %18, align 4, !tbaa !6
   %20 = call i8* @nish_str_from_i32(i32 %19)
   call void @nish_print(i8* %20)
   call void @nish_arena_release(i64 %arena.mark)
@@ -120,3 +120,11 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind noreturn cold }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Stats", !2, i64 0, !2, i64 4, !2, i64 8}
+!4 = !{!3, !2, i64 8}
+!5 = !{!3, !2, i64 0}
+!6 = !{!3, !2, i64 4}

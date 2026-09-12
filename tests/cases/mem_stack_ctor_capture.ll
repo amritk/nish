@@ -36,9 +36,9 @@ slow:
 define internal void @Item.constructor(%struct.Item* noundef nonnull noalias align 8 dereferenceable(4) %this, %struct.Registry* noundef nonnull align 8 dereferenceable(8) nocapture %reg, i32 noundef %value) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Item, %struct.Item* %this, i32 0, i32 0
-  store i32 %value, i32* %0, align 4
+  store i32 %value, i32* %0, align 4, !tbaa !4
   %1 = getelementptr inbounds %struct.Registry, %struct.Registry* %reg, i32 0, i32 0
-  store %struct.Item* %this, %struct.Item** %1, align 8
+  store %struct.Item* %this, %struct.Item** %1, align 8, !tbaa !7
   ret void
 }
 
@@ -51,7 +51,7 @@ entry:
   store %struct.Item* %1, %struct.Item** %item.addr, align 8
   %2 = load %struct.Item*, %struct.Item** %item.addr, align 8
   %3 = getelementptr inbounds %struct.Item, %struct.Item* %2, i32 0, i32 0
-  %4 = load i32, i32* %3, align 4
+  %4 = load i32, i32* %3, align 4, !tbaa !4
   ret i32 %4
 }
 
@@ -61,7 +61,7 @@ entry:
   %Registry.obj = alloca %struct.Registry, align 8
   %last.addr = alloca %struct.Item*, align 8
   %0 = getelementptr inbounds %struct.Registry, %struct.Registry* %Registry.obj, i32 0, i32 0
-  store %struct.Item* null, %struct.Item** %0, align 8
+  store %struct.Item* null, %struct.Item** %0, align 8, !tbaa !7
   store %struct.Registry* %Registry.obj, %struct.Registry** %reg.addr, align 8
   %1 = load %struct.Registry*, %struct.Registry** %reg.addr, align 8
   %2 = call i32 @register(%struct.Registry* %1, i32 7)
@@ -73,7 +73,7 @@ entry:
   call void @nish_print(i8* %6)
   %7 = load %struct.Registry*, %struct.Registry** %reg.addr, align 8
   %8 = getelementptr inbounds %struct.Registry, %struct.Registry* %7, i32 0, i32 0
-  %9 = load %struct.Item*, %struct.Item** %8, align 8
+  %9 = load %struct.Item*, %struct.Item** %8, align 8, !tbaa !7
   store %struct.Item* %9, %struct.Item** %last.addr, align 8
   %10 = load %struct.Item*, %struct.Item** %last.addr, align 8
   %11 = icmp ne %struct.Item* %10, null
@@ -82,7 +82,7 @@ entry:
 if.then:
   %12 = load %struct.Item*, %struct.Item** %last.addr, align 8
   %13 = getelementptr inbounds %struct.Item, %struct.Item* %12, i32 0, i32 0
-  %14 = load i32, i32* %13, align 4
+  %14 = load i32, i32* %13, align 4, !tbaa !4
   %15 = call i8* @nish_str_from_i32(i32 %14)
   call void @nish_print(i8* %15)
   br label %if.end
@@ -102,3 +102,12 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Item", !2, i64 0}
+!4 = !{!3, !2, i64 0}
+!5 = !{!"ptr", !1, i64 0}
+!6 = !{!"Registry", !5, i64 0}
+!7 = !{!6, !5, i64 0}

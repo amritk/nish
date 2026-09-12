@@ -93,7 +93,7 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 | `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). |
 | `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, and narrowing: [Nullable types](#nullable-types). |
-| `Result<T, E>` | `%struct.nish_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32 }` between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `nish_result_<T>_<E>_word` by value, `struct nish_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
+| `Result<T, E>` | `%struct.nish_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32, i32 }` — the tag and one slot per arm — between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `nish_result_<T>_<E>_word` by value, `struct nish_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
 | `void` | `void` | – | `void` | Return type only. |
 
 Sources: `src/types.ts` (`llvmType`, `alignOf`), `src/interop/abi.ts`
@@ -436,10 +436,11 @@ changes: a `Result` in a field or an array element, and a `Result` whose
 payloads do not fit, stay the WP16 pointer.
 
 The word is what a **host** sees. Between two functions of one module it is
-`{ i1, i32 }` — the discriminant and the payload as two values — because a
-non-exported function's calling convention is nobody else's business and the
-word costs a fold the pair does not (WP15 §7b: 650 ms to 464 ms on
-`bench/result`). The condition is exactly the one that gives a function
+`{ i1, i32, i32 }` — the discriminant and one slot per arm, the arm that is
+not live left `undef` — because a non-exported function's calling convention
+is nobody else's business and the word costs two folds this shape does not
+(WP15 §7b, which took `bench/result` from 2.59x behind Rust `-O3` to parity in
+two steps). The condition is exactly the one that gives a function
 `internal` linkage, so `--no-strict-exports` returns every function to the
 word, and an exported function is packed whoever calls it — which is what
 keeps `--emit-header` honest (`tests/cases/res_export`). Nothing about the

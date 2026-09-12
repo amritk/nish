@@ -9,7 +9,7 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 define internal void @toString.constructor(%struct.toString* noundef nonnull noalias align 8 dereferenceable(4) nocapture %this, i32 noundef %n) #0 {
 entry:
   %0 = getelementptr inbounds %struct.toString, %struct.toString* %this, i32 0, i32 0
-  store i32 %n, i32* %0, align 4
+  store i32 %n, i32* %0, align 4, !tbaa !4
   ret void
 }
 
@@ -48,7 +48,7 @@ entry:
   call void @nish_print(i8* %5)
   call void @toString.constructor(%struct.toString* %toString.obj, i32 7)
   %6 = getelementptr inbounds %struct.toString, %struct.toString* %toString.obj, i32 0, i32 0
-  %7 = load i32, i32* %6, align 4
+  %7 = load i32, i32* %6, align 4, !tbaa !4
   %8 = call i8* @nish_str_from_i32(i32 %7)
   call void @nish_print(i8* %8)
   %9 = load i32, i32* %constructor.addr, align 4
@@ -68,3 +68,9 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"toString", !2, i64 0}
+!4 = !{!3, !2, i64 0}

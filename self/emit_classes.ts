@@ -21,11 +21,11 @@
 import { Emitter } from "./emit";
 import {
   emitPackedResult,
-  emitResultArgument,
   emitResultReturningCall,
   privateResultAbi,
   resultTypeDecl,
 } from "./emit_result";
+import { fieldTbaa } from "./tbaa";
 import { emitArrayLength, emitArrayMethodCall, emitNewArray } from "./emit_arrays";
 import {
   compoundFloatOpcode,
@@ -79,7 +79,8 @@ function structFieldPointer(emitter: Emitter, info: StructInfo, receiver: string
 function loadField(emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string {
   const ty = emitter.llvm(field.type);
   const ptr = structFieldPointer(emitter, info, receiver, field);
-  return emitter.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}`);
+  const tbaa = fieldTbaa(emitter, info, field);
+  return emitter.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}${tbaa}`);
 }
 
 function storeField(
@@ -91,7 +92,8 @@ function storeField(
 ): void {
   const ty = emitter.llvm(field.type);
   const ptr = structFieldPointer(emitter, info, receiver, field);
-  emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}`);
+  const tbaa = fieldTbaa(emitter, info, field);
+  emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}${tbaa}`);
 }
 
 /**
@@ -248,9 +250,9 @@ function emitCall(
     // WP17: as in the plain call, a `Result` argument the ABI packs travels as the word.
     const want = callee.paramTypes[i + 1];
     const value = emitter.table.resultByValue(want)
-      ? emitPackedResult(emitter, args[i], want)
+      ? emitPackedResult(emitter, args[i], want, calleePrivate)
       : emitter.emitExpression(args[i]);
-    operands.push(`${emitter.llvmAbi(want, calleePrivate)} ${emitResultArgument(emitter, want, value, calleePrivate)}`);
+    operands.push(`${emitter.llvmAbi(want, calleePrivate)} ${value}`);
     i = i + 1;
   }
   // WP9: after the receiver and the arguments, so the bracket holds only what

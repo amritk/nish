@@ -1,7 +1,7 @@
 /** Statement lowering, one handler per `ts.SyntaxKind`. */
 import ts from "typescript";
 import { ResultType, llvmType, resultByValue } from "../../types.js";
-import { emitPackedResult, emitResultReturn } from "./result.js";
+import { emitPackedResult, emitResultReturn, privateResultAbi } from "./result.js";
 import { arrayStatementEmitters } from "./arrays.js";
 import { EmitContext, EmitterTable, StatementEmitter } from "./context.js";
 import { controlFlowStatementEmitters } from "./control-flow.js";
@@ -28,9 +28,9 @@ export const emitReturnValue = (ctx: EmitContext, expression: ts.Expression): vo
   // the release reclaims.
   const want = ctx.currentSig.returnType;
   if (resultByValue(want)) {
-    const word = emitPackedResult(ctx, expression, want as ResultType);
+    const value = emitPackedResult(ctx, expression, want as ResultType, privateResultAbi(ctx, ctx.currentSig));
     ctx.emitScopeExit();
-    emitResultReturn(ctx, word);
+    emitResultReturn(ctx, value);
     return;
   }
   const type = ctx.typeOf(expression);

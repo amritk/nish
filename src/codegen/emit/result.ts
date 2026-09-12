@@ -50,10 +50,11 @@ import ts from "typescript";
 import { CheckedProgram } from "../../checker/index.js";
 import { ResultLayout, ResultSlot, resultLayout, resultTypesIn } from "../../checker/result.js";
 import {
-  RESULT_PAIR,
+  RESULT_ARMS,
   RESULT_PAYLOAD_SHIFT,
   ResultType,
   StaticType,
+  llvmAbiType,
   llvmType,
   resultByValue,
 } from "../../types.js";
@@ -236,15 +237,22 @@ const packObject = (ctx: EmitContext, type: ResultType, object: string): string 
  * runs before the arena scope is released, because the object it may be read
  * out of is arena memory the release reclaims.
  */
-export const emitPackedResult = (ctx: EmitContext, expr: ts.Expression, type: ResultType): string => {
+export const emitPackedResult = (
+  ctx: EmitContext,
+  expr: ts.Expression,
+  type: ResultType,
+  privateAbi: boolean
+): string => {
   declareResultTypes(ctx, type);
   const arm = constructedArm(ctx.program, expr);
   if (arm !== undefined) {
     const call = expr as ts.CallExpression;
     const payload = call.arguments.length > 0 ? ctx.emitExpression(call.arguments[0]) : undefined;
-    return packArm(ctx, type, arm === "Ok", payload);
+    const isOk = arm === "Ok";
+    return privateAbi ? armsForArm(ctx, type, isOk, payload) : packArm(ctx, type, isOk, payload);
   }
-  return packObject(ctx, type, ctx.emitExpression(expr));
+  const object = ctx.emitExpression(expr);
+  return privateAbi ? armsForObject(ctx, type, object) : packObject(ctx, type, object);
 };
 
 /** `Ok` / `Err` when `expr` is one of them written out here, else undefined. */
@@ -292,14 +300,15 @@ export const unpackResult = (
   return object;
 };
 
-// ---- The private two-scalar ABI (WP15) ----------------------------------------------
+// ---- The private per-arm ABI (WP15) -------------------------------------------------
 
 /**
- * Whether `sig` may use the private `{ i1, i32 }` ABI for a by-value `Result`
- * rather than the packed word. The condition is exactly the one that decides
- * `internal` linkage in `emitter.ts`, and it has to stay that way: the private
- * shape is only safe because no host can name the symbol. `--no-strict-exports`
- * makes every function external and so turns this off everywhere.
+ * Whether `sig` may use the private `{ i1, i32, i32 }` ABI for a by-value
+ * `Result` rather than the packed word. The condition is exactly the one that
+ * decides `internal` linkage in `emitter.ts`, and it has to stay that way: the
+ * private shape is only safe because no host can name the symbol.
+ * `--no-strict-exports` makes every function external and so turns this off
+ * everywhere.
  *
  * An imported function is always exported by definition — a module cannot
  * import what its exporter kept internal — so a cross-module call is packed,
@@ -308,51 +317,105 @@ export const unpackResult = (
 export const privateResultAbi = (ctx: EmitContext, sig: { exported: boolean }): boolean =>
   ctx.opts.strictExports && !sig.exported;
 
+/** The tag with both payload slots still `undef`; the live arm fills one in. */
+const armsFor = (isOk: boolean): string => `{ i1 ${isOk}, i32 undef, i32 undef }`;
+
 /**
- * Split the packed word into the pair, at a boundary that uses the private
- * ABI. The word is still built exactly as the packed ABI builds it and taken
- * apart again here, which reads like waste and is not: LLVM folds the round
- * trip away entirely, and the two spellings measure the same (464 ms against
- * 467 ms for a hand-written two-scalar lowering of `bench/result`). Keeping
- * the packing in one place is worth more than the instructions it appears to
- * cost, so `packArm`, `packObject` and `unpackResult` stay the packed ABI's.
+ * Widen one payload to its own slot. `f32` goes through a bitcast rather than
+ * a conversion, for the same reason `payloadToWord` does: the slot carries
+ * the bits the caller stored, not a number the ABI is free to round.
  */
-export const resultWordToPair = (ctx: EmitContext, word: string): string => {
-  const tag = ctx.fn.emitValue(`trunc i64 ${word} to i1`);
-  const high = ctx.fn.emitValue(`lshr i64 ${word}, ${RESULT_PAYLOAD_SHIFT}`);
-  const payload = ctx.fn.emitValue(`trunc i64 ${high} to i32`);
-  const withTag = ctx.fn.emitValue(`insertvalue ${RESULT_PAIR} undef, i1 ${tag}, 0`);
-  return ctx.fn.emitValue(`insertvalue ${RESULT_PAIR} ${withTag}, i32 ${payload}, 1`);
+const payloadToSlot = (ctx: EmitContext, type: StaticType, value: string): string => {
+  if (type.kind === "void") return "undef";
+  if (type.kind === "f32") return ctx.fn.emitValue(`bitcast float ${value} to i32`);
+  const from = llvmType(type);
+  return from === "i32" ? value : ctx.fn.emitValue(`zext ${from} ${value} to i32`);
 };
 
-/** The inverse, on the other side of the same boundary. */
-export const resultPairToWord = (ctx: EmitContext, pair: string): string => {
-  const tag = ctx.fn.emitValue(`extractvalue ${RESULT_PAIR} ${pair}, 0`);
-  const payload = ctx.fn.emitValue(`extractvalue ${RESULT_PAIR} ${pair}, 1`);
-  const wide = ctx.fn.emitValue(`zext i32 ${payload} to i64`);
-  const shifted = ctx.fn.emitValue(`shl i64 ${wide}, ${RESULT_PAYLOAD_SHIFT}`);
-  const low = ctx.fn.emitValue(`zext i1 ${tag} to i64`);
-  return ctx.fn.emitValue(`or i64 ${shifted}, ${low}`);
+/** The inverse: the low bits of a slot, read back as the payload type. */
+const slotToPayload = (ctx: EmitContext, type: StaticType, slot: string): string => {
+  const to = type.kind === "f32" ? "i32" : llvmType(type);
+  const bits = to === "i32" ? slot : ctx.fn.emitValue(`trunc i32 ${slot} to ${to}`);
+  return type.kind === "f32" ? ctx.fn.emitValue(`bitcast i32 ${bits} to float`) : bits;
 };
 
 /**
- * A by-value `Result` argument, in whichever ABI the *callee* uses. The value
- * handed in is always the packed word, so this is where it becomes the pair.
+ * The private ABI's value for an arm built here and now — the counterpart of
+ * `packArm`, and the reason the two spellings are not one. `packArm` has a
+ * single payload half to put the payload in; this has two, and leaves the one
+ * the arm does not use `undef`.
+ *
+ * That `undef` is the whole optimisation. Where two arms meet — a `phi` after
+ * inlining, most of all — `phi(undef, x)` is `x`, so the ok slot arriving at a
+ * `r.value` read is the ok arm's expression and nothing else. With one shared
+ * slot it would be `phi(errorPayload, x)`, and the arithmetic that produced
+ * the error payload would be folded into the ok path's. `RESULT_ARMS` in
+ * `types.ts` has the measurement.
  */
-export const emitResultArgument = (
+const armsForArm = (
   ctx: EmitContext,
-  want: StaticType,
+  type: ResultType,
+  isOk: boolean,
+  payload: string | undefined
+): string => {
+  const payloadType = isOk ? type.ok : type.err;
+  if (payload === undefined || payloadType.kind === "void") return armsFor(isOk);
+  const slot = payloadToSlot(ctx, payloadType, payload);
+  return ctx.fn.emitValue(`insertvalue ${RESULT_ARMS} ${armsFor(isOk)}, i32 ${slot}, ${isOk ? 1 : 2}`);
+};
+
+/**
+ * The private ABI's value for a `Result` that already exists in memory — the
+ * counterpart of `packObject`. Both payloads are loaded and both are carried:
+ * where the word needs a `select` to choose which half to keep, two slots keep
+ * each where it belongs and the dead one is discarded by whoever ignores it.
+ */
+const armsForObject = (ctx: EmitContext, type: ResultType, object: string): string => {
+  const layout = resultLayout(type);
+  const ok = loadSlot(ctx, layout, object, layout.ok);
+  const withTag = ctx.fn.emitValue(`insertvalue ${RESULT_ARMS} undef, i1 ${ok}, 0`);
+  const error = payloadToSlot(ctx, layout.error.type, loadSlot(ctx, layout, object, layout.error));
+  let arms = withTag;
+  if (layout.value) {
+    const value = payloadToSlot(ctx, layout.value.type, loadSlot(ctx, layout, object, layout.value));
+    arms = ctx.fn.emitValue(`insertvalue ${RESULT_ARMS} ${arms}, i32 ${value}, 1`);
+  }
+  return ctx.fn.emitValue(`insertvalue ${RESULT_ARMS} ${arms}, i32 ${error}, 2`);
+};
+
+/**
+ * The caller's half under the private ABI: materialise the arms as the object
+ * every other construct reads, exactly as `unpackResult` does for the word.
+ * Each slot goes to its own field, so unlike the word's unpack there is no
+ * dead slot to fill with a copy of the live one.
+ */
+const unpackArms = (ctx: EmitContext, type: ResultType, arms: string, stack: boolean): string => {
+  declareResultTypes(ctx, type);
+  const layout = resultLayout(type);
+  const object = allocateIn(ctx, layout, stack);
+  storeSlot(ctx, layout, object, layout.ok, ctx.fn.emitValue(`extractvalue ${RESULT_ARMS} ${arms}, 0`));
+  if (layout.value) {
+    const slot = ctx.fn.emitValue(`extractvalue ${RESULT_ARMS} ${arms}, 1`);
+    storeSlot(ctx, layout, object, layout.value, slotToPayload(ctx, layout.value.type, slot));
+  }
+  const errSlot = ctx.fn.emitValue(`extractvalue ${RESULT_ARMS} ${arms}, 2`);
+  storeSlot(ctx, layout, object, layout.error, slotToPayload(ctx, layout.error.type, errSlot));
+  return object;
+};
+
+/** `unpackResult` or `unpackArms`, by which ABI the value arrived in. */
+export const unpackReturnedResult = (
+  ctx: EmitContext,
+  type: ResultType,
   value: string,
+  stack: boolean,
   privateAbi: boolean
-): string => (privateAbi && resultByValue(want) ? resultWordToPair(ctx, value) : value);
+): string =>
+  privateAbi ? unpackArms(ctx, type, value, stack) : unpackResult(ctx, type, value, stack);
 
 /** `ret` a by-value `Result`, in whichever ABI the enclosing function uses. */
-export const emitResultReturn = (ctx: EmitContext, word: string): void => {
-  if (!privateResultAbi(ctx, ctx.currentSig)) {
-    ctx.fn.emit(`ret i64 ${word}`);
-    return;
-  }
-  ctx.fn.emit(`ret ${RESULT_PAIR} ${resultWordToPair(ctx, word)}`);
+export const emitResultReturn = (ctx: EmitContext, value: string): void => {
+  ctx.fn.emit(`ret ${llvmAbiType(ctx.currentSig.returnType, privateResultAbi(ctx, ctx.currentSig))} ${value}`);
 };
 
 /**
@@ -366,11 +429,8 @@ export const emitResultReturningCall = (
   type: StaticType,
   site: ts.Node,
   privateAbi = false
-): string => {
-  const returned = ctx.fn.emitValue(call);
-  const word = privateAbi ? resultPairToWord(ctx, returned) : returned;
-  return unpackResult(ctx, type as ResultType, word, ctx.isStackSite(site));
-};
+): string =>
+  unpackReturnedResult(ctx, type as ResultType, ctx.fn.emitValue(call), ctx.isStackSite(site), privateAbi);
 
 
 
@@ -423,9 +483,12 @@ const emitOrReturn = (ctx: EmitContext, expr: ts.CallExpression, receiver: Resul
   ctx.fn.placeBlock(errBlock);
   const error = loadSlot(ctx, layout, object, layout.error);
   if (resultByValue(returnType)) {
-    const word = packArm(ctx, returnType, false, error);
+    const privateAbi = privateResultAbi(ctx, ctx.currentSig);
+    const propagated = privateAbi
+      ? armsForArm(ctx, returnType, false, error)
+      : packArm(ctx, returnType, false, error);
     ctx.emitScopeExit();
-    emitResultReturn(ctx, word);
+    emitResultReturn(ctx, propagated);
   } else {
     const propagated = construct(ctx, returnType, false, error);
     ctx.emitScopeExit();

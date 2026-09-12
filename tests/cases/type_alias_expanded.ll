@@ -130,7 +130,7 @@ if.then:
 
 if.end:
   %1 = getelementptr inbounds %struct.Sample, %struct.Sample* %r, i32 0, i32 1
-  %2 = load i8*, i8** %1, align 8
+  %2 = load i8*, i8** %1, align 8, !tbaa !10
   ret i8* %2
 }
 
@@ -140,16 +140,16 @@ entry:
   %0 = call i8* @nish_alloc_struct(i64 16)
   %1 = bitcast i8* %0 to %struct.Sample*
   %2 = getelementptr inbounds %struct.Sample, %struct.Sample* %1, i32 0, i32 0
-  store i32 0, i32* %2, align 4
+  store i32 0, i32* %2, align 4, !tbaa !11
   %3 = getelementptr inbounds %struct.Sample, %struct.Sample* %1, i32 0, i32 1
-  store i8* bitcast ({ i64, [1 x i8] }* @.str.1 to i8*), i8** %3, align 8
+  store i8* bitcast ({ i64, [1 x i8] }* @.str.1 to i8*), i8** %3, align 8, !tbaa !10
   store %struct.Sample* %1, %struct.Sample** %s.addr, align 8
   %4 = load %struct.Sample*, %struct.Sample** %s.addr, align 8
   %5 = getelementptr inbounds %struct.Sample, %struct.Sample* %4, i32 0, i32 0
-  store i32 %value, i32* %5, align 4
+  store i32 %value, i32* %5, align 4, !tbaa !11
   %6 = load %struct.Sample*, %struct.Sample** %s.addr, align 8
   %7 = getelementptr inbounds %struct.Sample, %struct.Sample* %6, i32 0, i32 1
-  store i8* bitcast ({ i64, [7 x i8] }* @.str.2 to i8*), i8** %7, align 8
+  store i8* bitcast ({ i64, [7 x i8] }* @.str.2 to i8*), i8** %7, align 8, !tbaa !10
   %8 = load %struct.Sample*, %struct.Sample** %s.addr, align 8
   ret %struct.Sample* %8
 }
@@ -244,7 +244,7 @@ cond.true:
   %32 = load i32, i32* %31, align 4
   %33 = load %struct.Sample*, %struct.Sample** %r.addr, align 8
   %34 = getelementptr inbounds %struct.Sample, %struct.Sample* %33, i32 0, i32 0
-  %35 = load i32, i32* %34, align 4
+  %35 = load i32, i32* %34, align 4, !tbaa !11
   %36 = add nsw i32 %32, %35
   br label %cond.end
 
@@ -272,3 +272,10 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"i32", !6, i64 0}
+!8 = !{!"ptr", !6, i64 0}
+!9 = !{!"Sample", !7, i64 0, !8, i64 8}
+!10 = !{!9, !8, i64 8}
+!11 = !{!9, !7, i64 0}

@@ -11,18 +11,18 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
-  store i32 %x, i32* %0, align 4
+  store i32 %x, i32* %0, align 4, !tbaa !4
   %1 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
-  store i32 %y, i32* %1, align 4
+  store i32 %y, i32* %1, align 4, !tbaa !5
   ret void
 }
 
 define internal noundef i32 @Point.manhattan(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
-  %1 = load i32, i32* %0, align 4
+  %1 = load i32, i32* %0, align 4, !tbaa !4
   %2 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
-  %3 = load i32, i32* %2, align 4
+  %3 = load i32, i32* %2, align 4, !tbaa !5
   %4 = add nsw i32 %1, %3
   ret i32 %4
 }
@@ -30,9 +30,9 @@ entry:
 define internal noundef i32 @sumX(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p, %struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %q) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %p, i32 0, i32 0
-  %1 = load i32, i32* %0, align 4
+  %1 = load i32, i32* %0, align 4, !tbaa !4
   %2 = getelementptr inbounds %struct.Point, %struct.Point* %q, i32 0, i32 0
-  %3 = load i32, i32* %2, align 4
+  %3 = load i32, i32* %2, align 4, !tbaa !4
   %4 = add nsw i32 %1, %3
   ret i32 %4
 }
@@ -62,24 +62,24 @@ entry:
   %c.addr = alloca %struct.Counter*, align 8
   %Counter.obj = alloca %struct.Counter, align 8
   %0 = getelementptr inbounds %struct.Counter, %struct.Counter* %Counter.obj, i32 0, i32 0
-  store i32 0, i32* %0, align 4
+  store i32 0, i32* %0, align 4, !tbaa !7
   %1 = getelementptr inbounds %struct.Counter, %struct.Counter* %Counter.obj, i32 0, i32 1
-  store i32 3, i32* %1, align 4
+  store i32 3, i32* %1, align 4, !tbaa !8
   store %struct.Counter* %Counter.obj, %struct.Counter** %c.addr, align 8
   %2 = load %struct.Counter*, %struct.Counter** %c.addr, align 8
   %3 = getelementptr inbounds %struct.Counter, %struct.Counter* %2, i32 0, i32 0
-  store i32 %n, i32* %3, align 4
+  store i32 %n, i32* %3, align 4, !tbaa !7
   %4 = load %struct.Counter*, %struct.Counter** %c.addr, align 8
   %5 = getelementptr inbounds %struct.Counter, %struct.Counter* %4, i32 0, i32 0
   %6 = load i32, i32* %5, align 4
   %7 = load %struct.Counter*, %struct.Counter** %c.addr, align 8
   %8 = getelementptr inbounds %struct.Counter, %struct.Counter* %7, i32 0, i32 1
-  %9 = load i32, i32* %8, align 4
+  %9 = load i32, i32* %8, align 4, !tbaa !8
   %10 = add nsw i32 %6, %9
   store i32 %10, i32* %5, align 4
   %11 = load %struct.Counter*, %struct.Counter** %c.addr, align 8
   %12 = getelementptr inbounds %struct.Counter, %struct.Counter* %11, i32 0, i32 0
-  %13 = load i32, i32* %12, align 4
+  %13 = load i32, i32* %12, align 4, !tbaa !7
   ret i32 %13
 }
 
@@ -136,3 +136,13 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind willreturn readnone }
 attributes #3 = { nounwind }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Point", !2, i64 0, !2, i64 4}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 4}
+!6 = !{!"Counter", !2, i64 0, !2, i64 4}
+!7 = !{!6, !2, i64 0}
+!8 = !{!6, !2, i64 4}

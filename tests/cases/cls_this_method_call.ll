@@ -12,9 +12,9 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 define internal void @Account.constructor(%struct.Account* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %balance, i32 noundef %fee) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 0
-  store i32 %balance, i32* %0, align 4
+  store i32 %balance, i32* %0, align 4, !tbaa !4
   %1 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 1
-  store i32 %fee, i32* %1, align 4
+  store i32 %fee, i32* %1, align 4, !tbaa !5
   ret void
 }
 
@@ -23,7 +23,7 @@ entry:
   %0 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 0
   %1 = load i32, i32* %0, align 4
   %2 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 1
-  %3 = load i32, i32* %2, align 4
+  %3 = load i32, i32* %2, align 4, !tbaa !5
   %4 = sub nsw i32 %1, %3
   store i32 %4, i32* %0, align 4
   ret void
@@ -32,7 +32,7 @@ entry:
 define internal noundef zeroext i1 @Account.withdraw(%struct.Account* noundef nonnull align 8 dereferenceable(8) nocapture %this, i32 noundef %amount) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 0
-  %1 = load i32, i32* %0, align 4
+  %1 = load i32, i32* %0, align 4, !tbaa !4
   %2 = icmp sgt i32 %amount, %1
   br i1 %2, label %if.then, label %if.end
 
@@ -56,7 +56,7 @@ entry:
 
 if.then:
   %2 = getelementptr inbounds %struct.Account, %struct.Account* %this, i32 0, i32 0
-  %3 = load i32, i32* %2, align 4
+  %3 = load i32, i32* %2, align 4, !tbaa !4
   ret i32 %3
 
 if.end:
@@ -84,7 +84,7 @@ entry:
   call void @nish_print(i8* %2)
   %3 = load %struct.Account*, %struct.Account** %a.addr, align 8
   %4 = getelementptr inbounds %struct.Account, %struct.Account* %3, i32 0, i32 0
-  %5 = load i32, i32* %4, align 4
+  %5 = load i32, i32* %4, align 4, !tbaa !4
   %6 = call i8* @nish_str_from_i32(i32 %5)
   call void @nish_print(i8* %6)
   %7 = load %struct.Account*, %struct.Account** %a.addr, align 8
@@ -115,3 +115,10 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readnone }
 attributes #2 = { nounwind }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Account", !2, i64 0, !2, i64 4}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 4}

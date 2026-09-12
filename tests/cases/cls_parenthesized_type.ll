@@ -52,11 +52,11 @@ entry:
   %5 = call i8* @nish_alloc_struct(i64 4)
   %6 = bitcast i8* %5 to %struct.Node*
   %7 = getelementptr inbounds %struct.Node, %struct.Node* %6, i32 0, i32 0
-  store i32 0, i32* %7, align 4
+  store i32 0, i32* %7, align 4, !tbaa !9
   store %struct.Node* %6, %struct.Node** %first.addr, align 8
   %8 = load %struct.Node*, %struct.Node** %first.addr, align 8
   %9 = getelementptr inbounds %struct.Node, %struct.Node* %8, i32 0, i32 0
-  store i32 7, i32* %9, align 4
+  store i32 7, i32* %9, align 4, !tbaa !9
   %10 = load %struct.nish_array*, %struct.nish_array** %slots.addr, align 8
   %11 = load %struct.Node*, %struct.Node** %first.addr, align 8
   %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0
@@ -102,7 +102,7 @@ cond.true:
 cond.false:
   %31 = load %struct.Node*, %struct.Node** %found.addr, align 8
   %32 = getelementptr inbounds %struct.Node, %struct.Node* %31, i32 0, i32 0
-  %33 = load i32, i32* %32, align 4
+  %33 = load i32, i32* %32, align 4, !tbaa !9
   br label %cond.end
 
 cond.end:
@@ -120,3 +120,8 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"i32", !6, i64 0}
+!8 = !{!"Node", !7, i64 0}
+!9 = !{!8, !7, i64 0}

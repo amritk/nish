@@ -9,21 +9,21 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 define internal void @Counter.constructor(%struct.Counter* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %step) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Counter, %struct.Counter* %this, i32 0, i32 0
-  store i32 0, i32* %0, align 4
+  store i32 0, i32* %0, align 4, !tbaa !4
   %1 = getelementptr inbounds %struct.Counter, %struct.Counter* %this, i32 0, i32 1
-  store i32 %step, i32* %1, align 4
+  store i32 %step, i32* %1, align 4, !tbaa !5
   ret void
 }
 
 define internal void @bump(%struct.Counter* noundef nonnull align 8 dereferenceable(8) nocapture %c) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Counter, %struct.Counter* %c, i32 0, i32 0
-  %1 = load i32, i32* %0, align 4
+  %1 = load i32, i32* %0, align 4, !tbaa !4
   %2 = getelementptr inbounds %struct.Counter, %struct.Counter* %c, i32 0, i32 1
-  %3 = load i32, i32* %2, align 4
+  %3 = load i32, i32* %2, align 4, !tbaa !5
   %4 = add nsw i32 %1, %3
   %5 = getelementptr inbounds %struct.Counter, %struct.Counter* %c, i32 0, i32 0
-  store i32 %4, i32* %5, align 4
+  store i32 %4, i32* %5, align 4, !tbaa !4
   ret void
 }
 
@@ -32,7 +32,7 @@ entry:
   call void @bump(%struct.Counter* %c)
   call void @bump(%struct.Counter* %c)
   %0 = getelementptr inbounds %struct.Counter, %struct.Counter* %c, i32 0, i32 0
-  %1 = load i32, i32* %0, align 4
+  %1 = load i32, i32* %0, align 4, !tbaa !4
   ret i32 %1
 }
 
@@ -45,17 +45,17 @@ entry:
   store %struct.Counter* %Counter.obj, %struct.Counter** %c.addr, align 8
   %0 = load %struct.Counter*, %struct.Counter** %c.addr, align 8
   %1 = getelementptr inbounds %struct.Counter, %struct.Counter* %0, i32 0, i32 1
-  store i32 7, i32* %1, align 4
+  store i32 7, i32* %1, align 4, !tbaa !5
   %2 = load %struct.Counter*, %struct.Counter** %c.addr, align 8
   %3 = call i32 @bumpTwice(%struct.Counter* %2)
   %4 = call i8* @nish_str_from_i32(i32 %3)
   call void @nish_print(i8* %4)
   %5 = load %struct.Counter*, %struct.Counter** %c.addr, align 8
   %6 = getelementptr inbounds %struct.Counter, %struct.Counter* %5, i32 0, i32 0
-  store i32 100, i32* %6, align 4
+  store i32 100, i32* %6, align 4, !tbaa !4
   %7 = load %struct.Counter*, %struct.Counter** %c.addr, align 8
   %8 = getelementptr inbounds %struct.Counter, %struct.Counter* %7, i32 0, i32 0
-  %9 = load i32, i32* %8, align 4
+  %9 = load i32, i32* %8, align 4, !tbaa !4
   %10 = call i8* @nish_str_from_i32(i32 %9)
   call void @nish_print(i8* %10)
   call void @nish_arena_release(i64 %arena.mark)
@@ -71,3 +71,10 @@ entry:
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Counter", !2, i64 0, !2, i64 4}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 4}

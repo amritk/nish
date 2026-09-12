@@ -112,8 +112,9 @@ function align8(ctx: EmitContext): string {
  * is a header write, and stays inside the same split.
  *
  * The domains cover *arrays* only. A string is one block whose length header
- * and bytes are contiguous, so it has no such split to describe, and struct
- * fields are left alone until there is a measurement behind them.
+ * and bytes are contiguous, so it has no such split to describe. Struct fields
+ * were left alone until there was a measurement behind them; there is one now,
+ * and what it bought is `!tbaa` rather than a scope (`emit/tbaa.ts`).
  *
  * The nodes are spelled with names rather than as self-referential nodes so
  * that LLVM's uniquing merges module A's header domain with module B's under

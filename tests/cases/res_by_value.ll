@@ -7,7 +7,7 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare void @nish_panic_div(i1 noundef zeroext) #2
 
-define internal noundef { i1, i32 } @half(i32 noundef %n) #0 {
+define internal { i1, i32, i32 } @half(i32 noundef %n) #0 {
 entry:
   %0 = icmp eq i32 2, 0
   %1 = icmp eq i32 %n, -2147483648
@@ -26,38 +26,25 @@ div.ok:
   br i1 %6, label %if.then, label %if.end
 
 if.then:
-  %7 = zext i32 %n to i64
-  %8 = shl i64 %7, 32
-  %9 = trunc i64 %8 to i1
-  %10 = lshr i64 %8, 32
-  %11 = trunc i64 %10 to i32
-  %12 = insertvalue { i1, i32 } undef, i1 %9, 0
-  %13 = insertvalue { i1, i32 } %12, i32 %11, 1
-  ret { i1, i32 } %13
+  %7 = insertvalue { i1, i32, i32 } { i1 false, i32 undef, i32 undef }, i32 %n, 2
+  ret { i1, i32, i32 } %7
 
 if.end:
-  %14 = icmp eq i32 2, 0
-  %15 = icmp eq i32 %n, -2147483648
-  %16 = icmp eq i32 2, -1
-  %17 = and i1 %15, %16
-  %18 = or i1 %14, %17
-  br i1 %18, label %div.fail.1, label %div.ok.1
+  %8 = icmp eq i32 2, 0
+  %9 = icmp eq i32 %n, -2147483648
+  %10 = icmp eq i32 2, -1
+  %11 = and i1 %9, %10
+  %12 = or i1 %8, %11
+  br i1 %12, label %div.fail.1, label %div.ok.1
 
 div.fail.1:
-  call void @nish_panic_div(i1 zeroext %14)
+  call void @nish_panic_div(i1 zeroext %8)
   unreachable
 
 div.ok.1:
-  %19 = sdiv i32 %n, 2
-  %20 = zext i32 %19 to i64
-  %21 = shl i64 %20, 32
-  %22 = or i64 %21, 1
-  %23 = trunc i64 %22 to i1
-  %24 = lshr i64 %22, 32
-  %25 = trunc i64 %24 to i32
-  %26 = insertvalue { i1, i32 } undef, i1 %23, 0
-  %27 = insertvalue { i1, i32 } %26, i32 %25, 1
-  ret { i1, i32 } %27
+  %13 = sdiv i32 %n, 2
+  %14 = insertvalue { i1, i32, i32 } { i1 true, i32 undef, i32 undef }, i32 %13, 1
+  ret { i1, i32, i32 } %14
 }
 
 define noundef i32 @nish_main() #0 {
@@ -67,81 +54,69 @@ entry:
   %bad.addr = alloca %struct.nish_result.i32.i32*, align 8
   %nish_result.i32.i32.obj.1 = alloca %struct.nish_result.i32.i32, align 8
   %arena.mark = call i64 @nish_arena_mark()
-  %0 = call { i1, i32 } @half(i32 8)
-  %1 = extractvalue { i1, i32 } %0, 0
-  %2 = extractvalue { i1, i32 } %0, 1
-  %3 = zext i32 %2 to i64
-  %4 = shl i64 %3, 32
-  %5 = zext i1 %1 to i64
-  %6 = or i64 %4, %5
-  %7 = trunc i64 %6 to i1
-  %8 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 0
-  store i1 %7, i1* %8, align 1
-  %9 = lshr i64 %6, 32
-  %10 = trunc i64 %9 to i32
-  %11 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 1
-  store i32 %10, i32* %11, align 4
-  %12 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 2
-  store i32 %10, i32* %12, align 4
+  %0 = call { i1, i32, i32 } @half(i32 8)
+  %1 = extractvalue { i1, i32, i32 } %0, 0
+  %2 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 0
+  store i1 %1, i1* %2, align 1
+  %3 = extractvalue { i1, i32, i32 } %0, 1
+  %4 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 1
+  store i32 %3, i32* %4, align 4
+  %5 = extractvalue { i1, i32, i32 } %0, 2
+  %6 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, i32 0, i32 2
+  store i32 %5, i32* %6, align 4
   store %struct.nish_result.i32.i32* %nish_result.i32.i32.obj, %struct.nish_result.i32.i32** %good.addr, align 8
-  %13 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %good.addr, align 8
-  %14 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %13, i32 0, i32 0
-  %15 = load i1, i1* %14, align 1
-  %16 = xor i1 %15, true
-  br i1 %16, label %if.then, label %if.end
+  %7 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %good.addr, align 8
+  %8 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %7, i32 0, i32 0
+  %9 = load i1, i1* %8, align 1
+  %10 = xor i1 %9, true
+  br i1 %10, label %if.then, label %if.end
 
 if.then:
-  %17 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %good.addr, align 8
-  %18 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %17, i32 0, i32 2
-  %19 = load i32, i32* %18, align 4
-  %20 = call i8* @nish_str_from_i32(i32 %19)
-  call void @nish_print(i8* %20)
+  %11 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %good.addr, align 8
+  %12 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %11, i32 0, i32 2
+  %13 = load i32, i32* %12, align 4
+  %14 = call i8* @nish_str_from_i32(i32 %13)
+  call void @nish_print(i8* %14)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 1
 
 if.end:
-  %21 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %good.addr, align 8
-  %22 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %21, i32 0, i32 1
-  %23 = load i32, i32* %22, align 4
-  %24 = call i8* @nish_str_from_i32(i32 %23)
-  call void @nish_print(i8* %24)
-  %25 = call { i1, i32 } @half(i32 7)
-  %26 = extractvalue { i1, i32 } %25, 0
-  %27 = extractvalue { i1, i32 } %25, 1
-  %28 = zext i32 %27 to i64
-  %29 = shl i64 %28, 32
-  %30 = zext i1 %26 to i64
-  %31 = or i64 %29, %30
-  %32 = trunc i64 %31 to i1
-  %33 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 0
-  store i1 %32, i1* %33, align 1
-  %34 = lshr i64 %31, 32
-  %35 = trunc i64 %34 to i32
-  %36 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 1
-  store i32 %35, i32* %36, align 4
-  %37 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 2
-  store i32 %35, i32* %37, align 4
+  %15 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %good.addr, align 8
+  %16 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %15, i32 0, i32 1
+  %17 = load i32, i32* %16, align 4
+  %18 = call i8* @nish_str_from_i32(i32 %17)
+  call void @nish_print(i8* %18)
+  %19 = call { i1, i32, i32 } @half(i32 7)
+  %20 = extractvalue { i1, i32, i32 } %19, 0
+  %21 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 0
+  store i1 %20, i1* %21, align 1
+  %22 = extractvalue { i1, i32, i32 } %19, 1
+  %23 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 1
+  store i32 %22, i32* %23, align 4
+  %24 = extractvalue { i1, i32, i32 } %19, 2
+  %25 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, i32 0, i32 2
+  store i32 %24, i32* %25, align 4
   store %struct.nish_result.i32.i32* %nish_result.i32.i32.obj.1, %struct.nish_result.i32.i32** %bad.addr, align 8
-  %38 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %bad.addr, align 8
-  %39 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %38, i32 0, i32 0
-  %40 = load i1, i1* %39, align 1
-  br i1 %40, label %if.then.1, label %if.end.1
+  %26 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %bad.addr, align 8
+  %27 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %26, i32 0, i32 0
+  %28 = load i1, i1* %27, align 1
+  br i1 %28, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %41 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %bad.addr, align 8
-  %42 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %41, i32 0, i32 1
-  %43 = load i32, i32* %42, align 4
-  %44 = call i8* @nish_str_from_i32(i32 %43)
-  call void @nish_print(i8* %44)
+  %29 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %bad.addr, align 8
+  %30 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %29, i32 0, i32 1
+  %31 = load i32, i32* %30, align 4
+  %32 = call i8* @nish_str_from_i32(i32 %31)
+  call void @nish_print(i8* %32)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 1
 
 if.end.1:
-  %45 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %bad.addr, align 8
-  %46 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %45, i32 0, i32 2
-  %47 = load i32, i32* %46, align 4
-  %48 = call i8* @nish_str_from_i32(i32 %47)
-  call void @nish_print(i8* %48)
+  %33 = load %struct.nish_result.i32.i32*, %struct.nish_result.i32.i32** %bad.addr, align 8
+  %34 = getelementptr inbounds %struct.nish_result.i32.i32, %struct.nish_result.i32.i32* %33, i32 0, i32 2
+  %35 = load i32, i32* %34, align 4
+  %36 = call i8* @nish_str_from_i32(i32 %35)
+  call void @nish_print(i8* %36)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

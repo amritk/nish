@@ -51,8 +51,9 @@ type, so `result.go` uses the same two-word struct as the C twin; Go's register
 ABI returns and passes it in registers, exactly as Go's own `(value, ok)` pair
 of results would be. All four are returned and passed in registers, so the four
 columns should be the same code; an Nish column well behind them means a
-`Result` went back to being a pointer into the arena. What the gap it currently shows is about, and the
-respelling that did *not* close it, is in
+`Result` went back to being a pointer into the arena. The gap this program
+used to show, the respelling that did *not* close it and the private per-arm
+ABI that did, are in
 [docs/wp17-result-abi.md](../docs/wp17-result-abi.md) §4.
 
 `strbuild` has one more version, `strbuild_naive.c`: the same immutable-string
