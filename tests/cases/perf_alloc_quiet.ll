@@ -132,9 +132,9 @@ for.cond.1:
 
 for.body.1:
   %36 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj, i32 0, i32 0
-  store i32 0, i32* %36, align 4
+  store i32 0, i32* %36, align 4, !tbaa !9
   %37 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj, i32 0, i32 1
-  store i32 0, i32* %37, align 4
+  store i32 0, i32* %37, align 4, !tbaa !10
   store %struct.Point* %Point.obj, %struct.Point** %p.addr, align 8
   %38 = load i32, i32* %i.addr.1, align 4
   %39 = load i32, i32* %i.addr.1, align 4
@@ -155,7 +155,7 @@ for.body.1:
   %48 = load i32, i32* %total.addr, align 4
   %49 = load %struct.Point*, %struct.Point** %p.addr, align 8
   %50 = getelementptr inbounds %struct.Point, %struct.Point* %49, i32 0, i32 0
-  %51 = load i32, i32* %50, align 4
+  %51 = load i32, i32* %50, align 4, !tbaa !9
   %52 = add nsw i32 %48, %51
   %53 = load %struct.nish_array*, %struct.nish_array** %pair.addr, align 8
   %54 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %53, i64 0, i32 0
@@ -332,3 +332,9 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !2 = !{!"elements", !0}
 !3 = !{!1}
 !4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"i32", !6, i64 0}
+!8 = !{!"Point", !7, i64 0, !7, i64 4}
+!9 = !{!8, !7, i64 0}
+!10 = !{!8, !7, i64 4}

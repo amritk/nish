@@ -42,21 +42,21 @@ slow:
 define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
-  store i32 %x, i32* %0, align 4
+  store i32 %x, i32* %0, align 4, !tbaa !4
   %1 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
-  store i32 %y, i32* %1, align 4
+  store i32 %y, i32* %1, align 4, !tbaa !5
   ret void
 }
 
 define internal noundef nonnull align 8 i8* @render(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %p, i32 0, i32 0
-  %1 = load i32, i32* %0, align 4
+  %1 = load i32, i32* %0, align 4, !tbaa !4
   %2 = call i8* @nish_str_from_i32(i32 %1)
   %3 = call i8* @nish_str_concat(i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), i8* %2)
   %4 = call i8* @nish_str_concat(i8* %3, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
   %5 = getelementptr inbounds %struct.Point, %struct.Point* %p, i32 0, i32 1
-  %6 = load i32, i32* %5, align 4
+  %6 = load i32, i32* %5, align 4, !tbaa !5
   %7 = call i8* @nish_str_from_i32(i32 %6)
   %8 = call i8* @nish_str_concat(i8* %4, i8* %7)
   %9 = call i8* @nish_str_concat(i8* %8, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*))
@@ -91,3 +91,10 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Point", !2, i64 0, !2, i64 4}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 4}

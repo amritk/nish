@@ -44,7 +44,7 @@ div.ok:
   %7 = srem i32 %1, %k
   store i32 %7, i32* %0, align 4
   %8 = getelementptr inbounds %struct.Box, %struct.Box* %b, i32 0, i32 0
-  %9 = load i32, i32* %8, align 4
+  %9 = load i32, i32* %8, align 4, !tbaa !4
   ret i32 %9
 }
 
@@ -68,3 +68,9 @@ div.ok:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind noreturn cold }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Box", !2, i64 0}
+!4 = !{!3, !2, i64 0}

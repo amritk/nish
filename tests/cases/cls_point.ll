@@ -9,18 +9,18 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
-  store i32 %x, i32* %0, align 4
+  store i32 %x, i32* %0, align 4, !tbaa !4
   %1 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
-  store i32 %y, i32* %1, align 4
+  store i32 %y, i32* %1, align 4, !tbaa !5
   ret void
 }
 
 define internal noundef i32 @Point.manhattan(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
-  %1 = load i32, i32* %0, align 4
+  %1 = load i32, i32* %0, align 4, !tbaa !4
   %2 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
-  %3 = load i32, i32* %2, align 4
+  %3 = load i32, i32* %2, align 4, !tbaa !5
   %4 = add nsw i32 %1, %3
   ret i32 %4
 }
@@ -28,9 +28,9 @@ entry:
 define internal noundef i32 @sumX(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p, %struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %q) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %p, i32 0, i32 0
-  %1 = load i32, i32* %0, align 4
+  %1 = load i32, i32* %0, align 4, !tbaa !4
   %2 = getelementptr inbounds %struct.Point, %struct.Point* %q, i32 0, i32 0
-  %3 = load i32, i32* %2, align 4
+  %3 = load i32, i32* %2, align 4, !tbaa !4
   %4 = add nsw i32 %1, %3
   ret i32 %4
 }
@@ -57,7 +57,7 @@ entry:
   call void @nish_print(i8* %6)
   %7 = load %struct.Point*, %struct.Point** %p.addr, align 8
   %8 = getelementptr inbounds %struct.Point, %struct.Point* %7, i32 0, i32 1
-  %9 = load i32, i32* %8, align 4
+  %9 = load i32, i32* %8, align 4, !tbaa !5
   %10 = call i8* @nish_str_from_i32(i32 %9)
   call void @nish_print(i8* %10)
   call void @nish_arena_release(i64 %arena.mark)
@@ -74,3 +74,10 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Point", !2, i64 0, !2, i64 4}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 4}

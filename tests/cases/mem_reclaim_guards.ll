@@ -46,7 +46,7 @@ slow:
 define internal void @Box.constructor(%struct.Box* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Box, %struct.Box* %this, i32 0, i32 0
-  store i8* %text, i8** %0, align 8
+  store i8* %text, i8** %0, align 8, !tbaa !4
   ret void
 }
 
@@ -58,7 +58,7 @@ entry:
   store i8* %1, i8** %s.addr, align 8
   %2 = load i8*, i8** %s.addr, align 8
   %3 = getelementptr inbounds %struct.Box, %struct.Box* %b, i32 0, i32 0
-  store i8* %2, i8** %3, align 8
+  store i8* %2, i8** %3, align 8, !tbaa !4
   %4 = load i8*, i8** %s.addr, align 8
   ret i8* %4
 }
@@ -102,7 +102,7 @@ entry:
   call void @nish_print(i8* %1)
   %2 = load %struct.Box*, %struct.Box** %b.addr, align 8
   %3 = getelementptr inbounds %struct.Box, %struct.Box* %2, i32 0, i32 0
-  %4 = load i8*, i8** %3, align 8
+  %4 = load i8*, i8** %3, align 8, !tbaa !4
   call void @nish_print(i8* %4)
   %5 = call i8* @sweep(i32 2)
   call void @nish_print(i8* %5)
@@ -140,3 +140,9 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"ptr", !1, i64 0}
+!3 = !{!"Box", !2, i64 0}
+!4 = !{!3, !2, i64 0}

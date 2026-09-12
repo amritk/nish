@@ -37,33 +37,33 @@ slow:
 define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
-  store i32 %x, i32* %0, align 4
+  store i32 %x, i32* %0, align 4, !tbaa !4
   %1 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
-  store i32 %y, i32* %1, align 4
+  store i32 %y, i32* %1, align 4, !tbaa !5
   ret void
 }
 
 define internal void @Segment.constructor(%struct.Segment* noundef nonnull noalias align 8 dereferenceable(24) nocapture %this, %struct.Point* noundef nonnull align 8 dereferenceable(8) %from, %struct.Point* noundef nonnull align 8 dereferenceable(8) %to, i8* noundef nonnull noalias readonly align 8 %label) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Segment, %struct.Segment* %this, i32 0, i32 0
-  store %struct.Point* %from, %struct.Point** %0, align 8
+  store %struct.Point* %from, %struct.Point** %0, align 8, !tbaa !8
   %1 = getelementptr inbounds %struct.Segment, %struct.Segment* %this, i32 0, i32 1
-  store %struct.Point* %to, %struct.Point** %1, align 8
+  store %struct.Point* %to, %struct.Point** %1, align 8, !tbaa !9
   %2 = getelementptr inbounds %struct.Segment, %struct.Segment* %this, i32 0, i32 2
-  store i8* %label, i8** %2, align 8
+  store i8* %label, i8** %2, align 8, !tbaa !10
   ret void
 }
 
 define internal noundef i32 @Segment.dx(%struct.Segment* noundef nonnull readonly align 8 dereferenceable(24) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Segment, %struct.Segment* %this, i32 0, i32 1
-  %1 = load %struct.Point*, %struct.Point** %0, align 8
+  %1 = load %struct.Point*, %struct.Point** %0, align 8, !tbaa !9
   %2 = getelementptr inbounds %struct.Point, %struct.Point* %1, i32 0, i32 0
-  %3 = load i32, i32* %2, align 4
+  %3 = load i32, i32* %2, align 4, !tbaa !4
   %4 = getelementptr inbounds %struct.Segment, %struct.Segment* %this, i32 0, i32 0
-  %5 = load %struct.Point*, %struct.Point** %4, align 8
+  %5 = load %struct.Point*, %struct.Point** %4, align 8, !tbaa !8
   %6 = getelementptr inbounds %struct.Point, %struct.Point* %5, i32 0, i32 0
-  %7 = load i32, i32* %6, align 4
+  %7 = load i32, i32* %6, align 4, !tbaa !4
   %8 = sub nsw i32 %3, %7
   ret i32 %8
 }
@@ -71,7 +71,7 @@ entry:
 define internal noundef nonnull align 8 dereferenceable(8) %struct.Point* @endpoint(%struct.Segment* noundef nonnull readonly align 8 dereferenceable(24) nocapture %s) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Segment, %struct.Segment* %s, i32 0, i32 1
-  %1 = load %struct.Point*, %struct.Point** %0, align 8
+  %1 = load %struct.Point*, %struct.Point** %0, align 8, !tbaa !9
   ret %struct.Point* %1
 }
 
@@ -94,24 +94,24 @@ entry:
   %7 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
   %8 = call %struct.Point* @endpoint(%struct.Segment* %7)
   %9 = getelementptr inbounds %struct.Point, %struct.Point* %8, i32 0, i32 1
-  %10 = load i32, i32* %9, align 4
+  %10 = load i32, i32* %9, align 4, !tbaa !5
   %11 = call i8* @nish_str_from_i32(i32 %10)
   call void @nish_print(i8* %11)
   %12 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
   %13 = getelementptr inbounds %struct.Segment, %struct.Segment* %12, i32 0, i32 0
-  %14 = load %struct.Point*, %struct.Point** %13, align 8
+  %14 = load %struct.Point*, %struct.Point** %13, align 8, !tbaa !8
   %15 = getelementptr inbounds %struct.Point, %struct.Point* %14, i32 0, i32 0
-  store i32 100, i32* %15, align 4
+  store i32 100, i32* %15, align 4, !tbaa !4
   %16 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
   %17 = getelementptr inbounds %struct.Segment, %struct.Segment* %16, i32 0, i32 0
-  %18 = load %struct.Point*, %struct.Point** %17, align 8
+  %18 = load %struct.Point*, %struct.Point** %17, align 8, !tbaa !8
   %19 = getelementptr inbounds %struct.Point, %struct.Point* %18, i32 0, i32 0
-  %20 = load i32, i32* %19, align 4
+  %20 = load i32, i32* %19, align 4, !tbaa !4
   %21 = call i8* @nish_str_from_i32(i32 %20)
   call void @nish_print(i8* %21)
   %22 = load %struct.Segment*, %struct.Segment** %s.addr, align 8
   %23 = getelementptr inbounds %struct.Segment, %struct.Segment* %22, i32 0, i32 2
-  %24 = load i8*, i8** %23, align 8
+  %24 = load i8*, i8** %23, align 8, !tbaa !10
   call void @nish_print(i8* %24)
   ret i32 0
 }
@@ -128,3 +128,15 @@ attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Point", !2, i64 0, !2, i64 4}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 4}
+!6 = !{!"ptr", !1, i64 0}
+!7 = !{!"Segment", !6, i64 0, !6, i64 8, !6, i64 16}
+!8 = !{!7, !6, i64 0}
+!9 = !{!7, !6, i64 8}
+!10 = !{!7, !6, i64 16}

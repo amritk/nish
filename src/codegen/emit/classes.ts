@@ -61,6 +61,7 @@ import {
   newEmitters,
   propertyEmitters,
 } from "./members.js";
+import { fieldTbaa } from "./tbaa.js";
 
 // ---- Helpers ------------------------------------------------------------------------
 
@@ -85,13 +86,13 @@ function fieldPointer(ctx: EmitContext, info: StructInfo, receiver: string, fiel
 function loadField(ctx: EmitContext, info: StructInfo, receiver: string, field: FieldInfo): string {
   const ty = llvmType(field.type);
   const ptr = fieldPointer(ctx, info, receiver, field);
-  return ctx.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${ctx.alignSuffix(field.type)}`);
+  return ctx.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${ctx.alignSuffix(field.type)}${fieldTbaa(ctx, info, field)}`);
 }
 
 function storeField(ctx: EmitContext, info: StructInfo, receiver: string, field: FieldInfo, value: string): void {
   const ty = llvmType(field.type);
   const ptr = fieldPointer(ctx, info, receiver, field);
-  ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${ctx.alignSuffix(field.type)}`);
+  ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${ctx.alignSuffix(field.type)}${fieldTbaa(ctx, info, field)}`);
 }
 
 /**

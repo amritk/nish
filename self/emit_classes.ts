@@ -25,6 +25,7 @@ import {
   privateResultAbi,
   resultTypeDecl,
 } from "./emit_result";
+import { fieldTbaa } from "./tbaa";
 import { emitArrayLength, emitArrayMethodCall, emitNewArray } from "./emit_arrays";
 import {
   compoundFloatOpcode,
@@ -78,7 +79,8 @@ function structFieldPointer(emitter: Emitter, info: StructInfo, receiver: string
 function loadField(emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string {
   const ty = emitter.llvm(field.type);
   const ptr = structFieldPointer(emitter, info, receiver, field);
-  return emitter.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}`);
+  const tbaa = fieldTbaa(emitter, info, field);
+  return emitter.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}${tbaa}`);
 }
 
 function storeField(
@@ -90,7 +92,8 @@ function storeField(
 ): void {
   const ty = emitter.llvm(field.type);
   const ptr = structFieldPointer(emitter, info, receiver, field);
-  emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}`);
+  const tbaa = fieldTbaa(emitter, info, field);
+  emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}${tbaa}`);
 }
 
 /**

@@ -42,6 +42,7 @@ sentence each:
 | `alwaysinline` | Always inline the callee: the arena fast path `@nish_alloc_struct` becomes a few instructions in every caller. |
 | `allocsize(0)` | The first argument is the size in bytes of the allocation the function returns, so LLVM can reason about the object's extent. |
 | `noundef` | The value is never `undef` or `poison`: every Nish value is initialised. Not emitted for a by-value `Result` under the private ABI, whose dead arm is `undef` on purpose (WP15 §7b). |
+| `!tbaa` | What the access *is*, not where it points: a field named by its class, LLVM type and byte offset. Lets LLVM keep a store to `bi.vx` from blocking a load of `bj.mass` through a different pointer. Only on classes that implement no interface. |
 | `zeroext` | An `i1` (`boolean`) is zero-extended in a register, matching the C ABI for `bool`. |
 | `nonnull` | The pointer is never null: only a `T \| null` parameter or return can be, and those do not carry it. |
 | `align 8` (param/return) | The pointee is 8-byte aligned: string literals, arena strings, array headers and objects all are. |
@@ -2945,18 +2946,18 @@ const origin = (): number => {
 define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
-  store i32 %x, i32* %0, align 4
+  store i32 %x, i32* %0, align 4, !tbaa !4
   %1 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
-  store i32 %y, i32* %1, align 4
+  store i32 %y, i32* %1, align 4, !tbaa !5
   ret void
 }
 
 define internal noundef i32 @Point.manhattan(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
-  %1 = load i32, i32* %0, align 4
+  %1 = load i32, i32* %0, align 4, !tbaa !4
   %2 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
-  %3 = load i32, i32* %2, align 4
+  %3 = load i32, i32* %2, align 4, !tbaa !5
   %4 = add nsw i32 %1, %3
   ret i32 %4
 }
@@ -2969,7 +2970,7 @@ entry:
   store %struct.Point* %Point.obj, %struct.Point** %p.addr, align 8
   %0 = load %struct.Point*, %struct.Point** %p.addr, align 8
   %1 = getelementptr inbounds %struct.Point, %struct.Point* %0, i32 0, i32 0
-  store i32 0, i32* %1, align 4
+  store i32 0, i32* %1, align 4, !tbaa !4
   %2 = load %struct.Point*, %struct.Point** %p.addr, align 8
   %3 = call i32 @Point.manhattan(%struct.Point* %2)
   ret i32 %3
@@ -2977,6 +2978,13 @@ entry:
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Point", !2, i64 0, !2, i64 4}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 4}
 ```
 <!-- cookbook:end cls_point -->
 
@@ -3034,17 +3042,27 @@ entry:
   %0 = call i8* @nish_alloc_struct(i64 16)
   %1 = bitcast i8* %0 to %struct.Defaults*
   %2 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %1, i32 0, i32 0
-  store i32 42, i32* %2, align 4
+  store i32 42, i32* %2, align 4, !tbaa !6
   %3 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %1, i32 0, i32 1
-  store i1 true, i1* %3, align 1
+  store i1 true, i1* %3, align 1, !tbaa !7
   %4 = getelementptr inbounds %struct.Defaults, %struct.Defaults* %1, i32 0, i32 2
-  store i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8** %4, align 8
+  store i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8** %4, align 8, !tbaa !8
   ret %struct.Defaults* %1
 }
 
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"i1", !1, i64 0}
+!4 = !{!"ptr", !1, i64 0}
+!5 = !{!"Defaults", !2, i64 0, !3, i64 4, !4, i64 8}
+!6 = !{!5, !2, i64 0}
+!7 = !{!5, !3, i64 4}
+!8 = !{!5, !4, i64 8}
 ```
 <!-- cookbook:end cls_initializers -->
 
@@ -3284,18 +3302,18 @@ const nearest = (x: number): number => {
 define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
-  store i32 %x, i32* %0, align 4
+  store i32 %x, i32* %0, align 4, !tbaa !4
   %1 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
-  store i32 %y, i32* %1, align 4
+  store i32 %y, i32* %1, align 4, !tbaa !5
   ret void
 }
 
 define internal noundef i32 @Point.manhattan(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
-  %1 = load i32, i32* %0, align 4
+  %1 = load i32, i32* %0, align 4, !tbaa !4
   %2 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
-  %3 = load i32, i32* %2, align 4
+  %3 = load i32, i32* %2, align 4, !tbaa !5
   %4 = add nsw i32 %1, %3
   ret i32 %4
 }
@@ -3334,6 +3352,13 @@ entry:
 attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind willreturn readnone }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Point", !2, i64 0, !2, i64 4}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 4}
 ```
 <!-- cookbook:end mem_stack_object -->
 
@@ -3418,18 +3443,18 @@ slow:
 define internal void @Point.constructor(%struct.Point* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %x, i32 noundef %y) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
-  store i32 %x, i32* %0, align 4
+  store i32 %x, i32* %0, align 4, !tbaa !4
   %1 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
-  store i32 %y, i32* %1, align 4
+  store i32 %y, i32* %1, align 4, !tbaa !5
   ret void
 }
 
 define internal noundef i32 @Point.manhattan(%struct.Point* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #1 {
 entry:
   %0 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 0
-  %1 = load i32, i32* %0, align 4
+  %1 = load i32, i32* %0, align 4, !tbaa !4
   %2 = getelementptr inbounds %struct.Point, %struct.Point* %this, i32 0, i32 1
-  %3 = load i32, i32* %2, align 4
+  %3 = load i32, i32* %2, align 4, !tbaa !5
   %4 = add nsw i32 %1, %3
   ret i32 %4
 }
@@ -3475,6 +3500,13 @@ attributes #0 = { nounwind willreturn }
 attributes #1 = { nounwind willreturn readonly }
 attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"Point", !2, i64 0, !2, i64 4}
+!4 = !{!3, !2, i64 0}
+!5 = !{!3, !2, i64 4}
 ```
 <!-- cookbook:end mem_stack_object_arena -->
 
@@ -3642,7 +3674,7 @@ for.end:
 define internal void @Box.constructor(%struct.Box* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Box, %struct.Box* %this, i32 0, i32 0
-  store i8* %text, i8** %0, align 8
+  store i8* %text, i8** %0, align 8, !tbaa !4
   ret void
 }
 
@@ -3654,7 +3686,7 @@ entry:
   store i8* %1, i8** %s.addr, align 8
   %2 = load i8*, i8** %s.addr, align 8
   %3 = getelementptr inbounds %struct.Box, %struct.Box* %b, i32 0, i32 0
-  store i8* %2, i8** %3, align 8
+  store i8* %2, i8** %3, align 8, !tbaa !4
   %4 = load i8*, i8** %s.addr, align 8
   ret i8* %4
 }
@@ -3670,6 +3702,12 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"ptr", !1, i64 0}
+!3 = !{!"Box", !2, i64 0}
+!4 = !{!3, !2, i64 0}
 ```
 <!-- cookbook:end mem_reclaim -->
 
@@ -3836,9 +3874,9 @@ declare void @nish_panic_index(i64 noundef, i64 noundef) #4
 define internal void @Node.constructor(%struct.Node* noundef nonnull noalias align 8 dereferenceable(16) nocapture %this, i32 noundef %value) #0 {
 entry:
   %0 = getelementptr inbounds %struct.Node, %struct.Node* %this, i32 0, i32 1
-  store %struct.Node* null, %struct.Node** %0, align 8
+  store %struct.Node* null, %struct.Node** %0, align 8, !tbaa !5
   %1 = getelementptr inbounds %struct.Node, %struct.Node* %this, i32 0, i32 0
-  store i32 %value, i32* %1, align 4
+  store i32 %value, i32* %1, align 4, !tbaa !6
   ret void
 }
 
@@ -3849,7 +3887,7 @@ entry:
 
 cond.true:
   %1 = getelementptr inbounds %struct.Node, %struct.Node* %n, i32 0, i32 0
-  %2 = load i32, i32* %1, align 4
+  %2 = load i32, i32* %1, align 4, !tbaa !6
   br label %cond.end
 
 cond.false:
@@ -3877,12 +3915,12 @@ while.body:
   %2 = load i32, i32* %total.addr, align 4
   %3 = load %struct.Node*, %struct.Node** %cur.addr, align 8
   %4 = getelementptr inbounds %struct.Node, %struct.Node* %3, i32 0, i32 0
-  %5 = load i32, i32* %4, align 4
+  %5 = load i32, i32* %4, align 4, !tbaa !6
   %6 = add nsw i32 %2, %5
   store i32 %6, i32* %total.addr, align 4
   %7 = load %struct.Node*, %struct.Node** %cur.addr, align 8
   %8 = getelementptr inbounds %struct.Node, %struct.Node* %7, i32 0, i32 1
-  %9 = load %struct.Node*, %struct.Node** %8, align 8
+  %9 = load %struct.Node*, %struct.Node** %8, align 8, !tbaa !5
   store %struct.Node* %9, %struct.Node** %cur.addr, align 8
   br label %while.cond
 
@@ -3895,7 +3933,7 @@ define internal noundef i32 @firstValue(%struct.nish_array* noundef nonnull alig
 entry:
   %head.addr = alloca %struct.Node*, align 8
   %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0
-  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
+  %1 = load i64, i64* %0, align 8, !alias.scope !10, !noalias !11
   %2 = icmp ult i64 0, %1
   br i1 %2, label %bounds.ok, label %bounds.fail
 
@@ -3905,10 +3943,10 @@ bounds.fail:
 
 bounds.ok:
   %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2
-  %4 = load i8*, i8** %3, align 8, !alias.scope !3, !noalias !4
+  %4 = load i8*, i8** %3, align 8, !alias.scope !10, !noalias !11
   %5 = bitcast i8* %4 to %struct.Node**
   %6 = getelementptr inbounds %struct.Node*, %struct.Node** %5, i64 0
-  %7 = load %struct.Node*, %struct.Node** %6, align 8, !alias.scope !4, !noalias !3
+  %7 = load %struct.Node*, %struct.Node** %6, align 8, !alias.scope !11, !noalias !10
   store %struct.Node* %7, %struct.Node** %head.addr, align 8
   %8 = load %struct.Node*, %struct.Node** %head.addr, align 8
   %9 = icmp ne %struct.Node* %8, null
@@ -3917,7 +3955,7 @@ bounds.ok:
 cond.true:
   %10 = load %struct.Node*, %struct.Node** %head.addr, align 8
   %11 = getelementptr inbounds %struct.Node, %struct.Node* %10, i32 0, i32 0
-  %12 = load i32, i32* %11, align 4
+  %12 = load i32, i32* %11, align 4, !tbaa !6
   br label %cond.end
 
 cond.false:
@@ -3934,11 +3972,18 @@ attributes #2 = { nounwind readonly }
 attributes #3 = { nounwind }
 attributes #4 = { nounwind noreturn cold }
 
-!0 = !{!"nish array"}
-!1 = !{!"header", !0}
-!2 = !{!"elements", !0}
-!3 = !{!1}
-!4 = !{!2}
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"i32", !1, i64 0}
+!3 = !{!"ptr", !1, i64 0}
+!4 = !{!"Node", !2, i64 0, !3, i64 8}
+!5 = !{!4, !3, i64 8}
+!6 = !{!4, !2, i64 0}
+!7 = !{!"nish array"}
+!8 = !{!"header", !7}
+!9 = !{!"elements", !7}
+!10 = !{!8}
+!11 = !{!9}
 ```
 <!-- cookbook:end mem_nullable -->
 
