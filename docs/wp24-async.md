@@ -399,8 +399,8 @@ asynchrony is entirely in generated C.
 
 Overlapping `spawnSync` waits, parallelism across cores, a long computation
 that must not stall a caller: all WP20, all designed, and all argued from the
-same zero-GC constraints. The four benchmark programs outside the 1.10x target
-are not waiting on I/O — they are waiting on one core.
+same zero-GC constraints. The benchmark programs that have ever sat outside the
+1.10x target were not waiting on I/O — they were waiting on one core.
 
 ### 5.3 Nothing, for the rest
 

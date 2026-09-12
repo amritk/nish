@@ -28,7 +28,9 @@ Requirements: Node.js 22.18+ and, to produce binaries, clang (LLVM 18) + lld;
 per-OS install commands are in [docs/INSTALL.md](docs/INSTALL.md).
 
 ```bash
-npm install -g nish          # or: git clone, npm install, npm run build, node dist/index.js ...
+# the npm name `nish` is somebody else's package; install the release tarball
+curl -LO https://github.com/amritk/nish/releases/download/v0.1.1/nish-0.1.1.tgz
+npm install -g ./nish-0.1.1.tgz   # or: git clone, npm install, npm run build, node dist/index.js ...
 ```
 
 `hello.ts`:
@@ -345,7 +347,7 @@ npm run bootstrap                   # build/nish, built by itself
 build/nish hello.ts --link hello  # -o, --link, --profile, its own directories
 ```
 
-`npm install -g nish` still ships the Node compiler: it is the seed every
+The released `.tgz` still ships the Node compiler: it is the seed every
 bootstrap starts from and the oracle every `self/` phase is compared against.
 What it is no longer is the only one that can emit DWARF, write the interop
 sidecars or link an executable — the self-hosted compiler does all three, the
