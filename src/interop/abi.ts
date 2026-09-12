@@ -11,7 +11,7 @@ import { CLI } from "../branding.js";
 import { FunctionSig } from "../checker/index.js";
 import { FunctionFacts, analyzeFunctions } from "../codegen/attributes.js";
 import { Compilation, ModuleUnit } from "../compilation.js";
-import { ResultType, StaticType, isReadonlyArray, resultByValue, resultStructName } from "../types.js";
+import { ResultType, StaticType, isReadonlyArray, isScalarType, resultByValue, resultStructName } from "../types.js";
 import { ResultLayout, resultLayout, resultTypesIn } from "../checker/result.js";
 import { ROOT_PACKAGE } from "../packages.js";
 
@@ -261,8 +261,7 @@ export function resultTypesUsed(
  * for the two bigint ones), and `--emit-dts` spells them all `number` too.
  */
 export function isScalar(t: StaticType): boolean {
-  const k = kindOf(t);
-  return k === "i32" || k === "u8" || k === "u16" || k === "u32" || k === "f32" || k === "f64" || k === "bool" || k === "void";
+  return isScalarType(t);
 }
 
 /** TypeScript source spelling of a signature, for comments and declarations. */
