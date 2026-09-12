@@ -57,9 +57,15 @@ export interface StructInfo {
 
 export interface FunctionSig {
   /**
-   * The LLVM symbol (`@name`). Equal to the declared identifier except for the
-   * entry module's `export function main`, which is emitted as `@nish_main` so
-   * the C-ABI wrapper can own `@main` (see `docs/wp5-modules.md`).
+   * The LLVM symbol (`@name`), and the key the whole-program fact fixpoint is
+   * kept under (`src/codegen/attributes.ts`). It is the declared identifier
+   * qualified with the module's package prefix (WP21 S1, `src/packages.ts`),
+   * which is empty for the root package and therefore for every module of a
+   * single-package program — so it still reads as the bare identifier in every
+   * program that could be compiled before packages existed. The two other
+   * spellings are unchanged: a method or constructor is `Owner.method`, and
+   * the entry module's `export function main` is `@nish_main` so the C-ABI
+   * wrapper can own `@main` (see `docs/wp5-modules.md`).
    */
   name: string;
   /** The identifier as written in the source. */
@@ -140,6 +146,20 @@ export interface ImportBinding {
 
 export interface CheckedProgram {
   sourceFile: ts.SourceFile;
+  /**
+   * The package this module belongs to (WP21 S1, `src/packages.ts`). `""` is
+   * the root package — the program being compiled — which is where every
+   * module of a single-package build lives.
+   */
+  packageName: string;
+  /**
+   * The prefix every symbol declared in this module carries; `""` for the root
+   * package. `FunctionSig.name` already has it applied, so nothing downstream
+   * has to remember to apply it. The field is kept so that a diagnostic can
+   * name the package a clash is inside and the `--emit-checked` dump can say
+   * which package a module came from.
+   */
+  symbolPrefix: string;
   /** Functions defined in this module, in source order. */
   functions: FunctionSig[];
   /** Functions imported from other modules; the emitter emits a `declare` per distinct symbol. */

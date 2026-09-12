@@ -273,7 +273,17 @@ export class FunctionFacts {
   }
 }
 
-/** Facts for every function of a whole program, keyed by LLVM symbol. */
+/**
+ * Facts for every function of a whole program, keyed by LLVM symbol.
+ *
+ * A symbol and no longer a bare name, since WP21 S1: every symbol carries its
+ * module's package prefix (`self/packages.ts`), so two dependencies that each
+ * keep a private `helper()` get two entries here instead of one. Sharing an
+ * entry would emit each of them with the other's purity, escape and pointer
+ * facts, which is a miscompile rather than a missed optimisation. Nothing here
+ * changed for it: the root package's prefix is empty, so a single-package
+ * program is analysed under exactly the keys it always was.
+ */
 export class FactsTable {
   index: StringMap;
   list: FunctionFacts[];
