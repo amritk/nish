@@ -61,6 +61,7 @@ export function collectFunctionSignature(
     returnType: resolveTypeNode(decl.type, sf, opts),
     decl,
     nameNode: decl.name,
+    declSite: decl,
     body: decl.body,
     exported: hasExportModifier(decl),
   };
@@ -137,6 +138,9 @@ export function collectArrowSignature(
     returnType: resolveTypeNode(arrow.type, sf, opts),
     decl: arrow,
     nameNode: decl.name,
+    // The declaration is the statement, not the arrow: `-g` measures the
+    // function from `export`, exactly as it does for the `function` spelling.
+    declSite: stmt,
     body: arrow.body,
     exported: hasExportModifier(stmt),
   };
@@ -205,6 +209,7 @@ export function collectFunctionTemplate(decl: ts.FunctionDeclaration, sf: ts.Sou
     typeParams: collectTypeParams(decl.typeParameters ?? [], sf),
     decl,
     nameNode: decl.name,
+    declSite: decl,
     body: decl.body,
     exported: hasExportModifier(decl),
     count: 0,
@@ -235,6 +240,9 @@ export function collectArrowTemplate(
     typeParams: collectTypeParams(arrow.typeParameters ?? [], sf),
     decl: arrow,
     nameNode: decl.name,
+    // The declaration is the statement, not the arrow, exactly as it is for a
+    // non-generic one: every instantiation inherits this as its `declSite`.
+    declSite: stmt,
     body: arrow.body,
     exported: hasExportModifier(stmt),
     count: 0,

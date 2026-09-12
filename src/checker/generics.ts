@@ -49,6 +49,14 @@ export interface TemplateInfo {
   decl: ts.FunctionDeclaration | ts.ArrowFunction;
   /** Where a diagnostic that names the template points (the `const` for an arrow, WP22 §5). */
   nameNode: ts.Node;
+  /**
+   * Where the declaration begins, which every instantiation inherits as its own
+   * `FunctionSig.declSite`. A template is written once and specialised many
+   * times, so every instantiation of `identity<T>` is declared exactly where
+   * `identity` is written -- which is the answer a debugger wants, and the one
+   * WP22 requires not to depend on which of the two spellings was used.
+   */
+  declSite: ts.Node;
   body: ts.Block | ts.Expression;
   exported: boolean;
   /** How many instantiations this template has produced, for the per-template cap. */

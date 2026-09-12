@@ -471,6 +471,10 @@ export class Checker implements CheckContext {
       returnType,
       decl: template.decl,
       nameNode: template.nameNode,
+      // Every instantiation is declared where the template is written: one
+      // `DISubprogram` per specialisation, all of them pointing at the one
+      // source line a reader would call the declaration (WP22, `declSite`).
+      declSite: template.declSite,
       body: template.body,
       exported: template.exported,
     };

@@ -75,6 +75,23 @@ export interface FunctionSig {
    */
   nameNode: ts.Node;
   /**
+   * Where the declaration *begins*, which is what `-g` measures the function's
+   * line and column from. For a `function`, a method and a constructor that is
+   * `decl` itself; for the arrow form it is the `VariableStatement`, because
+   * `export const add = (a: i32): i32 => ...` begins at `export` and not at the
+   * arrow's parameter list.
+   *
+   * It is recorded rather than re-derived for the reason every position here is
+   * recorded: `debug.ts` may not climb to a parent to find out what a node is
+   * part of. Reading it off `decl` put an arrow-declared function at the column
+   * of its parameter list — so the same function's debug info depended on which
+   * of the two spellings declared it, and on a multi-line declaration the
+   * `DISubprogram` named the wrong line as well. Stage1 needs no such field:
+   * its parser normalises both spellings into one `N_FUNCTION` that already
+   * spans the whole declaration (`self/parser.ts`, WP22 §8).
+   */
+  declSite: ts.Node;
+  /**
    * The body, normalised. A `function`, a method and a constructor always carry
    * a `Block`; an arrow may carry a concise body (`=> n * 2`), which means
    * exactly what a block with one `return` means (WP22 §4). The four places

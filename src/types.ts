@@ -63,6 +63,16 @@ export interface CompilerOptions {
    * byte-for-byte unchanged. Default: false.
    */
   debugInfo: boolean;
+  /**
+   * Give every thread its own arena (`--threads`, WP20 T0). The only thing it
+   * changes in the IR is the storage class of `@nish_arena`, which the inlined
+   * bump allocator then reaches through the thread pointer; the runtime must be
+   * built with `-DNISH_THREADS` to match, which `--link` and
+   * `scripts/build.sh --threads` do. There is no language surface: no program
+   * can tell, because nothing in the language makes a second thread yet. Off
+   * leaves the IR byte-for-byte unchanged. Default: false.
+   */
+  threads: boolean;
 }
 
 export const DEFAULT_OPTIONS: CompilerOptions = {
@@ -75,6 +85,7 @@ export const DEFAULT_OPTIONS: CompilerOptions = {
   nsw: true,
   stackAlloc: true,
   debugInfo: false,
+  threads: false,
 };
 
 export type StaticType =
