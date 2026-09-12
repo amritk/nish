@@ -380,6 +380,17 @@ export const RUNTIME_FUNCTIONS: RuntimeFunction[] = [
     effect: "write",
     noreturn: true,
   },
+  {
+    // `slice` range-check failure (WP15 §4): prints "slice out of range:
+    // [<start>, <end>) of length <len>" and exits 1. It is its own symbol
+    // rather than `nish_panic_index` because a reversed pair is as common a
+    // mistake as an end past the string, and "i >= len" describes neither.
+    name: "nish_panic_slice",
+    signature: "declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef)",
+    attrs: ["nounwind", "noreturn", "cold"],
+    effect: "write",
+    noreturn: true,
+  },
   // ---- Checked integer division and ECMAScript pow ----------------------------
   {
     name: "nish_panic_div",

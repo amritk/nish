@@ -415,7 +415,7 @@ function assignableReadonly(
 // index is a **byte** offset, matching `.length`: a lexer walks bytes, and a
 // code-point index would need a decode per access.
 
-const STRING_METHODS: string = "charCodeAt, substring, indexOf, startsWith, endsWith";
+const STRING_METHODS: string = "charCodeAt, substring, slice, indexOf, startsWith, endsWith";
 
 export function checkStringProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 {
   if (expr.text === "length") {
@@ -463,6 +463,15 @@ export function checkStringMethod(
     }
     for (const arg of args.children) {
       checkIndexArgument(ctx, arg, scope, "substring");
+    }
+    return T_STRING;
+  }
+  if (name === "slice") {
+    if (count === 0 || count > 2) {
+      return ctx.errorType(call, `\`slice\` expects 1 or 2 arguments, got ${count}`);
+    }
+    for (const arg of args.children) {
+      checkIndexArgument(ctx, arg, scope, "slice");
     }
     return T_STRING;
   }

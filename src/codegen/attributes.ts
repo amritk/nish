@@ -627,7 +627,7 @@ function collectFacts(
     }
     const param = paramRef(node);
     if (param !== undefined) noteUse(param, node as ts.Expression);
-    collectStringFacts(program, node, facts);
+    collectStringFacts(program, node, facts, opts);
     for (const collect of factCollectors) collect(program, node, facts, opts);
     collectBuiltinFacts(program, node, facts); // WP7: toI32/toF64/..., readFileSync/...
     ts.forEachChild(node, visit);

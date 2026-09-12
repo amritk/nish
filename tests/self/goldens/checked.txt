@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 275 programs, 4541 dump lines.
+# 278 programs, 4589 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3277,6 +3277,43 @@ function test(): i32 -> @test [exported]
   local 10:7 flags: i32 (let)
   callee 15:10 find -> @find
   callee 15:32 find -> @find
+program tests/cases/str_slice.ts
+module tests/cases/str_slice.ts (entry)
+function cut(s: string, from: i32, to: i32): string -> @cut
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_slice nish_str_new
+  stackSites=0 stackLocals=0
+function rest(s: string, from: i32): string -> @rest
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_slice nish_str_new
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: cut nish_arena_mark nish_arena_release nish_str_eq rest
+  stackSites=0 stackLocals=0
+  local 10:9 s: string (const)
+  local 11:9 head: string (const)
+  callee 11:16 cut -> @cut
+  local 12:9 tail: string (const)
+  callee 12:16 rest -> @rest
+  local 13:9 empty: string (const)
+  callee 13:17 cut -> @cut
+  local 14:9 whole: string (const)
+  callee 14:17 cut -> @cut
+  local 15:7 flags: i32 (let)
+  callee 20:7 rest -> @rest
+program tests/cases/str_slice_panic.ts
+module tests/cases/str_slice_panic.ts (entry)
+function cut(s: string, from: i32, to: i32): string -> @cut
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_slice nish_str_new
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: cut nish_arena_mark nish_arena_release nish_print
+  stackSites=0 stackLocals=0
+  callee 9:15 cut -> @cut
+  callee 10:15 cut -> @cut
 program tests/cases/str_template.ts
 module tests/cases/str_template.ts (entry)
 function describe(n: i32, ok: boolean, name: string): string -> @describe
@@ -4483,6 +4520,20 @@ function same(a: string, b: string): boolean -> @same
   stackSites=0 stackLocals=0
 function len(s: string): i32 -> @len
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+program docs/cookbook/str_slice.ts
+module docs/cookbook/str_slice.ts (entry)
+function head(s: string, n: i32): string -> @head
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_slice nish_str_new
+  stackSites=0 stackLocals=0
+function rest(s: string, n: i32): string -> @rest
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_slice nish_str_new
+  stackSites=0 stackLocals=0
+function proven(): string -> @proven
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_slice nish_str_new
   stackSites=0 stackLocals=0
 program docs/cookbook/str_template.ts
 module docs/cookbook/str_template.ts (entry)

@@ -219,6 +219,7 @@ of `RUNTIME_FUNCTIONS`:
 | `nish_getenv(name)` | `getenv` (WP19 R1): the value of one environment variable, copied into the arena, or NULL when it is unset — the `string \| null` a driver reads `CC` with before it spawns `scripts/build.sh`. The copy is what makes the answer an ordinary arena string: libc hands back a pointer into `environ`, which a later `setenv` may move. `noalias` on the declaration for that reason and `readnone` on none of it: it allocates, and the environment is not memory LLVM tracks. |
 | `nish_array_grow(hdr, elemSize)` | `push` when `len == cap`: doubles `cap` (4 from 0) and moves the elements to fresh arena storage. |
 | `nish_panic_index(idx, len)` | Failed bounds check: `index out of range: <idx> >= <len>` on stderr, `_exit(1)`. |
+| `nish_panic_slice(start, end, len)` | Failed `slice` range check (`cold noreturn`): `slice out of range: [<start>, <end>) of length <len>` on stderr, `_exit(1)`. Its own symbol because a reversed pair is as common a mistake as an end past the string, and `index out of range` describes neither (WP15 §4). |
 | `nish_panic_div(by_zero)` | Failed integer-division check (`cold noreturn`): `attempt to divide by zero` or `attempt to divide with overflow` on stderr, `_exit(1)`. |
 
 `Math.sqrt`, `Math.floor`, `Math.abs`, `Math.min`, ... are not runtime calls
