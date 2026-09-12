@@ -111,7 +111,14 @@ const DECLARED = [
   {
     flag: "--emit-checked",
     surface: "stdout",
-    normalize: (text) => text.replace(/^module .*?([^/\\]+\.ts)( \(entry\))?$/gm, "module $1$2"),
+    // The tags after the file name are part of the header and are compared:
+    // ` (entry)`, and ` [package <name>]` for a module outside the root package
+    // (WP21 S1). Only the path in front of them is rewritten away.
+    normalize: (text) =>
+      text.replace(
+        /^module .*?([^/\\]+\.ts)( \(entry\))?( \[package [^\]]*\])?$/gm,
+        (_whole, file, entry, pkg) => `module ${file}${entry ?? ""}${pkg ?? ""}`
+      ),
     why: "the `module <path>` header only. stage0 rewrites a file name to be cwd-relative (`displayName` in src/dump.ts) because the harness hands it absolute paths and a golden must not carry a checkout path; stage1 prints the path it was given, because it has no `cwd` to relativise against and adding a builtin to change one line of a debug dump is what §4 means by the runtime budget dying. Every other line of the dump is compared as it stands.",
   },
 ];
