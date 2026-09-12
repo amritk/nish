@@ -221,6 +221,31 @@ for (const name of cases) {
   }
 }
 
+// ---- A `nish:` import is the same builtin, not another one -----------------------
+// The whole claim a builtin module makes: importing a name *renames* a builtin
+// rather than introducing one, so the program that imports and the program that
+// reaches for the global have to emit the same body. A golden cannot say that —
+// two goldens generated together only prove they were generated together — so
+// the two outputs are compared directly, with the one line that is allowed to
+// differ (the source file each was compiled from) taken out.
+if (!only || "io_nish_import".includes(only) || "io_nish_import_global".includes(only)) {
+  const ir = (name) => {
+    const file = path.join(buildDir, `${name}.ll`);
+    return fs.existsSync(file)
+      ? stripHeader(fs.readFileSync(file, "utf8")).split(root).join("<root>").trim()
+      : null;
+  };
+  const imported = ir("io_nish_import");
+  const global = ir("io_nish_import_global");
+  check(
+    "io_nish_import: the imported spelling emits the IR the global one does",
+    imported !== null && imported === global,
+    imported === null
+      ? "(one of the two cases did not compile)"
+      : `--- global\n${global}\n--- imported\n${imported}`
+  );
+}
+
 /**
  * `<name>.env`: one `NAME=value` per line, layered over the environment the
  * harness inherited. A case that reads the environment (`getenv`, WP19 R1)

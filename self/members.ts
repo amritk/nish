@@ -42,7 +42,14 @@ export function isValueReceiver(ctx: CheckContext, receiver: Node, scope: Scope)
   if (receiver.kind !== N_IDENT) {
     return true;
   }
-  return scope.lookup(receiver.text) !== null || ctx.program.constant(receiver.text) !== null;
+  // A name a `nish:` import bound is a value too, and for the reason a module
+  // constant is: `argv.length` is a member of the array `argv`, not a member of
+  // a namespace called `argv`.
+  return (
+    scope.lookup(receiver.text) !== null ||
+    ctx.program.constant(receiver.text) !== null ||
+    ctx.program.builtinImport(receiver.text) !== null
+  );
 }
 
 /**

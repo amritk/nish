@@ -22,8 +22,14 @@ import {
 } from "./result.js";
 import { isAssignmentOperator } from "../../checker/classes.js";
 import { classExpressionEmitters } from "./classes.js";
-import { assignmentTargetEmitters, emitMethodCall, isValueReceiver, memberExpressionEmitters } from "./members.js";
-import { emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from "./strings.js";
+import {
+  assignmentTargetEmitters,
+  emitMethodCall,
+  isValueReceiver,
+  memberExpressionEmitters,
+  namespacePropertyEmitters,
+} from "./members.js";
+import { builtinCallEmitters, emitBuiltinCall, stringBinaryEmitters, stringExpressionEmitters } from "./strings.js";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, UnaryEmitter, intOpcode } from "./context.js";
 import {
   controlFlowBinaryEmitters,
@@ -75,6 +81,10 @@ const emitNull: ExpressionEmitter = () => "null";
 const emitIdentifier: ExpressionEmitter = (ctx, expr) => {
   const constant = ctx.program.constRefs.get(expr as ts.Identifier);
   if (constant) return constantValue(ctx, constValue(constant));
+  // `import { argv } from "nish:process"`: the same load as `process.argv`,
+  // reached by a name instead of a dot.
+  const builtin = ctx.program.builtinRefs.get(expr);
+  if (builtin !== undefined) return lookup(namespacePropertyEmitters, builtin)!(ctx, expr as ts.Expression);
   const local = ctx.program.bindings.get(expr as ts.Identifier)!;
   if (local.storage === "param") return ctx.paramObject(local.name) ?? `%${local.name}`;
   const ty = llvmType(local.type);
@@ -188,6 +198,13 @@ export const builtinFunctionEmitters: Record<string, BuiltinCall> = {
 /** The identifier builtin a call resolves to, or undefined for calls to user functions. */
 function builtinFunctionOf(program: CheckedProgram, expr: ts.CallExpression): BuiltinCall | undefined {
   if (!ts.isIdentifier(expr.expression) || program.callees.has(expr)) return undefined;
+  // Under a `nish:` import the identifier is the local name, so the checker
+  // recorded which builtin it is. A dotted one (`process.exit`) then has to be
+  // fetched from the table that owns dotted callees: the import is precisely
+  // what let the program call it without writing the dot.
+  const canonical = program.builtinRefs.get(expr);
+  if (canonical !== undefined)
+    return lookup(builtinFunctionEmitters, canonical) ?? lookup(builtinCallEmitters, canonical);
   return lookup(builtinFunctionEmitters, expr.expression.text);
 }
 

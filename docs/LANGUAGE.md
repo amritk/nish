@@ -800,8 +800,8 @@ program twice, with one golden between them.
   `tests/cases/reject_export_default`).
 - The only import form is a named import from a relative specifier:
   `import { square, cube as pow3 } from "./math"` (`tests/link/two_file`).
-  The specifier must start with `./` or `../`
-  (`Only relative import specifiers are supported`,
+  The specifier must start with `./` or `../`, or be one of the three builtin
+  modules below (`Only relative import specifiers are supported`,
   `tests/cases/reject_bare_import`); `.ts` is optional and `./x.js` maps to
   `./x.ts`; paths resolve relative to the importing file. Default imports
   (`Default imports are not supported`, `reject_default_import`), namespace
@@ -1361,9 +1361,59 @@ See [Classes](#classes) and [Interfaces](#interfaces-and-object-literals).
 
 ## Builtins
 
-No `import` is needed; builtins are resolved by name. Effects (`none`,
-`read`, `write`) are what the call does to the purity of the enclosing
-function ([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
+No `import` is needed; builtins are resolved by name. The libc-backed ones may
+also be imported from a `nish:` module, which is the same builtin under a name
+that cannot be shadowed (see [Builtin modules](#builtin-modules-nish) below).
+Effects (`none`, `read`, `write`) are what the call does to the purity of the
+enclosing function
+([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
+
+### Builtin modules (`nish:`)
+
+The builtins backed by the C runtime can be imported instead of reached for as
+globals. `nish:` is the only bare specifier the language accepts; it resolves
+to no file, and the import *renames a builtin rather than introducing one* —
+the call checks through the same rule and emits the same IR as the global
+spelling, which `tests/run.js` pins by compiling `tests/cases/io_nish_import`
+and `io_nish_import_global` and comparing the two bodies.
+
+| Module | Exports |
+| --- | --- |
+| `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `writeFileSync`, `appendFileSync`, `mkdirSync`, `isDirectorySync` |
+| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `argv`, `platform`, `arch` |
+| `nish:io` | `write`, `writeError`, `panic` |
+
+```ts
+import { readFileSync } from "nish:fs";
+import { argv } from "nish:process";
+import { write } from "nish:io";
+```
+
+- The forms are the ones every other import allows: a named import, with `as`
+  (`tests/cases/io_nish_rename`). Default, namespace, side-effect and type-only
+  imports are refused under the same messages a relative specifier gets.
+- An unknown module is `` Unknown builtin module `nish:sqlite` ``
+  (`reject_nish_unknown_module`); a name a module does not export is
+  `` Module `nish:fs` has no export `readdirSync` ``
+  (`reject_nish_unknown_export`). Both list what does exist.
+- **An imported builtin cannot be shadowed**, and that is the reason to prefer
+  one. A global builtin is consulted only when no user function of that name is
+  in scope, so declaring one silently replaces it; declaring one that collides
+  with an import is `` `panic` is already declared in this module `` instead
+  (`reject_nish_import_clash`).
+- A name keeps its kind. `argv`, `platform` and `arch` are values, and calling
+  one is refused (`reject_nish_property_call`); the functions are not values,
+  for the reason no function in this language is one
+  (`reject_nish_builtin_value`).
+- `exit` terminates control flow exactly as `process.exit` does, so a
+  non-`void` function may end with it (`io_nish_rename`).
+- Diagnostics name the canonical builtin whatever the call site calls it:
+  `exit(1, 2)` reports `` `process.exit` expects exactly 1 argument ``, which
+  is the rule to look up.
+- Everything else stays global — `Math.*`, the width conversions,
+  `console.log` / `console.error`, `String.fromCharCode`, `Arena.*`, `Ok` and
+  `Err`. They lower to an LLVM intrinsic or a single instruction and cost no
+  runtime at all, so they read as language rather than as library.
 
 ### `console`
 

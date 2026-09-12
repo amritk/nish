@@ -25,6 +25,7 @@ import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { CheckedProgram, Checker, FunctionSig, ImportBinding, StructInfo } from "./checker/index.js";
+import { isNishSpecifier } from "./checker/nish-modules.js";
 import { FunctionFacts, analyzeFunctions } from "./codegen/attributes.js";
 import { emitProgram } from "./codegen/emitter.js";
 import { CompileError, DiagnosticSink } from "./diagnostics.js";
@@ -111,6 +112,8 @@ export class Compilation {
 
     checker.collectSignatures(); // pass 1: also validates the import syntax
     for (const imp of checker.program.imports) {
+      // A builtin module has no file behind it; pass 1b binds it instead.
+      if (isNishSpecifier(imp.specifier)) continue;
       if (unit.resolved.has(imp.specifier)) continue;
       // A missing module is reported and the others still load; `check()` stops before binding.
       this.sink.recover(() => {

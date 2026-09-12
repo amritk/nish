@@ -18,6 +18,7 @@
 // would be into the wrong module's list. Everything local is an index.
 
 import { SourceFile } from "./diagnostics";
+import { BuiltinExport } from "./nish_modules";
 import { StringMap, StringSet } from "./map";
 import { N_CONSTRUCTOR, N_EMPTY, Node } from "./nodes";
 import { Local } from "./symbols";
@@ -255,7 +256,7 @@ export class AliasInfo {
 
 /** One name brought in by `import { f, g as h } from "./m"`. */
 export class ImportBinding {
-  /** Module specifier text, e.g. `./math`. Relative specifiers only. */
+  /** Module specifier text: a relative path (`./math`) or a builtin module (`nish:fs`). */
   specifier: string;
   /** Name inside the exporting module. */
   importedName: string;
@@ -273,6 +274,12 @@ export class ImportBinding {
   sig: FunctionSig | null;
   struct: StructInfo | null;
   constant: ConstInfo | null;
+  /**
+   * Set instead of the three above when the specifier is a `nish:` module: the
+   * import names a builtin, so there is no signature to bind and no symbol to
+   * declare, only the canonical spelling the builtin checkers are keyed by.
+   */
+  builtin: BuiltinExport | null;
 
   constructor(specifier: string, importedName: string, localName: string, node: Node, decl: Node) {
     this.specifier = specifier;
@@ -283,6 +290,7 @@ export class ImportBinding {
     this.sig = null;
     this.struct = null;
     this.constant = null;
+    this.builtin = null;
   }
 }
 
@@ -361,6 +369,9 @@ export class CheckedProgram {
   /** Name -> index into `constantList`, for the constants visible here. */
   constants: StringMap;
   constantList: ConstInfo[];
+  /** Local name -> index into `builtinImportList`, for the `nish:` imports. */
+  builtinImports: StringMap;
+  builtinImportList: BuiltinExport[];
 
   /** Name -> index into `aliasList`, for the `type` aliases this module declares. */
   aliases: StringMap;
@@ -379,6 +390,14 @@ export class CheckedProgram {
   nodeConstants: (ConstInfo | null)[];
   /** Call node id -> the callee, free functions and methods alike. */
   nodeCallees: (FunctionSig | null)[];
+  /**
+   * Call or identifier node id -> the canonical builtin it resolved to, for
+   * the names a `nish:` import brought in, and `""` for every other node. The
+   * emitter dispatches builtins on the identifier's own text, which under an
+   * import is the local name and may be an `as` rename, so the checker records
+   * the spelling the emitter is keyed by rather than leaving it to be derived.
+   */
+  nodeBuiltins: string[];
   /**
    * Node id -> the type a coerced expression *was*, when a class value stands
    * where a base class or an implemented interface is expected. `nodeTypes`
@@ -411,12 +430,18 @@ export class CheckedProgram {
     this.nodeLocals = new Array<Local | null>(nodeCount);
     this.nodeConstants = new Array<ConstInfo | null>(nodeCount);
     this.nodeCallees = new Array<FunctionSig | null>(nodeCount);
+    this.nodeBuiltins = [];
+    this.builtinImports = new StringMap();
+    this.builtinImportList = [];
     this.nodeCoercions = new Array<i32>(nodeCount);
     this.nodeCaseValues = new Array<i64>(nodeCount);
     let i = 0;
     while (i < nodeCount) {
       this.nodeTypes[i] = -1;
       this.nodeCoercions[i] = -1;
+      // `new Array<string>(n)` is refused — it would zero-fill with null
+      // strings — so the empty name every node starts at is pushed instead.
+      this.nodeBuiltins.push("");
       i = i + 1;
     }
   }
@@ -452,6 +477,23 @@ export class CheckedProgram {
   addAlias(info: AliasInfo): void {
     this.aliases.set(info.name, this.aliasList.length);
     this.aliasList.push(info);
+  }
+
+  /**
+   * The builtin a `nish:` import bound `name` to, or `null`. Consulted before
+   * the ambient builtin tables, which is what makes an import shadow-proof: a
+   * user function of the same name is a collision at the import rather than a
+   * silent replacement of the builtin.
+   */
+  builtinImport(name: string): BuiltinExport | null {
+    const at = this.builtinImports.get(name, -1);
+    return at < 0 ? null : this.builtinImportList[at];
+  }
+
+  /** Register `info` under the name it is used by; the caller has checked for a clash. */
+  addBuiltinImport(name: string, info: BuiltinExport): void {
+    this.builtinImports.set(name, this.builtinImportList.length);
+    this.builtinImportList.push(info);
   }
 
   /** The exported function called `name`, or `null`. */

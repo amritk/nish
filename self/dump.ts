@@ -267,12 +267,15 @@ function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
   for (const imp of program.imports) {
     const struct = imp.struct;
     const constant = imp.constant;
+    const builtin = imp.builtin;
     const sig = imp.sig;
     let what = "unbound";
     if (struct !== null) {
       what = `struct ${struct.name}`;
     } else if (constant !== null) {
       what = `const ${constant.name}`;
+    } else if (builtin !== null) {
+      what = `builtin ${builtin.canonical}`;
     } else if (sig !== null) {
       what = `function @${sig.name}`;
     }

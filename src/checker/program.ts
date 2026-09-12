@@ -2,6 +2,7 @@
 import ts from "typescript";
 import { AliasInfo } from "./aliases.js";
 import { ConstInfo } from "./constants.js";
+import { BuiltinExport } from "./nish-modules.js";
 import { StaticType } from "../types.js";
 
 export interface Param {
@@ -105,7 +106,7 @@ export interface LocalVar {
 export interface ImportBinding {
   /** The `import` statement. */
   node: ts.ImportDeclaration;
-  /** Module specifier text, e.g. `./math`. Relative specifiers only. */
+  /** Module specifier text: a relative path (`./math`) or a builtin module (`nish:fs`). */
   specifier: string;
   /** Name inside the exporting module. */
   importedName: string;
@@ -119,6 +120,12 @@ export interface ImportBinding {
   struct?: StructInfo;
   /** Set instead of `sig` when the imported name is an exported module constant (WP14). */
   constant?: ConstInfo;
+  /**
+   * Set instead of `sig` when the specifier is a `nish:` module: the import
+   * names a builtin, so there is no signature to bind and no symbol to
+   * declare — only the canonical spelling the builtin tables are keyed by.
+   */
+  builtin?: BuiltinExport;
 }
 
 export interface CheckedProgram {
@@ -138,6 +145,14 @@ export interface CheckedProgram {
   constants: Map<string, ConstInfo>;
   /** Declared name -> constant, for every `export const` in this module. */
   exportedConstants: Map<string, ConstInfo>;
+  /**
+   * Local name -> the builtin a `nish:` import bound it to, under the name it
+   * is used by (so an `as` rename is the key). Consulted before the ambient
+   * builtin tables, which is what makes an import shadow-proof: a user
+   * function of the same name is a collision at the import, not a silent
+   * replacement of the builtin.
+   */
+  builtinImports: Map<string, BuiltinExport>;
   /**
    * Module-level `type` aliases, by the name they were declared under (WP23).
    * An alias emits nothing and is not a type of its own — it resolves to the
@@ -162,6 +177,14 @@ export interface CheckedProgram {
   bindings: WeakMap<ts.Identifier, LocalVar>;
   /** Identifier node -> the module constant it names, when it is not a variable (WP14). */
   constRefs: WeakMap<ts.Identifier, ConstInfo>;
+  /**
+   * Call or identifier node -> the canonical builtin it resolved to, for the
+   * names a `nish:` import brought in. The emitter dispatches builtins on the
+   * identifier's own text, which is the local name and may be an `as` rename,
+   * so the checker records the spelling the emitter tables are keyed by rather
+   * than leaving the emitter to work it back out.
+   */
+  builtinRefs: WeakMap<ts.Node, string>;
   /** VariableDeclaration node -> the local it introduces. */
   locals: WeakMap<ts.VariableDeclaration, LocalVar>;
   /** CallExpression node -> callee signature (free functions and methods alike). */

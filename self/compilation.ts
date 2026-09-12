@@ -32,6 +32,7 @@ import { Checker } from "./checker";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { emitProgram } from "./emit";
 import { StringMap } from "./map";
+import { isNishSpecifier } from "./nish_modules";
 import { N_CONSTRUCTOR, Node } from "./nodes";
 import { Options } from "./options";
 import { ParentTable } from "./parents";
@@ -216,6 +217,10 @@ export class Compilation {
     const dir = dirname(path);
     let ok = true;
     for (const imp of checker.program.imports) {
+      // A builtin module has no file behind it; pass 1b binds it instead.
+      if (isNishSpecifier(imp.specifier)) {
+        continue;
+      }
       if (unit.resolved.has(imp.specifier)) {
         continue;
       }
@@ -256,8 +261,11 @@ export class Compilation {
     for (const unit of this.modules) {
       const targets: CheckedProgram[] = [];
       for (const imp of unit.checker.program.imports) {
-        const index = unit.resolved.get(imp.specifier, -1);
-        targets.push(this.modules[index].checker.program);
+        // A builtin module has no file behind it, so there is nothing to look
+        // up; the entry keeps the array the same length as `imports` and
+        // `bindImport` routes on the specifier before it reads one.
+        const index = isNishSpecifier(imp.specifier) ? -1 : unit.resolved.get(imp.specifier, -1);
+        targets.push(index < 0 ? unit.checker.program : this.modules[index].checker.program);
       }
       unit.checker.bindImports(targets);
     }

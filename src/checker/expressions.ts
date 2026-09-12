@@ -8,10 +8,11 @@
  */
 import ts from "typescript";
 import { LANGUAGE } from "../branding.js";
-import { BOOL, F64, I32, assignable, isInteger, isNumeric, sameType, typeToString } from "../types.js";
+import { BOOL, F64, I32, StaticType, assignable, isInteger, isNumeric, sameType, typeToString } from "../types.js";
 import { arrayExpressionCheckers, installArrayAssignmentCheckers } from "./arrays.js";
 import { bitwiseBinaryCheckers, bitwiseUnaryCheckers } from "./bitwise.js";
 import { BuiltinCallChecker } from "./builtins.js";
+import { BuiltinExport } from "./nish-modules.js";
 import { ioBuiltinFunctions } from "./io.js";
 import { contextualLiteralType, conversionBuiltins, parseBuiltins } from "./math.js";
 import { classExpressionCheckers, isAssignmentOperator } from "./classes.js";
@@ -20,17 +21,19 @@ import {
   checkMethodCall,
   isValueReceiver,
   memberExpressionCheckers,
+  namespaceProperties,
 } from "./members.js";
 import { nullableExpressionCheckers } from "./nullable.js";
 import { resultBuiltinFunctions } from "./result.js";
-import { checkBuiltinCall, stringBinaryCheckers, stringExpressionCheckers } from "./strings.js";
-import { BinaryChecker, CheckerTable, ExpressionChecker, UnaryChecker } from "./context.js";
+import { builtinCalls, checkBuiltinCall, stringBinaryCheckers, stringExpressionCheckers } from "./strings.js";
+import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker, UnaryChecker } from "./context.js";
 import {
   controlFlowBinaryCheckers,
   controlFlowExpressionCheckers,
   controlFlowUnaryCheckers,
 } from "./control-flow.js";
 import { lookup } from "../lookup.js";
+import { Scope } from "./scope.js";
 
 // ---- Leaves -----------------------------------------------------------------
 
@@ -69,6 +72,18 @@ const checkIdentifier: ExpressionChecker = (ctx, node, scope) => {
   if (constant) {
     ctx.program.constRefs.set(expr, constant);
     return constant.type;
+  }
+  // A `nish:` import of a property builtin (`argv`, `platform`) is read as a
+  // value rather than called, so it lands here. It is consulted after the
+  // scope chain for the reason a module constant is: a local of the same name
+  // shadows it, exactly as it would in TypeScript.
+  const imported = ctx.program.builtinImports.get(expr.text);
+  if (imported) {
+    if (imported.kind !== "property") {
+      throw ctx.error(`\`${expr.text}\` is a builtin function and can only be called`, expr);
+    }
+    ctx.program.builtinRefs.set(expr, imported.canonical);
+    return lookup(namespaceProperties, imported.canonical)!(ctx, expr);
   }
   throw ctx.error(`Unknown identifier \`${expr.text}\``, expr);
 };
@@ -221,6 +236,36 @@ export const builtinFunctions: Record<string, BuiltinCallChecker> = {
   ...resultBuiltinFunctions, // WP16: ok, err
 };
 
+/**
+ * A call to a name a `nish:` import bound (`readFileSync`, `exit`, and any
+ * `as` rename of either). The checker is the one the global spelling uses, so
+ * there is exactly one rule per builtin and the diagnostics keep naming the
+ * canonical form — `exit(1, 2)` reports `process.exit`, which is the rule the
+ * reader has to look up.
+ *
+ * The canonical name is recorded because the emitter dispatches builtins on
+ * the identifier's own text, and under an import that text is the local name.
+ */
+const checkImportedBuiltin = (
+  ctx: CheckContext,
+  expr: ts.CallExpression,
+  scope: Scope,
+  imported: BuiltinExport
+): StaticType => {
+  if (imported.kind !== "call") {
+    // The callee is an identifier: `checkCall` rejected every other shape above.
+    const name = (expr.expression as ts.Identifier).text;
+    throw ctx.error(`\`${name}\` is a builtin value and cannot be called`, expr.expression);
+  }
+  // Dotted builtins (`process.exit`) live in the other table; the import is
+  // what erases the distinction for the program that uses one. One of the two
+  // always answers: `NISH_MODULES` is written against these tables, and a name
+  // in neither would have failed at the import.
+  const builtin = lookup(builtinFunctions, imported.canonical) ?? lookup(builtinCalls, imported.canonical);
+  ctx.program.builtinRefs.set(expr, imported.canonical);
+  return builtin!(ctx, expr, scope);
+};
+
 const checkCall: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.CallExpression;
   // `super(...)`: checking the receiver reports it (WP25), so the rule is stated once.
@@ -236,6 +281,10 @@ const checkCall: ExpressionChecker = (ctx, node, scope) => {
   }
   const callee = ctx.sigs.get(expr.expression.text);
   if (!callee) {
+    // An imported builtin first: it cannot have been shadowed, because a user
+    // function of the same name is rejected at the import itself.
+    const imported = ctx.program.builtinImports.get(expr.expression.text);
+    if (imported) return checkImportedBuiltin(ctx, expr, scope, imported);
     const builtin = lookup(builtinFunctions, expr.expression.text);
     if (builtin) return builtin(ctx, expr, scope); // no `callees` entry: the emitter knows it by name
     throw ctx.error(`Unknown function \`${expr.expression.text}\``, expr.expression);

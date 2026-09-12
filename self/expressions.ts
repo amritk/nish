@@ -18,7 +18,15 @@
 import { LANGUAGE } from "./branding";
 import { CheckContext } from "./context";
 import { checkArrayLiteral, checkIndex, checkIndexAssignment } from "./arrays";
-import { checkBuiltinCall, checkBuiltinFunction, isBuiltinFunction } from "./builtins";
+import {
+  checkBuiltinCall,
+  checkBuiltinFunction,
+  checkBuiltinFunctionNamed,
+  checkImportedDottedBuiltin,
+  checkNamespaceProperty,
+  isBuiltinFunction,
+} from "./builtins";
+import { BuiltinExport } from "./nish_modules";
 import { checkResultConstructor, isResultConstructor, narrowResultTest } from "./result";
 import {
   checkMember,
@@ -274,6 +282,17 @@ function checkIdentifier(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   if (constant !== null) {
     ctx.program.nodeConstants[expr.id] = constant;
     return constant.type;
+  }
+  // A `nish:` import of a property builtin (`argv`, `platform`) is read as a
+  // value rather than called, so it lands here, and after the scope chain for
+  // the reason a module constant is: a local of the same name shadows it.
+  const imported = ctx.program.builtinImport(expr.text);
+  if (imported !== null) {
+    if (!imported.isProperty) {
+      return ctx.errorType(expr, `\`${expr.text}\` is a builtin function and can only be called`);
+    }
+    ctx.program.nodeBuiltins[expr.id] = imported.canonical;
+    return checkNamespaceProperty(ctx, expr, imported.namespace, imported.member);
   }
   return ctx.errorType(expr, `Unknown identifier \`${expr.text}\``);
 }
@@ -879,6 +898,27 @@ export function assignInto(
 
 // ---- Calls ---------------------------------------------------------------------
 
+/**
+ * A call to a name a `nish:` import bound (`readFileSync`, `exit`, and any
+ * `as` rename of either). The rule applied is the one the global spelling
+ * uses, so there is exactly one of each and the diagnostics keep naming the
+ * canonical form — `exit(1, 2)` reports `process.exit`, which is the rule the
+ * reader has to look up.
+ *
+ * The canonical name is recorded because the emitter dispatches builtins on
+ * the identifier's own text, and under an import that text is the local name.
+ */
+function checkImportedBuiltin(ctx: CheckContext, expr: Node, scope: Scope, imported: BuiltinExport): i32 {
+  const callee = expr.children[0];
+  if (imported.isProperty) {
+    return ctx.errorType(callee, `\`${callee.text}\` is a builtin value and cannot be called`);
+  }
+  ctx.program.nodeBuiltins[expr.id] = imported.canonical;
+  return imported.namespace.length > 0
+    ? checkImportedDottedBuiltin(ctx, expr, scope, imported.namespace, imported.member)
+    : checkBuiltinFunctionNamed(ctx, expr, scope, imported.member);
+}
+
 function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
   const callee = expr.children[0];
   if (callee.kind === N_SUPER) {
@@ -896,6 +936,12 @@ function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   }
   const sig = ctx.signature(callee.text);
   if (sig === null) {
+    // An imported builtin first: it cannot have been shadowed, because a user
+    // function of the same name is rejected at the import itself.
+    const imported = ctx.program.builtinImport(callee.text);
+    if (imported !== null) {
+      return checkImportedBuiltin(ctx, expr, scope, imported);
+    }
     if (isResultConstructor(callee.text)) {
       return checkResultConstructor(ctx, expr, scope, want); // WP16: `Ok(v)` / `Err(e)`
     }

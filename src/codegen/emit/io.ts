@@ -203,12 +203,25 @@ namespacePropertyEmitters["process.argv"] = (ctx) => {
   return ctx.fn.emitValue(`load ${ARRAY_STRUCT}*, ${ARRAY_STRUCT}** @nish_argv${align}`);
 };
 
-const isArgvRead = (node: ts.Node): node is ts.PropertyAccessExpression =>
-  ts.isPropertyAccessExpression(node) && dottedName(node) === "process.argv";
+/**
+ * The namespace property a node reads, or undefined when it reads none. Both
+ * spellings answer here — `process.argv` written out, and the same property
+ * brought in by `import { argv } from "nish:process"` — because an attribute
+ * that depended on which one a program used would be a miscompile waiting for
+ * the other.
+ */
+const namespacePropertyRead = (program: CheckedProgram, node: ts.Node): string | undefined => {
+  if (ts.isPropertyAccessExpression(node)) {
+    return isValueReceiver(program, node.expression) ? undefined : dottedName(node);
+  }
+  // Call builtins are recorded in the same table, and are call nodes: only an
+  // identifier can be a property read.
+  return ts.isIdentifier(node) ? program.builtinRefs.get(node) : undefined;
+};
 
 /** The load of `@nish_argv` reads memory the function does not own: at most `readonly`. */
 factCollectors.push((program, node, facts) => {
-  if (isArgvRead(node) && !isValueReceiver(program, node.expression)) facts.readsMemory = true;
+  if (namespacePropertyRead(program, node) === "process.argv") facts.readsMemory = true;
 });
 
 // ---- process.platform and process.arch ------------------------------------------------
@@ -234,8 +247,7 @@ namespacePropertyEmitters["process.arch"] = machineProperty("nish_arch");
  * never drift apart, and a future change to either would otherwise be silent.
  */
 factCollectors.push((program, node, facts) => {
-  if (!ts.isPropertyAccessExpression(node) || isValueReceiver(program, node.expression)) return;
-  const dotted = dottedName(node);
-  if (dotted === "process.platform") facts.callees.add("nish_platform");
-  else if (dotted === "process.arch") facts.callees.add("nish_arch");
+  const property = namespacePropertyRead(program, node);
+  if (property === "process.platform") facts.callees.add("nish_platform");
+  else if (property === "process.arch") facts.callees.add("nish_arch");
 });

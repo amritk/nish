@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 351;
+export const RULE_COUNT: i32 = 357;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -281,6 +281,8 @@ export function diagnosticRules(): string[] {
     "NL2022",
     "` has more than one constructor (no overloads)",
     "NL2063",
+    "` is a builtin function and can only be called",
+    "NL2282",
     "` requires two operands of the same type, got ",
     "NL2103",
     "`) are not supported; import functions by name",
@@ -335,6 +337,8 @@ export function diagnosticRules(): string[] {
     "NL1007",
     "` in a constant requires boolean operands",
     "NL2069",
+    "` is a builtin value and cannot be called",
+    "NL2284",
     "Computed property names are forbidden in ",
     "NL1041",
     "Constructors cannot declare a return type",
@@ -525,6 +529,8 @@ export function diagnosticRules(): string[] {
     "NL2058",
     "` expects an argument of type ",
     "NL2268",
+    "` is a builtin imported from `",
+    "NL2283",
     "` must return a value of type ",
     "NL2093",
     "`bigint` type is forbidden in ",
@@ -555,6 +561,8 @@ export function diagnosticRules(): string[] {
     "NL1004",
     " (no interpreter at runtime)",
     "NL1005",
+    "` is already imported from `",
+    "NL2285",
     "`__proto__` is forbidden in ",
     "NL1011",
     "`arguments` is forbidden in ",
@@ -571,6 +579,8 @@ export function diagnosticRules(): string[] {
     "NL2261",
     "()` in the constructor of `",
     "NL2036",
+    "` (the builtin modules are ",
+    "NL2280",
     "` cannot extend interface `",
     "NL2049",
     "`debugger` is forbidden in ",
@@ -713,6 +723,8 @@ export function diagnosticRules(): string[] {
     "NL2247",
     "Unknown property `",
     "NL2250",
+    "` has no export `",
+    "NL2281",
     "Empty import list",
     "NL2200",
     "Module constant `",

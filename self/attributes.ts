@@ -982,11 +982,18 @@ class FactCollector {
    * the analysis is told it emits never drift apart.
    */
   collectNamespacePropertyFacts(node: Node): void {
-    if (node.kind !== N_MEMBER) {
-      return;
-    }
-    const name = dottedName(node);
-    if (receiverIsValue(this.unit.program, node.children[0])) {
+    let name = "";
+    if (node.kind === N_MEMBER) {
+      if (receiverIsValue(this.unit.program, node.children[0])) {
+        return;
+      }
+      name = dottedName(node);
+    } else if (node.kind === N_IDENT) {
+      // The same property, reached through `import { argv } from
+      // "nish:process"`. An attribute that depended on which spelling a
+      // program used would be a miscompile waiting for the other one.
+      name = this.unit.program.nodeBuiltins[node.id];
+    } else {
       return;
     }
     if (name === "process.argv") {

@@ -371,7 +371,9 @@ function contextType(ctx: CheckContext, node: ts.Expression, scope: Scope): Stat
     }
     const userParam = ctx.sigs.get(name)?.params[index]?.type;
     if (userParam) return userParam;
-    const rule = lookup(LITERAL_CONTEXT_CALLS, name);
+    // The table is keyed by the canonical spelling, so an imported `exit`
+    // types its literal the way `process.exit` does, `as` rename included.
+    const rule = lookup(LITERAL_CONTEXT_CALLS, ctx.program.builtinImports.get(name)?.canonical ?? name);
     if (rule === undefined) return undefined;
     return rule === "other" ? peekType(ctx, parent.arguments[1 - index], scope) : rule;
   }

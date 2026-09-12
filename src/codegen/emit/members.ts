@@ -17,7 +17,13 @@ import { lookup } from "../../lookup.js";
 export type PropertyEmitter = (ctx: EmitContext, expr: ts.PropertyAccessExpression, receiver: StaticType) => string;
 export type MethodCallEmitter = (ctx: EmitContext, expr: ts.CallExpression, receiver: StaticType) => string;
 export type NewEmitter = (ctx: EmitContext, expr: ts.NewExpression) => string;
-export type NamespacePropertyEmitter = (ctx: EmitContext, expr: ts.PropertyAccessExpression) => string;
+/**
+ * A builtin namespace member read as a value. The node is a `ts.Expression`
+ * for the reason the checker's `NamespacePropertyChecker` is: a `nish:` import
+ * brings the same property in under a plain identifier, and none of these
+ * emitters looks at the node at all.
+ */
+export type NamespacePropertyEmitter = (ctx: EmitContext, expr: ts.Expression) => string;
 
 export interface MemoryFacts {
   readsMemory: boolean;
