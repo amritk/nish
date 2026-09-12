@@ -262,6 +262,9 @@ nish <entry.ts> [more.ts ...] [options]
   --wrapping                 signed integer add/sub/mul wrap two's-complement (default: they
                              carry `nsw`, so signed overflow is undefined, like C)
   --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)
+  --threads                  give every thread its own arena and random seed; the runtime is
+                             built to match by --link (no language surface: nothing in the
+                             language spawns a thread yet)
   --no-warn-performance      do not report the `performance` diagnostics (they are on by default,
                              print on stderr, and never change the exit code)
   -g                         emit DWARF debug info (!dbg locations, variables); kept by --link

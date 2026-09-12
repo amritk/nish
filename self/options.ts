@@ -49,6 +49,16 @@ export class Options {
    */
   debugInfo: boolean;
   /**
+   * Give every thread its own arena (`--threads`, WP20 T0). The one thing it
+   * changes in the IR is the storage class of `@nish_arena`, which the inlined
+   * bump allocator reaches through the thread pointer instead of the data
+   * segment; the runtime has to be built with `-DNISH_THREADS` to match, which
+   * `--link` and `scripts/build.sh --threads` do. No language surface: nothing
+   * in the language makes a second thread, so no program can tell. Off leaves
+   * the IR byte for byte what it was.
+   */
+  threads: boolean;
+  /**
    * The WP8 interop sidecars, each the path `--emit-header` / `--emit-dts` /
    * `--emit-napi` was given, or the empty string when it was not passed.
    * `--emit-dts` writes two files: the declarations, and the loader that
@@ -72,6 +82,7 @@ export class Options {
     this.target = "";
     this.nsw = true;
     this.debugInfo = false;
+    this.threads = false;
     this.emitHeader = "";
     this.emitDts = "";
     this.emitNapi = "";
