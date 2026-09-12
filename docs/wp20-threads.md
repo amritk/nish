@@ -1,11 +1,12 @@
 # WP20: Threads
 
-**Proposed, not implemented.** Nothing in this note exists in the compiler
-today; it is the plan of record for the question "how does Nish do true
-multithreading, like Go or Rust", and the shape of the answer is forced by
-decisions the project has already made rather than chosen freely. The
-normative rules would land in [LANGUAGE.md](LANGUAGE.md) as each stage does;
-where this note and LANGUAGE.md ever disagree, LANGUAGE.md wins.
+**T0 is built; T1 to T4 are proposed, not implemented.** This is the plan of
+record for the question "how does Nish do true multithreading, like Go or
+Rust", and the shape of the answer is forced by decisions the project has
+already made rather than chosen freely. The normative rules would land in
+[LANGUAGE.md](LANGUAGE.md) as each stage does — except T0, which has no rule to
+add, because it has no language surface: §4 T0 below records what landed. Where
+this note and LANGUAGE.md ever disagree, LANGUAGE.md wins.
 
 Read [wp6-memory.md](wp6-memory.md) first: every hard part below is a
 consequence of the zero-GC memory model, and §3 here is mostly a list of
@@ -95,6 +96,14 @@ extra register on the hot path, and `-fPIC` shared objects are worse. That is
 a benchmark question, not an argument, which is why T0 stands alone and is
 gated on [BENCHMARKS.md](BENCHMARKS.md).
 
+**This is what landed, and §4 T0 has the numbers.** Two of the three guesses
+in the paragraph above were wrong, both in the cheap direction. The spelling is
+a `thread_local(initialexec)` global *referenced directly*: LLVM 18 takes it in
+the GEP operand of the allocator and needs no `@llvm.threadlocal.address`. And
+the allocator's body does not change at all — the only line that moves is the
+`@nish_arena` declaration, and only in a module compiled with `--threads`, so
+no golden was rewritten. The third guess held: one extra register.
+
 `nish_arena_mark` / `nish_arena_release` / `nish_arena_keep` become
 per-thread and get *better*, not worse: WP6's automatic scopes and WP9's
 call-site reclaim are per-thread by construction, so a worker that allocates
@@ -110,6 +119,16 @@ random stream reproducible per worker instead of interleaved. `nish_argv`
 runs and read-only afterwards, so it is safe as it stands provided no thread
 is spawned before initialisation — a fact worth writing down rather than
 relying on.
+
+Both landed with T0. `nish_rng` is `_Thread_local` under `-DNISH_THREADS`, and
+`nish_argv` is deliberately not, with the reason written beside it in
+`runtime/runtime.c` so that the next reader does not "fix" the inconsistency.
+One thing the note promised and T0 does not deliver: the per-thread stream is
+*independent*, not *distinct*. Both threads seed lazily from `time(0)` and the
+pid, so two workers starting in the same second start from the same seed and
+draw the same numbers. Nothing tears, which was the point; a program that wants
+different streams per worker has to seed them itself, and there is no API for
+that yet.
 
 ### 3.3 Per-thread arenas make lifetime a new question
 
@@ -150,6 +169,13 @@ was written, and stood at 2,544 then (MASTER_PLAN §2). The live ceiling is
 remaining 1,552 bytes as unconditional cost, and threads also add `-lpthread`
 to the link line.
 
+The remaining headroom is 194 bytes, not 1,552, and T0 spent none of it: the
+default build is unchanged to the byte, because `NISH_TLS` is empty without
+`-DNISH_THREADS`. The thread-local build spends 125 of those bytes on the
+thread pointer and comes to 4,795, still inside the ceiling but with 69 bytes
+left rather than 194 — so the build T1 extends starts nearer the wall than the
+default one does, and `pthread_create` is not going to fit in it either.
+
 They must therefore be pay-for-what-you-use, exactly as WP14's `nish_mkdir`
 and `nish_spawn` are: adding them left `examples/hello.ts` at 4,696 bytes,
 the same number to the byte, because `-ffunction-sections -Wl,--gc-sections`
@@ -173,7 +199,7 @@ This is the single largest multiplier on every estimate below.
 Five stages. Each is separately useful, separately gated, and — apart from
 T0, which has no language surface — separately documentable in LANGUAGE.md.
 
-### T0 — A thread-safe runtime, with no language surface
+### T0 — A thread-safe runtime, with no language surface — **done**
 
 Thread-local arena (§3.1) and thread-local RNG (§3.2), behind `--threads` so
 the golden corpus does not churn before the numbers justify it.
@@ -187,6 +213,104 @@ the golden corpus does not churn before the numbers justify it.
 - This is the prerequisite for every other stage, and for the detached-thread
   designs §3.4 defers as well, so it is worth landing on its own merits even
   if the rest of this note is never built.
+
+#### What it turned out to be
+
+Smaller than this note expected, and in one sentence: **one declaration line in
+the IR and one storage class in the C.**
+
+```llvm
+; without --threads
+@nish_arena = external global %struct.nish_arena, align 8
+; with
+@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8
+```
+
+Nothing else in a module moves — `@nish_alloc_struct` GEPs the declaration it is
+given and LLVM 18 accepts a thread-local global straight in the GEP operand, so
+the `alwaysinline` body is the same text either way and `@llvm.threadlocal.address`
+is not needed. On x86-64 the fast path becomes one `movq nish_arena@GOTTPOFF(%rip)`
+and then `%fs`-relative addressing for all three fields: the extra register §3.1
+predicted, and no call. `initialexec` is named rather than left to default
+precisely so that the `-fPIC` case (the `napi` profile, which is the one host
+that will want this — [wp24-async.md](wp24-async.md) §5.1) does not lower an
+allocation to `__tls_get_addr`. The price of naming it is that a `dlopen`ed
+object spends from glibc's static TLS surplus rather than allocating on demand;
+40 bytes of arena and seed is far inside it, and an addon built this way was
+checked to `require()` into Node and answer correctly.
+
+On the C side `runtime/runtime.c`, `runtime/nish.h` and `runtime/runtime_wasm.c`
+each define the same `NISH_TLS` macro, empty unless `-DNISH_THREADS`, and it
+sits on `nish_arena` and on the RNG seed. `nish_argv` deliberately does not have
+it (§3.2). `scripts/build.sh --threads` passes the macro, and
+`nish --threads --link` passes the flag, so the two halves of a build move
+together — and cannot silently fail to: ELF refuses a non-TLS reference to a TLS
+definition, so a mismatched pair is a link error, which `tests/run.js` pins as a
+check of its own rather than leaving to luck.
+
+#### What it cost, measured
+
+| | without `--threads` | with |
+| --- | ---: | ---: |
+| `runtime.c` `.text*` at `-Oz` (budget 4,864) | **4,670**, unchanged to the byte | 4,795 |
+| `examples/hello.ts`, size profile | **4,680**, byte-identical to before | 4,808 |
+| an allocation-bound loop (4M scopes × 64 escaping objects) | 451 ms | 667 ms (**1.48x**) |
+| `bench/strbuild` at 4M pieces | 829 ms | 824 ms (noise) |
+| `bench/nbody` | 974 ms | 1,006 ms (1.03x, noise) |
+
+Times are the best of seven runs, the two variants interleaved run by run so
+that a busy patch of machine hits both — the absolute numbers are therefore not
+[BENCHMARKS.md](BENCHMARKS.md)'s and are not meant to be, only the ratios in
+each row are. The two allocation-heavy benchmarks are the interesting rows and
+they say opposite things, which is the point. **The thread pointer costs about
+half again on a loop that does nothing but bump**, and nothing at all on real
+programs, because
+no real program's hot loop is the allocator — `strbuild` spends its time in
+`memcpy` and `nbody` in arithmetic on stack slots WP6 already took out of the
+arena. So the honest summary is that the flag is free for the programs in
+[BENCHMARKS.md](BENCHMARKS.md) and expensive for a microbenchmark of the thing
+it changes, and that is why it is a flag: a program pays only if it asks.
+
+With the flag *off*, nothing moved. Not one golden `.ll` changed, the runtime's
+`.text` is the same number, and `hello` is the same binary byte for byte — which
+is what the `--threads` default of `false` buys and what makes this landable
+before the 1.0 freeze.
+
+The budget rule of [wp15-performance.md](wp15-performance.md) §7 is therefore
+not called on and neither is the gate. `RUNTIME_TEXT_BUDGET` in `tests/run.js`
+sums every `.text*` section of `clang -Oz -c runtime/runtime.c` against a
+ceiling of 4,864 ([wp7-runtime.md](wp7-runtime.md) §"Runtime additions and
+budget"), and that build — the one a user's `--link` produces — did not move a
+byte. The `-DNISH_THREADS` build costs 125 bytes more and is inside the ceiling
+too, at 4,795; it is not what the gate measures, because it is a configuration
+nobody links without asking for it, but it is worth writing down for T1, which
+arrives with `pthread_create` beside it and has 69 bytes rather than 194 to fit
+it into (§3.5).
+
+#### What it did not buy
+
+- **No thread can be started yet**, and nothing in the language will start one,
+  so no Nish program alone can observe the flag. What it enables is a *host*
+  starting one: a C driver, or the `napi_create_async_work` shim
+  [wp24-async.md](wp24-async.md) §5.1 wants, which was the whole cost of that
+  item and is now unblocked.
+- **No escape rule.** §3.3's fourth flow class — an allocation that escapes to
+  another thread — is not implemented and does not need to be until something
+  can spawn. Until T1, an object crossing a thread boundary is the host's
+  problem, exactly as a raw pointer handed to C has always been.
+- **Nothing for wasm.** `runtime_wasm.c` mirrors the macro so a `--threads`
+  build still links, but a wasm module has one thread and `_Thread_local` in a
+  non-shared memory is one ordinary block of linear memory. §6 still defers
+  wasm threads in full.
+- **Not a distinct random stream per thread**, only an untorn one; see §3.2.
+
+Tests: `tests/cases/mem_threads_arena` (the golden that pins the declaration
+and the output), the `-DNISH_THREADS` half of `tests/runtime_test.c` (a worker
+thread's arena is its own, empty at entry, disjoint, and released without the
+parent losing a byte), and three pipeline checks in `tests/run.js` — the
+thread-local allocator linking and running on two threads through
+`scripts/build.sh --threads`, the mismatched link failing, and `NISH_TLS` being
+spelled the same way in all three runtime files.
 
 ### T1 — Structured spawn and join
 
@@ -312,8 +436,11 @@ language surface, it is a prerequisite for every version of this design
 including the detached-thread ones §3.4 defers, and its whole cost is a
 benchmark question
 that can be answered in a day. Nothing about the 1.0 freeze argues against
-it.
+it. **It landed on that argument** — the benchmark question is answered in §4
+T0, and the answer was "nothing, unless the program asks".
 
-The suggested order, then: **T0 whenever it is convenient; a T4-shaped
-prototype to measure the payoff before the surface is designed; T1 and T2
-together after the freeze; T3 after WP15 item 8.**
+The remaining order, then: **a T4-shaped prototype to measure the payoff before
+the surface is designed; T1 and T2 together after the freeze; T3 after WP15
+item 8.** Nothing in that order changed when T0 landed, and the one thing T0
+unblocks outside this note is [wp24-async.md](wp24-async.md) §5.1's A1, which is
+now buildable and still unowned.

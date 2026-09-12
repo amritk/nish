@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 281 programs, 4636 dump lines.
+# 284 programs, 4684 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -1471,6 +1471,26 @@ function test(): i32 -> @test [exported]
   local 4:9 f: f64 (const)
   local 5:9 big: i64 (const)
   local 12:9 zero: f64 (const)
+program tests/cases/dbg_arrow.ts
+module tests/cases/dbg_arrow.ts (entry)
+function add(a: i32, b: i32): i32 -> @add [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function span(lo: i32, hi: i32): i32 -> @span
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function scaled(n: i32): i32 -> @scaled
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=1 stackLocals=0
+  local 22:7 acc: i32 (let)
+  local 23:14 v: i32 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: add nish_arena_mark nish_arena_release nish_print nish_str_from_i32 scaled span
+  stackSites=0 stackLocals=0
+  callee 30:18 add -> @add
+  callee 31:18 span -> @span
+  callee 32:18 scaled -> @scaled
 program tests/cases/dbg_locals.ts
 module tests/cases/dbg_locals.ts (entry)
 struct Point (class) size=8 align=4
@@ -1537,6 +1557,13 @@ function test(): i32 -> @test [exported]
   local 33:9 named: Result<i32, string> (const)
   callee 33:17 tag -> @tag
   callee 37:10 score -> @score
+program tests/cases/dbg_utf8.ts
+module tests/cases/dbg_utf8.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 13:9 n: i32 (const)
 program tests/cases/decl_prototype_names.ts
 module tests/cases/decl_prototype_names.ts (entry)
 struct toString (class) size=4 align=4
@@ -2679,6 +2706,30 @@ function main(): i32 -> @nish_main [exported entry]
   callee 55:15 swapped -> @swapped
   callee 56:15 count -> @count
   callee 57:15 nearest -> @nearest
+program tests/cases/mem_threads_arena.ts
+module tests/cases/mem_threads_arena.ts (entry)
+struct Point (class) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+  constructor -> @Point.constructor
+function Point.constructor(this: Point, x: i32, y: i32): void -> @Point.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: x y
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function makePoints(n: i32): Point[] -> @makePoints
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: Point.constructor nish_alloc_struct nish_array_grow
+  stackSites=0 stackLocals=0
+  local 25:9 xs: Point[] (const)
+  local 26:12 i: i32 (let)
+  callee 27:13 new Point -> @Point.constructor
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: makePoints nish_panic_index nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 33:9 xs: Point[] (const)
+  callee 33:14 makePoints -> @makePoints
 program tests/cases/opt_nsw.ts
 module tests/cases/opt_nsw.ts (entry)
 struct Acc (class) size=4 align=4
