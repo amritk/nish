@@ -48,7 +48,7 @@ Three things about that order, because the order is the decision:
 
 **What this note does not do is promise a schedule.** Every stage below is
 sized, gated, and has an acceptance test; none of them is dated, and §6 names
-the two things that should land before any of it — neither of which is in the
+the one thing that has to land before any of it — WP20 T0, which is not in the
 stages — and the ordering fact that makes the whole road cheaper after M4 and
 M6 than before them.
 
@@ -86,10 +86,10 @@ language is already shaped for. What is missing is the syscalls.
 Measured on this tree, today, because three of the four contradict a number
 some other note is still costing its plan against.
 
-### 3.1 The runtime budget is spent: 4,088 of 4,096, not 2,544
+### 3.1 The runtime budget is at its line: 4,088 of 4,096, not 2,544
 
-MASTER_PLAN §2 sets a hard budget of 4 KB of `.text` for `runtime.c` at `-Oz`
-and gives the command. Run it:
+MASTER_PLAN §2 sets a 4 KB `.text` budget for `runtime.c` at `-Oz` and gives
+the command. Run it:
 
 ```
 $ clang -Oz -c runtime/runtime.c -o rt.o && size -A rt.o
@@ -107,20 +107,28 @@ in the change that adds this note, and WP24 §4.5's "a poller, a timer heap and
 a ready queue are not 244 bytes" turns out to have been right by a much larger
 margin than it knew.
 
-This does not block anything, because the budget rule is already the wrong
-measurement and says so in its own body: `-ffunction-sections
+**This does not block anything, and the budget is not a gate.**
+[wp15-performance.md](wp15-performance.md) §7 is the standing rule and it
+already covers this case: the budget "stays the default forcing function" and
+"yields to a measured win", on the strength of a benchmark in the pull request
+rather than an assertion. A socket surface will exceed it. That is allowed,
+it is the rule working as written, and the only thing owed is the benchmark.
+
+The argument for pushing it here is in fact stronger than §7's, because §7's
+case is one where every binary pays and the win is worth it. **A socket
+surface is not that case: the cost is opt-in.** `-ffunction-sections
 -Wl,--gc-sections` means a binary pays only for what it calls, which is why
 adding `nish_mkdir` and `nish_spawn` left `examples/hello.ts` at the same byte
 count. Measured today, that still holds: `examples/hello.ts` links to **4,680
-bytes** at the `size` profile against a `runtime.c` whose `.text` is 4,088.
-The object file is not what ships.
+bytes** at the `size` profile against a `runtime.c` whose `.text` is 4,088 —
+the object file is not what ships, and a program that opens no socket will
+link no socket code.
 
-**So the budget rule has to be restated before S1, not after.** The honest
-rule is a per-program linked size — `examples/hello.ts` stays at its byte
-count, a program that opens no socket links no socket code — and that is an
-acceptance test rather than a wish. Restating it is a MASTER_PLAN §2 edit and
-a CI check, it is a prerequisite for WP20 T1 just as much as for this package,
-and it is the cheapest item in this note.
+So the number worth watching per stage is the **per-program linked size**, and
+it appears in each stage's acceptance list below as exactly that: a program
+that uses none of the new surface stays at its byte count. The 4 KB figure
+stays what it is — a guideline that says *think before adding to the runtime*,
+and one this package will knowingly push.
 
 ### 3.2 The accept loop does not fit WP20 T1's structured join
 
@@ -284,14 +292,17 @@ That is a deliberate widening rather than an accident, and the alternative —
 `Result` in order not to have.
 
 **Depends on.** WP20 T0 (thread-local arena — a worker thread that allocates is
-a data race in the emitted IR without it) and T1 (spawn and join), plus §3.1's
-budget restatement. T0 is already the thing WP24 recommended building anyway.
+a data race in the emitted IR without it) and T1 (spawn and join). Nothing
+else — the runtime budget is a guideline this stage will push, not a gate in
+front of it (§3.1). T0 is already the thing WP24 recommended building anyway.
 
 **Acceptance.**
 - A TCP echo server and a minimal HTTP server in `examples/`, each under 100
   lines, built and run by the test suite against a Node client.
 - `examples/hello.ts` links to the same byte count it does today — the
-  pay-for-what-you-use proof, run in CI rather than asserted.
+  pay-for-what-you-use proof measured in the pull request, which is also the
+  benchmark WP15 §7 asks for in exchange for pushing the runtime budget. This
+  is a stage acceptance test, not a standing gate.
 - The peak RSS of the HTTP server serving 10,000 sequential requests is flat,
   proving the per-request arena reset (§3.4) does what it claims.
 - Every new builtin has a golden `.ll`, an `llvm-as` pass, a native round trip
@@ -365,7 +376,7 @@ the first stage that needs monomorphisation.
 
 | Package | What changes |
 | --- | --- |
-| MASTER_PLAN §2 | the runtime budget rule is restated as a per-program linked size, with a CI check; the three stale figures are corrected (§3.1) |
+| MASTER_PLAN §2 | the three stale `.text` figures are corrected to the measured 4,088 (§3.1). The budget itself is unchanged and stays a guideline: [wp15-performance.md](wp15-performance.md) §7 already says it yields to a measured win, and this package will push it with the benchmark that rule asks for |
 | [wp20-threads.md](wp20-threads.md) | T1's structured join cannot express an accept loop (§3.2). T1 stands, S1 works within it, and a `Thread[]` stage between T1 and T3 is the smallest fix. T0 gains a second customer and a reason to be first |
 | [wp15-performance.md](wp15-performance.md) | item 5, the fast slice, is what an HTTP parser is made of (§3.4); a server is the program that justifies it |
 | [wp13-differential.md](wp13-differential.md) | owes a written decision on socket builtins before the first one lands (§3.3) |
@@ -375,13 +386,15 @@ the first stage that needs monomorphisation.
 
 ## 6. The one thing to build first, and it is not in the stages
 
-**WP20 T0, the thread-local arena.** It is S1's prerequisite, it is WP24 A1's
-whole cost, it is the prerequisite for every WP20 stage and for the detached
-designs §3.4 of that note defers, and it has no language surface. Beside it,
-§3.1's budget restatement, which is a paragraph and a CI check.
+**WP20 T0, the thread-local arena**, and it is the only one. It is S1's
+prerequisite, it is WP24 A1's whole cost, it is the prerequisite for every
+WP20 stage and for the detached designs §3.4 of that note defers, and it has
+no language surface. Nothing else here is a gate: §3.1 is a paragraph of
+corrections and no code, and the budget it corrects is a guideline this
+package will push rather than a wall in front of it.
 
-After those two, the ordering question is not technical but strategic, and it
-is the project's to answer rather than this note's: **S1 costs double until
+After T0, the ordering question is not technical but strategic, and it is the
+project's to answer rather than this note's: **S1 costs double until
 stage0 is deleted.** WP24 §4.8's multiplier applies to every builtin, every
 diagnostic and every golden here, and it is applied to whatever the language
 is on the day the work starts. M4 and M6 are cheaper the sooner they happen,

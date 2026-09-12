@@ -81,11 +81,14 @@ Design rules that every WP must respect:
   `size -A`), plus 66 bytes of `.text.unlikely.` — eight bytes of headroom,
   and the figure has been stale in three notes at once (this line said 2,544,
   §4 said 3,852, `wp20-threads.md` §3.5 said 2,544 and then reasoned about
-  1,552 bytes that do not exist). **The rule needs restating as the number
-  that ships**: `examples/hello.ts` links to 4,680 bytes at the `size`
-  profile, and a per-program linked size with a CI check is what
-  [wp26-io-and-servers.md](wp26-io-and-servers.md) §3.1 asks for before a
-  socket surface lands.
+  1,552 bytes that do not exist). The number that actually ships is still the
+  per-program one — `examples/hello.ts` links to 4,680 bytes at the `size`
+  profile — so this figure stays a **guideline rather than a gate**:
+  `wp15-performance.md` §7 is the standing rule, and the budget yields to a
+  measured win on the strength of a benchmark in the pull request.
+  [wp26-io-and-servers.md](wp26-io-and-servers.md) §3.1 is the package that
+  expects to push it, and says why the case there is the easy one: a program
+  that opens no socket links no socket code.
 
 ## 3. Consolidated language specification (Nish)
 
@@ -828,10 +831,11 @@ the function values Phase 0 forbids and `Result` was refused `map`/`andThen`
 for the same reason (wp24 §9.3).
 
 Three things that note's staging turned up, each of which belongs to another
-package. The **runtime budget is spent** — 4,088 of 4,096 measured today,
-against three different stale figures in three notes — so the rule has to be
-restated as the per-program linked
-size before a socket surface can land (wp26 §3.1). **WP20 T1's structured join
+package. The **runtime budget is at its line** — 4,088 of 4,096 measured
+today, against three different stale figures in three notes, now corrected. It
+stays a guideline rather than a gate (§2, and WP15 §7's "yields to a measured
+win"), and a socket surface will push it: the cost is opt-in, since a program
+that opens no socket links no socket code (wp26 §3.1). **WP20 T1's structured join
 cannot express an accept loop**, since a server spawns per connection and never
 joins; a fixed pool spawned in `main` fits the rule as written, and a
 `Thread[]` stage between T1 and T3 is the smallest thing that makes it

@@ -369,9 +369,10 @@ that is an acceptance test, not a hope. A program that never awaits must link
 no scheduler. Measured today, the pay-for-what-you-use claim holds:
 `examples/hello.ts` links to 4,680 bytes at the `size` profile against a
 `runtime.c` whose `.text` is 4,088, so the object file is not what ships — and
-[wp26-io-and-servers.md](wp26-io-and-servers.md) §3.1 argues the budget rule
-should be restated as that per-program number, with a CI check, before any of
-this lands.
+[wp26-io-and-servers.md](wp26-io-and-servers.md) §3.1 reads the budget the way
+WP15 §7 already states it — a guideline that yields to a measured win — so a
+poller exceeding it is allowed, and what is owed is the benchmark and the
+per-program number, not a smaller poller.
 
 ### 4.6 wasm is the one target where a loop exists, and it is not ours
 

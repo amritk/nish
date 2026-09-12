@@ -149,9 +149,9 @@ plan.**
 `pthread_create`, a mutex and a condition variable do not fit inside eight
 bytes as unconditional cost, and threads also add `-lpthread` to the link
 line. The conclusion below is unchanged and the correction only strengthens it;
-[wp26-io-and-servers.md](wp26-io-and-servers.md) §3.1 argues the budget rule
-itself should be restated as a per-program linked size, which is the number
-that actually ships.
+the budget stays a guideline rather than a gate (WP15 §7: it "yields to a
+measured win"), and the number that actually ships is the per-program linked
+size — see [wp26-io-and-servers.md](wp26-io-and-servers.md) §3.1.
 
 They must therefore be pay-for-what-you-use, exactly as WP14's `nish_mkdir`
 and `nish_spawn` are: adding them left `examples/hello.ts` at 4,696 bytes,
