@@ -305,8 +305,11 @@ built once.
 
 ### 4.5 The loop does not fit in the runtime budget
 
-`runtime.c` has a hard 4,096-byte `.text` budget and stands at 3,852
-(MASTER_PLAN §4). A poller, a timer heap and a ready queue are not 244 bytes.
+`runtime.c` had a hard 4,096-byte `.text` budget and stood at 3,852 when this
+note was written (MASTER_PLAN §4); the ceiling is now 4,864 bytes summed over
+every `.text*` section, leaving 194 bytes of headroom (`docs/wp7-runtime.md`
+§"Runtime additions and budget"). A poller, a timer heap and a ready queue are
+not 244 bytes.
 
 They would have to be pay-for-what-you-use, exactly as `nish_mkdir` and
 `nish_spawn` are — `-ffunction-sections -Wl,--gc-sections` kept

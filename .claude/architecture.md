@@ -53,8 +53,13 @@ Compilation                                                            src/compi
   `src/codegen/runtime.ts` and `runtime/runtime.c` / `runtime/nish.h`;
   they change in the same commit and a layout test grows with them.
   `tests/run.js` fails when the runtime symbol table disagrees between them.
-- **The runtime has a budget.** `runtime/runtime.c` stays around 8 KB of source
-  and 4 KB of `.text` at `-Oz`; report its size in a PR that touches it.
+- **The runtime has a budget.** Every `.text*` section of
+  `clang -Oz -c runtime/runtime.c`, summed, stays under 4,864 bytes; it is 4,670
+  today, and the source bytes are history rather than a limit. `tests/run.js`
+  measures it on every run (`node tests/run.js budget`), so a PR that touches
+  the runtime does not depend on a reviewer remembering to report a size.
+  Raising the ceiling takes a fresh measurement written into
+  `docs/wp7-runtime.md` §"Runtime additions and budget".
 - **The name lives in two files.** `src/branding.ts` and `self/branding.ts` are
   the only source files that spell the project's name. Every string the
   compiler prints builds it from `LANGUAGE` / `CLI` there; prose is exempt, and

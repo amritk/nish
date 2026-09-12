@@ -13,6 +13,10 @@
  *   spawnSync(argv)             call i32 @nish_spawn(%struct.nish_array* argv)
  *   isDirectorySync(path)       call zeroext i1 @nish_is_dir(i8* path)
  *   getenv(name)                call i8* @nish_getenv(i8* name)
+ *   spawnSyncTo(argv, o, e)     call i32 @nish_spawn_to(%struct.nish_array* argv,
+ *                                                        i8* o, i8* e)
+ *   readdirSync(path)           call %struct.nish_array* @nish_readdir(i8* path)
+ *   monotonicNanos()            call i64 @nish_monotonic_nanos()
  *   process.argv                load %struct.nish_array*, %struct.nish_array** @nish_argv
  *   process.platform            call i8* @nish_platform()
  *   process.arch                call i8* @nish_arch()
@@ -33,12 +37,12 @@
  * nor `readonly`. Their string arguments are `nocapture` in runtime.ts, so
  * passing a parameter to them does not make it escape.
  *
- * `spawnSync` is the exception to that last sentence, and the only builtin
- * whose pointer argument the runtime keeps: `nish_spawn` copies each
- * element's bytes pointer into an arena vector that outlives the call, so the
- * array escapes. `isSpawnCall` below is what tells `classifyUse` in
+ * `spawnSync` and `spawnSyncTo` are the exception to that last sentence, and the
+ * only builtins whose pointer argument the runtime keeps: the spawn path copies
+ * each element's bytes pointer into an arena vector that outlives the call, so
+ * the array escapes. `isSpawnCall` below is what tells `classifyUse` in
  * attributes.ts, which would otherwise hand the caller a `nocapture` it cannot
- * back up.
+ * back up — and it answers for both names, because both reach the same C.
  */
 import ts from "typescript";
 import { CheckedProgram } from "../../checker/index.js";
@@ -166,12 +170,57 @@ const spawnSync: BuiltinCall = {
 };
 
 /**
+ * `spawnSyncTo(argv, stdoutPath, stderrPath)`: the same call with the two paths
+ * after the vector. The arguments are emitted left to right, as every call is,
+ * so a path expression that allocates does so before the child starts.
+ */
+const spawnSyncTo: BuiltinCall = {
+  emit: (ctx, expr) => {
+    ctx.declareType(ARRAY_TYPE);
+    const argv = ctx.emitExpression(expr.arguments[0]);
+    const out = ctx.emitExpression(expr.arguments[1]);
+    const err = ctx.emitExpression(expr.arguments[2]);
+    const status = ctx.fn.emitValue(
+      `call i32 ${ctx.useRuntime("nish_spawn_to")}(${ARRAY_STRUCT}* ${argv}, i8* ${out}, i8* ${err})`
+    );
+    return ctx.typeOf(expr).kind === "f64"
+      ? ctx.fn.emitValue(`sitofp i32 ${status} to double`)
+      : status;
+  },
+  callees: () => ["nish_spawn_to"],
+};
+
+/**
+ * `readdirSync(path)`: one call answering the array header, which may be null.
+ * The same shape as `readFileSyncOrNull` one type up: the checker typed it
+ * `string[] | null` and the narrowing reads it with an ordinary null compare,
+ * so nothing here has to know that a nullable array is a nullable pointer.
+ */
+const readdirSync: BuiltinCall = {
+  emit: (ctx, expr) => {
+    ctx.declareType(ARRAY_TYPE);
+    return ctx.fn.emitValue(
+      `call ${ARRAY_STRUCT}* ${ctx.useRuntime("nish_readdir")}(${stringArgs(ctx, expr)})`
+    );
+  },
+  callees: () => ["nish_readdir"],
+};
+
+/** `monotonicNanos()`: one call, an `i64`, and no arguments to emit. */
+const monotonicNanos: BuiltinCall = {
+  emit: (ctx) => ctx.fn.emitValue(`call i64 ${ctx.useRuntime("nish_monotonic_nanos")}()`),
+  callees: () => ["nish_monotonic_nanos"],
+};
+
+/**
  * A call of the `spawnSync` builtin (not of a user function that happens to be
  * called `spawnSync`, which wins the name as every identifier builtin loses
  * it). `attributes.ts` asks, because the argument escapes into the runtime.
  */
 export const isSpawnCall = (program: CheckedProgram, call: ts.CallExpression): boolean =>
-  ts.isIdentifier(call.expression) && call.expression.text === "spawnSync" && !program.callees.has(call);
+  ts.isIdentifier(call.expression) &&
+  (call.expression.text === "spawnSync" || call.expression.text === "spawnSyncTo") &&
+  !program.callees.has(call);
 
 /** Dotted callees, spread into `builtinCallEmitters`; mirrors `ioBuiltinCalls`. */
 export const ioBuiltinCallEmitters: Record<string, BuiltinCall> = {
@@ -189,6 +238,9 @@ export const ioFunctionEmitters: Record<string, BuiltinCall> = {
   panic,
   mkdirSync,
   spawnSync,
+  spawnSyncTo,
+  readdirSync,
+  monotonicNanos,
   isDirectorySync,
   getenv,
 };

@@ -68,16 +68,22 @@ Design rules that every WP must respect:
   (see `tests/ir/alloc_smoke.ll`).
 - **Every construct ships with a golden test** (`.ts` in, `.ll` out) and a
   native round trip (link with clang, run, compare stdout).
-- **Runtime stays tiny.** Budget: `runtime.c` under 4 KB of `.text` compiled
-  at `-Oz` (`clang -Oz -c runtime/runtime.c && size -A runtime.o`). No stdio on
-  hot paths. The two figures this replaces were the *source* bytes, over
-  budget since WP4 and left there because comments are not code, and the `text`
+- **Runtime stays tiny.** Budget: `runtime.c` under 4,864 bytes of compiled
+  code, counted as every `.text*` section summed
+  (`clang -Oz -c runtime/runtime.c && size -A runtime.o`). No stdio on hot
+  paths. The two figures this replaces were the *source* bytes, over budget
+  since WP4 and left there because comments are not code, and the `text`
   column of `size`, which counts the `.eh_frame` unwind entries the `size`
-  build profile strips — measuring the bytes that never ship. `.text` is what
-  a linked binary pays, and `-ffunction-sections -Wl,--gc-sections` means it
-  pays only for the functions it calls: adding WP14's `nish_mkdir` and
-  `nish_spawn` left `examples/hello.ts` at 4,696 bytes, the same number to the
-  byte. Today: 2,544 of 4,096 (`size` text 4,297, source 12,707).
+  build profile strips — measuring the bytes that never ship. The sum rather
+  than the `.text` line alone is what a linked binary pays: `clang -Oz` puts
+  cold code in `.text.unlikely.`, so a ceiling on `.text` by itself can be met
+  by moving code into another section instead of by making it smaller. And
+  `-ffunction-sections -Wl,--gc-sections` means a binary pays only for the
+  functions it calls: adding WP14's `nish_mkdir` and `nish_spawn` left
+  `examples/hello.ts` at 4,696 bytes, the same number to the byte. Today:
+  4,670 of 4,864, measured by `tests/run.js` rather than by a reviewer
+  (`node tests/run.js budget`); `docs/wp7-runtime.md` §"Runtime additions and
+  budget" records each measurement and why the ceiling moved.
 
 ## 3. Consolidated language specification (Nish)
 
@@ -162,8 +168,9 @@ ninety-second map; the table below is the inventory.
 | Benchmarks: seven programs in Nish, C and Rust, with wall time, binary size, peak RSS and checksums | done (WP9) | `bench/`, `docs/BENCHMARKS.md` |
 | Docs: the normative reference, the regenerated IR cookbook, the architecture, the FAQ, install, and one design note per package | done (WP11) | `docs/` |
 
-Measured today: `examples/hello.ts` links to 4,696 bytes at the `size` profile
-and `runtime.c` costs 3,852 of its 4,096-byte `.text` budget, beside 9,920
+Measured today: `examples/hello.ts` links to 4,680 bytes at the `size` profile
+and `runtime.c` costs 4,670 of its 4,864-byte `.text*` budget
+(`docs/wp7-runtime.md` §"Runtime additions and budget"), beside 9,920
 bytes of `.rodata` that Ryu's tables dominate and that only a binary formatting
 a double links (WP15 §7a)
 (`docs/wp14-selfhost.md` §7a); the benchmark binaries are 5.5-12 KB against

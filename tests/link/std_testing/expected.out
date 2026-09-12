@@ -1,0 +1,10 @@
+PASS  sumOf
+PASS  sumOf of an empty array
+PASS  countAbove
+PASS  countAbove the largest element
+PASS  sumOf is not the length
+PASS  countAbove found something
+PASS  length
+PASS  last element
+SKIP  i64 reduction (stats.ts has no i64 path yet)
+stats: 8 passed, 0 failed, 1 skipped

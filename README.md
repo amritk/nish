@@ -1,10 +1,28 @@
+<div align="center">
+
 # Nish
 
-An ahead-of-time compiler for a strictly static subset of TypeScript. It
-parses source with the official TypeScript compiler API, rejects everything
-dynamic (`any`, prototypes, `eval`, exceptions, a garbage collector), and
-emits textual LLVM IR (`.ll`). LLVM's own toolchain (`clang` / `llc`) then
-optimises and produces native binaries for x86_64, ARM64, or WebAssembly.
+**An ahead-of-time compiler for a strictly static subset of TypeScript — LLVM IR in the middle, native binaries at the end. No interpreter, no garbage collector, nothing to ship beside the executable.**
+
+![status](https://img.shields.io/badge/status-pre--alpha-ef4444?style=flat-square)
+![license](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)
+![TypeScript](https://img.shields.io/badge/TypeScript-static%20subset-3178c6?style=flat-square&logo=typescript&logoColor=white)
+![LLVM](https://img.shields.io/badge/LLVM-18-4b5563?style=flat-square&logo=llvm&logoColor=white)
+![node](https://img.shields.io/badge/node-%E2%89%A522.18-339933?style=flat-square&logo=node.js&logoColor=white)
+![WebAssembly](https://img.shields.io/badge/wasm-wasm32%20%C2%B7%20wasi-654ff0?style=flat-square&logo=webassembly&logoColor=white)
+![self-hosted](https://img.shields.io/badge/self--hosted-stage2%20fixpoint-0ea5e9?style=flat-square)
+![GC](https://img.shields.io/badge/GC-none-f97316?style=flat-square)
+![vibe coded](https://img.shields.io/badge/vibe-coded-a855f7?style=flat-square)
+
+</div>
+
+---
+
+Nish parses source with the official TypeScript compiler API, rejects
+everything dynamic (`any`, prototypes, `eval`, exceptions, a garbage
+collector), and emits textual LLVM IR (`.ll`). LLVM's own toolchain
+(`clang` / `llc`) then optimises and produces native binaries for x86_64,
+ARM64, or WebAssembly.
 
 ```
 TypeScript source ──▶ TS AST ──▶ validator + checker ──▶ LLVM IR (.ll) ──▶ clang/llc ──▶ native binary
@@ -14,13 +32,15 @@ TypeScript source ──▶ TS AST ──▶ validator + checker ──▶ LLVM 
 If it compiles, every value has one fixed, known memory layout; binaries are
 a few kilobytes; there is no interpreter and no GC anywhere in the pipeline.
 
-> **Nish is pre-alpha and unreleased.** There is no tag yet: the language, the
-> CLI flags and the IR that either compiler emits all change without notice
-> until 1.0. Every commit compiles, tests and bootstraps itself — see
-> [Project status](#project-status) for what is done and what is next — but
-> nothing here is frozen yet, so pin a commit rather than a range, expect to
-> fix your source when you move to a newer one, and read
-> [CHANGELOG.md](CHANGELOG.md) before you upgrade.
+> [!WARNING]
+> **Nish is pre-alpha.** The language, the CLI flags and the IR that either
+> compiler emits all change without notice until 1.0. Every commit compiles,
+> tests and bootstraps itself — see [Project status](#project-status) for what
+> is done and what is next — but nothing here is frozen yet, so pin an exact
+> version rather than a range, expect to fix your source when you move to a
+> newer one, and read [CHANGELOG.md](CHANGELOG.md) before you upgrade.
+
+---
 
 ## Quickstart
 
@@ -28,10 +48,15 @@ Requirements: Node.js 22.18+ and, to produce binaries, clang (LLVM 18) + lld;
 per-OS install commands are in [docs/INSTALL.md](docs/INSTALL.md).
 
 ```bash
-# the npm name `nish` is somebody else's package; install the release tarball
+# the npm name `nish` belongs to an unrelated package; install the release tarball
 curl -LO https://github.com/amritk/nish/releases/download/v0.1.1/nish-0.1.1.tgz
-npm install -g ./nish-0.1.1.tgz   # or: git clone, npm install, npm run build, node dist/index.js ...
+npm install -g ./nish-0.1.1.tgz
 ```
+
+> [!TIP]
+> Building from source works just as well: `git clone`, `npm install`,
+> `npm run build`, then `node dist/index.js ...` wherever this README says
+> `nish`.
 
 `hello.ts`:
 
@@ -64,13 +89,15 @@ attributes #0 = { nounwind willreturn readnone }
 `define i32 @add(i32 %a, i32 %b)` with the same body. Every construct's IR
 is in [docs/IR_COOKBOOK.md](docs/IR_COOKBOOK.md).
 
+---
+
 ## The language
 
 The full reference is [docs/LANGUAGE.md](docs/LANGUAGE.md); every rule
 there cites the test case that proves it.
 
 | Feature | Summary | Reference |
-| --- | --- | --- |
+|:---|:---|:---|
 | Types | `number` (`i32` by default, `double` with `--number-mode f64`), `i32`, `i64`, `f64`, `boolean`, `string`, `T[]`, classes, interfaces, `T \| null`, `void`; 1:1 LLVM mapping, no implicit conversions | [Types](docs/LANGUAGE.md#types) |
 | Functions and modules | annotated signatures, calls in any order, `export`/named relative `import`, whole-program attribute facts, `export const main` as the entry, `internal` linkage for everything not exported | [Declarations](docs/LANGUAGE.md#declarations) |
 | Control flow | `if`/`else`, `while`, `do`, `for`, `for...of`, `break`/`continue`, boolean-only conditions, definite return, unreachable-code errors | [Statements](docs/LANGUAGE.md#statements) |
@@ -93,6 +120,40 @@ yielding `0`, `.length` counts bytes, there is no `throw` and no unwinding,
 lists everything the differential test suite found that still differs from
 Node.
 
+### The standard library
+
+[`std/`](std/README.md) is Nish written in Nish, for Nish programs to import:
+[`std/testing`](std/testing.ts), a test runner, so a compiled program can check
+itself and answer an exit code with no Node in the picture, and
+[`std/text`](std/text.ts), the string operations a program would otherwise write
+inline — the language has no `split`, `trim` or regular expression, because each
+of those allocates and some need a character table the runtime has no room for.
+
+```ts
+import { Suite } from "../std/testing";
+
+export const main = (): number => {
+  const t = new Suite("stats");
+  t.eqI32("sumOf", sumOf([3, 9, 4, 9]), 25);
+  return t.done();          // prints the report; 0 when nothing failed
+};
+```
+
+A library module is source, not a built artifact, so it compiles with the
+program that imports it and the whole-program pass sees straight through it
+([docs/wp21-packages.md](docs/wp21-packages.md)). There is no bare specifier
+yet — imports are relative, as everywhere else in the language — and no
+callbacks, which is what makes a suite a value with methods rather than a
+`test("name", () => ...)`: a function is never a value here.
+
+The suite's own golden cases are run by [`tests/nish/run.ts`](tests/nish/run.ts),
+which is this repository's test harness written in the language it tests:
+`readdirSync` finds the cases, `spawnSyncTo` captures each compile and each run,
+and the IR is diffed against the golden line by line. `npm run test:nish` runs it
+over the whole corpus.
+
+---
+
 ## Memory safety
 
 There is no garbage collector and no `free`, so the bugs that need one cannot
@@ -101,7 +162,7 @@ checked, and every way to give a check up is a flag you pass or a builtin you
 call on purpose.
 
 | Bug class | What Nish does | Reference |
-| --- | --- | --- |
+|:---|:---|:---|
 | Use-after-free, double free | Not expressible: nothing is freed individually. Four compile-time mechanisms decide where a value lives — a stack `alloca` when escape analysis proves it dies with the frame, an automatic arena scope when a function's temporaries do, a `nish_arena_keep` reclaim at the call site for a returned string, the bump arena otherwise — and the arena goes back when `main` returns | [Memory model](docs/LANGUAGE.md#memory-model), [wp6-memory.md](docs/wp6-memory.md) |
 | Out-of-bounds read or write | Every `a[i]`, `a[i] op= v`, `s.charCodeAt(i)` and `a.pop()` is bounds-checked, with an unsigned compare, so a negative index fails too; the failure prints `index out of range: <i> >= <len>` and exits 1 | [Element access](docs/LANGUAGE.md#element-access), `tests/cases/arr_bounds_panic` |
 | Null dereference | `T \| null` is a separate type, for pointers only; member access needs a narrowing the checker accepts and `?.` is forbidden — which is what lets the emitter put `nonnull dereferenceable` on every pointer that is not one | [Nullable types](docs/LANGUAGE.md#nullable-types) |
@@ -134,7 +195,7 @@ does recycle.
 Not any one of them; it is more useful to say which piece came from where.
 
 | Concern | Closest to | Not |
-| --- | --- | --- |
+|:---|:---|:---|
 | Lifetimes | Go's escape analysis, over a Zig-style arena discipline the compiler writes for you | Rust: no ownership, no borrow checker, no lifetime annotations |
 | Bounds and panics | Rust with `panic=abort` | C |
 | Null | Kotlin and C# nullable reference types: flow narrowing, not a wrapper type | Rust's `Option<T>` |
@@ -149,7 +210,8 @@ weaker: one global arena, per-function granularity, no region polymorphism.
 
 ### Where it is not safe
 
-Four holes, every one of them asked for:
+> [!CAUTION]
+> Four holes, every one of them asked for by name.
 
 - **`Arena.reset()` / `Arena.release(m)`** release or recycle in O(1), and
   doing either while anything allocated after the mark is still referenced is
@@ -171,6 +233,8 @@ Memory-safe like Go, allocated like Zig, errors like Rust, nulls like Kotlin,
 overflow like C — with two C-shaped holes you have to ask for by name. What it
 buys is the output: no GC, no runtime, and the sizes under
 [Performance and binary size](#performance-and-binary-size).
+
+---
 
 ## Command line
 
@@ -236,6 +300,8 @@ pass `--target host` (or a triple) when you inspect optimised IR by hand;
 with `--target aarch64-unknown-linux-gnu` / `wasm32-wasi` plus
 `clang --target=...`, or with `llc -mtriple=...`.
 
+---
+
 ## Performance and binary size
 
 Rust-class output is the goal: no GC, no embedded engine, aliasing and
@@ -244,7 +310,7 @@ unused. `examples/add.ts` + `examples/main.c` + `runtime/runtime.c`, x86_64
 Linux, glibc dynamically linked (`npm run size-report`):
 
 | Profile | Bytes | What it does |
-| --- | ---: | --- |
+|:---|---:|:---|
 | `debug` | 15,072 | `clang` defaults: no optimisation, symbols kept. |
 | `speed` | 4,528 | `-O3 -flto`, section GC, unwind tables off, stripped. Rust `--release`. |
 | `size` | 4,512 | `-Oz -flto`, plus hidden visibility and no stack protector. Rust `opt-level="z"`. |
@@ -277,6 +343,8 @@ peak memory per column, plus the exact build commands. The analysis of every
 gap, and what `--nsw` and PGO (`scripts/build.sh --pgo-generate` /
 `--pgo-use`) buy, is in [docs/wp9-optimisation.md](docs/wp9-optimisation.md);
 the rules of the game are in [bench/README.md](bench/README.md).
+
+---
 
 ## Interop: export, do not embed
 
@@ -311,6 +379,8 @@ The supported direction is Node importing Nish:
 
 Details: [docs/wp8-interop.md](docs/wp8-interop.md).
 
+---
+
 ## The compiler in a browser
 
 `self/` is an Nish program, so the compiler compiles itself to
@@ -326,6 +396,8 @@ with no server in the loop; `web/index.html` is a playground built on it and
 `web/wasi.mjs` is the in-memory filesystem it runs against. It stops at the
 IR — `clang` and `wasm-ld` are not in a page — so `--link` and `--profile` are
 refused there. [web/README.md](web/README.md) has the rest.
+
+---
 
 ## Self-hosting
 
@@ -359,6 +431,8 @@ and imitating the other was never the point.
 Details, and the subset `self/` is written in, are in
 [docs/wp14-selfhost.md](docs/wp14-selfhost.md).
 
+---
+
 ## Project status
 
 Pre-alpha, as above: M4 is the milestone that freezes the language reference
@@ -366,7 +440,7 @@ and tags a release, so until it lands a construct's spelling, a flag's name
 and the IR any of them lowers to are all still free to change.
 
 | Milestone | Contents | State |
-| --- | --- | --- |
+|:---|:---|:---|
 | M1 "Programs" | pipeline prep, validator, control flow, strings, modules, CI | done |
 | M2 "Data" | classes and interfaces, arrays, runtime and intrinsics | done |
 | M3 "Rust parity" | interop, memory strategy (stack allocation, arena scopes, `T \| null`), benchmarks with `--target`/`--nsw`/PGO, differential testing against Node | done |
@@ -385,6 +459,8 @@ Release engineering (`--version`, exit codes, npm packaging, tag-driven
 releases) landed with WP12; see [CHANGELOG.md](CHANGELOG.md) and
 [docs/wp12-release.md](docs/wp12-release.md). The plan itself is
 [docs/MASTER_PLAN.md](docs/MASTER_PLAN.md).
+
+---
 
 ## Contributing
 
@@ -413,6 +489,8 @@ CI runs the suite on Ubuntu and macOS with LLVM 18
 ([docs/wp10-ci.md](docs/wp10-ci.md)). The documentation index is
 [docs/README.md](docs/README.md). Coding guidelines for contributors and
 coding agents are in [AGENTS.md](AGENTS.md) and [`.claude/`](.claude/).
+
+---
 
 ## License
 

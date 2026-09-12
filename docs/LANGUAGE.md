@@ -1479,8 +1479,10 @@ wins, as it does for every identifier builtin.
 | `mkdirSync(path: string): boolean` | create **one** directory, mode `0777 & ~umask` — not recursive, exactly like Node's `fs.mkdirSync(p)` with no options, so a missing parent is a failure and not a reason to create it. `true` when a directory exists at `path` once the call returns, whether this call created it or it was already there; `false` for every other outcome, a plain file at `path` included | write | `io_mkdir`; `reject_mkdir_arity`, `reject_mkdir_type` |
 | `isDirectorySync(path: string): boolean` | one `stat`: `true` when a directory exists at `path` as the call runs, `false` for everything else — a missing path, a plain file, a device node, a parent that cannot be searched. It is the question `-o <dir>` asks of a path, and it is the `stat` half of `mkdirSync`, which calls it (WP14 §7a) | write | `io_is_directory`; `reject_is_directory_arity`, `reject_is_directory_type` |
 | `spawnSync(argv: string[]): number` | run `argv[0]`, searched on `PATH`, with `argv` as its argument vector; wait for it; answer its exit status, or `128 + n` when signal `n` killed it (the shell's convention). `-1` when the vector is **empty** — there is no `argv[0]` to run — and whenever the child cannot be started or cannot be waited for, which is also what a WASI build always answers, since WASI has no processes. The child inherits this process's environment, streams and working directory | write | `io_spawn`; `reject_spawn_arity`, `reject_spawn_element_type` |
+| `spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number` | the same run, with each stream sent to a file rather than inherited: each path is created or truncated at `0644`, as `writeFileSync` does. An **empty** path leaves that stream inherited, so one call can capture stdout and let stderr through. Every answer `spawnSync` gives, it gives — the status, `128 + n`, and `-1` for an empty vector, a child that cannot be started, and a WASI build. The two paths must not name one file: each is opened separately, with its own offset, so the streams would overwrite rather than interleave; capture them apart and concatenate | write | `io_spawn_to`, `io_spawn_to_inherit`; `reject_spawn_to_arity`, `reject_spawn_to_type` |
+| `readdirSync(path: string): string[] \| null` | the directory's entries, **sorted ascending by bytes**, without `.` and `..`; every other dotfile is an entry. `null` when the directory cannot be read at all — a missing path, a plain file, a parent that cannot be searched — which is a *different* answer from the empty array an empty directory gives. A WASI build always answers `null`: `fd_readdir` lists a preopened directory rather than a path, which is a different contract and not a port of this one | write | `io_readdir`, `io_readdir_null`; `reject_readdir_arity`, `reject_readdir_type`, `reject_readdir_unchecked` |
 
-All three answer a value where they could have exited, for the reason
+All five answer a value where they could have exited, for the reason
 `readFileSyncOrNull` answers `null` (WP14 B3): the language has no exceptions,
 so a driver has to be able to turn the failure into its own diagnostic. They
 exist so that a compiler written in Nish can create its own `-o dir/`,
@@ -1495,14 +1497,30 @@ stale by the time the caller acts on it, so `mkdirSync` is still the call that
 decides whether a directory was made, and `readFileSyncOrNull` is still the way
 to read a file without racing a check against it.
 
-`spawnSync` is the one builtin whose pointer argument the runtime keeps: it
-copies each element's bytes pointer into a vector that outlives the call, so
-the array escapes, a parameter passed to it is never `nocapture`, and an array
-literal handed to it is never stack-allocated (`io_spawn` pins all three).
-Nothing that can reach `spawnSync` is `willreturn` either, because the child
-may never exit. The argument is checked down to its element type: an `i32[]`
-is an array but not a command line (`reject_spawn_element_type`). Arguments
-are passed as bytes, so an embedded NUL truncates one.
+`spawnSync` and `spawnSyncTo` are the two builtins whose pointer argument the
+runtime keeps: the spawn path copies each element's bytes pointer into a vector
+that outlives the call, so the array escapes, a parameter passed to either is
+never `nocapture`, and an array literal handed to one is never stack-allocated
+(`io_spawn` pins all three). Nothing that can reach either is `willreturn`
+either, because the child may never exit. The argument is checked down to its
+element type: an `i32[]` is an array but not a command line
+(`reject_spawn_element_type`). Arguments are passed as bytes, so an embedded NUL
+truncates one.
+
+`spawnSyncTo` is a second builtin rather than two more parameters on the first
+because there are no optional parameters — and the alternative shape, answering
+the output as a string, was refused for two reasons: the runtime would have to
+buffer a child that can print more than memory holds, and a harness comparing
+output against a golden wants the bytes on disk anyway, to diff and to keep
+after a failure.
+
+`readdirSync` sorts, which neither `readdir(3)` nor Node's `fs.readdirSync`
+does, and that is a decision about this language rather than a convenience:
+there is no `sort` to reach for, so every caller of an unsorted listing would
+have to write one, and a run whose order is the file system's is a run that
+differs between two machines. The sort is by **bytes**, like every other string
+comparison here, so it agrees with Node's `.sort()` for ASCII names and can
+differ for names that are not (`docs/wp13-differential.md`).
 
 ### The environment
 
@@ -1539,6 +1557,28 @@ LLVM may not fold the second read into the first.
 The value is what `getenv(3)` answers, so it is bytes: a variable holding
 something that is not valid UTF-8 comes back as those bytes, exactly as
 `readFileSync` does, and every offset into it is a byte offset.
+
+### The clock
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `monotonicNanos(): i64` | `CLOCK_MONOTONIC` in nanoseconds. The origin is arbitrary, so only the **difference** between two reads means anything: it is not comparable between two processes or two machines, and it is not a date | write | `io_monotonic`; `reject_monotonic_arity` |
+
+It is an `i64` in both number modes and not a `number`, because a `number` is an
+`i32` by default and would overflow inside a tenth of a second, and an `f64`
+loses nanoseconds after about 104 days of uptime.
+
+It is the **monotonic** clock and not the wall clock, and the type cannot say so,
+so the name does. An elapsed time measured from a wall clock has to survive that
+clock being corrected mid-run, and it cannot: the difference can come out
+negative. There is deliberately no wall clock and no `Date`: nothing in the
+compiler needs the date, and a program that formats one needs a calendar, a time
+zone database and a locale, none of which this language has.
+
+The effect is `write` rather than `none` for the reason `getenv` is not
+`readnone`: the clock is not memory LLVM is tracking, so two reads with work
+between them must not fold into one. A `readnone` clock would make every measured
+interval exactly zero, which `io_monotonic` is the test for.
 
 ### Arrays and strings as receivers
 
@@ -2128,7 +2168,7 @@ messages are exact for the cases cited; other rows quote
 | bitwise operator on a non-integer | `` Operator `&` requires two operands of the same integer type, got f64 and f64 `` (with `` (`number` is f64 under --number-mode f64; convert with toI32/toI64) `` appended in that mode) / `` Operator `~` requires an integer operand, got f64 ``; a compound form names itself, `` Operator `&=` requires two operands of the same integer type, got f64 and f64 ``, for a local, a field and an element alike | `reject_bit_f64`, `reject_bit_width`, `reject_bit_number_mode`, `reject_bit_not`, `reject_arr_element_bitwise_f64` |
 | bitwise operator on booleans | `` Operator `&` is not available on boolean (use `&&`) `` (`\|` names `\|\|`, `^` names `!==`, `~` names `!`) | `reject_bit_boolean` |
 | ordering on booleans / strings / structs | `` Operator `<` requires two numeric operands, got string and i32 `` | `reject_bool_ordering`, `reject_str_lt`, `reject_str_lt_str`, `reject_cls_ordering` |
-| `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned` |
+| `T \| null` misuse | see [Nullable types](#nullable-types) | `reject_nullable_scalar`, `reject_null_to_nonnull`, `reject_null_field_access`, `reject_null_compare_two`, `reject_null_narrowing_leaks`, `reject_null_narrowing_assigned`, `reject_readfile_or_null_unchecked`, `reject_readdir_unchecked` |
 | `Arena.release` with a non-`i64` argument | `` `Arena.release` expects an argument of type i64, got i32 `` | `reject_arena_release_type` |
 | non-integer literal in i32 mode | `` Non-integer literal `1.5` in i32 number mode (use --number-mode f64) `` | `reject_float_in_i32` |
 | non-boolean condition | `Condition must be boolean, got i32 (Nish has no truthiness)` | `reject_cf_nonbool_cond` |
@@ -2142,7 +2182,8 @@ messages are exact for the cases cited; other rows quote
 | unknown property / method / builtin | `` Unknown property `foo` on string `` / `` Unknown property `length` on i32 `` / `` Unknown builtin `Math.foo` (supported: ...) `` | `reject_unknown_property`, `reject_length_on_number`, `reject_unknown_builtin` |
 | `Math.*` on an integer | `` `Math.sqrt` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) `` | `reject_math_i32` |
 | conversion of a non-number | `` `toI32` expects a number (i32, i64, or f64), got string `` | `reject_toi32_string` |
-| I/O with the wrong type | `` `readFileSync` expects an argument of type string, got i32 `` | `reject_readfile_number` |
+| I/O with the wrong type | `` `readFileSync` expects an argument of type string, got i32 `` | `reject_readfile_number`, `reject_readdir_type`, `reject_spawn_to_type` |
+| I/O with the wrong arity | `` `readdirSync` expects exactly 1 argument, got 2 ``; `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``; `` `monotonicNanos` expects exactly 0 arguments, got 1 `` | `reject_readdir_arity`, `reject_spawn_to_arity`, `reject_monotonic_arity` |
 | array errors | see [Arrays](#array-literals), [Element access](#element-access), [`for...of`](#for-const-x-of-a) | `reject_arr_*` |
 | class and interface errors | see [Classes](#classes), [Interfaces](#interfaces-and-object-literals) | `reject_cls_*` |
 | `extends` or `super` on a class (WP25: there is no inheritance) | `` `extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `Derived` and `implements` an interface to convert between them `` / `` `super` is not supported: Nish has no inheritance, so a class has no base class to reach `` | `reject_cls_extends`, `reject_cls_super` |

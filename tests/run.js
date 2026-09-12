@@ -1457,6 +1457,117 @@ if (!only && HAS_CLANG) {
   skip("clang not installed: native round trips and pipeline checks skipped");
 }
 
+// ---- WP7: the runtime .text budget -------------------------------------------------
+// `runtime/runtime.c` is linked into every native binary, so its machine code is a cost
+// every program that touches the runtime pays. The budget was a row in
+// docs/wp7-runtime.md and a reviewer's memory until this check, which is why nobody
+// noticed the tree drift from the 2,544 bytes WP14 D4 recorded to 4,154 -- a review rule
+// cannot see a number that no run prints.
+//
+// The metric is the sum of every `.text*` section rather than the single `.text` line
+// wp7 quoted, because that sum is what a linked binary pays: `clang -Oz` puts cold code
+// in `.text.unlikely.` (66 bytes today), so a ceiling on `.text` alone can also be met
+// by moving code into another section instead of by making it smaller. The two other
+// numbers in that table are history rather than limits -- source bytes mostly measure
+// comments, and the `text` column of plain `size` adds the read-only constants and the
+// `.eh_frame` unwind tables that the size build profile strips.
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime.c`.
+ *
+ * Measured 4,670 bytes on 2026-09-12 with clang 18.1.3 on linux-x64 (`.text` 4,604 plus
+ * `.text.unlikely.` 66), after `nish_readdir`, `nish_spawn_to`, `nish_monotonic_nanos`
+ * and the shared `nish_spawn_impl` added 516 bytes to the 4,154 of the commit before
+ * them. The budget is the next 256-byte boundary above that measurement, so 194 bytes
+ * are left: enough headroom that a small fix -- an extra bounds check, one more error
+ * path -- does not have to raise the budget in the same commit, and little enough that
+ * anything larger than one such fix cannot land quietly. Raising this number is a
+ * deliberate decision that comes with its own measurement and a row in
+ * docs/wp7-runtime.md ("Runtime additions and budget"); it is not a way to get green.
+ */
+const RUNTIME_TEXT_BUDGET = 4864;
+if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
+  // A byte-exact ceiling is a fact about one target and one compiler, not about the
+  // source, so everywhere else the honest answer is a counted skip rather than a number
+  // that would fail for the wrong reason.
+  const budgetSkip = () => {
+    const host = `${process.platform}-${process.arch}`;
+    if (host !== "linux-x64")
+      return (
+        `runtime.c .text budget: measured on linux-x64 and this host is ${host}; ` +
+        "a byte-exact ceiling is a fact about one target and one compiler version"
+      );
+    if (!HAS_CLANG) return "clang not installed: the runtime.c .text budget is not measured";
+    if (!has("size"))
+      return "size (binutils or llvm) not installed: the runtime.c .text budget is not measured";
+    return null;
+  };
+  const reason = budgetSkip();
+  if (reason !== null) skip(reason);
+  else {
+    const obj = path.join(buildDir, "runtime_budget.o");
+    const cc = spawnSync("clang", ["-Oz", "-c", "runtime/runtime.c", "-o", obj], { cwd: root });
+    const sz = cc.status === 0 ? spawnSync("size", ["-A", obj]) : null;
+    // `size -A` prints one `<section> <size> <addr>` row per section; every row whose
+    // name starts with `.text` counts, whatever clang decided to call it.
+    const sections = String(sz?.stdout ?? "")
+      .split("\n")
+      .map((line) => line.trim().split(/\s+/))
+      .filter((row) => row[0].startsWith(".text") && /^\d+$/.test(row[1] ?? ""))
+      .map((row) => [row[0], Number(row[1])]);
+    const total = sections.reduce((sum, [, bytes]) => sum + bytes, 0);
+    const breakdown = sections.map(([name, bytes]) => `${name} ${bytes}`).join(" + ");
+    check(
+      `runtime.c: .text* at -Oz fits the ${RUNTIME_TEXT_BUDGET} byte budget`,
+      cc.status === 0 && sections.length > 0 && total <= RUNTIME_TEXT_BUDGET,
+      cc.status !== 0
+        ? String(cc.stderr)
+        : sections.length === 0
+          ? `size -A printed no .text section:\n${sz.stdout}${sz.stderr}`
+          : `measured ${total} bytes (${breakdown}), budget ${RUNTIME_TEXT_BUDGET}, ` +
+            `over by ${total - RUNTIME_TEXT_BUDGET}.\n` +
+            "Shrink the addition, or raise RUNTIME_TEXT_BUDGET in tests/run.js and add the " +
+            "measured row to docs/wp7-runtime.md saying why it moved."
+    );
+  }
+}
+
+// ---- The golden runner written in Nish ---------------------------------------------
+// `tests/nish/run.ts` is the suite's section A — the golden cases — implemented in
+// the language instead of in Node, on top of `std/testing`, `std/text` and the three
+// builtins that made it possible (`readdirSync`, `spawnSyncTo`, `monotonicNanos`).
+// It is the only thing here that exercises those three together on a real workload
+// rather than in a case written to pin one rule.
+//
+// This runs it over the `pop` cases and not over the corpus, deliberately: the
+// runner spawns a compiler per case, so a full pass costs about four and a half
+// minutes, and paying that on every `npm test` would double the suite to prove
+// what a handful of cases already prove — one golden, one native round trip and
+// three rejections. `npm run test:nish` is the full pass.
+if (!only || "nish-runner".includes(only)) {
+  if (!HAS_CLANG) {
+    skip("the golden runner written in Nish (clang not found, and it links)");
+  } else {
+    const irDir = path.join(buildDir, "nish-runner.ir") + path.sep;
+    const runnerExe = path.join(buildDir, "nish-runner");
+    const built = spawnSync("node", [cli, path.join("tests", "nish", "run.ts"), "-o", irDir, "--link", runnerExe], {
+      cwd: root,
+    });
+    if (check("tests/nish/run.ts compiles and links", built.status === 0, String(built.stderr))) {
+      // cwd is the repository root because the runner addresses `tests/cases` and
+      // `dist/index.js` by relative path: there is no `cwd` builtin for it to
+      // build an absolute one from, which is also why it folds `<root>/` out of a
+      // golden rather than into its own output.
+      const ran = spawnSync(runnerExe, ["pop"], { cwd: root });
+      const report = String(ran.stdout);
+      check(
+        "the Nish runner agrees with the goldens over the `pop` cases (one golden, one native run, three rejections)",
+        ran.status === 0 && / 0 failed, /.test(report),
+        report + String(ran.stderr)
+      );
+    }
+  }
+}
+
 // ---- WP8: interop ------------------------------------------------------------------
 // runtime/nish.h is the public C ABI; --emit-header / --emit-dts / --emit-napi derive
 // host-side declarations from the same checked program the IR came from. Checks:
@@ -4003,6 +4114,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       /^dist\//,
       /^runtime\//,
       /^scripts\//,
+      /^std\//,
       /^README\.md$/,
       /^LICENSE$/,
       /^docs\/INSTALL\.md$/,
@@ -4023,12 +4135,17 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/nish.d.ts",
       "runtime/nish.mjs",
       "scripts/build.sh",
+      // The standard library is source, so shipping it *is* shipping the library
+      // (wp21 §2). A tarball without it would install a compiler whose `std/`
+      // imports cannot resolve.
+      "std/testing.ts",
+      "std/README.md",
       "LICENSE",
       "docs/INSTALL.md",
     ];
     const absent = required.filter((f) => !files.includes(f));
     check(
-      "npm pack includes everything --link and `node --import` need (runtime.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus LICENSE/INSTALL.md",
+      "npm pack includes everything --link and `node --import` need (runtime.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE and INSTALL.md",
       absent.length === 0,
       absent.join("\n")
     );

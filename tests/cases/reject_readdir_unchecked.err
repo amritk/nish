@@ -1,0 +1,2 @@
+Cannot read property `length` of `string[] | null`
+check for null first

@@ -101,6 +101,9 @@ export function isBuiltinFunction(name: string): boolean {
     name === "panic" ||
     name === "mkdirSync" ||
     name === "spawnSync" ||
+    name === "spawnSyncTo" ||
+    name === "readdirSync" ||
+    name === "monotonicNanos" ||
     name === "isDirectorySync" ||
     name === "getenv"
   );
@@ -484,6 +487,42 @@ export function checkBuiltinFunction(ctx: CheckContext, call: Node, scope: Scope
       checkArgumentType(ctx, args.children[0], scope, name, ctx.table.arrayOf(T_STRING));
     }
     return ctx.numberType();
+  }
+  // `spawnSyncTo` is that same run with a stream sent to a file, and it is a
+  // second builtin rather than two more parameters on the first because the
+  // language has no optional parameters. The vector is checked down to its
+  // element type exactly as above; the two paths are plain strings, and that an
+  // empty one leaves the stream inherited is a fact about the value rather than
+  // about the type, so it is stated in `docs/LANGUAGE.md` and not here.
+  if (name === "spawnSyncTo") {
+    if (checkBuiltinArity(ctx, call, name, args, 3)) {
+      checkArgumentType(ctx, args.children[0], scope, name, ctx.table.arrayOf(T_STRING));
+      checkArgumentType(ctx, args.children[1], scope, name, T_STRING);
+      checkArgumentType(ctx, args.children[2], scope, name, T_STRING);
+    }
+    return ctx.numberType();
+  }
+  // A directory's entries, or null when it cannot be read. Nullable for the
+  // reason `readFileSyncOrNull` is nullable — there are no exceptions, so the
+  // caller has to be able to phrase its own diagnostic — and an empty directory
+  // is an empty array, which is a different answer from that null. The runtime
+  // sorts the listing and drops `.` and `..`, neither of which this phase can
+  // say anything about.
+  if (name === "readdirSync") {
+    if (checkBuiltinArity(ctx, call, name, args, 1)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING);
+    }
+    return ctx.table.nullableOf(ctx.table.arrayOf(T_STRING));
+  }
+  // The monotonic clock, an `i64` in either number mode rather than
+  // `ctx.numberType()`: the default `number` is an `i32` and would overflow
+  // inside a tenth of a second, and an f64 stops counting whole nanoseconds
+  // after about 104 days of uptime. The name carries what the type cannot, that
+  // only the difference between two reads means anything. Zero arguments, which
+  // `checkBuiltinArity` words the way `Math.random` already does.
+  if (name === "monotonicNanos") {
+    checkBuiltinArity(ctx, call, name, args, 0);
+    return T_I64;
   }
   // WP14 §7a. One `stat`, answering the one question a driver asks of a path
   // it was handed: is `-o out` a directory that is already there? A value like

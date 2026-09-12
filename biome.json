@@ -9,6 +9,7 @@
     "includes": [
       "src/**",
       "self/**/*.ts",
+      "std/**/*.ts",
       "tests/self/**/*.ts",
       "tests/**/*.js",
       "examples/**",
@@ -106,6 +107,7 @@
         "docs/cookbook/**",
         "bench/**/*.ts",
         "self/**/*.ts",
+        "std/**/*.ts",
         "tests/self/**/*.ts"
       ],
       "linter": {

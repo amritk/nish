@@ -82,6 +82,29 @@ function worse(a: i32, b: i32): i32 {
   return a >= b ? a : b;
 }
 
+/**
+ * Whether an identifier builtin answers fresh arena memory, which is what makes
+ * a call of one an allocation site of the function around it.
+ *
+ * A builtin belongs here when it answers a `string`, an array or a struct that
+ * the runtime allocated during the call — every one of these does. One that
+ * answers a number does not, and neither does one that answers memory it did not
+ * just allocate: `process.platform` hands back the same static string on every
+ * call, and `process.argv` is `malloc`ed once by the entry wrapper rather than
+ * bumped, which is why neither is here.
+ *
+ * Adding an allocating builtin to `builtins.ts` and forgetting this predicate is
+ * a use-after-free rather than a missed optimisation, so the three `mem_*_scope`
+ * cases pin one each. `src/codegen/escape.ts` holds the same four names in a
+ * `Set`; a module constant in this language is a scalar or a string, so the set
+ * is a function here and the two are read side by side.
+ */
+function isAllocatingBuiltin(name: string): boolean {
+  return (
+    name === "readFileSync" || name === "readFileSyncOrNull" || name === "getenv" || name === "readdirSync"
+  );
+}
+
 export class EscapeResult {
   /** Node id -> the allocation there is lowered to an entry-block alloca. */
   stackSites: boolean[];
@@ -371,7 +394,16 @@ class EscapeAnalysis {
         this.sites.push(new Site(call, true));
         return;
       }
-      if (target.text === "readFileSync" || target.text === "readFileSyncOrNull") {
+      // An identifier builtin that bumps its result out of the arena is an
+      // allocation site of its caller, and missing one is not a lost
+      // optimisation: the function gets an automatic arena scope whose
+      // `nish_arena_release` rewinds past the bytes the caller is about to read.
+      // Missing the `OrNull` half did exactly that
+      // (`tests/cases/mem_read_or_null_scope`), and `getenv` and `readdirSync`
+      // were missing for the same reason (`mem_getenv_scope`,
+      // `mem_readdir_scope`), which is why the list is named above with the rule
+      // for extending it written beside it.
+      if (isAllocatingBuiltin(target.text)) {
         this.sites.push(new Site(call, false));
       }
       return;

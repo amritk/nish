@@ -322,6 +322,39 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     );
+    // `nish_spawn` with one or both of the child's streams pointed at a file,
+    // and therefore the same conservative answers: the child still runs
+    // arbitrary code, the vector is still captured, and `waitpid` still waits.
+    // The two paths are read and never retained (`STR_NOCAP`); an empty one
+    // means "inherit that stream", which is a value and not a null, so both
+    // stay `nonnull`.
+    this.add(
+      new RuntimeFunction(
+        "nish_spawn_to",
+        `declare noundef i32 @nish_spawn_to(%struct.nish_array* noundef nonnull align 8, ${STR_NOCAP}, ${STR_NOCAP})`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    );
+    // A fresh `string[]` per call, so `noalias`, and null when the directory
+    // cannot be read, so no `nonnull`. `EFFECT_WRITE` because it allocates (the
+    // arena moves) and because the directory is not memory LLVM tracks: two
+    // listings either side of a `mkdirSync` must not fold into one.
+    // `willreturn` is a fact rather than a hope: the loop runs once per entry
+    // and a directory has finitely many. The path is read and never retained.
+    this.add(
+      plain(
+        "nish_readdir",
+        `declare noalias align 8 %struct.nish_array* @nish_readdir(${STR_NOCAP})`,
+        EFFECT_WRITE
+      )
+    );
+    // The clock is not memory either, and that is the whole reason this is not
+    // `readnone`: two reads with work between them are two different answers,
+    // and a `readnone` pair would fold into one and measure zero. `willreturn`
+    // holds — one `clock_gettime` and some arithmetic — and there is nothing to
+    // capture, so the only argument-free entry here needs no parameter facts.
+    this.add(plain("nish_monotonic_nanos", "declare i64 @nish_monotonic_nanos()", EFFECT_WRITE));
     // WP19 R1: the environment, so a self-hosted driver can honour `CC` before
     // it spawns `scripts/build.sh` the way stage0's preflight does.
     // `EFFECT_WRITE` and no `readnone`, for two reasons that each suffice: the

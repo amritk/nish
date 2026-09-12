@@ -158,9 +158,10 @@ extern nish_array *nish_argv;
 void nish_argv_init(int32_t argc, char **argv);
 
 /* ---- Directories and subprocesses (WP14 D4) -----------------------------
- * The two calls a self-hosted driver needs to link its own output. Both
- * answer a value instead of exiting, exactly as `nish_read_file_or_null`
- * does: Nish has no exceptions, so the caller owns the diagnostic. */
+ * The calls a self-hosted driver needs to find its inputs and link its own
+ * output. Every one of them answers a value instead of exiting, exactly as
+ * `nish_read_file_or_null` does: Nish has no exceptions, so the caller
+ * owns the diagnostic. */
 /* `mkdirSync(path)`: create one directory, NOT recursive (mode 0777 & ~umask,
  * like Node's `fs.mkdirSync(p)` with no options). True when a directory
  * exists at `path` afterwards, whether this call created it or it was already
@@ -171,6 +172,18 @@ bool nish_mkdir(const nish_str *path);
    a parent that cannot be searched. One `stat`, no allocation, no exit; it is
    the `stat` half of `nish_mkdir`, which calls it. */
 bool nish_is_dir(const nish_str *path);
+/* `readdirSync(path)`: the entries of directory `path` as a `string[]` (the
+ * elements are `nish_str *`), **sorted ascending by bytes** (`strcmp`), with
+ * `.` and `..` dropped and every other dotfile kept. The runtime sorts because
+ * the language has no `sort` for the caller to reach for, and because a listing
+ * in the file system's own order differs between two machines running the same
+ * program. NULL when the directory cannot be read at all — the language's
+ * `string[] | null` — where a directory that exists and is empty answers an
+ * empty array, which is a different answer. The array and its strings live in
+ * the arena, so copy what you keep before the next reset or release. NULL
+ * under WASI: `fd_readdir` lists a preopened directory rather than a path, so
+ * porting this there is a different contract and not a translation. */
+nish_array *nish_readdir(const nish_str *path);
 /* `spawnSync(argv)`: run element 0 of `argv` (searched on `PATH`) with `argv`
  * as its argument vector, wait for it, and answer its exit status, or
  * `128 + n` when signal `n` killed it. -1 when `argv` is empty, when the
@@ -178,6 +191,19 @@ bool nish_is_dir(const nish_str *path);
  * processes. The elements are `nish_str *`; the child receives their bytes,
  * so an argument containing a NUL is truncated at it. */
 int32_t nish_spawn(const nish_array *argv);
+/* `spawnSyncTo(argv, stdoutPath, stderrPath)`: exactly `nish_spawn` — the same
+ * `PATH` search, the same wait, the same status, `128 + n` and -1 — except that
+ * each non-empty path receives that stream, created or truncated at 0644 as
+ * `nish_write_file` would leave it. An **empty** string leaves that stream
+ * inherited, so one call can capture stdout and let stderr through to the
+ * terminal. The child opens the files, so a failed open is a child that could
+ * not start and answers -1 rather than leaving this process redirected. The two
+ * paths must differ: each is opened separately with its own offset, so naming
+ * one file twice makes the streams overwrite each other instead of
+ * interleaving; capture them apart and concatenate to merge them. One `static`
+ * implementation in runtime.c backs both spawn builtins, which is what keeps
+ * the argument vector, the wait and the signal convention written once. */
+int32_t nish_spawn_to(const nish_array *argv, const nish_str *out, const nish_str *err);
 
 /* ---- The environment (WP19 R1) ------------------------------------------
  * `getenv(name)`: the value of environment variable `name`, copied into the
@@ -197,6 +223,17 @@ nish_str *nish_getenv(const nish_str *name);
  * arena reset, never change, and must not be freed. */
 const nish_str *nish_platform(void);
 const nish_str *nish_arch(void);
+
+/* ---- The clock ----------------------------------------------------------
+ * `monotonicNanos()`: `CLOCK_MONOTONIC` in nanoseconds, which is what timing a
+ * run needs. Deliberately not the wall clock: a wall clock corrected mid-run
+ * can go backwards and make an elapsed time negative. The origin is arbitrary
+ * — only the difference between two reads means anything, and no reading is
+ * comparable across processes or machines — and an i64 of nanoseconds holds 292
+ * years of difference. Compiled code calls this as a *writing* function on
+ * purpose: `readnone` would let LLVM fold the two reads around a measured
+ * region into one and measure zero. */
+int64_t nish_monotonic_nanos(void);
 
 /* String to number (WP7), ASCII whitespace only. mode 0 is `parseFloat`
  * (longest JS decimal literal or `Infinity`, else NaN), mode 1 is `Number`
