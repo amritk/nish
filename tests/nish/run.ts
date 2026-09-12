@@ -63,6 +63,8 @@ import { firstDifference, replaceAll, splitLines, splitWhitespace, trim } from "
 const CASES: string = "tests/cases";
 const LINKS: string = "tests/link";
 const WORK: string = "build/nish-cases";
+/** `tests/run.js`'s own build directory, which some cases write into by that literal path. */
+const CASE_WORK: string = "build/test";
 const LINK_WORK: string = "build/nish-link";
 const CLI: string = "dist/index.js";
 /** How many of the slowest cases the closing report names. */
@@ -622,6 +624,15 @@ export const main = (): number => {
   mkdirSync("build");
   if (!mkdirSync(WORK)) {
     panic(`cannot create ${WORK}`);
+  }
+  // `build/test` is not this runner's directory — it is `tests/run.js`'s, which
+  // creates it before running anything. Several cases write into it by that
+  // literal path (`io_files`, `io_mkdir`, `io_streams`), so a harness that runs
+  // them has to provide it or they fail at their first `writeFileSync`. This
+  // runner passed for days on a tree where an earlier `npm test` had left the
+  // directory behind, and failed the moment CI ran it on a clean checkout.
+  if (!mkdirSync(CASE_WORK)) {
+    panic(`cannot create ${CASE_WORK}`);
   }
   // The link work directory starts empty, because a stale module left by an
   // earlier run would be listed, assembled, verified and — if a `<module>.ll`
