@@ -161,7 +161,23 @@ Following the nine-step checklist in `docs/ARCHITECTURE.md`:
   the note that a program using FFI is no longer one the compiler can reason
   about end to end.
 
-## 5. The thing a reviewer should push back on
+## 5. What FFI costs the test strategy
+
+The differential oracle (`docs/wp13-differential.md`) rewrites a Nish program to
+JavaScript and runs it against `runtime/shim.mjs`, and its premise is that the
+same source means the same thing in both worlds. That premise does not hold for a
+source whose meaning is "whatever this C function does": `tests/cases/ffi_scalar`
+calls `abs`, the shim has no `abs`, and no amount of shimming fixes the class —
+the next program declares a different symbol.
+
+So **every FFI program is outside the differential oracle by construction**, and
+that is a cost rather than an oversight. It is why S1's evidence is arranged the
+other way round: a golden `.ll`, an `llvm-as` pass, a native round trip against
+real libc, and the attribute assertions — a caller of C keeps only `nounwind`,
+one that calls no C keeps `willreturn readnone` — which the differential oracle
+could never have made anyway.
+
+## 6. The thing a reviewer should push back on
 
 The runtime budget exists because C in this project is meant to be a closed,
 shrinking set (`docs/wp7-runtime.md`). FFI makes that set *open* — not in

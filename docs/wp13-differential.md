@@ -328,6 +328,23 @@ when reading a `COMPILE-ERROR` row:
 - `n *= i` with an `i64` `n` and an i32 loop variable needs `toI64(i)`;
   there is no implicit widening (documented).
 
+### A program that calls C is outside this oracle, permanently
+
+WP27 S1 added `declare function`, and `tests/cases/ffi_scalar` calls libc's `abs`
+and `labs`. The rewriter produces JavaScript that references `abs`, the shim has
+no such export, and Node exits 1 where the native binary exits 0.
+
+It is listed in `known-failures.txt` and it is not a discrepancy to be closed.
+Shimming `abs` would work and would teach the wrong lesson: the next program
+declares a different symbol, and the oracle's premise — that the same source has
+one meaning in both worlds — does not hold for a source whose meaning is "whatever
+this C function does". Every FFI program is outside this oracle by construction.
+
+That is a real coverage cost, and it is why the feature's evidence is arranged
+differently: `ffi_scalar` carries a golden `.ll`, an `llvm-as` pass, a native
+round trip with expected stdout, and the attribute assertions the differential
+oracle could never have made anyway.
+
 ## The fuzzer
 
 `tests/differential/fuzz.js` generates programs over `number` (i32) and
