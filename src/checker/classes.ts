@@ -220,7 +220,9 @@ export function declareStruct(ctx: CheckContext, decl: ts.ClassDeclaration | ts.
   const name = decl.name.text;
   if (name.startsWith("nish_")) throw ctx.error("Names starting with `nish_` are reserved for the runtime", decl.name);
   if (ctx.program.structs.has(name)) throw ctx.error(`Duplicate declaration of \`${name}\``, decl.name);
-  if (ctx.program.aliases.has(name)) throw ctx.error(`\`${name}\` is already declared in this module`, decl.name);
+  if (ctx.program.aliases.has(name) || ctx.program.enums.has(name)) {
+    throw ctx.error(`\`${name}\` is already declared in this module`, decl.name);
+  }
   if (ctx.sigs.has(name)) throw ctx.error(`\`${name}\` is already declared as a function`, decl.name);
   for (const m of modifierKinds(decl)) {
     if (m === ts.SyntaxKind.AbstractKeyword) throw ctx.error("Abstract classes are not supported", decl);

@@ -56,7 +56,7 @@ import { internalError } from "./ice";
 import { IRFunction, IRModule } from "./ir";
 import { StringMap } from "./map";
 import { Node } from "./nodes";
-import { CheckedProgram, FunctionSig, StructInfo } from "./program";
+import { CheckedProgram, EnumInfo, FunctionSig, StructInfo } from "./program";
 import { ResultLayout, resultLayout } from "./result";
 import { StringBuilder } from "./strings";
 import { Local } from "./symbols";
@@ -126,6 +126,14 @@ function bitsOf(type: i32): i32 {
     return 0;
   }
   return 64;
+}
+
+/**
+ * `bitsOf` for a type id that may be an enum (WP23): an enum is an `i32`, and
+ * `intBits` is deliberately 0 for it so that arithmetic stays refused.
+ */
+function bitsOfIn(table: TypeTable, type: i32): i32 {
+  return table.isEnum(type) ? 32 : bitsOf(type);
 }
 
 /**
@@ -256,6 +264,17 @@ export class DebugInfo {
       } else {
         ref = this.pointerTo(this.composite(info));
       }
+    } else if (this.table.isEnum(type)) {
+      // WP23: an enum is an `i32` with names attached, which is exactly what
+      // DWARF's enumeration type is for — so a debugger prints `While` rather
+      // than `2`, and the distinctness the checker enforces survives into the
+      // debugger.
+      const declared = this.program.enumNamed(this.table.nameOf(type));
+      if (declared === null) {
+        process.exit(internalError(`debug: no enum recorded for \`${this.table.nameOf(type)}\``));
+      } else {
+        ref = this.enumeration(declared);
+      }
     } else if (this.table.isResult(type)) {
       // A `Result` has no `StructInfo` — its layout is derived from the type —
       // but `resultLayout` knows everything a `DW_TAG_structure_type` needs, so
@@ -310,7 +329,7 @@ export class DebugInfo {
     for (const f of info.fields) {
       const base = this.typeRef(f.type);
       const line = this.lineOf(info.origin, f.decl);
-      members.push(this.member(f.name, ref, base, bitsOf(f.type), f.offset * 8, file, line));
+      members.push(this.member(f.name, ref, base, bitsOfIn(this.table, f.type), f.offset * 8, file, line));
     }
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`);
     this.module.setMetadata(
@@ -318,6 +337,25 @@ export class DebugInfo {
       `distinct !DICompositeType(tag: DW_TAG_structure_type, name: ${quote(info.name)}, file: ${file}, line: ${this.lineOf(info.origin, info.decl)}, size: ${info.size * 8}, align: ${info.align * 8}, elements: ${elements})`
     );
     return ref;
+  }
+
+  /** `enum Kind { ... }` as DWARF sees it: a 32-bit signed enumeration with one enumerator per member (WP23). */
+  enumeration(info: EnumInfo): string {
+    const file = this.fileOf(info.origin);
+    const enumerators: string[] = [];
+    let i = 0;
+    while (i < info.memberNames.length) {
+      enumerators.push(
+        this.module.addMetadata(
+          `!DIEnumerator(name: ${quote(info.memberNames[i])}, value: ${info.memberValues[i]})`
+        )
+      );
+      i = i + 1;
+    }
+    const elements = this.module.addMetadata(`!{${enumerators.join(", ")}}`);
+    return this.module.addMetadata(
+      `!DICompositeType(tag: DW_TAG_enumeration_type, name: ${quote(info.name)}, file: ${file}, line: ${this.lineOf(info.origin, info.decl)}, size: 32, align: 32, elements: ${elements}, baseType: ${this.typeRef(T_I32)})`
+    );
   }
 
   /** The `%struct.nish_array` header `{ i64 len, i64 cap, T* data }`, specialised per element type for the debugger's sake. */
@@ -362,7 +400,7 @@ export class DebugInfo {
     let i = 0;
     while (i < names.length) {
       const base = this.typeRef(types[i]);
-      members.push(this.member(names[i], ref, base, bitsOf(types[i]), offsets[i] * 8, "", 0));
+      members.push(this.member(names[i], ref, base, bitsOfIn(this.table, types[i]), offsets[i] * 8, "", 0));
       i = i + 1;
     }
     const elements = this.module.addMetadata(`!{${members.join(", ")}}`);
@@ -402,7 +440,7 @@ export class DebugInfo {
     }
     let armBits = 8;
     for (const arm of armTypes) {
-      const bits = bitsOf(arm);
+      const bits = bitsOfIn(this.table, arm);
       if (bits > armBits) {
         armBits = bits;
       }
@@ -411,7 +449,7 @@ export class DebugInfo {
     let i = 0;
     while (i < armNames.length) {
       const base = this.typeRef(armTypes[i]);
-      arms.push(this.member(armNames[i], union, base, bitsOf(armTypes[i]), 0, "", 0));
+      arms.push(this.member(armNames[i], union, base, bitsOfIn(this.table, armTypes[i]), 0, "", 0));
       i = i + 1;
     }
     const armElements = this.module.addMetadata(`!{${arms.join(", ")}}`);

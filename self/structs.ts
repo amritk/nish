@@ -107,7 +107,7 @@ export function declareStruct(ctx: CheckContext, decl: Node, kind: i32): StructI
     ctx.error(decl.children[0], `\`${name}\` is already declared as a function`);
     return null;
   }
-  if (ctx.program.aliases.has(name)) {
+  if (ctx.program.aliases.has(name) || ctx.program.enums.has(name)) {
     ctx.error(decl.children[0], `\`${name}\` is already declared in this module`);
     return null;
   }

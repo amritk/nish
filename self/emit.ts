@@ -798,6 +798,11 @@ export class Emitter {
 
   emitMember(expr: Node): string {
     if (!receiverIsValue(this.program, expr.children[0])) {
+      // WP23: `Kind.If` was folded by the checker, so it lowers to its integer
+      // with no global and no load — the arrangement a module constant has.
+      if (this.program.isEnumMember(this.table, expr)) {
+        return `${this.program.nodeEnumValues[expr.id]}`;
+      }
       return emitNamespaceProperty(this, expr, dottedName(expr));
     }
     if (this.table.isResult(this.typeOf(expr.children[0]))) {

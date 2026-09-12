@@ -1,6 +1,7 @@
 /** Data model produced by the checker and consumed by the emitter. */
 import ts from "typescript";
 import { AliasInfo } from "./aliases.js";
+import { EnumInfo } from "./enums.js";
 import { ConstInfo } from "./constants.js";
 import { StaticType } from "../types.js";
 
@@ -145,6 +146,19 @@ export interface CheckedProgram {
    * catch a name that is declared twice.
    */
   aliases: Map<string, AliasInfo>;
+  /**
+   * Numeric `enum` declarations, by the name they were declared under (WP23).
+   * An enum is a distinct type with `i32` representation, and its members are
+   * folded here, so this table answers an annotation (`Kind`) and a member
+   * reference (`Kind.If`) and the emitter never reads it.
+   */
+  enums: Map<string, EnumInfo>;
+  /**
+   * `Kind.If` -> the integer it stands for (WP23). The checker folds it, the
+   * emitter writes the literal, exactly as `constRefs` works for a module
+   * constant — which is why an enum emits no symbol and no table.
+   */
+  enumRefs: WeakMap<ts.PropertyAccessExpression, bigint>;
   /**
    * Set on the entry module when it declares `export function main`. The
    * emitter then adds the `define i32 @main(i32, i8**)` wrapper around it.

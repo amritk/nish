@@ -369,7 +369,11 @@ function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
  */
 function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
   const discriminant = checkExpression(ctx, stmt.children[0], scope, -1);
-  if (discriminant !== T_ERROR && !isInteger(discriminant)) {
+  // WP23: an enum is an `i32` in the jump table and a type of its own to the
+  // checker, so it switches exactly as an integer does — and a `case` label of
+  // any other type is caught below, which is what stops `case 1:` standing in
+  // for `case Kind.If:`.
+  if (discriminant !== T_ERROR && !isInteger(discriminant) && !ctx.table.isEnum(discriminant)) {
     ctx.error(
       stmt.children[0],
       `\`switch\` requires an integer discriminant, got ${ctx.table.typeName(discriminant)} (use \`if\` / \`else\`; only an integer switch lowers to a jump table)`
@@ -419,8 +423,9 @@ function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
 
 /**
  * A `case` label: the same type as the discriminant, and a value LLVM's
- * `switch` table can hold — an integer literal, its negation, or a module
- * constant, which is where a program's token and node kinds live.
+ * `switch` table can hold — an integer literal, its negation, a module
+ * constant, or an enum member (WP23), which are the three places a program's
+ * token and node kinds live.
  */
 function checkCaseLabel(ctx: CheckContext, clause: Node, scope: Scope, discriminant: i32, seen: i64[]): void {
   const label = clause.children[0];
@@ -436,7 +441,7 @@ function checkCaseLabel(ctx: CheckContext, clause: Node, scope: Scope, discrimin
   if (!value.known) {
     ctx.error(
       label,
-      "`case` label must be an integer literal or a module constant (LLVM's `switch` table holds constants)"
+      "`case` label must be an integer literal, a module constant, or an enum member (LLVM's `switch` table holds constants)"
     );
     return;
   }

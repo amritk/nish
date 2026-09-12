@@ -1,0 +1,1 @@
+`case` label is i32 but the discriminant is Kind

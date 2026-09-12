@@ -59,12 +59,18 @@ const RULES: string[] = [
     "NL2035",
     " | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)",
     "NL2010",
+    "`case` label must be an integer literal, a module constant, or an enum member (LLVM's `switch` table holds constants)",
+    "NL2284",
     "Type aliases cannot be exported: an alias names a type inside one module (declare it in every module that needs it)",
     "NL2276",
+    "`const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing",
+    "NL2285",
     "`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class",
     "NL2155",
     "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead",
     "NL2055",
+    "Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it)",
+    "NL2288",
     "Object literal needs a contextual class or interface type (annotate the variable: `const p: P = { ... }`)",
     "NL2224",
     "Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it",
@@ -205,6 +211,8 @@ const RULES: string[] = [
     "NL3007",
     ": definite-assignment assertions (`!`) are not supported",
     "NL2029",
+    "` is a built-in type name and cannot be used for an enum",
+    "NL2281",
     "`this` cannot be used as a value in the constructor of `",
     "NL2161",
     "Array literal elements must all have the same type, got ",
@@ -331,6 +339,8 @@ const RULES: string[] = [
     "NL1007",
     "` in a constant requires boolean operands",
     "NL2069",
+    "An enum member name must be an identifier",
+    "NL2287",
     "Computed property names are forbidden in ",
     "NL1041",
     "Constructors cannot declare a return type",
@@ -443,6 +453,8 @@ const RULES: string[] = [
     "NL2258",
     "` expects exactly 1 argument, got ",
     "NL2061",
+    "` must declare at least one member",
+    "NL2283",
     "` must have plain identifier names",
     "NL2092",
     "`expect(...)` expects string, got ",
@@ -505,6 +517,8 @@ const RULES: string[] = [
     "NL2077",
     "` when checking a single module",
     "NL2109",
+    "`declare enum` is not supported",
+    "NL2286",
     "`new Function` is forbidden in ",
     "NL1028",
     "async methods are not supported",
@@ -551,6 +565,8 @@ const RULES: string[] = [
     "NL1004",
     " (no interpreter at runtime)",
     "NL1005",
+    "` must be an integer literal",
+    "NL2282",
     "`__proto__` is forbidden in ",
     "NL1011",
     "`arguments` is forbidden in ",
@@ -709,6 +725,8 @@ const RULES: string[] = [
     "NL2247",
     "Unknown property `",
     "NL2250",
+    "` has no member `",
+    "NL2280",
     "Empty import list",
     "NL2200",
     "Module constant `",
@@ -760,7 +778,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 351;
+export const RULE_COUNT = 360;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

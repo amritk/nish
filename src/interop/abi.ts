@@ -272,6 +272,11 @@ export function tsKeyword(t: StaticType): string {
       return "boolean";
     case "struct":
       return (t as { name: string }).name;
+    // WP23: an enum does not cross to C or JS — `cType` and `wasmType` have no
+    // entry for it — but it can still appear in the comment above a
+    // declaration that was skipped, and there it reads as its own name.
+    case "enum":
+      return (t as { name: string }).name;
     case "array":
       // The comment above the prototype is the signature as it was written, so
       // a `readonly T[]` says so: it is what makes the `const` on the C

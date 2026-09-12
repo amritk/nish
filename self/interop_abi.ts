@@ -35,6 +35,7 @@ import {
   K_ARRAY,
   K_NULLABLE,
   K_RESULT,
+  K_ENUM,
   K_STRUCT,
   T_BOOL,
   T_F32,
@@ -405,6 +406,11 @@ export function tsKeyword(table: TypeTable, t: i32): string {
     case T_BOOL:
       return "boolean";
     case K_STRUCT:
+      return table.nameOf(t);
+    // WP23: an enum does not cross to C or JS — `cType` and `wasmType` have no
+    // entry for it — but it can still appear in the comment above a
+    // declaration that was skipped, and there it reads as its own name.
+    case K_ENUM:
       return table.nameOf(t);
     case K_ARRAY:
       // The comment above the prototype is the signature as it was written, so
