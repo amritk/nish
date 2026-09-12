@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 58 programs, 303920 dump lines live, 58 distinct modules.
+# 58 programs, 304060 dump lines live, 58 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/symbols.ts self/types.ts self/ice.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/symbols.ts self/types.ts self/ice.ts self/builtins.ts self/expressions.ts self/result.ts self/structs.ts self/declarations.ts self/members.ts self/emit_util.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/symbols.ts self/types.ts self/ice.ts self/branding.ts
@@ -9126,6 +9126,7 @@ import Node from "./nodes" -> struct Node
 import FieldInfo from "./program" -> struct FieldInfo
 import FunctionSig from "./program" -> struct FunctionSig
 import StructInfo from "./program" -> struct StructInfo
+import ARRAY_TYPE from "./runtime" -> const ARRAY_TYPE
 import isFloat from "./types" -> function @isFloat
 import T_I32 from "./types" -> const T_I32
 import T_STRING from "./types" -> const T_STRING
@@ -9136,11 +9137,11 @@ function structInfoOf(emitter: Emitter, type: i32): StructInfo -> @structInfoOf 
   calls: CheckedProgram.struct TypeTable.nameOf internalError nish_arena_mark nish_arena_release nish_exit nish_str_concat
   pointer emitter: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 59:9 info: StructInfo | null (const)
-  callee 59:16 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 59:39 TypeTable.nameOf -> @TypeTable.nameOf
-  callee 63:16 internalError -> @internalError
-  callee 63:59 TypeTable.nameOf -> @TypeTable.nameOf
+  local 60:9 info: StructInfo | null (const)
+  callee 60:16 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 60:39 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 64:16 internalError -> @internalError
+  callee 64:59 TypeTable.nameOf -> @TypeTable.nameOf
 function structTypeName(info: StructInfo): string -> @structTypeName
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_str_concat
@@ -9153,9 +9154,9 @@ function structFieldPointer(emitter: Emitter, info: StructInfo, receiver: string
   pointer info: size=96 writesThrough=false captured=false passedTo=structTypeName#0
   pointer field: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 73:9 ty: string (const)
-  callee 73:14 structTypeName -> @structTypeName
-  callee 74:10 IRFunction.emitValue -> @IRFunction.emitValue
+  local 74:9 ty: string (const)
+  callee 74:14 structTypeName -> @structTypeName
+  callee 75:10 IRFunction.emitValue -> @IRFunction.emitValue
 function loadField(emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string -> @loadField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
@@ -9164,14 +9165,14 @@ function loadField(emitter: Emitter, info: StructInfo, receiver: string, field: 
   pointer info: size=96 writesThrough=false captured=false passedTo=structFieldPointer#1 fieldTbaa#1
   pointer field: size=40 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
   stackSites=0 stackLocals=0
-  local 80:9 ty: string (const)
-  callee 80:14 Emitter.llvm -> @Emitter.llvm
-  local 81:9 ptr: string (const)
-  callee 81:15 structFieldPointer -> @structFieldPointer
-  local 82:9 tbaa: string (const)
-  callee 82:16 fieldTbaa -> @fieldTbaa
-  callee 83:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 83:59 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local 81:9 ty: string (const)
+  callee 81:14 Emitter.llvm -> @Emitter.llvm
+  local 82:9 ptr: string (const)
+  callee 82:15 structFieldPointer -> @structFieldPointer
+  local 83:9 tbaa: string (const)
+  callee 83:16 fieldTbaa -> @fieldTbaa
+  callee 84:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 84:59 Emitter.alignSuffix -> @Emitter.alignSuffix
 function storeField(emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo, value: string): void -> @storeField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
@@ -9180,14 +9181,14 @@ function storeField(emitter: Emitter, info: StructInfo, receiver: string, field:
   pointer info: size=96 writesThrough=false captured=false passedTo=structFieldPointer#1 fieldTbaa#1
   pointer field: size=40 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
   stackSites=0 stackLocals=0
-  local 93:9 ty: string (const)
-  callee 93:14 Emitter.llvm -> @Emitter.llvm
-  local 94:9 ptr: string (const)
-  callee 94:15 structFieldPointer -> @structFieldPointer
-  local 95:9 tbaa: string (const)
-  callee 95:16 fieldTbaa -> @fieldTbaa
-  callee 96:3 IRFunction.emit -> @IRFunction.emit
-  callee 96:57 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local 94:9 ty: string (const)
+  callee 94:14 Emitter.llvm -> @Emitter.llvm
+  local 95:9 ptr: string (const)
+  callee 95:15 structFieldPointer -> @structFieldPointer
+  local 96:9 tbaa: string (const)
+  callee 96:16 fieldTbaa -> @fieldTbaa
+  callee 97:3 IRFunction.emit -> @IRFunction.emit
+  callee 97:57 Emitter.alignSuffix -> @Emitter.alignSuffix
 function allocate(emitter: Emitter, info: StructInfo, site: Node): string -> @allocate
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.isStackSite Emitter.useRuntime IRFunction.emitAlloca IRFunction.emitValue nish_str_concat nish_str_from_i32 structTypeName
@@ -9195,31 +9196,31 @@ function allocate(emitter: Emitter, info: StructInfo, site: Node): string -> @al
   pointer info: size=96 writesThrough=false captured=false passedTo=structTypeName#0 structTypeName#0
   pointer site: size=40 writesThrough=false captured=false passedTo=Emitter.isStackSite#1
   stackSites=0 stackLocals=0
-  callee 105:7 Emitter.isStackSite -> @Emitter.isStackSite
-  callee 106:12 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  callee 106:54 structTypeName -> @structTypeName
-  local 108:9 raw: string (const)
-  callee 108:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 109:17 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 111:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 111:56 structTypeName -> @structTypeName
+  callee 106:7 Emitter.isStackSite -> @Emitter.isStackSite
+  callee 107:12 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  callee 107:54 structTypeName -> @structTypeName
+  local 109:9 raw: string (const)
+  callee 109:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 110:17 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 112:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 112:56 structTypeName -> @structTypeName
 function initializerConstant(emitter: Emitter, field: FieldInfo): string -> @initializerConstant
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.stringConstant floatText internalError isFloat nish_exit nish_panic_index nish_parse_number nish_str_from_i32 nish_str_from_i64 parseIntegerLiteral
   pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.stringConstant#0 Emitter.stringConstant#0
   pointer field: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 121:9 init: Node | null (const)
-  callee 123:18 internalError -> @internalError
-  local 125:9 negated: boolean (const)
-  local 126:9 literal: Node (const)
-  callee 137:12 Emitter.stringConstant -> @Emitter.stringConstant
-  callee 141:12 Emitter.stringConstant -> @Emitter.stringConstant
-  callee 143:7 isFloat -> @isFloat
-  local 144:11 value: f64 (const)
-  callee 145:12 floatText -> @floatText
-  local 147:7 value: i64 (let)
-  callee 147:15 parseIntegerLiteral -> @parseIntegerLiteral
+  local 122:9 init: Node | null (const)
+  callee 124:18 internalError -> @internalError
+  local 126:9 negated: boolean (const)
+  local 127:9 literal: Node (const)
+  callee 138:12 Emitter.stringConstant -> @Emitter.stringConstant
+  callee 142:12 Emitter.stringConstant -> @Emitter.stringConstant
+  callee 144:7 isFloat -> @isFloat
+  local 145:11 value: f64 (const)
+  callee 146:12 floatText -> @floatText
+  local 148:7 value: i64 (let)
+  callee 148:15 parseIntegerLiteral -> @parseIntegerLiteral
 function emitFieldInitializers(emitter: Emitter, info: StructInfo, receiver: string): void -> @emitFieldInitializers [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
@@ -9227,9 +9228,9 @@ function emitFieldInitializers(emitter: Emitter, info: StructInfo, receiver: str
   pointer emitter: size=144 writesThrough=false captured=false passedTo=storeField#0 initializerConstant#0
   pointer info: size=96 writesThrough=false captured=false passedTo=storeField#1
   stackSites=0 stackLocals=0
-  local 156:14 field: FieldInfo (const)
-  callee 158:7 storeField -> @storeField
-  callee 158:50 initializerConstant -> @initializerConstant
+  local 157:14 field: FieldInfo (const)
+  callee 159:7 storeField -> @storeField
+  callee 159:50 initializerConstant -> @initializerConstant
 function constructObject(emitter: Emitter, info: StructInfo, receiver: string, args: Node[], site: Node): void -> @constructObject
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
@@ -9239,68 +9240,68 @@ function constructObject(emitter: Emitter, info: StructInfo, receiver: string, a
   pointer args: size=0 writesThrough=true captured=false passedTo=emitCall#3
   pointer site: size=40 writesThrough=false captured=false passedTo=emitCall#4
   stackSites=0 stackLocals=0
-  local 174:9 ctor: FunctionSig | null (const)
-  callee 176:5 emitCall -> @emitCall
-  callee 179:3 emitFieldInitializers -> @emitFieldInitializers
+  local 175:9 ctor: FunctionSig | null (const)
+  callee 177:5 emitCall -> @emitCall
+  callee 180:3 emitFieldInitializers -> @emitFieldInitializers
 function emitConstructorPrologue(emitter: Emitter, sig: FunctionSig): void -> @emitConstructorPrologue [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: emitFieldInitializers internalError nish_exit
   pointer emitter: size=144 writesThrough=false captured=false passedTo=emitFieldInitializers#0
   pointer sig: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 184:9 info: StructInfo | null (const)
-  callee 186:18 internalError -> @internalError
-  callee 188:3 emitFieldInitializers -> @emitFieldInitializers
+  local 185:9 info: StructInfo | null (const)
+  callee 187:18 internalError -> @internalError
+  callee 189:3 emitFieldInitializers -> @emitFieldInitializers
 function emitObjectLiteral(emitter: Emitter, expr: Node): string -> @emitObjectLiteral [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitExpression Emitter.typeOf StructInfo.field allocate internalError nish_exit nish_panic_index nish_str_concat storeField structInfoOf
   pointer emitter: size=144 writesThrough=false captured=false passedTo=structInfoOf#0 Emitter.typeOf#0 allocate#0 storeField#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1 allocate#2
   stackSites=0 stackLocals=0
-  local 194:9 info: StructInfo (const)
-  callee 194:16 structInfoOf -> @structInfoOf
-  callee 194:38 Emitter.typeOf -> @Emitter.typeOf
-  local 195:9 obj: string (const)
-  callee 195:15 allocate -> @allocate
-  local 196:14 prop: Node (const)
-  local 197:11 field: FieldInfo | null (const)
-  callee 197:19 StructInfo.field -> @StructInfo.field
-  callee 199:20 internalError -> @internalError
-  callee 201:7 storeField -> @storeField
-  callee 201:45 Emitter.emitExpression -> @Emitter.emitExpression
+  local 195:9 info: StructInfo (const)
+  callee 195:16 structInfoOf -> @structInfoOf
+  callee 195:38 Emitter.typeOf -> @Emitter.typeOf
+  local 196:9 obj: string (const)
+  callee 196:15 allocate -> @allocate
+  local 197:14 prop: Node (const)
+  local 198:11 field: FieldInfo | null (const)
+  callee 198:19 StructInfo.field -> @StructInfo.field
+  callee 200:20 internalError -> @internalError
+  callee 202:7 storeField -> @storeField
+  callee 202:45 Emitter.emitExpression -> @Emitter.emitExpression
 function emitNew(emitter: Emitter, expr: Node): string -> @emitNew [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.typeOf TypeTable.isArray allocate constructObject emitNewArray intrinsicType nish_panic_index structInfoOf
   pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.typeOf#0 emitNewArray#0 structInfoOf#0 allocate#0 constructObject#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1 emitNewArray#1 intrinsicType#1 allocate#2 constructObject#4
   stackSites=0 stackLocals=0
-  callee 209:7 TypeTable.isArray -> @TypeTable.isArray
-  callee 209:29 Emitter.typeOf -> @Emitter.typeOf
-  callee 210:12 emitNewArray -> @emitNewArray
-  local 213:9 info: StructInfo (const)
-  callee 213:16 structInfoOf -> @structInfoOf
-  callee 213:38 intrinsicType -> @intrinsicType
-  local 214:9 obj: string (const)
-  callee 214:15 allocate -> @allocate
-  callee 215:3 constructObject -> @constructObject
+  callee 210:7 TypeTable.isArray -> @TypeTable.isArray
+  callee 210:29 Emitter.typeOf -> @Emitter.typeOf
+  callee 211:12 emitNewArray -> @emitNewArray
+  local 214:9 info: StructInfo (const)
+  callee 214:16 structInfoOf -> @structInfoOf
+  callee 214:38 intrinsicType -> @intrinsicType
+  local 215:9 obj: string (const)
+  callee 215:15 allocate -> @allocate
+  callee 216:3 constructObject -> @constructObject
 function emitPropertyAccess(emitter: Emitter, expr: Node): string -> @emitPropertyAccess [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitExpression Emitter.typeOf StructInfo.field TypeTable.isArray emitArrayLength emitStringLength internalError loadField nish_exit nish_panic_index nish_str_concat structInfoOf
   pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.typeOf#0 emitStringLength#0 emitArrayLength#0 structInfoOf#0 loadField#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitStringLength#1 emitArrayLength#1
   stackSites=0 stackLocals=0
-  local 223:9 receiver: i32 (const)
-  callee 223:20 Emitter.typeOf -> @Emitter.typeOf
-  callee 225:12 emitStringLength -> @emitStringLength
-  callee 227:7 TypeTable.isArray -> @TypeTable.isArray
-  callee 228:12 emitArrayLength -> @emitArrayLength
-  local 230:9 info: StructInfo (const)
-  callee 230:16 structInfoOf -> @structInfoOf
-  local 231:9 field: FieldInfo | null (const)
-  callee 231:17 StructInfo.field -> @StructInfo.field
-  callee 233:12 loadField -> @loadField
-  callee 233:37 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 235:16 internalError -> @internalError
+  local 224:9 receiver: i32 (const)
+  callee 224:20 Emitter.typeOf -> @Emitter.typeOf
+  callee 226:12 emitStringLength -> @emitStringLength
+  callee 228:7 TypeTable.isArray -> @TypeTable.isArray
+  callee 229:12 emitArrayLength -> @emitArrayLength
+  local 231:9 info: StructInfo (const)
+  callee 231:16 structInfoOf -> @structInfoOf
+  local 232:9 field: FieldInfo | null (const)
+  callee 232:17 StructInfo.field -> @StructInfo.field
+  callee 234:12 loadField -> @loadField
+  callee 234:37 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 236:16 internalError -> @internalError
 function emitCall(emitter: Emitter, callee: FunctionSig, receiver: string, args: Node[], site: Node): string -> @emitCall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.beginReclaim Emitter.emitExpression Emitter.endReclaim Emitter.llvm Emitter.llvmAbi IRFunction.emit IRFunction.emitValue TypeTable.resultByValue emitPackedResult emitResultReturningCall nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat privateResultAbi
@@ -9309,150 +9310,156 @@ function emitCall(emitter: Emitter, callee: FunctionSig, receiver: string, args:
   pointer args: size=0 writesThrough=true captured=false
   pointer site: size=40 writesThrough=false captured=false passedTo=emitResultReturningCall#3
   stackSites=1 stackLocals=1
-  local 246:9 calleePrivate: boolean (const)
-  callee 246:25 privateResultAbi -> @privateResultAbi
-  local 247:9 operands: string[] (const)
-  callee 247:34 Emitter.llvm -> @Emitter.llvm
-  local 248:7 i: i32 (let)
-  local 251:11 want: i32 (const)
-  local 252:11 value: string (const)
-  callee 252:19 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 253:9 emitPackedResult -> @emitPackedResult
-  callee 254:9 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 255:22 Emitter.llvmAbi -> @Emitter.llvmAbi
-  local 260:9 mark: string (const)
-  callee 260:16 Emitter.beginReclaim -> @Emitter.beginReclaim
-  local 261:9 call: string (const)
-  callee 261:24 Emitter.llvmAbi -> @Emitter.llvmAbi
-  callee 263:5 IRFunction.emit -> @IRFunction.emit
-  callee 268:7 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 269:12 emitResultReturningCall -> @emitResultReturningCall
-  callee 271:10 Emitter.endReclaim -> @Emitter.endReclaim
-  callee 271:35 IRFunction.emitValue -> @IRFunction.emitValue
+  local 247:9 calleePrivate: boolean (const)
+  callee 247:25 privateResultAbi -> @privateResultAbi
+  local 248:9 operands: string[] (const)
+  callee 248:34 Emitter.llvm -> @Emitter.llvm
+  local 249:7 i: i32 (let)
+  local 252:11 want: i32 (const)
+  local 253:11 value: string (const)
+  callee 253:19 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 254:9 emitPackedResult -> @emitPackedResult
+  callee 255:9 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 256:22 Emitter.llvmAbi -> @Emitter.llvmAbi
+  local 261:9 mark: string (const)
+  callee 261:16 Emitter.beginReclaim -> @Emitter.beginReclaim
+  local 262:9 call: string (const)
+  callee 262:24 Emitter.llvmAbi -> @Emitter.llvmAbi
+  callee 264:5 IRFunction.emit -> @IRFunction.emit
+  callee 269:7 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 270:12 emitResultReturningCall -> @emitResultReturningCall
+  callee 272:10 Emitter.endReclaim -> @Emitter.endReclaim
+  callee 272:35 IRFunction.emitValue -> @IRFunction.emitValue
 function emitMethodCall(emitter: Emitter, expr: Node): string -> @emitMethodCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitExpression Emitter.typeOf TypeTable.isArray emitArrayMethodCall emitCall emitStringMethodCall internalError nish_exit nish_panic_index nish_str_concat
   pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.typeOf#0 emitStringMethodCall#0 emitArrayMethodCall#0 Emitter.emitExpression#0 emitCall#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitStringMethodCall#1 emitArrayMethodCall#1 emitCall#4
   stackSites=0 stackLocals=0
-  local 276:9 access: Node (const)
-  local 277:9 receiverType: i32 (const)
-  callee 277:24 Emitter.typeOf -> @Emitter.typeOf
-  callee 279:12 emitStringMethodCall -> @emitStringMethodCall
-  callee 281:7 TypeTable.isArray -> @TypeTable.isArray
-  callee 282:12 emitArrayMethodCall -> @emitArrayMethodCall
-  local 284:9 callee: FunctionSig | null (const)
-  callee 286:18 internalError -> @internalError
-  local 288:9 receiver: string (const)
-  callee 288:20 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 289:10 emitCall -> @emitCall
+  local 277:9 access: Node (const)
+  local 278:9 receiverType: i32 (const)
+  callee 278:24 Emitter.typeOf -> @Emitter.typeOf
+  callee 280:12 emitStringMethodCall -> @emitStringMethodCall
+  callee 282:7 TypeTable.isArray -> @TypeTable.isArray
+  callee 283:12 emitArrayMethodCall -> @emitArrayMethodCall
+  local 285:9 callee: FunctionSig | null (const)
+  callee 287:18 internalError -> @internalError
+  local 289:9 receiver: string (const)
+  callee 289:20 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 290:10 emitCall -> @emitCall
 function emitFieldAssignment(emitter: Emitter, expr: Node): string -> @emitFieldAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.alignSuffix Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emit IRFunction.emitValue StructInfo.field compoundFloatOpcode compoundIntegerOpcode emitBitwiseCombine emitIntBinary internalError isBitwiseAssignment isFloat nish_exit nish_panic_index nish_str_concat nish_str_eq storeField structFieldPointer structInfoOf
   pointer emitter: size=144 writesThrough=false captured=false passedTo=structInfoOf#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 storeField#0 structFieldPointer#0 Emitter.llvm#0 Emitter.alignSuffix#0 emitBitwiseCombine#0 Emitter.emitExpression#0 emitIntBinary#0 Emitter.alignSuffix#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 294:9 target: Node (const)
-  local 295:9 info: StructInfo (const)
-  callee 295:16 structInfoOf -> @structInfoOf
-  callee 295:38 Emitter.typeOf -> @Emitter.typeOf
-  local 296:9 field: FieldInfo | null (const)
-  callee 296:17 StructInfo.field -> @StructInfo.field
-  callee 298:18 internalError -> @internalError
-  local 300:9 receiver: string (const)
-  callee 300:20 Emitter.emitExpression -> @Emitter.emitExpression
-  local 302:11 value: string (const)
-  callee 302:19 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 303:5 storeField -> @storeField
-  local 308:9 ptr: string (const)
-  callee 308:15 structFieldPointer -> @structFieldPointer
-  local 309:9 ty: string (const)
-  callee 309:14 Emitter.llvm -> @Emitter.llvm
-  local 310:9 old: string (const)
-  callee 310:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 310:64 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local 311:7 value: string (let)
-  callee 312:7 isBitwiseAssignment -> @isBitwiseAssignment
-  callee 313:13 emitBitwiseCombine -> @emitBitwiseCombine
-  local 315:11 rhs: string (const)
-  callee 315:17 Emitter.emitExpression -> @Emitter.emitExpression
-  callee 316:13 isFloat -> @isFloat
-  callee 317:9 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 317:33 compoundFloatOpcode -> @compoundFloatOpcode
-  callee 318:9 emitIntBinary -> @emitIntBinary
-  callee 318:32 compoundIntegerOpcode -> @compoundIntegerOpcode
-  callee 320:3 IRFunction.emit -> @IRFunction.emit
-  callee 320:57 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local 295:9 target: Node (const)
+  local 296:9 info: StructInfo (const)
+  callee 296:16 structInfoOf -> @structInfoOf
+  callee 296:38 Emitter.typeOf -> @Emitter.typeOf
+  local 297:9 field: FieldInfo | null (const)
+  callee 297:17 StructInfo.field -> @StructInfo.field
+  callee 299:18 internalError -> @internalError
+  local 301:9 receiver: string (const)
+  callee 301:20 Emitter.emitExpression -> @Emitter.emitExpression
+  local 303:11 value: string (const)
+  callee 303:19 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 304:5 storeField -> @storeField
+  local 309:9 ptr: string (const)
+  callee 309:15 structFieldPointer -> @structFieldPointer
+  local 310:9 ty: string (const)
+  callee 310:14 Emitter.llvm -> @Emitter.llvm
+  local 311:9 old: string (const)
+  callee 311:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 311:64 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local 312:7 value: string (let)
+  callee 313:7 isBitwiseAssignment -> @isBitwiseAssignment
+  callee 314:13 emitBitwiseCombine -> @emitBitwiseCombine
+  local 316:11 rhs: string (const)
+  callee 316:17 Emitter.emitExpression -> @Emitter.emitExpression
+  callee 317:13 isFloat -> @isFloat
+  callee 318:9 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 318:33 compoundFloatOpcode -> @compoundFloatOpcode
+  callee 319:9 emitIntBinary -> @emitIntBinary
+  callee 319:32 compoundIntegerOpcode -> @compoundIntegerOpcode
+  callee 321:3 IRFunction.emit -> @IRFunction.emit
+  callee 321:57 Emitter.alignSuffix -> @Emitter.alignSuffix
 function structTypeDeclarations(emitter: Emitter): string[] -> @structTypeDeclarations [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.llvm nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq noteSignature noteStruct
   pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.llvm#0 noteStruct#0 noteStruct#0 noteSignature#0 noteSignature#0 noteSignature#0 noteSignature#0
-  stackSites=4 stackLocals=4
-  local 333:9 lines: string[] (const)
-  local 334:9 declared: string[] (const)
-  local 335:9 referenced: string[] (const)
-  local 339:9 results: string[] (const)
-  local 340:14 info: StructInfo (const)
-  local 345:11 types: string[] (const)
-  local 346:16 field: FieldInfo (const)
-  callee 347:18 Emitter.llvm -> @Emitter.llvm
-  local 349:11 body: string (const)
-  local 351:16 field: FieldInfo (const)
-  callee 352:7 noteStruct -> @noteStruct
-  callee 355:5 noteStruct -> @noteStruct
-  local 356:16 method: FunctionSig (const)
-  callee 357:7 noteSignature -> @noteSignature
-  local 359:11 ctor: FunctionSig | null (const)
-  callee 361:7 noteSignature -> @noteSignature
-  local 364:14 sig: FunctionSig (const)
-  callee 365:5 noteSignature -> @noteSignature
-  local 367:14 imp: ImportBinding (const)
-  local 368:11 sig: FunctionSig | null (const)
-  callee 370:7 noteSignature -> @noteSignature
-  local 373:14 name: string (const)
-  local 378:14 decl: string (const)
-function noteStruct(emitter: Emitter, referenced: string[], results: string[], type: i32): void -> @noteStruct
+  stackSites=5 stackLocals=5
+  local 341:9 lines: string[] (const)
+  local 342:9 declared: string[] (const)
+  local 343:9 referenced: string[] (const)
+  local 347:9 results: string[] (const)
+  local 350:9 headers: string[] (const)
+  local 351:14 info: StructInfo (const)
+  local 356:11 types: string[] (const)
+  local 357:16 field: FieldInfo (const)
+  callee 358:18 Emitter.llvm -> @Emitter.llvm
+  local 360:11 body: string (const)
+  local 362:16 field: FieldInfo (const)
+  callee 363:7 noteStruct -> @noteStruct
+  callee 366:5 noteStruct -> @noteStruct
+  local 367:16 method: FunctionSig (const)
+  callee 368:7 noteSignature -> @noteSignature
+  local 370:11 ctor: FunctionSig | null (const)
+  callee 372:7 noteSignature -> @noteSignature
+  local 375:14 sig: FunctionSig (const)
+  callee 376:5 noteSignature -> @noteSignature
+  local 378:14 imp: ImportBinding (const)
+  local 379:11 sig: FunctionSig | null (const)
+  callee 381:7 noteSignature -> @noteSignature
+  local 384:14 name: string (const)
+  local 389:14 decl: string (const)
+  local 395:14 decl: string (const)
+function noteStruct(emitter: Emitter, referenced: string[], results: string[], headers: string[], type: i32): void -> @noteStruct
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
   calls: TypeTable.errOf TypeTable.isArray TypeTable.isNullable TypeTable.isResult TypeTable.isStruct TypeTable.nameOf TypeTable.okOf TypeTable.refOf nish_array_grow nish_str_eq noteStruct resultTypeDecl
-  pointer emitter: size=144 writesThrough=false captured=false passedTo=noteStruct#0 noteStruct#0 noteStruct#0
-  pointer referenced: size=0 writesThrough=true captured=false passedTo=noteStruct#1 noteStruct#1 noteStruct#1
-  pointer results: size=0 writesThrough=true captured=false passedTo=noteStruct#2 noteStruct#2 noteStruct#2
+  pointer emitter: size=144 writesThrough=false captured=false passedTo=noteStruct#0 noteStruct#0 noteStruct#0 noteStruct#0
+  pointer referenced: size=0 writesThrough=true captured=false passedTo=noteStruct#1 noteStruct#1 noteStruct#1 noteStruct#1
+  pointer results: size=0 writesThrough=true captured=false passedTo=noteStruct#2 noteStruct#2 noteStruct#2 noteStruct#2
+  pointer headers: size=0 writesThrough=true captured=false passedTo=noteStruct#3 noteStruct#3 noteStruct#3 noteStruct#3
   stackSites=0 stackLocals=0
-  local 385:9 table: TypeTable (const)
-  callee 386:7 TypeTable.isArray -> @TypeTable.isArray
-  callee 386:30 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 387:5 noteStruct -> @noteStruct
-  callee 387:46 TypeTable.refOf -> @TypeTable.refOf
-  callee 390:7 TypeTable.isResult -> @TypeTable.isResult
-  callee 391:5 noteStruct -> @noteStruct
-  callee 391:46 TypeTable.okOf -> @TypeTable.okOf
-  callee 392:5 noteStruct -> @noteStruct
-  callee 392:46 TypeTable.errOf -> @TypeTable.errOf
-  local 393:11 decl: string (const)
-  callee 393:18 resultTypeDecl -> @resultTypeDecl
-  callee 399:8 TypeTable.isStruct -> @TypeTable.isStruct
-  local 402:9 name: string (const)
-  callee 402:16 TypeTable.nameOf -> @TypeTable.nameOf
-function noteSignature(emitter: Emitter, referenced: string[], results: string[], sig: FunctionSig): void -> @noteSignature
+  local 408:9 table: TypeTable (const)
+  callee 409:7 TypeTable.isArray -> @TypeTable.isArray
+  callee 413:5 noteStruct -> @noteStruct
+  callee 413:55 TypeTable.refOf -> @TypeTable.refOf
+  callee 416:7 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 417:5 noteStruct -> @noteStruct
+  callee 417:55 TypeTable.refOf -> @TypeTable.refOf
+  callee 420:7 TypeTable.isResult -> @TypeTable.isResult
+  callee 421:5 noteStruct -> @noteStruct
+  callee 421:55 TypeTable.okOf -> @TypeTable.okOf
+  callee 422:5 noteStruct -> @noteStruct
+  callee 422:55 TypeTable.errOf -> @TypeTable.errOf
+  local 423:11 decl: string (const)
+  callee 423:18 resultTypeDecl -> @resultTypeDecl
+  callee 429:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local 432:9 name: string (const)
+  callee 432:16 TypeTable.nameOf -> @TypeTable.nameOf
+function noteSignature(emitter: Emitter, referenced: string[], results: string[], headers: string[], sig: FunctionSig): void -> @noteSignature
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: noteStruct
   pointer emitter: size=144 writesThrough=false captured=false passedTo=noteStruct#0 noteStruct#0
   pointer referenced: size=0 writesThrough=true captured=false passedTo=noteStruct#1 noteStruct#1
   pointer results: size=0 writesThrough=true captured=false passedTo=noteStruct#2 noteStruct#2
+  pointer headers: size=0 writesThrough=true captured=false passedTo=noteStruct#3 noteStruct#3
   pointer sig: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 409:14 type: i32 (const)
-  callee 410:5 noteStruct -> @noteStruct
-  callee 412:3 noteStruct -> @noteStruct
+  local 445:14 type: i32 (const)
+  callee 446:5 noteStruct -> @noteStruct
+  callee 448:3 noteStruct -> @noteStruct
 function structFunctions(info: StructInfo): FunctionSig[] -> @structFunctions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_array_grow
   pointer info: size=96 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 420:9 out: FunctionSig[] (const)
-  local 421:9 ctor: FunctionSig | null (const)
-  local 425:14 method: FunctionSig (const)
+  local 456:9 out: FunctionSig[] (const)
+  local 457:9 ctor: FunctionSig | null (const)
+  local 461:14 method: FunctionSig (const)
 module self/emit_result.ts
 import Emitter from "./emit" -> struct Emitter
 import internalError from "./ice" -> function @internalError

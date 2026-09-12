@@ -41,6 +41,7 @@ import ts from "typescript";
 import { CheckedProgram, FieldInfo, FunctionSig, ImportBinding, StructInfo } from "../../checker/index.js";
 import { intrinsicType, isAssignmentOperator } from "../../checker/classes.js";
 import { ResultType, StaticType, isFloat, llvmAbiType, llvmType, resultByValue } from "../../types.js";
+import { ARRAY_TYPE } from "../runtime.js";
 import { beginReclaim, endReclaim } from "./arena.js";
 import { emitIntBinary } from "./arithmetic.js";
 import { emitBitwiseCombine, isBitwiseCompoundOperator } from "./bitwise.js";
@@ -296,6 +297,13 @@ assignmentTargetEmitters[ts.SyntaxKind.PropertyAccessExpression] = emitFieldAssi
  * `type opaque` for struct types the module only points at (a field or a
  * parameter of an imported declaration whose class was not imported here).
  * Pointers to opaque types are legal; only field access needs the body.
+ *
+ * The array header is declared here too when a layout or a signature mentions
+ * an array, because `%struct.nish_array*` in a struct body is a reference like
+ * any other and the module that writes it has to define it. An importer of a
+ * class with an array field is the case that needs saying: it emits the whole
+ * body — arrays and all — while its own code may never touch an array, so
+ * nothing else in the module would ever ask for the header.
  */
 export function structTypeDeclarations(program: CheckedProgram): string[] {
   const lines: string[] = [];
@@ -305,10 +313,14 @@ export function structTypeDeclarations(program: CheckedProgram): string[] {
   // emitted here rather than looked up: a field or signature that mentions one
   // is enough to need it in this module.
   const results = new Set<string>();
+  /** Whether anything emitted here spells `%struct.nish_array`. */
+  let needsArrayHeader = false;
   const note = (t: StaticType) => {
     if (t.kind === "struct") referenced.add(t.name);
-    else if (t.kind === "array") note(t.elem);
-    else if (t.kind === "nullable") note(t.inner);
+    else if (t.kind === "array") {
+      needsArrayHeader = true;
+      note(t.elem);
+    } else if (t.kind === "nullable") note(t.inner);
     else if (t.kind === "result") {
       note(t.ok);
       note(t.err);
@@ -333,6 +345,10 @@ export function structTypeDeclarations(program: CheckedProgram): string[] {
   for (const imp of program.imports) if (imp.sig) noteSig(imp.sig);
   for (const name of referenced) if (!declared.has(name)) lines.push(`%struct.${name} = type opaque`);
   lines.push(...results);
+  // Last, so that a module which also declares the header for a signature or an
+  // array operation puts it in the same place it always did: `addTypeDecl`
+  // dedupes by first insertion, and these lines precede both.
+  if (needsArrayHeader) lines.push(ARRAY_TYPE);
   return lines;
 }
 
