@@ -165,6 +165,12 @@ nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len);
 /* The cold paths compiled code calls: `push` when len == cap, a failed bounds check. */
 void nish_array_grow(nish_array *a, uint64_t elem_size);
 void nish_panic_index(uint64_t idx, uint64_t len);
+/* The failed range check of `s.slice(start, end)` (WP15 section 4): prints the
+   half-open interval that was asked for and the byte length it left, then
+   exits 1. Signed, although the check itself compares unsigned, so that an
+   offset that went negative reads as `-1` and not as 2^64 - 1. `substring`
+   clamps instead and never reaches this. */
+void nish_panic_slice(int64_t start, int64_t end, int64_t len);
 
 /* `process.argv` (WP7): a `string[]` (elements are `nish_str *`) that the entry
  * wrapper `main` builds once from argc/argv before calling the program; index 0

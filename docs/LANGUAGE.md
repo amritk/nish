@@ -91,6 +91,7 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 | `T[]`, `Array<T>` | `%struct.nish_array*` to `{ i64 len, i64 cap, i8* data }` | 8 / 8 (pointer); header 24 bytes | `const nish_array *` in (read-only), `nish_array *` in (written through) and out | One element type; `data` holds `cap` elements of `sizeof(T)`; bounds-checked. |
 | `readonly T[]`, `ReadonlyArray<T>` | the same as `T[]` | as `T[]` | `const nish_array *` in | The same array, with every write refused: [Readonly arrays](#readonly-arrays). |
 | `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). |
+| `enum K` | `i32` | 4 / 4 | (not representable) | A **distinct** type, not a spelling of `i32` (`sameType` fails against every other type): [Enums](#enums). `K.A` is the member's integer, so nothing is emitted for the declaration. |
 | `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, and narrowing: [Nullable types](#nullable-types). |
 | `Result<T, E>` | `%struct.nish_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32, i32 }` — the tag and one slot per arm — between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `nish_result_<T>_<E>_word` by value, `struct nish_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
@@ -112,7 +113,9 @@ Type rules:
   `` `Float64Array` takes no type argument (it is an alias of `f64[]`) ``,
   `tests/cases/reject_arr_typed_view_type_annotation_arg`; a `Float64Array`
   is an `f64[]` wherever one is expected and vice versa,
-  `tests/cases/arr_typed_views`, `reject_arr_typed_view_mismatch`), and the
+  `tests/cases/arr_typed_views`, `reject_arr_typed_view_mismatch`), the name of
+  a `type` alias or a numeric `enum` declared in the module
+  ([Type aliases](#type-aliases), [Enums](#enums)), and the
   name of a class or interface declared or imported in the module. Anything else is
   `` Unsupported type `...` `` / `` Unsupported type reference `...` ``
   (`src/types.ts`; `tests/cases/reject_union_type`, `reject_function_type`).
@@ -583,11 +586,12 @@ A module (one `.ts` file) may contain, at the top level, only function
 declarations (a `const` bound to an arrow, or the legacy `function` keyword),
 `class` and `interface` declarations, `const` declarations
 ([Module constants](#module-constants)), `type` aliases
-([Type aliases](#type-aliases)), `import` statements, and `export` modifiers on
-those declarations. Any other top-level statement, including `let` and `enum`,
+([Type aliases](#type-aliases)), numeric `enum` declarations
+([Enums](#enums)), `import` statements, and `export` modifiers on
+those declarations. Any other top-level statement, including `let`,
 is rejected with
 `Only top-level function declarations are supported in Phase 1 (found <Kind>)`
-(`tests/cases/reject_top_level_stmt`; `enum` *(CLI only)*); top-level
+(`tests/cases/reject_top_level_stmt`); top-level
 `let` and `var` name the reason instead (`` Top-level `let` is not supported ``,
 `reject_const_top_level_let`). Modules have no top-level code, so there is no
 initialisation order to worry about — which is exactly why a top-level `const`
@@ -789,6 +793,103 @@ program twice, with one golden between them.
   boundary.
 - **Aliases are top-level only.** `type X = i32` inside a function body is
   `Unsupported statement in Phase 1: TypeAliasDeclaration` *(CLI only)*.
+
+### Enums
+
+```ts
+enum Kind {
+  If = 1,
+  While = 2,
+  Return = 3,
+}
+
+enum Level {
+  Low,   // 0
+  Mid,   // 1
+  High,  // 2
+}
+```
+
+A numeric `enum` declares a **distinct type whose representation is `i32`**.
+Distinct is the point, and it is stricter than TypeScript, where a numeric enum
+member is assignable to `number`: the rule this language is built on is that
+two values are compatible only when their types are identical
+([Types](#types)), and an enum that were silently `i32` would be the one type
+compatible with something it is not spelled as. So `Kind` and `i32` are two
+types, in both directions, and the only values of `Kind` are the members it
+declares.
+
+Nothing is emitted for one. A member is folded to its integer the way a module
+constant is folded to its value, so `Kind.While` lowers to the literal `2`, a
+`Kind` parameter is an `i32` parameter, and there is no symbol, no table and no
+`%struct` anywhere. `tests/cases/enum_ir` and `tests/cases/enum_expanded` are
+one program written twice — with the enum, and with `i32` module constants —
+and their `.ll` goldens are byte-identical files.
+
+- **A member's value is a numeric literal, or the one before it plus one.**
+  Auto-numbering is TypeScript's: the first member without an initialiser is
+  `0`. A member that is not a numeric literal is Phase 0's
+  `` Enum members must be numeric literals in Nish (enums lower to plain integers) ``
+  (`tests/cases/reject_enum_string`, `reject_enum_computed`); a numeric literal
+  that is not an integer is `` Enum member `Kind.Half` must be an integer literal ``
+  (`reject_enum_float`), and one outside the width is
+  `` Enum member `Kind.Big` does not fit in i32 `` (`reject_enum_overflow`).
+- **An enum must declare at least one member**, because an empty one is a type
+  no value can inhabit: `` Enum `Kind` must declare at least one member ``
+  (`tests/cases/reject_enum_empty`). Two members of one name are
+  `` Duplicate member `If` in enum `Kind` `` (`reject_enum_duplicate_member`).
+- **A value is spelled `Kind.If` and nothing else.** A name that is not a
+  member is `` Enum `Kind` has no member `Nope` ``
+  (`tests/cases/reject_enum_unknown_member`), and there is no conversion in
+  either direction: `const n: i32 = k` is
+  `` Cannot initialize i32 variable `n` with Kind ``
+  (`reject_enum_not_i32`) and `const k: Kind = 1` is
+  `` Cannot initialize Kind variable `k` with i32 `` (`reject_enum_from_i32`).
+- **`===` and `!==` are the only operators.** Two values of one enum compare;
+  everything else is refused because an enum is not numeric — `+` is
+  `` Operator `+` requires two operands of the same numeric type or two strings, got Kind and Kind ``
+  (`tests/cases/reject_enum_arith`), `<` is
+  `` Operator `<` requires two numeric operands, got Kind and Kind ``
+  *(CLI only)*, and the bitwise operators are
+  `` Operator `|` requires two operands of the same integer type, got Flag and Flag ``
+  (`reject_enum_bitwise`). **Bit flags therefore stay `i32` module constants**:
+  `A | B` on an enum would produce a value that is no declared member, which is
+  the one thing the type exists to prevent
+  ([wp23-language-surface.md](wp23-language-surface.md) §10 question 1 leaves
+  the wider form open).
+- **A `switch` takes an enum discriminant and enum-member labels**
+  (`tests/cases/enum_ir`), which is what an enum is for: the statement lowers
+  to LLVM's `switch` exactly as an integer discriminant does. A label of any
+  other type is `` `case` label is i32 but the discriminant is Kind ``
+  (`reject_enum_case_label`), so the integer a member stands for is not a
+  label. See [`switch`](#switch).
+- **A built-in type name may not be taken**: `enum i32 { ... }` is
+  `` `i32` is a built-in type name and cannot be used for an enum ``
+  (`tests/cases/reject_enum_builtin_name`), for the reason the same rule exists
+  for a `type` alias — the name would never be looked at. The name shares the
+  one declaration namespace with functions, classes, interfaces, type aliases
+  and module constants: a clash is `` `Kind` is already declared in this module ``
+  whichever came first (`reject_enum_duplicate`).
+- **An enum is module-local and cannot be exported.** `export enum Kind` is
+  `` Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it) ``
+  (`tests/cases/reject_enum_export`), for exactly the reason a `type` alias
+  cannot be: a module's signatures are resolved before its imports are bound,
+  so an imported name in type position resolves provisionally as a class, and
+  an enum has no layout to stand in for. A class or interface is what crosses a
+  module boundary.
+- **`const enum` and `declare enum` are refused.** `const enum` asks for the
+  inlining every member already gets —
+  `` `const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing ``
+  (`tests/cases/reject_enum_const_enum`) — and `` `declare enum` is not supported ``
+  is the ambient form, which has nothing to declare against *(CLI only)*.
+- **An enum does not cross to C or JavaScript.** `--emit-header`, `--emit-dts`
+  and `--emit-napi` have no spelling for one, so a function whose signature
+  mentions an enum is skipped with the note those generators write for every
+  type they cannot carry (`weight(k: Kind): number: not declared; no C spelling
+  for one of its types.`). An enum is a type inside one module, as it is across
+  a module boundary: give a host an `i32` and keep the enum behind it.
+- **Enums are top-level only.** `enum K { A = 1 }` inside a function body is
+  `Unsupported statement in Phase 1: EnumDeclaration` *(CLI only)*.
 
 ### `export` and `import`
 
@@ -1109,18 +1210,23 @@ switch (node.kind) {
 ```
 
 - The discriminant is an **integer** (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`;
-  so a `number` in the default mode but not under `--number-mode f64`). Any
-  other type is `` `switch` requires an integer discriminant, got <type> ``
+  so a `number` in the default mode but not under `--number-mode f64`) or a
+  numeric **`enum`** ([Enums](#enums)), which is an `i32` in the jump table.
+  Any other type is `` `switch` requires an integer discriminant, got <type> ``
   (`tests/cases/reject_switch_string`). Only an integer switch lowers to
   LLVM's `switch` and a jump table; a string switch would have been a chain
   of `nish_str_eq` calls wearing a switch's clothes, and `if`/`else` says that
   honestly.
 - Every `case` label is an **integer constant expression** of the
-  discriminant's type: a literal, its negation, or a module constant
-  (`` `case` label must be an integer literal or a module constant ``,
+  discriminant's type: a literal, its negation, a module constant, or an enum
+  member
+  (`` `case` label must be an integer literal, a module constant, or an enum member ``,
   `tests/cases/reject_switch_case_not_constant`; `` `case` label is i64 but
   the discriminant is i32 ``, `reject_switch_case_type`). A literal takes the
-  discriminant's width, so `case 1:` on an `i64` switch is an `i64` one.
+  discriminant's width, so `case 1:` on an `i64` switch is an `i64` one — and
+  on an enum switch it is `` `case` label is i32 but the discriminant is Kind ``
+  (`reject_enum_case_label`), because the integer a member stands for is not
+  the member.
 - Labels are distinct (``Duplicate `case` label `1` in this `switch` ``,
   `tests/cases/reject_switch_duplicate_case`), and there is at most one
   `default` (`` `switch` has more than one `default` clause `` *(CLI only)*),
@@ -1201,6 +1307,9 @@ terminate. Rules (`src/checker/control-flow.ts`, `statements.ts`):
 `debugger` (`reject_debugger`), labeled statements (`reject_labeled_statement`),
 `var` (`reject_var_keyword`), `for...in`, nested `function`, `enum`, `type`,
 `namespace` (`reject_namespace`), `declare global` (`reject_declare_global`).
+`enum` and `type` are top-level declarations ([Enums](#enums),
+[Type aliases](#type-aliases)); it is only inside a function body that they are
+a rejected statement.
 
 ## Expressions
 
@@ -1592,6 +1701,7 @@ interval exactly zero, which `io_monotonic` is the test for.
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`) | `str_bytes`; `reject_str_substring_arity` |
+| `s.slice(start: number[, end: number]): string` | the same bytes, without the clamp: `start` and `end` must satisfy `0 <= start <= end <= s.length` and anything else **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript would count a negative offset from the end and answer `""` for a reversed pair. `end` defaults to `s.length`, an empty range is `""`, and an in-range non-negative pair gives exactly what JavaScript's `String.prototype.slice` gives. Two `icmp ule` against a cold panic block, one allocation and one `memcpy`; `--unchecked-indexing` drops the compares, as it drops `a[i]`'s. Measured 1.18x over `substring` on a lexer-shaped scan ([wp15-performance.md](wp15-performance.md) §4) | `str_slice`, `str_slice_panic`; `reject_str_slice_arity`, `reject_str_slice_type` |
 | `s.indexOf(sub: string): number` | the first **byte** offset at which `sub` occurs, or `-1`; `s.indexOf("")` is `0`. One `nish_str_index_of` call: the search is the runtime's, so it is the libc's vectorised one rather than a probe per offset (WP15 §7c) | `str_search`; `reject_str_index_of_type` |
 | `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`nish_str_at`) | `str_search` |
 | `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
@@ -1670,9 +1780,10 @@ a mutable `T[]` — and it is exact where the fixpoint is not
 (`` `process.argv` is read-only ``), because it is a value and not an
 annotation.
 
-There are no other array or string methods (`slice`, `map`, `shift`,
-`toUpperCase`, `charAt`, ...) and no `toString` (template literals
-and `console.log` convert numbers); string-to-number parsing is the bare
+There are no other array or string methods (`map`, `shift`, `toUpperCase`,
+`charAt`, ...) — `slice` is a string method and an array has none — and no
+`toString` (template literals and `console.log` convert numbers);
+string-to-number parsing is the bare
 `Number(s)` / `parseInt(s)` / `parseFloat(s)` under
 [Numeric conversions](#numeric-conversions). An unknown name is
 `` Unknown method `codePointAt` on string `` or
@@ -1800,10 +1911,13 @@ compiler's own marks are never invalidated by user resets.
   (`tests/cases/res_basic`); runtime failures (bounds check, integer
   division, file errors, out of memory) print a message to stderr and exit
   with status 1 (`tests/cases/arr_bounds_panic`:
-  `index out of range: <i> >= <len>`; `div_zero_panic`:
+  `index out of range: <i> >= <len>`; `str_slice_panic`:
+  `slice out of range: [<start>, <end>) of length <len>`; `div_zero_panic`:
   `attempt to divide by zero`).
 - **Bounds checks** on every `a[i]` read and write, unsigned, so `-1` fails
-  (`tests/cases/arr_bounds_panic`); `--unchecked-indexing` removes them
+  (`tests/cases/arr_bounds_panic`), and the same unsigned compare guards
+  `s.charCodeAt(i)` and the two ends of `s.slice(a, b)`
+  (`tests/cases/str_slice_panic`); `--unchecked-indexing` removes all of them
   (`tests/cases/arr_unchecked`), after which out-of-range is undefined
   behaviour.
 - **`new Array<T>(n)` zero-fills** (`0` / `false`), no holes; pointer element
@@ -2092,7 +2206,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | generators (`function*`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator` |
 | `async` functions, methods, arrows | `` `async` functions are forbidden in Nish (no event loop or promises) `` | `reject_async_function` |
 | `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |
-| enum members that are not numeric literals | `` Enum members must be numeric literals in Nish (enums lower to plain integers) `` | `reject_enum_string`, `reject_enum_computed` (numeric enums then fail in the checker as top-level statements) |
+| enum members that are not numeric literals | `` Enum members must be numeric literals in Nish (enums lower to plain integers) `` | `reject_enum_string`, `reject_enum_computed`; the numeric form compiles ([Enums](#enums)) |
 | `namespace` / `module` blocks | `` `namespace` and `module` blocks are forbidden in Nish (use ES module files) `` | `reject_namespace` |
 | `declare global` | `` `declare global` is forbidden in Nish (no global object to augment) `` | `reject_declare_global` |
 | decorators | `` Decorators are forbidden in Nish (no runtime metadata or class rewriting) `` | `reject_decorator` |
@@ -2157,10 +2271,19 @@ messages are exact for the cases cited; other rows quote
 
 | Situation | Message | Test |
 | --- | --- | --- |
-| top-level statement other than function/class/interface/const/type/import | `Only top-level function declarations are supported in Phase 1 (found <Kind>)` | `reject_top_level_stmt` |
+| top-level statement other than function/class/interface/const/type/enum/import | `Only top-level function declarations are supported in Phase 1 (found <Kind>)` | `reject_top_level_stmt` |
 | type alias cycle | `` Type alias `Feet` is defined in terms of itself `` | `reject_type_alias_cycle` |
 | type alias named after a built-in type | `` `string` is a built-in type name and cannot be used for a type alias `` | `reject_type_alias_builtin` |
 | `export` on a type alias | `Type aliases cannot be exported: an alias names a type inside one module ...` | `reject_type_alias_export` |
+| enum named after a built-in type | `` `i32` is a built-in type name and cannot be used for an enum `` | `reject_enum_builtin_name` |
+| `export` on an enum | `Enums cannot be exported: an enum names a type inside one module ...` | `reject_enum_export` |
+| `const enum` | `` `const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing `` | `reject_enum_const_enum` |
+| `declare enum` | `` `declare enum` is not supported `` | *(CLI only)* |
+| enum with no members | `` Enum `Kind` must declare at least one member `` | `reject_enum_empty` |
+| two enum members of one name | `` Duplicate member `If` in enum `Kind` `` | `reject_enum_duplicate_member` |
+| enum member that is not an integer | `` Enum member `Kind.Half` must be an integer literal `` | `reject_enum_float` |
+| enum member outside `i32` | `` Enum member `Kind.Big` does not fit in i32 `` | `reject_enum_overflow` |
+| name that is not a member of the enum | `` Enum `Kind` has no member `Nope` `` | `reject_enum_unknown_member` |
 | top-level `let` / `var` | `` Top-level `let` is not supported; a module has no top-level code, so only `const` is available `` | `reject_const_top_level_let` |
 | constant initialiser that is not constant | `A module constant's initialiser must be a literal, another constant, or arithmetic over them` | `reject_const_not_constant` |
 | constant cycle | `` Module constant `A` is defined in terms of itself `` | `reject_const_cycle` |

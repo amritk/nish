@@ -219,6 +219,7 @@ of `RUNTIME_FUNCTIONS`:
 | `nish_getenv(name)` | `getenv` (WP19 R1): the value of one environment variable, copied into the arena, or NULL when it is unset — the `string \| null` a driver reads `CC` with before it spawns `scripts/build.sh`. The copy is what makes the answer an ordinary arena string: libc hands back a pointer into `environ`, which a later `setenv` may move. `noalias` on the declaration for that reason and `readnone` on none of it: it allocates, and the environment is not memory LLVM tracks. |
 | `nish_array_grow(hdr, elemSize)` | `push` when `len == cap`: doubles `cap` (4 from 0) and moves the elements to fresh arena storage. |
 | `nish_panic_index(idx, len)` | Failed bounds check: `index out of range: <idx> >= <len>` on stderr, `_exit(1)`. |
+| `nish_panic_slice(start, end, len)` | Failed `slice` range check (`cold noreturn`): `slice out of range: [<start>, <end>) of length <len>` on stderr, `_exit(1)`. Its own symbol because a reversed pair is as common a mistake as an end past the string, and `index out of range` describes neither (WP15 §4). |
 | `nish_panic_div(by_zero)` | Failed integer-division check (`cold noreturn`): `attempt to divide by zero` or `attempt to divide with overflow` on stderr, `_exit(1)`. |
 
 `Math.sqrt`, `Math.floor`, `Math.abs`, `Math.min`, ... are not runtime calls
@@ -397,10 +398,15 @@ is still a pointer: [wp16-results.md](wp16-results.md).
   `export` gets `internal` linkage (`emitter.ts`) and is left out of the
   `--emit-header` / `--emit-dts` / `--emit-napi` surface (`interop/abi.ts`,
   `externalFunctions`); `--no-strict-exports` puts both back. What it does
-  *not* change is `rejectSymbolClashes` (`compilation.ts`): a function name is
-  unique across the program in either mode, because `analyzeFunctions` keys the
-  fact fixpoint by symbol name and two functions sharing one would be emitted
-  with each other's attributes.
+  *not* change is `rejectSymbolClashes` (`compilation.ts`): a function *symbol*
+  is unique across the program in either mode, because `analyzeFunctions` keys
+  the fact fixpoint by that symbol and two functions sharing one would be
+  emitted with each other's attributes. Since WP21 S1 a symbol carries its
+  module's package prefix (`packages.ts`), so the *name* has to be unique only
+  within the package that declares it — which is what lets two dependencies
+  each keep a private `helper()`. The root package's prefix is empty, so for a
+  single-package program the symbol, the rule and the message are all exactly
+  what they were.
 - **`--target`** (WP9): `targetHeader` writes `target datalayout` and
   `target triple` after `source_filename`, from the table in
   `codegen/target.ts` (strings copied from `clang --target=<triple> -S

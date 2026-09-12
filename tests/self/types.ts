@@ -43,6 +43,13 @@ function buildTypes(table: TypeTable): i32[] {
   }
   types.push(table.structOf("Node"));
   types.push(table.structOf("Lexer"));
+  // WP23: an enum is a distinct type with `i32` representation, so it has to
+  // print as an `i32` and assign to nothing but itself.
+  types.push(table.enumOf("Kind"));
+  types.push(table.enumOf("Level"));
+  // An enum and a struct of one name are two types, which is what keeps
+  // `derivedKey` keying on the kind as well as the name.
+  types.push(table.enumOf("Node"));
 
   const arrays: i32[] = [];
   let i = 0;
@@ -103,6 +110,10 @@ export function main(): number {
   const firstNode = table.structOf("Node");
   const secondNode = table.structOf("Node");
   out.push(`intern struct ${firstNode === secondNode ? 1 : 0}`);
+  const firstKind = table.enumOf("Kind");
+  const secondKind = table.enumOf("Kind");
+  out.push(`intern enum ${firstKind === secondKind ? 1 : 0}`);
+  out.push(`enum not struct ${table.enumOf("Node") === table.structOf("Node") ? 1 : 0}`);
   const nullableNode = table.nullableOf(table.structOf("Node"));
   out.push(`intern nullable ${table.nullableOf(nullableNode) === nullableNode ? 1 : 0}`);
   out.push(`strip ${table.stripNull(nullableNode) === table.structOf("Node") ? 1 : 0}`);

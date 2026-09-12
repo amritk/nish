@@ -391,16 +391,79 @@ rather than averaged away.
 
 ---
 
-## 4. Two string slices, not one compromise
+## 4. Two string slices, not one compromise — **done**
 
 `substring` keeps **exact JavaScript semantics** — both arguments clamped to
 `[0, len]`, swapped when reversed — so code ported from TypeScript behaves the
 way its author expects and the Node differential suite stays meaningful.
 
-Alongside it, a **fast slice** (`sliceFast` / `subarray`, name open) with the
-lean lowering: length computation, one bump allocation, one `memcpy`, and a
-check that branches to a cold panic block rather than clamping. Out-of-range is
-a panic, not a silent clamp.
+Alongside it, a **fast slice** with the lean lowering: length computation, one
+bump allocation, one `memcpy`, and a check that branches to a cold panic block
+rather than clamping. Out-of-range is a panic, not a silent clamp.
+
+**The name is `slice`, and the two this note proposed could not have been it.**
+`sliceFast` and `subarray` are both `TS2339: Property '...' does not exist on
+type 'string'` under `tsc --strict` (verified, not assumed), and the rule
+[wp23-language-surface.md](wp23-language-surface.md) §7 declines `for...of`
+over a string to protect is that an Nish program is a TypeScript program
+`tsc --strict` also accepts. A method nobody else has is a worse break of it
+than a loop that means something else, because it does not even compile.
+`slice` is in `lib.es5.d.ts` as `slice(start?: number, end?: number): string`,
+so the language gains no name of its own and a reader's editor already knows
+what it returns.
+
+What `slice` does *not* keep is JavaScript's argument handling, and that is the
+point of having two: `0 <= start <= end <= s.length` or it panics, where
+JavaScript counts a negative offset from the end and answers `""` for a
+reversed pair. That is the same shape of divergence `charCodeAt` already
+carries — JavaScript answers `NaN` out of range and Nish panics — and it is
+recorded the same way, in `docs/LANGUAGE.md`'s method table and in
+[wp13-differential.md](wp13-differential.md).
+
+The lowering is two `icmp ule` against a cold `nish_panic_slice` block, one
+`sub`, one `getelementptr` and one `nish_str_new`. Two compares are the whole
+range test because a negative offset sign-extends to a value above any byte
+length, which is the trick the array bounds check already uses. With no `end`,
+`end` *is* `len` and only the ordering compare is emitted.
+
+**Measured**, x86-64, LLVM 18, `--profile speed`. A lexer-shaped scan slices
+every word out of a 300 KB source, 2,000 passes — 40,000,000 slices of 14
+bytes each:
+
+| | min wall | |
+| --- | ---: | --- |
+| `substring` | 734 ms | six `llvm.smin` / `llvm.smax` per slice |
+| **`slice`** | **618 ms** | **1.18x** |
+
+Wall time on a loaded machine is the weaker half of that, so the number the
+claim rests on is instructions retired, which does not care what else is
+running: over 100 passes of the same scan, `callgrind` counts **339,516,079**
+against **313,516,079**, 8.3% of the whole program and exactly
+**13 x86-64 instructions per slice**. `llc -O3` bears that out statically: the
+scan function is 74 instructions with `substring` and 65 with `slice`, and the
+six `cmov` the clamp leaves behind are zero in the `slice` build. The copy is
+identical in both, which is why the win is a constant per call rather than a
+factor: `slice` is worth reaching for where slices are small and many, and
+worth nothing where one slice copies a megabyte.
+
+The other half of the argument is not about instruction counts at all. **A
+check is provable and a clamp is not.** `tests/cases/str_slice` slices constant
+offsets out of a literal and `opt -O2` deletes every compare, branch and panic
+block in the module — a golden cannot express that, so `tests/run.js` asserts
+no `nish_panic_slice` survives. No optimiser can do the same to `substring`,
+because its `smin`/`smax` are not a check that might be redundant but part of
+the answer it is defined to give. That is what makes this two constructs rather
+than one replacing the other, and it is what §2.1's ranged types will extend:
+every proof they add removes a `slice` check and none of them can remove a
+clamp.
+
+`slice` costs one runtime symbol, `nish_panic_slice`, rather than reusing
+`nish_panic_index`: a reversed pair is as common a mistake as an end past the
+string and `index out of range: i >= len` describes neither. It prints the two
+offsets signed although the check compares them unsigned, so someone who wrote
+`s.slice(i - 1)` is told `-1` rather than 18446744073709551615. That is 113
+bytes of `.text` at `-Oz` (16,844 to 16,957), spent under §7's rule on the
+measurement above.
 
 Hot paths should avoid materialising a slice at all where they can — a counted
 loop over the original string, guarded by `i < s.length`, already emits no
@@ -736,7 +799,15 @@ measurement closed says so and says why.
    by `tests/cases/u_*` — `u_arith_wrap`, `u_compare_above_intmax`,
    `u_conv_roundtrip` and `u_conv_f64` among them — plus
    `reject_u_mixed_signedness`.
-5. **Fast slice** (§4).
+5. **Fast slice** (§4) — **done**. `slice`, not `sliceFast` or `subarray`:
+   both names this note proposed are `TS2339` under `tsc --strict`, and
+   `wp23-language-surface.md` §7's rule is what settles it. 1.18x on a
+   lexer-shaped scan and 8.3% fewer instructions retired whole-program, which
+   is 13 x86-64 instructions per slice; and, unlike a clamp, the check folds
+   away entirely where the bounds are provable, which is the half of the case
+   that item 6 compounds. `tests/cases/str_slice`, `str_slice_panic`,
+   `reject_str_slice_arity`, `reject_str_slice_type` and
+   `tests/differential/corpus/str_slice` pin it.
 6. **Ranged types and length narrowing** (§2.1, §2.2) — a real flow-sensitive
    analysis; the `performance` warning for a check that survives is its
    acceptance test.

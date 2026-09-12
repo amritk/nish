@@ -113,6 +113,16 @@
  * attributes of the exporter's `define`, which is what lets the optimiser
  * treat cross-module calls like local ones. Symbols are unique across the
  * program (the Compilation rejects clashes), so one map suffices.
+ *
+ * Cross-*package* facts (WP21 S1): that key is a symbol and no longer a bare
+ * name. A module belongs to a package and every symbol it declares carries
+ * that package's prefix (`src/packages.ts`), so two dependencies that each
+ * keep a private `helper()` get two entries here instead of one — which is
+ * what they always needed, because sharing an entry means each of them is
+ * emitted with the other's purity, escape and pointer facts, and that is a
+ * miscompile rather than a missed optimisation. Nothing in this file changed
+ * for it: the root package's prefix is empty, so a single-package program is
+ * analysed under exactly the keys it always was.
  */
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar, Param } from "../checker/index.js";
@@ -627,7 +637,7 @@ function collectFacts(
     }
     const param = paramRef(node);
     if (param !== undefined) noteUse(param, node as ts.Expression);
-    collectStringFacts(program, node, facts);
+    collectStringFacts(program, node, facts, opts);
     for (const collect of factCollectors) collect(program, node, facts, opts);
     collectBuiltinFacts(program, node, facts); // WP7: toI32/toF64/..., readFileSync/...
     ts.forEachChild(node, visit);

@@ -1,6 +1,7 @@
 /** Data model produced by the checker and consumed by the emitter. */
 import ts from "typescript";
 import { AliasInfo } from "./aliases.js";
+import { EnumInfo } from "./enums.js";
 import { ConstInfo } from "./constants.js";
 import { StaticType } from "../types.js";
 
@@ -57,9 +58,15 @@ export interface StructInfo {
 
 export interface FunctionSig {
   /**
-   * The LLVM symbol (`@name`). Equal to the declared identifier except for the
-   * entry module's `export function main`, which is emitted as `@nish_main` so
-   * the C-ABI wrapper can own `@main` (see `docs/wp5-modules.md`).
+   * The LLVM symbol (`@name`), and the key the whole-program fact fixpoint is
+   * kept under (`src/codegen/attributes.ts`). It is the declared identifier
+   * qualified with the module's package prefix (WP21 S1, `src/packages.ts`),
+   * which is empty for the root package and therefore for every module of a
+   * single-package program — so it still reads as the bare identifier in every
+   * program that could be compiled before packages existed. The two other
+   * spellings are unchanged: a method or constructor is `Owner.method`, and
+   * the entry module's `export function main` is `@nish_main` so the C-ABI
+   * wrapper can own `@main` (see `docs/wp5-modules.md`).
    */
   name: string;
   /** The identifier as written in the source. */
@@ -140,6 +147,20 @@ export interface ImportBinding {
 
 export interface CheckedProgram {
   sourceFile: ts.SourceFile;
+  /**
+   * The package this module belongs to (WP21 S1, `src/packages.ts`). `""` is
+   * the root package — the program being compiled — which is where every
+   * module of a single-package build lives.
+   */
+  packageName: string;
+  /**
+   * The prefix every symbol declared in this module carries; `""` for the root
+   * package. `FunctionSig.name` already has it applied, so nothing downstream
+   * has to remember to apply it. The field is kept so that a diagnostic can
+   * name the package a clash is inside and the `--emit-checked` dump can say
+   * which package a module came from.
+   */
+  symbolPrefix: string;
   /** Functions defined in this module, in source order. */
   functions: FunctionSig[];
   /** Functions imported from other modules; the emitter emits a `declare` per distinct symbol. */
@@ -162,6 +183,19 @@ export interface CheckedProgram {
    * catch a name that is declared twice.
    */
   aliases: Map<string, AliasInfo>;
+  /**
+   * Numeric `enum` declarations, by the name they were declared under (WP23).
+   * An enum is a distinct type with `i32` representation, and its members are
+   * folded here, so this table answers an annotation (`Kind`) and a member
+   * reference (`Kind.If`) and the emitter never reads it.
+   */
+  enums: Map<string, EnumInfo>;
+  /**
+   * `Kind.If` -> the integer it stands for (WP23). The checker folds it, the
+   * emitter writes the literal, exactly as `constRefs` works for a module
+   * constant — which is why an enum emits no symbol and no table.
+   */
+  enumRefs: WeakMap<ts.PropertyAccessExpression, bigint>;
   /**
    * Set on the entry module when it declares `export function main`. The
    * emitter then adds the `define i32 @main(i32, i8**)` wrapper around it.

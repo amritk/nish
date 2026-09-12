@@ -55,6 +55,10 @@ export function isValueReceiver(program: CheckedProgram, receiver: ts.Expression
 const emitPropertyAccess: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.PropertyAccessExpression;
   if (!isValueReceiver(ctx.program, expr.expression)) {
+    // WP23: `Kind.If` was folded by the checker, so it lowers to its integer
+    // with no global and no load — the same arrangement a module constant has.
+    const member = ctx.program.enumRefs.get(expr);
+    if (member !== undefined) return String(member);
     const dotted = `${(expr.expression as ts.Identifier).text}.${expr.name.text}`;
     return lookup(namespacePropertyEmitters, dotted)!(ctx, expr);
   }

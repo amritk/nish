@@ -127,6 +127,7 @@ No generics, arrow functions, closures, nested functions or function values; no
 | `self/` | replaces in `src/` |
 | --- | --- |
 | `strings.ts` `map.ts` `paths.ts` | the standard library `src/` gets from Node |
+| `packages.ts` | `src/packages.ts`: which package a module is in, and the prefix its symbols carry (WP21 S1) |
 | `branding.ts` | `src/branding.ts`: the language name every diagnostic reads |
 | `ice.ts` | `reportInternalError` in `src/index.ts`: the exit-70 report a broken invariant prints, which the language's `panic` (exit 1) is not |
 | `tokens.ts` `lexer.ts` | the `typescript` scanner |

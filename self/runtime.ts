@@ -438,6 +438,18 @@ export class RuntimeTable {
     );
     panicIndex.noreturn = true;
     this.add(panicIndex);
+    // `slice` range-check failure (WP15 section 4): prints "slice out of range:
+    // [<start>, <end>) of length <len>" and exits 1. Its own symbol rather than
+    // `nish_panic_index` because a reversed pair is as common a mistake as an
+    // end past the string, and "i >= len" describes neither.
+    const panicSlice = new RuntimeFunction(
+      "nish_panic_slice",
+      "declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef)",
+      attrs3("nounwind", "noreturn", "cold"),
+      EFFECT_WRITE
+    );
+    panicSlice.noreturn = true;
+    this.add(panicSlice);
     // Division failure: "attempt to divide by zero" (true) or "... with overflow" (false), exit 1.
     const panicDiv = new RuntimeFunction(
       "nish_panic_div",
