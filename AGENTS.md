@@ -1,7 +1,12 @@
 # AGENTS.md
 
-Guidance for AI coding agents (Cursor, Copilot, Claude Code, …) working **in
-this repository**. For Claude Code the same rules live in
+Guidance for AI coding agents (Cursor, Copilot, Claude Code, …) working **on
+this compiler**. If you are instead **writing a program in the language**, this
+is the wrong file: read [`docs/AI.md`](./docs/AI.md), which is the whole
+language stated as rules in one pass, with the TypeScript reflexes Nish rejects
+listed first. [`llms.txt`](./llms.txt) indexes both.
+
+For Claude Code the same rules live in
 [`CLAUDE.md`](./CLAUDE.md); the detailed developer guidelines are in
 [`.claude/`](./.claude/) — read the one that matches your task:
 
@@ -44,7 +49,9 @@ steps per OS are in [`docs/INSTALL.md`](./docs/INSTALL.md).
 ## Machine-readable surfaces
 
 Read these rather than scraping prose; they are contracts with tests behind
-them.
+them. [`docs/AI.md`](./docs/AI.md) documents the same surfaces for an agent
+*using* the compiler, and ships in the npm tarball so an install describes
+itself.
 
 | Ask | Command | Answer |
 | --- | --- | --- |

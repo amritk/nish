@@ -4229,6 +4229,88 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
   );
 }
 
+// ---- docs/AI.md: the rules card compiles ---------------------------------------------
+// `docs/AI.md` is the language written for a model that has to produce a program
+// that compiles on the first try, so its examples are the part that matters: an
+// agent copies them. A digest hand-written beside a 2,300-line reference is also
+// exactly the kind of document that rots, and a stale example is worse than no
+// example -- it teaches a rule the compiler no longer has.
+//
+// So every fenced block the doc marks is compiled here, and the marker says what
+// must happen:
+//
+//   ```ts nish:ok                 compiles, exit 0
+//   ```ts nish:ok-body            the same, wrapped in a `main` body
+//   ```ts nish:err NL2231         must be rejected, with that code among the errors
+//   ```ts nish:err-body NL2188    the same, wrapped in a `main` body
+//
+// Anything after the code is passed to the CLI as flags (`--number-mode f64`).
+// A plain ```ts block is prose and is not compiled, which is what lets the doc
+// show a fragment. The expectation is the *code* rather than the message,
+// because that is what the doc tells its reader to key on (`AGENTS.md`,
+// "Machine-readable surfaces"): a reworded message must not fail this, and a
+// renumbered rule must.
+if (!only || "docs".includes(only) || "ai".includes(only)) {
+  const aiDoc = path.join(root, "docs", "AI.md");
+  const snippetDir = path.join(buildDir, "docs-ai");
+  fs.rmSync(snippetDir, { recursive: true, force: true });
+  fs.mkdirSync(snippetDir, { recursive: true });
+
+  /** Fenced blocks of `docs/AI.md` that carry a `nish:` marker, with the line they start on. */
+  const markedSnippets = (text) => {
+    const found = [];
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const m = /^```ts\s+nish:(ok|err)(-body)?\s*(.*)$/.exec(lines[i]);
+      if (!m) continue;
+      const rest = m[3].trim().split(/\s+/).filter(Boolean);
+      const code = m[1] === "err" ? rest.shift() : null;
+      let end = i + 1;
+      while (end < lines.length && lines[end] !== "```") end++;
+      found.push({
+        kind: m[1],
+        wrap: m[2] === "-body",
+        code,
+        args: rest,
+        line: i + 1,
+        source: lines.slice(i + 1, end).join("\n"),
+      });
+      i = end;
+    }
+    return found;
+  };
+
+  const snippets = markedSnippets(fs.readFileSync(aiDoc, "utf8"));
+  // A doc whose markers all got renamed would otherwise pass by checking nothing.
+  check("docs/AI.md marks its examples for compilation", snippets.length >= 15, `${snippets.length} found`);
+  for (const s of snippets) {
+    const stem = `ai_${s.line}`;
+    const file = path.join(snippetDir, `${stem}.ts`);
+    const body = s.wrap
+      ? `export const main = (): i32 => {\n${s.source}\n  return 0;\n};\n`
+      : `${s.source}\n`;
+    fs.writeFileSync(file, body);
+    const run = spawnSync("node", [cli, file, "--json", "-o", path.join(snippetDir, `${stem}.ll`), ...s.args], {
+      encoding: "utf8",
+    });
+    const diagnostics = run.stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    const errors = diagnostics.filter((d) => d.severity === "error");
+    const detail = errors.map((e) => `${e.code} ${e.message}`).join("\n");
+    if (s.kind === "ok") {
+      check(`docs/AI.md:${s.line} compiles`, run.status === 0, detail || run.stderr);
+    } else {
+      check(
+        `docs/AI.md:${s.line} is rejected with ${s.code}`,
+        run.status !== 0 && errors.some((e) => e.code === s.code),
+        run.status === 0 ? "it compiled" : detail || run.stderr
+      );
+    }
+  }
+}
+
 // ---- WP12: package ------------------------------------------------------------------
 // The npm tarball must be self-contained: `npm pack`, install it into a temporary prefix,
 // and drive the installed `nish` from an unrelated directory. That proves the `files`
@@ -4254,6 +4336,8 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       /^std\//,
       /^README\.md$/,
       /^LICENSE$/,
+      /^llms\.txt$/,
+      /^docs\/AI\.md$/,
       /^docs\/INSTALL\.md$/,
       /^package\.json$/,
       /^CHANGELOG\.md$/,
@@ -4278,11 +4362,17 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "std/testing.ts",
       "std/README.md",
       "LICENSE",
+      // An agent writing Nish reads what is on disk beside the compiler it is
+      // driving, so the rules card and the llms.txt index ship with it: an
+      // install is then self-describing, with no network fetch and no version
+      // skew between the compiler and the rules it is documented by.
+      "llms.txt",
+      "docs/AI.md",
       "docs/INSTALL.md",
     ];
     const absent = required.filter((f) => !files.includes(f));
     check(
-      "npm pack includes everything --link and `node --import` need (runtime.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE and INSTALL.md",
+      "npm pack includes everything --link and `node --import` need (runtime.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE, llms.txt, AI.md and INSTALL.md",
       absent.length === 0,
       absent.join("\n")
     );

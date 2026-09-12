@@ -5,6 +5,10 @@ it is the ninety-second map of the repository, the two compilers, and the
 commands. If the work touches `self/`, read
 [`.claude/selfhost.md`](.claude/selfhost.md) straight after it.
 
+Writing a *program* in Nish rather than working on the compiler? That is
+[`docs/AI.md`](docs/AI.md) — the whole language as rules in one pass, every
+example compiled by `npm test`.
+
 Developer guidelines live in the `.claude/` directory:
 
 - **orientation.md** — start here: what the repo is, where the code is, what to run
