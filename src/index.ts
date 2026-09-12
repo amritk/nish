@@ -129,6 +129,9 @@ const usageText = (): string =>
     "  --wrapping                 signed integer add/sub/mul wrap two's-complement (default: they",
     "                             carry `nsw`, so signed overflow is undefined, like C)",
     "  --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)",
+    "  --threads                  give every thread its own arena and random seed; the runtime is",
+    "                             built to match by --link (no language surface: nothing in the",
+    "                             language spawns a thread yet)",
     "  --no-warn-performance      do not report the `performance` diagnostics (WP15 §8; they are on by",
     "                             default, print on stderr, and never change the exit code)",
     "  -g                         emit DWARF debug info (!dbg locations, variables); kept by --link",
@@ -215,6 +218,9 @@ function main(argv: string[]): number {
   let target: string | undefined; // WP9: canonical triple, validated below
   let nsw = true;
   let stackAlloc = true;
+  // WP20 T0: off by default, so the IR and the runtime are byte for byte what
+  // they were for every program that does not ask.
+  let threads = false;
   // WP10 diagnostics and debugging.
   let debugInfo = false;
   let json = false;
@@ -277,6 +283,8 @@ function main(argv: string[]): number {
       nsw = false;
     } else if (arg === "--no-stack-alloc") {
       stackAlloc = false;
+    } else if (arg === "--threads") {
+      threads = true;
     } else if (arg === "--no-warn-performance") {
       warnPerformance = false;
     } else if (arg === "-g") {
@@ -331,6 +339,7 @@ function main(argv: string[]): number {
     nsw,
     stackAlloc,
     debugInfo,
+    threads,
   });
   try {
     // Test hook for the internal-error path (tests/run.js, WP12 block); not a user feature.
@@ -408,7 +417,13 @@ function main(argv: string[]): number {
   if (link !== undefined) {
     fs.mkdirSync(path.dirname(path.resolve(link)), { recursive: true });
     // `-g` is passed through so runtime.c gets debug info too and build.sh does not strip the binary.
+    // `--threads` likewise: it compiles runtime.c with -DNISH_THREADS, which is
+    // what makes the C definition of `nish_arena` thread-local. The two halves
+    // are not allowed to disagree and cannot: ELF refuses to link a non-TLS
+    // reference against a TLS definition, so a mismatch is a link error rather
+    // than a program with two arenas.
     const flags = debugInfo ? ["-g"] : [];
+    if (threads) flags.push("--threads");
     const build = spawnSync("bash", [BUILD_SH, ...outputs, RUNTIME_C, "-o", link, "--profile", profile, ...flags], {
       stdio: ["ignore", "pipe", "pipe"],
       encoding: "utf8",
