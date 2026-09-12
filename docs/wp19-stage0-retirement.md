@@ -173,6 +173,12 @@ defaults to rather than the directory the first run happened to use.
 
 ### A4. The gate, green
 
+> **Read §A5 before quoting this section.** The run below was real and its
+> number was true on the day it was measured. It was false again by the time
+> anybody read it: `--parity` was red on `main` at 045c8f8, on two separate
+> `-g` defects, both of them stage0's. §A5 is what that cost and what it says
+> about a gate that lives outside `npm test`.
+
 ```
 parity: 8358 runs over 597 programs; 0 undeclared difference(s), 1523 declared
 ```
@@ -194,6 +200,163 @@ Getting there took the count from 13,800 to 503 to 189 to 28 to 0, and one
 step of it went *backwards*, from 28 to 53, on a rule about stage0 inferred
 from two experiments and wrong in two ways. The mode is what caught that
 too.
+
+### A5. The gate reopened, and the correction §A4 needed
+
+**R1 and G1 were recorded as done on "an empty difference set", and that claim
+stopped being true without anyone editing it.** On a clean `main` at 045c8f8,
+`node tests/run.js --parity` was red. The program:
+
+```typescript
+export const add = (a: i32, b: i32): i32 => a + b;
+
+export const main = (): number => add(2, 3) - 5;
+```
+
+Compiled with `-g` by each compiler, three `!DILocation` columns differed:
+
+```
+!8  = !DILocation(line: 1, column: 20, scope: !7)     stage0
+!8  = !DILocation(line: 1, column: 1,  scope: !7)     stage1
+!16 = !DILocation(line: 3, column: 21, scope: !15)    stage0
+!16 = !DILocation(line: 3, column: 1,  scope: !15)    stage1
+!22 = !DILocation(line: 3, column: 21, scope: !21)    stage0
+!22 = !DILocation(line: 3, column: 1,  scope: !21)    stage1
+```
+
+stage0 took a function's position from the `ArrowFunction`, whose own start is
+its parameter list; stage1 took it from the declaration, because its parser
+normalises both spellings into one `N_FUNCTION` that begins at `export`
+(WP22 §8).
+
+**stage0 was the wrong side, and the argument is not a preference about
+debuggers.** stage0 gave *the same function* two different positions depending
+on which spelling declared it: `export function add(…)` landed at column 1 and
+`export const add = (…) => …` at column 20, from one compiler, for one program.
+That is precisely the identity WP22 stage A was declared done on — "the two
+spellings of one program emit byte-identical IR" — and under `-g` it had not
+held since arrows landed. The divergence is also wider than the three columns
+the corpus happened to show. Whenever the arrow does not begin on the `const`'s
+own line, stage0 named the wrong **line** as well, in the `DISubprogram`, in
+`scopeLine`, and in every parameter's `DILocalVariable`:
+
+```typescript
+export const add =
+  (a: i32, b: i32): i32 =>
+    a + b;
+```
+
+```
+!7 = distinct !DISubprogram(name: "add", …, line: 2, …, scopeLine: 2, …)   stage0
+!7 = distinct !DISubprogram(name: "add", …, line: 1, …, scopeLine: 1, …)   stage1
+```
+
+A debugger asked where `add` is declared should answer where a reader would say
+it is, which is line 1 — and the answer may not depend on the spelling.
+
+**The fix is `FunctionSig.declSite`**, recorded by the checker and read by
+`src/codegen/debug.ts`: the node the declaration *begins* at, which is `decl`
+itself for a `function`, a method and a constructor, and the `VariableStatement`
+for the arrow form. It is recorded rather than re-derived for the reason
+everything here is recorded — the emitter may not climb to a parent to find out
+what a node is part of. Stage1 needed no change and gained a comment saying
+why. This is the same family as the two concise-body bugs of
+`docs/wp22-arrow-functions.md` §8a and resolves the same way: the pass that was
+climbing to a parent node was the one in the wrong, and stage0 is the compiler
+that climbs.
+
+**How a closed gate reopened in silence.** Three things had to hold at once,
+and all three still hold for whatever reopens it next:
+
+1. **An empty difference set is a fact about the corpus, not about the
+   language.** The cross product runs every corpus program under fourteen flag
+   variations, and it cannot ask a question no program in the corpus poses.
+   Every `-g` case was written in the `function` spelling, so in 8,358 runs
+   nothing ever compiled an arrow-declared function with `-g`. The number in
+   §A4 measured the corpus of the day it was run.
+2. **`--parity` is not a section of `npm test`.** It is a mode, run explicitly,
+   for the reasons G1 gives: it is a cross product and it links a stage1
+   binary. Nothing on the way to `main` runs it, so the gate records the last
+   day somebody remembered to.
+3. **WP22 was moving the corpus underneath it.** Arrows are already the
+   declaration form for every example, the README, the cookbook and
+   `docs/LANGUAGE.md`, and stage C converts `self/`'s ~603 declarations — so
+   the divergence was spreading by the file while the record said the
+   difference set was empty. `tests/cases/dbg_enum` (WP23) was written in the
+   `function` spelling *because of* this bug, which is the shape of a defect
+   that has started to bend the work around itself.
+
+`tests/cases/dbg_arrow` closes the first of the three: a `-g` case in the arrow
+spelling, pinning the line as well as the column, so `tests/self/ir_oracle.js`
+and the corpus half of `--parity` both ask the question from every run onwards.
+
+#### And the run that proved the fix found a second one
+
+The run that proved the arrow fix came back with **10** undeclared differences
+still standing, and they were one root cause with nothing to do with arrows: a
+`!DILocation` column after a **non-ASCII character**.
+
+```
+self/checker.ts  -g  checker.ll  line 9202:
+  stage1 !2528 = !DILocation(line: 1305, column: 36, scope: !2476)
+  stage0 !2528 = !DILocation(line: 1305, column: 34, scope: !2476)
+```
+
+`self/checker.ts:1305` is a performance-warning string with an em dash in it —
+three UTF-8 bytes, one UTF-16 code unit, and the two columns differ by exactly
+two. stage1 counts bytes, because every offset in `self/` is a byte offset;
+stage0 counted the code units the `typescript` API hands it.
+
+**stage0 was wrong again, and clang settles it rather than taste.** Given a
+line whose comment holds a three-byte em dash, `clang -g` puts the `return`
+after it at **column 13** — the byte count — where a code-unit count says 11. A
+DWARF column is read back against the file's bytes, so bytes is the answer, and
+stage1 had it. `locationOf` counts UTF-8 bytes now (`tests/cases/dbg_utf8`).
+stage0's *diagnostic* columns are deliberately untouched and stay code units:
+an editor is the consumer there, a debugger is the consumer here.
+
+The header of `self/debug.ts` had written this divergence down and then
+dismissed it — "every line of every `-g` case is ASCII, where the two counts
+are equal". That was true of `tests/cases` and false of the corpus, which is
+§A4's mistake in miniature: **a caveat retired on the strength of the test
+directory, by a mode that compiles `self/` too.** Two defects, one shape —
+a claim about the corpus quietly read as a claim about the language.
+
+#### The gate, green again
+
+```
+parity: 8708 runs over 622 programs (3455.5 s); 0 undeclared difference(s), 1617 declared
+```
+
+The declarations are §A4's five, unchanged in kind and larger only because the
+corpus is: nothing here is a new thing the two compilers are allowed to differ
+about. Quote this with its date, the way §A4 should have been quoted, and run
+the mode again before quoting it at all.
+
+#### Should `--parity` run in CI?
+
+**Yes, and not in the `test` job.** Recommended rather than done here, because
+wiring it up is a WP10 change and this correction is a debug-info fix; the
+costs, so the decision is made on numbers rather than on the fright of finding
+this:
+
+- **What it costs.** A full run is 8,400-odd compilations by each compiler over
+  597 programs, plus linking a stage1 binary first — about half an hour on this
+  machine, against roughly three minutes for `npm test`. On a hosted runner it
+  is the longest single thing in the repository.
+- **Where it fits.** Not in `test`, which every push waits on. The `bootstrap`
+  job already links a stage1 compiler and already runs on its own schedule of
+  patience, and `--flags-only` — the half that found `--no-warn-performance`
+  and `--out-dir` — takes seconds and could sit in `test` today at no
+  meaningful cost. The corpus half belongs beside `bootstrap`, or on a nightly
+  `schedule:` trigger, where a red result names the day it appeared rather than
+  the month.
+- **What it buys.** The failure mode this defect demonstrates: a gate recorded
+  as closed, reopened by an unrelated feature, spreading with every file the
+  feature converts, and invisible until somebody ran the mode by hand. Between
+  §A2 and §A3 this mode found a miscompile that eleven oracles and 1,161 checks
+  had not. A gate that only runs when remembered is a gate that measures
+  memory.
 
 
 ### B. The oracles
@@ -335,6 +498,12 @@ shipped to users who were told the two compilers were the same compiler. §A2
 is what that reads like in practice: the first run of this check found five
 disagreements, one of them a miscompile, and every one of them had been
 sitting under a flag combination nothing had ever tried.
+
+**This gate is met by running it, not by having run it.** Nothing on the way to
+`main` runs the mode, so "G1 is green" dates from whenever somebody last typed
+the command — and §A5 is the gate reopening in the gap, on a construct the
+language gained after the gate closed. Re-run `node tests/run.js --parity`
+before citing it, and read §A5's costing before deciding it should be automatic.
 
 ### G2 — Oracle succession: the replacement runs before the original is deleted
 
