@@ -307,13 +307,26 @@ function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
     if (entry !== null && entry === sig) {
       tags.push("entry");
     }
+    // WP18: the instantiation set, printed in discovery order with the rest of
+    // the functions, so a divergence in *which* instantiations exist is caught
+    // by `tests/self/checked_oracle.js` before any IR is compared.
+    const instance = sig.instance;
+    if (instance !== null) {
+      tags.push("instance");
+    }
     const suffix = tags.length > 0 ? ` [${tags.join(" ")}]` : "";
     out.push(`function ${signatureText(table, sig)} -> @${sig.name}${suffix}`);
     const f = facts.get(sig.name);
     if (f !== null) {
       factsText(table, sig, f, out);
     }
+    if (instance !== null) {
+      program.enterInstance(instance);
+    }
     bodyTables(program, source, table, sig, out);
+    if (instance !== null) {
+      program.leaveInstance();
+    }
   }
 }
 

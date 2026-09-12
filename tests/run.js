@@ -954,6 +954,75 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
   }
 }
 
+// ---- WP18: generics ---------------------------------------------------------------
+// The acceptance test of the whole package, and a golden cannot express it: an
+// instantiation's `define` must be *byte-identical* to the `define` of the
+// monomorphic function somebody would have written by hand, modulo the symbol
+// name. If that ever stops holding, the instantiation path has started emitting
+// something a hand-written function would not, which is a bug rather than a
+// performance question (docs/wp18-generics.md §9, §12).
+{
+  const dir = path.join(buildDir, "generics");
+  fs.mkdirSync(dir, { recursive: true });
+  const twin = (name, source) => {
+    const file = path.join(dir, `${name}.ts`);
+    fs.writeFileSync(file, source);
+    const out = path.join(dir, `${name}.ll`);
+    const r = spawnSync("node", [cli, file, "-o", out], { cwd: root, encoding: "utf8" });
+    if (r.status !== 0) return { error: `${r.stdout}${r.stderr}` };
+    return { ir: fs.readFileSync(out, "utf8") };
+  };
+  /**
+   * One `define` block, from its header to the closing brace, with the
+   * attribute *group* resolved to the attributes it names. The index is
+   * per module and depends on the order the groups were added, and the two
+   * modules emit their functions in different orders — the template's
+   * instantiations are appended after the functions the module declares — so
+   * comparing `#0` against `#1` would fail on the numbering rather than on the
+   * function. Resolving it compares the attributes themselves, which is the
+   * stronger check anyway.
+   */
+  const defineOf = (ir, symbol) => {
+    const lines = ir.split("\n");
+    const at = lines.findIndex((line) => line.startsWith(`define `) && line.includes(`@${symbol}(`));
+    if (at < 0) return "";
+    const end = lines.indexOf("}", at);
+    const block = lines.slice(at, end + 1);
+    block[0] = block[0].replace(/#(\d+) \{$/, (_, n) => {
+      const group = lines.find((line) => line.startsWith(`attributes #${n} = `));
+      return `${group ? group.slice(`attributes #${n} = `.length) : `#${n}`} {`;
+    });
+    return block.join("\n");
+  };
+  const body = `{
+  let total = 0;
+  for (let i = 0; i < 4; i++) {
+    total = total + i;
+  }
+  return x;
+}`;
+  const generic = twin("gen_twin", `const same = <T>(x: T, n: i32): T => ${body}\n\nexport const test = (): number => {\n  console.log(same(7, 1));\n  return 0;\n};\n`);
+  const plain = twin("mono_twin", `const same = (x: i32, n: i32): i32 => ${body}\n\nexport const test = (): number => {\n  console.log(same(7, 1));\n  return 0;\n};\n`);
+  const got = generic.ir ? defineOf(generic.ir, "same$i32") : "";
+  const want = plain.ir ? defineOf(plain.ir, "same").replace("@same(", "@same$i32(") : "";
+  check(
+    "generics: an instantiation's `define` is the hand-written monomorphic twin's, symbol aside",
+    want.length > 0 && got === want,
+    `--- monomorphic\n${want}\n--- instantiated\n${got}\n${generic.error ?? ""}${plain.error ?? ""}`
+  );
+}
+// Every generic module must satisfy the IR verifier, not just the assembler:
+// an instantiation is emitted from side tables the module's own body never
+// wrote into, which is exactly the shape a dominance bug would hide in.
+if (has("opt")) {
+  for (const name of cases.filter((c) => c.startsWith("gen_") && (!only || c.includes(only)))) {
+    const ll = path.join(buildDir, `${name}.ll`);
+    if (!fs.existsSync(ll)) continue;
+    const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll]);
+    check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr));
+  }
+}
+
 // ---- WP4: arrays ------------------------------------------------------------------
 // 1. Every arr_ module must pass the IR verifier (the bounds check adds blocks and `unreachable`).
 // 2. A failed bounds check exits 1 with "index out of range: <idx> >= <len>" on stderr.

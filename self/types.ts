@@ -296,7 +296,12 @@ export class TypeTable {
       case T_BOOL:
         return "bool";
       case K_ARRAY:
-        return `arr.${this.mangle(this.refs[type])}`;
+        // `readonly T[]` and `T[]` are two types (`sameType` says so), so they
+        // need two names: without the tag `identity<readonly i32[]>` and
+        // `identity<i32[]>` would be one symbol (WP18 §3c).
+        return this.readonlys[type]
+          ? `roarr.${this.mangle(this.refs[type])}`
+          : `arr.${this.mangle(this.refs[type])}`;
       case K_NULLABLE:
         return `opt.${this.mangle(this.refs[type])}`;
       case K_STRUCT:

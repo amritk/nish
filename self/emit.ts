@@ -224,7 +224,18 @@ export class Emitter {
     }
     for (const sig of this.program.functions) {
       if (sig.definedIn(this.program.source)) {
+        // WP18: an instantiation's body is the template's tree checked into
+        // that instantiation's own side tables, so they are installed around
+        // its emission and every `nodeTypes[node.id]` below answers for this
+        // type-argument tuple.
+        const instance = sig.instance;
+        if (instance !== null) {
+          this.program.enterInstance(instance);
+        }
         this.module.addFunction(this.emitFunction(sig));
+        if (instance !== null) {
+          this.program.leaveInstance();
+        }
       }
     }
     const entry = this.program.entryMain;

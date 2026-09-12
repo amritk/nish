@@ -17,6 +17,12 @@ import { CheckContext } from "./context";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations";
 import {
+  collectTypeParamNames,
+  isGenericFunction,
+  mentionsTypeParam,
+  rejectDollarInSymbolName,
+} from "./generics";
+import {
   FLAG_PREFIX,
   N_BINARY,
   N_BLOCK,
@@ -55,6 +61,8 @@ import {
   CheckedProgram,
   ConstInfo,
   FunctionSig,
+  Instantiation,
+  TemplateInfo,
   STRUCT_CLASS,
   STRUCT_INTERFACE,
   StructInfo,
@@ -191,8 +199,15 @@ export class Checker {
 
   /** One `function` declaration: its signature, its name, and `main`. */
   collectFunction(stmt: Node): void {
+    if (isGenericFunction(stmt)) {
+      this.registerTemplate(stmt);
+      return;
+    }
     const sig = collectFunctionSignature(this.ctx, stmt);
     const name = sig.sourceName;
+    if (rejectDollarInSymbolName(this.ctx, name, "function", stmt.children[0])) {
+      return;
+    }
     if (
       this.ctx.sigs.has(name) ||
       this.program.structs.has(name) ||
@@ -215,6 +230,104 @@ export class Checker {
       }
       markEntryMain(this.ctx, sig);
     }
+  }
+
+  /**
+   * WP18: one generic function declaration. A template shares the declaration
+   * namespace with everything else — it is a `function` however it is spelled —
+   * but it is not a signature: it has no types until an instantiation binds its
+   * parameters, so it never joins `sigs` or `program.functions`.
+   */
+  registerTemplate(stmt: Node): void {
+    const nameNode = stmt.children[0];
+    const name = nameNode.text;
+    // The order is stage0's: the name's own rules before the ones about what
+    // else is declared, because that is the order `collectFunctionTemplate`
+    // and `registerTemplate` run in over there.
+    if (name.startsWith("nish_")) {
+      this.ctx.error(nameNode, "Function names starting with `nish_` are reserved for the runtime");
+      return;
+    }
+    if (rejectDollarInSymbolName(this.ctx, name, "function", nameNode)) {
+      return;
+    }
+    if (
+      this.ctx.sigs.has(name) ||
+      this.program.templates.has(name) ||
+      this.program.structs.has(name) ||
+      this.program.constants.has(name) ||
+      this.program.aliases.has(name)
+    ) {
+      this.ctx.error(nameNode, `\`${name}\` is already declared in this module`);
+      return;
+    }
+    const template = new TemplateInfo(name, stmt, this.program.source);
+    template.exported = isExported(stmt);
+    template.typeParams = collectTypeParamNames(stmt);
+    if (template.exported && name === "main") {
+      this.ctx.error(
+        nameNode,
+        "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it"
+      );
+      return;
+    }
+    // A type parameter is inferred from the arguments and from nothing else, so
+    // one that appears in no parameter can never be bound and the function
+    // could never be called. Reported here, once, against the declaration
+    // rather than against every call.
+    const parameters = stmt.children[1];
+    for (const param of template.typeParams) {
+      const names = new StringSet();
+      names.add(param);
+      let mentioned = false;
+      for (const declared of parameters.children) {
+        const annotation = declared.children[1];
+        if (annotation.kind !== N_EMPTY && mentionsTypeParam(annotation, names)) {
+          mentioned = true;
+        }
+      }
+      if (mentioned) {
+        continue;
+      }
+      this.ctx.error(
+        nameNode,
+        `Cannot infer \`${param}\` for \`${name}\`: a type parameter is inferred from the arguments, and ` +
+          `\`${param}\` appears in none of them; give \`${name}\` a parameter that mentions \`${param}\``
+      );
+      return;
+    }
+    this.program.addTemplate(template);
+  }
+
+  /**
+   * Pass 3 (WP18): check every instantiation's body, to a fixed point. Each one
+   * may request more, and the queue is drained rather than recursed into, so
+   * `from` is a chain of requests and not a call stack.
+   */
+  drainInstantiations(): void {
+    let at = 0;
+    while (at < this.ctx.pending.length) {
+      const info = this.ctx.pending[at];
+      at = at + 1;
+      // Appended here rather than at the request, so that `functions` is in the
+      // order the bodies are checked and the emitter walks it the same way.
+      this.program.functions.push(info.sig);
+      this.checkInstanceBody(info);
+    }
+    this.ctx.pending = [];
+  }
+
+  /** One instantiation's body, over its own side tables and with its own type bindings. */
+  checkInstanceBody(info: Instantiation): void {
+    const savedBindings = this.ctx.typeBindings;
+    const savedInstance = this.ctx.currentInstance;
+    this.program.enterInstance(info);
+    this.ctx.typeBindings = info.bindings;
+    this.ctx.currentInstance = info;
+    this.checkFunctionBody(info.sig);
+    this.ctx.currentInstance = savedInstance;
+    this.ctx.typeBindings = savedBindings;
+    this.program.leaveInstance();
   }
 
   /**

@@ -116,6 +116,7 @@
  */
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar, Param } from "../checker/index.js";
+import { withInstance } from "../checker/generics.js";
 import {
   intrinsicType,
   isAssignmentOperator,
@@ -242,8 +243,13 @@ export function analyzeFunctions(
   const collect = (escapes?: Map<string, EscapeResult>) => {
     const facts = new Map<string, FunctionFacts>();
     for (const program of list) {
-      for (const sig of program.functions)
-        facts.set(sig.name, collectFacts(program, sig, opts, escapes?.get(sig.name)));
+      for (const sig of program.functions) {
+        // WP18: per instantiation, over that instantiation's side tables. The
+        // facts are keyed by symbol already, so `eq$i32` being `readnone` and
+        // `eq$str` `readonly` needs nothing but the right tables here.
+        const f = withInstance(program, sig, () => collectFacts(program, sig, opts, escapes?.get(sig.name)));
+        facts.set(sig.name, f);
+      }
     }
     return facts;
   };
@@ -252,7 +258,9 @@ export function analyzeFunctions(
   propagate(first);
   const escapes = new Map<string, EscapeResult>();
   for (const program of list) {
-    for (const sig of program.functions) escapes.set(sig.name, analyzeEscapes(program, sig, first, opts));
+    for (const sig of program.functions) {
+      escapes.set(sig.name, withInstance(program, sig, () => analyzeEscapes(program, sig, first, opts)));
+    }
   }
   // Round 2: the same facts with stack allocations applied, then the scope decision.
   const facts = collect(escapes);

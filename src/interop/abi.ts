@@ -317,10 +317,15 @@ export function cParamName(name: string): string {
  * (`NISH_SYMBOL`, from nish.h; it adds the `_` prefix Mach-O needs).
  * Methods and constructors (`Point.shifted`, `Point.constructor`, WP2) are
  * declared the same way as `Point_shifted` / `Point_constructor`, taking the
- * object pointer first: a C host may call them on objects it holds.
+ * object pointer first: a C host may call them on objects it holds. A generic
+ * instantiation (`identity$i32`, WP18) goes the same way, because `-pedantic`
+ * refuses `$` in a C identifier (`-Wdollar-in-identifier-extension`) while it
+ * is a perfectly good LLVM symbol.
  */
 export function cFunctionName(symbol: string): { ident: string; label: string } {
-  if (symbol.includes(".")) return { ident: symbol.replace(/\./g, "_"), label: ` NISH_SYMBOL("${symbol}")` };
+  if (/[.$]/.test(symbol)) {
+    return { ident: symbol.replace(/[.$]/g, "_"), label: ` NISH_SYMBOL("${symbol}")` };
+  }
   if (!C_RESERVED.has(symbol)) return { ident: symbol, label: "" };
   return { ident: `${symbol}_`, label: ` NISH_SYMBOL("${symbol}")` };
 }

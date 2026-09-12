@@ -54,6 +54,13 @@ export class FunctionSig {
   owner: StructInfo | null;
   /** A statement of the body was rejected: no IR is emitted for this program. */
   poisoned: boolean;
+  /**
+   * WP18: set when this signature is one instantiation of a generic template
+   * rather than a declared function. It carries the side tables the template's
+   * body was checked into for *this* type-argument tuple, which every pass that
+   * walks the body installs before it starts (`CheckedProgram.enterInstance`).
+   */
+  instance: Instantiation | null;
 
   /**
    * The body, or `null` when the declaration has none. A `BLOCK` for every
@@ -90,6 +97,85 @@ export class FunctionSig {
     this.role = ROLE_FUNCTION;
     this.owner = null;
     this.poisoned = false;
+    this.instance = null;
+  }
+}
+
+/**
+ * A generic function declaration (WP18). Nothing about it is resolved: the
+ * parameter and return annotations mention `typeParams`, so they mean nothing
+ * until an instantiation binds them, and a template therefore has no signature,
+ * no symbol and no entry in `functions`.
+ */
+export class TemplateInfo {
+  /** The identifier as written; what every diagnostic about the template names. */
+  sourceName: string;
+  /** `<T, U>` in declaration order; an instantiation's tuple has the same order. */
+  typeParams: string[];
+  /** The `N_FUNCTION` node, in either spelling. */
+  decl: Node;
+  origin: SourceFile;
+  exported: boolean;
+  /** How many instantiations it has produced, for the per-template cap. */
+  count: i32;
+
+  constructor(sourceName: string, decl: Node, origin: SourceFile) {
+    this.sourceName = sourceName;
+    this.typeParams = [];
+    this.decl = decl;
+    this.origin = origin;
+    this.exported = false;
+    this.count = 0;
+  }
+}
+
+/**
+ * One (template, type-argument tuple): the specialised function it names, and
+ * the side tables its body is checked into.
+ *
+ * The tables are a full copy rather than a window on the template's node-id
+ * span (`docs/wp18-generics.md` §3d's fallback): it costs memory on a program
+ * that instantiates something and nothing at all on one that does not, and it
+ * needs no invariant about how the parser hands out ids.
+ */
+export class Instantiation {
+  template: TemplateInfo;
+  /** One concrete type id per entry of `template.typeParams`, in that order. */
+  typeArgs: i32[];
+  sig: FunctionSig;
+  /** Type parameter name -> the type id it stands for. */
+  bindings: StringMap;
+  nodeTypes: i32[];
+  nodeLocals: (Local | null)[];
+  nodeConstants: (ConstInfo | null)[];
+  nodeCallees: (FunctionSig | null)[];
+  nodeCoercions: i32[];
+  nodeCaseValues: i64[];
+  /**
+   * The instantiation whose body asked for this one, or `null` for one
+   * requested from ordinary code. The chain is what the termination rule walks
+   * and what its diagnostic quotes.
+   */
+  from: Instantiation | null;
+
+  constructor(template: TemplateInfo, typeArgs: i32[], sig: FunctionSig, bindings: StringMap, nodeCount: i32) {
+    this.template = template;
+    this.typeArgs = typeArgs;
+    this.sig = sig;
+    this.bindings = bindings;
+    this.nodeTypes = new Array<i32>(nodeCount);
+    this.nodeLocals = new Array<Local | null>(nodeCount);
+    this.nodeConstants = new Array<ConstInfo | null>(nodeCount);
+    this.nodeCallees = new Array<FunctionSig | null>(nodeCount);
+    this.nodeCoercions = new Array<i32>(nodeCount);
+    this.nodeCaseValues = new Array<i64>(nodeCount);
+    this.from = null;
+    let i = 0;
+    while (i < nodeCount) {
+      this.nodeTypes[i] = -1;
+      this.nodeCoercions[i] = -1;
+      i = i + 1;
+    }
   }
 }
 
@@ -366,6 +452,26 @@ export class CheckedProgram {
   aliases: StringMap;
   aliasList: AliasInfo[];
 
+  /**
+   * Generic templates this module declares, by source name, and the ones it has
+   * instantiated, by mangled symbol (WP18). An instantiation is appended in
+   * discovery order, which is the order it is checked, emitted and dumped in —
+   * so the two compilers can be compared before any IR is.
+   */
+  templates: StringMap;
+  templateList: TemplateInfo[];
+  instantiations: StringMap;
+  instantiationList: Instantiation[];
+  /** Non-null while an instantiation's side tables are installed. */
+  activeInstance: Instantiation | null;
+  /** The module's own tables, held aside while `activeInstance` is installed. */
+  savedNodeTypes: i32[];
+  savedNodeLocals: (Local | null)[];
+  savedNodeConstants: (ConstInfo | null)[];
+  savedNodeCallees: (FunctionSig | null)[];
+  savedNodeCoercions: i32[];
+  savedNodeCaseValues: i64[];
+
   /** Set when this module declares `export function main`; the entry wrapper wraps it. */
   entryMain: FunctionSig | null;
   /** Some function reads `process.argv`, so the `@main` wrapper calls `nish_argv_init`. */
@@ -405,6 +511,17 @@ export class CheckedProgram {
     this.constantList = [];
     this.aliases = new StringMap();
     this.aliasList = [];
+    this.templates = new StringMap();
+    this.templateList = [];
+    this.instantiations = new StringMap();
+    this.instantiationList = [];
+    this.activeInstance = null;
+    this.savedNodeTypes = [];
+    this.savedNodeLocals = [];
+    this.savedNodeConstants = [];
+    this.savedNodeCallees = [];
+    this.savedNodeCoercions = [];
+    this.savedNodeCaseValues = [];
     this.entryMain = null;
     this.usesArgv = false;
     this.nodeTypes = new Array<i32>(nodeCount);
@@ -452,6 +569,63 @@ export class CheckedProgram {
   addAlias(info: AliasInfo): void {
     this.aliases.set(info.name, this.aliasList.length);
     this.aliasList.push(info);
+  }
+
+  /** The generic template called `name` in this module, or `null` (WP18). */
+  template(name: string): TemplateInfo | null {
+    const at = this.templates.get(name, -1);
+    return at < 0 ? null : this.templateList[at];
+  }
+
+  addTemplate(info: TemplateInfo): void {
+    this.templates.set(info.sourceName, this.templateList.length);
+    this.templateList.push(info);
+  }
+
+  /** The instantiation emitted under `symbol`, or `null` when there is none yet. */
+  instantiation(symbol: string): Instantiation | null {
+    const at = this.instantiations.get(symbol, -1);
+    return at < 0 ? null : this.instantiationList[at];
+  }
+
+  addInstantiation(symbol: string, info: Instantiation): void {
+    this.instantiations.set(symbol, this.instantiationList.length);
+    this.instantiationList.push(info);
+  }
+
+  /**
+   * Install one instantiation's side tables (WP18 §3d). Every pass that walks a
+   * function body brackets that walk with this and `leaveInstance`, so a read
+   * of `nodeTypes[node.id]` inside an instantiation's body answers for *that*
+   * type-argument tuple and the code doing the reading never learns there was a
+   * choice. There is never more than one installed at a time: the worklist is
+   * drained in a loop and every other caller walks one function at a time.
+   */
+  enterInstance(info: Instantiation): void {
+    this.savedNodeTypes = this.nodeTypes;
+    this.savedNodeLocals = this.nodeLocals;
+    this.savedNodeConstants = this.nodeConstants;
+    this.savedNodeCallees = this.nodeCallees;
+    this.savedNodeCoercions = this.nodeCoercions;
+    this.savedNodeCaseValues = this.nodeCaseValues;
+    this.nodeTypes = info.nodeTypes;
+    this.nodeLocals = info.nodeLocals;
+    this.nodeConstants = info.nodeConstants;
+    this.nodeCallees = info.nodeCallees;
+    this.nodeCoercions = info.nodeCoercions;
+    this.nodeCaseValues = info.nodeCaseValues;
+    this.activeInstance = info;
+  }
+
+  /** Put the module's own tables back. */
+  leaveInstance(): void {
+    this.nodeTypes = this.savedNodeTypes;
+    this.nodeLocals = this.savedNodeLocals;
+    this.nodeConstants = this.savedNodeConstants;
+    this.nodeCallees = this.savedNodeCallees;
+    this.nodeCoercions = this.savedNodeCoercions;
+    this.nodeCaseValues = this.savedNodeCaseValues;
+    this.activeInstance = null;
   }
 
   /** The exported function called `name`, or `null`. */

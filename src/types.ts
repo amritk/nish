@@ -238,7 +238,10 @@ export function mangleType(t: StaticType): string {
     case "bool":
       return "bool";
     case "array":
-      return `arr.${mangleType(t.elem)}`;
+      // `readonly T[]` and `T[]` are two types (`sameType` says so), so they
+      // need two names: without the tag `identity<readonly i32[]>` and
+      // `identity<i32[]>` would be one symbol (WP18 §3c).
+      return `${t.readonly === true ? "roarr" : "arr"}.${mangleType(t.elem)}`;
     case "nullable":
       return `opt.${mangleType(t.inner)}`;
     case "struct":

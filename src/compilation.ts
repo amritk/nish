@@ -162,6 +162,11 @@ export class Compilation {
     for (const unit of this.modules) unit.checker.entryHasMain = hasMain;
     for (const unit of this.modules) unit.checker.checkBodies();
     this.sink.throwIfErrors();
+    // Pass 3 (WP18): every instantiation the bodies asked for, to a fixed
+    // point. It runs per module in load order because an instantiation is
+    // checked by the module that declares its template, in that module's scope.
+    for (const unit of this.modules) unit.checker.drainInstantiations();
+    this.sink.throwIfErrors();
     this.checked = true;
   }
 
@@ -201,6 +206,25 @@ export class Compilation {
     if (entry.checker.program.entryMain) owners.set("main", { unit: entry });
 
     for (const unit of this.modules) {
+      // A template's instantiations are named after it (`identity$i32`), so two
+      // modules declaring the same generic would produce the same symbols. The
+      // template's own name is what has to be unique, and it is checked here
+      // with the functions because the rule is the same rule (WP18 §3b).
+      for (const template of unit.checker.program.templates.values()) {
+        const prev = owners.get(template.sourceName);
+        if (!prev) {
+          owners.set(template.sourceName, { unit });
+          continue;
+        }
+        this.sink.report(
+          new CompileError(
+            `Generic function \`${template.sourceName}\` is also defined in ${prev.unit.fileName}; a function ` +
+              "name must be unique across the program, and an instantiation is named after its template",
+            template.nameNode,
+            unit.sourceFile
+          )
+        );
+      }
       for (const sig of unit.checker.program.functions) {
         const prev = owners.get(sig.name);
         if (!prev) {

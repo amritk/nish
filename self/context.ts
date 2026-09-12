@@ -10,7 +10,7 @@
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { StringMap } from "./map";
 import { Node } from "./nodes";
-import { CheckedProgram, FunctionSig } from "./program";
+import { CheckedProgram, FunctionSig, Instantiation, TemplateInfo } from "./program";
 import { T_ERROR, T_F64, T_I32, TypeTable } from "./types";
 
 /** `number` is `i32` by default and `f64` under `--number-mode f64`. */
@@ -40,6 +40,17 @@ export class CheckContext {
   entryHasMain: boolean;
   /** The function whose body is being checked, for `return` and `this`. */
   current: FunctionSig | null;
+  /**
+   * WP18: the type parameters in scope, bound to the types this instantiation
+   * gives them. Non-empty only while an instantiation's signature is resolved
+   * or its body is checked, and read by `resolveReference` — which is the whole
+   * of how `T` becomes `i32`.
+   */
+  typeBindings: StringMap;
+  /** The instantiation whose body is being checked, so a request from it records its parent. */
+  currentInstance: Instantiation | null;
+  /** Requested but not yet checked, FIFO so the enumeration order is the discovery order. */
+  pending: Instantiation[];
   /**
    * The loops and `switch`es enclosing the statement being checked, innermost
    * last. `break` marks the innermost; `continue` needs a real loop, because a
@@ -90,6 +101,9 @@ export class CheckContext {
     this.loopBreaks = [];
     this.statementExpression = null;
     this.errored = false;
+    this.typeBindings = new StringMap();
+    this.currentInstance = null;
+    this.pending = [];
   }
 
   /**
@@ -187,6 +201,11 @@ export class CheckContext {
   signature(name: string): FunctionSig | null {
     const at = this.sigs.get(name, -1);
     return at < 0 ? null : this.program.functions[at];
+  }
+
+  /** The generic template called `name` in this module, or `null` (WP18). */
+  template(name: string): TemplateInfo | null {
+    return this.program.template(name);
   }
 
   /** Register a function under its source name and add it to the module. */
