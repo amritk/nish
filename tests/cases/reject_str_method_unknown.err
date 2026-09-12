@@ -1,1 +1,1 @@
-Unknown method `codePointAt` on string (supported: charCodeAt, substring, indexOf, startsWith, endsWith)
+Unknown method `codePointAt` on string (supported: charCodeAt, substring, slice, indexOf, startsWith, endsWith)

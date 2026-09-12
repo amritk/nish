@@ -1054,6 +1054,53 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   }
 }
 
+// ---- WP15 §4: the fast slice ---------------------------------------------------------
+// 1. Every str_ module must satisfy the IR verifier, because `slice`'s range check adds
+//    blocks and an `unreachable` the way the array bounds check does.
+// 2. A failed range check exits 1 naming the interval that was asked for, and the earlier
+//    line still reaches stdout. The case slices a reversed pair, which is what separates
+//    `slice` from `substring`: JavaScript's `substring` would swap the ends and answer.
+// 3. The check is what the clamp is not: provable. `str_slice.ts` slices constant offsets
+//    out of a literal, so after `opt -O2` not one `nish_panic_slice` call is left in the
+//    module — the lean lowering costs nothing at all where the bounds are known, which is
+//    the argument for having it beside `substring` rather than instead of it.
+if (!only || "strings".includes(only) || only.startsWith("str")) {
+  if (HAS_OPT) {
+    for (const name of cases.filter((c) => c.startsWith("str_") && (!only || c.includes(only)))) {
+      const ll = path.join(buildDir, `${name}.ll`);
+      if (!fs.existsSync(ll)) continue;
+      const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll]);
+      check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr));
+    }
+    const sliceLl = path.join(buildDir, "str_slice.ll");
+    if (fs.existsSync(sliceLl)) {
+      const o = spawnSync("opt", ["-O2", "-S", sliceLl]);
+      const out = String(o.stdout);
+      check(
+        "str_slice: opt -O2 proves every constant slice in range and drops the panic",
+        o.status === 0 && out !== "" && !out.includes("nish_panic_slice"),
+        o.status === 0 ? out : String(o.stderr)
+      );
+    }
+  }
+  const slicePanicLl = path.join(buildDir, "str_slice_panic.ll");
+  if (HAS_CLANG && fs.existsSync(slicePanicLl)) {
+    const exe = path.join(buildDir, "str_slice_panic");
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", slicePanicLl, "runtime/runtime.c", "-o", exe], {
+      cwd: root,
+    });
+    const run = cc.status === 0 ? spawnSync(exe) : null;
+    check(
+      "str_slice_panic: exits 1 with `slice out of range: [4, 2) of length 5` on stderr",
+      run !== null &&
+        run.status === 1 &&
+        String(run.stderr).includes("slice out of range: [4, 2) of length 5") &&
+        String(run.stdout).trim() === "el",
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    );
+  }
+}
+
 // ---- WP6: memory --------------------------------------------------------------------
 // 1. Every mem_ module passes the IR verifier (allocas, scope calls, null compares).
 // 2. mem_stack_struct.ts has no arena allocation left: every object is an alloca, so the

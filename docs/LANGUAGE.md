@@ -1701,6 +1701,7 @@ interval exactly zero, which `io_monotonic` is the test for.
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`) | `str_bytes`; `reject_str_substring_arity` |
+| `s.slice(start: number[, end: number]): string` | the same bytes, without the clamp: `start` and `end` must satisfy `0 <= start <= end <= s.length` and anything else **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript would count a negative offset from the end and answer `""` for a reversed pair. `end` defaults to `s.length`, an empty range is `""`, and an in-range non-negative pair gives exactly what JavaScript's `String.prototype.slice` gives. Two `icmp ule` against a cold panic block, one allocation and one `memcpy`; `--unchecked-indexing` drops the compares, as it drops `a[i]`'s. Measured 1.18x over `substring` on a lexer-shaped scan ([wp15-performance.md](wp15-performance.md) §4) | `str_slice`, `str_slice_panic`; `reject_str_slice_arity`, `reject_str_slice_type` |
 | `s.indexOf(sub: string): number` | the first **byte** offset at which `sub` occurs, or `-1`; `s.indexOf("")` is `0`. One `nish_str_index_of` call: the search is the runtime's, so it is the libc's vectorised one rather than a probe per offset (WP15 §7c) | `str_search`; `reject_str_index_of_type` |
 | `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`nish_str_at`) | `str_search` |
 | `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
@@ -1779,9 +1780,10 @@ a mutable `T[]` — and it is exact where the fixpoint is not
 (`` `process.argv` is read-only ``), because it is a value and not an
 annotation.
 
-There are no other array or string methods (`slice`, `map`, `shift`,
-`toUpperCase`, `charAt`, ...) and no `toString` (template literals
-and `console.log` convert numbers); string-to-number parsing is the bare
+There are no other array or string methods (`map`, `shift`, `toUpperCase`,
+`charAt`, ...) — `slice` is a string method and an array has none — and no
+`toString` (template literals and `console.log` convert numbers);
+string-to-number parsing is the bare
 `Number(s)` / `parseInt(s)` / `parseFloat(s)` under
 [Numeric conversions](#numeric-conversions). An unknown name is
 `` Unknown method `codePointAt` on string `` or
@@ -1909,10 +1911,13 @@ compiler's own marks are never invalidated by user resets.
   (`tests/cases/res_basic`); runtime failures (bounds check, integer
   division, file errors, out of memory) print a message to stderr and exit
   with status 1 (`tests/cases/arr_bounds_panic`:
-  `index out of range: <i> >= <len>`; `div_zero_panic`:
+  `index out of range: <i> >= <len>`; `str_slice_panic`:
+  `slice out of range: [<start>, <end>) of length <len>`; `div_zero_panic`:
   `attempt to divide by zero`).
 - **Bounds checks** on every `a[i]` read and write, unsigned, so `-1` fails
-  (`tests/cases/arr_bounds_panic`); `--unchecked-indexing` removes them
+  (`tests/cases/arr_bounds_panic`), and the same unsigned compare guards
+  `s.charCodeAt(i)` and the two ends of `s.slice(a, b)`
+  (`tests/cases/str_slice_panic`); `--unchecked-indexing` removes all of them
   (`tests/cases/arr_unchecked`), after which out-of-range is undefined
   behaviour.
 - **`new Array<T>(n)` zero-fills** (`0` / `false`), no holes; pointer element

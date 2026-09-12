@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 361;
+export const RULE_COUNT: i32 = 362;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -395,6 +395,8 @@ export function diagnosticRules(): string[] {
     "NL2236",
     " (fields must match exactly, in order)",
     "NL2004",
+    "`slice` expects 1 or 2 arguments, got ",
+    "NL2289",
     "Cannot declare a variable of type void",
     "NL2183",
     "` must be declared `const`, not `let`",

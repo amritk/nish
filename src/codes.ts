@@ -391,6 +391,8 @@ const RULES: string[] = [
     "NL2236",
     " (fields must match exactly, in order)",
     "NL2004",
+    "`slice` expects 1 or 2 arguments, got ",
+    "NL2289",
     "Cannot declare a variable of type void",
     "NL2183",
     "` must be declared `const`, not `let`",
@@ -780,7 +782,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 361;
+export const RULE_COUNT = 362;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line
