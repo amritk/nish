@@ -62,6 +62,7 @@ export function collectFunctionSignature(
     returnType: resolveTypeNode(decl.type, sf, opts),
     decl,
     nameNode: decl.name,
+    declSite: decl,
     body: decl.body,
     exported: hasExportModifier(decl),
   };
@@ -139,6 +140,9 @@ export function collectArrowSignature(
     returnType: resolveTypeNode(arrow.type, sf, opts),
     decl: arrow,
     nameNode: decl.name,
+    // The declaration is the statement, not the arrow: `-g` measures the
+    // function from `export`, exactly as it does for the `function` spelling.
+    declSite: stmt,
     body: arrow.body,
     exported: hasExportModifier(stmt),
   };

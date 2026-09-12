@@ -32,11 +32,17 @@
 //     and `name` positionally and `member` takes an empty `file` for a member
 //     with no declaration to point at.
 //
-// **Columns are bytes**, as everywhere in `self/`, where stage0's are UTF-16
-// code units — the same caveat `self/diagnostics.ts` opens with, and it bites
-// in the same one place: a `DILocation` for an instruction whose line holds a
-// multi-byte character above the column. Every line of every `-g` case is
-// ASCII, where the two counts are equal.
+// **Columns are bytes**, as everywhere in `self/` — and stage0 counts bytes
+// here too now, which it did not always. Its diagnostics are still UTF-16 code
+// units (the caveat `self/diagnostics.ts` opens with), so the two used to
+// disagree about every `DILocation` whose line holds a multi-byte character
+// above the column. "Every line of every `-g` case is ASCII" was what kept
+// that invisible, and it was a fact about `tests/cases` rather than about the
+// corpus: `--parity` compiles `self/` with `-g` as well, and `self/checker.ts`
+// has an em dash inside a warning string. Bytes is the right answer rather
+// than the convenient one — it is what `clang -g` writes, and what a debugger
+// reads the column back against (`tests/cases/dbg_utf8`,
+// `docs/wp19-stage0-retirement.md` §A5).
 //
 // **The one host dependency, and what was done about it.** A `DIFile` carries
 // a filename and a directory, and stage0 used to spell the directory
@@ -447,6 +453,14 @@ export class DebugInfo {
    * `artificial` is the C-ABI entry wrapper, whose signature is
    * `int main(int, char**)` and whose parameters are not described; `name`
    * overrides `sig.sourceName` for it, and is empty everywhere else.
+   *
+   * `sig.decl` is the position because the parser normalises both spellings of
+   * a declaration into one `N_FUNCTION` that starts where the declaration does
+   * — at `export`, or at `const` (docs/wp22-arrow-functions.md §8). stage0 has
+   * to record that node separately (`FunctionSig.declSite`), because its arrow
+   * form keeps the `ArrowFunction`, whose own start is the parameter list.
+   * Reading a function's position off the arrow is what made the two compilers
+   * disagree about three `!DILocation` columns (tests/cases/dbg_arrow).
    */
   beginFunction(fn: IRFunction, sig: FunctionSig, artificial: boolean, name: string, privateAbi: boolean): void {
     const line = this.lineOf(this.source, sig.decl);
