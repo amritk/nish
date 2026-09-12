@@ -36,7 +36,7 @@ sentence each:
 | `readnone` | The function touches no memory except its own stack slots and calls only `readnone` callees (LLVM 16+ reads it as `memory(none)`). |
 | `readonly` (function) | As `readnone`, except the body reads memory it does not own: a string or array header, a field, an element, or a reading callee such as `nish_str_eq`. |
 | `memory(argmem: read)` | On a runtime `declare`: the callee reads only through its pointer arguments. |
-| `noreturn` | The callee never returns (`nish_exit`, `nish_panic_index`, `nish_panic_div`); the call is followed by `unreachable`. |
+| `noreturn` | The callee never returns (`nish_exit`, `nish_panic_index`, `nish_panic_slice`, `nish_panic_div`); the call is followed by `unreachable`. |
 | `cold` | The callee runs rarely (arena growth, a bounds-check failure); LLVM moves the call path out of the hot code. |
 | `noinline` | Never inline the callee (`nish_arena_grow`), so the slow path stays out of the caller. |
 | `alwaysinline` | Always inline the callee: the arena fast path `@nish_alloc_struct` becomes a few instructions in every caller. |
@@ -501,6 +501,96 @@ attributes #3 = { nounwind noreturn cold }
 !4 = !{!2}
 ```
 <!-- cookbook:end decl_type_alias -->
+
+### Numeric `enum`
+
+An enum is a **distinct type with `i32` representation**, so the type system
+keeps `Kind` apart from every other integer and the IR keeps nothing at all:
+`Kind.While` is the constant `2`, a `Kind` parameter is an `i32` parameter, and
+the `switch` is the jump table an integer discriminant has always produced.
+There is no symbol, no table and no `%struct` for the enum, which is why the
+same program written with `i32` module constants compiles to a byte-identical
+module (`tests/cases/enum_ir` and `enum_expanded`).
+
+<!-- cookbook:begin decl_enum -->
+```ts
+enum Kind {
+  If = 1,
+  While = 2,
+  Return = 3,
+}
+
+const weight = (k: Kind): i32 => {
+  switch (k) {
+    case Kind.If:
+      return 10;
+    case Kind.While:
+      return 20;
+    default:
+      return 30;
+  }
+};
+
+export const main = (): number => {
+  const k: Kind = Kind.While;
+  console.log(`weight = ${weight(k)}`);
+  return 0;
+};
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"weight = \00" }, align 8
+
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+
+define internal noundef i32 @weight(i32 noundef %k) #0 {
+entry:
+  switch i32 %k, label %sw.default [
+    i32 1, label %sw.case
+    i32 2, label %sw.case.1
+  ]
+
+sw.case:
+  ret i32 10
+
+sw.case.1:
+  ret i32 20
+
+sw.default:
+  ret i32 30
+}
+
+define noundef i32 @nish_main() #1 {
+entry:
+  %k.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  store i32 2, i32* %k.addr, align 4
+  %0 = load i32, i32* %k.addr, align 4
+  %1 = call i32 @weight(i32 %0)
+  %2 = call i8* @nish_str_from_i32(i32 %1)
+  %3 = call i8* @nish_str_concat(i8* bitcast ({ i64, [10 x i8] }* @.str.0 to i8*), i8* %2)
+  call void @nish_print(i8* %3)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readnone }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind }
+```
+<!-- cookbook:end decl_enum -->
 
 ### `export const main` and the entry wrapper
 
@@ -2192,6 +2282,108 @@ attributes #3 = { nounwind noreturn cold }
 attributes #4 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end str_bytes -->
+
+### The fast slice
+
+`slice` is `substring` with the clamp taken out (WP15 §4). Where `substring`
+puts both ends in range with six `llvm.smin` / `llvm.smax` calls, `slice`
+requires `0 <= start <= end <= len` and branches to a cold
+`nish_panic_slice` block when that does not hold, so the body is two
+`icmp ule`, one `sub`, one `getelementptr` and one `nish_str_new`. Two
+unsigned compares are the whole test because a negative offset sign-extends
+to a value above any byte length. With no `end`, `end` *is* `len` and only
+the ordering compare is emitted, which is `rest` below.
+
+The check is the part a clamp can never be: provable. `proven` slices constant
+offsets out of a literal, and `opt -O2` deletes its compare, its branch and its
+panic block outright — the same optimiser cannot delete a clamp, because the
+clamp is not a check but part of the answer. That is why the two live side by
+side rather than one replacing the other, and it is worth 1.18x on a scan that
+slices every word out of a 300 KB source.
+
+<!-- cookbook:begin str_slice -->
+```ts
+const head = (s: string, n: number): string => s.slice(0, n);
+
+const rest = (s: string, n: number): string => s.slice(n);
+
+const proven = (): string => "hello,world".slice(0, 5);
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [12 x i8] } { i64 11, [12 x i8] c"hello,world\00" }, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+
+define internal noundef nonnull align 8 i8* @head(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %n) #0 {
+entry:
+  %0 = bitcast i8* %s to i64*
+  %1 = load i64, i64* %0, align 8
+  %2 = sext i32 %n to i64
+  %3 = icmp ule i64 0, %2
+  %4 = icmp ule i64 %2, %1
+  %5 = and i1 %3, %4
+  br i1 %5, label %slice.ok, label %slice.fail
+
+slice.fail:
+  call void @nish_panic_slice(i64 0, i64 %2, i64 %1)
+  unreachable
+
+slice.ok:
+  %6 = sub i64 %2, 0
+  %7 = getelementptr inbounds i8, i8* %s, i64 8
+  %8 = getelementptr inbounds i8, i8* %7, i64 0
+  %9 = call i8* @nish_str_new(i8* %8, i64 %6)
+  ret i8* %9
+}
+
+define internal noundef nonnull align 8 i8* @rest(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %n) #0 {
+entry:
+  %0 = bitcast i8* %s to i64*
+  %1 = load i64, i64* %0, align 8
+  %2 = sext i32 %n to i64
+  %3 = icmp ule i64 %2, %1
+  br i1 %3, label %slice.ok, label %slice.fail
+
+slice.fail:
+  call void @nish_panic_slice(i64 %2, i64 %1, i64 %1)
+  unreachable
+
+slice.ok:
+  %4 = sub i64 %1, %2
+  %5 = getelementptr inbounds i8, i8* %s, i64 8
+  %6 = getelementptr inbounds i8, i8* %5, i64 %2
+  %7 = call i8* @nish_str_new(i8* %6, i64 %4)
+  ret i8* %7
+}
+
+define internal noundef nonnull align 8 i8* @proven() #0 {
+entry:
+  %0 = bitcast i8* bitcast ({ i64, [12 x i8] }* @.str.0 to i8*) to i64*
+  %1 = load i64, i64* %0, align 8
+  %2 = icmp ule i64 0, 5
+  %3 = icmp ule i64 5, %1
+  %4 = and i1 %2, %3
+  br i1 %4, label %slice.ok, label %slice.fail
+
+slice.fail:
+  call void @nish_panic_slice(i64 0, i64 5, i64 %1)
+  unreachable
+
+slice.ok:
+  %5 = sub i64 5, 0
+  %6 = getelementptr inbounds i8, i8* bitcast ({ i64, [12 x i8] }* @.str.0 to i8*), i64 8
+  %7 = getelementptr inbounds i8, i8* %6, i64 0
+  %8 = call i8* @nish_str_new(i8* %7, i64 %5)
+  ret i8* %8
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+```
+<!-- cookbook:end str_slice -->
 
 ### Template literals
 
@@ -5065,6 +5257,7 @@ declare noundef nonnull align 8 i8* @nish_arch() #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_alloc_array(i64 noundef, i64 noundef) #2
 declare void @nish_panic_index(i64 noundef, i64 noundef) #6
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #6
 declare void @nish_panic_div(i1 noundef zeroext) #6
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {

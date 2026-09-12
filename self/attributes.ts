@@ -287,7 +287,17 @@ export class FunctionFacts {
   }
 }
 
-/** Facts for every function of a whole program, keyed by LLVM symbol. */
+/**
+ * Facts for every function of a whole program, keyed by LLVM symbol.
+ *
+ * A symbol and no longer a bare name, since WP21 S1: every symbol carries its
+ * module's package prefix (`self/packages.ts`), so two dependencies that each
+ * keep a private `helper()` get two entries here instead of one. Sharing an
+ * entry would emit each of them with the other's purity, escape and pointer
+ * facts, which is a miscompile rather than a missed optimisation. Nothing here
+ * changed for it: the root package's prefix is empty, so a single-package
+ * program is analysed under exactly the keys it always was.
+ */
 export class FactsTable {
   index: StringMap;
   list: FunctionFacts[];
@@ -798,9 +808,10 @@ class FactCollector {
       return;
     }
     if (node.kind === N_CALL && isStringMethodCall(program, node)) {
-      // The byte methods all read the string's bytes; `substring` also allocates.
+      // The byte methods all read the string's bytes; `substring` and `slice`
+      // also allocate, and `slice` can reach its panic.
       this.facts.readsMemory = true;
-      this.addCallees(stringConstructCallees(node.children[0].text));
+      this.addCallees(stringConstructCallees(node.children[0].text, this.opts.uncheckedIndexing));
       return;
     }
     if (node.kind === N_MEMBER && program.nodeTypes[node.children[0].id] === T_STRING) {

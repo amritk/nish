@@ -1,0 +1,1 @@
+`charCodeAt` expects a number index, got string

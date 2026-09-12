@@ -19,7 +19,8 @@
 
 import { SourceFile } from "./diagnostics";
 import { StringMap, StringSet } from "./map";
-import { N_CONSTRUCTOR, N_EMPTY, Node } from "./nodes";
+import { N_CONSTRUCTOR, N_EMPTY, N_MEMBER, Node } from "./nodes";
+import { packageSymbolPrefix } from "./packages";
 import { Local } from "./symbols";
 import { TypeTable } from "./types";
 
@@ -39,7 +40,14 @@ export const STRUCT_INTERFACE: i32 = 1;
  * per parameter. For a method or constructor `params[0]` is `this`.
  */
 export class FunctionSig {
-  /** The LLVM symbol (`@name`). `main` in the entry module is `@nish_main`. */
+  /**
+   * The LLVM symbol (`@name`), and the key the whole-program fact fixpoint is
+   * kept under (`self/attributes.ts`). It is the declared identifier qualified
+   * with the module's package prefix (WP21 S1, `self/packages.ts`), which is
+   * empty for the root package and so for every module of a single-package
+   * program. `Owner.method` for a member, and `main` in the entry module is
+   * `@nish_main`.
+   */
   name: string;
   /** The identifier as written; for a method it reads `Owner.method`. */
   sourceName: string;
@@ -262,6 +270,51 @@ export class AliasInfo {
   }
 }
 
+/**
+ * A numeric `enum` declaration (WP23). It is a distinct type with `i32`
+ * representation, and its members are folded when the declaration is read, so
+ * this record answers an annotation (`Kind`) and a member reference
+ * (`Kind.If`) and the emitter never hears of it — `Kind.If` lowers to the
+ * literal the checker wrote into `nodeEnumValues` (`src/checker/enums.ts`).
+ */
+export class EnumInfo {
+  name: string;
+  decl: Node;
+  /** The module that declares it; an enum never leaves the one that wrote it. */
+  origin: SourceFile;
+  /** The distinct type id, shared by every annotation that names it. */
+  type: i32;
+  /** Member name -> index into `memberValues`; iteration order is declaration order. */
+  members: StringMap;
+  memberNames: string[];
+  memberValues: i32[];
+
+  constructor(name: string, decl: Node, origin: SourceFile, type: i32) {
+    this.name = name;
+    this.decl = decl;
+    this.origin = origin;
+    this.type = type;
+    this.members = new StringMap();
+    this.memberNames = [];
+    this.memberValues = [];
+  }
+
+  addMember(name: string, value: i32): void {
+    this.members.set(name, this.memberValues.length);
+    this.memberNames.push(name);
+    this.memberValues.push(value);
+  }
+
+  hasMember(name: string): boolean {
+    return this.members.has(name);
+  }
+
+  /** The integer `name` stands for; the caller has already asked `hasMember`. */
+  memberValue(name: string): i32 {
+    return this.memberValues[this.members.get(name, 0)];
+  }
+}
+
 /** One name brought in by `import { f, g as h } from "./m"`. */
 export class ImportBinding {
   /** Module specifier text, e.g. `./math`. Relative specifiers only. */
@@ -337,6 +390,20 @@ export class CheckedProgram {
   /** The `N_SOURCE_FILE` this module parsed to. */
   file: Node;
   isEntry: boolean;
+  /**
+   * The package this module belongs to (WP21 S1, `self/packages.ts`). `""` is
+   * the root package — the program being compiled — which is where every
+   * module of a single-package build lives.
+   */
+  packageName: string;
+  /**
+   * The prefix every symbol declared in this module carries; `""` for the root
+   * package. `FunctionSig.name` already has it applied, so nothing downstream
+   * has to remember to apply it. The field is kept so a diagnostic can name
+   * the package a clash is inside and `--emit-checked` can say which package a
+   * module came from.
+   */
+  symbolPrefix: string;
 
   /** Functions defined in this module, in source order. */
   functions: FunctionSig[];
@@ -375,6 +442,10 @@ export class CheckedProgram {
   aliases: StringMap;
   aliasList: AliasInfo[];
 
+  /** Name -> index into `enumList`, for the numeric `enum`s this module declares (WP23). */
+  enums: StringMap;
+  enumList: EnumInfo[];
+
   /** Set when this module declares `export function main`; the entry wrapper wraps it. */
   entryMain: FunctionSig | null;
   /** Some function reads `process.argv`, so the `@main` wrapper calls `nish_argv_init`. */
@@ -397,11 +468,22 @@ export class CheckedProgram {
   nodeCoercions: i32[];
   /** `N_CASE` node id -> the folded label, which a `switch` needs as a constant. */
   nodeCaseValues: i64[];
+  /**
+   * `N_MEMBER` node id -> the integer an enum member stands for (WP23). There
+   * is no presence flag beside it and none is needed: a member's value may be
+   * 0 or negative, but the node that carries one is exactly an `N_MEMBER` of
+   * enum type whose receiver is not a value, and both of those are already
+   * recorded (`isEnumMember`). `src/` uses a `WeakMap`, where presence is the
+   * key's own answer.
+   */
+  nodeEnumValues: i32[];
 
-  constructor(source: SourceFile, file: Node, isEntry: boolean, nodeCount: i32) {
+  constructor(source: SourceFile, file: Node, isEntry: boolean, nodeCount: i32, packageName: string) {
     this.source = source;
     this.file = file;
     this.isEntry = isEntry;
+    this.packageName = packageName;
+    this.symbolPrefix = packageSymbolPrefix(packageName);
     this.functions = [];
     this.exports = new StringMap();
     this.imports = [];
@@ -414,6 +496,8 @@ export class CheckedProgram {
     this.constantList = [];
     this.aliases = new StringMap();
     this.aliasList = [];
+    this.enums = new StringMap();
+    this.enumList = [];
     this.entryMain = null;
     this.usesArgv = false;
     this.nodeTypes = new Array<i32>(nodeCount);
@@ -422,6 +506,7 @@ export class CheckedProgram {
     this.nodeCallees = new Array<FunctionSig | null>(nodeCount);
     this.nodeCoercions = new Array<i32>(nodeCount);
     this.nodeCaseValues = new Array<i64>(nodeCount);
+    this.nodeEnumValues = new Array<i32>(nodeCount);
     let i = 0;
     while (i < nodeCount) {
       this.nodeTypes[i] = -1;
@@ -461,6 +546,31 @@ export class CheckedProgram {
   addAlias(info: AliasInfo): void {
     this.aliases.set(info.name, this.aliasList.length);
     this.aliasList.push(info);
+  }
+
+  /**
+   * Whether `node` is an enum member reference — `Kind.If` — whose folded
+   * integer is in `nodeEnumValues` (WP23). It is an `N_MEMBER` of enum type
+   * whose receiver is a *name* rather than a value, and nothing else in the
+   * language has that shape, so the two tables the checker already writes
+   * answer the question and no presence flag has to be stored beside them.
+   */
+  isEnumMember(table: TypeTable, node: Node): boolean {
+    if (node.kind !== N_MEMBER || this.nodeTypes[node.children[0].id] >= 0) {
+      return false;
+    }
+    return table.isEnum(this.nodeTypes[node.id]);
+  }
+
+  /** The numeric `enum` called `name` in this module, or `null` (WP23). */
+  enumNamed(name: string): EnumInfo | null {
+    const at = this.enums.get(name, -1);
+    return at < 0 ? null : this.enumList[at];
+  }
+
+  addEnum(info: EnumInfo): void {
+    this.enums.set(info.name, this.enumList.length);
+    this.enumList.push(info);
   }
 
   /** The exported function called `name`, or `null`. */

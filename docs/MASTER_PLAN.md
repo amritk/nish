@@ -517,7 +517,10 @@ to stage2.
   comparing stage1 against stage0 over the whole corpus rather than against a
   hand-written golden.
 - `scripts/bootstrap.sh` builds the chain and leaves `build/nish` behind;
-  `--verify` runs the three equalities with `cmp`.
+  `--verify` runs the three equalities with `cmp` — all three for a stage0
+  seed, and the two that do not mention the seed for any other, since
+  `IR(seed) == IR(stage1)` is diverse double-compiling only when the seed is
+  the second implementation (`docs/wp19-stage0-retirement.md` G3).
 - §7a reversed decision D4: `mkdirSync` and `spawnSync` entered the language,
   so stage1 plans its own output, makes its own directories and runs
   `scripts/build.sh` itself. The wrapper `scripts/nish.sh` is deleted.
@@ -762,11 +765,14 @@ prebuilt library cannot carry the attribute fixpoint of §3a, cannot contain a
 generic that nobody has instantiated yet, and would have to be built once per
 (number mode × target × profile). An `exports` map states both, one condition
 per consumer. [wp21-packages.md](wp21-packages.md) is the plan of record; it
-is rough, and its one hard blocker is that the symbol namespace is flat today
-— two packages with a private `helper()` each would fail to compile together,
-because the whole-program fact table is keyed by symbol name. Package-scoped
-symbols are its first stage, have no language surface, and are worth landing
-early: the diff is mechanical and grows with every new golden.
+is rough, and its one hard blocker was that the symbol namespace was flat —
+two packages with a private `helper()` each could not be compiled together,
+because the whole-program fact table was keyed by symbol name. **That blocker
+is closed**: S1 gave every symbol a package scope (wp21 §9), and because the
+root package's prefix is empty a single-package program emits the IR it always
+did — not one golden moved and no exported name changed. The stage that
+follows is S2, bare specifiers and the `nish` export condition; S1 has no
+language surface and left `docs/LANGUAGE.md` untouched.
 
 The declaration form is not on that list either, and it is the one entry here
 that is pure spelling: **arrow functions become how Nish declares a
@@ -786,11 +792,15 @@ The rest of the language surface has no owner either, and a review of the
 corpus for the sentence *the language has no X* turned up eight candidates
 that belong to nobody: [wp23-language-surface.md](wp23-language-surface.md) is
 the plan of record, and its most useful half is the three it **refuses**.
-Non-generic `type` aliases and a numeric `enum` are being built now — both are
-pure checker work that changes no byte of IR, the alias because `Int32Array`
+Non-generic `type` aliases and a numeric `enum` have both landed — both were
+pure checker work that changed no byte of IR, the alias because `Int32Array`
 already establishes that an alias is the type it names, the enum because
-`self/` stands 171 module constants in for three of them and nothing stops
-passing a token kind where a node kind belongs. Module-level mutable state is
+`self/` stands 171 module constants in for three of them and nothing stopped
+passing a token kind where a node kind belongs. An enum is a *distinct* type
+with `i32` representation, so `tests/cases/enum_ir` and `enum_expanded` are one
+program written with and without it and their goldens are byte-identical files;
+`self/` does not adopt them until the next minor, by the bootstrap seed policy
+([wp19-stage0-retirement.md](wp19-stage0-retirement.md) G4). Module-level mutable state is
 the one functional gap, since stage1 cannot emit the `--json` object for an
 internal compiler error and orientation rule 7 says every failure is one of
 those objects; the note designs the narrow version — module-private, scalar,

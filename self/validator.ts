@@ -20,6 +20,8 @@ import {
   N_BIGINT,
   N_BINARY,
   N_CALL,
+  N_EMPTY,
+  N_ENUM,
   N_IDENT,
   N_INDEX,
   N_MEMBER,
@@ -200,6 +202,9 @@ function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void {
     case N_CALL:
       rejectForbiddenCall(ctx, node);
       break;
+    case N_ENUM:
+      rejectComputedEnumMembers(ctx, node);
+      break;
     case N_THROW:
       // WP16: `throw` never unwound, it trapped and discarded its value, so it
       // was an abort wearing the syntax of error handling. The parser still
@@ -216,6 +221,32 @@ function visit(ctx: CheckContext, node: Node, inTypePosition: boolean): void {
   for (const child of node.children) {
     visit(ctx, child, inTypePosition);
   }
+}
+
+/**
+ * An enum member's value has to be a numeric literal, because an enum lowers
+ * to a plain integer and a module has no code that could compute one. What the
+ * *checker* adds on top is what needs the type model: the literal must be an
+ * integer and it must fit in `i32` (WP23).
+ */
+function rejectComputedEnumMembers(ctx: CheckContext, node: Node): void {
+  for (const member of node.children[1].children) {
+    const initializer = member.children[1];
+    if (initializer.kind !== N_EMPTY && !isNumericLiteralShape(initializer)) {
+      ctx.error(
+        initializer,
+        "Enum members must be numeric literals in " + LANGUAGE + " (enums lower to plain integers)"
+      );
+    }
+  }
+}
+
+/** A numeric literal, or one with a leading `-`: everything an enum member may be. */
+function isNumericLiteralShape(expr: Node): boolean {
+  if (expr.kind === N_NUMBER) {
+    return true;
+  }
+  return expr.kind === N_UNARY && expr.text === "-" && expr.children[0].kind === N_NUMBER;
 }
 
 function rejectForbiddenMember(ctx: CheckContext, node: Node): void {

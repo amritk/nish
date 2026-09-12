@@ -27,6 +27,7 @@ import { analyzeFunctions, AnalysisUnit, FunctionFacts } from "./attributes";
 import { CLI } from "./branding";
 import { Compilation, ModuleUnit } from "./compilation";
 import { StringMap, StringSet } from "./map";
+import { ROOT_PACKAGE } from "./packages";
 import { basename } from "./paths";
 import { FunctionSig } from "./program";
 import { ResultLayout, resultLayout } from "./result";
@@ -35,6 +36,7 @@ import {
   K_ARRAY,
   K_NULLABLE,
   K_RESULT,
+  K_ENUM,
   K_STRUCT,
   T_BOOL,
   T_F32,
@@ -91,11 +93,12 @@ export class ExternalFunction {
 }
 
 /**
- * Every function that is an external symbol of the final link, in module and
- * source order: exported functions always, non-exported ones unless
- * `--strict-exports` made them `internal`. The entry `export function main`
- * is excluded: it is emitted as `@nish_main` behind the process entry wrapper
- * and is not a library call.
+ * Every function of the *root package* that is an external symbol of the final
+ * link, in module and source order: exported functions always, non-exported
+ * ones unless `--strict-exports` made them `internal`. The entry
+ * `export function main` is excluded: it is emitted as `@nish_main` behind the
+ * process entry wrapper and is not a library call, and since WP21 S1 a
+ * dependency package's exports are excluded too -- see the comment in the loop.
  *
  * An imported signature is skipped as well. Pass 1b appends it to the
  * importer's `functions` (`self/program.ts`), where `src/` leaves that list
@@ -112,6 +115,15 @@ export function externalFunctions(compilation: Compilation): ExternalFunction[] 
   for (const unit of compilation.modules) {
     const program = unit.checker.program;
     const entryMain = program.entryMain;
+    // WP21 S1: a dependency package's `export` is an export to an Nish
+    // consumer, not a promise to a C host -- wp21-packages.md sections 1 and 4
+    // are explicit that a package's artifact rows are a narrowed projection of
+    // what an Nish consumer sees, and that the projection is the embedding
+    // program's to choose. So the foreign surface is the root package's, which
+    // for every single-package program is all of it and changes nothing.
+    if (program.packageName !== ROOT_PACKAGE) {
+      continue;
+    }
     for (const sig of program.functions) {
       if (!sig.definedIn(program.source)) {
         continue;
@@ -412,6 +424,11 @@ export function tsKeyword(table: TypeTable, t: i32): string {
     case T_BOOL:
       return "boolean";
     case K_STRUCT:
+      return table.nameOf(t);
+    // WP23: an enum does not cross to C or JS — `cType` and `wasmType` have no
+    // entry for it — but it can still appear in the comment above a
+    // declaration that was skipped, and there it reads as its own name.
+    case K_ENUM:
       return table.nameOf(t);
     case K_ARRAY:
       // The comment above the prototype is the signature as it was written, so

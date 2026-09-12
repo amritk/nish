@@ -1399,6 +1399,19 @@ void nish_panic_index(uint64_t idx, uint64_t len) {
   _exit(1);
 }
 
+/* `s.slice(start, end)` (WP15 section 4) with a range the string does not
+   contain. The two ends are printed as the half-open interval that was asked
+   for, because the failure is as often a reversed pair as an end past the
+   string, and `nish_panic_index`'s "i >= len" says nothing useful about the
+   first of those. They are signed here although the check compares them
+   unsigned: that comparison is a trick for folding `>= 0` into one `icmp`, and
+   a reader who wrote `s.slice(i - 1)` wants to be told `-1` rather than
+   18446744073709551615. The length cannot be negative either way. */
+void nish_panic_slice(int64_t start, int64_t end, int64_t len) {
+  dprintf(2, "slice out of range: [%" PRId64 ", %" PRId64 ") of length %" PRId64 "\n", start, end, len);
+  _exit(1);
+}
+
 /* ---- Checked division (Rust semantics): the failed-check path */
 void nish_panic_div(_Bool by_zero) {
   nish_die(by_zero ? "attempt to divide by zero\n" : "attempt to divide with overflow\n");

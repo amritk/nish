@@ -93,14 +93,19 @@ export const N_TYPE_READONLY: i32 = 57; // `readonly T[]`; children: the type th
 // appended and never moved: forty constants and a `nodeName` switch read the
 // same either way, and renumbering them would churn every one of them.
 export const N_TYPE_ALIAS: i32 = 58; // `type X = T;`; children: name, the aliased type
+// `enum X { A = 1 }` (WP23); children: name, LIST of ENUM_MEMBER.
+export const N_ENUM: i32 = 59;
+// One member; children: name, initializer (N_EMPTY when it is auto-numbered).
+export const N_ENUM_MEMBER: i32 = 60;
 
-export const N_COUNT: i32 = 59;
+export const N_COUNT: i32 = 61;
 
 // `flags` on N_UNARY: which side the operator was written on.
 export const FLAG_PREFIX: i32 = 0;
 export const FLAG_POSTFIX: i32 = 1;
 
-// `flags` on N_FUNCTION, N_CLASS, N_INTERFACE, N_MODULE_CONST, N_TYPE_ALIAS: bit 0 is
+// `flags` on N_FUNCTION, N_CLASS, N_INTERFACE, N_MODULE_CONST, N_TYPE_ALIAS,
+// N_ENUM: bit 0 is
 // `export`. A bitfield rather than a field per modifier, because the checker
 // asks about them one at a time and the parser sets them in one place.
 export const FLAG_EXPORTED: i32 = 1;
@@ -266,6 +271,10 @@ export function nodeName(kind: i32): string {
       return "TYPE_READONLY";
     case N_TYPE_ALIAS:
       return "TYPE_ALIAS";
+    case N_ENUM:
+      return "ENUM";
+    case N_ENUM_MEMBER:
+      return "ENUM_MEMBER";
     default:
       return "?";
   }

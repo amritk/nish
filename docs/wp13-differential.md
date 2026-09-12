@@ -117,6 +117,7 @@ round/sqrt/sin/cos/exp/log/pow`, `Math.PI/E`, `Math.random`.
 | `a[i]` read | any | `__nish.idx(a, i)` | WP4 bounds check: out of range prints `index out of range: i >= len` to stderr and exits 1; negative indices fail like the unsigned compare; a double index is truncated like `fptosi` |
 | `a[i] = v` | any | `__nish.setIdx(a, i, v)` | evaluates `a`, `i`, `v`, then checks and stores; yields `v` |
 | `a[i] op= v` | any numeric, and any integer for the bitwise forms | `__nish.updIdx(a, i, (old) => <old op v rule>)` | evaluates `a`, `i`, checks, loads, evaluates `v`, computes, stores — once each, which is what `corpus/bit_compound_target` counts |
+| `s.charCodeAt(i)`, `s.substring(a, b)`, `s.slice(a, b)`, `s.indexOf(sub)`, `s.startsWith(p)`, `s.endsWith(p)` | receiver string | `__nish.<name>(s, ...)` | every offset is a UTF-8 byte offset, which JavaScript's own methods do not use; `slice` panics on a range the string does not contain instead of clamping |
 | `s.length` | receiver string | `__nish.strLen(s)` = `Buffer.byteLength(s, "utf8")` | UTF-8 byte length. Arrays keep `.length` |
 | `new Array<T>(n)` | | `__nish.newArray(n, 0 \| 0n \| false)` | zero-filled, no holes |
 | `console.log(x)` | | `__nish.log(x)` | `String(x)` + newline via `fs.writeSync(1)`: no `n` suffix on BigInt, synchronous so `process.exit` cannot lose it |
@@ -171,7 +172,7 @@ visible as known failures):
   `p` into the slot, so a later write through `p` does not change `ps[n]` —
   where JavaScript would have stored the object itself. The shim cannot
   reproduce this without a deep copy per store, and the dangerous half of it is
-  a compile error anyway (`NL2280`: an element reference may not be held across
+  a compile error anyway (`NL2290`: an element reference may not be held across
   a `push`), so **a corpus program must not rely on a pushed record and the
   element it became being the same object**. An array of a `class`, or of an
   `interface` some class implements, is unchanged and still holds references.
@@ -194,10 +195,10 @@ visible as known failures):
   width (`corpus/u_wrap`, `u_div_cmp`, `u_convert_shift`).
 - **`s.length` is the UTF-8 byte length** (docs/wp3-strings.md): `"héllo".length`
   is `6`, `"🎉".length` is `4`. So is every offset the string methods take or
-  return (WP14 A2): the shim runs `charCodeAt`, `substring`, `indexOf`,
-  `startsWith` and `endsWith` over `Buffer.from(s, "utf8")` rather than over
-  the JavaScript string, so `"héllo".charCodeAt(1)` is `195`, the first byte
-  of `é`, on both sides (`corpus/str_methods`).
+  return (WP14 A2): the shim runs `charCodeAt`, `substring`, `slice`,
+  `indexOf`, `startsWith` and `endsWith` over `Buffer.from(s, "utf8")` rather
+  than over the JavaScript string, so `"héllo".charCodeAt(1)` is `195`, the
+  first byte of `é`, on both sides (`corpus/str_methods`, `corpus/str_slice`).
 - **`s.charCodeAt(i)` bounds-checks** and exits 1, where JavaScript answers
   `NaN`, which an `i32` cannot hold; `String.fromCharCode(c)` builds the
   one-byte string of `c & 0xFF`. A code above 127 is therefore one byte that
@@ -207,6 +208,12 @@ visible as known failures):
   a cut through the middle of a multi-byte character leaves bytes that are not
   a valid string, and Node replaces them with `U+FFFD` where the native side
   prints them raw, so `corpus/str_methods` cuts on character boundaries.
+- **`s.slice(a, b)` refuses what `substring` clamps** (WP15 §4): JavaScript
+  counts a negative offset from the end and answers `""` for a reversed pair,
+  and `slice` panics with `slice out of range: [a, b) of length len` in both
+  of those cases. The shim panics the same way, so `cases/str_slice_panic`
+  agrees rather than being a known difference; what the corpus compares is the
+  in-range, non-negative half, where the two are byte for byte the same.
 - **`toI32`/`toI64` from a double saturate** (`toI32(5e10)` is `2147483647`,
   `toI32(NaN)` is `0`), unlike JavaScript's `ToInt32`; integer-to-integer
   conversions wrap (docs/wp7-runtime.md).

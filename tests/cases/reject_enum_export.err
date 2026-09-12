@@ -1,0 +1,1 @@
+Enums cannot be exported: an enum names a type inside one module

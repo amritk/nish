@@ -15,6 +15,7 @@
 import ts from "typescript";
 import { StaticType, typeToString } from "../types.js";
 import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context.js";
+import { EnumInfo } from "./enums.js";
 import { Scope } from "./scope.js";
 import { lookup } from "../lookup.js";
 
@@ -58,12 +59,34 @@ export function isValueReceiver(ctx: CheckContext, receiver: ts.Expression, scop
   return scope.lookup(receiver.text) !== undefined || ctx.program.constants.has(receiver.text);
 }
 
+/**
+ * `Kind.If` (WP23). An enum name is not a value, so it arrives here the way
+ * `Math` does — as a receiver nothing is bound to — and the member is folded
+ * to its integer on the spot. The emitter reads `enumRefs`, so a member costs
+ * exactly what the literal costs and an enum emits no symbol at all.
+ */
+const checkEnumMember = (
+  ctx: CheckContext,
+  expr: ts.PropertyAccessExpression,
+  info: EnumInfo
+): StaticType => {
+  const value = info.members.get(expr.name.text);
+  if (value === undefined) {
+    throw ctx.error(`Enum \`${info.name}\` has no member \`${expr.name.text}\``, expr.name);
+  }
+  ctx.program.enumRefs.set(expr, value);
+  return info.type;
+};
+
 const checkPropertyAccess: ExpressionChecker = (ctx, node, scope) => {
   const expr = node as ts.PropertyAccessExpression;
   if (!isValueReceiver(ctx, expr.expression, scope)) {
-    const dotted = `${(expr.expression as ts.Identifier).text}.${expr.name.text}`;
+    const name = (expr.expression as ts.Identifier).text;
+    const declaredEnum = ctx.program.enums.get(name);
+    if (declaredEnum) return checkEnumMember(ctx, expr, declaredEnum);
+    const dotted = `${name}.${expr.name.text}`;
     const handler = lookup(namespaceProperties, dotted);
-    if (!handler) throw ctx.error(`Unknown identifier \`${(expr.expression as ts.Identifier).text}\``, expr.expression);
+    if (!handler) throw ctx.error(`Unknown identifier \`${name}\``, expr.expression);
     return handler(ctx, expr);
   }
   const receiver = ctx.checkExpression(expr.expression, scope);

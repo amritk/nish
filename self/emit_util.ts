@@ -138,6 +138,7 @@ export function isStringMethod(name: string): boolean {
   return (
     name === "charCodeAt" ||
     name === "substring" ||
+    name === "slice" ||
     name === "indexOf" ||
     name === "startsWith" ||
     name === "endsWith"
@@ -153,7 +154,7 @@ export function isStringMethodCall(program: CheckedProgram, call: Node): boolean
   return program.nodeTypes[receiver.id] === T_STRING;
 }
 
-/** `call` allocates a string: `s.substring(...)` or `String.fromCharCode(c)`. */
+/** `call` allocates a string: `s.substring(...)`, `s.slice(...)` or `String.fromCharCode(c)`. */
 export function isStringAllocCall(program: CheckedProgram, call: Node): boolean {
   if (call.kind !== N_CALL) {
     return false;
@@ -162,7 +163,10 @@ export function isStringAllocCall(program: CheckedProgram, call: Node): boolean 
   if (dottedName(callee) === "String.fromCharCode" && !receiverIsValue(program, callee.children[0])) {
     return true;
   }
-  return isStringMethodCall(program, call) && callee.text === "substring";
+  if (!isStringMethodCall(program, call)) {
+    return false;
+  }
+  return callee.text === "substring" || callee.text === "slice";
 }
 
 /**

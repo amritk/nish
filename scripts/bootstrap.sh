@@ -24,6 +24,12 @@
 # the parameter: stage0 stays the default answer without being the only one, so
 # the same script builds `self/` from a released binary and from `src/`.
 #
+# Naming this checkout's own `dist/index.js` is that same seed spelled a second
+# way, and is treated as stage0 for it. What `--verify` asserts below depends
+# on what the seed *is*, not on whether a variable happened to be set, and the
+# example above would otherwise drop the strongest equality in the file without
+# saying so.
+#
 # stage2 is what this installs, because it is the first binary in the chain
 # that no part of the seed emitted: the seed built the compiler that built it,
 # and `--verify` is what says the two agree. `--stages 1` stops at the seed's
@@ -32,13 +38,48 @@
 #
 # --verify runs the equalities the proof is made of, byte for byte:
 #
-#   IR(seed, self/)   == IR(stage1, self/)     the two compilers agree
+#   IR(seed, self/)   == IR(stage1, self/)     asserted for a stage0 seed only
 #   IR(stage1, self/) == IR(stage2, self/)     the fixed point: self-hosted
 #   stage3 == stage2                           as files
 #
-# With stage0 as the seed the first of those is WP14's stronger claim — two
-# independently written implementations agreeing — and with a released `nish`
-# it is the weaker one that a release and HEAD agree, which is what G3 buys.
+# The last two are properties of the working tree and of nothing else: whatever
+# built stage1, the compiler `self/` describes has to agree with itself and
+# then reproduce itself. Both are asserted whatever the seed is.
+#
+# The first one is asserted only when the seed is stage0. The reason is not
+# that it is a weaker claim with another seed — it is a different claim with
+# another seed, and the two are worth keeping apart:
+#
+#   seed = stage0    `src/` in TypeScript and `self/` in Nish are two
+#                    independently written implementations of the same source
+#                    revision, and they emit the same IR for that revision.
+#                    That is the second half of Wheeler's diverse
+#                    double-compiling, it is the strongest thing this
+#                    repository asserts, and it is why a Thompson-style
+#                    backdoor cannot presently hide in either compiler
+#                    (docs/wp14-selfhost.md §1, wp19-stage0-retirement.md §1).
+#
+#   seed = a         one implementation at two points in time: the IR HEAD
+#   released `nish`  emits for `self/` is the IR the last release emitted for
+#                    it. Nothing in that sentence is about bootstrapping. It is
+#                    a freeze on codegen between releases, and it fails on
+#                    exactly the changes a release cycle exists to carry: the
+#                    first improvement to land broke it, when a flow-sensitive
+#                    bounds analysis proved 46 of `self/`'s 1,206 index checks
+#                    redundant and 20 of 56 modules "differed" because the
+#                    optimisation worked.
+#
+# So a seed that is not stage0 has that difference reported to it and not
+# asserted, and the report is information about this release rather than a
+# verdict on the bootstrap.
+#
+# What the seeded run buys is not that equality. The rolling freeze — "a
+# construct added in 0.N cannot be used by `self/` until 0.(N+1)" — is enforced
+# by stage1 being built at all: a `self/` that reaches for something the seed
+# has never heard of does not compile, does not link, and never gets as far as
+# a comparison. That failure is loud here whatever the seed is, and it is the
+# whole of what the seeded run proves about the freeze
+# (docs/wp19-stage0-retirement.md §3, G3).
 #
 # `node tests/self/bootstrap.js` is the same check with the suite's reporting,
 # and is what CI runs; this script is how the compiler gets built for use.
@@ -77,6 +118,12 @@ Builds the self-hosted compiler. The seed builds stage1, stage1 builds stage2
 (the default output), stage2 builds stage3. --verify compares the IR each stage
 emits for self/ and the stage2/stage3 binaries, byte for byte. The result is
 the command line itself: -o, --link, --profile and the rest.
+
+IR(seed) == IR(stage1) is asserted only when the seed is stage0, where it is
+two independent implementations of one revision agreeing. With any other seed
+that comparison asks whether codegen has changed since the seed was built, so
+it is reported and not asserted; IR(stage1) == IR(stage2) and stage3 == stage2
+are asserted whatever the seed is.
 
 The seed is NISH_BOOTSTRAP=<path> when it is set — a released `nish` binary, or
 a .js/.mjs entry point run under node — and stage0 (dist/index.js) when it is
@@ -146,6 +193,7 @@ if [ -n "$seed_given" ]; then
     *) seed_kind=native; seed_label="NISH_BOOTSTRAP seed ($seed)" ;;
   esac
   seed_name=seed
+  seed_is_stage0=0
   [ -e "$seed" ] || seed_die "does not exist"
   [ -f "$seed" ] || seed_die "is not a file"
   if [ "$seed_kind" = native ]; then
@@ -159,12 +207,21 @@ if [ -n "$seed_given" ]; then
   # finding that out here names the variable and the path the caller set, where
   # finding it out in the stage1 link names a temporary file three stages deep.
   run_seed --version >/dev/null 2>&1 || seed_die "is not runnable (\`--version\` failed)"
+  # A seed that is this checkout's own dist/index.js *is* stage0, however it
+  # was spelled, so it gets stage0's equalities. The question `--verify` asks
+  # is about the seed, not about the variable: see the header.
+  if [ "$(cd "$(dirname "$seed")" && pwd -P)/$(basename "$seed")" = "$(pwd -P)/dist/index.js" ]; then
+    seed_is_stage0=1
+    seed_label="stage0 (node dist/index.js, named by NISH_BOOTSTRAP)"
+    seed_name=stage0
+  fi
 else
   # Unset: the seed is stage0, the only compiler a fresh checkout has.
   seed=dist/index.js
   seed_kind=node
   seed_label="stage0 (node dist/index.js)"
   seed_name=stage0
+  seed_is_stage0=1
   if [ ! -f "$seed" ]; then
     echo "bootstrap: dist/index.js is missing; run \`npm run build\` first (stage0 is the seed)" >&2
     exit 3
@@ -196,6 +253,37 @@ compare_ir() {
   say "  $label: $(ls "$a"/*.ll | wc -l | tr -d ' ') modules identical"
 }
 
+# The same comparison for a seed that is not stage0, where it is reported and
+# never asserted. What it measures then is whether codegen has moved since the
+# seed was built, which is a fact about this release rather than a property of
+# the bootstrap — the header says why, at length, because the two claims read
+# alike and are not alike. Nothing in here exits.
+survey_ir() {
+  local a="$1" b="$2" total=0 differing=0 name
+  if ! diff <(cd "$a" && ls ./*.ll) <(cd "$b" && ls ./*.ll) >/dev/null; then
+    say "  note: IR(seed) vs IR(stage1): the two emitted different module sets."
+    say "        Not a bootstrap failure: with a seed that is not stage0 this"
+    say "        comparison is not asserted (see the header of this script)."
+    return 0
+  fi
+  for name in "$a"/*.ll; do
+    total=$((total + 1))
+    cmp -s "$name" "$b/$(basename "$name")" || differing=$((differing + 1))
+  done
+  if [ "$differing" -eq 0 ]; then
+    say "  note: IR(seed) vs IR(stage1): all $total modules identical."
+    say "        Not asserted, because the seed is not stage0: codegen simply"
+    say "        has not moved for self/ since the seed was built."
+  else
+    say "  note: IR(seed) vs IR(stage1): $differing of $total modules differ."
+    say "        Not a bootstrap failure. Codegen has moved for self/ since the"
+    say "        seed was built, which is what a release carries; only a stage0"
+    say "        seed makes this comparison the diverse-double-compiling claim,"
+    say "        and it is asserted there and nowhere else. See the header of"
+    say "        this script and docs/wp19-stage0-retirement.md §3, G3."
+  fi
+}
+
 mkdir -p "$work"
 outdir=$(dirname "$out")
 [ "$outdir" = "" ] || mkdir -p "$outdir"
@@ -207,13 +295,29 @@ outdir=$(dirname "$out")
 # means the chain exercises the same driver a user does.
 say "stage1: self/ compiled by $seed_label"
 rm -rf "$work/stage1.modules"
-run_seed self/compile.ts --link "$work/stage1" --profile "$profile" >/dev/null
+# This is the step the rolling freeze is enforced by, so it says so when it
+# fails rather than leaving a reader with the compiler's own diagnostic and no
+# idea which rule it just met.
+if ! run_seed self/compile.ts --link "$work/stage1" --profile "$profile" >/dev/null; then
+  echo "bootstrap: $seed_label could not build stage1 from self/ (its output is above)" >&2
+  echo "bootstrap: if it refused the source, that is the freeze doing its job: a construct" >&2
+  echo "bootstrap: added in 0.N cannot be used by self/ until 0.(N+1) (docs/wp12-release.md," >&2
+  echo "bootstrap: \"The bootstrap seed\"; docs/wp19-stage0-retirement.md §3, G3)" >&2
+  exit 1
+fi
 
 if [ "$build_to" -ge 2 ]; then
   say "stage2: self/ compiled by stage1"
   rm -rf "$work/stage2.modules"
   "$work/stage1" self/compile.ts --link "$work/stage2" --profile "$profile" >/dev/null
-  [ "$verify" -eq 1 ] && compare_ir "$work/stage1.modules" "$work/stage2.modules" "IR($seed_name) == IR(stage1)"
+  # The seed equality, asserted for stage0 and reported for anything else.
+  if [ "$verify" -eq 1 ]; then
+    if [ "$seed_is_stage0" -eq 1 ]; then
+      compare_ir "$work/stage1.modules" "$work/stage2.modules" "IR($seed_name) == IR(stage1)"
+    else
+      survey_ir "$work/stage1.modules" "$work/stage2.modules"
+    fi
+  fi
 fi
 
 if [ "$build_to" -ge 3 ]; then
