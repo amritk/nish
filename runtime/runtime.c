@@ -1352,7 +1352,11 @@ double nish_parse_number(const nish_str *s, int32_t mode) {
   return mode && end + strspn(end, NISH_SPACES) != stop ? NAN : v;
 }
 
-/* push() when len == cap: double the capacity (4 from empty). */
+/* push() when len == cap: double the capacity (4 from empty). `elem_size` is
+ * `sizeof` one element, which for a record element type (WP15 section 2a) is
+ * the whole struct, so this relocates the elements themselves rather than a
+ * block of pointers to them. Compiled code may therefore hold no pointer into
+ * `data` across a push, and the checker refuses the programs that would. */
 void nish_array_grow(nish_array *a, uint64_t elem_size) {
   uint64_t cap = a->cap ? a->cap * 2 : 4;
   char *data = nish_alloc_struct(cap * elem_size);

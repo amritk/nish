@@ -11,6 +11,7 @@
 // than the six `try`/`catch` sites `src/` uses.
 
 import { aliasType, builtinTypeName, resolveType } from "./annotations";
+import { checkElementReferences } from "./arrays";
 import { checkDefiniteAssignment } from "./assignment";
 import { foldConstant, parseIntegerLiteral } from "./constants";
 import { CheckContext } from "./context";
@@ -313,7 +314,7 @@ export class Checker {
     } else {
       checkReturnValue(this.ctx, body, scope);
     }
-    const failed = this.ctx.sink.count() > before;
+    let failed = this.ctx.sink.count() > before;
     // Outside a statement list the flag is always clear, so a diagnostic from
     // constant folding or from another module is never dropped by this body.
     this.ctx.errored = false;
@@ -328,6 +329,16 @@ export class Checker {
       // that does not compile is noise, and a poisoned body has incomplete
       // side tables anyway.
       checkPerformance(this.ctx, sig, body);
+      // WP15 §2a: an element reference into contiguous struct storage may not
+      // be held across a `push`. Same placement and same reason as the line
+      // above — the walk reads types and bindings pass 2 has just written.
+      const beforeElements = this.ctx.sink.count();
+      checkElementReferences(this.ctx, body);
+      if (this.ctx.sink.count() > beforeElements) {
+        sig.poisoned = true;
+        failed = true;
+        this.ctx.errored = false;
+      }
     }
     // A body with a rejected statement may have lost its `return`; reporting
     // a missing one on top of that is a cascade, not a second bug.

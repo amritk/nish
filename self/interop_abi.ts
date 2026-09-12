@@ -158,6 +158,13 @@ function writtenArrayParams(table: TypeTable, sig: FunctionSig, facts: FunctionF
  * byte, its N-API tag, and the C element type. `null` for element types JS
  * has no flat view of (booleans would need 0/1 validation; strings, arrays
  * and objects are pointers into the arena).
+ *
+ * WP15 §2a gave a *record* element type a flat layout too — `data` is a C
+ * array of the structs themselves — and it still does not cross, because the
+ * missing half was never the layout: JS has no typed array of a struct, so a
+ * host would need a per-field unpack loop and a JS object per element, which
+ * is marshalling rather than a view. The C header describes the block and the
+ * wasm and N-API bridges go on declining these functions.
  */
 export class TypedView {
   /** `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array`: the language's alias and the JS constructor. */

@@ -70,11 +70,11 @@
  * automatic scopes still read `allocLeaks` and decide exactly what they did.
  */
 import ts from "typescript";
-import { CheckedProgram, FunctionSig, LocalVar } from "../checker/index.js";
+import { CheckedProgram, FunctionSig, LocalVar, elementStride } from "../checker/index.js";
 import { dottedName } from "../checker/builtins.js";
 import { isFunctionResult } from "../checker/declarations.js";
 import { intrinsicType, isAssignmentOperator } from "../checker/classes.js";
-import { CompilerOptions, StaticType, alignOf, isNumeric, resultByValue, stripNull } from "../types.js";
+import { CompilerOptions, StaticType, isNumeric, resultByValue, stripNull } from "../types.js";
 import { FunctionFacts, classifyUse } from "./attributes.js";
 import { isJoinCall, isPushCall, literalLength } from "./emit/arrays.js";
 import { isResultConstructorCall, resultMethodName } from "./emit/result.js";
@@ -150,9 +150,15 @@ interface Site {
   callee?: string;
 }
 
-/** Bytes per element: every value is a scalar or a pointer, so its size is its alignment. */
-function elementSize(elem: StaticType): number {
-  return alignOf(elem);
+/**
+ * Bytes per element, for the stack budget. WP15 §2a: an array of classes holds
+ * its elements inline, so a stackable `new Array<Point>(64)` is 64 `Point`s of
+ * slot rather than 64 pointers — the same question `emit/arrays.ts` asks, and
+ * it has to be asked the same way or the budget and the `[n x T]` slot the
+ * emitter writes would disagree.
+ */
+function elementSize(program: CheckedProgram, elem: StaticType): number {
+  return elementStride(program.structs, elem);
 }
 
 function unwrapParens(expr: ts.Expression): ts.Expression {
@@ -259,14 +265,17 @@ export function analyzeEscapes(
       if (t?.kind === "struct") sites.push({ node, stackable: true });
       else if (t?.kind === "array") {
         const n = literalLength(node.arguments![0]);
-        sites.push({ node, stackable: n !== undefined && n * elementSize(t.elem) <= STACK_ARRAY_BYTES });
+        sites.push({
+          node,
+          stackable: n !== undefined && n * elementSize(program, t.elem) <= STACK_ARRAY_BYTES,
+        });
       }
     } else if (ts.isObjectLiteralExpression(node)) {
       sites.push({ node, stackable: true });
     } else if (ts.isArrayLiteralExpression(node)) {
       const t = program.types.get(node);
       const bytes =
-        t?.kind === "array" ? node.elements.length * elementSize(t.elem) : Number.POSITIVE_INFINITY;
+        t?.kind === "array" ? node.elements.length * elementSize(program, t.elem) : Number.POSITIVE_INFINITY;
       sites.push({ node, stackable: bytes <= STACK_ARRAY_BYTES });
     } else if (ts.isBinaryExpression(node)) {
       if (
@@ -516,9 +525,7 @@ export function analyzeEscapes(
   for (const p of sig.params) {
     if (!resultByValue(p.type)) continue;
     const v = byValueParams.get(p.name);
-    const outcome = v
-      ? localOutcome(v, new Set())
-      : { flow: "local" as Flow, stable: true, escapes: false };
+    const outcome = v ? localOutcome(v, new Set()) : { flow: "local" as Flow, stable: true, escapes: false };
     if (outcome.escapes) result.allocEscapes = true;
     if (opts.stackAlloc && outcome.flow === "local" && outcome.stable) result.stackParams.add(p.name);
     else if (outcome.flow === "local") result.directArena = true;

@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 351;
+export const RULE_COUNT: i32 = 353;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -85,6 +85,8 @@ export function diagnosticRules(): string[] {
     "NL2025",
     "`super` can only be used as `super.method(...)`, or as `super(...)` at the start of a constructor",
     "NL2157",
+    "`, and the push may move that storage first; copy the fields you need into locals before pushing",
+    "NL2281",
     "`null` needs a contextual `T | null` type (annotate the variable, e.g. `let p: P | null = null`)",
     "NL2145",
     "`Result<T, E> | null` is not supported: a `Result` already models absence through its error arm",
@@ -193,6 +195,8 @@ export function diagnosticRules(): string[] {
     "NL2121",
     "`extends` must name exactly one class declared in this module",
     "NL2132",
+    "` again afterwards rather than holding the element across it",
+    "NL2280",
     "` cannot be used before `super(...)` in the constructor of `",
     "NL2047",
     "` expects 0 argument(s) (the class has no constructor), got ",

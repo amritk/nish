@@ -483,6 +483,12 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
 function checkImplements(ctx: CheckContext, cls: StructInfo): void {
   for (const ifaceName of cls.implements) {
     const iface = ctx.program.structs.get(ifaceName)!;
+    // WP15 §2a: an interface with an implementer is a *view*, not a record —
+    // an `I[]` may hold any implementer and they are all longer than `I`, so
+    // its elements stay one pointer per slot. `StructInfo` objects are shared
+    // across the modules of a compilation, so marking the one here is what
+    // makes every module lay `I[]` out the same way (`inlineElementStruct`).
+    iface.implemented = true;
     const describe = (f: FieldInfo) => `\`${f.name}: ${typeToString(f.type)}\``;
     for (let i = 0; i < iface.fields.length; i++) {
       const want = iface.fields[i];

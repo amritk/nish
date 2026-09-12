@@ -1120,7 +1120,10 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
 
 // ---- WP2: layout -------------------------------------------------------------------
 // tests/layout/structs.ts declares fifteen classes, three of which `implements` an
-// interface (WP25, whose layout is the interface's fields followed by their own);
+// interface (WP25, whose layout is the interface's fields followed by their own),
+// plus the WP15 §2a record `P`, whose *array* is contiguous storage: the C twin
+// walks `data` as a `struct P *` and checks the stride and every field of every
+// element, which is the half of the ABI a golden `.ll` cannot express.
 // tests/layout/structs.c declares
 // the same C structs (flattened) with `_Static_assert(sizeof(struct X) == N)`. The
 // compiler's size for each class is read from the `nish_alloc_struct(i64 N)` in its
@@ -1155,7 +1158,7 @@ if (!only || "layout".includes(only)) {
       if (fromIr.get(name) !== size) diffs.push(`${name}: C ${size}, IR ${fromIr.get(name)}`);
     check(
       `layout: compiler sizes match structs.c for ${fromC.size} structs (${[...fromC].map(([n, s]) => `${n}=${s}`).join(" ")})`,
-      fromC.size === 15 && fromIr.size === 15 && diffs.length === 0,
+      fromC.size === 16 && fromIr.size === 16 && diffs.length === 0,
       diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`
     );
     if (HAS_CLANG) {
@@ -4052,6 +4055,17 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       // `Int32Array` and friends name the element-typed array here and the JS
       // view in lib.es5; redeclaring them would break every other lib type.
       "typed-array aliases (see the note at the foot of runtime/nish.d.ts)",
+    ],
+    [
+      "arr_struct_push_copy.ts",
+      // The `pop` divergence the declarations already document (the note at
+      // runtime/nish.d.ts, and the `self/` check below, which strips the same
+      // error): `a.pop()` is `T` here because an empty array panics, and
+      // `T | undefined` in lib.es5, so reading a field of the popped element
+      // is TS18048 and nothing this side can say changes that. The case reads
+      // one because a popped *record* is the slot that was dropped, which is
+      // the interior pointer WP15 §2a is about.
+      "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
     ],
   ]);
   const acceptedCases = fs

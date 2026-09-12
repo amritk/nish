@@ -546,9 +546,11 @@ existed;
 slice iterators, so `for (const c of s)` lowers to pointer advancement;
 unsigned types; the fast slice beside JavaScript's `substring`; ranged integer
 types and length narrowing, so a proven index emits no bounds check;
-contiguous struct arrays with the checker rule that makes the dangling
-interior pointer a compile error; and generics by monomorphisation with
-discriminated unions. §9 has the
+contiguous *record* arrays with the checker rule that makes the dangling
+interior pointer a compile error (**done** for an `interface` nobody
+implements, 2.27x where allocation order and traversal order differ; a class
+has identity and keeps its pointer slot, and §2a says what that migration
+would be); and generics by monomorphisation with discriminated unions. §9 has the
 order with the reason for each position, and
 [wp15-performance.md](wp15-performance.md) has the design.
 

@@ -1347,6 +1347,57 @@ literal, or parameter) (`Empty array literal needs a type annotation`,
 `reject_arr_empty_literal`; `tests/cases/arr_push`, `arr_literal`). Holes and
 spread are not supported.
 
+### Arrays of records are contiguous
+
+An array whose element type is an **`interface`** is one block of records, `N`
+of them end to end at exactly the stride and alignment clang gives the matching
+C array. `ps[i]` is an interior pointer into that block — a `getelementptr`,
+with no pointer to load and chase — which is what makes a loop over `Point[]`
+vectorisable and what lets a C host read `((struct Point *)a->data)[i]`
+(`tests/cases/arr_struct_contiguous`, `tests/layout/structs.c`).
+
+Three element kinds are **not** records and keep one pointer per slot:
+
+- a **`class`**. The two struct kinds already mean different things: an
+  `interface` is fields and nothing else, so copying one into a slot cannot be
+  told apart from pointing at it, while a `class` has identity — a constructor
+  and methods that run on one object — and every other position in the language
+  passes a class value by reference.
+- an **`interface` some class `implements`**. That array is the language's only
+  polymorphic container (`tests/cases/cls_implements_prefix`): a `Shape[]` holds
+  a `Square` and a `Circle` at once, and both are longer than `Shape`, so a
+  value slot would copy the prefix and drop the rest. The property is
+  program-wide — one compilation, one layout for `Shape[]` in every module of it.
+- a **`T | null`** of any kind: a null element has no bytes to be, and `null` is
+  the pointer. That spelling is also how to ask for a sparse array of records.
+
+Three consequences, each of them a rule:
+
+- **A record put into an array is copied into the slot.** `ps.push(p)`,
+  `ps[i] = p` and `[p, q]` copy `sizeof` bytes, exactly as a C array of structs
+  does; afterwards `ps[i]` and `p` are two records, and writing one does not
+  change the other (`tests/cases/arr_struct_push_copy`).
+- **An element reference may not be held across a mutation of its array.**
+  `push` may move the block (`nish_array_grow` bumps a fresh one and copies)
+  and `pop` hands the slot back to the next `push`, so a pointer taken before
+  either names memory that is no longer the element. A `const` bound to `a[i]`
+  or `a.pop()`, and the variable of a `for (const p of a)`, are element
+  references; using one after a `push` or `pop` on the same array — or after a
+  call that could push through it, which is any call handed the array as a
+  non-`readonly` parameter — is
+  `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse
+  that storage; index `ps` again afterwards rather than holding the element
+  across it `` (`reject_arr_element_across_push`,
+  `reject_arr_element_loop_push`). A loop is checked as a whole, because a
+  `push` at the bottom of the body reaches a reference taken at the top on the
+  next pass. `ps.push(ps[i])` is refused for the same reason, in one message of
+  its own (`reject_arr_element_push_self`).
+
+The rule rejects some programs that would have been safe — a call is taken to
+mutate every mutable array it is handed, because whether the callee pushes is a
+whole-program question the checker does not answer. `readonly T[]` is how a
+signature promises it does not.
+
 ### Template literals
 
 `` `text ${e} text` `` accepts holes of type `string`, `number`, `i64`,
@@ -2185,6 +2236,7 @@ messages are exact for the cases cited; other rows quote
 | I/O with the wrong type | `` `readFileSync` expects an argument of type string, got i32 `` | `reject_readfile_number`, `reject_readdir_type`, `reject_spawn_to_type` |
 | I/O with the wrong arity | `` `readdirSync` expects exactly 1 argument, got 2 ``; `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``; `` `monotonicNanos` expects exactly 0 arguments, got 1 `` | `reject_readdir_arity`, `reject_spawn_to_arity`, `reject_monotonic_arity` |
 | array errors | see [Arrays](#array-literals), [Element access](#element-access), [`for...of`](#for-const-x-of-a) | `reject_arr_*` |
+| element reference held across a `push` or `pop` | `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it `` — see [Arrays of records are contiguous](#arrays-of-records-are-contiguous) | `reject_arr_element_across_push`, `reject_arr_element_loop_push`, `reject_arr_element_push_self` |
 | class and interface errors | see [Classes](#classes), [Interfaces](#interfaces-and-object-literals) | `reject_cls_*` |
 | `extends` or `super` on a class (WP25: there is no inheritance) | `` `extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `Derived` and `implements` an interface to convert between them `` / `` `super` is not supported: Nish has no inheritance, so a class has no base class to reach `` | `reject_cls_extends`, `reject_cls_super` |
 | a class does not cover the interface it `implements` | `` Class `Point2` does not implement `Point3`: it lacks field `z: i32` (the interface's fields must be the class's first fields, in order) `` | `reject_cls_implements_short`, `reject_cls_implements_mismatch` |

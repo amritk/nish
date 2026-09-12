@@ -2908,6 +2908,189 @@ attributes #0 = { nounwind willreturn readonly }
 ```
 <!-- cookbook:end arr_readonly -->
 
+### An array of records is contiguous
+
+WP15 §2a. When the element type is an `interface` — a record, fields and
+nothing else — the array's `data` block holds the records themselves, `N` of
+them end to end at the stride clang gives the matching C array. `ps[i]` is one
+`getelementptr %struct.Point, %struct.Point* %base, i64 %i` and *is* the
+element: there is no pointer to load and nothing to chase, which is what puts
+two adjacent points on one cache line.
+
+The other side of the same coin is in the IR below: `push` lowers to a
+`llvm.memcpy` of `sizeof(Point)` into the slot, because the array owns the
+storage. That is also why the checker refuses to let a program hold `ps[i]`
+across a `push` — `nish_array_grow` moves the block the pointer is in. An
+array of a `class` is unchanged and still holds one pointer per slot; the rule
+and its reason are in `docs/LANGUAGE.md`,
+"Arrays of records are contiguous".
+
+<!-- cookbook:begin arr_records -->
+```ts
+interface Point {
+  x: f64;
+  y: f64;
+}
+
+// The whole array is one block of `Point`s, so the loop walks it with a single
+// `getelementptr %struct.Point, ..., i64 %i` per element: no pointer to load,
+// no second block to chase into, and two adjacent points on one cache line.
+const centroidX = (ps: readonly Point[]): f64 => {
+  let total: f64 = 0.0;
+  for (const p of ps) {
+    total = total + p.x;
+  }
+  return total / toF64(ps.length);
+};
+
+// `push` copies the record into the slot, which is why holding `ps[i]` across
+// one is a compile error: `nish_array_grow` moves the block the pointer is in.
+export const spread = (n: i32): f64 => {
+  const ps: Point[] = [];
+  let i = 0;
+  while (i < n) {
+    ps.push({ x: toF64(i), y: toF64(i) * 0.5 });
+    i = i + 1;
+  }
+  return centroidX(ps);
+};
+```
+
+```llvm
+%struct.Point = type { double, double }
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
+
+define internal noundef double @centroidX(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %ps) #0 {
+entry:
+  %total.addr = alloca double, align 8
+  %p.addr = alloca %struct.Point*, align 8
+  %forof.idx = alloca i64, align 8
+  store double 0x0000000000000000, double* %total.addr, align 8
+  store i64 0, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.cond:
+  %0 = load i64, i64* %forof.idx, align 8
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %ps, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %forof.body, label %forof.end
+
+forof.body:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %ps, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
+  %6 = bitcast i8* %5 to %struct.Point*
+  %7 = getelementptr inbounds %struct.Point, %struct.Point* %6, i64 %0
+  store %struct.Point* %7, %struct.Point** %p.addr, align 8
+  %8 = load double, double* %total.addr, align 8
+  %9 = load %struct.Point*, %struct.Point** %p.addr, align 8
+  %10 = getelementptr inbounds %struct.Point, %struct.Point* %9, i32 0, i32 0
+  %11 = load double, double* %10, align 8
+  %12 = fadd double %8, %11
+  store double %12, double* %total.addr, align 8
+  br label %forof.inc
+
+forof.inc:
+  %13 = load i64, i64* %forof.idx, align 8
+  %14 = add i64 %13, 1
+  store i64 %14, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.end:
+  %15 = load double, double* %total.addr, align 8
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %ps, i64 0, i32 0
+  %17 = load i64, i64* %16, align 8, !alias.scope !3, !noalias !4
+  %18 = trunc i64 %17 to i32
+  %19 = sitofp i32 %18 to double
+  %20 = fdiv double %15, %19
+  ret double %20
+}
+
+define noundef double @spread(i32 noundef %n) #1 {
+entry:
+  %ps.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %i.addr = alloca i32, align 4
+  %Point.obj = alloca %struct.Point, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 0, i64* %0, align 8, !alias.scope !3, !noalias !4
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 0, i64* %1, align 8, !alias.scope !3, !noalias !4
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* null, i8** %2, align 8, !alias.scope !3, !noalias !4
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %ps.addr, align 8
+  store i32 0, i32* %i.addr, align 4
+  br label %while.cond
+
+while.cond:
+  %3 = load i32, i32* %i.addr, align 4
+  %4 = icmp slt i32 %3, %n
+  br i1 %4, label %while.body, label %while.end
+
+while.body:
+  %5 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
+  %6 = load i32, i32* %i.addr, align 4
+  %7 = sitofp i32 %6 to double
+  %8 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj, i32 0, i32 0
+  store double %7, double* %8, align 8
+  %9 = load i32, i32* %i.addr, align 4
+  %10 = sitofp i32 %9 to double
+  %11 = fmul double %10, 0x3FE0000000000000
+  %12 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj, i32 0, i32 1
+  store double %11, double* %12, align 8
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %5, i64 0, i32 0
+  %14 = load i64, i64* %13, align 8, !alias.scope !3, !noalias !4
+  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %5, i64 0, i32 1
+  %16 = load i64, i64* %15, align 8, !alias.scope !3, !noalias !4
+  %17 = icmp eq i64 %14, %16
+  br i1 %17, label %push.grow, label %push.store
+
+push.grow:
+  call void @nish_array_grow(%struct.nish_array* %5, i64 16)
+  br label %push.store
+
+push.store:
+  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %5, i64 0, i32 2
+  %19 = load i8*, i8** %18, align 8, !alias.scope !3, !noalias !4
+  %20 = bitcast i8* %19 to %struct.Point*
+  %21 = getelementptr inbounds %struct.Point, %struct.Point* %20, i64 %14
+  %22 = bitcast %struct.Point* %21 to i8*
+  %23 = bitcast %struct.Point* %Point.obj to i8*
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %22, i8* align 8 %23, i64 16, i1 false), !alias.scope !4, !noalias !3
+  %24 = add i64 %14, 1
+  store i64 %24, i64* %13, align 8, !alias.scope !3, !noalias !4
+  %25 = trunc i64 %24 to i32
+  %26 = load i32, i32* %i.addr, align 4
+  %27 = add nsw i32 %26, 1
+  store i32 %27, i32* %i.addr, align 4
+  br label %while.cond
+
+while.end:
+  %28 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
+  %29 = call double @centroidX(%struct.nish_array* %28)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret double %29
+}
+
+attributes #0 = { nounwind willreturn readonly }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+```
+<!-- cookbook:end arr_records -->
+
+
 
 ## Classes and interfaces
 
