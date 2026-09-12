@@ -26,4 +26,36 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-12
+
+### Fixed
+
+- tests: Regenerate the stage1 goldens for the corpus WP25 left ([`0d233f4`](https://github.com/amritk/nish/commit/0d233f4))
+- release: Build the notes from conventional commits only ([#37](https://github.com/amritk/nish/pull/37))
+- release: Unstick the `---` rule and render the notes as an index ([#40](https://github.com/amritk/nish/pull/40))
+- checker: Give a concise arrow body the context a `return` has ([#41](https://github.com/amritk/nish/pull/41))
+
+### Performance
+
+- checker: Add arithmetic and arena-drop performance warnings ([#38](https://github.com/amritk/nish/pull/38))
+- codegen: Close the last two gaps in the benchmark suite ([#39](https://github.com/amritk/nish/pull/39))
+
+### Documentation
+
+- bench: Regenerate the benchmark report against Go and Rust ([#36](https://github.com/amritk/nish/pull/36))
+
+### Build
+
+- release: Generate releases from commits, on a release train ([`8ac1728`](https://github.com/amritk/nish/commit/8ac1728))
+
+### CI
+
+- release: Give the release pull request a conventional title ([#33](https://github.com/amritk/nish/pull/33))
+
+### Internal
+
+- release: Start at 0.0.0 and stop pinning the version in goldens ([`d17e294`](https://github.com/amritk/nish/commit/d17e294))
+
+
 [Unreleased]: https://github.com/amritk/nish/commits/main
+[0.1.0]: https://github.com/amritk/nish/releases/tag/v0.1.0
