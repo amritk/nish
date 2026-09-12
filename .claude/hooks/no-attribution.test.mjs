@@ -43,6 +43,21 @@ const cases = [
   ["ALLOW  a commit from a path with claude-0 in it", 0, bash("git commit -q -F /tmp/claude-0/scratch/msg-that-does-not-exist.txt")],
   ["ALLOW  npm test", 0, bash("npm test")],
   ["ALLOW  a clean PR through the GitHub MCP", 0, mcp("mcp__github__create_pull_request", { title: "feat: z", body: "Does a thing." })],
+  // The two that bit us: prose about the rule is not a breach of it. Both
+  // name a trailer on one line and `.claude/...` further down, which a
+  // pattern that runs past the end of a line reads as one line.
+  [
+    "ALLOW  a PR body that describes the rule",
+    0,
+    mcp("mcp__github__update_pull_request", {
+      body: "Adds a hook that refuses an agent `Co-Authored-By:` trailer.\n\nSee `.claude/hooks/no-attribution.mjs`.",
+    }),
+  ],
+  [
+    "ALLOW  a human co-author above a path with claude in it",
+    0,
+    bash('git commit -m "fix: x\\n\\nCo-Authored-By: A Person <p@example.com>" && node .claude/hooks/no-attribution.test.mjs'),
+  ],
   ["ALLOW  a tool the matcher does not cover", 0, mcp("Write", { file_path: "CLAUDE.md", content: session })],
   ["ALLOW  unparseable stdin, which fails open", 0, "not json at all"],
 ];

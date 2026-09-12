@@ -33,9 +33,12 @@ import path from "node:path";
 
 /** Each entry is [what to call it in the refusal, how to spot it]. */
 const BANNED = [
+  // The author's *name* (up to the `<` that opens the address) or an address
+  // at a vendor's own domain. Not the whole line: a human co-author followed
+  // by `&& node .claude/...` on one line is not an agent.
   [
     "a `Co-Authored-By:` trailer naming an agent or a model",
-    /co-authored-by:[^\n]*(claude|anthropic|copilot|cursor|codex|gpt|gemini|devin)/i,
+    /co-authored-by:(?:[^\n<]{0,60}(claude|anthropic|copilot|cursor|codex|chatgpt|gemini|devin)|[^\n]{0,80}@(anthropic|openai)\.com)/i,
   ],
   ["a `Claude-Session:` trailer", /^[ \t>]*claude-session[ \t]*:/im],
   ["a session or assistant link", /https?:\/\/(claude\.ai|claude\.com\/claude-code)/i],
@@ -81,6 +84,19 @@ const readMessageFiles = (command, cwd) => {
   return out;
 };
 
+/**
+ * Every string in a tool input, each on its own. Not `JSON.stringify`: that
+ * turns a body's newlines into `\n` escapes, and a pattern anchored to a line
+ * then runs off the end of one -- which read a clean PR body that merely
+ * *names* the banned trailer as if it carried it.
+ */
+const strings = (value, out = []) => {
+  if (typeof value === "string") out.push(value);
+  else if (Array.isArray(value)) for (const item of value) strings(item, out);
+  else if (value && typeof value === "object") for (const item of Object.values(value)) strings(item, out);
+  return out;
+};
+
 /** The texts this tool call would publish, or [] when it publishes none. */
 const subjects = (toolName, toolInput, cwd) => {
   if (toolName === "Bash") {
@@ -88,7 +104,7 @@ const subjects = (toolName, toolInput, cwd) => {
     if (!WRITES_A_MESSAGE.test(command)) return [];
     return [command, ...readMessageFiles(command, cwd)];
   }
-  if (GITHUB_PROSE.test(toolName)) return [JSON.stringify(toolInput ?? {})];
+  if (GITHUB_PROSE.test(toolName)) return strings(toolInput ?? {});
   return [];
 };
 
@@ -101,7 +117,12 @@ const main = () => {
   }
 
   const cwd = typeof event?.cwd === "string" ? event.cwd : process.cwd();
-  const texts = subjects(event?.tool_name ?? "", event?.tool_input, cwd);
+  // A shell string carries its newlines as the two characters `\` and `n`.
+  // Restoring them keeps a line-anchored pattern on one line, so prose that
+  // names a trailer is not read as carrying it.
+  const texts = subjects(event?.tool_name ?? "", event?.tool_input, cwd).map((text) =>
+    text.replace(/\\n/g, "\n"),
+  );
   const found = BANNED.filter(([, pattern]) => texts.some((text) => pattern.test(text)));
   if (found.length === 0) return 0;
 
