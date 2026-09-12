@@ -270,12 +270,20 @@ Module-level constants do not behave this way — `NEWLINE`, `SPACE`, `TAB` and
 `CARRIAGE_RETURN` in `std/text` are folded at their uses, and a program may
 declare all four itself — so the hazard is functions only.
 
-This is [wp21-packages.md](wp21-packages.md#5a-the-symbol-namespace-is-flat-the-blocker)
+This is [wp21-packages.md](wp21-packages.md#5a-the-symbol-namespace-was-flat-closed-by-s1)
 §5a arriving early, inside one repository, with two modules instead of an npm
-tree. The rule until S1 lands is therefore a naming rule: **a `std/` module
-keeps its private functions few and their names distinctive**, and a module
-whose internals want ordinary names (`compare`, `next`, `parse`) is telling you
-it should wait for package-scoped symbols.
+tree — and S1 has landed now without lifting it, which is the part worth stating.
+Package-scoped symbols key the fact table on a *package-qualified* name, so two
+npm packages that each keep a private `helper()` compile together. A `std/`
+module is not a second package: a package is a `node_modules/<name>/` directory
+and the root package's prefix is empty, so a `std/` module shares its importer's
+package and the clash above is unchanged. Checked rather than assumed — a
+program declaring `isTextBlankByte` itself is still refused, in those words.
+
+The rule is therefore permanent until `std/` ships as a package of its own:
+**a `std/` module keeps its private functions few and their names
+distinctive**, and a module whose internals want ordinary names (`compare`,
+`next`, `parse`) is telling you it should wait for that.
 
 ---
 
