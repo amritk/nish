@@ -92,29 +92,43 @@ the Ubuntu steps inside it.
 
 ## 2. Install the compiler
 
-From npm (once published; see [docs/wp12-release.md](wp12-release.md)):
+**Not from npm yet.** `npm install -g nish` installs somebody else's package.
+The name `nish` on the public registry has belonged to `stdarg`'s "A Node.js
+Interactive shell" since February 2014 — versions 0.0.0 and 0.0.1, both
+deprecated by their author, nothing published since. Which name this compiler
+takes is an open decision; the options and what each costs are in
+[docs/wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken).
+Until it is settled, install from a release or from a checkout.
+
+From a release tarball on GitHub — the same package `npm publish` would upload,
+carried by the release instead of the registry. The `Release` workflow attaches
+`nish-<version>.tgz` to the release it builds for a `v*` tag:
 
 ```bash
-npm install -g nish
+curl -LO https://github.com/amritk/nish/releases/download/v0.1.1/nish-0.1.1.tgz
+npm install -g ./nish-0.1.1.tgz
 nish --version
 ```
 
-From a release tarball on GitHub (the `Release` workflow attaches
-`nish-<version>.tgz` to every `v*` tag):
+As a native compiler, which needs no Node at all. Every release also attaches
+`nish-<version>-x86_64-linux.tar.gz` — the self-hosted compiler, the binary
+`self/` produces by compiling itself:
 
 ```bash
-npm install -g ./nish-0.1.0.tgz
+curl -LO https://github.com/amritk/nish/releases/download/v0.1.1/nish-0.1.1-x86_64-linux.tar.gz
+tar -xzf nish-0.1.1-x86_64-linux.tar.gz
+nish-0.1.1-x86_64-linux/bin/nish --version
 ```
 
-As a native compiler, which needs no Node at all. Every `v*` release also
-attaches `nish-<version>-x86_64-linux.tar.gz` — the self-hosted compiler, the
-binary `self/` produces by compiling itself:
-
-```bash
-curl -LO https://github.com/amritk/nish/releases/download/v0.1.0/nish-0.1.0-x86_64-linux.tar.gz
-tar -xzf nish-0.1.0-x86_64-linux.tar.gz
-nish-0.1.0-x86_64-linux/bin/nish --version
-```
+Both URLs name the version rather than using GitHub's version-neutral
+`/releases/latest/download/` form, because that form needs the asset's exact
+file name and both asset names carry the version in them. **v0.1.1 is the
+current and only release**: the `v0.1.0` tag exists but has no release behind it
+and no assets, so every `v0.1.0` download URL is a 404 — the tag was pushed by a
+workflow, and GitHub raises no event for that, so nothing ever built it
+([docs/wp12-release.md](wp12-release.md#release-procedure) step 2). When a newer
+release exists, take its version from
+[the releases page](https://github.com/amritk/nish/releases/latest).
 
 Unpack it and run `bin/nish` from wherever you like; put that on `PATH` if you
 want it there. Keep the directory intact rather than moving the binary out of
@@ -125,8 +139,8 @@ find `scripts/build.sh`.
 
 It still needs `clang` and `lld` on `PATH` for `--link` (§1), because linking
 is the C toolchain's job in either compiler; what it does not need is Node.
-x86_64 Linux is the only platform built today — on anything else, take the npm
-package or build from a checkout.
+x86_64 Linux is the only platform built today — on anything else, take the
+`.tgz` above or build from a checkout.
 
 From a checkout:
 
@@ -173,8 +187,8 @@ passes `-g` on to `scripts/build.sh`, so the debug info survives into the
 binary. It answers every flag `nish` answers, `--emit-ast` and
 `--target host` included; the one thing that differs is what `--emit-ast`
 prints, because each compiler dumps its own syntax tree and only `nish` has
-the `typescript` package's node names to print. `nish` is also what the npm
-package installs.
+the `typescript` package's node names to print. `nish` is also what the
+`.tgz` package installs, whichever way that package reaches the machine.
 
 ## 3. Hello world
 

@@ -45,6 +45,7 @@ const VARIATIONS = [
   { name: "--wrapping", args: ["--wrapping"], family: "--wrapping" },
   { name: "--unchecked-indexing", args: ["--unchecked-indexing"], family: "--unchecked-indexing" },
   { name: "--no-stack-alloc", args: ["--no-stack-alloc"], family: "--no-stack-alloc" },
+  { name: "--threads", args: ["--threads"], family: "--threads" },
   { name: "--no-strict-exports", args: ["--no-strict-exports"], family: "strict-exports" },
   { name: "--strict-exports", args: ["--strict-exports"], family: "strict-exports" },
   { name: "--runtime-decls", args: ["--runtime-decls"], family: "--runtime-decls" },
