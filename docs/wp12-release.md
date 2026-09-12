@@ -226,6 +226,19 @@ it ([wp19-stage0-retirement.md](wp19-stage0-retirement.md) §3, G3). Go
 publishes a rule of the same shape; the reason to write ours down now is that a
 policy decided in the abstract costs nobody an argument during a release.
 
+**What that job checks is that the seed can build `self/`.** stage1 compiling
+and linking is the rule above enforced; `self/` reaching for something the seed
+does not have fails there and nowhere else. `--verify` then asserts the two
+equalities that belong to the working tree rather than to the seed —
+`IR(stage1) == IR(stage2)`, the fixed point, and stage3 byte-identical to
+stage2. It does **not** assert `IR(seed) == IR(stage1)` for a released seed: a
+release is allowed to emit better code than the release before it, and that
+comparison forbids it. The seeded run reports the difference and carries on.
+The one seed that comparison is asserted for is stage0, where it is two
+independent implementations of one revision agreeing rather than one
+implementation at two dates (G3, "What the seeded run proves, and what it does
+not").
+
 0.1.0 is the base case the rule needs. It is the first release and has no
 predecessor to be built by, so it is built by stage0, and it is the release
 that creates the first seed. From 0.2.0 on the seed is the previous line's last

@@ -639,6 +639,47 @@ regression would look like rather than the normal case. (v0.1.0 is a tag with
 no release behind it and no assets, so it is not a seed and never was — see
 [wp12-release.md](wp12-release.md#release-procedure) step 2.)
 
+#### What the seeded run proves, and what it does not
+
+**It proves that the seed can build `self/`, and that is the whole of the
+freeze.** stage1 compiling and linking is the check: a `self/` that reaches for
+a construct the seed has never heard of does not compile, does not link, and
+the job fails on the spot naming the rule. Nothing later in the run is needed
+for that, which matters because everything later in the run is about something
+else.
+
+**It does not prove `IR(seed) == IR(stage1)`, and must not be asked to.** With
+stage0 as the seed that equality is diverse double-compiling — two
+independently written implementations of *the same source revision* agreeing
+byte for byte — and it is asserted, by `npm test` on every run
+(`tests/self/bootstrap.js`, which seeds with stage0 deliberately) and by
+`scripts/bootstrap.sh --verify`. With a **released binary** as the seed the
+same comparison silently becomes a different assertion: that the IR this
+working tree emits for `self/` is the IR the last release emitted for it. That
+is one implementation at two points in time. It is not a bootstrap property at
+all — it is a freeze on codegen between releases, and it forbids exactly the
+changes a release exists to carry.
+
+It broke the first time one landed. A flow-sensitive bounds analysis
+(`wp15/ranged-types`) proved 46 of `self/`'s 1,206 index checks redundant; 20
+of 56 modules changed, 143,468 lines of IR became 143,008, and the seeded job
+reported a broken bootstrap because an optimisation had worked. The fixed point
+was untouched throughout: `IR(stage1) == IR(stage2)` held over all 56 modules
+and stage3 was byte-identical to stage2.
+
+So `scripts/bootstrap.sh --verify` asserts the seed equality **only when the
+seed is stage0** — by identity, so naming this checkout's own `dist/index.js`
+in `NISH_BOOTSTRAP` still counts as stage0 — and with any other seed reports
+the difference as a note and carries on. The two seed-independent equalities
+are asserted whatever the seed is. The script's header carries the long form of
+the argument, and `tests/run.js`'s WP14 block pins both halves of the decision
+so it cannot drift back.
+
+This is §A5's lesson on a second subject. There a gate's claim stopped being
+true while its record said it held; here a gate's claim quietly changed into a
+*different* claim, under one spelling, while the record still described the
+old one. A gate is worth exactly what its meaning is written down as.
+
 ### G4 — The seed policy is written before it is needed
 
 One sentence in `wp12-release.md`, decided now rather than at the first
@@ -773,7 +814,7 @@ gate nobody has opened is how a runtime budget dies.
 | | Milestone | Done when |
 | --- | --- | --- |
 | **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) — though that claim was recorded once while it was not true, and §A5 is the correction and what it cost |
-| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. Outstanding: the job runs on Linux only. The seed itself has arrived — v0.1.1 is released with `nish-0.1.1-x86_64-linux.tar.gz` attached, and it is the first one, because v0.1.0 was tagged and never built (G3, G4) |
+| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). Outstanding: the job runs on Linux only. The seed itself has arrived — v0.1.1 is released with `nish-0.1.1-x86_64-linux.tar.gz` attached, and it is the first one, because v0.1.0 was tagged and never built (G3, G4) |
 | **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is now 0, with 307 codes provoked by `tests/wordings/` and the surviving negatives and 55 unreachable with a reason on file (§2B). Outstanding: the four survivors repointed to the seed; and, carried rather than closed, the 45 wordings stage1's parser refuses before Phase 0 can state them — those go with stage0 at R6 — and the 11 programs the two compilers still answer differently, six of which stage1 compiles |
 | **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the package becoming an installer — which first needs a registry name, since `nish` is taken ([wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken)) — and the INSTALL.md/wp12 rewrite (G5) |
 | **R5** | Provenance | the re-verification procedure is written (G6); the `ddc-<version>` tag is cut at release time |

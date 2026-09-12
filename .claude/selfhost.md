@@ -48,8 +48,19 @@ one you can keep:
 ```bash
 npm run bootstrap                   # build/nish (stage2, speed)
 scripts/bootstrap.sh --verify       # the three equalities, with cmp
+NISH_BOOTSTRAP=<released nish> scripts/bootstrap.sh --verify   # two of them
 build/nish hello.ts --link hello  # -o, --link, --profile, its own directories
 ```
+
+`--verify` asserts all three equalities when the seed is stage0, which is what
+the line above runs and what `npm test` runs. Seeded with a **released** binary
+it asserts only `IR(stage1) == IR(stage2)` and `stage3 == stage2`, and reports
+`IR(seed) == IR(stage1)` as a note: with a released seed that comparison asks
+whether codegen has changed since that release rather than whether two
+implementations agree, so a codegen improvement is expected to move it. What
+the seeded run enforces is the rolling freeze, and it enforces it by stage1
+building at all (`docs/wp19-stage0-retirement.md` G3, and the header of
+`scripts/bootstrap.sh`).
 
 There is no wrapper any more: `scripts/nish.sh` is deleted and
 `self/compile.ts` drives the whole thing (§3a D4, reversed in
