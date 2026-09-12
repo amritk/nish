@@ -91,6 +91,30 @@ yielding `0`, `.length` counts bytes, there is no `throw` and no unwinding,
 lists everything the differential test suite found that still differs from
 Node.
 
+### The standard library
+
+[`std/`](std/README.md) is Nish written in Nish, for Nish programs to import.
+It holds one module today, [`std/testing`](std/testing.ts) — a test runner, so a
+compiled program can check itself and answer an exit code with no Node in the
+picture:
+
+```ts
+import { Suite } from "../std/testing";
+
+export const main = (): number => {
+  const t = new Suite("stats");
+  t.eqI32("sumOf", sumOf([3, 9, 4, 9]), 25);
+  return t.done();          // prints the report; 0 when nothing failed
+};
+```
+
+A library module is source, not a built artifact, so it compiles with the
+program that imports it and the whole-program pass sees straight through it
+([docs/wp21-packages.md](docs/wp21-packages.md)). There is no bare specifier
+yet — imports are relative, as everywhere else in the language — and no
+callbacks, which is what makes a suite a value with methods rather than a
+`test("name", () => ...)`: a function is never a value here.
+
 ## Memory safety
 
 There is no garbage collector and no `free`, so the bugs that need one cannot

@@ -12,6 +12,7 @@
     "dist",
     "runtime",
     "scripts",
+    "std",
     "README.md",
     "LICENSE",
     "docs/INSTALL.md"

@@ -3980,6 +3980,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       /^dist\//,
       /^runtime\//,
       /^scripts\//,
+      /^std\//,
       /^README\.md$/,
       /^LICENSE$/,
       /^docs\/INSTALL\.md$/,
@@ -4000,12 +4001,17 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/nish.d.ts",
       "runtime/nish.mjs",
       "scripts/build.sh",
+      // The standard library is source, so shipping it *is* shipping the library
+      // (wp21 §2). A tarball without it would install a compiler whose `std/`
+      // imports cannot resolve.
+      "std/testing.ts",
+      "std/README.md",
       "LICENSE",
       "docs/INSTALL.md",
     ];
     const absent = required.filter((f) => !files.includes(f));
     check(
-      "npm pack includes everything --link and `node --import` need (runtime.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus LICENSE/INSTALL.md",
+      "npm pack includes everything --link and `node --import` need (runtime.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE and INSTALL.md",
       absent.length === 0,
       absent.join("\n")
     );

@@ -96,6 +96,40 @@ across `runtime.ts`, `runtime.c` and `nish.h`, `opt -O2` vectorising
 change is what is wrong, not the test. Do not raise a budget or delete a guard
 to get green.
 
+## Testing a Nish program in Nish
+
+Everything above is the harness that tests the *compiler*. A program the
+compiler produced can also test itself, with [`std/testing`](../std/README.md):
+
+```typescript
+import { Suite } from "../std/testing";
+
+export const main = (): number => {
+  const t = new Suite("stats");
+  t.eqI32("sumOf", sumOf([3, 9, 4, 9]), 25);
+  return t.done();            // 0 when nothing failed, 1 otherwise
+};
+```
+
+It prints the `PASS` / `FAIL` / `SKIP` lines and the `N passed, M failed, K
+skipped` summary this suite prints, for the reason this suite counts skips: a
+green run that skipped half its checks should not look like one that proved
+everything. Two rules of the language shape how it is used, and both are worth
+knowing before writing a case with it:
+
+- **A function is not a value**, so there is no `test(name, () => ...)`. The
+  suite is driven by straight-line calls.
+- **Every assertion answers a `boolean`**, because a failure cannot throw and be
+  caught: an out-of-range index *panics* and ends the process, so a check that a
+  later read depends on is a branch —
+  `if (!t.eqI32("len", a.length, 3)) { return t.done(); }`.
+
+Use it for a whole program whose behaviour is the point (`tests/link/`), not for
+the golden cases: a `tests/cases/<name>.ts` asserts through its `.ll` and `.out`
+sidecars, and a suite inside one would put the assertion in the program instead
+of in the data. `tests/link/std_testing` and `tests/link/std_testing_fail` are
+the two cases that pin the library itself, one per outcome.
+
 ## Style & Best Practices
 
 - Clarity first. Write tests that are easy to read and understand, even for
