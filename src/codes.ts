@@ -99,6 +99,8 @@ const RULES: string[] = [
     "NL2167",
     "` allocates a dynamically sized array on every iteration of this loop and nothing keeps it ",
     "NL2042",
+    "; a class or interface name is still program-wide, so two packages cannot both declare one",
+    "NL3009",
     "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the ",
     "NL2054",
     "` is rebuilt from its own value on every iteration of this loop, so every pass copies all ",
@@ -778,7 +780,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 360;
+export const RULE_COUNT = 361;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

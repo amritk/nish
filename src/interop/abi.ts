@@ -13,6 +13,7 @@ import { FunctionFacts, analyzeFunctions } from "../codegen/attributes.js";
 import { Compilation, ModuleUnit } from "../compilation.js";
 import { ResultType, StaticType, isReadonlyArray, resultByValue, resultStructName } from "../types.js";
 import { ResultLayout, resultLayout, resultTypesIn } from "../checker/result.js";
+import { ROOT_PACKAGE } from "../packages.js";
 
 export interface ExternalFunction {
   sig: FunctionSig;
@@ -26,11 +27,12 @@ export interface ExternalFunction {
 }
 
 /**
- * Every function that is an external symbol of the final link, in module and
- * source order: exported functions always, non-exported ones unless
- * `--strict-exports` made them `internal`. The entry `export function main`
- * is excluded: it is emitted as `@nish_main` behind the process entry
- * wrapper and is not a library call.
+ * Every function of the *root package* that is an external symbol of the final
+ * link, in module and source order: exported functions always, non-exported
+ * ones unless `--strict-exports` made them `internal`. The entry
+ * `export function main` is excluded: it is emitted as `@nish_main` behind the
+ * process entry wrapper and is not a library call, and since WP21 S1 a
+ * dependency package's exports are excluded too — see the comment in the loop.
  */
 export function externalFunctions(compilation: Compilation): ExternalFunction[] {
   const out: ExternalFunction[] = [];
@@ -38,6 +40,16 @@ export function externalFunctions(compilation: Compilation): ExternalFunction[] 
   const facts = analyzeFunctions(programs, compilation.opts);
   for (const unit of compilation.modules) {
     const program = unit.checker.program;
+    // WP21 S1: a dependency package's `export` is an export to an Nish
+    // consumer, not a promise to a C host — wp21-packages.md §1 and §4 are
+    // explicit that the artifact rows of a package are a *narrowed projection*
+    // of what an Nish consumer sees, and that the projection is the embedding
+    // program's to choose. So the foreign surface is the root package's, which
+    // for every single-package program is all of it and changes nothing.
+    // TODO(WP21 S2): re-exporting a dependency's function from the root
+    // package is how it should reach the C ABI, and needs `export { f } from`,
+    // which the language does not have.
+    if (program.packageName !== ROOT_PACKAGE) continue;
     for (const sig of program.functions) {
       if (sig === program.entryMain) continue;
       if (!sig.exported && compilation.opts.strictExports) continue;
