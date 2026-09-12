@@ -1118,6 +1118,202 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
   }
 }
 
+// ---- WP6: every allocating builtin is an allocation site -----------------------------
+// `ALLOCATING_BUILTINS` in src/codegen/escape.ts names the identifier builtins whose
+// result is fresh arena memory. A builtin that belongs there and is missing is not a
+// lost optimisation: the function that returns its result gets an automatic arena scope
+// whose `nish_arena_release` runs before the `ret`, rewinding the arena past the bytes
+// the caller is about to read. That shipped in 0.1.0 for `getenv` and printed a correct
+// value that the next allocation overwrote, which is silent corruption rather than a
+// crash (`tests/cases/mem_getenv_scope`, and `mem_read_or_null_scope` /
+// `mem_readdir_scope` for the other two). Three cases pin three builtins; this pins the
+// class, in two halves that are each derived rather than listed again:
+//
+//  1. **Which builtins allocate, mechanically.** A builtin allocates when its lowering
+//     declares a runtime callee whose entry in src/codegen/runtime.ts answers a pointer
+//     and is `noalias`. In that table `noalias` means "a fresh allocation per call",
+//     which is exactly the property the set is about, and it is the reason the two
+//     pointer-answering non-allocators are not candidates: `nish_platform` hands back
+//     the same constant and is deliberately not `noalias`, and `process.argv` is
+//     `malloc`ed once by the entry wrapper (neither is an identifier builtin either).
+//     The lowering's own `callees` list is the link, so this asks the emitter rather
+//     than a copy of the emitter.
+//  2. **What membership buys, by compiling a probe.** For every builtin the signal
+//     names, a generated program returns the builtin's result from a function that also
+//     allocates locally -- the shape of `mem_getenv_scope` -- and the emitted IR must
+//     contain no `nish_arena_release`.
+//
+// What this does not prove: that the C behind a `noalias` entry really bumps the arena
+// (the table is where that fact is declared, and the interop section is what holds it to
+// nish.h), and nothing about a hypothetical builtin that allocates through the inline
+// allocator instead of a named runtime symbol -- a lowering like that would have to say
+// so in `callees` to keep its caller's attributes honest, and saying so is what this
+// reads. The lowerings come from dist/, which `npm test` has just built, while the set is
+// read from src/: running this over a stale dist/ compares two different compilers.
+if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
+  const { builtinFunctionEmitters } = await import(
+    pathToFileURL(path.join(root, "dist", "codegen", "emit", "expressions.js")).href
+  );
+  const { RUNTIME_BY_NAME } = await import(
+    pathToFileURL(path.join(root, "dist", "codegen", "runtime.js")).href
+  );
+
+  /**
+   * The runtime symbols one builtin's lowering may call. `callees` is handed the checked
+   * program and the call because a builtin's symbol can depend on its argument type
+   * (`Number(s)` parses, `Number(n)` converts), so the question is asked once per
+   * argument kind over a stub that answers that kind for every node, and the answers
+   * are unioned: what matters here is whether *any* call of the builtin allocates.
+   */
+  const ARGUMENT_KINDS = ["string", "f64", "i32", "bool"];
+  const calleesOf = (emitter) => {
+    const symbols = new Set();
+    const failures = [];
+    for (const kind of ARGUMENT_KINDS) {
+      const program = { types: { get: () => ({ kind }) } };
+      const expr = { arguments: [{}, {}, {}] };
+      try {
+        for (const symbol of emitter.callees(program, expr)) symbols.add(symbol);
+      } catch (e) {
+        failures.push(`${kind}: ${e.message}`);
+      }
+    }
+    return { symbols, failures };
+  };
+
+  /** The `declare` line's return part: the attributes and the type, before the `@name(`. */
+  const returnPart = (fn) =>
+    fn.signature.slice("declare ".length, fn.signature.indexOf(`@${fn.name}(`)).trim();
+
+  /** A fresh allocation per call: `noalias` on a pointer return, as runtime.ts uses it. */
+  const allocatesFreshMemory = (fn) => {
+    const ret = returnPart(fn);
+    return /\bnoalias\b/.test(ret) && /(?:i8\*|%struct\.nish_array\*)$/.test(ret);
+  };
+
+  /** builtin -> the first runtime symbol whose entry says the lowering allocates. */
+  const allocating = new Map();
+  const unreadable = [];
+  const unknownSymbols = [];
+  for (const [builtin, emitter] of Object.entries(builtinFunctionEmitters)) {
+    const { symbols, failures } = calleesOf(emitter);
+    if (failures.length === ARGUMENT_KINDS.length) {
+      unreadable.push(`${builtin}: ${failures[0]}`);
+      continue;
+    }
+    for (const symbol of symbols) {
+      const fn = RUNTIME_BY_NAME.get(symbol);
+      // A name the table does not know would read as "does not allocate", so the
+      // signal is only as complete as this agreement.
+      if (!fn) unknownSymbols.push(`${builtin} -> ${symbol}`);
+      else if (allocatesFreshMemory(fn) && !allocating.has(builtin)) allocating.set(builtin, symbol);
+    }
+  }
+  check(
+    `every identifier builtin declares runtime callees the table knows (${Object.keys(builtinFunctionEmitters).length} builtins)`,
+    unreadable.length === 0 && unknownSymbols.length === 0,
+    [
+      ...unreadable.map(
+        (u) => `could not read the callees of ${u} -- teach this check the context that lowering needs`
+      ),
+      ...unknownSymbols.map((u) => `${u} is not in RUNTIME_FUNCTIONS (src/codegen/runtime.ts)`),
+    ].join("\n")
+  );
+
+  // The set is read out of the source because it is private to escape.ts, which is
+  // where it belongs: nothing but the escape analysis has any business consulting it.
+  const escapeSrc = fs.readFileSync(path.join(root, "src", "codegen", "escape.ts"), "utf8");
+  const setLiteral = escapeSrc.match(/ALLOCATING_BUILTINS\s*=\s*new Set\(\[([\s\S]*?)\]\)/);
+  const declared = new Set([...(setLiteral?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]));
+  check(
+    "src/codegen/escape.ts declares ALLOCATING_BUILTINS as a literal set of names",
+    setLiteral !== null && declared.size > 0,
+    "the declaration moved or changed shape; this check reads it by name, so point it at the new one"
+  );
+
+  const missing = [...allocating].filter(([builtin]) => !declared.has(builtin));
+  const stale = [...declared].filter((builtin) => !allocating.has(builtin));
+  check(
+    `ALLOCATING_BUILTINS lists every allocating builtin and nothing else (${[...allocating.keys()].join(", ")})`,
+    missing.length === 0 && stale.length === 0,
+    [
+      ...missing.map(
+        ([builtin, symbol]) =>
+          `${builtin} allocates -- its lowering calls @${symbol}, whose entry in src/codegen/runtime.ts is a ` +
+          `noalias pointer return, which in that table means a fresh allocation per call -- but it is not in ` +
+          `ALLOCATING_BUILTINS in src/codegen/escape.ts. Add it there, or a function returning ${builtin}(...) ` +
+          "gets an arena scope that releases the result before the ret. Add a tests/cases/mem_*_scope case for it " +
+          "beside the other three while you are there.",
+      ),
+      ...stale.map(
+        (builtin) =>
+          `${builtin} is in ALLOCATING_BUILTINS but nothing its lowering calls is a noalias pointer-returning ` +
+          "runtime symbol: either the lowering changed or the entry is stale.",
+      ),
+    ].join("\n")
+  );
+
+  // Half two: the consequence, for each builtin the signal named. The probe is
+  // generated from the runtime signature -- one string argument per `i8*` parameter,
+  // and a return type from the pointer kind and whether the entry is `nonnull` -- so
+  // there is no per-builtin fixture to keep in step. A shape the generator cannot
+  // express is a counted skip rather than a failure: half one is what proves
+  // completeness, and this half is about what membership does.
+  const nishReturnType = (fn) => {
+    const ret = returnPart(fn);
+    const orNull = /\bnonnull\b/.test(ret) ? "" : " | null";
+    // The element type of an array is not in `%struct.nish_array*`; every
+    // array-answering builtin answers `string[]` today, and a probe that does not
+    // typecheck skips itself below rather than claiming anything.
+    if (/i8\*$/.test(ret)) return `string${orNull}`;
+    if (/%struct\.nish_array\*$/.test(ret)) return `string[]${orNull}`;
+    return undefined;
+  };
+  const stringArity = (fn) => {
+    const params = fn.signature.slice(fn.signature.indexOf("(") + 1, fn.signature.lastIndexOf(")"));
+    const parts = params.split(",").map((p) => p.trim()).filter(Boolean);
+    return parts.every((p) => p.startsWith("i8*")) ? parts.length : undefined;
+  };
+  for (const [builtin, symbol] of allocating) {
+    const fn = RUNTIME_BY_NAME.get(symbol);
+    const returnType = nishReturnType(fn);
+    const arity = stringArity(fn);
+    if (returnType === undefined || arity === undefined || arity === 0) {
+      skip(`${builtin}: no arena-scope probe (@${symbol} takes or answers a shape the generator cannot write)`);
+      continue;
+    }
+    const params = Array.from({ length: arity }, (_, i) => `arg${i}: string`).join(", ");
+    const args = Array.from({ length: arity }, (_, i) => `arg${i}`).join(", ");
+    // The template literal is the local allocation that gives the function something
+    // to release, which is what made the missing sites visible in the first place.
+    const probeSrc = [
+      `export const probe = (${params}): ${returnType} => {`,
+      "  const label = `probe ${arg0}`;",
+      "  console.log(label);",
+      `  return ${builtin}(${args});`,
+      "};",
+      "",
+    ].join("\n");
+    const probeTs = path.join(buildDir, `alloc_probe_${builtin}.ts`);
+    const probeLl = path.join(buildDir, `alloc_probe_${builtin}.ll`);
+    fs.writeFileSync(probeTs, probeSrc);
+    const r = spawnSync("node", [cli, probeTs, "-o", probeLl], { cwd: root });
+    if (r.status !== 0) {
+      skip(`${builtin}: no arena-scope probe (the generated program did not compile: ${String(r.stderr).trim().split("\n")[0]})`);
+      continue;
+    }
+    const ir = fs.readFileSync(probeLl, "utf8");
+    const body = ir.match(/^define [^\n]*@probe\([^\n]*\{\n([\s\S]*?)^\}/m)?.[1] ?? "";
+    // The `@nish_str_concat` is the template literal's own allocation: it is what there
+    // would be to release, so a probe missing it would pass for the wrong reason.
+    check(
+      `${builtin}: a function returning its result keeps the arena (no nish_arena_release before the ret)`,
+      body.includes(`@${symbol}(`) && body.includes("@nish_str_concat(") && !body.includes("nish_arena_release"),
+      `${probeSrc}\n${ir}`
+    );
+  }
+}
+
 // ---- WP2: layout -------------------------------------------------------------------
 // tests/layout/structs.ts declares fifteen classes, three of which `implements` an
 // interface (WP25, whose layout is the interface's fields followed by their own);
@@ -4396,6 +4592,29 @@ if (!only || "changelog".includes(only) || "wp12".includes(only)) {
     "changelog: --check-subject is the same rule pr-title.yml enforces",
     bad.status === 1 && ok.status === 0,
     `bad exit ${bad.status}, ok exit ${ok.status}\n${bad.stderr}${ok.stderr}`
+  );
+}
+
+// ---- WP22 x WP13: the two spellings of a function ------------------------------------
+// `tests/differential/arrow-parity.js` rewrites one program written both ways --
+// `function f() { ... }` and `const f = () => { ... }` -- and compares the JavaScript
+// modulo the declaration syntax. They are the same program, so the rewrite owes them the
+// same output; it did not, from WP22 until 2806854, and the symptom was a body that
+// reached Node with JavaScript's own `console.log` in it, printing something close
+// enough to pass while measuring nothing. The runner's own header says why the
+// comparison is honest and how to point it at the pre-fix rewrite. Nothing here is
+// compiled or run, so this needs no toolchain and does not belong under the clang gate
+// below.
+if (!only || "differential".includes(only) || "arrow-parity".includes(only)) {
+  const ap = spawnSync("node", [path.join(import.meta.dirname, "differential", "arrow-parity.js")], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  const summary = (ap.stdout.match(/^arrow-parity: .*\(([^)]*)\)/m) ?? [])[1] ?? "";
+  check(
+    `differential: an arrow-declared program and its \`function\` twin rewrite identically (${summary || "no summary"})`,
+    ap.status === 0,
+    ap.stdout + ap.stderr
   );
 }
 
