@@ -386,11 +386,14 @@ thread pool, `napi_create_promise` / `napi_resolve_deferred` so JavaScript gets
 a promise. The Nish function stays exactly as synchronous as it is now; the
 asynchrony is entirely in generated C.
 
-- **Prerequisite: WP20 T0, the thread-local arena.** The worker thread
+- **Prerequisite: WP20 T0, the thread-local arena — landed, so this is now
+  buildable.** ([wp20-threads.md](wp20-threads.md) §4 T0: `nish --threads`
+  plus `scripts/build.sh --threads`.) The worker thread
   allocates, and `@nish_arena` is one process-wide object whose bump is
-  inlined into the IR (wp20 §3.1). Without T0 this is a data race in the
-  emitted IR, not merely in the runtime. **T0 is the whole cost of A1**, which
-  is another reason T0 is worth landing on its own.
+  inlined into the IR (wp20 §3.1). Without T0 this was a data race in the
+  emitted IR, not merely in the runtime. **T0 was the whole cost of A1**, which
+  was the argument for landing it on its own, and the argument held: the shim
+  and the `napi` profile's build line are all that is left of this item.
 - Surface: a flag (`--emit-napi-async`) or a per-function opt-in; §10 leaves
   that open, because it should be decided against a real addon.
 - Acceptance: the `napi` profile still builds and the WP8 batching benchmark
@@ -402,8 +405,8 @@ asynchrony is entirely in generated C.
 
 Overlapping `spawnSync` waits, parallelism across cores, a long computation
 that must not stall a caller: all WP20, all designed, and all argued from the
-same zero-GC constraints. The four benchmark programs outside the 1.10x target
-are not waiting on I/O — they are waiting on one core.
+same zero-GC constraints. The benchmark programs that have ever sat outside the
+1.10x target were not waiting on I/O — they were waiting on one core.
 
 ### 5.3 Nothing, for the rest
 
