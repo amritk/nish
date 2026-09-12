@@ -168,28 +168,6 @@ export function basenameWithout(p: string, suffix: string): string {
  * which is `src/compilation.ts`'s rule (TypeScript's ESM convention) written
  * out. The result is the module's identity, so it goes through `resolvePath`.
  */
-/**
- * The package root: the directory holding `scripts/`, `runtime/` and `std/`.
- * stage0 reads it from `import.meta.dirname` (`src/version.ts`); this compiler
- * is a binary, so it derives it from the path it was invoked by —
- * `<prefix>/bin/nish` and `build/nish` both put it one level up — and falls
- * back to the working directory, which is what a checkout wants. Empty when
- * neither has the script, so a caller can say which two it looked in.
- *
- * It lives here rather than in the driver because two callers need it now:
- * `--link`, to find `scripts/build.sh`, and module resolution, to find the
- * standard library beside the compiler.
- */
-export function packageRoot(): string {
-  const candidates: string[] = [`${dirname(process.argv[0])}/..`, "."];
-  for (const root of candidates) {
-    if (readFileSyncOrNull(`${root}/scripts/build.sh`) !== null) {
-      return root;
-    }
-  }
-  return "";
-}
-
 export function resolveModule(importerDir: string, specifier: string): string {
   const resolved = resolvePath(importerDir, specifier);
   if (resolved.endsWith(".js")) {

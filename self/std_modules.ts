@@ -8,7 +8,7 @@
 // everything after that is the ordinary module path.
 
 import { STD_PREFIX } from "./branding";
-import { normalizePath, packageRoot } from "./paths";
+import { normalizePath } from "./paths";
 
 /** The directory the library lives in, relative to the package root. */
 export const STD_DIR: string = "std";
@@ -22,8 +22,8 @@ export const STD_DIR: string = "std";
  * `./build/../std/text.ts` where stage0 writes `std/text.ts`, and the two
  * compilers would disagree on a byte the parity gate compares.
  */
-export const stdModulePath = (specifier: string): string =>
-  normalizePath(`${packageRoot()}/${STD_DIR}/${specifier.substring(STD_PREFIX.length)}.ts`);
+export const stdModulePath = (root: string, specifier: string): string =>
+  normalizePath(`${root}/${STD_DIR}/${specifier.substring(STD_PREFIX.length)}.ts`);
 
 /**
  * The modules the installed library has, without their extension, for the
@@ -34,8 +34,8 @@ export const stdModulePath = (specifier: string): string =>
  * directory — answers nothing rather than failing, because the caller is
  * already reporting an error when it asks.
  */
-export const stdModuleNames = (): string => {
-  const entries = readdirSync(normalizePath(`${packageRoot()}/${STD_DIR}`));
+export const stdModuleNames = (root: string): string => {
+  const entries = readdirSync(normalizePath(`${root}/${STD_DIR}`));
   if (entries === null) {
     return "";
   }

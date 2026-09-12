@@ -227,7 +227,7 @@ export class Compilation {
         continue;
       }
       const target = imp.specifier.startsWith(STD_PREFIX)
-        ? stdModulePath(imp.specifier)
+        ? stdModulePath(this.opts.packageRoot, imp.specifier)
         : resolveModule(dir, imp.specifier);
       if (readFileSyncOrNull(target) === null) {
         // At the module specifier, where stage0 points
@@ -235,7 +235,7 @@ export class Compilation {
         checker.ctx.errorAtSpecifier(
           imp.decl,
           imp.specifier.startsWith(STD_PREFIX)
-            ? `Module \`${imp.specifier}\` is not part of the standard library (it has: ${stdModuleNames()})`
+            ? `Module \`${imp.specifier}\` is not part of the standard library (it has: ${stdModuleNames(this.opts.packageRoot)})`
             : `Cannot find module \`${imp.specifier}\` (looked for ${target})`
         );
         checker.ctx.errored = false;
