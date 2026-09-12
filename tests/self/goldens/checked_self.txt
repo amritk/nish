@@ -6426,35 +6426,35 @@ function basicType(type: i32): string -> @basicType
   escaping: type
   calls: internalError nish_arena_mark nish_arena_release nish_exit nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
-  callee 109:20 internalError -> @internalError
+  callee 115:20 internalError -> @internalError
 function bitsOf(type: i32): i32 -> @bitsOf
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   escaping: type
   calls: intBits
   stackSites=0 stackLocals=0
-  local 115:9 bits: i32 (const)
-  callee 115:16 intBits -> @intBits
+  local 121:9 bits: i32 (const)
+  callee 121:16 intBits -> @intBits
 function bitsOfIn(table: TypeTable, type: i32): i32 -> @bitsOfIn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: type
   calls: TypeTable.isEnum bitsOf
   pointer table: size=56 writesThrough=false captured=false passedTo=TypeTable.isEnum#0
   stackSites=0 stackLocals=0
-  callee 136:10 TypeTable.isEnum -> @TypeTable.isEnum
-  callee 136:36 bitsOf -> @bitsOf
+  callee 142:10 TypeTable.isEnum -> @TypeTable.isEnum
+  callee 142:36 bitsOf -> @bitsOf
 function quote(text: string): string -> @quote
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: StringBuilder.addChar StringBuilder.constructor StringBuilder.toText
   stackSites=1 stackLocals=1
-  local 145:9 out: StringBuilder (const)
-  callee 145:15 new StringBuilder -> @StringBuilder.constructor
-  callee 146:3 StringBuilder.addChar -> @StringBuilder.addChar
-  local 147:7 i: i32 (let)
-  local 149:11 code: i32 (const)
-  callee 151:7 StringBuilder.addChar -> @StringBuilder.addChar
-  callee 153:5 StringBuilder.addChar -> @StringBuilder.addChar
-  callee 156:3 StringBuilder.addChar -> @StringBuilder.addChar
-  callee 157:10 StringBuilder.toText -> @StringBuilder.toText
+  local 151:9 out: StringBuilder (const)
+  callee 151:15 new StringBuilder -> @StringBuilder.constructor
+  callee 152:3 StringBuilder.addChar -> @StringBuilder.addChar
+  local 153:7 i: i32 (let)
+  local 155:11 code: i32 (const)
+  callee 157:7 StringBuilder.addChar -> @StringBuilder.addChar
+  callee 159:5 StringBuilder.addChar -> @StringBuilder.addChar
+  callee 162:3 StringBuilder.addChar -> @StringBuilder.addChar
+  callee 163:10 StringBuilder.toText -> @StringBuilder.toText
 function DebugInfo.constructor(this: DebugInfo, module: IRModule, program: CheckedProgram, table: TypeTable): void -> @DebugInfo.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true
   escaping: module program table
@@ -6464,31 +6464,31 @@ function DebugInfo.constructor(this: DebugInfo, module: IRModule, program: Check
   pointer program: size=208 writesThrough=true captured=true
   pointer table: size=56 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  callee 193:21 new StringMap -> @StringMap.constructor
-  callee 195:21 new StringMap -> @StringMap.constructor
-  callee 204:15 IRModule.reserveMetadata -> @IRModule.reserveMetadata
-  callee 205:17 DebugInfo.fileOf -> @DebugInfo.fileOf
-  callee 206:5 IRModule.setMetadata -> @IRModule.setMetadata
-  callee 208:87 quote -> @quote
-  callee 210:5 IRModule.addNamedMetadata -> @IRModule.addNamedMetadata
-  local 211:11 dwarf: string (const)
-  callee 211:19 IRModule.addMetadata -> @IRModule.addMetadata
-  local 212:11 version: string (const)
-  callee 212:21 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 213:5 IRModule.addNamedMetadata -> @IRModule.addNamedMetadata
+  callee 199:21 new StringMap -> @StringMap.constructor
+  callee 201:21 new StringMap -> @StringMap.constructor
+  callee 210:15 IRModule.reserveMetadata -> @IRModule.reserveMetadata
+  callee 211:17 DebugInfo.fileOf -> @DebugInfo.fileOf
+  callee 212:5 IRModule.setMetadata -> @IRModule.setMetadata
+  callee 214:87 quote -> @quote
+  callee 216:5 IRModule.addNamedMetadata -> @IRModule.addNamedMetadata
+  local 217:11 dwarf: string (const)
+  callee 217:19 IRModule.addMetadata -> @IRModule.addMetadata
+  local 218:11 version: string (const)
+  callee 218:21 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 219:5 IRModule.addNamedMetadata -> @IRModule.addNamedMetadata
 function DebugInfo.fileOf(this: DebugInfo, source: SourceFile): string -> @DebugInfo.fileOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: IRModule.addMetadata StringMap.get StringMap.set nish_array_grow nish_panic_index nish_str_concat quote
   pointer this: size=88 writesThrough=false captured=false
   pointer source: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 218:11 known: i32 (const)
-  callee 218:19 StringMap.get -> @StringMap.get
-  local 222:11 ref: string (const)
-  callee 222:17 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 223:28 quote -> @quote
-  callee 223:62 quote -> @quote
-  callee 225:5 StringMap.set -> @StringMap.set
+  local 224:11 known: i32 (const)
+  callee 224:19 StringMap.get -> @StringMap.get
+  local 228:11 ref: string (const)
+  callee 228:17 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 229:28 quote -> @quote
+  callee 229:62 quote -> @quote
+  callee 231:5 StringMap.set -> @StringMap.set
 function DebugInfo.lineOf(this: DebugInfo, source: SourceFile, node: Node): i32 -> @DebugInfo.lineOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: SourceFile.lineOf
@@ -6496,208 +6496,208 @@ function DebugInfo.lineOf(this: DebugInfo, source: SourceFile, node: Node): i32 
   pointer source: size=24 writesThrough=false captured=false passedTo=SourceFile.lineOf#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 236:12 SourceFile.lineOf -> @SourceFile.lineOf
+  callee 242:12 SourceFile.lineOf -> @SourceFile.lineOf
 function DebugInfo.typeRef(this: DebugInfo, type: i32): string -> @DebugInfo.typeRef [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
   calls: CheckedProgram.enumNamed CheckedProgram.struct DebugInfo.arrayHeader DebugInfo.composite DebugInfo.enumeration DebugInfo.pointerTo DebugInfo.resultComposite DebugInfo.setTypeRef DebugInfo.typeRef IRModule.addMetadata StringMap.get TypeTable.isArray TypeTable.isEnum TypeTable.isNullable TypeTable.isResult TypeTable.isStruct TypeTable.nameOf TypeTable.refOf TypeTable.typeName basicType internalError nish_exit nish_panic_index nish_str_concat resultLayout
   pointer this: size=88 writesThrough=false captured=false passedTo=DebugInfo.typeRef#0 DebugInfo.pointerTo#0 DebugInfo.pointerTo#0 DebugInfo.arrayHeader#0 DebugInfo.pointerTo#0 DebugInfo.composite#0 DebugInfo.enumeration#0 DebugInfo.pointerTo#0 DebugInfo.resultComposite#0 DebugInfo.setTypeRef#0
   stackSites=0 stackLocals=0
-  callee 246:9 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 247:14 DebugInfo.typeRef -> @DebugInfo.typeRef
-  callee 247:27 TypeTable.refOf -> @TypeTable.refOf
-  local 249:11 key: string (const)
-  callee 249:17 TypeTable.typeName -> @TypeTable.typeName
-  local 250:11 known: i32 (const)
-  callee 250:19 StringMap.get -> @StringMap.get
-  local 254:9 ref: string (let)
-  local 256:13 ch: string (const)
-  callee 256:18 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 257:13 DebugInfo.pointerTo -> @DebugInfo.pointerTo
-  callee 258:16 TypeTable.isArray -> @TypeTable.isArray
-  callee 259:13 DebugInfo.pointerTo -> @DebugInfo.pointerTo
-  callee 259:28 DebugInfo.arrayHeader -> @DebugInfo.arrayHeader
-  callee 259:45 TypeTable.refOf -> @TypeTable.refOf
-  callee 260:16 TypeTable.isStruct -> @TypeTable.isStruct
-  local 261:13 info: StructInfo | null (const)
-  callee 261:20 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 261:40 TypeTable.nameOf -> @TypeTable.nameOf
-  callee 263:22 internalError -> @internalError
-  callee 263:71 TypeTable.nameOf -> @TypeTable.nameOf
-  callee 265:15 DebugInfo.pointerTo -> @DebugInfo.pointerTo
-  callee 265:30 DebugInfo.composite -> @DebugInfo.composite
-  callee 267:16 TypeTable.isEnum -> @TypeTable.isEnum
-  local 272:13 declared: EnumInfo | null (const)
-  callee 272:24 CheckedProgram.enumNamed -> @CheckedProgram.enumNamed
-  callee 272:47 TypeTable.nameOf -> @TypeTable.nameOf
-  callee 274:22 internalError -> @internalError
-  callee 274:69 TypeTable.nameOf -> @TypeTable.nameOf
-  callee 276:15 DebugInfo.enumeration -> @DebugInfo.enumeration
-  callee 278:16 TypeTable.isResult -> @TypeTable.isResult
-  callee 284:13 DebugInfo.pointerTo -> @DebugInfo.pointerTo
-  callee 284:28 DebugInfo.resultComposite -> @DebugInfo.resultComposite
-  callee 284:49 resultLayout -> @resultLayout
-  callee 286:13 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 286:37 basicType -> @basicType
-  callee 288:5 DebugInfo.setTypeRef -> @DebugInfo.setTypeRef
+  callee 252:9 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 253:14 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee 253:27 TypeTable.refOf -> @TypeTable.refOf
+  local 255:11 key: string (const)
+  callee 255:17 TypeTable.typeName -> @TypeTable.typeName
+  local 256:11 known: i32 (const)
+  callee 256:19 StringMap.get -> @StringMap.get
+  local 260:9 ref: string (let)
+  local 262:13 ch: string (const)
+  callee 262:18 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 263:13 DebugInfo.pointerTo -> @DebugInfo.pointerTo
+  callee 264:16 TypeTable.isArray -> @TypeTable.isArray
+  callee 265:13 DebugInfo.pointerTo -> @DebugInfo.pointerTo
+  callee 265:28 DebugInfo.arrayHeader -> @DebugInfo.arrayHeader
+  callee 265:45 TypeTable.refOf -> @TypeTable.refOf
+  callee 266:16 TypeTable.isStruct -> @TypeTable.isStruct
+  local 267:13 info: StructInfo | null (const)
+  callee 267:20 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 267:40 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 269:22 internalError -> @internalError
+  callee 269:71 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 271:15 DebugInfo.pointerTo -> @DebugInfo.pointerTo
+  callee 271:30 DebugInfo.composite -> @DebugInfo.composite
+  callee 273:16 TypeTable.isEnum -> @TypeTable.isEnum
+  local 278:13 declared: EnumInfo | null (const)
+  callee 278:24 CheckedProgram.enumNamed -> @CheckedProgram.enumNamed
+  callee 278:47 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 280:22 internalError -> @internalError
+  callee 280:69 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 282:15 DebugInfo.enumeration -> @DebugInfo.enumeration
+  callee 284:16 TypeTable.isResult -> @TypeTable.isResult
+  callee 290:13 DebugInfo.pointerTo -> @DebugInfo.pointerTo
+  callee 290:28 DebugInfo.resultComposite -> @DebugInfo.resultComposite
+  callee 290:49 resultLayout -> @resultLayout
+  callee 292:13 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 292:37 basicType -> @basicType
+  callee 294:5 DebugInfo.setTypeRef -> @DebugInfo.setTypeRef
 function DebugInfo.setTypeRef(this: DebugInfo, key: string, ref: string): void -> @DebugInfo.setTypeRef [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: key ref
   calls: StringMap.get StringMap.set nish_array_grow nish_panic_index
   pointer this: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 294:11 known: i32 (const)
-  callee 294:19 StringMap.get -> @StringMap.get
-  callee 299:5 StringMap.set -> @StringMap.set
+  local 300:11 known: i32 (const)
+  callee 300:19 StringMap.get -> @StringMap.get
+  callee 305:5 StringMap.set -> @StringMap.set
 function DebugInfo.pointerTo(this: DebugInfo, base: string): string -> @DebugInfo.pointerTo [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: IRModule.addMetadata nish_str_concat
   pointer this: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 304:12 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 310:12 IRModule.addMetadata -> @IRModule.addMetadata
 function DebugInfo.member(this: DebugInfo, name: string, scope: string, type: string, sizeBits: i32, offsetBits: i32, file: string, line: i32): string -> @DebugInfo.member [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: name
   calls: IRModule.addMetadata nish_str_concat nish_str_from_i32 quote
   pointer this: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 317:11 at: string (const)
-  callee 318:12 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 319:51 quote -> @quote
+  local 323:11 at: string (const)
+  callee 324:12 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 325:51 quote -> @quote
 function DebugInfo.composite(this: DebugInfo, info: StructInfo): string -> @DebugInfo.composite [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: DebugInfo.fileOf DebugInfo.lineOf DebugInfo.member DebugInfo.pointerTo DebugInfo.setTypeRef DebugInfo.typeRef IRModule.addMetadata IRModule.reserveMetadata IRModule.setMetadata bitsOfIn nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32 quote
   pointer this: size=88 writesThrough=false captured=false passedTo=DebugInfo.setTypeRef#0 DebugInfo.pointerTo#0 DebugInfo.fileOf#0 DebugInfo.typeRef#0 DebugInfo.lineOf#0 DebugInfo.member#0 DebugInfo.lineOf#0
   pointer info: size=96 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 325:11 ref: string (const)
-  callee 325:17 IRModule.reserveMetadata -> @IRModule.reserveMetadata
-  callee 326:5 DebugInfo.setTypeRef -> @DebugInfo.setTypeRef
-  callee 326:32 DebugInfo.pointerTo -> @DebugInfo.pointerTo
-  local 327:11 file: string (const)
-  callee 327:18 DebugInfo.fileOf -> @DebugInfo.fileOf
-  local 328:11 members: string[] (const)
-  local 329:16 f: FieldInfo (const)
-  local 330:13 base: string (const)
-  callee 330:20 DebugInfo.typeRef -> @DebugInfo.typeRef
-  local 331:13 line: i32 (const)
-  callee 331:20 DebugInfo.lineOf -> @DebugInfo.lineOf
-  callee 332:20 DebugInfo.member -> @DebugInfo.member
-  callee 332:51 bitsOfIn -> @bitsOfIn
-  local 334:11 elements: string (const)
-  callee 334:22 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 335:5 IRModule.setMetadata -> @IRModule.setMetadata
-  callee 337:70 quote -> @quote
-  callee 337:112 DebugInfo.lineOf -> @DebugInfo.lineOf
+  local 331:11 ref: string (const)
+  callee 331:17 IRModule.reserveMetadata -> @IRModule.reserveMetadata
+  callee 332:5 DebugInfo.setTypeRef -> @DebugInfo.setTypeRef
+  callee 332:32 DebugInfo.pointerTo -> @DebugInfo.pointerTo
+  local 333:11 file: string (const)
+  callee 333:18 DebugInfo.fileOf -> @DebugInfo.fileOf
+  local 334:11 members: string[] (const)
+  local 335:16 f: FieldInfo (const)
+  local 336:13 base: string (const)
+  callee 336:20 DebugInfo.typeRef -> @DebugInfo.typeRef
+  local 337:13 line: i32 (const)
+  callee 337:20 DebugInfo.lineOf -> @DebugInfo.lineOf
+  callee 338:20 DebugInfo.member -> @DebugInfo.member
+  callee 338:51 bitsOfIn -> @bitsOfIn
+  local 340:11 elements: string (const)
+  callee 340:22 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 341:5 IRModule.setMetadata -> @IRModule.setMetadata
+  callee 343:70 quote -> @quote
+  callee 343:112 DebugInfo.lineOf -> @DebugInfo.lineOf
 function DebugInfo.enumeration(this: DebugInfo, info: EnumInfo): string -> @DebugInfo.enumeration [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: DebugInfo.fileOf DebugInfo.lineOf DebugInfo.typeRef IRModule.addMetadata nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 quote
   pointer this: size=88 writesThrough=false captured=false passedTo=DebugInfo.fileOf#0 DebugInfo.lineOf#0 DebugInfo.typeRef#0
   pointer info: size=56 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 344:11 file: string (const)
-  callee 344:18 DebugInfo.fileOf -> @DebugInfo.fileOf
-  local 345:11 enumerators: string[] (const)
-  local 346:9 i: i32 (let)
-  callee 349:9 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 350:34 quote -> @quote
-  local 355:11 elements: string (const)
-  callee 355:22 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 356:12 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 357:63 quote -> @quote
-  callee 357:105 DebugInfo.lineOf -> @DebugInfo.lineOf
-  callee 357:199 DebugInfo.typeRef -> @DebugInfo.typeRef
+  local 350:11 file: string (const)
+  callee 350:18 DebugInfo.fileOf -> @DebugInfo.fileOf
+  local 351:11 enumerators: string[] (const)
+  local 352:9 i: i32 (let)
+  callee 355:9 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 356:34 quote -> @quote
+  local 361:11 elements: string (const)
+  callee 361:22 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 362:12 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 363:63 quote -> @quote
+  callee 363:105 DebugInfo.lineOf -> @DebugInfo.lineOf
+  callee 363:199 DebugInfo.typeRef -> @DebugInfo.typeRef
 function DebugInfo.arrayHeader(this: DebugInfo, elem: i32, name: string): string -> @DebugInfo.arrayHeader [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: elem name
   calls: DebugInfo.member DebugInfo.pointerTo DebugInfo.typeRef IRModule.addMetadata IRModule.reserveMetadata IRModule.setMetadata nish_alloc_struct nish_array_grow nish_str_concat quote
   pointer this: size=88 writesThrough=false captured=false passedTo=DebugInfo.typeRef#0 DebugInfo.member#0 DebugInfo.member#0 DebugInfo.member#0 DebugInfo.pointerTo#0 DebugInfo.typeRef#0
   stackSites=1 stackLocals=1
-  local 363:11 ref: string (const)
-  callee 363:17 IRModule.reserveMetadata -> @IRModule.reserveMetadata
-  local 364:11 long: string (const)
-  callee 364:18 DebugInfo.typeRef -> @DebugInfo.typeRef
-  local 365:11 members: string[] (const)
-  callee 366:18 DebugInfo.member -> @DebugInfo.member
-  callee 367:18 DebugInfo.member -> @DebugInfo.member
-  callee 368:18 DebugInfo.member -> @DebugInfo.member
-  callee 368:43 DebugInfo.pointerTo -> @DebugInfo.pointerTo
-  callee 368:58 DebugInfo.typeRef -> @DebugInfo.typeRef
-  local 369:11 elements: string (const)
-  callee 369:22 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 370:5 IRModule.setMetadata -> @IRModule.setMetadata
-  callee 372:70 quote -> @quote
+  local 369:11 ref: string (const)
+  callee 369:17 IRModule.reserveMetadata -> @IRModule.reserveMetadata
+  local 370:11 long: string (const)
+  callee 370:18 DebugInfo.typeRef -> @DebugInfo.typeRef
+  local 371:11 members: string[] (const)
+  callee 372:18 DebugInfo.member -> @DebugInfo.member
+  callee 373:18 DebugInfo.member -> @DebugInfo.member
+  callee 374:18 DebugInfo.member -> @DebugInfo.member
+  callee 374:43 DebugInfo.pointerTo -> @DebugInfo.pointerTo
+  callee 374:58 DebugInfo.typeRef -> @DebugInfo.typeRef
+  local 375:11 elements: string (const)
+  callee 375:22 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 376:5 IRModule.setMetadata -> @IRModule.setMetadata
+  callee 378:70 quote -> @quote
 function DebugInfo.resultComposite(this: DebugInfo, layout: ResultLayout): string -> @DebugInfo.resultComposite [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: DebugInfo.member DebugInfo.typeRef IRModule.addMetadata IRModule.reserveMetadata IRModule.setMetadata bitsOfIn nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 quote
   pointer this: size=88 writesThrough=false captured=false passedTo=DebugInfo.typeRef#0 DebugInfo.member#0
   pointer layout: size=56 writesThrough=false captured=false
   stackSites=4 stackLocals=4
-  local 384:11 ref: string (const)
-  callee 384:17 IRModule.reserveMetadata -> @IRModule.reserveMetadata
-  local 385:11 names: string[] (const)
-  local 386:11 types: i32[] (const)
-  local 387:11 offsets: i32[] (const)
-  local 399:11 members: string[] (const)
-  local 400:9 i: i32 (let)
-  local 402:13 base: string (const)
-  callee 402:20 DebugInfo.typeRef -> @DebugInfo.typeRef
-  callee 403:20 DebugInfo.member -> @DebugInfo.member
-  callee 403:53 bitsOfIn -> @bitsOfIn
-  local 406:11 elements: string (const)
-  callee 406:22 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 407:5 IRModule.setMetadata -> @IRModule.setMetadata
-  callee 409:70 quote -> @quote
+  local 390:11 ref: string (const)
+  callee 390:17 IRModule.reserveMetadata -> @IRModule.reserveMetadata
+  local 391:11 names: string[] (const)
+  local 392:11 types: i32[] (const)
+  local 393:11 offsets: i32[] (const)
+  local 405:11 members: string[] (const)
+  local 406:9 i: i32 (let)
+  local 408:13 base: string (const)
+  callee 408:20 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee 409:20 DebugInfo.member -> @DebugInfo.member
+  callee 409:53 bitsOfIn -> @bitsOfIn
+  local 412:11 elements: string (const)
+  callee 412:22 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 413:5 IRModule.setMetadata -> @IRModule.setMetadata
+  callee 415:70 quote -> @quote
 function DebugInfo.resultWord(this: DebugInfo, type: i32): string -> @DebugInfo.resultWord [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
   calls: DebugInfo.member DebugInfo.setTypeRef DebugInfo.typeRef IRModule.addMetadata IRModule.reserveMetadata IRModule.setMetadata StringMap.get TypeTable.typeName bitsOfIn nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 quote resultLayout
   pointer this: size=88 writesThrough=false captured=false passedTo=DebugInfo.typeRef#0 DebugInfo.member#0 DebugInfo.member#0 DebugInfo.typeRef#0 DebugInfo.member#0 DebugInfo.setTypeRef#0
   stackSites=4 stackLocals=4
-  local 423:11 key: string (const)
-  callee 423:20 TypeTable.typeName -> @TypeTable.typeName
-  local 424:11 known: i32 (const)
-  callee 424:19 StringMap.get -> @StringMap.get
-  local 428:11 layout: ResultLayout (const)
-  callee 428:20 resultLayout -> @resultLayout
-  local 429:11 ref: string (const)
-  callee 429:17 IRModule.reserveMetadata -> @IRModule.reserveMetadata
-  local 430:11 union: string (const)
-  callee 430:19 IRModule.reserveMetadata -> @IRModule.reserveMetadata
-  local 431:11 armNames: string[] (const)
-  local 432:11 armTypes: i32[] (const)
-  local 441:9 armBits: i32 (let)
-  local 442:16 arm: i32 (const)
-  local 443:13 bits: i32 (const)
-  callee 443:20 bitsOfIn -> @bitsOfIn
-  local 448:11 arms: string[] (const)
-  local 449:9 i: i32 (let)
-  local 451:13 base: string (const)
-  callee 451:20 DebugInfo.typeRef -> @DebugInfo.typeRef
-  callee 452:17 DebugInfo.member -> @DebugInfo.member
-  callee 452:55 bitsOfIn -> @bitsOfIn
-  local 455:11 armElements: string (const)
-  callee 455:25 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 456:5 IRModule.setMetadata -> @IRModule.setMetadata
-  callee 458:66 quote -> @quote
-  local 460:11 members: string[] (const)
-  callee 461:18 DebugInfo.member -> @DebugInfo.member
-  callee 461:41 DebugInfo.typeRef -> @DebugInfo.typeRef
-  callee 462:18 DebugInfo.member -> @DebugInfo.member
-  local 463:11 elements: string (const)
-  callee 463:22 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 464:5 IRModule.setMetadata -> @IRModule.setMetadata
-  callee 466:70 quote -> @quote
-  callee 468:5 DebugInfo.setTypeRef -> @DebugInfo.setTypeRef
+  local 429:11 key: string (const)
+  callee 429:20 TypeTable.typeName -> @TypeTable.typeName
+  local 430:11 known: i32 (const)
+  callee 430:19 StringMap.get -> @StringMap.get
+  local 434:11 layout: ResultLayout (const)
+  callee 434:20 resultLayout -> @resultLayout
+  local 435:11 ref: string (const)
+  callee 435:17 IRModule.reserveMetadata -> @IRModule.reserveMetadata
+  local 436:11 union: string (const)
+  callee 436:19 IRModule.reserveMetadata -> @IRModule.reserveMetadata
+  local 437:11 armNames: string[] (const)
+  local 438:11 armTypes: i32[] (const)
+  local 447:9 armBits: i32 (let)
+  local 448:16 arm: i32 (const)
+  local 449:13 bits: i32 (const)
+  callee 449:20 bitsOfIn -> @bitsOfIn
+  local 454:11 arms: string[] (const)
+  local 455:9 i: i32 (let)
+  local 457:13 base: string (const)
+  callee 457:20 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee 458:17 DebugInfo.member -> @DebugInfo.member
+  callee 458:55 bitsOfIn -> @bitsOfIn
+  local 461:11 armElements: string (const)
+  callee 461:25 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 462:5 IRModule.setMetadata -> @IRModule.setMetadata
+  callee 464:66 quote -> @quote
+  local 466:11 members: string[] (const)
+  callee 467:18 DebugInfo.member -> @DebugInfo.member
+  callee 467:41 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee 468:18 DebugInfo.member -> @DebugInfo.member
+  local 469:11 elements: string (const)
+  callee 469:22 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 470:5 IRModule.setMetadata -> @IRModule.setMetadata
+  callee 472:70 quote -> @quote
+  callee 474:5 DebugInfo.setTypeRef -> @DebugInfo.setTypeRef
 function DebugInfo.abiTypeRef(this: DebugInfo, type: i32): string -> @DebugInfo.abiTypeRef [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
   calls: DebugInfo.resultWord DebugInfo.typeRef TypeTable.resultByValue
   pointer this: size=88 writesThrough=false captured=false passedTo=DebugInfo.resultWord#0 DebugInfo.typeRef#0
   stackSites=0 stackLocals=0
-  callee 474:12 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 474:45 DebugInfo.resultWord -> @DebugInfo.resultWord
-  callee 474:69 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee 480:12 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 480:45 DebugInfo.resultWord -> @DebugInfo.resultWord
+  callee 480:69 DebugInfo.typeRef -> @DebugInfo.typeRef
 function DebugInfo.beginFunction(this: DebugInfo, fn: IRFunction, sig: FunctionSig, artificial: boolean, name: string, privateAbi: boolean): void -> @DebugInfo.beginFunction [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: name privateAbi
@@ -6706,45 +6706,45 @@ function DebugInfo.beginFunction(this: DebugInfo, fn: IRFunction, sig: FunctionS
   pointer fn: size=112 writesThrough=true captured=false passedTo=IRFunction.setLocation#0 IRFunction.emit#0
   pointer sig: size=80 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 490:11 line: i32 (const)
-  callee 490:18 DebugInfo.lineOf -> @DebugInfo.lineOf
-  local 491:11 types: string[] (const)
-  callee 493:18 DebugInfo.typeRef -> @DebugInfo.typeRef
-  callee 495:18 DebugInfo.abiTypeRef -> @DebugInfo.abiTypeRef
-  local 496:18 paramType: i32 (const)
-  callee 497:20 DebugInfo.abiTypeRef -> @DebugInfo.abiTypeRef
-  local 500:11 signature: string (const)
-  callee 500:23 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 501:35 IRModule.addMetadata -> @IRModule.addMetadata
-  local 504:11 printed: string (const)
-  local 505:11 flags: string (const)
-  local 506:11 spFlags: string (const)
-  callee 507:23 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 508:39 quote -> @quote
-  callee 508:71 quote -> @quote
-  callee 511:5 IRFunction.setLocation -> @IRFunction.setLocation
-  callee 511:20 DebugInfo.locationOf -> @DebugInfo.locationOf
-  callee 516:5 IRModule.addDeclaration -> @IRModule.addDeclaration
-  local 517:9 i: i32 (let)
-  local 519:13 isThis: boolean (const)
-  local 520:13 extra: string (const)
-  local 521:13 variable: string (const)
-  callee 521:24 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 522:35 quote -> @quote
-  callee 522:147 DebugInfo.abiTypeRef -> @DebugInfo.abiTypeRef
-  callee 524:7 IRFunction.emit -> @IRFunction.emit
-  callee 525:47 TypeTable.llvmAbiType -> @TypeTable.llvmAbiType
+  local 504:11 line: i32 (const)
+  callee 504:18 DebugInfo.lineOf -> @DebugInfo.lineOf
+  local 505:11 types: string[] (const)
+  callee 507:18 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee 509:18 DebugInfo.abiTypeRef -> @DebugInfo.abiTypeRef
+  local 510:18 paramType: i32 (const)
+  callee 511:20 DebugInfo.abiTypeRef -> @DebugInfo.abiTypeRef
+  local 514:11 signature: string (const)
+  callee 514:23 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 515:35 IRModule.addMetadata -> @IRModule.addMetadata
+  local 518:11 printed: string (const)
+  local 519:11 flags: string (const)
+  local 520:11 spFlags: string (const)
+  callee 521:23 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 522:39 quote -> @quote
+  callee 522:71 quote -> @quote
+  callee 525:5 IRFunction.setLocation -> @IRFunction.setLocation
+  callee 525:20 DebugInfo.locationOf -> @DebugInfo.locationOf
+  callee 530:5 IRModule.addDeclaration -> @IRModule.addDeclaration
+  local 531:9 i: i32 (let)
+  local 533:13 isThis: boolean (const)
+  local 534:13 extra: string (const)
+  local 535:13 variable: string (const)
+  callee 535:24 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 536:35 quote -> @quote
+  callee 536:147 DebugInfo.abiTypeRef -> @DebugInfo.abiTypeRef
+  callee 538:7 IRFunction.emit -> @IRFunction.emit
+  callee 539:47 TypeTable.llvmAbiType -> @TypeTable.llvmAbiType
 function DebugInfo.locationOf(this: DebugInfo, node: Node): string -> @DebugInfo.locationOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: IRModule.addMetadata SourceFile.columnOf SourceFile.lineOf nish_str_concat nish_str_from_i32
   pointer this: size=88 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 533:11 line: i32 (const)
-  callee 533:18 SourceFile.lineOf -> @SourceFile.lineOf
-  local 534:11 column: i32 (const)
-  callee 534:20 SourceFile.columnOf -> @SourceFile.columnOf
-  callee 535:12 IRModule.addMetadata -> @IRModule.addMetadata
+  local 547:11 line: i32 (const)
+  callee 547:18 SourceFile.lineOf -> @SourceFile.lineOf
+  local 548:11 column: i32 (const)
+  callee 548:20 SourceFile.columnOf -> @SourceFile.columnOf
+  callee 549:12 IRModule.addMetadata -> @IRModule.addMetadata
 function DebugInfo.declareLocal(this: DebugInfo, fn: IRFunction, local: Local, slot: string, node: Node): void -> @DebugInfo.declareLocal [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: DebugInfo.lineOf DebugInfo.typeRef IRFunction.emit IRModule.addDeclaration IRModule.addMetadata TypeTable.llvmType nish_str_concat nish_str_from_i32 quote
@@ -6753,14 +6753,14 @@ function DebugInfo.declareLocal(this: DebugInfo, fn: IRFunction, local: Local, s
   pointer local: size=24 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=DebugInfo.lineOf#2
   stackSites=0 stackLocals=0
-  callee 540:5 IRModule.addDeclaration -> @IRModule.addDeclaration
-  local 541:11 variable: string (const)
-  callee 541:22 IRModule.addMetadata -> @IRModule.addMetadata
-  callee 542:33 quote -> @quote
-  callee 542:108 DebugInfo.lineOf -> @DebugInfo.lineOf
-  callee 542:149 DebugInfo.typeRef -> @DebugInfo.typeRef
-  callee 544:5 IRFunction.emit -> @IRFunction.emit
-  callee 545:47 TypeTable.llvmType -> @TypeTable.llvmType
+  callee 554:5 IRModule.addDeclaration -> @IRModule.addDeclaration
+  local 555:11 variable: string (const)
+  callee 555:22 IRModule.addMetadata -> @IRModule.addMetadata
+  callee 556:33 quote -> @quote
+  callee 556:108 DebugInfo.lineOf -> @DebugInfo.lineOf
+  callee 556:149 DebugInfo.typeRef -> @DebugInfo.typeRef
+  callee 558:5 IRFunction.emit -> @IRFunction.emit
+  callee 559:47 TypeTable.llvmType -> @TypeTable.llvmType
 module self/ir.ts
 import StringBuilder from "./strings" -> struct StringBuilder
 import StringMap from "./map" -> struct StringMap

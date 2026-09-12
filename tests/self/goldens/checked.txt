@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 280 programs, 4644 dump lines.
+# 282 programs, 4669 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -1426,6 +1426,26 @@ function test(): i32 -> @test [exported]
   local 4:9 f: f64 (const)
   local 5:9 big: i64 (const)
   local 12:9 zero: f64 (const)
+program tests/cases/dbg_arrow.ts
+module tests/cases/dbg_arrow.ts (entry)
+function add(a: i32, b: i32): i32 -> @add [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function span(lo: i32, hi: i32): i32 -> @span
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function scaled(n: i32): i32 -> @scaled
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=1 stackLocals=0
+  local 22:7 acc: i32 (let)
+  local 23:14 v: i32 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: add nish_arena_mark nish_arena_release nish_print nish_str_from_i32 scaled span
+  stackSites=0 stackLocals=0
+  callee 30:18 add -> @add
+  callee 31:18 span -> @span
+  callee 32:18 scaled -> @scaled
 program tests/cases/dbg_enum.ts
 module tests/cases/dbg_enum.ts (entry)
 function weight(k: Kind): i32 -> @weight
@@ -1504,6 +1524,13 @@ function test(): i32 -> @test [exported]
   local 33:9 named: Result<i32, string> (const)
   callee 33:17 tag -> @tag
   callee 37:10 score -> @score
+program tests/cases/dbg_utf8.ts
+module tests/cases/dbg_utf8.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 13:9 n: i32 (const)
 program tests/cases/decl_prototype_names.ts
 module tests/cases/decl_prototype_names.ts (entry)
 struct toString (class) size=4 align=4
