@@ -137,25 +137,43 @@ the two cases that pin the library itself, one per outcome.
 ### The golden runner in Nish
 
 [`tests/nish/run.ts`](../tests/nish/run.ts) is this suite's section A written in
-the language: it discovers `tests/cases/` with `readdirSync`, spawns the compiler
-per case, links and runs the ones with a `.out`, diffs the emitted IR against the
-golden line by line, and reports through a `Suite`.
+the language. It discovers `tests/cases/` with `readdirSync`, spawns the compiler
+per case, honours `.args`, `.argv`, `.env` and `.stdout`, diffs the emitted IR
+against the golden line by line, assembles every module with `llvm-as` and
+verifies it with `opt -passes=verify`, links and runs the cases with a `.out`,
+walks the `tests/link/` programs the same way, and reports through a `Suite`. It
+answers 1 when any check failed, and names its slowest cases from
+`monotonicNanos`.
 
 ```bash
-npm run test:nish                 # the whole corpus, about four and a half minutes
+npm run test:nish                 # the whole corpus, about five minutes
 build/nish-runner pop             # only cases whose name contains "pop"
 ```
 
 `npm test` builds it and runs it over the `pop` cases — one golden, one native
-round trip and three rejections — rather than over the corpus, because it spawns
-a compiler per case and a second full pass would double the suite to prove what
-those five prove. It is also the only place `readdirSync`, `spawnSyncTo` and
-`monotonicNanos` are exercised together on a real workload.
+round trip and three rejections — because it spawns a compiler per case and a
+second full pass would double the suite. The full pass runs in CI as its own
+parallel job (`.github/workflows/ci.yml`), which is what keeps it honest: a
+harness nobody runs is a harness that rots. It is also the only place
+`readdirSync`, `spawnSyncTo` and `monotonicNanos` are exercised together on a
+real workload.
 
-It is not a replacement for this file's subject. It implements the golden cases
-and none of the pipeline checks, and it skips `.env`, `.argv` and `.stdout` by
-name — counted, as everything here is counted. `tests/run.js` is still what
-proves the compiler; the runner proves the language can host a harness.
+Two POSIX utilities stand in for builtins the language does not have, and both
+are deliberate: `env(1)` gives a child its `.env` (including `env -u` for a name
+the sidecar unsets, which is why a developer's own exported variable cannot leak
+into a golden), and one `rm -rf` empties the link output directory, because a
+stale module from an earlier run would otherwise be listed and compared as though
+this run had emitted it. Each is a counted skip when the utility is missing
+rather than a silent pass.
+
+It is not a replacement for this file's subject, and what it leaves out is now
+short enough to name: the cross-module `declare`/`define` attribute agreement,
+which needs a regular expression the language does not have, `UPDATE_GOLDENS`,
+which it must never do, and every pipeline check — interop sidecars, layout,
+wasm and napi profiles, packaging, the self-hosting oracles, the fourteen parity
+flag variations. `tests/run.js` is still what proves the compiler; the runner
+proves the language can host a harness. Its own header comment is the accurate
+description of what it covers; keep the two in step.
 
 ## Style & Best Practices
 
