@@ -771,11 +771,14 @@ prebuilt library cannot carry the attribute fixpoint of §3a, cannot contain a
 generic that nobody has instantiated yet, and would have to be built once per
 (number mode × target × profile). An `exports` map states both, one condition
 per consumer. [wp21-packages.md](wp21-packages.md) is the plan of record; it
-is rough, and its one hard blocker is that the symbol namespace is flat today
-— two packages with a private `helper()` each would fail to compile together,
-because the whole-program fact table is keyed by symbol name. Package-scoped
-symbols are its first stage, have no language surface, and are worth landing
-early: the diff is mechanical and grows with every new golden.
+is rough, and its one hard blocker was that the symbol namespace was flat —
+two packages with a private `helper()` each could not be compiled together,
+because the whole-program fact table was keyed by symbol name. **That blocker
+is closed**: S1 gave every symbol a package scope (wp21 §9), and because the
+root package's prefix is empty a single-package program emits the IR it always
+did — not one golden moved and no exported name changed. The stage that
+follows is S2, bare specifiers and the `nish` export condition; S1 has no
+language surface and left `docs/LANGUAGE.md` untouched.
 
 The declaration form is not on that list either, and it is the one entry here
 that is pure spelling: **arrow functions become how Nish declares a

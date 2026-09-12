@@ -20,6 +20,7 @@
 import { SourceFile } from "./diagnostics";
 import { StringMap, StringSet } from "./map";
 import { N_CONSTRUCTOR, N_EMPTY, Node } from "./nodes";
+import { packageSymbolPrefix } from "./packages";
 import { Local } from "./symbols";
 
 /** What a `FunctionSig` is: a free function, a method, or a constructor. */
@@ -38,7 +39,14 @@ export const STRUCT_INTERFACE: i32 = 1;
  * per parameter. For a method or constructor `params[0]` is `this`.
  */
 export class FunctionSig {
-  /** The LLVM symbol (`@name`). `main` in the entry module is `@nish_main`. */
+  /**
+   * The LLVM symbol (`@name`), and the key the whole-program fact fixpoint is
+   * kept under (`self/attributes.ts`). It is the declared identifier qualified
+   * with the module's package prefix (WP21 S1, `self/packages.ts`), which is
+   * empty for the root package and so for every module of a single-package
+   * program. `Owner.method` for a member, and `main` in the entry module is
+   * `@nish_main`.
+   */
   name: string;
   /** The identifier as written; for a method it reads `Owner.method`. */
   sourceName: string;
@@ -328,6 +336,20 @@ export class CheckedProgram {
   /** The `N_SOURCE_FILE` this module parsed to. */
   file: Node;
   isEntry: boolean;
+  /**
+   * The package this module belongs to (WP21 S1, `self/packages.ts`). `""` is
+   * the root package — the program being compiled — which is where every
+   * module of a single-package build lives.
+   */
+  packageName: string;
+  /**
+   * The prefix every symbol declared in this module carries; `""` for the root
+   * package. `FunctionSig.name` already has it applied, so nothing downstream
+   * has to remember to apply it. The field is kept so a diagnostic can name
+   * the package a clash is inside and `--emit-checked` can say which package a
+   * module came from.
+   */
+  symbolPrefix: string;
 
   /** Functions defined in this module, in source order. */
   functions: FunctionSig[];
@@ -389,10 +411,12 @@ export class CheckedProgram {
   /** `N_CASE` node id -> the folded label, which a `switch` needs as a constant. */
   nodeCaseValues: i64[];
 
-  constructor(source: SourceFile, file: Node, isEntry: boolean, nodeCount: i32) {
+  constructor(source: SourceFile, file: Node, isEntry: boolean, nodeCount: i32, packageName: string) {
     this.source = source;
     this.file = file;
     this.isEntry = isEntry;
+    this.packageName = packageName;
+    this.symbolPrefix = packageSymbolPrefix(packageName);
     this.functions = [];
     this.exports = new StringMap();
     this.imports = [];
