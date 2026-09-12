@@ -613,7 +613,7 @@ const UNCODED: string = "NL0000" [exported]
 const SYNTAX: string = "NL0001" [exported]
 const TOOLCHAIN: string = "NL0002" [exported]
 const INTERNAL: string = "NL0003" [exported]
-const RULE_COUNT: i32 = 361 [exported]
+const RULE_COUNT: i32 = 365 [exported]
 function diagnosticRules(): string[] -> @diagnosticRules [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
@@ -624,12 +624,12 @@ function codeFor(kind: string, text: string): string -> @codeFor [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
   calls: diagnosticRules nish_arena_mark nish_arena_release nish_panic_index nish_str_at nish_str_eq performanceRules
   stackSites=0 stackLocals=0
-  local 799:11 perf: string[] (const)
-  callee 799:28 performanceRules -> @performanceRules
-  local 800:9 i: i32 (let)
-  local 809:9 rules: string[] (const)
-  callee 809:27 diagnosticRules -> @diagnosticRules
-  local 810:7 j: i32 (let)
+  local 807:11 perf: string[] (const)
+  callee 807:28 performanceRules -> @performanceRules
+  local 808:9 i: i32 (let)
+  local 817:9 rules: string[] (const)
+  callee 817:27 diagnosticRules -> @diagnosticRules
+  local 818:7 j: i32 (let)
 module self/strings.ts
 const HEX_LOWER: string = "0123456789abcdef"
 const HEX_UPPER: string = "0123456789ABCDEF"
