@@ -334,6 +334,11 @@ function makeTransformer(unit, stems) {
     const visit = (node) => {
       // ---- imports: `./math` -> `./math.mjs` ----
       if (ts.isImportDeclaration(node)) {
+        // A `nish:` import names builtins rather than a module, and every name
+        // it binds is rewritten into a `__nish.*` call below, so the statement
+        // itself has nothing left to say — and Node could not resolve the
+        // specifier if it were left standing.
+        if (node.moduleSpecifier.text.startsWith("nish:")) return undefined;
         const target = unit.resolved.get(node.moduleSpecifier.text);
         const spec = target ? `./${stems.get(target)}.mjs` : node.moduleSpecifier.text;
         return f.updateImportDeclaration(
@@ -378,7 +383,25 @@ function makeTransformer(unit, stems) {
       if (ts.isVariableStatement(node) && ts.isSourceFile(node.parent)) {
         const declarations = node.declarationList.declarations.map((decl) => {
           const info = program.constants.get(decl.name.text);
-          if (!info || info.value === undefined) return decl;
+          if (!info || info.value === undefined) {
+            // Not a module constant, so it is a function: `export const main =
+            // (): number => { ... }` is how the language spells one now (WP22),
+            // and its body needs every rewrite a `function` body gets. Returning
+            // the declaration untouched here left the whole body as plain
+            // TypeScript — no `| 0` wrapping, no shim call — so an arrow-form
+            // program was compared against itself rather than against Nish
+            // semantics. Only the initialiser is visited: the name and the type
+            // annotation are not expressions and have nothing to rewrite.
+            return decl.initializer === undefined
+              ? decl
+              : f.updateVariableDeclaration(
+                  decl,
+                  decl.name,
+                  undefined,
+                  decl.type,
+                  ts.visitNode(decl.initializer, visit)
+                );
+          }
           return f.updateVariableDeclaration(
             decl,
             decl.name,
@@ -497,6 +520,16 @@ function makeTransformer(unit, stems) {
         return shimCall("strLen", [ts.visitNode(node.expression, visit)]);
       }
 
+      // ---- a builtin under the name a `nish:` import gave it ----
+      // The checker recorded which builtin each local name stands for, so an
+      // `as` rename lands on the same shim helper the global spelling does.
+      if (ts.isIdentifier(node) && !bindings.has(node)) {
+        const canonical = program.builtinImports.get(node.text)?.canonical;
+        if (canonical === "process.argv") return shimCall("argv", []);
+        if (canonical === "process.platform") return shimCall("platform", []);
+        if (canonical === "process.arch") return shimCall("arch", []);
+      }
+
       // ---- process.argv -> the script and its arguments (argv[0] is the program, as natively) ----
       if (dottedName(node) === "process.argv" && !bindings.has(node.expression)) {
         return shimCall("argv", []);
@@ -597,8 +630,13 @@ function makeTransformer(unit, stems) {
           if (to !== undefined && (touchesF32 || UNSIGNED_KINDS.has(to) || UNSIGNED_KINDS.has(from))) {
             return shimCall("convert", [args[0], str(from), str(to)]);
           }
-          if (IDENTIFIER_BUILTINS.has(node.expression.text)) {
-            return shimCall(IDENTIFIER_BUILTINS.get(node.expression.text), args);
+          // An imported builtin is keyed by its canonical spelling, so `exit`
+          // from `nish:process` reaches the same helper `process.exit` does.
+          const imported = program.builtinImports.get(node.expression.text)?.canonical;
+          if (imported === "process.exit") return shimCall("exit", args);
+          const name = imported ?? node.expression.text;
+          if (IDENTIFIER_BUILTINS.has(name)) {
+            return shimCall(IDENTIFIER_BUILTINS.get(name), args);
           }
         }
         return f.updateCallExpression(node, ts.visitNode(node.expression, visit), undefined, args);
