@@ -143,9 +143,15 @@ plan.**
 ### 3.5 The runtime budget
 
 `runtime.c` is under a hard budget of 4 KB of `.text` at `-Oz`, and stands at
-2,544 today (MASTER_PLAN §2). `pthread_create`, a mutex and a condition
-variable do not fit inside the remaining 1,552 bytes as unconditional cost,
-and threads also add `-lpthread` to the link line.
+**4,088** measured today. This paragraph said 2,544 and then reasoned about
+"the remaining 1,552 bytes"; there is no remaining 1,552 bytes, and MASTER_PLAN
+§2 has been corrected to the measured figure.
+`pthread_create`, a mutex and a condition variable do not fit inside eight
+bytes as unconditional cost, and threads also add `-lpthread` to the link
+line. The conclusion below is unchanged and the correction only strengthens it;
+[wp26-io-and-servers.md](wp26-io-and-servers.md) §3.1 argues the budget rule
+itself should be restated as a per-program linked size, which is the number
+that actually ships.
 
 They must therefore be pay-for-what-you-use, exactly as WP14's `nish_mkdir`
 and `nish_spawn` are: adding them left `examples/hello.ts` at 4,696 bytes,
@@ -285,9 +291,17 @@ and it must name the field that disqualified the type rather than the type.
   Phase 0 rules and no event loop behind them (LANGUAGE.md). Threads do not
   change that and this note does not propose to.
   [wp24-async.md](wp24-async.md) is the plan of record for the question, and it
-  reaches the same answer from the other side: the I/O surface is synchronous
+  reached the same answer from the other side: the I/O surface is synchronous
   and there is nothing to await, so what an asker usually wants is T0 plus an
   asynchronous N-API export, and the rest is this note's T1 to T4.
+  **Since then the server requirement has re-opened it**, and
+  [wp26-io-and-servers.md](wp26-io-and-servers.md) is the staging: its first
+  stage is blocking sockets on *these* threads, which makes T0 the first item
+  on that road and T1 its load-bearing rule. Two consequences for this note,
+  both in wp26 §3.2: T1 as specified cannot express an accept loop, and a
+  fixed pool spawned in `main` is what fits inside it — with a `Thread[]`
+  stage, between T1 and T3, as the smallest thing that would make a server's
+  pool size something other than a source constant.
 - **A race detector.** §1 explains why the static rule replaces it rather
   than complementing it.
 - **Atomics as a user-facing type.** They would be the escape hatch from T2,

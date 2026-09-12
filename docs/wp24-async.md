@@ -1,35 +1,71 @@
 # WP24: Async
 
-**Proposed and then declined, in that order, and the second half is the point.**
-Nothing here exists in the compiler and this note does not ask for it to. It is
-the plan of record for the question "how does Nish do `async`/`await`", which
+**Proposed, declined, and now re-opened, in that order.** This is the plan of
+record for the question "how does Nish do `async`/`await`", which
 [wp20-threads.md](wp20-threads.md) §6 deferred to a note that did not exist
-yet. The answer is *not yet, and probably not this*, and the reason is not the
-one the question expects: the lowering is cheap and measured below, and what is
-missing is anything to wait for.
+yet. Nothing here exists in the compiler yet.
+
+The first two thirds of that history still stand and are the reason this note
+is worth reading: the lowering is cheap and measured below (§3), and what was
+missing was anything to wait for (§2). §8 wrote down the trigger that would
+change the answer — *someone wants to write a server in Nish* — so that a
+future reader could check it rather than re-argue the case.
+
+**That trigger has fired.** Nish is to be used for servers, which makes §6's
+A2 — sockets, timers, a poller — a package somebody wants rather than one
+nobody had asked for, and it now has a note of its own:
+[wp26-io-and-servers.md](wp26-io-and-servers.md). This note keeps the cost
+analysis, which is unchanged; WP26 owns the staging, and `async`/`await` is
+its stage S3, gated on a measurement rather than on taste.
 
 [LANGUAGE.md](LANGUAGE.md) stays normative. It says today that `async`, `await`
 and `yield` are forbidden constructs with Phase 0 rules of their own, and
 nothing in this note changes a line of it; where this note and LANGUAGE.md ever
 disagree, LANGUAGE.md wins.
 
-Read [wp20-threads.md](wp20-threads.md) first. Most of what a reader wants when
-they ask for `async` is in that note under a different name, and §5 here is
-mostly a map from one to the other.
+**Where to read.** For the plan — what is being built, in what order, and what
+each stage has to prove — read [wp26-io-and-servers.md](wp26-io-and-servers.md);
+this note is the analysis underneath it. Read
+[wp20-threads.md](wp20-threads.md) too: much of what a reader wants when they
+ask for `async` is in that note under a different name, WP26's first stage is
+built on its threads, and §5 here is mostly a map from one to the other.
 
 ## 1. The decision
 
-**Keep the Phase 0 rejections. Build the one thing that is actually being asked
-for — an asynchronous N-API export, which has no language surface at all — and
-revisit `async`/`await` only behind a networking package that does not exist.**
+**Superseded, and the supersession is recorded rather than edited away,
+because the reasoning is what carries forward.**
 
-Three findings, in the order they changed the answer:
+> **The decision as it stood, before the server requirement:** Keep the
+> Phase 0 rejections. Build the one thing that is actually being asked for — an
+> asynchronous N-API export, which has no language surface at all — and revisit
+> `async`/`await` only behind a networking package that does not exist.
+
+**The decision now:** keep the Phase 0 rejections *until the thing they are
+waiting for exists*, and build that thing in the order
+[wp26-io-and-servers.md](wp26-io-and-servers.md) §1 sets out — blocking
+sockets on threads (S1), a reactor (S2), and `async`/`await` over it (S3),
+each stage gated on the previous stage's measurement. The asynchronous N-API
+export (§5.1) is unchanged and is still worth building on its own; it is
+independent of all of it.
+
+What did **not** change is every number and every constraint in §2 to §4. A
+suspend point costs the attribute fixpoint the same `willreturn` and the same
+`readnone` whether or not there is a socket behind it; the arena bracket has
+the same problem; the wasm twin still cannot own a loop; Node is still the
+differential oracle. **Those sections are WP26's cost list, not a dead
+argument** — read them as the price of stage S3 rather than as a case against
+it.
+
+The three findings that decided the original answer, and where each one stands
+now:
 
 1. **There is nothing to await.** Every I/O call in the language is
    synchronous, and there are no sockets, no timers, no sleep and no DNS —
    not "not yet implemented", but *not anywhere in the tree* (§2). An `async`
    function whose body cannot suspend is a `function` with a heap allocation
-   in front of it.
+   in front of it. **Still true, and now a work item rather than a wall:** it
+   is WP26 S1 and S2, and it is still the case that nothing about `async` is
+   worth building before those land.
 2. **The lowering everyone braces for is the cheap part, whichever way it is
    built.** LLVM 18 splits a hand-written coroutine that arrives as textual IR
    and elides the frame entirely — allocation, layout, resume and destroy
@@ -38,21 +74,31 @@ Three findings, in the order they changed the answer:
    does not use those intrinsics at all: it builds a 20-byte struct with a
    one-byte state discriminant and a `switch`, allocates nothing, and that is
    the shape to copy if this is ever built (§3b). Both measured, not
-   predicted.
+   predicted. **Unchanged, and it is now the reason S3 is a tractable stage
+   rather than a research project**: the state machine is a struct and a
+   `switch`, and this language has both.
 3. **The two things people mean by "async here" both have answers already.**
    Overlapping work is threads, which WP20 designed and argued for on
    soundness grounds; not blocking *Node's* event loop from a Nish addon
    is a change to the generated N-API shim and to nothing else (§5).
+   **Still both true, and a third thing has been added to the list**: serving
+   many mostly-idle connections, which is the workload neither of those two
+   answers covers and the one this note's §8 named as the trigger.
 
-So the honest shape of this package is one buildable item with no language
-surface, a pointer to WP20 for the rest, and a written-down refusal for the
-syntax — the same shape [wp23-language-surface.md](wp23-language-surface.md)
-found for most of its list, arrived at the same way.
+So the honest shape of this package is now: one buildable item with no
+language surface that is worth doing regardless (§5.1), the cost list in §2 to
+§4 that WP26's stage S3 has to pay, and a set of refusals in §7 that the
+server requirement does **not** overturn — the callback, the function value
+and the green-thread scheduler are refused by rules this project keeps, not by
+the absence of a reason to want them.
 
 ## 2. There is nothing to await
 
-This is the finding that decides the note, so it is first and it is evidence
-rather than assertion.
+This is the finding that decided the note, so it is first and it is evidence
+rather than assertion. It is still an accurate description of the tree — every
+`grep` below still comes back empty — and what has changed is that the gap is
+now scheduled work ([wp26-io-and-servers.md](wp26-io-and-servers.md) S1 and
+S2) instead of an argument for stopping.
 
 The whole I/O surface of the language, from LANGUAGE.md ("File I/O",
 "Directories and subprocesses", "The environment", "`console`"):
@@ -85,9 +131,13 @@ sequencing decision rather than a taste one:
   readiness poller (`epoll` / `kqueue` / WASI `poll_oneoff`), a socket type,
   timers, and the runtime budget conversation that comes with them (§4.5).
   That is a larger package than the syntax by a wide margin, and it is a
-  package nobody has asked for: there is no Nish server and no Nish HTTP
-  client, and the largest programs in the tree — `self/`, the benchmark suite,
-  the examples — are batch jobs that read a file, compute, and exit.
+  package that, when this was written, nobody had asked for: there was no Nish
+  server and no Nish HTTP client, and the largest programs in the tree —
+  `self/`, the benchmark suite, the examples — are batch jobs that read a file,
+  compute, and exit. **That is the sentence the server requirement overturned,
+  and only that one.** The package is still larger than the syntax by a wide
+  margin, which is why it is WP26 and why the syntax is its fourth stage
+  rather than its first.
 - **`spawnSync` is the one honest candidate, and its answer is threads.**
   Waiting on four children at once is `waitpid` on four threads, needs no new
   syntax, no colour, and no scheduler, and falls out of WP20 T1 without a
@@ -305,14 +355,23 @@ built once.
 
 ### 4.5 The loop does not fit in the runtime budget
 
-`runtime.c` has a hard 4,096-byte `.text` budget and stands at 3,852
-(MASTER_PLAN §4). A poller, a timer heap and a ready queue are not 244 bytes.
+`runtime.c` has a hard 4,096-byte `.text` budget and stands at **4,088**,
+measured on the current tree — eight bytes of headroom, and over budget if
+`.text.unlikely.`'s 66 bytes count. This paragraph used to say 3,852 and
+"a poller, a timer heap and a ready queue are not 244 bytes"; the figure was
+stale, and so are MASTER_PLAN §2's 2,544 and §4's 3,852. The conclusion
+survives its own correction by a wider margin than it claimed.
 
 They would have to be pay-for-what-you-use, exactly as `nish_mkdir` and
 `nish_spawn` are — `-ffunction-sections -Wl,--gc-sections` kept
 `examples/hello.ts` at the same byte count when those landed (wp20 §3.5) — and
 that is an acceptance test, not a hope. A program that never awaits must link
-no scheduler.
+no scheduler. Measured today, the pay-for-what-you-use claim holds:
+`examples/hello.ts` links to 4,680 bytes at the `size` profile against a
+`runtime.c` whose `.text` is 4,088, so the object file is not what ships — and
+[wp26-io-and-servers.md](wp26-io-and-servers.md) §3.1 argues the budget rule
+should be restated as that per-program number, with a CI check, before any of
+this lands.
 
 ### 4.6 wasm is the one target where a loop exists, and it is not ours
 
@@ -399,35 +458,61 @@ asynchrony is entirely in generated C.
 
 Overlapping `spawnSync` waits, parallelism across cores, a long computation
 that must not stall a caller: all WP20, all designed, and all argued from the
-same zero-GC constraints. The four benchmark programs outside the 1.10x target
-are not waiting on I/O — they are waiting on one core.
+same zero-GC constraints. The benchmark programs still outside the 1.10x
+target are not waiting on I/O — they are waiting on one core.
 
-### 5.3 Nothing, for the rest
+Threads are also, now, how the **first** Nish server gets written:
+[wp26-io-and-servers.md](wp26-io-and-servers.md) S1 is blocking sockets on a
+fixed WP20 T1 thread pool, which needs no language change at all. That note's
+§3.2 found the one place T1 as specified does not stretch — an accept loop
+spawns without joining — and the fixed pool is what fits inside the rule.
 
-There is no third item, and saying so is the useful part of this note.
+### 5.3 Sockets, which used to be the "nothing" in this slot
 
-## 6. If it is ever built, the order is forced
+**This section used to read "There is no third item, and saying so is the
+useful part of this note."** There is now a third item, and it is the whole of
+[wp26-io-and-servers.md](wp26-io-and-servers.md): a socket surface, a reactor,
+and a server to point them at. It is kept as its own note rather than absorbed
+here because it is larger than this one and because most of it has no language
+surface — which was this note's original finding about it, and is still the
+reason the syntax is last.
+
+## 6. The order is forced, and A2 now has an owner
 
 Not a schedule — a dependency chain, each link of which is someone else's
 package:
 
-| | Gate | Owner |
-| ---: | --- | --- |
-| A0 | the coroutine spike, both ways | **done, §3a and §3b** |
-| A1 | asynchronous N-API export | this note, after WP20 T0 |
-| A2 | a reason: sockets, timers, a poller, and the budget conversation | unowned; nobody has asked |
-| A3 | `async` / `await` as a rustc-shaped state machine: the colour rule, the suspend point, the anonymous frame type, the frame's escape flow | this note, and only after A2 |
-| A4 | futures as data — an array of them, `join`, `select` | WP15 item 8 / WP18, an enhancement of A3 rather than a gate before it (§4.1) |
+| | Gate | Owner | State |
+| ---: | --- | --- | --- |
+| A0 | the coroutine spike, both ways | this note | **done, §3a and §3b** |
+| A1 | asynchronous N-API export | this note, after WP20 T0 | §5.1; independent of everything below it |
+| A2 | a reason: sockets, timers, a poller, and the budget conversation | **[wp26-io-and-servers.md](wp26-io-and-servers.md), stages S1 and S2** | **owned.** Was "unowned; nobody has asked" |
+| A3 | `async` / `await` as a rustc-shaped state machine: the colour rule, the suspend point, the anonymous frame type, the frame's escape flow | this note, built as WP26 stage S3 | gated on S2's measurement, not on taste (wp26 §4) |
+| A4 | futures as data — an array of them, `join`, `select` | WP15 item 8 / WP18, an enhancement of A3 rather than a gate before it (§4.1) | WP26 stage S4 |
 
 A2 is the load-bearing link, and it is the only one. Without it, A3 builds a
 mechanism with nothing to drive it — which is the trap this note exists to
-name. Note what A3 does *not* wait for: generics were listed as a prerequisite
-in the first draft of this note and are not one (§4.1).
+name, and which the staging in WP26 §1 exists to avoid: S1 ships a server
+before any syntax is designed, and S3 has to beat S2 on connections per second
+and peak RSS to justify itself. Note what A3 does *not* wait for: generics
+were listed as a prerequisite in the first draft of this note and are not one
+(§4.1).
+
+**The one item that is not in the chain at all is A1**, and it is still the
+cheapest useful thing here: its whole cost is WP20 T0, and T0 is also S1's
+prerequisite. Whichever way the server work goes, T0 is first.
 
 ## 7. Declined, with the rule each one breaks
 
 In the house style, because a plan of record that says what it turned down is
 worth more than one that only says yes.
+
+**Every one of these survives the server requirement**, and that is worth
+saying explicitly, because a server is the workload that most tempts each of
+them. They are refused by rules this project keeps — no function values, no
+GC, no lie to the differential oracle — and not by the absence of a reason to
+want them. [wp26-io-and-servers.md](wp26-io-and-servers.md) §7 restates the
+three that a server pushes hardest on, with the same answers.
 
 - **`async` as an accepted no-op keyword** (parsed, erased, the function
   compiled synchronously). Tempting — it costs nothing and makes some
@@ -458,15 +543,21 @@ worth more than one that only says yes.
   declined as a thing to sign up for before there is an implementation to hold
   to it.
 
-## 8. What would change the answer
+## 8. What would change the answer — **and the first one has**
 
 Written down so that a future reader can check the trigger rather than
-re-argue the case. **The trigger is I/O, not syntax.**
+re-argue the case. **The trigger is I/O, not syntax.** The mechanism worked:
+the first bullet fired, it was checked against this list rather than
+re-litigated, and [wp26-io-and-servers.md](wp26-io-and-servers.md) is what
+came of it.
 
-- Someone wants to write a **server** in Nish — sockets, many connections,
-  most of them idle. That is the workload async was invented for and the only
-  one that beats a thread per connection. It would make A2 a real package with
-  a real acceptance test, and everything after it follows.
+- ✅ **Fired.** Someone wants to write a **server** in Nish — sockets, many
+  connections, most of them idle. That is the workload async was invented for
+  and the only one that beats a thread per connection. It would make A2 a real
+  package with a real acceptance test, and everything after it follows.
+  *A2 is now WP26 S1 and S2; "the only one that beats a thread per connection"
+  is the claim WP26 §4 turns into S2's acceptance measurement rather than
+  assuming.*
 - A **wasm host** that wants a Nish module to yield mid-function, once JSPI
   is ordinary. That is a different design (the host owns the loop) and would be
   its own note, not this one.
@@ -474,16 +565,24 @@ re-argue the case. **The trigger is I/O, not syntax.**
   expressible. Worth having and still not a trigger: a promise with nothing to
   promise is still nothing.
 
-None of this is pre-1.0. M4 freezes the language reference (MASTER_PLAN §9) and
-this note adds no rule to it: `async`, `await` and `yield` stay forbidden with
-the messages they have, so the freeze is not waiting on anything here. A1 has
-no language surface and can land whenever WP20 T0 does.
+**What this does and does not do to M4.** The *syntax* is still not pre-1.0:
+`async`, `await` and `yield` stay forbidden with the messages they have until
+WP26 S3, so the language-reference freeze is not waiting on anything in this
+note, and §9.1 shows adding them later breaks nothing. **WP26 S1 and S2 are a
+different matter** — every socket builtin is a row in LANGUAGE.md's builtin
+tables and therefore a rule the freeze would cover. That makes the ordering
+question a real one rather than a formality, and it is stated in wp26 §6: the
+work is cheaper after M4 and M6 than before, because until stage0 is deleted
+every builtin lands twice (§4.8). A1 is the exception on both counts — no
+language surface, no freeze interaction, and it can land whenever WP20 T0 does.
 
-## 9. What the refusal costs, and what survives it
+## 9. What the delay costs, and what survives it
 
-The two questions a decision to not build something has to answer: does waiting
-foreclose anything, and which parts of the feature are still reachable when the
-trigger arrives.
+Written when the decision was to wait, and kept because the questions are the
+same ones the staging in WP26 answers: does waiting foreclose anything, and
+which parts of the feature are still reachable when the trigger arrives. The
+trigger has now arrived (§8), so §9.3 in particular has stopped being a
+hypothetical — it is the shape of what WP26 S3 and S4 would deliver.
 
 ### 9.1 Waiting forecloses nothing in the language, and that is checked
 
@@ -569,9 +668,11 @@ do not get is the promise as a thing you hold.
   for the whole module, a per-function opt-in in the source, or a rule based on
   the function's measured cost — decided against a real addon, not in this
   note.
-- **Whether a `sleep(ms)` builtin should exist at all.** It is the only thing a
-  program could await today, which is either the argument for a small async or
-  the argument that this is what threads are for. It leans towards the second.
+- ~~**Whether a `sleep(ms)` builtin should exist at all.**~~ **Answered by
+  WP26**, and in the direction this bullet leaned. A timeout is the poller's
+  own argument rather than a `sleep`, and what a deadline needs beside it is a
+  monotonic clock; both are wp26 §4 stage S2, and a bare `sleep` that blocks a
+  thread is what a reactor exists to avoid (wp26 §7).
 - **Nothing, about what a debug build of a coroutine would cost.** That was an
   open question while §3a was the only plan; §3b answers it by not depending on
   an optimisation pass, so a state machine built the way rustc builds one has
@@ -579,7 +680,12 @@ do not get is the promise as a thing you hold.
   argues for the intrinsics after all.
 - **Whether the fourth escape flow is WP20's or this note's.** Both need it,
   neither is building it, and whichever package gets there first should own it
-  rather than inventing a parallel one.
+  rather than inventing a parallel one. WP26's staging makes WP20 the likely
+  answer, since S1 needs T0 and T1 before any of this note's stages start.
+- **Everything in [wp26-io-and-servers.md](wp26-io-and-servers.md) §8**, which
+  is where the open questions that actually block progress now live: the fd
+  type, the differential-testing decision, `Thread[]`, and whether WASI can
+  serve at all.
 
 ## 11. Appendix: the spikes, in full
 

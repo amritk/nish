@@ -77,7 +77,15 @@ Design rules that every WP must respect:
   a linked binary pays, and `-ffunction-sections -Wl,--gc-sections` means it
   pays only for the functions it calls: adding WP14's `nish_mkdir` and
   `nish_spawn` left `examples/hello.ts` at 4,696 bytes, the same number to the
-  byte. Today: 2,544 of 4,096 (`size` text 4,297, source 12,707).
+  byte. Measured today: **4,088 of 4,096** (`clang -Oz -c runtime/runtime.c`,
+  `size -A`), plus 66 bytes of `.text.unlikely.` — eight bytes of headroom,
+  and the figure has been stale in three notes at once (this line said 2,544,
+  §4 said 3,852, `wp20-threads.md` §3.5 said 2,544 and then reasoned about
+  1,552 bytes that do not exist). **The rule needs restating as the number
+  that ships**: `examples/hello.ts` links to 4,680 bytes at the `size`
+  profile, and a per-program linked size with a CI check is what
+  [wp26-io-and-servers.md](wp26-io-and-servers.md) §3.1 asks for before a
+  socket surface lands.
 
 ## 3. Consolidated language specification (Nish)
 
@@ -163,7 +171,7 @@ ninety-second map; the table below is the inventory.
 | Docs: the normative reference, the regenerated IR cookbook, the architecture, the FAQ, install, and one design note per package | done (WP11) | `docs/` |
 
 Measured today: `examples/hello.ts` links to 4,696 bytes at the `size` profile
-and `runtime.c` costs 3,852 of its 4,096-byte `.text` budget, beside 9,920
+and `runtime.c` costs 4,088 of its 4,096-byte `.text` budget (§2), beside 9,920
 bytes of `.rodata` that Ryu's tables dominate and that only a binary formatting
 a double links (WP15 §7a)
 (`docs/wp14-selfhost.md` §7a); the benchmark binaries are 5.5-12 KB against
@@ -688,7 +696,7 @@ Show the exact LLVM IR for every TypeScript snippet you add to the tests.
 | --- | --- | --- | --- |
 | M1 "Programs" | WP-P, WP0, WP1, WP3, WP5, WP10 | fib/gcd/string CLI builds with `nish --link`, under 20 KB. | done |
 | M2 "Data" | WP2, WP4, WP7 | nbody with structs and arrays, matches C output bit for bit. | done |
-| M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. | done as a package; four of the seven benchmarks are outside 1.10x today ([BENCHMARKS.md](BENCHMARKS.md)), which is what WP15 is for |
+| M3 "Rust parity" | WP6, WP9, WP8 | benchmark table within 10 % of Rust; wasm and N-API demos. | done as a package; one of the seven benchmarks is outside 1.10x today — fib at 1.15x ([BENCHMARKS.md](BENCHMARKS.md)), regenerated after the codegen work that closed the other three — and the rest of WP15 is what the remaining gap and the items below are for |
 | M4 "1.0" | remaining docs, stabilised spec | tagged release, language reference frozen. | **open — the only one left.** WP2b has left the milestone rather than been finished: inheritance was removed and virtual dispatch is not coming ([wp25-inheritance.md](wp25-inheritance.md)), so what M4 still wants is the frozen reference and the tag |
 | M5 "Self-hosting" | WP14 ([wp14-selfhost.md](wp14-selfhost.md)) | `self/` compiles `self/`: `IR(stage1, self/) == IR(stage2, self/)` byte for byte, and stage3 is byte-identical to stage2 (`tests/self/bootstrap.js`). | done |
 | M6 "One compiler" | WP19 ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | stage0 is deleted rather than frozen. The six gates of §3 there are closed first: parity, oracle succession, the seed protocol, the seed policy, distribution without Node, and the provenance tag. | open — after M4 |
@@ -733,6 +741,16 @@ it. Its first stage, a thread-local arena, has no language surface and is a
 prerequisite for every version of the design, so it can land whenever it is
 convenient; the four stages that add rules to LANGUAGE.md cannot land before
 M4 without delaying the freeze, and are 1.1 scope by default.
+
+The server requirement gives that note two things it did not have. **T0 stops
+being merely convenient and becomes the first item on the road**, since it is
+the prerequisite for the asynchronous N-API export and for WP26 S1 alike. And
+**T1 acquires a customer that does not quite fit it**: a server spawns per
+connection and never joins, which T1's structured rule forbids, so S1 uses a
+fixed pool spawned in `main` — sound under T1 exactly as written, with the pool
+size as a source constant — and a `Thread[]` stage between T1 and T3 is the
+smallest thing that removes that constant
+([wp26-io-and-servers.md](wp26-io-and-servers.md) §3.2).
 
 Packages are not on that list either, and the question "how does one
 Nish package depend on another" turns out to have the same character:
@@ -785,34 +803,52 @@ string, a string `switch` and `?.` are declined with the argument written out:
 each is refused by a rule the project already accepted, and a plan of record
 that says what it turned down is worth more than one that only says yes.
 
-`async`/`await` is the one question on this page whose plan of record is a
-**refusal**, and [wp24-async.md](wp24-async.md) is that note. The blocker is
-not the lowering, and a coroutine is not a strategy for `async`/`await` but
-what `async`/`await` is — the only choice is who writes the state machine, and
-both answers were measured. A hand-written coroutine in textual IR is split by
-LLVM 18's default pipeline, and when the handle does not escape its caller the
-frame, the allocation and both split functions are elided outright, under the
-condition `src/codegen/escape.ts` already computes; rustc, meanwhile, uses none
-of those intrinsics and builds a 20-byte struct with a one-byte state
-discriminant and a `switch`, allocating nothing — which is the shape to copy,
-since a struct and a `switch` are constructs this language already has. The
-blocker is that there is nothing to await. Every I/O call in the
-language is synchronous and there is no socket, timer, sleep or poller in
-either compiler or either runtime, so the first deliverable of an async package
-would be a poller and a socket type rather than a keyword — a larger package
-than the syntax, for a workload nobody has asked for. What an asker usually
-wants is one of two things that already have answers: overlapping work is
-WP20's threads, and "do not block Node's event loop" is a change to the
-generated N-API shim — `napi_create_async_work` plus a promise on the
-JavaScript side, with the Nish function left exactly as synchronous as it
-is — whose entire cost is WP20's T0 thread-local arena. That one item has no
-language surface and is the note's only recommendation to build. The rest is
-declined with the rule each refusal breaks, including the tempting one:
-accepting `async` as an erased no-op keyword would make a program mean
-something different under Node than it does here, in the direction
-[wp13-differential.md](wp13-differential.md) exists to prevent. Nothing here
-is pre-1.0 — LANGUAGE.md keeps the rejections it has, so M4's freeze is not
-waiting on any of it.
+`async`/`await` was the one question on this page whose plan of record was a
+**refusal**, and it is the one that has changed: **Nish is to be used for
+servers**, which is exactly the trigger
+[wp24-async.md](wp24-async.md) §8 wrote down so that a future reader could
+check it rather than re-argue the case. That note kept its analysis and handed
+the staging to [wp26-io-and-servers.md](wp26-io-and-servers.md), which is now
+the plan of record for the I/O surface, and `async`/`await` is its third
+stage rather than its first.
+
+The shape of the plan is that **the syntax is last and the first stage ships a
+server**: S1 is blocking sockets on a fixed WP20 T1 thread pool and needs no
+language change at all; S2 is the reactor — non-blocking mode, a poller,
+timers, a monotonic clock — and still has no language surface; S3 is
+`async`/`await` over S2, gated on beating S2's measured connections per second
+and peak RSS rather than on taste; S4 is futures as data, after WP18. WP24's
+cost list is unchanged and is now S3's price rather than an argument against
+it: a suspend point kills `willreturn` and `readnone` in the fixpoint, the
+arena's contiguous-extent bracket cannot span one, the wasm twin cannot own a
+loop, and Node is the differential oracle for ordering that async makes
+observable. What survives is Rust's arrangement rather than JavaScript's —
+`async`/`await` yes, the promise as a value you hold no, because `.then` needs
+the function values Phase 0 forbids and `Result` was refused `map`/`andThen`
+for the same reason (wp24 §9.3).
+
+Three things that note's staging turned up, each of which belongs to another
+package. The **runtime budget is spent** — 4,088 of 4,096 measured today,
+against three different stale figures in three notes — so the rule has to be
+restated as the per-program linked
+size before a socket surface can land (wp26 §3.1). **WP20 T1's structured join
+cannot express an accept loop**, since a server spawns per connection and never
+joins; a fixed pool spawned in `main` fits the rule as written, and a
+`Thread[]` stage between T1 and T3 is the smallest thing that makes it
+pleasant (wp26 §3.2). And **a blocking `accept` has no Node twin**, so WP13
+owes a written decision — a `worker_threads` shim, a declared hole in
+`known-failures.txt`, or native-only integration tests — before the first
+socket builtin lands (wp26 §3.3).
+
+The one item that is not gated on any of it is the **asynchronous N-API
+export** (wp24 §5.1): no language surface, it fixes a real defect against §1's
+fourth vision bullet — a 200 ms Nish call blocks Node's event loop for
+200 ms — and its whole cost is WP20 **T0**, the thread-local arena, which is
+also S1's prerequisite and every WP20 stage's. T0 is therefore the first thing
+to build on this road whichever way it goes. Against that, one ordering fact
+worth stating plainly: **every stage of WP26 lands twice until stage0 is
+deleted** (wp24 §4.8), so M4 and M6 get more expensive with each stage that
+precedes them, not less.
 
 The one thing that has *left* the language rather than entered it is
 inheritance, and [wp25-inheritance.md](wp25-inheritance.md) is the plan of
