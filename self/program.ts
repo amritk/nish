@@ -388,6 +388,15 @@ export class CheckedProgram {
   nodeCoercions: i32[];
   /** `N_CASE` node id -> the folded label, which a `switch` needs as a constant. */
   nodeCaseValues: i64[];
+  /**
+   * `N_INDEX` and `charCodeAt` node id -> the bounds analysis proved the index
+   * in range (WP15 §2.1/§2.2, `self/bounds.ts`). The emitter writes the address
+   * and no check for each of them, and the attribute pass leaves
+   * `nish_panic_index` out of the callee set — which is the whole of what the
+   * proof buys, and the reason it lives in a table the emitter reads rather
+   * than in a decision the emitter makes.
+   */
+  nodeProvenIndex: boolean[];
 
   constructor(source: SourceFile, file: Node, isEntry: boolean, nodeCount: i32) {
     this.source = source;
@@ -413,6 +422,7 @@ export class CheckedProgram {
     this.nodeCallees = new Array<FunctionSig | null>(nodeCount);
     this.nodeCoercions = new Array<i32>(nodeCount);
     this.nodeCaseValues = new Array<i64>(nodeCount);
+    this.nodeProvenIndex = new Array<boolean>(nodeCount);
     let i = 0;
     while (i < nodeCount) {
       this.nodeTypes[i] = -1;

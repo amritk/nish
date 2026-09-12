@@ -177,7 +177,8 @@ export class Compilation {
       parser.nodeCount,
       this.sink,
       this.opts.numberMode,
-      !this.opts.nsw
+      !this.opts.nsw,
+      this.opts.uncheckedIndexing
     );
     const unit = new ModuleUnit(path, source, file, parser.nodeCount, isEntry, checker);
     this.byPath.set(path, this.modules.length);

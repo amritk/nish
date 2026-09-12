@@ -1,7 +1,5 @@
 %struct.nish_array = type { i64, i64, i8* }
 
-declare void @nish_panic_index(i64 noundef, i64 noundef) #2
-
 define noundef i32 @sum(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
 entry:
   %total.addr = alloca i32, align 4
@@ -59,24 +57,14 @@ while.cond:
 while.body:
   %5 = load i32, i32* %i.addr, align 4
   %6 = sext i32 %5 to i64
-  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
-  %8 = load i64, i64* %7, align 8, !alias.scope !3, !noalias !4
-  %9 = icmp ult i64 %6, %8
-  br i1 %9, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 %6, i64 %8)
-  unreachable
-
-bounds.ok:
-  %10 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
-  %11 = load i8*, i8** %10, align 8, !alias.scope !3, !noalias !4
-  %12 = bitcast i8* %11 to i32*
-  %13 = getelementptr inbounds i32, i32* %12, i64 %6
-  store i32 %v, i32* %13, align 4, !alias.scope !4, !noalias !3
-  %14 = load i32, i32* %i.addr, align 4
-  %15 = add nsw i32 %14, 1
-  store i32 %15, i32* %i.addr, align 4
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4
+  %9 = bitcast i8* %8 to i32*
+  %10 = getelementptr inbounds i32, i32* %9, i64 %6
+  store i32 %v, i32* %10, align 4, !alias.scope !4, !noalias !3
+  %11 = load i32, i32* %i.addr, align 4
+  %12 = add nsw i32 %11, 1
+  store i32 %12, i32* %i.addr, align 4
   br label %while.cond
 
 while.end:
@@ -85,7 +73,6 @@ while.end:
 
 attributes #0 = { nounwind willreturn readonly }
 attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

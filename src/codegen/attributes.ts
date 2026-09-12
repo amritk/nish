@@ -9,7 +9,9 @@
  *               loop with a finite trip count (`isCountedLoop`), the body
  *               has no `throw` (which traps and never returns), it cannot
  *               reach a `noreturn` runtime call (`process.exit`, a checked
- *               `a[i]`), and every callee is itself willreturn (fixpoint over
+ *               `a[i]` — an index the checker *proved* in range emits no
+ *               check and so does not count, WP15 §2), and every callee is
+ *               itself willreturn (fixpoint over
  *               the call graph). Unbounded recursion is allowed: LangRef lets
  *               a willreturn function exhaust the stack. `mustprogress` is
  *               never added, because JS permits infinite loops.
@@ -158,6 +160,9 @@ export interface FunctionFacts {
   /**
    * Can reach a `noreturn` runtime call (`process.exit`, WP7; `nish_panic_index`,
    * WP4), directly or through a callee; such a function must not carry `willreturn`.
+   * An access the bounds proof cleared (WP15 §2, `checker/bounds.ts`) emits no
+   * check, so `collectArrayFacts` does not list the panic for it — the fact
+   * and the emitter read the one table, which is what keeps them in step.
    */
   callsNoReturn: boolean;
   /** Parameter names that escape (see `classifyUse`); decides `nocapture` for strings. */

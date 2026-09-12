@@ -174,9 +174,18 @@ export function emitRangeCheck(emitter: Emitter, idx: string, len: string): void
   fn.placeBlock(okBlock);
 }
 
-/** The bounds check of `a[i]`: the array's length, then the shared range check. */
-function emitBoundsCheck(emitter: Emitter, arr: string, idx: string): void {
-  if (emitter.opts.uncheckedIndexing) {
+/**
+ * The bounds check of `a[i]`: the array's length, then the shared range check.
+ * `site` is the access node, which is how the checker's proof is looked up —
+ * a proven access loads no length at all, so the header read goes with the
+ * compare rather than being left behind for LICM to hoist.
+ *
+ * A proof is not the same thing as `--unchecked-indexing`: the flag removes
+ * every check and trusts the program, while a proof removes one check and the
+ * safety is unchanged (WP15 §2.1/§2.2, `self/bounds.ts`).
+ */
+function emitBoundsCheck(emitter: Emitter, arr: string, idx: string, site: Node): void {
+  if (emitter.opts.uncheckedIndexing || emitter.program.nodeProvenIndex[site.id]) {
     return;
   }
   emitRangeCheck(emitter, idx, loadLength(emitter, arr));
@@ -305,7 +314,7 @@ export function emitElementAccess(emitter: Emitter, expr: Node): string {
   emitter.declareType(ARRAY_TYPE);
   const arr = emitter.emitExpression(expr.children[0]);
   const idx = emitIndex(emitter, expr.children[1]);
-  emitBoundsCheck(emitter, arr, idx);
+  emitBoundsCheck(emitter, arr, idx, expr);
   const ty = emitter.llvm(elem);
   return emitter.fn.emitValue(
     `load ${ty}, ${ty}* ${elementPointer(emitter, arr, elem, idx)}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`
@@ -326,7 +335,7 @@ export function emitElementAssignment(emitter: Emitter, expr: Node): string {
   const idx = emitIndex(emitter, target.children[1]);
   if (expr.text === "=") {
     const value = emitter.emitExpression(expr.children[1]);
-    emitBoundsCheck(emitter, arr, idx);
+    emitBoundsCheck(emitter, arr, idx, target);
     emitter.fn.emit(
       `store ${ty} ${value}, ${ty}* ${elementPointer(emitter, arr, elem, idx)}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`
     );
@@ -335,7 +344,7 @@ export function emitElementAssignment(emitter: Emitter, expr: Node): string {
   // The array and the index were evaluated once, above; the check and the GEP
   // happen once here, and the load and the store share the address. That is
   // what keeps `xs[next()] |= 1` to one call and one bounds check.
-  emitBoundsCheck(emitter, arr, idx);
+  emitBoundsCheck(emitter, arr, idx, target);
   const slot = elementPointer(emitter, arr, elem, idx);
   const old = emitter.fn.emitValue(`load ${ty}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`);
   let value = "";

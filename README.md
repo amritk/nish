@@ -162,7 +162,7 @@ call on purpose.
 | Bug class | What Nish does | Reference |
 |:---|:---|:---|
 | Use-after-free, double free | Not expressible: nothing is freed individually. Four compile-time mechanisms decide where a value lives — a stack `alloca` when escape analysis proves it dies with the frame, an automatic arena scope when a function's temporaries do, a `nish_arena_keep` reclaim at the call site for a returned string, the bump arena otherwise — and the arena goes back when `main` returns | [Memory model](docs/LANGUAGE.md#memory-model), [wp6-memory.md](docs/wp6-memory.md) |
-| Out-of-bounds read or write | Every `a[i]`, `a[i] op= v`, `s.charCodeAt(i)` and `a.pop()` is bounds-checked, with an unsigned compare, so a negative index fails too; the failure prints `index out of range: <i> >= <len>` and exits 1 | [Element access](docs/LANGUAGE.md#element-access), `tests/cases/arr_bounds_panic` |
+| Out-of-bounds read or write | Every `a[i]`, `a[i] op= v`, `s.charCodeAt(i)` and `a.pop()` is bounds-checked, with an unsigned compare, so a negative index fails too; the failure prints `index out of range: <i> >= <len>` and exits 1. Where a flow-sensitive proof shows the index is already in range — a loop condition, a length guard, a hoisted `const n = a.length`, an unsigned index — **no check is emitted at all**, and the checks that survive inside a loop say so as a `performance` warning naming the guard that would remove them | [Element access](docs/LANGUAGE.md#element-access), `tests/cases/arr_bounds_panic`, `arr_bounds_proven` |
 | Null dereference | `T \| null` is a separate type, for pointers only; member access needs a narrowing the checker accepts and `?.` is forbidden — which is what lets the emitter put `nonnull dereferenceable` on every pointer that is not one | [Nullable types](docs/LANGUAGE.md#nullable-types) |
 | Uninitialised memory | `new Array<T>(n)` zero-fills and rejects pointer element types, because a zeroed pointer would be a null nobody declared; class fields are definitely assigned | [Classes](docs/LANGUAGE.md#classes), `tests/cases/arr_new_zeroed` |
 | Unwinding past a release | There is none. Every function is `nounwind`; a failure a caller should handle is a `Result<T, E>` and one it should not is `panic(message)` — stderr, exit 1 | [Result](docs/LANGUAGE.md#result-and-error-handling) |
@@ -218,7 +218,9 @@ weaker: one global arena, per-function granularity, no region polymorphism.
   scope — and not yours ([`Arena`](docs/LANGUAGE.md#arena)).
 - **`--unchecked-indexing`** drops the bounds checks, after which an
   out-of-range index is undefined behaviour. It is there for benchmarks
-  (`tests/cases/arr_unchecked`).
+  (`tests/cases/arr_unchecked`), and it is a different thing from the proof
+  above: the proof removes a check the compiler showed was never going to
+  fire, and changes nothing about what the program means.
 - **Signed integer overflow is undefined** by default, so LLVM may widen
   induction variables and strength-reduce loops; `--wrapping` restores
   two's-complement wrapping for a hash or an LCG that overflows on purpose

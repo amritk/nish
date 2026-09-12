@@ -40,6 +40,7 @@ import {
 import { CheckContext, LoopInfo } from "./context.js";
 import { expressionCheckers } from "./expressions.js";
 import { CheckedProgram, FunctionSig, ImportBinding, LocalVar, StructInfo } from "./program.js";
+import { analyzeBounds } from "./bounds.js";
 import { checkPerformance } from "./performance.js";
 import { checkResultLocalsHandled } from "./result.js";
 import { Scope } from "./scope.js";
@@ -130,6 +131,7 @@ export class Checker implements CheckContext {
       reachableStructs: [],
       coercions: new WeakMap(),
       caseValues: new WeakMap(),
+      provenIndices: new WeakSet(),
       aliases: new Map(),
     };
     registerNamedTypes(sourceFile, (name) => {
@@ -515,11 +517,16 @@ export class Checker implements CheckContext {
     // after the body so the diagnostic names a variable whose type is known.
     if (!sig.poisoned) {
       checkResultLocalsHandled(this, sig);
+      // WP15 §2.1/§2.2: prove what indices are in range before the warnings
+      // are reported, because one of the warnings is about the proofs that did
+      // not come off, and it has to be reported by the same source-order walk
+      // as the rest of the class.
+      const unprovenIndices = analyzeBounds(this, sig);
       // WP15 §8: the performance warnings, over the same body and the same
       // side tables. Only for a body that checked cleanly — advice about code
       // that does not compile is noise, and a poisoned body has incomplete
       // side tables anyway.
-      checkPerformance(this, sig);
+      checkPerformance(this, sig, unprovenIndices);
     }
     // A body with a rejected statement may have lost its `return`: no definite-return cascade.
     if (sig.returnType.kind !== "void" && !terminates && !sig.poisoned) {

@@ -139,6 +139,7 @@ No generics, arrow functions, closures, nested functions or function values; no
 | `validator.ts` | `src/validator.ts` (Phase 0) |
 | `checker.ts` `declarations.ts` `structs.ts` `annotations.ts` `constants.ts` `assignment.ts` | `src/checker/index.ts` and friends |
 | `expressions.ts` `statements.ts` `members.ts` `arrays.ts` `builtins.ts` | `src/checker/<family>.ts` |
+| `bounds.ts` | `src/checker/bounds.ts`: the WP15 §2 bounds-check proof, whose verdicts the emitter reads out of `nodeProvenIndex` |
 | `ir.ts` `runtime.ts` `target.ts` `options.ts` | `src/codegen/ir.ts`, `runtime.ts`, `target.ts`, `CompilerOptions` |
 | `parents.ts` | `node.parent`, which this tree does not have |
 | `escape.ts` `attributes.ts` | `src/codegen/escape.ts` and `attributes.ts` |

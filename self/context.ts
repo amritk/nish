@@ -29,11 +29,17 @@ export class CheckContext {
   numberMode: i32;
   /**
    * `--wrapping` was given, so constant folding wraps at the declared width
-   * instead of refusing an overflow (`self/constants.ts`). The only compiler
-   * option pass 2 reads apart from the number mode, and for the same reason:
-   * the fold has to agree with the instruction it replaces.
+   * instead of refusing an overflow (`self/constants.ts`). The fold has to
+   * agree with the instruction it replaces, which is why an option reaches
+   * pass 2 at all.
    */
   wrapping: boolean;
+  /**
+   * `--unchecked-indexing` was given, so no bounds check is emitted anywhere
+   * and the WP15 §2 warning about a check that survived has nothing to report.
+   * Read by that rule and by nothing else in the checker.
+   */
+  uncheckedIndexing: boolean;
   /** Function source name -> index into `program.functions`, for clash checks. */
   sigs: StringMap;
   /** The program has an entry point, so `process.argv` may be read. */
@@ -75,7 +81,8 @@ export class CheckContext {
     program: CheckedProgram,
     sink: DiagnosticSink,
     numberMode: i32,
-    wrapping: boolean
+    wrapping: boolean,
+    uncheckedIndexing: boolean
   ) {
     this.table = table;
     this.program = program;
@@ -83,6 +90,7 @@ export class CheckContext {
     this.source = program.source;
     this.numberMode = numberMode;
     this.wrapping = wrapping;
+    this.uncheckedIndexing = uncheckedIndexing;
     this.sigs = new StringMap();
     this.entryHasMain = false;
     this.current = null;

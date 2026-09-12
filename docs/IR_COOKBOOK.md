@@ -441,43 +441,33 @@ entry:
   store i8* bitcast ({ i64, [7 x i8] }* @.str.0 to i8*), i8** %label.addr, align 8
   %9 = load i8*, i8** %label.addr, align 8
   %10 = load %struct.nish_array*, %struct.nish_array** %data.addr, align 8
-  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 0
-  %12 = load i64, i64* %11, align 8, !alias.scope !3, !noalias !4
-  %13 = icmp ult i64 0, %12
-  br i1 %13, label %bounds.ok, label %bounds.fail
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4
+  %13 = bitcast i8* %12 to i8*
+  %14 = getelementptr inbounds i8, i8* %13, i64 0
+  %15 = load i8, i8* %14, align 1, !alias.scope !4, !noalias !3
+  %16 = call i32 @widen(i8 %15)
+  %17 = load %struct.nish_array*, %struct.nish_array** %data.addr, align 8
+  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 0
+  %19 = load i64, i64* %18, align 8, !alias.scope !3, !noalias !4
+  %20 = icmp ult i64 1, %19
+  br i1 %20, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %12)
+  call void @nish_panic_index(i64 1, i64 %19)
   unreachable
 
 bounds.ok:
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
-  %15 = load i8*, i8** %14, align 8, !alias.scope !3, !noalias !4
-  %16 = bitcast i8* %15 to i8*
-  %17 = getelementptr inbounds i8, i8* %16, i64 0
-  %18 = load i8, i8* %17, align 1, !alias.scope !4, !noalias !3
-  %19 = call i32 @widen(i8 %18)
-  %20 = load %struct.nish_array*, %struct.nish_array** %data.addr, align 8
-  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 0
-  %22 = load i64, i64* %21, align 8, !alias.scope !3, !noalias !4
-  %23 = icmp ult i64 1, %22
-  br i1 %23, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 1, i64 %22)
-  unreachable
-
-bounds.ok.1:
-  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %20, i64 0, i32 2
-  %25 = load i8*, i8** %24, align 8, !alias.scope !3, !noalias !4
-  %26 = bitcast i8* %25 to i8*
-  %27 = getelementptr inbounds i8, i8* %26, i64 1
-  %28 = load i8, i8* %27, align 1, !alias.scope !4, !noalias !3
-  %29 = call i32 @widen(i8 %28)
-  %30 = add nsw i32 %19, %29
-  %31 = call i8* @nish_str_from_i32(i32 %30)
-  %32 = call i8* @nish_str_concat(i8* %9, i8* %31)
-  call void @nish_print(i8* %32)
+  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 2
+  %22 = load i8*, i8** %21, align 8, !alias.scope !3, !noalias !4
+  %23 = bitcast i8* %22 to i8*
+  %24 = getelementptr inbounds i8, i8* %23, i64 1
+  %25 = load i8, i8* %24, align 1, !alias.scope !4, !noalias !3
+  %26 = call i32 @widen(i8 %25)
+  %27 = add nsw i32 %16, %26
+  %28 = call i8* @nish_str_from_i32(i32 %27)
+  %29 = call i8* @nish_str_concat(i8* %9, i8* %28)
+  call void @nish_print(i8* %29)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
@@ -2340,11 +2330,112 @@ attributes #1 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end arr_index -->
 
+### A proven index: the check the checker removed
+
+The same lowering with no compare, no branch and no panic block, and with the
+safety unchanged — the checker proved the index in range rather than being told
+to trust it (WP15 §2.1/§2.2, `src/checker/bounds.ts`). The loop condition
+proves `i`; the length guard proves the constant `0`. Neither function names
+`nish_panic_index`, so both keep `willreturn`.
+
+<!-- cookbook:begin arr_bounds_proven -->
+```ts
+const sum = (a: number[]): number => {
+  let total = 0;
+  for (let i = 0; i < a.length; i = i + 1) {
+    total = total + a[i];
+  }
+  return total;
+};
+
+const first = (a: number[]): number => {
+  if (a.length > 0) {
+    return a[0];
+  }
+  return 0;
+};
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+define internal noundef i32 @sum(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a) #0 {
+entry:
+  %total.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  store i32 0, i32* %total.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %0 = load i32, i32* %i.addr, align 4
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
+  %3 = trunc i64 %2 to i32
+  %4 = icmp slt i32 %0, %3
+  br i1 %4, label %for.body, label %for.end
+
+for.body:
+  %5 = load i32, i32* %total.addr, align 4
+  %6 = load i32, i32* %i.addr, align 4
+  %7 = sext i32 %6 to i64
+  %8 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 2
+  %9 = load i8*, i8** %8, align 8, !alias.scope !3, !noalias !4
+  %10 = bitcast i8* %9 to i32*
+  %11 = getelementptr inbounds i32, i32* %10, i64 %7
+  %12 = load i32, i32* %11, align 4, !alias.scope !4, !noalias !3
+  %13 = add nsw i32 %5, %12
+  store i32 %13, i32* %total.addr, align 4
+  br label %for.inc
+
+for.inc:
+  %14 = load i32, i32* %i.addr, align 4
+  %15 = add nsw i32 %14, 1
+  store i32 %15, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %16 = load i32, i32* %total.addr, align 4
+  ret i32 %16
+}
+
+define internal noundef i32 @first(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a) #1 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
+  %2 = trunc i64 %1 to i32
+  %3 = icmp sgt i32 %2, 0
+  br i1 %3, label %if.then, label %if.end
+
+if.then:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
+  %6 = bitcast i8* %5 to i32*
+  %7 = getelementptr inbounds i32, i32* %6, i64 0
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
+  ret i32 %8
+
+if.end:
+  ret i32 0
+}
+
+attributes #0 = { nounwind readonly }
+attributes #1 = { nounwind willreturn readonly }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+```
+<!-- cookbook:end arr_bounds_proven -->
+
 ### `--unchecked-indexing`
 
 The compare, the branch and the panic block disappear; `get` regains
 `willreturn` and becomes `readonly`. Out-of-range is then undefined
-behaviour.
+behaviour. Unlike the proof above, this is a promise the *program* makes:
+an out-of-range index is undefined behaviour rather than a panic.
 
 <!-- cookbook:begin arr_unchecked -->
 Compiled with `--unchecked-indexing`.

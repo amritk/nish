@@ -1331,7 +1331,48 @@ divide with overflow` is simply unreachable on an unsigned type.
 The index is sign-extended from `i32` (or truncated toward zero from
 `double` in f64 mode) to `i64` and checked against `len` with an unsigned
 compare, so negative indices fail too (`tests/cases/arr_bounds_panic`,
-`arr_index_read_write`, `arr_f64`). String-keyed access is forbidden by the
+`arr_index_read_write`, `arr_f64`).
+
+**The check is not emitted when the checker has proved the index in range**
+(WP15 §2.1/§2.2). The proof is flow-sensitive and keyed by *variable*: a fact
+is about a local or a parameter, never about a field or a property path, for
+the same reason a null narrowing is ([Nullable types](#nullable-types)). An
+access `w[i]` needs `i >= 0` and `i < w.length`, and both come from the
+program as written:
+
+  - `i >= 0` from a literal initialiser, from `i = w.length`, from a test that
+    reaches the access (`if (i >= 0)`, `0 <= i`, the false arm of `i < 0`), or
+    from the type — an `u8`/`u16`/`u32`/`u64` index is never negative, which
+    is the one *ranged* type the language has today.
+  - `i < w.length` from a test that reaches the access — a loop condition, an
+    `if`, the right operand of `&&`, the statements after
+    `if (i >= w.length) { return; }` — or, through `const n = w.length`, from
+    `i < n`. A constant index `w[3]` needs `w.length >= 4` instead, which a
+    length guard (`if (w.length >= 4)`) or an array literal of known size
+    gives.
+
+A fact ends where it stops being true: at any assignment to `i` that is not
+`i = i + <non-negative literal>` (`i++` and `i += n` included), at any
+assignment to `w`, and — for an **array** — at any call, because a callee
+holding the same array may `push` or `pop` and move `len`
+(`tests/cases/arr_bounds_shrink_panic` is the program that still panics
+because of that rule). A **string**'s length cannot change once the variable
+holding it is bound, so a string fact survives calls, which is what makes a
+scanner's cursor check-free (`tests/cases/str_bounds_proven`). The increment
+exception needs `nsw`: under `--wrapping` the step past `INT_MAX` is *defined*
+to land on `INT_MIN`, so an incremented counter has no lower bound and the
+check stays — **`--wrapping` therefore costs the bounds-check elimination on
+counted loops**, which is the one thing besides the overflow flags that the
+flag changes (`tests/cases/opt_wrapping` pins both halves). An `f64` index is never proved, because a bound on the double is
+not a bound on its truncation. `tests/cases/arr_bounds_proven` and
+`perf_bounds_quiet` pin the proofs; the surviving checks warn, below.
+
+The proof changes what the program *costs*, never what it *means*: an
+out-of-range index that reaches a check still panics.
+`--unchecked-indexing` is the opposite trade and is still a separate thing —
+it removes every check and makes an out-of-range index undefined behaviour.
+
+String-keyed access is forbidden by the
 validator (`reject_string_key_access`, `reject_non_numeric_index`), and so
 is an index outside the "numeric-shaped" forms listed under
 [Forbidden constructs](#forbidden-constructs-phase-0-validator): `a[k++]`
@@ -1716,7 +1757,13 @@ compiler's own marks are never invalidated by user resets.
   `tests/differential/corpus/int_wrap`, `prng_lcg`, `bit_fnv1a`).
   This withdraws a guarantee the language used to make, and it is the one place
   where a correct program can become an incorrect one by upgrading; the flag is
-  the whole remedy.
+  the whole remedy. It is not free, though: the bounds proof
+  ([Element access](#element-access)) may not carry a lower bound across
+  `i = i + 1` when the wrap is *defined*, so a counted loop compiled with
+  `--wrapping` keeps the bounds checks the default build removes. That is the
+  only other thing the flag changes, and `tests/cases/opt_wrapping` pins both
+  halves: no `nsw` anywhere, and — with the checks taken out of both builds —
+  no other difference at all.
 - **Unsigned integers never carry a no-wrap flag**, in either mode. `u8`,
   `u16`, `u32` and `u64` are *defined* to wrap, so `(255: u8) + 1` is `0`
   (`tests/cases/u_arith_wrap`): `nuw` would be a claim the language does not
@@ -1949,7 +1996,7 @@ by the caller.
   that *failed* prints its errors and none of its warnings; a report of more
   than one warning is capped at 20, like the error report, with
   `...and N more performance warnings` and an `N performance warnings` line.
-  Six warnings exist today, and each names the rewrite:
+  Seven warnings exist today, and each names the rewrite:
   - **quadratic string building** — `s = <something built from s>` where `s`
     is a string local declared outside the loop the assignment sits in, so
     every pass copies the whole accumulator. The hint is a `string[]` and one
@@ -2015,6 +2062,20 @@ by the caller.
     The count is masked to the width, so the shift that runs is not the shift
     that was written; the hint is to mask deliberately or to shift a wider
     value (`tests/cases/perf_overflow`). A count inside the width is silent.
+  - **a bounds check that was not eliminated** — `a[i]` or `s.charCodeAt(i)`
+    inside a loop where the proof above did not come off, so the length is
+    loaded and compared on every iteration. The hint is the guard that always
+    works — `if (i >= 0 && i < a.length)` reaching the access proves both ends,
+    whatever took the proof away — with an unsigned index named beside it,
+    since half the proof then comes off the declaration
+    (`tests/cases/perf_bounds_loop`). Reported on the index, once per access.
+    Silent outside a loop, where one check is not a cost anybody is paying;
+    silent under `--unchecked-indexing`, where no check survives to report;
+    and silent unless the receiver and the index are both plain locals, which
+    is the shape the analysis knows how to prove — a field receiver
+    (`this.source.charCodeAt(this.pos)`) or a computed index was never a
+    candidate, and the rewrite there is to bind them to locals first
+    (`tests/cases/perf_bounds_quiet`).
 - **`--json`** prints every diagnostic as one JSON object per line on stdout,
   `{"file","line","column","endLine","endColumn","severity","code","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in

@@ -670,6 +670,35 @@ if (!only || "performance".includes(only)) {
     wrapped.stderr
   );
 
+  // WP15 §2: a bounds check the proof could not remove. The three shapes are the
+  // three ways a fact dies — a second array with its own length, a call that may
+  // move `len`, and a cursor that walks down — and each message names the guard
+  // that would prove both ends.
+  const bounds = compile("perf_bounds_loop", "perf_bounds_loop.ll");
+  const boundsLines = summaries(bounds.stderr);
+  check(
+    "performance: a bounds check that survived the proof warns once per access, naming the guard",
+    bounds.status === 0 &&
+      boundsLines.length === 3 &&
+      boundsLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") ===
+        "12:24,20:36,28:24" &&
+      boundsLines[0].includes("`i` is not proven to be in range for `ys` here, so this access keeps its bounds check") &&
+      boundsLines[1].includes("`j` is not proven to be in range for `zs`") &&
+      boundsLines[2].includes("`k` is not proven to be in range for `ws`") &&
+      boundsLines.every((l) =>
+        l.includes("proves both ends, and an unsigned index needs only the upper one")
+      ),
+    bounds.stderr
+  );
+
+  // The flag removes every check, so there is no surviving one to report.
+  const boundsOff = compile("perf_bounds_loop", "perf_bounds_off.ll", ["--unchecked-indexing"]);
+  check(
+    "performance: --unchecked-indexing leaves no bounds check to warn about",
+    boundsOff.status === 0 && summaries(boundsOff.stderr).length === 0,
+    boundsOff.stderr
+  );
+
   // The false-positive guards. Each of these compiles loops that concatenate or
   // allocate where the faster form is already what the compiler emits, or where the
   // program genuinely asked for the memory, so it must say nothing at all.
@@ -678,6 +707,8 @@ if (!only || "performance".includes(only)) {
     "perf_alloc_quiet",
     "perf_overflow_quiet",
     "perf_arena_quiet",
+    // Every index proven, so no check survives and nothing is reported.
+    "perf_bounds_quiet",
     // Literal spellings neither compiler folds: normalising them in stage0 would
     // fold exactly what stage1 refuses, and only one of the two would warn.
     "perf_overflow_spelling",
@@ -987,6 +1018,26 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
       run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
     );
   }
+  // WP15 §2: the proof is not a licence. The loop condition proves `i < xs.length`
+  // on the way in, but the callee pops through the same array, so the fact dies at
+  // the call and the access after it still panics.
+  const shrinkLl = path.join(buildDir, "arr_bounds_shrink_panic.ll");
+  if (HAS_CLANG && fs.existsSync(shrinkLl)) {
+    const exe = path.join(buildDir, "arr_bounds_shrink_panic");
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", shrinkLl, "runtime/runtime.c", "-o", exe], {
+      cwd: root,
+    });
+    const run = cc.status === 0 ? spawnSync(exe) : null;
+    check(
+      "arr_bounds_shrink_panic: a `pop` through a callee kills the proof, so the next access panics",
+      run !== null &&
+        run.status === 1 &&
+        String(run.stderr).includes("index out of range: 1 >= 1") &&
+        String(run.stdout).split("\n").filter((l) => l.length > 0).join(",") === "2,1,1",
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    );
+  }
+
   // WP15: the array header and the element buffer are separate alias domains, so an
   // element store cannot be read as a clobber of a header. The consequence a golden
   // cannot express is that LICM then hoists `len` and `data` out of a loop that writes
@@ -3774,17 +3825,41 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
       ir
     );
     // The opt-out: the same source under --wrapping, which must differ in the
-    // flags and in nothing else at all.
+    // flags and in nothing else *the flag does not reach*. Since WP15 §2 it
+    // reaches one more thing, and honestly: the bounds proof may not carry a
+    // lower bound across `i = i + 1` when the wrap is *defined*, because the
+    // increment that passes `INT_MAX` then lands on `INT_MIN` rather than being
+    // undefined behaviour the compiler may assume away
+    // (`src/checker/bounds.ts`). So the counted loop in `sum` keeps the checks
+    // the default build proves away, and the two IRs are compared with the
+    // checks out of the picture on both sides — where the only difference left
+    // is the flag itself.
     const wrapLl = path.join(buildDir, "opt_wrapping.ll");
     if (fs.existsSync(wrapLl)) {
-      // The module header names the source file, which is the one thing the two
-      // cases legitimately differ in, so compare the stripped bodies.
-      const wrapIr = stripHeader(fs.readFileSync(wrapLl, "utf8"));
-      const nswIr = stripHeader(ir);
+      const src = (name) => path.join(casesDir, `${name}.ts`);
+      const buildUnchecked = (name, out, extra) => {
+        const r = spawnSync(
+          "node",
+          [cli, src(name), "-o", path.join(buildDir, out), "--unchecked-indexing", ...extra],
+          { cwd: root, encoding: "utf8" }
+        );
+        return r.status === 0 ? stripHeader(fs.readFileSync(path.join(buildDir, out), "utf8")) : r.stderr;
+      };
+      const nswBare = buildUnchecked("opt_nsw", "opt_nsw_unchecked.ll", []);
+      const wrapBare = buildUnchecked("opt_wrapping", "opt_wrapping_unchecked.ll", ["--wrapping"]);
       check(
-        "--wrapping removes every nsw and changes nothing else (opt_wrapping vs opt_nsw)",
-        !wrapIr.includes("nsw") && !wrapIr.includes("nuw") && wrapIr === nswIr.split(" nsw").join(""),
-        wrapIr
+        "--wrapping removes every nsw and, with the bounds checks out of both builds, changes nothing else",
+        !wrapBare.includes("nsw") && !wrapBare.includes("nuw") && wrapBare === nswBare.split(" nsw").join(""),
+        wrapBare
+      );
+      // The second half of the same story, stated rather than left implicit:
+      // the checked `--wrapping` build *does* keep the checks, and the checked
+      // default build has none, which is what the flag now costs.
+      const wrapIr = stripHeader(fs.readFileSync(wrapLl, "utf8"));
+      check(
+        "--wrapping costs the lower-bound proof: its counted loops keep the bounds checks the default build removes",
+        wrapIr.includes("nish_panic_index") && !stripHeader(ir).includes("nish_panic_index"),
+        `wrapping has panic_index: ${wrapIr.includes("nish_panic_index")}, default has: ${stripHeader(ir).includes("nish_panic_index")}`
       );
     }
   }

@@ -73,6 +73,7 @@ const PERFORMANCE = [
   "this computes with overflow: the result",
   "is computed in i32 and wraps before",
   "is at or beyond the",
+  "is not proven to be in range for",
 ];
 
 /** Every `.ts` under a directory, in a stable order. */
