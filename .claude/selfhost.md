@@ -221,6 +221,15 @@ node tests/differential/fuzz.js --stage1 --count 300
 node tests/run.js self                 # all of them, as the suite runs them
 ```
 
+`checked_oracle.js` and `ir_oracle.js` are the two longest checks in the suite
+— together about half of the self-hosting section — because each is the whole
+corpus through *both* compilers. Each program is independent of every other, so
+both compare `--jobs` at a time, one job per core and capped at eight
+(`tests/pool.js`). Results are walked in corpus order whatever order they
+finish in, so the summary and the named failures are the same at any width:
+**`--jobs 1` is the sequential runner these used to be, and is the first thing
+to reach for when a parallel run says something surprising.**
+
 ### The goldens that outlive the oracles
 
 Four of the comparisons above are a comparison with stage0 and nothing else:

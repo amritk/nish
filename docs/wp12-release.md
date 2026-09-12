@@ -138,13 +138,26 @@ step below is done by hand.
 
 2. **Merge the Release pull request.** That is the act of releasing. The same
    workflow sees `changelog/<version>.json` present and `v<version>` absent,
-   and creates the tag.
+   creates the tag, and then **dispatches `release.yml` at it**.
+
+   The dispatch is not belt and braces; it is the only thing that starts the
+   release. GitHub raises no event for a ref pushed with the default
+   `GITHUB_TOKEN` — its loop guard, with no exemption for ref creation — so
+   `release.yml`'s `push: tags` trigger never sees a tag this workflow pushed.
+   **v0.1.0 is what that looks like: tagged, never built, no release.** The two
+   events `GITHUB_TOKEN` *may* raise are `workflow_dispatch` and
+   `repository_dispatch`, so the train uses the first and needs no PAT. The
+   `push` trigger stays for a tag pushed by a human, whose credentials do start
+   a workflow — which is also how a tag stranded by this bug is recovered.
 
 3. **The `Release` workflow** (`.github/workflows/release.yml`) runs on the
-   tag:
+   tag, whether it was dispatched there or a human pushed it:
    - calls the `CI` workflow (`workflow_call`): typecheck, tests, smoke and
      size report on Ubuntu, the bootstrap-from-the-last-release job, lint;
-   - refuses to continue if the tag does not equal `package.json#version`;
+   - refuses to continue unless the ref is a tag and equals
+     `package.json#version` — the ref type first, because a dispatch can be
+     aimed at any ref and a run started on `main` would otherwise report a
+     version mismatch rather than the mis-aimed run it is;
    - `npm ci && npm run build && npm pack`, and checks the tarball contains
      `dist/index.js`, `runtime/runtime.c`, `runtime/nish.h` and
      `scripts/build.sh`;

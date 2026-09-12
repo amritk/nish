@@ -19,10 +19,15 @@
 #
 # Why the tag is created here and not by the merge itself: a tag pushed by a
 # workflow using the default GITHUB_TOKEN does not start another workflow, so
-# release.yml would never run. The step below uses the same token but pushes
-# the tag as a *ref creation* from a job that release.yml watches by `v*`,
-# which does start it. If that ever stops being true, the fix is a deploy key
-# or an app token, not a manual tag.
+# release.yml would never run on it.
+#
+# This file used to claim that pushing the tag as a ref creation was enough to
+# get around that. It is not, and v0.1.0 is the proof: tagged by this job,
+# never built, because `push: tags` raises nothing for a GITHUB_TOKEN push --
+# there is no ref-creation exemption. What GitHub does exempt is
+# `workflow_dispatch` and `repository_dispatch`, so the step below pushes the
+# tag and then dispatches release.yml *at* that tag, which needs no deploy key
+# and no personal access token. `actions: write` below is what lets it.
 name: Release PR
 
 on:
@@ -33,6 +38,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write # dispatch release.yml at the tag this job pushes
 
 concurrency:
   group: release-pr
@@ -73,11 +79,46 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           v="v${{ steps.path.outputs.version }}"
+          # Never tag or dispatch at a guessed ref. An empty version here would
+          # mean the step above changed its output contract, and `v` alone
+          # would tag the wrong thing and then aim release.yml at it -- the
+          # silent mis-release this chain exists to avoid.
+          if [ "$v" = "v" ]; then
+            echo "::error::the release train computed an empty version; refusing to tag or dispatch at a guessed ref"
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$v" -m "nish ${{ steps.path.outputs.version }}"
           git push origin "$v"
-          echo "::notice::tagged $v; release.yml builds and publishes it"
+
+          # Pushing the tag is not enough, and the comment at the top of this
+          # file used to say it was. GitHub raises no event for a ref pushed
+          # with GITHUB_TOKEN, so release.yml's `push: tags` trigger never
+          # sees it: v0.1.0 was tagged here and never built, and the only
+          # symptom was a release that did not exist.
+          #
+          # `workflow_dispatch` is one of the two events GITHUB_TOKEN may
+          # raise, so aim it at the tag we just pushed. The ref carries through
+          # as GITHUB_REF_NAME, which is what every step of release.yml reads,
+          # so a dispatched run and a human's `git push origin v0.1.0` build
+          # exactly the same thing.
+          gh workflow run release.yml --ref "$v"
+
+          # `gh workflow run` returning 0 means the dispatch was accepted, not
+          # that a run exists; this is the check that tells the two apart,
+          # because "the release silently did not happen" is the failure this
+          # whole step is fixing. The dispatch already succeeded if we are
+          # here, so a run we cannot *see* is a warning naming the one command
+          # that finishes the job -- not a red main over an observation.
+          for _ in $(seq 1 10); do
+            if [ -n "$(gh run list --workflow release.yml --branch "$v" --limit 1 --json databaseId --jq '.[0].databaseId // ""')" ]; then
+              echo "::notice::tagged $v and started release.yml, which builds and publishes it"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::warning title=Release run not seen::Tagged $v and dispatched release.yml, but no run appeared within 30s. Check the Actions tab; if there is nothing, start it with: gh workflow run release.yml --ref $v"
 
       # ---- path 2: an ordinary merge, so refresh the release PR ------------------------------
       - name: Build the next release

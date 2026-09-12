@@ -6,6 +6,13 @@
  *   node tests/self/ir_oracle.js <file>...    just those files
  *   node tests/self/ir_oracle.js --verbose    name every skip
  *   node tests/self/ir_oracle.js --diff       print the first differing lines
+ *   node tests/self/ir_oracle.js --jobs N     compare N programs at once
+ *
+ * Every program is independent of every other -- two compilers, one input, a
+ * directory each -- so they are compared `--jobs` at a time (one per core,
+ * capped; `tests/pool.js`). The results are still walked in corpus order, so a
+ * parallel run prints exactly what `--jobs 1` prints, and `--jobs 1` is the
+ * thing to reach for when a parallel run says something surprising.
  *
  * There is nothing to normalise: the module header names the path both
  * compilers were given, and everything after it is the emitter's own text. So
@@ -37,6 +44,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { extraArgs, linkPrograms, programs, root } from "./corpus.js";
+import { jobsFrom, pool, run } from "../pool.js";
 import { fileURLToPath } from "node:url";
 
 const cli = path.join(root, "dist", "index.js");
@@ -91,7 +99,7 @@ function llFiles(dir) {
 // `tests/link/` cases with an `expected.err`). A caller compiling programs that
 // were never meant to fail — the fuzzer's generated ones — passes none, so it
 // defaults to empty rather than making every such caller build a set.
-function compare(binary, work, file, negatives = new Set()) {
+async function compare(binary, work, file, negatives = new Set()) {
   const { flags, unsupported } = argsFor(file);
   // A program compiled with a dump flag writes no IR on either side, so this
   // oracle has nothing to compare and is not the one that should say so.
@@ -116,10 +124,9 @@ function compare(binary, work, file, negatives = new Set()) {
   const dir0 = fresh(path.join(work, "stage0"));
   const dir1 = fresh(path.join(work, "stage1"));
 
-  const stage0 = spawnSync("node", [cli, named, "-o", `${dir0}/`, ...flags], {
+  const stage0 = await run("node", [cli, named, "-o", `${dir0}/`, ...flags], {
     cwd: root,
     encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
   });
   if (stage0.status !== 0) {
     if (negative) return { negative: true };
@@ -128,10 +135,9 @@ function compare(binary, work, file, negatives = new Set()) {
   const names = llFiles(dir0);
   if (names.length === 0) return { skipped: "stage0 wrote no IR" };
 
-  const stage1 = spawnSync(binary, [...flags, named, "-o", `${dir1}/`], {
+  const stage1 = await run(binary, [...flags, named, "-o", `${dir1}/`], {
     cwd: root,
     encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
   });
   if (stage1.status !== 0) return { rejected: firstLine(stage1.stderr) || `exit ${stage1.status}` };
   const ours = llFiles(dir1);
@@ -201,10 +207,16 @@ function build() {
   return out;
 }
 
-function main(argv) {
+async function main(argv) {
   const verbose = argv.includes("--verbose");
   const showDiff = argv.includes("--diff");
-  const named = argv.filter((a) => !a.startsWith("--"));
+  const jobs = jobsFrom(argv);
+  // `--jobs N` takes a value, so its number is not a file even though it does
+  // not start with a dash. Guarded on the flag being present at all: an
+  // `indexOf` of -1 would otherwise make `jobsAt + 1` index 0 and quietly drop
+  // the first file named on the command line.
+  const jobsAt = argv.indexOf("--jobs");
+  const named = argv.filter((a, i) => !a.startsWith("--") && !(jobsAt >= 0 && i === jobsAt + 1));
   const binary = build();
   if (binary === null) return 1;
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "nish-ir-"));
@@ -218,8 +230,24 @@ function main(argv) {
   const failed = [];
   const refused = [];
   const dumps = [];
-  for (const file of inputs) {
-    const result = compare(binary, work, file, negatives);
+  const t0 = Date.now();
+  // One directory per comparison rather than one for the run: two jobs sharing
+  // `work/stage0` would each `fresh()` it under the other, and the failure that
+  // produced would read as a disagreement about IR rather than as a bug here.
+  // Each is removed as soon as its program is compared, so the peak on disk is
+  // `jobs` programs' IR and not the whole corpus's.
+  const results = await pool(inputs, jobs, async (file, i) => {
+    const dir = path.join(work, String(i));
+    try {
+      return await compare(binary, dir, file, negatives);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  // Walked in corpus order, whatever order they finished in: every count and
+  // every name below is what a sequential run produced.
+  for (const [i, file] of inputs.entries()) {
+    const result = results[i];
     const name = path.relative(root, file);
     if (result.dumped !== undefined) dumps.push(`${name}: ${result.dumped}`);
     else if (result.negative !== undefined) refused.push(name);
@@ -253,11 +281,22 @@ function main(argv) {
   const dumpNote = dumps.length > 0 ? `, ${dumps.length} dumps (no IR to compare)` : "";
   const note = rejected.length > 0 ? `, ${rejected.length} rejected by stage1` : "";
   process.stdout.write(
-    `${agreed}/${compared} programs agree (${modules} modules, ${lines} IR lines), ` +
+    `${agreed}/${compared} programs agree (${modules} modules, ${lines} IR lines, ` +
+      `${((Date.now() - t0) / 1000).toFixed(1)} s, ${jobs} jobs), ` +
       `${skipped.length} skipped${negativeNote}${dumpNote}${note}\n`
   );
   return failed.length === 0 && rejected.length === 0 ? 0 : 1;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  // `process.exitCode`, not `process.exit`: stdout is a pipe when tests/run.js
+  // spawns this, writes to a pipe are asynchronous, and `process.exit` does not
+  // wait for them. The summary this prints is the whole result, so losing its
+  // tail to a forced exit would read as an oracle that said nothing. Every
+  // child is awaited by then, so the loop drains and the process ends on its
+  // own with this status.
+  main(process.argv.slice(2)).then((code) => {
+    process.exitCode = code;
+  });
+}
 export { compare, corpus, build };
