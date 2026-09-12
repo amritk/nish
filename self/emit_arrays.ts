@@ -7,7 +7,16 @@
 //   %struct.nish_array = type { i64 len, i64 cap, i8* data }
 //
 // `data` points at `cap` elements of `sizeof(T)` bytes, arena-allocated and
-// 8-byte aligned. The lowerings are `src/codegen/emit/arrays.ts`'s: literals
+// 8-byte aligned.
+//
+// WP15 section 2a: when `T` is a record (an `interface`), the slot type is
+// `%struct.T` rather than `%struct.T*` — the array holds the records
+// themselves, `sizeof(T)` apart, exactly as a C array of that struct does.
+// `a[i]` is then the `getelementptr` itself, with no load, and a write into a
+// slot is an `llvm.memcpy` of the object. `inlineElementStruct` in
+// `self/program.ts` carries the rule.
+//
+// The lowerings are `src/codegen/emit/arrays.ts`'s: literals
 // and `new Array` allocate a header and a block (or two entry-block allocas
 // when the escape analysis proved the array does not outlive the function),
 // `a[i]` bounds-checks and indexes, and `indexOf` and `join` are emitted
@@ -29,6 +38,7 @@ import {
 import { unwrapParens } from "./emit_util";
 import { internalError } from "./ice";
 import { N_NUMBER, Node } from "./nodes";
+import { elementLLVMType, elementStride, inlineElementStruct, StructInfo } from "./program";
 import { ARRAY_TYPE } from "./runtime";
 import { ARRAY_STRUCT, isFloat, isUnsigned, T_F64, T_I32, T_STRING } from "./types";
 
@@ -38,9 +48,23 @@ const HEADER_BYTES: i32 = 24;
 const MEMSET: string = "llvm.memset.p0i8.i64";
 const MEMCPY: string = "llvm.memcpy.p0i8.p0i8.i64";
 
-/** Bytes per element. Every value is a scalar or a pointer, so its size is its alignment. */
+/**
+ * WP15 section 2a: the record stored inline in this array's slots, or `null`
+ * when a slot holds a value. `inlineElementStruct` in `self/program.ts`
+ * carries the rule and the two exclusions.
+ */
+function inlineStruct(emitter: Emitter, elem: i32): StructInfo | null {
+  return inlineElementStruct(emitter.program, emitter.table, elem);
+}
+
+/** Bytes from one element to the next: `sizeof` for an inline record, the value's size otherwise. */
 function elementSize(emitter: Emitter, elem: i32): i32 {
-  return emitter.table.alignOf(elem);
+  return elementStride(emitter.program, emitter.table, elem);
+}
+
+/** The LLVM type of one slot: `%struct.P` inline, the value type otherwise. */
+function slotType(emitter: Emitter, elem: i32): string {
+  return elementLLVMType(emitter.program, emitter.table, elem);
 }
 
 // ---- Alias domains ------------------------------------------------------------------
@@ -112,12 +136,58 @@ function loadLength(emitter: Emitter, arr: string): string {
   return loadHeaderField(emitter, arr, 0, "i64");
 }
 
-/** `T*` to element `idx` (an i64 value) of `arr`. */
+/**
+ * Address of element `idx` (an i64 value) of `arr`, as a `<slot type>*`. For
+ * an inline record the slot type is the struct itself, so this *is* the
+ * element's value: the GEP strides by `sizeof` and lands on the object.
+ */
 function elementPointer(emitter: Emitter, arr: string, elem: i32, idx: string): string {
-  const ty = emitter.llvm(elem);
+  const ty = slotType(emitter, elem);
   const data = loadHeaderField(emitter, arr, 2, "i8*");
   const typed = emitter.fn.emitValue(`bitcast i8* ${data} to ${ty}*`);
   return emitter.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${typed}, i64 ${idx}`);
+}
+
+/**
+ * Read element `idx`: the slot's value, or — for an inline record — the slot's
+ * *address*, which is what a struct value is everywhere else in the emitter.
+ */
+function loadElement(emitter: Emitter, arr: string, elem: i32, idx: string): string {
+  const slot = elementPointer(emitter, arr, elem, idx);
+  if (inlineStruct(emitter, elem) !== null) {
+    return slot;
+  }
+  const ty = emitter.llvm(elem);
+  return emitter.fn.emitValue(
+    `load ${ty}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`
+  );
+}
+
+/**
+ * Write `value` into the slot at `ptr`. For an inline record that is a copy of
+ * the object's bytes: the array owns its storage, so a struct entering it is
+ * duplicated into the slot rather than referenced from it. `llvm.memcpy` wants
+ * the ranges equal or disjoint, and two whole objects of one class always are.
+ */
+function storeElement(emitter: Emitter, ptr: string, elem: i32, value: string): void {
+  const info = inlineStruct(emitter, elem);
+  if (info === null) {
+    const ty = emitter.llvm(elem);
+    emitter.fn.emit(
+      `store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`
+    );
+    return;
+  }
+  const ty = `%struct.${info.name}`;
+  emitter.declare(
+    `declare void @${MEMCPY}(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)`
+  );
+  const dst = emitter.fn.emitValue(`bitcast ${ty}* ${ptr} to i8*`);
+  const src = emitter.fn.emitValue(`bitcast ${ty}* ${value} to i8*`);
+  const a = emitter.opts.optimizeAttributes ? `align ${info.align} ` : "";
+  emitter.fn.emit(
+    `call void @${MEMCPY}(i8* ${a}${dst}, i8* ${a}${src}, i64 ${info.size}, i1 false)${elementAccess(emitter)}`
+  );
 }
 
 /**
@@ -230,7 +300,7 @@ export function literalLength(expr: Node): i32 {
  */
 function emitData(emitter: Emitter, site: Node, elem: i32, count: i32, bytes: string): string {
   if (count >= 0 && emitter.isStackSite(site)) {
-    const ty = `[${count} x ${emitter.llvm(elem)}]`;
+    const ty = `[${count} x ${slotType(emitter, elem)}]`;
     const slot = emitter.fn.emitAlloca("arr.data", ty, 8);
     return emitter.fn.emitValue(`bitcast ${ty}* ${slot} to i8*`);
   }
@@ -246,7 +316,7 @@ function storeData(emitter: Emitter, arr: string, data: string): void {
 /** `[a, b, c]`: elements are evaluated first (left to right), then stored into fresh storage. */
 export function emitArrayLiteral(emitter: Emitter, expr: Node): string {
   const elem = emitter.table.refOf(emitter.typeOf(expr));
-  const ty = emitter.llvm(elem);
+  const ty = slotType(emitter, elem);
   const values: string[] = [];
   for (const element of expr.children) {
     values.push(emitter.emitExpression(element));
@@ -260,7 +330,7 @@ export function emitArrayLiteral(emitter: Emitter, expr: Node): string {
     let i = 0;
     while (i < n) {
       const slot = emitter.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${typed}, i64 ${i}`);
-      emitter.fn.emit(`store ${ty} ${values[i]}, ${ty}* ${slot}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`);
+      storeElement(emitter, slot, elem, values[i]);
       i = i + 1;
     }
   }
@@ -306,10 +376,7 @@ export function emitElementAccess(emitter: Emitter, expr: Node): string {
   const arr = emitter.emitExpression(expr.children[0]);
   const idx = emitIndex(emitter, expr.children[1]);
   emitBoundsCheck(emitter, arr, idx);
-  const ty = emitter.llvm(elem);
-  return emitter.fn.emitValue(
-    `load ${ty}, ${ty}* ${elementPointer(emitter, arr, elem, idx)}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`
-  );
+  return loadElement(emitter, arr, elem, idx);
 }
 
 /**
@@ -327,9 +394,7 @@ export function emitElementAssignment(emitter: Emitter, expr: Node): string {
   if (expr.text === "=") {
     const value = emitter.emitExpression(expr.children[1]);
     emitBoundsCheck(emitter, arr, idx);
-    emitter.fn.emit(
-      `store ${ty} ${value}, ${ty}* ${elementPointer(emitter, arr, elem, idx)}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`
-    );
+    storeElement(emitter, elementPointer(emitter, arr, elem, idx), elem, value);
     return value;
   }
   // The array and the index were evaluated once, above; the check and the GEP
@@ -384,7 +449,6 @@ function emitElementEquals(emitter: Emitter, elem: i32, a: string, b: string): s
 
 /** `a.push(v)`: grow when full, store at `len`, and answer the new length. */
 function emitPush(emitter: Emitter, expr: Node, arr: string, elem: i32): string {
-  const ty = emitter.llvm(elem);
   const fn = emitter.fn;
   const value = emitter.emitExpression(expr.children[1].children[0]);
   const lenPtr = headerFieldPointer(emitter, arr, 0);
@@ -400,9 +464,7 @@ function emitPush(emitter: Emitter, expr: Node, arr: string, elem: i32): string 
   );
   fn.emit(`br label %${storeBlock.label}`);
   fn.placeBlock(storeBlock);
-  fn.emit(
-    `store ${ty} ${value}, ${ty}* ${elementPointer(emitter, arr, elem, len)}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`
-  );
+  storeElement(emitter, elementPointer(emitter, arr, elem, len), elem, value);
   const newLen = fn.emitValue(`add i64 ${len}, 1`);
   fn.emit(`store i64 ${newLen}, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter)}`);
   return emitNumberFromI64(emitter, newLen, expr);
@@ -430,10 +492,10 @@ function emitPop(emitter: Emitter, arr: string, elem: i32): string {
   }
   const last = fn.emitValue(`sub i64 ${len}, 1`);
   fn.emit(`store i64 ${last}, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter)}`);
-  const ty = emitter.llvm(elem);
-  return fn.emitValue(
-    `load ${ty}, ${ty}* ${elementPointer(emitter, arr, elem, last)}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`
-  );
+  // An inline record comes back as the address of the slot that was just
+  // dropped. The bytes are still there; the next `push` reuses them, which is
+  // why the checker counts `pop` as a mutation.
+  return loadElement(emitter, arr, elem, last);
 }
 
 /**
@@ -461,10 +523,10 @@ function emitArrayIndexOf(emitter: Emitter, expr: Node, arr: string, elem: i32):
   fn.emit(`br i1 ${more}, label %${testBlock.label}, label %${missBlock.label}`);
 
   fn.placeBlock(testBlock);
-  const ty = emitter.llvm(elem);
-  const element = fn.emitValue(
-    `load ${ty}, ${ty}* ${elementPointer(emitter, arr, elem, at)}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`
-  );
+  // For an inline record the element *is* the slot address, so the `icmp eq`
+  // still asks what it always asked: is this the same object? Identity is now
+  // "the same slot", which is the only identity a contiguous array has.
+  const element = loadElement(emitter, arr, elem, at);
   const hit = emitElementEquals(emitter, elem, element, value);
   fn.emit(`br i1 ${hit}, label %${endBlock.label}, label %${nextBlock.label}`);
 
@@ -634,9 +696,9 @@ export function emitForOf(emitter: Emitter, stmt: Node): void {
   fn.emit(`br i1 ${more}, label %${bodyBlock.label}, label %${endBlock.label}`);
 
   fn.placeBlock(bodyBlock);
-  const value = fn.emitValue(
-    `load ${ty}, ${ty}* ${elementPointer(emitter, arr, elem, idx)}${emitter.alignSuffix(elem)}${elementAccess(emitter)}`
-  );
+  // The loop variable holds what `a[i]` holds: for an inline record that is the
+  // slot's address, so the body reads and writes the element in place.
+  const value = loadElement(emitter, arr, elem, idx);
   fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${emitter.alignSuffix(elem)}`);
   emitter.loops.push(new LoopTarget(endBlock, incBlock));
   emitter.emitStatement(stmt.children[2]);

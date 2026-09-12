@@ -166,6 +166,16 @@ visible as known failures):
   `bool_logic`, `bit_fnv1a`, `prng_lcg` and `const_module`.
 - **`i64` wraps at 64 bits under `--wrapping`**, and is undefined on overflow
   without it; literals are typed by context (docs/wp7-runtime.md).
+- **An array of records holds them by value** (WP15 §2a,
+  [LANGUAGE.md, Arrays of records are contiguous](LANGUAGE.md#arrays-of-records-are-contiguous)):
+  `ps.push(p)` on a `P[]` whose `P` is an `interface` nobody implements copies
+  `p` into the slot, so a later write through `p` does not change `ps[n]` —
+  where JavaScript would have stored the object itself. The shim cannot
+  reproduce this without a deep copy per store, and the dangerous half of it is
+  a compile error anyway (`NL2290`: an element reference may not be held across
+  a `push`), so **a corpus program must not rely on a pushed record and the
+  element it became being the same object**. An array of a `class`, or of an
+  `interface` some class implements, is unchanged and still holds references.
 - **Shift counts are masked** to the operand width — 31 at 32 bits and 63 at
   64, which is what JavaScript does too, so `x << 33` agrees on both sides; the
   rewrite spells the mask out only for `u8` and `u16`, whose widths JavaScript

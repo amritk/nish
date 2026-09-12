@@ -152,7 +152,7 @@ export class Emitter implements EmitContext {
     // ABI). Every other function is `internal` unless --no-strict-exports.
     if (this.opts.strictExports && !sig.exported) this.fn.linkage = "internal";
     if (optimize) {
-      this.fn.returnAttrs = returnAttributes(sig.returnType, facts.returnDeref, privateAbi);
+      this.fn.returnAttrs = returnAttributes(sig.returnType, facts.returnDeref, privateAbi, facts.returnAlign);
       this.fn.attrGroup = this.module.attrGroup(functionAttributes(facts));
     }
     this.slots = new WeakMap();
@@ -290,7 +290,7 @@ export class Emitter implements EmitContext {
     const params = sig.params
       .map((p) => [llvmAbiType(p.type), ...(optimize ? paramAttributes(p, facts, false) : [])].join(" "))
       .join(", ");
-    const ret = [...(optimize ? returnAttributes(sig.returnType, facts.returnDeref, false) : []), llvmAbiType(sig.returnType)].join(" ");
+    const ret = [...(optimize ? returnAttributes(sig.returnType, facts.returnDeref, false, facts.returnAlign) : []), llvmAbiType(sig.returnType)].join(" ");
     const group = optimize ? ` ${this.module.attrGroup(functionAttributes(facts))}` : "";
     return `declare ${ret} @${sig.name}(${params})${group}`;
   }

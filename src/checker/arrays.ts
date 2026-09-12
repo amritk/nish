@@ -51,8 +51,9 @@ import { structOf } from "./classes.js";
 import { isFunctionResult } from "./declarations.js";
 import { isValueReceiver, methodCallCheckers, newCheckers, propertyCheckers } from "./members.js";
 import { invalidateNarrowings } from "./narrowing.js";
-import { LocalVar } from "./program.js";
+import { FunctionSig, LocalVar, inlineElementStruct } from "./program.js";
 import { Scope } from "./scope.js";
+import { CompileError } from "../diagnostics.js";
 
 /** Assignment operators that may target an element: `=` and the compound forms, numeric and bitwise. */
 export const ELEMENT_ASSIGNMENT_OPERATORS: readonly ts.SyntaxKind[] = [
@@ -446,6 +447,277 @@ const checkForOf: StatementChecker = (ctx, node, scope) => {
   ctx.loops.pop();
   return false; // an empty array runs the body zero times
 };
+
+// ---- WP15 §2a: element references -----------------------------------------------------------
+
+/**
+ * The rule that makes contiguous storage safe: **an element reference may not
+ * be held across a mutation of the array it came from.**
+ *
+ * An array of classes is one block of objects (`inlineElementStruct` in
+ * `checker/program.ts`), so `ps[i]` hands out a pointer *into* that block
+ * rather than a pointer the array happened to be storing. `push` may move the
+ * block — `nish_array_grow` bumps a fresh buffer and copies — and `pop` hands
+ * the slot back to the next `push`. Either way a reference taken beforehand
+ * names memory that is no longer the element:
+ *
+ * ```ts
+ * const p = ps[0];   // interior pointer into ps's storage
+ * ps.push(other);    // may move that storage
+ * p.x = 1;           // refused: this would write to the old block
+ * ```
+ *
+ * The analysis is the one `codegen/escape.ts` runs, in the phase that is
+ * allowed to report: a source-order walk of one body, references followed from
+ * the declaration that binds them through every identifier that names them,
+ * with a block's references dropped when the block ends. A loop is the one
+ * place source order is not execution order, so a loop is pre-scanned and a
+ * reference that is live on the way in is invalidated by any mutation anywhere
+ * inside it; a reference *declared* inside the loop (a `const` in the body, or
+ * a `for...of` variable, which is re-derived from the header every pass) is
+ * fresh each iteration and needs no such treatment.
+ *
+ * It rejects programs that would have been fine — a call is taken to mutate
+ * every mutable array it is handed, because whether the callee pushes is a
+ * whole-program question and this phase has no fixpoint — and that is the
+ * accepted cost of the layout (WP15 §2a). `readonly T[]` is the way to say a
+ * callee does not push, and a `C | null` element array is the way to keep one
+ * pointer per slot.
+ */
+const UNNAMED = "";
+
+/** `xs`, `this.bodies`, `a.b.c` — how two references are told apart; empty when it cannot be named. */
+function referenceRoot(expr: ts.Expression): string {
+  const inner = unwrapParens(expr);
+  if (ts.isIdentifier(inner)) return inner.text;
+  if (inner.kind === ts.SyntaxKind.ThisKeyword) return "this";
+  if (ts.isPropertyAccessExpression(inner)) {
+    const base = referenceRoot(inner.expression);
+    return base === UNNAMED ? UNNAMED : `${base}.${inner.name.text}`;
+  }
+  return UNNAMED;
+}
+
+/** How the root is spelled in a message; an unnameable receiver borrows the element type's name. */
+function rootText(ctx: CheckContext, expr: ts.Expression): string {
+  const root = referenceRoot(expr);
+  if (root !== UNNAMED) return root;
+  const t = ctx.program.types.get(expr);
+  return t === undefined ? "the array" : typeToString(t);
+}
+
+/**
+ * The class `expr`'s slots hold inline, or undefined when `expr` is not an
+ * array that stores its elements by value. The *name* is what two arrays are
+ * compared by when one of them cannot be named: element types are exact here
+ * (the language has no array covariance), so a `FunctionSig[]` and an
+ * `ImportBinding[]` are never the same array however either was spelled.
+ */
+function inlineArrayElement(ctx: CheckContext, expr: ts.Expression): string | undefined {
+  const t = ctx.program.types.get(expr);
+  if (t?.kind !== "array") return undefined;
+  return inlineElementStruct(ctx.program.structs, t.elem)?.name;
+}
+
+/** `expr` is an array whose slots hold their elements inline, so indexing it yields an interior pointer. */
+function isInlineArray(ctx: CheckContext, expr: ts.Expression): boolean {
+  return inlineArrayElement(ctx, expr) !== undefined;
+}
+
+/** The array `expr` reads an element of (`a[i]`, `a.pop()`), or undefined. */
+function elementSource(ctx: CheckContext, expr: ts.Expression): ts.Expression | undefined {
+  const inner = unwrapParens(expr);
+  if (ts.isElementAccessExpression(inner) && isInlineArray(ctx, inner.expression)) return inner.expression;
+  if (
+    ts.isCallExpression(inner) &&
+    ts.isPropertyAccessExpression(inner.expression) &&
+    inner.expression.name.text === "pop" &&
+    isInlineArray(ctx, inner.expression.expression)
+  ) {
+    return inner.expression.expression;
+  }
+  return undefined;
+}
+
+/** One array a call may change the length of, named for the message. */
+interface Mutation {
+  root: string;
+  /** The element class, so an unnameable receiver cannot invalidate an unrelated array. */
+  elem: string;
+  what: string;
+}
+
+/**
+ * Every inline-element array this call may grow or shorten: the receiver of a
+ * `push` / `pop`, and every mutable array argument of a user call, since the
+ * callee is free to push through it. A `readonly T[]` parameter is exactly the
+ * promise that it does not, and is skipped.
+ */
+function mutations(ctx: CheckContext, call: ts.CallExpression): Mutation[] {
+  const out: Mutation[] = [];
+  if (ts.isPropertyAccessExpression(call.expression)) {
+    const method = call.expression.name.text;
+    const receiver = call.expression.expression;
+    const elem = inlineArrayElement(ctx, receiver);
+    if ((method === "push" || method === "pop") && elem !== undefined) {
+      const name = rootText(ctx, receiver);
+      out.push({
+        root: referenceRoot(receiver),
+        elem,
+        what: `${name}.${method}(${method === "push" ? "..." : ""})`,
+      });
+    }
+  }
+  const callee = ctx.program.callees.get(call);
+  if (!callee) return out;
+  const offset = callee.struct ? 1 : 0;
+  call.arguments.forEach((arg, i) => {
+    const param = callee.params[i + offset];
+    const elem = inlineArrayElement(ctx, arg);
+    if (!param || elem === undefined || isReadonlyArray(param.type)) return;
+    out.push({ root: referenceRoot(arg), elem, what: `${callee.sourceName}(...)` });
+  });
+  return out;
+}
+
+/** A live element reference: the local that names it, the array it points into, and what invalidated it. */
+interface ElementRef {
+  local: LocalVar;
+  array: string;
+  elem: string;
+  arrayText: string;
+  invalidatedBy?: string;
+}
+
+/**
+ * WP15 §2a. Reported after the body has checked, like the performance
+ * warnings, so every type and binding the walk reads is already recorded.
+ */
+export function checkElementReferences(ctx: CheckContext, sig: FunctionSig): void {
+  const live: ElementRef[] = [];
+  /**
+   * One report per body, which is what `self/`'s error-value threading gives
+   * and what keeps the two compilers' diagnostics identical. A body that broke
+   * this rule once is poisoned anyway, so the rest would be a cascade.
+   */
+  let reported = false;
+  const refuse = (err: CompileError): void => {
+    if (reported) return;
+    reported = true;
+    ctx.report(err);
+  };
+
+  /** Everything `node` may mutate, for the pre-scan of a loop. */
+  const mutationsWithin = (node: ts.Node): Mutation[] => {
+    const found: Mutation[] = [];
+    const scan = (n: ts.Node): void => {
+      if (ts.isCallExpression(n)) found.push(...mutations(ctx, n));
+      ts.forEachChild(n, scan);
+    };
+    scan(node);
+    return found;
+  };
+
+  const invalidate = (m: Mutation): void => {
+    for (const ref of live) {
+      if (ref.invalidatedBy !== undefined || ref.elem !== m.elem) continue;
+      if (m.root === UNNAMED || ref.array === UNNAMED || ref.array === m.root) ref.invalidatedBy = m.what;
+    }
+  };
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node)) {
+      const v = ctx.program.bindings.get(node);
+      const ref = v === undefined ? undefined : live.find((r) => r.local === v);
+      if (ref?.invalidatedBy !== undefined) {
+        refuse(
+          new CompileError(
+            `\`${ref.local.name}\` refers to an element of \`${ref.arrayText}\`, and \`${ref.invalidatedBy}\` may move or reuse that storage; index \`${ref.arrayText}\` again afterwards rather than holding the element across it`,
+            node,
+            ctx.sf
+          )
+        );
+      }
+      return;
+    }
+    if (ts.isBlock(node) || ts.isCaseClause(node) || ts.isDefaultClause(node)) {
+      const depth = live.length;
+      ts.forEachChild(node, visit);
+      live.length = depth;
+      return;
+    }
+    if (
+      ts.isForStatement(node) ||
+      ts.isForOfStatement(node) ||
+      ts.isWhileStatement(node) ||
+      ts.isDoStatement(node)
+    ) {
+      // Source order is not execution order here: a mutation at the bottom of
+      // the body reaches a reference taken at the top on the next pass.
+      for (const m of mutationsWithin(node)) invalidate(m);
+      const depth = live.length;
+      // `for (const p of ps)` binds an element reference too. It is re-derived
+      // from the header at the top of every pass, so it starts each iteration
+      // valid and is only invalidated by a mutation inside the body — which is
+      // exactly what the walk below finds in source order.
+      if (ts.isForOfStatement(node)) {
+        const loopElem = inlineArrayElement(ctx, node.expression);
+        const decl = (node.initializer as ts.VariableDeclarationList).declarations[0];
+        const local = ctx.program.locals.get(decl);
+        if (loopElem !== undefined && local !== undefined) {
+          live.push({
+            local,
+            array: referenceRoot(node.expression),
+            elem: loopElem,
+            arrayText: rootText(ctx, node.expression),
+          });
+        }
+      }
+      ts.forEachChild(node, visit);
+      live.length = depth;
+      return;
+    }
+    if (ts.isCallExpression(node)) {
+      ts.forEachChild(node, visit);
+      for (const m of mutations(ctx, node)) {
+        // `xs.push(xs[0])`: the argument is read before `nish_array_grow` runs,
+        // and the copy into the new slot reads it after.
+        if (m.root !== UNNAMED) {
+          for (const arg of node.arguments) {
+            const source = elementSource(ctx, arg);
+            if (source !== undefined && referenceRoot(source) === m.root) {
+              refuse(
+                new CompileError(
+                  `\`${m.what}\` reads an element of \`${m.root}\`, and the push may move that storage first; copy the fields you need into locals before pushing`,
+                  arg,
+                  ctx.sf
+                )
+              );
+            }
+          }
+        }
+        invalidate(m);
+      }
+      return;
+    }
+    if (ts.isVariableDeclaration(node)) {
+      ts.forEachChild(node, visit);
+      const local = ctx.program.locals.get(node);
+      const source = node.initializer === undefined ? undefined : elementSource(ctx, node.initializer);
+      const elem = source === undefined ? undefined : inlineArrayElement(ctx, source);
+      if (local !== undefined && source !== undefined && elem !== undefined) {
+        live.push({ local, array: referenceRoot(source), elem, arrayText: rootText(ctx, source) });
+      }
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+
+  visit(sig.body);
+  // A `for...of` variable over an inline array is an element reference too,
+  // re-derived from the header on every pass, so it is only ever invalidated
+  // inside its own body — which the loop pre-scan above has already done.
+}
 
 // ---- Registration ------------------------------------------------------------------------
 

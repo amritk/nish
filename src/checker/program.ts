@@ -3,7 +3,7 @@ import ts from "typescript";
 import { AliasInfo } from "./aliases.js";
 import { EnumInfo } from "./enums.js";
 import { ConstInfo } from "./constants.js";
-import { StaticType } from "../types.js";
+import { StaticType, alignOf, llvmType } from "../types.js";
 
 export interface Param {
   name: string;
@@ -48,6 +48,13 @@ export interface StructInfo {
    * a `%struct.<name>*` may be `bitcast` to `%struct.<interface>*`.
    */
   implements: string[];
+  /**
+   * WP15 §2a: some class in the program `implements` this interface, so it is
+   * a *view* rather than a record and an `I[]` keeps one pointer per slot. Set
+   * in `checkImplements` (pass 1c), which runs for every module before any
+   * body is checked, and read by `inlineElementStruct`.
+   */
+  implemented?: boolean;
   /** Pass 1b progress, so a struct's members are collected once. */
   collected?: "collecting" | "done";
   decl: ts.ClassDeclaration | ts.InterfaceDeclaration;
@@ -239,4 +246,88 @@ export interface CheckedProgram {
    * without re-deriving anything.
    */
   caseValues: WeakMap<ts.CaseClause, bigint>;
+}
+
+/**
+ * WP15 §2a: how one element of a `T[]` is stored.
+ *
+ * An array of **records** is contiguous storage — `N` of them end to end in
+ * one block — so `ps[i]` is an interior `getelementptr` rather than a load of
+ * a pointer followed by a chase to wherever that pointer went. That is what
+ * puts a cache line's worth of fields in front of the CPU instead of a cache
+ * line's worth of addresses, and what makes a loop over `Point[]` vectorisable.
+ *
+ * **A record is an `interface`, and only an `interface`.** The language has
+ * two struct kinds and they already mean different things
+ * (`docs/LANGUAGE.md`): an `interface` is fields and nothing else — no
+ * constructor, no methods, no `this` — so the only thing a program can observe
+ * about one is its fields, and copying it into a slot is indistinguishable
+ * from pointing at it. A `class` has identity: a constructor runs on one
+ * object, a method mutates the `this` it was handed, and every other position
+ * in the language (a parameter, a field, a return, a local) passes a class
+ * value by reference. Making an array the single place a class is *copied*
+ * would give `xs.push(c); c.m()` a different meaning from
+ * `xs.push(c); xs[n].m()`, and nothing else in the language works that way.
+ *
+ * This is not a conservative guess, it is measured on the largest Nish program
+ * there is. `self/` keeps one `FunctionSig` in `program.functions`, in
+ * `StructInfo.methodSigs` and in `StructInfo.ctor` at once and then writes
+ * `sig.poisoned` through one of them; with value slots those are three
+ * objects and the write is lost. Every registry in that compiler is built the
+ * same way. Contiguous *class* arrays are therefore a separate change with a
+ * migration of its own, and §2a of `docs/wp15-performance.md` records why.
+ *
+ * **An interface some class `implements` is not a record either.** `implements`
+ * is prefix subtyping reached through a `bitcast` (WP25), so a `Shape[]` may
+ * hold a `Square` and a `Circle` at once and both are longer than `Shape`;
+ * storing one by value would copy the prefix and drop the rest, which is C++'s
+ * object slicing. That array is the language's only polymorphic container and
+ * it keeps the pointer that makes the widening free. The property is
+ * program-wide and is recorded on the shared `StructInfo` by `checkImplements`,
+ * so every module of one compilation agrees about the layout.
+ *
+ * `I | null` also stays a pointer: a null element has no bytes to be, and
+ * `null` is the pointer. That spelling is the way to ask for a sparse array
+ * of records, and the way out of the copy semantics below.
+ *
+ * The layout is what makes an element *reference* interior rather than
+ * independent, and that has two consequences the checker owns rather than the
+ * emitter (`checkElementReferences` in `checker/arrays.ts`): a reference into
+ * the storage dangles once `push` moves it, and a record stored into an array
+ * is *copied* into the slot, the way a C array of structs copies.
+ */
+export function inlineElementStruct(
+  structs: Map<string, StructInfo>,
+  elem: StaticType
+): StructInfo | undefined {
+  if (elem.kind !== "struct") return undefined;
+  const info = structs.get(elem.name);
+  if (info === undefined || info.kind !== "interface" || info.implemented === true) return undefined;
+  return info;
+}
+
+/**
+ * Bytes from one element to the next. For an inline struct that is `sizeof`
+ * exactly as clang computes it — the stride a C `struct Point[]` has, which is
+ * what lets a C host walk the same block — and for everything else the value's
+ * natural size, which is its alignment.
+ */
+export function elementStride(structs: Map<string, StructInfo>, elem: StaticType): number {
+  return inlineElementStruct(structs, elem)?.size ?? alignOf(elem);
+}
+
+/**
+ * Alignment of one element slot. An inline struct's is its own maximum field
+ * alignment; the block is 8-aligned and the stride is a multiple of that
+ * alignment, so every slot is aligned and every field inside it keeps the
+ * alignment `emit/classes.ts` states for it.
+ */
+export function elementAlign(structs: Map<string, StructInfo>, elem: StaticType): number {
+  return inlineElementStruct(structs, elem)?.align ?? alignOf(elem);
+}
+
+/** The LLVM type of one element slot: `%struct.P` inline, the value type otherwise. */
+export function elementLLVMType(structs: Map<string, StructInfo>, elem: StaticType): string {
+  const inline = inlineElementStruct(structs, elem);
+  return inline === undefined ? llvmType(elem) : `%struct.${inline.name}`;
 }

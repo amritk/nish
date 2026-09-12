@@ -42,6 +42,7 @@ import { CheckContext, LoopInfo } from "./context.js";
 import { expressionCheckers } from "./expressions.js";
 import { ROOT_PACKAGE, packageSymbolPrefix } from "../packages.js";
 import { CheckedProgram, FunctionSig, ImportBinding, LocalVar, StructInfo } from "./program.js";
+import { checkElementReferences } from "./arrays.js";
 import { checkPerformance } from "./performance.js";
 import { checkResultLocalsHandled } from "./result.js";
 import { Scope } from "./scope.js";
@@ -576,6 +577,10 @@ export class Checker implements CheckContext {
       // that does not compile is noise, and a poisoned body has incomplete
       // side tables anyway.
       checkPerformance(this, sig);
+      // WP15 §2a: an element reference into contiguous record storage may not
+      // be held across a `push`. Same placement and same reason as the line
+      // above — the walk reads types and bindings pass 2 has just written.
+      checkElementReferences(this, sig);
     }
     // A body with a rejected statement may have lost its `return`: no definite-return cascade.
     if (sig.returnType.kind !== "void" && !terminates && !sig.poisoned) {

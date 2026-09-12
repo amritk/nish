@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 285 programs, 4717 dump lines.
+# 288 programs, 4755 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -369,6 +369,29 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=1 stackLocals=1
   local 10:9 words: string[] (const)
   callee 12:15 join -> @join
+program tests/cases/arr_struct_contiguous.ts
+module tests/cases/arr_struct_contiguous.ts (entry)
+struct Point (interface) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
+  calls: nish_panic_index
+  stackSites=3 stackLocals=1
+  local 11:9 ps: Point[] (const)
+  local 16:7 sum: i32 (let)
+  local 17:14 p: Point (const)
+program tests/cases/arr_struct_push_copy.ts
+module tests/cases/arr_struct_push_copy.ts (entry)
+struct Cell (interface) size=4 align=4
+  field v: i32 index=0 offset=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_array_grow nish_panic_index
+  stackSites=4 stackLocals=1
+  local 10:9 cells: Cell[] (const)
+  local 17:9 found: i32 (const)
+  local 18:9 last: Cell (const)
 program tests/cases/arr_sum.ts
 module tests/cases/arr_sum.ts (entry)
 function fill(xs: i32[], n: i32): void -> @fill
@@ -3920,6 +3943,24 @@ function sumMutable(xs: i32[]): i32 -> @sumMutable
   stackSites=0 stackLocals=0
   local 10:7 total: i32 (let)
   local 11:14 x: i32 (const)
+program docs/cookbook/arr_records.ts
+module docs/cookbook/arr_records.ts (entry)
+struct Point (interface) size=16 align=8
+  field x: f64 index=0 offset=0
+  field y: f64 index=1 offset=8
+function centroidX(ps: readonly Point[]): f64 -> @centroidX
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer ps: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 10:7 total: f64 (let)
+  local 11:14 p: Point (const)
+function spread(n: i32): f64 -> @spread [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: centroidX nish_arena_mark nish_arena_release nish_array_grow
+  stackSites=2 stackLocals=1
+  local 20:9 ps: Point[] (const)
+  local 21:7 i: i32 (let)
+  callee 26:10 centroidX -> @centroidX
 program docs/cookbook/arr_unchecked.ts
 module docs/cookbook/arr_unchecked.ts (entry)
 function get(a: i32[], i: i32): i32 -> @get

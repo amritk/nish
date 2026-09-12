@@ -49,6 +49,7 @@ import {
   isTemplateExpression,
   receiverIsValue,
   methodReceiver,
+  storesInlineElements,
   templateParts,
   unwrapParens,
 } from "./emit_util";
@@ -86,7 +87,14 @@ import {
 } from "./nodes";
 import { Options } from "./options";
 import { ParentTable } from "./parents";
-import { CheckedProgram, FieldInfo, FunctionSig, ROLE_CONSTRUCTOR, StructInfo } from "./program";
+import {
+  CheckedProgram,
+  FieldInfo,
+  FunctionSig,
+  inlineElementStruct,
+  ROLE_CONSTRUCTOR,
+  StructInfo,
+} from "./program";
 import { EFFECT_NONE, EFFECT_READ, EFFECT_WRITE, inlineAllocatorAttrs, maxEffect, RuntimeTable } from "./runtime";
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols";
 import { isResultConstructorCall, resultMethodName } from "./emit_result";
@@ -123,6 +131,8 @@ export class PointerParamFacts {
   name: string;
   /** `sizeof` of the pointee, for `dereferenceable`; 0 when it is not emitted (arrays). */
   size: i32;
+  /** The alignment the pointer is guaranteed to have; see `pointerAlign`. */
+  align: i32;
   /** Stores through the pointer, directly or via a callee (fixpoint). */
   writesThrough: boolean;
   /** The pointer may outlive the call: returned, stored, aliased, or captured by a callee. */
@@ -131,9 +141,10 @@ export class PointerParamFacts {
   passedToCallees: string[];
   passedToIndices: i32[];
 
-  constructor(name: string, size: i32) {
+  constructor(name: string, size: i32, align: i32) {
     this.name = name;
     this.size = size;
+    this.align = align;
     this.writesThrough = false;
     this.captured = false;
     this.passedToCallees = [];
@@ -179,6 +190,8 @@ export class FunctionFacts {
   freshThis: boolean;
   /** `sizeof` the returned struct, or 0 when the return type is not a struct. */
   returnDeref: i32;
+  /** The alignment a returned pointer is guaranteed to have; see `pointerAlign`. */
+  returnAlign: i32;
   // ---- WP6 memory strategy (see escape.ts) ----
   /** Node id -> the allocation there is lowered to an entry-block alloca. */
   stackSites: boolean[];
@@ -222,6 +235,7 @@ export class FunctionFacts {
     this.pointerParams = [];
     this.freshThis = false;
     this.returnDeref = 0;
+    this.returnAlign = 8;
     this.stackSites = new Array<boolean>(nodeCount);
     this.stackLocals = [];
     this.stackParams = new StringSet();
@@ -408,9 +422,23 @@ export function classifyUse(unit: AnalysisUnit, table: TypeTable, ref: Node): Pa
     if (parent.kind === N_BINARY) {
       // Assignment retains the right-hand side; every other operator consumes both operands.
       if (isAssignmentOperator(parent.text)) {
-        return use(parent.children[1] === node ? USE_ESCAPE : USE_NONE);
+        if (parent.children[1] !== node) {
+          return use(USE_NONE);
+        }
+        // WP15 §2a: `xs[i] = p` into an inline-element array copies `p`'s bytes
+        // into the slot, exactly as `push` does; nothing keeps the pointer.
+        const target = unwrapParens(parent.children[0]);
+        if (target.kind === N_INDEX && storesInlineElements(program, table, target.children[0])) {
+          return use(USE_READ);
+        }
+        return use(USE_ESCAPE);
       }
       return use(USE_NONE);
+    }
+    // An element of an array literal whose elements are inline is copied into
+    // the fresh block the literal allocates, so the value is read, not kept.
+    if (parent.kind === N_ARRAY && storesInlineElements(program, table, parent)) {
+      return use(USE_READ);
     }
     if (parent.kind === N_FOR_OF) {
       return use(parent.children[1] === node ? USE_READ : USE_ESCAPE);
@@ -483,11 +511,15 @@ function classifyArgumentUse(unit: AnalysisUnit, table: TypeTable, list: Node, n
     // arena vector of pointers into `p`'s strings (WP14 D4); every other
     // builtin lowers to runtime functions whose pointer params are all
     // declared `nocapture`.
-    if (
-      isPushCall(program, table, owner) ||
-      isResultConstructorCall(program, table, owner) ||
-      isSpawnCall(program, owner)
-    ) {
+    // WP15 §2a: a push into an array that holds its elements inline *copies*
+    // the object into the slot, so the pointer is read and then forgotten —
+    // the one shape where a push does not retain what it was given.
+    if (isPushCall(program, table, owner)) {
+      const receiver = methodReceiver(owner);
+      const inline = receiver !== null && storesInlineElements(program, table, receiver);
+      return use(inline ? USE_READ : USE_ESCAPE);
+    }
+    if (isResultConstructorCall(program, table, owner) || isSpawnCall(program, owner)) {
       return use(USE_ESCAPE);
     }
     return use(resultMethodName(program, table, owner) === "unwrapOr" ? USE_ESCAPE : USE_NONE);
@@ -601,6 +633,31 @@ function structSize(program: CheckedProgram, table: TypeTable, type: i32): i32 {
   }
   const info = program.struct(table.nameOf(type));
   return info === null ? 0 : info.size;
+}
+
+/**
+ * The alignment a pointer of this type is *guaranteed* to have, which is 8 for
+ * everything the allocator hands out and less for exactly one shape.
+ *
+ * WP15 section 2a: an array of records is contiguous storage, so `ps[i]` is an
+ * interior pointer at `i * sizeof(P)` into an 8-aligned block. When `sizeof(P)`
+ * is not a multiple of 8 — `interface Q { a: i32; b: i32 }` is eight bytes
+ * aligned to four — element 1 is 4-aligned and `align 8` would be a lie. The
+ * record's own alignment is the true bound: the block is 8-aligned and the
+ * stride is a multiple of `align`, so every slot is `align`-aligned and no more
+ * can be promised. Every other pointer keeps `align 8`, because it comes from
+ * `nish_alloc_struct` (which rounds to 8) or an entry-block alloca the emitter
+ * gives `align 8`.
+ */
+function pointerAlign(program: CheckedProgram, table: TypeTable, type: i32): i32 {
+  if (type < 0) {
+    return 8;
+  }
+  const record = inlineElementStruct(program, table, table.stripNull(type));
+  if (record === null || record.align >= 8) {
+    return 8;
+  }
+  return record.align;
 }
 
 /** Struct, array and `Result` params, plain or `T | null`, get pointer facts. */
@@ -1038,6 +1095,7 @@ export function collectFacts(
   const facts = new FunctionFacts(sig.paramNames, nodeCount);
   facts.freshThis = sig.role === ROLE_CONSTRUCTOR;
   facts.returnDeref = structSize(program, table, sig.returnType);
+  facts.returnAlign = pointerAlign(program, table, sig.returnType);
   if (memory !== null) {
     facts.stackSites = memory.stackSites;
     facts.stackLocals = memory.stackLocals;
@@ -1059,7 +1117,11 @@ export function collectFacts(
     const type = sig.paramTypes[i];
     if (isPointerParam(table, type)) {
       facts.pointerParams.push(
-        new PointerParamFacts(sig.paramNames[i], structSize(program, table, table.stripNull(type)))
+        new PointerParamFacts(
+          sig.paramNames[i],
+          structSize(program, table, table.stripNull(type)),
+          pointerAlign(program, table, type)
+        )
       );
     }
     i = i + 1;
@@ -1530,7 +1592,9 @@ export function paramAttributes(
     if (pointer !== null && !pointer.writesThrough && !pointer.captured) {
       attrs.push("readonly");
     }
-    attrs.push("align 8");
+    // Not always 8: a record that is an array element sits at `i * sizeof(P)`
+    // into the block, so its own alignment is all that can be promised.
+    attrs.push(`align ${pointer === null ? 8 : pointer.align}`);
     if (pointer !== null && pointer.size > 0) {
       attrs.push(`dereferenceable(${pointer.size})`);
     }
@@ -1569,7 +1633,7 @@ export function paramAttributes(
     } else if (pointer !== null && !pointer.writesThrough && !pointer.captured) {
       attrs.push("readonly");
     }
-    attrs.push("align 8");
+    attrs.push(`align ${pointer === null ? 8 : pointer.align}`);
     const uncaptured = pointer !== null ? !pointer.captured : !f.escaping.has(name);
     if (uncaptured) {
       attrs.push("nocapture");
@@ -1583,7 +1647,13 @@ export function paramAttributes(
  * `privateAbi` is whether this function answers a by-value `Result` as the
  * arms rather than the word (WP15 §7b).
  */
-export function returnAttributes(table: TypeTable, type: i32, deref: i32, privateAbi: boolean): string[] {
+export function returnAttributes(
+  table: TypeTable,
+  type: i32,
+  deref: i32,
+  privateAbi: boolean,
+  align: i32
+): string[] {
   const attrs: string[] = [];
   const kind = table.kindOf(type);
   if (type === T_VOID) {
@@ -1619,15 +1689,16 @@ export function returnAttributes(table: TypeTable, type: i32, deref: i32, privat
   }
   if (kind === K_STRUCT || kind === K_RESULT) {
     // WP16: a `Result` is a whole, never-null object, exactly like a struct.
+    // `align` is the record alignment for a record type, 8 otherwise.
     attrs.push("nonnull");
-    attrs.push("align 8");
+    attrs.push(`align ${align}`);
     if (deref > 0) {
       attrs.push(`dereferenceable(${deref})`);
     }
     return attrs;
   }
   if (kind === K_NULLABLE) {
-    attrs.push("align 8"); // WP6: may be null
+    attrs.push(`align ${align}`); // WP6: may be null
   }
   return attrs;
 }

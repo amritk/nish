@@ -287,7 +287,7 @@ export class Emitter {
       this.fn.linkage = "internal";
     }
     if (optimize) {
-      this.fn.returnAttrs = returnAttributes(this.table, sig.returnType, facts.returnDeref, privateAbi);
+      this.fn.returnAttrs = returnAttributes(this.table, sig.returnType, facts.returnDeref, privateAbi, facts.returnAlign);
       this.fn.attrGroup = this.module.attrGroupFor(functionAttributes(facts));
     }
     this.slotLocals = [];
@@ -496,7 +496,7 @@ export class Emitter {
     }
     const ret: string[] = [];
     if (optimize) {
-      for (const attr of returnAttributes(this.table, sig.returnType, facts.returnDeref, false)) {
+      for (const attr of returnAttributes(this.table, sig.returnType, facts.returnDeref, false, facts.returnAlign)) {
         ret.push(attr);
       }
     }

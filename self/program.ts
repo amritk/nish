@@ -151,6 +151,13 @@ export class StructInfo {
    * `%struct.<name>*` may be `bitcast` to the interface's with no adjustment.
    */
   implementsNames: string[];
+  /**
+   * WP15 section 2a: some class in the program `implements` this interface, so
+   * it is a *view* rather than a record and an `I[]` keeps one pointer per
+   * slot. Set in `checkImplements` (pass 1c), which runs for every module
+   * before any body is checked, and read by `inlineElementStruct`.
+   */
+  implemented: boolean;
   decl: Node;
   /** The module that declares it, so an importer can tell it from a re-export. */
   origin: SourceFile;
@@ -173,6 +180,7 @@ export class StructInfo {
     this.methodSigs = [];
     this.ctor = null;
     this.implementsNames = [];
+    this.implemented = false;
     this.decl = decl;
     this.exported = false;
     this.poisoned = false;
@@ -570,4 +578,51 @@ export class CheckedProgram {
     const at = this.exports.get(name, -1);
     return at < 0 ? null : this.functions[at];
   }
+}
+
+// ---- WP15 §2a: element layout ------------------------------------------------
+
+/**
+ * How one element of a `T[]` is stored (`src/checker/program.ts`).
+ *
+ * An array of *records* is contiguous storage — `N` of them end to end in one
+ * block — so `ps[i]` is an interior `getelementptr` rather than a load of a
+ * pointer and a chase to wherever it went. A record is an `interface` and only
+ * an `interface` nobody implements: fields and nothing else, so copying one
+ * into a slot is indistinguishable from pointing at it. A `class` has identity
+ * — a constructor and methods that run on one object — and every other position
+ * in the language passes it by reference, so a class element stays a pointer.
+ * An interface some class `implements` stays a pointer too, because that array
+ * is the language's only polymorphic container and every implementer is longer
+ * than the interface; so does a `C | null`, because a null element has no bytes
+ * to be. The full argument, and the `self/` evidence behind it, is in
+ * `src/checker/program.ts`.
+ */
+export function inlineElementStruct(program: CheckedProgram, table: TypeTable, elem: i32): StructInfo | null {
+  if (!table.isStruct(elem)) {
+    return null;
+  }
+  const info = program.struct(table.nameOf(elem));
+  if (info === null || info.kind !== STRUCT_INTERFACE || info.implemented) {
+    return null;
+  }
+  return info;
+}
+
+/** Bytes from one element to the next: `sizeof` for an inline class, the value's size otherwise. */
+export function elementStride(program: CheckedProgram, table: TypeTable, elem: i32): i32 {
+  const info = inlineElementStruct(program, table, elem);
+  return info === null ? table.alignOf(elem) : info.size;
+}
+
+/** Alignment of one element slot: the class's own maximum field alignment when it is inline. */
+export function elementAlignOf(program: CheckedProgram, table: TypeTable, elem: i32): i32 {
+  const info = inlineElementStruct(program, table, elem);
+  return info === null ? table.alignOf(elem) : info.align;
+}
+
+/** The LLVM type of one element slot: `%struct.P` inline, the value type otherwise. */
+export function elementLLVMType(program: CheckedProgram, table: TypeTable, elem: i32): string {
+  const info = inlineElementStruct(program, table, elem);
+  return info === null ? table.llvmType(elem) : `%struct.${info.name}`;
 }
