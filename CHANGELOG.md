@@ -26,6 +26,13 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-12
+
+### Fixed
+
+- release: Start release.yml at the tag the release train pushes ([#43](https://github.com/amritk/nish/pull/43))
+
+
 ## [0.1.0] - 2026-09-12
 
 ### Fixed
@@ -59,3 +66,4 @@ hand — the git log is the working account until a release turns it into one.
 
 [Unreleased]: https://github.com/amritk/nish/commits/main
 [0.1.0]: https://github.com/amritk/nish/releases/tag/v0.1.0
+[0.1.1]: https://github.com/amritk/nish/releases/tag/v0.1.1
