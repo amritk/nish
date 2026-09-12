@@ -373,15 +373,20 @@ nothing else. Nish has no conditional compilation and will not grow any:
 there is no `#[cfg(bootstrap)]` to write, so the discipline is "do not use it
 yet", and a discipline that CI does not check is a comment.
 
-**State: the script half is done, the CI half is one operating system short.**
-`scripts/bootstrap.sh` reads `NISH_BOOTSTRAP`, and the `bootstrap` job in
-`ci.yml` downloads the last release's binary and builds `self/` with it. It
-runs on Linux alone, because `macos-latest` is commented out of the test matrix
-(`ci.yml` says why: `scripts/build.sh` needed a bash 3.2 fix, which has landed,
-and `scripts/smoke.sh` still uses `mapfile`, a bash 4 builtin, which has not).
-Until a release exists the job has no seed and says so in an annotation rather
-than passing quietly — a freeze nobody checked must not read as a freeze that
-held.
+**State: done.** `scripts/bootstrap.sh` reads `NISH_BOOTSTRAP`, and the
+`bootstrap` job in `ci.yml` downloads the last release's binary and builds
+`self/` with it, on both operating systems — the last bash 3.2 blocker was
+`scripts/smoke.sh`'s `mapfile`, and with that gone `macos-latest` is back in
+the matrix. Each runner seeds from the asset for its own platform, which is
+also what proves that asset is a working compiler rather than a file that
+uploaded cleanly.
+
+Two states are annotated rather than failed, because neither is a fault in the
+commit under test: no release at all, and a release with no binary for the
+platform the runner is on — `v0.1.1` shipped `x86_64-linux` alone, so every
+other platform has nothing to seed from until the next release. Both say so in
+an annotation rather than passing quietly; a freeze nobody checked must not
+read as a freeze that held.
 
 ### G4 — The seed policy is written before it is needed
 
@@ -398,7 +403,7 @@ retirement unchanged — only its subject changes, from stage0 to the seed.
 ### G5 — Distribution does not need Node
 
 - The release workflow builds `nish` for `x86_64`/`aarch64` × `linux`/`darwin`
-  from the seed release and attaches the four binaries to the GitHub release.
+  from the seed release and attaches the binaries to the GitHub release.
 - `npm install -g nish` keeps working: the package becomes a thin installer
   that fetches the binary for the host, or ships it. Whichever, the check in
   `tests/run.js`'s WP12 block — pack, install into a temporary prefix, link a
@@ -410,18 +415,29 @@ retirement unchanged — only its subject changes, from stage0 to the seed.
 **Why it blocks.** Retiring stage0 without this does not remove Node from the
 compiler; it removes the compiler.
 
-**State: one binary of the four, and the npm package is unchanged.** The
-release workflow builds `nish-<version>-x86_64-linux` — stage2, `--verify`d,
-and smoke-tested before it ships, because it is also the seed every later
-release bootstraps from. The other three are not built: `aarch64-linux` needs
-an arm64 runner, and both darwin binaries need `macos-latest`, which is out of
-the matrix. The npm package is still the Node tarball rather than a thin
-installer, so `nish` today is Node-free only if you take the binary rather than
-`npm install`. `--version` already has a source that is not `package.json` —
-`VERSION` in `self/branding.ts`, which `tests/run.js` pins against
-`package.json` — so that bullet is met by the binary the moment it is the
-product. This gate closes when the remaining three binaries and the installer
-land; nothing here is a decision against them.
+**State: three binaries of the four, and the npm package is unchanged.** The
+release workflow builds `x86_64-linux`, `aarch64-linux` and `aarch64-darwin` —
+each stage2, `--verify`d, and smoke-tested on its own native runner before it
+ships, because each is also the seed every later release on that platform
+bootstraps from. Nothing cross-compiles and nothing can: `bootstrap.sh` has to
+*run* stage1 to get stage2, so the machine that builds a target must execute
+it.
+
+`x86_64-darwin` is not built, and unlike the other two that is a decision
+rather than a gap. LLVM 18 cannot be put on a free Intel macOS runner in
+workable time: Homebrew's `llvm@18` has no bottle for macOS 15 Intel
+(`sequoia`) so `brew install` compiles it from source, llvm.org stopped
+publishing prebuilt `x86_64-apple-darwin` tarballs around 18.x, and `macos-13`,
+which did have a bottle, was retired in December 2025. What is left is a billed
+larger runner or Apple clang in place of LLVM 18, for an architecture GitHub
+drops in Fall 2027. Intel macOS takes the npm package or a checkout.
+
+The npm package is still the Node tarball rather than a thin installer, so
+`nish` today is Node-free only if you take a binary rather than `npm install`.
+`--version` already has a source that is not `package.json` — `VERSION` in
+`self/branding.ts`, which `tests/run.js` pins against `package.json` — so that
+bullet is met by the binary the moment it is the product. This gate closes when
+the installer lands.
 
 ### G6 — The provenance is recorded before it is lost
 
@@ -511,7 +527,7 @@ gate nobody has opened is how a runtime budget dies.
 | **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) |
 | **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. Outstanding: the job runs on Linux only, and it has no seed to use until 0.1.0 ships (G3, G4) |
 | **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. Outstanding: the four survivors repointed to the seed, and the 196 diagnostic wordings that no surviving case exercises (§2B, "The wording gap") — which is now the half that matters (G2) |
-| **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the npm package becoming an installer, and the INSTALL.md/wp12 rewrite (G5) |
+| **R4** | Distribution | **begun.** Three binaries per release — `x86_64-linux`, `aarch64-linux`, `aarch64-darwin` — each built, `--verify`d and smoke-tested on a native runner by `release.yml`; `--version` already has a source that is not `package.json`; INSTALL.md and wp12 name the set. Outstanding: the npm package becoming an installer (G5). `x86_64-darwin` is declined rather than outstanding — see G5 |
 | **R5** | Provenance | the re-verification procedure is written (G6); the `ddc-<version>` tag is cut at release time |
 | **R6** | The deletion | `src/`, the `typescript` runtime dependency, the six dead oracles, and every rule that names stage0 |
 

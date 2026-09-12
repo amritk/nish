@@ -1,0 +1,53 @@
+# LLVM 18 on PATH under its plain tool names, on either operating system.
+#
+# Three workflows' jobs needed this and each carried its own copy; the copies
+# are what drift, and a release built against a different LLVM than the one CI
+# tested is exactly the drift that matters here. One place pins the version.
+#
+# Debian ships versioned binaries (clang-18, llc-18, ...), so the Linux half
+# exposes the plain names through a private bin dir ahead of /usr/bin: the
+# scripts and tests/run.js look for `clang`, `llc`, `llvm-as`, `opt`, `ld.lld`
+# and `wasm-ld` regardless of what the runner image happens to ship.
+name: Install LLVM 18
+description: Put clang, llc, llvm-as, opt, ld.lld and wasm-ld on PATH under their plain names.
+
+runs:
+  using: composite
+  steps:
+    - name: Install LLVM 18 + lld (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+        bin="$RUNNER_TEMP/llvm-bin"
+        mkdir -p "$bin"
+        for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+          ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+        done
+        echo "$bin" >> "$GITHUB_PATH"
+
+    - name: Install LLVM 18 + lld (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      env:
+        # The runner image's Homebrew is current enough; an auto-update costs
+        # minutes on every job and changes what gets installed run to run.
+        HOMEBREW_NO_AUTO_UPDATE: "1"
+        HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      run: |
+        brew install llvm@18
+        prefix="$(brew --prefix llvm@18)"
+        # Homebrew's llvm@18 bundles lld (ld.lld, wasm-ld). If a build ever
+        # drops it, fall back to the standalone formula.
+        if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
+        echo "$prefix/bin" >> "$GITHUB_PATH"
+
+    - name: Toolchain versions
+      shell: bash
+      run: |
+        for tool in clang llc llvm-as opt ld.lld wasm-ld; do
+          printf '%-8s ' "$tool"; command -v "$tool"
+        done
+        clang --version | head -n 1
+        llc --version | sed -n '2p'

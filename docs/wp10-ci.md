@@ -13,15 +13,21 @@ comment above the `on:` block has the details.
 | Job | Runner | Steps |
 | --- | --- | --- |
 | `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, `npm test`, size report |
-| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **commented out of the matrix**, see below |
+| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | the same steps |
+| `bootstrap (ubuntu-latest)` / `bootstrap (macos-latest)` | as above | build `self/` with the last release's binary for that platform (WP19 G3) |
 | `lint` | Ubuntu | `npm run lint --if-present` (a no-op until `package.json` defines `lint`) |
 
-**The macOS job is disabled for now.** It is not a compiler failure and not an
-architecture one: `scripts/build.sh` runs under `set -euo pipefail`, and macOS
-ships bash 3.2 as `/bin/bash` (Apple will not ship GPLv3), where expanding an
-empty array as `"${arr[@]}"` while `set -u` is on raises *unbound variable*.
-bash 4.4 made that expansion legal, which is why every Linux runner passes and
-every macOS one fails at
+Both operating systems install LLVM 18 through the same composite action,
+`.github/actions/llvm`, so the version is pinned in one place rather than in
+each job that needs it.
+
+**The macOS job was disabled, and is not any more.** Worth recording, because
+the symptom pointed at the compiler and the cause was neither a compiler
+failure nor an architecture one. `scripts/build.sh` runs under
+`set -euo pipefail`, and macOS ships bash 3.2 as `/bin/bash` (Apple will not
+ship GPLv3), where expanding an empty array as `"${arr[@]}"` while `set -u` is
+on raises *unbound variable*. bash 4.4 made that expansion legal, which is why
+every Linux runner passed and every macOS one died at
 
 ```
 scripts/build.sh: line 96: pgo[@]: unbound variable
@@ -29,12 +35,16 @@ scripts/build.sh: line 96: pgo[@]: unbound variable
 
 `pgo`, `elf`, `strip_flag` and `libs` are all legitimately empty on the
 ordinary macOS path, so every `--link` at the `speed`, `size` and `napi`
-profiles dies before clang is reached. The fix is `${arr[@]+"${arr[@]}"}` at
-the nine sites that expand them; the matrix line in `ci.yml` carries the same
-note and is restored in the same commit. Until then macOS is untested here,
-and what that costs is the ld64 / Mach-O half of `build.sh` — `-dead_strip`,
-`-Wl,-x`, no `-fuse-ld=lld`, no `-fno-plt` — which no Linux runner exercises
-at any architecture.
+profiles failed before clang was reached. `build.sh` took the
+`${arr[@]+"${arr[@]}"}` spelling at all ten sites, and `scripts/smoke.sh` — the
+half nobody had noticed, because the matrix line named only `build.sh` — traded
+its bash-4 `mapfile` for a `while read` loop and its GNU-only `\b` for a
+`[^A-Za-z0-9_]` class that BSD grep also understands.
+
+What macOS coverage buys, now that it is back, is the ld64 / Mach-O half of
+`build.sh` — `-dead_strip`, `-Wl,-x`, no `-fuse-ld=lld`, no `-fno-plt` — which
+no Linux runner exercises at any architecture, and bash 3.2 itself, which is
+the only place a bash-4 builtin can be caught.
 
 Both `test` jobs need the plain tool names `clang`, `llc`, `llvm-as`, `opt`,
 `ld.lld` and `wasm-ld` on `PATH`, because `tests/run.js` and the scripts

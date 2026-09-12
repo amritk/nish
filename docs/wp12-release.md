@@ -152,31 +152,51 @@ step below is done by hand.
 
 3. **The `Release` workflow** (`.github/workflows/release.yml`) runs on the
    tag, whether it was dispatched there or a human pushed it:
-   - calls the `CI` workflow (`workflow_call`): typecheck, tests, smoke and
-     size report on Ubuntu, the bootstrap-from-the-last-release job, lint;
    - refuses to continue unless the ref is a tag and equals
-     `package.json#version` — the ref type first, because a dispatch can be
-     aimed at any ref and a run started on `main` would otherwise report a
-     version mismatch rather than the mis-aimed run it is;
+     `package.json#version` — in a `guard` job of its own, ahead of everything
+     expensive, and the ref type first, because a dispatch can be aimed at any
+     ref and a run started on `main` would otherwise report a version mismatch
+     rather than the mis-aimed run it is;
+   - calls the `CI` workflow (`workflow_call`): typecheck, tests, smoke and
+     size report on Ubuntu and macOS, the bootstrap-from-the-last-release jobs,
+     lint;
+   - alongside that, a `binaries` matrix with one native runner per platform.
+     Each bootstraps the native compiler to
+     `build/release/nish-0.2.0-<platform>` with `--verify`, checks the runner
+     really is the platform the matrix claimed (`scripts/platform.sh`), then
+     smoke-tests the unpacked tarball from an unrelated directory:
+     `--version`, and linking and running `examples/hello.ts`:
+
+     | Platform | Runner |
+     | --- | --- |
+     | `x86_64-linux` | `ubuntu-latest` |
+     | `aarch64-linux` | `ubuntu-24.04-arm` |
+     | `aarch64-darwin` | `macos-latest` |
+
+     Nothing cross-compiles: `bootstrap.sh` runs stage1 to get stage2, so the
+     machine that builds a target must be able to execute it. Intel macOS is
+     deliberately absent — docs/wp19-stage0-retirement.md G5 has the reasoning.
    - `npm ci && npm run build && npm pack`, and checks the tarball contains
      `dist/index.js`, `runtime/runtime.c`, `runtime/nish.h` and
      `scripts/build.sh`;
-   - bootstraps the native compiler to
-     `build/release/nish-0.2.0-x86_64-linux` with `--verify`, then smoke-tests
-     it: `--version`, and linking and running `examples/hello.ts`;
-   - `gh release create v0.2.0 nish-0.2.0.tgz nish-0.2.0-x86_64-linux.tar.gz`
+   - `gh release create v0.2.0 nish-0.2.0.tgz nish-0.2.0-<platform>.tar.gz ...`
      with the notes rendered from `changelog/0.2.0.json` — the file the
      release pull request was reviewed with, not a fresh walk of the log, so
      what is published is what somebody approved. A body over 120,000
      characters is cut at a paragraph and points at the JSON; an empty one
-     fails the job rather than shipping a blank release.
+     fails the job rather than shipping a blank release. Every platform in the
+     matrix must have arrived or the job fails: a release that ships two
+     binaries and a promise of three is invisible once published.
 
-   The binary is not only a convenience for people without Node: it is the
-   **seed** the next release is built from, which is why it is verified and
-   smoke-tested before it ships and why its name is fixed. `ci.yml`'s
-   `bootstrap` job downloads exactly `nish-<version>-x86_64-linux` from the
-   latest release, so renaming the asset breaks the freeze check rather than
-   the release.
+   The binaries are not only a convenience for people without Node: each is the
+   **seed** the next release on that platform is built from, which is why every
+   one is verified and smoke-tested before it ships and why the names are
+   fixed. `ci.yml`'s `bootstrap` job downloads `nish-<version>-<platform>` for
+   the runner it is on, so renaming an asset breaks the freeze check rather
+   than the release. `scripts/platform.sh` is the one definition of
+   `<platform>`, and both workflows call it rather than spelling the tag out
+   again; docs/INSTALL.md carries the same mapping inline, because a reader
+   copying a `curl` line does not have the repository yet.
 
 4. **npm publish is manual** for now. When ready:
 

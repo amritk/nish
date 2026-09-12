@@ -38,16 +38,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-latest is commented out, not deleted. It is red for a reason
-        # that has nothing to do with the compiler: scripts/build.sh runs under
-        # `set -u`, and macOS ships bash 3.2 (Apple will not ship GPLv3), where
-        # expanding an empty array as "${arr[@]}" is an "unbound variable"
-        # error -- bash 4.4 made it legal, so every Linux runner is fine and
-        # every --link at the speed/size/napi profiles dies on macOS with
+        # macos-latest was out of this matrix for a reason that has since been
+        # fixed at both sites, so it is back. For the record, because the
+        # symptom was confusing: scripts/build.sh runs under `set -u` and macOS
+        # ships bash 3.2 (Apple will not ship GPLv3), where expanding an empty
+        # array as "${arr[@]}" is an "unbound variable" error -- bash 4.4 made
+        # it legal, so every Linux runner was fine and every --link at the
+        # speed/size/napi profiles died on macOS with
         #   scripts/build.sh: line 96: pgo[@]: unbound variable
-        # The fix is ${arr[@]+"${arr[@]}"} at the nine sites that expand `pgo`,
-        # `elf`, `strip_flag` and `libs`. Restore this line with it.
-        os: [ubuntu-latest] # , macos-latest
+        # build.sh took the ${arr[@]+"${arr[@]}"} spelling in 2f5dd13, and
+        # scripts/smoke.sh dropped its bash-4 `mapfile` for a read loop, which
+        # was the other half nobody had noticed.
+        #
+        # Two entries, where release.yml builds three binaries. This matrix
+        # runs on every pull request, and what it covers is the two operating
+        # systems -- the bash version, the linker (ld64 vs lld), the strip
+        # flag, BSD vs GNU userland. A second architecture per OS would cost
+        # every contributor another wait to re-test the same code paths. Each
+        # *binary* is built and smoke-tested on its own native runner by
+        # release.yml, which is where an arch-specific break would show.
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -56,39 +66,10 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install LLVM 18 + lld (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
-          # Debian ships versioned binaries (clang-18, llc-18, ...). Expose the
-          # plain names through a private bin dir placed ahead of /usr/bin so the
-          # scripts and tests/run.js find `clang`, `llc`, `llvm-as`, `opt`,
-          # `ld.lld` and `wasm-ld` regardless of what the runner image ships.
-          bin="$RUNNER_TEMP/llvm-bin"
-          mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
-            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
-          done
-          echo "$bin" >> "$GITHUB_PATH"
+      - uses: ./.github/actions/llvm
 
-      - name: Install LLVM 18 + lld (macOS)
-        if: runner.os == 'macOS'
+      - name: Node versions
         run: |
-          brew install llvm@18
-          prefix="$(brew --prefix llvm@18)"
-          # Homebrew's llvm@18 bundles lld (ld.lld, wasm-ld). If a build ever
-          # drops it, fall back to the standalone formula.
-          if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
-          echo "$prefix/bin" >> "$GITHUB_PATH"
-
-      - name: Toolchain versions
-        run: |
-          for tool in clang llc llvm-as opt ld.lld wasm-ld; do
-            printf '%-8s ' "$tool"; command -v "$tool"
-          done
-          clang --version | head -n 1
-          llc --version | sed -n '2p'
           node --version
           npm --version
 
@@ -140,17 +121,25 @@ jobs:
   # breaks here and nowhere else: `npm test` bootstraps with stage0, which
   # always knows every construct the working tree does.
   #
-  # Until 0.1.0 exists there is no seed, and this reports that and stops
-  # rather than inventing one. It is deliberately NOT a silent success: the
-  # step says which release it used, or that there was none, so a green run
-  # cannot be mistaken for a freeze that was actually checked.
+  # G3 asks for this on both operating systems, and now that macos-latest is
+  # back in the matrix above it runs on both. Each runner seeds from the asset
+  # for its own platform, which is also what proves that asset is a working
+  # compiler and not just a file that uploaded cleanly.
   #
-  # G3 asks for this on both operating systems. It runs on Linux alone today
-  # because macos-latest is out of the matrix above; see docs/wp19-stage0
-  # -retirement.md G3 for what that leaves open.
+  # Two states are reported rather than failed, because neither is a fault in
+  # the commit under test: a repository with no release at all (which is where
+  # this started), and a release that predates the platform this runner is on
+  # -- v0.1.1 shipped x86_64-linux alone, so every other platform has nothing
+  # to seed from until the next release. Both are deliberately NOT a silent
+  # success: the last step says which release it used, or exactly why it used
+  # none, so a green run cannot be mistaken for a freeze that was checked.
   bootstrap:
-    name: bootstrap (from the last release)
-    runs-on: ubuntu-latest
+    name: bootstrap (${{ matrix.os }}, from the last release)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -159,23 +148,15 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install LLVM 18 + lld
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
-          bin="$RUNNER_TEMP/llvm-bin"
-          mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
-            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
-          done
-          echo "$bin" >> "$GITHUB_PATH"
+      - uses: ./.github/actions/llvm
 
       - name: Install dependencies
         run: npm ci
 
       # `gh release download` fails when the repository has no release at all,
-      # which is the state before 0.1.0 -- so ask first and record the answer,
-      # rather than reading a failed download as "no release".
+      # and again when the release has no asset for this runner's platform --
+      # so ask both questions and record the answer, rather than reading a
+      # failed download as "no release".
       - name: Find the last release
         id: seed
         env:
@@ -183,11 +164,20 @@ jobs:
         run: |
           tag="$(gh release list --limit 1 --json tagName --jq '.[0].tagName // ""')"
           if [ -z "$tag" ]; then
-            echo "no release yet: nothing to seed from, so the freeze is unchecked" >&2
-            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "why=no release exists yet" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          name="nish-${tag#v}-x86_64-linux"
+          name="nish-${tag#v}-$(bash scripts/platform.sh)"
+          # Listed, not probed with a download: a download that fails cannot
+          # tell "this release has no binary for this platform" apart from an
+          # API or auth error, and those two want opposite handling. A failing
+          # `gh release view` takes the step down with it, which is right --
+          # that is a broken runner, not a release that predates a platform.
+          assets="$(gh release view "$tag" --json assets --jq '.assets[].name')"
+          if ! printf '%s\n' "$assets" | grep -qx "$name.tar.gz"; then
+            echo "why=$tag has no $name.tar.gz asset" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           gh release download "$tag" --pattern "$name.tar.gz" --dir "$RUNNER_TEMP"
           tar -xzf "$RUNNER_TEMP/$name.tar.gz" -C "$RUNNER_TEMP"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
@@ -202,9 +192,9 @@ jobs:
       - name: Say what this proved
         run: |
           if [ -z "${{ steps.seed.outputs.tag }}" ]; then
-            echo "::notice::No release exists yet, so self/ was NOT built from a seed. The rolling freeze is unchecked until 0.1.0 ships."
+            echo "::notice::self/ was NOT built from a seed on ${{ matrix.os }} (${{ steps.seed.outputs.why }}). The rolling freeze is unchecked here until a release carries this platform."
           else
-            echo "::notice::self/ built and verified with ${{ steps.seed.outputs.tag }} as the seed."
+            echo "::notice::self/ built and verified with ${{ steps.seed.outputs.tag }} as the seed on ${{ matrix.os }}."
           fi
 
   lint:

@@ -16,7 +16,7 @@
 # that builds Go. It is either a released `nish`, executed directly, or a Node
 # entry point (`.js`, `.mjs`, `.cjs`), executed as `node <path>`:
 #
-#   NISH_BOOTSTRAP=~/nish-0.1.0-linux-x86_64 scripts/bootstrap.sh --verify
+#   NISH_BOOTSTRAP=~/nish-0.1.0-x86_64-linux/bin/nish scripts/bootstrap.sh --verify
 #   NISH_BOOTSTRAP=dist/index.js             scripts/bootstrap.sh
 #
 # Unset, the seed is stage0 — `node dist/index.js` — which is what a fresh
@@ -82,7 +82,7 @@ The seed is NISH_BOOTSTRAP=<path> when it is set — a released `nish` binary, o
 a .js/.mjs entry point run under node — and stage0 (dist/index.js) when it is
 not:
 
-  NISH_BOOTSTRAP=~/nish-0.1.0-linux-x86_64 scripts/bootstrap.sh --verify
+  NISH_BOOTSTRAP=~/nish-0.1.0-x86_64-linux/bin/nish scripts/bootstrap.sh --verify
 EOF
   exit "${1:-2}"
 }

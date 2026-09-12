@@ -26,7 +26,17 @@ fi
 # Either spelling declares the entry (docs/wp22-arrow-functions.md): the arrow
 # `export const main = (...) => ...` is the form the corpus is written in, and
 # `export function main` is still legal.
-mapfile -t programs < <(grep -rl --include='*.ts' -E '^export (function main\b|const main[[:space:]]*=)' "$examples" | sort)
+#
+# Two portability notes, because this script runs on macOS as well as Linux:
+# `mapfile` is a bash 4 builtin and macOS ships bash 3.2 (Apple will not ship
+# GPLv3), so the read loop below is the portable spelling; and `\b` is a GNU
+# extension that POSIX leaves undefined in an ERE, so BSD grep would read it as
+# a literal `b` and silently match no `export function main` at all. The
+# `[^A-Za-z0-9_]` class is the same boundary in a form both greps agree on.
+programs=()
+while IFS= read -r program; do
+  programs+=("$program")
+done < <(grep -rl --include='*.ts' -E '^export (function main[^A-Za-z0-9_]|const main[[:space:]]*=)' "$examples" | sort)
 if [ ${#programs[@]} -eq 0 ]; then
   echo "error: no examples with \`export const main\` under $examples" >&2
   exit 1

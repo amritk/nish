@@ -106,14 +106,22 @@ From a release tarball on GitHub (the `Release` workflow attaches
 npm install -g ./nish-0.1.0.tgz
 ```
 
-As a native compiler, which needs no Node at all. Every `v*` release also
-attaches `nish-<version>-x86_64-linux.tar.gz` — the self-hosted compiler, the
-binary `self/` produces by compiling itself:
+As a native compiler, which needs no Node at all. Every `v*` release attaches
+one tarball per platform — the self-hosted compiler, the binary `self/`
+produces by compiling itself:
+
+| Platform | Asset |
+| --- | --- |
+| Linux, x86_64 | `nish-<version>-x86_64-linux.tar.gz` |
+| Linux, arm64 | `nish-<version>-aarch64-linux.tar.gz` |
+| macOS, Apple silicon | `nish-<version>-aarch64-darwin.tar.gz` |
 
 ```bash
-curl -LO https://github.com/amritk/nish/releases/download/v0.1.0/nish-0.1.0-x86_64-linux.tar.gz
-tar -xzf nish-0.1.0-x86_64-linux.tar.gz
-nish-0.1.0-x86_64-linux/bin/nish --version
+v=0.2.0                                   # the release you want
+p=$(uname -m | sed 's/^arm64$/aarch64/; s/^amd64$/x86_64/')-$(uname -s | tr '[:upper:]' '[:lower:]')
+curl -LO "https://github.com/amritk/nish/releases/download/v$v/nish-$v-$p.tar.gz"
+tar -xzf "nish-$v-$p.tar.gz"
+"nish-$v-$p/bin/nish" --version
 ```
 
 Unpack it and run `bin/nish` from wherever you like; put that on `PATH` if you
@@ -125,8 +133,14 @@ find `scripts/build.sh`.
 
 It still needs `clang` and `lld` on `PATH` for `--link` (§1), because linking
 is the C toolchain's job in either compiler; what it does not need is Node.
-x86_64 Linux is the only platform built today — on anything else, take the npm
-package or build from a checkout.
+
+Intel macOS has no binary. That is a decision rather than an oversight: LLVM 18
+cannot be installed on a free Intel macOS runner in workable time — Homebrew's
+`llvm@18` has no bottle for macOS 15 Intel, so it would compile from source,
+and llvm.org stopped publishing prebuilt `x86_64-apple-darwin` tarballs around
+18.x — and GitHub retires its last Intel macOS image in Fall 2027 regardless.
+On Intel macOS, and on any other platform without a row above, take the npm
+package or build from a checkout; both produce the same compiler.
 
 From a checkout:
 

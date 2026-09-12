@@ -1,14 +1,45 @@
 # Nish release: on a `v*` tag, run the full CI workflow (test matrix, lint,
-# smoke), then build the npm tarball and the native compiler and attach both to
-# a GitHub release whose notes are the matching CHANGELOG.md section.
+# smoke), build the self-hosted compiler on one native runner per platform,
+# then pack the npm tarball and attach everything to a GitHub release whose
+# notes are the reviewed `changelog/<version>.json`.
 #
-# Two artifacts, for two audiences:
-#   nish-<version>.tgz            the npm package; needs Node
-#   nish-<version>-x86_64-linux   the self-hosted compiler; needs nothing
+# Four artifacts, for two audiences:
+#   nish-<version>.tgz                 the npm package; needs Node
+#   nish-<version>-x86_64-linux        the self-hosted compiler; needs nothing
+#   nish-<version>-aarch64-linux         "
+#   nish-<version>-aarch64-darwin        "
 #
-# The binary is also the seed: ci.yml's `bootstrap` job downloads it from the
-# last release and builds self/ with it (WP19 G3), so its name is a contract
-# between the two workflows. One platform for now -- WP19 G5 wants four.
+# The binaries are also the seed: ci.yml's `bootstrap` job downloads the one
+# for its own platform from the last release and builds self/ with it (WP19
+# G3), so the asset name is a contract between the two workflows rather than a
+# label. scripts/platform.sh is the single definition of that name, and the
+# check in the `binaries` job below is what stops a tarball from being labelled
+# with a platform it was not built on -- a mislabelled binary passes its own
+# smoke test, because that runs on the machine that built it, and fails for
+# every person who downloads it.
+#
+# Every binary is built on a native runner; nothing here cross-compiles. It
+# could not: bootstrap.sh has to RUN stage1 to get stage2, so the machine that
+# builds a target must be able to execute it. That is what pins the matrix to
+# the four runner labels below, and what makes their availability a release
+# dependency worth writing down:
+#
+#   x86_64-linux     ubuntu-latest
+#   aarch64-linux    ubuntu-24.04-arm    free for public repositories
+#   aarch64-darwin   macos-latest
+#
+# Three of WP19 G5's four. x86_64-darwin is deliberately not built, and the
+# reason is worth recording so nobody re-derives it: there is no way to get
+# LLVM 18 onto a free Intel macOS runner in reasonable time. Homebrew's llvm@18
+# has no bottle for macOS 15 Intel (`sequoia`) -- only `sonoma`, `arm64_sonoma`,
+# `arm64_sequoia` and `arm64_tahoe` -- so `brew install` there compiles LLVM
+# from source; llvm.org stopped publishing prebuilt x86_64-apple-darwin
+# tarballs around 18.x, so there is nothing to download instead; and macos-13,
+# which did have a bottle, was retired in December 2025. What remains is a
+# billed larger runner (macos-14-large) or Xcode's Apple clang in place of
+# LLVM 18, and neither is worth it for a platform GitHub drops in Fall 2027.
+# Intel Mac users take the npm package or a checkout, as docs/INSTALL.md says
+# for any platform without a binary.
 #
 # Publishing to npm is deliberately NOT automated yet; see the commented step
 # at the end and docs/wp12-release.md.
@@ -24,7 +55,7 @@
 #
 # Either way the ref is the tag, so GITHUB_REF_NAME is `v<version>` and every
 # step below reads the same. Running this on a branch is a mistake rather than
-# a release, and the first step says so.
+# a release, and the `guard` job says so before anything expensive starts.
 name: Release
 
 on:
@@ -33,7 +64,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 # Two triggers means two ways to land on one tag. Serialise rather than cancel:
 # a half-published release is worse than a queued one, and the second run fails
@@ -43,27 +74,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  ci:
-    name: ci
-    uses: ./.github/workflows/ci.yml
-
-  release:
-    name: release
-    needs: ci
+  # Ten seconds of checking in front of about half an hour of building across
+  # six runners. `workflow_dispatch` can be aimed at any ref, so a mis-aimed
+  # run is the ordinary mistake here, and it used to be caught in the release
+  # job -- after the full test matrix had already run. The ref type is checked
+  # before the version is: dispatched at `main`, every step below would read
+  # GITHUB_REF_NAME as a branch name and the comparison underneath would report
+  # a version mismatch for what is really a mis-aimed run.
+  guard:
+    name: guard
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          registry-url: https://registry.npmjs.org
-
-      # `workflow_dispatch` can be aimed at any ref, so the ref type is checked
-      # before the version is: dispatched at `main`, every step below would
-      # read GITHUB_REF_NAME as a branch name and the comparison underneath
-      # would report a version mismatch for what is really a mis-aimed run.
       - name: Ref must be a v* tag matching package.json version
         run: |
           if [ "$GITHUB_REF_TYPE" != "tag" ]; then
@@ -76,19 +99,54 @@ jobs:
             echo "::error::tag v$tag does not match package.json version $pkg"
             exit 1
           fi
+          echo "releasing $GITHUB_REF_NAME"
 
-      # The native binary is linked by clang, so the release job needs the same
-      # toolchain the test matrix installs.
-      - name: Install LLVM 18 + lld
+  ci:
+    name: ci
+    needs: guard
+    uses: ./.github/workflows/ci.yml
+
+  # Alongside `ci` rather than after it. The release job gates on both, so
+  # nothing ships untested either way, and building in parallel keeps the whole
+  # run at about the length of the test matrix instead of adding to it.
+  binaries:
+    name: binary (${{ matrix.target }})
+    needs: guard
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      # Every platform reports, rather than the first failure hiding the
+      # others. The release job still needs all three to succeed: `needs` fails
+      # if any leg does, so a partial matrix publishes nothing.
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-linux
+            runs-on: ubuntu-latest
+          - target: aarch64-linux
+            runs-on: ubuntu-24.04-arm
+          - target: aarch64-darwin
+            runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: ./.github/actions/llvm
+
+      # The one thing the smoke test below cannot catch, because it runs on the
+      # machine that did the building. If GitHub ever re-points a label at a
+      # different architecture, this is what says so.
+      - name: Runner must be the platform the matrix claims
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
-          bin="$RUNNER_TEMP/llvm-bin"
-          mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
-            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
-          done
-          echo "$bin" >> "$GITHUB_PATH"
+          got="$(bash scripts/platform.sh)"
+          if [ "$got" != "${{ matrix.target }}" ]; then
+            echo "::error::matrix says \`${{ matrix.target }}\` but runner ${{ matrix.runs-on }} is \`$got\`; the asset would be mislabelled"
+            exit 1
+          fi
+          echo "runner is $got, as claimed"
 
       - name: Install dependencies
         run: npm ci
@@ -97,9 +155,8 @@ jobs:
         run: npm run build
 
       # The self-hosted compiler, as something that needs no Node. This is also
-      # the artifact the NEXT release bootstraps from: ci.yml's `bootstrap` job
-      # downloads exactly this asset, so its name and its layout are a contract
-      # between the two workflows, not a label.
+      # the artifact the NEXT release bootstraps from on this platform, so its
+      # name and its layout are a contract, not a label.
       #
       # A tarball rather than a bare binary, because a bare binary is half a
       # compiler. `--link` shells out to scripts/build.sh and compiles
@@ -109,17 +166,18 @@ jobs:
       # beside runtime/ and it links only while the working directory happens
       # to be the unpacked folder, which is a trap rather than a distribution.
       #
-      # x86_64 linux only for now. WP19 G5 asks for four (x86_64 and aarch64,
-      # linux and darwin); darwin needs macos-latest, which is out of the CI
-      # matrix. See docs/wp19-stage0-retirement.md G5 for what stays open.
-      #
       # stage2, not stage1: it is the first binary in the chain that no part of
       # stage0 emitted, and --verify is what says the stages agree.
       - name: Build the native compiler
         id: binary
+        env:
+          # macOS `tar` is bsdtar, which stores extended attributes as extra
+          # AppleDouble `._name` members -- a Linux `tar -xzf` then scatters
+          # them through the unpacked directory. Nothing here wants xattrs.
+          COPYFILE_DISABLE: "1"
         run: |
           version="${GITHUB_REF_NAME#v}"
-          name="nish-$version-x86_64-linux"
+          name="nish-$version-${{ matrix.target }}"
           stage="build/release/$name"
           mkdir -p "$stage/bin" "$stage/scripts"
           bash scripts/bootstrap.sh -o "$stage/bin/nish" --profile speed --verify
@@ -131,9 +189,10 @@ jobs:
           echo "asset=build/release/$name.tar.gz" >> "$GITHUB_OUTPUT"
 
       # A released compiler that does not work is worse than no release: it is
-      # the seed every later release is built from. Unpack the actual tarball
-      # somewhere unrelated and drive it from a third directory, so neither the
-      # repository nor the unpack directory can be what makes it work.
+      # the seed every later release on this platform is built from. Unpack the
+      # actual tarball somewhere unrelated and drive it from a third directory,
+      # so neither the repository nor the unpack directory can be what makes it
+      # work.
       - name: Smoke the native compiler
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -147,6 +206,62 @@ jobs:
           "$nish" hello.ts --link hello
           test "$(./hello)" = "hello from Nish"
           echo "native compiler works from an unrelated directory"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: ${{ steps.binary.outputs.asset }}
+          if-no-files-found: error
+          # These live on the release once it is published; the artifact is
+          # only the hop from the build runner to the release job.
+          retention-days: 7
+
+  release:
+    name: release
+    needs: [ci, binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the only job that writes: it creates the release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          path: build/release
+          merge-multiple: true
+
+      # `needs: binaries` already fails the job if a leg failed, and
+      # `if-no-files-found: error` fails the upload if a leg produced nothing.
+      # This is the third check because the thing it prevents -- a release that
+      # silently ships two binaries and a promise of three -- is invisible once
+      # published. The list must match the matrix above.
+      - name: Every platform arrived
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          missing=0
+          for target in x86_64-linux aarch64-linux aarch64-darwin; do
+            f="build/release/nish-$version-$target.tar.gz"
+            if [ -f "$f" ]; then
+              printf '  %-32s %s bytes\n' "$target" "$(wc -c < "$f" | tr -d ' ')"
+            else
+              echo "::error::$f did not arrive from the binaries matrix"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
 
       - name: Pack
         id: pack
@@ -189,16 +304,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          version="${GITHUB_REF_NAME#v}"
           gh release create "$GITHUB_REF_NAME" \
             "${{ steps.pack.outputs.tarball }}" \
-            "${{ steps.binary.outputs.asset }}" \
+            "build/release/nish-$version-x86_64-linux.tar.gz" \
+            "build/release/nish-$version-aarch64-linux.tar.gz" \
+            "build/release/nish-$version-aarch64-darwin.tar.gz" \
             --title "nish $GITHUB_REF_NAME" \
             --notes-file build/release/notes.md \
             --verify-tag
 
       # npm publish is intentionally manual for now. To automate it: create an
       # npm automation token, store it as the NPM_TOKEN repository secret, add
-      # `id-token: write` under permissions for provenance, then uncomment:
+      # `id-token: write` under this job's permissions for provenance, then
+      # uncomment:
       #
       # - name: Publish to npm
       #   run: npm publish "${{ steps.pack.outputs.tarball }}" --provenance --access public
