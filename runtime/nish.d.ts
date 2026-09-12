@@ -154,10 +154,26 @@ declare function appendFileSync(path: string, data: string): void;
 declare function mkdirSync(path: string): boolean;
 /** Whether a directory is at `path` right now. One `stat`, and never an exit. */
 declare function isDirectorySync(path: string): boolean;
+/**
+ * The directory's entries, sorted ascending by bytes and without `.` or `..`,
+ * or `null` when it cannot be read. An empty directory is an empty array, so
+ * the null check is about the directory and not about its contents.
+ */
+declare function readdirSync(path: string): string[] | null;
 /** Run `argv[0]` through `PATH` and wait: the exit status, `128 + n` for a signal, `-1` for a failure. */
 declare function spawnSync(argv: string[]): number;
+/**
+ * The same run with each non-empty path receiving that stream, created or
+ * truncated; an empty string leaves that stream inherited.
+ */
+declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
 /** One environment variable, or `null` when it is unset (an empty value is a set variable). */
 declare function getenv(name: string): string | null;
+/**
+ * A monotonic clock in nanoseconds, for timing a region of a program. The
+ * origin is arbitrary, so only the difference between two reads is meaningful.
+ */
+declare function monotonicNanos(): i64;
 
 // ---- Arena (docs/LANGUAGE.md -> Arena) ---------------------------------------
 

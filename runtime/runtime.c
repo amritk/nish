@@ -1,5 +1,6 @@
 /* Nish runtime: arena + strings + cold paths. Layouts are ABI (runtime.ts, nish.h). */
 #define _POSIX_C_SOURCE 200809L
+#include <dirent.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <math.h>
@@ -1156,10 +1157,18 @@ _Bool nish_mkdir(const nish_str *path) {
 
 /* `posix_spawnp` is one libc call where fork/execvp/waitpid would be three,
    it searches PATH, and glibc reports a failed exec through its return
-   value rather than through a child that has already run. */
-int32_t nish_spawn(const nish_array *argv) {
+   value rather than through a child that has already run.
+
+   `out` and `err` are paths for the child's stdout and stderr, or NULL to let
+   it inherit this process's. Both spawn builtins are this function with those
+   two arguments answered differently, so the argv vector, the wait and the
+   signal convention are written once; it is `static`, so a program that spawns
+   nothing still loses all three to `--gc-sections`. */
+static int32_t nish_spawn_impl(const nish_array *argv, const char *out, const char *err) {
 #ifdef __wasi__
   (void)argv;
+  (void)out;
+  (void)err;
   return -1;
 #else
   if (!argv->len) return -1; /* argv[0] would read past an empty array */
@@ -1170,12 +1179,102 @@ int32_t nish_spawn(const nish_array *argv) {
   uint64_t i = 0;
   for (; i < argv->len; i++) v[i] = s[i]->data;
   v[i] = 0;
+  posix_spawn_file_actions_t fa;
+  posix_spawn_file_actions_t *fap = 0;
+  if (out || err) {
+    if (posix_spawn_file_actions_init(&fa)) return -1;
+    fap = &fa;
+    /* The child opens the file, not this process: a redirect that this process
+       performed would have to be undone afterwards, and a failed open would
+       leave its own stdout pointing at the file. */
+    if (out) posix_spawn_file_actions_addopen(fap, 1, out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (err) posix_spawn_file_actions_addopen(fap, 2, err, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  }
   pid_t pid;
   int status;
-  if (posix_spawnp(&pid, v[0], 0, 0, v, environ)) return -1;
+  int failed = posix_spawnp(&pid, v[0], fap, 0, v, environ);
+  if (fap) posix_spawn_file_actions_destroy(fap);
+  if (failed) return -1;
   if (waitpid(pid, &status, 0) < 0) return -1;
   return WIFSIGNALED(status) ? 128 + WTERMSIG(status) : WEXITSTATUS(status);
 #endif
+}
+
+int32_t nish_spawn(const nish_array *argv) { return nish_spawn_impl(argv, 0, 0); }
+
+/* `spawnSyncTo(argv, stdoutPath, stderrPath)`: the same run with a stream sent
+   to a file, which is what comparing a program's output against a golden needs
+   — `nish_spawn` answers a status and the output is gone. An **empty** path
+   leaves that stream inherited, so one call can capture stdout and let stderr
+   through to the terminal. Each file is created or truncated at 0644, as
+   `writeFileSync` does.
+
+   Two streams must not name one path: each would be opened separately, with
+   its own offset, and the two would overwrite each other rather than
+   interleave. Capturing them apart and concatenating is the way to merge. */
+int32_t nish_spawn_to(const nish_array *argv, const nish_str *out, const nish_str *err) {
+  return nish_spawn_impl(argv, out->len ? out->data : 0, err->len ? err->data : 0);
+}
+
+/* `readdirSync(path)`: the listing a driver needs to discover its own inputs.
+
+   **Sorted by bytes**, which `readdir(3)` and Node are not, for two reasons
+   that both belong to this language rather than to taste: there is no `sort`,
+   so every caller of an unsorted listing would have to write one, and an order
+   that is the file system's is an order that differs between two machines
+   running the same suite. `.` and `..` are dropped, as Node drops them; every
+   other dotfile is kept.
+
+   NULL when the directory cannot be read — the language's `string[] | null` —
+   so a missing directory is a diagnostic the caller writes and not an exit. An
+   empty directory is an empty array, which is a different answer. */
+void nish_array_grow(nish_array *a, uint64_t elem_size); /* defined with the array cold paths below */
+
+nish_array *nish_readdir(const nish_str *path) {
+#ifdef __wasi__
+  /* The WASI form of this is a different contract, not a port of this one:
+     `fd_readdir` lists a preopened directory rather than a path, and the wasi
+     profile has no check in the default run. NULL until it has both. */
+  (void)path;
+  return 0;
+#else
+  DIR *d = opendir(path->data);
+  if (!d) return 0;
+  nish_array *a = nish_alloc_struct(sizeof *a);
+  *a = (nish_array){ 0, 0, 0 };
+  const struct dirent *e;
+  while ((e = readdir(d))) {
+    const char *n = e->d_name;
+    if (n[0] == '.' && (!n[1] || (n[1] == '.' && !n[2]))) continue;
+    if (a->len == a->cap) nish_array_grow(a, sizeof(nish_str *));
+    ((nish_str **)a->data)[a->len++] = nish_str_new(n, strlen(n));
+  }
+  closedir(d);
+  /* Insertion sort over pointers: a directory is short, and `qsort` would cost
+     a comparator symbol and its unwind entry for a call that is never hot. */
+  nish_str **v = (nish_str **)a->data;
+  for (uint64_t i = 1; i < a->len; i++) {
+    nish_str *s = v[i];
+    uint64_t j = i;
+    while (j && strcmp(v[j - 1]->data, s->data) > 0) {
+      v[j] = v[j - 1];
+      j--;
+    }
+    v[j] = s;
+  }
+  return a;
+#endif
+}
+
+/* `monotonicNanos()`: `CLOCK_MONOTONIC` in nanoseconds, which is what timing a
+   run needs. Not the wall clock: a wall clock corrected mid-run can go
+   backwards and make an elapsed time negative. Only the difference between two
+   reads means anything — the origin is arbitrary and is not comparable across
+   processes or machines — and an i64 of nanoseconds is 292 years of it. */
+int64_t nish_monotonic_nanos(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (int64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
 }
 
 /* ---- The environment (WP19 R1): `getenv(name)`, the one environment read the

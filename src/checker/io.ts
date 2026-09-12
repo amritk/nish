@@ -39,6 +39,17 @@
  *                                       and not `process.env.NAME`, because
  *                                       member access on a dynamic key is
  *                                       what Phase 0 forbids.
+ *   readdirSync(path): string[] | null  the directory's entries, sorted by
+ *                                       bytes and without `.` or `..`; `null`
+ *                                       when it cannot be read, where an
+ *                                       empty directory is an empty array.
+ *   spawnSyncTo(argv, out, err): number `spawnSync` with a stream sent to a
+ *                                       file, which is what comparing a
+ *                                       child's output against a golden
+ *                                       needs; an empty path inherits.
+ *   monotonicNanos(): i64               `CLOCK_MONOTONIC` in nanoseconds.
+ *                                       Only the difference between two reads
+ *                                       means anything.
  *
  *   process.argv: string[]              the command line, index 0 the program
  *                                       path (like C's argv[0]); read-only,
@@ -58,7 +69,7 @@
  * stop leaning on `scripts/nish.sh`.
  */
 import ts from "typescript";
-import { BOOL, F64, I32, STRING, VOID, arrayOf, nullableOf } from "../types.js";
+import { BOOL, F64, I32, I64, STRING, VOID, arrayOf, nullableOf } from "../types.js";
 import {
   BuiltinCallChecker,
   checkArgumentType,
@@ -177,6 +188,66 @@ const checkSpawnSync: BuiltinCallChecker = (ctx, expr, scope) => {
   return ctx.opts.numberMode === "f64" ? F64 : I32;
 };
 
+/**
+ * `spawnSyncTo(argv, stdoutPath, stderrPath)`: `spawnSync` with a stream
+ * redirected into a file. It is a second builtin rather than two more
+ * parameters on the first because the language has no optional parameters, and
+ * a *different* answer to the same question would have been the alternative:
+ * returning the output as a string would make the runtime buffer a child that
+ * can print more than memory holds, and a test harness wants the bytes on disk
+ * anyway, to diff and to keep after a failure.
+ *
+ * An empty path leaves that stream inherited, so `spawnSyncTo(argv, out, "")`
+ * captures stdout and lets stderr through to the terminal. The two paths must
+ * not name one file: each is opened separately, with its own offset, so the
+ * streams would overwrite rather than interleave — a rule the checker cannot
+ * enforce, since both are runtime values, and `docs/LANGUAGE.md` states it.
+ */
+const checkSpawnSyncTo: BuiltinCallChecker = (ctx, expr, scope) => {
+  checkArity(ctx, expr, "spawnSyncTo", 3);
+  checkArgumentType(ctx, expr.arguments[0], scope, "spawnSyncTo", arrayOf(STRING));
+  checkArgumentType(ctx, expr.arguments[1], scope, "spawnSyncTo", STRING);
+  checkArgumentType(ctx, expr.arguments[2], scope, "spawnSyncTo", STRING);
+  return ctx.opts.numberMode === "f64" ? F64 : I32;
+};
+
+/**
+ * `readdirSync(path)`: a directory's entries as a `string[]`, or `null` when it
+ * cannot be read. Nullable for the reason `readFileSyncOrNull` is: there are no
+ * exceptions, so "there is no directory here" has to be a value the caller can
+ * turn into its own diagnostic, and it has to be distinguishable from the
+ * directory that is there and empty.
+ *
+ * The listing is **sorted**, which neither `readdir(3)` nor Node's
+ * `fs.readdirSync` is, and that is a decision about this language rather than a
+ * convenience: there is no `sort` to reach for, so every caller of an unsorted
+ * listing would have to write one, and a run whose order is the file system's
+ * is a run that differs between two machines. `.` and `..` are dropped, as Node
+ * drops them; every other dotfile is an entry.
+ */
+const checkReaddirSync: BuiltinCallChecker = (ctx, expr, scope) => {
+  checkArity(ctx, expr, "readdirSync", 1);
+  checkArgumentType(ctx, expr.arguments[0], scope, "readdirSync", STRING);
+  return nullableOf(arrayOf(STRING));
+};
+
+/**
+ * `monotonicNanos()`: the monotonic clock in nanoseconds, as an `i64` in both
+ * number modes — a `number` would be an `i32` by default and overflow inside a
+ * tenth of a second, and an `f64` would lose nanoseconds after about 104 days
+ * of uptime.
+ *
+ * It is not the wall clock, and the type cannot say so, so the name does: only
+ * the difference between two reads is meaningful, because the origin is
+ * arbitrary and is not comparable between processes or machines. A wall clock
+ * corrected mid-run is what an elapsed time measured from one would have to
+ * survive, and it cannot.
+ */
+const checkMonotonicNanos: BuiltinCallChecker = (ctx, expr) => {
+  checkArity(ctx, expr, "monotonicNanos", 0);
+  return I64;
+};
+
 /** Dotted callees, spread into `builtinCalls`. */
 export const ioBuiltinCalls: Record<string, BuiltinCallChecker> = {
   "process.exit": checkProcessExit,
@@ -260,6 +331,9 @@ export const ioBuiltinFunctions: Record<string, BuiltinCallChecker> = {
   panic: checkPanic,
   mkdirSync: checkMkdirSync,
   spawnSync: checkSpawnSync,
+  spawnSyncTo: checkSpawnSyncTo,
+  readdirSync: checkReaddirSync,
+  monotonicNanos: checkMonotonicNanos,
   isDirectorySync: checkIsDirectorySync,
   getenv: checkGetenv,
 };

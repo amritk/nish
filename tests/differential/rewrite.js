@@ -231,8 +231,18 @@ const IDENTIFIER_BUILTINS = new Map([
   ["appendFileSync", "appendFileSync"],
   ["mkdirSync", "mkdirSync"],
   ["spawnSync", "spawnSync"],
+  // `spawnSyncTo` redirects a stream to a file and `readdirSync` sorts its
+  // listing by UTF-8 bytes; neither is Node's own behaviour, so both are the
+  // shim's (`runtime/shim.mjs` says why the sort cannot be `Array#sort`'s).
+  ["spawnSyncTo", "spawnSyncTo"],
   ["isDirectorySync", "isDirectorySync"],
+  ["readdirSync", "readdirSync"],
   ["getenv", "getenv"],
+  // `monotonicNanos()` is an `i64`, so the shim answers the BigInt this side
+  // holds one in. It is also the one builtin here whose value is not a function
+  // of the program: two readings can be compared, and a printed reading cannot
+  // agree with a native run.
+  ["monotonicNanos", "monotonicNanos"],
   // WP16: natively these bump a struct out of the arena; in JavaScript they
   // build the object with the same three field names (`runtime/shim.mjs`).
   ["Ok", "Ok"],

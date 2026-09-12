@@ -410,28 +410,71 @@ faster but does not fit the runtime budget.
 `runtime/runtime.c` gained `nish_str_from_i64`, the new `nish_str_from_f64`,
 `nish_random`, `nish_exit`, `nish_read_file`, `nish_write_file`, and
 `nish_append_file`, and defines `_POSIX_C_SOURCE` for `pread`; the second
-round added `nish_argv` / `nish_argv_init` and `nish_parse_number`. Measured
-with `clang -Oz -c runtime/runtime.c && size runtime.o` (the `text` column
-of `size`, which also counts the read-only constants and the `.eh_frame`
-unwind entries that the `size` build profile strips):
+round added `nish_argv` / `nish_argv_init` and `nish_parse_number`; the
+2026-09-12 column adds `nish_readdir`, `nish_spawn_to`,
+`nish_monotonic_nanos` and the shared `nish_spawn_impl` that `nish_spawn`
+delegates to. Measured with `clang -Oz -c runtime/runtime.c && size -A
+runtime.o`, per section; the `text` column of plain `size` is the same code
+plus the read-only constants and the `.eh_frame` unwind entries that the
+`size` build profile strips:
 
-| | Before WP7 | After WP7 | After argv + parsing | After WP14 D4 | Budget |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| source bytes | 4,039 | 7,402 | 11,131 (arrays and WP6 in between) | 12,707 | — (was 8,192; exceeded since WP4, comments) |
-| `size` text at `-Oz` | 1,118 | 2,688 | 4,093 (was 3,498) | 4,297 | — (was 4,096; counts `.eh_frame`, which the size profile strips) |
-| `.text` section alone | | | 2,583 (was 2,172) | 2,544 (2,287 before D4) | 4,096 |
+| | Before WP7 | After WP7 | After argv + parsing | After WP14 D4 | 2026-09-12 | Budget |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| source bytes | 4,039 | 7,402 | 11,131 (arrays and WP6 in between) | 12,707 | 61,725 | — (was 8,192; exceeded since WP4, comments) |
+| `size` text at `-Oz` | 1,118 | 2,688 | 4,093 (was 3,498) | 4,297 | 16,844 | — (was 4,096; counts `.eh_frame` and the Ryu tables) |
+| `.text` section alone | | | 2,583 (was 2,172) | 2,544 (2,287 before D4) | 4,604 | — (was 4,096; the row below replaced it) |
+| every `.text*` section, summed | | | | | 4,670 (4,154 before the three) | **4,864** |
 
-The WP14 column is measured on today's tree, where the work between WP7 and it
-had already brought `.text` back down to 2,287; the 2,583 beside it is the WP7
-figure and is not the number D4 grew.
+The WP14 column is measured on the tree of that milestone, where the work
+between WP7 and it had already brought `.text` back down to 2,287; the 2,583
+beside it is the WP7 figure and is not the number D4 grew. The 2026-09-12
+column is clang 18.1.3 on linux-x64.
 
-The budget is `.text` now, and the two rows above it are history rather than
-limits (`docs/MASTER_PLAN.md` §2): `.text` is what a linked binary pays, the
-other two measure comments and unwind tables that never reach one. WP14 D4's
-`nish_mkdir` and `nish_spawn` cost 257 bytes of it, and cost a program that
-calls neither exactly nothing — `examples/hello.ts` at the `size` profile is
-4,696 bytes with them and 4,696 without, because `-ffunction-sections
--Wl,--gc-sections` drops both.
+The budget is the compiled code, and the two rows above it are history rather
+than limits (`docs/MASTER_PLAN.md` §2): what a linked binary pays is
+instructions, while those two measure comments, unwind tables, and — since the
+Ryu formatter replaced the `snprintf` round trip — the 9,888 bytes of
+power-of-five tables that `size` counts as text and that are constants rather
+than code. WP14 D4's `nish_mkdir` and `nish_spawn` cost 257 bytes of it, and
+cost a program that calls neither exactly nothing — `examples/hello.ts` at the
+`size` profile is 4,696 bytes with them and 4,696 without, because
+`-ffunction-sections -Wl,--gc-sections` drops both.
+
+### 2026-09-12: 4,864 bytes, enforced by the suite
+
+Two things moved at once. The metric is now the **sum of every `.text*`
+section** rather than the single `.text` line the rows above quote: `clang -Oz`
+puts cold code in `.text.unlikely.` (66 bytes today), a linked binary pays for
+that section as well, and a ceiling on `.text` alone can be satisfied by moving
+code into another section instead of by making it smaller.
+
+And the number is now **4,864**. `nish_readdir` (294 bytes), `nish_spawn_impl`
+(319, against the 172 the old `nish_spawn` body cost), `nish_monotonic_nanos`
+(36), `nish_spawn_to` (33) and the 6 bytes `nish_spawn` is reduced to add 516
+bytes of `.text` and 232 of `.eh_frame`, taking the `.text*` sum from 4,154 to
+4,670. Most of the overshoot against the old 4,096 is older than these
+functions, though: while the budget was a row in this document and a reviewer's
+memory, the tree drifted from WP14 D4's 2,544 bytes to 4,088 with nobody
+measuring. So the budget is the next 256-byte boundary above what was actually
+measured, which leaves 194 bytes of headroom — enough that a small fix (one
+more error path, an extra bounds check) does not need a commit that raises the
+budget with it, and little enough that anything larger has to be a deliberate
+decision with its own measurement in this section.
+
+**The gate is `tests/run.js`, not a reviewer.** `RUNTIME_TEXT_BUDGET` there
+compiles `runtime/runtime.c` with `clang -Oz`, sums every `.text*` row of
+`size -A`, and fails with the measured number, the budget and the overshoot, so
+whoever breaks it reads the size rather than a red line. It skips — through
+`skip(reason)`, so the run counts it — when `clang` or `size` is missing, and
+on any host that is not linux-x64, because a byte-exact ceiling is a fact about
+one target and one compiler version rather than about the source.
+`node tests/run.js budget` is the filter that selects it.
+
+The `--gc-sections` claim holds for the three new functions too, and this is
+the check that says so: `examples/hello.ts` at the `size` profile is 4,680
+bytes against this runtime and 4,680 bytes against the one before it — the two
+binaries are byte-identical, because a program that calls none of the three
+drops all three.
 
 The 595 bytes of the second round are `nish_argv_init` (162 bytes),
 `nish_parse_number` (249), their two unwind entries and the constants
