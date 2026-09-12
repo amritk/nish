@@ -123,6 +123,7 @@ import { Options } from "./options";
 import { CheckedProgram, FunctionSig, ROLE_CONSTRUCTOR, StructInfo } from "./program";
 import {
   ARENA_GLOBAL,
+  ARENA_GLOBAL_TLS,
   ARENA_TYPE,
   ARGV_GLOBAL,
   ARRAY_TYPE,
@@ -546,7 +547,13 @@ export class Emitter {
     if (wantsAlloc) {
       this.usedRuntime.add("nish_arena_grow");
       this.module.addTypeDecl(ARENA_TYPE);
-      this.module.addGlobal(ARENA_GLOBAL);
+      // WP20 T0: `--threads` gives every thread its own arena, and the only
+      // thing that changes in the IR is this declaration.
+      if (this.opts.threads) {
+        this.module.addGlobal(ARENA_GLOBAL_TLS);
+      } else {
+        this.module.addGlobal(ARENA_GLOBAL);
+      }
     }
     // The array header type is referenced by `nish_array_grow`'s declaration.
     if (all || this.usedRuntime.has("nish_array_grow")) {

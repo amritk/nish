@@ -203,10 +203,26 @@ for (const name of cases) {
     // Either spelling declares it (WP22): `export function main` or `export const main = (...) => ...`.
     const hasEntry = /\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"));
     const exe = path.join(buildDir, name);
+    // WP20 T0: a case compiled with `--threads` references `@nish_arena` as a
+    // thread-local global, so runtime.c has to define it as one. The macro is
+    // what `scripts/build.sh --threads` passes, and the link is the check: ELF
+    // refuses a non-TLS reference to a TLS definition, so a case that got this
+    // wrong fails here rather than running with two arenas.
+    const threads = args.includes("--threads") ? ["-DNISH_THREADS=1"] : [];
     // -lm: Math.sin/cos/exp/log/pow lower to LLVM intrinsics that become libm calls (WP7).
     const cc = spawnSync(
       "clang",
-      ["-Wno-override-module", "-O2", outLl, ...(hasEntry ? [] : [driver]), ...RUNTIME_C, "-lm", "-o", exe],
+      [
+        "-Wno-override-module",
+        "-O2",
+        ...threads,
+        outLl,
+        ...(hasEntry ? [] : [driver]),
+        ...RUNTIME_C,
+        "-lm",
+        "-o",
+        exe,
+      ],
       { cwd: root }
     );
     if (cc.status !== 0) {
@@ -1487,6 +1503,39 @@ if (!only && HAS_CLANG) {
     String(rt.stderr)
   );
 
+  // WP20 T0: the same file again with -DNISH_THREADS, which is the build where
+  // the arena and the RNG seed are `_Thread_local`. The extra section it turns
+  // on runs a worker thread and asserts that its arena is its own -- empty at
+  // entry, disjoint from the parent's storage, and released and freed without
+  // the parent losing a byte.
+  const rtThreads = spawnSync(
+    "clang",
+    [
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-O2",
+      "-DNISH_THREADS=1",
+      "-pthread",
+      // Both translation units, as its non-threaded sibling above names both:
+      // `runtime_test.c` exercises the file I/O, which lives in runtime_os.c
+      // since the split, so naming only the core leaves `nish_write_file`,
+      // `nish_append_file` and `nish_read_file` undefined at link time.
+      ...RUNTIME_C,
+      "tests/runtime_test.c",
+      "-o",
+      path.join(buildDir, "runtime_test_threads"),
+    ],
+    { cwd: root }
+  );
+  const rtThreadsRun = rtThreads.status === 0 ? spawnSync(path.join(buildDir, "runtime_test_threads")) : null;
+  check(
+    "runtime.c -DNISH_THREADS: every thread gets its own arena and RNG seed",
+    rtThreadsRun !== null && rtThreadsRun.status === 0,
+    String(rtThreads.stderr) + (rtThreadsRun ? String(rtThreadsRun.stdout) + String(rtThreadsRun.stderr) : "")
+  );
+
   // Emit the runtime prelude, append an IR test that uses the inline allocator, and
   // link it against runtime.c: proves the IR struct layout matches the C struct.
   const preludeLl = path.join(buildDir, "prelude.ll");
@@ -1520,6 +1569,87 @@ if (!only && HAS_CLANG) {
     check("inline allocator bump matches C arena layout (delta 16)", r.status === 0, String(r.stdout));
   }
 
+  // WP20 T0: the same smoke, with `--threads` on both halves. It is the layout
+  // check the flag needs, because the flag changes the storage class of a
+  // global the IR and the C both name: the IR declares `@nish_arena`
+  // thread-local, `scripts/build.sh --threads` compiles runtime.c with
+  // -DNISH_THREADS so the definition is too, and the driver then asks the
+  // question the flag exists for -- does a second thread bump its own arena?
+  // (`-pthread` is passed as an input so it reaches clang; build.sh forwards
+  // anything it does not recognise, the way it already receives `-lm`.)
+  const tlsPreludeLl = path.join(buildDir, "prelude_threads.ll");
+  execFileSync("node", [cli, "tests/cases/string_params.ts", "--runtime-decls", "--threads", "-o", tlsPreludeLl], {
+    cwd: root,
+    stdio: "pipe",
+  });
+  const tlsPrelude = fs.readFileSync(tlsPreludeLl, "utf8");
+  check(
+    "--threads declares @nish_arena thread-local and changes nothing else in the prelude",
+    tlsPrelude.split("thread_local").length === 2 &&
+      tlsPrelude.replace(" thread_local(initialexec)", "") === fs.readFileSync(preludeLl, "utf8"),
+    "the --threads prelude differs from the ordinary one by more than the arena's storage class"
+  );
+  const tlsSmokeLl = path.join(buildDir, "alloc_smoke_threads.ll");
+  fs.writeFileSync(
+    tlsSmokeLl,
+    tlsPrelude + fs.readFileSync(path.join(root, "tests/ir/alloc_smoke.ll"), "utf8")
+  );
+  const tlsSmokeExe = path.join(buildDir, "alloc_smoke_threads");
+  const tb = spawnSync(
+    "bash",
+    [
+      "scripts/build.sh",
+      tlsSmokeLl,
+      "runtime/runtime.c",
+      "tests/ir/alloc_smoke_threads_main.c",
+      "-pthread",
+      "-o",
+      tlsSmokeExe,
+      "--profile",
+      "speed",
+      "--threads",
+    ],
+    { cwd: root }
+  );
+  check(
+    "--threads: the thread-local allocator links with runtime.c -DNISH_THREADS (speed profile, LTO)",
+    tb.status === 0,
+    String(tb.stderr)
+  );
+  if (tb.status === 0) {
+    const r = spawnSync(tlsSmokeExe);
+    check(
+      "--threads: two threads bump two arenas (16 apart, 32 used, each)",
+      r.status === 0,
+      String(r.stdout) + String(r.stderr)
+    );
+  }
+
+  // The negative half, and the reason the two flags never have to be kept in
+  // step by hand: thread-local IR linked against a runtime that was built
+  // without -DNISH_THREADS is a *link* error on every ELF target, not a program
+  // with two arenas. A silent mismatch is the one failure mode this design
+  // could have had, so it is pinned rather than assumed.
+  const mismatch = spawnSync(
+    "clang",
+    [
+      "-Wno-override-module",
+      "-O2",
+      tlsSmokeLl,
+      "runtime/runtime.c",
+      "tests/ir/alloc_smoke_main.c",
+      "-lm",
+      "-o",
+      path.join(buildDir, "alloc_smoke_mismatch"),
+    ],
+    { cwd: root }
+  );
+  check(
+    "--threads IR refuses to link against a runtime built without -DNISH_THREADS",
+    mismatch.status !== 0 && /TLS|thread.local/i.test(String(mismatch.stderr)),
+    `exit ${mismatch.status}\n${mismatch.stderr}`
+  );
+
   // The check above links for the host, so it only ever proved the layout on a 64-bit
   // target. The IR is target-neutral — `%struct.nish_arena = type { i8*, i64, i64, i8* }`
   // is what every compiled function inlines — so the C side has to hold those offsets
@@ -1546,14 +1676,21 @@ if (!only && HAS_CLANG) {
       "",
     ].join("\n")
   );
+  // Each target twice: the ordinary header, and the one a `--threads` host
+  // includes. `-DNISH_THREADS` moves the arena into thread-local storage and
+  // must move nothing else, so the same assertions have to hold under it —
+  // a storage class is not a layout, and this is where that is written down.
   for (const target of ["host", "wasm32-unknown-unknown"]) {
     const flags = target === "host" ? [] : [`--target=${target}`];
-    const a = spawnSync(
-      "clang",
-      [...flags, "-std=c11", "-Wall", "-Wextra", "-Werror", abiInclude, "-fsyntax-only", abiSrc],
-      { cwd: root }
-    );
-    check(`nish.h layouts match the IR types on ${target}`, a.status === 0, String(a.stderr));
+    for (const threads of [[], ["-DNISH_THREADS=1"]]) {
+      const a = spawnSync(
+        "clang",
+        [...flags, ...threads, "-std=c11", "-Wall", "-Wextra", "-Werror", abiInclude, "-fsyntax-only", abiSrc],
+        { cwd: root }
+      );
+      const how = threads.length > 0 ? " under -DNISH_THREADS" : "";
+      check(`nish.h layouts match the IR types on ${target}${how}`, a.status === 0, String(a.stderr));
+    }
   }
 
   const addLl = path.join(buildDir, "add.ll");
@@ -1707,6 +1844,22 @@ const RUNTIME_TEXT_BUDGET = 3584;
  * coincidence and not a constraint.
  */
 const RUNTIME_OS_TEXT_BUDGET = 1280;
+/**
+ * Ceiling on the same `runtime.c` compiled with `-DNISH_THREADS=1`, which is the build
+ * `--threads` links (WP20 T0): the arena and the RNG seed become `_Thread_local`.
+ *
+ * Measured 3,605 bytes on 2026-09-12 with clang 18.1.3 on linux-x64, 125 more than the
+ * default build and 21 *above* `RUNTIME_TEXT_BUDGET` — which is exactly why it needs a
+ * number of its own instead of sharing one. The default measurement cannot see this
+ * configuration, so without a row of its own the threads build's code size was ungated
+ * while the gate stayed green: `--threads` is a flag a user passes, not a experiment, and
+ * `_Thread_local` storage is the kind of thing that grows quietly.
+ *
+ * It is deliberately a *separate* ceiling rather than a raised shared one. Making the core
+ * budget 3,840 to cover both would give the default build 360 bytes of room it has no
+ * business having, and the point of the split was that a number should mean one thing.
+ */
+const RUNTIME_THREADS_TEXT_BUDGET = 3840;
 if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   // A byte-exact ceiling is a fact about one target and one compiler, not about the
   // source, so everywhere else the honest answer is a counted skip rather than a number
@@ -1726,13 +1879,18 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   const reason = budgetSkip();
   if (reason !== null) skip(reason);
   else {
-    for (const [src, budget, constant] of [
-      ["runtime/runtime.c", RUNTIME_TEXT_BUDGET, "RUNTIME_TEXT_BUDGET"],
-      ["runtime/runtime_os.c", RUNTIME_OS_TEXT_BUDGET, "RUNTIME_OS_TEXT_BUDGET"],
+    for (const [src, budget, constant, flags] of [
+      ["runtime/runtime.c", RUNTIME_TEXT_BUDGET, "RUNTIME_TEXT_BUDGET", []],
+      ["runtime/runtime_os.c", RUNTIME_OS_TEXT_BUDGET, "RUNTIME_OS_TEXT_BUDGET", []],
+      ["runtime/runtime.c", RUNTIME_THREADS_TEXT_BUDGET, "RUNTIME_THREADS_TEXT_BUDGET", ["-DNISH_THREADS=1"]],
     ]) {
       const name = path.basename(src);
-      const obj = path.join(buildDir, `${name.replace(/\.c$/, "")}_budget.o`);
-      const cc = spawnSync("clang", ["-Oz", "-c", src, "-o", obj], { cwd: root });
+      // The flags are in the check's name and in the object's, so the two rows for
+      // runtime.c read as the two configurations they are rather than as a repeat.
+      const label = flags.length > 0 ? `${name} ${flags.join(" ")}` : name;
+      const stem = `${name.replace(/\.c$/, "")}${flags.length > 0 ? "_threads" : ""}`;
+      const obj = path.join(buildDir, `${stem}_budget.o`);
+      const cc = spawnSync("clang", ["-Oz", ...flags, "-c", src, "-o", obj], { cwd: root });
       const sz = cc.status === 0 ? spawnSync("size", ["-A", obj]) : null;
       // `size -A` prints one `<section> <size> <addr>` row per section; every row whose
       // name starts with `.text` counts, whatever clang decided to call it.
@@ -1744,7 +1902,7 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
       const total = sections.reduce((sum, [, bytes]) => sum + bytes, 0);
       const breakdown = sections.map(([section, bytes]) => `${section} ${bytes}`).join(" + ");
       check(
-        `${name}: .text* at -Oz fits the ${budget} byte budget`,
+        `${label}: .text* at -Oz fits the ${budget} byte budget`,
         cc.status === 0 && sections.length > 0 && total <= budget,
         cc.status !== 0
           ? String(cc.stderr)
@@ -1821,8 +1979,21 @@ if (!only || "interop".includes(only)) {
   const undeclared = runtimeNames.filter((n) => !new RegExp(`\\b${n}\\s*\\(`).test(publicHeader));
   check(
     `nish.h declares every runtime.ts function (${runtimeNames.length}) and the arena global`,
-    undeclared.length === 0 && publicHeader.includes("extern struct nish_arena nish_arena;"),
+    undeclared.length === 0 && publicHeader.includes("extern NISH_TLS struct nish_arena nish_arena;"),
     `missing: ${undeclared.join(", ")}`
+  );
+  // WP20 T0: `NISH_TLS` is the storage class of the arena, and a host that
+  // includes this header has to agree with the runtime about it. The macro is
+  // defined in three places that are one contract — the header a host reads,
+  // and the two runtimes — so the three spellings are compared rather than
+  // trusted.
+  const tlsMacro = /#ifdef NISH_THREADS\n#define NISH_TLS _Thread_local\n#else\n#define NISH_TLS\n#endif/;
+  const tlsSources = ["nish.h", "runtime.c", "runtime_wasm.c"];
+  const withoutMacro = tlsSources.filter((f) => !tlsMacro.test(fs.readFileSync(path.join(runtimeDir, f), "utf8")));
+  check(
+    "NISH_TLS is defined the same way in nish.h, runtime.c and runtime_wasm.c",
+    withoutMacro.length === 0,
+    `missing or different in: ${withoutMacro.join(", ")}`
   );
 
   const strictC = [

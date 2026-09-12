@@ -63,6 +63,10 @@ const SHARED_FLAGS = new Set([
   "--no-strict-exports",
   "--no-stack-alloc",
   "--runtime-decls",
+  // WP20 T0. It changes one line of the prelude on both sides, and a flag left
+  // out of this set is a silent skip rather than a failure, which is how
+  // `--wrapping` stopped being compared for four programs above.
+  "--threads",
   // `-g` is compared like any other flag, metadata and all: the `DIFile` both
   // compilers write names the entry as it was spelled and `.` for the
   // directory, so nothing here depends on the working directory.

@@ -43,6 +43,13 @@
 # libclang-rt-<ver>-dev; it ships with Apple clang and Homebrew llvm).
 # docs/wp9-optimisation.md reports what PGO buys on the benchmark suite.
 #
+# Threads (WP20 T0): `--threads` compiles every input with -DNISH_THREADS, which
+# makes the arena and the RNG seed in runtime/runtime.c thread-local. Pass it
+# exactly when the IR was compiled with `nish --threads` (`nish --threads
+# --link` does it for you): compiled modules reference `@nish_arena` as a
+# thread-local global, and ELF will not link that against a non-TLS definition,
+# so a half-threaded build fails at the link rather than at run time.
+#
 # Debug info (WP10): `-g` compiles every input with -g and skips the strip
 # step of the speed/size/napi profiles, so the DWARF that `nish -g`
 # put in the .ll (line table, variables) reaches the binary. `nish
@@ -57,11 +64,13 @@ out=""
 inputs=()
 pgo=()                                 # -fprofile-generate / -fprofile-use=<file>
 debug=0                                # -g: keep DWARF (nish -g emits it in the IR; runtime.c gets it here)
+threads=0                              # --threads: -DNISH_THREADS, the thread-local arena (WP20 T0)
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
     --profile) profile="$2"; shift 2 ;;
     -g) debug=1; shift ;;
+    --threads) threads=1; shift ;;
     --pgo-generate) pgo=(-fprofile-generate); shift ;;
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
@@ -116,6 +125,24 @@ esac
 # so the line table nish emitted survives into the binary.
 if [ "$debug" = 1 ]; then common+=(-g); strip_flag=(); fi
 
+# --threads: the storage class of the arena is ABI, so every input is compiled
+# with the same macro -- C runtime and generated N-API shim alike.
+#
+# -ftls-model=initial-exec names, for the C side, the model the IR already
+# names. Without it a -fPIC build (the napi profile) reaches the arena through
+# a __tls_get_addr call, so the two halves of one inlined allocator would use
+# two different models; it is also smaller (4,759 bytes of runtime.c `.text*`
+# against 4,820 at -Oz -fPIC) and free where the model was local-exec anyway.
+#
+# `tls` is the same pair again for the wasm and wasi profiles, which build their
+# own command line instead of using `common`; it is empty on every ordinary
+# build, hence the bash 3.2 expansion spelling explained below.
+tls=()
+if [ "$threads" = 1 ]; then
+  common+=(-DNISH_THREADS=1 -ftls-model=initial-exec)
+  tls=(-DNISH_THREADS=1 -ftls-model=initial-exec)
+fi
+
 # The ${arr[@]+"${arr[@]}"} spelling below is not a style tic: macOS ships bash
 # 3.2 (Apple will not ship GPLv3), where expanding an empty array as "${arr[@]}"
 # under `set -u` is a fatal "unbound variable" -- bash 4.4 made it legal, which is
@@ -146,6 +173,7 @@ case "$profile" in
     # -mbulk-memory lowers llvm.memset/memcpy (`new Array<T>(n)`, `push` growth) to the
     # memory.fill/memory.copy instructions instead of libc calls the freestanding link lacks.
     "$CC" -Wno-override-module --target=wasm32-unknown-unknown -Oz -nostdlib -mbulk-memory \
+      ${tls[@]+"${tls[@]}"} \
       -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections \
       "${inputs[@]}" -o "$out" ;;
   wasi)
@@ -184,6 +212,7 @@ case "$profile" in
       fi
     fi
     "$CC" -Wno-override-module --target=wasm32-wasi --sysroot="$sysroot" -Oz -DNDEBUG \
+      ${tls[@]+"${tls[@]}"} \
       -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,--strip-all \
       "${inputs[@]}" ${libs[@]+"${libs[@]}"} -o "$out" ;;
   napi)

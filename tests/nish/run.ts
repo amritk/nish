@@ -373,9 +373,17 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   const compileOut = `${WORK}/${name}.compile.out`;
   const compileErr = `${WORK}/${name}.compile.err`;
   const argv: string[] = ["node", CLI, `${CASES}/${name}.ts`, "-o", irPath];
+  // `--threads` is the one compiler flag that also changes how the case is
+  // *linked*: the IR then reaches for a `_Thread_local` arena, which only
+  // `runtime.c` compiled with `-DNISH_THREADS=1` defines (WP20 T0). Reading it
+  // out of the same `.args` the compile reads is what keeps the two in step.
+  let threaded = false;
   const args = readFileSyncOrNull(`${CASES}/${name}.args`);
   if (args !== null) {
     for (const flag of splitWhitespace(args)) {
+      if (flag === "--threads") {
+        threaded = true;
+      }
       argv.push(flag);
     }
   }
@@ -453,7 +461,12 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   }
 
   const exe = `${WORK}/${name}.exe`;
-  const link: string[] = ["clang", "-Wno-override-module", "-O2", irPath];
+  const link: string[] = ["clang", "-Wno-override-module", "-O2"];
+  if (threaded) {
+    link.push("-DNISH_THREADS=1");
+    link.push("-pthread");
+  }
+  link.push(irPath);
   if (!hasEntry(source)) {
     // `<name>.c` is the case's own driver when it has one, and `tests/driver.c`
     // — which prints `test()` as an `int` — otherwise. A case compiled with

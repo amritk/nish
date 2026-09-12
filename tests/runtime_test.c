@@ -8,8 +8,19 @@
 #include <string.h>
 #include <unistd.h>
 
+/* WP20 T0: the arena's storage class is part of the ABI, so this file spells it
+ * the way runtime.c, nish.h and runtime_wasm.c do. Without the macro a
+ * -DNISH_THREADS build would not link at all -- a non-TLS reference to a TLS
+ * definition is an error, which is the property the threads section below is
+ * really resting on. */
+#ifdef NISH_THREADS
+#define NISH_TLS _Thread_local
+#else
+#define NISH_TLS
+#endif
+
 typedef struct { uint64_t len; char data[]; } nish_str;
-extern struct nish_arena { char *buf; size_t off; size_t cap; void *chunks; } nish_arena;
+extern NISH_TLS struct nish_arena { char *buf; size_t off; size_t cap; void *chunks; } nish_arena;
 void *nish_alloc_struct(size_t);
 void nish_reset_arena(void);
 void nish_free_arena(void);
@@ -61,6 +72,86 @@ static void expect_parse(const char *input, int32_t mode, const char *want) {
   snprintf(what, sizeof what, "parse(\"%s\", %d)", input, mode);
   expect_str(nish_str_from_f64(nish_parse_number(lit(input), mode)), want, what);
 }
+
+/* ---- WP20 T0: the thread-local arena -------------------------------------
+ * Only compiled into the -DNISH_THREADS build, which is the build where
+ * `nish_arena` and the RNG seed are `_Thread_local`. Everything asserted here
+ * is deterministic: the worker runs to completion before the parent looks
+ * again, so nothing depends on how the two threads interleave.
+ *
+ * The RNG is exercised but its *values* are not pinned. Both threads seed
+ * lazily from `time(0)` and the pid, so two threads starting in the same second
+ * start from the same seed — which makes "the streams are independent"
+ * indistinguishable from "the streams are identical" without reaching into the
+ * seed word, and would make any equality assertion here a test of the clock.
+ * What the thread-local seed buys is that neither thread's draw can tear the
+ * other's state; the range check is what this file can honestly say about it. */
+#ifdef NISH_THREADS
+#include <pthread.h>
+
+/* What the worker thread saw in its own arena, read by the parent after join. */
+static struct {
+  uint64_t used_at_entry;
+  char *first;
+  uint64_t used_after_two;
+  uint64_t used_after_release;
+  int random_in_range;
+} worker;
+
+static void *thread_body(void *unused) {
+  (void)unused;
+  /* A fresh thread starts with an empty arena however much the parent has
+     bumped, because the arena it bumps is not the parent's. */
+  worker.used_at_entry = nish_arena_used();
+  worker.first = nish_alloc_struct(12);
+  nish_alloc_struct(12);
+  worker.used_after_two = nish_arena_used();
+  /* WP20 §3.1: scopes are per-thread by construction, so a worker's release
+     rewinds its own arena and cannot reach into the parent's. */
+  uint64_t mark = nish_arena_mark();
+  nish_alloc_struct(4096);
+  nish_arena_release(mark);
+  worker.used_after_release = nish_arena_used();
+  worker.random_in_range = 1;
+  for (int i = 0; i < 1000; i++) {
+    double r = nish_random();
+    if (!(r >= 0.0 && r < 1.0)) worker.random_in_range = 0;
+  }
+  /* The worker owns its chunks, so it frees them; the parent's are untouched. */
+  nish_free_arena();
+  return NULL;
+}
+
+static void test_threads(void) {
+  nish_free_arena();
+  nish_str *parent = lit("parent string");
+  uint64_t used_before = nish_arena_used();
+  char *parent_block = nish_alloc_struct(64);
+  parent_block[0] = 'p';
+  assert(used_before > 0);
+
+  pthread_t t;
+  assert(pthread_create(&t, NULL, thread_body, NULL) == 0);
+  assert(pthread_join(t, NULL) == 0);
+
+  assert(worker.used_at_entry == 0);   /* its own arena, not the parent's */
+  assert(worker.used_after_two == 32); /* two 12-byte bumps, 8-byte rounded */
+  assert(worker.used_after_release == 32);
+  assert(worker.random_in_range);
+  /* Disjoint storage: the worker never bumped a byte of the parent's chunk. */
+  assert(worker.first != parent_block);
+  /* And the parent's arena came through the join exactly as it was, contents
+     included — which one shared arena would not have survived, because the
+     worker released and then freed everything it could see. */
+  assert(nish_arena_used() == used_before + 64);
+  assert(parent_block[0] == 'p');
+  expect_str(parent, "parent string", "the parent's string survives a worker thread");
+
+  double r = nish_random();
+  assert(r >= 0.0 && r < 1.0);
+  nish_free_arena();
+}
+#endif
 
 int main(void) {
   /* Bump allocation: consecutive, 8-byte rounded, 8-byte aligned. */
@@ -329,6 +420,11 @@ int main(void) {
 
   nish_free_arena();
   assert(nish_arena.chunks == NULL && nish_arena.cap == 0);
+#ifdef NISH_THREADS
+  test_threads();
+  puts("runtime_test: ok (threads)");
+#else
   puts("runtime_test: ok");
+#endif
   return 0;
 }

@@ -556,6 +556,7 @@ section summed, clang 18.1.3 on linux-x64:
 | `runtime/runtime.c` | 3,449 | 31 (`nish_die`) | **3,480** | **3,584** | 104 |
 | `runtime/runtime_os.c` | 1,155 | 35 (`nish_io_fail`) | **1,190** | **1,280** | 90 |
 | both | 4,604 | 66 | 4,670 | 4,864 | 194 |
+| `runtime.c -DNISH_THREADS=1` | 3,574 | 31 | **3,605** | **3,840** | 235 |
 
 The third row is the runtime before the split, unchanged: 3,480 + 1,190 is
 exactly the 4,670 that one file measured, and every moved function is byte for
@@ -644,13 +645,23 @@ defines none of the moved functions and the `wasm` profile never names
 entry bridge stayed in `runtime.c`). The end-to-end wasi check still needs a
 WASI sysroot and still skips, counted, without one.
 
-**The gate.** `tests/run.js` now holds `RUNTIME_TEXT_BUDGET` (3,584) and
-`RUNTIME_OS_TEXT_BUDGET` (1,280) and measures both files in one block, with the
-same skip behaviour as before — a counted `skip(reason)` off linux-x64 or
-without `clang` or `size`, because a byte-exact ceiling is a fact about one
-target and one compiler version. Each failure names its own file, its own
-measurement, its own budget and the constant to raise.
-`node tests/run.js budget` selects them.
+**The gate.** `tests/run.js` holds `RUNTIME_TEXT_BUDGET` (3,584),
+`RUNTIME_OS_TEXT_BUDGET` (1,280) and `RUNTIME_THREADS_TEXT_BUDGET` (3,840), and
+measures all three configurations in one block, with the same skip behaviour as
+before — a counted `skip(reason)` off linux-x64 or without `clang` or `size`,
+because a byte-exact ceiling is a fact about one target and one compiler version.
+Each failure names its own configuration, its own measurement, its own budget and
+the constant to raise. `node tests/run.js budget` selects them.
+
+The third row is the fourth line of the table above, and it exists because the
+first two cannot see it. `-DNISH_THREADS=1` is the build `--threads` links (WP20
+T0), where the arena and the RNG seed are `_Thread_local`, and at 3,605 bytes it
+is 21 *above* the core's own ceiling — so for as long as only the default build
+was measured, the code size of a configuration a user asks for by flag was
+ungated, and `_Thread_local` storage is the kind of thing that grows quietly. It
+is a separate number rather than a raised shared one on purpose: covering both
+with 3,840 would hand the default build 360 bytes it has no business having, and
+the whole point of splitting the budget was that a number should mean one thing.
 
 ## Attributes
 
