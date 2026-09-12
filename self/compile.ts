@@ -402,7 +402,7 @@ export function main(): number {
   compilation.dumpOnly = emitAst;
   let loaded = true;
   for (const root of roots) {
-    if (!compilation.load(root)) {
+    if (!compilation.load(root, "")) {
       loaded = false;
       break;
     }

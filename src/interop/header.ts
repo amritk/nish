@@ -153,7 +153,11 @@ export function generateHeader(compilation: Compilation, outFile: string): strin
       continue;
     }
     const { ident, label } = cFunctionName(fn.sig.name);
-    const alias = label ? ` (${fn.sig.struct ? "a method" : "a C keyword"}: call it as ${ident})` : "";
+    // Three reasons a symbol cannot be spelled in C, and the comment says
+    // which: a method (`Point.shifted`), a symbol inside a package
+    // (`hash.helper`, WP21 S1), or a name that is a C keyword.
+    const why = fn.sig.struct ? "a method" : fn.sig.name.includes(".") ? "in a package" : "a C keyword";
+    const alias = label ? ` (${why}: call it as ${ident})` : "";
     lines.push(`/* ${ts}${alias}${elementNotes(fn)} */`, `${proto};`);
   }
   if (lastUnit === undefined)

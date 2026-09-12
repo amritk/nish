@@ -85,9 +85,10 @@ export class Checker {
     nodeCount: i32,
     sink: DiagnosticSink,
     numberMode: i32,
-    wrapping: boolean
+    wrapping: boolean,
+    packageName: string
   ) {
-    this.program = new CheckedProgram(source, file, isEntry, nodeCount);
+    this.program = new CheckedProgram(source, file, isEntry, nodeCount, packageName);
     this.ctx = new CheckContext(table, this.program, sink, numberMode, wrapping);
   }
 
@@ -156,6 +157,37 @@ export class Checker {
       aliasType(alias, this.ctx);
     }
     this.ctx.errored = false;
+    this.qualifySymbols();
+  }
+
+  /**
+   * WP21 S1: put every symbol this module declares inside its package.
+   *
+   * One place, and after every signature exists, so a free function, a method
+   * (`Owner.method`) and a constructor are scoped by the same line of code and
+   * nothing added later can forget to be. The root package's prefix is empty,
+   * which is why a single-package program — every program that could be
+   * compiled before this existed — emits exactly the symbols it always did.
+   *
+   * `main` needs no exception: only the entry module may declare it, and the
+   * entry module is the root package by construction (`Compilation` derives
+   * every other module's package by comparing it with the entry's own).
+   */
+  qualifySymbols(): void {
+    const prefix = this.program.symbolPrefix;
+    if (prefix.length === 0) {
+      return;
+    }
+    for (const sig of this.program.functions) {
+      // Pass 1b appends an imported signature to the importer's `functions`
+      // (`self/program.ts`), where stage0 leaves that list holding only what
+      // the module declares. It has not run yet, but qualifying an imported
+      // symbol would rename the *exporter's* function, so say so rather than
+      // depend on the order.
+      if (sig.definedIn(this.program.source)) {
+        sig.name = `${prefix}${sig.name}`;
+      }
+    }
   }
 
   /**

@@ -34,6 +34,14 @@ whole. Measured at the `speed` and `size` profiles, both of which link with
 calling none is **byte-identical** to the same program without the import.
 (`debug` keeps them, which is what `debug` is for.)
 
+A `std/` module is its own package (`nish`), so its symbols are scoped and a
+program may declare a function one of these modules also exports
+(`tests/link/std_package_scope`, `docs/wp21-packages.md` §5a). The package is
+decided by the `nish/` specifier rather than by the directory the file is found
+in — read off the path it would be `nish` from `node_modules/nish/std/` and the
+root package from a checkout, and the same program would compile against an
+installed compiler and be refused by a checkout of it.
+
 A relative specifier still works and means the same thing —
 `import { Suite } from "../std/testing"` — but it hard-codes the depth of the
 importing file and only reaches an installed library by the path the install

@@ -39,6 +39,7 @@ import {
 } from "./declarations.js";
 import { CheckContext, LoopInfo } from "./context.js";
 import { expressionCheckers } from "./expressions.js";
+import { ROOT_PACKAGE, packageSymbolPrefix } from "../packages.js";
 import { CheckedProgram, FunctionSig, ImportBinding, LocalVar, StructInfo } from "./program.js";
 import { isNishSpecifier, nishModule, nishModuleNames } from "./nish-modules.js";
 import { lookup } from "../lookup.js";
@@ -55,6 +56,12 @@ export type { CheckContext, StatementChecker, ExpressionChecker, BinaryChecker, 
 export interface CheckerModuleOptions {
   /** The entry module may (and with `--link` must) declare `export function main`. */
   isEntry: boolean;
+  /**
+   * The package this module belongs to (WP21 S1). The Compilation derives it
+   * from the module's name; a module checked on its own is in the root
+   * package, whose prefix is empty, so nothing it emits moves.
+   */
+  packageName?: string;
   /**
    * Where errors are collected (WP10). Shared by every module of a
    * Compilation, which decides between phases whether to go on. Without one
@@ -118,6 +125,8 @@ export class Checker implements CheckContext {
     this.sink = module.sink ?? new DiagnosticSink();
     this.program = {
       sourceFile,
+      packageName: module.packageName ?? ROOT_PACKAGE,
+      symbolPrefix: packageSymbolPrefix(module.packageName ?? ROOT_PACKAGE),
       functions: [],
       imports: [],
       exports: new Map(),
@@ -222,6 +231,27 @@ export class Checker implements CheckContext {
     // right-hand side and a cycle are reported where they are written rather
     // than at the first use — or never.
     for (const info of aliases) this.sink.recover(() => aliasType(info, this.opts));
+    this.qualifySymbols();
+  }
+
+  /**
+   * WP21 S1: put every symbol this module declares inside its package.
+   *
+   * One place, and after every signature exists, so that a free function, a
+   * method (`Owner.method`) and a constructor are scoped by the same line of
+   * code and nothing can be added later that forgets to be. The root package's
+   * prefix is empty, which is why a single-package program — every program
+   * that could be compiled before this existed — emits exactly the symbols it
+   * always did.
+   *
+   * `main` needs no exception: only the entry module may declare it, and the
+   * entry module is the root package by construction (`Compilation` derives
+   * every other module's package by comparing it with the entry's own).
+   */
+  private qualifySymbols(): void {
+    const prefix = this.program.symbolPrefix;
+    if (prefix === "") return;
+    for (const sig of this.program.functions) sig.name = prefix + sig.name;
   }
 
   /**

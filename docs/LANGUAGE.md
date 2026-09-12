@@ -819,7 +819,12 @@ program twice, with one golden between them.
   ordinary Nish source: it is compiled into the program that imports it and is
   subject to every rule in this document. What it costs is what you call —
   `speed` and `size` link with `--gc-sections`, and a module imported but never
-  called is byte-for-byte free (`std/README.md`).
+  called is byte-for-byte free (`std/README.md`). Its symbols are scoped to
+  package `nish`, so a program may declare a function a `std/` module also
+  exports (`tests/link/std_package_scope`); the package is decided by the
+  specifier rather than by where the file sits, because reading it off the path
+  would answer differently for an installed compiler and a checkout of the same
+  version.
 - Every other bare specifier is refused: there is no package resolution
   (`reject_bare_package`, `docs/wp21-packages.md` §5b).
 - An imported constant contributes no `declare` and no relocation: it is

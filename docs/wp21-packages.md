@@ -1,7 +1,9 @@
 # WP21: Packages
 
-**Proposed, not implemented, and rough.** Nothing here exists in the compiler
-today. It is the plan of record for two questions that arrived together —
+**Stage S1 has landed; everything after it is proposed, and rough.**
+Package-scoped symbols exist in both compilers now (§5a, and §9 for what
+exactly was built); nothing else here does. It is the plan of record for two
+questions that arrived together —
 "what would an extra `exports` condition alongside `cjs` and `esm` look like",
 and "how should an Nish package depend on another Nish package" —
 and the first thing it decides is that they are *different* questions with
@@ -150,27 +152,23 @@ package an Nish consumer sees.
 
 ## 5. What blocks this today
 
-Two hard blockers, both in the compiler rather than in packaging.
+Three things blocked it, all in the compiler rather than in packaging. The
+first is closed; §9 is the account of how.
 
-### 5a. The symbol namespace is flat (the blocker)
+### 5a. The symbol namespace was flat (**closed by S1**)
 
-Today two modules exporting the same name is an error, and — worse — two
-modules defining the same *non-exported* name is an error too, in either
-linkage mode. The reason is not the linker: `analyzeFunctions` keys the
-whole-program fact fixpoint by symbol name, so a duplicate would hand each
-function the other's attributes, which is a miscompile rather than a link
-failure (`tests/link/duplicate_internal`, and the rule deliberately does not
-consult `--no-strict-exports`).
+Two modules exporting the same name was an error, and — worse — two modules
+defining the same *non-exported* name was an error too, in either linkage mode.
+The reason was never the linker: `analyzeFunctions` keys the whole-program fact
+fixpoint by symbol name, so a duplicate would hand each function the other's
+attributes, which is a miscompile rather than a link failure
+(`tests/link/duplicate_internal`, and the rule deliberately does not consult
+`--no-strict-exports`).
 
-In an ecosystem this is fatal at the first `npm install`. Two unrelated
+In an ecosystem that is fatal at the first `npm install`. Two unrelated
 packages that both have a private `helper()` would fail to compile together,
-and two that both export `hash` certainly would. Symbols have to become
-package-scoped — `pkg@version.symbol`, or a content hash — which touches the
-checker's clash detection (`src/compilation.ts`, the pass-1.5 symbol check),
-the fact table's key, the generic mangling (WP18 §3), the class and method
-symbols (`Point.constructor`), the `--emit-header` asm labels, and every link
-golden. It is the first stage for that reason and not because it is the most
-interesting.
+and two that both export `hash` certainly would. So symbols became
+package-scoped, and §9 is what that turned out to mean.
 
 ### 5b. `import` has no bare specifiers — except the compiler's own package
 
@@ -327,14 +325,124 @@ should not look alike.
 
 | | Stage | Depends on | Notes |
 | ---: | --- | --- | --- |
-| S1 | Package-scoped symbols | — | §5a. No language surface; a large mechanical diff across the checker, the fact table, the mangling and the goldens. Landable on its own merits. |
+| S1 | Package-scoped symbols | — | **done**, §9. §5a. No language surface, and the diff turned out small rather than large: the root package's prefix is empty, so not one golden `.ll` moved. |
 | S2 | Bare specifiers and the `nish` condition | S1 | §5b. The condition name lands in `branding.ts` on both sides. |
 | S3 | The boundary diagnostics | S2 | §5c, §6. No new artifact: the `NL3xxx` entries for a missing or mode-mismatched `nish` condition, a version floor from `engines.nish`, a builtin the target has no runtime for, and a compile error attributed to a dependency rather than to the consumer. |
 | S4 | The build cache | S2 | Content-addressed by (package version, number mode, target, profile, compiler version). Invisible to the package author; a pure compile-time optimisation, and the answer to §3's stated cost. |
 | S5 | Prebuilt distribution | S4 | §7. Deferred, possibly permanently. |
 
-S1 is the only one with no design questions left open, which is why it is
-first. S3 is the one to resist over-building: §6 already talked one manifest
-out of existence, and everything left in it is a message rather than a file. Nothing here is on the
-M4 critical path and none of it should delay the freeze; S1 is the piece worth
-landing early, because every day it waits it gets more goldens to update.
+S1 was the only one with no design questions left open, which is why it went
+first, and it is done. **S2 is the next stage**, and S1 left it two things
+rather than a blank page: the package-identity rule S1 reads off a path is a
+placeholder for the one the resolver will state (`src/packages.ts`,
+`self/packages.ts`, each with the `TODO(WP21 S2)` that says so), and the
+`nish` condition name still has to land in `branding.ts` on both sides before
+either compiler can resolve a bare specifier. S3 is the one to resist
+over-building: §6 already talked one manifest out of existence, and everything
+left in it is a message rather than a file. Nothing here is on the M4 critical
+path and none of it should delay the freeze.
+
+## 9. S1 as built: package-scoped symbols
+
+### 9a. The scheme, and the one it replaced
+
+§5a offered two spellings — `pkg@version.symbol` or a content hash — and both
+of them move *every* symbol in *every* program, because both qualify the
+program's own code as readily as a dependency's. That is a rewrite of every
+golden `.ll` in `tests/cases/`, of the link goldens, of the `--emit-header` asm
+labels, and of the three interop sidecars, to buy nothing at all for the
+single-package programs that are the only programs that exist today. It was
+rejected for that reason.
+
+What landed instead is the same idea with one asymmetry: **the root package's
+prefix is empty.**
+
+- A module belongs to exactly one package. The *root package* is the program
+  being compiled; a module under `<...>/node_modules/<name>/` (or
+  `.../@scope/<name>/`) belongs to that package instead.
+- Every function, method and constructor a module declares is emitted under
+  `<prefix><name>`, where the prefix is `""` for the root package and
+  `<mangled package name>.` otherwise — the `.` that `Point.shifted` already
+  uses, so `--emit-header` declares such a symbol exactly as it has always
+  declared a method, as `hash_helper` with an asm label.
+- The whole-program fact table is keyed by that symbol. `analyzeFunctions` did
+  not have to change at all, which is the point: the key it was already using
+  stopped being a bare name.
+
+So a program of one package — which is every program that could be compiled
+before this landed — emits byte for byte the IR it always did, and the
+`docs/IR_COOKBOOK.md` entries, the goldens and the C ABI of every exported
+function are untouched. A prefix appears only where a second package does,
+which is a program that did not compile at all until now.
+
+The qualification happens in one place per compiler, at the end of pass 1
+(`Checker.qualifySymbols` in `src/checker/index.ts` and `self/checker.ts`),
+after every signature exists — so a free function, a method and a constructor
+are scoped by the same line of code and nothing added later can forget to be.
+
+That single place is also what makes the scheme compose with
+[wp18-generics.md](wp18-generics.md). A monomorphised instantiation's symbol is
+built from its template's symbol, and the template's symbol is package-scoped
+before any instantiation exists, so `sum<i32>` from two packages is two symbols
+without the generic mangling needing to know that packages are a thing.
+
+### 9b. How a module says which package it is in
+
+It does not; its path says it. There is no manifest, no resolver, no flag and
+no language surface, which is what lets S1 land years before S2: the identity
+is read off the module name the compiler already carries, and that name is the
+*same string in both compilers* (WP19 §A3), so stage0 and stage1 put a module
+in the same package without either of them needing a working directory.
+
+The entry's own package directory is what *is* the root package, rather than
+"no `node_modules` on the path". Comparing directories rather than names is
+what stops a compiler invoked on a file that itself lives inside
+`node_modules/<pkg>` from deciding that its own entry is one of its
+dependencies.
+
+This is a placeholder and is labelled as one in both files. S2 resolves bare
+specifiers through Node's algorithm with the `nish` condition, and the package
+a module belongs to becomes something the resolver *states*; when that lands,
+only the mangling below it survives.
+
+### 9c. Where S1 deliberately stops
+
+- **Struct names are still program-wide.** `%struct.<name>` is a module-level
+  LLVM type and `StaticType` equality compares names, so two packages that both
+  declared `Node` would silently be treated as declaring one type. Rather than
+  half-scope that, the Compilation now *reports* it — naming both packages, in
+  the words §7 uses — so the hole is a diagnostic instead of a miscompile.
+  Scoping the layouts, and saying what a `Point` from two versions of one
+  package means, is §7's question and not this stage's.
+- **Versions are not in the identity.** §5a floated `pkg@version.symbol`;
+  reading a version means reading a manifest, which §6 spent a section
+  refusing. Two copies of one package name in one build therefore still
+  collide, and they collide *loudly*, through the same clash check.
+- **The mangling is not injective.** `@scope/hash` and `scope_hash` reduce to
+  one prefix. They do not have to be distinguishable, because the clash check
+  runs over the *qualified* symbols: two packages that reduce to one prefix are
+  refused with a name in the message rather than silently sharing a fact table.
+
+### 9d. What proves it
+
+`tests/link/two_packages/` is the case §5a names: two packages, each with a
+private `helper()` and an exported `scale()`, and a program that keeps a
+private `helper()` of its own. Three functions called `helper`, two called
+`scale`, one program; every `helper` computes something different, so the exit
+code is right only if each call reached its own package's. It compiles, it
+links, `llvm-as` and `opt -passes=verify` accept every module, each importer's
+`declare` matches its exporter's `define` attribute for attribute, and the
+binary exits 7.
+
+`tests/link/duplicate_internal` is the same rule inside one package and is
+unchanged: a name still has to be unique within the package that declares it,
+and `internal` linkage still buys inlining rather than a second namespace.
+`tests/link/two_packages_struct` is the negative for where S1 stops — two
+packages, a private `Node` in each, refused by name with both packages in the
+message.
+
+Everything else is the proof that nothing moved: every golden `.ll` in
+`tests/cases/` and `tests/link/` is byte-identical, `tests/self/goldens/` needed
+no regeneration, and `tests/self/ir_oracle.js` — which compiles the corpus with
+*both* compilers and diffs the IR byte for byte, `tests/link/two_packages`
+included — is what says the two implementations scope symbols the same way.
