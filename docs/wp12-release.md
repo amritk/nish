@@ -10,7 +10,7 @@ User-facing install instructions are in [INSTALL.md](INSTALL.md).
 | Path | Why it ships |
 | --- | --- |
 | `dist/` | the compiled CLI (`dist/index.js` is the `nish` bin) |
-| `runtime/` | `runtime.c` (linked into every `--link` binary) and `nish.h` (included by the N-API shim) |
+| `runtime/` | `runtime.c` and `runtime_os.c` (the two translation units of the C runtime, both linked into every `--link` binary) and `nish.h` (included by the N-API shim) |
 | `scripts/` | `build.sh` (the `--link` pipeline), `bootstrap.sh` (the self-hosted compiler), `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
 | `README.md`, `LICENSE`, `docs/INSTALL.md` | documentation |
 

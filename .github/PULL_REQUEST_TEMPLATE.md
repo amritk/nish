@@ -15,7 +15,7 @@
 - [ ] `npm run lint` passes
 - [ ] New construct: golden `.ll`, native round trip (`.out`), at least one `reject_*` case
 - [ ] `docs/LANGUAGE.md` and the IR cookbook updated, `CHANGELOG.md` line added
-- [ ] `runtime.c` size reported if it changed
+- [ ] `runtime.c` / `runtime_os.c` size reported if either changed (`node tests/run.js budget`)
 
 ## Related issues
 

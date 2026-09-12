@@ -125,7 +125,7 @@ jobs:
           {
             echo "### Binary size (${{ matrix.os }}, LLVM 18)"
             echo
-            echo '`examples/add.ts` + `examples/main.c` + `runtime/runtime.c`'
+            echo '`examples/add.ts` + `examples/main.c` + `runtime/runtime.c` + `runtime/runtime_os.c`'
             echo
             cat build/size-report.md
           } >> "$GITHUB_STEP_SUMMARY"

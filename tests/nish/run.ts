@@ -461,7 +461,12 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
     const own = `${CASES}/${name}.c`;
     link.push(readFileSyncOrNull(own) === null ? "tests/driver.c" : own);
   }
+  // The C runtime is two translation units: the core (arena, strings, arrays,
+  // number formatting, the panics) and the syscall wrappers, split apart so each
+  // carries its own size budget. A direct `clang` line names both; only
+  // `scripts/build.sh` pairs them for its callers.
   link.push("runtime/runtime.c");
+  link.push("runtime/runtime_os.c");
   link.push("-lm");
   link.push("-o");
   link.push(exe);

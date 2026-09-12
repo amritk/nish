@@ -28,7 +28,7 @@ Compilation                                                            src/compi
    └─ interop sidecars           --emit-header / --emit-dts / --emit-napi src/interop/
    │
    ▼
-.ll files ──▶ scripts/build.sh + runtime/runtime.c ──▶ native binary / .wasm / .node
+.ll files ──▶ scripts/build.sh + runtime/*.c ──▶ native binary / .wasm / .node
 ```
 
 | Stage | File(s) | Responsibility |
@@ -46,7 +46,7 @@ Compilation                                                            src/compi
 | Emitter | `src/codegen/emitter.ts` + `codegen/emit/*.ts` | Lowers the checked program to IR text: module assembly, function setup, `declare`s for imports, the `@main` wrapper, the runtime prelude, and dispatch to per-construct emitters. Contains no user-facing error handling. |
 | IR builder | `src/codegen/ir.ts` | `IRModule`, `IRFunction`, `IRBlock`: named blocks, hoisted allocas, SSA temp numbering (`%0` is always the first temp because every block and parameter is named), attribute-group interning. |
 | Runtime ABI | `src/codegen/runtime.ts` | The `declare` lines, attributes, and memory effects of every runtime symbol and intrinsic; the IR text of the inline arena allocator; the `%struct.nish_arena` / `%struct.nish_array` layouts. |
-| Runtime | `runtime/runtime.c`, `runtime/nish.h`, `runtime/runtime_wasm.c` | The C implementation: chunked bump arena with marks (`nish_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, exit, files, array growth and `nish_alloc_array` (the host entry the wasm loader uses), the bounds-check and division panics. The header is the public C ABI. `runtime_wasm.c` is the freestanding subset (arena over linear memory, arrays, trapping panics) for the wasm profile. `runtime/shim.mjs` is the Node-side twin used by the differential tests. |
+| Runtime | `runtime/runtime.c`, `runtime/runtime_os.c`, `runtime/nish.h`, `runtime/runtime_wasm.c` | The C implementation, in two translation units so that each carries its own code-size ceiling. `runtime.c` is what every program touches whatever it does: the chunked bump arena with marks (`nish_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, `process.argv`, array growth and `nish_alloc_array` (the host entry the wasm loader uses), the bounds-check and division panics. `runtime_os.c` is everything that wraps a system call — `process.exit`, files, directories, subprocesses, `getenv`, the monotonic clock, `process.platform` / `arch` — which is the surface that grows as the language reaches further into the operating system. The header is the public C ABI for both. `runtime_wasm.c` is the freestanding subset (arena over linear memory, arrays, trapping panics) for the wasm profile. `runtime/shim.mjs` is the Node-side twin used by the differential tests. |
 | Interop | `src/interop/{abi,header,dts,napi}.ts` | C header, wasm `.d.ts`, and N-API shim generators, all derived from the same checked signatures the IR was emitted from. |
 | Build | `scripts/build.sh`, `size-report.sh`, `smoke.sh` | The clang/LTO profiles, the size table, the example smoke test. |
 | Tests | `tests/run.js` + `tests/{cases,link,ir,layout}`, `tests/runtime_test.c`, `tests/driver.c` | Goldens, native round trips, link tests, ABI guards, memory checks, interop, exit codes, packaging, benchmark checksums. |
@@ -145,16 +145,20 @@ The checklist every work package has followed (MASTER_PLAN.md §7):
    hoist allocas with `emitAlloca`; reference runtime symbols only through
    `ctx.useRuntime(name)` so the declaration is emitted.
 6. **Runtime.** New C symbol? Add it to `RUNTIME_FUNCTIONS` in
-   `src/codegen/runtime.ts` (signature, attributes, `effect`, `noreturn`),
-   to `runtime/runtime.c`, and to `runtime/nish.h`; `tests/run.js`
-   fails if the three disagree. Any struct layout change touches `runtime.ts`
-   and `runtime.c` in the same commit and extends a layout test. Keep
-   `runtime.c` within the budget — every `.text*` section summed, under 4,864
-   bytes at `-Oz` (§2 of the master plan, and
-   [wp7-runtime.md](wp7-runtime.md) for each measurement and why the ceiling
-   moved). `node tests/run.js budget` measures it, so this is a check you can
-   run rather than a number to remember; `clang -Oz -c runtime/runtime.c &&
-   size -A runtime.o` is the same measurement by hand.
+   `src/codegen/runtime.ts` (signature, attributes, `effect`, `noreturn`), to
+   the runtime, and to `runtime/nish.h`; `tests/run.js` fails if the three
+   disagree. The runtime is two translation units: a symbol that wraps a system
+   call goes in `runtime/runtime_os.c`, everything else in `runtime/runtime.c`.
+   Any struct layout change touches `runtime.ts` and `runtime.c` in the same
+   commit and extends a layout test. Keep each file within its budget — every
+   `.text*` section summed, at `-Oz`, under 3,584 bytes for `runtime.c` and
+   1,280 for `runtime_os.c` (§2 of the master plan, and
+   [wp7-runtime.md](wp7-runtime.md) for each measurement, why the ceilings are
+   separate and why either moved). `node tests/run.js budget` measures both, so
+   this is a check you can run rather than a number to remember;
+   `clang -Oz -c <file> && size -A <file>.o` is the same measurement by hand.
+   A link line names only `runtime.c`: `scripts/build.sh` compiles
+   `runtime_os.c` beside it, and a direct `clang` line names both.
 7. **Attributes.** Tell the fact collector what the construct does:
    memory effect (`readsMemory`, callee symbols via `collectStringFacts` /
    `collectBuiltinFacts` / `factCollectors`), escapes (`classifyUse`), loop
@@ -195,12 +199,12 @@ a layout smoke test.
 
 ### Runtime symbols
 
-`runtime/runtime.c` (4,670 bytes of `.text*` at `-Oz` against the
-MASTER_PLAN.md §2 budget of 4,864, plus 9,920 bytes of `.rodata` that is almost
-all Ryu's two power-of-five tables; measure with
-`clang -Oz -c runtime/runtime.c && size -A runtime.o`, or
-`scripts/size-report.sh`, which reports both rows) provides, in the order
-of `RUNTIME_FUNCTIONS`:
+`runtime/runtime.c` (3,480 bytes of `.text*` at `-Oz` against a budget of
+3,584, plus 10,068 bytes of `.rodata` that is almost all Ryu's two
+power-of-five tables) and `runtime/runtime_os.c` (the system-call half: 1,190
+bytes against 1,280) provide, in the order of `RUNTIME_FUNCTIONS`, the symbols
+below; measure either with `clang -Oz -c <file> && size -A <file>.o`, or
+`scripts/size-report.sh`, which reports every row:
 
 | Symbol | Purpose |
 | --- | --- |
@@ -461,7 +465,7 @@ toolchain-dependent steps when LLVM is not installed:
   `<name>.args`; a `<name>.err` case must fail with exit 1 and the message
   fragment; otherwise the IR (module header stripped) must equal `<name>.ll`,
   pass `llvm-as`, and, when `<name>.out` exists, be linked with
-  `<name>.c` or `tests/driver.c` plus `runtime/runtime.c -lm`, run, and
+  `<name>.c` or `tests/driver.c` plus both runtime `.c` files and `-lm`, run, and
   match stdout. A source declaring `main` — `export const main`, or the legacy
   `export function main` — is linked without the driver. `node tests/run.js <substring>` runs a subset;
   `npm run test:update` writes missing goldens.
@@ -552,7 +556,7 @@ frozen, and a third rename stops at `LANGUAGE` and `CLI`.
 | Path | Contents |
 | --- | --- |
 | `src/` | the compiler (see the pipeline table); `branding.ts` holds the project's name |
-| `runtime/` | `runtime.c`, `nish.h`, `runtime_wasm.c` (freestanding arena + arrays for the wasm profile), `shim.mjs` (the Node-side runtime for the differential tests) |
+| `runtime/` | `runtime.c` (the core every program touches) and `runtime_os.c` (the system-call half, measured against its own ceiling), `nish.h`, `runtime_wasm.c` (freestanding arena + arrays for the wasm profile), `shim.mjs` (the Node-side runtime for the differential tests) |
 | `scripts/` | `build.sh`, `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
 | `std/` | the standard library, in Nish rather than about Nish: `testing.ts`, the `Suite` a program drives to check itself. Source is the distribution format (wp21 §2), so an import of one compiles with the program. `std/README.md` has the rules for adding a module |
 | `tests/` | `run.js`, `cases/`, `link/`, `ir/`, `layout/`, `differential/` (`run.js`, `lib.js`, `rewrite.js`, `fuzz.js`, `corpus/`, `known-failures.txt`), `runtime_test.c`, `driver.c` |

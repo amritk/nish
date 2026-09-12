@@ -118,8 +118,9 @@ nish-0.1.0-x86_64-linux/bin/nish --version
 
 Unpack it and run `bin/nish` from wherever you like; put that on `PATH` if you
 want it there. Keep the directory intact rather than moving the binary out of
-it: `--link` runs `scripts/build.sh` and compiles `runtime/runtime.c`, and the
-compiler finds both relative to its own location — `bin/nish` alone in a
+it: `--link` runs `scripts/build.sh` and compiles the C runtime
+(`runtime/runtime.c` and `runtime/runtime_os.c`, the system-call half), and the
+compiler finds all of them relative to its own location — `bin/nish` alone in a
 directory can still emit IR with `-o`, but `--link` will tell you it cannot
 find `scripts/build.sh`.
 
@@ -139,10 +140,28 @@ npm link            # optional: puts `nish` on PATH
 # or run it in place: node dist/index.js ...
 ```
 
-The package ships `dist/` (the compiler), `runtime/` (the C runtime and its
-header), and `scripts/build.sh` (the link pipeline). `nish` locates the
-runtime and the script relative to its own install directory, so a global
-install works from any working directory.
+The package ships `dist/` (the compiler), `runtime/` (the C runtime — two
+translation units and their header), and `scripts/build.sh` (the link
+pipeline). `nish` locates the runtime and the script relative to its own
+install directory, so a global install works from any working directory.
+
+Building the IR yourself rather than through `--link` means naming the runtime
+on the `clang` line, and it is two files:
+
+```bash
+clang app.ll runtime/runtime.c runtime/runtime_os.c -lm -o app
+```
+
+`runtime.c` is the half every program touches — the arena, strings, arrays,
+number formatting, the panics — and `runtime_os.c` is the half that wraps the
+system calls: files, directories, subprocesses, `getenv`, the monotonic clock.
+They are separate so that each carries its own measured size ceiling
+([docs/wp7-runtime.md](wp7-runtime.md)); nothing in the core calls into the
+system-call half, so an older line that names `runtime.c` alone still links a
+program that reads no files and spawns nothing. `scripts/build.sh` compiles
+`runtime_os.c` beside any `runtime.c` it is handed, so a build that goes
+through it — every `--link`, and every `--profile` recipe in these documents —
+needs to name only the one.
 
 ## 2a. Building the self-hosted compiler (optional)
 
@@ -162,9 +181,9 @@ and compares the IR and the binaries byte for byte; `--stages 1` stops one link
 sooner. `build/nish` is then the compiler you run: it takes the same `-o`,
 `--link` and `--profile` spellings as `nish` and makes every directory in the
 way of the IR, a sidecar or the binary itself. It looks for `scripts/build.sh`
-and `runtime/runtime.c` one level up from wherever it was invoked, then in the
-working directory, so it wants a checkout or an installed package around it the
-way `nish` does.
+and the two `runtime/*.c` files one level up from wherever it was invoked, then
+in the working directory, so it wants a checkout or an installed package around
+it the way `nish` does.
 
 The native compiler is about eight times faster than the Node one and needs no
 Node at all. It writes the interop sidecars (`--emit-header`, `--emit-dts`,

@@ -4,8 +4,9 @@
  * The differential runner (tests/differential/run.js) rewrites an Nish
  * program into plain JavaScript and runs it under Node with this module as
  * `__nish`. Every helper here reproduces the *runtime* semantics the compiled
- * binary has (runtime/runtime.c plus the intrinsics in docs/wp7-runtime.md)
- * where JavaScript's own semantics differ:
+ * binary has (runtime/runtime.c and runtime/runtime_os.c, the system-call half,
+ * plus the intrinsics in docs/wp7-runtime.md) where JavaScript's own semantics
+ * differ:
  *
  *   - `number` is a 32-bit integer in the default mode (`--number-mode i32`),
  *     `i64` is a 64-bit integer, both wrapping; JS has doubles and BigInt.
@@ -463,15 +464,15 @@ export function isDirectorySync(path) {
  * the directory cannot be read. Node throws where the runtime answers a value,
  * so the `catch` is what makes the two agree, and a directory that exists and
  * is empty answers an empty array on both sides. Node's readdir never yields
- * `.` or `..` — the pair `runtime.c` skips explicitly — so there is nothing to
- * filter out here.
+ * `.` or `..` — the pair `runtime_os.c` skips explicitly — so there is nothing
+ * to filter out here.
  *
- * The sort is the semantic point. `runtime.c` orders the names with `strcmp`,
- * which compares UTF-8 bytes, and `Array#sort` compares UTF-16 code units. The
- * two agree on ASCII names and part company above the BMP, where a surrogate
- * pair sorts below `U+E000`..`U+FFFF` in UTF-16 and above them in UTF-8. So the
- * comparison is over the encoded bytes, which is the native order exactly
- * rather than the native order for the names that happen to be ASCII.
+ * The sort is the semantic point. `runtime_os.c` orders the names with
+ * `strcmp`, which compares UTF-8 bytes, and `Array#sort` compares UTF-16 code
+ * units. The two agree on ASCII names and part company above the BMP, where a
+ * surrogate pair sorts below `U+E000`..`U+FFFF` in UTF-16 and above them in
+ * UTF-8. So the comparison is over the encoded bytes, which is the native order
+ * exactly rather than the native order for the names that happen to be ASCII.
  */
 export function readdirSync(path) {
   let names;
@@ -485,9 +486,10 @@ export function readdirSync(path) {
 
 /**
  * `process.platform` / `process.arch` (WP14 §7a). Node's spellings are the
- * ones `runtime.c` answers with, so on any machine this compiler has a triple
- * for the two runtimes give the same string; elsewhere the native build says
- * `unknown` where Node names the platform, which is the one place they part.
+ * ones `runtime_os.c` answers with, so on any machine this compiler has a
+ * triple for the two runtimes give the same string; elsewhere the native build
+ * says `unknown` where Node names the platform, which is the one place they
+ * part.
  */
 export function platform() {
   return process.platform;
@@ -511,8 +513,8 @@ export function getenv(name) {
  * `spawnSync(argv)` and `spawnSyncTo(argv, out, err)` (WP14 D4), which are one
  * run with its streams answered differently: the child's exit status, 128 + n
  * when signal n killed it, -1 for an empty vector or a program that would not
- * start. `runtime.c` puts one `static nish_spawn_impl` behind both builtins for
- * the same reason this module puts one function behind both helpers — the
+ * start. `runtime_os.c` puts one `static nish_spawn_impl` behind both builtins
+ * for the same reason this module puts one function behind both helpers — the
  * argument vector, the wait and the signal convention are written once and
  * cannot drift between the two.
  *
@@ -564,8 +566,8 @@ export function spawnSyncTo(argv, out, err) {
 /**
  * `monotonicNanos()`: `process.hrtime.bigint()`, a monotonic clock in
  * nanoseconds (`CLOCK_MONOTONIC` on every platform that has it, which is the
- * one `runtime.c` reads). The value is a BigInt because that is how an `i64` is
- * held on this side.
+ * one `runtime_os.c` reads). The value is a BigInt because that is how an `i64`
+ * is held on this side.
  *
  * No rewrite can make a *reading* agree with a native run: both origins are
  * arbitrary and neither is the other's. Only the difference between two reads

@@ -18,9 +18,10 @@ is **data, not code**: a source file next to the output it must produce.
   - `<name>.err` — one expected message fragment per line; the compile must
     fail with exit 1 and every fragment must appear. No `.ll` is needed.
   - `<name>.out` — expected stdout once the case is linked with `<name>.c`
-    (or `tests/driver.c`, which prints `test()`) and `runtime/runtime.c` and
-    run. A source with `export const main` (or the legacy `export function
-    main`) is linked without the driver.
+    (or `tests/driver.c`, which prints `test()`) and both runtime `.c` files
+    (`runtime/runtime.c` and `runtime/runtime_os.c`) and run. A source with
+    `export const main` (or the legacy `export function main`) is linked without
+    the driver.
   - `<name>.args` — extra CLI flags, whitespace separated.
   - `<name>.env` — the environment the run is given, one `NAME=value` per line,
     layered over the inherited one (blank lines and `#` comments ignored;
@@ -90,9 +91,11 @@ about one thing, and hand-check the IR before committing it rather than
 accepting whatever `test:update` wrote. A golden that changes for an unrelated
 construct is a regression until proven otherwise.
 
-Structural guards (`runtime.c`'s `.text*` budget — every `.text*` section of
-`clang -Oz -c runtime/runtime.c` summed, which is neither the source file's size
-nor `size`'s text column — the runtime symbol table agreeing across
+Structural guards (the runtime's two `.text*` budgets — every `.text*` section
+of `clang -Oz -c runtime/runtime.c` summed, and the same for
+`runtime/runtime_os.c`, which is neither file's source size and neither is
+`size`'s text column; they are separate so that a new syscall wrapper cannot
+move the core's ceiling — the runtime symbol table agreeing across
 `runtime.ts`, `runtime.c` and `nish.h`, and `opt -O2` vectorising `cf_sum_loop`)
 pin properties that have been broken before. When one fails, the change is what
 is wrong, not the test. Never delete a guard, and never move a number to turn a

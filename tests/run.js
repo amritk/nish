@@ -8,13 +8,13 @@
  *       <name>.args  extra CLI flags, whitespace separated
  *       <name>.err   expected error substring; compile must fail (no .ll needed)
  *       <name>.out   expected stdout when linked with <name>.c (or tests/driver.c,
- *                    which prints `test()`) and runtime/runtime.c, then run
+ *                    which prints `test()`) and the two runtime .c files, then run
  *       <name>.argv  command-line arguments for that run, whitespace separated (WP7)
  *       <name>.env   environment for that run, `NAME=value` per line, layered over
  *                    the inherited one (WP19 R1: `getenv` has no other way to be pinned)
  *     Every successfully compiled case is also assembled with llvm-as.
  *
- *  B. Pipeline checks: runtime.c unit test, inline allocator vs C arena layout
+ *  B. Pipeline checks: the runtime unit test, inline allocator vs C arena layout
  *     (linked for the host, and asserted per target so wasm32 cannot drift),
  *     size and wasm build profiles, Node wasm host, and the browser harness in
  *     web/ compiling with the compiler's own wasi build.
@@ -31,6 +31,20 @@ const cli = path.join(root, "dist", "index.js");
 const casesDir = path.join(root, "tests", "cases");
 const buildDir = path.join(root, "build", "test");
 fs.mkdirSync(buildDir, { recursive: true });
+
+/**
+ * The C runtime's two translation units, as a direct `clang` line has to spell
+ * them: `runtime.c` is the core every program touches and `runtime_os.c` is the
+ * half that wraps the system calls, split apart so that each carries its own
+ * `.text*` budget (RUNTIME_TEXT_BUDGET and RUNTIME_OS_TEXT_BUDGET below).
+ *
+ * Named here rather than written out at each link so that a third unit is one
+ * edit, and spelled out at all -- `scripts/build.sh` pairs the two itself, so
+ * the builds that go through it need only name `runtime.c` -- because a link
+ * line this suite gets wrong should fail as a link error rather than be quietly
+ * repaired on the way past.
+ */
+const RUNTIME_C = ["runtime/runtime.c", "runtime/runtime_os.c"];
 
 let failures = 0;
 let passes = 0;
@@ -192,16 +206,7 @@ for (const name of cases) {
     // -lm: Math.sin/cos/exp/log/pow lower to LLVM intrinsics that become libm calls (WP7).
     const cc = spawnSync(
       "clang",
-      [
-        "-Wno-override-module",
-        "-O2",
-        outLl,
-        ...(hasEntry ? [] : [driver]),
-        "runtime/runtime.c",
-        "-lm",
-        "-o",
-        exe,
-      ],
+      ["-Wno-override-module", "-O2", outLl, ...(hasEntry ? [] : [driver]), ...RUNTIME_C, "-lm", "-o", exe],
       { cwd: root }
     );
     if (cc.status !== 0) {
@@ -974,7 +979,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   const panicLl = path.join(buildDir, "arr_bounds_panic.ll");
   if (HAS_CLANG && fs.existsSync(panicLl)) {
     const exe = path.join(buildDir, "arr_bounds_panic");
-    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", panicLl, "runtime/runtime.c", "-o", exe], {
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", panicLl, ...RUNTIME_C, "-o", exe], {
       cwd: root,
     });
     const run = cc.status === 0 ? spawnSync(exe) : null;
@@ -1094,11 +1099,9 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
   );
   if (HAS_CLANG && ns.status === 0) {
     const exe = path.join(buildDir, "mem_stack_struct_nostack");
-    const cc = spawnSync(
-      "clang",
-      ["-Wno-override-module", "-O2", noStackLl, "runtime/runtime.c", "-o", exe],
-      { cwd: root }
-    );
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", noStackLl, ...RUNTIME_C, "-o", exe], {
+      cwd: root,
+    });
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
       "mem_stack_struct with --no-stack-alloc prints the same output",
@@ -1401,7 +1404,7 @@ if (!only || "layout".includes(only)) {
           "-O2",
           layoutC,
           layoutLl,
-          "runtime/runtime.c",
+          ...RUNTIME_C,
           "-o",
           exe,
         ],
@@ -1446,11 +1449,9 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
     const ll = path.join(buildDir, `${name}.ll`);
     if (!HAS_CLANG || !fs.existsSync(ll)) continue;
     const exe = path.join(buildDir, name);
-    const cc = spawnSync(
-      "clang",
-      ["-Wno-override-module", "-O2", ll, "runtime/runtime.c", "-lm", "-o", exe],
-      { cwd: root }
-    );
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", ll, ...RUNTIME_C, "-lm", "-o", exe], {
+      cwd: root,
+    });
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
       `${name}: exits 1 with "${needle}" on stderr`,
@@ -1473,7 +1474,7 @@ if (!only && HAS_CLANG) {
       "-Wextra",
       "-Werror",
       "-O2",
-      "runtime/runtime.c",
+      ...RUNTIME_C,
       "tests/runtime_test.c",
       "-o",
       path.join(buildDir, "runtime_test"),
@@ -1481,7 +1482,7 @@ if (!only && HAS_CLANG) {
     { cwd: root }
   );
   check(
-    "runtime.c compiles warning-free and passes its unit test",
+    "runtime.c and runtime_os.c compile warning-free together and pass the runtime unit test",
     rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0,
     String(rt.stderr)
   );
@@ -1653,34 +1654,59 @@ if (!only && HAS_CLANG) {
   skip("clang not installed: native round trips and pipeline checks skipped");
 }
 
-// ---- WP7: the runtime .text budget -------------------------------------------------
-// `runtime/runtime.c` is linked into every native binary, so its machine code is a cost
-// every program that touches the runtime pays. The budget was a row in
-// docs/wp7-runtime.md and a reviewer's memory until this check, which is why nobody
-// noticed the tree drift from the 2,544 bytes WP14 D4 recorded to 4,154 -- a review rule
-// cannot see a number that no run prints.
+// ---- WP7: the runtime .text budgets ------------------------------------------------
+// The C runtime is linked into every native binary, so its machine code is a cost every
+// program that touches the runtime pays. The budget was a row in docs/wp7-runtime.md and
+// a reviewer's memory until this check, which is why nobody noticed the tree drift from
+// the 2,544 bytes WP14 D4 recorded to 4,154 -- a review rule cannot see a number that no
+// run prints.
 //
 // The metric is the sum of every `.text*` section rather than the single `.text` line
 // wp7 quoted, because that sum is what a linked binary pays: `clang -Oz` puts cold code
-// in `.text.unlikely.` (66 bytes today), so a ceiling on `.text` alone can also be met
-// by moving code into another section instead of by making it smaller. The two other
-// numbers in that table are history rather than limits -- source bytes mostly measure
-// comments, and the `text` column of plain `size` adds the read-only constants and the
-// `.eh_frame` unwind tables that the size build profile strips.
+// in `.text.unlikely.`, so a ceiling on `.text` alone can also be met by moving code
+// into another section instead of by making it smaller. The two other numbers in that
+// table are history rather than limits -- source bytes mostly measure comments, and the
+// `text` column of plain `size` adds the read-only constants and the `.eh_frame` unwind
+// tables that the size build profile strips.
+//
+// There are two budgets because there are two translation units, and they grow for
+// unrelated reasons. `runtime.c` is the core every program touches whatever it does --
+// the arena, strings, arrays, number formatting, the panics -- and that is a closed set,
+// so its ceiling should come down over time and never up. `runtime_os.c` is the syscall
+// wrappers, and that surface grows whenever the language reaches further into the
+// operating system: three builtins (`readdirSync`, `spawnSyncTo`, `monotonicNanos`) took
+// the single old budget from 4,096 to 4,864 and moved the number a reader saw for "the
+// runtime" for a reason that had nothing to do with the arena or the strings. Section GC
+// already meant a program calling none of them paid nothing; now the measurement says so
+// too. One gate, two constants, two reasons.
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime.c`.
  *
- * Measured 4,670 bytes on 2026-09-12 with clang 18.1.3 on linux-x64 (`.text` 4,604 plus
- * `.text.unlikely.` 66), after `nish_readdir`, `nish_spawn_to`, `nish_monotonic_nanos`
- * and the shared `nish_spawn_impl` added 516 bytes to the 4,154 of the commit before
- * them. The budget is the next 256-byte boundary above that measurement, so 194 bytes
- * are left: enough headroom that a small fix -- an extra bounds check, one more error
- * path -- does not have to raise the budget in the same commit, and little enough that
- * anything larger than one such fix cannot land quietly. Raising this number is a
- * deliberate decision that comes with its own measurement and a row in
+ * Measured 3,480 bytes on 2026-09-12 with clang 18.1.3 on linux-x64 (`.text` 3,449 plus
+ * `.text.unlikely.` 31), the whole runtime's 4,670 less the 1,190 bytes that moved into
+ * runtime_os.c. The budget is the next 256-byte boundary above that measurement, so 104
+ * bytes are left. That is deliberately tight: this half is a closed set, so a commit that
+ * needs the room is a commit that grew something which was not supposed to grow, and
+ * raising this number -- unlike raising the one below it -- should be rare enough to be
+ * argued for. Either way it comes with its own measurement and a row in
  * docs/wp7-runtime.md ("Runtime additions and budget"); it is not a way to get green.
  */
-const RUNTIME_TEXT_BUDGET = 4864;
+const RUNTIME_TEXT_BUDGET = 3584;
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime_os.c`.
+ *
+ * Measured 1,190 bytes on 2026-09-12 with clang 18.1.3 on linux-x64 (`.text` 1,155 plus
+ * `.text.unlikely.` 35, which is `nish_io_fail`), for the file I/O, the directory and
+ * subprocess calls, `getenv`, the monotonic clock and the two constant host strings. The
+ * budget is the next 256-byte boundary above it, 90 bytes of headroom, which is less than
+ * one syscall wrapper on purpose: `nish_readdir` alone is 294 bytes, so the next builtin
+ * that reaches into the operating system has to raise this number in the commit that adds
+ * it, with the measurement, and cannot borrow room from the arena to hide in.
+ *
+ * The two together are 4,864 -- exactly the single budget they replace, which is a
+ * coincidence and not a constraint.
+ */
+const RUNTIME_OS_TEXT_BUDGET = 1280;
 if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   // A byte-exact ceiling is a fact about one target and one compiler, not about the
   // source, so everywhere else the honest answer is a counted skip rather than a number
@@ -1689,41 +1715,47 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
     const host = `${process.platform}-${process.arch}`;
     if (host !== "linux-x64")
       return (
-        `runtime.c .text budget: measured on linux-x64 and this host is ${host}; ` +
+        `runtime .text budgets: measured on linux-x64 and this host is ${host}; ` +
         "a byte-exact ceiling is a fact about one target and one compiler version"
       );
-    if (!HAS_CLANG) return "clang not installed: the runtime.c .text budget is not measured";
+    if (!HAS_CLANG) return "clang not installed: the runtime .text budgets are not measured";
     if (!has("size"))
-      return "size (binutils or llvm) not installed: the runtime.c .text budget is not measured";
+      return "size (binutils or llvm) not installed: the runtime .text budgets are not measured";
     return null;
   };
   const reason = budgetSkip();
   if (reason !== null) skip(reason);
   else {
-    const obj = path.join(buildDir, "runtime_budget.o");
-    const cc = spawnSync("clang", ["-Oz", "-c", "runtime/runtime.c", "-o", obj], { cwd: root });
-    const sz = cc.status === 0 ? spawnSync("size", ["-A", obj]) : null;
-    // `size -A` prints one `<section> <size> <addr>` row per section; every row whose
-    // name starts with `.text` counts, whatever clang decided to call it.
-    const sections = String(sz?.stdout ?? "")
-      .split("\n")
-      .map((line) => line.trim().split(/\s+/))
-      .filter((row) => row[0].startsWith(".text") && /^\d+$/.test(row[1] ?? ""))
-      .map((row) => [row[0], Number(row[1])]);
-    const total = sections.reduce((sum, [, bytes]) => sum + bytes, 0);
-    const breakdown = sections.map(([name, bytes]) => `${name} ${bytes}`).join(" + ");
-    check(
-      `runtime.c: .text* at -Oz fits the ${RUNTIME_TEXT_BUDGET} byte budget`,
-      cc.status === 0 && sections.length > 0 && total <= RUNTIME_TEXT_BUDGET,
-      cc.status !== 0
-        ? String(cc.stderr)
-        : sections.length === 0
-          ? `size -A printed no .text section:\n${sz.stdout}${sz.stderr}`
-          : `measured ${total} bytes (${breakdown}), budget ${RUNTIME_TEXT_BUDGET}, ` +
-            `over by ${total - RUNTIME_TEXT_BUDGET}.\n` +
-            "Shrink the addition, or raise RUNTIME_TEXT_BUDGET in tests/run.js and add the " +
-            "measured row to docs/wp7-runtime.md saying why it moved."
-    );
+    for (const [src, budget, constant] of [
+      ["runtime/runtime.c", RUNTIME_TEXT_BUDGET, "RUNTIME_TEXT_BUDGET"],
+      ["runtime/runtime_os.c", RUNTIME_OS_TEXT_BUDGET, "RUNTIME_OS_TEXT_BUDGET"],
+    ]) {
+      const name = path.basename(src);
+      const obj = path.join(buildDir, `${name.replace(/\.c$/, "")}_budget.o`);
+      const cc = spawnSync("clang", ["-Oz", "-c", src, "-o", obj], { cwd: root });
+      const sz = cc.status === 0 ? spawnSync("size", ["-A", obj]) : null;
+      // `size -A` prints one `<section> <size> <addr>` row per section; every row whose
+      // name starts with `.text` counts, whatever clang decided to call it.
+      const sections = String(sz?.stdout ?? "")
+        .split("\n")
+        .map((line) => line.trim().split(/\s+/))
+        .filter((row) => row[0].startsWith(".text") && /^\d+$/.test(row[1] ?? ""))
+        .map((row) => [row[0], Number(row[1])]);
+      const total = sections.reduce((sum, [, bytes]) => sum + bytes, 0);
+      const breakdown = sections.map(([section, bytes]) => `${section} ${bytes}`).join(" + ");
+      check(
+        `${name}: .text* at -Oz fits the ${budget} byte budget`,
+        cc.status === 0 && sections.length > 0 && total <= budget,
+        cc.status !== 0
+          ? String(cc.stderr)
+          : sections.length === 0
+            ? `size -A printed no .text section:\n${sz.stdout}${sz.stderr}`
+            : `measured ${total} bytes (${breakdown}), budget ${budget}, ` +
+              `over by ${total - budget}.\n` +
+              `Shrink the addition, or raise ${constant} in tests/run.js and add the ` +
+              "measured row to docs/wp7-runtime.md saying why it moved."
+      );
+    }
   }
 }
 
@@ -4291,7 +4323,8 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
 // ---- WP12: package ------------------------------------------------------------------
 // The npm tarball must be self-contained: `npm pack`, install it into a temporary prefix,
 // and drive the installed `nish` from an unrelated directory. That proves the `files`
-// whitelist ships runtime/runtime.c, runtime/nish.h and scripts/build.sh, and that the
+// whitelist ships both runtime translation units, runtime/nish.h and scripts/build.sh,
+// and that the
 // CLI resolves them from its own package root rather than from the cwd.
 if (!only || "package".includes(only) || "wp12".includes(only)) {
   const pkgDir = path.join(buildDir, "wp12-package");
@@ -4327,6 +4360,11 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "dist/index.js",
       "dist/version.js",
       "runtime/runtime.c",
+      // The runtime is two translation units since the operating-system half was
+      // split out for its own size budget, and `--link` compiles both. A tarball
+      // with only the core would install a compiler that cannot link any program
+      // that reads a file.
+      "runtime/runtime_os.c",
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",
@@ -4341,7 +4379,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     ];
     const absent = required.filter((f) => !files.includes(f));
     check(
-      "npm pack includes everything --link and `node --import` need (runtime.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE and INSTALL.md",
+      "npm pack includes everything --link and `node --import` need (runtime.c, runtime_os.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE and INSTALL.md",
       absent.length === 0,
       absent.join("\n")
     );

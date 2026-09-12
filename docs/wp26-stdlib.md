@@ -142,11 +142,12 @@ guarding:
 
 - **Do not add a C function for something `std/` could do.** The runtime has a
   measured byte budget that a test enforces
-  ([wp7-runtime.md](wp7-runtime.md#runtime-additions-and-budget); 4,670 of 4,864
-  bytes of `.text*` today, 194 bytes of headroom), and a library function costs
-  that budget nothing. The live example is `sort`: `readdirSync` sorts its own
-  result *because there is no `sort` for a caller to reach for*, and the answer
-  to that gap is a `std/` function, not `nish_sort`.
+  ([wp7-runtime.md](wp7-runtime.md#runtime-additions-and-budget); one budget per
+  translation unit today — 3,480 of `runtime.c`'s 3,584 bytes of `.text*`, and
+  1,190 of `runtime_os.c`'s 1,280), and a library function costs neither of them
+  anything. The live example is `sort`: `readdirSync` sorts its own result
+  *because there is no `sort` for a caller to reach for*, and the answer to that
+  gap is a `std/` function, not `nish_sort`.
 - **Do not write a `std/` module for something only C can do.** A wall clock, a
   locale table, a `toLowerCase` that knows about anything but ASCII: each needs
   data or a syscall the language cannot reach, and a module that fakes one would
