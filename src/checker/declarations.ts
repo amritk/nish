@@ -13,7 +13,7 @@
  */
 import ts from "typescript";
 import { CompileError } from "../diagnostics.js";
-import { CompilerOptions, isScalarType, resolveTypeNode, typeToString } from "../types.js";
+import { CompilerOptions, isForeignScalar, resolveTypeNode, typeToString } from "../types.js";
 import { ConstInfo } from "./constants.js";
 import { FunctionSig, ImportBinding, Param } from "./program.js";
 
@@ -68,8 +68,7 @@ export function collectFunctionSignature(
     // S1 crosses the boundary with scalars only. That is not timidity about C:
     // with no pointer among the arguments or the result there is nothing for
     // escape analysis to be wrong about, which is the whole reason S1 can be
-    // sound without answering WP27 §3's questions. `isScalarType` is the same
-    // predicate `--emit-header` uses, so one ABI serves both directions.
+    // sound without answering WP27 §3's questions.
     if (hasExportModifier(decl)) {
       throw new CompileError(
         `\`declare function ${decl.name.text}\` cannot be exported: it is a C function this program calls, not one it defines`,
@@ -78,7 +77,7 @@ export function collectFunctionSignature(
       );
     }
     for (const p of params) {
-      if (!isScalarType(p.type)) {
+      if (!isForeignScalar(p.type)) {
         throw new CompileError(
           `Parameter \`${p.name}\` of \`declare function ${decl.name.text}\` is ${typeToString(p.type)}, and a declared C function takes scalars only`,
           decl,
@@ -86,7 +85,7 @@ export function collectFunctionSignature(
         );
       }
     }
-    if (!isScalarType(returnType)) {
+    if (!isForeignScalar(returnType)) {
       throw new CompileError(
         `\`declare function ${decl.name.text}\` returns ${typeToString(returnType)}, and a declared C function returns a scalar only`,
         decl.type,

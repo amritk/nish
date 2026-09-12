@@ -502,6 +502,73 @@ attributes #3 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end decl_type_alias -->
 
+### `declare function`: calling C
+
+A `declare function` is a C function this program **calls but does not define**
+(WP27 S1). It lowers to an LLVM `declare` and a plain `call`, and the whole of
+what is interesting is the attributes — specifically their absence.
+
+The declaration carries none, because nothing about a body this compiler cannot
+see is provable. What that costs is visible on the *callers*: `pureDouble` keeps
+`willreturn readnone`, `main` calls C and keeps only `nounwind`. The impurity
+travels the call graph like any other, so a function three hops above a foreign
+call loses `readnone` too.
+
+`nounwind` stays on the caller by decision rather than by proof: a C++ callee
+could unwind, and a language with no `throw` and no landing pad can do nothing
+with that admission, so unwinding out of a foreign call is undefined here — the
+position clang already takes compiling C (`docs/wp27-ffi.md` §2).
+
+The boundary is scalars only, and that is what makes it sound rather than merely
+small: with no pointer among the arguments or the result, there is nothing for
+escape analysis to be wrong about (`tests/cases/ffi_scalar`, and the four
+`reject_ffi_*` cases).
+
+<!-- cookbook:begin decl_ffi -->
+```ts
+declare function abs(n: i32): i32;
+
+function pureDouble(n: i32): i32 {
+  return n * 2;
+}
+
+export function main(): i32 {
+  return abs(-7) + pureDouble(3);
+}
+```
+
+```llvm
+declare i32 @abs(i32)
+declare void @nish_free_arena() #2
+
+define internal noundef i32 @pureDouble(i32 noundef %n) #0 {
+entry:
+  %0 = mul nsw i32 %n, 2
+  ret i32 %0
+}
+
+define noundef i32 @nish_main() #1 {
+entry:
+  %0 = sub nsw i32 0, 7
+  %1 = call i32 @abs(i32 %0)
+  %2 = call i32 @pureDouble(i32 3)
+  %3 = add nsw i32 %1, %2
+  ret i32 %3
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readnone }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
+```
+<!-- cookbook:end decl_ffi -->
+
 ### Numeric `enum`
 
 An enum is a **distinct type with `i32` representation**, so the type system

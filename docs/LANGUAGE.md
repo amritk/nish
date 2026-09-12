@@ -587,7 +587,8 @@ declarations (a `const` bound to an arrow, or the legacy `function` keyword),
 `class` and `interface` declarations, `const` declarations
 ([Module constants](#module-constants)), `type` aliases
 ([Type aliases](#type-aliases)), numeric `enum` declarations
-([Enums](#enums)), `import` statements, and `export` modifiers on
+([Enums](#enums)), `declare function` declarations
+([Calling C](#calling-c)), `import` statements, and `export` modifiers on
 those declarations. Any other top-level statement, including `let`,
 is rejected with
 `Only top-level function declarations are supported in Phase 1 (found <Kind>)`
@@ -1122,6 +1123,53 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   function (`tests/cases/cls_implements_prefix`,
   `tests/differential/corpus/class_prefix`) — the job `extends` used to do,
   without a dispatch rule to get wrong.
+
+### Calling C
+
+**`declare function name(params): T;` declares a C function this program calls
+but does not define.** The symbol is the identifier — no mangling, no prefix —
+and the call is an ordinary call:
+
+```ts
+declare function abs(n: i32): i32;
+```
+
+```llvm
+declare i32 @abs(i32)
+  %0 = call i32 @abs(i32 %n)
+```
+
+The spelling is TypeScript's own ambient declaration, and `declare` is a
+*contextual* keyword: a variable may still be called `declare`.
+
+**Every position must be a scalar** — `i32`, `i64`, `u8`, `u16`, `u32`, `u64`,
+`f32`, `f64`, `boolean`, `void`. A `string`, an array, a class or an interface is
+rejected with
+`` and a declared C function takes scalars only `` in a parameter
+(`tests/cases/reject_ffi_string_param`) and
+`` returns a scalar only `` in the return position
+(`reject_ffi_string_return`). This is not a stylistic limit: a scalar boundary has
+no pointer for a foreign function to capture or free, which is what lets the
+escape analysis stay correct without knowing anything about the callee.
+
+**A foreign declaration has no body** (`reject_ffi_body`) and **cannot be
+`export`ed** (`reject_ffi_export`), because `export` offers other modules a
+function *this* module defines.
+
+**The declaration carries no LLVM attributes, and its callers pay for it.**
+Nothing about a body the compiler cannot see is provable, so a function that
+calls C loses `readnone` and `willreturn`, and so does everything above it in the
+call graph; a function that calls no C keeps both (`tests/cases/ffi_scalar`).
+`nounwind` is the one exception, and it is a **decision rather than a proof**:
+unwinding out of a foreign call is undefined in this language, the same position
+clang takes compiling C, because there is no `throw` and no landing pad with
+which to do anything else. See
+[`docs/wp27-ffi.md`](wp27-ffi.md) §2 and the
+[cookbook entry](IR_COOKBOOK.md#declare-function-calling-c).
+
+**A program that calls C is no longer one the compiler can reason about end to
+end.** That is the trade the feature is: the whole-program fact fixpoint is the
+performance thesis, and a foreign call is a hole in it.
 
 ## Statements
 

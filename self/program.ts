@@ -19,7 +19,7 @@
 
 import { SourceFile } from "./diagnostics";
 import { StringMap, StringSet } from "./map";
-import { N_CONSTRUCTOR, N_EMPTY, N_MEMBER, Node } from "./nodes";
+import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_MEMBER, Node } from "./nodes";
 import { packageSymbolPrefix } from "./packages";
 import { Local } from "./symbols";
 import { TypeTable } from "./types";
@@ -74,6 +74,19 @@ export class FunctionSig {
   body(): Node | null {
     const node = this.decl.kind === N_CONSTRUCTOR ? this.decl.children[1] : this.decl.children[3];
     return node.kind === N_EMPTY ? null : node;
+  }
+
+  /**
+   * `declare function f(...): T;` — a C function this program calls but does not
+   * define (WP27 S1). Derived from the parser's flag rather than stored, so
+   * there is one place that decides what a foreign declaration is.
+   *
+   * `body()` above already answers `null` for one, because the parser puts the
+   * empty node where the block goes; this is what tells a foreign declaration
+   * apart from the other reason a body can be missing.
+   */
+  foreign(): boolean {
+    return (this.decl.flags & FLAG_FOREIGN) !== 0;
   }
 
   /**

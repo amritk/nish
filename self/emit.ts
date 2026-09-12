@@ -225,7 +225,12 @@ export class Emitter {
     }
     for (const sig of this.program.functions) {
       if (sig.definedIn(this.program.source)) {
-        this.module.addFunction(this.emitFunction(sig));
+        // WP27 S1: a declared C function is a `declare`, not a `define`.
+        if (sig.foreign()) {
+          this.module.addDeclaration(this.foreignDeclarationFor(sig));
+        } else {
+          this.module.addFunction(this.emitFunction(sig));
+        }
       }
     }
     const entry = this.program.entryMain;
@@ -478,6 +483,27 @@ export class Emitter {
    * exporter used for its `define`, so the two agree attribute for attribute
    * (parameter names are omitted, as clang does for declarations).
    */
+  /**
+   * `declare <ret> @name(<params>)` for a `declare function` (WP27 S1), with no
+   * parameter attributes, no return attributes and no attribute group.
+   *
+   * The emptiness is "no attribute without a proof" applied to a body this
+   * compiler cannot see: not `nounwind` (a C++ callee may unwind — undefined
+   * here by decision, see `self/attributes.ts`), not `willreturn` (it may exit
+   * or spin), not `readnone` (it may do anything to memory). `declarationFor`
+   * below is the opposite case: an *imported* Nish function, whose `define` this
+   * same compiler wrote, so its attributes are facts and must match.
+   */
+  foreignDeclarationFor(sig: FunctionSig): string {
+    const params: string[] = [];
+    let i = 0;
+    while (i < sig.paramNames.length) {
+      params.push(this.llvmAbi(sig.paramTypes[i], false));
+      i = i + 1;
+    }
+    return `declare ${this.llvmAbi(sig.returnType, false)} @${sig.name}(${params.join(", ")})`;
+  }
+
   declarationFor(sig: FunctionSig): string {
     const facts = this.factsFor(sig);
     this.declareSignatureTypes(sig);

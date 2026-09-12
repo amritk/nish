@@ -39,6 +39,32 @@ export const T_VOID: i32 = 11;
 /** The first id a `TypeTable` hands out; everything below is fixed. */
 export const T_FIRST_DERIVED: i32 = 12;
 
+/**
+ * A type that crosses the C boundary as exactly one machine value (WP27 S1) —
+ * no pointer, no length word, no layout this compiler had to agree with anyone
+ * about. `T_ERROR` passes so a signature that already failed to resolve reports
+ * once rather than twice.
+ *
+ * Deliberately not `interop_abi`'s scalar set, which leaves `i64` and `u64` out:
+ * the C ABI spells both (`int64_t`, `uint64_t`), so excluding them would refuse
+ * a signature the compiler can already write into a header.
+ */
+export function isForeignScalar(t: i32): boolean {
+  return (
+    t === T_ERROR ||
+    t === T_I32 ||
+    t === T_I64 ||
+    t === T_U8 ||
+    t === T_U16 ||
+    t === T_U32 ||
+    t === T_U64 ||
+    t === T_F32 ||
+    t === T_F64 ||
+    t === T_BOOL ||
+    t === T_VOID
+  );
+}
+
 // The kinds of the types that are not scalars. `kindOf` answers one of these
 // or the scalar id itself, so a `switch` over a kind is exhaustive.
 export const K_ARRAY: i32 = 12;
