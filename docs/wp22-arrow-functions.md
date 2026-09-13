@@ -399,9 +399,32 @@ comes back with one difference in 373 programs, and it is a *position* rather
 than a lowering — the subsection below is what it was and why the corpus has 77
 of it and `self/` none.
 
-**By reading: also none, and the reason is more useful than the count.** Every
-pass in `src/` that consults `node.parent` to classify a use was re-read against
-a concise body, and they divide into three kinds:
+**By reading: also none.** A search that finds nothing is only worth what the
+search was, so here is the search, reproducible in four commands:
+
+```bash
+grep -rn "isReturnStatement" src/ --include=*.ts      # 5 hits
+grep -rn "\.parent" src/ --include=*.ts               # 47, of which 19 bind it to a name
+grep -rn "decl\.body\|sig\.body" src/ --include=*.ts  # the body walkers
+grep -n  "parentOf\|N_RETURN" self/*.ts               # the stage1 side: 11 and 10
+```
+
+The first two are the class's signature — a pass that names a `return` by its
+kind, or climbs to a parent to find out what a value is for. The third is the
+other way in, because a pass that reaches a body and expects a `Block` has the
+same problem from the other end (`self/dump.ts` had exactly that, §8's "What B
+cost"). The fourth runs the same two searches against the self-hosted compiler,
+which has no `node.parent` and a `parents.ts` table instead, so the query is
+spelled differently and the class is identical.
+
+Of the five `isReturnStatement` hits, two are `isFunctionResult` itself.
+`classes.ts:630` and `bounds.ts:1095` are statement walks, reached only with a
+`ts.Statement` in hand, and a concise body is not a statement — their arrow
+path goes through `walkExpression` instead (`bounds.ts:1161`).
+`performance.ts:337` is the one real gap, and it is the unreachable one below.
+
+Every pass among the 19 that consults `node.parent` to classify a use was then
+re-read against a concise body, and they divide into three kinds:
 
 | Pass | What it asks the parent | Concise body |
 | --- | --- | --- |
@@ -415,6 +438,12 @@ design; they are right because their default is the conservative answer and a
 `ts.isReturnStatement` and not for the arrow would put them straight back into
 §8a's class, which is why the comment on `isFunctionResult` says to ask it
 rather than the node kind.
+
+Nine passes walk a body; three branch on `ts.isBlock` and see the concise case
+explicitly, and six walk whatever they are handed, which for an arrow is the
+expression. Three of those six reached it as `sig.decl.body` rather than as the
+normalised `sig.body` — the same node today, and named here because the field
+`FunctionSig` documents is the one a reader should find them using.
 
 One gap exists and is unreachable, in both compilers, identically:
 `capturesLocal` in `checker/performance.ts` and `isLocalRef` in
