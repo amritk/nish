@@ -30,11 +30,19 @@
  *     converting one would only move the error.
  *
  * `--concise` additionally collapses a body that is exactly one `return expr;`
- * into `=> expr`. It is **off by default and should stay off for a bulk
- * migration**: a concise body is the one shape where the four declaration
- * kinds stop agreeing, it changes the line count, and it is what found both
- * bugs in WP22 §8a. Use it to *hunt* for that bug class through
- * `scripts/arrow-verify.mjs`, not to land a rewrite.
+ * into `=> expr`, for an arrow this run just wrote *and* for one that was
+ * already there. The second half is not a flourish: Biome's
+ * `useConsistentArrowReturn` is an **error** in `biome.json`, so a block-bodied
+ * arrow whose body is one `return` fails `npm run lint` in every directory
+ * Biome reads — which is every Nish surface except the test fixtures. A
+ * block-only rewrite of `self/` would therefore land hundreds of lint errors,
+ * and this is the pass that clears them.
+ *
+ * It is still a second step rather than the default, and the order matters: a
+ * concise body is the one shape where the four declaration kinds stop agreeing,
+ * it changes the line count where a block-bodied rewrite does not, and it is
+ * what found both bugs in WP22 §8a. Rewrite, verify, *then* collapse and verify
+ * again — so that a difference has one cause rather than two.
  */
 import fs from "node:fs";
 import ts from "typescript";
@@ -124,6 +132,28 @@ const replacement = (text, sf, decl, concise) => {
 };
 
 /**
+ * An arrow declaration that is already an arrow but still carries a block for
+ * one `return`: `const f = (n: i32): i32 => { return n * 2; };`. Only
+ * `--concise` reaches this, and only because Biome's
+ * `useConsistentArrowReturn` is an error rather than a warning, so the block
+ * form does not merely read worse — it fails the lint.
+ */
+const conciseArrow = (text, sf, stmt) => {
+  const decls = stmt.declarationList.declarations;
+  if (decls.length !== 1) return undefined;
+  const init = decls[0].initializer;
+  if (init === undefined || !ts.isArrowFunction(init) || !ts.isBlock(init.body)) return undefined;
+  const returned = singleReturn(text, init.body);
+  if (returned === undefined) return undefined;
+  const expr = text.slice(returned.getStart(sf), returned.getEnd());
+  return {
+    start: init.body.getStart(sf),
+    end: init.body.getEnd(),
+    text: ts.isObjectLiteralExpression(returned) ? `(${expr})` : expr,
+  };
+};
+
+/**
  * Rewrite every top-level `function` declaration of one file.
  *
  * Returns the new text, whether anything changed, and one entry per
@@ -136,6 +166,13 @@ export const rewrite = (text, fileName, { concise = false } = {}) => {
   const edits = [];
   const skipped = [];
   for (const stmt of sf.statements) {
+    if (ts.isVariableStatement(stmt)) {
+      if (concise) {
+        const collapse = conciseArrow(text, sf, stmt);
+        if (collapse !== undefined) edits.push(collapse);
+      }
+      continue;
+    }
     if (!ts.isFunctionDeclaration(stmt)) continue;
     const edit = replacement(text, sf, stmt, concise);
     if (edit.skip !== undefined) {
@@ -174,17 +211,21 @@ const main = (argv) => {
     for (const skip of result.skipped) {
       process.stderr.write(`${file}:${skip.line}: left \`${skip.name}\` alone: ${skip.reason}\n`);
     }
+    // `--stdout` answers with the file whether or not anything changed: a
+    // codemod that prints nothing for an unchanged file is a way to truncate
+    // one by accident, which is a thing that has happened.
+    if (flags.has("--stdout")) {
+      process.stdout.write(result.text);
+      continue;
+    }
     if (result.changed === 0) continue;
-    if (flags.has("--stdout")) process.stdout.write(result.text);
-    else if (flags.has("--check")) pending += result.changed;
+    if (flags.has("--check")) pending += result.changed;
     else fs.writeFileSync(file, result.text);
     changed += result.changed;
-    if (!flags.has("--stdout")) {
-      process.stdout.write(`${flags.has("--check") ? "would rewrite" : "rewrote"} ${file}: ${result.changed}\n`);
-    }
+    process.stdout.write(`${flags.has("--check") ? "would rewrite" : "rewrote"} ${file}: ${result.changed}\n`);
   }
   if (flags.has("--check")) {
-    process.stdout.write(`${pending} declaration(s) still written with \`function\`\n`);
+    process.stdout.write(`${pending} declaration(s) left to rewrite\n`);
     return pending > 0 ? 1 : 0;
   }
   // `--stdout` answers with the file and nothing else, so a summary there would

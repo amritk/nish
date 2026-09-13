@@ -27,11 +27,21 @@
  * `ArrowFunction` rather than from the declaration, and *no corpus program had
  * ever been compiled as an arrow with `-g`*. Running the sweep under `-g` asks
  * that question of every program at once.
+ *
+ * The IR is only half of what a compiler emits, so the sweep also puts every
+ * `reject_*` case through `--json` on both sides and diffs the objects. That is
+ * the §A5 question asked of the other surface: a diagnostic carries a line and
+ * a column, the parity gate is keyed on them, and a declaration that changes
+ * shape can move one without moving a byte of anybody's IR. The answer for a
+ * block-bodied rewrite turns out to be a pleasant accident of arithmetic —
+ * `function NAME(` and `const NAME = (` are the same width for every NAME, so
+ * the parameters, the return type and the `{` all keep their column, and the
+ * only thing that moves is a caret pointed at the name itself.
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { extraArgs, programs, root } from "../tests/self/corpus.js";
+import { CORPUS_DIRS, extraArgs, programs, root } from "../tests/self/corpus.js";
 import { rewrite } from "./arrowify.mjs";
 
 const work = path.join(root, "build", "arrowify");
@@ -50,6 +60,37 @@ const copyTree = () => {
     fs.copyFileSync(path.join(root, rel), to);
   }
   return files;
+};
+
+/**
+ * Every negative case of the corpus: a source with a `.err` sidecar, which
+ * `programs()` leaves out because it is the reject oracle's rather than the IR
+ * oracle's. Here it is the other half of what the compiler emits.
+ */
+const rejections = () => {
+  const out = [];
+  for (const dir of CORPUS_DIRS) {
+    const full = path.join(root, dir);
+    if (!fs.existsSync(full)) continue;
+    for (const name of fs.readdirSync(full).sort()) {
+      if (!name.endsWith(".ts")) continue;
+      if (!fs.existsSync(path.join(full, name.replace(/\.ts$/, ".err")))) continue;
+      out.push(path.join(dir, name));
+    }
+  }
+  return out;
+};
+
+/** The `--json` diagnostics of one program, as the lines the compiler printed them on. */
+const diagnose = (rel) => {
+  // A rejection writes nothing, but name a directory rather than a file so that
+  // a case which stops being one does not land its IR on top of the last.
+  const out = path.join(work, "diagnose");
+  fs.mkdirSync(out, { recursive: true });
+  const args = [path.join(root, "dist", "index.js"), path.join(tree, rel), "--json", "-o", `${out}/`];
+  args.push(...extraArgs(path.join(root, rel)));
+  const run = spawnSync(process.execPath, args, { encoding: "utf8" });
+  return (run.stdout ?? "").trim();
 };
 
 /**
@@ -107,7 +148,9 @@ const main = (argv) => {
 
   process.stdout.write(`arrow-verify: ${relPrograms.length} program(s)${debug ? ", with -g" : ""}\n`);
   const tracked = copyTree();
+  const negatives = rejections().filter((rel) => filters.length === 0 || filters.some((f) => rel.includes(f)));
   const before = compileAll(relPrograms, path.join(work, "before"), debug);
+  const saidBefore = new Map(negatives.map((rel) => [rel, diagnose(rel)]));
 
   // Rewrite every Nish source in the copy. `std/` and `tests/` are in the set
   // because a program compiles its imports, so a module nobody names directly
@@ -127,6 +170,22 @@ const main = (argv) => {
   process.stdout.write(`arrow-verify: rewrote ${rewritten} declaration(s)${concise ? ", concise bodies" : ""}\n`);
 
   const after = compileAll(relPrograms, path.join(work, "after"), debug);
+
+  // The diagnostics half. A moved caret is reported rather than failed: under
+  // `--concise` the line numbers move by construction, and even a block-bodied
+  // rewrite is allowed to move a caret pointed at the function's own name.
+  let moved = 0;
+  for (const rel of negatives) {
+    const said = diagnose(rel);
+    if (said === saidBefore.get(rel)) continue;
+    moved += 1;
+    if (flags.has("--verbose")) {
+      process.stdout.write(`MOVED ${rel}\n      before ${saidBefore.get(rel).split("\n")[0]}\n      after  ${said.split("\n")[0]}\n`);
+    }
+  }
+  process.stdout.write(
+    `arrow-verify: ${negatives.length} rejection(s) re-diagnosed, ${moved} whose \`--json\` moved\n`
+  );
 
   let differed = 0;
   let compared = 0;

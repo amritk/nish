@@ -341,12 +341,31 @@ rather than from the declaration — and it stood for as long as it did because
 asks that question of every program at once, which is the only form of the
 question that does not depend on somebody having thought to write the case.
 
-`--concise` collapses a body that is exactly one `return expr;`. It is **off by
-default and stays off for the bulk rewrite**: a concise body is the one shape
-where the four declaration kinds stop agreeing (§4), it changes the line count,
-and it is what found both bugs in §8a. Its use is the sweep — running the whole
-corpus through it is a search for the rest of that bug class, rather than a
-rewrite anybody lands.
+`--concise` collapses a body that is exactly one `return expr;`, for an arrow
+the run just wrote *and* for one that was already there. **The second half is
+not a flourish, and finding out why is what this preparation was for.** Biome's
+`useConsistentArrowReturn` is an **error** in `biome.json`, not a warning — so a
+block-bodied arrow whose body is one `return` fails `npm run lint` in every
+directory Biome reads, which is every Nish surface except the test fixtures.
+A block-only rewrite of `self/` would land **119 lint errors**, one per
+single-return declaration of its 721, and `npm run lint` may not get worse than
+`main`. The rewrite is therefore two passes and not one, and the order is the
+point:
+
+```bash
+node scripts/arrowify.mjs self/*.ts            # block bodies; lines and columns hold
+node scripts/arrow-verify.mjs self             # 0 differences, or stop
+node scripts/arrowify.mjs --concise self/*.ts  # the 119, for the lint
+node scripts/arrow-verify.mjs self             # 0 differences again
+```
+
+Collapsing second rather than first is what keeps a difference down to one
+cause. A concise body is the one shape where the four declaration kinds stop
+agreeing (§4), it changes the line count where a block-bodied rewrite does not,
+and it is what found both bugs in §8a — so it is the pass to be able to blame,
+and it can only be blamed if the other one has already come back clean. The same
+flag over the whole corpus is the search for the rest of that bug class, which
+§8c reports.
 
 `npm test` pins the tool against a file a person wrote rather than against its
 own output: `tests/differential/arrow-parity/declared.ts` and `arrow.ts` are one
@@ -376,7 +395,10 @@ arrow-verify: 1678 module(s) compared, 0 difference(s), 38 declaration(s) left a
 — which is every `function` definition in the repository outside `src/`,
 `self/`'s 721 included, turned into an arrow and compiled to the same 1,678
 modules, byte for byte. That is the evidence for the `self/` migration, and it
-exists before the migration rather than after it.
+exists before the migration rather than after it. The same sweep under `-g`
+comes back with one difference in 373 programs, and it is a *position* rather
+than a lowering — the subsection below is what it was and why the corpus has 77
+of it and `self/` none.
 
 **By reading: also none, and the reason is more useful than the count.** Every
 pass in `src/` that consults `node.parent` to classify a use was re-read against
@@ -415,30 +437,61 @@ is a read rather than a capture.
 
 #### What a block-bodied rewrite does to a position, exactly
 
-§A5's failure mode is a declaration whose position moves, so the sweep asks the
-other surface too: every `reject_*` case through `--json` on both sides. The
-answer is a pleasant accident of arithmetic.
+§A5's failure mode is a declaration whose position moves, so the sweep runs
+again under `-g` — where a column is a byte of output rather than a caret
+nobody diffed — and puts every `reject_*` case through `--json` on both sides.
+A block-bodied rewrite moves **no line at all**, and moves a column in exactly
+two ways.
+
+The first is a pleasant accident of arithmetic. `function ` is nine characters
+and `const ` is six, and the arrow form spends the other three on ` = (` where
+the declaration form spends one on `(`, so `function NAME(` and
+`const NAME = (` are the same width **for every NAME**:
 
 ```
 export function widget(a: i32, b: any): i32     `any` at column 35
 export const widget = (a: i32, b: any): i32 =>  `any` at column 35
 ```
 
-`function ` is nine characters and `const ` is six, and the arrow form spends
-the other three on ` = (` where the declaration form spends one on `(`. So
-`function NAME(` and `const NAME = (` are the same width **for every NAME**, and
-every parameter, the return type and the `{` keep the column they had. A
-block-bodied rewrite therefore moves no line at all and exactly one kind of
-column: a caret pointed at the function's *own name*, which moves left by three.
+Every parameter, the return type and the `{` therefore keep the column they
+had. What does move is a caret pointed at the function's *own name*, three
+characters to the left:
 
 ```
 export function nish_alloc(...)   name at column 17
 export const nish_alloc = (...)   name at column 14
 ```
 
-That is the whole difference set, and it is small enough to enumerate rather
-than to discover: the cases that pin a caret on a function name are the ones a
-`self/`-style rewrite has to look at, and nothing else is.
+**The second was found by the sweep rather than by the arithmetic, which is the
+point of running it.** One program in 373 came back different under `-g`, and
+it is the one whose whole body is on the line its declaration is on:
+
+```typescript
+export function main(): number { let big: i64 = 9007199254740992; console.log(`${big}`); return 0; }
+```
+
+The ` =>` that the arrow form adds sits between the return type and the `{`, so
+everything *after* the brace on that physical line shifts right by three —
+seven `!DILocation` columns in `tests/cases/i64_literal_2pow53`, 34 becoming 37
+and so on. In the conventional layout the `{` ends its line and there is nothing
+after it to move, which is why 372 of the 373 were identical and why the
+arithmetic above looked complete until something asked.
+
+So the whole rule, and it is short enough to check a file against:
+
+> A block-bodied rewrite moves no line. It moves the function's own name three
+> columns left, and — only where a body is written on the same line as its
+> declaration — everything inside that body three columns right.
+
+Both are enumerable rather than discoverable. **`self/` has no single-line body
+at all**, so the second cannot reach the migration that matters; the corpus has
+77, and 76 of them are `reject_*` cases, where a column is precisely what the
+diagnostic carries. No gate sees that shift today — the `.err` sidecars pin
+words rather than positions, and both compilers shift together so no oracle and
+no `--parity` run diverges — which makes it the kind of change that lands
+silently and is worth deciding rather than discovering. The cheap answer is to
+give those cases the ordinary layout while converting them, so that the rewrite
+owes nothing to a column at all.
 
 ## 9. What stage D forecloses
 
