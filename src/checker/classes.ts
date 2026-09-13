@@ -62,7 +62,7 @@ import {
   typeToString,
 } from "../types.js";
 import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context.js";
-import { hasExportModifier, isFunctionResult } from "./declarations.js";
+import { hasExportModifier, isFunctionResult, rejectDollarInSymbolName } from "./declarations.js";
 import { assignmentTargetCheckers, methodCallCheckers, newCheckers, propertyCheckers } from "./members.js";
 import { checkBitwiseAssignOperands, isBitwiseCompoundOperator } from "./bitwise.js";
 import { CheckedProgram, FieldInfo, FunctionSig, LocalVar, Param, StructInfo } from "./program.js";
@@ -219,6 +219,7 @@ export function declareStruct(ctx: CheckContext, decl: ts.ClassDeclaration | ts.
   if (!decl.name) throw ctx.error(`${kind === "class" ? "Classes" : "Interfaces"} must be named`, decl);
   const name = decl.name.text;
   if (name.startsWith("nish_")) throw ctx.error("Names starting with `nish_` are reserved for the runtime", decl.name);
+  rejectDollarInSymbolName(name, kind, decl.name, ctx.sf);
   if (ctx.program.structs.has(name)) throw ctx.error(`Duplicate declaration of \`${name}\``, decl.name);
   if (ctx.program.aliases.has(name) || ctx.program.enums.has(name)) {
     throw ctx.error(`\`${name}\` is already declared in this module`, decl.name);
@@ -229,7 +230,11 @@ export function declareStruct(ctx: CheckContext, decl: ts.ClassDeclaration | ts.
     if (m === ts.SyntaxKind.DeclareKeyword) throw ctx.error(`\`declare ${kind}\` is not supported`, decl);
     if (m === ts.SyntaxKind.DefaultKeyword) throw ctx.error("`export default` is not supported; use a named `export`", decl);
   }
-  if (decl.typeParameters) throw ctx.error(`Generic ${kind === "class" ? "classes" : "interfaces"} are not supported`, decl);
+  if (decl.typeParameters) {
+    // Phase 0 already refused this; the message is kept for a struct that
+    // reaches the checker another way (WP18 §11, G5 lifts the restriction).
+    throw ctx.error(`Generic ${kind === "class" ? "classes" : "interfaces"} are not supported yet`, decl);
+  }
   // A class's `extends` is refused in pass 1b, so the struct is registered
   // first and a rejected class does not cascade into every use of its name.
   for (const clause of decl.heritageClauses ?? []) {
@@ -370,6 +375,7 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: ts.MethodDecl
   rejectMethodModifiers(ctx, owner, decl, what);
   if (!decl.body) throw ctx.error(`${what} of class \`${owner.name}\` must have a body`, decl);
   if (decl.typeParameters) throw ctx.error("Generic methods are not supported", decl);
+  rejectDollarInSymbolName(name, "method", decl.name, ctx.sf);
   if (decl.asteriskToken) throw ctx.error("Generators are not supported", decl);
   if (decl.questionToken) throw ctx.error(`${what} of class \`${owner.name}\` cannot be optional`, decl);
   if (!decl.type) throw ctx.error(`${what} of class \`${owner.name}\` needs an explicit return type annotation`, decl.name);

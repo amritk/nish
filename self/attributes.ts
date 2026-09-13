@@ -1166,7 +1166,17 @@ export function analyzeFunctions(
   for (const unit of units) {
     for (const sig of unit.program.functions) {
       if (sig.definedIn(unit.program.source)) {
+        // WP18: over the instantiation's own side tables, so `Box<i32>` being
+        // stack-allocated in one instantiation and arena-allocated in another
+        // is two answers rather than one.
+        const instance = sig.instance;
+        if (instance !== null) {
+          unit.program.enterInstance(instance);
+        }
         escapes.set(sig.name, analyzeEscapes(unit, table, sig, first, opts));
+        if (instance !== null) {
+          unit.program.leaveInstance();
+        }
       }
     }
   }
@@ -1221,7 +1231,17 @@ function collectRound(
       if (escapes !== null) {
         memory = escapes.get(sig.name);
       }
+      // WP18: per instantiation, over that instantiation's side tables. The
+      // facts are keyed by symbol already, so `eq$i32` being `readnone` and
+      // `eq$str` `readonly` needs nothing but the right tables here.
+      const instance = sig.instance;
+      if (instance !== null) {
+        unit.program.enterInstance(instance);
+      }
       facts.set(sig.name, collectFacts(unit, table, opts, sig, memory, unit.program.nodeTypes.length));
+      if (instance !== null) {
+        unit.program.leaveInstance();
+      }
     }
   }
   return facts;

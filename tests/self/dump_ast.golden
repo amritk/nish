@@ -38,6 +38,7 @@ SOURCE_FILE tests/cases/dump_ast.ts
               IDENT 109 110 p
       RETURN 118 131
         IDENT 125 130 total
+    LIST 0 0
   FUNCTION+export 135 205
     IDENT 151 156 greet
     LIST 157 169
@@ -52,3 +53,4 @@ SOURCE_FILE tests/cases/dump_ast.ts
         BINARY 190 202 +
           STRING 190 195 #3
           IDENT 198 202 name
+    LIST 0 0

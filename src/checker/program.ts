@@ -2,6 +2,7 @@
 import ts from "typescript";
 import { AliasInfo } from "./aliases.js";
 import { EnumInfo } from "./enums.js";
+import { Instantiation, TemplateInfo } from "./generics.js";
 import { ConstInfo } from "./constants.js";
 import { StaticType, alignOf, llvmType } from "../types.js";
 
@@ -122,6 +123,13 @@ export interface FunctionSig {
    * it and whole-body checks (definite return) are skipped to avoid cascades.
    */
   poisoned?: boolean;
+  /**
+   * WP18: set when this signature is one instantiation of a generic template
+   * rather than a declared function. It carries the node-keyed tables the
+   * template's body was checked into for *this* type-argument tuple, which is
+   * what every pass that walks the body swaps in (`checker/generics.ts`).
+   */
+  instance?: Instantiation;
 }
 
 export interface LocalVar {
@@ -224,6 +232,20 @@ export interface CheckedProgram {
   locals: WeakMap<ts.VariableDeclaration, LocalVar>;
   /** CallExpression node -> callee signature (free functions and methods alike). */
   callees: WeakMap<ts.CallExpression, FunctionSig>;
+  /**
+   * Generic function templates declared in this module, by source name (WP18).
+   * A template is not a function: it has no signature, no symbol and no body
+   * of its own in `functions`, and only its instantiations are checked and
+   * emitted.
+   */
+  templates: Map<string, TemplateInfo>;
+  /**
+   * Every instantiation this module owns, keyed by its mangled symbol and in
+   * discovery order — which is the order they are appended to `functions`, the
+   * order they are emitted in, and the order `--emit-checked` prints them, so
+   * the two compilers can be compared before the IR is (`docs/wp18-generics.md` §3a).
+   */
+  instantiations: Map<string, Instantiation>;
   /** Classes and interfaces visible in this module (declared or imported), keyed by name (WP2). */
   structs: Map<string, StructInfo>;
   /**

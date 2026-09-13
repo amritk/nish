@@ -39,6 +39,7 @@ NL2156  retired: `super(...)`, removed with inheritance
 NL2157  retired: `super`, removed with inheritance
 NL2158  retired: `super`, removed with inheritance
 NL2159  retired: `super`, removed with inheritance
+NL1045  retired: Phase 0's blanket `Generic type parameters are forbidden in ` before WP18 named the kind; the live ones are NL1054 and NL1055
 NL2287  retired before it ever fired: WP23 reserved the number, and no message in either compiler produces the fragment
 
 # --- Shadowed: a longer fragment of the same message always wins. ------------
@@ -51,16 +52,33 @@ NL2031  shadowed by NL2118, the same words with the colon before them
 
 # --- Preempted: an earlier phase or a nearer rule refuses it first. ----------
 NL1039  the generator holding the `yield` is refused before the `yield` is reached
-NL2011  `Generic interfaces are not supported` needs a type parameter, which Phase 0 refuses (NL1045)
+NL2011  `Generic interfaces are not supported` needs a type parameter, which Phase 0 refuses (NL1054)
 NL2075  a class name is registered before any function signature, so NL2074 is the one that fires
 NL2109  the single-module `check()` path is not the driver's; the loader reports NL3006 instead
 NL2173  `async` functions are Phase 0's (NL1015)
 NL2174  `async` methods are Phase 0's (NL1015)
 NL2205  generators are Phase 0's (NL1044)
-NL2207  generic functions are Phase 0's (NL1045)
-NL2208  generic methods are Phase 0's (NL1045)
+NL2207  generic functions are Phase 0's (NL1054)
+NL2208  generic methods are Phase 0's (NL1055)
+NL2293  the checker's `Generic classes are not supported yet` is preempted by Phase 0's NL1054, which refuses the type parameter first
 NL2217  labelled `break` is Phase 0's (NL1046)
 NL2218  labelled `continue` is Phase 0's (NL1046)
+
+# --- Backstops: reachable, but only by a program this corpus will not carry. --
+# WP18's two instantiation caps. They are not rules of the language and their
+# messages say so; they exist to stop a program that asks for an absurd number
+# of specialisations without tripping the termination rule. Provoking one needs
+# 257 distinct type-argument tuples for a single template, or 4,097 in a module,
+# and a program that size is a stress test rather than a wording case: it would
+# be the largest file in `tests/` and would spend the suite's time proving a
+# constant. The wordings are held by the `MAX_INSTANTIATIONS*` constants they
+# interpolate, which `docs/wp18-generics.md` §4 documents.
+#
+# This is the one kind of entry here that is a judgement about the corpus rather
+# than a fact about the compiler, and it is the kind to look at first if this
+# list ever starts growing.
+NL2295  the per-module cap (4,096 instantiations); provokable only by a program this corpus will not carry
+NL2297  the per-template cap (256 instantiations); provokable only by a program this corpus will not carry
 
 # --- Structurally unreachable. -----------------------------------------------
 NL2211  no import syntax produces a clause with neither a name nor named bindings

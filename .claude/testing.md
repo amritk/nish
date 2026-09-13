@@ -214,8 +214,8 @@ node tests/diagnostic_coverage.js --update              # rewrite the .err pins
 Two lists sit beside the corpus and both shrink rather than grow:
 `parser_refusals.txt` names the cases whose wording is stage0's because
 stage1's parser refuses the syntax first (§A3's declared class, and those
-wordings do not survive R6), and `stage1_divergence.txt` names the eleven where
-the two compilers do not agree at all. `npm test` runs the tool over both
+wordings do not survive R6), and `stage1_divergence.txt` names the thirteen
+where the two compilers do not agree at all. `npm test` runs the tool over both
 compilers, the second with `--strict-refusals`, so a case that starts agreeing
 fails until its line is deleted.
 

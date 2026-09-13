@@ -647,7 +647,8 @@ spelling; the two compile to identical IR, instruction for instruction
   (`tests/cases/reject_assign_param`, `reject_cf_incdec_param`).
 - Parameters and the body's top-level block share one scope: `let x` in
   the body of `f(x)` is `` Duplicate declaration of `x` `` *(CLI only)*.
-- Rejected forms: generics (`tests/cases/reject_generic_function`),
+- **A function may be generic**, and each instantiation is compiled on its
+  own; see [Generic functions](#generic-functions). Rejected forms:
   generators (`reject_generator`), `async` (`reject_async_function`),
   destructured / rest / optional / default parameters
   (`Destructured parameters are not supported`,
@@ -765,9 +766,10 @@ program twice, with one golden between them.
   because it is the same mistake.
 - **An alias is resolved even when nothing uses it**, so a broken right-hand
   side is reported where it is written rather than never.
-- **Generic aliases are forbidden**, as every other generic is:
-  `type Box<T> = T[]` is
-  `` Generic type parameters are forbidden in Nish (no monomorphisation yet) ``
+- **Generic aliases are forbidden**, unlike a generic *function*: an alias
+  only renames a type that already exists, so there is nothing for a type
+  argument to apply to. `type Box<T> = T[]` is
+  `` Generic type parameters are forbidden on a type alias in Nish (a generic function is monomorphised; a generic class is not supported yet) ``
   (`tests/cases/reject_type_alias_generic`).
 - **A built-in type name may not be aliased.** `type string = i32` is
   `` `string` is a built-in type name and cannot be used for a type alias ``
@@ -1058,9 +1060,81 @@ class Point {
 - **Rejected**: `static` (`tests/cases/reject_cls_static`),
   getters/setters (`Getters and setters are not supported`), optional fields
   (`cannot be optional`), index signatures, `!` assertions, `abstract`,
-  `declare class`, generics (`tests/cases/reject_generic_class`), decorators
+  `declare class`, type parameters on a class or on one of its methods
+  (`tests/cases/reject_generic_class`, `reject_generic_method`), decorators
   (`reject_decorator`), computed member names (`reject_computed_property`),
   overloaded constructors.
+
+### Generic functions
+
+A function may declare type parameters, and **every instantiation is compiled
+to its own specialised function**: one `define` per (template, type-argument
+tuple), named by appending `$` and each argument's mangled type to the
+template's name. There is no boxing, no type dictionary and no runtime type
+information, and the IR of an instantiation is the IR of the monomorphic
+function somebody would have written by hand, with the symbol renamed
+(`tests/cases/gen_identity`).
+
+```typescript
+const identity = <T>(x: T): T => x;
+
+export const main = (): i32 => {
+  console.log(identity(7));      // @identity$i32
+  console.log(identity("hi"));   // @identity$str
+  return 0;
+};
+```
+
+- **Both spellings take type parameters.** `function identity<T>(x: T): T` and
+  `const identity = <T>(x: T): T => x` declare the same thing, as they do
+  without them (`tests/cases/gen_identity`).
+- **A type argument is inferred from the arguments, and is never written at a
+  call site.** `identity<i32>(7)` is
+  `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `identity(...)` ``
+  (`tests/cases/reject_generic_call_type_args`). One token of lookahead cannot
+  tell `f<i32>(x)` from `(f < i32) > (x)`, and inference already covers the
+  spelling. Inference matches the *shape* of each declared parameter against
+  its argument's type — `T` against `i32`, `T[]` against `i32[]`,
+  `Result<T, string>` against `Result<i32, string>` — left to right, first
+  binding wins (`tests/cases/gen_infer_two`, `gen_result_payload`).
+- **A type parameter that appears in no parameter is an error at the
+  declaration**, because it could never be inferred and the function could
+  never be called:
+  `` Cannot infer `T` for `empty`: a type parameter is inferred from the arguments, and `T` appears in none of them; give `empty` a parameter that mentions `T` ``
+  (`tests/cases/reject_generic_function`).
+- **Every other type rule applies to a type argument unchanged.** A type
+  parameter is not a hole through which something the language refuses can be
+  smuggled in: `Result<T, void>` is still refused at an instantiation whose `E`
+  is `void`, `T | null` is still only over a pointer type, and each
+  instantiation's body is checked with `T` bound to a concrete type.
+- **Each instantiation gets its own facts.** The attribute fixpoint and the
+  escape analysis are keyed by symbol, so `eq<T>` is `readnone` at `T = i32`
+  and `readonly` at `T = string` — one source line, two sets of attributes
+  (`tests/cases/gen_eq_purity`).
+- **Recursion terminates or is refused by name.** A recursive call whose type
+  argument is the parameter itself, or a type that does not mention it, is
+  accepted: `countDown<string>` asking for `countDown<i32>` is two
+  instantiations and no more (`tests/cases/gen_recursive_ground`). A call that
+  puts the parameter *under a type constructor* has no end and is refused:
+  `` Monomorphising `grow` would not terminate: `grow<i32>` asks for `grow<i32[]>`, which puts `i32` under a type constructor instead of passing it on, so the chain has no end; pass `T` itself, or a type that does not mention it ``
+  (`tests/cases/reject_generic_polymorphic_recursion`). Behind the rule are two
+  compiler limits — 256 instantiations of one template, 4096 in one module —
+  whose message says it is a limit rather than a rule of the language.
+- **`$` may not appear in a declared name.** It separates a generic's name from
+  its type arguments in every symbol the compiler emits, so a function called
+  `identity$i32` would be the symbol `identity<i32>` already has:
+  `` `identity$i32` cannot be the name of a function in Nish: `$` separates a generic's name from its type arguments in the symbols the compiler emits ``
+  (`tests/cases/reject_generic_dollar_name`). Locals, parameters and fields are
+  unaffected — only names that become symbols are restricted.
+- **Not supported yet**, each with its own message: a constrained parameter
+  (`<T extends Shape>`, `tests/cases/reject_generic_constraint`), a default
+  type argument (`<T = string>`), type parameters on a class, an interface, a
+  method or a type alias, and instantiating a generic imported from another
+  module (`` is a generic function, and a generic function cannot yet be
+  instantiated from another module ``). A generic `main` is refused too: the
+  entry point is called by the C runtime, which has no type arguments to give
+  it. The design and the milestones are in
+  [wp18-generics.md](wp18-generics.md).
 
 ### Interfaces and object literals
 
@@ -2253,7 +2327,9 @@ fragment `tests/run.js` matches and the case that proves it.
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| type parameters on functions, methods, arrows, classes, interfaces, type aliases | `` Generic type parameters are forbidden in Nish (no monomorphisation yet) `` | `reject_generic_function`, `reject_generic_class`, `reject_type_alias_generic` |
+| type parameters on a class or an interface | `` Generic type parameters are forbidden on a class in Nish (a generic function is monomorphised; a generic class is not supported yet) `` | `reject_generic_class` |
+| type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish (a generic function is monomorphised; a generic class is not supported yet) `` | `reject_type_alias_generic` |
+| type parameters on a method | `` Generic type parameters are forbidden on a method in Nish (a method takes its class's type arguments and adds none of its own) `` | `reject_generic_method` |
 | generators (`function*`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator` |
 | `async` functions, methods, arrows | `` `async` functions are forbidden in Nish (no event loop or promises) `` | `reject_async_function` |
 | `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |

@@ -32,7 +32,9 @@ nl2239_void_ternary  stage1 reports the void local (NL2183) and never reaches th
 nl2260_empty_statement  stage1 says "Unsupported statement `;`", which carries no code (NL0000)
 
 # --- stage1 compiles what stage0 refuses -------------------------------------
+nl2298_generic_import  stage1 says "Module `./wordings_generic` has no exported function `identity`", which carries no code (NL0000): it does not look past the exported functions to find the template
 nl2054_literal_u64  stage1 accepts a u64 literal past 2^53 and emits IR for the rounded value
+nl2302_duplicate_type_parameter  stage1 accepts `<T, T>` and compiles it; the second parameter can never be bound to anything the first was not, so the program means what stage0 refuses to let it mean
 nl2055_literal_i64  stage1 accepts an i64 literal past 2^53 and emits IR for the rounded value
 nl2134_for_of_two_variables  stage1 accepts a `for...of` head with two declarators (syntax TypeScript itself refuses)
 nl2206_generic_new  stage1 ignores the type arguments on `new Point<i32>()` and compiles it

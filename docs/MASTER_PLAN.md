@@ -112,7 +112,8 @@ declared on the class, `var`, loose `==`/`!=`, `arguments`, `this` outside
 methods, generators, `async`/`await`, decorators, enums with computed
 values, namespaces, `declare global`, dynamic `import()`, optional chaining
 and nullish coalescing on non-nullable types, union types other than
-`T | null`, generics (until a monomorphisation WP exists), `symbol`,
+`T | null`, type parameters on a class, an interface, a method or a type
+alias (a generic *function* is monomorphised, WP18), `symbol`,
 `bigint`, regex literals, `try`/`catch` and `throw` (no unwinding; a failure is a `Result<T, E>`, WP16).
 
 ### 3.3 Semantics decisions already made
@@ -728,7 +729,7 @@ document does not need a second one open beside it to be current:
 | 5 | The fast slice beside JavaScript's `substring` | |
 | 6 | Ranged types and length narrowing | a real flow-sensitive analysis; its acceptance test is the surviving-check warning item 2 held back, and item 3 measured at 1.094x on lexer-shaped code |
 | 7 | Contiguous struct arrays | the layout change, the escape rule that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI |
-| 8 | Generics by monomorphisation; discriminated unions deferred to their own note | the largest. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code — [wp18-generics.md](wp18-generics.md) §6.1 says why |
+| 8 | Generics by monomorphisation; discriminated unions deferred to their own note | the largest. Generic **functions** have landed in both compilers — [wp18-generics.md](wp18-generics.md) §15 records what shipped and §16 the order for classes, constraints and the whole-program rule. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code, and §6.1 says why |
 
 An explicit bounds-check opt-out is deferred until 6 has landed and the checks
 that survive it have been counted. What each item is worth is a measurement

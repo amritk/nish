@@ -13,8 +13,10 @@
  */
 import ts from "typescript";
 import { CompileError } from "../diagnostics.js";
+import { LANGUAGE } from "../branding.js";
 import { CompilerOptions, resolveTypeNode, typeToString } from "../types.js";
 import { ConstInfo } from "./constants.js";
+import { TemplateInfo } from "./generics.js";
 import { FunctionSig, ImportBinding, Param } from "./program.js";
 
 /** Symbol the entry module's `export function main` is emitted under. */
@@ -31,7 +33,6 @@ export function collectFunctionSignature(
 ): FunctionSig {
   if (!decl.name) throw new CompileError("Functions must be named", decl, sf);
   if (!decl.body) throw new CompileError("Functions must have a body", decl, sf);
-  if (decl.typeParameters) throw new CompileError("Generic functions are not supported", decl, sf);
   if (decl.asteriskToken) throw new CompileError("Generators are not supported", decl, sf);
   if (decl.modifiers?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) {
     throw new CompileError("async functions are not supported", decl, sf);
@@ -71,7 +72,7 @@ export function collectFunctionSignature(
  * constructors do not come through here: they prepend `this` and resolve types
  * against their owner (`checker/classes.ts`, `collectParams`).
  */
-function collectPlainParams(
+export function collectPlainParams(
   parameters: readonly ts.ParameterDeclaration[],
   sf: ts.SourceFile,
   opts: CompilerOptions
@@ -121,7 +122,6 @@ export function collectArrowSignature(
       sf
     );
   }
-  if (arrow.typeParameters) throw new CompileError("Generic functions are not supported", arrow, sf);
   if (arrow.modifiers?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) {
     throw new CompileError("async functions are not supported", arrow, sf);
   }
@@ -143,6 +143,109 @@ export function collectArrowSignature(
     declSite: stmt,
     body: arrow.body,
     exported: hasExportModifier(stmt),
+  };
+}
+
+/**
+ * WP18 §3c: `$` separates a generic's name from its type arguments in every
+ * symbol the compiler emits, so a *declared* name may not contain one — a
+ * class literally called `Box$i32` would be the same symbol as `Box<i32>`.
+ * Locals, parameters and fields keep it; only names that become symbols are
+ * restricted, which is what makes the encoding injective.
+ */
+export function rejectDollarInSymbolName(name: string, what: string, node: ts.Node, sf: ts.SourceFile): void {
+  if (!name.includes("$")) return;
+  throw new CompileError(
+    `\`${name}\` cannot be the name of a ${what} in ${LANGUAGE}: \`$\` separates a generic's name from its ` +
+      "type arguments in the symbols the compiler emits",
+    node,
+    sf
+  );
+}
+
+/** The names of `<T, U>`, refusing the constrained and defaulted forms this package does not lower. */
+function collectTypeParams(list: readonly ts.TypeParameterDeclaration[], sf: ts.SourceFile): string[] {
+  const names: string[] = [];
+  for (const p of list) {
+    if (p.constraint) {
+      throw new CompileError(
+        `A constrained type parameter (\`${p.name.text} extends ...\`) is not supported yet: an unconstrained ` +
+          "parameter can be passed on, returned and stored, and a constrained one would also have members",
+        p.constraint,
+        sf
+      );
+    }
+    if (p.default) {
+      throw new CompileError(
+        `A default type argument (\`${p.name.text} = ...\`) is not supported: a type argument is inferred ` +
+          "from the arguments, so there is no position for a default to fill",
+        p.default,
+        sf
+      );
+    }
+    if (names.includes(p.name.text)) throw new CompileError(`Duplicate type parameter \`${p.name.text}\``, p, sf);
+    names.push(p.name.text);
+  }
+  return names;
+}
+
+/**
+ * A generic `function` declaration (WP18). Everything a monomorphic signature
+ * checks is checked here except the *types*: the annotations mention the type
+ * parameters, so they stay as syntax and are resolved once per instantiation.
+ */
+export function collectFunctionTemplate(decl: ts.FunctionDeclaration, sf: ts.SourceFile): TemplateInfo {
+  if (!decl.name) throw new CompileError("Functions must be named", decl, sf);
+  if (!decl.body) throw new CompileError("Functions must have a body", decl, sf);
+  if (!decl.type) {
+    throw new CompileError(`Function \`${decl.name.text}\` needs an explicit return type annotation`, decl.name, sf);
+  }
+  if (decl.name.text.startsWith("nish_")) {
+    throw new CompileError("Function names starting with `nish_` are reserved for the runtime", decl.name, sf);
+  }
+  rejectDollarInSymbolName(decl.name.text, "function", decl.name, sf);
+  return {
+    sourceName: decl.name.text,
+    typeParams: collectTypeParams(decl.typeParameters ?? [], sf),
+    decl,
+    nameNode: decl.name,
+    declSite: decl,
+    body: decl.body,
+    exported: hasExportModifier(decl),
+    count: 0,
+  };
+}
+
+/** The arrow spelling of the same thing: `const identity = <T>(x: T): T => x`. */
+export function collectArrowTemplate(
+  stmt: ts.VariableStatement,
+  decl: ts.VariableDeclaration,
+  arrow: ts.ArrowFunction,
+  sf: ts.SourceFile
+): TemplateInfo {
+  if (!ts.isIdentifier(decl.name)) throw new CompileError("Functions must be named", decl.name, sf);
+  const name = decl.name.text;
+  if ((stmt.declarationList.flags & ts.NodeFlags.Const) === 0) {
+    throw new CompileError(`Function \`${name}\` must be declared \`const\`, not \`let\``, stmt, sf);
+  }
+  if (!arrow.type) {
+    throw new CompileError(`Function \`${name}\` needs an explicit return type annotation`, decl.name, sf);
+  }
+  if (name.startsWith("nish_")) {
+    throw new CompileError("Function names starting with `nish_` are reserved for the runtime", decl.name, sf);
+  }
+  rejectDollarInSymbolName(name, "function", decl.name, sf);
+  return {
+    sourceName: name,
+    typeParams: collectTypeParams(arrow.typeParameters ?? [], sf),
+    decl: arrow,
+    nameNode: decl.name,
+    // The declaration is the statement, not the arrow, exactly as it is for a
+    // non-generic one: every instantiation inherits this as its `declSite`.
+    declSite: stmt,
+    body: arrow.body,
+    exported: hasExportModifier(stmt),
+    count: 0,
   };
 }
 

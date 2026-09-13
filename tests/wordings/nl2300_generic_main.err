@@ -1,0 +1,1 @@
+`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it

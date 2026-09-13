@@ -158,6 +158,195 @@ attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end fn_f64 -->
 
+### A generic function
+
+Every instantiation is a function of its own, named by appending `$` and each
+type argument's mangled type to the template's name. `identity` is written once
+and compiled twice; neither `define` has anything generic left in it, and
+`identity$i32` is the IR of `const identityI32 = (x: i32): i32 => x` with the
+symbol renamed. `identity$str` keeps its parameter's pointer attributes but not
+`nocapture`, because returning the pointer is an escape.
+
+<!-- cookbook:begin gen_function -->
+```ts
+const identity = <T>(x: T): T => x;
+
+export const main = (): i32 => {
+  console.log(identity(7));
+  console.log(identity("hi"));
+  return 0;
+};
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"hi\00" }, align 8
+
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i32 @identity$i32(i32 7)
+  %1 = call i8* @nish_str_from_i32(i32 %0)
+  call void @nish_print(i8* %1)
+  %2 = call i8* @identity$str(i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*))
+  call void @nish_print(i8* %2)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define internal noundef i32 @identity$i32(i32 noundef %x) #1 {
+entry:
+  ret i32 %x
+}
+
+define internal noundef nonnull align 8 i8* @identity$str(i8* noundef nonnull noalias readonly align 8 %x) #1 {
+entry:
+  ret i8* %x
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readnone }
+attributes #2 = { nounwind }
+```
+<!-- cookbook:end gen_function -->
+
+### Inference, and per-instantiation facts
+
+A type argument is read off the argument's type: `T[]` against `i32[]` binds
+`T := i32`, and nothing is written at the call site. The two instantiations of
+`eq` are the reason the attribute fixpoint is keyed by symbol rather than by
+declaration — comparing two integers reads no memory, comparing two strings
+calls into the runtime, so one source line gets `readnone` in one instantiation
+and `readonly` in the other.
+
+<!-- cookbook:begin gen_infer -->
+```ts
+const firstOf = <T>(xs: T[]): T => xs[0];
+
+const eq = <T>(a: T, b: T): boolean => a === b;
+
+export const main = (): i32 => {
+  console.log(firstOf([4, 5, 6]));
+  console.log(eq(1, 1));
+  console.log(eq("a", "b"));
+  return 0;
+};
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"a\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"b\00" }, align 8
+
+declare void @nish_free_arena() #3
+declare noundef i64 @nish_arena_mark() #3
+declare void @nish_arena_release(i64 noundef) #3
+declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #3
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #3
+declare void @nish_panic_index(i64 noundef, i64 noundef) #5
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [3 x i32], align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 3, i64* %0, align 8, !alias.scope !3, !noalias !4
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 3, i64* %1, align 8, !alias.scope !3, !noalias !4
+  %2 = bitcast [3 x i32]* %arr.data to i8*
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4
+  %4 = bitcast i8* %2 to i32*
+  %5 = getelementptr inbounds i32, i32* %4, i64 0
+  store i32 4, i32* %5, align 4, !alias.scope !4, !noalias !3
+  %6 = getelementptr inbounds i32, i32* %4, i64 1
+  store i32 5, i32* %6, align 4, !alias.scope !4, !noalias !3
+  %7 = getelementptr inbounds i32, i32* %4, i64 2
+  store i32 6, i32* %7, align 4, !alias.scope !4, !noalias !3
+  %8 = call i32 @firstOf$i32(%struct.nish_array* %arr.hdr)
+  %9 = call i8* @nish_str_from_i32(i32 %8)
+  call void @nish_print(i8* %9)
+  %10 = call i1 @eq$i32(i32 1, i32 1)
+  %11 = select i1 %10, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  call void @nish_print(i8* %11)
+  %12 = call i1 @eq$str(i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
+  %13 = select i1 %12, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  call void @nish_print(i8* %13)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define internal noundef i32 @firstOf$i32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
+  %2 = icmp ult i64 0, %1
+  br i1 %2, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 0, i64 %1)
+  unreachable
+
+bounds.ok:
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %4 = load i8*, i8** %3, align 8, !alias.scope !3, !noalias !4
+  %5 = bitcast i8* %4 to i32*
+  %6 = getelementptr inbounds i32, i32* %5, i64 0
+  %7 = load i32, i32* %6, align 4, !alias.scope !4, !noalias !3
+  ret i32 %7
+}
+
+define internal noundef zeroext i1 @eq$i32(i32 noundef %a, i32 noundef %b) #1 {
+entry:
+  %0 = icmp eq i32 %a, %b
+  ret i1 %0
+}
+
+define internal noundef zeroext i1 @eq$str(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #2 {
+entry:
+  %0 = call zeroext i1 @nish_str_eq(i8* %a, i8* %b)
+  ret i1 %0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn readnone }
+attributes #2 = { nounwind willreturn readonly }
+attributes #3 = { nounwind willreturn }
+attributes #4 = { nounwind willreturn memory(argmem: read) }
+attributes #5 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+```
+<!-- cookbook:end gen_infer -->
+
 ## Types
 
 ### `i64` and the explicit conversions

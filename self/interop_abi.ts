@@ -564,12 +564,15 @@ export class CName {
  * object pointer first: a C host may call them on objects it holds.
  */
 export function cFunctionName(symbol: string): CName {
-  if (symbol.indexOf(".") >= 0) {
+  // `.` from a method and `$` from a generic instantiation (WP18) are both
+  // legal LLVM and illegal C, so both collapse to `_` and the declaration is
+  // bound to the real symbol with an asm label.
+  if (symbol.indexOf(".") >= 0 || symbol.indexOf("$") >= 0) {
     const ident = new StringBuilder();
     let i = 0;
     while (i < symbol.length) {
       const c = symbol.charCodeAt(i);
-      ident.addChar(c === CHAR_DOT ? CHAR_UNDERSCORE : c);
+      ident.addChar(c === CHAR_DOT || c === CHAR_DOLLAR ? CHAR_UNDERSCORE : c);
       i = i + 1;
     }
     return new CName(ident.toText(), ` NISH_SYMBOL("${symbol}")`);

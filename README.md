@@ -109,7 +109,7 @@ there cites the test case that proves it.
 | `T \| null` | for class, interface, array and string types; `=== null`, and narrowing to `T` by `if`, early return, `while`, `&&`, `?:`, enforced by the checker | [Nullable types](docs/LANGUAGE.md#nullable-types) |
 | Errors | Rust-style `Result<T, E>` with `Ok`/`Err`, `isOk()`/`isErr()`, `orReturn()` (the `?`), `unwrapOr`, `expect`; the checker refuses to let a failure be dropped or the success payload be read before the error is handled. No `throw`, no unwinding | [Result and error handling](docs/LANGUAGE.md#result-and-error-handling) |
 | Builtins | `console.log`, `Math.*` as LLVM intrinsics (ECMAScript `pow` corner cases included), `Math.random`, `toI32`/`toI64`/`toF64`, `process.exit`, `readFileSync`/`writeFileSync`/`appendFileSync` | [Builtins](docs/LANGUAGE.md#builtins) |
-| Rejected | `any`, `unknown`, `var`, `==`, `?.`, `??`, generics, `async`, `try`, `throw`, `typeof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
+| Rejected | `any`, `unknown`, `var`, `==`, `?.`, `??`, generic classes, `async`, `try`, `throw`, `typeof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
 
 Semantics that differ from JavaScript on purpose: signed integer overflow is
 undefined behaviour (`--wrapping` restores two's-complement wrapping; the
@@ -455,9 +455,11 @@ reference counting for objects that must outlive an arena reset, and dynamic
 dispatch — which would be a trait object over an interface, since inheritance
 was removed ([docs/wp25-inheritance.md](docs/wp25-inheritance.md)) and every
 method call names one symbol today.
-Generics, closures, `try`/`catch` and labelled `break`/`continue` are
-refusals rather than gaps, each with the message and the idiom to use
-instead ([docs/LANGUAGE.md](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)).
+Generic *functions* compile — each instantiation becomes its own specialised
+function ([docs/wp18-generics.md](docs/wp18-generics.md)) — while generic
+classes, closures, `try`/`catch` and labelled `break`/`continue` are refusals
+rather than gaps, each with the message and the idiom to use instead
+([docs/LANGUAGE.md](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)).
 Release engineering (`--version`, exit codes, npm packaging, tag-driven
 releases) landed with WP12; see [CHANGELOG.md](CHANGELOG.md) and
 [docs/wp12-release.md](docs/wp12-release.md). The plan itself is
