@@ -37,6 +37,68 @@ It also costs a full second implementation of every construct, forever.
 **The target shape is Rust's and Go's**: `self/` is the compiler, and the seed
 is the previous released `nish` binary. This document is the price list.
 
+### 1a. The doubling ends before R6
+
+The gates below are about *deleting* `src/`. They are not what stops the second
+implementation costing a second implementation, and reading them as though they
+were is what kept the doubling in place after the port had finished: every
+construct since S5 has been written twice, and the last three were 125/112,
+354/487 and 371/415 lines of `src/` against `self/`. Half of every compiler
+change is the second implementation.
+
+**None of that is required by the gates.** Work out what actually forces a
+construct into `src/` and there are two things, both of them mechanical:
+
+1. **`tests/run.js` compiles a case with stage0**, so a construct stage0 does
+   not have cannot have a golden `.ll`, and the definition of done requires
+   one.
+2. **The oracles compare stage0 with stage1 over the corpus**, so a case stage0
+   refuses is recorded as `stage0 rejects it` and *skipped* — and a skip in an
+   oracle is a fact about how far the port has got (`.claude/selfhost.md`),
+   printed only under `--verbose`. A construct landing in `self/` alone would
+   quietly shrink the comparison rather than declare that it had.
+
+Neither is about the seed, which is the thing people reach for first. The seed
+compiles `self/`'s *source*, and `self/`'s source does not use a construct the
+day it lands — G4's rolling freeze already says it may not until the next
+release. stage0 can go on being the local seed exactly as long as it can
+compile `self/`, and nothing here changes that.
+
+So the answer is a register. `tests/self/stage1_only.txt` names the cases
+whose implementation is `self/`'s alone, and every tool that would otherwise
+have been silent reads it:
+
+| Tool | What a registered case does |
+| --- | --- |
+| `tests/run.js` | compiles it with a **stage1** binary built from `self/` by the seed; its golden, `llvm-as` pass and native round trip are stage1's |
+| `ir_oracle.js`, `checked_oracle.js` | counts as `stage1-only` in the summary, apart from the skips: no stage0 answer exists, by decision |
+| `interop_oracle.js` | skipped with the register as the named reason, on the `--all` path — the only one of its two corpora that can reach a `tests/cases` program |
+| `parity.js` | one declaration, the only one keyed on the program rather than the surface, matched *after* the others so an ordinary difference is still attributed to its own reason |
+| `nish-cmp.js` | expected while the seed is older than the construct, and compared normally from the release that has it |
+| `tests/nish/run.ts` | skipped by name: that runner spawns stage0 and cannot build a stage1 |
+
+**What it costs is one line of the ledger and no more.** Diverse double
+compiling stops growing: the construct is proved by a golden and by
+`nish-cmp.js` rather than by two implementations agreeing. Everything already
+in the corpus is still compiled by both and compared byte for byte, `self/`'s
+own 56 modules included, so §2D's property holds over what it always held
+over. That is the trade §6 prices, taken one construct at a time and reversibly
+— writing the `src/` half later removes the line — instead of all at once at
+R6.
+
+**What it does not change**: the construct's tests, its `LANGUAGE.md` rule, its
+cookbook entry, its `CHANGELOG.md` line, and the rolling freeze. A register
+entry buys one thing, the second implementation, and pays for it in the one
+currency this document has been keeping accounts in since §1.
+
+The register has a fixture, `stage1_probe`, and it is there for the reason a
+gate nobody can fail is a wish: with an empty register the whole path above is
+machinery nobody has driven. The fixture is an ordinary case both compilers can
+compile, registered so that the stage1 path is walked on every run — and
+because both compilers *can* do it, `tests/run.js` also compiles it with stage0
+and requires the same bytes, which is a stronger check than any real
+stage1-only case can offer.
+
 ### Two things retirement is not
 
 **It is not "Node leaves the repository."** `tests/run.js` (2,900 lines), the

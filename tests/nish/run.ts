@@ -36,6 +36,7 @@ import { firstDifference, replaceAll, splitLines, splitWhitespace, trim } from "
 const CASES: string = "tests/cases";
 const WORK: string = "build/nish-cases";
 const CLI: string = "dist/index.js";
+const REGISTER: string = "tests/self/stage1_only.txt";
 
 /**
  * `producer: "nish <version>"` in place of the real version, which is what
@@ -80,6 +81,42 @@ const stripHeader = (ir: string): string[] => {
 const hasEntry = (source: string): boolean =>
   source.indexOf("export const main") >= 0 || source.indexOf("export function main") >= 0;
 
+/**
+ * The case names of the stage1-only register (`tests/self/stage1_only.txt`,
+ * WP19 §1a). This runner spawns stage0, and a registered case is one stage0
+ * has no implementation of, so it is skipped by name here rather than failed:
+ * `tests/run.js` compiles those with a stage1 binary, which this runner has no
+ * way to build.
+ */
+const stage1OnlyNames = (): string[] => {
+  const names: string[] = [];
+  const text = readFileSyncOrNull(REGISTER);
+  if (text === null) {
+    return names;
+  }
+  for (const line of splitLines(text)) {
+    const entry = trim(line);
+    if (entry.length === 0 || entry.startsWith("#")) {
+      continue;
+    }
+    const fields = splitWhitespace(entry);
+    if (fields.length > 0) {
+      names.push(fields[0]);
+    }
+  }
+  return names;
+};
+
+/** Whether `name` is one of `names`: the language has no `Array.includes`. */
+const includesName = (names: string[], name: string): boolean => {
+  for (const candidate of names) {
+    if (candidate === name) {
+      return true;
+    }
+  }
+  return false;
+};
+
 /** Every `<name>.ts` in `tests/cases`, sorted, with the extension removed. */
 const caseNames = (): string[] => {
   const entries = readdirSync(CASES);
@@ -113,8 +150,13 @@ export const main = (): number => {
     t.skip("native round trips", "clang not found");
   }
 
+  const stage1OnlyCases = stage1OnlyNames();
   for (const name of caseNames()) {
     if (filter.length > 0 && name.indexOf(filter) < 0) {
+      continue;
+    }
+    if (includesName(stage1OnlyCases, name)) {
+      t.skip(name, "stage1-only (tests/self/stage1_only.txt): this runner spawns stage0");
       continue;
     }
     const source = readFileSyncOrNull(`${CASES}/${name}.ts`);

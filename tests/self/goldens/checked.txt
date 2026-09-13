@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 285 programs, 4717 dump lines.
+# 286 programs, 4728 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3259,6 +3259,18 @@ function main(): i32 -> @nish_main [exported entry]
   local 11:9 bad: Result<void, string> (const)
   callee 11:15 checkPort -> @checkPort
   callee 15:3 checkPort -> @checkPort
+program tests/cases/stage1_probe.ts
+module tests/cases/stage1_probe.ts (entry)
+function doubled(n: i32): i32 -> @doubled
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: doubled nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 13:7 total: i32 (let)
+  local 14:12 i: i32 (let)
+  callee 15:14 doubled -> @doubled
 program tests/cases/str_bytes.ts
 module tests/cases/str_bytes.ts (entry)
 function firstByte(s: string): i32 -> @firstByte

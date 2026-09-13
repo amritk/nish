@@ -43,8 +43,12 @@ import { spawnSync } from "node:child_process";
 import { checkerArgs, programs, root } from "./corpus.js";
 import { jobsFrom, pool, run } from "../pool.js";
 import { fileURLToPath } from "node:url";
+import { stage1Only, stage1OnlyFor } from "./stage1_only.js";
 
 const cli = path.join(root, "dist", "index.js");
+
+/** The cases `self/` implements alone (WP19 §1a), read once for the whole run. */
+const REGISTER = stage1Only();
 
 /** The dump's lines, blanks dropped; nothing else is filtered out any more. */
 function dumpLines(dump) {
@@ -52,6 +56,11 @@ function dumpLines(dump) {
 }
 
 async function compare(binary, file) {
+  // A registered case is `self/`'s alone, so stage0 has no dump of it to be
+  // compared against and that is a decision rather than a hole in the port
+  // (WP19 §1a).
+  const registered = stage1OnlyFor(file, REGISTER);
+  if (registered !== null) return { stage1Only: registered.why };
   // The flags the dump depends on -- what `number` is, and whether the
   // constant folder wraps -- and no others: the rest change the IR, which is
   // `ir_oracle.js`'s half of the comparison.
@@ -121,6 +130,7 @@ async function main(argv) {
   let agreed = 0;
   let lines = 0;
   const skipped = [];
+  const declared = [];
   const rejected = [];
   const failed = [];
   const t0 = Date.now();
@@ -130,7 +140,8 @@ async function main(argv) {
   for (const [i, file] of inputs.entries()) {
     const result = results[i];
     const name = path.relative(root, file);
-    if (result.skipped !== undefined) skipped.push(`${name}: ${result.skipped}`);
+    if (result.stage1Only !== undefined) declared.push(`${name}: ${result.stage1Only}`);
+    else if (result.skipped !== undefined) skipped.push(`${name}: ${result.skipped}`);
     else if (result.rejected !== undefined) rejected.push(`${name}: ${result.rejected}`);
     else if (result.failed !== undefined) failed.push(`${name}: ${result.failed}`);
     else {
@@ -142,15 +153,19 @@ async function main(argv) {
   if (verbose) {
     for (const r of rejected) process.stdout.write(`  reject ${r}\n`);
     for (const s of skipped) process.stdout.write(`  skip ${s}\n`);
+    for (const d of declared) process.stdout.write(`  stage1-only ${d}\n`);
   }
-  const compared = inputs.length - skipped.length - rejected.length;
+  const compared = inputs.length - skipped.length - rejected.length - declared.length;
   // Rejections are counted apart from the other skips and named in the
   // summary: a file stage0 accepts and stage1 does not is the remaining work
   // of this milestone, and it must not be able to hide inside a skip count.
   const note = rejected.length > 0 ? `, ${rejected.length} rejected by stage1` : "";
+  const declaredNote =
+    declared.length > 0 ? `, ${declared.length} stage1-only (tests/self/stage1_only.txt)` : "";
   process.stdout.write(
     `${agreed}/${compared} files agree (${lines} dump lines, ` +
-      `${((Date.now() - t0) / 1000).toFixed(1)} s, ${jobs} jobs), ${skipped.length} skipped${note}\n`
+      `${((Date.now() - t0) / 1000).toFixed(1)} s, ${jobs} jobs), ` +
+      `${skipped.length} skipped${declaredNote}${note}\n`
   );
   return failed.length === 0 ? 0 : 1;
 }

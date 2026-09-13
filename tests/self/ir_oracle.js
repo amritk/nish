@@ -46,8 +46,12 @@ import { spawnSync } from "node:child_process";
 import { extraArgs, linkPrograms, programs, root } from "./corpus.js";
 import { jobsFrom, pool, run } from "../pool.js";
 import { fileURLToPath } from "node:url";
+import { stage1Only, stage1OnlyFor } from "./stage1_only.js";
 
 const cli = path.join(root, "dist", "index.js");
+
+/** The cases `self/` implements alone (WP19 §1a), read once for the whole run. */
+const REGISTER = stage1Only();
 
 /** Flags that change the IR and that stage1 accepts; anything else is a skip. */
 const SHARED_FLAGS = new Set([
@@ -104,6 +108,13 @@ function llFiles(dir) {
 // were never meant to fail — the fuzzer's generated ones — passes none, so it
 // defaults to empty rather than making every such caller build a set.
 async function compare(binary, work, file, negatives = new Set()) {
+  // A registered case has no stage0 answer by construction, so there is
+  // nothing here to compare and saying so is a declaration rather than a skip:
+  // a skip in this oracle means "the port has not got there yet"
+  // (`.claude/selfhost.md`), and this is the opposite — a construct the port
+  // got to first, and stage0 never will.
+  const registered = stage1OnlyFor(file, REGISTER);
+  if (registered !== null) return { stage1Only: registered.why };
   const { flags, unsupported } = argsFor(file);
   // A program compiled with a dump flag writes no IR on either side, so this
   // oracle has nothing to compare and is not the one that should say so.
@@ -234,6 +245,7 @@ async function main(argv) {
   const failed = [];
   const refused = [];
   const dumps = [];
+  const declared = [];
   const t0 = Date.now();
   // One directory per comparison rather than one for the run: two jobs sharing
   // `work/stage0` would each `fresh()` it under the other, and the failure that
@@ -253,7 +265,8 @@ async function main(argv) {
   for (const [i, file] of inputs.entries()) {
     const result = results[i];
     const name = path.relative(root, file);
-    if (result.dumped !== undefined) dumps.push(`${name}: ${result.dumped}`);
+    if (result.stage1Only !== undefined) declared.push(`${name}: ${result.stage1Only}`);
+    else if (result.dumped !== undefined) dumps.push(`${name}: ${result.dumped}`);
     else if (result.negative !== undefined) refused.push(name);
     else if (result.skipped !== undefined) skipped.push(`${name}: ${result.skipped}`);
     else if (result.rejected !== undefined) rejected.push(`${name}: ${result.rejected}`);
@@ -273,8 +286,10 @@ async function main(argv) {
     for (const s of skipped) process.stdout.write(`  skip ${s}\n`);
     for (const r of refused) process.stdout.write(`  negative ${r}\n`);
     for (const d of dumps) process.stdout.write(`  dump ${d}\n`);
+    for (const d of declared) process.stdout.write(`  stage1-only ${d}\n`);
   }
-  const compared = inputs.length - skipped.length - rejected.length - refused.length - dumps.length;
+  const compared =
+    inputs.length - skipped.length - rejected.length - refused.length - dumps.length - declared.length;
   // Each of these is counted apart from the others and named in the summary. A
   // file stage0 accepts and stage1 does not is the remaining work of this
   // milestone and must not be able to hide inside a skip count; a program that
@@ -283,11 +298,13 @@ async function main(argv) {
   const negativeNote =
     refused.length > 0 ? `, ${refused.length} negatives (tests/self/reject_oracle.js compares them)` : "";
   const dumpNote = dumps.length > 0 ? `, ${dumps.length} dumps (no IR to compare)` : "";
+  const declaredNote =
+    declared.length > 0 ? `, ${declared.length} stage1-only (tests/self/stage1_only.txt)` : "";
   const note = rejected.length > 0 ? `, ${rejected.length} rejected by stage1` : "";
   process.stdout.write(
     `${agreed}/${compared} programs agree (${modules} modules, ${lines} IR lines, ` +
       `${((Date.now() - t0) / 1000).toFixed(1)} s, ${jobs} jobs), ` +
-      `${skipped.length} skipped${negativeNote}${dumpNote}${note}\n`
+      `${skipped.length} skipped${negativeNote}${dumpNote}${declaredNote}${note}\n`
   );
   return failed.length === 0 && rejected.length === 0 ? 0 : 1;
 }

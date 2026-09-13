@@ -24,6 +24,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
+import { linkWith, resolveSeed } from "./self/seed.js";
+import { stage1Only } from "./self/stage1_only.js";
 const require = createRequire(import.meta.url);
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -31,6 +33,21 @@ const cli = path.join(root, "dist", "index.js");
 const casesDir = path.join(root, "tests", "cases");
 const buildDir = path.join(root, "build", "test");
 fs.mkdirSync(buildDir, { recursive: true });
+
+/**
+ * The seed every stage1 binary in this suite is built with (WP19 G2.3):
+ * `NISH_BOOTSTRAP` when there is one, and stage0 otherwise, which is what a
+ * fresh clone has. The tools themselves name no compiler — `tests/self/seed.js`
+ * resolves what it is given — so this is the one line in the suite that still
+ * says `dist/index.js` on their behalf, and after R6 it loses its second half.
+ */
+const seedSpec = process.env.NISH_BOOTSTRAP || path.relative(root, cli);
+
+/**
+ * The cases whose only implementation is `self/`'s (WP19 §1a). The file's
+ * header is the contract; here it decides which compiler section A runs.
+ */
+const STAGE1_ONLY = stage1Only();
 
 let failures = 0;
 let passes = 0;
@@ -109,6 +126,27 @@ if (process.argv.includes("--parity")) {
 }
 
 // ---- A. Golden cases -------------------------------------------------------------
+//
+// A case is compiled by stage0, unless the stage1-only register names it: then
+// it is compiled by a stage1 binary built out of `self/` with the seed, because
+// a construct that lives only in `self/` has no stage0 answer to be held
+// against (WP19 §1a). One compiler is built for all of them, on the first case
+// that needs it, and never at all when the register is empty.
+let stage1Cache;
+function stage1ForCases() {
+  if (stage1Cache === undefined) stage1Cache = buildStage1ForCases();
+  return stage1Cache;
+}
+
+function buildStage1ForCases() {
+  if (!HAS_CLANG) return { error: "clang not found, and a stage1 compiler has to be linked" };
+  const seed = resolveSeed(seedSpec);
+  if (seed.error !== undefined) return { error: seed.error };
+  const built = linkWith(seed, path.join("self", "compile.ts"), path.join(buildDir, "self", "compile"));
+  if (built === null) return { error: `the seed (${seed.label}) could not build self/compile.ts` };
+  return { cmd: built, prefix: [], label: seed.label };
+}
+
 const only = process.argv[2];
 const cases = fs
   .readdirSync(casesDir)
@@ -123,7 +161,22 @@ for (const name of cases) {
     ? fs.readFileSync(side("args"), "utf8").trim().split(/\s+/).filter(Boolean)
     : [];
   const outLl = path.join(buildDir, `${name}.ll`);
-  const r = spawnSync("node", [cli, src, "-o", outLl, ...args], { cwd: root });
+  const registered = STAGE1_ONLY.get(name) ?? null;
+  let stage1 = null;
+  if (registered !== null) {
+    stage1 = stage1ForCases();
+    if (stage1.error !== undefined) {
+      // Loudly, and counted: a registered case compiled by stage0 instead
+      // would be a golden written by the compiler that is supposed to have no
+      // opinion about it.
+      skip(`${name}: it is stage1-only and there is no stage1 compiler (${stage1.error})`);
+      continue;
+    }
+  }
+  const r =
+    stage1 === null
+      ? spawnSync("node", [cli, src, "-o", outLl, ...args], { cwd: root })
+      : spawnSync(stage1.cmd, [...stage1.prefix, src, "-o", outLl, ...args], { cwd: root });
   const stderr = String(r.stderr);
 
   if (fs.existsSync(side("err"))) {
@@ -173,10 +226,29 @@ for (const name of cases) {
   }
   const expected = normaliseProducer(fs.readFileSync(side("ll"), "utf8").trim());
   check(
-    `${name}: IR matches golden`,
+    `${name}: IR matches golden${registered === null ? "" : " (compiled by stage1)"}`,
     actual === expected,
     `--- expected\n${expected}\n--- actual\n${actual}`
   );
+
+  // The register's fixture is a case both compilers can do, registered so that
+  // the stage1 path is exercised on every run. That makes one more assertion
+  // available than a real stage1-only case allows, and it is the strongest one
+  // here: the two compilers emit the same bytes for it, so a difference is the
+  // machinery rather than the language.
+  if (registered !== null && registered.fixture) {
+    const alsoLl = path.join(buildDir, `${name}.stage0.ll`);
+    const byStage0 = spawnSync("node", [cli, src, "-o", alsoLl, ...args], { cwd: root });
+    const stage0Ir =
+      byStage0.status === 0
+        ? normaliseProducer(stripHeader(fs.readFileSync(alsoLl, "utf8")).split(root).join("<root>"))
+        : String(byStage0.stderr);
+    check(
+      `${name}: the register's fixture compiles to the same bytes under stage0`,
+      byStage0.status === 0 && stage0Ir === actual,
+      `--- stage1\n${actual}\n--- stage0\n${stage0Ir}`
+    );
+  }
 
   if (HAS_LLVM_AS) {
     const as = spawnSync("llvm-as", [outLl, "-o", "/dev/null"]);
@@ -226,6 +298,17 @@ for (const name of cases) {
       `--- expected\n${want}\n--- actual (exit ${run.status})\n${run.stdout}${run.stderr}`
     );
   }
+}
+
+// Every line of the register has to name a case that exists. A typo there is
+// silent otherwise — the case would be compiled by stage0 and pass, and the
+// register would be a claim about a file nobody has.
+for (const entry of STAGE1_ONLY.values()) {
+  check(
+    `tests/self/stage1_only.txt: \`${entry.name}\` is a case in tests/cases`,
+    fs.existsSync(path.join(casesDir, `${entry.name}.ts`)),
+    `no tests/cases/${entry.name}.ts`
+  );
 }
 
 /**
@@ -2896,13 +2979,6 @@ if (!only) {
 // moment `self/` uses something the language does not have.
 if (!only || "selfhost".includes(only) || only.includes("self")) {
   const selfDir = path.join(root, "self");
-  // The seed every check in this section builds its stage1 binary with, passed
-  // in rather than looked up (WP19 G2.3): `NISH_BOOTSTRAP` when CI set one, and
-  // stage0 otherwise, which is what a fresh clone has. The tools themselves
-  // name no compiler — `tests/self/seed.js` resolves what it is given — so this
-  // line is the only place in the suite that still says `dist/index.js` on
-  // their behalf, and after R6 it loses its second half.
-  const seedSpec = process.env.NISH_BOOTSTRAP || path.relative(root, cli);
   const modules = fs.existsSync(selfDir)
     ? fs
         .readdirSync(selfDir)

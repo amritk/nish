@@ -28,6 +28,15 @@ negative test, its `docs/LANGUAGE.md` rule and cookbook entry, and a line in
 `docs/ARCHITECTURE.md`. Show the exact LLVM IR for every TypeScript snippet a
 PR adds to the tests.
 
+**A construct does not have to be written twice.** Implement it in `src/` and
+`self/` and the oracles compare the two byte for byte, which is the strongest
+thing this repository can say about a lowering. Implement it in `self/` alone
+and name its case in `tests/self/stage1_only.txt`: the golden is compiled by
+stage1 and the stage0 oracles declare the case instead of skipping it
+(`docs/wp19-stage0-retirement.md` §1a). Everything else on the list is
+unchanged, and `self/` may not use the construct in its own source until the
+next release, which is the rolling freeze CI's `bootstrap` job checks.
+
 ## Git & PR Guidelines
 
 NEVER include Claude session links, tracking IDs, model names, or platform

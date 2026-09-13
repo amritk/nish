@@ -97,7 +97,10 @@ this does not happen quietly.
 `npm run check` and `npm test` green, and a new construct ships with a golden
 `.ll`, an `llvm-as` pass, a native round trip with expected stdout, at least one
 negative test, its `docs/LANGUAGE.md` rule and cookbook entry, and a
-`CHANGELOG.md` line.
+`CHANGELOG.md` line. It ships with **one or two implementations, on purpose**:
+`src/` and `self/` both, which the oracles compare byte for byte, or `self/`
+alone with its case in `tests/self/stage1_only.txt`
+(`docs/wp19-stage0-retirement.md` §1a).
 
 ## Where to read next
 
