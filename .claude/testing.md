@@ -109,7 +109,7 @@ Everything above is the harness that tests the *compiler*. A program the
 compiler produced can also test itself, with [`std/testing`](../std/README.md):
 
 ```typescript
-import { Suite } from "../std/testing";
+import { Suite } from "nish/testing";
 
 export const main = (): number => {
   const t = new Suite("stats");
@@ -130,6 +130,15 @@ knowing before writing a case with it:
   caught: an out-of-range index *panics* and ends the process, so a check that a
   later read depends on is a branch —
   `if (!t.eqI32("len", a.length, 3)) { return t.done(); }`.
+
+The assertions are `ok`, `eqBool`, `eqI32`, `eqI64`, `eqF64`, `nearF64` and
+`eqStr` for a value, and three for text a harness produces: `contains` for a
+fragment of a captured stream, `containsAll` for an expectation file that holds
+one fragment per line (blank lines ignored, the first missing one named), and
+`eqLines` for a generated text against a golden, which reports the first
+differing line rather than printing both. `pass`, `fail` and `skip` are public
+for a check of your own shape, and `skip` is how a check that did not run stays
+counted.
 
 Use it for a whole program whose behaviour is the point (`tests/link/`), not for
 the golden cases: a `tests/cases/<name>.ts` asserts through its `.ll` and `.out`
@@ -178,6 +187,33 @@ flag variations. `tests/run.js` is still what proves the compiler; the runner
 proves the language can host a harness. Its own header comment is the accurate
 description of what it covers; keep the two in step.
 
+### The CLI contract in Nish
+
+[`tests/nish/cli.ts`](../tests/nish/cli.ts) is the second Nish harness, and it
+covers the one thing the runner deliberately does not: the **machine-readable
+surface** (orientation rule 7, `docs/wp12-release.md`). `--help` on stdout with
+exit 0 against the same text on stderr with exit 2, every advertised flag named
+in the usage, one flat `--json` object per diagnostic with a stable `code` and a
+`severity` a tool filters on, the `wrote <file>` progress line on stderr so
+stdout carries objects and nothing else, and each exit-code band — 0, 1, 2, 3 and
+70 — driven from outside the compiler.
+
+```bash
+npm run test:cli                  # the default compiler, 69 checks in about nine seconds
+build/nish-cli build/nish         # the same contract, against the self-hosted one
+```
+
+The point is not a second implementation of the WP12 block in `tests/run.js`. The
+promise `--json` makes is made *to a program that reads the output*, and this is
+that program: it reads the objects with `std/json`, the streams with `std/text`,
+and the version it expects from `--version` out of `package.json` with the same
+`jsonField`, so the expectation cannot drift from the release. Unlike the golden
+runner it runs in full on every `npm test`, because it spawns eighteen compilers
+rather than four hundred. The three `NISH_SIMULATE_ICE` checks are stage0's — the
+hook is stage0's, and stage1 answers 70 with the same report
+([`self/ice.ts`](../self/ice.ts)) — so they are counted skips when the compiler
+under test is not a Node entry point.
+
 ## Style & Best Practices
 
 - Clarity first. Write tests that are easy to read and understand, even for
@@ -202,6 +238,7 @@ npm run test:update                 # write missing .ll goldens, and tests/self/
 npm run test:diff                   # the full differential set
 node tests/differential/fuzz.js --count 200
 node tests/self/goldens.js          # the stage1 goldens alone, ~13 s
+npm run test:cli                    # the CLI contract, through the Nish harness
 ```
 
 `tests/self/goldens/` is the other family of checked-in golden here: the

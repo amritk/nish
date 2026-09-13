@@ -199,6 +199,22 @@ jobs:
           "${{ steps.seed.outputs.path }}" --version
           NISH_BOOTSTRAP="${{ steps.seed.outputs.path }}" bash scripts/bootstrap.sh --verify
 
+      # The command line's contract, asked of the compiler that outlives stage0.
+      # `tests/nish/cli.ts` is a Nish program reading the compiler's own output —
+      # the streams, the exit-code bands, one flat `--json` object per diagnostic —
+      # and this is the only place it is pointed at a *self-hosted* nish. `npm test`
+      # runs it against stage0; a divergence in stage1's driver fails only here.
+      # Two checks are stage0's own and report as counted skips, which the summary
+      # below prints.
+      - name: The CLI contract, against the self-hosted compiler
+        if: steps.seed.outputs.tag != ''
+        run: |
+          set -o pipefail
+          npm run build
+          node dist/index.js tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli
+          build/nish-cli build/nish | tee "$RUNNER_TEMP/nish-cli.log"
+          echo "::notice::tests/nish/cli.ts against build/nish: $(tail -n 1 "$RUNNER_TEMP/nish-cli.log")"
+
       - name: Say what this proved
         run: |
           if [ -z "${{ steps.seed.outputs.tag }}" ]; then

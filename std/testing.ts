@@ -64,6 +64,63 @@
  */
 
 /**
+ * How much of a haystack a failure detail quotes.
+ *
+ * The haystack in every real use of `contains` is a captured stream or a module
+ * of generated text, and a detail line forty thousand bytes long is not a
+ * diagnostic — it is the output the reader was already searching by hand.
+ */
+const TESTING_EXCERPT: i32 = 200;
+
+/**
+ * `text` when it is short enough to read, and its first `TESTING_EXCERPT` bytes
+ * with the whole length named otherwise.
+ *
+ * The cut is at a byte, like every offset in this language, so a multi-byte
+ * character at the boundary is split — which is acceptable here and would not be
+ * anywhere else: this string is read by a person looking at a failure, not by a
+ * program.
+ *
+ * The name is deliberately not `excerpt`. A `std/` module is compiled into the
+ * program that imports it and the symbol namespace is flat, so a private helper
+ * called `excerpt` would stop any program that declares its own `excerpt` from
+ * compiling (`std/README.md`, "Name the private helpers as though they were
+ * exported").
+ */
+const testingExcerpt = (text: string): string => {
+  const length: i32 = toI32(text.length);
+  if (length <= TESTING_EXCERPT) {
+    return text;
+  }
+  return `${text.substring(0, TESTING_EXCERPT)}... (${length} bytes)`;
+};
+
+/**
+ * The index of the first line at which `actual` and `expected` differ, the
+ * shorter length when one is a prefix of the other, and `-1` when they are
+ * equal.
+ *
+ * `std/text` exports `firstDifference`, which is this loop, and this module
+ * deliberately does not import it: an import of a `std/` module is compiled into
+ * the program, so reaching for it here would put `trim`, `contains` and
+ * `replaceAll` into the namespace of every program that only wanted a `Suite`.
+ * Ten lines is the cheaper half of that trade.
+ */
+const testingFirstDifferentLine = (actual: string[], expected: string[]): i32 => {
+  const actualLength: i32 = toI32(actual.length);
+  const expectedLength: i32 = toI32(expected.length);
+  const shorter: i32 = actualLength < expectedLength ? actualLength : expectedLength;
+  let i: i32 = 0;
+  while (i < shorter) {
+    if (actual[i] !== expected[i]) {
+      return i;
+    }
+    i += 1;
+  }
+  return actualLength === expectedLength ? -1 : shorter;
+};
+
+/**
  * One run of checks, and the tally it reports.
  *
  * A program may hold several — one per family of behaviour — and sum their exit
@@ -189,6 +246,83 @@ export class Suite {
       return this.pass(name);
     }
     return this.fail(name, `expected "${expected}", got "${actual}"`);
+  }
+
+  /**
+   * Whether `needle` occurs anywhere in `haystack`, which is the assertion a
+   * check over captured output makes: the message a compiler prints is pinned by
+   * the sentence it has to contain and not by the whole stream, because the rest
+   * of that stream is a version line and a file path that change for reasons the
+   * check is not about.
+   *
+   * The detail quotes the needle in full and the haystack only to
+   * `TESTING_EXCERPT` bytes: the needle is what a reader compares, and the
+   * haystack is what they have already got.
+   */
+  contains(name: string, haystack: string, needle: string): boolean {
+    if (toI32(haystack.indexOf(needle)) >= 0) {
+      return this.pass(name);
+    }
+    return this.fail(name, `expected to contain "${needle}", got "${testingExcerpt(haystack)}"`);
+  }
+
+  /**
+   * Whether every one of `needles` occurs in `haystack` — one check for an
+   * expectation file that holds a fragment per line, which is the shape
+   * `tests/cases/<name>.err` and `tests/link/<name>/expected.ir` both have.
+   *
+   * An empty needle is ignored, so the blank lines of such a file cost the caller
+   * no filtering, and a list with nothing in it passes: an expectation that says
+   * nothing is met by anything. The detail names the first fragment that is
+   * missing and how many are, because a detail that quoted all of them would bury
+   * the one a reader fixes first.
+   */
+  containsAll(name: string, haystack: string, needles: string[]): boolean {
+    let looked: i32 = 0;
+    let missing: i32 = 0;
+    let first = "";
+    for (const needle of needles) {
+      if (toI32(needle.length) === 0) {
+        continue;
+      }
+      looked += 1;
+      if (toI32(haystack.indexOf(needle)) < 0) {
+        missing += 1;
+        if (toI32(first.length) === 0) {
+          first = needle;
+        }
+      }
+    }
+    if (missing === 0) {
+      return this.pass(name);
+    }
+    if (missing === 1) {
+      return this.fail(name, `missing "${first}"`);
+    }
+    // `looked` and not `needles.length`, because the blank lines this ignored are
+    // not fragments anybody expected to find.
+    return this.fail(name, `missing ${missing} of ${looked}, first "${first}"`);
+  }
+
+  /**
+   * Line-by-line equality of two texts already split into lines, reporting the
+   * first line that differs.
+   *
+   * It is `eqStr`'s answer for the case `eqStr` reports badly: a golden of four
+   * hundred lines against an emitted four hundred and one prints two walls of
+   * text under `expected ... got ...`, and the reader's next move is to diff them
+   * by hand. `<end of input>` is the side that ran out, which is what a missing
+   * or an extra line at the end looks like from here, and the line number is the
+   * one an editor takes.
+   */
+  eqLines(name: string, actual: string[], expected: string[]): boolean {
+    const at: i32 = testingFirstDifferentLine(actual, expected);
+    if (at < 0) {
+      return this.pass(name);
+    }
+    const wanted = at < toI32(expected.length) ? `"${expected[at]}"` : "<end of input>";
+    const saw = at < toI32(actual.length) ? `"${actual[at]}"` : "<end of input>";
+    return this.fail(name, `line ${at + 1}: expected ${wanted}, got ${saw}`);
   }
 
   /**

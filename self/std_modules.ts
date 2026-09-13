@@ -36,4 +36,4 @@ export const stdModulePath = (root: string, specifier: string): string =>
  * arrangement that keeps `VERSION` in `branding.ts` honest against
  * `package.json`.
  */
-export const stdModuleNames = (): string => "testing, text";
+export const stdModuleNames = (): string => "json, testing, text";

@@ -49,14 +49,18 @@ steps per OS are in [`docs/INSTALL.md`](./docs/INSTALL.md).
 ## Machine-readable surfaces
 
 Read these rather than scraping prose; they are contracts with tests behind
-them. [`docs/AI.md`](./docs/AI.md) documents the same surfaces for an agent
+them — the WP12 block of `tests/run.js`, and
+[`tests/nish/cli.ts`](./tests/nish/cli.ts), which asks the same questions from a
+program written in Nish that reads the answers the way a wrapper does
+(`npm run test:cli`, and `build/nish-cli build/nish` against the self-hosted
+compiler). [`docs/AI.md`](./docs/AI.md) documents the same surfaces for an agent
 *using* the compiler, and ships in the npm tarball so an install describes
 itself.
 
 | Ask | Command | Answer |
 | --- | --- | --- |
 | what the CLI accepts | `nish --help` | usage text on **stdout**, exit **0**. A usage *error* prints the same text on stderr with exit 2, so the stream and the code tell a request apart from a refusal |
-| what is wrong with a program | `nish --json <files>` | one JSON object per line on stdout, nothing on stderr, exit unchanged |
+| what is wrong with a program | `nish --json <files>` | one JSON object per line on **stdout**, which carries nothing else — the `wrote <file>` progress line and the human report are on stderr — exit unchanged |
 | the version | `nish --version` | `nish <semver>` on stdout, exit 0 |
 | what the compiler parsed | `nish --emit-ast <file>` | the syntax tree, one node per line |
 | what the checker recorded | `nish --emit-checked <file>` | the side tables the emitter reads |

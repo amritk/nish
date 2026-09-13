@@ -127,13 +127,15 @@ Node.
 
 [`std/`](std/README.md) is Nish written in Nish, for Nish programs to import:
 [`std/testing`](std/testing.ts), a test runner, so a compiled program can check
-itself and answer an exit code with no Node in the picture, and
+itself and answer an exit code with no Node in the picture,
 [`std/text`](std/text.ts), the string operations a program would otherwise write
 inline — the language has no `split`, `trim` or regular expression, because each
-of those allocates and some need a character table the runtime has no room for.
+of those allocates and some need a character table the runtime has no room for —
+and [`std/json`](std/json.ts), the value of one field of one flat JSON object,
+which is the shape the compiler's own `--json` diagnostics have.
 
 ```ts
-import { Suite } from "../std/testing";
+import { Suite } from "nish/testing";
 
 export const main = (): number => {
   const t = new Suite("stats");
@@ -144,9 +146,10 @@ export const main = (): number => {
 
 A library module is source, not a built artifact, so it compiles with the
 program that imports it and the whole-program pass sees straight through it
-([docs/wp21-packages.md](docs/wp21-packages.md)). There is no bare specifier
-yet — imports are relative, as everywhere else in the language — and no
-callbacks, which is what makes a suite a value with methods rather than a
+([docs/wp21-packages.md](docs/wp21-packages.md)): `nish/<module>` resolves to
+`std/<module>.ts` beside the running compiler, and what you import but never
+call is dropped at the link. What the library does *not* have is callbacks,
+which is what makes a suite a value with methods rather than a
 `test("name", () => ...)`: a function is never a value here.
 
 The suite's own golden cases are run by [`tests/nish/run.ts`](tests/nish/run.ts),
@@ -154,6 +157,15 @@ which is this repository's test harness written in the language it tests:
 `readdirSync` finds the cases, `spawnSyncTo` captures each compile and each run,
 and the IR is diffed against the golden line by line. `npm run test:nish` runs it
 over the whole corpus.
+
+[`tests/nish/cli.ts`](tests/nish/cli.ts) is the other half of that idea, pointed
+at the compiler's own promises rather than at its output: `--help` on stdout with
+exit 0 against the same text on stderr with exit 2, one flat `--json` object per
+diagnostic with a stable code, and each documented exit-code band. It reads those
+objects with `std/json` and takes the version it expects out of `package.json`, so
+a release cannot leave the expectation behind — and it passes against the
+self-hosted compiler as well as against the one written in TypeScript
+(`npm run test:cli`).
 
 ---
 

@@ -4,7 +4,10 @@ PASS  countAbove
 PASS  countAbove the largest element
 PASS  sumOf is not the length
 PASS  countAbove found something
+PASS  describe names the sum
+PASS  describe names both figures
+PASS  describeLines
 PASS  length
 PASS  last element
 SKIP  i64 reduction (stats.ts has no i64 path yet)
-stats: 8 passed, 0 failed, 1 skipped
+stats: 11 passed, 0 failed, 1 skipped

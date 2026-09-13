@@ -1,0 +1,40 @@
+PASS  a string field loses its quotes
+PASS  a number field is its own bytes
+PASS  and parseInt reads it
+PASS  the last field is reachable
+PASS  the message comes back whole
+PASS  a field that is not there is absent
+PASS  a prefix of a field name is not that field
+PASS  nor is a suffix
+PASS  an escaped quote
+PASS  an escaped backslash
+PASS  an escaped newline
+PASS  an escaped tab
+PASS  an escaped solidus stands for itself
+PASS  a control escape is one byte
+PASS  and it is the byte it names
+PASS  a code point below 0x800 is two bytes
+PASS  the lead byte of the two
+PASS  the continuation byte
+PASS  a code point above it is three
+PASS  the lead byte of the three
+PASS  a `\u` with no hex digits is copied through
+PASS  a brace in a string closes nothing
+PASS  a nested object comes back as its text
+PASS  so does an array
+PASS  a field after both is still found
+PASS  a field of a nested object is not a field of this one
+PASS  a boolean is its own bytes
+PASS  so is false
+PASS  a null value
+PASS  and the string that reads the same
+PASS  an exponent is not reformatted
+PASS  blanks around a key and a value
+PASS  the first of two fields of one name
+PASS  text that is not an object
+PASS  an empty object
+PASS  an empty string
+PASS  a key with no value
+PASS  an unterminated string
+PASS  a truncated object still answers the field before the cut
+json: 39 passed, 0 failed, 0 skipped

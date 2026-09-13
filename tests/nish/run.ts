@@ -58,7 +58,7 @@
  * `UPDATE_GOLDENS`, which this runner deliberately cannot do.
  */
 import { Suite } from "../../std/testing";
-import { firstDifference, replaceAll, splitLines, splitWhitespace, trim } from "../../std/text";
+import { replaceAll, splitLines, splitWhitespace, trim } from "../../std/text";
 
 const CASES: string = "tests/cases";
 const LINKS: string = "tests/link";
@@ -349,18 +349,6 @@ const verifyIR = (t: Suite, tools: Tools, label: string, irPath: string, errBase
   }
 };
 
-/** Reports the first differing line of two IR texts, or passes when they agree. */
-const checkIR = (t: Suite, label: string, want: string[], got: string[]): void => {
-  const at = firstDifference(want, got);
-  if (at < 0) {
-    t.pass(label);
-    return;
-  }
-  const wantLine = at < want.length ? want[at] : "<end of golden>";
-  const gotLine = at < got.length ? got[at] : "<end of output>";
-  t.fail(label, `IR line ${at + 1}: golden "${wantLine}", emitted "${gotLine}"`);
-};
-
 /** One `tests/cases/<name>.ts` and every sidecar beside it. */
 const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
   const source = readFileSyncOrNull(`${CASES}/${name}.ts`);
@@ -399,18 +387,13 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
       t.fail(name, `expected the compile to fail with 1, got ${status}`);
       return;
     }
-    let missing = "";
+    // One fragment per line, and `containsAll` ignores the blank ones, which is
+    // why the file needs no filtering here beyond the trim.
+    const fragments: string[] = [];
     for (const fragment of splitLines(expectedErr)) {
-      const wanted = trim(fragment);
-      if (wanted.length > 0 && diagnostics.indexOf(wanted) < 0) {
-        missing = wanted;
-      }
+      fragments.push(trim(fragment));
     }
-    if (missing.length > 0) {
-      t.fail(name, `stderr does not contain "${missing}"`);
-    } else {
-      t.pass(name);
-    }
+    t.containsAll(name, diagnostics, fragments);
     return;
   }
 
@@ -445,7 +428,7 @@ const runGoldenCase = (t: Suite, tools: Tools, name: string): void => {
     // absolute one from — so the placeholder is what has to go, and the two
     // sides then say the same thing about the same file (`dbg_locals`, whose
     // `-g` DIFile is the only place the path reaches the IR).
-    checkIR(t, name, stripHeader(replaceAll(golden, "<root>/", "")), stripHeader(emitted));
+    t.eqLines(name, stripHeader(emitted), stripHeader(replaceAll(golden, "<root>/", "")));
   }
 
   verifyIR(t, tools, name, irPath, `${WORK}/${name}`);
@@ -556,13 +539,10 @@ const runLinkCase = (t: Suite, tools: Tools, name: string): void => {
 
   const expectedErr = readFileSyncOrNull(`${dir}/expected.err`);
   if (expectedErr !== null) {
-    const needle = trim(expectedErr);
     if (status !== 1) {
       t.fail(label, `expected the compile to fail with 1, got ${status}`);
-    } else if (diagnostics.indexOf(needle) < 0) {
-      t.fail(label, `stderr does not contain "${needle}"`);
     } else {
-      t.pass(label);
+      t.contains(label, diagnostics, trim(expectedErr));
     }
     return;
   }
@@ -587,27 +567,18 @@ const runLinkCase = (t: Suite, tools: Tools, name: string): void => {
     all.push(emitted);
     const golden = readFileSyncOrNull(`${dir}/${file}`);
     if (golden !== null) {
-      checkIR(t, `${label}: ${file} matches golden`, stripHeader(golden), stripHeader(emitted));
+      t.eqLines(`${label}: ${file} matches golden`, stripHeader(emitted), stripHeader(golden));
     }
     verifyIR(t, tools, `${label}: ${file}`, `${outDir}/${file}`, `${work}_${file}`);
   }
 
   const expectedIR = readFileSyncOrNull(`${dir}/expected.ir`);
   if (expectedIR !== null) {
-    const joined = all.join("\n");
-    let missing = "";
+    const wanted: string[] = [];
     for (const line of splitLines(expectedIR)) {
-      const wanted = trim(line);
-      if (wanted.length > 0 && joined.indexOf(wanted) < 0) {
-        missing = wanted;
-      }
+      wanted.push(trim(line));
     }
-    const check = `${label}: emitted IR contains every expected.ir line`;
-    if (missing.length > 0) {
-      t.fail(check, `missing: ${missing}`);
-    } else {
-      t.pass(check);
-    }
+    t.containsAll(`${label}: emitted IR contains every expected.ir line`, all.join("\n"), wanted);
   }
 
   if (!tools.clang) {

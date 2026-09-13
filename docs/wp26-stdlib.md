@@ -1,11 +1,16 @@
 # WP26: The standard library
 
-**Landed.** `std/` exists, with two modules — [`std/testing`](../std/testing.ts),
-a test runner a compiled program drives to check itself, and
+**Landed.** `std/` exists, with three modules — [`std/testing`](../std/testing.ts),
+a test runner a compiled program drives to check itself,
 [`std/text`](../std/text.ts), the string operations the language deliberately
-does not have — and one program written on top of both,
+does not have, and [`std/json`](../std/json.ts), the value of one field of one
+flat JSON object — and two programs written on top of them:
 [`tests/nish/run.ts`](../tests/nish/run.ts), which runs this repository's golden
-cases and its `tests/link/` programs in the language it tests.
+cases and its `tests/link/` programs in the language it tests, and
+[`tests/nish/cli.ts`](../tests/nish/cli.ts), which reads the compiler's own
+machine-readable output and checks the contract
+[wp12-release.md](wp12-release.md) states — the streams, the exit-code bands, and
+one flat `--json` object per diagnostic — from a consumer written in Nish.
 
 This note is the plan of record for the directory: what a module there is, what
 it is not, and the four or five rules a second contributor needs before adding
@@ -361,6 +366,13 @@ preference:
    stage1 on every suite run, and the IR oracle requires the two to agree byte
    for byte.
 
+A third thing every module gets, for the same money: `tests/run.js` type-checks
+`std/` and the programs written on it against
+[`runtime/nish.d.ts`](../runtime/nish.d.ts) under `tsc --strict`, beside the
+corpus and `self/`. The claim those declarations make is that a program nish
+accepts is never one `tsc` refuses, and `std/` is the code a user *imports* —
+an editor open on `std/testing.ts` is how most people will meet the claim.
+
 Stated as the rule a contributor needs: **a `std/` module with no importer in
 `tests/link/` is compiled by neither compiler on any run.** It is not in
 `tests/cases`, so the golden harness never sees it; it is not in `CORPUS_DIRS`,
@@ -379,22 +391,27 @@ The one honest gap this leaves is narrow and worth recording: `checked_oracle.js
 reads `programs()` only and not `linkPrograms()`, so the *checker-dump* oracle
 never sees a `std/` module; the IR, parity and reject oracles do.
 
-The three cases, and why there are three rather than two:
+The cases, and why `std/testing` has two of them:
 
 | Case | What it pins |
 | --- | --- |
-| `tests/link/std_testing` | `std/testing` on a real subject (`stats.ts`), exit code 0, and the guard idiom of §3b. 8 passed, 0 failed, 1 skipped |
-| `tests/link/std_testing_fail` | the other outcome: every assertion fails on purpose, so `expected.out` is the *wording* of every failure message and `expected.code` is 1. 1 passed, 8 failed, 1 skipped |
+| `tests/link/std_testing` | `std/testing` on a real subject (`stats.ts`), exit code 0, and the guard idiom of §3b. 11 passed, 0 failed, 1 skipped |
+| `tests/link/std_testing_fail` | the other outcome: every assertion fails on purpose, so `expected.out` is the *wording* of every failure message and `expected.code` is 1. 1 passed, 15 failed, 1 skipped |
 | `tests/link/std_text` | `std/text` checked through `Suite`, the way a user would compose the two — 65 assertions, each one an edge case the doc comments in `std/text.ts` decide |
+| `tests/link/std_text_f64` | the same two modules under `--number-mode f64` (§4), which is where a module that spelled its own widths and forgot a `toI32` at a builtin's answer is caught |
+| `tests/link/std_json` | `std/json` against the awkward material a reader of the `--json` surface meets — escapes, a `}` inside a message, a nested value to step over, a field that is not there, and text that is not an object at all. 39 assertions |
+| `tests/link/std_bare_specifier` | the same two modules reached as `nish/testing` and `nish/text` rather than by a path up the tree — deliberately thin, because what it proves is that the module arrived |
+| `tests/link/std_package_scope` | a program that declares `trimStart` while importing the `std/text` that exports one, which is legal only because a `nish/` module is its own package (§5a of [wp21-packages.md](wp21-packages.md)) |
 
 A library whose failure path is observable therefore gets two cases, one per
 outcome. `std/testing`'s report *is* its output, so the wording of a message is
 a contract and a golden is the only thing that keeps it one.
 
 Packaging is the last leg of the same rule: source is the distribution format,
-so shipping the library *is* shipping those files, and `tests/run.js` requires
-`std/testing.ts` and `std/README.md` to be in the tarball. §7 question 6 notes
-that the required list has not grown with the directory.
+so shipping the library *is* shipping those files. `tests/run.js` requires
+`std/testing.ts` and `std/README.md` by name, and then asks the tree: every
+`std/*.ts` on disk has to be in the tarball, which is the form of the assertion
+that cannot go stale as the directory grows (§7 question 6, now answered).
 
 ---
 
@@ -405,14 +422,16 @@ from the tree rather than remembered.
 
 | Surface | Count |
 | --- | ---: |
-| `std/testing.ts` | 204 lines — one `Suite` class, 4 fields, 11 methods |
-| `std/text.ts` | 155 lines — 8 exported functions, 1 private helper, 4 constants |
-| Lines added to `runtime/runtime.c` by either module | **0** |
+| `std/testing.ts` | 339 lines — one `Suite` class, 5 fields, 14 methods, 2 private helpers |
+| `std/text.ts` | 180 lines — 8 exported functions, 1 private helper, 4 constants |
+| `std/json.ts` | 336 lines — 1 exported function, 8 private helpers, 12 constants |
+| Lines added to `runtime/runtime.c` by any of the three | **0** |
 | New diagnostics, new Phase 0 rules, new checker rules | **0** |
-| `tests/nish/run.ts` — the program the library exists for | 246 lines when it landed; 668 today, as it catches up with `tests/run.js` |
-| `tests/link/` cases | 3 (`std_testing`, `std_testing_fail`, `std_text`) |
-| Assertions in `tests/link/std_text` | 65 |
-| Importers of `std/` in the repository | 4 (the three link cases and the runner) |
+| `tests/nish/run.ts` — the program the library exists for | 246 lines when it landed; 670 today, as it catches up with `tests/run.js` |
+| `tests/nish/cli.ts` — the second program, and `std/json`'s reason to exist | 616 lines, 69 checks against stage0 and 57 with 2 declared skips against the self-hosted compiler, in 8.8 s |
+| `tests/link/` cases | 7 (`std_testing`, `std_testing_fail`, `std_text`, `std_text_f64`, `std_json`, `std_bare_specifier`, `std_package_scope`) |
+| Assertions in `tests/link/std_text` / `std_json` | 65 / 39 |
+| Importers of `std/` in the repository | 9 (the seven link cases and the two harnesses) |
 
 **The three builtins.** They are the part that did cost runtime bytes, and they
 are builtins for §2 reason 1 — they are syscalls. Measured with
@@ -481,14 +500,16 @@ the compiler.
 Stated as questions, in the shape [wp23-language-surface.md](wp23-language-surface.md#10-where-the-answer-is-genuinely-open)
 §10 uses, each with a recommendation rather than a decision.
 
-1. **The bare specifier.** `import { Suite } from "nish/testing"` is what
-   [wp21-packages.md](wp21-packages.md#8-stages) S2 buys, and today the
-   specifier is `../std/testing` in this repository and
-   `node_modules/nish/std/testing` outside it. **Recommendation: do not fake
-   it.** A special case for this one directory would be a second resolver that
-   the real one then has to agree with, and the condition name itself has to
-   land in `src/branding.ts` and `self/branding.ts` first (orientation rule 5).
-   The ugly path is the honest signal that resolution does not exist yet.
+1. **The bare specifier. Answered: `nish/<module>` resolves.**
+   `import { Suite } from "nish/testing"` is what
+   [wp21-packages.md](wp21-packages.md#8-stages) S2 buys, and it landed — §1
+   above says how. The recommendation this question used to carry was *do not
+   fake it*, on the grounds that a special case for one directory would be a
+   second resolver the real one then has to agree with. What changed is not the
+   reasoning but which package it applies to: for the compiler's own there is
+   exactly one right answer and it is the one Node gives, so nothing is being
+   faked. For a third-party package the argument stands and the specifier is
+   still refused, which is the half of the question that is still open.
 
 2. **Whether `std/` is versioned separately from the compiler once WP21 lands.**
    Today it cannot be: it ships in the compiler's tarball at the compiler's
@@ -520,6 +541,33 @@ Stated as questions, in the shape [wp23-language-surface.md](wp23-language-surfa
    gap named in the normative reference rather than inferred from a corpus
    reading.
 
+   **What actually arrived, and how it reads against this rule.** The third
+   module is [`std/json`](../std/json.ts), and it arrived with *one* importer
+   rather than two, so the rule as stated does not admit it. The case for it is
+   the format rather than the count: the object it reads is this project's own
+   published contract (`AGENTS.md`, [wp12-release.md](wp12-release.md) — one flat
+   object per diagnostic, a stable `code`, a `severity` a tool filters on), so
+   every Nish program that ever reads compiler output needs exactly this scan,
+   and a private helper inside `tests/nish/cli.ts` would be the thing the next
+   such program copies. It is also where the format's one ambiguity is written
+   down and tested — a field whose value is `null` and one whose value is the
+   string `"null"` answer the same four bytes, which is the sign that a caller
+   wants a real parser — and 39 assertions in `tests/link/std_json` pin that.
+   **Recommendation: keep the rule as it stands and treat this as the exception
+   it is**, with the second importer expected rather than assumed: a Nish
+   harness over `tests/wordings/` would be one, since that tool's whole job is
+   reading `--json` objects and comparing a `code` and a `message`. `sort` is
+   still the candidate that arrives with two.
+
+   The three assertions `std/testing` grew at the same time —
+   `contains`, `containsAll` and `eqLines` — are the rule working as intended in
+   the other direction: each was written by hand in `tests/nish/run.ts` first,
+   the second harness needed the same three, and only then did they move into the
+   library. `eqLines` is the one worth naming, because it is not a convenience:
+   comparing a 400-line golden with `eqStr` prints both texts and leaves the
+   reader to diff them, and reporting the first differing line with its number is
+   the whole diagnostic.
+
 4. **Whether a `std/` module must compile in both number modes.** §4 says
    `std/text` does not. **Recommendation: yes for any new module, and fix
    `std/text` with `toI32` at each length and `charCodeAt` read.** The test
@@ -547,12 +595,15 @@ Stated as questions, in the shape [wp23-language-surface.md](wp23-language-surfa
    caller-supplied buffer instead has no way to ask for one today, and that is
    the shape to reconsider if a `std/` module ever becomes hot.
 
-6. **Whether the packaging check should name every module.**
-   `tests/run.js` requires `std/testing.ts` and `std/README.md` in the tarball;
-   `std/text.ts` ships because `files` names the whole directory, but nothing
-   asserts it. **Recommendation: the required list should name every module, or
-   be replaced by one assertion that every `std/*.ts` in the tree is in the
-   tarball.** The second is better: it cannot go stale.
+6. **Whether the packaging check should name every module. Answered: it asks the
+   tree.** `tests/run.js` still requires `std/testing.ts` and `std/README.md` by
+   name — they are the two a broken tarball would be recognised by — and beside
+   that it now reads `std/` and requires every `.ts` in it to be in the tarball.
+   That is the second of the two options this question offered, for the reason it
+   gave: `files` in package.json names the whole directory, so a module ships
+   without anybody saying so, and a list written down here would have been one
+   module out of date the day `std/json` landed. The check names the modules it
+   found, so the count is in the run's own output rather than in this note.
 
 7. **Whether WP18 collapses the assertion set.** With monomorphisation,
    `eqI32`/`eqI64`/`eqF64`/`eqStr` could become one `eq<T>` — but only if the

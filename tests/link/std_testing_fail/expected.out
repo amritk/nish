@@ -12,8 +12,22 @@ FAIL  nearF64
       expected 0.25 +/- 0.01, got 0.5
 FAIL  eqStr
       expected " ", got ""
+FAIL  contains
+      expected to contain "FAIL", got "PASS  ok"
+FAIL  containsAll with one fragment missing
+      missing "above=2"
+FAIL  containsAll with two fragments missing
+      missing 2 of 3, first "above=2"
+FAIL  eqLines on a differing line
+      line 2: expected "b", got "x"
+FAIL  eqLines when the actual ran out
+      line 2: expected "b", got <end of input>
+FAIL  eqLines when the expected ran out
+      line 2: expected <end of input>, got "b"
+FAIL  contains in a long haystack
+      expected to contain "abc", got "01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789... (300 bytes)"
 FAIL  fail with no detail
 PASS  pass
 SKIP  skip (nothing to run)
-failed: ok, eqBool, eqI32, eqI64, eqF64, nearF64, eqStr, fail with no detail
-failures: 1 passed, 8 failed, 1 skipped
+failed: ok, eqBool, eqI32, eqI64, eqF64, nearF64, eqStr, contains, containsAll with one fragment missing, containsAll with two fragments missing, eqLines on a differing line, eqLines when the actual ran out, eqLines when the expected ran out, contains in a long haystack, fail with no detail
+failures: 1 passed, 15 failed, 1 skipped
