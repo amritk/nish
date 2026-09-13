@@ -74,6 +74,8 @@ const PERFORMANCE = [
   "is computed in i32 and wraps before",
   "is at or beyond the",
   "is not proven to be in range for",
+  "is not provably within",
+  "is called here inside a loop and",
 ];
 
 /** Every `.ts` under a directory, in a stable order. */

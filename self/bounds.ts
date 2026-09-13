@@ -10,6 +10,17 @@
 // no check; where it is not, the runtime check stays and the WP15 §8 warning
 // in `self/checker.ts` names the guard that would have proved it.
 //
+// The same facts answer a second question, and it is not about a check.
+// `s.substring(a, b)` clamps each end into `[0, len]` the way JavaScript
+// specifies — an `llvm.smin` / `llvm.smax` pair per bound, six intrinsic calls
+// once the two are swapped into order — and that clamp is the semantics rather
+// than a safety net, so `--unchecked-indexing` leaves it alone. A bound this
+// analysis can place in `[0, s.length]` cannot be moved by the clamp, so the
+// clamp is dead code: `program.nodeProvenClamp` says which bounds those are
+// and `self/emit_strings.ts` writes them through. LLVM does not find this on
+// its own — the guard a program writes is on the `i32` and the clamp is on its
+// `sext`, and `opt -O3` keeps all six calls either way.
+//
 // The five families of fact, all keyed by *variable* and never by a property
 // path — a local cannot be written through an alias, so no store and no call
 // can invalidate a fact behind the checker's back:
@@ -899,6 +910,75 @@ function judge(walk: BoundsWalk, state: State, node: Node, receiver: Node, index
   walk.unproven.push(node);
 }
 
+/**
+ * `s.substring(a)` / `s.substring(a, b)` on a string receiver: the shape whose
+ * bounds are clamped rather than checked. Two arguments at most, because that
+ * is the arity the checker accepts; a third is already an error and is never
+ * judged here.
+ */
+function isSubstringCall(ctx: CheckContext, call: Node): boolean {
+  const callee = unwrapBoundsParens(call.children[0]);
+  if (callee.kind !== N_MEMBER || callee.text !== "substring") {
+    return false;
+  }
+  const count = call.children[1].children.length;
+  if (count < 1 || count > 2) {
+    return false;
+  }
+  return ctx.program.nodeTypes[callee.children[0].id] === T_STRING;
+}
+
+/**
+ * `0 <= bound <= holder.length`, which is what makes the clamp a no-op.
+ *
+ * It is one fact weaker than `proves`, and deliberately so: an *index* has to
+ * be below the length to name an element, while a substring bound may equal it
+ * — `s.substring(i, s.length)` is an ordinary thing to write. That is exactly
+ * what the `atMost` family records, and what `const n = s.length` gives a
+ * program for free.
+ *
+ * A literal `0` is proven with no facts at all, because no string the runtime
+ * builds has a negative length. That is not a special case for its own sake: it
+ * is the lower bound of `s.substring(0, n)`, the commonest spelling of the call
+ * there is, and it means the fold reaches code nobody rewrote.
+ */
+function provesClamp(ctx: CheckContext, state: State, holder: Local | null, bound: Node): boolean {
+  const constant = literalValue(bound);
+  if (constant >= 0) {
+    return constant === 0 || (holder !== null && knownMinLength(state, holder, constant));
+  }
+  if (holder === null) {
+    return false;
+  }
+  const i = indexLocal(ctx.program, bound);
+  if (i === null || !knownNonNegative(state, i)) {
+    return false;
+  }
+  // `knownAtMost` answers `knownBelow` too, and `i < len` implies `i <= len`.
+  return knownAtMost(state, i, holder);
+}
+
+/**
+ * Record which of a `substring`'s bounds the clamp cannot move. Nothing is
+ * pushed on to the unproven list here: the warning for the bounds that stay
+ * clamped is reported by `checkPerformance`, which re-derives the shape from
+ * the syntax and reads this table for the verdict, so that all of WP15 §8's
+ * warnings still come out of one source-order walk.
+ */
+function judgeClamp(walk: BoundsWalk, state: State, call: Node): void {
+  const ctx = walk.ctx;
+  if (!isSubstringCall(ctx, call)) {
+    return;
+  }
+  const callee = unwrapBoundsParens(call.children[0]);
+  const holder = lengthHolder(ctx, callee.children[0]);
+  for (const bound of call.children[1].children) {
+    if (provesClamp(ctx, state, holder, bound)) {
+      ctx.program.nodeProvenClamp[bound.id] = true;
+    }
+  }
+}
+
 /** The proof itself: `0 <= i` and `i < holder.length`, by whichever route the state has. */
 function proves(ctx: CheckContext, state: State, holder: Local, index: Node): boolean {
   const constant = literalValue(index);
@@ -948,6 +1028,11 @@ function walkExpression(walk: BoundsWalk, state: State, expr: Node): void {
       judge(walk, state, e, callee.children[0], e.children[1].children[0]);
       return;
     }
+    // The clamp runs before the copy, so the bounds are judged against the
+    // facts that reach the call rather than the ones that survive it. The call
+    // still forgets array lengths below: `nish_str_new` is a callee like any
+    // other, and nothing about this verdict changes what it may do.
+    judgeClamp(walk, state, e);
     forgetArrayLengths(ctx, state);
     return;
   }

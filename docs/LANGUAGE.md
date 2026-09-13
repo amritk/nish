@@ -2002,7 +2002,7 @@ interval exactly zero, which `io_monotonic` is the test for.
 | `a.join(sep: string = ","): string` | **`string[]` only** (`` `join` requires string[], got i32[] ``, `reject_arr_join_elem`): one pass summing the lengths, one allocation, one `memcpy` per part. Element conversion would allocate per element, which is the quadratic shape `join` exists to replace ([wp14-selfhost.md](wp14-selfhost.md) §3) | `arr_join`; `reject_arr_join_elem` |
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
-| `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`) | `str_bytes`; `reject_str_substring_arity` |
+| `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`). The clamp is two `llvm.smin` / `llvm.smax` calls per bound and is **not** emitted for a bound the compiler can place in `[0, s.length]`, because a clamp cannot move a value that is already inside its range: the proof is the same one that removes a bounds check ([Element access](#element-access)), and a literal `0` is proven for every string, since none has a negative length. A bound it could not prove keeps the clamp and is reported by the performance warning below. `--unchecked-indexing` does not remove the clamp: it is the semantics, not a check | `str_bytes`, `perf_clamp_quiet`; `reject_str_substring_arity` |
 | `s.slice(start: number[, end: number]): string` | the same bytes, without the clamp: `start` and `end` must satisfy `0 <= start <= end <= s.length` and anything else **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript would count a negative offset from the end and answer `""` for a reversed pair. `end` defaults to `s.length`, an empty range is `""`, and an in-range non-negative pair gives exactly what JavaScript's `String.prototype.slice` gives. Two `icmp ule` against a cold panic block, one allocation and one `memcpy`; `--unchecked-indexing` drops the compares, as it drops `a[i]`'s. Measured 1.18x over `substring` on a lexer-shaped scan ([wp15-performance.md](wp15-performance.md) §4) | `str_slice`, `str_slice_panic`; `reject_str_slice_arity`, `reject_str_slice_type` |
 | `s.indexOf(sub: string): number` | the first **byte** offset at which `sub` occurs, or `-1`; `s.indexOf("")` is `0`. One `nish_str_index_of` call: the search is the runtime's, so it is the libc's vectorised one rather than a probe per offset (WP15 §7c) | `str_search`; `reject_str_index_of_type` |
 | `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`nish_str_at`) | `str_search` |
@@ -2371,7 +2371,7 @@ by the caller.
   that *failed* prints its errors and none of its warnings; a report of more
   than one warning is capped at 20, like the error report, with
   `...and N more performance warnings` and an `N performance warnings` line.
-  Seven warnings exist today, and each names the rewrite:
+  Nine warnings exist today, and each names the rewrite:
   - **quadratic string building** — `s = <something built from s>` where `s`
     is a string local declared outside the loop the assignment sits in, so
     every pass copies the whole accumulator. The hint is a `string[]` and one
@@ -2451,6 +2451,40 @@ by the caller.
     (`this.source.charCodeAt(this.pos)`) or a computed index was never a
     candidate, and the rewrite there is to bind them to locals first
     (`tests/cases/perf_bounds_quiet`).
+  - **a `substring` bound whose clamp could not be folded off** —
+    `s.substring(a, b)` inside a loop where the proof above could not place `a`
+    or `b` in `[0, s.length]`, so that bound keeps the `llvm.smin` /
+    `llvm.smax` pair JavaScript's clamp needs and pays for it on every pass.
+    Two hints, because they are not the same trade: a test that reaches the
+    call (`if (a >= 0 && a <= s.length)`) keeps the semantics exactly and lets
+    the compiler write the bound through, and `slice` has no clamp at all but
+    **panics** where `substring` would have clamped — it was measured 1.18x
+    over an unfolded `substring` on a lexer-shaped scan
+    ([wp15-performance.md](wp15-performance.md) §4), and the fold is what
+    closes most of that gap for a bound the guard proves
+    (`tests/cases/perf_clamp`). Reported on the bound, once per bound, so
+    `s.substring(from, to)` with neither end proven warns twice. Silent
+    outside a loop, where the clamp runs once; silent for a bound the proof
+    came off, including the literal `0` that every string proves; and silent
+    unless the receiver and the bound are both plain locals, which is the
+    shape a guard could prove (`tests/cases/perf_clamp_quiet`). Unlike the
+    bounds-check warning it is **unaffected by `--unchecked-indexing`**,
+    because the clamp is not a check: the flag does not remove it and neither
+    rewrite depends on it.
+  - **a function kept external by `--no-strict-exports`** — a call, inside a
+    loop, to a function the module does not export, while that flag is in
+    effect. The default gives such a function `internal` linkage, which is what
+    lets the whole-program passes treat the call sites they can see as all of
+    them: specialise the body to those arguments, and drop the out-of-line copy
+    once the calls are inlined. The hint is to stop passing the flag
+    (`tests/cases/perf_inline`). Measured 4% slower and 240 bytes larger on
+    `bench/sieve` and nothing at all on `bench/spectral`
+    ([wp15-performance.md](wp15-performance.md) §9), which is why it is
+    reported at a call in a loop rather than per function. Reported once per
+    call site. Silent for an exported function, where the ABI is the point;
+    silent outside a loop; and silent altogether under the default, so a build
+    that did not ask for the flag never sees it
+    (`tests/cases/perf_inline_quiet`).
 - **`--json`** prints every diagnostic as one JSON object per line on stdout,
   `{"file","line","column","endLine","endColumn","severity","code","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in

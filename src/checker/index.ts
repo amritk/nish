@@ -176,6 +176,7 @@ export class Checker implements CheckContext {
       coercions: new WeakMap(),
       caseValues: new WeakMap(),
       provenIndices: new WeakSet(),
+      provenClamps: new WeakSet(),
       aliases: new Map(),
       builtinImports: new Map(),
       enums: new Map(),

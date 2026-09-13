@@ -881,8 +881,8 @@ and the original six:
 | bounds check not eliminated | `a[i]` or `s.charCodeAt(i)` in a loop where neither the range nor a length guard proved it, and where the receiver and the index are both plain locals — the shape the analysis knows how to prove | guard the access with `if (i >= 0 && i < a.length)`, which proves both ends wherever it reaches, or give the index an unsigned type, which proves the lower one |
 | quadratic string building | `s = s + t` where `s` is assigned in an enclosing loop | build a `string[]` and `join` it |
 | allocation in a loop | a `new`, array literal or concat that escapes and is inside a loop | hoist it, or bound it with an arena scope |
-| not inlinable | a hot, non-exported function kept external because `--no-strict-exports` was given | drop the flag |
-| clamp not folded | a `substring` whose bounds could not be proven in range | use the fast slice, or narrow the index |
+| not inlinable | a call **inside a loop** to a function the module does not export, while `--no-strict-exports` is keeping it an external symbol | drop the flag |
+| clamp not folded | a `substring` **bound** the §2 proof could not place in `[0, s.length]`, on a call inside a loop | the guard that proves it, which makes the compiler write the bound through, or `slice`, which has no clamp |
 | wasteful struct padding | reordering a struct's fields would shrink it | names the current size, the achievable size, and the field order that gets there |
 
 The bar cuts both ways, and the dropped-allocation rule is where it shows.
@@ -934,10 +934,45 @@ measurement closed says so and says why.
    `self/compile.ts`, `PerformanceWarning` is in `src/diagnostics.ts`, both
    warnings are specified in `docs/LANGUAGE.md`, and
    `tests/cases/perf_str_concat_loop`, `perf_str_concat_quiet`,
-   `perf_alloc_loop` and `perf_alloc_quiet` pin them. Only those two shipped:
-   the other four rows of §8's table — bounds check not eliminated, not
-   inlinable, clamp not folded, wasteful struct padding — still wait on the
-   analyses that feed them.
+   `perf_alloc_loop` and `perf_alloc_quiet` pin them.
+
+   **The four rows that were said to be waiting are now three answers and one
+   correction**, and nine of §8's ten rules exist:
+   - **bounds check not eliminated** — shipped with item 6, not waiting.
+     `NL9007`, `tests/cases/perf_bounds_loop` / `perf_bounds_quiet`. This row
+     had gone stale.
+   - **clamp not folded** — shipped, `NL9008`, and with it the fold it had
+     presupposed. Measuring first showed the premise was wrong: LLVM does *not*
+     fold `substring`'s clamp when a dominating guard proves the bound, because
+     the guard compares `i32` and the clamp runs on its `sext`, so `opt -O3`
+     keeps all six `llvm.smin` / `llvm.smax` calls either way. So the compiler
+     folds it, out of the §2 facts it already has, and the warning is for the
+     bounds where the proof did not come off. A literal `0` is proven for every
+     string, which is why `s.substring(0, n)` — the commonest spelling there is
+     — loses two of its six intrinsic calls with nothing rewritten: the
+     cookbook's `head` went from six to four. Measured **3.5x** (91 ms against
+     26 ms) on a loop that does nothing but `substring`, which is the ceiling
+     rather than the expectation; §4's 1.18x for `slice` over `substring` is
+     what the same instructions are worth on lexer-shaped code.
+     `tests/cases/perf_clamp` / `perf_clamp_quiet`.
+   - **not inlinable** — shipped, `NL9009`, and it is smaller than the row
+     sounded. `--no-strict-exports` measured **4% slower and 240 bytes larger**
+     on `bench/sieve` (848 ms against 882 ms, 6,576 bytes against 6,816) and
+     **nothing at all** on `bench/spectral`, whose binary is in fact 64 bytes
+     *smaller* without the flag. So the warning fires only at a call inside a
+     loop to a function the module does not export, and only when the flag is
+     given — which means it can never be noise for a default build.
+     `tests/cases/perf_inline` / `perf_inline_quiet`.
+   - **wasteful struct padding** — still not shipped, and what blocks it is
+     the *report* rather than the analysis. The layout is already computed
+     (`computeLayout` in `checker/classes.ts`, `StructInfo.size`/`align` and
+     `FieldInfo.offset`), so the better packing is arithmetic. But a struct is
+     laid out in pass 1 and every §8 warning today comes out of one
+     source-order walk in pass 2, so the warning would print ahead of every
+     warning in the same file. Closing it means giving the warning list a sort,
+     in both compilers, which changes the order of a machine-readable stream
+     and is worth doing deliberately rather than as a side effect of a
+     diagnostic.
 3. **Slice iterators** (§2.3) — **measured, and not taken**. The array half was
    already banked by §2b: `for (const x of xs)` and the counted loop over
    `xs[i]` link to byte-identical binaries, and a guarded byte loop is

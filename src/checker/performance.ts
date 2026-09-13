@@ -685,6 +685,86 @@ const checkSurvivingBoundsCheck = (walk: Walk, access: ts.Node): void => {
   );
 };
 
+/**
+ * A call, inside a loop, to a function this module does not export, while
+ * `--no-strict-exports` is keeping it an external symbol.
+ *
+ * The default gives a non-exported function `internal` linkage, which is what
+ * lets LLVM treat the call sites it can see as all of them: specialise the
+ * body to their arguments, and drop the out-of-line copy once they are
+ * inlined. The flag withdraws that for every function in the module at once,
+ * and the loop is what makes it worth saying — measured 4% slower and 240
+ * bytes larger on `bench/sieve`, whose hot `sieve` is exactly this shape, and
+ * nothing at all on `bench/spectral` (WP15 §8).
+ *
+ * It cannot be noise for anybody who did not ask for it: the flag is opt-in,
+ * so a default build reports none of these, and the rewrite the message names
+ * is to stop passing it. An exported function is silent because the ABI is
+ * then the point, and a call outside a loop is silent because one indirect
+ * call is not a cost anybody is paying.
+ */
+const checkNotInlinable = (walk: Walk, call: ts.CallExpression): void => {
+  if (walk.ctx.opts.strictExports) return;
+  if (walk.loops.length === 0) return;
+  const callee = walk.ctx.program.callees.get(call);
+  if (callee === undefined || callee.exported) return;
+  walk.ctx.reportPerformance(
+    `\`${callee.sourceName}\` is called here inside a loop and \`--no-strict-exports\` keeps it an external ` +
+      `symbol, so the whole-program passes must assume there are callers they cannot see: the function is not ` +
+      `specialised to these arguments and its out-of-line copy survives even where every call was inlined — ` +
+      `drop \`--no-strict-exports\`, and a function this module does not export is \`internal\` instead`,
+    call.expression
+  );
+};
+
+/**
+ * A `substring` bound the WP15 §2 analysis could not place in `[0, s.length]`,
+ * on a call inside a loop.
+ *
+ * JavaScript's `substring` clamps each end, which is an `llvm.smin` /
+ * `llvm.smax` pair per bound, and the compiler writes a bound straight through
+ * wherever it can prove the clamp cannot move it (`bounds.ts`,
+ * `CheckedProgram.provenClamps`). So a bound it could not prove is two
+ * intrinsic calls every pass that a guard would take away — which is the one
+ * thing this class is for, a slow path with a named rewrite.
+ *
+ * Two rewrites are named because they are not the same trade. The guard keeps
+ * the semantics exactly: a clamped bound that was already in range clamps to
+ * itself. `slice` changes them — it panics where `substring` would have
+ * clamped — and it is the faster call whichever way the proof goes, measured
+ * 1.18x over `substring` on a lexer-shaped scan (WP15 §4).
+ *
+ * Not reported outside a loop, where the clamp runs once; not reported unless
+ * the receiver and the bound are both plain locals, which is the shape the
+ * analysis can prove and therefore the shape a guard would help — the same bar
+ * `checkSurvivingBoundsCheck` holds itself to. Unlike that one it ignores
+ * `--unchecked-indexing`, because the clamp is not a check: the flag does not
+ * remove it and neither rewrite depends on it.
+ */
+const checkUnfoldedClamp = (walk: Walk, call: ts.CallExpression): void => {
+  if (walk.loops.length === 0) return;
+  const program = walk.ctx.program;
+  const callee = unwrapParens(call.expression);
+  if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "substring") return;
+  if (call.arguments.length === 0 || call.arguments.length > 2) return;
+  if (program.types.get(callee.expression)?.kind !== "string") return;
+  const holder = nameOfLocal(program, callee.expression);
+  if (holder === undefined) return;
+  for (const bound of call.arguments) {
+    if (program.provenClamps.has(bound)) continue;
+    const name = nameOfLocal(program, bound);
+    if (name === undefined) continue;
+    walk.ctx.reportPerformance(
+      `\`${name}\` is not provably within \`${holder}\`, so this \`substring\` bound keeps the clamp ` +
+        `JavaScript specifies — an \`llvm.smin\` and an \`llvm.smax\` on every pass, which the optimiser will ` +
+        `not fold away for you, because the guard compares i32 and the clamp runs on its sext: prove it with a ` +
+        `test that reaches the call, as \`if (${name} >= 0 && ${name} <= ${holder}.length)\`, or use ` +
+        `\`slice\`, which has no clamp at all and panics where this would have clamped`,
+      bound
+    );
+  }
+};
+
 /** The receiver and index of `a[i]` or `s.charCodeAt(i)`; the two shapes that bounds-check. */
 const accessParts = (node: ts.Node): { receiver: ts.Expression; index: ts.Expression } | undefined => {
   if (ts.isElementAccessExpression(node)) {
@@ -765,6 +845,8 @@ const walkNode = (walk: Walk, node: ts.Node): void => {
     checkShiftCount(walk, node);
   } else if (ts.isCallExpression(node)) {
     checkWideningConversion(walk, node);
+    checkUnfoldedClamp(walk, node);
+    checkNotInlinable(walk, node);
   }
   if (walk.unprovenIndices.includes(node)) checkSurvivingBoundsCheck(walk, node);
   ts.forEachChild(node, (child) => walkNode(walk, child));

@@ -309,6 +309,22 @@ export interface CheckedProgram {
    * than in a decision the emitter makes.
    */
   provenIndices: WeakSet<ts.Node>;
+  /**
+   * `substring` bounds the same analysis placed in `[0, s.length]`, keyed by
+   * the bound expression rather than by the call, because one end of an
+   * `s.substring(0, n)` is usually proven and the other is not.
+   *
+   * This is not a bounds *check*. JavaScript's `substring` clamps each end into
+   * `[0, len]`, which `emit/strings.ts` writes as an `llvm.smin` / `llvm.smax`
+   * pair, and that clamp is the semantics rather than a safety net —
+   * `--unchecked-indexing` does not remove it and must not. What the proof buys
+   * is that a bound the clamp cannot move needs no clamp, so the emitter writes
+   * the value straight through. A literal `0` is in here for every string,
+   * because no string has a negative length, which is why the commonest
+   * spelling there is — `s.substring(0, n)` — loses two of its six intrinsic
+   * calls without a guard being written anywhere.
+   */
+  provenClamps: WeakSet<ts.Node>;
 }
 
 /**

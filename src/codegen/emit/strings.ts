@@ -234,14 +234,32 @@ function emitCharCodeAt(ctx: EmitContext, expr: ts.CallExpression, str: string):
 }
 
 /**
+ * One end of a `substring`: the clamp, or the value itself where the WP15 §2
+ * analysis proved `0 <= bound <= len` (`checker/bounds.ts`, `provenClamps`).
+ *
+ * The clamp cannot move a bound that is already inside the range, so dropping
+ * it changes no answer — the checker recorded the verdict and the emitter
+ * reads it, exactly as it does for a bounds check it may omit. LLVM will not
+ * do this itself: a program's `if (a >= 0 && a <= s.length)` compares `i32`s
+ * and the clamp runs on the `sext`, so `opt -O3` keeps all six intrinsic calls
+ * whether the guard is there or not.
+ */
+const clampBound = (ctx: EmitContext, bound: ts.Expression, len: string): string => {
+  const value = emitIndex(ctx, bound);
+  return ctx.program.provenClamps.has(bound) ? value : clampToLength(ctx, value, len);
+};
+
+/**
  * `s.substring(a, b)`: both ends clamped into `[0, len]` and then swapped
  * into order, as JavaScript specifies, so the length is never negative and
- * the copy never leaves the string.
+ * the copy never leaves the string. A bound the checker proved in range is
+ * written through instead (`clampBound`); the swap stays either way, because
+ * nothing here proves `a <= b`.
  */
 function emitSubstring(ctx: EmitContext, expr: ts.CallExpression, str: string): string {
   const len = loadStringLength(ctx, str);
-  const first = clampToLength(ctx, emitIndex(ctx, expr.arguments[0]), len);
-  const second = expr.arguments.length > 1 ? clampToLength(ctx, emitIndex(ctx, expr.arguments[1]), len) : len;
+  const first = clampBound(ctx, expr.arguments[0], len);
+  const second = expr.arguments.length > 1 ? clampBound(ctx, expr.arguments[1], len) : len;
   const from = ctx.fn.emitValue(`call i64 ${ctx.useRuntime("llvm.smin.i64")}(i64 ${first}, i64 ${second})`);
   const to = ctx.fn.emitValue(`call i64 ${ctx.useRuntime("llvm.smax.i64")}(i64 ${first}, i64 ${second})`);
   const n = ctx.fn.emitValue(`sub i64 ${to}, ${from}`);

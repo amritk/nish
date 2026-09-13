@@ -72,6 +72,17 @@
  * `emit/strings.ts` read it and `collectArrayFacts` reads it too — a proven
  * access no longer calls `nish_panic_index`, so a function whose every index
  * is proven keeps `willreturn`.
+ *
+ * **The same facts answer a second question, and it is not about a check.**
+ * `s.substring(a, b)` clamps each end into `[0, len]` the way JavaScript
+ * specifies — an `llvm.smin` / `llvm.smax` pair per bound, six intrinsic calls
+ * once the two are swapped into order — and that clamp is the semantics rather
+ * than a safety net, so `--unchecked-indexing` leaves it alone. A bound this
+ * analysis can place in `[0, s.length]` cannot be moved by the clamp, so the
+ * clamp is dead code: `CheckedProgram.provenClamps` says which bounds those
+ * are and `emit/strings.ts` writes them through. LLVM does not find this on
+ * its own — the guard a program writes is on the `i32` and the clamp is on its
+ * `sext`, and `opt -O3` keeps all six calls either way.
  */
 import ts from "typescript";
 import { CheckContext } from "./context.js";
@@ -734,6 +745,8 @@ type Walk = {
   proven: WeakSet<ts.Node>;
   /** Access nodes whose surviving check is worth a warning, in source order. */
   unproven: ts.Node[];
+  /** `substring` bound expressions the clamp cannot move; see `provenClamps`. */
+  provenClamps: WeakSet<ts.Node>;
   loops: number;
 };
 
@@ -779,6 +792,70 @@ const judge = (walk: Walk, state: State, access: Access): void => {
   walk.unproven.push(access.node);
 };
 
+/**
+ * `s.substring(a)` / `s.substring(a, b)` on a string receiver: the receiver and
+ * the bounds. Two arguments at most, because that is the arity the checker
+ * accepts; a third is already an error and is never judged here.
+ */
+const substringBounds = (
+  program: CheckedProgram,
+  call: ts.CallExpression
+): { receiver: ts.Expression; bounds: readonly ts.Expression[] } | undefined => {
+  const callee = unwrapParens(call.expression);
+  if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "substring") return undefined;
+  if (call.arguments.length === 0 || call.arguments.length > 2) return undefined;
+  if (program.types.get(callee.expression)?.kind !== "string") return undefined;
+  return { receiver: callee.expression, bounds: call.arguments };
+};
+
+/**
+ * `0 <= bound <= holder.length`, which is what makes the clamp a no-op.
+ *
+ * It is one fact weaker than `proves`, and deliberately so: an *index* has to
+ * be below the length to name an element, while a substring bound may equal it
+ * — `s.substring(i, s.length)` is an ordinary thing to write. That is exactly
+ * what the `atMost` family records, and what `const n = s.length` gives a
+ * program for free.
+ *
+ * A literal `0` is proven with no facts at all, because no string the runtime
+ * builds has a negative length. That is not a special case for its own sake: it
+ * is the lower bound of `s.substring(0, n)`, which is the commonest spelling of
+ * the call there is, and it means the fold reaches code nobody rewrote.
+ */
+const provesClamp = (
+  walk: Walk,
+  state: State,
+  holder: LocalVar | undefined,
+  bound: ts.Expression
+): boolean => {
+  const constant = literalValue(bound);
+  if (constant !== undefined) {
+    if (constant === 0) return true;
+    return constant > 0 && holder !== undefined && knownMinLength(state, holder, constant);
+  }
+  if (holder === undefined) return false;
+  const i = indexLocal(walk.ctx.program, bound);
+  if (i === undefined || !knownNonNegative(state, i)) return false;
+  // `knownAtMost` answers `knownBelow` too, and `i < len` implies `i <= len`.
+  return knownAtMost(state, i, holder);
+};
+
+/**
+ * Record which of a `substring`'s bounds the clamp cannot move. Nothing is
+ * pushed on to the unproven list here: the warning for the bounds that stay
+ * clamped is reported by `checkPerformance`, which re-derives the shape from
+ * the syntax and reads this table for the verdict, so that all of WP15 §8's
+ * warnings still come out of one source-order walk.
+ */
+const judgeClamp = (walk: Walk, state: State, call: ts.CallExpression): void => {
+  const parts = substringBounds(walk.ctx.program, call);
+  if (parts === undefined) return;
+  const holder = lengthHolder(walk.ctx.program, parts.receiver);
+  for (const bound of parts.bounds) {
+    if (provesClamp(walk, state, holder, bound)) walk.provenClamps.add(bound);
+  }
+};
+
 /** The proof itself: `0 <= i` and `i < holder.length`, by whichever route the state has. */
 const proves = (walk: Walk, state: State, holder: LocalVar, index: ts.Expression): boolean => {
   const program = walk.ctx.program;
@@ -819,6 +896,11 @@ const walkExpression = (walk: Walk, state: State, expr: ts.Expression): void => 
       judge(walk, state, chars);
       return;
     }
+    // The clamp runs before the copy, so the bounds are judged against the
+    // facts that reach the call rather than the ones that survive it. The call
+    // still forgets array lengths below: `nish_str_new` is a callee like any
+    // other, and nothing about this verdict changes what it may do.
+    judgeClamp(walk, state, e);
     forgetArrayLengths(state);
     return;
   }
@@ -1156,7 +1238,13 @@ export const analyzeBounds = (ctx: CheckContext, sig: FunctionSig): ts.Node[] =>
   // rather than on its caller's account.
   const body = sig.body;
   if (body === undefined) return [];
-  const walk: Walk = { ctx, proven: ctx.program.provenIndices, unproven: [], loops: 0 };
+  const walk: Walk = {
+    ctx,
+    proven: ctx.program.provenIndices,
+    unproven: [],
+    provenClamps: ctx.program.provenClamps,
+    loops: 0,
+  };
   const state = emptyState();
   if (ts.isBlock(body)) walkStatement(walk, state, body);
   else walkExpression(walk, state, body);

@@ -101,10 +101,19 @@ export class Checker {
     numberMode: i32,
     wrapping: boolean,
     uncheckedIndexing: boolean,
+    strictExports: boolean,
     packageName: string
   ) {
     this.program = new CheckedProgram(source, file, isEntry, nodeCount, packageName);
-    this.ctx = new CheckContext(table, this.program, sink, numberMode, wrapping, uncheckedIndexing);
+    this.ctx = new CheckContext(
+      table,
+      this.program,
+      sink,
+      numberMode,
+      wrapping,
+      uncheckedIndexing,
+      strictExports
+    );
   }
 
   /**
@@ -1028,6 +1037,105 @@ function checkSurvivingBoundsCheck(walk: PerfWalk, access: Node): void {
   );
 }
 
+/**
+ * A call, inside a loop, to a function this module does not export, while
+ * `--no-strict-exports` is keeping it an external symbol.
+ *
+ * The default gives a non-exported function `internal` linkage, which is what
+ * lets LLVM treat the call sites it can see as all of them: specialise the body
+ * to their arguments, and drop the out-of-line copy once they are inlined. The
+ * flag withdraws that for every function in the module at once, and the loop is
+ * what makes it worth saying — measured 4% slower and 240 bytes larger on
+ * `bench/sieve`, whose hot `sieve` is exactly this shape, and nothing at all on
+ * `bench/spectral` (WP15 §8).
+ *
+ * It cannot be noise for anybody who did not ask for it: the flag is opt-in, so
+ * a default build reports none of these, and the rewrite the message names is
+ * to stop passing it. An exported function is silent because the ABI is then
+ * the point, and a call outside a loop is silent because one call is not a cost
+ * anybody is paying.
+ */
+function checkNotInlinable(walk: PerfWalk, call: Node): void {
+  const ctx = walk.ctx;
+  if (ctx.strictExports || walk.loops.length === 0) {
+    return;
+  }
+  const callee = ctx.program.nodeCallees[call.id];
+  if (callee === null || callee.exported) {
+    return;
+  }
+  ctx.performance(
+    call.children[0],
+    `\`${callee.sourceName}\` is called here inside a loop and \`--no-strict-exports\` keeps it an external ` +
+      `symbol, so the whole-program passes must assume there are callers they cannot see: the function is not ` +
+      `specialised to these arguments and its out-of-line copy survives even where every call was inlined — ` +
+      `drop \`--no-strict-exports\`, and a function this module does not export is \`internal\` instead`
+  );
+}
+
+/**
+ * A `substring` bound the WP15 §2 analysis could not place in `[0, s.length]`,
+ * on a call inside a loop.
+ *
+ * JavaScript's `substring` clamps each end, which is an `llvm.smin` /
+ * `llvm.smax` pair per bound, and the compiler writes a bound straight through
+ * wherever it can prove the clamp cannot move it (`self/bounds.ts`,
+ * `program.nodeProvenClamp`). So a bound it could not prove is two intrinsic
+ * calls every pass that a guard would take away — a slow path with a named
+ * rewrite, which is the whole bar of this class.
+ *
+ * Two rewrites are named because they are not the same trade. The guard keeps
+ * the semantics exactly: a clamped bound that was already in range clamps to
+ * itself. `slice` changes them — it panics where `substring` would have clamped
+ * — and it is the faster call whichever way the proof goes, measured 1.18x over
+ * `substring` on a lexer-shaped scan (WP15 §4).
+ *
+ * Not reported outside a loop, where the clamp runs once; not reported unless
+ * the receiver and the bound are both plain locals, which is the shape the
+ * analysis can prove and therefore the shape a guard would help — the same bar
+ * `checkSurvivingBoundsCheck` holds itself to. Unlike that one it ignores
+ * `--unchecked-indexing`, because the clamp is not a check: the flag does not
+ * remove it and neither rewrite depends on it.
+ */
+function checkUnfoldedClamp(walk: PerfWalk, call: Node): void {
+  if (walk.loops.length === 0) {
+    return;
+  }
+  const ctx = walk.ctx;
+  const callee = unwrapPerfParens(call.children[0]);
+  if (callee.kind !== N_MEMBER || callee.text !== "substring") {
+    return;
+  }
+  const count = call.children[1].children.length;
+  if (count < 1 || count > 2) {
+    return;
+  }
+  if (ctx.program.nodeTypes[callee.children[0].id] !== T_STRING) {
+    return;
+  }
+  const holder = perfLocalName(ctx, callee.children[0]);
+  if (holder.length === 0) {
+    return;
+  }
+  for (const bound of call.children[1].children) {
+    if (ctx.program.nodeProvenClamp[bound.id]) {
+      continue;
+    }
+    const name = perfLocalName(ctx, bound);
+    if (name.length === 0) {
+      continue;
+    }
+    ctx.performance(
+      bound,
+      `\`${name}\` is not provably within \`${holder}\`, so this \`substring\` bound keeps the clamp ` +
+        `JavaScript specifies — an \`llvm.smin\` and an \`llvm.smax\` on every pass, which the optimiser will ` +
+        `not fold away for you, because the guard compares i32 and the clamp runs on its sext: prove it with a ` +
+        `test that reaches the call, as \`if (${name} >= 0 && ${name} <= ${holder}.length)\`, or use ` +
+        `\`slice\`, which has no clamp at all and panics where this would have clamped`
+    );
+  }
+}
+
 /** The source name of the local a bare identifier binds, or `""` for anything else. */
 function perfLocalName(ctx: CheckContext, expr: Node): string {
   const e = unwrapPerfParens(expr);
@@ -1090,6 +1198,8 @@ function walkPerformance(walk: PerfWalk, node: Node): void {
     checkShiftCount(walk, node);
   } else if (node.kind === N_CALL) {
     checkWideningConversion(walk, node);
+    checkUnfoldedClamp(walk, node);
+    checkNotInlinable(walk, node);
   }
   if (isUnprovenIndex(walk, node)) {
     checkSurvivingBoundsCheck(walk, node);
