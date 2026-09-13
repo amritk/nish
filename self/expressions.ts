@@ -190,6 +190,15 @@ export function checkNumericLiteral(
         `Negative literal \`-${text}\` where ${spelled} is expected (${spelled} is unsigned)`
       );
     }
+    // Past 2^53 the literal is already the double it rounded to, whatever the
+    // digits say, so the range check below would be answering a question about
+    // a different number. stage0 refuses it here and stage1 was compiling it.
+    if (Number(text) > TWO_53) {
+      return ctx.errorType(
+        expr,
+        `Literal \`${text}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the ${spelled} value instead`
+      );
+    }
     // 2^bits - 1 as an f64: exact for every width up to u64, where the
     // largest values are past 2^53 and cannot be written at all.
     const bits = intBits(type);
@@ -198,8 +207,17 @@ export function checkNumericLiteral(
       return ctx.errorType(expr, `Literal \`${text}\` does not fit in ${spelled}`);
     }
   }
+  if (type === T_I64 && Math.abs(Number(text)) > TWO_53) {
+    return ctx.errorType(
+      expr,
+      `Literal \`${text}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead`
+    );
+  }
   return type;
 }
+
+/** 2^53: above it not every integer has a double, so a bigger literal is already rounded. */
+const TWO_53: f64 = 9007199254740992.0;
 
 /** Whether a literal as written has a fraction or an exponent. */
 function hasFraction(text: string): boolean {
@@ -358,7 +376,7 @@ function checkIncrement(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   if (!isNumeric(type)) {
     return ctx.errorType(
       expr,
-      `Operator \`${expr.text}\` requires a numeric operand, got ${ctx.table.typeName(type)}`
+      `Operator \`${expr.text}\` requires a numeric variable, got ${ctx.table.typeName(type)}`
     );
   }
   if (target.kind === N_IDENT) {

@@ -492,24 +492,33 @@ file and not come back, and a *new* code that arrives without a case fails the
 check. CI runs it beside the registry staleness check it is the twin of: that
 one says every diagnostic has a code, this one says every code has a case.
 
-- The registry has **362 entries**, of which **334 are rules a program can
-  reach**. The other 28 are bookkeeping and are counted apart rather than
-  carried as debt: **26 retired**, fragments no message contains any more,
-  kept so their numbers are never handed to a different rule, and **2
-  shadowed** (`NL1022`, `NL1041`), live fragments that `codeFor` can never
-  return because a longer fragment of the same message is matched first.
-  Shadowing was not known before this check was written; the generator
-  computes it now and the coverage backlog excludes it, because a case for a
-  code nothing can print is a case nobody can write.
+- The registry has **362 entries**, of which **328 are rules a program can
+  reach**. The other 34 are bookkeeping and are counted apart rather than
+  carried as debt: **32 retired**, fragments no message contains any more,
+  kept so their numbers are never handed to a different rule — six of them the
+  NL4xxx band, which turned out to be the *sidecar generators' own file text*
+  rather than diagnostics at all — and **2 shadowed** (`NL1022`, `NL1041`),
+  live fragments that `codeFor` can never return because a longer fragment of
+  the same message is matched first. Shadowing was not known before this check
+  was written; the generator computes it now and the coverage backlog excludes
+  it, because a case for a code nothing can print is a case nobody can write.
 - The `reject_*` cases and the `tests/link/` negatives — which `reject_oracle.js`
   owns and which **survive**, because their fragments are checked in — exercise
-  **184** of the 334. **150 are exercised by nothing that outlives stage0.**
-- On the 265 `reject_*` cases alone the two compilers do not reach the same
-  set: stage1 names **144** codes where stage0 names **182**. That 38-code
-  difference is §A3's declared class — stage1's parser refuses the syntax as
-  `NL0001` before Phase 0 can name the rule — so those 38 wordings are proved
-  today only by a comparison that is going away, on top of the 196 that no
-  surviving case reaches at all.
+  **309** of the 328, together with the three driver command lines and the five
+  warning programs the check runs itself (a usage error, the crash report and a
+  WP15 §8 warning carry no `code`, so no `reject_*` case can reach them).
+  **19 are exercised by nothing**, and every one of them now carries a note in
+  `tests/self/wording_backlog.txt` saying why: seventeen are rules no program
+  can reach, because Phase 0 or an earlier check in the same function always
+  fires first, and two are wordings for which no arrangement has been found
+  yet. That is the honest end of this gate rather than a number still falling.
+- The two compilers still do not reach the same set of codes over those cases,
+  and the difference is §A3's declared class: **90** of them are refused by
+  stage1's *parser*, as `NL0001`, before Phase 0 can name the rule
+  (`reject_oracle.js` counts them apart and says so in its summary). Those
+  wordings are stage0's alone, so what proves them after R6 is the case's
+  checked-in fragment and nothing else — which is exactly what these cases
+  are, and why writing them mattered more than the count suggested.
 - **The four goldens above close none of that gap**, which was measured rather
   than assumed: every registry fragment was matched against each file.
   `checked.txt` contains one registry wording (`NL2099`) that a `reject_*` case

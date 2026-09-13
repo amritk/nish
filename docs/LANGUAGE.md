@@ -197,9 +197,12 @@ because a shift is not one of the shapes "known type" names however plainly it
 is an integer: give it a name first, or write `toI32(0xc0)`. A literal in an integer context must be integral
 (`` Non-integer literal `1.5` where i64 is expected ``,
 `tests/cases/reject_i64_literal_float`); in an `i64` context it must also be
-at most 2^53 in magnitude (`` exceeds 2^53 and cannot be written exactly ``
-*(CLI only)*) because TypeScript's parser has already rounded larger
-literals to a double. In an *unsigned* context it must also be non-negative
+at most 2^53 in magnitude (`` exceeds 2^53 and cannot be written exactly ``,
+`tests/cases/reject_i64_literal_precision`; an unsigned context has the same
+rule, `reject_u64_literal_precision`) because TypeScript's parser has already
+rounded larger literals to a double. Every one of these messages quotes the
+literal **as it is written**, not as the parser cooked it: `0x1FF` reads back
+as `0x1FF` and a rounded literal as the digits in the file. In an *unsigned* context it must also be non-negative
 and fit the width: `const b: u8 = -1` is
 `` Negative literal `-1` where u8 is expected (u8 is unsigned) ``
 (`tests/cases/reject_u_negative_literal`) and `const b: u8 = 256` is
