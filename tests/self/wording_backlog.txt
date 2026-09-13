@@ -10,97 +10,66 @@
 # not here and not covered fails the run. Write a `reject_*` case, run the
 # script with --update, and the line disappears.
 #
-# 99 live codes, measured against tests/cases/reject_* and
+# 68 live codes, measured against tests/cases/reject_* and
 # tests/link/. Retired fragments are not here and never will be: they match no
 # message, so no case can reach them.
 
 NL1021  # `Function` constructor is forbidden in
 NL1032  # `Symbol` type is forbidden in
 NL1039  # `yield` is forbidden in
-NL2005  #  (it has `isOk`, `isErr`, `orReturn`, `unwrapOr` and `expect`)
-NL2006  #  (it has `ok`, `value` and `error`)
 NL2011  #  are not supported
 NL2019  #  needs a type annotation
-NL2020  #  produces no value and can only be used as a statement
 NL2031  # : unsupported modifier `
-NL2034  # (...)` is a `Result<T, E>`, not
 NL2038  # ` (Phase 1 supports number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void)
 NL2054  # ` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the
 NL2055  # ` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead
 NL2062  # ` expects f64, got
-NL2064  # ` has no `value`: its success arm carries nothing
 NL2068  # ` in a constant of integer type (annotate it `f64`)
 NL2069  # ` in a constant requires boolean operands
 NL2072  # ` is a constant imported from `
 NL2073  # ` is a function imported from `
 NL2075  # ` is already declared as a function
 NL2083  # ` is not supported
-NL2089  # ` must be initialized
 NL2098  # ` requires a numeric variable, got
-NL2103  # ` requires two operands of the same type, got
 NL2109  # ` when checking a single module
-NL2114  # `; check the nullable side against `null` first, then compare the narrowed values
-NL2121  # `Array` needs exactly one type argument, e.g. `Array<number>`
+NL2124  # `continue` outside of a loop
 NL2125  # `declare function` is not supported yet
-NL2126  # `Err(...)` expects
-NL2127  # `expect(...)` expects string, got
 NL2133  # `for await` is not supported
-NL2141  # `Math.abs` expects a number, got
-NL2144  # `new` requires a class name
-NL2145  # `null` needs a contextual `T | null` type (annotate the variable, e.g. `let p: P | null = null`)
-NL2152  # `Result<T, void>` is not supported: an error must carry a value (use `Result<T, string>`)
-NL2160  # `switch` has more than one `default` clause
-NL2164  # `unwrapOr(...)` needs a success value to fall back to, and `
 NL2173  # async functions are not supported
 NL2174  # async methods are not supported
 NL2177  # attempt to divide with overflow in a constant
 NL2178  # Cannot assign
-NL2180  # Cannot assign to property `
 NL2182  # Cannot call `
 NL2183  # Cannot declare a variable of type void
-NL2189  # Constructors cannot declare a return type
 NL2192  # Destructured parameters are not supported
 NL2193  # Destructuring is not supported
 NL2195  # Duplicate declaration of `
-NL2198  # Duplicate parameter `
 NL2201  # Expected a return value of type
 NL2203  # Functions must be named
 NL2205  # Generators are not supported
-NL2206  # Generic classes are not supported
 NL2207  # Generic functions are not supported
 NL2208  # Generic methods are not supported
 NL2211  # Import must name the functions it imports
 NL2212  # Import specifier must be a string literal
-NL2213  # Index signatures are not supported in class `
-NL2214  # Index signatures are not supported in interface `
 NL2215  # Interface inheritance (`extends`) is not supported; list every field
 NL2216  # internal: array method on non-array
 NL2217  # Labelled `break` is not supported
 NL2218  # Labelled `continue` is not supported
 NL2220  # Names starting with `nish_` are reserved for the runtime
-NL2223  # Object literal keys must be plain identifiers
 NL2225  # Only direct calls to named functions are supported
 NL2226  # Only functions can be exported for now, plus classes and interfaces (found `export` on
 NL2233  # Optional/default parameters are not supported
-NL2234  # Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it
 NL2235  # Rest parameters are not supported
 NL2236  # Return type mismatch: function returns
-NL2238  # Template literal hole must be string, number, or boolean, got
-NL2239  # Ternary branches cannot be void
-NL2245  # Unknown class `
 NL2252  # Unsupported `new
-NL2253  # Unsupported assignment operator `
 NL2254  # Unsupported binary operator `
 NL2255  # Unsupported class member in `
 NL2256  # Unsupported expression in Phase 1:
-NL2257  # Unsupported interface member in `
-NL2258  # Unsupported object literal member:
 NL2259  # Unsupported operator `
 NL2260  # Unsupported statement in Phase 1:
 NL2261  # Unsupported unary operator `
 NL2262  # Unsupported unary operator `-` on
 NL2263  # Unsupported unary operator `!` on
-NL2286  # `declare enum` is not supported
 NL4001  #  functions (identical to --emit-header). */
 NL4002  #  modules listed below. Link the .ll module(s) and
 NL4003  # : cannot create the result

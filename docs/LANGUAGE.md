@@ -1349,7 +1349,7 @@ under [Semantics decisions](#semantics-decisions).
 | `=== !==` | any two values of the same type except `void`; a `T \| null` only against the literal `null` | `boolean` | integers and booleans: `icmp eq` / `icmp ne`; `f64`: `fcmp oeq` / `fcmp une` (so `x !== x` is true for NaN); strings: `nish_str_eq` (content); arrays and objects: `icmp eq` on the pointer (identity); `p === null`: `icmp eq` against `null` | `str_eq`, `cls_this_method_call`, `conversions`, `mem_nullable`; arrays *(CLI only)*; `reject_null_compare_two` |
 | `== !=` | – | – | forbidden | `reject_loose_equality`, `reject_loose_inequality` |
 | `&& \|\|` | two `boolean` | `boolean` | short-circuit: `br` + `phi` | `cf_logical`; `reject_cf_logical_numbers` (`requires boolean operands`) |
-| `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch` |
+| `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch`, `reject_cf_ternary_void` |
 | `x = e` | mutable local, field, or element; `e` of the target's type | the target's type | `store` | `locals`, `cls_field_write`, `arr_index_read_write` |
 | `x op= e` (`+= -= *= /= %=`) | numeric mutable local, numeric field, or numeric element; same type | the target's type | load, op, store | `cf_compound_assign`, `cls_compound_field`, `arr_index_read_write`; `reject_cf_compound_const`, `reject_cf_compound_string`, `reject_cf_compound_widths` |
 | `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local, field, or element of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask; a field is addressed by one GEP and an element bounds-checked once, so the target expression is evaluated exactly once | `bit_compound`, `cls_field_bitwise_assign`, `arr_element_bitwise_assign`; `reject_cls_field_bitwise_readonly`, `reject_arr_element_bitwise_f64`; `tests/differential/corpus/bit_compound_target` |
@@ -2220,6 +2220,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | Construct | Message | Test |
 | --- | --- | --- |
 | type parameters on functions, methods, arrows, classes, interfaces, type aliases | `` Generic type parameters are forbidden in Nish (no monomorphisation yet) `` | `reject_generic_function`, `reject_generic_class`, `reject_type_alias_generic` |
+| type *arguments* on `new` of a declared class | `` Generic classes are not supported `` | `reject_cls_new_generic` |
 | generators (`function*`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator` |
 | `async` functions, methods, arrows | `` `async` functions are forbidden in Nish (no event loop or promises) `` | `reject_async_function` |
 | `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |

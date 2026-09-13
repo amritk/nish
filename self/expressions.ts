@@ -686,18 +686,32 @@ function checkConditional(ctx: CheckContext, expr: Node, scope: Scope, want: i32
     return T_ERROR;
   }
   if (whenTrue === whenFalse) {
-    return whenTrue;
+    return ternaryResult(ctx, expr, whenTrue);
   }
   // `c ? p : null` is `T | null`, which is the one place the arms may differ.
   if (ctx.table.assignable(whenFalse, whenTrue)) {
-    return whenTrue;
+    return ternaryResult(ctx, expr, whenTrue);
   }
   if (ctx.table.assignable(whenTrue, whenFalse)) {
-    return whenFalse;
+    return ternaryResult(ctx, expr, whenFalse);
   }
   const a = ctx.table.typeName(whenTrue);
   const b = ctx.table.typeName(whenFalse);
   return ctx.errorType(expr, `Ternary branches must have the same type, got ${a} and ${b}`);
+}
+
+/**
+ * The ternary's type, refused when it is `void`. A ternary is an expression and
+ * its value is what it is for; two `void` arms agree about a type that cannot
+ * be the value of anything, so the arms are where the mistake is. stage0 says
+ * this at the same point and stage1 said nothing, so the two reported different
+ * first diagnostics for one program (`tests/cases/reject_cf_ternary_void`).
+ */
+function ternaryResult(ctx: CheckContext, expr: Node, type: i32): i32 {
+  if (type === T_VOID) {
+    return ctx.errorType(expr, "Ternary branches cannot be void");
+  }
+  return type;
 }
 
 /** A condition is a boolean: the language has no truthiness. */
