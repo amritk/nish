@@ -59,6 +59,7 @@ import {
 import { expressionCheckers } from "./expressions.js";
 import { ROOT_PACKAGE, packageSymbolPrefix } from "../packages.js";
 import { CheckedProgram, FunctionSig, ImportBinding, LocalVar, Param, StructInfo } from "./program.js";
+import { analyzeBounds } from "./bounds.js";
 import { checkElementReferences } from "./arrays.js";
 import { isNishSpecifier, nishModule, nishModuleNames } from "./nish-modules.js";
 import { lookup } from "../lookup.js";
@@ -174,6 +175,7 @@ export class Checker implements CheckContext {
       reachableStructs: [],
       coercions: new WeakMap(),
       caseValues: new WeakMap(),
+      provenIndices: new WeakSet(),
       aliases: new Map(),
       builtinImports: new Map(),
       enums: new Map(),
@@ -864,11 +866,16 @@ export class Checker implements CheckContext {
     // after the body so the diagnostic names a variable whose type is known.
     if (!sig.poisoned) {
       checkResultLocalsHandled(this, sig);
+      // WP15 §2.1/§2.2: prove what indices are in range before the warnings
+      // are reported, because one of the warnings is about the proofs that did
+      // not come off, and it has to be reported by the same source-order walk
+      // as the rest of the class.
+      const unprovenIndices = analyzeBounds(this, sig);
       // WP15 §8: the performance warnings, over the same body and the same
       // side tables. Only for a body that checked cleanly — advice about code
       // that does not compile is noise, and a poisoned body has incomplete
       // side tables anyway.
-      checkPerformance(this, sig);
+      checkPerformance(this, sig, unprovenIndices);
       // WP15 §2a: an element reference into contiguous record storage may not
       // be held across a `push`. Same placement and same reason as the line
       // above — the walk reads types and bindings pass 2 has just written.

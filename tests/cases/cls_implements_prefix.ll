@@ -108,58 +108,48 @@ entry:
   store %struct.Shape* %7, %struct.Shape** %14, align 8, !alias.scope !4, !noalias !3
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %shapes.addr, align 8
   %15 = load %struct.nish_array*, %struct.nish_array** %shapes.addr, align 8
-  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 0
-  %17 = load i64, i64* %16, align 8, !alias.scope !3, !noalias !4
-  %18 = icmp ult i64 0, %17
-  br i1 %18, label %bounds.ok, label %bounds.fail
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
+  %17 = load i8*, i8** %16, align 8, !alias.scope !3, !noalias !4
+  %18 = bitcast i8* %17 to %struct.Shape**
+  %19 = getelementptr inbounds %struct.Shape*, %struct.Shape** %18, i64 0
+  %20 = load %struct.Shape*, %struct.Shape** %19, align 8, !alias.scope !4, !noalias !3
+  %21 = call i32 @shift(%struct.Shape* %20, i32 5)
+  %22 = call i8* @nish_str_from_i32(i32 %21)
+  call void @nish_print(i8* %22)
+  %23 = load %struct.nish_array*, %struct.nish_array** %shapes.addr, align 8
+  %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 0
+  %25 = load i64, i64* %24, align 8, !alias.scope !3, !noalias !4
+  %26 = icmp ult i64 1, %25
+  br i1 %26, label %bounds.ok, label %bounds.fail
 
 bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %17)
+  call void @nish_panic_index(i64 1, i64 %25)
   unreachable
 
 bounds.ok:
-  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %15, i64 0, i32 2
-  %20 = load i8*, i8** %19, align 8, !alias.scope !3, !noalias !4
-  %21 = bitcast i8* %20 to %struct.Shape**
-  %22 = getelementptr inbounds %struct.Shape*, %struct.Shape** %21, i64 0
-  %23 = load %struct.Shape*, %struct.Shape** %22, align 8, !alias.scope !4, !noalias !3
-  %24 = call i32 @shift(%struct.Shape* %23, i32 5)
-  %25 = call i8* @nish_str_from_i32(i32 %24)
-  call void @nish_print(i8* %25)
-  %26 = load %struct.nish_array*, %struct.nish_array** %shapes.addr, align 8
-  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 0
-  %28 = load i64, i64* %27, align 8, !alias.scope !3, !noalias !4
-  %29 = icmp ult i64 1, %28
-  br i1 %29, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 1, i64 %28)
-  unreachable
-
-bounds.ok.1:
-  %30 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %26, i64 0, i32 2
-  %31 = load i8*, i8** %30, align 8, !alias.scope !3, !noalias !4
-  %32 = bitcast i8* %31 to %struct.Shape**
-  %33 = getelementptr inbounds %struct.Shape*, %struct.Shape** %32, i64 1
-  %34 = load %struct.Shape*, %struct.Shape** %33, align 8, !alias.scope !4, !noalias !3
-  %35 = call i32 @shift(%struct.Shape* %34, i32 5)
-  %36 = call i8* @nish_str_from_i32(i32 %35)
-  call void @nish_print(i8* %36)
-  %37 = load %struct.Square*, %struct.Square** %sq.addr, align 8
-  %38 = getelementptr inbounds %struct.Square, %struct.Square* %37, i32 0, i32 0
-  %39 = load i32, i32* %38, align 4
-  %40 = call i8* @nish_str_from_i32(i32 %39)
-  call void @nish_print(i8* %40)
-  %41 = load %struct.Square*, %struct.Square** %sq.addr, align 8
-  %42 = getelementptr inbounds %struct.Square, %struct.Square* %41, i32 0, i32 2
-  %43 = load i32, i32* %42, align 4
-  %44 = call i8* @nish_str_from_i32(i32 %43)
-  call void @nish_print(i8* %44)
-  %45 = load %struct.Circle*, %struct.Circle** %c.addr, align 8
-  %46 = getelementptr inbounds %struct.Circle, %struct.Circle* %45, i32 0, i32 2
-  %47 = load i32, i32* %46, align 4
-  %48 = call i8* @nish_str_from_i32(i32 %47)
-  call void @nish_print(i8* %48)
+  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %23, i64 0, i32 2
+  %28 = load i8*, i8** %27, align 8, !alias.scope !3, !noalias !4
+  %29 = bitcast i8* %28 to %struct.Shape**
+  %30 = getelementptr inbounds %struct.Shape*, %struct.Shape** %29, i64 1
+  %31 = load %struct.Shape*, %struct.Shape** %30, align 8, !alias.scope !4, !noalias !3
+  %32 = call i32 @shift(%struct.Shape* %31, i32 5)
+  %33 = call i8* @nish_str_from_i32(i32 %32)
+  call void @nish_print(i8* %33)
+  %34 = load %struct.Square*, %struct.Square** %sq.addr, align 8
+  %35 = getelementptr inbounds %struct.Square, %struct.Square* %34, i32 0, i32 0
+  %36 = load i32, i32* %35, align 4
+  %37 = call i8* @nish_str_from_i32(i32 %36)
+  call void @nish_print(i8* %37)
+  %38 = load %struct.Square*, %struct.Square** %sq.addr, align 8
+  %39 = getelementptr inbounds %struct.Square, %struct.Square* %38, i32 0, i32 2
+  %40 = load i32, i32* %39, align 4
+  %41 = call i8* @nish_str_from_i32(i32 %40)
+  call void @nish_print(i8* %41)
+  %42 = load %struct.Circle*, %struct.Circle** %c.addr, align 8
+  %43 = getelementptr inbounds %struct.Circle, %struct.Circle* %42, i32 0, i32 2
+  %44 = load i32, i32* %43, align 4
+  %45 = call i8* @nish_str_from_i32(i32 %44)
+  call void @nish_print(i8* %45)
   ret i32 0
 }
 

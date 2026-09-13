@@ -77,8 +77,8 @@ and the choice is *not* between unsafe speed and safe slowness. The compiler
 should prove the access safe at build time and emit no check at all. Four
 mechanisms, tried in order, with the runtime panic only as the floor:
 
-**1. Ranged integer types.** `number` says nothing a compiler can use.
-A constrained integer does:
+**1. Ranged integer types — the analysis shipped, the syntax did not.**
+`number` says nothing a compiler can use. A constrained integer does:
 
 ```ts
 function getByte(buf: FixedBuffer<256>, i: integer<0, 255>): u8 {
@@ -86,19 +86,81 @@ function getByte(buf: FixedBuffer<256>, i: integer<0, 255>): u8 {
 }
 ```
 
-Passing an unproven value is a build error. Once it type-checks, the binary
-reads memory directly.
+That spelling needs a generic type parameter, which Phase 0 refuses and which
+§9 item 8 owns, so item 6 could not have built it without building item 8's
+prerequisite first — the sequencing rules it out, and this note had not
+noticed. What shipped instead is the *range analysis* the declared form would
+have fed: `src/checker/bounds.ts` and `self/bounds.ts` infer the range of every
+integer local from the guards, loop conditions and initialisers already in the
+program, and from the one ranged type the language does have — `u8`/`u16`/
+`u32`/`u64`, whose lower bound is the declaration rather than a proof. A
+declared range is then one more source of facts for the same domain, which is
+a smaller change than it looks from here.
 
-**2. Length-narrowing type guards.** A length check narrows an array to a
-fixed-size tuple for the rest of the block, so the check happens once outside
-the loop instead of once per access:
+**2. Length-narrowing type guards — shipped, as facts rather than as types.**
+A length check proves an index for the region it reaches, so the check happens
+once outside the loop instead of once per access:
 
 ```ts
 if (data.length >= 4) {
-  // data is [u8, u8, u8, u8, ...u8[]] in here
   const magic = data[0];   // proven, no check
 }
 ```
+
+The plan's spelling was that `data` *becomes* `[u8, u8, u8, u8, ...u8[]]` in
+the guarded block. It does not: the tuple type would have to be threaded
+through assignment, parameter passing and the two type tables, and everything
+it buys is already bought by recording `data.length >= 4` as a fact keyed by
+the variable. The facts are `i >= 0`, `i < w.length`, `i <= w.length`,
+`i < n` and `w.length >= n`, and the rules that invalidate them are the
+soundness argument — they are written out in `src/checker/bounds.ts` and
+stated normatively in `docs/LANGUAGE.md` under "Element access".
+
+The shape the domain most obviously cannot hold is **`min`**:
+
+```ts
+const shorter = a.length < b.length ? a.length : b.length;
+while (i < shorter) { if (a[i] !== b[i]) { ... } }
+```
+
+`shorter <= a.length` and `shorter <= b.length` are both true, and both follow
+from the *condition* rather than from either arm, so a fact keyed by one
+variable and one holder cannot carry them: the then-arm gives
+`shorter <= a.length` and the else-arm `shorter <= b.length`, and their
+intersection is empty. Recognising `c ? a.length : b.length` where `c` is
+`a.length < b.length` would be sound and would close it, and it is deliberately
+not done: a peephole inside a soundness-critical analysis is how a wrong
+elision gets in, and nothing has measured this shape yet. It is what
+`std/text.ts`'s `firstDifference` and `self/strings.ts`'s `compareStrings`
+report, and it is four of the surviving warnings in the whole tree.
+
+**What it measured.** On the lexer-shaped scan of §2.3 below — a cursor the
+body advances by a variable amount, 400 passes over 547 KB of this
+repository's own source — **1.069x**, against a floor of 1.082x that removing
+*every* check buys on the same program. CPU time rather than wall time, min of
+15 after 3 warm-ups, `--profile speed`, x86-64 with LLVM 18, because the box
+was carrying five other agents' test suites and wall time under a load average
+of 25 on four cores measures the neighbours:
+
+| | CPU min | CPU median | checks left in the module |
+| --- | ---: | ---: | ---: |
+| before | 673 ms | 678 ms | 2 |
+| **proven** | **630 ms** | 639 ms | 1 |
+| `--unchecked-indexing` | 623 ms | 632 ms | 0 |
+
+The 7 ms between the proven build and the unchecked one is not a check in the
+loop: the hot `@scan` function is **byte-identical** between them (178 lines
+and four `nish_panic_index` calls before, 138 and none in both after). What is
+left is `process.argv[1]`, which runs once at startup, plus code layout. The
+shortfall against §2.3's 1.094x is the program rather than the analysis — this
+scan carries an `isDigit` arm that one did not — and the thing that matters is
+that there is no check left in the loop to remove.
+
+On an ordinary counted loop over an array it recovers nothing measurable, which
+§2b had already predicted: once the header is hoisted, the checks are worth
+about 0.5%. The honest summary is that this item is worth what §2b said it was
+worth, and that the place it is worth time is the string cursor; everywhere
+else it buys code size and `willreturn`.
 
 **3. Slice iterators — measured, and not taken.** The proposal was that
 `for (const c of s)` lower to pointer advancement —
@@ -154,11 +216,19 @@ The numbers above are x86-64, LLVM 18, at the `speed` profile, and they are
 vectoriser would be worth something these hide. Not enough to reopen the item,
 but worth stating.
 
-**4. An explicit opt-out — deliberately not built yet.** A scoped `trusted`
-region was considered and deferred: it is the escape hatch, and every check
-mechanisms 1-3 eliminate is one nobody needs to escape. Build the proofs first,
-measure how many checks actually survive them, and only then decide whether an
-opt-out earns its keep. (For the record, `#trusted { }` could not have been the
+**4. An explicit opt-out — deliberately not built, and now with the count
+behind that.** A scoped `trusted` region was considered and deferred: it is the
+escape hatch, and every check mechanisms 1-3 eliminate is one nobody needs to
+escape. Build the proofs first, measure how many checks actually survive them,
+and only then decide whether an opt-out earns its keep. Item 6 has landed and
+the count is in: over the whole of `self/` — sixty modules, about fifty
+thousand lines, the most index-heavy program this repository has — **seventeen
+checks survive inside a loop** in a shape the analysis could have proved, and
+every one of them is an invariant the program has and the compiler cannot see:
+two arrays the program keeps the same length, a `min(a.length, b.length)`
+cursor, a merge sort's three indices into two buffers. Seventeen sites do not
+justify a language feature, and each of them already has a rewrite the warning
+names. The opt-out stays unbuilt. (For the record, `#trusted { }` could not have been the
 spelling: Nish parses with the TypeScript parser, which rejects it. A
 labelled block `trusted: { ... }` or a `/* @trusted */` pragma would be the
 candidates.)
@@ -808,7 +878,7 @@ and the original six:
 
 | Warning | Fires when | Hint |
 | --- | --- | --- |
-| bounds check not eliminated | `a[i]` in a loop where neither the range nor a length guard proved it | hoist the length check, use `for...of`, or a ranged index |
+| bounds check not eliminated | `a[i]` or `s.charCodeAt(i)` in a loop where neither the range nor a length guard proved it, and where the receiver and the index are both plain locals — the shape the analysis knows how to prove | guard the access with `if (i >= 0 && i < a.length)`, which proves both ends wherever it reaches, or give the index an unsigned type, which proves the lower one |
 | quadratic string building | `s = s + t` where `s` is assigned in an enclosing loop | build a `string[]` and `join` it |
 | allocation in a loop | a `new`, array literal or concat that escapes and is inside a loop | hoist it, or bound it with an arena scope |
 | not inlinable | a hot, non-exported function kept external because `--no-strict-exports` was given | drop the flag |
@@ -891,9 +961,20 @@ measurement closed says so and says why.
    that item 6 compounds. `tests/cases/str_slice`, `str_slice_panic`,
    `reject_str_slice_arity`, `reject_str_slice_type` and
    `tests/differential/corpus/str_slice` pin it.
-6. **Ranged types and length narrowing** (§2.1, §2.2) — a real flow-sensitive
-   analysis; the `performance` warning for a check that survives is its
-   acceptance test.
+6. **Ranged types and length narrowing** (§2.1, §2.2) — **done, and smaller
+   than it was written**. The flow-sensitive analysis shipped
+   (`src/checker/bounds.ts`, `self/bounds.ts`), and with it the §8 warning for
+   a check that survives, which is what proves it worked. What did *not* ship
+   is the declared surface: `integer<0, 255>` needs the generics of item 8, so
+   the sequencing forbids it, and the tuple form of the length guard buys
+   nothing the facts do not. Measured **1.069x** on the lexer-shaped cursor of
+   item 3, against the 1.082x that removing every check buys on the same
+   program — the hot function comes out byte-identical to the
+   `--unchecked-indexing` build, so there is no check left in the loop — and
+   nothing measurable on a counted array loop, exactly as §2b said: once the
+   header is hoisted the checks cost about 0.5%. An index proven here also
+   takes `nish_panic_index` out of the function's callee set, so a function
+   whose every index is proven keeps `willreturn`.
 7. **Contiguous record arrays** (§2a) — **done for `interface` elements**.
    2.27x on a loop whose allocation order and traversal order differ, and
    nothing at all when they agree — the measurement that re-scoped the item.
