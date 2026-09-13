@@ -17,9 +17,15 @@
  * The first root is the entry module; only it may declare
  * `export function main`, which the emitter wraps in a C `main`.
  *
- * Module resolution: specifiers must be relative (`./x`, `../y/z`); `.ts` is
- * optional (`./x.js` is also accepted and mapped to `./x.ts`, matching the
- * TypeScript convention); the path is resolved against the importing file.
+ * Module resolution: a relative specifier (`./x`, `../y/z`) is resolved against
+ * the importing file, with `.ts` optional (`./x.js` is also accepted and mapped
+ * to `./x.ts`, matching the TypeScript convention). A *bare* specifier is a
+ * package (WP21 S2): `node_modules/<name>` is looked for in each directory up
+ * from the importer, and the file is the one its `package.json` offers for the
+ * `nish` export condition — source, because source is the distribution format
+ * for an Nish consumer (`docs/wp21-packages.md` §2, §3). `nish:x` is a builtin
+ * and resolves to no file at all; `nish/x` is the standard library beside this
+ * compiler.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -29,11 +35,19 @@ import { isNishSpecifier } from "./checker/nish-modules.js";
 import { FunctionFacts, analyzeFunctions } from "./codegen/attributes.js";
 import { emitProgram } from "./codegen/emitter.js";
 import { CompileError, DiagnosticSink } from "./diagnostics.js";
-import { ROOT_PACKAGE, packageDirOf, packageNameOf } from "./packages.js";
+import {
+  BareSpecifier,
+  PACKAGE_ROOT_SEGMENT,
+  ROOT_PACKAGE,
+  packageDirOf,
+  packageNameOf,
+  parseBareSpecifier,
+} from "./packages.js";
 import { parseSource } from "./parser.js";
 import { validateSyntax } from "./validator.js";
 import { CompilerOptions, DEFAULT_OPTIONS } from "./types.js";
-import { CLI, STD_PREFIX } from "./branding.js";
+import { CLI, LANGUAGE, PACKAGE_CONDITION, STD_PREFIX, packageConditionFor } from "./branding.js";
+import { nishExportTarget } from "./manifest.js";
 import { STD_DIR, stdModuleNames } from "./std-modules.js";
 import { PKG_ROOT } from "./version.js";
 
@@ -62,6 +76,20 @@ export interface EmittedModule {
   unit: ModuleUnit;
   ir: string;
 }
+
+/**
+ * What resolving one specifier answers: the file, and the package it is in when
+ * the specifier says (WP21 S2). `packageName` is left undefined when it does
+ * not — a relative import stays wherever its path puts it — and `packages.ts`
+ * reads it off the path for those.
+ */
+type ResolvedModule = {
+  path: string;
+  packageName?: string;
+};
+
+/** A path that exists and is a file, which is what every resolution answers. */
+const isFile = (candidate: string): boolean => fs.existsSync(candidate) && fs.statSync(candidate).isFile();
 
 /**
  * Phase A for one file, with the Phase 0 validator slot: the forbidden-syntax
@@ -172,38 +200,91 @@ export class Compilation {
       if (unit.resolved.has(imp.specifier)) continue;
       // A missing module is reported and the others still load; `check()` stops before binding.
       this.sink.recover(() => {
-        const target = this.resolveSpecifier(unit, imp);
+        const found = this.resolveSpecifier(unit, imp);
         unit.resolved.set(
           imp.specifier,
-          this.load(
-            target,
-            importedName(unit, target),
-            undefined,
-            false,
-            imp.specifier.startsWith(STD_PREFIX) ? CLI : undefined
-          )
+          this.load(found.path, importedName(unit, found.path), undefined, false, found.packageName)
         );
       });
     }
     return unit;
   }
 
-  private resolveSpecifier(importer: ModuleUnit, imp: ImportBinding): string {
-    if (imp.specifier.startsWith(STD_PREFIX)) return this.resolveStdSpecifier(importer, imp);
+  private resolveSpecifier(importer: ModuleUnit, imp: ImportBinding): ResolvedModule {
+    if (imp.specifier.startsWith(STD_PREFIX)) {
+      return { path: this.resolveStdSpecifier(importer, imp), packageName: CLI };
+    }
+    if (!imp.specifier.startsWith("./") && !imp.specifier.startsWith("../")) {
+      return this.resolveBareSpecifier(importer, imp);
+    }
     let resolved = path.resolve(path.dirname(importer.path), imp.specifier);
     if (resolved.endsWith(".js")) resolved = resolved.slice(0, -3) + ".ts";
     else if (!resolved.endsWith(".ts")) resolved += ".ts";
-    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
-      throw new CompileError(
-        // Named from the importer, as `importedName` names one that *is* found:
-        // a diagnostic about a missing file should not depend on the directory
-        // the compiler was run from any more than the IR does (WP19 §A3).
-        `Cannot find module \`${imp.specifier}\` (looked for ${importedName(importer, resolved)})`,
-        imp.node.moduleSpecifier,
-        importer.sourceFile
-      );
+    if (!isFile(resolved)) throw missingModule(importer, imp, resolved);
+    return { path: resolved };
+  }
+
+  /**
+   * `import { blake3 } from "@scope/hash"` (WP21 S2, `docs/wp21-packages.md`
+   * §5b, §6).
+   *
+   * Node's algorithm, and deliberately not a resolver of our own: npm already
+   * owns the registry, the lockfile and the layout, and this project should not
+   * own a second one. What is ours is the *condition* — `nish`, or its
+   * mode-qualified spelling — and reading the `exports` map here rather than
+   * delegating to `import.meta.resolve` is what makes a package that offers no
+   * Nish source fail saying so, which a resolver that only answers
+   * "unresolved" could never do.
+   *
+   * The package is **stated** here rather than read back off the resolved path:
+   * this is the code that found the manifest, so it is the code that knows
+   * which package the file is in, and `packages.ts` no longer has to infer it
+   * for anything that comes through here (§9b).
+   */
+  private resolveBareSpecifier(importer: ModuleUnit, imp: ImportBinding): ResolvedModule {
+    const parsed = parseBareSpecifier(imp.specifier);
+    // Pass 1 refuses a specifier that is neither relative nor a package name, so
+    // `null` here is unreachable. It answers the same diagnostic rather than an
+    // internal error, because an invariant that is broken anyway should not turn
+    // into two different failures in the two compilers.
+    if (parsed === null) throw cannotFindPackage(importer, imp, imp.specifier);
+    const packageDir = this.findPackageDir(path.dirname(importer.path), parsed.name);
+    if (packageDir === null) throw cannotFindPackage(importer, imp, parsed.name);
+    const manifest = fs.readFileSync(path.join(packageDir, "package.json"), "utf8");
+    const target = nishExportTarget(
+      manifest,
+      parsed.subpath,
+      packageConditionFor(this.opts.numberMode),
+      PACKAGE_CONDITION
+    );
+    if (target === null) throw noNishEntryPoint(importer, imp, parsed);
+    const resolved = path.join(packageDir, target);
+    // The manifest named a file that is not there, which is the package's own
+    // mistake and not the consumer's — but it is still a module that could not
+    // be found, so it is the same diagnostic the relative path gets.
+    if (!isFile(resolved)) throw missingModule(importer, imp, resolved);
+    return { path: resolved, packageName: parsed.name };
+  }
+
+  /**
+   * The directory of package `name` as Node would find it: `node_modules/<name>`
+   * with a `package.json` in it, in `from` or in any directory above it.
+   *
+   * A directory whose last segment is already `node_modules` is stepped over
+   * rather than searched, which is Node's rule and stops
+   * `node_modules/node_modules/<name>` from ever being looked for.
+   */
+  private findPackageDir(from: string, name: string): string | null {
+    let dir = from;
+    for (;;) {
+      if (path.basename(dir) !== PACKAGE_ROOT_SEGMENT) {
+        const candidate = path.join(dir, PACKAGE_ROOT_SEGMENT, name);
+        if (isFile(path.join(candidate, "package.json"))) return candidate;
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) return null;
+      dir = parent;
     }
-    return resolved;
   }
 
   /**
@@ -458,6 +539,52 @@ function importedName(importer: ModuleUnit, target: string): string {
   const rel = path.relative(path.dirname(importer.path), target);
   return path.join(path.dirname(importer.fileName), rel);
 }
+
+/**
+ * The one wording for a module that is not on disk, whether a relative
+ * specifier named it or a package's `exports` did.
+ *
+ * Named from the importer, as `importedName` names one that *is* found: a
+ * diagnostic about a missing file should not depend on the directory the
+ * compiler was run from any more than the IR does (WP19 §A3).
+ */
+const missingModule = (importer: ModuleUnit, imp: ImportBinding, resolved: string): CompileError =>
+  new CompileError(
+    `Cannot find module \`${imp.specifier}\` (looked for ${importedName(importer, resolved)})`,
+    imp.node.moduleSpecifier,
+    importer.sourceFile
+  );
+
+/** No `node_modules/<name>` with a manifest in it, anywhere above the importer (WP21 S2). */
+const cannotFindPackage = (importer: ModuleUnit, imp: ImportBinding, name: string): CompileError =>
+  new CompileError(
+    `Cannot find package \`${name}\`; no \`${PACKAGE_ROOT_SEGMENT}\` directory above the importing module has it`,
+    imp.node.moduleSpecifier,
+    importer.sourceFile
+  );
+
+/**
+ * The package was found and is not an Nish package (WP21 S2).
+ *
+ * Its `exports` map has no `nish` condition for this subpath — or no `exports`
+ * at all, or one shaped in a way `manifest.ts` does not read. The point of
+ * saying it in these words is §6's: a bare import of an ordinary npm package
+ * should fail naming the thing that is missing, not with a module-not-found
+ * that reads like the consumer mistyped their own file name.
+ *
+ * TODO(WP21 S3): the boundary diagnostics split this one message into the
+ * specific ones — a package that offers Nish in the *other* number mode, named
+ * with both modes in the message, and an `engines.nish` floor above this
+ * compiler (§5c). Keeping it one message here is deliberate: S3 is the stage
+ * that owns error quality, and everything left in it is a message rather than
+ * a file.
+ */
+const noNishEntryPoint = (importer: ModuleUnit, imp: ImportBinding, parsed: BareSpecifier): CompileError =>
+  new CompileError(
+    `Package \`${parsed.name}\` has no ${LANGUAGE} entry point: its \`exports\` declares no \`${PACKAGE_CONDITION}\` condition for \`${parsed.subpath}\``,
+    imp.node.moduleSpecifier,
+    importer.sourceFile
+  );
 
 /** How a diagnostic names a package: the program's own has no name to give. */
 function describePackage(packageName: string): string {

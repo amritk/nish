@@ -22,6 +22,8 @@ import {
   StringBuilder,
 } from "../../self/strings";
 import { hashString, StringMap, StringSet } from "../../self/map";
+import { nishExportTarget } from "../../self/manifest";
+import { parseBareSpecifier } from "../../self/packages";
 import {
   basename,
   basenameWithout,
@@ -70,6 +72,29 @@ function reportPath(out: string[], base: string, spec: string): void {
 /** `relativePath`, over one `from<TAB>to` case; both are rooted at the same base. */
 function reportRelative(out: string[], from: string, to: string): void {
   out.push(`relative ${jsonQuote(relativePath(from, to))}`);
+}
+
+/**
+ * `self/manifest.ts` and `self/packages.ts`, over one `pkg` or `spec` case
+ * (WP21 S2). These are the two halves of resolving a bare specifier, and they
+ * are here because both are hand-written scanners with a stage0 twin that has
+ * to select the *same file for the same manifest*: a package that resolved
+ * under one compiler and not the other is a program that compiles with one and
+ * not the other, which no golden of one compiler's own output would catch.
+ */
+function reportPackage(out: string[], subpath: string, primary: string, fallback: string, manifest: string): void {
+  const target = nishExportTarget(manifest, subpath, primary, fallback);
+  out.push(`pkg ${target === null ? "null" : jsonQuote(target)}`);
+}
+
+/** `parseBareSpecifier`, over one `spec` case: the name and the `exports` key. */
+function reportSpecifier(out: string[], specifier: string): void {
+  const parsed = parseBareSpecifier(specifier);
+  if (parsed === null) {
+    out.push("spec null");
+    return;
+  }
+  out.push(`spec ${jsonQuote(parsed.name)} ${jsonQuote(parsed.subpath)}`);
 }
 
 /**
@@ -159,6 +184,12 @@ export function main(): number {
     } else if (section === "rel") {
       out.push(`# rel ${jsonQuote(fields[1])} ${jsonQuote(fields[2])}`);
       reportRelative(out, fields[1], fields[2]);
+    } else if (section === "pkg") {
+      out.push(`# pkg ${jsonQuote(fields[1])} ${fields[2]} ${fields[3]} ${jsonQuote(fields[4])}`);
+      reportPackage(out, fields[1], fields[2], fields[3], fields[4]);
+    } else if (section === "spec") {
+      out.push(`# spec ${jsonQuote(fields[1])}`);
+      reportSpecifier(out, fields[1]);
     } else if (section === "num") {
       out.push(`# num ${fields[1]}`);
       out.push(`f64 ${f64Hex(Number(fields[1]))}`);

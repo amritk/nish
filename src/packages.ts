@@ -28,13 +28,19 @@
  * directory at all" — is the root package. That rule needs no manifest, no
  * resolver and no new flag, it reads only the module name the compiler already
  * carries, and it is exactly the layout the bare-specifier resolution of
- * WP21 S2 will produce.
+ * WP21 S2 produces.
  *
- * TODO(WP21 S2): S2 resolves bare specifiers through Node's algorithm with the
- * `nish` export condition, and the package a module belongs to becomes
- * something the resolver states rather than something a path is read for. When
- * it lands, the identity below should come from the resolver and this file
- * keeps only the mangling.
+ * **What WP21 S2 changed, and what it deliberately left.** A module reached by
+ * a *bare* specifier no longer has its package read off its path: the resolver
+ * states it, because the resolver is the thing that knows — it found the
+ * manifest that made the directory a package. What still reads a path is a
+ * module reached any other way, which is a relative import that happens to
+ * point into `node_modules` (`tests/link/two_packages`) and every module inside
+ * a package, whose own relative imports are its own package's. The two rules
+ * agree wherever both apply, which is what §9b predicted: the path rule is the
+ * layout bare resolution produces. So the placeholder shrank to the cases the
+ * resolver is never asked about, rather than disappearing.
+ *
  * TODO(WP21 S7): two packages that declare the same class or interface name
  * still collide, because a struct's identity is its name program-wide
  * (`%struct.<name>`, and `StaticType` equality). `Compilation` reports that in
@@ -46,7 +52,7 @@
 export const ROOT_PACKAGE = "";
 
 /** The directory segment that introduces a package, as npm lays one out. */
-const PACKAGE_ROOT_SEGMENT = "node_modules";
+export const PACKAGE_ROOT_SEGMENT = "node_modules";
 
 /** Windows and POSIX alike: a module name reaches here in either spelling. */
 const segmentsOf = (modulePath: string): string[] => modulePath.split(/[\\/]/);
@@ -140,4 +146,58 @@ export const packageSymbolPrefix = (packageName: string): string => {
   // global, and a name that mangles away to nothing would produce `@.f`.
   const first = mangled.length === 0 ? DIGIT_0 : mangled.charCodeAt(0);
   return `${first >= DIGIT_0 && first <= DIGIT_9 ? `_${mangled}` : mangled}.`;
+};
+
+/**
+ * A bare import specifier taken apart (WP21 S2): `@scope/hash/blake3` is the
+ * package `@scope/hash` and the `exports` subpath `./blake3`.
+ *
+ * The subpath is spelled the way the manifest spells it — `.` for the package
+ * itself and `./x` for anything under it — so that it is the key looked up in
+ * the `exports` map with no further shaping.
+ */
+export type BareSpecifier = {
+  /** `hash`, `@scope/hash`. */
+  name: string;
+  /** `.` or `./blake3`: the key in the package's `exports` map. */
+  subpath: string;
+};
+
+/** `/`, `\` and `:` are what separates a package name from a path or a URL. */
+const isNameSegment = (segment: string): boolean =>
+  segment.length > 0 && !segment.startsWith(".") && segment.indexOf("\\") < 0 && segment.indexOf(":") < 0;
+
+/**
+ * `specifier` as a package name and subpath, or `null` when it is not a package
+ * specifier at all.
+ *
+ * Refused: an empty specifier, one that begins with `.` (that is a relative
+ * import and is resolved as one) or with `/` (an absolute path, which is a
+ * thing about the machine rather than about the program), a scope with no name
+ * after it, a trailing slash, any segment that begins with a `.` (which is what
+ * rules out a `..` climbing out of the package), and any `\` or `:` — the last
+ * being what keeps `node:fs` and `http://x` from reading as package names.
+ *
+ * Deliberately *not* checked: whether the name is one npm would accept today.
+ * npm's own rules have changed and the registry still holds names that no
+ * longer pass them, so a name this compiler cannot resolve should fail by not
+ * being on disk, which names the package, rather than by a spelling rule, which
+ * would be this compiler inventing a registry policy (§7: the resolver is
+ * Node's algorithm, and the registry is npm's problem).
+ */
+export const parseBareSpecifier = (specifier: string): BareSpecifier | null => {
+  const segments = specifier.split("/");
+  const scoped = specifier.startsWith("@");
+  const nameLength = scoped ? 2 : 1;
+  if (segments.length < nameLength) return null;
+  for (let i = 0; i < segments.length; i++) {
+    // The scope's `@` is stripped before the check, so `@scope` is a name
+    // segment and a bare `@` is not.
+    if (!isNameSegment(i === 0 && scoped ? segments[0].slice(1) : segments[i])) return null;
+  }
+  const rest = joinSegments(segments, nameLength, segments.length);
+  return {
+    name: joinSegments(segments, 0, nameLength),
+    subpath: rest.length === 0 ? "." : `./${rest}`,
+  };
 };

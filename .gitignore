@@ -3,6 +3,10 @@ node_modules/
 # from the `node_modules/<name>` directory it sits in, so the fixture for two
 # packages compiling together has to be laid out the way npm lays one out.
 !tests/link/*/node_modules/
+# ...and the one the cookbook needs, for the same reason: the bare-specifier
+# entry (WP21 S2) is only a demonstration if the package it imports is laid out
+# the way npm lays one out.
+!docs/cookbook/node_modules/
 dist/
 build/
 web/*.wasm

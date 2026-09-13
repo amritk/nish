@@ -1,9 +1,12 @@
 # WP21: Packages
 
-**Stage S1 has landed; everything after it is proposed, and rough.**
-Package-scoped symbols exist in both compilers now (§5a, and §9 for what
-exactly was built); nothing else here does. It is the plan of record for two
-questions that arrived together —
+**Stages S1 and S2 have landed; everything after them is proposed, and rough.**
+Package-scoped symbols exist in both compilers (§5a, and §9 for what exactly was
+built), and so does the resolution that gives them something to scope: a bare
+specifier resolves through `node_modules` and the `nish` export condition (§5b,
+and §10 for S2 as built). Nothing after that does.
+
+It is the plan of record for two questions that arrived together —
 "what would an extra `exports` condition alongside `cjs` and `esm` look like",
 and "how should an Nish package depend on another Nish package" —
 and the first thing it decides is that they are *different* questions with
@@ -66,10 +69,10 @@ The `nish` row also carries the number mode, by spelling — `nish-f64`,
 `nish-i32`, or plain `nish` for a package correct under either. §6 says why
 that is the right place for it and why nothing else needs a manifest.
 
-`"nish"` is a placeholder. Whatever it ends up being is a spelling of the
-project's name, so it belongs in `src/branding.ts` and `self/branding.ts` with
-the rest of them (orientation rule 5), and both compilers have to agree on it
-before either can resolve a bare specifier.
+`"nish"` is what it ended up being, and it is a spelling of the project's name,
+so it lives in `src/branding.ts` and `self/branding.ts` with the rest of them
+(orientation rule 5) as `PACKAGE_CONDITION` — where both compilers read it, which
+is what makes them agree about which file a package offers.
 
 ## 3. Why source, and not a compiled library
 
@@ -153,7 +156,7 @@ package an Nish consumer sees.
 ## 5. What blocks this today
 
 Three things blocked it, all in the compiler rather than in packaging. The
-first is closed; §9 is the account of how.
+first two are closed; §9 and §10 are the account of how.
 
 ### 5a. The symbol namespace was flat (**closed by S1**)
 
@@ -172,7 +175,12 @@ package-scoped, and §9 is what that turned out to mean.
 
 ### 5b. `import` has no bare specifiers
 
-**Amended: except the compiler's own package.** Two bare forms are now legal, and neither is the general case this
+**Closed by S2**, and it was closed in two steps. First the compiler's own
+package became a legal bare form, then every package did; what follows is the
+section as it read before S2, with the amendment it already carried, because the
+narrowing in it is still the rule for `nish/` itself.
+
+Two bare forms were legal before S2, and neither is the general case this
 section is about:
 
 - `nish:fs` / `nish:process` / `nish:io` name *builtins*. They resolve to no
@@ -189,14 +197,11 @@ because `package.json` declares `"./*": "./std/*.ts"` and `nish/text` is
 therefore a package self-reference. The compiler short-circuits to it instead
 of walking `node_modules` to arrive at the same file.
 
-Everything else is still rejected. The general case — `import { blake3 } from
-"@scope/hash"` — is what remains, and it means resolving through Node's own
-algorithm with `--conditions=nish`: deliberately *not* inventing a resolver, a
-lockfile or a registry, all of which npm already has and none of which this
-project should own. Two things that were going to be this package's work are
-already done by the amendment above: the specifier prefix lives in
-`src/branding.ts` / `self/branding.ts` (§2 asked for that), and both compilers
-agree on it.
+The general case — `import { blake3 } from "@scope/hash"` — is what remained,
+and S2 built it: resolution through Node's own algorithm with the `nish`
+condition, deliberately *not* inventing a resolver, a lockfile or a registry,
+all of which npm already has and none of which this project should own. §10 is
+what that turned out to mean.
 
 ### 5c. Compatibility has to be a diagnostic, not a miscompile
 
@@ -326,21 +331,19 @@ should not look alike.
 | | Stage | Depends on | Notes |
 | ---: | --- | --- | --- |
 | S1 | Package-scoped symbols | — | **done**, §9. §5a. No language surface, and the diff turned out small rather than large: the root package's prefix is empty, so not one golden `.ll` moved. |
-| S2 | Bare specifiers and the `nish` condition | S1 | §5b. The condition name lands in `branding.ts` on both sides. |
+| S2 | Bare specifiers and the `nish` condition | S1 | **done**, §10. §5b. The condition name landed in `branding.ts` on both sides. |
 | S3 | The boundary diagnostics | S2 | §5c, §6. No new artifact: the `NL3xxx` entries for a missing or mode-mismatched `nish` condition, a version floor from `engines.nish`, a builtin the target has no runtime for, and a compile error attributed to a dependency rather than to the consumer. |
 | S4 | The build cache | S2 | Content-addressed by (package version, number mode, target, profile, compiler version). Invisible to the package author; a pure compile-time optimisation, and the answer to §3's stated cost. |
 | S5 | Prebuilt distribution | S4 | §7. Deferred, possibly permanently. |
 
 S1 was the only one with no design questions left open, which is why it went
-first, and it is done. **S2 is the next stage**, and S1 left it two things
-rather than a blank page: the package-identity rule S1 reads off a path is a
-placeholder for the one the resolver will state (`src/packages.ts`,
-`self/packages.ts`, each with the `TODO(WP21 S2)` that says so), and the
-`nish` condition name still has to land in `branding.ts` on both sides before
-either compiler can resolve a bare specifier. S3 is the one to resist
-over-building: §6 already talked one manifest out of existence, and everything
-left in it is a message rather than a file. Nothing here is on the M4 critical
-path and none of it should delay the freeze.
+first, and it is done; S2 followed it and is done too. **S3 is the next stage
+and is the one to resist over-building**: §6 already talked one manifest out of
+existence, everything left in it is a message rather than a file, and S2 left it
+exactly one place to start — the single "has no Nish entry point" diagnostic
+that S2 answers every resolution failure with, carrying a `TODO(WP21 S3)` in
+`src/manifest.ts`, `self/manifest.ts` and both `compilation.ts` files. Nothing
+here is on the M4 critical path and none of it should delay the freeze.
 
 ## 9. S1 as built: package-scoped symbols
 
@@ -446,3 +449,88 @@ Everything else is the proof that nothing moved: every golden `.ll` in
 no regeneration, and `tests/self/ir_oracle.js` — which compiles the corpus with
 *both* compilers and diffs the IR byte for byte, `tests/link/two_packages`
 included — is what says the two implementations scope symbols the same way.
+
+## 10. S2 as built: bare specifiers and the `nish` condition
+
+### 10a. What resolves, and what it resolves to
+
+`import { blake3 } from "@scope/hash/blake3"` now compiles. The specifier is
+split into a package name and an `exports` subpath (`@scope/hash` and
+`./blake3`), `node_modules/<name>` is looked for in the importing file's
+directory and in every directory above it — Node's algorithm, including its rule
+that a directory already called `node_modules` is stepped over — and the file
+compiled is the one that package's `exports` map offers for the `nish`
+condition.
+
+Two constants landed in `branding.ts` on both sides, which is where §2 asked for
+them: `PACKAGE_CONDITION` (`nish`) and `packageConditionFor`, which spells the
+mode-qualified `nish-i32` / `nish-f64`. The compiler asks for its own mode first
+and then the plain one, and the *order the manifest declares them in* decides,
+because that is how Node matches a condition. A package correct under either
+mode declares `nish` and matches both; one that needs different source per mode
+declares both and gets two entry points for free.
+
+Nothing about the module downstream of resolution is special. The file is
+compiled, checked, analysed and emitted like any other module, which is §3 in
+one sentence: for an Nish consumer the distribution format is source, so there
+is no boundary to cross and no second code path to maintain.
+
+### 10b. The manifest reader, and why stage0 does not use `JSON.parse`
+
+`src/manifest.ts` and `self/manifest.ts` are the same narrow scan rather than a
+parser and a hand-rolled twin. That is the one design decision in this stage
+worth arguing about, so it is written down: stage1 has no `JSON.parse`, the two
+compilers must select the *same file* for the same manifest, and a program that
+resolved under stage0 and not under stage1 would be a program that compiles with
+one compiler and not the other. Delegating on one side and scanning on the other
+would have made that a question about malformed input rather than a fact.
+
+What the narrowing costs is stated in both module headers rather than left to be
+discovered: only the `nish` conditions are honoured (`default`, `import` and
+`node` are skipped, not matched — a `default` target is JavaScript and this
+compiler cannot compile it), a subpath is an exact key rather than a `"./*"`
+pattern, and a target is a string beginning with `./` with no `..` segment and
+no backslash escape. Node's one-entry shorthand — an `exports` object with no
+`.`-prefixed key is the condition map for `.` — is read, because a one-export
+package is the common case and writing it that way is not a mistake.
+
+### 10c. Where the package identity now comes from
+
+§9b called the path rule a placeholder for the one the resolver would state, and
+S2 stated it: a module reached by a bare specifier is in the package whose
+manifest the resolver just read. What the path rule still answers is every
+module the resolver is never asked about — a relative import that points into
+`node_modules` (`tests/link/two_packages`, unchanged), and a dependency's own
+relative imports, which stay in their dependency. The two rules agree wherever
+both apply, which is what §9b predicted, so the placeholder shrank rather than
+disappeared and `packages.ts` says so.
+
+### 10d. What S2 deliberately stops short of
+
+- **One diagnostic, not four.** Every failure to find a Nish entry point — no
+  `exports`, no such subpath, no `nish` condition, a shape the reader does not
+  understand — is `` Package `X` has no Nish entry point ``. S3 is the stage that
+  splits it into the specific ones §5c and §6 want, the mode mismatch named with
+  both modes among them, and a `TODO(WP21 S3)` sits at each of the four places
+  that would change.
+- **No `engines.nish` floor**, for the same reason: it is a message rather than
+  a file, and it is S3's.
+- **No cache.** §3's stated cost — compile time grows with the dependency tree —
+  is unpaid, and S4 is the payment.
+- **Struct names are still program-wide**, exactly as §9c left them.
+
+### 10e. What proves it
+
+`tests/link/package_bare/` is the positive: a program importing `pkg_bare`, the
+`./util` subpath of that same package, and the scoped `@scope/hash`, whose
+manifest declares `nish-i32` before `nish` so that the i32 compile picks a
+different file from the one an f64 compile would. Each package keeps a private
+`helper()` and so does the program, so the exit code is 7 only if every call
+reached the file the condition selected and the symbol its package's prefix.
+
+`tests/link/package_not_nish/` is the negative §6 asks for by name: an ordinary
+npm package, with `import`, `require` and `default` rows and no `nish` one.
+`tests/cases/reject_bare_package` is the package that is not installed at all,
+and `tests/cases/reject_bare_import` is a specifier that is neither relative nor
+a package name. `docs/cookbook/mod_package.ts` is the lowering, and it shows the
+only thing a package changes about the IR: the prefix on the imported symbol.

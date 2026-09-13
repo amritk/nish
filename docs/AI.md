@@ -129,7 +129,7 @@ rejects. This table is the highest-value part of the page.
 | `String(n)`, `n.toString()` | `` Unknown function `String` `` / `` Unknown method `toString` on i32 `` | `` `${n}` `` |
 | `xs.length = 0` | `` Cannot assign to `length` of i32[] (array length is read-only; use `push`) `` | build a new array |
 | `for (const k in o)` | `Unsupported statement in Phase 1: ForInStatement` | `for (const x of xs)` over an array |
-| `import { readFileSync } from "fs"` | `Only relative import specifiers are supported` | `readFileSync` is a global; no import needed |
+| `import { readFileSync } from "fs"` | `` Package `fs` has no Nish entry point `` | `readFileSync` is a global; no import needed (or `import { readFileSync } from "nish:fs"`) |
 | `export default f` | `` `export default` / `export =` are not supported `` | `export const f = …` |
 | `export type T = …`, `export enum K` | cannot be exported | declare the alias/enum in each module that needs it |
 | `new Date()`, `Date.now()` | `` Unknown builtin `Date.now` `` | `monotonicNanos()` for elapsed time; there is no wall clock and no calendar |
@@ -597,10 +597,20 @@ export const main = (): i32 => {
 
 - `export` goes on `const` (function or constant), `class`, and `interface`
   declarations. No `export default`, no `export { … }`, no `export *`.
-- The only import form is a **named import from a relative specifier**:
-  `import { square, cube as pow3 } from "./math"`. `.ts` is optional.
-  Bare specifiers, default imports, namespace imports, side-effect imports and
-  type-only imports are all rejected.
+- The only import form is a **named import**:
+  `import { square, cube as pow3 } from "./math"`. `.ts` is optional. Default
+  imports, namespace imports, side-effect imports and type-only imports are all
+  rejected.
+- A specifier is a relative path (`./x`, `../x`), a builtin module (`nish:fs`),
+  a standard-library module (`nish/text`), or a **package name** (`hash`,
+  `@scope/hash`, with a subpath after it if you want one).
+- **A package is resolved through `node_modules` and compiled from source.**
+  The package's `package.json` must offer the file under the `nish` export
+  condition — `{"exports": {".": {"nish": "./src/index.ts"}}}` — and the mode
+  gets a spelling of its own, `nish-i32` / `nish-f64`, for source that is only
+  correct under one `--number-mode`. A package without that condition is
+  `` Package `lodash` has no Nish entry point ``, which is what an ordinary npm
+  package gets: there is nothing to compile in a `.js` file.
 - Functions may be renamed on import; classes and interfaces may not — the type
   name is part of the ABI.
 - Import cycles are allowed; a shared dependency is compiled once.

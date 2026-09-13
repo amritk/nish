@@ -913,13 +913,13 @@ and their `.ll` goldens are byte-identical files.
   `export * from`, and `export =` are rejected
   (`Only functions can be exported`; `` `export default` is not supported ``,
   `tests/cases/reject_export_default`).
-- The only import form is a named import from a relative specifier:
-  `import { square, cube as pow3 } from "./math"` (`tests/link/two_file`).
-  The specifier must start with `./` or `../`, name one of the three builtin
-  modules below, or name a standard-library module as `nish/<module>`
-  (`Only relative import specifiers are supported`,
-  `tests/cases/reject_bare_import`, `tests/cases/reject_bare_package`); `.ts` is optional and `./x.js` maps to
-  `./x.ts`; paths resolve relative to the importing file. Default imports
+- The only import form is a named import: `import { square, cube as pow3 } from
+  "./math"` (`tests/link/two_file`). The specifier must start with `./` or
+  `../`, name one of the three builtin modules below, name a standard-library
+  module as `nish/<module>`, or be a **package name** — `hash`, `@scope/hash`,
+  either with a subpath after it (`Import specifier ... must be relative`,
+  `tests/cases/reject_bare_import`); `.ts` is optional and `./x.js` maps to
+  `./x.ts`; a relative path resolves relative to the importing file. Default imports
   (`Default imports are not supported`, `reject_default_import`), namespace
   imports (`Namespace imports`, `reject_namespace_import`), side-effect
   imports (`Side-effect imports`, `reject_side_effect_import`), and
@@ -940,8 +940,46 @@ and their `.ll` goldens are byte-identical files.
   specifier rather than by where the file sits, because reading it off the path
   would answer differently for an installed compiler and a checkout of the same
   version.
-- Every other bare specifier is refused: there is no package resolution
-  (`reject_bare_package`, `docs/wp21-packages.md` §5b).
+- **A package is imported by name, and what is resolved is its source.**
+  `import { scale } from "pkg_bare"` looks for `node_modules/pkg_bare` in the
+  importing file's directory and in every directory above it, reads that
+  package's `package.json`, and compiles the file its `exports` map offers for
+  the **`nish` condition** (`tests/link/package_bare`,
+  `docs/wp21-packages.md` §2):
+
+  ```jsonc
+  { "exports": { ".": { "nish": "./src/index.ts" }, "./util": { "nish": "./src/util.ts" } } }
+  ```
+
+  Source, not a built artifact, and that is the decision rather than a stage:
+  the whole-program fact fixpoint, monomorphisation, and `--number-mode` being
+  a compile-time ABI each make a prebuilt library strictly worse than the
+  source that is already there (`docs/wp21-packages.md` §3). The consequence a
+  reader should carry away is that a dependency is compiled, checked and
+  optimised as if it were your own code, and its non-exported functions are
+  `internal` and dead-stripped like your own.
+  - **The number mode rides in the condition.** `nish-i32` and `nish-f64` are
+    the mode-qualified spellings, and the compiler asks for its own mode first
+    and then plain `nish` — so a package correct under either declares `nish`,
+    a package that needs different source per mode declares both, and a
+    mismatch is a *resolution* failure at the package boundary rather than a
+    wrong answer at run time. Conditions match in the manifest's own
+    declaration order, as Node matches them.
+  - **Presence of the condition is the claim.** A package that has no `nish`
+    condition for the subpath asked for is
+    `` Package `plainjs` has no Nish entry point: its `exports` declares no
+    `nish` condition for `.` `` (`tests/link/package_not_nish`) — which is
+    what an ordinary npm package gets, in words that name what is missing. A
+    package that is not installed at all is `` Cannot find package `@x/y` ``
+    (`tests/cases/reject_bare_package`).
+  - **Only the `nish` conditions are honoured**, and a subpath is an exact key:
+    `default`, `import` and `node` are skipped rather than matched, and the
+    `"./*"` pattern form is not read. A target is a string beginning with `./`
+    and naming a file inside the package.
+  - A package's symbols carry its prefix (`@pkg_bare.scale`), so two packages
+    may each keep a private `helper()`; the root package — the program being
+    compiled — has no prefix and its IR is unchanged (`docs/wp21-packages.md`
+    §9).
 - An imported constant contributes no `declare` and no relocation: it is
   folded into every use site in the importing module exactly as it is in the
   exporting one (`tests/link/const_export`,

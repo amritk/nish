@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 393;
+export const RULE_COUNT: i32 = 396;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -129,6 +129,8 @@ export function diagnosticRules(): string[] {
     "NL2080",
     "Only functions can be exported for now, plus classes and interfaces (found `export` on ",
     "NL2226",
+    "` must be relative (`./x`, `../x`), a package name (`hash`, `@scope/hash`), or one of ",
+    "NL2316",
     "` under a type constructor instead of passing it on, so the chain has no end; pass `",
     "NL2309",
     "`declare function` declares a C function this program calls, so it must have no body",
@@ -339,6 +341,8 @@ export function diagnosticRules(): string[] {
     "NL2240",
     "; use `obj.name` (no dynamic property lookup)",
     "NL1009",
+    "` directory above the importing module has it",
+    "NL3013",
     "` is already declared as a class or interface",
     "NL2074",
     "` takes no type argument (it is an alias of `",
@@ -385,6 +389,8 @@ export function diagnosticRules(): string[] {
     "NL1006",
     " (object layout is fixed at compile time)",
     "NL1007",
+    " entry point: its `exports` declares no `",
+    "NL3012",
     "` in a constant requires boolean operands",
     "NL2069",
     "` is a builtin value and cannot be called",
