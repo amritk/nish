@@ -31,6 +31,15 @@ is **data, not code**: a source file next to the output it must produce.
     the Node rewrite are handed the same environment.
   - `<name>.stdout` — for dump flags (`--emit-ast`, `--emit-checked`): the
     compiler's stdout is the golden and no IR is written.
+
+  One thing about a case is decided away from the case, in
+  `tests/self/stage1_only.txt`: whether it is **stage1-only**. A case named
+  there is compiled by a stage1 binary built out of `self/` rather than by
+  stage0, and every stage0 oracle counts it as declared rather than skipping
+  it — which is how a construct can be implemented in `self/` alone instead of
+  twice (`docs/wp19-stage0-retirement.md` §1a). The file's header is the
+  contract; registering a case removes the second implementation and none of
+  the tests below.
 - **Naming is by family prefix**, matching the module that owns the construct:
   `cf_*` control flow, `cls_*` classes, `str_*` strings, `arr_*` arrays,
   `mem_*` memory, `math_*` / `div_*` / `i64_*` / `f64_*` numerics, `io_*` and
@@ -79,7 +88,27 @@ PR adding a construct is not finished without all of them:
    message.
 4. `.args` for any flag the case depends on.
 5. Its `docs/LANGUAGE.md` rule, citing the case by name, and a cookbook entry.
-6. A diagnostic code, if the construct can be refused: run
+   A cookbook entry is compiled by stage0 (`docs/cookbook/regen.sh`), so a
+   stage1-only construct's entry waits until the seed has it — one release —
+   and the case in `tests/cases/` is what pins the lowering until then.
+6. Both implementations, or a line in the register. A construct written in
+   `src/` *and* `self/` is compared by the oracles byte for byte, which is the
+   strongest thing this repository can say about a lowering; a construct
+   written in `self/` alone is named in `tests/self/stage1_only.txt` and is
+   proved by its golden and by `nish-cmp.js` instead. Either is a decision
+   someone makes on purpose. What is not allowed is the third thing — a
+   construct in `self/` alone and *not* registered — because the oracles would
+   then skip its case in silence and the corpus would shrink without anyone
+   deciding it should.
+7. A case that *reaches* each new wording, not only a code for it.
+   `tests/diagnostic_coverage.js` compiles the negatives, the `perf_*`
+   positives and `tests/wordings/`, reads the code out of every `--json`
+   object, and requires each registry code to be provoked or named in
+   `tests/wordings/unreachable.txt` with a reason; `npm test` runs it. After
+   R6 a wording no case reaches is proved by nothing at all, since the
+   comparison with stage0 is what proves it today
+   (`docs/wp19-stage0-retirement.md` §2B).
+8. A diagnostic code, if the construct can be refused: run
    `node scripts/gen-diagnostic-codes.mjs` so `src/codes.ts` and `self/codes.ts`
    pick the new message up. The generator appends and never renumbers, and
    `npm test` fails while either file is stale. A message built entirely out of

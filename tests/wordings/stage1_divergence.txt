@@ -24,19 +24,16 @@
 # `npm test` runs the coverage tool over stage1 with `--strict-refusals`, so a
 # line here that stops being true fails the run and has to be deleted.
 
+# Ten of the lines this file opened with are gone, closed rather than declared:
+# the clash wordings, `++` on a string, the void ternary, the two 2^53 literals,
+# the three `for...of` head rules and `new C<T>()`. Each was stage1 saying
+# something else or compiling what stage0 refuses, and each is now the same
+# sentence at the same column on both sides, with a `reject_*` case of its own
+# in `tests/cases`. What is left is the three nobody has taken yet.
+
 # --- stage1 says something else ----------------------------------------------
-nl2074_function_after_class  stage1 says "`Shape` is already declared in this module" (NL2076)
-nl2098_increment_string  stage1 says "Operator `++` requires a numeric operand, got string", which carries no code (NL0000)
-nl2196_duplicate_function  stage1 says "`twice` is already declared in this module" (NL2076)
-nl2239_void_ternary  stage1 reports the void local (NL2183) and never reaches the ternary
 nl2260_empty_statement  stage1 says "Unsupported statement `;`", which carries no code (NL0000)
 
 # --- stage1 compiles what stage0 refuses -------------------------------------
 nl2298_generic_import  stage1 says "Module `./wordings_generic` has no exported function `identity`", which carries no code (NL0000): it does not look past the exported functions to find the template
-nl2054_literal_u64  stage1 accepts a u64 literal past 2^53 and emits IR for the rounded value
 nl2302_duplicate_type_parameter  stage1 accepts `<T, T>` and compiles it; the second parameter can never be bound to anything the first was not, so the program means what stage0 refuses to let it mean
-nl2055_literal_i64  stage1 accepts an i64 literal past 2^53 and emits IR for the rounded value
-nl2134_for_of_two_variables  stage1 accepts a `for...of` head with two declarators (syntax TypeScript itself refuses)
-nl2206_generic_new  stage1 ignores the type arguments on `new Point<i32>()` and compiles it
-nl2241_for_of_initializer  stage1 accepts an initializer on the `for...of` variable and compiles it
-nl2242_for_of_annotation  stage1 accepts an annotation on the `for...of` variable and compiles it

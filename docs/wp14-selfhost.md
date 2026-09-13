@@ -788,6 +788,21 @@ These are in addition to `docs/MASTER_PLAN.md` §7, not instead of it.
 1. **A construct enters the language before it enters `self/`.** Wanting it
    for the port is not a reason to skip its `reject_*` case or its cookbook
    entry. `self/` is the customer, not the exception.
+
+   **Amended by [wp19 §1a](wp19-stage0-retirement.md#1a-the-doubling-ends-before-r6).**
+   What the rule meant in practice was "a construct is implemented twice,
+   `src/` first", and that is no longer required: a construct may be
+   implemented in `self/` alone, with its case in
+   `tests/self/stage1_only.txt`, which is what makes it stage1's golden and a
+   declared row in the oracles rather than a silent skip. Two halves of the
+   rule survive it and are the reason it is amended rather than deleted: the
+   construct still ships with everything a construct ships with — a golden, an
+   `llvm-as` pass, a native round trip, a negative case, a `LANGUAGE.md` rule
+   and a cookbook entry — and `self/` still may not *use* it until the seed
+   compiles it, which is the next release (wp19 G4). The port is finished;
+   what is left is a language that is still moving, and paying for a second
+   implementation of every new construct is a choice rather than a
+   consequence.
 2. **`self/` is an Nish program.** It follows `docs/LANGUAGE.md` and the
    Nish half of `.claude/typescript.md` — `function` declarations,
    `interface` for structs, no arrow functions, no `type` aliases. The house

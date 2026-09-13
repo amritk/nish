@@ -39,9 +39,13 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { stage1Only, stage1OnlyFor } from "./stage1_only.js";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
 const cli = path.join(root, "dist", "index.js");
+
+/** The cases `self/` implements alone (WP19 §1a), read once for the whole run. */
+const REGISTER = stage1Only();
 
 /**
  * The interop corpus: an entry, the stem its sidecars are named after (the
@@ -149,6 +153,10 @@ const fresh = (dir) => {
 const compare = (binary, work, entry) => {
   const file = path.join(root, entry.file);
   if (!fs.existsSync(file)) return { skipped: "no such file" };
+  // Reachable through `--all`, which walks the IR oracle's corpus: a
+  // registered case is `self/`'s alone, so there are no stage0 sidecars to
+  // compare against (WP19 §1a).
+  if (stage1OnlyFor(file, REGISTER) !== null) return { skipped: "stage1-only (tests/self/stage1_only.txt)" };
   const { flags, unsupported } = argsFor(file);
   if (unsupported.length > 0) return { skipped: `stage1 has no ${unsupported.join(" ")}` };
   const all = [...flags, ...(entry.flags ?? [])];

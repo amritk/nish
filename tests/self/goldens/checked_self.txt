@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 63 programs, 362731 dump lines live, 63 distinct modules.
+# 63 programs, 363194 dump lines live, 63 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/builtins.ts self/expressions.ts self/generics.ts self/declarations.ts self/result.ts self/structs.ts self/members.ts self/emit_util.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
@@ -2971,6 +2971,7 @@ import T_I32 from "./types" -> const T_I32
 import T_I64 from "./types" -> const T_I64
 import T_STRING from "./types" -> const T_STRING
 import T_VOID from "./types" -> const T_VOID
+const TWO_53: f64 = 9007199254740992
 function checkExpression(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 -> @checkExpression [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: want
@@ -3015,8 +3016,8 @@ function checkNumericLiteral(ctx: CheckContext, expr: Node, want: i32, negated: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: negated want
   calls: CheckContext.errorType CheckContext.numberType TypeTable.typeName fitsInI32 hasFraction intBits isFloat isNumeric isUnsigned llvm.fabs.f64 llvm.pow.f64 nish_parse_number nish_str_concat
-  pointer ctx: size=120 writesThrough=true captured=false passedTo=CheckContext.numberType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
+  pointer ctx: size=120 writesThrough=true captured=false passedTo=CheckContext.numberType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
   stackSites=0 stackLocals=0
   local 177:9 type: i32 (const)
@@ -3035,21 +3036,23 @@ function checkNumericLiteral(ctx: CheckContext, expr: Node, want: i32, negated: 
   local 195:11 spelled: string (const)
   callee 195:21 TypeTable.typeName -> @TypeTable.typeName
   callee 197:14 CheckContext.errorType -> @CheckContext.errorType
-  local 204:11 bits: i32 (const)
-  callee 204:18 intBits -> @intBits
-  local 205:11 limit: f64 (const)
-  callee 207:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 206:14 CheckContext.errorType -> @CheckContext.errorType
+  local 213:11 bits: i32 (const)
+  callee 213:18 intBits -> @intBits
+  local 214:11 limit: f64 (const)
+  callee 216:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 220:12 CheckContext.errorType -> @CheckContext.errorType
 function hasFraction(text: string): boolean -> @hasFraction
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: llvm.floor.f64 nish_parse_number nish_str_at
   stackSites=0 stackLocals=0
-  local 218:7 i: i32 (let)
-  local 220:11 c: i32 (const)
+  local 236:7 i: i32 (let)
+  local 238:11 c: i32 (const)
 function fitsInI32(text: string, negated: boolean): boolean -> @fitsInI32
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: nish_parse_number
   stackSites=0 stackLocals=0
-  local 231:9 limit: f64 (const)
+  local 249:9 limit: f64 (const)
 function checkTemplate(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkTemplate
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error TypeTable.typeName checkExpression isNumeric nish_str_concat
@@ -3057,13 +3060,13 @@ function checkTemplate(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @che
   pointer expr: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local 236:14 part: Node (const)
-  local 240:11 hole: i32 (const)
-  callee 240:18 checkExpression -> @checkExpression
-  callee 244:10 isNumeric -> @isNumeric
-  local 245:13 spelled: string (const)
-  callee 245:23 TypeTable.typeName -> @TypeTable.typeName
-  callee 246:7 CheckContext.error -> @CheckContext.error
+  local 254:14 part: Node (const)
+  local 258:11 hole: i32 (const)
+  callee 258:18 checkExpression -> @checkExpression
+  callee 262:10 isNumeric -> @isNumeric
+  local 263:13 spelled: string (const)
+  callee 263:23 TypeTable.typeName -> @TypeTable.typeName
+  callee 264:7 CheckContext.error -> @CheckContext.error
 function checkNull(ctx: CheckContext, expr: Node, want: i32): i32 -> @checkNull
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: want
@@ -3071,13 +3074,13 @@ function checkNull(ctx: CheckContext, expr: Node, want: i32): i32 -> @checkNull
   pointer ctx: size=120 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   stackSites=0 stackLocals=0
-  callee 254:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 259:7 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 264:7 TypeTable.isPointer -> @TypeTable.isPointer
-  local 265:11 spelled: string (const)
-  callee 265:21 TypeTable.typeName -> @TypeTable.typeName
-  callee 266:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 268:10 CheckContext.errorType -> @CheckContext.errorType
+  callee 272:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 277:7 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 282:7 TypeTable.isPointer -> @TypeTable.isPointer
+  local 283:11 spelled: string (const)
+  callee 283:21 TypeTable.typeName -> @TypeTable.typeName
+  callee 284:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 286:10 CheckContext.errorType -> @CheckContext.errorType
 function checkIdentifier(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkIdentifier
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.errorType CheckedProgram.builtinImport CheckedProgram.constant Scope.lookup Scope.typeOf checkNamespaceProperty nish_panic_index nish_str_concat
@@ -3085,16 +3088,16 @@ function checkIdentifier(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @c
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 checkNamespaceProperty#1 CheckContext.errorType#1
   pointer scope: size=40 writesThrough=false captured=false passedTo=Scope.lookup#0 Scope.typeOf#0
   stackSites=0 stackLocals=0
-  local 275:9 local: Local | null (const)
-  callee 275:17 Scope.lookup -> @Scope.lookup
-  callee 278:12 Scope.typeOf -> @Scope.typeOf
-  local 282:9 constant: ConstInfo | null (const)
-  callee 282:20 CheckedProgram.constant -> @CheckedProgram.constant
-  local 290:9 imported: BuiltinExport | null (const)
-  callee 290:20 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
-  callee 293:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 296:12 checkNamespaceProperty -> @checkNamespaceProperty
-  callee 298:10 CheckContext.errorType -> @CheckContext.errorType
+  local 293:9 local: Local | null (const)
+  callee 293:17 Scope.lookup -> @Scope.lookup
+  callee 296:12 Scope.typeOf -> @Scope.typeOf
+  local 300:9 constant: ConstInfo | null (const)
+  callee 300:20 CheckedProgram.constant -> @CheckedProgram.constant
+  local 308:9 imported: BuiltinExport | null (const)
+  callee 308:20 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
+  callee 311:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 314:12 checkNamespaceProperty -> @checkNamespaceProperty
+  callee 316:10 CheckContext.errorType -> @CheckContext.errorType
 function checkThis(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkThis
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.errorType Scope.lookup nish_panic_index
@@ -3102,9 +3105,9 @@ function checkThis(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkTh
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
   pointer scope: size=40 writesThrough=false captured=false passedTo=Scope.lookup#0
   stackSites=0 stackLocals=0
-  local 302:9 self: Local | null (const)
-  callee 302:16 Scope.lookup -> @Scope.lookup
-  callee 304:12 CheckContext.errorType -> @CheckContext.errorType
+  local 320:9 self: Local | null (const)
+  callee 320:16 Scope.lookup -> @Scope.lookup
+  callee 322:12 CheckContext.errorType -> @CheckContext.errorType
 function checkUnary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 -> @checkUnary
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: want
@@ -3113,24 +3116,24 @@ function checkUnary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32
   pointer expr: size=40 writesThrough=false captured=false passedTo=checkIncrement#1 checkNumericLiteral#4 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkIncrement#2 checkExpression#2
   stackSites=0 stackLocals=0
-  local 313:9 op: string (const)
-  local 314:9 operand: Node (const)
-  callee 316:12 checkIncrement -> @checkIncrement
-  local 324:11 type: i32 (const)
-  callee 324:18 checkNumericLiteral -> @checkNumericLiteral
-  local 328:9 type: i32 (const)
-  callee 328:16 checkExpression -> @checkExpression
-  callee 333:10 isNumeric -> @isNumeric
-  callee 334:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 334:73 TypeTable.typeName -> @TypeTable.typeName
-  callee 340:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 340:73 TypeTable.typeName -> @TypeTable.typeName
-  callee 345:10 isInteger -> @isInteger
-  callee 349:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 351:60 TypeTable.typeName -> @TypeTable.typeName
-  callee 351:87 f64Hint -> @f64Hint
-  callee 357:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 362:10 CheckContext.errorType -> @CheckContext.errorType
+  local 331:9 op: string (const)
+  local 332:9 operand: Node (const)
+  callee 334:12 checkIncrement -> @checkIncrement
+  local 342:11 type: i32 (const)
+  callee 342:18 checkNumericLiteral -> @checkNumericLiteral
+  local 346:9 type: i32 (const)
+  callee 346:16 checkExpression -> @checkExpression
+  callee 351:10 isNumeric -> @isNumeric
+  callee 352:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 352:73 TypeTable.typeName -> @TypeTable.typeName
+  callee 358:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 358:73 TypeTable.typeName -> @TypeTable.typeName
+  callee 363:10 isInteger -> @isInteger
+  callee 367:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 369:60 TypeTable.typeName -> @TypeTable.typeName
+  callee 369:87 f64Hint -> @f64Hint
+  callee 375:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 380:10 CheckContext.errorType -> @CheckContext.errorType
 function checkIncrement(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkIncrement
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.errorType CheckedProgram.constant Scope.clearNarrowing Scope.lookup TypeTable.typeName checkExpression isNumeric nish_panic_index nish_str_concat
@@ -3138,26 +3141,26 @@ function checkIncrement(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @ch
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 Scope.lookup#0 Scope.clearNarrowing#0
   stackSites=0 stackLocals=0
-  local 367:9 target: Node (const)
-  callee 372:12 CheckContext.errorType -> @CheckContext.errorType
-  local 374:9 type: i32 (const)
-  callee 374:16 checkExpression -> @checkExpression
-  callee 378:8 isNumeric -> @isNumeric
-  callee 379:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 381:68 TypeTable.typeName -> @TypeTable.typeName
-  local 385:11 local: Local | null (const)
-  callee 385:19 Scope.lookup -> @Scope.lookup
-  callee 387:11 CheckedProgram.constant -> @CheckedProgram.constant
-  callee 388:16 CheckContext.errorType -> @CheckContext.errorType
-  local 393:13 what: string (const)
-  callee 394:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 396:5 Scope.clearNarrowing -> @Scope.clearNarrowing
+  local 385:9 target: Node (const)
+  callee 390:12 CheckContext.errorType -> @CheckContext.errorType
+  local 392:9 type: i32 (const)
+  callee 392:16 checkExpression -> @checkExpression
+  callee 396:8 isNumeric -> @isNumeric
+  callee 397:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 399:69 TypeTable.typeName -> @TypeTable.typeName
+  local 403:11 local: Local | null (const)
+  callee 403:19 Scope.lookup -> @Scope.lookup
+  callee 405:11 CheckedProgram.constant -> @CheckedProgram.constant
+  callee 406:16 CheckContext.errorType -> @CheckContext.errorType
+  local 411:13 what: string (const)
+  callee 412:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 414:5 Scope.clearNarrowing -> @Scope.clearNarrowing
 function writesLeft(op: string): boolean -> @writesLeft
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   escaping: op
   calls: nish_str_at nish_str_eq yieldsBool
   stackSites=0 stackLocals=0
-  callee 407:63 yieldsBool -> @yieldsBool
+  callee 425:63 yieldsBool -> @yieldsBool
 function yieldsBool(op: string): boolean -> @yieldsBool
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: nish_str_eq
@@ -3173,16 +3176,16 @@ function checkBitwiseAssignOperands(ctx: CheckContext, expr: Node, target: i32, 
   pointer ctx: size=120 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 f64Hint#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1
   stackSites=0 stackLocals=0
-  local 442:9 op: string (const)
-  callee 447:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 447:81 booleanAlternative -> @booleanAlternative
-  callee 449:8 isInteger -> @isInteger
-  local 450:11 a: string (const)
-  callee 450:15 TypeTable.typeName -> @TypeTable.typeName
-  local 451:11 b: string (const)
-  callee 451:15 TypeTable.typeName -> @TypeTable.typeName
-  callee 452:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 454:94 f64Hint -> @f64Hint
+  local 460:9 op: string (const)
+  callee 465:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 465:81 booleanAlternative -> @booleanAlternative
+  callee 467:8 isInteger -> @isInteger
+  local 468:11 a: string (const)
+  callee 468:15 TypeTable.typeName -> @TypeTable.typeName
+  local 469:11 b: string (const)
+  callee 469:15 TypeTable.typeName -> @TypeTable.typeName
+  callee 470:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 472:94 f64Hint -> @f64Hint
 function checkBinary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 -> @checkBinary
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.errorType CheckContext.template checkAssignment checkLogical checkOperator nish_panic_index nish_str_concat nish_str_eq writesLeft
@@ -3190,29 +3193,29 @@ function checkBinary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 checkAssignment#1 checkLogical#1 checkOperator#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkAssignment#2 checkLogical#2 checkOperator#5
   stackSites=0 stackLocals=0
-  local 461:9 op: string (const)
-  callee 463:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 465:7 writesLeft -> @writesLeft
-  callee 466:12 checkAssignment -> @checkAssignment
-  callee 469:12 checkLogical -> @checkLogical
-  local 477:11 template: TemplateInfo | null (const)
-  callee 477:22 CheckContext.template -> @CheckContext.template
-  local 479:13 first: string (const)
-  callee 480:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 487:10 checkOperator -> @checkOperator
+  local 479:9 op: string (const)
+  callee 481:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 483:7 writesLeft -> @writesLeft
+  callee 484:12 checkAssignment -> @checkAssignment
+  callee 487:12 checkLogical -> @checkLogical
+  local 495:11 template: TemplateInfo | null (const)
+  callee 495:22 CheckContext.template -> @CheckContext.template
+  local 497:13 first: string (const)
+  callee 498:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 505:10 checkOperator -> @checkOperator
 function literalHint(other: i32, fallback: i32): i32 -> @literalHint
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   escaping: fallback other
   calls: isNumeric
   stackSites=0 stackLocals=0
-  callee 503:10 isNumeric -> @isNumeric
+  callee 521:10 isNumeric -> @isNumeric
 function peekable(node: Node): boolean -> @peekable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index nish_str_eq peekable
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 521:12 peekable -> @peekable
-  callee 524:33 peekable -> @peekable
+  callee 539:12 peekable -> @peekable
+  callee 542:33 peekable -> @peekable
 function checkOperator(ctx: CheckContext, expr: Node, op: string, leftNode: Node, rightNode: Node, scope: Scope): i32 -> @checkOperator
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: op
@@ -3223,34 +3226,34 @@ function checkOperator(ctx: CheckContext, expr: Node, op: string, leftNode: Node
   pointer rightNode: size=40 writesThrough=true captured=true passedTo=checkExpression#1 peekable#0 checkExpression#1 checkEquality#6
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 checkExpression#2 checkExpression#2 checkExpression#2
   stackSites=0 stackLocals=0
-  local 553:7 left: i32 (let)
-  local 554:7 right: i32 (let)
-  callee 556:13 checkExpression -> @checkExpression
-  callee 560:12 checkExpression -> @checkExpression
-  callee 560:50 peekable -> @peekable
-  callee 560:72 literalHint -> @literalHint
-  callee 562:12 checkExpression -> @checkExpression
-  callee 566:13 checkExpression -> @checkExpression
-  callee 570:37 literalHint -> @literalHint
-  local 576:9 a: string (const)
-  callee 576:13 TypeTable.typeName -> @TypeTable.typeName
-  local 577:9 b: string (const)
-  callee 577:13 TypeTable.typeName -> @TypeTable.typeName
-  callee 583:10 isNumeric -> @isNumeric
-  local 584:13 hint: string (const)
-  callee 588:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 596:12 checkEquality -> @checkEquality
-  callee 599:28 isNumeric -> @isNumeric
-  callee 600:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 604:7 isShift -> @isShift
+  local 571:7 left: i32 (let)
+  local 572:7 right: i32 (let)
+  callee 574:13 checkExpression -> @checkExpression
+  callee 578:12 checkExpression -> @checkExpression
+  callee 578:50 peekable -> @peekable
+  callee 578:72 literalHint -> @literalHint
+  callee 580:12 checkExpression -> @checkExpression
+  callee 584:13 checkExpression -> @checkExpression
+  callee 588:37 literalHint -> @literalHint
+  local 594:9 a: string (const)
+  callee 594:13 TypeTable.typeName -> @TypeTable.typeName
+  local 595:9 b: string (const)
+  callee 595:13 TypeTable.typeName -> @TypeTable.typeName
+  callee 601:10 isNumeric -> @isNumeric
+  local 602:13 hint: string (const)
   callee 606:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 606:83 booleanAlternative -> @booleanAlternative
-  callee 608:10 isInteger -> @isInteger
-  callee 609:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 611:96 f64Hint -> @f64Hint
-  callee 617:10 isNumeric -> @isNumeric
+  callee 614:12 checkEquality -> @checkEquality
+  callee 617:28 isNumeric -> @isNumeric
   callee 618:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 625:10 CheckContext.errorType -> @CheckContext.errorType
+  callee 622:7 isShift -> @isShift
+  callee 624:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 624:83 booleanAlternative -> @booleanAlternative
+  callee 626:10 isInteger -> @isInteger
+  callee 627:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 629:96 f64Hint -> @f64Hint
+  callee 635:10 isNumeric -> @isNumeric
+  callee 636:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 643:10 CheckContext.errorType -> @CheckContext.errorType
 function booleanAlternative(op: string): string -> @booleanAlternative
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: nish_str_eq
@@ -3260,8 +3263,8 @@ function f64Hint(ctx: CheckContext, left: i32, right: i32): string -> @f64Hint
   calls: CheckContext.numberType
   pointer ctx: size=120 writesThrough=false captured=false passedTo=CheckContext.numberType#0
   stackSites=0 stackLocals=0
-  local 648:9 fromMode: boolean (const)
-  callee 648:20 CheckContext.numberType -> @CheckContext.numberType
+  local 666:9 fromMode: boolean (const)
+  callee 666:20 CheckContext.numberType -> @CheckContext.numberType
 function isShift(op: string): boolean -> @isShift
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: nish_str_eq
@@ -3275,16 +3278,16 @@ function checkEquality(ctx: CheckContext, expr: Node, op: string, left: i32, rig
   pointer leftNode: size=40 writesThrough=false captured=false
   pointer rightNode: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 670:9 a: string (const)
-  callee 670:13 TypeTable.typeName -> @TypeTable.typeName
-  local 671:9 b: string (const)
-  callee 671:13 TypeTable.typeName -> @TypeTable.typeName
-  callee 673:9 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 673:39 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 674:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 679:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 686:7 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 687:12 CheckContext.errorType -> @CheckContext.errorType
+  local 688:9 a: string (const)
+  callee 688:13 TypeTable.typeName -> @TypeTable.typeName
+  local 689:9 b: string (const)
+  callee 689:13 TypeTable.typeName -> @TypeTable.typeName
+  callee 691:9 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 691:39 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 692:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 697:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 704:7 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 705:12 CheckContext.errorType -> @CheckContext.errorType
 function checkLogical(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkLogical
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.errorType Scope.child TypeTable.typeName checkExpression narrow nish_panic_index nish_str_concat nish_str_eq
@@ -3292,44 +3295,55 @@ function checkLogical(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @chec
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 Scope.child#0
   stackSites=0 stackLocals=0
-  local 696:9 left: i32 (const)
-  callee 696:16 checkExpression -> @checkExpression
-  local 699:9 guarded: Scope (const)
-  callee 699:19 Scope.child -> @Scope.child
-  callee 700:3 narrow -> @narrow
-  local 701:9 right: i32 (const)
-  callee 701:17 checkExpression -> @checkExpression
-  local 706:11 a: string (const)
-  callee 706:15 TypeTable.typeName -> @TypeTable.typeName
-  local 707:11 b: string (const)
-  callee 707:15 TypeTable.typeName -> @TypeTable.typeName
-  callee 708:12 CheckContext.errorType -> @CheckContext.errorType
+  local 714:9 left: i32 (const)
+  callee 714:16 checkExpression -> @checkExpression
+  local 717:9 guarded: Scope (const)
+  callee 717:19 Scope.child -> @Scope.child
+  callee 718:3 narrow -> @narrow
+  local 719:9 right: i32 (const)
+  callee 719:17 checkExpression -> @checkExpression
+  local 724:11 a: string (const)
+  callee 724:15 TypeTable.typeName -> @TypeTable.typeName
+  local 725:11 b: string (const)
+  callee 725:15 TypeTable.typeName -> @TypeTable.typeName
+  callee 726:12 CheckContext.errorType -> @CheckContext.errorType
 function checkConditional(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 -> @checkConditional
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: want
-  calls: CheckContext.errorType Scope.child TypeTable.assignable TypeTable.typeName checkCondition checkExpression narrow nish_panic_index nish_str_concat
-  pointer ctx: size=120 writesThrough=true captured=false passedTo=checkCondition#0 narrow#0 narrow#0 checkExpression#0 checkExpression#0 CheckContext.errorType#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
+  calls: CheckContext.errorType Scope.child TypeTable.assignable TypeTable.typeName checkCondition checkExpression narrow nish_panic_index nish_str_concat ternaryResult
+  pointer ctx: size=120 writesThrough=true captured=false passedTo=checkCondition#0 narrow#0 narrow#0 checkExpression#0 checkExpression#0 ternaryResult#0 ternaryResult#0 ternaryResult#0 CheckContext.errorType#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=ternaryResult#1 ternaryResult#1 ternaryResult#1 CheckContext.errorType#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkCondition#2 Scope.child#0 Scope.child#0
   stackSites=0 stackLocals=0
-  callee 714:3 checkCondition -> @checkCondition
-  local 715:9 thenScope: Scope (const)
-  callee 715:21 Scope.child -> @Scope.child
-  callee 716:3 narrow -> @narrow
-  local 717:9 elseScope: Scope (const)
-  callee 717:21 Scope.child -> @Scope.child
-  callee 718:3 narrow -> @narrow
-  local 719:9 whenTrue: i32 (const)
-  callee 719:20 checkExpression -> @checkExpression
-  local 720:9 whenFalse: i32 (const)
-  callee 720:21 checkExpression -> @checkExpression
-  callee 728:7 TypeTable.assignable -> @TypeTable.assignable
-  callee 731:7 TypeTable.assignable -> @TypeTable.assignable
-  local 734:9 a: string (const)
-  callee 734:13 TypeTable.typeName -> @TypeTable.typeName
-  local 735:9 b: string (const)
-  callee 735:13 TypeTable.typeName -> @TypeTable.typeName
-  callee 736:10 CheckContext.errorType -> @CheckContext.errorType
+  callee 732:3 checkCondition -> @checkCondition
+  local 733:9 thenScope: Scope (const)
+  callee 733:21 Scope.child -> @Scope.child
+  callee 734:3 narrow -> @narrow
+  local 735:9 elseScope: Scope (const)
+  callee 735:21 Scope.child -> @Scope.child
+  callee 736:3 narrow -> @narrow
+  local 737:9 whenTrue: i32 (const)
+  callee 737:20 checkExpression -> @checkExpression
+  local 738:9 whenFalse: i32 (const)
+  callee 738:21 checkExpression -> @checkExpression
+  callee 743:12 ternaryResult -> @ternaryResult
+  callee 746:7 TypeTable.assignable -> @TypeTable.assignable
+  callee 747:12 ternaryResult -> @ternaryResult
+  callee 749:7 TypeTable.assignable -> @TypeTable.assignable
+  callee 750:12 ternaryResult -> @ternaryResult
+  local 752:9 a: string (const)
+  callee 752:13 TypeTable.typeName -> @TypeTable.typeName
+  local 753:9 b: string (const)
+  callee 753:13 TypeTable.typeName -> @TypeTable.typeName
+  callee 754:10 CheckContext.errorType -> @CheckContext.errorType
+function ternaryResult(ctx: CheckContext, expr: Node, type: i32): i32 -> @ternaryResult
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  escaping: type
+  calls: CheckContext.errorType
+  pointer ctx: size=120 writesThrough=true captured=false passedTo=CheckContext.errorType#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1
+  stackSites=0 stackLocals=0
+  callee 766:12 CheckContext.errorType -> @CheckContext.errorType
 function checkCondition(ctx: CheckContext, expr: Node, scope: Scope): void -> @checkCondition [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error TypeTable.typeName checkExpression nish_str_concat
@@ -3337,10 +3351,10 @@ function checkCondition(ctx: CheckContext, expr: Node, scope: Scope): void -> @c
   pointer expr: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local 741:9 type: i32 (const)
-  callee 741:16 checkExpression -> @checkExpression
-  callee 743:5 CheckContext.error -> @CheckContext.error
-  callee 743:55 TypeTable.typeName -> @TypeTable.typeName
+  local 773:9 type: i32 (const)
+  callee 773:16 checkExpression -> @checkExpression
+  callee 775:5 CheckContext.error -> @CheckContext.error
+  callee 775:55 TypeTable.typeName -> @TypeTable.typeName
 function narrow(ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void -> @narrow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: whenTrue
@@ -3349,10 +3363,10 @@ function narrow(ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean):
   pointer cond: size=40 writesThrough=false captured=false passedTo=narrowBinary#1 narrowResultTest#0
   pointer scope: size=40 writesThrough=false captured=false passedTo=narrow#2 narrow#2 narrowBinary#2 narrowResultTest#1
   stackSites=0 stackLocals=0
-  callee 761:7 narrow -> @narrow
-  callee 765:9 narrow -> @narrow
-  callee 769:7 narrowBinary -> @narrowBinary
-  callee 774:7 narrowResultTest -> @narrowResultTest
+  callee 793:7 narrow -> @narrow
+  callee 797:9 narrow -> @narrow
+  callee 801:7 narrowBinary -> @narrowBinary
+  callee 806:7 narrowResultTest -> @narrowResultTest
 function narrowBinary(ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boolean): void -> @narrowBinary
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: whenTrue
@@ -3361,22 +3375,22 @@ function narrowBinary(ctx: CheckContext, cond: Node, scope: Scope, whenTrue: boo
   pointer cond: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=false captured=false passedTo=narrow#2 narrow#2 narrow#2 narrow#2 Scope.lookup#0 Scope.typeOf#0 Scope.narrow#0
   stackSites=0 stackLocals=0
-  local 780:9 op: string (const)
-  callee 782:5 narrow -> @narrow
-  callee 783:5 narrow -> @narrow
-  callee 787:5 narrow -> @narrow
-  callee 788:5 narrow -> @narrow
-  local 794:9 left: Node (const)
-  local 795:9 right: Node (const)
-  local 796:9 variable: Node (const)
-  local 800:9 local: Local | null (const)
-  callee 800:17 Scope.lookup -> @Scope.lookup
-  local 804:9 declared: i32 (const)
-  callee 804:20 Scope.typeOf -> @Scope.typeOf
-  callee 805:8 TypeTable.isNullable -> @TypeTable.isNullable
-  local 809:9 narrows: boolean (const)
-  callee 811:5 Scope.narrow -> @Scope.narrow
-  callee 811:25 TypeTable.stripNull -> @TypeTable.stripNull
+  local 812:9 op: string (const)
+  callee 814:5 narrow -> @narrow
+  callee 815:5 narrow -> @narrow
+  callee 819:5 narrow -> @narrow
+  callee 820:5 narrow -> @narrow
+  local 826:9 left: Node (const)
+  local 827:9 right: Node (const)
+  local 828:9 variable: Node (const)
+  local 832:9 local: Local | null (const)
+  callee 832:17 Scope.lookup -> @Scope.lookup
+  local 836:9 declared: i32 (const)
+  callee 836:20 Scope.typeOf -> @Scope.typeOf
+  callee 837:8 TypeTable.isNullable -> @TypeTable.isNullable
+  local 841:9 narrows: boolean (const)
+  callee 843:5 Scope.narrow -> @Scope.narrow
+  callee 843:25 TypeTable.stripNull -> @TypeTable.stripNull
 function checkAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkAssignment
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.errorType CheckedProgram.constant Scope.lookup assignInto checkIndexAssignment checkMemberAssignment nish_panic_index nish_str_concat
@@ -3384,18 +3398,18 @@ function checkAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @c
   pointer expr: size=40 writesThrough=false captured=false passedTo=checkMemberAssignment#1 checkIndexAssignment#1 assignInto#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkMemberAssignment#2 checkIndexAssignment#2 Scope.lookup#0 assignInto#2
   stackSites=0 stackLocals=0
-  local 818:9 target: Node (const)
-  callee 820:12 checkMemberAssignment -> @checkMemberAssignment
-  callee 823:12 checkIndexAssignment -> @checkIndexAssignment
-  callee 826:12 CheckContext.errorType -> @CheckContext.errorType
-  local 828:9 local: Local | null (const)
-  callee 828:17 Scope.lookup -> @Scope.lookup
-  callee 830:9 CheckedProgram.constant -> @CheckedProgram.constant
-  callee 831:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 833:12 CheckContext.errorType -> @CheckContext.errorType
-  local 836:11 what: string (const)
-  callee 837:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 840:10 assignInto -> @assignInto
+  local 850:9 target: Node (const)
+  callee 852:12 checkMemberAssignment -> @checkMemberAssignment
+  callee 855:12 checkIndexAssignment -> @checkIndexAssignment
+  callee 858:12 CheckContext.errorType -> @CheckContext.errorType
+  local 860:9 local: Local | null (const)
+  callee 860:17 Scope.lookup -> @Scope.lookup
+  callee 862:9 CheckedProgram.constant -> @CheckedProgram.constant
+  callee 863:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 865:12 CheckContext.errorType -> @CheckContext.errorType
+  local 868:11 what: string (const)
+  callee 869:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 872:10 assignInto -> @assignInto
 function assignInto(ctx: CheckContext, expr: Node, scope: Scope, local: Local | null, slot: i32, name: string, what: string): i32 -> @assignInto [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: slot
@@ -3405,31 +3419,31 @@ function assignInto(ctx: CheckContext, expr: Node, scope: Scope, local: Local | 
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 Scope.clearNarrowing#0 checkExpression#2 Scope.clearNarrowing#0 checkExpression#2 checkExpression#2 Scope.clearNarrowing#0
   pointer local: size=24 writesThrough=false captured=false passedTo=Scope.clearNarrowing#1 Scope.clearNarrowing#1 Scope.clearNarrowing#1
   stackSites=0 stackLocals=0
-  local 857:9 op: string (const)
-  local 858:9 value: Node (const)
-  local 860:11 rhs: i32 (const)
-  callee 860:17 checkExpression -> @checkExpression
-  callee 862:7 Scope.clearNarrowing -> @Scope.clearNarrowing
-  callee 864:49 TypeTable.assignable -> @TypeTable.assignable
-  local 865:13 got: string (const)
-  callee 865:19 TypeTable.typeName -> @TypeTable.typeName
-  callee 866:14 CheckContext.errorType -> @CheckContext.errorType
-  callee 866:62 TypeTable.typeName -> @TypeTable.typeName
-  callee 870:7 isBitwiseCompound -> @isBitwiseCompound
-  local 874:11 bits: i32 (const)
-  callee 874:18 checkExpression -> @checkExpression
-  callee 876:7 Scope.clearNarrowing -> @Scope.clearNarrowing
-  callee 878:12 checkBitwiseAssignOperands -> @checkBitwiseAssignOperands
-  local 894:9 target: i32 (const)
-  callee 894:18 checkExpression -> @checkExpression
-  local 895:9 rhs: i32 (const)
-  callee 895:15 checkExpression -> @checkExpression
-  callee 899:31 literalHint -> @literalHint
-  callee 902:5 Scope.clearNarrowing -> @Scope.clearNarrowing
-  callee 907:8 isNumeric -> @isNumeric
-  callee 908:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 910:81 TypeTable.typeName -> @TypeTable.typeName
-  callee 910:113 TypeTable.typeName -> @TypeTable.typeName
+  local 889:9 op: string (const)
+  local 890:9 value: Node (const)
+  local 892:11 rhs: i32 (const)
+  callee 892:17 checkExpression -> @checkExpression
+  callee 894:7 Scope.clearNarrowing -> @Scope.clearNarrowing
+  callee 896:49 TypeTable.assignable -> @TypeTable.assignable
+  local 897:13 got: string (const)
+  callee 897:19 TypeTable.typeName -> @TypeTable.typeName
+  callee 898:14 CheckContext.errorType -> @CheckContext.errorType
+  callee 898:62 TypeTable.typeName -> @TypeTable.typeName
+  callee 902:7 isBitwiseCompound -> @isBitwiseCompound
+  local 906:11 bits: i32 (const)
+  callee 906:18 checkExpression -> @checkExpression
+  callee 908:7 Scope.clearNarrowing -> @Scope.clearNarrowing
+  callee 910:12 checkBitwiseAssignOperands -> @checkBitwiseAssignOperands
+  local 926:9 target: i32 (const)
+  callee 926:18 checkExpression -> @checkExpression
+  local 927:9 rhs: i32 (const)
+  callee 927:15 checkExpression -> @checkExpression
+  callee 931:31 literalHint -> @literalHint
+  callee 934:5 Scope.clearNarrowing -> @Scope.clearNarrowing
+  callee 939:8 isNumeric -> @isNumeric
+  callee 940:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 942:81 TypeTable.typeName -> @TypeTable.typeName
+  callee 942:113 TypeTable.typeName -> @TypeTable.typeName
 function checkImportedBuiltin(ctx: CheckContext, expr: Node, scope: Scope, imported: BuiltinExport): i32 -> @checkImportedBuiltin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.errorType checkBuiltinFunctionNamed checkImportedDottedBuiltin nish_panic_index nish_str_concat
@@ -3438,10 +3452,10 @@ function checkImportedBuiltin(ctx: CheckContext, expr: Node, scope: Scope, impor
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkImportedDottedBuiltin#2 checkBuiltinFunctionNamed#2
   pointer imported: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 929:9 callee: Node (const)
-  callee 931:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 935:7 checkImportedDottedBuiltin -> @checkImportedDottedBuiltin
-  callee 936:7 checkBuiltinFunctionNamed -> @checkBuiltinFunctionNamed
+  local 961:9 callee: Node (const)
+  callee 963:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 967:7 checkImportedDottedBuiltin -> @checkImportedDottedBuiltin
+  callee 968:7 checkBuiltinFunctionNamed -> @checkBuiltinFunctionNamed
 function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 -> @checkCall
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: want
@@ -3450,36 +3464,36 @@ function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   pointer expr: size=40 writesThrough=true captured=true passedTo=checkMethodCall#1 checkBuiltinCall#1 CheckContext.errorType#1 checkGenericCall#1 checkImportedBuiltin#1 checkResultConstructor#1 checkBuiltinFunction#1 CheckContext.errorType#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 isValueReceiver#2 checkMethodCall#2 checkBuiltinCall#2 checkGenericCall#3 checkImportedBuiltin#2 checkResultConstructor#2 checkBuiltinFunction#2 checkExpression#2
   stackSites=0 stackLocals=0
-  local 940:9 callee: Node (const)
-  callee 942:12 checkExpression -> @checkExpression
-  callee 947:12 isValueReceiver -> @isValueReceiver
-  callee 948:9 checkMethodCall -> @checkMethodCall
-  callee 949:9 checkBuiltinCall -> @checkBuiltinCall
-  callee 952:12 CheckContext.errorType -> @CheckContext.errorType
-  local 954:9 template: TemplateInfo | null (const)
-  callee 954:20 CheckContext.template -> @CheckContext.template
-  callee 956:12 checkGenericCall -> @checkGenericCall
-  local 958:9 sig: FunctionSig | null (const)
-  callee 958:15 CheckContext.signature -> @CheckContext.signature
-  local 962:11 imported: BuiltinExport | null (const)
-  callee 962:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
-  callee 964:14 checkImportedBuiltin -> @checkImportedBuiltin
-  callee 966:9 isResultConstructor -> @isResultConstructor
-  callee 967:14 checkResultConstructor -> @checkResultConstructor
-  callee 969:9 isBuiltinFunction -> @isBuiltinFunction
-  callee 970:14 checkBuiltinFunction -> @checkBuiltinFunction
-  callee 972:12 CheckContext.errorType -> @CheckContext.errorType
-  local 974:9 args: Node (const)
-  callee 976:12 CheckContext.errorType -> @CheckContext.errorType
-  local 981:7 i: i32 (let)
-  local 983:11 arg: Node (const)
-  local 984:11 got: i32 (const)
-  callee 984:17 checkExpression -> @checkExpression
-  callee 985:29 TypeTable.assignable -> @TypeTable.assignable
-  local 986:13 want: string (const)
-  callee 986:20 TypeTable.typeName -> @TypeTable.typeName
-  callee 987:7 CheckContext.error -> @CheckContext.error
-  callee 989:72 TypeTable.typeName -> @TypeTable.typeName
+  local 972:9 callee: Node (const)
+  callee 974:12 checkExpression -> @checkExpression
+  callee 979:12 isValueReceiver -> @isValueReceiver
+  callee 980:9 checkMethodCall -> @checkMethodCall
+  callee 981:9 checkBuiltinCall -> @checkBuiltinCall
+  callee 984:12 CheckContext.errorType -> @CheckContext.errorType
+  local 986:9 template: TemplateInfo | null (const)
+  callee 986:20 CheckContext.template -> @CheckContext.template
+  callee 988:12 checkGenericCall -> @checkGenericCall
+  local 990:9 sig: FunctionSig | null (const)
+  callee 990:15 CheckContext.signature -> @CheckContext.signature
+  local 994:11 imported: BuiltinExport | null (const)
+  callee 994:22 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
+  callee 996:14 checkImportedBuiltin -> @checkImportedBuiltin
+  callee 998:9 isResultConstructor -> @isResultConstructor
+  callee 999:14 checkResultConstructor -> @checkResultConstructor
+  callee 1001:9 isBuiltinFunction -> @isBuiltinFunction
+  callee 1002:14 checkBuiltinFunction -> @checkBuiltinFunction
+  callee 1004:12 CheckContext.errorType -> @CheckContext.errorType
+  local 1006:9 args: Node (const)
+  callee 1008:12 CheckContext.errorType -> @CheckContext.errorType
+  local 1013:7 i: i32 (let)
+  local 1015:11 arg: Node (const)
+  local 1016:11 got: i32 (const)
+  callee 1016:17 checkExpression -> @checkExpression
+  callee 1017:29 TypeTable.assignable -> @TypeTable.assignable
+  local 1018:13 want: string (const)
+  callee 1018:20 TypeTable.typeName -> @TypeTable.typeName
+  callee 1019:7 CheckContext.error -> @CheckContext.error
+  callee 1021:72 TypeTable.typeName -> @TypeTable.typeName
 function checkArguments(ctx: CheckContext, args: Node, scope: Scope, want: i32): void -> @checkArguments [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: want
@@ -3488,8 +3502,8 @@ function checkArguments(ctx: CheckContext, args: Node, scope: Scope, want: i32):
   pointer args: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local 1000:14 arg: Node (const)
-  callee 1001:5 checkExpression -> @checkExpression
+  local 1032:14 arg: Node (const)
+  callee 1033:5 checkExpression -> @checkExpression
 function clearNarrowingsAssignedIn(ctx: CheckContext, node: Node, scope: Scope): void -> @clearNarrowingsAssignedIn [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: clearNarrowingsAssignedIn clearTarget nish_panic_index nish_str_eq writesLeft
@@ -3497,20 +3511,20 @@ function clearNarrowingsAssignedIn(ctx: CheckContext, node: Node, scope: Scope):
   pointer node: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=false captured=false passedTo=clearTarget#1 clearTarget#1 clearNarrowingsAssignedIn#2
   stackSites=0 stackLocals=0
-  callee 1013:33 writesLeft -> @writesLeft
-  callee 1014:5 clearTarget -> @clearTarget
-  callee 1016:5 clearTarget -> @clearTarget
-  local 1018:14 child: Node (const)
-  callee 1019:5 clearNarrowingsAssignedIn -> @clearNarrowingsAssignedIn
+  callee 1045:33 writesLeft -> @writesLeft
+  callee 1046:5 clearTarget -> @clearTarget
+  callee 1048:5 clearTarget -> @clearTarget
+  local 1050:14 child: Node (const)
+  callee 1051:5 clearNarrowingsAssignedIn -> @clearNarrowingsAssignedIn
 function clearTarget(target: Node, scope: Scope): void -> @clearTarget
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: Scope.clearNarrowing Scope.lookup
   pointer target: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=false captured=false passedTo=Scope.lookup#0 Scope.clearNarrowing#0
   stackSites=0 stackLocals=0
-  local 1027:9 local: Local | null (const)
-  callee 1027:17 Scope.lookup -> @Scope.lookup
-  callee 1029:5 Scope.clearNarrowing -> @Scope.clearNarrowing
+  local 1059:9 local: Local | null (const)
+  callee 1059:17 Scope.lookup -> @Scope.lookup
+  callee 1061:5 Scope.clearNarrowing -> @Scope.clearNarrowing
 module self/generics.ts
 import LANGUAGE from "./branding" -> const LANGUAGE
 import CheckContext from "./context" -> struct CheckContext
@@ -4297,7 +4311,7 @@ function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void ->
   callee 174:19 TypeTable.typeName -> @TypeTable.typeName
   callee 175:7 CheckContext.error -> @CheckContext.error
   callee 175:44 TypeTable.typeName -> @TypeTable.typeName
-  callee 180:3 StringMap.set -> @StringMap.set
+  callee 186:3 StringMap.set -> @StringMap.set
 function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectMethod
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: owner
@@ -4306,19 +4320,19 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void -
   pointer owner: size=104 writesThrough=true captured=true passedTo=StructInfo.field#0
   pointer decl: size=40 writesThrough=true captured=true passedTo=FunctionSig.constructor#3
   stackSites=0 stackLocals=0
-  local 185:9 name: string (const)
-  local 186:9 what: string (const)
-  callee 187:7 StructInfo.field -> @StructInfo.field
-  callee 187:37 StringMap.has -> @StringMap.has
-  callee 188:5 CheckContext.error -> @CheckContext.error
-  local 191:9 symbol: string (const)
-  local 192:9 sig: FunctionSig (const)
-  callee 192:15 new FunctionSig -> @FunctionSig.constructor
-  callee 197:3 collectParams -> @collectParams
-  local 198:9 returnAnnotation: Node (const)
-  callee 200:5 CheckContext.error -> @CheckContext.error
-  callee 206:22 resolveType -> @resolveType
-  callee 208:3 StringMap.set -> @StringMap.set
+  local 191:9 name: string (const)
+  local 192:9 what: string (const)
+  callee 193:7 StructInfo.field -> @StructInfo.field
+  callee 193:37 StringMap.has -> @StringMap.has
+  callee 194:5 CheckContext.error -> @CheckContext.error
+  local 197:9 symbol: string (const)
+  local 198:9 sig: FunctionSig (const)
+  callee 198:15 new FunctionSig -> @FunctionSig.constructor
+  callee 203:3 collectParams -> @collectParams
+  local 204:9 returnAnnotation: Node (const)
+  callee 206:5 CheckContext.error -> @CheckContext.error
+  callee 212:22 resolveType -> @resolveType
+  callee 214:3 StringMap.set -> @StringMap.set
 function collectConstructor(ctx: CheckContext, owner: StructInfo, decl: Node): void -> @collectConstructor
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: owner
@@ -4327,55 +4341,55 @@ function collectConstructor(ctx: CheckContext, owner: StructInfo, decl: Node): v
   pointer owner: size=104 writesThrough=true captured=true
   pointer decl: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 FunctionSig.constructor#3
   stackSites=0 stackLocals=0
-  callee 215:5 CheckContext.error -> @CheckContext.error
-  local 218:9 symbol: string (const)
-  local 219:9 sig: FunctionSig (const)
-  callee 219:15 new FunctionSig -> @FunctionSig.constructor
-  callee 225:3 collectParams -> @collectParams
+  callee 221:5 CheckContext.error -> @CheckContext.error
+  local 224:9 symbol: string (const)
+  local 225:9 sig: FunctionSig (const)
+  callee 225:15 new FunctionSig -> @FunctionSig.constructor
+  callee 231:3 collectParams -> @collectParams
 function collectStructMembers(ctx: CheckContext, info: StructInfo): void -> @collectStructMembers [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckedProgram.struct collectConstructor collectField collectMethod computeLayout nish_array_grow nish_panic_index nish_str_concat
   pointer ctx: size=120 writesThrough=true captured=false passedTo=CheckContext.error#0 CheckContext.error#0 collectField#0 collectMethod#0 collectConstructor#0 collectField#0 computeLayout#0
   pointer info: size=104 writesThrough=true captured=true passedTo=collectField#1 collectMethod#1 collectConstructor#1 collectField#1 computeLayout#1
   stackSites=0 stackLocals=0
-  local 235:9 decl: Node (const)
-  local 237:11 extendsName: Node (const)
-  callee 243:7 CheckContext.error -> @CheckContext.error
-  local 252:16 iface: Node (const)
-  local 253:13 target: StructInfo | null (const)
-  callee 253:22 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 255:9 CheckContext.error -> @CheckContext.error
-  local 260:16 member: Node (const)
-  callee 262:9 collectField -> @collectField
-  callee 264:9 collectMethod -> @collectMethod
-  callee 266:9 collectConstructor -> @collectConstructor
-  local 270:16 member: Node (const)
-  callee 272:9 collectField -> @collectField
-  callee 276:3 computeLayout -> @computeLayout
+  local 241:9 decl: Node (const)
+  local 243:11 extendsName: Node (const)
+  callee 249:7 CheckContext.error -> @CheckContext.error
+  local 258:16 iface: Node (const)
+  local 259:13 target: StructInfo | null (const)
+  callee 259:22 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 261:9 CheckContext.error -> @CheckContext.error
+  local 266:16 member: Node (const)
+  callee 268:9 collectField -> @collectField
+  callee 270:9 collectMethod -> @collectMethod
+  callee 272:9 collectConstructor -> @collectConstructor
+  local 276:16 member: Node (const)
+  callee 278:9 collectField -> @collectField
+  callee 282:3 computeLayout -> @computeLayout
 function checkImplements(ctx: CheckContext, cls: StructInfo): void -> @checkImplements [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckedProgram.struct describeField nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32
   pointer ctx: size=120 writesThrough=true captured=false passedTo=CheckContext.error#0 describeField#0 describeField#0 CheckContext.error#0 describeField#0
   pointer cls: size=104 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 288:14 name: string (const)
-  local 289:11 iface: StructInfo | null (const)
-  callee 289:19 CheckedProgram.struct -> @CheckedProgram.struct
-  local 299:9 i: i32 (let)
-  local 301:13 want: FieldInfo (const)
-  local 303:15 got: FieldInfo (const)
-  callee 308:9 CheckContext.error -> @CheckContext.error
-  callee 310:92 describeField -> @describeField
-  callee 310:145 describeField -> @describeField
-  callee 314:7 CheckContext.error -> @CheckContext.error
-  callee 316:87 describeField -> @describeField
+  local 294:14 name: string (const)
+  local 295:11 iface: StructInfo | null (const)
+  callee 295:19 CheckedProgram.struct -> @CheckedProgram.struct
+  local 305:9 i: i32 (let)
+  local 307:13 want: FieldInfo (const)
+  local 309:15 got: FieldInfo (const)
+  callee 314:9 CheckContext.error -> @CheckContext.error
+  callee 316:92 describeField -> @describeField
+  callee 316:145 describeField -> @describeField
+  callee 320:7 CheckContext.error -> @CheckContext.error
+  callee 322:87 describeField -> @describeField
 function describeField(ctx: CheckContext, field: FieldInfo): string -> @describeField
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: TypeTable.typeName nish_str_concat
   pointer ctx: size=120 writesThrough=false captured=false
   pointer field: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 324:30 TypeTable.typeName -> @TypeTable.typeName
+  callee 330:30 TypeTable.typeName -> @TypeTable.typeName
 function noteStructNames(table: TypeTable, type: i32, out: StringSet): void -> @noteStructNames [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: type
@@ -4383,17 +4397,17 @@ function noteStructNames(table: TypeTable, type: i32, out: StringSet): void -> @
   pointer table: size=56 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0 TypeTable.isResult#0 noteStructNames#0 TypeTable.okOf#0 noteStructNames#0 TypeTable.errOf#0 TypeTable.refOf#0 noteStructNames#0
   pointer out: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 noteStructNames#2 noteStructNames#2 noteStructNames#2
   stackSites=0 stackLocals=0
-  callee 333:7 TypeTable.isStruct -> @TypeTable.isStruct
-  callee 334:5 StringSet.add -> @StringSet.add
-  callee 334:13 TypeTable.nameOf -> @TypeTable.nameOf
-  callee 339:7 TypeTable.isResult -> @TypeTable.isResult
-  callee 340:5 noteStructNames -> @noteStructNames
-  callee 340:28 TypeTable.okOf -> @TypeTable.okOf
-  callee 341:5 noteStructNames -> @noteStructNames
-  callee 341:28 TypeTable.errOf -> @TypeTable.errOf
-  local 344:9 inner: i32 (const)
-  callee 344:17 TypeTable.refOf -> @TypeTable.refOf
+  callee 339:7 TypeTable.isStruct -> @TypeTable.isStruct
+  callee 340:5 StringSet.add -> @StringSet.add
+  callee 340:13 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 345:7 TypeTable.isResult -> @TypeTable.isResult
   callee 346:5 noteStructNames -> @noteStructNames
+  callee 346:28 TypeTable.okOf -> @TypeTable.okOf
+  callee 347:5 noteStructNames -> @noteStructNames
+  callee 347:28 TypeTable.errOf -> @TypeTable.errOf
+  local 350:9 inner: i32 (const)
+  callee 350:17 TypeTable.refOf -> @TypeTable.refOf
+  callee 352:5 noteStructNames -> @noteStructNames
 function signatureStructNames(table: TypeTable, sig: FunctionSig, out: StringSet): void -> @signatureStructNames [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: nish_panic_index noteStructNames
@@ -4401,9 +4415,9 @@ function signatureStructNames(table: TypeTable, sig: FunctionSig, out: StringSet
   pointer sig: size=88 writesThrough=false captured=false
   pointer out: size=8 writesThrough=false captured=false passedTo=noteStructNames#2 noteStructNames#2
   stackSites=0 stackLocals=0
-  local 357:7 i: i32 (let)
-  callee 359:5 noteStructNames -> @noteStructNames
-  callee 362:3 noteStructNames -> @noteStructNames
+  local 363:7 i: i32 (let)
+  callee 365:5 noteStructNames -> @noteStructNames
+  callee 368:3 noteStructNames -> @noteStructNames
 function referencedStructNames(table: TypeTable, info: StructInfo, out: StringSet): void -> @referencedStructNames [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: noteStructNames signatureStructNames
@@ -4411,29 +4425,29 @@ function referencedStructNames(table: TypeTable, info: StructInfo, out: StringSe
   pointer info: size=104 writesThrough=false captured=false
   pointer out: size=8 writesThrough=false captured=false passedTo=noteStructNames#2 signatureStructNames#2 signatureStructNames#2
   stackSites=0 stackLocals=0
-  local 370:14 field: FieldInfo (const)
-  callee 371:5 noteStructNames -> @noteStructNames
-  local 373:14 method: FunctionSig (const)
-  callee 374:5 signatureStructNames -> @signatureStructNames
-  local 376:9 ctor: FunctionSig | null (const)
-  callee 378:5 signatureStructNames -> @signatureStructNames
+  local 376:14 field: FieldInfo (const)
+  callee 377:5 noteStructNames -> @noteStructNames
+  local 379:14 method: FunctionSig (const)
+  callee 380:5 signatureStructNames -> @signatureStructNames
+  local 382:9 ctor: FunctionSig | null (const)
+  callee 384:5 signatureStructNames -> @signatureStructNames
 function coercesTo(ctx: CheckContext, from: i32, want: i32): boolean -> @coercesTo [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: from want
   calls: CheckedProgram.struct TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull nish_str_eq
   pointer ctx: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 389:20 TypeTable.isStruct -> @TypeTable.isStruct
-  local 392:9 target: i32 (const)
-  callee 392:18 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 393:8 TypeTable.isStruct -> @TypeTable.isStruct
-  local 396:9 source: StructInfo | null (const)
-  callee 396:18 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 396:37 TypeTable.nameOf -> @TypeTable.nameOf
-  local 397:9 wanted: StructInfo | null (const)
-  callee 397:18 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 397:37 TypeTable.nameOf -> @TypeTable.nameOf
-  local 404:14 name: string (const)
+  callee 395:20 TypeTable.isStruct -> @TypeTable.isStruct
+  local 398:9 target: i32 (const)
+  callee 398:18 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 399:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local 402:9 source: StructInfo | null (const)
+  callee 402:18 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 402:37 TypeTable.nameOf -> @TypeTable.nameOf
+  local 403:9 wanted: StructInfo | null (const)
+  callee 403:18 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 403:37 TypeTable.nameOf -> @TypeTable.nameOf
+  local 410:14 name: string (const)
 module self/members.ts
 import checkArrayMethod from "./arrays" -> function @checkArrayMethod
 import checkArrayProperty from "./arrays" -> function @checkArrayProperty
@@ -4615,8 +4629,8 @@ function checkMethodArguments(ctx: CheckContext, call: Node, callee: FunctionSig
 function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkNew [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckContext.errorType CheckedProgram.struct checkMethodArguments checkNewArray nish_panic_index nish_str_concat nish_str_from_i32
-  pointer ctx: size=120 writesThrough=true captured=false passedTo=CheckContext.errorType#0 checkNewArray#0 CheckContext.errorType#0 CheckContext.errorType#0 checkMethodArguments#0 CheckContext.error#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=checkNewArray#1 CheckContext.errorType#1 checkMethodArguments#1 CheckContext.error#1
+  pointer ctx: size=120 writesThrough=true captured=false passedTo=CheckContext.errorType#0 checkNewArray#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 checkMethodArguments#0 CheckContext.error#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=checkNewArray#1 CheckContext.errorType#1 CheckContext.errorType#1 checkMethodArguments#1 CheckContext.error#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkNewArray#3 checkMethodArguments#5
   stackSites=0 stackLocals=0
   local 230:9 callee: Node (const)
@@ -4629,18 +4643,19 @@ function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkNew
   callee 240:16 CheckedProgram.struct -> @CheckedProgram.struct
   callee 242:12 CheckContext.errorType -> @CheckContext.errorType
   callee 245:12 CheckContext.errorType -> @CheckContext.errorType
-  local 247:9 ctor: FunctionSig | null (const)
-  callee 249:5 checkMethodArguments -> @checkMethodArguments
-  callee 252:5 CheckContext.error -> @CheckContext.error
+  callee 252:12 CheckContext.errorType -> @CheckContext.errorType
+  local 254:9 ctor: FunctionSig | null (const)
+  callee 256:5 checkMethodArguments -> @checkMethodArguments
+  callee 259:5 CheckContext.error -> @CheckContext.error
 function takesDeclaredContext(value: Node): boolean -> @takesDeclaredContext [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index takesDeclaredContext
   pointer value: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 290:12 takesDeclaredContext -> @takesDeclaredContext
-  callee 293:12 takesDeclaredContext -> @takesDeclaredContext
-  callee 293:55 takesDeclaredContext -> @takesDeclaredContext
-  callee 296:12 takesDeclaredContext -> @takesDeclaredContext
+  callee 297:12 takesDeclaredContext -> @takesDeclaredContext
+  callee 300:12 takesDeclaredContext -> @takesDeclaredContext
+  callee 300:55 takesDeclaredContext -> @takesDeclaredContext
+  callee 303:12 takesDeclaredContext -> @takesDeclaredContext
 function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 -> @checkObjectLiteral [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: want
@@ -4649,35 +4664,35 @@ function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.error#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=1 stackLocals=1
-  callee 303:20 TypeTable.isStruct -> @TypeTable.isStruct
-  callee 303:39 TypeTable.stripNull -> @TypeTable.stripNull
-  callee 304:12 CheckContext.errorType -> @CheckContext.errorType
-  local 309:9 target: i32 (const)
-  callee 309:18 TypeTable.stripNull -> @TypeTable.stripNull
-  local 310:9 info: StructInfo | null (const)
-  callee 310:16 structOf -> @structOf
-  local 314:9 seen: string[] (const)
-  local 315:14 prop: Node (const)
-  local 319:11 field: FieldInfo | null (const)
-  callee 319:19 StructInfo.field -> @StructInfo.field
-  callee 321:7 CheckContext.error -> @CheckContext.error
-  local 324:9 duplicate: boolean (let)
-  local 325:16 name: string (const)
-  callee 331:7 CheckContext.error -> @CheckContext.error
-  local 335:11 value: Node (const)
-  local 336:11 context: i32 (const)
-  callee 336:21 takesDeclaredContext -> @takesDeclaredContext
-  local 337:11 got: i32 (const)
-  callee 337:17 checkExpression -> @checkExpression
-  callee 338:29 TypeTable.assignable -> @TypeTable.assignable
-  local 339:13 spelled: string (const)
-  callee 339:23 TypeTable.typeName -> @TypeTable.typeName
-  callee 340:7 CheckContext.error -> @CheckContext.error
-  callee 342:95 TypeTable.typeName -> @TypeTable.typeName
-  local 346:14 field: FieldInfo (const)
-  local 347:9 set: boolean (let)
-  local 348:16 name: string (const)
-  callee 354:7 CheckContext.error -> @CheckContext.error
+  callee 310:20 TypeTable.isStruct -> @TypeTable.isStruct
+  callee 310:39 TypeTable.stripNull -> @TypeTable.stripNull
+  callee 311:12 CheckContext.errorType -> @CheckContext.errorType
+  local 316:9 target: i32 (const)
+  callee 316:18 TypeTable.stripNull -> @TypeTable.stripNull
+  local 317:9 info: StructInfo | null (const)
+  callee 317:16 structOf -> @structOf
+  local 321:9 seen: string[] (const)
+  local 322:14 prop: Node (const)
+  local 326:11 field: FieldInfo | null (const)
+  callee 326:19 StructInfo.field -> @StructInfo.field
+  callee 328:7 CheckContext.error -> @CheckContext.error
+  local 331:9 duplicate: boolean (let)
+  local 332:16 name: string (const)
+  callee 338:7 CheckContext.error -> @CheckContext.error
+  local 342:11 value: Node (const)
+  local 343:11 context: i32 (const)
+  callee 343:21 takesDeclaredContext -> @takesDeclaredContext
+  local 344:11 got: i32 (const)
+  callee 344:17 checkExpression -> @checkExpression
+  callee 345:29 TypeTable.assignable -> @TypeTable.assignable
+  local 346:13 spelled: string (const)
+  callee 346:23 TypeTable.typeName -> @TypeTable.typeName
+  callee 347:7 CheckContext.error -> @CheckContext.error
+  callee 349:95 TypeTable.typeName -> @TypeTable.typeName
+  local 353:14 field: FieldInfo (const)
+  local 354:9 set: boolean (let)
+  local 355:16 name: string (const)
+  callee 361:7 CheckContext.error -> @CheckContext.error
 function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkMemberAssignment [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.errorAtProperty CheckContext.errorType CheckContext.textOf StructInfo.field TypeTable.isArray TypeTable.isResult TypeTable.isStruct TypeTable.typeName assignInto assignableReadonly checkExpression isValueReceiver nish_panic_index nish_str_concat nish_str_eq structOf
@@ -4685,32 +4700,32 @@ function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32
   pointer expr: size=40 writesThrough=false captured=false passedTo=assignInto#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=isValueReceiver#2 checkExpression#2 assignInto#2
   stackSites=0 stackLocals=0
-  local 363:9 target: Node (const)
-  local 364:9 receiverExpr: Node (const)
-  callee 365:8 isValueReceiver -> @isValueReceiver
-  callee 366:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 366:56 CheckContext.textOf -> @CheckContext.textOf
-  local 368:9 receiver: i32 (const)
-  callee 368:20 checkExpression -> @checkExpression
-  callee 372:7 TypeTable.isArray -> @TypeTable.isArray
+  local 370:9 target: Node (const)
+  local 371:9 receiverExpr: Node (const)
+  callee 372:8 isValueReceiver -> @isValueReceiver
   callee 373:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 375:41 TypeTable.typeName -> @TypeTable.typeName
-  callee 378:7 TypeTable.isResult -> @TypeTable.isResult
-  callee 379:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 381:49 TypeTable.typeName -> @TypeTable.typeName
-  callee 384:8 TypeTable.isStruct -> @TypeTable.isStruct
-  callee 385:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 387:58 TypeTable.typeName -> @TypeTable.typeName
-  local 390:9 info: StructInfo | null (const)
-  callee 390:16 structOf -> @structOf
-  local 394:9 field: FieldInfo | null (const)
-  callee 394:17 StructInfo.field -> @StructInfo.field
-  local 396:11 kind: string (const)
-  callee 397:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee 400:26 assignableReadonly -> @assignableReadonly
-  local 401:11 where: string (const)
-  callee 402:12 CheckContext.errorType -> @CheckContext.errorType
-  callee 407:10 assignInto -> @assignInto
+  callee 373:56 CheckContext.textOf -> @CheckContext.textOf
+  local 375:9 receiver: i32 (const)
+  callee 375:20 checkExpression -> @checkExpression
+  callee 379:7 TypeTable.isArray -> @TypeTable.isArray
+  callee 380:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 382:41 TypeTable.typeName -> @TypeTable.typeName
+  callee 385:7 TypeTable.isResult -> @TypeTable.isResult
+  callee 386:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 388:49 TypeTable.typeName -> @TypeTable.typeName
+  callee 391:8 TypeTable.isStruct -> @TypeTable.isStruct
+  callee 392:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 394:58 TypeTable.typeName -> @TypeTable.typeName
+  local 397:9 info: StructInfo | null (const)
+  callee 397:16 structOf -> @structOf
+  local 401:9 field: FieldInfo | null (const)
+  callee 401:17 StructInfo.field -> @StructInfo.field
+  local 403:11 kind: string (const)
+  callee 404:5 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee 407:26 assignableReadonly -> @assignableReadonly
+  local 408:11 where: string (const)
+  callee 409:12 CheckContext.errorType -> @CheckContext.errorType
+  callee 414:10 assignInto -> @assignInto
 function assignableReadonly(ctx: CheckContext, info: StructInfo, target: Node, receiverExpr: Node, op: string): boolean -> @assignableReadonly
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: StructInfo.field nish_str_eq
@@ -4719,9 +4734,9 @@ function assignableReadonly(ctx: CheckContext, info: StructInfo, target: Node, r
   pointer target: size=40 writesThrough=false captured=false
   pointer receiverExpr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 421:9 current: FunctionSig | null (const)
-  callee 428:7 StructInfo.field -> @StructInfo.field
-  local 431:9 owner: StructInfo | null (const)
+  local 428:9 current: FunctionSig | null (const)
+  callee 435:7 StructInfo.field -> @StructInfo.field
+  local 438:9 owner: StructInfo | null (const)
 function checkStringProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 -> @checkStringProperty [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: receiver
@@ -4729,9 +4744,9 @@ function checkStringProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 
   pointer ctx: size=120 writesThrough=true captured=false passedTo=CheckContext.numberType#0 CheckContext.errorAtProperty#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
   stackSites=0 stackLocals=0
-  callee 446:12 CheckContext.numberType -> @CheckContext.numberType
-  callee 448:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
-  callee 448:69 TypeTable.typeName -> @TypeTable.typeName
+  callee 453:12 CheckContext.numberType -> @CheckContext.numberType
+  callee 455:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  callee 455:69 TypeTable.typeName -> @TypeTable.typeName
 function checkIndexArgument(ctx: CheckContext, arg: Node, scope: Scope, name: string): void -> @checkIndexArgument
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckContext.numberType TypeTable.typeName checkExpression isNumeric nish_str_concat
@@ -4739,12 +4754,12 @@ function checkIndexArgument(ctx: CheckContext, arg: Node, scope: Scope, name: st
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local 453:9 type: i32 (const)
-  callee 453:16 checkExpression -> @checkExpression
-  callee 453:49 CheckContext.numberType -> @CheckContext.numberType
-  callee 454:28 isNumeric -> @isNumeric
-  callee 455:5 CheckContext.error -> @CheckContext.error
-  callee 455:63 TypeTable.typeName -> @TypeTable.typeName
+  local 460:9 type: i32 (const)
+  callee 460:16 checkExpression -> @checkExpression
+  callee 460:49 CheckContext.numberType -> @CheckContext.numberType
+  callee 461:28 isNumeric -> @isNumeric
+  callee 462:5 CheckContext.error -> @CheckContext.error
+  callee 462:63 TypeTable.typeName -> @TypeTable.typeName
 function checkStringArgument(ctx: CheckContext, arg: Node, scope: Scope, name: string): void -> @checkStringArgument
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error TypeTable.typeName checkExpression nish_str_concat
@@ -4752,10 +4767,10 @@ function checkStringArgument(ctx: CheckContext, arg: Node, scope: Scope, name: s
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
-  local 460:9 type: i32 (const)
-  callee 460:16 checkExpression -> @checkExpression
-  callee 465:5 CheckContext.error -> @CheckContext.error
-  callee 465:75 TypeTable.typeName -> @TypeTable.typeName
+  local 467:9 type: i32 (const)
+  callee 467:16 checkExpression -> @checkExpression
+  callee 472:5 CheckContext.error -> @CheckContext.error
+  callee 472:75 TypeTable.typeName -> @TypeTable.typeName
 function checkStringMethod(ctx: CheckContext, call: Node, access: Node, args: Node, scope: Scope): i32 -> @checkStringMethod [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.errorAtProperty CheckContext.errorType CheckContext.numberType checkBuiltinArity checkIndexArgument checkStringArgument nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32
@@ -4765,23 +4780,23 @@ function checkStringMethod(ctx: CheckContext, call: Node, access: Node, args: No
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkIndexArgument#2 checkIndexArgument#2 checkIndexArgument#2 checkStringArgument#2 checkStringArgument#2
   stackSites=0 stackLocals=0
-  local 476:9 name: string (const)
-  local 477:9 count: i32 (const)
-  callee 479:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 480:7 checkIndexArgument -> @checkIndexArgument
-  callee 482:12 CheckContext.numberType -> @CheckContext.numberType
-  callee 486:14 CheckContext.errorType -> @CheckContext.errorType
-  local 488:16 arg: Node (const)
-  callee 489:7 checkIndexArgument -> @checkIndexArgument
-  callee 495:14 CheckContext.errorType -> @CheckContext.errorType
-  local 497:16 arg: Node (const)
-  callee 498:7 checkIndexArgument -> @checkIndexArgument
-  callee 503:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 504:7 checkStringArgument -> @checkStringArgument
-  callee 506:12 CheckContext.numberType -> @CheckContext.numberType
-  callee 509:9 checkBuiltinArity -> @checkBuiltinArity
-  callee 510:7 checkStringArgument -> @checkStringArgument
-  callee 514:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
+  local 483:9 name: string (const)
+  local 484:9 count: i32 (const)
+  callee 486:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 487:7 checkIndexArgument -> @checkIndexArgument
+  callee 489:12 CheckContext.numberType -> @CheckContext.numberType
+  callee 493:14 CheckContext.errorType -> @CheckContext.errorType
+  local 495:16 arg: Node (const)
+  callee 496:7 checkIndexArgument -> @checkIndexArgument
+  callee 502:14 CheckContext.errorType -> @CheckContext.errorType
+  local 504:16 arg: Node (const)
+  callee 505:7 checkIndexArgument -> @checkIndexArgument
+  callee 510:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 511:7 checkStringArgument -> @checkStringArgument
+  callee 513:12 CheckContext.numberType -> @CheckContext.numberType
+  callee 516:9 checkBuiltinArity -> @checkBuiltinArity
+  callee 517:7 checkStringArgument -> @checkStringArgument
+  callee 521:3 CheckContext.errorAtProperty -> @CheckContext.errorAtProperty
 module self/emit_util.ts
 import CheckedProgram from "./program" -> struct CheckedProgram
 import inlineElementStruct from "./program" -> function @inlineElementStruct
@@ -12991,9 +13006,9 @@ function Checker.declareEnum(this: Checker, stmt: Node): void -> @Checker.declar
   callee 322:5 CheckedProgram.addEnum -> @CheckedProgram.addEnum
 function Checker.collectFunction(this: Checker, stmt: Node): void -> @Checker.collectFunction [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: CheckContext.addFunction CheckContext.error Checker.nameTaken Checker.registerTemplate StringMap.set collectFunctionSignature isGenericFunction markEntryMain nish_panic_index nish_str_concat nish_str_eq rejectDollarInSymbolName
+  calls: CheckContext.addFunction CheckContext.error Checker.nameTaken Checker.registerTemplate StringMap.has StringMap.set collectFunctionSignature isGenericFunction markEntryMain nish_panic_index nish_str_concat nish_str_eq rejectDollarInSymbolName
   pointer this: size=16 writesThrough=false captured=false passedTo=Checker.registerTemplate#0 Checker.nameTaken#0
-  pointer stmt: size=40 writesThrough=true captured=true passedTo=isGenericFunction#0 Checker.registerTemplate#1 collectFunctionSignature#1
+  pointer stmt: size=40 writesThrough=true captured=true passedTo=isGenericFunction#0 Checker.registerTemplate#1 collectFunctionSignature#1 CheckContext.error#1
   stackSites=0 stackLocals=0
   callee 327:9 isGenericFunction -> @isGenericFunction
   callee 328:7 Checker.registerTemplate -> @Checker.registerTemplate
@@ -13001,49 +13016,54 @@ function Checker.collectFunction(this: Checker, stmt: Node): void -> @Checker.co
   callee 331:17 collectFunctionSignature -> @collectFunctionSignature
   local 332:11 name: string (const)
   callee 333:9 rejectDollarInSymbolName -> @rejectDollarInSymbolName
-  callee 336:9 Checker.nameTaken -> @Checker.nameTaken
-  callee 337:7 CheckContext.error -> @CheckContext.error
-  callee 340:5 CheckContext.addFunction -> @CheckContext.addFunction
-  callee 342:7 StringMap.set -> @StringMap.set
-  callee 349:9 CheckContext.error -> @CheckContext.error
-  callee 351:7 markEntryMain -> @markEntryMain
+  callee 343:9 StringMap.has -> @StringMap.has
+  callee 343:36 StringMap.has -> @StringMap.has
+  callee 344:7 CheckContext.error -> @CheckContext.error
+  callee 347:9 StringMap.has -> @StringMap.has
+  callee 348:7 CheckContext.error -> @CheckContext.error
+  callee 351:9 Checker.nameTaken -> @Checker.nameTaken
+  callee 352:7 CheckContext.error -> @CheckContext.error
+  callee 355:5 CheckContext.addFunction -> @CheckContext.addFunction
+  callee 357:7 StringMap.set -> @StringMap.set
+  callee 364:9 CheckContext.error -> @CheckContext.error
+  callee 366:7 markEntryMain -> @markEntryMain
 function Checker.registerTemplate(this: Checker, stmt: Node): void -> @Checker.registerTemplate [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckedProgram.addTemplate Checker.nameTaken StringSet.add StringSet.constructor TemplateInfo.constructor collectTypeParamNames isExported mentionsTypeParam nish_alloc_struct nish_panic_index nish_str_at nish_str_concat nish_str_eq rejectDollarInSymbolName
   pointer this: size=16 writesThrough=false captured=false passedTo=Checker.nameTaken#0
   pointer stmt: size=40 writesThrough=true captured=true passedTo=CheckContext.error#1 TemplateInfo.constructor#2 isExported#0 collectTypeParamNames#0
   stackSites=1 stackLocals=1
-  local 362:11 nameNode: Node (const)
-  local 363:11 name: string (const)
-  callee 369:7 CheckContext.error -> @CheckContext.error
-  callee 379:7 CheckContext.error -> @CheckContext.error
-  callee 382:9 rejectDollarInSymbolName -> @rejectDollarInSymbolName
-  callee 385:9 Checker.nameTaken -> @Checker.nameTaken
-  callee 386:7 CheckContext.error -> @CheckContext.error
-  local 389:11 template: TemplateInfo (const)
-  callee 389:22 new TemplateInfo -> @TemplateInfo.constructor
-  callee 390:25 isExported -> @isExported
-  callee 391:27 collectTypeParamNames -> @collectTypeParamNames
-  callee 393:7 CheckContext.error -> @CheckContext.error
-  local 403:11 parameters: Node (const)
-  local 404:16 param: string (const)
-  local 405:13 names: StringSet (const)
-  callee 405:21 new StringSet -> @StringSet.constructor
-  callee 406:7 StringSet.add -> @StringSet.add
-  local 407:11 mentioned: boolean (let)
-  local 408:18 declared: Node (const)
-  local 409:15 annotation: Node (const)
-  callee 410:44 mentionsTypeParam -> @mentionsTypeParam
-  callee 417:7 CheckContext.error -> @CheckContext.error
-  callee 424:5 CheckedProgram.addTemplate -> @CheckedProgram.addTemplate
+  local 377:11 nameNode: Node (const)
+  local 378:11 name: string (const)
+  callee 384:7 CheckContext.error -> @CheckContext.error
+  callee 394:7 CheckContext.error -> @CheckContext.error
+  callee 397:9 rejectDollarInSymbolName -> @rejectDollarInSymbolName
+  callee 400:9 Checker.nameTaken -> @Checker.nameTaken
+  callee 401:7 CheckContext.error -> @CheckContext.error
+  local 404:11 template: TemplateInfo (const)
+  callee 404:22 new TemplateInfo -> @TemplateInfo.constructor
+  callee 405:25 isExported -> @isExported
+  callee 406:27 collectTypeParamNames -> @collectTypeParamNames
+  callee 408:7 CheckContext.error -> @CheckContext.error
+  local 418:11 parameters: Node (const)
+  local 419:16 param: string (const)
+  local 420:13 names: StringSet (const)
+  callee 420:21 new StringSet -> @StringSet.constructor
+  callee 421:7 StringSet.add -> @StringSet.add
+  local 422:11 mentioned: boolean (let)
+  local 423:18 declared: Node (const)
+  local 424:15 annotation: Node (const)
+  callee 425:44 mentionsTypeParam -> @mentionsTypeParam
+  callee 432:7 CheckContext.error -> @CheckContext.error
+  callee 439:5 CheckedProgram.addTemplate -> @CheckedProgram.addTemplate
 function Checker.drainInstantiations(this: Checker): void -> @Checker.drainInstantiations [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Checker.checkInstanceBody nish_array_grow nish_panic_index
   pointer this: size=16 writesThrough=false captured=false passedTo=Checker.checkInstanceBody#0
   stackSites=0 stackLocals=0
-  local 433:9 at: i32 (let)
-  local 435:13 info: Instantiation (const)
-  callee 440:7 Checker.checkInstanceBody -> @Checker.checkInstanceBody
+  local 448:9 at: i32 (let)
+  local 450:13 info: Instantiation (const)
+  callee 455:7 Checker.checkInstanceBody -> @Checker.checkInstanceBody
 function Checker.checkInstanceBody(this: Checker, info: Instantiation): void -> @Checker.checkInstanceBody [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: info
@@ -13051,41 +13071,41 @@ function Checker.checkInstanceBody(this: Checker, info: Instantiation): void -> 
   pointer this: size=16 writesThrough=false captured=false passedTo=Checker.checkFunctionBody#0
   pointer info: size=88 writesThrough=true captured=true passedTo=CheckedProgram.enterInstance#1
   stackSites=0 stackLocals=0
-  local 447:11 savedBindings: StringMap (const)
-  local 448:11 savedInstance: Instantiation | null (const)
-  callee 449:5 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  callee 452:5 Checker.checkFunctionBody -> @Checker.checkFunctionBody
-  callee 455:5 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local 462:11 savedBindings: StringMap (const)
+  local 463:11 savedInstance: Instantiation | null (const)
+  callee 464:5 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  callee 467:5 Checker.checkFunctionBody -> @Checker.checkFunctionBody
+  callee 470:5 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
 function Checker.collectConstants(this: Checker, stmt: Node): void -> @Checker.collectConstants [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckedProgram.addConstant Checker.nameTaken ConstInfo.constructor TypeTable.typeName isExported nish_alloc_struct nish_panic_index nish_str_concat resolveType
   pointer this: size=16 writesThrough=false captured=false passedTo=Checker.nameTaken#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=isExported#0
   stackSites=0 stackLocals=0
-  local 465:11 exported: boolean (const)
-  callee 465:22 isExported -> @isExported
-  local 466:16 decl: Node (const)
-  local 467:13 name: string (const)
-  callee 469:9 CheckContext.error -> @CheckContext.error
-  callee 473:9 CheckContext.error -> @CheckContext.error
-  local 476:13 type: i32 (const)
-  callee 476:20 resolveType -> @resolveType
-  local 485:15 spelled: string (const)
-  callee 485:25 TypeTable.typeName -> @TypeTable.typeName
-  callee 486:9 CheckContext.error -> @CheckContext.error
-  callee 492:11 Checker.nameTaken -> @Checker.nameTaken
-  callee 493:9 CheckContext.error -> @CheckContext.error
-  local 496:13 info: ConstInfo (const)
-  callee 496:20 new ConstInfo -> @ConstInfo.constructor
-  callee 499:7 CheckedProgram.addConstant -> @CheckedProgram.addConstant
+  local 480:11 exported: boolean (const)
+  callee 480:22 isExported -> @isExported
+  local 481:16 decl: Node (const)
+  local 482:13 name: string (const)
+  callee 484:9 CheckContext.error -> @CheckContext.error
+  callee 488:9 CheckContext.error -> @CheckContext.error
+  local 491:13 type: i32 (const)
+  callee 491:20 resolveType -> @resolveType
+  local 500:15 spelled: string (const)
+  callee 500:25 TypeTable.typeName -> @TypeTable.typeName
+  callee 501:9 CheckContext.error -> @CheckContext.error
+  callee 507:11 Checker.nameTaken -> @Checker.nameTaken
+  callee 508:9 CheckContext.error -> @CheckContext.error
+  local 511:13 info: ConstInfo (const)
+  callee 511:20 new ConstInfo -> @ConstInfo.constructor
+  callee 514:7 CheckedProgram.addConstant -> @CheckedProgram.addConstant
 function Checker.checkBodies(this: Checker): void -> @Checker.checkBodies [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Checker.checkFunctionBody FunctionSig.definedIn
   pointer this: size=16 writesThrough=false captured=false passedTo=Checker.checkFunctionBody#0
   stackSites=0 stackLocals=0
-  local 511:16 sig: FunctionSig (const)
-  callee 512:11 FunctionSig.definedIn -> @FunctionSig.definedIn
-  callee 513:9 Checker.checkFunctionBody -> @Checker.checkFunctionBody
+  local 526:16 sig: FunctionSig (const)
+  callee 527:11 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee 528:9 Checker.checkFunctionBody -> @Checker.checkFunctionBody
 function Checker.checkFunctionBody(this: Checker, sig: FunctionSig): void -> @Checker.checkFunctionBody [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: sig
@@ -13093,63 +13113,63 @@ function Checker.checkFunctionBody(this: Checker, sig: FunctionSig): void -> @Ch
   pointer this: size=16 writesThrough=false captured=false
   pointer sig: size=88 writesThrough=true captured=true passedTo=FunctionSig.body#0 checkResultLocalsHandled#1 checkPerformance#1 nameOf#0
   stackSites=0 stackLocals=0
-  local 523:11 scope: Scope (const)
-  callee 523:19 new Scope -> @Scope.constructor
-  local 524:9 i: i32 (let)
-  local 528:13 local: Local (const)
-  callee 528:21 new Local -> @Local.constructor
-  callee 529:12 Scope.declare -> @Scope.declare
-  callee 530:9 CheckContext.error -> @CheckContext.error
-  local 534:11 body: Node | null (const)
-  callee 534:18 FunctionSig.body -> @FunctionSig.body
-  local 540:11 before: i32 (const)
-  callee 540:20 DiagnosticSink.count -> @DiagnosticSink.count
-  local 543:9 terminates: boolean (let)
-  callee 545:20 checkStatements -> @checkStatements
-  callee 547:7 checkReturnValue -> @checkReturnValue
-  local 549:9 failed: boolean (let)
-  callee 549:18 DiagnosticSink.count -> @DiagnosticSink.count
-  callee 558:7 checkResultLocalsHandled -> @checkResultLocalsHandled
-  local 563:13 unprovenIndices: Node[] (const)
-  callee 563:31 analyzeBounds -> @analyzeBounds
-  callee 568:7 checkPerformance -> @checkPerformance
-  local 572:13 beforeElements: i32 (const)
-  callee 572:30 DiagnosticSink.count -> @DiagnosticSink.count
-  callee 573:7 checkElementReferences -> @checkElementReferences
-  callee 574:11 DiagnosticSink.count -> @DiagnosticSink.count
-  local 583:13 spelled: string (const)
-  callee 583:23 TypeTable.typeName -> @TypeTable.typeName
-  callee 584:7 CheckContext.error -> @CheckContext.error
-  callee 585:9 nameOf -> @nameOf
+  local 538:11 scope: Scope (const)
+  callee 538:19 new Scope -> @Scope.constructor
+  local 539:9 i: i32 (let)
+  local 543:13 local: Local (const)
+  callee 543:21 new Local -> @Local.constructor
+  callee 544:12 Scope.declare -> @Scope.declare
+  callee 545:9 CheckContext.error -> @CheckContext.error
+  local 549:11 body: Node | null (const)
+  callee 549:18 FunctionSig.body -> @FunctionSig.body
+  local 555:11 before: i32 (const)
+  callee 555:20 DiagnosticSink.count -> @DiagnosticSink.count
+  local 558:9 terminates: boolean (let)
+  callee 560:20 checkStatements -> @checkStatements
+  callee 562:7 checkReturnValue -> @checkReturnValue
+  local 564:9 failed: boolean (let)
+  callee 564:18 DiagnosticSink.count -> @DiagnosticSink.count
+  callee 573:7 checkResultLocalsHandled -> @checkResultLocalsHandled
+  local 578:13 unprovenIndices: Node[] (const)
+  callee 578:31 analyzeBounds -> @analyzeBounds
+  callee 583:7 checkPerformance -> @checkPerformance
+  local 587:13 beforeElements: i32 (const)
+  callee 587:30 DiagnosticSink.count -> @DiagnosticSink.count
+  callee 588:7 checkElementReferences -> @checkElementReferences
+  callee 589:11 DiagnosticSink.count -> @DiagnosticSink.count
+  local 598:13 spelled: string (const)
+  callee 598:23 TypeTable.typeName -> @TypeTable.typeName
+  callee 599:7 CheckContext.error -> @CheckContext.error
+  callee 600:9 nameOf -> @nameOf
 function Checker.foldConstants(this: Checker): void -> @Checker.foldConstants [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: foldConstant
   pointer this: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 605:16 info: ConstInfo (const)
-  callee 611:9 foldConstant -> @foldConstant
+  local 620:16 info: ConstInfo (const)
+  callee 626:9 foldConstant -> @foldConstant
 function Checker.closeReachableStructs(this: Checker, declared: StructRegistry): void -> @Checker.closeReachableStructs [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Checker.reachAll StringSet.add StringSet.constructor nish_array_grow nish_panic_index referencedStructNames signatureStructNames
   pointer this: size=16 writesThrough=false captured=false passedTo=Checker.reachAll#0 Checker.reachAll#0
   pointer declared: size=16 writesThrough=false captured=false passedTo=Checker.reachAll#1 Checker.reachAll#1
   stackSites=4 stackLocals=4
-  local 626:11 pending: StructInfo[] (const)
-  local 627:11 seen: StringSet (const)
-  callee 627:18 new StringSet -> @StringSet.constructor
-  local 628:16 imp: ImportBinding (const)
-  local 629:13 struct: StructInfo | null (const)
-  callee 632:9 StringSet.add -> @StringSet.add
-  local 637:13 sig: FunctionSig | null (const)
-  local 639:15 names: StringSet (const)
-  callee 639:23 new StringSet -> @StringSet.constructor
-  callee 640:9 signatureStructNames -> @signatureStructNames
-  callee 641:9 Checker.reachAll -> @Checker.reachAll
-  local 645:13 info: StructInfo (const)
-  local 646:13 names: StringSet (const)
-  callee 646:21 new StringSet -> @StringSet.constructor
-  callee 650:7 referencedStructNames -> @referencedStructNames
-  callee 651:7 Checker.reachAll -> @Checker.reachAll
+  local 641:11 pending: StructInfo[] (const)
+  local 642:11 seen: StringSet (const)
+  callee 642:18 new StringSet -> @StringSet.constructor
+  local 643:16 imp: ImportBinding (const)
+  local 644:13 struct: StructInfo | null (const)
+  callee 647:9 StringSet.add -> @StringSet.add
+  local 652:13 sig: FunctionSig | null (const)
+  local 654:15 names: StringSet (const)
+  callee 654:23 new StringSet -> @StringSet.constructor
+  callee 655:9 signatureStructNames -> @signatureStructNames
+  callee 656:9 Checker.reachAll -> @Checker.reachAll
+  local 660:13 info: StructInfo (const)
+  local 661:13 names: StringSet (const)
+  callee 661:21 new StringSet -> @StringSet.constructor
+  callee 665:7 referencedStructNames -> @referencedStructNames
+  callee 666:7 Checker.reachAll -> @Checker.reachAll
 function Checker.reachAll(this: Checker, declared: StructRegistry, seen: StringSet, pending: StructInfo[], names: StringSet): void -> @Checker.reachAll [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Checker.reach StringSet.at StringSet.size
@@ -13159,10 +13179,10 @@ function Checker.reachAll(this: Checker, declared: StructRegistry, seen: StringS
   pointer pending: size=0 writesThrough=true captured=false passedTo=Checker.reach#3
   pointer names: size=8 writesThrough=false captured=false passedTo=StringSet.size#0 StringSet.at#0
   stackSites=0 stackLocals=0
-  local 656:9 i: i32 (let)
-  callee 657:16 StringSet.size -> @StringSet.size
-  callee 658:7 Checker.reach -> @Checker.reach
-  callee 658:43 StringSet.at -> @StringSet.at
+  local 671:9 i: i32 (let)
+  callee 672:16 StringSet.size -> @StringSet.size
+  callee 673:7 Checker.reach -> @Checker.reach
+  callee 673:43 StringSet.at -> @StringSet.at
 function Checker.reach(this: Checker, declared: StructRegistry, seen: StringSet, pending: StructInfo[], name: string): void -> @Checker.reach [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: name
@@ -13172,42 +13192,42 @@ function Checker.reach(this: Checker, declared: StructRegistry, seen: StringSet,
   pointer seen: size=8 writesThrough=false captured=false passedTo=StringSet.add#0
   pointer pending: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  callee 665:10 StringSet.add -> @StringSet.add
-  local 668:11 info: StructInfo | null (const)
-  callee 668:18 StructRegistry.get -> @StructRegistry.get
-  callee 672:10 StringMap.has -> @StringMap.has
-  callee 674:7 CheckedProgram.addStruct -> @CheckedProgram.addStruct
+  callee 680:10 StringSet.add -> @StringSet.add
+  local 683:11 info: StructInfo | null (const)
+  callee 683:18 StructRegistry.get -> @StructRegistry.get
+  callee 687:10 StringMap.has -> @StringMap.has
+  callee 689:7 CheckedProgram.addStruct -> @CheckedProgram.addStruct
 function Checker.bindImports(this: Checker, targets: CheckedProgram[]): void -> @Checker.bindImports [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Checker.bindImport nish_panic_index
   pointer this: size=16 writesThrough=false captured=false passedTo=Checker.bindImport#0
   pointer targets: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 680:9 i: i32 (let)
-  callee 682:7 Checker.bindImport -> @Checker.bindImport
+  local 695:9 i: i32 (let)
+  callee 697:7 Checker.bindImport -> @Checker.bindImport
 function Checker.bindBuiltinImport(this: Checker, index: i32): void -> @Checker.bindBuiltinImport [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: index
   calls: CheckContext.error CheckContext.errorAtSpecifier CheckedProgram.addBuiltinImport CheckedProgram.constant StringMap.get StringSet.has isNishModule nishExport nishModuleExports nishModuleNames nish_panic_index nish_str_concat nish_str_eq
   pointer this: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 698:11 imp: ImportBinding (const)
-  callee 699:10 isNishModule -> @isNishModule
-  callee 700:7 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  callee 702:81 nishModuleNames -> @nishModuleNames
-  local 706:11 exported: BuiltinExport | null (const)
-  callee 706:22 nishExport -> @nishExport
-  callee 708:7 CheckContext.error -> @CheckContext.error
-  callee 710:90 nishModuleExports -> @nishModuleExports
-  callee 714:9 StringSet.has -> @StringSet.has
-  callee 715:7 CheckContext.error -> @CheckContext.error
-  callee 720:9 StringMap.get -> @StringMap.get
-  callee 720:54 CheckedProgram.constant -> @CheckedProgram.constant
-  callee 721:7 CheckContext.error -> @CheckContext.error
-  local 724:9 origin: string (let)
-  local 725:16 other: ImportBinding (const)
-  callee 731:7 CheckContext.error -> @CheckContext.error
-  callee 735:5 CheckedProgram.addBuiltinImport -> @CheckedProgram.addBuiltinImport
+  local 713:11 imp: ImportBinding (const)
+  callee 714:10 isNishModule -> @isNishModule
+  callee 715:7 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  callee 717:81 nishModuleNames -> @nishModuleNames
+  local 721:11 exported: BuiltinExport | null (const)
+  callee 721:22 nishExport -> @nishExport
+  callee 723:7 CheckContext.error -> @CheckContext.error
+  callee 725:90 nishModuleExports -> @nishModuleExports
+  callee 729:9 StringSet.has -> @StringSet.has
+  callee 730:7 CheckContext.error -> @CheckContext.error
+  callee 735:9 StringMap.get -> @StringMap.get
+  callee 735:54 CheckedProgram.constant -> @CheckedProgram.constant
+  callee 736:7 CheckContext.error -> @CheckContext.error
+  local 739:9 origin: string (let)
+  local 740:16 other: ImportBinding (const)
+  callee 746:7 CheckContext.error -> @CheckContext.error
+  callee 750:5 CheckedProgram.addBuiltinImport -> @CheckedProgram.addBuiltinImport
 function Checker.bindImport(this: Checker, index: i32, target: CheckedProgram): void -> @Checker.bindImport [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: index
@@ -13215,30 +13235,30 @@ function Checker.bindImport(this: Checker, index: i32, target: CheckedProgram): 
   pointer this: size=16 writesThrough=false captured=false passedTo=Checker.bindBuiltinImport#0 Checker.bindConstantImport#0 Checker.bindStructImport#0
   pointer target: size=344 writesThrough=false captured=false passedTo=CheckedProgram.constant#0 CheckedProgram.struct#0 CheckedProgram.exported#0
   stackSites=0 stackLocals=0
-  local 739:11 imp: ImportBinding (const)
-  callee 742:9 isNishSpecifier -> @isNishSpecifier
-  callee 743:7 Checker.bindBuiltinImport -> @Checker.bindBuiltinImport
-  local 746:11 constant: ConstInfo | null (const)
-  callee 746:22 CheckedProgram.constant -> @CheckedProgram.constant
-  callee 748:7 Checker.bindConstantImport -> @Checker.bindConstantImport
-  local 751:11 struct: StructInfo | null (const)
-  callee 751:20 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 753:7 Checker.bindStructImport -> @Checker.bindStructImport
-  local 756:11 sig: FunctionSig | null (const)
-  callee 756:17 CheckedProgram.exported -> @CheckedProgram.exported
-  local 758:11 exists: boolean (let)
-  local 759:18 candidate: FunctionSig (const)
-  callee 764:7 CheckContext.error -> @CheckContext.error
-  callee 772:9 StringSet.has -> @StringSet.has
-  callee 773:7 CheckContext.error -> @CheckContext.error
-  local 782:11 clashAt: i32 (const)
-  callee 782:21 StringMap.get -> @StringMap.get
-  local 784:13 clash: FunctionSig (const)
-  local 785:11 origin: string (let)
-  local 786:18 other: ImportBinding (const)
-  local 787:15 bound: FunctionSig | null (const)
-  callee 792:7 CheckContext.error -> @CheckContext.error
-  callee 800:5 StringMap.set -> @StringMap.set
+  local 754:11 imp: ImportBinding (const)
+  callee 757:9 isNishSpecifier -> @isNishSpecifier
+  callee 758:7 Checker.bindBuiltinImport -> @Checker.bindBuiltinImport
+  local 761:11 constant: ConstInfo | null (const)
+  callee 761:22 CheckedProgram.constant -> @CheckedProgram.constant
+  callee 763:7 Checker.bindConstantImport -> @Checker.bindConstantImport
+  local 766:11 struct: StructInfo | null (const)
+  callee 766:20 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 768:7 Checker.bindStructImport -> @Checker.bindStructImport
+  local 771:11 sig: FunctionSig | null (const)
+  callee 771:17 CheckedProgram.exported -> @CheckedProgram.exported
+  local 773:11 exists: boolean (let)
+  local 774:18 candidate: FunctionSig (const)
+  callee 779:7 CheckContext.error -> @CheckContext.error
+  callee 787:9 StringSet.has -> @StringSet.has
+  callee 788:7 CheckContext.error -> @CheckContext.error
+  local 797:11 clashAt: i32 (const)
+  callee 797:21 StringMap.get -> @StringMap.get
+  local 799:13 clash: FunctionSig (const)
+  local 800:11 origin: string (let)
+  local 801:18 other: ImportBinding (const)
+  local 802:15 bound: FunctionSig | null (const)
+  callee 807:7 CheckContext.error -> @CheckContext.error
+  callee 815:5 StringMap.set -> @StringMap.set
 function Checker.bindStructImport(this: Checker, index: i32, struct: StructInfo): void -> @Checker.bindStructImport [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: index struct
@@ -13246,15 +13266,15 @@ function Checker.bindStructImport(this: Checker, index: i32, struct: StructInfo)
   pointer this: size=16 writesThrough=false captured=false
   pointer struct: size=104 writesThrough=true captured=true passedTo=CheckedProgram.addStruct#2
   stackSites=0 stackLocals=0
-  local 810:11 imp: ImportBinding (const)
-  callee 812:7 CheckContext.error -> @CheckContext.error
-  local 818:13 what: string (const)
-  callee 819:7 CheckContext.error -> @CheckContext.error
-  callee 824:9 StringMap.has -> @StringMap.has
-  callee 824:52 StringMap.has -> @StringMap.has
-  callee 825:7 CheckContext.error -> @CheckContext.error
-  callee 829:5 CheckedProgram.addStruct -> @CheckedProgram.addStruct
-  callee 830:5 StringSet.add -> @StringSet.add
+  local 825:11 imp: ImportBinding (const)
+  callee 827:7 CheckContext.error -> @CheckContext.error
+  local 833:13 what: string (const)
+  callee 834:7 CheckContext.error -> @CheckContext.error
+  callee 839:9 StringMap.has -> @StringMap.has
+  callee 839:52 StringMap.has -> @StringMap.has
+  callee 840:7 CheckContext.error -> @CheckContext.error
+  callee 844:5 CheckedProgram.addStruct -> @CheckedProgram.addStruct
+  callee 845:5 StringSet.add -> @StringSet.add
 function Checker.bindConstantImport(this: Checker, index: i32, constant: ConstInfo): void -> @Checker.bindConstantImport [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: constant index
@@ -13262,15 +13282,15 @@ function Checker.bindConstantImport(this: Checker, index: i32, constant: ConstIn
   pointer this: size=16 writesThrough=false captured=false
   pointer constant: size=80 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 840:11 imp: ImportBinding (const)
-  local 841:11 localName: string (const)
-  callee 843:7 StringMap.has -> @StringMap.has
-  callee 844:7 StringMap.has -> @StringMap.has
-  callee 845:7 StringMap.has -> @StringMap.has
-  callee 847:7 CheckContext.error -> @CheckContext.error
-  callee 850:9 StringSet.has -> @StringSet.has
-  callee 851:7 CheckContext.error -> @CheckContext.error
-  callee 857:5 StringMap.set -> @StringMap.set
+  local 855:11 imp: ImportBinding (const)
+  local 856:11 localName: string (const)
+  callee 858:7 StringMap.has -> @StringMap.has
+  callee 859:7 StringMap.has -> @StringMap.has
+  callee 860:7 StringMap.has -> @StringMap.has
+  callee 862:7 CheckContext.error -> @CheckContext.error
+  callee 865:9 StringSet.has -> @StringSet.has
+  callee 866:7 CheckContext.error -> @CheckContext.error
+  callee 872:5 StringMap.set -> @StringMap.set
 function nameOf(sig: FunctionSig): Node -> @nameOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false returnDeref=40
   calls: nish_panic_index
@@ -13291,14 +13311,14 @@ function PerfWalk.declaredHoldingAllocation(this: PerfWalk, local: Local): boole
   pointer this: size=64 writesThrough=false captured=false
   pointer local: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 943:9 i: i32 (let)
+  local 958:9 i: i32 (let)
 function PerfWalk.depthOf(this: PerfWalk, local: Local): i32 -> @PerfWalk.depthOf [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index
   pointer this: size=64 writesThrough=false captured=false
   pointer local: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 955:9 i: i32 (let)
+  local 970:9 i: i32 (let)
 function checkPerformance(ctx: CheckContext, sig: FunctionSig, body: Node, unprovenIndices: Node[]): void -> @checkPerformance [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: PerfWalk.constructor walkPerformance
@@ -13307,8 +13327,8 @@ function checkPerformance(ctx: CheckContext, sig: FunctionSig, body: Node, unpro
   pointer body: size=40 writesThrough=true captured=true passedTo=PerfWalk.constructor#3 walkPerformance#1
   pointer unprovenIndices: size=0 writesThrough=true captured=true passedTo=PerfWalk.constructor#4
   stackSites=1 stackLocals=0
-  callee 973:3 walkPerformance -> @walkPerformance
-  callee 973:19 new PerfWalk -> @PerfWalk.constructor
+  callee 988:3 walkPerformance -> @walkPerformance
+  callee 988:19 new PerfWalk -> @PerfWalk.constructor
 function checkSurvivingBoundsCheck(walk: PerfWalk, access: Node): void -> @checkSurvivingBoundsCheck
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: access
@@ -13316,24 +13336,24 @@ function checkSurvivingBoundsCheck(walk: PerfWalk, access: Node): void -> @check
   pointer walk: size=64 writesThrough=false captured=false
   pointer access: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 989:7 receiver: Node (let)
-  local 990:7 index: Node (let)
-  local 995:11 callee: Node (const)
-  callee 995:20 unwrapPerfParens -> @unwrapPerfParens
-  local 1002:9 holder: string (const)
-  callee 1002:18 perfLocalName -> @perfLocalName
-  local 1003:9 name: string (const)
-  callee 1003:16 perfLocalName -> @perfLocalName
-  callee 1007:3 CheckContext.performance -> @CheckContext.performance
+  local 1004:7 receiver: Node (let)
+  local 1005:7 index: Node (let)
+  local 1010:11 callee: Node (const)
+  callee 1010:20 unwrapPerfParens -> @unwrapPerfParens
+  local 1017:9 holder: string (const)
+  callee 1017:18 perfLocalName -> @perfLocalName
+  local 1018:9 name: string (const)
+  callee 1018:16 perfLocalName -> @perfLocalName
+  callee 1022:3 CheckContext.performance -> @CheckContext.performance
 function perfLocalName(ctx: CheckContext, expr: Node): string -> @perfLocalName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index unwrapPerfParens
   pointer ctx: size=120 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
-  local 1018:9 e: Node (const)
-  callee 1018:13 unwrapPerfParens -> @unwrapPerfParens
-  local 1022:9 local: Local | null (const)
+  local 1033:9 e: Node (const)
+  callee 1033:13 unwrapPerfParens -> @unwrapPerfParens
+  local 1037:9 local: Local | null (const)
 function walkPerformance(walk: PerfWalk, node: Node): void -> @walkPerformance
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: node
@@ -13341,72 +13361,72 @@ function walkPerformance(walk: PerfWalk, node: Node): void -> @walkPerformance
   pointer walk: size=64 writesThrough=false captured=false passedTo=walkPerformance#0 walkPerformance#0 walkPerformance#0 walkPerformance#0 walkPerformance#0 walkPerformance#0 walkPerformance#0 walkPerformance#0 walkPerformance#0 checkLoopAllocation#0 checkStringAccumulation#0 checkArenaReassignment#0 checkConstantOverflow#0 checkShiftCount#0 checkWideningConversion#0 isUnprovenIndex#0 checkSurvivingBoundsCheck#0 walkPerformance#0
   pointer node: size=40 writesThrough=true captured=true passedTo=checkLoopAllocation#1 checkStringAccumulation#1 checkArenaReassignment#1 checkConstantOverflow#1 checkShiftCount#1 checkWideningConversion#1 isUnprovenIndex#1 checkSurvivingBoundsCheck#1
   stackSites=0 stackLocals=0
-  callee 1035:5 walkPerformance -> @walkPerformance
-  callee 1037:5 walkPerformance -> @walkPerformance
-  callee 1038:5 walkPerformance -> @walkPerformance
-  callee 1039:5 walkPerformance -> @walkPerformance
-  callee 1044:5 walkPerformance -> @walkPerformance
-  callee 1046:5 walkPerformance -> @walkPerformance
-  callee 1047:5 walkPerformance -> @walkPerformance
-  callee 1056:5 walkPerformance -> @walkPerformance
-  callee 1057:5 walkPerformance -> @walkPerformance
-  local 1062:11 local: Local | null (const)
-  callee 1066:35 perfAllocatesVisibly -> @perfAllocatesVisibly
-  callee 1068:5 checkLoopAllocation -> @checkLoopAllocation
-  callee 1071:7 checkStringAccumulation -> @checkStringAccumulation
-  callee 1072:7 checkArenaReassignment -> @checkArenaReassignment
-  callee 1074:5 checkConstantOverflow -> @checkConstantOverflow
-  callee 1075:5 checkShiftCount -> @checkShiftCount
-  callee 1077:5 checkWideningConversion -> @checkWideningConversion
-  callee 1079:7 isUnprovenIndex -> @isUnprovenIndex
-  callee 1080:5 checkSurvivingBoundsCheck -> @checkSurvivingBoundsCheck
-  local 1082:14 child: Node (const)
-  callee 1083:5 walkPerformance -> @walkPerformance
+  callee 1050:5 walkPerformance -> @walkPerformance
+  callee 1052:5 walkPerformance -> @walkPerformance
+  callee 1053:5 walkPerformance -> @walkPerformance
+  callee 1054:5 walkPerformance -> @walkPerformance
+  callee 1059:5 walkPerformance -> @walkPerformance
+  callee 1061:5 walkPerformance -> @walkPerformance
+  callee 1062:5 walkPerformance -> @walkPerformance
+  callee 1071:5 walkPerformance -> @walkPerformance
+  callee 1072:5 walkPerformance -> @walkPerformance
+  local 1077:11 local: Local | null (const)
+  callee 1081:35 perfAllocatesVisibly -> @perfAllocatesVisibly
+  callee 1083:5 checkLoopAllocation -> @checkLoopAllocation
+  callee 1086:7 checkStringAccumulation -> @checkStringAccumulation
+  callee 1087:7 checkArenaReassignment -> @checkArenaReassignment
+  callee 1089:5 checkConstantOverflow -> @checkConstantOverflow
+  callee 1090:5 checkShiftCount -> @checkShiftCount
+  callee 1092:5 checkWideningConversion -> @checkWideningConversion
+  callee 1094:7 isUnprovenIndex -> @isUnprovenIndex
+  callee 1095:5 checkSurvivingBoundsCheck -> @checkSurvivingBoundsCheck
+  local 1097:14 child: Node (const)
+  callee 1098:5 walkPerformance -> @walkPerformance
 function isUnprovenIndex(walk: PerfWalk, node: Node): boolean -> @isUnprovenIndex
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   pointer walk: size=64 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1089:14 access: Node (const)
+  local 1104:14 access: Node (const)
 function isQuadraticAccumulation(walk: PerfWalk, expr: Node): boolean -> @isQuadraticAccumulation
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: PerfWalk.depthOf accumulates nish_panic_index
   pointer walk: size=64 writesThrough=false captured=false passedTo=PerfWalk.depthOf#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1106:9 left: Node (const)
-  local 1110:9 target: Local | null (const)
-  callee 1116:7 PerfWalk.depthOf -> @PerfWalk.depthOf
-  callee 1119:10 accumulates -> @accumulates
+  local 1121:9 left: Node (const)
+  local 1125:9 target: Local | null (const)
+  callee 1131:7 PerfWalk.depthOf -> @PerfWalk.depthOf
+  callee 1134:10 accumulates -> @accumulates
 function checkStringAccumulation(walk: PerfWalk, expr: Node): void -> @checkStringAccumulation
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.performance isQuadraticAccumulation nish_panic_index nish_str_concat
   pointer walk: size=64 writesThrough=false captured=false passedTo=isQuadraticAccumulation#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=isQuadraticAccumulation#1
   stackSites=0 stackLocals=0
-  callee 1124:8 isQuadraticAccumulation -> @isQuadraticAccumulation
-  local 1127:9 left: Node (const)
-  local 1128:9 target: Local | null (const)
-  callee 1132:3 CheckContext.performance -> @CheckContext.performance
+  callee 1139:8 isQuadraticAccumulation -> @isQuadraticAccumulation
+  local 1142:9 left: Node (const)
+  local 1143:9 target: Local | null (const)
+  callee 1147:3 CheckContext.performance -> @CheckContext.performance
 function checkLoopAllocation(walk: PerfWalk, decl: Node): void -> @checkLoopAllocation
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.performance isDynamicArrayAllocation nish_panic_index nish_str_concat usedOnlyWithinIteration
   pointer walk: size=64 writesThrough=false captured=false
   pointer decl: size=40 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#3
   stackSites=0 stackLocals=0
-  local 1144:9 local: Local | null (const)
-  local 1145:9 name: Node (const)
-  callee 1149:8 isDynamicArrayAllocation -> @isDynamicArrayAllocation
-  local 1152:9 loop: Node (const)
-  callee 1153:8 usedOnlyWithinIteration -> @usedOnlyWithinIteration
-  callee 1156:3 CheckContext.performance -> @CheckContext.performance
+  local 1159:9 local: Local | null (const)
+  local 1160:9 name: Node (const)
+  callee 1164:8 isDynamicArrayAllocation -> @isDynamicArrayAllocation
+  local 1167:9 loop: Node (const)
+  callee 1168:8 usedOnlyWithinIteration -> @usedOnlyWithinIteration
+  callee 1171:3 CheckContext.performance -> @CheckContext.performance
 function unwrapPerfParens(expr: Node): Node -> @unwrapPerfParens
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false returnDeref=40
   escaping: expr
   calls: nish_panic_index
   pointer expr: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
-  local 1166:7 inner: Node (let)
+  local 1181:7 inner: Node (let)
 function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean -> @accumulates
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: accumulates nish_panic_index nish_str_eq unwrapPerfParens
@@ -13414,31 +13434,31 @@ function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean -> @
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   pointer target: size=24 writesThrough=false captured=false passedTo=accumulates#2 accumulates#2 accumulates#2
   stackSites=0 stackLocals=0
-  local 1180:9 e: Node (const)
-  callee 1180:13 unwrapPerfParens -> @unwrapPerfParens
-  local 1182:11 bound: Local | null (const)
-  callee 1186:12 accumulates -> @accumulates
-  callee 1186:55 accumulates -> @accumulates
-  local 1189:16 part: Node (const)
-  callee 1190:44 accumulates -> @accumulates
+  local 1195:9 e: Node (const)
+  callee 1195:13 unwrapPerfParens -> @unwrapPerfParens
+  local 1197:11 bound: Local | null (const)
+  callee 1201:12 accumulates -> @accumulates
+  callee 1201:55 accumulates -> @accumulates
+  local 1204:16 part: Node (const)
+  callee 1205:44 accumulates -> @accumulates
 function isDynamicArrayAllocation(ctx: CheckContext, expr: Node): boolean -> @isDynamicArrayAllocation
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: TypeTable.isArray isNonNegativeInteger nish_panic_index unwrapPerfParens
   pointer ctx: size=120 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
-  local 1210:9 e: Node (const)
-  callee 1210:13 unwrapPerfParens -> @unwrapPerfParens
-  callee 1211:28 TypeTable.isArray -> @TypeTable.isArray
-  local 1214:9 args: Node (const)
-  local 1220:9 length: Node (const)
-  callee 1220:18 unwrapPerfParens -> @unwrapPerfParens
-  callee 1221:39 isNonNegativeInteger -> @isNonNegativeInteger
+  local 1225:9 e: Node (const)
+  callee 1225:13 unwrapPerfParens -> @unwrapPerfParens
+  callee 1226:28 TypeTable.isArray -> @TypeTable.isArray
+  local 1229:9 args: Node (const)
+  local 1235:9 length: Node (const)
+  callee 1235:18 unwrapPerfParens -> @unwrapPerfParens
+  callee 1236:39 isNonNegativeInteger -> @isNonNegativeInteger
 function isNonNegativeInteger(text: string): boolean -> @isNonNegativeInteger
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
-  local 1229:7 i: i32 (let)
-  local 1231:11 c: i32 (const)
+  local 1244:7 i: i32 (let)
+  local 1246:11 c: i32 (const)
 function usedOnlyWithinIteration(ctx: CheckContext, root: Node, local: Local, own: Node): boolean -> @usedOnlyWithinIteration
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: isLocalRef nish_panic_index nish_str_eq usedOnlyWithinIteration
@@ -13447,16 +13467,16 @@ function usedOnlyWithinIteration(ctx: CheckContext, root: Node, local: Local, ow
   pointer local: size=24 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#2 isLocalRef#2 usedOnlyWithinIteration#2 isLocalRef#2 isLocalRef#2 usedOnlyWithinIteration#2 usedOnlyWithinIteration#2 usedOnlyWithinIteration#2
   pointer own: size=40 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3
   stackSites=0 stackLocals=0
-  callee 1251:12 usedOnlyWithinIteration -> @usedOnlyWithinIteration
-  callee 1253:32 isLocalRef -> @isLocalRef
-  callee 1254:12 usedOnlyWithinIteration -> @usedOnlyWithinIteration
-  callee 1256:59 isLocalRef -> @isLocalRef
-  callee 1259:33 isLocalRef -> @isLocalRef
-  callee 1261:7 usedOnlyWithinIteration -> @usedOnlyWithinIteration
-  callee 1262:7 usedOnlyWithinIteration -> @usedOnlyWithinIteration
-  local 1266:11 bound: Local | null (const)
-  local 1269:14 child: Node (const)
-  callee 1270:10 usedOnlyWithinIteration -> @usedOnlyWithinIteration
+  callee 1266:12 usedOnlyWithinIteration -> @usedOnlyWithinIteration
+  callee 1268:32 isLocalRef -> @isLocalRef
+  callee 1269:12 usedOnlyWithinIteration -> @usedOnlyWithinIteration
+  callee 1271:59 isLocalRef -> @isLocalRef
+  callee 1274:33 isLocalRef -> @isLocalRef
+  callee 1276:7 usedOnlyWithinIteration -> @usedOnlyWithinIteration
+  callee 1277:7 usedOnlyWithinIteration -> @usedOnlyWithinIteration
+  local 1281:11 bound: Local | null (const)
+  local 1284:14 child: Node (const)
+  callee 1285:10 usedOnlyWithinIteration -> @usedOnlyWithinIteration
 function isLocalRef(ctx: CheckContext, expr: Node, local: Local): boolean -> @isLocalRef
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index unwrapPerfParens
@@ -13464,9 +13484,9 @@ function isLocalRef(ctx: CheckContext, expr: Node, local: Local): boolean -> @is
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   pointer local: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1279:9 e: Node (const)
-  callee 1279:13 unwrapPerfParens -> @unwrapPerfParens
-  local 1283:9 bound: Local | null (const)
+  local 1294:9 e: Node (const)
+  callee 1294:13 unwrapPerfParens -> @unwrapPerfParens
+  local 1298:9 bound: Local | null (const)
 function perfIsReadBuiltin(name: string): boolean -> @perfIsReadBuiltin
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: nish_str_eq
@@ -13477,22 +13497,22 @@ function perfAllocatesVisibly(ctx: CheckContext, expr: Node): boolean -> @perfAl
   pointer ctx: size=120 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
-  local 1322:9 e: Node (const)
-  callee 1322:13 unwrapPerfParens -> @unwrapPerfParens
-  local 1331:16 part: Node (const)
-  local 1339:11 callee: Node (const)
-  callee 1339:20 unwrapPerfParens -> @unwrapPerfParens
-  callee 1340:39 perfIsReadBuiltin -> @perfIsReadBuiltin
-  callee 1340:74 StringMap.has -> @StringMap.has
+  local 1337:9 e: Node (const)
+  callee 1337:13 unwrapPerfParens -> @unwrapPerfParens
+  local 1346:16 part: Node (const)
+  local 1354:11 callee: Node (const)
+  callee 1354:20 unwrapPerfParens -> @unwrapPerfParens
+  callee 1355:39 perfIsReadBuiltin -> @perfIsReadBuiltin
+  callee 1355:74 StringMap.has -> @StringMap.has
 function perfIsPointerType(ctx: CheckContext, type: i32): boolean -> @perfIsPointerType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: type
   calls: TypeTable.isNullable TypeTable.isPointer TypeTable.isResult
   pointer ctx: size=120 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 1352:10 TypeTable.isPointer -> @TypeTable.isPointer
-  callee 1352:39 TypeTable.isNullable -> @TypeTable.isNullable
-  callee 1352:69 TypeTable.isResult -> @TypeTable.isResult
+  callee 1367:10 TypeTable.isPointer -> @TypeTable.isPointer
+  callee 1367:39 TypeTable.isNullable -> @TypeTable.isNullable
+  callee 1367:69 TypeTable.isResult -> @TypeTable.isResult
 function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean -> @perfCapturesLocal
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: isLocalRef nish_panic_index nish_str_eq
@@ -13500,13 +13520,13 @@ function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean
   pointer node: size=40 writesThrough=false captured=false
   pointer local: size=24 writesThrough=false captured=false passedTo=isLocalRef#2 isLocalRef#2 isLocalRef#2 isLocalRef#2 isLocalRef#2
   stackSites=0 stackLocals=0
-  local 1365:16 arg: Node (const)
-  callee 1366:11 isLocalRef -> @isLocalRef
-  local 1373:16 element: Node (const)
-  callee 1374:11 isLocalRef -> @isLocalRef
-  callee 1381:12 isLocalRef -> @isLocalRef
-  callee 1384:12 isLocalRef -> @isLocalRef
-  callee 1386:57 isLocalRef -> @isLocalRef
+  local 1380:16 arg: Node (const)
+  callee 1381:11 isLocalRef -> @isLocalRef
+  local 1388:16 element: Node (const)
+  callee 1389:11 isLocalRef -> @isLocalRef
+  callee 1396:12 isLocalRef -> @isLocalRef
+  callee 1399:12 isLocalRef -> @isLocalRef
+  callee 1401:57 isLocalRef -> @isLocalRef
 function perfHeldValueMayBeReachable(walk: PerfWalk, expr: Node, local: Local): boolean -> @perfHeldValueMayBeReachable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index perfScanForCapture
@@ -13514,9 +13534,9 @@ function perfHeldValueMayBeReachable(walk: PerfWalk, expr: Node, local: Local): 
   pointer expr: size=40 writesThrough=false captured=false
   pointer local: size=24 writesThrough=false captured=false passedTo=perfScanForCapture#2
   stackSites=0 stackLocals=0
-  local 1406:9 inLoop: boolean (const)
-  local 1407:9 root: Node (const)
-  callee 1408:10 perfScanForCapture -> @perfScanForCapture
+  local 1421:9 inLoop: boolean (const)
+  local 1422:9 root: Node (const)
+  callee 1423:10 perfScanForCapture -> @perfScanForCapture
 function perfScanForCapture(ctx: CheckContext, node: Node, local: Local, inLoop: boolean, before: i32): boolean -> @perfScanForCapture
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: before inLoop
@@ -13525,26 +13545,26 @@ function perfScanForCapture(ctx: CheckContext, node: Node, local: Local, inLoop:
   pointer node: size=40 writesThrough=false captured=false passedTo=perfCapturesLocal#1
   pointer local: size=24 writesThrough=false captured=false passedTo=perfCapturesLocal#2 perfScanForCapture#2
   stackSites=0 stackLocals=0
-  callee 1412:41 perfCapturesLocal -> @perfCapturesLocal
-  local 1415:14 child: Node (const)
-  callee 1416:9 perfScanForCapture -> @perfScanForCapture
+  callee 1427:41 perfCapturesLocal -> @perfCapturesLocal
+  local 1430:14 child: Node (const)
+  callee 1431:9 perfScanForCapture -> @perfScanForCapture
 function checkArenaReassignment(walk: PerfWalk, expr: Node): void -> @checkArenaReassignment
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.performance PerfWalk.declaredHoldingAllocation isQuadraticAccumulation nish_panic_index nish_str_concat perfAllocatesVisibly perfHeldValueMayBeReachable perfIsPointerType
   pointer walk: size=64 writesThrough=false captured=false passedTo=isQuadraticAccumulation#0 PerfWalk.declaredHoldingAllocation#0 perfHeldValueMayBeReachable#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=isQuadraticAccumulation#1 perfHeldValueMayBeReachable#1
   stackSites=0 stackLocals=0
-  local 1429:9 left: Node (const)
-  local 1433:9 ctx: CheckContext (const)
-  local 1434:9 target: Local | null (const)
-  callee 1435:63 perfIsPointerType -> @perfIsPointerType
-  local 1438:9 sig: FunctionSig (const)
-  callee 1439:7 perfIsPointerType -> @perfIsPointerType
-  callee 1442:7 isQuadraticAccumulation -> @isQuadraticAccumulation
-  callee 1445:8 PerfWalk.declaredHoldingAllocation -> @PerfWalk.declaredHoldingAllocation
-  callee 1445:51 perfAllocatesVisibly -> @perfAllocatesVisibly
-  callee 1448:7 perfHeldValueMayBeReachable -> @perfHeldValueMayBeReachable
-  callee 1451:3 CheckContext.performance -> @CheckContext.performance
+  local 1444:9 left: Node (const)
+  local 1448:9 ctx: CheckContext (const)
+  local 1449:9 target: Local | null (const)
+  callee 1450:63 perfIsPointerType -> @perfIsPointerType
+  local 1453:9 sig: FunctionSig (const)
+  callee 1454:7 perfIsPointerType -> @perfIsPointerType
+  callee 1457:7 isQuadraticAccumulation -> @isQuadraticAccumulation
+  callee 1460:8 PerfWalk.declaredHoldingAllocation -> @PerfWalk.declaredHoldingAllocation
+  callee 1460:51 perfAllocatesVisibly -> @perfAllocatesVisibly
+  callee 1463:7 perfHeldValueMayBeReachable -> @perfHeldValueMayBeReachable
+  callee 1466:3 CheckContext.performance -> @CheckContext.performance
 function PerfConst.constructor(this: PerfConst, ok: boolean, value: i64): void -> @PerfConst.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
   escaping: ok value
@@ -13554,7 +13574,7 @@ function perfNoConst(): PerfConst -> @perfNoConst
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=16
   calls: PerfConst.constructor nish_alloc_struct
   stackSites=0 stackLocals=0
-  callee 1511:10 new PerfConst -> @PerfConst.constructor
+  callee 1526:10 new PerfConst -> @PerfConst.constructor
 function perfMagnitude(value: i64): i64 -> @perfMagnitude
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   escaping: value
@@ -13564,83 +13584,83 @@ function perfConstantInt(expr: Node): PerfConst -> @perfConstantInt
   calls: PerfConst.constructor isNonNegativeInteger nish_alloc_struct nish_panic_index nish_str_eq parseIntegerLiteral perfConstantInt perfMagnitude perfNoConst unwrapPerfParens
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
-  local 1530:9 e: Node (const)
-  callee 1530:13 unwrapPerfParens -> @unwrapPerfParens
-  callee 1532:10 isNonNegativeInteger -> @isNonNegativeInteger
-  callee 1533:14 perfNoConst -> @perfNoConst
-  local 1535:11 value: i64 (const)
-  callee 1535:19 parseIntegerLiteral -> @parseIntegerLiteral
-  callee 1536:33 perfNoConst -> @perfNoConst
-  callee 1536:49 new PerfConst -> @PerfConst.constructor
-  local 1539:11 operand: PerfConst (const)
-  callee 1539:21 perfConstantInt -> @perfConstantInt
-  callee 1540:25 new PerfConst -> @PerfConst.constructor
-  callee 1540:63 perfNoConst -> @perfNoConst
-  callee 1543:12 perfNoConst -> @perfNoConst
-  local 1545:9 left: PerfConst (const)
-  callee 1545:16 perfConstantInt -> @perfConstantInt
-  local 1546:9 right: PerfConst (const)
-  callee 1546:17 perfConstantInt -> @perfConstantInt
-  callee 1548:12 perfNoConst -> @perfNoConst
-  callee 1551:9 perfMagnitude -> @perfMagnitude
-  callee 1551:51 perfMagnitude -> @perfMagnitude
-  callee 1552:14 perfNoConst -> @perfNoConst
-  callee 1554:12 new PerfConst -> @PerfConst.constructor
-  callee 1556:7 perfMagnitude -> @perfMagnitude
-  callee 1556:53 perfMagnitude -> @perfMagnitude
-  callee 1557:12 perfNoConst -> @perfNoConst
-  callee 1560:12 new PerfConst -> @PerfConst.constructor
-  callee 1563:12 new PerfConst -> @PerfConst.constructor
-  callee 1565:10 perfNoConst -> @perfNoConst
+  local 1545:9 e: Node (const)
+  callee 1545:13 unwrapPerfParens -> @unwrapPerfParens
+  callee 1547:10 isNonNegativeInteger -> @isNonNegativeInteger
+  callee 1548:14 perfNoConst -> @perfNoConst
+  local 1550:11 value: i64 (const)
+  callee 1550:19 parseIntegerLiteral -> @parseIntegerLiteral
+  callee 1551:33 perfNoConst -> @perfNoConst
+  callee 1551:49 new PerfConst -> @PerfConst.constructor
+  local 1554:11 operand: PerfConst (const)
+  callee 1554:21 perfConstantInt -> @perfConstantInt
+  callee 1555:25 new PerfConst -> @PerfConst.constructor
+  callee 1555:63 perfNoConst -> @perfNoConst
+  callee 1558:12 perfNoConst -> @perfNoConst
+  local 1560:9 left: PerfConst (const)
+  callee 1560:16 perfConstantInt -> @perfConstantInt
+  local 1561:9 right: PerfConst (const)
+  callee 1561:17 perfConstantInt -> @perfConstantInt
+  callee 1563:12 perfNoConst -> @perfNoConst
+  callee 1566:9 perfMagnitude -> @perfMagnitude
+  callee 1566:51 perfMagnitude -> @perfMagnitude
+  callee 1567:14 perfNoConst -> @perfNoConst
+  callee 1569:12 new PerfConst -> @PerfConst.constructor
+  callee 1571:7 perfMagnitude -> @perfMagnitude
+  callee 1571:53 perfMagnitude -> @perfMagnitude
+  callee 1572:12 perfNoConst -> @perfNoConst
+  callee 1575:12 new PerfConst -> @PerfConst.constructor
+  callee 1578:12 new PerfConst -> @PerfConst.constructor
+  callee 1580:10 perfNoConst -> @perfNoConst
 function perfOverflowsItsType(ctx: CheckContext, expr: Node): boolean -> @perfOverflowsItsType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
   calls: nish_arena_mark nish_arena_release nish_panic_index perfConstantInt unwrapPerfParens
   pointer ctx: size=120 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
-  local 1570:9 e: Node (const)
-  callee 1570:13 unwrapPerfParens -> @unwrapPerfParens
-  local 1574:9 folded: PerfConst (const)
-  callee 1574:18 perfConstantInt -> @perfConstantInt
+  local 1585:9 e: Node (const)
+  callee 1585:13 unwrapPerfParens -> @unwrapPerfParens
+  local 1589:9 folded: PerfConst (const)
+  callee 1589:18 perfConstantInt -> @perfConstantInt
 function checkConstantOverflow(walk: PerfWalk, expr: Node): void -> @checkConstantOverflow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.performance nish_panic_index nish_str_concat nish_str_eq nish_str_from_i64 perfConstantInt perfOverflowsItsType
   pointer walk: size=64 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=perfConstantInt#0 CheckContext.performance#1
   stackSites=0 stackLocals=0
-  local 1596:9 ctx: CheckContext (const)
-  local 1600:9 folded: PerfConst (const)
-  callee 1600:18 perfConstantInt -> @perfConstantInt
-  callee 1604:7 perfOverflowsItsType -> @perfOverflowsItsType
-  callee 1604:54 perfOverflowsItsType -> @perfOverflowsItsType
-  callee 1607:3 CheckContext.performance -> @CheckContext.performance
+  local 1611:9 ctx: CheckContext (const)
+  local 1615:9 folded: PerfConst (const)
+  callee 1615:18 perfConstantInt -> @perfConstantInt
+  callee 1619:7 perfOverflowsItsType -> @perfOverflowsItsType
+  callee 1619:54 perfOverflowsItsType -> @perfOverflowsItsType
+  callee 1622:3 CheckContext.performance -> @CheckContext.performance
 function checkWideningConversion(walk: PerfWalk, call: Node): void -> @checkWideningConversion
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.performance StringMap.has nish_panic_index nish_str_concat nish_str_eq unwrapPerfParens
   pointer walk: size=64 writesThrough=false captured=false
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1630:9 callee: Node (const)
-  callee 1630:18 unwrapPerfParens -> @unwrapPerfParens
-  local 1634:9 args: Node (const)
-  local 1638:9 ctx: CheckContext (const)
-  callee 1639:7 StringMap.has -> @StringMap.has
-  local 1642:9 arg: Node (const)
-  callee 1642:15 unwrapPerfParens -> @unwrapPerfParens
-  callee 1649:3 CheckContext.performance -> @CheckContext.performance
+  local 1645:9 callee: Node (const)
+  callee 1645:18 unwrapPerfParens -> @unwrapPerfParens
+  local 1649:9 args: Node (const)
+  local 1653:9 ctx: CheckContext (const)
+  callee 1654:7 StringMap.has -> @StringMap.has
+  local 1657:9 arg: Node (const)
+  callee 1657:15 unwrapPerfParens -> @unwrapPerfParens
+  callee 1664:3 CheckContext.performance -> @CheckContext.performance
 function checkShiftCount(walk: PerfWalk, expr: Node): void -> @checkShiftCount
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.performance intBits nish_panic_div nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 nish_str_from_i64 perfConstantInt
   pointer walk: size=64 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 1667:9 ctx: CheckContext (const)
-  local 1668:9 bits: i32 (const)
-  callee 1668:16 intBits -> @intBits
-  local 1672:9 count: PerfConst (const)
-  callee 1672:17 perfConstantInt -> @perfConstantInt
-  local 1673:9 width: i64 (const)
-  callee 1677:3 CheckContext.performance -> @CheckContext.performance
+  local 1682:9 ctx: CheckContext (const)
+  local 1683:9 bits: i32 (const)
+  callee 1683:16 intBits -> @intBits
+  local 1687:9 count: PerfConst (const)
+  callee 1687:17 perfConstantInt -> @perfConstantInt
+  local 1688:9 width: i64 (const)
+  callee 1692:3 CheckContext.performance -> @CheckContext.performance
 module self/statements.ts
 import LANGUAGE from "./branding" -> const LANGUAGE
 import checkCondition from "./expressions" -> function @checkCondition
@@ -13873,34 +13893,32 @@ function checkFor(ctx: CheckContext, stmt: Node, scope: Scope): boolean -> @chec
   callee 320:17 CheckContext.popLoop -> @CheckContext.popLoop
 function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope): boolean -> @checkForOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: CheckContext.error CheckContext.popLoop CheckContext.pushLoop Scope.child TypeTable.isArray TypeTable.refOf TypeTable.typeName checkExpression checkStatement clearNarrowingsAssignedIn declareLocal nish_panic_index nish_str_concat resolveType
-  pointer ctx: size=120 writesThrough=true captured=false passedTo=clearNarrowingsAssignedIn#0 checkExpression#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 declareLocal#0 CheckContext.pushLoop#0 checkStatement#0 CheckContext.popLoop#0
+  calls: CheckContext.error CheckContext.popLoop CheckContext.pushLoop Scope.child TypeTable.isArray TypeTable.refOf TypeTable.typeName checkExpression checkStatement clearNarrowingsAssignedIn declareLocal nish_panic_index nish_str_concat
+  pointer ctx: size=120 writesThrough=true captured=false passedTo=clearNarrowingsAssignedIn#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 declareLocal#0 CheckContext.pushLoop#0 checkStatement#0 CheckContext.popLoop#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=clearNarrowingsAssignedIn#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=clearNarrowingsAssignedIn#2 checkExpression#2 Scope.child#0
   stackSites=0 stackLocals=0
   callee 325:3 clearNarrowingsAssignedIn -> @clearNarrowingsAssignedIn
-  local 326:9 iterable: i32 (const)
-  callee 326:20 checkExpression -> @checkExpression
-  local 327:9 outer: Scope (const)
-  callee 327:17 Scope.child -> @Scope.child
-  local 328:9 decl: Node (const)
-  local 329:9 name: string (const)
-  local 330:7 element: i32 (let)
-  callee 332:10 TypeTable.isArray -> @TypeTable.isArray
-  callee 333:7 CheckContext.error -> @CheckContext.error
-  callee 333:74 TypeTable.typeName -> @TypeTable.typeName
-  callee 335:17 TypeTable.refOf -> @TypeTable.refOf
-  local 338:9 annotation: Node (const)
-  local 340:11 declared: i32 (const)
-  callee 340:22 resolveType -> @resolveType
-  callee 342:7 CheckContext.error -> @CheckContext.error
-  callee 344:36 TypeTable.typeName -> @TypeTable.typeName
-  callee 344:72 TypeTable.typeName -> @TypeTable.typeName
-  callee 349:3 declareLocal -> @declareLocal
-  callee 350:3 CheckContext.pushLoop -> @CheckContext.pushLoop
-  callee 351:3 checkStatement -> @checkStatement
-  callee 351:41 Scope.child -> @Scope.child
-  callee 352:3 CheckContext.popLoop -> @CheckContext.popLoop
+  local 332:9 list: Node (const)
+  callee 336:5 CheckContext.error -> @CheckContext.error
+  local 339:9 decl: Node (const)
+  callee 341:5 CheckContext.error -> @CheckContext.error
+  callee 345:5 CheckContext.error -> @CheckContext.error
+  local 348:9 iterable: i32 (const)
+  callee 348:20 checkExpression -> @checkExpression
+  local 349:9 outer: Scope (const)
+  callee 349:17 Scope.child -> @Scope.child
+  local 350:9 name: string (const)
+  local 351:7 element: i32 (let)
+  callee 353:10 TypeTable.isArray -> @TypeTable.isArray
+  callee 354:7 CheckContext.error -> @CheckContext.error
+  callee 354:74 TypeTable.typeName -> @TypeTable.typeName
+  callee 356:17 TypeTable.refOf -> @TypeTable.refOf
+  callee 360:3 declareLocal -> @declareLocal
+  callee 361:3 CheckContext.pushLoop -> @CheckContext.pushLoop
+  callee 362:3 checkStatement -> @checkStatement
+  callee 362:41 Scope.child -> @Scope.child
+  callee 363:3 CheckContext.popLoop -> @CheckContext.popLoop
 function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope): boolean -> @checkSwitch
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckContext.popLoop CheckContext.pushLoop Scope.child TypeTable.isEnum TypeTable.typeName checkCaseLabel checkExpression checkStatements isInteger nish_panic_index nish_str_concat
@@ -13908,30 +13926,30 @@ function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope): boolean -> @c
   pointer stmt: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 checkCaseLabel#2 Scope.child#0
   stackSites=1 stackLocals=1
-  local 371:9 discriminant: i32 (const)
-  callee 371:24 checkExpression -> @checkExpression
-  callee 376:36 isInteger -> @isInteger
-  callee 376:64 TypeTable.isEnum -> @TypeTable.isEnum
-  callee 377:5 CheckContext.error -> @CheckContext.error
-  callee 379:59 TypeTable.typeName -> @TypeTable.typeName
-  local 382:9 clauses: Node[] (const)
-  local 383:9 seen: i64[] (const)
-  local 384:7 hasDefault: boolean (let)
-  local 385:7 lastTerminates: boolean (let)
-  callee 386:3 CheckContext.pushLoop -> @CheckContext.pushLoop
-  local 387:7 i: i32 (let)
-  local 389:11 clause: Node (const)
-  local 390:11 body: Node (const)
-  callee 393:9 CheckContext.error -> @CheckContext.error
-  callee 397:7 checkCaseLabel -> @checkCaseLabel
-  local 399:16 statement: Node (const)
-  callee 401:9 CheckContext.error -> @CheckContext.error
-  local 407:11 terminates: boolean (const)
-  callee 407:51 checkStatements -> @checkStatements
-  callee 407:87 Scope.child -> @Scope.child
-  callee 409:7 CheckContext.error -> @CheckContext.error
-  local 417:9 broke: boolean (const)
-  callee 417:17 CheckContext.popLoop -> @CheckContext.popLoop
+  local 382:9 discriminant: i32 (const)
+  callee 382:24 checkExpression -> @checkExpression
+  callee 387:36 isInteger -> @isInteger
+  callee 387:64 TypeTable.isEnum -> @TypeTable.isEnum
+  callee 388:5 CheckContext.error -> @CheckContext.error
+  callee 390:59 TypeTable.typeName -> @TypeTable.typeName
+  local 393:9 clauses: Node[] (const)
+  local 394:9 seen: i64[] (const)
+  local 395:7 hasDefault: boolean (let)
+  local 396:7 lastTerminates: boolean (let)
+  callee 397:3 CheckContext.pushLoop -> @CheckContext.pushLoop
+  local 398:7 i: i32 (let)
+  local 400:11 clause: Node (const)
+  local 401:11 body: Node (const)
+  callee 404:9 CheckContext.error -> @CheckContext.error
+  callee 408:7 checkCaseLabel -> @checkCaseLabel
+  local 410:16 statement: Node (const)
+  callee 412:9 CheckContext.error -> @CheckContext.error
+  local 418:11 terminates: boolean (const)
+  callee 418:51 checkStatements -> @checkStatements
+  callee 418:87 Scope.child -> @Scope.child
+  callee 420:7 CheckContext.error -> @CheckContext.error
+  local 428:9 broke: boolean (const)
+  callee 428:17 CheckContext.popLoop -> @CheckContext.popLoop
 function checkCaseLabel(ctx: CheckContext, clause: Node, scope: Scope, discriminant: i32, seen: i64[]): void -> @checkCaseLabel
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: discriminant
@@ -13941,33 +13959,33 @@ function checkCaseLabel(ctx: CheckContext, clause: Node, scope: Scope, discrimin
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   pointer seen: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 431:9 label: Node (const)
-  local 432:9 type: i32 (const)
-  callee 432:16 checkExpression -> @checkExpression
-  callee 434:5 CheckContext.error -> @CheckContext.error
-  callee 436:28 TypeTable.typeName -> @TypeTable.typeName
-  callee 436:80 TypeTable.typeName -> @TypeTable.typeName
-  local 440:9 value: CaseValue (const)
-  callee 440:17 caseValue -> @caseValue
-  callee 442:5 CheckContext.error -> @CheckContext.error
-  local 448:14 previous: i64 (const)
-  callee 450:7 CheckContext.error -> @CheckContext.error
+  local 442:9 label: Node (const)
+  local 443:9 type: i32 (const)
+  callee 443:16 checkExpression -> @checkExpression
+  callee 445:5 CheckContext.error -> @CheckContext.error
+  callee 447:28 TypeTable.typeName -> @TypeTable.typeName
+  callee 447:80 TypeTable.typeName -> @TypeTable.typeName
+  local 451:9 value: CaseValue (const)
+  callee 451:17 caseValue -> @caseValue
+  callee 453:5 CheckContext.error -> @CheckContext.error
+  local 459:14 previous: i64 (const)
+  callee 461:7 CheckContext.error -> @CheckContext.error
 function checkBreak(ctx: CheckContext, stmt: Node): boolean -> @checkBreak
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error nish_panic_index
   pointer ctx: size=120 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 460:5 CheckContext.error -> @CheckContext.error
+  callee 471:5 CheckContext.error -> @CheckContext.error
 function checkContinue(ctx: CheckContext, stmt: Node): boolean -> @checkContinue
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error
   pointer ctx: size=120 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 470:7 inLoop: boolean (let)
-  local 471:14 kind: i32 (const)
-  callee 477:5 CheckContext.error -> @CheckContext.error
+  local 481:7 inLoop: boolean (let)
+  local 482:14 kind: i32 (const)
+  callee 488:5 CheckContext.error -> @CheckContext.error
 module self/compilation.ts
 import analyzeFunctions from "./attributes" -> function @analyzeFunctions
 import AnalysisUnit from "./attributes" -> struct AnalysisUnit

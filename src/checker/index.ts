@@ -402,6 +402,15 @@ export class Checker implements CheckContext {
     if (this.program.structs.has(sig.sourceName)) {
       this.error(`\`${sig.sourceName}\` is already declared as a class or interface`, sig.nameNode);
     }
+    // Constants belong in this list for the same reason the three above do:
+    // one name, one meaning, whichever declaration came first. They were
+    // missing, and only in this direction -- `collectConstants` asks
+    // `nameTaken`, which knows about functions, so a constant after a function
+    // was refused while a function after a constant compiled, emitting a
+    // module with two things called one name (`tests/cases/reject_fn_after_const`).
+    if (this.program.constants.has(sig.sourceName)) {
+      this.error(`\`${sig.sourceName}\` is already declared in this module`, sig.nameNode);
+    }
     if (this.program.aliases.has(sig.sourceName) || this.program.enums.has(sig.sourceName)) {
       this.error(`\`${sig.sourceName}\` is already declared in this module`, sig.nameNode);
     }

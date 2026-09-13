@@ -199,6 +199,15 @@ export function checkNumericLiteral(
         `Negative literal \`-${text}\` where ${spelled} is expected (${spelled} is unsigned)`
       );
     }
+    // Past 2^53 the literal is already the double it rounded to, whatever the
+    // digits say, so the range check below would be answering a question about
+    // a different number. stage0 refuses it here and stage1 was compiling it.
+    if (Number(text) > TWO_53) {
+      return ctx.errorType(
+        expr,
+        `Literal \`${text}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the ${spelled} value instead`
+      );
+    }
     // 2^bits - 1 as an f64: exact for every width up to u64, where the
     // largest values are past 2^53 and cannot be written at all.
     const bits = intBits(type);
@@ -207,8 +216,17 @@ export function checkNumericLiteral(
       return ctx.errorType(expr, `Literal \`${text}\` does not fit in ${spelled}`);
     }
   }
+  if (type === T_I64 && Math.abs(Number(text)) > TWO_53) {
+    return ctx.errorType(
+      expr,
+      `Literal \`${text}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead`
+    );
+  }
   return type;
 }
+
+/** 2^53: above it not every integer has a double, so a bigger literal is already rounded. */
+const TWO_53: f64 = 9007199254740992.0;
 
 /** Whether a literal as written has a fraction or an exponent. */
 function hasFraction(text: string): boolean {
@@ -378,7 +396,7 @@ function checkIncrement(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   if (!isNumeric(type)) {
     return ctx.errorType(
       expr,
-      `Operator \`${expr.text}\` requires a numeric operand, got ${ctx.table.typeName(type)}`
+      `Operator \`${expr.text}\` requires a numeric variable, got ${ctx.table.typeName(type)}`
     );
   }
   if (target.kind === N_IDENT) {
@@ -722,18 +740,32 @@ function checkConditional(ctx: CheckContext, expr: Node, scope: Scope, want: i32
     return T_ERROR;
   }
   if (whenTrue === whenFalse) {
-    return whenTrue;
+    return ternaryResult(ctx, expr, whenTrue);
   }
   // `c ? p : null` is `T | null`, which is the one place the arms may differ.
   if (ctx.table.assignable(whenFalse, whenTrue)) {
-    return whenTrue;
+    return ternaryResult(ctx, expr, whenTrue);
   }
   if (ctx.table.assignable(whenTrue, whenFalse)) {
-    return whenFalse;
+    return ternaryResult(ctx, expr, whenFalse);
   }
   const a = ctx.table.typeName(whenTrue);
   const b = ctx.table.typeName(whenFalse);
   return ctx.errorType(expr, `Ternary branches must have the same type, got ${a} and ${b}`);
+}
+
+/**
+ * The ternary's type, refused when it is `void`. A ternary is an expression and
+ * its value is what it is for; two `void` arms agree about a type that cannot
+ * be the value of anything, so the arms are where the mistake is. stage0 says
+ * this at the same point and stage1 said nothing, so the two reported different
+ * first diagnostics for one program (`tests/cases/reject_cf_ternary_void`).
+ */
+function ternaryResult(ctx: CheckContext, expr: Node, type: i32): i32 {
+  if (type === T_VOID) {
+    return ctx.errorType(expr, "Ternary branches cannot be void");
+  }
+  return type;
 }
 
 /** A condition is a boolean: the language has no truthiness. */

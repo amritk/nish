@@ -38,15 +38,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-latest is commented out, not deleted. It is red for a reason
-        # that has nothing to do with the compiler: scripts/build.sh runs under
-        # `set -u`, and macOS ships bash 3.2 (Apple will not ship GPLv3), where
-        # expanding an empty array as "${arr[@]}" is an "unbound variable"
-        # error -- bash 4.4 made it legal, so every Linux runner is fine and
-        # every --link at the speed/size/napi profiles dies on macOS with
-        #   scripts/build.sh: line 96: pgo[@]: unbound variable
-        # The fix is ${arr[@]+"${arr[@]}"} at the nine sites that expand `pgo`,
-        # `elf`, `strip_flag` and `libs`. Restore this line with it.
+        # macos-latest is commented out, and what it is waiting for has
+        # changed. It used to be broken: macOS ships bash 3.2 (Apple will not
+        # ship GPLv3), where expanding an empty array as "${arr[@]}" under
+        # `set -u` is an "unbound variable" error and `mapfile` does not exist
+        # at all. Both are fixed -- scripts/build.sh spells its nine
+        # expansions of `pgo`, `elf`, `strip_flag` and `libs` as
+        # ${arr[@]+"${arr[@]}"}, and scripts/smoke.sh reads its program list
+        # with `while read` -- so restoring the row is uncommenting this line
+        # and nothing else.
+        #
+        # It stays commented out on **cost**: this row is the whole job over
+        # again -- npm ci, typecheck, the full suite, smoke, the cookbook and
+        # registry checks, the size report -- behind a `brew install llvm@18`,
+        # on the slowest runner GitHub rents. Every push would wait for it.
+        # Turn it on when the suite is fast, or put it on a schedule the way
+        # parity.yml is; what it buys is the ld64 / Mach-O half of build.sh
+        # (-dead_strip, -Wl,-x, no -fuse-ld=lld, no -fno-plt) and Apple
+        # Silicon, neither of which any Linux runner exercises.
+        #
+        # `fail-fast: false` above is what would keep a macOS-only failure
+        # from cancelling the Linux row. Anything measured in bytes already
+        # knows it is a fact about one target: the runtime.c .text budget
+        # skips itself off linux-x64 (tests/run.js).
         os: [ubuntu-latest] # , macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -118,6 +132,11 @@ jobs:
       - name: Diagnostic codes (registry up to date)
         run: node scripts/gen-diagnostic-codes.mjs --check
 
+      # The other half of WP19 G2.4 -- every code provoked by a program, not
+      # only every diagnostic given a code -- is not a step here: it is inside
+      # `npm test`, which runs `tests/diagnostic_coverage.js` with
+      # `--require-coverage` and `--strict-refusals`.
+
       - name: Size report
         run: |
           node dist/index.js examples/add.ts -o build/add.ll
@@ -145,9 +164,11 @@ jobs:
   # step says which release it used, or that there was none, so a green run
   # cannot be mistaken for a freeze that was actually checked.
   #
-  # G3 asks for this on both operating systems. It runs on Linux alone today
-  # because macos-latest is out of the matrix above; see docs/wp19-stage0
-  # -retirement.md G3 for what that leaves open.
+  # G3 asks for this on both operating systems, and what is missing is now the
+  # seed rather than the runner: a release ships nish-<version>-x86_64-linux
+  # and nothing else, so there is no darwin binary to bootstrap from. The
+  # macOS half of this job lands with the other three binaries of G5, not
+  # here; see docs/wp19-stage0-retirement.md G5 for what that leaves open.
   bootstrap:
     name: bootstrap (from the last release)
     runs-on: ubuntu-latest

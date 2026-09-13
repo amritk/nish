@@ -1,0 +1,39 @@
+# The stage1-only register: cases whose implementation is `self/`'s alone.
+#
+# One entry per line, three fields:
+#
+#   <case>   <kind>   <why, in a sentence>
+#
+# <case> is a name under `tests/cases`, without the extension. <kind> is
+# `since:<version>` for a construct that entered the language in that release
+# and has no stage0 implementation, or `fixture` for the register's own test.
+# Blank lines and `#` comments are ignored.
+#
+# What an entry *means*, in every tool that reads this file:
+#
+#   - `tests/run.js` compiles the case with **stage1** rather than with stage0,
+#     and its `.ll` golden, `llvm-as` pass and native round trip are stage1's;
+#   - `ir_oracle.js`, `checked_oracle.js` and `interop_oracle.js` count it as
+#     *declared* rather than skipped — there is no stage0 answer to compare
+#     against, and that is a decision rather than a gap in the port;
+#   - `parity.js` declares every surface of it, for the same reason;
+#   - `nish-cmp.js` declares it until the seed is a release that has it;
+#   - `tests/nish/run.ts` passes over it, because that runner spawns stage0.
+#
+# Registering a case is how a construct lands in `self/` without also being
+# written in `src/` (WP19 §1a). It costs the diverse-double-compiling equality
+# on that construct and nothing else: everything already in the corpus keeps
+# being compiled by both implementations and compared byte for byte.
+#
+# Two rules the file cannot enforce and a reviewer must:
+#
+#   1. `self/` may not *use* the construct until the seed compiles it, which is
+#      the next release (G4's rolling freeze). Landing it here and using it in
+#      `self/` in the same change breaks the `bootstrap` job and nothing else,
+#      which is exactly the discipline that job exists for.
+#   2. An entry is a claim that stage0 cannot answer, so it needs the ordinary
+#      evidence a construct ships with — a golden, an `llvm-as` pass, a native
+#      round trip, a negative case, a LANGUAGE.md rule and a cookbook entry.
+#      The register removes the second implementation, not the tests.
+
+stage1_probe	fixture	the register's own test. It pins nothing about the language: it is here so the stage1 path — build a compiler out of `self/`, compile a case with it, hold the result against a golden — is exercised on every run instead of being machinery nobody has driven since the day it was written. Because it is a fixture rather than a real stage1-only construct, `tests/run.js` also compiles it with stage0 and requires the same bytes, which is the strongest thing that can be said about a case both compilers can do.

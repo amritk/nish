@@ -29,6 +29,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import ts from "typescript";
 import { fileURLToPath } from "node:url";
+import { linkWith, seedForOracle, withoutSeed } from "./self/seed.js";
 
 const root = path.resolve(import.meta.dirname, "..");
 
@@ -259,29 +260,28 @@ function corpus() {
   return files;
 }
 
-/** Build `self/dump_tokens.ts` natively; returns the binary path or null without a toolchain. */
-function build() {
-  const out = path.join(root, "build", "self", "dump_tokens");
-  fs.mkdirSync(path.dirname(out), { recursive: true });
-  const r = spawnSync(
-    "node",
-    [path.join(root, "dist", "index.js"), path.join(root, "self", "dump_tokens.ts"), "--link", out],
-    {
-      cwd: root,
-      encoding: "utf8",
-    }
-  );
-  if (r.status !== 0) {
-    process.stderr.write(`${r.stderr}\n`);
-    return null;
-  }
-  return out;
+/**
+ * Build `self/dump_tokens.ts` natively with the seed; returns the binary path,
+ * or null without a toolchain.
+ *
+ * The seed rather than stage0 (WP19 G2.3): this oracle compares stage1 with
+ * the `typescript` package and outlives `src/`, so the compiler that links its
+ * subject must outlive `src/` too. `tests/self/seed.js` has the order and the
+ * one case where stage0 is still the answer.
+ */
+function build(seed) {
+  return linkWith(seed, path.join("self", "dump_tokens.ts"), path.join(root, "build", "self", "dump_tokens"));
 }
 
 function main(argv) {
   const verbose = argv.includes("--verbose");
-  const files = argv.filter((a) => !a.startsWith("--"));
-  const binary = build();
+  const files = withoutSeed(argv).filter((a) => !a.startsWith("--"));
+  const seed = seedForOracle(argv);
+  if (seed.error !== undefined) {
+    process.stderr.write(`${seed.error}\n`);
+    return 1;
+  }
+  const binary = build(seed);
   if (binary === null) return 1;
   const inputs = files.length > 0 ? files.map((f) => path.resolve(f)) : corpus();
   let agreed = 0;
@@ -298,7 +298,9 @@ function main(argv) {
       tokens += result.tokens;
     }
   }
-  const summary = `${agreed}/${inputs.length - skipped.length} files agree (${tokens} tokens), ${skipped.length} skipped`;
+  const summary =
+    `${agreed}/${inputs.length - skipped.length} files agree (${tokens} tokens), ` +
+    `${skipped.length} skipped, seed ${seed.label}`;
   if (verbose || failed.length > 0) {
     for (const f of failed) process.stdout.write(`  FAIL ${f}\n`);
     if (verbose) for (const s of skipped) process.stdout.write(`  skip ${s}\n`);

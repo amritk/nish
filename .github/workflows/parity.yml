@@ -1,0 +1,121 @@
+# WP19 G1: the corpus half of `--parity`, nightly.
+#
+# `node tests/run.js --parity` runs the whole corpus through both compilers
+# under every flag variation the suite uses and compares everything the
+# command line produces -- exit status, stdout, stderr and every file written.
+# It is the only check that asks whether a program or a flag is still stage0's,
+# and between wp19 §A2 and §A3 it found a miscompile that eleven oracles and
+# 1,161 checks had not.
+#
+# Why here rather than in ci.yml's `test` job: it is roughly 9,000 compilations
+# by each compiler over 623 programs, plus linking a stage1 binary first --
+# about forty minutes against three for `npm test`, and it grows with every
+# flag the suite adds. Making every push wait on that is the trade wp19 §A5
+# argues against; the flag-set half, which takes seconds and is what found
+# `--no-warn-performance` and `--out-dir`, already runs inside `npm test`.
+#
+# Why nightly rather than never: G1 was recorded green on an empty difference
+# set, and the claim stopped being true without anybody editing it -- arrows
+# landed, no `-g` case was written in the arrow spelling, and the gate sat
+# reopened until somebody ran the mode by hand. A gate that only runs when
+# remembered measures memory. Nightly, a red result names the day it appeared.
+#
+# A scheduled workflow runs on the default branch only, so this says nothing
+# about a branch; `workflow_dispatch` is how you ask it about one.
+name: Parity
+
+on:
+  schedule:
+    # 06:17 UTC. Off the hour because GitHub's scheduler queues everything
+    # written at :00, and the run is long enough to care about starting.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Only programs whose path contains this (default: the whole corpus)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: parity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity:
+    name: parity (the corpus, every variation)
+    runs-on: ubuntu-latest
+    # The measured run is ~40 minutes on a machine that is not a hosted runner.
+    # Two hours is room for a slower one, and short enough that a hang is
+    # reported the same morning rather than after six.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install LLVM 18 + lld
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The mode spawns `dist/index.js` for stage0 and links its own stage1
+      # binary out of `self/`, so stage0 has to exist first.
+      - name: Build stage0
+        run: npm run build
+
+      # The dispatch input reaches the shell as an environment variable rather
+      # than through `${{ }}` interpolation, which would paste whatever was
+      # typed into the script itself.
+      - name: Parity
+        id: parity
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          args=""
+          if [ -n "$ONLY" ]; then args="--only $ONLY"; fi
+          # shellcheck disable=SC2086
+          set +e
+          node tests/run.js --parity $args 2>&1 | tee "$RUNNER_TEMP/parity.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      # The summary line carries the numbers wp19 §A4 and §A5 are quoted from,
+      # and the point of both sections is that such a number is only true on
+      # the day it was measured. Recording it in the run means the next person
+      # can quote it with its date instead of re-deriving it.
+      - name: Say what this proved
+        if: always()
+        run: |
+          {
+            echo "### Parity ($(date -u +%Y-%m-%d), ubuntu-latest, LLVM 18)"
+            echo
+            echo '```'
+            tail -n 40 "$RUNNER_TEMP/parity.log"
+            echo '```'
+            if [ "${{ steps.parity.outputs.status }}" = "0" ]; then
+              echo
+              echo "Green: every undeclared difference is gone. Quote this with its date."
+            else
+              echo
+              echo "Red: an undeclared difference. It is a gate, not a flake --"
+              echo "read the table above, then wp19 §A2/§A3 for the five classes"
+              echo "that have come up before."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

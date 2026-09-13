@@ -192,6 +192,14 @@ what is blocking and what you need — and keep watching.
   one negative test, its `docs/LANGUAGE.md` rule and cookbook entry, and a
   `CHANGELOG.md` line. There is no changesets flow here; the changelog is the
   record.
+- **A construct may be implemented once.** Writing it in both `src/` and
+  `self/` buys the byte-for-byte comparison between two implementations;
+  writing it in `self/` alone is the other legitimate answer, and costs one
+  line in `tests/self/stage1_only.txt`, which makes the golden stage1's and
+  the stage0 oracles declare the case rather than skip it
+  ([wp19 §1a](./docs/wp19-stage0-retirement.md#1a-the-doubling-ends-before-r6)).
+  What is never allowed is the third thing: `self/` alone and unregistered,
+  where the oracles quietly stop comparing.
 - **Never emit an LLVM attribute you cannot cite a checker proof for.** Write
   the reason in `src/codegen/attributes.ts` beside the code.
 - **A struct layout change touches `runtime.ts` and `runtime.c` in the same

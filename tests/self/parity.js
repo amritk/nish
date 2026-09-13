@@ -24,9 +24,30 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { linkPrograms, programs, root } from "./corpus.js";
+import { stage1Only, stage1OnlyFor } from "./stage1_only.js";
 
 const cli = path.join(root, "dist", "index.js");
 const workRoot = path.join(root, "build", "test", "parity");
+
+/** The cases `self/` implements alone (WP19 §1a), read once for the whole run. */
+const REGISTER = stage1Only();
+
+/**
+ * The one declaration that is about the *program* rather than about a surface.
+ * A registered case has no stage0 implementation at all, so stage0 refuses it
+ * and every surface differs; there is nothing finer to say and normalising
+ * would be dishonest. It is counted and named in the table like every other
+ * declaration, which is what keeps the register from being a quiet exemption:
+ * a line that appears here without a line in `stage1_only.txt` is a failure.
+ */
+const STAGE1_ONLY_DECLARED = {
+  surface: "every surface",
+  whole: true,
+  why:
+    "the case is in tests/self/stage1_only.txt: its construct is implemented in `self/` alone, so stage0 " +
+    "refuses the program and there is no parity to have. What pins it instead is the golden `tests/run.js` " +
+    "compiles with stage1, and `nish-cmp.js` once the seed is a release that has the construct (WP19 §1a).",
+};
 
 /**
  * The flag variations, applied on top of whatever flags a program already
@@ -146,7 +167,12 @@ function declaredFor(flags, surface, want, got, run) {
     if (d.matches !== undefined && d.matches(want, got, run)) return d;
     if (d.normalize !== undefined && d.normalize(want) === d.normalize(got)) return d;
   }
-  return null;
+  // Last, so that a difference one of the declarations above already explains
+  // is attributed to it rather than to the register. The register's own
+  // fixture is a case both compilers *can* compile, and it differs on exactly
+  // the two surfaces every program differs on; reading those as "stage0
+  // refuses it" would be a false sentence in the table.
+  return run.stage1Only === true ? STAGE1_ONLY_DECLARED : null;
 }
 
 /** The first `error:` / `warning:` line of a report, or "". */
@@ -166,9 +192,17 @@ function diagnosticFile(line) {
  * Reused when it is already there, so a run of the mode after `npm test` does
  * not pay for it twice. `NISH_PARITY_COMPILER` points at another one.
  */
+/**
+ * The stage1 compiler, built out of live sources **on every run**. It used to
+ * be reused when the file was already there, and that is how a gate lies: the
+ * mode compares stage0 as it is now with stage1 as it was whenever that binary
+ * was last linked, so a fix on one side reads as a difference and a fix on the
+ * other reads as agreement. Forty seconds on a run that is half an hour.
+ * `NISH_PARITY_COMPILER` is still the way to point the mode at a compiler you
+ * built yourself.
+ */
 async function build() {
   const out = path.join(root, "build", "self", "compile");
-  if (fs.existsSync(out)) return out;
   fs.mkdirSync(path.dirname(out), { recursive: true });
   const r = await run("node", [cli, path.join(root, "self", "compile.ts"), "--link", out]);
   if (r.status !== 0) {
@@ -251,8 +285,9 @@ async function compare(compiler, program, variation, index) {
   // a difference on one surface can be decided by what happened on another:
   // an exit status of 1 where stage0 has 0 is the parser's refusal when the
   // stderr *is* that refusal, and nothing else.
+  const registered = stage1OnlyFor(program.entry, REGISTER) !== null;
   const note = (surface, want, got, detail) => {
-    const declared = declaredFor(args, surface, want, got, { zero, one, flags: args });
+    const declared = declaredFor(args, surface, want, got, { zero, one, flags: args, stage1Only: registered });
     found.push({ program: program.name, variation: variation.name, surface, detail, declared });
   };
 

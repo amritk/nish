@@ -197,9 +197,12 @@ because a shift is not one of the shapes "known type" names however plainly it
 is an integer: give it a name first, or write `toI32(0xc0)`. A literal in an integer context must be integral
 (`` Non-integer literal `1.5` where i64 is expected ``,
 `tests/cases/reject_i64_literal_float`); in an `i64` context it must also be
-at most 2^53 in magnitude (`` exceeds 2^53 and cannot be written exactly ``
-*(CLI only)*) because TypeScript's parser has already rounded larger
-literals to a double. In an *unsigned* context it must also be non-negative
+at most 2^53 in magnitude (`` exceeds 2^53 and cannot be written exactly ``,
+`tests/cases/reject_i64_literal_precision`; an unsigned context has the same
+rule, `reject_u64_literal_precision`) because TypeScript's parser has already
+rounded larger literals to a double. Every one of these messages quotes the
+literal **as it is written**, not as the parser cooked it: `0x1FF` reads back
+as `0x1FF` and a rounded literal as the digits in the file. In an *unsigned* context it must also be non-negative
 and fit the width: `const b: u8 = -1` is
 `` Negative literal `-1` where u8 is expected (u8 is unsigned) ``
 (`tests/cases/reject_u_negative_literal`) and `const b: u8 = 256` is
@@ -648,6 +651,13 @@ spelling; the two compile to identical IR, instruction for instruction
   (`tests/cases/reject_assign_param`, `reject_cf_incdec_param`).
 - Parameters and the body's top-level block share one scope: `let x` in
   the body of `f(x)` is `` Duplicate declaration of `x` `` *(CLI only)*.
+- **A function's name shares one declaration namespace** with classes,
+  interfaces, type aliases, enums and module constants, whichever declaration
+  came first. A class or interface of the same name is
+  `` `Point` is already declared as a class or interface ``
+  (`tests/cases/reject_cls_name_is_function`); everything else is
+  `` `value` is already declared in this module ``
+  (`tests/cases/reject_fn_after_const`).
 - **A function may be generic**, and each instantiation is compiled on its
   own; see [Generic functions](#generic-functions). Rejected forms:
   generators (`reject_generator`), `async` (`reject_async_function`),
@@ -655,7 +665,8 @@ spelling; the two compile to identical IR, instruction for instruction
   (`Destructured parameters are not supported`,
   `Rest parameters are not supported`,
   `Optional/default parameters are not supported`), overloads
-  (`` Duplicate function `f` `` *(CLI only)*), `declare function`,
+  (`` Duplicate function `f` ``, `tests/cases/reject_fn_duplicate`),
+  `declare function`,
   function expressions and arrow functions
   (`Unsupported expression in Phase 1: ArrowFunction` *(CLI only)*),
   and nested function declarations (`Unsupported statement in Phase 1:
@@ -1327,7 +1338,16 @@ The condition must be `boolean`: there is no truthiness
 
 - `a` must be an array (`` `for...of` requires an array, got string ``,
   `tests/cases/reject_arr_forof_non_array`); `x` gets the element type and
-  must not be annotated or initialised; exactly one variable; `let x` makes
+  must not be annotated
+  (`` The `for...of` variable takes the element type; remove the annotation ``,
+  `tests/cases/reject_arr_forof_annotation`) or initialised
+  (`` The `for...of` variable cannot have an initializer ``,
+  `tests/cases/reject_arr_forof_initializer`); exactly one variable
+  (`` `for...of` declares exactly one variable ``,
+  `tests/cases/reject_arr_forof_two_vars`); the head is a declaration rather
+  than an assignment to something already declared
+  (`` `for...of` needs a `const` or `let` declaration ``,
+  `tests/cases/reject_arr_forof_expression`); `let x` makes
   it assignable, `const x` does not (`tests/cases/reject_arr_forof_const_assign`).
   `for await` is not supported.
 - `a` is evaluated once; `a.length` is re-read every iteration, so a `push`
@@ -1472,7 +1492,7 @@ under [Semantics decisions](#semantics-decisions).
 | `=== !==` | any two values of the same type except `void`; a `T \| null` only against the literal `null` | `boolean` | integers and booleans: `icmp eq` / `icmp ne`; `f64`: `fcmp oeq` / `fcmp une` (so `x !== x` is true for NaN); strings: `nish_str_eq` (content); arrays and objects: `icmp eq` on the pointer (identity); `p === null`: `icmp eq` against `null` | `str_eq`, `cls_this_method_call`, `conversions`, `mem_nullable`; arrays *(CLI only)*; `reject_null_compare_two` |
 | `== !=` | – | – | forbidden | `reject_loose_equality`, `reject_loose_inequality` |
 | `&& \|\|` | two `boolean` | `boolean` | short-circuit: `br` + `phi` | `cf_logical`; `reject_cf_logical_numbers` (`requires boolean operands`) |
-| `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch` |
+| `c ? a : b` | `c: boolean`; `a`, `b` same non-`void` type | that type | `br` + `phi` | `cf_ternary`; `reject_cf_ternary_mismatch`, `reject_cf_ternary_void` |
 | `x = e` | mutable local, field, or element; `e` of the target's type | the target's type | `store` | `locals`, `cls_field_write`, `arr_index_read_write` |
 | `x op= e` (`+= -= *= /= %=`) | numeric mutable local, numeric field, or numeric element; same type | the target's type | load, op, store | `cf_compound_assign`, `cls_compound_field`, `arr_index_read_write`; `reject_cf_compound_const`, `reject_cf_compound_string`, `reject_cf_compound_widths` |
 | `x op= e` (`&= \|= ^= <<= >>= >>>=`) | mutable local, field, or element of integer type; `e` of the same type | the target's type | load, op, store, with the same shift-count mask; a field is addressed by one GEP and an element bounds-checked once, so the target expression is evaluated exactly once | `bit_compound`, `cls_field_bitwise_assign`, `arr_element_bitwise_assign`; `reject_cls_field_bitwise_readonly`, `reject_arr_element_bitwise_f64`; `tests/differential/corpus/bit_compound_target` |
@@ -2507,6 +2527,7 @@ fragment `tests/run.js` matches and the case that proves it.
 | type parameters on a class or an interface | `` Generic type parameters are forbidden on a class in Nish (a generic function is monomorphised; a generic class is not supported yet) `` | `reject_generic_class` |
 | type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish (a generic function is monomorphised; a generic class is not supported yet) `` | `reject_type_alias_generic` |
 | type parameters on a method | `` Generic type parameters are forbidden on a method in Nish (a method takes its class's type arguments and adds none of its own) `` | `reject_generic_method` |
+| type *arguments* on `new` of a declared class | `` Generic classes are not supported `` | `reject_cls_new_generic` |
 | generators (`function*`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator` |
 | `async` functions, methods, arrows | `` `async` functions are forbidden in Nish (no event loop or promises) `` | `reject_async_function` |
 | `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |

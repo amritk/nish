@@ -66,6 +66,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { extraArgs, linkPrograms, programs, root } from "./self/corpus.js";
+import { stage1Only, stage1OnlyFor } from "./self/stage1_only.js";
 
 /**
  * Output differences that are decided rather than broken, each with the words
@@ -242,6 +243,7 @@ function excerpt(want, got, limit) {
  */
 function compare(pair, work, file, options = {}) {
   const limit = options.lines ?? 3;
+  const registered = stage1OnlyFor(file, options.register ?? stage1Only());
   const flags = extraArgs(file);
   const dump = flags.find((flag) => DUMP_FLAGS.has(flag));
   if (dump !== undefined) return { dump: `${dump}: no artefact; the <name>.stdout golden pins it` };
@@ -268,6 +270,13 @@ function compare(pair, work, file, options = {}) {
     return { refused: firstLine(reference.stderr) || `exit ${reference.status}` };
   }
   if (reference.status !== 0) {
+    // A case in the stage1-only register is a construct HEAD has and the seed
+    // does not, which is what the rolling freeze *is*: the seed is a release
+    // older than the construct. That is the expected reading of "the reference
+    // refuses it" for exactly these programs, and it stops being true of its
+    // own accord one release later, when the seed has the construct and the
+    // two are compared like everything else (WP19 §1a, G4).
+    if (registered !== null) return { newSince: registered.why };
     return {
       differences: [
         {
@@ -461,6 +470,7 @@ function main(argv) {
   const declared = [];
   const dumps = [];
   const refused = [];
+  const stage1OnlyRows = [];
   let agreed = 0;
   let files = 0;
   let lines = 0;
@@ -469,6 +479,8 @@ function main(argv) {
     const result = compare(pair, work, file, options);
     if (result.dump !== undefined) {
       dumps.push(`${program}: ${result.dump}`);
+    } else if (result.newSince !== undefined) {
+      stage1OnlyRows.push(`${program}: stage1-only, and older than the seed: ${result.newSince}`);
     } else if (result.refused !== undefined) {
       refused.push(`${program}: both refuse it: ${result.refused}`);
     } else if (result.differences !== undefined) {
@@ -538,9 +550,10 @@ function main(argv) {
   if (verbose) {
     for (const row of refused) process.stdout.write(`  refused ${row}\n`);
     for (const row of dumps) process.stdout.write(`  dump ${row}\n`);
+    for (const row of stage1OnlyRows) process.stdout.write(`  stage1-only ${row}\n`);
   }
 
-  const compared = inputs.length - refused.length - dumps.length;
+  const compared = inputs.length - refused.length - dumps.length - stage1OnlyRows.length;
   // Each outcome is counted apart and named, for the reason the oracles count
   // their skips apart (`.claude/selfhost.md`): a program neither compiler
   // compiles proves nothing about either, and must not be able to hide inside
@@ -548,10 +561,12 @@ function main(argv) {
   const refusedNote = refused.length > 0 ? `, ${refused.length} refused by both` : "";
   const dumpNote = dumps.length > 0 ? `, ${dumps.length} dumps (no artefact)` : "";
   const declaredNote = declared.length > 0 ? `, ${declared.length} declared difference(s)` : "";
+  const stage1OnlyNote =
+    stage1OnlyRows.length > 0 ? `, ${stage1OnlyRows.length} stage1-only and newer than the seed` : "";
   process.stdout.write(
     `nish-cmp: ${agreed}/${compared} programs agree (${files} files, ${lines} IR lines) — ` +
       `reference ${pair.reference.label}, candidate ${pair.candidate.label}` +
-      `${refusedNote}${dumpNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
+      `${refusedNote}${dumpNote}${stage1OnlyNote}${declaredNote}, ${undeclared.length} undeclared difference(s)\n`
   );
   return undeclared.length === 0 && unnamed.length === 0 ? 0 : 1;
 }
