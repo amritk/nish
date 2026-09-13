@@ -1111,6 +1111,35 @@ if (fs.existsSync(diamondEntry)) {
   );
 }
 
+// The same rule for a `nish/` specifier, and it is deliberately a *different*
+// rule: a standard-library module does not resolve against the importer, it
+// resolves against the package this compiler shipped in, so its name is
+// package-relative and depends on neither the importer nor the cwd. Naming it
+// from the importer was the same string under a relative entry and the whole
+// checkout path under an absolute one, which is why the corpus never saw it
+// and 37 rows of `--parity` did (WP19 §A3, and §A5 on why that gap keeps
+// happening). `self/std_modules.ts` writes the rule down for stage1 and its
+// comment asserts this one; this check is what keeps that sentence true.
+const stdEntry = path.join(linkDir, "std_bare_specifier", "main.ts");
+if (fs.existsSync(stdEntry)) {
+  const absOut = path.join(buildDir, "link", "std-bare-abs");
+  fs.rmSync(absOut, { recursive: true, force: true });
+  fs.mkdirSync(absOut, { recursive: true });
+  const r = spawnSync("node", [cli, stdEntry, "-o", `${absOut}${path.sep}`], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  const imported = path.join(absOut, "testing.ll");
+  const header =
+    r.status === 0 && fs.existsSync(imported) ? fs.readFileSync(imported, "utf8").split("\n")[0] : "";
+  const want = "; ModuleID = 'std/testing.ts'";
+  check(
+    "link/std_bare_specifier: a `nish/` module is named package-relative, whatever the entry was called",
+    header === want,
+    `--- expected\n${want}\n--- actual\n${header}\n${r.stderr}`
+  );
+}
+
 // ---- WP1: optimisation ------------------------------------------------------------
 // The emitted IR is target-neutral, so `opt` needs a triple before it believes it has
 // vector registers; without one the loop vectoriser never fires. x86_64 is always built in.

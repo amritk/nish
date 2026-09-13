@@ -424,6 +424,55 @@ checked and none of them caches: `ir_oracle.js`, `checked_oracle.js` and
 its own header — "a golden compared against a stale binary is a golden
 comparing itself with yesterday".
 
+#### A7. Red again, on a corpus a third larger — and the same class, a third time
+
+```
+parity: 12225 runs over 815 programs (3937.1 s); 37 undeclared difference(s), 2588 declared    2026-09-13, before the fix
+(the run with the fix in it is in flight; this line is filled in from what it measures, not from what it should measure)
+```
+
+**§A6 was quoted as green and the gate was red when it was next run.** That is
+now the third time, and the corpus is the reason every time: 764 programs then,
+**815** now. The fifty-one new ones include the two that reach the standard
+library by its package specifier (`tests/link/std_bare_specifier`,
+`std_package_scope`), and all 37 differences were those two.
+
+The cause is §A3's first class — **a path inside the IR** — recorded as closed
+and reopened on the one specifier kind the fix never covered:
+
+```
+stage1  ; ModuleID = 'std/testing.ts'
+stage0  ; ModuleID = '/home/user/nish/std/testing.ts'
+```
+
+`importedName` names an imported module by "the specifier resolved against the
+name the importer was given", which is right for `./text` and is answering a
+question nobody asked for `nish/text`: a `nish/` specifier does not resolve
+against the importer at all, it resolves against the package the compiler
+shipped in. Under a **relative** entry `path.relative` climbed out of the
+importer's directory and back down to the same string, so the two compilers
+agreed; under an **absolute** entry the join put the whole checkout path in the
+header. stage0 was the wrong side, for the third time in this family and for
+the reason §A3 gave the first time: the rule that survives is the one that needs
+no working directory, because that is also the one that makes a build
+reproducible. `stdModuleName` in `src/std-modules.ts` answers `std/<name>.ts`
+and nothing else now.
+
+**The comment that asserted the bug was already in the tree.**
+`self/std_modules.ts` says, of its own normalisation, "the header would read
+`./build/../std/text.ts` where *stage0 writes `std/text.ts`*". That sentence was
+true of every call in this repository and false of the one the parity harness
+makes, which is §A5's `self/debug.ts` caveat exactly — *a claim about the corpus
+quietly read as a claim about the language* — in a second file, about a second
+subject, written down and then trusted.
+
+**What stops the fourth one is a check, not a paragraph.** `tests/run.js` now
+compiles `std_bare_specifier` **by absolute path** and pins the header, beside
+the `link/diamond` check that does the same for a relative specifier — the
+`dbg_arrow` move of §A5, applied to this family. It fails on the commit before
+this one and costs one compile, so the question is asked on every run rather
+than on the nights somebody reads the nightly.
+
 #### Should `--parity` run in CI?
 
 **Yes, and not in the `test` job — and it does now.**
@@ -674,6 +723,19 @@ on the default branch only, so a change that reopens the gate is caught the
 morning after it merges, not before. Re-run `node tests/run.js --parity`
 against a branch that touches either compiler, and quote a number with the
 date it was measured on.
+
+**And running it is not the same as somebody hearing the answer.** A nightly
+whose only record is a run summary has moved the silence rather than closed
+it: §A5's gate was reopened for weeks with a number written down that nobody
+re-derived, and a red Tuesday nobody opens Actions on is the same failure with
+a schedule attached. So a full run that is not green now opens the issue
+*WP19 G1: the parity gate is not green* — or comments on the open one, so a
+run of red nights is one thread — and a green full run closes it. An
+`only`-filtered `workflow_dispatch` is barred from touching it, because a
+green subset read as a green corpus is §A5's mistake in the shape a workflow
+input makes it easy to repeat. The two states that open it are an undeclared
+difference and a run that never reached the mode: the second is not the lesser
+one, because the record may not read green on a day nothing was measured.
 
 ### G2 — Oracle succession: the replacement runs before the original is deleted
 
@@ -935,7 +997,7 @@ gate nobody has opened is how a runtime budget dies.
 
 | | Milestone | Done when |
 | --- | --- | --- |
-| **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) — though that claim was recorded once while it was not true, and §A5 is the correction and what it cost |
+| **R1** | Parity | **green when last measured, and that is the only form this row may take.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared. The mode has now been recorded green three times and found red on the next run twice — §A5 and §A7 — both times because the corpus had grown a program that asked a question the old one could not. Quote §A7's number with its date, and re-run the mode before quoting it at all |
 | **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). Outstanding: the job runs on Linux only, and now for want of a darwin seed rather than a darwin runner — the two bash 3.2 defects that kept `macos-latest` out of the test matrix are fixed, so that row is one uncommented line whenever the suite is fast enough to pay for it. The seed itself has arrived — v0.1.1 is released with `nish-0.1.1-x86_64-linux.tar.gz` attached, and it is the first one, because v0.1.0 was tagged and never built (G3, G4) |
 | **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is now 0, with 325 codes provoked by `tests/wordings/` and the surviving negatives and 60 unreachable with a reason on file (§2B). The four survivors are repointed too: they build their stage1 binary with the seed through `tests/self/seed.js` and name no compiler of their own, and all four were watched green with `dist/` moved out of the tree. Outstanding, carried rather than closed: the 45 wordings stage1's parser refuses before Phase 0 can state them — those go with stage0 at R6 — and the 13 programs the two compilers still answer differently, seven of which stage1 compiles |
 | **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the package becoming an installer — which first needs a registry name, since `nish` is taken ([wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken)) — and the INSTALL.md/wp12 rewrite (G5) |

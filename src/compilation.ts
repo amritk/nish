@@ -34,7 +34,7 @@ import { parseSource } from "./parser.js";
 import { validateSyntax } from "./validator.js";
 import { CompilerOptions, DEFAULT_OPTIONS } from "./types.js";
 import { CLI, STD_PREFIX } from "./branding.js";
-import { STD_DIR, stdModuleNames } from "./std-modules.js";
+import { STD_DIR, stdModuleName, stdModuleNames } from "./std-modules.js";
 import { PKG_ROOT } from "./version.js";
 
 export interface ModuleUnit {
@@ -173,14 +173,19 @@ export class Compilation {
       // A missing module is reported and the others still load; `check()` stops before binding.
       this.sink.recover(() => {
         const target = this.resolveSpecifier(unit, imp);
+        const std = imp.specifier.startsWith(STD_PREFIX);
         unit.resolved.set(
           imp.specifier,
           this.load(
             target,
-            importedName(unit, target),
+            // A `nish/` module is named by where it sits in the package, not by
+            // where the importer sits: it did not resolve against the importer,
+            // so naming it from there put the checkout path in the header
+            // whenever the entry was named absolutely (WP19 §A3).
+            std ? stdModuleName(imp.specifier, STD_PREFIX.length) : importedName(unit, target),
             undefined,
             false,
-            imp.specifier.startsWith(STD_PREFIX) ? CLI : undefined
+            std ? CLI : undefined
           )
         );
       });

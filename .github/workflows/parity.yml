@@ -36,8 +36,12 @@ on:
         required: false
         type: string
 
+# `issues: write` is what the last step needs: a red gate opens an issue and a
+# green one closes it, so the gate's state lives somewhere a person passes
+# rather than in a run log somebody has to think to open.
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: parity-${{ github.ref }}
@@ -119,3 +123,69 @@ jobs:
               echo "that have come up before."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # And a gate whose state lives only in a run log is one step short of the
+      # silence wp19 §A5 is about. The mode running nightly fixes "nobody
+      # remembered to type the command"; it does not fix "nobody opened the
+      # run". So a full run that is not green opens an issue -- or adds a
+      # comment to the one already open, so a week of red is one thread rather
+      # than seven -- and a full run that is green closes it. The repository
+      # itself then carries the answer, and a reopened gate arrives as a
+      # notification instead of as a number somebody has to re-derive.
+      #
+      # Only a **full** run may touch the issue. `workflow_dispatch` takes an
+      # `only` filter, and a green subset is exactly the claim §A5 records
+      # going wrong: an empty difference set over part of the corpus read as an
+      # empty difference set. A filtered run therefore reports into the job
+      # summary and nowhere else.
+      #
+      # Two states are not green and both open the issue, because both leave
+      # the gate unproved for the day: an undeclared difference, and a run that
+      # never got as far as the mode.
+      - name: A gate that is not green says so where it will be seen
+        if: always() && inputs.only == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS: ${{ steps.parity.outputs.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # Absolute, because a relative link in an issue body is not
+          # resolved against the repository the way one in a file is.
+          WP19: ${{ github.server_url }}/${{ github.repository }}/blob/main/docs/wp19-stage0-retirement.md
+          TITLE: "WP19 G1: the parity gate is not green"
+        run: |
+          today="$(date -u +%Y-%m-%d)"
+          # `gh issue list` reads the API directly. `--search` would go through
+          # the search index, which lags by minutes and would open a second
+          # issue on the second red night.
+          number="$(gh issue list --state open --limit 100 --json number,title \
+            --jq "[.[] | select(.title == \"$TITLE\")][0].number // empty")"
+
+          if [ "$STATUS" = "0" ]; then
+            [ -n "$number" ] || { echo "green, and no issue open"; exit 0; }
+            gh issue comment "$number" --body "Green again on $today: \`$(tail -n 1 "$RUNNER_TEMP/parity.log")\`. [The run]($RUN_URL)."
+            gh issue close "$number" --reason completed
+            echo "green: closed #$number"
+            exit 0
+          fi
+
+          if [ -s "${RUNNER_TEMP}/parity.log" ]; then
+            evidence="$(tail -n 40 "$RUNNER_TEMP/parity.log")"
+            what="\`node tests/run.js --parity\` reported an undeclared difference."
+          else
+            evidence="(the run produced no parity output)"
+            what="The run never reached the mode, so the gate is **unmeasured** for $today rather than red. That is not a lesser state: the record may not read green on a day nothing was measured."
+          fi
+
+          body="$(printf '%s\n\n%s\n\n```\n%s\n```\n\n%s\n' \
+            "$what" \
+            "Measured $today on \`ubuntu-latest\` with LLVM 18. [The run]($RUN_URL)." \
+            "$evidence" \
+            "A red result here is a gate rather than a flake: read the table above, then [wp19 §A2/§A3]($WP19#a2-what---parity-found-on-its-first-run) for the classes that have come up before, and [§A5]($WP19#a5-the-gate-reopened-and-the-correction-a4-needed) for what a gate recorded green while it was red has cost once already. This issue closes itself on the next green full run.")"
+
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+            echo "not green: commented on #$number"
+          else
+            gh issue create --title "$TITLE" --body "$body"
+            echo "not green: opened an issue"
+          fi
