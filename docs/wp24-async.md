@@ -451,12 +451,17 @@ the two shims disagree about what a bad call does.
 **The measurement.** `examples/add.ts` is too fast to say anything, so the
 numbers below are from a function that spins for about a second — the shape §5.1
 is about. One call; a 5 ms interval measuring how late it is actually served; the
-same Nish function and the same `--threads` build behind both shims:
+same Nish function and the same `--threads` build behind both shims; best of
+three runs each, on an otherwise idle machine:
 
 | Shim | Wall clock | 5 ms ticks served during the call | Longest the event loop went unserved |
 | --- | ---: | ---: | ---: |
-| `--emit-napi` | 1030 ms | **0** | **1024.7 ms** |
-| `--emit-napi-async` | 1030 ms | 201 | **0.5 ms** |
+| `--emit-napi` | 1032 ms | **0** | **1027.2 ms** |
+| `--emit-napi-async` | 1034 ms | 201 | **0.5 ms** |
+
+The three runs were within 20 ms of each other on wall clock and within 0.1 ms
+on the async lag; the synchronous shim served **zero** ticks in every one of
+them, which is the number that matters.
 
 How to get the numbers again: a function that loops
 (`export const spin = (rounds: i32): i32 => { ... }`), compiled twice from the
