@@ -19,7 +19,10 @@ import { CheckContext } from "./context";
 import { resolveType } from "./annotations";
 import { isExported, collectParams } from "./declarations";
 import {
+  FLAG_DEFINITE,
+  FLAG_OPTIONAL,
   FLAG_READONLY,
+  FLAG_STATIC,
   N_CONSTRUCTOR,
   N_EMPTY,
   N_FALSE,
@@ -153,6 +156,29 @@ function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void {
     ctx.error(decl.children[0], `Duplicate member \`${name}\` in ${kindWord(owner)} \`${owner.name}\``);
     return;
   }
+  // The three member headers the parser flags rather than refuses
+  // (`self/nodes.ts`). Each is a rule about the *member*, so the sentence
+  // names it and its class, which is what the parser could not do and why
+  // these were stage0's wordings alone.
+  //
+  // The order is stage0's and is load-bearing: a field carries the name's
+  // marker and its modifiers at once, and `static x?: i32` has to get the same
+  // one of the three sentences from both compilers. stage0 reads the marker
+  // first for a field (`src/checker/classes.ts`, collectField) and the
+  // modifiers first for a method (rejectMethodModifiers), so the two lists
+  // below are deliberately not in the same order as each other.
+  if ((decl.flags & FLAG_OPTIONAL) !== 0) {
+    ctx.error(decl, `${what} cannot be optional (every field has a fixed slot)`);
+    return;
+  }
+  if ((decl.flags & FLAG_DEFINITE) !== 0) {
+    ctx.error(decl, `${what}: definite-assignment assertions (\`!\`) are not supported`);
+    return;
+  }
+  if ((decl.flags & FLAG_STATIC) !== 0) {
+    ctx.error(decl, `${what}: \`static\` members are not supported (use a top-level function or const)`);
+    return;
+  }
   const type = resolveType(decl.children[1], ctx);
   if (type === T_VOID) {
     ctx.error(decl.children[1], `${what} cannot have type void`);
@@ -192,6 +218,20 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void {
   const what = `Method \`${name}\``;
   if (owner.field(name) !== null || owner.methodIndex.has(name)) {
     ctx.error(decl.children[0], `Duplicate member \`${name}\` in class \`${owner.name}\``);
+    return;
+  }
+  // As in `collectField` above, and worth the repetition rather than a shared
+  // helper: the two sentences differ, and so does the order — stage0 reads a
+  // method's modifiers before its `?`.
+  if ((decl.flags & FLAG_STATIC) !== 0) {
+    ctx.error(
+      decl,
+      `${what} of class \`${owner.name}\`: \`static\` members are not supported (use a top-level function)`
+    );
+    return;
+  }
+  if ((decl.flags & FLAG_OPTIONAL) !== 0) {
+    ctx.error(decl, `${what} of class \`${owner.name}\` cannot be optional`);
     return;
   }
   const symbol = `${owner.name}.${name}`;

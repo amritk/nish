@@ -18,16 +18,22 @@
 # `npm test` runs the coverage tool over stage1 with `--strict-refusals`, so a
 # case listed here that stage1 starts answering the same way is a failure: the
 # list shrinks as the parser learns a rule, and it cannot grow by accident.
-nl2015_optional_field
+#
+# It has shrunk once, from 45 to 41. `nl2015_optional_field`,
+# `nl2029_definite_assignment`, `nl2046_optional_method` and
+# `nl2116_static_method` are one family — the *member header*, `x?: T`, `x!: T`
+# and `static` — and they came off together because they close the same way:
+# stage1's parser records the marker or the modifier as a flag and the checker
+# states the rule, which is the phase that knows whether this is a field or a
+# method and which class it is in. Those three facts are the whole difference
+# between the parser's sentence and stage0's, and they are why the parser could
+# not have said it.
 nl2018_anonymous_class
-nl2029_definite_assignment
 nl2038_keyof_type
-nl2046_optional_method
 nl2083_declare_class
 nl2090_method_without_body
 nl2091_constructor_without_body
 nl2092_string_member_name
-nl2116_static_method
 nl2118_override_method
 nl2128_export_list
 nl2129_export_default_value

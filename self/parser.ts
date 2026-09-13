@@ -26,11 +26,14 @@ import { Diagnostic, SourceFile } from "./diagnostics";
 import { Lexer } from "./lexer";
 import {
   FLAG_CONST,
+  FLAG_DEFINITE,
   FLAG_EXPORTED,
   FLAG_FOREIGN,
+  FLAG_OPTIONAL,
   FLAG_POSTFIX,
   FLAG_PREFIX,
   FLAG_READONLY,
+  FLAG_STATIC,
   N_ARRAY,
   N_BIGINT,
   N_BINARY,
@@ -745,20 +748,55 @@ export class Parser {
 
   /**
    * `readonly`, `public`, `private`, `protected` and `static` in front of a
-   * member. Only `readonly` is recorded, because it is the only one the
-   * checker asks about; the accessibility three are accepted and ignored
-   * (docs/LANGUAGE.md, Classes), and `static` is refused where it stands.
+   * member. `readonly` and `static` are recorded; the accessibility three are
+   * accepted and ignored (docs/LANGUAGE.md, Classes).
+   *
+   * `static` used to be refused here, with a sentence of the parser's own.
+   * The checker states it now, because the checker is the phase that knows
+   * whether this is a field or a method and which class it is in, and stage0's
+   * message names all three — so refusing it here is what kept
+   * `nl2116_static_method` in `tests/wordings/parser_refusals.txt` rather than
+   * letting the two compilers say the same thing
+   * (docs/wp19-stage0-retirement.md R3).
    */
   parseMemberModifiers(): i32 {
     let flags = 0;
     while (this.at(TOK_IDENT) && this.peek() !== TOK_LPAREN && this.peek() !== TOK_COLON) {
       const word = this.value;
       if (word === "readonly") flags = flags | FLAG_READONLY;
-      else if (word === "static") this.report("`static` members are not supported", this.start, this.end);
+      else if (word === "static") flags = flags | FLAG_STATIC;
       else if (word !== "public" && word !== "private" && word !== "protected") return flags;
       this.advance();
     }
     return flags;
+  }
+
+  /**
+   * The `?` or `!` that may follow a member's name, as a flag rather than as a
+   * refusal. Both are forbidden and the checker is what says so, in the words
+   * that name the member and its class.
+   */
+  parseMemberMarker(): i32 {
+    if (this.eat(TOK_QUESTION)) return FLAG_OPTIONAL;
+    if (this.eat(TOK_BANG)) return FLAG_DEFINITE;
+    return 0;
+  }
+
+  /**
+   * Whether the member about to be parsed is `m?(...)` — a method whose name
+   * carries the optional marker. That needs one token more lookahead than
+   * `peek` has, so it is a scan over the same source, the shape
+   * `startsConstEnum` uses. `m!(...)` is not a spelling TypeScript has, so
+   * only `?` is looked for.
+   */
+  markedMethodAhead(): boolean {
+    if (this.peek() !== TOK_QUESTION) return false;
+    const scan = new Lexer(this.file.text);
+    scan.pos = this.start;
+    scan.next(); // the name
+    scan.next(); // `?`
+    scan.next();
+    return scan.kind === TOK_LPAREN;
   }
 
   /** A field, a method, or the constructor. `constructor` is an identifier to the lexer. */
@@ -778,9 +816,13 @@ export class Parser {
         `a class member is a field, a method or a constructor, found \`${tokenName(this.kind)}\``
       );
     }
-    if (this.peek() === TOK_LPAREN) {
+    // `m?(): void` is a method with a marker, not a field: the `?` sits
+    // between the name and the parameter list, so the one token of lookahead
+    // that tells a method from a field has to look past it.
+    if (this.peek() === TOK_LPAREN || this.markedMethodAhead()) {
       const method = this.node(N_METHOD, start, this.end);
       method.children.push(this.parseIdentifier());
+      method.flags = modifiers | this.parseMemberMarker();
       method.children.push(this.parseParameters());
       method.children.push(this.parseReturnType());
       method.children.push(this.parseBlock());
@@ -788,8 +830,8 @@ export class Parser {
       return method;
     }
     const field = this.node(N_FIELD, start, this.end);
-    field.flags = modifiers;
     field.children.push(this.parseIdentifier());
+    field.flags = modifiers | this.parseMemberMarker();
     field.children.push(this.parseTypeAnnotation());
     field.children.push(this.eat(TOK_ASSIGN) ? this.parseExpression() : this.empty());
     this.expectSemicolon();
@@ -811,6 +853,12 @@ export class Parser {
         } else {
           const field = this.node(N_FIELD, fieldStart, this.end);
           field.children.push(this.parseIdentifier());
+          // `?` only, and not `!`: a definite-assignment assertion is not a
+          // spelling TypeScript allows on a property signature at all, so
+          // there is no stage0 sentence to agree with and the syntax error
+          // stays the right answer.
+          if (this.at(TOK_QUESTION)) field.flags = field.flags | FLAG_OPTIONAL;
+          this.eat(TOK_QUESTION);
           field.children.push(this.parseTypeAnnotation());
           field.children.push(this.empty());
           if (!this.eat(TOK_SEMICOLON)) this.eat(TOK_COMMA);

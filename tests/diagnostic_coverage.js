@@ -55,9 +55,10 @@
  *
  * `tests/wordings/stage1_divergence.txt` is the other list, and it is not a
  * declaration of anything: it names the programs the two compilers answer
- * differently — five of which stage1 *compiles* — found by writing this corpus
+ * differently — some of which stage1 *compiles* — found by writing this corpus
  * and reported rather than fixed, because a code is keyed on its message text
- * and rewording one retires the code.
+ * and rewording one retires the code. The summary line counts both lists; the
+ * counts move, so read them there rather than here.
  *
  * `npm test` runs this tool over stage1 with `--strict-refusals`, so both
  * lists have to match what stage1 does exactly: they can shrink, and they
