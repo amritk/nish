@@ -130,6 +130,22 @@ export type StaticType =
   /** A class or interface (WP2): a pointer to `%struct.<name>`, always arena-allocated and 8-aligned. */
   | { kind: "struct"; name: string }
   /**
+   * A numeric `enum` (WP23): a **distinct** type whose representation is `i32`.
+   *
+   * Distinct is the point, and it is stricter than TypeScript, where a numeric
+   * enum member is assignable to `number`. The rule this language is built on
+   * is that two values are compatible only when their types are identical, and
+   * an enum that were silently `i32` would be the one type in the language
+   * compatible with something it is not spelled as. So `assignable` never
+   * relates an enum to an integer in either direction, `isInteger` is false for
+   * one, and arithmetic on it is refused exactly as arithmetic on a `string` is.
+   *
+   * Identity is the declared `name`, as a struct's is. The members live in
+   * `EnumInfo` (`src/checker/enums.ts`) and never reach the emitter: a member
+   * reference folds to its integer the way a module constant folds to its value.
+   */
+  | { kind: "enum"; name: string }
+  /**
    * `T | null` (WP6) for a pointer type `T` (struct, array, string): the same
    * LLVM pointer type, with `null` as an extra value. The only operations are
    * `=== null` / `!== null`, assignment, passing, and narrowing to `T` inside
@@ -185,6 +201,11 @@ export function arrayOf(elem: StaticType): StaticType {
 /** `readonly T[]` / `ReadonlyArray<T>`: `T[]`'s layout, with every write rejected. */
 export function readonlyArrayOf(elem: StaticType): StaticType {
   return { kind: "array", elem, readonly: true };
+}
+
+/** The type a numeric `enum` declaration names (WP23); identity is the declared name. */
+export function enumOf(name: string): StaticType {
+  return { kind: "enum", name };
 }
 
 /** True for the `readonly T[]` spelling of an array type; false for every other type. */
@@ -249,11 +270,19 @@ export function mangleType(t: StaticType): string {
     case "bool":
       return "bool";
     case "array":
-      return `arr.${mangleType(t.elem)}`;
+      // `readonly T[]` and `T[]` are two types (`sameType` says so), so they
+      // need two names: without the tag `identity<readonly i32[]>` and
+      // `identity<i32[]>` would be one symbol (WP18 §3c).
+      return `${t.readonly === true ? "roarr" : "arr"}.${mangleType(t.elem)}`;
     case "nullable":
       return `opt.${mangleType(t.inner)}`;
     case "struct":
       return `$${t.name}`;
+    // An enum is an `i32` in memory but not an `i32` in the type system, so it
+    // mangles apart from one: `Result<Kind, string>` and `Result<i32, string>`
+    // share a layout and must not share a layout *name*.
+    case "enum":
+      return `en$${t.name}`;
     case "result":
       return `res.${mangleType(t.ok)}.${mangleType(t.err)}`;
     default:
@@ -283,6 +312,9 @@ function packablePayload(t: StaticType): boolean {
     case "i32":
     case "u32":
     case "f32":
+    // WP23: an enum is an `i32`, so it packs exactly as one does — every
+    // widening on that path goes through `llvmType`, which already says `i32`.
+    case "enum":
       return true;
     default:
       return false;
@@ -339,6 +371,8 @@ export function llvmType(t: StaticType): string {
       return `${ARRAY_STRUCT}*`;
     case "struct":
       return `%struct.${t.name}*`;
+    case "enum":
+      return "i32";
     case "nullable":
       return llvmType(t.inner);
     case "result":
@@ -414,6 +448,8 @@ export function alignOf(t: StaticType): number {
       return 8;
     case "struct":
       return 8; // a pointer
+    case "enum":
+      return 4; // an i32
     case "nullable":
       return 8; // a pointer
     case "result":
@@ -423,7 +459,7 @@ export function alignOf(t: StaticType): number {
 
 export function typeToString(t: StaticType): string {
   if (t.kind === "array") return `${t.readonly === true ? "readonly " : ""}${typeToString(t.elem)}[]`;
-  if (t.kind === "struct") return t.name;
+  if (t.kind === "struct" || t.kind === "enum") return t.name;
   if (t.kind === "nullable") return `${typeToString(t.inner)} | null`;
   if (t.kind === "result") return `Result<${typeToString(t.ok)}, ${typeToString(t.err)}>`;
   return t.kind === "bool" ? "boolean" : t.kind;
@@ -431,7 +467,7 @@ export function typeToString(t: StaticType): string {
 
 export function sameType(a: StaticType, b: StaticType): boolean {
   if (a.kind !== b.kind) return false;
-  if (a.kind === "struct") return a.name === (b as { name: string }).name;
+  if (a.kind === "struct" || a.kind === "enum") return a.name === (b as { name: string }).name;
   if (a.kind === "array") {
     const other = b as { elem: StaticType; readonly?: true };
     return a.readonly === other.readonly && sameType(a.elem, other.elem);

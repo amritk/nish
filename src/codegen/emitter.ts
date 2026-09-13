@@ -39,6 +39,7 @@
  */
 import ts from "typescript";
 import { CheckedProgram, FunctionSig, LocalVar } from "../checker/index.js";
+import { withInstance } from "../checker/generics.js";
 import { CompilerOptions, ResultType, StaticType, alignOf, llvmAbiType, llvmType, resultByValue } from "../types.js";
 import { FunctionFacts, analyzeFunctions, functionAttributes, paramAttributes, returnAttributes } from "./attributes.js";
 import { DebugInfo } from "./debug.js";
@@ -107,7 +108,11 @@ export class Emitter implements EmitContext {
     // `%struct.X = type { ... }` for every class/interface the module can see (WP2).
     for (const decl of structTypeDeclarations(this.program)) this.module.addTypeDecl(decl);
     for (const sig of this.program.functions) {
-      this.module.addFunction(this.emitFunction(sig));
+      // WP18: an instantiation's body is the template's AST checked into that
+      // instantiation's own side tables, so the tables are swapped in around
+      // its emission and every `program.types.get(node)` below answers for
+      // this type-argument tuple.
+      this.module.addFunction(withInstance(this.program, sig, () => this.emitFunction(sig)));
     }
     if (this.program.entryMain) this.module.addFunction(this.emitEntryWrapper(this.program.entryMain));
     this.emitImportDeclarations();
@@ -152,7 +157,7 @@ export class Emitter implements EmitContext {
     // ABI). Every other function is `internal` unless --no-strict-exports.
     if (this.opts.strictExports && !sig.exported) this.fn.linkage = "internal";
     if (optimize) {
-      this.fn.returnAttrs = returnAttributes(sig.returnType, facts.returnDeref, privateAbi);
+      this.fn.returnAttrs = returnAttributes(sig.returnType, facts.returnDeref, privateAbi, facts.returnAlign);
       this.fn.attrGroup = this.module.attrGroup(functionAttributes(facts));
     }
     this.slots = new WeakMap();
@@ -290,7 +295,7 @@ export class Emitter implements EmitContext {
     const params = sig.params
       .map((p) => [llvmAbiType(p.type), ...(optimize ? paramAttributes(p, facts, false) : [])].join(" "))
       .join(", ");
-    const ret = [...(optimize ? returnAttributes(sig.returnType, facts.returnDeref, false) : []), llvmAbiType(sig.returnType)].join(" ");
+    const ret = [...(optimize ? returnAttributes(sig.returnType, facts.returnDeref, false, facts.returnAlign) : []), llvmAbiType(sig.returnType)].join(" ");
     const group = optimize ? ` ${this.module.attrGroup(functionAttributes(facts))}` : "";
     return `declare ${ret} @${sig.name}(${params})${group}`;
   }

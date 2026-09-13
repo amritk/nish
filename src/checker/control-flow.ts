@@ -175,12 +175,15 @@ const checkContinue: StatementChecker = (ctx, node) => {
 /**
  * The value a `case` label selects on. It has to be known at compile time,
  * because LLVM's `switch` table holds constants: an integer literal, its
- * negation, or a module constant (WP14 A3), which is where a program's token
- * and node kinds live. Anything else is a runtime value and belongs in an
- * `if`.
+ * negation, a module constant (WP14 A3), or an enum member (WP23) — the three
+ * places a program's token and node kinds live. Anything else is a runtime
+ * value and belongs in an `if`.
  */
 const caseValue = (ctx: CheckContext, expr: ts.Expression): bigint | undefined => {
   const inner = unwrapParens(expr);
+  // WP23: `case Kind.If:`. An enum member is a compile-time integer, and a
+  // `switch` over a discriminant is the reason the language has enums at all.
+  if (ts.isPropertyAccessExpression(inner)) return ctx.program.enumRefs.get(inner);
   if (ts.isNumericLiteral(inner)) {
     // TypeScript normalises every numeric literal's text to decimal digits
     // (`0x10` reads back as `16`), so this is exact past 2^53 as well.
@@ -227,7 +230,11 @@ const declaresDirectly = (clause: ts.CaseOrDefaultClause): ts.Statement | undefi
 const checkSwitch: StatementChecker = (ctx, node, scope) => {
   const stmt = node as ts.SwitchStatement;
   const subject = ctx.checkExpression(stmt.expression, scope);
-  if (!isInteger(subject)) {
+  // WP23: an enum is an `i32` in the jump table and a type of its own to the
+  // checker, so it switches exactly as an integer does — and a `case` label of
+  // any other type is caught by the `sameType` check below, which is what
+  // stops `case 1:` standing in for `case Kind.If:`.
+  if (!isInteger(subject) && subject.kind !== "enum") {
     throw ctx.error(
       `\`switch\` requires an integer discriminant, got ${typeToString(subject)} (use \`if\` / \`else\`; only an integer switch lowers to a jump table)`,
       stmt.expression
@@ -256,7 +263,7 @@ const checkSwitch: StatementChecker = (ctx, node, scope) => {
       const value = caseValue(ctx, clause.expression);
       if (value === undefined) {
         throw ctx.error(
-          "`case` label must be an integer literal or a module constant (LLVM's `switch` table holds constants)",
+          "`case` label must be an integer literal, a module constant, or an enum member (LLVM's `switch` table holds constants)",
           clause.expression
         );
       }

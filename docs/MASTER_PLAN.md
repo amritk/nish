@@ -112,7 +112,8 @@ declared on the class, `var`, loose `==`/`!=`, `arguments`, `this` outside
 methods, generators, `async`/`await`, decorators, enums with computed
 values, namespaces, `declare global`, dynamic `import()`, optional chaining
 and nullish coalescing on non-nullable types, union types other than
-`T | null`, generics (until a monomorphisation WP exists), `symbol`,
+`T | null`, type parameters on a class, an interface, a method or a type
+alias (a generic *function* is monomorphised, WP18), `symbol`,
 `bigint`, regex literals, `try`/`catch` and `throw` (no unwinding; a failure is a `Result<T, E>`, WP16).
 
 ### 3.3 Semantics decisions already made
@@ -517,7 +518,10 @@ to stage2.
   comparing stage1 against stage0 over the whole corpus rather than against a
   hand-written golden.
 - `scripts/bootstrap.sh` builds the chain and leaves `build/nish` behind;
-  `--verify` runs the three equalities with `cmp`.
+  `--verify` runs the three equalities with `cmp` — all three for a stage0
+  seed, and the two that do not mention the seed for any other, since
+  `IR(seed) == IR(stage1)` is diverse double-compiling only when the seed is
+  the second implementation (`docs/wp19-stage0-retirement.md` G3).
 - §7a reversed decision D4: `mkdirSync` and `spawnSync` entered the language,
   so stage1 plans its own output, makes its own directories and runs
   `scripts/build.sh` itself. The wrapper `scripts/nish.sh` is deleted.
@@ -546,9 +550,11 @@ existed;
 slice iterators, so `for (const c of s)` lowers to pointer advancement;
 unsigned types; the fast slice beside JavaScript's `substring`; the range
 analysis that makes a proven index emit no bounds check;
-contiguous struct arrays with the checker rule that makes the dangling
-interior pointer a compile error; and generics by monomorphisation with
-discriminated unions. §9 has the
+contiguous *record* arrays with the checker rule that makes the dangling
+interior pointer a compile error (**done** for an `interface` nobody
+implements, 2.27x where allocation order and traversal order differ; a class
+has identity and keeps its pointer slot, and §2a says what that migration
+would be); and generics by monomorphisation with discriminated unions. §9 has the
 order with the reason for each position, and
 [wp15-performance.md](wp15-performance.md) has the design.
 
@@ -723,7 +729,7 @@ document does not need a second one open beside it to be current:
 | 5 | The fast slice beside JavaScript's `substring` | |
 | 6 | Ranged types and length narrowing — **done, smaller than it was written** | the flow-sensitive analysis shipped (`src/checker/bounds.ts`, `self/bounds.ts`) with the surviving-check warning item 2 held back, which is what proves it worked. The *declared* surface did not: `integer<0, 255>` needs item 8's generics, so the sequencing forbids it, and the tuple form of the length guard buys nothing the facts do not. Measured 1.069x on item 3's lexer-shaped cursor against the 1.082x that removing every check buys on the same program — the hot function comes out byte-identical to the `--unchecked-indexing` build — and nothing measurable on a counted array loop, exactly as §2b predicted |
 | 7 | Contiguous struct arrays | the layout change, the escape rule that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI |
-| 8 | Generics by monomorphisation; discriminated unions deferred to their own note | the largest. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code — [wp18-generics.md](wp18-generics.md) §6.1 says why |
+| 8 | Generics by monomorphisation; discriminated unions deferred to their own note | the largest. Generic **functions** have landed in both compilers — [wp18-generics.md](wp18-generics.md) §15 records what shipped and §16 the order for classes, constraints and the whole-program rule. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code, and §6.1 says why |
 
 An explicit bounds-check opt-out is deferred until 6 has landed and the checks
 that survive it have been counted. Both have happened: seventeen survive in a
@@ -763,11 +769,14 @@ prebuilt library cannot carry the attribute fixpoint of §3a, cannot contain a
 generic that nobody has instantiated yet, and would have to be built once per
 (number mode × target × profile). An `exports` map states both, one condition
 per consumer. [wp21-packages.md](wp21-packages.md) is the plan of record; it
-is rough, and its one hard blocker is that the symbol namespace is flat today
-— two packages with a private `helper()` each would fail to compile together,
-because the whole-program fact table is keyed by symbol name. Package-scoped
-symbols are its first stage, have no language surface, and are worth landing
-early: the diff is mechanical and grows with every new golden.
+is rough, and its one hard blocker was that the symbol namespace was flat —
+two packages with a private `helper()` each could not be compiled together,
+because the whole-program fact table was keyed by symbol name. **That blocker
+is closed**: S1 gave every symbol a package scope (wp21 §9), and because the
+root package's prefix is empty a single-package program emits the IR it always
+did — not one golden moved and no exported name changed. The stage that
+follows is S2, bare specifiers and the `nish` export condition; S1 has no
+language surface and left `docs/LANGUAGE.md` untouched.
 
 The declaration form is not on that list either, and it is the one entry here
 that is pure spelling: **arrow functions become how Nish declares a
@@ -787,11 +796,15 @@ The rest of the language surface has no owner either, and a review of the
 corpus for the sentence *the language has no X* turned up eight candidates
 that belong to nobody: [wp23-language-surface.md](wp23-language-surface.md) is
 the plan of record, and its most useful half is the three it **refuses**.
-Non-generic `type` aliases and a numeric `enum` are being built now — both are
-pure checker work that changes no byte of IR, the alias because `Int32Array`
+Non-generic `type` aliases and a numeric `enum` have both landed — both were
+pure checker work that changed no byte of IR, the alias because `Int32Array`
 already establishes that an alias is the type it names, the enum because
-`self/` stands 171 module constants in for three of them and nothing stops
-passing a token kind where a node kind belongs. Module-level mutable state is
+`self/` stands 171 module constants in for three of them and nothing stopped
+passing a token kind where a node kind belongs. An enum is a *distinct* type
+with `i32` representation, so `tests/cases/enum_ir` and `enum_expanded` are one
+program written with and without it and their goldens are byte-identical files;
+`self/` does not adopt them until the next minor, by the bootstrap seed policy
+([wp19-stage0-retirement.md](wp19-stage0-retirement.md) G4). Module-level mutable state is
 the one functional gap, since stage1 cannot emit the `--json` object for an
 internal compiler error and orientation rule 7 says every failure is one of
 those objects; the note designs the narrow version — module-private, scalar,

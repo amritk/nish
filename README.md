@@ -109,7 +109,7 @@ there cites the test case that proves it.
 | `T \| null` | for class, interface, array and string types; `=== null`, and narrowing to `T` by `if`, early return, `while`, `&&`, `?:`, enforced by the checker | [Nullable types](docs/LANGUAGE.md#nullable-types) |
 | Errors | Rust-style `Result<T, E>` with `Ok`/`Err`, `isOk()`/`isErr()`, `orReturn()` (the `?`), `unwrapOr`, `expect`; the checker refuses to let a failure be dropped or the success payload be read before the error is handled. No `throw`, no unwinding | [Result and error handling](docs/LANGUAGE.md#result-and-error-handling) |
 | Builtins | `console.log`, `Math.*` as LLVM intrinsics (ECMAScript `pow` corner cases included), `Math.random`, `toI32`/`toI64`/`toF64`, `process.exit`, `readFileSync`/`writeFileSync`/`appendFileSync` | [Builtins](docs/LANGUAGE.md#builtins) |
-| Rejected | `any`, `unknown`, `var`, `==`, `?.`, `??`, generics, `async`, `try`, `throw`, `typeof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
+| Rejected | `any`, `unknown`, `var`, `==`, `?.`, `??`, generic classes, `async`, `try`, `throw`, `typeof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
 
 Semantics that differ from JavaScript on purpose: signed integer overflow is
 undefined behaviour (`--wrapping` restores two's-complement wrapping; the
@@ -164,7 +164,7 @@ call on purpose.
 | Bug class | What Nish does | Reference |
 |:---|:---|:---|
 | Use-after-free, double free | Not expressible: nothing is freed individually. Four compile-time mechanisms decide where a value lives — a stack `alloca` when escape analysis proves it dies with the frame, an automatic arena scope when a function's temporaries do, a `nish_arena_keep` reclaim at the call site for a returned string, the bump arena otherwise — and the arena goes back when `main` returns | [Memory model](docs/LANGUAGE.md#memory-model), [wp6-memory.md](docs/wp6-memory.md) |
-| Out-of-bounds read or write | Every `a[i]`, `a[i] op= v`, `s.charCodeAt(i)` and `a.pop()` is bounds-checked, with an unsigned compare, so a negative index fails too; the failure prints `index out of range: <i> >= <len>` and exits 1. Where a flow-sensitive proof shows the index is already in range — a loop condition, a length guard, a hoisted `const n = a.length`, an unsigned index — **no check is emitted at all**, and the checks that survive inside a loop say so as a `performance` warning naming the guard that would remove them | [Element access](docs/LANGUAGE.md#element-access), `tests/cases/arr_bounds_panic`, `arr_bounds_proven` |
+| Out-of-bounds read or write | Every `a[i]`, `a[i] op= v`, `s.charCodeAt(i)`, `s.slice(a, b)` and `a.pop()` is bounds-checked, with an unsigned compare, so a negative index fails too; the failure prints `index out of range: <i> >= <len>` (or, for `slice`, `slice out of range: [<a>, <b>) of length <len>`) and exits 1. Where a flow-sensitive proof shows the index is already in range — a loop condition, a length guard, a hoisted `const n = a.length`, an unsigned index — **no check is emitted at all**, and the checks that survive inside a loop say so as a `performance` warning naming the guard that would remove them | [Element access](docs/LANGUAGE.md#element-access), `tests/cases/arr_bounds_panic`, `arr_bounds_proven` |
 | Null dereference | `T \| null` is a separate type, for pointers only; member access needs a narrowing the checker accepts and `?.` is forbidden — which is what lets the emitter put `nonnull dereferenceable` on every pointer that is not one | [Nullable types](docs/LANGUAGE.md#nullable-types) |
 | Uninitialised memory | `new Array<T>(n)` zero-fills and rejects pointer element types, because a zeroed pointer would be a null nobody declared; class fields are definitely assigned | [Classes](docs/LANGUAGE.md#classes), `tests/cases/arr_new_zeroed` |
 | Unwinding past a release | There is none. Every function is `nounwind`; a failure a caller should handle is a `Result<T, E>` and one it should not is `panic(message)` — stderr, exit 1 | [Result](docs/LANGUAGE.md#result-and-error-handling) |
@@ -457,9 +457,11 @@ reference counting for objects that must outlive an arena reset, and dynamic
 dispatch — which would be a trait object over an interface, since inheritance
 was removed ([docs/wp25-inheritance.md](docs/wp25-inheritance.md)) and every
 method call names one symbol today.
-Generics, closures, `try`/`catch` and labelled `break`/`continue` are
-refusals rather than gaps, each with the message and the idiom to use
-instead ([docs/LANGUAGE.md](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)).
+Generic *functions* compile — each instantiation becomes its own specialised
+function ([docs/wp18-generics.md](docs/wp18-generics.md)) — while generic
+classes, closures, `try`/`catch` and labelled `break`/`continue` are refusals
+rather than gaps, each with the message and the idiom to use instead
+([docs/LANGUAGE.md](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)).
 Release engineering (`--version`, exit codes, npm packaging, tag-driven
 releases) landed with WP12; see [CHANGELOG.md](CHANGELOG.md) and
 [docs/wp12-release.md](docs/wp12-release.md). The plan itself is

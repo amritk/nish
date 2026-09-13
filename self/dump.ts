@@ -263,7 +263,11 @@ function walkBody(
 function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: string[]): void {
   const program = unit.checker.program;
   const source = unit.source;
-  out.push(`module ${unit.path}${unit.isEntry ? " (entry)" : ""}`);
+  // The package is printed only when there is one to print (WP21 S1): the root
+  // package has no name, so a single-package program's dump is the same text
+  // it has always been.
+  const pkg = program.packageName.length === 0 ? "" : ` [package ${program.packageName}]`;
+  out.push(`module ${unit.path}${unit.isEntry ? " (entry)" : ""}${pkg}`);
   for (const imp of program.imports) {
     const struct = imp.struct;
     const constant = imp.constant;
@@ -307,13 +311,26 @@ function dumpModule(unit: ModuleUnit, table: TypeTable, facts: FactsTable, out: 
     if (entry !== null && entry === sig) {
       tags.push("entry");
     }
+    // WP18: the instantiation set, printed in discovery order with the rest of
+    // the functions, so a divergence in *which* instantiations exist is caught
+    // by `tests/self/checked_oracle.js` before any IR is compared.
+    const instance = sig.instance;
+    if (instance !== null) {
+      tags.push("instance");
+    }
     const suffix = tags.length > 0 ? ` [${tags.join(" ")}]` : "";
     out.push(`function ${signatureText(table, sig)} -> @${sig.name}${suffix}`);
     const f = facts.get(sig.name);
     if (f !== null) {
       factsText(table, sig, f, out);
     }
+    if (instance !== null) {
+      program.enterInstance(instance);
+    }
     bodyTables(program, source, table, sig, out);
+    if (instance !== null) {
+      program.leaveInstance();
+    }
   }
 }
 

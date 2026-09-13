@@ -94,5 +94,6 @@ void nish_array_grow(nish_array *a, uint64_t elem_size) {
 
 /* ---- Panics: `unreachable`, which the host sees as a RuntimeError */
 void nish_panic_index(uint64_t idx, uint64_t len) { (void)idx; (void)len; __builtin_trap(); }
+void nish_panic_slice(int64_t s, int64_t e, int64_t len) { (void)s; (void)e; (void)len; __builtin_trap(); }
 void nish_panic_div(_Bool by_zero) { (void)by_zero; __builtin_trap(); }
 void nish_exit(int32_t code) { (void)code; __builtin_trap(); }

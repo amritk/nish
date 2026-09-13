@@ -1,0 +1,1 @@
+`unwrapOr(...)` needs a success value to fall back to, and `Result<void, string>` has none; use `if (r.isErr()) { ... }`

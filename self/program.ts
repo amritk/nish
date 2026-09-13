@@ -19,8 +19,10 @@
 
 import { SourceFile } from "./diagnostics";
 import { StringMap, StringSet } from "./map";
-import { N_CONSTRUCTOR, N_EMPTY, Node } from "./nodes";
+import { N_CONSTRUCTOR, N_EMPTY, N_MEMBER, Node } from "./nodes";
+import { packageSymbolPrefix } from "./packages";
 import { Local } from "./symbols";
+import { TypeTable } from "./types";
 
 /** What a `FunctionSig` is: a free function, a method, or a constructor. */
 export const ROLE_FUNCTION: i32 = 0;
@@ -38,7 +40,14 @@ export const STRUCT_INTERFACE: i32 = 1;
  * per parameter. For a method or constructor `params[0]` is `this`.
  */
 export class FunctionSig {
-  /** The LLVM symbol (`@name`). `main` in the entry module is `@nish_main`. */
+  /**
+   * The LLVM symbol (`@name`), and the key the whole-program fact fixpoint is
+   * kept under (`self/attributes.ts`). It is the declared identifier qualified
+   * with the module's package prefix (WP21 S1, `self/packages.ts`), which is
+   * empty for the root package and so for every module of a single-package
+   * program. `Owner.method` for a member, and `main` in the entry module is
+   * `@nish_main`.
+   */
   name: string;
   /** The identifier as written; for a method it reads `Owner.method`. */
   sourceName: string;
@@ -54,6 +63,13 @@ export class FunctionSig {
   owner: StructInfo | null;
   /** A statement of the body was rejected: no IR is emitted for this program. */
   poisoned: boolean;
+  /**
+   * WP18: set when this signature is one instantiation of a generic template
+   * rather than a declared function. It carries the side tables the template's
+   * body was checked into for *this* type-argument tuple, which every pass that
+   * walks the body installs before it starts (`CheckedProgram.enterInstance`).
+   */
+  instance: Instantiation | null;
 
   /**
    * The body, or `null` when the declaration has none. A `BLOCK` for every
@@ -90,6 +106,85 @@ export class FunctionSig {
     this.role = ROLE_FUNCTION;
     this.owner = null;
     this.poisoned = false;
+    this.instance = null;
+  }
+}
+
+/**
+ * A generic function declaration (WP18). Nothing about it is resolved: the
+ * parameter and return annotations mention `typeParams`, so they mean nothing
+ * until an instantiation binds them, and a template therefore has no signature,
+ * no symbol and no entry in `functions`.
+ */
+export class TemplateInfo {
+  /** The identifier as written; what every diagnostic about the template names. */
+  sourceName: string;
+  /** `<T, U>` in declaration order; an instantiation's tuple has the same order. */
+  typeParams: string[];
+  /** The `N_FUNCTION` node, in either spelling. */
+  decl: Node;
+  origin: SourceFile;
+  exported: boolean;
+  /** How many instantiations it has produced, for the per-template cap. */
+  count: i32;
+
+  constructor(sourceName: string, decl: Node, origin: SourceFile) {
+    this.sourceName = sourceName;
+    this.typeParams = [];
+    this.decl = decl;
+    this.origin = origin;
+    this.exported = false;
+    this.count = 0;
+  }
+}
+
+/**
+ * One (template, type-argument tuple): the specialised function it names, and
+ * the side tables its body is checked into.
+ *
+ * The tables are a full copy rather than a window on the template's node-id
+ * span (`docs/wp18-generics.md` §3d's fallback): it costs memory on a program
+ * that instantiates something and nothing at all on one that does not, and it
+ * needs no invariant about how the parser hands out ids.
+ */
+export class Instantiation {
+  template: TemplateInfo;
+  /** One concrete type id per entry of `template.typeParams`, in that order. */
+  typeArgs: i32[];
+  sig: FunctionSig;
+  /** Type parameter name -> the type id it stands for. */
+  bindings: StringMap;
+  nodeTypes: i32[];
+  nodeLocals: (Local | null)[];
+  nodeConstants: (ConstInfo | null)[];
+  nodeCallees: (FunctionSig | null)[];
+  nodeCoercions: i32[];
+  nodeCaseValues: i64[];
+  /**
+   * The instantiation whose body asked for this one, or `null` for one
+   * requested from ordinary code. The chain is what the termination rule walks
+   * and what its diagnostic quotes.
+   */
+  from: Instantiation | null;
+
+  constructor(template: TemplateInfo, typeArgs: i32[], sig: FunctionSig, bindings: StringMap, nodeCount: i32) {
+    this.template = template;
+    this.typeArgs = typeArgs;
+    this.sig = sig;
+    this.bindings = bindings;
+    this.nodeTypes = new Array<i32>(nodeCount);
+    this.nodeLocals = new Array<Local | null>(nodeCount);
+    this.nodeConstants = new Array<ConstInfo | null>(nodeCount);
+    this.nodeCallees = new Array<FunctionSig | null>(nodeCount);
+    this.nodeCoercions = new Array<i32>(nodeCount);
+    this.nodeCaseValues = new Array<i64>(nodeCount);
+    this.from = null;
+    let i = 0;
+    while (i < nodeCount) {
+      this.nodeTypes[i] = -1;
+      this.nodeCoercions[i] = -1;
+      i = i + 1;
+    }
   }
 }
 
@@ -142,6 +237,13 @@ export class StructInfo {
    * `%struct.<name>*` may be `bitcast` to the interface's with no adjustment.
    */
   implementsNames: string[];
+  /**
+   * WP15 section 2a: some class in the program `implements` this interface, so
+   * it is a *view* rather than a record and an `I[]` keeps one pointer per
+   * slot. Set in `checkImplements` (pass 1c), which runs for every module
+   * before any body is checked, and read by `inlineElementStruct`.
+   */
+  implemented: boolean;
   decl: Node;
   /** The module that declares it, so an importer can tell it from a re-export. */
   origin: SourceFile;
@@ -164,6 +266,7 @@ export class StructInfo {
     this.methodSigs = [];
     this.ctor = null;
     this.implementsNames = [];
+    this.implemented = false;
     this.decl = decl;
     this.exported = false;
     this.poisoned = false;
@@ -253,6 +356,51 @@ export class AliasInfo {
   }
 }
 
+/**
+ * A numeric `enum` declaration (WP23). It is a distinct type with `i32`
+ * representation, and its members are folded when the declaration is read, so
+ * this record answers an annotation (`Kind`) and a member reference
+ * (`Kind.If`) and the emitter never hears of it — `Kind.If` lowers to the
+ * literal the checker wrote into `nodeEnumValues` (`src/checker/enums.ts`).
+ */
+export class EnumInfo {
+  name: string;
+  decl: Node;
+  /** The module that declares it; an enum never leaves the one that wrote it. */
+  origin: SourceFile;
+  /** The distinct type id, shared by every annotation that names it. */
+  type: i32;
+  /** Member name -> index into `memberValues`; iteration order is declaration order. */
+  members: StringMap;
+  memberNames: string[];
+  memberValues: i32[];
+
+  constructor(name: string, decl: Node, origin: SourceFile, type: i32) {
+    this.name = name;
+    this.decl = decl;
+    this.origin = origin;
+    this.type = type;
+    this.members = new StringMap();
+    this.memberNames = [];
+    this.memberValues = [];
+  }
+
+  addMember(name: string, value: i32): void {
+    this.members.set(name, this.memberValues.length);
+    this.memberNames.push(name);
+    this.memberValues.push(value);
+  }
+
+  hasMember(name: string): boolean {
+    return this.members.has(name);
+  }
+
+  /** The integer `name` stands for; the caller has already asked `hasMember`. */
+  memberValue(name: string): i32 {
+    return this.memberValues[this.members.get(name, 0)];
+  }
+}
+
 /** One name brought in by `import { f, g as h } from "./m"`. */
 export class ImportBinding {
   /** Module specifier text, e.g. `./math`. Relative specifiers only. */
@@ -328,6 +476,20 @@ export class CheckedProgram {
   /** The `N_SOURCE_FILE` this module parsed to. */
   file: Node;
   isEntry: boolean;
+  /**
+   * The package this module belongs to (WP21 S1, `self/packages.ts`). `""` is
+   * the root package — the program being compiled — which is where every
+   * module of a single-package build lives.
+   */
+  packageName: string;
+  /**
+   * The prefix every symbol declared in this module carries; `""` for the root
+   * package. `FunctionSig.name` already has it applied, so nothing downstream
+   * has to remember to apply it. The field is kept so a diagnostic can name
+   * the package a clash is inside and `--emit-checked` can say which package a
+   * module came from.
+   */
+  symbolPrefix: string;
 
   /** Functions defined in this module, in source order. */
   functions: FunctionSig[];
@@ -366,6 +528,29 @@ export class CheckedProgram {
   aliases: StringMap;
   aliasList: AliasInfo[];
 
+  /**
+   * Generic templates this module declares, by source name, and the ones it has
+   * instantiated, by mangled symbol (WP18). An instantiation is appended in
+   * discovery order, which is the order it is checked, emitted and dumped in —
+   * so the two compilers can be compared before any IR is.
+   */
+  templates: StringMap;
+  templateList: TemplateInfo[];
+  instantiations: StringMap;
+  instantiationList: Instantiation[];
+  /** Non-null while an instantiation's side tables are installed. */
+  activeInstance: Instantiation | null;
+  /** The module's own tables, held aside while `activeInstance` is installed. */
+  savedNodeTypes: i32[];
+  savedNodeLocals: (Local | null)[];
+  savedNodeConstants: (ConstInfo | null)[];
+  savedNodeCallees: (FunctionSig | null)[];
+  savedNodeCoercions: i32[];
+  savedNodeCaseValues: i64[];
+  /** Name -> index into `enumList`, for the numeric `enum`s this module declares (WP23). */
+  enums: StringMap;
+  enumList: EnumInfo[];
+
   /** Set when this module declares `export function main`; the entry wrapper wraps it. */
   entryMain: FunctionSig | null;
   /** Some function reads `process.argv`, so the `@main` wrapper calls `nish_argv_init`. */
@@ -389,6 +574,15 @@ export class CheckedProgram {
   /** `N_CASE` node id -> the folded label, which a `switch` needs as a constant. */
   nodeCaseValues: i64[];
   /**
+   * `N_MEMBER` node id -> the integer an enum member stands for (WP23). There
+   * is no presence flag beside it and none is needed: a member's value may be
+   * 0 or negative, but the node that carries one is exactly an `N_MEMBER` of
+   * enum type whose receiver is not a value, and both of those are already
+   * recorded (`isEnumMember`). `src/` uses a `WeakMap`, where presence is the
+   * key's own answer.
+   */
+  nodeEnumValues: i32[];
+  /**
    * `N_INDEX` and `charCodeAt` node id -> the bounds analysis proved the index
    * in range (WP15 §2.1/§2.2, `self/bounds.ts`). The emitter writes the address
    * and no check for each of them, and the attribute pass leaves
@@ -398,10 +592,12 @@ export class CheckedProgram {
    */
   nodeProvenIndex: boolean[];
 
-  constructor(source: SourceFile, file: Node, isEntry: boolean, nodeCount: i32) {
+  constructor(source: SourceFile, file: Node, isEntry: boolean, nodeCount: i32, packageName: string) {
     this.source = source;
     this.file = file;
     this.isEntry = isEntry;
+    this.packageName = packageName;
+    this.symbolPrefix = packageSymbolPrefix(packageName);
     this.functions = [];
     this.exports = new StringMap();
     this.imports = [];
@@ -414,6 +610,19 @@ export class CheckedProgram {
     this.constantList = [];
     this.aliases = new StringMap();
     this.aliasList = [];
+    this.templates = new StringMap();
+    this.templateList = [];
+    this.instantiations = new StringMap();
+    this.instantiationList = [];
+    this.activeInstance = null;
+    this.savedNodeTypes = [];
+    this.savedNodeLocals = [];
+    this.savedNodeConstants = [];
+    this.savedNodeCallees = [];
+    this.savedNodeCoercions = [];
+    this.savedNodeCaseValues = [];
+    this.enums = new StringMap();
+    this.enumList = [];
     this.entryMain = null;
     this.usesArgv = false;
     this.nodeTypes = new Array<i32>(nodeCount);
@@ -422,6 +631,7 @@ export class CheckedProgram {
     this.nodeCallees = new Array<FunctionSig | null>(nodeCount);
     this.nodeCoercions = new Array<i32>(nodeCount);
     this.nodeCaseValues = new Array<i64>(nodeCount);
+    this.nodeEnumValues = new Array<i32>(nodeCount);
     this.nodeProvenIndex = new Array<boolean>(nodeCount);
     let i = 0;
     while (i < nodeCount) {
@@ -464,9 +674,138 @@ export class CheckedProgram {
     this.aliasList.push(info);
   }
 
+  /** The generic template called `name` in this module, or `null` (WP18). */
+  template(name: string): TemplateInfo | null {
+    const at = this.templates.get(name, -1);
+    return at < 0 ? null : this.templateList[at];
+  }
+
+  addTemplate(info: TemplateInfo): void {
+    this.templates.set(info.sourceName, this.templateList.length);
+    this.templateList.push(info);
+  }
+
+  /** The instantiation emitted under `symbol`, or `null` when there is none yet. */
+  instantiation(symbol: string): Instantiation | null {
+    const at = this.instantiations.get(symbol, -1);
+    return at < 0 ? null : this.instantiationList[at];
+  }
+
+  addInstantiation(symbol: string, info: Instantiation): void {
+    this.instantiations.set(symbol, this.instantiationList.length);
+    this.instantiationList.push(info);
+  }
+
+  /**
+   * Install one instantiation's side tables (WP18 §3d). Every pass that walks a
+   * function body brackets that walk with this and `leaveInstance`, so a read
+   * of `nodeTypes[node.id]` inside an instantiation's body answers for *that*
+   * type-argument tuple and the code doing the reading never learns there was a
+   * choice. There is never more than one installed at a time: the worklist is
+   * drained in a loop and every other caller walks one function at a time.
+   */
+  enterInstance(info: Instantiation): void {
+    this.savedNodeTypes = this.nodeTypes;
+    this.savedNodeLocals = this.nodeLocals;
+    this.savedNodeConstants = this.nodeConstants;
+    this.savedNodeCallees = this.nodeCallees;
+    this.savedNodeCoercions = this.nodeCoercions;
+    this.savedNodeCaseValues = this.nodeCaseValues;
+    this.nodeTypes = info.nodeTypes;
+    this.nodeLocals = info.nodeLocals;
+    this.nodeConstants = info.nodeConstants;
+    this.nodeCallees = info.nodeCallees;
+    this.nodeCoercions = info.nodeCoercions;
+    this.nodeCaseValues = info.nodeCaseValues;
+    this.activeInstance = info;
+  }
+
+  /** Put the module's own tables back. */
+  leaveInstance(): void {
+    this.nodeTypes = this.savedNodeTypes;
+    this.nodeLocals = this.savedNodeLocals;
+    this.nodeConstants = this.savedNodeConstants;
+    this.nodeCallees = this.savedNodeCallees;
+    this.nodeCoercions = this.savedNodeCoercions;
+    this.nodeCaseValues = this.savedNodeCaseValues;
+    this.activeInstance = null;
+  }
+
+  /**
+   * Whether `node` is an enum member reference — `Kind.If` — whose folded
+   * integer is in `nodeEnumValues` (WP23). It is an `N_MEMBER` of enum type
+   * whose receiver is a *name* rather than a value, and nothing else in the
+   * language has that shape, so the two tables the checker already writes
+   * answer the question and no presence flag has to be stored beside them.
+   */
+  isEnumMember(table: TypeTable, node: Node): boolean {
+    if (node.kind !== N_MEMBER || this.nodeTypes[node.children[0].id] >= 0) {
+      return false;
+    }
+    return table.isEnum(this.nodeTypes[node.id]);
+  }
+
+  /** The numeric `enum` called `name` in this module, or `null` (WP23). */
+  enumNamed(name: string): EnumInfo | null {
+    const at = this.enums.get(name, -1);
+    return at < 0 ? null : this.enumList[at];
+  }
+
+  addEnum(info: EnumInfo): void {
+    this.enums.set(info.name, this.enumList.length);
+    this.enumList.push(info);
+  }
+
   /** The exported function called `name`, or `null`. */
   exported(name: string): FunctionSig | null {
     const at = this.exports.get(name, -1);
     return at < 0 ? null : this.functions[at];
   }
+}
+
+// ---- WP15 §2a: element layout ------------------------------------------------
+
+/**
+ * How one element of a `T[]` is stored (`src/checker/program.ts`).
+ *
+ * An array of *records* is contiguous storage — `N` of them end to end in one
+ * block — so `ps[i]` is an interior `getelementptr` rather than a load of a
+ * pointer and a chase to wherever it went. A record is an `interface` and only
+ * an `interface` nobody implements: fields and nothing else, so copying one
+ * into a slot is indistinguishable from pointing at it. A `class` has identity
+ * — a constructor and methods that run on one object — and every other position
+ * in the language passes it by reference, so a class element stays a pointer.
+ * An interface some class `implements` stays a pointer too, because that array
+ * is the language's only polymorphic container and every implementer is longer
+ * than the interface; so does a `C | null`, because a null element has no bytes
+ * to be. The full argument, and the `self/` evidence behind it, is in
+ * `src/checker/program.ts`.
+ */
+export function inlineElementStruct(program: CheckedProgram, table: TypeTable, elem: i32): StructInfo | null {
+  if (!table.isStruct(elem)) {
+    return null;
+  }
+  const info = program.struct(table.nameOf(elem));
+  if (info === null || info.kind !== STRUCT_INTERFACE || info.implemented) {
+    return null;
+  }
+  return info;
+}
+
+/** Bytes from one element to the next: `sizeof` for an inline class, the value's size otherwise. */
+export function elementStride(program: CheckedProgram, table: TypeTable, elem: i32): i32 {
+  const info = inlineElementStruct(program, table, elem);
+  return info === null ? table.alignOf(elem) : info.size;
+}
+
+/** Alignment of one element slot: the class's own maximum field alignment when it is inline. */
+export function elementAlignOf(program: CheckedProgram, table: TypeTable, elem: i32): i32 {
+  const info = inlineElementStruct(program, table, elem);
+  return info === null ? table.alignOf(elem) : info.align;
+}
+
+/** The LLVM type of one element slot: `%struct.P` inline, the value type otherwise. */
+export function elementLLVMType(program: CheckedProgram, table: TypeTable, elem: i32): string {
+  const info = inlineElementStruct(program, table, elem);
+  return info === null ? table.llvmType(elem) : `%struct.${info.name}`;
 }

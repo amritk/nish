@@ -16,7 +16,7 @@
  * argument, no return-slot pointer, no name mangling. A `.ll` module and a C
  * file that includes this header therefore link with a plain `clang a.ll b.c`.
  */
-import { StructInfo } from "../checker/index.js";
+import { StructInfo, inlineElementStruct } from "../checker/index.js";
 import { HEADER_GUARD_PREFIX, LANGUAGE, RUNTIME_HEADER } from "../branding.js";
 import { Compilation } from "../compilation.js";
 import { StaticType } from "../types.js";
@@ -36,17 +36,34 @@ import {
   tsSignature,
 } from "./abi.js";
 
-/** ` -- xs: double elements, returns int32_t elements`: what an `nish_array` holds, per array in the signature. */
+/**
+ * ` -- xs: double elements, returns int32_t elements`: what an `nish_array`
+ * holds, per array in the signature.
+ *
+ * WP15 §2a made this two different answers rather than one. A record element
+ * type (an Nish `interface`) is stored **inline**: `data` is a C array of the
+ * structs themselves, so the note spells the element `struct Point` without a
+ * `*` and says `inline`, which is a host's cue that
+ * `((struct Point *)a->data)[i]` is element `i` and needs no marshalling.
+ * Every other element type is still one pointer per slot, and the note is the
+ * pointer spelling it always was.
+ */
 function elementNotes(fn: ExternalFunction): string {
-  const elem = (t: StaticType): string | undefined =>
-    kindOf(t) === "array" ? (cType((t as { elem: StaticType }).elem, "return") ?? "nish_array *") : undefined;
+  const structs = fn.unit.checker.program.structs;
+  const elem = (t: StaticType): string | undefined => {
+    if (kindOf(t) !== "array") return undefined;
+    const e = (t as { elem: StaticType }).elem;
+    const inline = inlineElementStruct(structs, e);
+    if (inline) return `struct ${inline.name} elements, inline`;
+    return `${cType(e, "return") ?? "nish_array *"} elements`;
+  };
   const notes: string[] = [];
   for (const p of fn.sig.params) {
     const e = elem(p.type);
-    if (e) notes.push(`${p.name}: ${e} elements`);
+    if (e) notes.push(`${p.name}: ${e}`);
   }
   const r = elem(fn.sig.returnType);
-  if (r) notes.push(`returns ${r} elements`);
+  if (r) notes.push(`returns ${r}`);
   return notes.length > 0 ? ` -- ${notes.join(", ")}` : "";
 }
 
@@ -117,7 +134,10 @@ export function generateHeader(compilation: Compilation, outFile: string): strin
     " * data }) live in the arena: a returned value is valid until",
     " * nish_reset_arena() / nish_arena_release(). A `const nish_array *` parameter",
     " * is only read; an `nish_array *` one is written through. To pass your own",
-    " * buffer build a header on the stack: nish_array a = { n, n, (char *)buf }. */",
+    " * buffer build a header on the stack: nish_array a = { n, n, (char *)buf }.",
+    " * An array of records (an interface below) holds them inline, so its data is",
+    " * a C array of that struct; every other element type is one pointer per",
+    " * slot. The comment above each prototype says which. */",
     `#ifndef ${guard}`,
     `#define ${guard}`,
     "",
@@ -153,7 +173,11 @@ export function generateHeader(compilation: Compilation, outFile: string): strin
       continue;
     }
     const { ident, label } = cFunctionName(fn.sig.name);
-    const alias = label ? ` (${fn.sig.struct ? "a method" : "a C keyword"}: call it as ${ident})` : "";
+    // Three reasons a symbol cannot be spelled in C, and the comment says
+    // which: a method (`Point.shifted`), a symbol inside a package
+    // (`hash.helper`, WP21 S1), or a name that is a C keyword.
+    const why = fn.sig.struct ? "a method" : fn.sig.name.includes(".") ? "in a package" : "a C keyword";
+    const alias = label ? ` (${why}: call it as ${ident})` : "";
     lines.push(`/* ${ts}${alias}${elementNotes(fn)} */`, `${proto};`);
   }
   if (lastUnit === undefined)

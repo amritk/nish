@@ -107,7 +107,7 @@ export function declareStruct(ctx: CheckContext, decl: Node, kind: i32): StructI
     ctx.error(decl.children[0], `\`${name}\` is already declared as a function`);
     return null;
   }
-  if (ctx.program.aliases.has(name)) {
+  if (ctx.program.aliases.has(name) || ctx.program.enums.has(name)) {
     ctx.error(decl.children[0], `\`${name}\` is already declared in this module`);
     return null;
   }
@@ -290,6 +290,12 @@ export function checkImplements(ctx: CheckContext, cls: StructInfo): void {
     if (iface === null) {
       continue;
     }
+    // WP15 section 2a: an interface with an implementer is a *view*, not a
+    // record — an `I[]` may hold any implementer and they are all longer than
+    // `I` — so its elements stay one pointer per slot. `StructInfo` objects are
+    // shared across the modules of a compilation, so marking the one here is
+    // what makes every module lay `I[]` out the same way.
+    iface.implemented = true;
     let i = 0;
     while (i < iface.fields.length) {
       const want = iface.fields[i];

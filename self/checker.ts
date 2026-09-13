@@ -11,12 +11,20 @@
 // than the six `try`/`catch` sites `src/` uses.
 
 import { aliasType, builtinTypeName, resolveType } from "./annotations";
+import { checkElementReferences } from "./arrays";
 import { checkDefiniteAssignment } from "./assignment";
-import { foldConstant, parseIntegerLiteral } from "./constants";
+import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants";
 import { CheckContext } from "./context";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations";
 import {
+  collectTypeParamNames,
+  isGenericFunction,
+  mentionsTypeParam,
+  rejectDollarInSymbolName,
+} from "./generics";
+import {
+  FLAG_CONST,
   FLAG_PREFIX,
   N_BINARY,
   N_BLOCK,
@@ -43,6 +51,7 @@ import {
   N_RETURN,
   N_TEMPLATE,
   N_TEMPLATE_TEXT,
+  N_ENUM,
   N_TYPE_ALIAS,
   N_UNARY,
   N_VAR_DECL,
@@ -54,7 +63,10 @@ import {
   AliasInfo,
   CheckedProgram,
   ConstInfo,
+  EnumInfo,
   FunctionSig,
+  Instantiation,
+  TemplateInfo,
   STRUCT_CLASS,
   STRUCT_INTERFACE,
   StructInfo,
@@ -86,9 +98,10 @@ export class Checker {
     sink: DiagnosticSink,
     numberMode: i32,
     wrapping: boolean,
-    uncheckedIndexing: boolean
+    uncheckedIndexing: boolean,
+    packageName: string
   ) {
-    this.program = new CheckedProgram(source, file, isEntry, nodeCount);
+    this.program = new CheckedProgram(source, file, isEntry, nodeCount, packageName);
     this.ctx = new CheckContext(table, this.program, sink, numberMode, wrapping, uncheckedIndexing);
   }
 
@@ -117,6 +130,12 @@ export class Checker {
         // Names first, resolution last: an alias may name a class declared
         // further down the file, or another alias.
         this.declareAlias(stmt);
+      } else if (stmt.kind === N_ENUM) {
+        // An enum is complete the moment it is read — its members are
+        // literals, not a right-hand side that can name something later — so
+        // unlike an alias there is no second pass for it (WP23).
+        this.ctx.errored = false;
+        this.declareEnum(stmt);
       }
     }
 
@@ -157,6 +176,37 @@ export class Checker {
       aliasType(alias, this.ctx);
     }
     this.ctx.errored = false;
+    this.qualifySymbols();
+  }
+
+  /**
+   * WP21 S1: put every symbol this module declares inside its package.
+   *
+   * One place, and after every signature exists, so a free function, a method
+   * (`Owner.method`) and a constructor are scoped by the same line of code and
+   * nothing added later can forget to be. The root package's prefix is empty,
+   * which is why a single-package program — every program that could be
+   * compiled before this existed — emits exactly the symbols it always did.
+   *
+   * `main` needs no exception: only the entry module may declare it, and the
+   * entry module is the root package by construction (`Compilation` derives
+   * every other module's package by comparing it with the entry's own).
+   */
+  qualifySymbols(): void {
+    const prefix = this.program.symbolPrefix;
+    if (prefix.length === 0) {
+      return;
+    }
+    for (const sig of this.program.functions) {
+      // Pass 1b appends an imported signature to the importer's `functions`
+      // (`self/program.ts`), where stage0 leaves that list holding only what
+      // the module declares. It has not run yet, but qualifying an imported
+      // symbol would rename the *exporter's* function, so say so rather than
+      // depend on the order.
+      if (sig.definedIn(this.program.source)) {
+        sig.name = `${prefix}${sig.name}`;
+      }
+    }
   }
 
   /**
@@ -179,28 +229,109 @@ export class Checker {
       );
       return;
     }
-    if (
-      this.program.aliases.has(name) ||
-      this.program.structs.has(name) ||
-      this.ctx.sigs.has(name) ||
-      this.program.constants.has(name)
-    ) {
+    if (this.nameTaken(name)) {
       this.ctx.error(nameNode, `\`${name}\` is already declared in this module`);
       return;
     }
     this.program.addAlias(new AliasInfo(name, stmt, this.program.source));
   }
 
+  /**
+   * Whether a top-level declaration has already claimed `name` in this module.
+   * A generic template counts (WP18): it is a `function` however it is spelled,
+   * and it shares the one declaration namespace with everything else, so an
+   * `enum` and a `function f<T>()` of the same name clash whichever was written
+   * first. Listing every kind in one test is what keeps that symmetric.
+   */
+  nameTaken(name: string): boolean {
+    return (
+      this.program.aliases.has(name) ||
+      this.program.enums.has(name) ||
+      this.program.structs.has(name) ||
+      this.program.templates.has(name) ||
+      this.ctx.sigs.has(name) ||
+      this.program.constants.has(name)
+    );
+  }
+
+  /**
+   * One `enum X { A = 1, B }` (WP23). A distinct type with `i32`
+   * representation, complete the moment it is read: the members are literals,
+   * so they are folded here and `Kind.If` lowers to its integer with no symbol
+   * and no table. Phase 0 owns the shape of an initialiser — anything that is
+   * not a numeric literal is refused there — and what is left is what needs
+   * the type model: an integer, in range, under a name nothing else has taken.
+   */
+  declareEnum(stmt: Node): void {
+    const nameNode = stmt.children[0];
+    const name = nameNode.text;
+    if (builtinTypeName(name)) {
+      this.ctx.error(nameNode, `\`${name}\` is a built-in type name and cannot be used for an enum`);
+      return;
+    }
+    if (isExported(stmt)) {
+      this.ctx.error(
+        stmt,
+        "Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it)"
+      );
+      return;
+    }
+    if ((stmt.flags & FLAG_CONST) !== 0) {
+      this.ctx.error(
+        stmt,
+        "`const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing"
+      );
+      return;
+    }
+    const members = stmt.children[1];
+    if (members.children.length === 0) {
+      this.ctx.error(nameNode, `Enum \`${name}\` must declare at least one member`);
+      return;
+    }
+    const info = new EnumInfo(name, stmt, this.program.source, this.ctx.table.enumOf(name));
+    let next = toI64(0);
+    for (const member of members.children) {
+      const memberName = member.children[0].text;
+      if (info.hasMember(memberName)) {
+        this.ctx.error(member.children[0], `Duplicate member \`${memberName}\` in enum \`${name}\``);
+        return;
+      }
+      let value = next;
+      const initializer = member.children[1];
+      if (initializer.kind !== N_EMPTY) {
+        const literal = enumMemberValue(initializer);
+        if (!literal.known) {
+          this.ctx.error(initializer, `Enum member \`${name}.${memberName}\` must be an integer literal`);
+          return;
+        }
+        value = literal.value;
+      }
+      if (value < I32_MIN || value > I32_MAX) {
+        this.ctx.error(member, `Enum member \`${name}.${memberName}\` does not fit in i32`);
+        return;
+      }
+      info.addMember(memberName, toI32(value));
+      next = value + toI64(1);
+    }
+    if (this.nameTaken(name)) {
+      this.ctx.error(nameNode, `\`${name}\` is already declared in this module`);
+      return;
+    }
+    this.program.addEnum(info);
+  }
+
   /** One `function` declaration: its signature, its name, and `main`. */
   collectFunction(stmt: Node): void {
+    if (isGenericFunction(stmt)) {
+      this.registerTemplate(stmt);
+      return;
+    }
     const sig = collectFunctionSignature(this.ctx, stmt);
     const name = sig.sourceName;
-    if (
-      this.ctx.sigs.has(name) ||
-      this.program.structs.has(name) ||
-      this.program.constants.has(name) ||
-      this.program.aliases.has(name)
-    ) {
+    if (rejectDollarInSymbolName(this.ctx, name, "function", stmt.children[0])) {
+      return;
+    }
+    if (this.nameTaken(name)) {
       this.ctx.error(stmt.children[0], `\`${name}\` is already declared in this module`);
       return;
     }
@@ -217,6 +348,98 @@ export class Checker {
       }
       markEntryMain(this.ctx, sig);
     }
+  }
+
+  /**
+   * WP18: one generic function declaration. A template shares the declaration
+   * namespace with everything else — it is a `function` however it is spelled —
+   * but it is not a signature: it has no types until an instantiation binds its
+   * parameters, so it never joins `sigs` or `program.functions`.
+   */
+  registerTemplate(stmt: Node): void {
+    const nameNode = stmt.children[0];
+    const name = nameNode.text;
+    // The order is stage0's: the name's own rules before the ones about what
+    // else is declared, because that is the order `collectFunctionTemplate`
+    // and `registerTemplate` run in over there.
+    if (name.startsWith("nish_")) {
+      this.ctx.error(nameNode, "Function names starting with `nish_` are reserved for the runtime");
+      return;
+    }
+    if (rejectDollarInSymbolName(this.ctx, name, "function", nameNode)) {
+      return;
+    }
+    if (this.nameTaken(name)) {
+      this.ctx.error(nameNode, `\`${name}\` is already declared in this module`);
+      return;
+    }
+    const template = new TemplateInfo(name, stmt, this.program.source);
+    template.exported = isExported(stmt);
+    template.typeParams = collectTypeParamNames(stmt);
+    if (template.exported && name === "main") {
+      this.ctx.error(
+        nameNode,
+        "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it"
+      );
+      return;
+    }
+    // A type parameter is inferred from the arguments and from nothing else, so
+    // one that appears in no parameter can never be bound and the function
+    // could never be called. Reported here, once, against the declaration
+    // rather than against every call.
+    const parameters = stmt.children[1];
+    for (const param of template.typeParams) {
+      const names = new StringSet();
+      names.add(param);
+      let mentioned = false;
+      for (const declared of parameters.children) {
+        const annotation = declared.children[1];
+        if (annotation.kind !== N_EMPTY && mentionsTypeParam(annotation, names)) {
+          mentioned = true;
+        }
+      }
+      if (mentioned) {
+        continue;
+      }
+      this.ctx.error(
+        nameNode,
+        `Cannot infer \`${param}\` for \`${name}\`: a type parameter is inferred from the arguments, and ` +
+          `\`${param}\` appears in none of them; give \`${name}\` a parameter that mentions \`${param}\``
+      );
+      return;
+    }
+    this.program.addTemplate(template);
+  }
+
+  /**
+   * Pass 3 (WP18): check every instantiation's body, to a fixed point. Each one
+   * may request more, and the queue is drained rather than recursed into, so
+   * `from` is a chain of requests and not a call stack.
+   */
+  drainInstantiations(): void {
+    let at = 0;
+    while (at < this.ctx.pending.length) {
+      const info = this.ctx.pending[at];
+      at = at + 1;
+      // Appended here rather than at the request, so that `functions` is in the
+      // order the bodies are checked and the emitter walks it the same way.
+      this.program.functions.push(info.sig);
+      this.checkInstanceBody(info);
+    }
+    this.ctx.pending = [];
+  }
+
+  /** One instantiation's body, over its own side tables and with its own type bindings. */
+  checkInstanceBody(info: Instantiation): void {
+    const savedBindings = this.ctx.typeBindings;
+    const savedInstance = this.ctx.currentInstance;
+    this.program.enterInstance(info);
+    this.ctx.typeBindings = info.bindings;
+    this.ctx.currentInstance = info;
+    this.checkFunctionBody(info.sig);
+    this.ctx.currentInstance = savedInstance;
+    this.ctx.typeBindings = savedBindings;
+    this.program.leaveInstance();
   }
 
   /**
@@ -253,12 +476,7 @@ export class Checker {
         );
         continue;
       }
-      if (
-        this.program.constants.has(name) ||
-        this.ctx.sigs.has(name) ||
-        this.program.structs.has(name) ||
-        this.program.aliases.has(name)
-      ) {
+      if (this.nameTaken(name)) {
         this.ctx.error(decl.children[0], `\`${name}\` is already declared in this module`);
         continue;
       }
@@ -315,7 +533,7 @@ export class Checker {
     } else {
       checkReturnValue(this.ctx, body, scope);
     }
-    const failed = this.ctx.sink.count() > before;
+    let failed = this.ctx.sink.count() > before;
     // Outside a statement list the flag is always clear, so a diagnostic from
     // constant folding or from another module is never dropped by this body.
     this.ctx.errored = false;
@@ -335,6 +553,16 @@ export class Checker {
       // that does not compile is noise, and a poisoned body has incomplete
       // side tables anyway.
       checkPerformance(this.ctx, sig, body, unprovenIndices);
+      // WP15 §2a: an element reference into contiguous struct storage may not
+      // be held across a `push`. Same placement and same reason as the line
+      // above — the walk reads types and bindings pass 2 has just written.
+      const beforeElements = this.ctx.sink.count();
+      checkElementReferences(this.ctx, body);
+      if (this.ctx.sink.count() > beforeElements) {
+        sig.poisoned = true;
+        failed = true;
+        this.ctx.errored = false;
+      }
     }
     // A body with a rejected statement may have lost its `return`; reporting
     // a missing one on top of that is a cascade, not a second bug.

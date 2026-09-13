@@ -151,6 +151,60 @@ function newString(emitter: Emitter, bytes: string, n: string): string {
   return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_str_new")}(i8* ${bytes}, i64 ${n})`);
 }
 
+/**
+ * The range check of `s.slice(from, to)`: `0 <= from <= to <= len`, or a cold
+ * block that panics and never returns.
+ *
+ * Two unsigned compares are the whole test. A negative offset arrives here as
+ * the `sext` of a negative `i32`, which read as unsigned is at least 2^63 and
+ * so greater than any byte length, which is why `icmp ule i64 to, len` rejects
+ * a negative `to` and `icmp ule i64 from, to` rejects a negative `from` once
+ * `to` is known non-negative. Without an explicit end, `to` *is* `len` and the
+ * second compare is a tautology, so only the first is emitted.
+ *
+ * `--unchecked-indexing` drops it, exactly as it drops `a[i]`'s.
+ */
+function emitSliceCheck(emitter: Emitter, from: string, to: string, len: string, hasEnd: boolean): void {
+  if (emitter.opts.uncheckedIndexing) {
+    return;
+  }
+  const fn = emitter.fn;
+  let inRange = fn.emitValue(`icmp ule i64 ${from}, ${to}`);
+  if (hasEnd) {
+    const within = fn.emitValue(`icmp ule i64 ${to}, ${len}`);
+    inRange = fn.emitValue(`and i1 ${inRange}, ${within}`);
+  }
+  const failBlock = fn.newBlock("slice.fail");
+  const okBlock = fn.newBlock("slice.ok");
+  fn.emit(`br i1 ${inRange}, label %${okBlock.label}, label %${failBlock.label}`);
+  fn.placeBlock(failBlock);
+  fn.emit(`call void ${emitter.useRuntime("nish_panic_slice")}(i64 ${from}, i64 ${to}, i64 ${len})`);
+  fn.emit("unreachable");
+  fn.placeBlock(okBlock);
+}
+
+/**
+ * `s.slice(a, b)`: the bytes of `[a, b)` with no clamp, `b` defaulting to
+ * `s.length` (WP15 section 4). This is `substring` minus the six `llvm.smin` /
+ * `llvm.smax` calls that put JavaScript's arguments in range.
+ */
+function emitSlice(emitter: Emitter, expr: Node, str: string): string {
+  const args = expr.children[1];
+  const len = loadStringLength(emitter, str);
+  const from = emitIndex(emitter, args.children[0]);
+  const hasEnd = args.children.length > 1;
+  let to = len;
+  if (hasEnd) {
+    to = emitIndex(emitter, args.children[1]);
+  }
+  emitSliceCheck(emitter, from, to, len, hasEnd);
+  const n = emitter.fn.emitValue(`sub i64 ${to}, ${from}`);
+  const at = emitter.fn.emitValue(
+    `getelementptr inbounds i8, i8* ${stringData(emitter, str)}, i64 ${from}`
+  );
+  return newString(emitter, at, n);
+}
+
 /** `nish_str_at(s, at, sub)`: whether `sub`'s bytes sit at offset `at`. */
 function emitOccursAt(emitter: Emitter, str: string, at: string, sub: string): string {
   return emitter.fn.emitValue(
@@ -234,6 +288,9 @@ export function emitStringMethodCall(emitter: Emitter, expr: Node): string {
   if (name === "substring") {
     return emitSubstring(emitter, expr, str);
   }
+  if (name === "slice") {
+    return emitSlice(emitter, expr, str);
+  }
   if (name === "indexOf") {
     return emitStringIndexOf(emitter, expr, str);
   }
@@ -258,11 +315,22 @@ export function emitFromCharCode(emitter: Emitter, expr: Node): string {
   return newString(emitter, slot, "1");
 }
 
-/** The runtime symbols a string byte method calls, for the attribute fixpoint. */
-export function stringConstructCallees(name: string): string[] {
+/**
+ * The runtime symbols a string byte method calls, for the attribute fixpoint.
+ *
+ * `slice` can also reach `nish_panic_slice`, which is `noreturn`, so a caller
+ * keeps `willreturn` only when the check is not emitted at all — the same rule
+ * `a[i]` follows with `nish_panic_index`.
+ */
+export function stringConstructCallees(name: string, uncheckedIndexing: boolean): string[] {
   const out: string[] = [];
   if (name === "substring") {
     out.push("nish_str_new");
+  } else if (name === "slice") {
+    out.push("nish_str_new");
+    if (!uncheckedIndexing) {
+      out.push("nish_panic_slice");
+    }
   } else if (name !== "charCodeAt") {
     out.push("nish_str_at");
   }

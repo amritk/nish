@@ -37,6 +37,8 @@ struct N { uint8_t a; uint16_t b; uint32_t c; uint64_t d; uint8_t e; };
 /* WP15: an f32 beside an f64. `a` is 4 bytes so `b` starts at 8, `c` at 16
    and `d` at 20: 24 bytes, where four doubles would have been 32. */
 struct O { float a; double b; float c; bool d; };
+/* WP15 section 2a: a record element type, so a `P[]` is a C array of these. */
+struct P { double x; double y; int32_t tag; };
 
 _Static_assert(sizeof(struct A) == 4, "A");
 _Static_assert(sizeof(struct B) == 16, "B");
@@ -53,6 +55,7 @@ _Static_assert(sizeof(struct L) == 16, "L");
 _Static_assert(sizeof(struct M) == 32, "M");
 _Static_assert(sizeof(struct N) == 24, "N");
 _Static_assert(sizeof(struct O) == 24, "O");
+_Static_assert(sizeof(struct P) == 24, "P");
 
 int32_t A_a(struct A *);
 int32_t B_a(struct B *);
@@ -104,6 +107,14 @@ float O_a(struct O *);
 double O_b(struct O *);
 float O_c(struct O *);
 bool O_d(struct O *);
+/* WP15 section 2a: the record element type and the array of it. `nish_array`
+   comes from nish.h, which the runtime this links against defines. */
+typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array;
+struct P *makeP(double, int32_t);
+nish_array *buildPs(int32_t);
+double P_x(struct P *);
+double P_y(struct P *);
+int32_t P_tag(struct P *);
 
 static int failures = 0;
 #define CHECK(name, cond)                              \
@@ -185,6 +196,32 @@ int main(void) {
   CHECK("O.b", O_b(&o) == -2.25);
   CHECK("O.c", O_c(&o) == 3.75f);
   CHECK("O.d", O_d(&o) == true);
+
+  /* WP15 section 2a: the array holds the records themselves, so `data` is a C
+     array of `struct P` and the stride is `sizeof(struct P)`. Anything else --
+     a block of pointers, or a stride rounded up to 8-byte multiples of
+     something -- and every element but the first reads the wrong bytes.
+     `buildPs` grows past the initial capacity of 4 twice, so this also checks
+     that `nish_array_grow` relocated whole records. */
+  {
+    nish_array *ps = buildPs(9);
+    struct P *data = (struct P *)ps->data;
+    int32_t k;
+    CHECK("P[] length", ps->len == 9);
+    CHECK("P[] stride", (char *)&data[1] - (char *)&data[0] == (long)sizeof(struct P));
+    for (k = 0; k < 9; k++) {
+      CHECK("P[].x", data[k].x == (double)k);
+      CHECK("P[].y", data[k].y == (double)k * 2.0);
+      CHECK("P[].tag", data[k].tag == k);
+      /* And the same element read back through the compiled getters, which go
+         through the interior pointer `ps[k]` rather than through C's view. */
+      CHECK("P[].x via getter", P_x(&data[k]) == (double)k);
+      CHECK("P[].tag via getter", P_tag(&data[k]) == k);
+    }
+    CHECK("makeP.x", P_x(makeP(3.5, 7)) == 3.5);
+    CHECK("makeP.y", P_y(makeP(3.5, 7)) == 7.0);
+    CHECK("makeP.tag", P_tag(makeP(3.5, 7)) == 7);
+  }
 
   if (failures == 0) printf("layout ok\n");
   return failures == 0 ? 0 : 1;

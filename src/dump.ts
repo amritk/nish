@@ -19,6 +19,7 @@
 import path from "node:path";
 import ts from "typescript";
 import { FunctionSig, LocalVar, StructInfo } from "./checker/index.js";
+import { withInstance } from "./checker/generics.js";
 import { ConstInfo, constValue } from "./checker/constants.js";
 import { FunctionFacts } from "./codegen/attributes.js";
 import { Compilation, ModuleUnit } from "./compilation.js";
@@ -159,7 +160,11 @@ export function dumpChecked(compilation: Compilation): string {
   const lines: string[] = [];
   for (const unit of compilation.modules) {
     const program = unit.checker.program;
-    lines.push(`module ${displayName(unit.fileName)}${unit.isEntry ? " (entry)" : ""}`);
+    // The package is printed only when there is one to print (WP21 S1): the
+    // root package has no name, and a single-package program's dump is
+    // therefore the same text it has always been.
+    const pkg = program.packageName === "" ? "" : ` [package ${program.packageName}]`;
+    lines.push(`module ${displayName(unit.fileName)}${unit.isEntry ? " (entry)" : ""}${pkg}`);
     for (const imp of program.imports) {
       const what = imp.struct
         ? `struct ${imp.struct.name}`
@@ -182,14 +187,23 @@ export function dumpChecked(compilation: Compilation): string {
       lines.push(...structText(info));
     }
     for (const sig of program.functions) {
-      const tags = [sig.exported ? "exported" : "", sig.role ?? "", program.entryMain === sig ? "entry" : ""]
+      const tags = [
+        sig.exported ? "exported" : "",
+        sig.role ?? "",
+        program.entryMain === sig ? "entry" : "",
+        // WP18: the instantiation set, printed in discovery order with the rest
+        // of the functions, so a divergence in *which* instantiations exist is
+        // caught by `tests/self/checked_oracle.js` before any IR is compared.
+        sig.instance ? "instance" : "",
+      ]
         .filter(Boolean)
         .join(" ");
-      // Methods' `sourceName` already reads `Owner.method`.
+      // Methods' `sourceName` already reads `Owner.method`; an instantiation's
+      // reads `identity<i32>`.
       lines.push(`function ${signatureText(sig)} -> @${sig.name}${tags ? ` [${tags}]` : ""}`);
       const f = facts.get(sig.name);
       if (f) lines.push(...factsText(f));
-      lines.push(...bodyTables(unit, sig));
+      lines.push(...withInstance(program, sig, () => bodyTables(unit, sig)));
     }
   }
   return `${lines.join("\n")}\n`;

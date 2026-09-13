@@ -1,0 +1,1 @@
+Non-integer literal `1.5` in a constant of integer type (annotate it `f64`)

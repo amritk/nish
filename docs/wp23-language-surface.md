@@ -157,6 +157,35 @@ would rewrite the discriminant of every dispatch in the compiler while the
 bootstrap is the only thing checking the rewrite. That is the same posture
 wp18 §10 takes towards generics, for the same reason.
 
+### What landed, and how the three forced choices were answered
+
+The rule is [LANGUAGE.md](LANGUAGE.md) → "Enums"; this is only the record of
+which way each open decision went.
+
+1. **`switch` takes an enum discriminant and enum-member labels.** The label is
+   folded the way a module constant's is, so the statement is LLVM's `switch`
+   and the jump table, unchanged. `case 1:` on an enum switch is refused —
+   `` `case` label is i32 but the discriminant is Kind `` — because the integer
+   a member stands for is not the member.
+2. **Bit flags stay `i32` module constants**, which is the second of the three
+   answers §10 question 1 offers and the one `self/nodes.ts` already lives by.
+   `|`, `&`, `^` and `~` on an enum are refused by the existing integer rule
+   (`tests/cases/reject_enum_bitwise`). It is the answer that can be widened
+   later without invalidating a program, which the other two are not.
+3. **`biome.json` turns `noEnum` off for the Nish-program half** — the
+   override that already exempts `examples/**`, `docs/cookbook/**`, `bench/**`,
+   `self/**`, `std/**` and `tests/self/**` from the two house-style rules — and
+   leaves it an error over `src/`, where an enum in the compiler's own
+   TypeScript is still a mistake.
+
+Two decisions the note did not list, both settled the way the `type` alias
+was: **auto-numbering is TypeScript's** (a member with no initialiser is the
+one before it plus one, starting at `0`), and **an enum cannot be exported**,
+because a module's signatures are resolved before its imports are bound, so an
+imported name in type position resolves provisionally as a class and an enum
+has no layout to stand in for. §10 question 2 — whether an enum takes a width
+— is still open and still `i32`.
+
 ---
 
 ## 4. Module-level mutable state — **proposed**
@@ -761,15 +790,18 @@ Recorded as questions rather than answered, in the shape
 [wp18-generics.md](wp18-generics.md) §14 uses, because this note is meant to be
 reviewed before more code is written.
 
-1. **Bit flags on an enum** (§3). `self/nodes.ts` combines `FLAG_EXPORTED |
-   FLAG_CONST` and tests with `&`. TypeScript allows both on a numeric enum and
-   gives back the enum type — which admits values that are no declared member,
-   in a language whose whole enum argument is that a value has one identical
-   type. Three answers are defensible: allow `| & ~ ^` on an enum and accept
-   non-member values; refuse them and leave bit flags as `i32` module constants
-   (which is what `self/` has today and what it would keep); or add a separate
-   `flags` form. This is the one open question that blocks a real program,
-   because `self/nodes.ts` is a real program.
+1. **Bit flags on an enum** (§3) — **answered, conservatively**. `self/nodes.ts`
+   combines `FLAG_EXPORTED | FLAG_CONST` and tests with `&`. TypeScript allows
+   both on a numeric enum and gives back the enum type — which admits values
+   that are no declared member, in a language whose whole enum argument is that
+   a value has one identical type. Three answers were defensible: allow
+   `| & ~ ^` on an enum and accept non-member values; refuse them and leave bit
+   flags as `i32` module constants (which is what `self/` has today and what it
+   would keep); or add a separate `flags` form. **The second shipped**
+   (`tests/cases/reject_enum_bitwise`), because it is the only one of the three
+   that can be widened later without invalidating a program that was already
+   written. The question stays here because the *choice* is still open in the
+   direction of widening.
 
 2. **Whether an enum is `i32` or takes a width.** `i32` is proposed and matches
    every discriminant in `self/`. `u8` for a small enum would matter inside a

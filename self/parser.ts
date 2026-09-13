@@ -79,6 +79,8 @@ import {
   N_THROW,
   N_TRUE,
   N_UNARY,
+  N_ENUM,
+  N_ENUM_MEMBER,
   N_TYPE_ALIAS,
   N_TYPE_ARRAY,
   N_TYPE_NULL,
@@ -416,16 +418,29 @@ export class Parser {
     if (this.at(TOK_CONST) && this.startsArrowDeclaration()) {
       return this.exportable(this.parseArrowFunction(start), exported);
     }
+    // `const enum` is read rather than refused where it stands, so the checker
+    // can say why an enum member needs no `const` instead of the parser saying
+    // that `enum` is not a variable name (WP23).
+    if (this.at(TOK_CONST) && this.startsConstEnum()) {
+      this.advance(); // `const`
+      const declaration = this.parseEnum(start);
+      declaration.flags = declaration.flags | FLAG_CONST;
+      return this.exportable(declaration, exported);
+    }
     if (this.at(TOK_CONST) || this.at(TOK_LET)) {
       return this.exportable(this.parseModuleConst(start), exported);
     }
-    // `type` is a contextual keyword, an ordinary identifier everywhere else,
-    // so it is matched by text here exactly as `from` and `of` are.
+    // `type` and `enum` are contextual keywords, ordinary identifiers
+    // everywhere else, so they are matched by text here exactly as `from` and
+    // `of` are — which is what leaves the lexer and its oracle untouched.
     if (this.at(TOK_IDENT) && this.value === "type") {
       return this.exportable(this.parseTypeAlias(start), exported);
     }
+    if (this.at(TOK_IDENT) && this.value === "enum") {
+      return this.exportable(this.parseEnum(start), exported);
+    }
     return this.fail(
-      `a module holds only \`function\`, \`class\`, \`interface\`, \`const\`, \`type\` and \`import\`, found \`${tokenName(this.kind)}\``
+      `a module holds only \`function\`, \`class\`, \`interface\`, \`const\`, \`type\`, \`enum\` and \`import\`, found \`${tokenName(this.kind)}\``
     );
   }
 
@@ -481,11 +496,62 @@ export class Parser {
     this.advance(); // `function`
     const node = this.node(N_FUNCTION, start, this.end);
     node.children.push(this.parseIdentifier());
+    // The type parameters are read here, where they are written, and pushed
+    // last, where `nodes.ts` puts them: the first four children of an
+    // `N_FUNCTION` mean what they have always meant, so nothing downstream
+    // that indexes them moves (WP18).
+    const typeParams = this.parseTypeParameters();
     node.children.push(this.parseParameters());
     node.children.push(this.parseReturnType());
     node.children.push(this.parseBlock());
+    node.children.push(typeParams);
     node.end = this.previousEnd;
     return node;
+  }
+
+  /**
+   * `<T, U>` on a function declaration (WP18), or an empty list when there is
+   * none. Only the *names* are recorded: a constrained parameter
+   * (`<T extends Shape>`) needs member access on a type parameter, which is its
+   * own rule and its own milestone, and a default (`<T = string>`) has no
+   * position to fill because a type argument is inferred from the arguments.
+   *
+   * `<` here is unambiguous — a declaration cannot start with a comparison —
+   * which is exactly why type arguments are written in an annotation and after
+   * `new`, and nowhere else: one token of lookahead cannot tell `f<i32>(x)`
+   * from `(f < i32) > (x)` (§2a).
+   */
+  parseTypeParameters(): Node {
+    const list = this.list();
+    if (!this.at(TOK_LT)) {
+      return list;
+    }
+    this.advance();
+    while (!this.at(TOK_GT) && !this.at(TOK_END)) {
+      list.children.push(this.parseIdentifier());
+      if (this.at(TOK_EXTENDS)) {
+        this.report(
+          "a constrained type parameter (`T extends ...`) is not supported yet",
+          this.start,
+          this.end
+        );
+        this.advance();
+        this.parseType();
+      } else if (this.at(TOK_ASSIGN)) {
+        this.report(
+          "a default type argument (`T = ...`) is not supported: a type argument is inferred from the arguments",
+          this.start,
+          this.end
+        );
+        this.advance();
+        this.parseType();
+      }
+      if (!this.eat(TOK_COMMA)) {
+        break;
+      }
+    }
+    this.expectTypeArgumentEnd();
+    return this.closeList(list);
   }
 
   /**
@@ -511,6 +577,19 @@ export class Parser {
     scan.next();
     if (scan.kind !== TOK_ASSIGN) return false;
     scan.next();
+    // WP18: `const identity = <T>(x: T): T => x` puts a type parameter list
+    // between the `=` and the parameters. It is skipped by matching `>` against
+    // `<`, which is enough because a type parameter list holds only names.
+    if (scan.kind === TOK_LT) {
+      let angles = 1;
+      while (angles > 0) {
+        scan.next();
+        if (scan.kind === TOK_END) return false;
+        if (scan.kind === TOK_LT) angles = angles + 1;
+        else if (scan.kind === TOK_GT) angles = angles - 1;
+      }
+      scan.next();
+    }
     if (scan.kind !== TOK_LPAREN) return false;
     let depth = 1;
     while (depth > 0) {
@@ -534,10 +613,12 @@ export class Parser {
     const node = this.node(N_FUNCTION, start, this.end);
     node.children.push(this.parseIdentifier());
     this.expect(TOK_ASSIGN);
+    const typeParams = this.parseTypeParameters();
     node.children.push(this.parseParameters());
     node.children.push(this.parseReturnType());
     this.expect(TOK_ARROW);
     node.children.push(this.at(TOK_LBRACE) ? this.parseBlock() : this.parseExpression());
+    node.children.push(typeParams);
     this.expectSemicolon();
     node.end = this.previousEnd;
     return node;
@@ -711,6 +792,54 @@ export class Parser {
     this.expectSemicolon();
     node.end = this.previousEnd;
     return node;
+  }
+
+  /**
+   * Whether the `const` about to be parsed introduces a `const enum` rather
+   * than a value. `enum` is a contextual keyword, so this is one token of
+   * lookahead over the same source, the shape `startsArrowDeclaration` uses.
+   */
+  startsConstEnum(): boolean {
+    const scan = new Lexer(this.file.text);
+    scan.pos = this.start;
+    scan.next(); // `const`
+    scan.next();
+    return scan.kind === TOK_IDENT && scan.value === "enum";
+  }
+
+  /**
+   * `enum X { A = 1, B }` — a distinct type with `i32` representation (WP23).
+   * The grammar is deliberately narrower than TypeScript's: the checker wants
+   * to say *why* a member is not a literal, so anything is parsed here as an
+   * expression and Phase 0 is what turns `B = A + 1` down by name.
+   */
+  parseEnum(start: i32): Node {
+    this.advance(); // `enum`
+    const node = this.node(N_ENUM, start, this.end);
+    node.children.push(this.parseIdentifier());
+    const members = this.list();
+    if (this.expect(TOK_LBRACE)) {
+      while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
+        const before = this.start;
+        members.children.push(this.parseEnumMember());
+        if (!this.eat(TOK_COMMA)) break;
+        if (this.start === before && !this.at(TOK_RBRACE) && !this.at(TOK_END)) this.advance();
+      }
+      this.expect(TOK_RBRACE);
+    }
+    node.children.push(this.closeList(members));
+    node.end = this.previousEnd;
+    return node;
+  }
+
+  /** `A` or `A = 1`; an absent initialiser is `N_EMPTY` and means "one more than the last". */
+  parseEnumMember(): Node {
+    const start = this.start;
+    const member = this.node(N_ENUM_MEMBER, start, this.end);
+    member.children.push(this.parseIdentifier());
+    member.children.push(this.eat(TOK_ASSIGN) ? this.parseExpression() : this.empty());
+    member.end = this.previousEnd;
+    return member;
   }
 
   parseModuleConst(start: i32): Node {

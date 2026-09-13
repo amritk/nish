@@ -28,7 +28,7 @@ export const N_LIST: i32 = 2; // children: the elements
 export const N_SOURCE_FILE: i32 = 3; // children: the top-level declarations
 export const N_IMPORT: i32 = 4; // text: the specifier; children: LIST of IMPORT_SPEC
 export const N_IMPORT_SPEC: i32 = 5; // text: local name; children: exported name IDENT
-export const N_FUNCTION: i32 = 6; // children: name, LIST of PARAM, return type, BLOCK
+export const N_FUNCTION: i32 = 6; // children: name, LIST of PARAM, return type, BLOCK, LIST of type parameters (WP18)
 export const N_PARAM: i32 = 7; // children: name, type
 export const N_CLASS: i32 = 8; // children: name, extends, LIST of implements, LIST of members
 export const N_INTERFACE: i32 = 9; // children: name, LIST of FIELD
@@ -93,14 +93,19 @@ export const N_TYPE_READONLY: i32 = 57; // `readonly T[]`; children: the type th
 // appended and never moved: forty constants and a `nodeName` switch read the
 // same either way, and renumbering them would churn every one of them.
 export const N_TYPE_ALIAS: i32 = 58; // `type X = T;`; children: name, the aliased type
+// `enum X { A = 1 }` (WP23); children: name, LIST of ENUM_MEMBER.
+export const N_ENUM: i32 = 59;
+// One member; children: name, initializer (N_EMPTY when it is auto-numbered).
+export const N_ENUM_MEMBER: i32 = 60;
 
-export const N_COUNT: i32 = 59;
+export const N_COUNT: i32 = 61;
 
 // `flags` on N_UNARY: which side the operator was written on.
 export const FLAG_PREFIX: i32 = 0;
 export const FLAG_POSTFIX: i32 = 1;
 
-// `flags` on N_FUNCTION, N_CLASS, N_INTERFACE, N_MODULE_CONST, N_TYPE_ALIAS: bit 0 is
+// `flags` on N_FUNCTION, N_CLASS, N_INTERFACE, N_MODULE_CONST, N_TYPE_ALIAS,
+// N_ENUM: bit 0 is
 // `export`. A bitfield rather than a field per modifier, because the checker
 // asks about them one at a time and the parser sets them in one place.
 export const FLAG_EXPORTED: i32 = 1;
@@ -266,6 +271,10 @@ export function nodeName(kind: i32): string {
       return "TYPE_READONLY";
     case N_TYPE_ALIAS:
       return "TYPE_ALIAS";
+    case N_ENUM:
+      return "ENUM";
+    case N_ENUM_MEMBER:
+      return "ENUM_MEMBER";
     default:
       return "?";
   }

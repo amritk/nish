@@ -17,6 +17,9 @@
  *   s.substring(a, b)  the JavaScript clamp (`llvm.smin` / `llvm.smax` into
  *                  `[0, len]`, then the two in order), one `getelementptr`
  *                  and one `nish_str_new`: one allocation, one `memcpy`.
+ *   s.slice(a, b)  the same copy without the clamp: two unsigned compares
+ *                  against a cold `nish_panic_slice` block, one
+ *                  `getelementptr`, one `nish_str_new` (WP15 §4).
  *   s.startsWith(p)  `nish_str_at(s, 0, p)`; `endsWith` passes `len - p.len`,
  *                  which is negative, and so false, when `p` is the longer.
  *   s.indexOf(p)   a loop over `nish_str_at` (`str.find` blocks), inline
@@ -36,7 +39,7 @@
 import ts from "typescript";
 import { CheckedProgram } from "../../checker/index.js";
 import { dottedName } from "../../checker/builtins.js";
-import { STRING, StaticType, isFloat, isUnsigned, llvmType } from "../../types.js";
+import { CompilerOptions, STRING, StaticType, isFloat, isUnsigned, llvmType } from "../../types.js";
 import { IRModule } from "../ir.js";
 import { arenaBuiltinCallEmitters } from "./arena.js";
 import { BuiltinCall } from "./builtins.js";
@@ -188,7 +191,7 @@ propertyEmitters.string = (ctx, expr) => {
 // ---- Byte methods (WP14 A2) ---------------------------------------------------------------
 
 /** Method names that lower here; also the list the checker's message prints. */
-const STRING_METHODS = new Set(["charCodeAt", "substring", "indexOf", "startsWith", "endsWith"]);
+const STRING_METHODS = new Set(["charCodeAt", "substring", "slice", "indexOf", "startsWith", "endsWith"]);
 
 /** Byte length, from the header the string pointer points at. */
 function loadStringLength(ctx: EmitContext, str: string): string {
@@ -246,6 +249,56 @@ function emitSubstring(ctx: EmitContext, expr: ts.CallExpression, str: string): 
   return newString(ctx, at, n);
 }
 
+/**
+ * The range check of `s.slice(from, to)`: `0 <= from <= to <= len`, or a cold
+ * block that panics and never returns.
+ *
+ * Two unsigned compares are the whole test. A negative offset arrives here as
+ * the `sext` of a negative `i32`, which read as unsigned is at least 2^63 and
+ * therefore greater than any byte length, so `icmp ule i64 to, len` rejects a
+ * negative `to` and `icmp ule i64 from, to` rejects a negative `from` once
+ * `to` is known non-negative. That is the same trick the array bounds check
+ * uses to fold `i >= 0` into `icmp ult`.
+ *
+ * `--unchecked-indexing` drops it, exactly as it drops `a[i]`'s: the flag's
+ * bargain is that an out-of-range access is undefined behaviour.
+ */
+function emitSliceCheck(ctx: EmitContext, from: string, to: string, len: string, hasEnd: boolean): void {
+  if (ctx.opts.uncheckedIndexing) return;
+  const fn = ctx.fn;
+  // Without an explicit end, `to` *is* `len`, so `to <= len` is a tautology
+  // and only the ordering compare is worth emitting.
+  const ordered = fn.emitValue(`icmp ule i64 ${from}, ${to}`);
+  const inRange = hasEnd
+    ? fn.emitValue(`and i1 ${ordered}, ${fn.emitValue(`icmp ule i64 ${to}, ${len}`)}`)
+    : ordered;
+  const failBlock = fn.newBlock("slice.fail");
+  const okBlock = fn.newBlock("slice.ok");
+  fn.emit(`br i1 ${inRange}, label %${okBlock.label}, label %${failBlock.label}`);
+  fn.placeBlock(failBlock);
+  fn.emit(`call void ${ctx.useRuntime("nish_panic_slice")}(i64 ${from}, i64 ${to}, i64 ${len})`);
+  fn.emit("unreachable");
+  fn.placeBlock(okBlock);
+}
+
+/**
+ * `s.slice(a, b)`: the bytes of `[a, b)` with no clamp, `b` defaulting to
+ * `s.length` (WP15 §4). This is `substring` minus the six `llvm.smin` /
+ * `llvm.smax` calls that put JavaScript's arguments in range, and measured
+ * 1.18x over `substring` on a lexer-shaped scan that slices every word out of
+ * a 300 KB source (`docs/wp15-performance.md` §4).
+ */
+function emitSlice(ctx: EmitContext, expr: ts.CallExpression, str: string): string {
+  const len = loadStringLength(ctx, str);
+  const from = emitIndex(ctx, expr.arguments[0]);
+  const hasEnd = expr.arguments.length > 1;
+  const to = hasEnd ? emitIndex(ctx, expr.arguments[1]) : len;
+  emitSliceCheck(ctx, from, to, len, hasEnd);
+  const n = ctx.fn.emitValue(`sub i64 ${to}, ${from}`);
+  const at = ctx.fn.emitValue(`getelementptr inbounds i8, i8* ${stringData(ctx, str)}, i64 ${from}`);
+  return newString(ctx, at, n);
+}
+
 /** `nish_str_at(s, at, sub)`: whether `sub`'s bytes sit at offset `at`. */
 function emitOccursAt(ctx: EmitContext, str: string, at: string, sub: string): string {
   return ctx.fn.emitValue(
@@ -266,9 +319,7 @@ function emitOccursAt(ctx: EmitContext, str: string, at: string, sub: string): s
  */
 function emitIndexOf(ctx: EmitContext, expr: ts.CallExpression, str: string): string {
   const sub = ctx.emitExpression(expr.arguments[0]);
-  const found = ctx.fn.emitValue(
-    `call i64 ${ctx.useRuntime("nish_str_index_of")}(i8* ${str}, i8* ${sub})`
-  );
+  const found = ctx.fn.emitValue(`call i64 ${ctx.useRuntime("nish_str_index_of")}(i8* ${str}, i8* ${sub})`);
   return emitNumberFromI64(ctx, found, expr);
 }
 
@@ -280,6 +331,8 @@ methodCallEmitters.string = (ctx, expr) => {
       return emitCharCodeAt(ctx, expr, str);
     case "substring":
       return emitSubstring(ctx, expr, str);
+    case "slice":
+      return emitSlice(ctx, expr, str);
     case "indexOf":
       return emitIndexOf(ctx, expr, str);
     case "startsWith":
@@ -307,8 +360,15 @@ const fromCharCode: BuiltinCall = {
 };
 
 /** Runtime symbols a string method calls, for the attribute fixpoint. */
-function methodCallees(name: string): string[] {
+function methodCallees(name: string, opts: CompilerOptions): string[] {
   if (name === "substring") return ["nish_str_new"];
+  // `slice` can also reach `nish_panic_slice`, which is `noreturn`, so the
+  // fixpoint has to see it or a caller keeps a `willreturn` it has not earned.
+  // `--unchecked-indexing` emits no check and therefore no call, exactly as it
+  // drops `nish_panic_index` from an `a[i]`.
+  if (name === "slice") {
+    return opts.uncheckedIndexing ? ["nish_str_new"] : ["nish_str_new", "nish_panic_slice"];
+  }
   return name === "charCodeAt" ? [] : ["nish_str_at"];
 }
 
@@ -319,7 +379,7 @@ export function isStringMethodCall(program: CheckedProgram, expr: ts.CallExpress
   return program.types.get(access.expression)?.kind === "string";
 }
 
-/** `expr` allocates a string: `s.substring(...)` or `String.fromCharCode(c)`. */
+/** `expr` allocates a string: `s.substring(...)`, `s.slice(...)` or `String.fromCharCode(c)`. */
 export function isStringAllocCall(program: CheckedProgram, expr: ts.CallExpression): boolean {
   if (
     dottedName(expr.expression) === "String.fromCharCode" &&
@@ -327,10 +387,9 @@ export function isStringAllocCall(program: CheckedProgram, expr: ts.CallExpressi
   ) {
     return true;
   }
-  return (
-    isStringMethodCall(program, expr) &&
-    (expr.expression as ts.PropertyAccessExpression).name.text === "substring"
-  );
+  if (!isStringMethodCall(program, expr)) return false;
+  const name = (expr.expression as ts.PropertyAccessExpression).name.text;
+  return name === "substring" || name === "slice";
 }
 
 // ---- Operators (string-aware `+`, `===`, `!==`) ---------------------------------------------
@@ -412,7 +471,8 @@ function conversionCallees(program: CheckedProgram, expr: ts.Expression): string
 export function collectStringFacts(
   program: CheckedProgram,
   node: ts.Node,
-  facts: { readsMemory: boolean; callees: Set<string> }
+  facts: { readsMemory: boolean; callees: Set<string> },
+  opts: CompilerOptions
 ): void {
   if (
     ts.isCallExpression(node) &&
@@ -431,9 +491,10 @@ export function collectStringFacts(
       facts.callees.add("nish_str_eq");
     }
   } else if (ts.isCallExpression(node) && isStringMethodCall(program, node)) {
-    // The byte methods all read the string's bytes; `substring` also allocates.
+    // The byte methods all read the string's bytes; `substring` and `slice`
+    // also allocate, and `slice` can reach its panic.
     facts.readsMemory = true;
-    for (const c of methodCallees((node.expression as ts.PropertyAccessExpression).name.text))
+    for (const c of methodCallees((node.expression as ts.PropertyAccessExpression).name.text, opts))
       facts.callees.add(c);
   } else if (ts.isPropertyAccessExpression(node) && program.types.get(node.expression)?.kind === "string") {
     facts.readsMemory = true; // `.length` loads the header through the string pointer (Math.PI has no typed target)
