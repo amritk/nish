@@ -28,6 +28,7 @@ NL2051  retired: inheritance, removed
 NL2085  retired: inheritance, removed
 NL2087  retired: the long form of the WP15 §8 string warning; the live one is NL9002
 NL2094  retired: inheritance, removed
+NL2125  retired: `declare function` is a supported construct since WP27 S1, so "not supported yet" names nothing; its wordings case went with it and the rules that replaced it are pinned by tests/cases/reject_ffi_*
 NL2110  retired: inheritance, removed
 NL2111  retired: inheritance, removed
 NL2112  retired: inheritance, removed
