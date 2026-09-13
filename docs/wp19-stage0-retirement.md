@@ -737,9 +737,10 @@ yet", and a discipline that CI does not check is a comment.
 
 **State: the script half is done, the Linux half of the CI half is done and
 honest, and the second operating system is short two things rather than one.**
-`scripts/bootstrap.sh` reads `NISH_BOOTSTRAP`, and the `bootstrap` job in
-`ci.yml` downloads the last release's binary and builds `self/` with it. It
-runs on Linux alone.
+`scripts/bootstrap.sh` reads `NISH_BOOTSTRAP`, `ci.yml`'s `seeds` job asks the
+last release which seed binaries it attaches, and its `bootstrap` job builds
+`self/` with each one. A release attaches `x86_64-linux` and nothing else, so
+that is one row, on Linux.
 
 The `test` row on macOS is **not** back, and for the first time the reason is a
 measurement rather than an estimate. It was run on 2026-09-13 and `npm test`
@@ -754,21 +755,73 @@ genuinely fixed; these are what is behind them
 release workflow and a darwin binary, because
 `scripts/bootstrap.sh --verify` asserts that same comparison.
 
-**A seed the job cannot find is now a failure.** It used to name the asset it
-wanted, warn, and exit 0 — and a warning above a green check is a green check.
-That is this document's own §A5 in a second place: a gate wearing the colour of
-a gate that held, while nothing had been checked. The freeze is enforced by
-this job and by nothing else, so no release at all, or a release carrying
-nothing for this host, is red with the missing asset named. The seed is asked
-for by *host* — `uname -s`/`uname -m` resolved to the triple `release.yml`
-stamps into the tarball name, one of the four spellings both workflows now
-write down — and the lookup runs before the toolchain install and before
-`npm ci`, because it is the gate and a host with no seed has nothing to install
-for. On Linux this is the ordinary path rather than the interesting one: v0.2.0
-is released with `nish-0.2.0-x86_64-linux.tar.gz` attached, so the job
-downloads a real seed and a red one would be a regression. (v0.1.0 is a tag
-with no release behind it and no assets, so it is not a seed and never was —
-see [wp12-release.md](wp12-release.md#release-procedure) step 2.)
+**A seed the job cannot find is no longer green, and "there is no seed" is not
+one state.** The gate has been wrong in both directions here, a round apart,
+and the correction is to stop asking one job to say three things with two
+colours.
+
+It first named the asset it wanted, warned, and exited 0 — and a warning above
+a green check is a green check. That is this document's own §A5 in a second
+place: a gate wearing the colour of a gate that held, while nothing had been
+checked. The correction for *that* made every missing seed red, which is the
+other error and a worse one: `release.yml`'s `release` job is `needs: ci`, so a
+repository with no release could never cut the release that would supply the
+seed the gate is waiting for. That is the 0.1.0 base case
+([wp12-release.md](wp12-release.md#release-procedure)) and it is every fork on
+the day it is forked — and it is the same argument that keeps the macOS `test`
+row out, applied to a job sitting on the release path.
+
+So the lookup is a job of its own, `seeds`, and `bootstrap` is a **matrix over
+its answer** — one row per seed the last release actually attaches. A platform
+with no seed has no row, and when there is no release at all there are no rows
+and `bootstrap` is skipped:
+
+| The checks list says | It means |
+| --- | --- |
+| `seeds` green, a `bootstrap (<seed>)` row green | the freeze was checked with that seed, on that seed's own platform, and it held |
+| `seeds` green, no row for a platform | the freeze was *not* checked there, and nothing is wrong: no release carries a seed for it yet. The `seeds` summary names every platform in both states |
+| `seeds` green, `bootstrap` **skipped** | the same for every platform at once: there is no release at all |
+| `seeds` **red** | a seed that should exist does not — a release missing an asset `release.yml` attaches |
+| a `bootstrap` row **red** | `self/` does not build with the last release: the rolling freeze broken, which is what the pair exists to catch |
+
+Which missing seed is which is decided by **platform**, because the two cases
+are genuinely different, and the decision is data rather than prose:
+[`.github/seed-targets.json`](../.github/seed-targets.json) marks a platform
+`attached` when `release.yml` builds a seed for it. A release that attaches no
+`nish-<version>-x86_64-linux.tar.gz` is a regression in `release.yml` or in the
+asset name, and costs the freeze its only check, so it is red — with the
+recovery in the annotation, since that red also blocks the release that would
+fix it. A release that attaches nothing for **darwin** is neither: nothing
+builds that binary yet, which is [G5](#g5--distribution-does-not-need-node), so
+there is no row and the `seeds` summary says the freeze is unchecked there.
+Each of the other three platforms joins the red list on the day `release.yml`
+starts building its binary and the file is marked to say so.
+
+**The lookup is a file rather than a `run:` block, and `npm test` runs it.**
+`.github/seed-matrix.sh` is the step body, and the WP19 block of `tests/run.js`
+drives it against a stand-in for `gh` through each state: the seed present, the
+`attached` seed missing (exit 1, with the `::error::`), no release at all, and
+a seed appearing for a platform that had none — which is the claim that the
+macOS row arrives with no edit to `ci.yml`, checked rather than asserted in a
+comment. Both times this logic was got wrong it was inline shell in a workflow
+that nothing could run.
+
+That file is also where the asset name is spelled, once. `release.yml` looks
+its own up rather than writing it out, and the same block of `tests/run.js`
+checks every row against the compiler's own target table: each `triple` is one
+`src/codegen/target.ts` calls canonical, and each `asset` is that triple with
+the vendor and the ABI dropped (`x86_64-unknown-linux-gnu` → `x86_64-linux`,
+`aarch64-apple-darwin` → `aarch64-darwin`). The four spellings used to live in
+two comments calling each other a contract, and two of them — `aarch64-darwin`
+and `x86_64-darwin` — were described there as triples the compiler accepts,
+which it never has: it knows `aarch64-apple-darwin` and `x86_64-apple-darwin`,
+and their `-macosx` and `arm64-` aliases.
+
+On Linux this is the ordinary path rather than the interesting one: v0.2.0 is
+released with `nish-0.2.0-x86_64-linux.tar.gz` attached, so the job downloads a
+real seed and a red one would be a regression. (v0.1.0 is a tag with no release
+behind it and no assets, so it is not a seed and never was — see
+[wp12-release.md](wp12-release.md#release-procedure) step 2.)
 
 **So the darwin half of G3 is short two things, and the runner is neither of
 them:**
@@ -779,11 +832,14 @@ them:**
 2. the **ld64 fixed point** — the fourth family above. `--verify` asserts
    `stage3 == stage2` byte for byte, and without that fixed a `bootstrap` row
    on macOS would be red on the day its seed arrived, which is the other way a
-   gate lies about itself.
+   gate lies about itself. That comparison now carries a note at the site
+   saying what was measured on Mach-O, so the next person to reach it does not
+   have to find it from a workflow comment.
 
-Neither is a matrix line and neither is claimed here. The job's seed lookup is
-written for any host already, so the row costs `ci.yml` one entry once both
-have landed.
+Neither is a line in `ci.yml`, and neither is claimed here. The matrix is the
+release's answer rather than a list in the workflow, so the macOS row appears
+on the day a release carries a darwin seed — which is the day the second of
+those two has to be true.
 
 #### What the seeded run proves, and what it does not
 
@@ -962,7 +1018,7 @@ gate nobody has opened is how a runtime budget dies.
 | | Milestone | Done when |
 | --- | --- | --- |
 | **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) — though that claim was recorded once while it was not true, and §A5 is the correction and what it cost |
-| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). A seed the job cannot find is a **failure** now rather than a warning it passed over, which is §A5's lesson applied where it had been broken again, and the seed is asked for by host triple. The Linux seed has arrived: v0.2.0 is released with `nish-0.2.0-x86_64-linux.tar.gz` attached, the line v0.1.1 started, because v0.1.0 was tagged and never built (G3, G4). Outstanding is the **second operating system**, and on a *measurement* rather than an estimate for the first time: the `test` row on macOS fails five checks in four families, all of them encoding an ELF assumption, and one of those four — `stage3 == stage2` at identical size, from Mach-O's debug map — is the comparison `--verify` makes, so it stands between this gate and a macOS `bootstrap` row as well as between G5 and a darwin release binary. That row therefore needs two things and not one: the darwin seed (G5), and that fixed point ([wp10-ci.md](wp10-ci.md#ci-matrix)) |
+| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). A seed the job cannot find no longer passes with a warning, and no longer fails either: the lookup is its own `seeds` job, `bootstrap` is a matrix over the seeds a release actually attaches, and only a seed that *should* exist and does not is red — which is §A5's lesson applied without deadlocking the release train that supplies the first seed. That lookup is a script `npm test` runs against a stand-in for `gh` in each of its states, and the four asset spellings are one file both workflows read rather than two comments calling each other a contract. The Linux seed has arrived: v0.2.0 is released with `nish-0.2.0-x86_64-linux.tar.gz` attached, the line v0.1.1 started, because v0.1.0 was tagged and never built (G3, G4). Outstanding is the **second operating system**, and on a *measurement* rather than an estimate for the first time: the `test` row on macOS fails five checks in four families, all of them encoding an ELF assumption, and one of those four — `stage3 == stage2` at identical size, from Mach-O's debug map — is the comparison `--verify` makes, so it stands between this gate and a macOS `bootstrap` row as well as between G5 and a darwin release binary. That row therefore needs two things and not one: the darwin seed (G5), and that fixed point ([wp10-ci.md](wp10-ci.md#ci-matrix)) |
 | **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is now 0, with 325 codes provoked by `tests/wordings/` and the surviving negatives and 60 unreachable with a reason on file (§2B). The four survivors are repointed too: they build their stage1 binary with the seed through `tests/self/seed.js` and name no compiler of their own, and all four were watched green with `dist/` moved out of the tree. Outstanding, carried rather than closed: the 45 wordings stage1's parser refuses before Phase 0 can state them — those go with stage0 at R6 — and the 13 programs the two compilers still answer differently, seven of which stage1 compiles |
 | **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the package becoming an installer — which first needs a registry name, since `nish` is taken ([wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken)) — and the INSTALL.md/wp12 rewrite (G5) |
 | **R5** | Provenance | the re-verification procedure is written (G6); the `ddc-<version>` tag is cut at release time |
