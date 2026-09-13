@@ -97,7 +97,9 @@ The declaration form is a spelling, not a lowering
 checked signature and never the syntax that produced it, so the legacy
 `function` spelling and the arrow above compile to the same module, instruction
 for instruction — attribute group included. `function` is still accepted, and
-this listing is the only one in the cookbook that uses it.
+this listing is now the only one in the cookbook that uses it: `decl_ffi` was
+the last of the others, and what it has left is `declare function`, which is a
+different thing (§9).
 
 <!-- cookbook:begin fn_add_function -->
 ```ts
@@ -703,17 +705,26 @@ small: with no pointer among the arguments or the result, there is nothing for
 escape analysis to be wrong about (`tests/cases/ffi_scalar`, and the four
 `reject_ffi_*` cases).
 
+The listing is also where the two senses of the word `function` sit side by
+side. `declare function abs` is an *ambient* declaration and defines nothing, so
+it is not a competing spelling for what `pureDouble` and `main` do and stays
+exactly as it is written; the two definitions beside it are arrows bound to a
+`const`, which is how Nish declares a function
+([wp22-arrow-functions.md](wp22-arrow-functions.md) §1 and §9). An arrow
+spelling for the ambient one would need a function type, and Phase 0 forbids
+those.
+
 <!-- cookbook:begin decl_ffi -->
 ```ts
 declare function abs(n: i32): i32;
 
-function pureDouble(n: i32): i32 {
+const pureDouble = (n: i32): i32 => {
   return n * 2;
-}
+};
 
-export function main(): i32 {
+export const main = (): i32 => {
   return abs(-7) + pureDouble(3);
-}
+};
 ```
 
 ```llvm

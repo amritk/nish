@@ -403,6 +403,32 @@ function type. The fix is to scope D to what it is actually for:
 That keeps D to one spelling of one thing, which is the whole point of taking
 it.
 
+### 9a. The `function` declarations stage D may not simply delete
+
+Stage C's rewrite is mechanical for all but a handful of files, and the handful
+is the part worth naming before the flag day rather than during it. These are
+the places where the `function` keyword is **the subject** rather than the
+spelling — a case that exists to say something about the keyword, or a fixture
+that exists to *be* the other spelling — and each one is a decision stage D
+owes an answer to:
+
+| File | What it is | What stage D owes it |
+| --- | --- | --- |
+| `tests/cases/reject_fn_nested.ts` | a `function` inside a body, refused as `Unsupported statement in Phase 1: FunctionDeclaration` | **scope §6's rule to the top level.** A nested declaration is already refused, by a rule with its own registry code; a stage D rejection that fired first would shadow that wording and `tests/diagnostic_coverage.js` would then have a code no program provokes |
+| `tests/cases/reject_fn_anonymous.ts` | `export default function ()`, refused as `Functions must be named` | **name the function before refusing the spelling.** §6's message interpolates the name, so there is nothing for it to say here; the existing rule has to keep firing first |
+| `tests/cases/reject_arrow_annotated.ts`, `reject_arrow_let.ts` | the arrow rules, whose `main` is still a `function` | mechanical, but **before** stage D rather than with it: each case pins a *first* diagnostic, and a rejection of its entry point would become the first |
+| `docs/cookbook/fn_add_function.ts` | the listing that exists to be the legacy spelling, beside `fn_add` | the listing is the evidence for §2, so deleting it removes the demonstration that the two spellings compile identically. Either the section goes with the spelling, or the pair moves somewhere the rejection does not reach |
+| `tests/differential/arrow-parity/declared.ts` | half of the guard that the two spellings rewrite to the same JavaScript (§8b) | the same question, and it is the sharper one: the guard *is* a pair of spellings, so stage D removes one of its halves. The guard has value after D only if a `function` program can still be checked somewhere |
+
+The last two are one question — **what proves an equivalence after one of its
+two sides is illegal?** — and it is stage D's to answer, not stage C's. It is
+the concrete form of what §10 is arguing about: A and B are additive, and D is
+the stage that takes something away.
+
+`tests/cases/reject_ffi_body.ts` is the opposite case and needs nothing:
+`declare function f() { }` is refused for carrying a body, and §9 keeps that
+rule exactly where it is.
+
 ## 10. Open
 
 - ~~**The entry point.**~~ **Settled, and taken.** `export const main =
