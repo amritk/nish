@@ -111,21 +111,44 @@ nish --version
 ```
 
 As a native compiler, which needs no Node at all. Every release also attaches
-`nish-<version>-x86_64-linux.tar.gz` — the self-hosted compiler, the binary
-`self/` produces by compiling itself:
+the self-hosted compiler — the binary `self/` produces by compiling itself —
+one per supported platform:
+
+| Asset | For | Attached to |
+| --- | --- | --- |
+| `nish-<version>-x86_64-linux.tar.gz` | Linux on Intel or AMD | v0.1.1 onwards |
+| `nish-<version>-aarch64-linux.tar.gz` | Linux on ARM | the next release |
+| `nish-<version>-x86_64-darwin.tar.gz` | macOS on Intel | the next release |
+| `nish-<version>-aarch64-darwin.tar.gz` | macOS on Apple Silicon | the next release |
+
+Each is built and smoke-tested on a machine of its own architecture rather than
+cross-compiled, so the one you take has run at least one program before it
+reached you.
+
+The third column is there because a release is a past event and a workflow is
+not. `release.yml` builds all four as of this change, but a release already
+published cannot grow an asset: **v0.2.0, the current release, attaches
+`x86_64-linux` only**, and the other three rows first appear on whatever is
+released next. Check
+[the releases page](https://github.com/amritk/nish/releases/latest) for what a
+given version actually carries rather than assuming the table; on a platform
+whose row has not shipped yet, take the npm package above, or build from source
+below.
 
 ```bash
-curl -LO https://github.com/amritk/nish/releases/download/v0.1.1/nish-0.1.1-x86_64-linux.tar.gz
-tar -xzf nish-0.1.1-x86_64-linux.tar.gz
-nish-0.1.1-x86_64-linux/bin/nish --version
+# pick the row above that matches `uname -s` and `uname -m`
+curl -LO https://github.com/amritk/nish/releases/download/v0.2.0/nish-0.2.0-x86_64-linux.tar.gz
+tar -xzf nish-0.2.0-x86_64-linux.tar.gz
+nish-0.2.0-x86_64-linux/bin/nish --version
 ```
 
 Both URLs name the version rather than using GitHub's version-neutral
 `/releases/latest/download/` form, because that form needs the asset's exact
-file name and both asset names carry the version in them. **v0.1.1 is the
-current and only release**: the `v0.1.0` tag exists but has no release behind it
-and no assets, so every `v0.1.0` download URL is a 404 — the tag was pushed by a
-workflow, and GitHub raises no event for that, so nothing ever built it
+file name and every asset name carries the version in it. **v0.2.0 is the
+current release**; v0.1.1 before it was the first one with a binary attached.
+The `v0.1.0` tag exists but has no release behind it and no assets, so every
+`v0.1.0` download URL is a 404 — the tag was pushed by a workflow, and GitHub
+raises no event for that, so nothing ever built it
 ([docs/wp12-release.md](wp12-release.md#release-procedure) step 2). When a newer
 release exists, take its version from
 [the releases page](https://github.com/amritk/nish/releases/latest).
