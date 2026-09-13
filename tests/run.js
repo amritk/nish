@@ -1111,6 +1111,56 @@ if (fs.existsSync(diamondEntry)) {
   );
 }
 
+/** The `.ll` files an output directory holds, in name order. */
+const llFilesIn = (dir) =>
+  fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".ll")).sort() : [];
+
+// WP21 S2: `node_modules` above the working directory. `tests/link/package_above`
+// is the ordinary npm layout — the manifest beside `src/`, not inside it — compiled
+// the ordinary way, `nish main.ts` from `src/`, so the entry is relative and the
+// package is two directories up. stage0 resolves an absolute path and climbs to
+// `/`; stage1 has no `process.cwd()` to build one from (WP19 §A3) and has to climb
+// past `.` by spelling `..`. This is the case that tells a walk that stops at `.`
+// from one that does not, and the WP14 section below runs the same fixture through
+// the self-hosted compiler and diffs the IR byte for byte.
+const aboveDir = path.join(linkDir, "package_above");
+if (fs.existsSync(path.join(aboveDir, "src", "main.ts"))) {
+  const outDir = path.join(buildDir, "link", "package_above") + path.sep;
+  fs.rmSync(outDir, { recursive: true, force: true });
+  const exe = path.join(buildDir, "link", "package_above-app");
+  const r = spawnSync(
+    "node",
+    [cli, "main.ts", "-o", outDir, ...(HAS_CLANG ? ["--link", exe] : [])],
+    { cwd: path.join(aboveDir, "src"), encoding: "utf8" }
+  );
+  const ir =
+    r.status === 0
+      ? llFilesIn(outDir)
+          .map((f) => fs.readFileSync(path.join(outDir, f), "utf8"))
+          .join("\n")
+      : "";
+  const missing = fs
+    .readFileSync(path.join(aboveDir, "expected.ir"), "utf8")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .filter((l) => !ir.includes(l));
+  check(
+    "link/package_above: a package above the working directory resolves, with its package prefix",
+    r.status === 0 && missing.length === 0,
+    r.status === 0 ? missing.map((l) => `missing: ${l}`).join("\n") : `${r.stdout}${r.stderr}`
+  );
+  if (HAS_CLANG && r.status === 0) {
+    const run = spawnSync(exe);
+    const want = Number(fs.readFileSync(path.join(aboveDir, "expected.code"), "utf8").trim());
+    check(
+      `link/package_above: exits with ${want}`,
+      run.status === want,
+      `exit ${run.status}: ${run.stdout}${run.stderr}`
+    );
+  }
+}
+
 // ---- WP1: optimisation ------------------------------------------------------------
 // The emitted IR is target-neutral, so `opt` needs a triple before it believes it has
 // vector registers; without one the loop vectoriser never fires. x86_64 is always built in.
@@ -4109,6 +4159,54 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           ourJson.stdout.split("\n").filter(Boolean).length === 3,
         `ours:\n${ourJson.stdout}${ourJson.stderr}\ntheirs:\n${theirJson.stdout}`
       );
+
+      // WP21 S2: the walk up to `node_modules` has to reach the same directories
+      // in both compilers, and the working directory is what pulls them apart.
+      // `tests/link/package_above` installs the package *above* the directory the
+      // compiler is run in — `proj/node_modules` beside `proj/src/main.ts`, which
+      // is what npm produces — and is compiled the way that program is compiled,
+      // `nish main.ts` from `src/`. stage0 resolves the entry against
+      // `process.cwd()`; stage1 has no such builtin (WP19 §A3) and climbs past `.`
+      // by spelling `..`, so a stage1 that stopped where `dirname` stops answered
+      // `` Cannot find package `pkg_above` `` for a program stage0 compiles. Both
+      // compilers are run here and every byte of every module is compared, because
+      // a program one of them resolves and the other does not is the divergence
+      // this whole section exists to prevent.
+      const aboveSrc = path.join(root, "tests", "link", "package_above", "src");
+      if (fs.existsSync(path.join(aboveSrc, "main.ts"))) {
+        const ourDir = path.join(shipDir, "package_above-stage1") + path.sep;
+        const theirDir = path.join(shipDir, "package_above-stage0") + path.sep;
+        fs.rmSync(ourDir, { recursive: true, force: true });
+        fs.rmSync(theirDir, { recursive: true, force: true });
+        const ourAbove = spawnSync(compiler, ["main.ts", "-o", ourDir], {
+          cwd: aboveSrc,
+          encoding: "utf8",
+        });
+        const theirAbove = spawnSync("node", [cli, "main.ts", "-o", theirDir], {
+          cwd: aboveSrc,
+          encoding: "utf8",
+        });
+        const ourModules = llFilesIn(ourDir);
+        const theirModules = llFilesIn(theirDir);
+        const differing = ourModules.filter(
+          (f) =>
+            !fs.existsSync(path.join(theirDir, f)) ||
+            fs.readFileSync(path.join(ourDir, f), "utf8") !==
+              fs.readFileSync(path.join(theirDir, f), "utf8")
+        );
+        check(
+          "the self-hosted compiler: a package above the working directory resolves, to stage0's bytes",
+          ourAbove.status === 0 &&
+            theirAbove.status === 0 &&
+            ourModules.length === 2 &&
+            ourModules.join(",") === theirModules.join(",") &&
+            differing.length === 0,
+          `stage1 ${ourAbove.status}: ${ourAbove.stdout}${ourAbove.stderr}` +
+            `stage0 ${theirAbove.status}: ${theirAbove.stderr}` +
+            `modules ours [${ourModules.join(" ")}] theirs [${theirModules.join(" ")}]` +
+            ` differing [${differing.join(" ")}]`
+        );
+      }
 
       // WP19 G2.4, the wording gap: the same coverage run, through the
       // compiler that survives stage0. `tests/wordings/` pins stage0's wording

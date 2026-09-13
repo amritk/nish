@@ -1,0 +1,4 @@
+define internal noundef i32 @helper()
+define internal noundef i32 @pkg_above.helper()
+define noundef i32 @pkg_above.scale(i32 noundef %n)
+declare noundef i32 @pkg_above.scale(i32 noundef)

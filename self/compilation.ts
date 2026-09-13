@@ -45,7 +45,15 @@ import {
 import { ParentTable } from "./parents";
 import { Parser } from "./parser";
 import { CheckedProgram, FunctionSig, STRUCT_CLASS, StructRegistry } from "./program";
-import { basename, basenameWithout, dirname, joinPath, relativePath, resolveModule } from "./paths";
+import {
+  basename,
+  basenameWithout,
+  dirname,
+  joinPath,
+  normalizePath,
+  relativePath,
+  resolveModule,
+} from "./paths";
 import { CLI, LANGUAGE, PACKAGE_CONDITION, packageConditionFor, STD_PREFIX } from "./branding";
 import { nishExportTarget } from "./manifest";
 import { stdModuleNames, stdModulePath } from "./std_modules";
@@ -56,6 +64,22 @@ import { validate } from "./validator";
 import { NUMBER_MODE_F64 } from "./context";
 
 const SLASH: i32 = 47;
+
+/**
+ * How many directories the `node_modules` walk visits before it gives up
+ * (`Compilation.findPackageDir`).
+ *
+ * Something has to end a relative walk, because it cannot recognise the
+ * filesystem root: `/..` is `/`, so each step past the root re-asks what the
+ * root already answered and the loop would never stop. 256 levels above the
+ * importing directory is two orders of magnitude past any working directory a
+ * compiler is run in, and it keeps a failed resolution instant — the spelled
+ * paths get longer as the walk climbs, and probing to PATH_MAX's worth of them
+ * costs about 1.8 s of kernel time where this costs a few milliseconds. What is
+ * left outside it is a package above a directory 256 deep, which needs the
+ * `cwd` builtin WP19 §A3 keeps out rather than a bigger number.
+ */
+const PACKAGE_WALK_LIMIT: i32 = 256;
 
 /**
  * What resolving one specifier answers: the file, the package it is in when the
@@ -441,14 +465,20 @@ export class Compilation {
    * rather than searched, which is Node's rule and stops
    * `node_modules/node_modules/<name>` from ever being looked for.
    *
-   * The walk ends where `dirname` stops moving — `/` for an absolute path and
-   * `.` for a relative one. stage0 resolves against the working directory and
-   * so keeps climbing past it; that is the one place the two can differ, and
-   * they differ only for a package installed *above* the directory the compiler
-   * was run in, which is a layout npm does not produce.
+   * The walk has to reach every directory stage0 reaches, because a program
+   * one compiler resolves and the other does not is a program that compiles
+   * with one compiler and not the other. stage0 resolves an absolute path and
+   * climbs to `/`; here the importing directory is usually relative — `nish
+   * main.ts` run in `proj/src` gives `.` — so above `.` the walk is spelled
+   * with `..` rather than computed by `dirname` (`parentDirectory`), and
+   * `proj/node_modules` beside `proj/src/main.ts`, which is the ordinary npm
+   * layout, is found by both.
    */
   findPackageDir(from: string, name: string): string | null {
-    let dir = from;
+    // Normalised first so that the `..` segments a relative walk produces are
+    // the only ones in the path, which is what `parentDirectory` reads.
+    let dir = normalizePath(from);
+    let steps = 0;
     let searching = true;
     while (searching) {
       if (basename(dir) !== PACKAGE_ROOT_SEGMENT) {
@@ -457,11 +487,12 @@ export class Compilation {
           return candidate;
         }
       }
-      const parent = dirname(dir);
-      if (parent === dir) {
+      const parent = parentDirectory(dir);
+      if (parent.length === 0 || steps >= PACKAGE_WALK_LIMIT) {
         searching = false;
       } else {
         dir = parent;
+        steps = steps + 1;
       }
     }
     return null;
@@ -715,6 +746,40 @@ export class Compilation {
     }
     return stems;
   }
+}
+
+/**
+ * The directory above `dir`, or `""` when there is none left to visit.
+ *
+ * `dirname` answers this for an absolute path and stops at `/`, which is
+ * exactly what stage0's walk does. For a relative one it stops at `.`, and it
+ * is wrong above that: `dirname("..")` is `.`, back the way we came. So above
+ * `.` the walk is spelled — one more `..` per level — and the operating system
+ * resolves those against the same working directory stage0 asks
+ * `process.cwd()` for. That is how a compiler with no `cwd` builtin (WP19 §A3)
+ * searches the directories above the one it was run in.
+ *
+ * One difference with stage0 survives, and it is the exotic layout rather than
+ * the ordinary one: an *ancestor of the working directory* that is itself
+ * called `node_modules` is stepped over by stage0, which can read the name off
+ * its absolute path, and is searched here, which only ever spelled `..`. It
+ * changes an answer only for a `node_modules/node_modules/<pkg>` above the
+ * working directory, which is a layout npm does not produce.
+ */
+function parentDirectory(dir: string): string {
+  if (dir.length > 0 && dir.charCodeAt(0) === SLASH) {
+    const parent = dirname(dir);
+    return parent === dir ? "" : parent; // `/` is the top of an absolute walk
+  }
+  if (dir === ".") {
+    return "..";
+  }
+  // In a normalised relative path every `..` leads, so a trailing one means
+  // the path is nothing but parent steps and the next level is one more.
+  if (dir === ".." || dir.endsWith("/..")) {
+    return `${dir}/..`;
+  }
+  return dirname(dir);
 }
 
 /** The node a symbol-clash diagnostic points at: the name, or the declaration. */

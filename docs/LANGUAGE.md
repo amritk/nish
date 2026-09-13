@@ -916,9 +916,13 @@ and their `.ll` goldens are byte-identical files.
 - The only import form is a named import: `import { square, cube as pow3 } from
   "./math"` (`tests/link/two_file`). The specifier must start with `./` or
   `../`, name one of the three builtin modules below, name a standard-library
-  module as `nish/<module>`, or be a **package name** — `hash`, `@scope/hash`,
-  either with a subpath after it (`Import specifier ... must be relative`,
-  `tests/cases/reject_bare_import`); `.ts` is optional and `./x.js` maps to
+  module as `nish/<module>`, or be a **package name** — `hash` or
+  `@scope/hash`, each of which may be followed by a subpath
+  (`@scope/hash/blake3`), resolved through `node_modules` and the `nish` export
+  condition (`tests/link/package_bare`; a package that is not installed is
+  `` Cannot find package `hash` ``, `tests/cases/reject_bare_package`). Anything
+  else is `Import specifier ... must be relative`
+  (`tests/cases/reject_bare_import`). `.ts` is optional and `./x.js` maps to
   `./x.ts`; a relative path resolves relative to the importing file. Default imports
   (`Default imports are not supported`, `reject_default_import`), namespace
   imports (`Namespace imports`, `reject_namespace_import`), side-effect
@@ -942,10 +946,11 @@ and their `.ll` goldens are byte-identical files.
   version.
 - **A package is imported by name, and what is resolved is its source.**
   `import { scale } from "pkg_bare"` looks for `node_modules/pkg_bare` in the
-  importing file's directory and in every directory above it, reads that
-  package's `package.json`, and compiles the file its `exports` map offers for
-  the **`nish` condition** (`tests/link/package_bare`,
-  `docs/wp21-packages.md` §2):
+  importing file's directory and in every directory above it — above the
+  directory the compiler was run in included, which is the ordinary npm layout
+  (`tests/link/package_above`) — reads that package's `package.json`, and
+  compiles the file its `exports` map offers for the **`nish` condition**
+  (`tests/link/package_bare`, `docs/wp21-packages.md` §2):
 
   ```jsonc
   { "exports": { ".": { "nish": "./src/index.ts" }, "./util": { "nish": "./src/util.ts" } } }

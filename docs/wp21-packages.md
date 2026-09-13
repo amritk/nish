@@ -475,6 +475,31 @@ compiled, checked, analysed and emitted like any other module, which is §3 in
 one sentence: for an Nish consumer the distribution format is source, so there
 is no boundary to cross and no second code path to maintain.
 
+**"Every directory above it" is the whole climb in both compilers, and it took
+two goes to be.** stage0 resolves the entry to an absolute path and climbs to
+`/`. stage1 has no `process.cwd()` to build one from — WP19 §A3 keeps that
+builtin out, and module identity is the path as written — so its walk ran out
+where `dirname` does, which for the usual relative entry is `.`: the working
+directory. That made `proj/node_modules` beside `proj/src/main.ts`, compiled as
+`nish main.ts` from `proj/src`, resolve under stage0 and fail under stage1 with
+`` Cannot find package `pkg` ``, and that layout is the one npm produces rather
+than an exotic one. Above `.` the walk is now *spelled* — `..`, `../..`, one
+level per step — and the operating system resolves those against the same
+working directory `process.cwd()` would have answered, so the two compilers
+search the same directories. Two things follow from spelling it rather than
+computing it, and both are written at `parentDirectory` in
+`self/compilation.ts`: the walk cannot recognise the filesystem root (`/..` is
+`/`), so a limit ends it rather than the root does — 256 levels, which is two
+orders of magnitude past any directory a compiler is run in and keeps a failed
+resolution at about 10 ms, where probing PATH_MAX's worth of levels cost 1.8 s
+of kernel time; and an
+*ancestor of the working directory* that is itself called `node_modules` is
+stepped over by stage0, which can read the name, and searched by stage1, which
+only ever spelled `..` — a difference that can change an answer only for
+`node_modules/node_modules/<pkg>`, which npm does not produce.
+`tests/link/package_above` is that layout, compiled from the subdirectory by
+both compilers and compared byte for byte (§10e).
+
 ### 10b. The manifest reader, and why stage0 does not use `JSON.parse`
 
 `src/manifest.ts` and `self/manifest.ts` are the same narrow scan rather than a
@@ -518,6 +543,15 @@ disappeared and `packages.ts` says so.
 - **No cache.** §3's stated cost — compile time grows with the dependency tree —
   is unpaid, and S4 is the payment.
 - **Struct names are still program-wide**, exactly as §9c left them.
+- **A dependency's exports are not the program's C ABI**, and no stage of this
+  note makes them one. `--emit-header`, `--emit-dts` and `--emit-napi` declare
+  the *root package's* functions (§4: a package's artifact rows are the
+  embedding program's to choose), so the way a dependency's function should
+  reach a host is a re-export from the root package — `export { f } from "pkg"`,
+  which the language does not have and which `docs/LANGUAGE.md` rejects by name.
+  It waits on that construct rather than on a stage here, and
+  `src/interop/abi.ts` and `self/interop_abi.ts` say so at the line that
+  skips a dependency's module.
 
 ### 10e. What proves it
 
@@ -527,6 +561,16 @@ manifest declares `nish-i32` before `nish` so that the i32 compile picks a
 different file from the one an f64 compile would. Each package keeps a private
 `helper()` and so does the program, so the exit code is 7 only if every call
 reached the file the condition selected and the symbol its package's prefix.
+
+`tests/link/package_above/` is the walk: the manifest beside `src/` rather than
+inside it, compiled as `nish main.ts` from `src/`, which is the ordinary npm
+layout compiled the ordinary way and the case that tells a walk that stops at
+the working directory from one that climbs past it. `tests/run.js` compiles it
+with **both** compilers from that subdirectory and compares every byte of every
+module, because a program stage0 resolves and stage1 does not is exactly the
+divergence `tests/self/` exists to prevent. The other fixtures cannot see this:
+the harness spawns the compiler with the repository root as the working
+directory and names the entry by path, so their walk never leaves the fixture.
 
 `tests/link/package_not_nish/` is the negative §6 asks for by name: an ordinary
 npm package, with `import`, `require` and `default` rows and no `nish` one.

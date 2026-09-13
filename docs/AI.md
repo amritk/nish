@@ -129,7 +129,7 @@ rejects. This table is the highest-value part of the page.
 | `String(n)`, `n.toString()` | `` Unknown function `String` `` / `` Unknown method `toString` on i32 `` | `` `${n}` `` |
 | `xs.length = 0` | `` Cannot assign to `length` of i32[] (array length is read-only; use `push`) `` | build a new array |
 | `for (const k in o)` | `Unsupported statement in Phase 1: ForInStatement` | `for (const x of xs)` over an array |
-| `import { readFileSync } from "fs"` | `` Package `fs` has no Nish entry point `` | `readFileSync` is a global; no import needed (or `import { readFileSync } from "nish:fs"`) |
+| `import { readFileSync } from "fs"` | `` Cannot find package `fs` `` — a bare specifier is a **package name**, so it is looked for in `node_modules`; one that is installed but has no `nish` condition is `` Package `fs` has no Nish entry point `` | `readFileSync` is a global; no import needed (or `import { readFileSync } from "nish:fs"`) |
 | `export default f` | `` `export default` / `export =` are not supported `` | `export const f = …` |
 | `export type T = …`, `export enum K` | cannot be exported | declare the alias/enum in each module that needs it |
 | `new Date()`, `Date.now()` | `` Unknown builtin `Date.now` `` | `monotonicNanos()` for elapsed time; there is no wall clock and no calendar |
