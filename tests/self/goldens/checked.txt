@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 308 programs, 5048 dump lines.
+# 316 programs, 5257 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -2065,6 +2065,81 @@ function main(): i32 -> @nish_main [exported entry]
   callee 36:18 full -> @full
   callee 37:18 empty -> @empty
   callee 38:15 shout -> @shout
+program tests/cases/gen_box_i32.ts
+module tests/cases/gen_box_i32.ts (entry)
+struct Box$i32 (class) size=4 align=4
+  field value: i32 index=0 offset=0
+  constructor -> @Box$i32.constructor
+  method get -> @Box$i32.get
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Box$i32.constructor Box$i32.get
+  stackSites=1 stackLocals=1
+  local 17:9 b: Box$i32 (const)
+  callee 18:10 Box$i32.get -> @Box$i32.get
+function Box$i32.constructor(this: Box$i32, v: i32): void -> @Box$i32.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Box$i32.get(this: Box$i32): i32 -> @Box$i32.get [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/gen_box_string.ts
+module tests/cases/gen_box_string.ts (entry)
+struct Box$str (class) size=8 align=8
+  field value: string index=0 offset=0
+  constructor -> @Box$str.constructor
+  method get -> @Box$str.get
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Box$str.constructor Box$str.get nish_print
+  stackSites=1 stackLocals=1
+  local 15:9 b: Box$str (const)
+  callee 16:15 Box$str.get -> @Box$str.get
+function Box$str.constructor(this: Box$str, v: string): void -> @Box$str.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Box$str.get(this: Box$str): string -> @Box$str.get [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/gen_box_struct.ts
+module tests/cases/gen_box_struct.ts (entry)
+struct Point (class) size=8 align=4
+  field x: i32 index=0 offset=0
+  field y: i32 index=1 offset=4
+  constructor -> @Point.constructor
+struct Box$$Point (class) size=8 align=8
+  field value: Point index=0 offset=0
+  constructor -> @Box$$Point.constructor
+  method get -> @Box$$Point.get
+function Point.constructor(this: Point, x: i32, y: i32): void -> @Point.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: x y
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: Box$$Point.constructor Box$$Point.get Point.constructor nish_alloc_struct
+  stackSites=1 stackLocals=1
+  local 24:9 b: Box$$Point (const)
+  callee 24:28 new Point -> @Point.constructor
+  local 25:9 p: Point (const)
+  callee 25:13 Box$$Point.get -> @Box$$Point.get
+function Box$$Point.constructor(this: Box$$Point, v: Point): void -> @Box$$Point.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=8 writesThrough=true captured=false
+  pointer v: size=8 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function Box$$Point.get(this: Box$$Point): Point -> @Box$$Point.get [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false returnDeref=8
+  pointer this: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 program tests/cases/gen_eq_purity.ts
 module tests/cases/gen_eq_purity.ts (entry)
 function test(): i32 -> @test [exported]
@@ -2096,6 +2171,30 @@ function identity<string>(x: string): string -> @identity$str [instance]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   escaping: x
   stackSites=0 stackLocals=0
+program tests/cases/gen_implements.ts
+module tests/cases/gen_implements.ts (entry)
+struct Container$i32 (interface) size=4 align=4
+  field value: i32 index=0 offset=0
+struct Box$i32 (class) size=8 align=4
+  implements Container$i32
+  field value: i32 index=0 offset=0
+  field extra: i32 index=1 offset=4
+  constructor -> @Box$i32.constructor
+function valueOf(c: Container$i32): i32 -> @valueOf
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer c: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Box$i32.constructor valueOf
+  stackSites=1 stackLocals=1
+  local 21:9 b: Box$i32 (const)
+  callee 22:10 valueOf -> @valueOf
+function Box$i32.constructor(this: Box$i32, v: i32): void -> @Box$i32.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
 program tests/cases/gen_infer_two.ts
 module tests/cases/gen_infer_two.ts (entry)
 function test(): i32 -> @test [exported]
@@ -2115,6 +2214,53 @@ function firstOf<i32[]>(xs: i32[][]): i32[] -> @firstOf$arr.i32 [instance]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   calls: nish_panic_index
   pointer xs: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/gen_interface.ts
+module tests/cases/gen_interface.ts (entry)
+struct Pair$i32$str (interface) size=16 align=8
+  field first: i32 index=0 offset=0
+  field second: string index=1 offset=8
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: nish_print
+  stackSites=1 stackLocals=1
+  local 10:9 p: Pair$i32$str (const)
+program tests/cases/gen_nested.ts
+module tests/cases/gen_nested.ts (entry)
+struct Box$i32 (class) size=4 align=4
+  field value: i32 index=0 offset=0
+  constructor -> @Box$i32.constructor
+  method get -> @Box$i32.get
+struct Box$$Box$i32 (class) size=8 align=8
+  field value: Box$i32 index=0 offset=0
+  constructor -> @Box$$Box$i32.constructor
+  method get -> @Box$$Box$i32.get
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: Box$$Box$i32.constructor Box$$Box$i32.get Box$i32.constructor Box$i32.get nish_alloc_struct
+  stackSites=1 stackLocals=1
+  local 15:9 inner: Box$i32 (const)
+  local 16:9 outer: Box$$Box$i32 (const)
+  callee 17:10 Box$i32.get -> @Box$i32.get
+  callee 17:10 Box$$Box$i32.get -> @Box$$Box$i32.get
+function Box$i32.constructor(this: Box$i32, v: i32): void -> @Box$i32.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Box$i32.get(this: Box$i32): i32 -> @Box$i32.get [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Box$$Box$i32.constructor(this: Box$$Box$i32, v: Box$i32): void -> @Box$$Box$i32.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=8 writesThrough=true captured=false
+  pointer v: size=4 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function Box$$Box$i32.get(this: Box$$Box$i32): Box$i32 -> @Box$$Box$i32.get [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false returnDeref=4
+  pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 program tests/cases/gen_recursive_ground.ts
 module tests/cases/gen_recursive_ground.ts (entry)
@@ -2151,6 +2297,41 @@ function orElse<i32>(r: Result<i32, string>, fallback: i32): i32 -> @orElse$i32 
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   escaping: fallback
   pointer r: size=16 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+program tests/cases/gen_stack.ts
+module tests/cases/gen_stack.ts (entry)
+struct Box$str (class) size=8 align=8
+  field value: string index=0 offset=0
+  constructor -> @Box$str.constructor
+struct Box$i32 (class) size=4 align=4
+  field value: i32 index=0 offset=0
+  constructor -> @Box$i32.constructor
+function sumOf(v: i32): i32 -> @sumOf
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: v
+  calls: Box$i32.constructor
+  stackSites=1 stackLocals=1
+  local 14:9 local: Box$i32 (const)
+function Box$str.constructor(this: Box$str, v: string): void -> @Box$str.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function escaping(v: string): Box$str -> @escaping
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=8
+  escaping: v
+  calls: Box$str.constructor nish_alloc_struct
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: escaping nish_arena_mark nish_arena_release nish_print sumOf
+  stackSites=0 stackLocals=0
+  callee 21:15 escaping -> @escaping
+  callee 22:10 sumOf -> @sumOf
+function Box$i32.constructor(this: Box$i32, v: i32): void -> @Box$i32.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=4 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 program tests/cases/i64_basic.ts --wrapping
 module tests/cases/i64_basic.ts (entry)
@@ -4635,6 +4816,42 @@ program docs/cookbook/fn_f64.ts --number-mode f64
 module docs/cookbook/fn_f64.ts (entry)
 function halve(x: f64): f64 -> @halve
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+program docs/cookbook/gen_class.ts
+module docs/cookbook/gen_class.ts (entry)
+struct Box$i32 (class) size=4 align=4
+  field value: i32 index=0 offset=0
+  constructor -> @Box$i32.constructor
+  method get -> @Box$i32.get
+struct Box$str (class) size=8 align=8
+  field value: string index=0 offset=0
+  constructor -> @Box$str.constructor
+  method get -> @Box$str.get
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: Box$i32.constructor Box$i32.get Box$str.constructor Box$str.get nish_print
+  stackSites=2 stackLocals=2
+  local 14:9 n: Box$i32 (const)
+  local 15:9 s: Box$str (const)
+  callee 16:15 Box$str.get -> @Box$str.get
+  callee 17:10 Box$i32.get -> @Box$i32.get
+function Box$i32.constructor(this: Box$i32, v: i32): void -> @Box$i32.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Box$i32.get(this: Box$i32): i32 -> @Box$i32.get [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Box$str.constructor(this: Box$str, v: string): void -> @Box$str.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Box$str.get(this: Box$str): string -> @Box$str.get [method instance]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer this: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 program docs/cookbook/gen_function.ts
 module docs/cookbook/gen_function.ts (entry)
