@@ -544,13 +544,19 @@ nothing else. Nish has no conditional compilation and will not grow any:
 there is no `#[cfg(bootstrap)]` to write, so the discipline is "do not use it
 yet", and a discipline that CI does not check is a comment.
 
-**State: the script half is done, the CI half is one operating system short.**
-`scripts/bootstrap.sh` reads `NISH_BOOTSTRAP`, and the `bootstrap` job in
-`ci.yml` downloads the last release's binary and builds `self/` with it. It
-runs on Linux alone, because `macos-latest` is commented out of the test matrix
-(`ci.yml` says why: `scripts/build.sh` needed a bash 3.2 fix, which has landed,
-and `scripts/smoke.sh` still uses `mapfile`, a bash 4 builtin, which has not).
-Without a release the job has no seed and says so in an annotation rather than
+**State: the script half is done, and the CI half is one operating system
+short for a different reason than it was.** `scripts/bootstrap.sh` reads
+`NISH_BOOTSTRAP`, and the `bootstrap` job in `ci.yml` downloads the last
+release's binary and builds `self/` with it. It runs on Linux alone. What used
+to be in the way was the runner: `macos-latest` was commented out of the test
+matrix over two bash 3.2 defects, and both have landed — `scripts/build.sh`
+spells its nine empty-array expansions `${arr[@]+"${arr[@]}"}`, and
+`scripts/smoke.sh` collects its program list with `while read` rather than with
+`mapfile`, a bash 4 builtin bash 3.2 does not have. macOS is in the test matrix
+again. **What is in the way now is the seed**: a release attaches
+`nish-<version>-x86_64-linux` and nothing else, so there is no darwin binary to
+bootstrap from and this half of G3 lands with G5's remaining three binaries
+rather than on its own. Without a release the job has no seed and says so in an annotation rather than
 passing quietly — a freeze nobody checked must not read as a freeze that held.
 **That branch is now the unused one:** v0.1.1 is released with its binary
 attached, so the job downloads a real seed and the annotation is what a
@@ -596,7 +602,9 @@ to install it under.** The release workflow builds
 `nish-<version>-x86_64-linux` — stage2, `--verify`d, and smoke-tested before it
 ships, because it is also the seed every later release bootstraps from. The
 other three are not built: `aarch64-linux` needs an arm64 runner, and both
-darwin binaries need `macos-latest`, which is out of the matrix. The package is
+darwin binaries need a `macos-latest` job in `release.yml` — the CI test matrix
+carries macOS again, but building a release asset there is a second job nobody
+has written. The package is
 still the Node tarball rather than a thin installer, and it is published
 nowhere — the release's `.tgz` is the only way to install it — so `nish` today
 is Node-free only if you take the binary. `--version` already has a source that
@@ -692,7 +700,7 @@ gate nobody has opened is how a runtime budget dies.
 | | Milestone | Done when |
 | --- | --- | --- |
 | **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) |
-| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. Outstanding: the job runs on Linux only. The seed itself has arrived — v0.1.1 is released with `nish-0.1.1-x86_64-linux.tar.gz` attached, and it is the first one, because v0.1.0 was tagged and never built (G3, G4) |
+| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. Outstanding: the job runs on Linux only, and now for want of a darwin seed rather than a darwin runner — the two bash 3.2 defects that kept `macos-latest` out of the test matrix are fixed and it is back in. The seed itself has arrived — v0.1.1 is released with `nish-0.1.1-x86_64-linux.tar.gz` attached, and it is the first one, because v0.1.0 was tagged and never built (G3, G4) |
 | **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. Outstanding: the four survivors repointed to the seed, and the 196 diagnostic wordings that no surviving case exercises (§2B, "The wording gap") — which is now the half that matters (G2) |
 | **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the package becoming an installer — which first needs a registry name, since `nish` is taken ([wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken)) — and the INSTALL.md/wp12 rewrite (G5) |
 | **R5** | Provenance | the re-verification procedure is written (G6); the `ddc-<version>` tag is cut at release time |

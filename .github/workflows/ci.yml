@@ -38,16 +38,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-latest is commented out, not deleted. It is red for a reason
-        # that has nothing to do with the compiler: scripts/build.sh runs under
-        # `set -u`, and macOS ships bash 3.2 (Apple will not ship GPLv3), where
-        # expanding an empty array as "${arr[@]}" is an "unbound variable"
-        # error -- bash 4.4 made it legal, so every Linux runner is fine and
-        # every --link at the speed/size/napi profiles dies on macOS with
-        #   scripts/build.sh: line 96: pgo[@]: unbound variable
-        # The fix is ${arr[@]+"${arr[@]}"} at the nine sites that expand `pgo`,
-        # `elf`, `strip_flag` and `libs`. Restore this line with it.
-        os: [ubuntu-latest] # , macos-latest
+        # Both operating systems, which WP19 G3 asks for and which took two
+        # bash 3.2 fixes to get back: macOS ships bash 3.2 (Apple will not
+        # ship GPLv3), where expanding an empty array as "${arr[@]}" under
+        # `set -u` is an "unbound variable" error and `mapfile` does not
+        # exist. scripts/build.sh spells the nine expansions of `pgo`, `elf`,
+        # `strip_flag` and `libs` as ${arr[@]+"${arr[@]}"}, and
+        # scripts/smoke.sh reads its program list with `while read` instead of
+        # `mapfile`. `fail-fast: false` above is what keeps a macOS-only
+        # failure from cancelling the Linux run that would say whether it is
+        # the platform or the change.
+        #
+        # Anything measured in bytes is a fact about one target: the
+        # runtime.c .text budget skips itself off linux-x64 (tests/run.js) and
+        # the size report below is per-matrix-row in the job summary.
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -145,9 +150,11 @@ jobs:
   # step says which release it used, or that there was none, so a green run
   # cannot be mistaken for a freeze that was actually checked.
   #
-  # G3 asks for this on both operating systems. It runs on Linux alone today
-  # because macos-latest is out of the matrix above; see docs/wp19-stage0
-  # -retirement.md G3 for what that leaves open.
+  # G3 asks for this on both operating systems, and what is missing is now the
+  # seed rather than the runner: a release ships nish-<version>-x86_64-linux
+  # and nothing else, so there is no darwin binary to bootstrap from. The
+  # macOS half of this job lands with the other three binaries of G5, not
+  # here; see docs/wp19-stage0-retirement.md G5 for what that leaves open.
   bootstrap:
     name: bootstrap (from the last release)
     runs-on: ubuntu-latest
