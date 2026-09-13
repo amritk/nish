@@ -452,7 +452,7 @@ the way to re-derive it is to run the tool rather than to read this table:
 | provoked by nothing | 176 | 0 |
 | unreachable, each with a reason on file | — | 59 |
 
-What moved it is `tests/wordings/`, 124 cases: one small program per code,
+What moved it is `tests/wordings/`, 125 cases: one small program per code,
 named for the code it pins (`nl2200_empty_import_list.ts`), with the whole
 message in its `.err`. A reword fails it twice — the message no longer matches, and the
 generator gives the new words a new number, so the code no longer matches
@@ -478,7 +478,7 @@ than a test nobody wrote.** In six kinds, all listed with reasons in
 
 Writing a program per code asks the two compilers a question no oracle asks,
 for the same reason §A2 gives about flags: **every oracle compiles the programs
-that are checked in, and none of these programs was.** Fifty-nine of the 124
+that are checked in, and none of these programs was.** Fifty-nine of the 125
 cases do not get the same answer from both compilers, and they are in
 `tests/wordings/parser_refusals.txt` and `tests/wordings/stage1_divergence.txt`
 rather than in anybody's memory:
