@@ -1,0 +1,1 @@
+`export default` / `export =` are not supported; use a named `export function`

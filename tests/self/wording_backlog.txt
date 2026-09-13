@@ -10,7 +10,7 @@
 # not here and not covered fails the run. Write a `reject_*` case, run the
 # script with --update, and the line disappears.
 #
-# 127 live codes, measured against tests/cases/reject_* and
+# 99 live codes, measured against tests/cases/reject_* and
 # tests/link/. Retired fragments are not here and never will be: they match no
 # message, so no case can reach them.
 
@@ -36,33 +36,21 @@ NL2073  # ` is a function imported from `
 NL2075  # ` is already declared as a function
 NL2083  # ` is not supported
 NL2089  # ` must be initialized
-NL2097  # ` needs an initialiser
 NL2098  # ` requires a numeric variable, got
 NL2103  # ` requires two operands of the same type, got
 NL2109  # ` when checking a single module
-NL2113  # `; check for null first: `if (a !== null) { ... }`
 NL2114  # `; check the nullable side against `null` first, then compare the narrowed values
 NL2121  # `Array` needs exactly one type argument, e.g. `Array<number>`
 NL2125  # `declare function` is not supported yet
 NL2126  # `Err(...)` expects
 NL2127  # `expect(...)` expects string, got
-NL2128  # `export { ... }` / `export * from` are not supported; put `export` on the function declaration itself
-NL2129  # `export default` / `export =` are not supported; use a named `export function`
 NL2133  # `for await` is not supported
-NL2134  # `for...of` declares exactly one variable
-NL2135  # `for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)`
-NL2138  # `join` expects 0 or 1 arguments, got
-NL2140  # `main` must return void or an i32 number (the process exit code), not
 NL2141  # `Math.abs` expects a number, got
-NL2142  # `new Array` needs exactly one type argument, e.g. `new Array<number>(n)`
-NL2143  # `new Array<T>(n)` expects exactly 1 argument (the length), got
 NL2144  # `new` requires a class name
 NL2145  # `null` needs a contextual `T | null` type (annotate the variable, e.g. `let p: P | null = null`)
 NL2152  # `Result<T, void>` is not supported: an error must carry a value (use `Result<T, string>`)
 NL2160  # `switch` has more than one `default` clause
 NL2164  # `unwrapOr(...)` needs a success value to fall back to, and `
-NL2169  # Array elements cannot be void
-NL2171  # Array length must be a number, got
 NL2173  # async functions are not supported
 NL2174  # async methods are not supported
 NL2177  # attempt to divide with overflow in a constant
@@ -71,21 +59,16 @@ NL2180  # Cannot assign to property `
 NL2182  # Cannot call `
 NL2183  # Cannot declare a variable of type void
 NL2189  # Constructors cannot declare a return type
-NL2191  # Destructured constants are not supported
 NL2192  # Destructured parameters are not supported
 NL2193  # Destructuring is not supported
 NL2195  # Duplicate declaration of `
 NL2198  # Duplicate parameter `
-NL2200  # Empty import list
 NL2201  # Expected a return value of type
-NL2202  # Function names starting with `nish_` are reserved for the runtime
 NL2203  # Functions must be named
-NL2204  # Functions must have a body
 NL2205  # Generators are not supported
 NL2206  # Generic classes are not supported
 NL2207  # Generic functions are not supported
 NL2208  # Generic methods are not supported
-NL2210  # Holes in array literals are not supported
 NL2211  # Import must name the functions it imports
 NL2212  # Import specifier must be a string literal
 NL2213  # Index signatures are not supported in class `
@@ -102,12 +85,8 @@ NL2233  # Optional/default parameters are not supported
 NL2234  # Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it
 NL2235  # Rest parameters are not supported
 NL2236  # Return type mismatch: function returns
-NL2237  # Spread in array literals is not supported
 NL2238  # Template literal hole must be string, number, or boolean, got
 NL2239  # Ternary branches cannot be void
-NL2241  # The `for...of` variable cannot have an initializer
-NL2242  # The `for...of` variable takes the element type; remove the annotation
-NL2243  # Type-only imports are not supported
 NL2245  # Unknown class `
 NL2252  # Unsupported `new
 NL2253  # Unsupported assignment operator `
@@ -121,14 +100,7 @@ NL2260  # Unsupported statement in Phase 1:
 NL2261  # Unsupported unary operator `
 NL2262  # Unsupported unary operator `-` on
 NL2263  # Unsupported unary operator `!` on
-NL2274  # A function declaration binds one name
 NL2286  # `declare enum` is not supported
-NL3001  # --target: unsupported target `
-NL3002  # , not in your program. Please report it with the input file and
-NL3003  # : internal compiler error
-NL3005  # =1 for the stack trace)
-NL3007  # the command line at https://github.com/amritk/nish/issues
-NL3008  # unknown option:
 NL4001  #  functions (identical to --emit-header). */
 NL4002  #  modules listed below. Link the .ll module(s) and
 NL4003  # : cannot create the result

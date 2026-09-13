@@ -1195,7 +1195,16 @@ The condition must be `boolean`: there is no truthiness
 
 - `a` must be an array (`` `for...of` requires an array, got string ``,
   `tests/cases/reject_arr_forof_non_array`); `x` gets the element type and
-  must not be annotated or initialised; exactly one variable; `let x` makes
+  must not be annotated
+  (`` The `for...of` variable takes the element type; remove the annotation ``,
+  `tests/cases/reject_arr_forof_annotation`) or initialised
+  (`` The `for...of` variable cannot have an initializer ``,
+  `tests/cases/reject_arr_forof_initializer`); exactly one variable
+  (`` `for...of` declares exactly one variable ``,
+  `tests/cases/reject_arr_forof_two_vars`); the head is a declaration rather
+  than an assignment to something already declared
+  (`` `for...of` needs a `const` or `let` declaration ``,
+  `tests/cases/reject_arr_forof_expression`); `let x` makes
   it assignable, `const x` does not (`tests/cases/reject_arr_forof_const_assign`).
   `for await` is not supported.
 - `a` is evaluated once; `a.length` is re-read every iteration, so a `push`

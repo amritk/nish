@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 59 programs, 316478 dump lines live, 59 distinct modules.
+# 59 programs, 316456 dump lines live, 59 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/builtins.ts self/expressions.ts self/result.ts self/structs.ts self/declarations.ts self/members.ts self/emit_util.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/branding.ts
@@ -11999,34 +11999,32 @@ function checkFor(ctx: CheckContext, stmt: Node, scope: Scope): boolean -> @chec
   callee 320:17 CheckContext.popLoop -> @CheckContext.popLoop
 function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope): boolean -> @checkForOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: CheckContext.error CheckContext.popLoop CheckContext.pushLoop Scope.child TypeTable.isArray TypeTable.refOf TypeTable.typeName checkExpression checkStatement clearNarrowingsAssignedIn declareLocal nish_panic_index nish_str_concat resolveType
-  pointer ctx: size=96 writesThrough=true captured=false passedTo=clearNarrowingsAssignedIn#0 checkExpression#0 CheckContext.error#0 resolveType#1 CheckContext.error#0 declareLocal#0 CheckContext.pushLoop#0 checkStatement#0 CheckContext.popLoop#0
+  calls: CheckContext.error CheckContext.popLoop CheckContext.pushLoop Scope.child TypeTable.isArray TypeTable.refOf TypeTable.typeName checkExpression checkStatement clearNarrowingsAssignedIn declareLocal nish_panic_index nish_str_concat
+  pointer ctx: size=96 writesThrough=true captured=false passedTo=clearNarrowingsAssignedIn#0 CheckContext.error#0 CheckContext.error#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 declareLocal#0 CheckContext.pushLoop#0 checkStatement#0 CheckContext.popLoop#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=clearNarrowingsAssignedIn#1
   pointer scope: size=40 writesThrough=true captured=true passedTo=clearNarrowingsAssignedIn#2 checkExpression#2 Scope.child#0
   stackSites=0 stackLocals=0
   callee 325:3 clearNarrowingsAssignedIn -> @clearNarrowingsAssignedIn
-  local 326:9 iterable: i32 (const)
-  callee 326:20 checkExpression -> @checkExpression
-  local 327:9 outer: Scope (const)
-  callee 327:17 Scope.child -> @Scope.child
-  local 328:9 decl: Node (const)
-  local 329:9 name: string (const)
-  local 330:7 element: i32 (let)
-  callee 332:10 TypeTable.isArray -> @TypeTable.isArray
-  callee 333:7 CheckContext.error -> @CheckContext.error
-  callee 333:74 TypeTable.typeName -> @TypeTable.typeName
-  callee 335:17 TypeTable.refOf -> @TypeTable.refOf
-  local 338:9 annotation: Node (const)
-  local 340:11 declared: i32 (const)
-  callee 340:22 resolveType -> @resolveType
-  callee 342:7 CheckContext.error -> @CheckContext.error
-  callee 344:36 TypeTable.typeName -> @TypeTable.typeName
-  callee 344:72 TypeTable.typeName -> @TypeTable.typeName
-  callee 349:3 declareLocal -> @declareLocal
-  callee 350:3 CheckContext.pushLoop -> @CheckContext.pushLoop
-  callee 351:3 checkStatement -> @checkStatement
-  callee 351:41 Scope.child -> @Scope.child
-  callee 352:3 CheckContext.popLoop -> @CheckContext.popLoop
+  local 332:9 list: Node (const)
+  callee 334:5 CheckContext.error -> @CheckContext.error
+  local 337:9 decl: Node (const)
+  callee 339:5 CheckContext.error -> @CheckContext.error
+  callee 343:5 CheckContext.error -> @CheckContext.error
+  local 346:9 iterable: i32 (const)
+  callee 346:20 checkExpression -> @checkExpression
+  local 347:9 outer: Scope (const)
+  callee 347:17 Scope.child -> @Scope.child
+  local 348:9 name: string (const)
+  local 349:7 element: i32 (let)
+  callee 351:10 TypeTable.isArray -> @TypeTable.isArray
+  callee 352:7 CheckContext.error -> @CheckContext.error
+  callee 352:74 TypeTable.typeName -> @TypeTable.typeName
+  callee 354:17 TypeTable.refOf -> @TypeTable.refOf
+  callee 358:3 declareLocal -> @declareLocal
+  callee 359:3 CheckContext.pushLoop -> @CheckContext.pushLoop
+  callee 360:3 checkStatement -> @checkStatement
+  callee 360:41 Scope.child -> @Scope.child
+  callee 361:3 CheckContext.popLoop -> @CheckContext.popLoop
 function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope): boolean -> @checkSwitch
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error CheckContext.popLoop CheckContext.pushLoop Scope.child TypeTable.isEnum TypeTable.typeName checkCaseLabel checkExpression checkStatements isInteger nish_panic_index nish_str_concat
@@ -12034,30 +12032,30 @@ function checkSwitch(ctx: CheckContext, stmt: Node, scope: Scope): boolean -> @c
   pointer stmt: size=40 writesThrough=false captured=false
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2 checkCaseLabel#2 Scope.child#0
   stackSites=1 stackLocals=1
-  local 371:9 discriminant: i32 (const)
-  callee 371:24 checkExpression -> @checkExpression
-  callee 376:36 isInteger -> @isInteger
-  callee 376:64 TypeTable.isEnum -> @TypeTable.isEnum
-  callee 377:5 CheckContext.error -> @CheckContext.error
-  callee 379:59 TypeTable.typeName -> @TypeTable.typeName
-  local 382:9 clauses: Node[] (const)
-  local 383:9 seen: i64[] (const)
-  local 384:7 hasDefault: boolean (let)
-  local 385:7 lastTerminates: boolean (let)
-  callee 386:3 CheckContext.pushLoop -> @CheckContext.pushLoop
-  local 387:7 i: i32 (let)
-  local 389:11 clause: Node (const)
-  local 390:11 body: Node (const)
-  callee 393:9 CheckContext.error -> @CheckContext.error
-  callee 397:7 checkCaseLabel -> @checkCaseLabel
-  local 399:16 statement: Node (const)
-  callee 401:9 CheckContext.error -> @CheckContext.error
-  local 407:11 terminates: boolean (const)
-  callee 407:51 checkStatements -> @checkStatements
-  callee 407:87 Scope.child -> @Scope.child
-  callee 409:7 CheckContext.error -> @CheckContext.error
-  local 417:9 broke: boolean (const)
-  callee 417:17 CheckContext.popLoop -> @CheckContext.popLoop
+  local 380:9 discriminant: i32 (const)
+  callee 380:24 checkExpression -> @checkExpression
+  callee 385:36 isInteger -> @isInteger
+  callee 385:64 TypeTable.isEnum -> @TypeTable.isEnum
+  callee 386:5 CheckContext.error -> @CheckContext.error
+  callee 388:59 TypeTable.typeName -> @TypeTable.typeName
+  local 391:9 clauses: Node[] (const)
+  local 392:9 seen: i64[] (const)
+  local 393:7 hasDefault: boolean (let)
+  local 394:7 lastTerminates: boolean (let)
+  callee 395:3 CheckContext.pushLoop -> @CheckContext.pushLoop
+  local 396:7 i: i32 (let)
+  local 398:11 clause: Node (const)
+  local 399:11 body: Node (const)
+  callee 402:9 CheckContext.error -> @CheckContext.error
+  callee 406:7 checkCaseLabel -> @checkCaseLabel
+  local 408:16 statement: Node (const)
+  callee 410:9 CheckContext.error -> @CheckContext.error
+  local 416:11 terminates: boolean (const)
+  callee 416:51 checkStatements -> @checkStatements
+  callee 416:87 Scope.child -> @Scope.child
+  callee 418:7 CheckContext.error -> @CheckContext.error
+  local 426:9 broke: boolean (const)
+  callee 426:17 CheckContext.popLoop -> @CheckContext.popLoop
 function checkCaseLabel(ctx: CheckContext, clause: Node, scope: Scope, discriminant: i32, seen: i64[]): void -> @checkCaseLabel
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: discriminant
@@ -12067,33 +12065,33 @@ function checkCaseLabel(ctx: CheckContext, clause: Node, scope: Scope, discrimin
   pointer scope: size=40 writesThrough=true captured=true passedTo=checkExpression#2
   pointer seen: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local 431:9 label: Node (const)
-  local 432:9 type: i32 (const)
-  callee 432:16 checkExpression -> @checkExpression
-  callee 434:5 CheckContext.error -> @CheckContext.error
-  callee 436:28 TypeTable.typeName -> @TypeTable.typeName
-  callee 436:80 TypeTable.typeName -> @TypeTable.typeName
-  local 440:9 value: CaseValue (const)
-  callee 440:17 caseValue -> @caseValue
-  callee 442:5 CheckContext.error -> @CheckContext.error
-  local 448:14 previous: i64 (const)
-  callee 450:7 CheckContext.error -> @CheckContext.error
+  local 440:9 label: Node (const)
+  local 441:9 type: i32 (const)
+  callee 441:16 checkExpression -> @checkExpression
+  callee 443:5 CheckContext.error -> @CheckContext.error
+  callee 445:28 TypeTable.typeName -> @TypeTable.typeName
+  callee 445:80 TypeTable.typeName -> @TypeTable.typeName
+  local 449:9 value: CaseValue (const)
+  callee 449:17 caseValue -> @caseValue
+  callee 451:5 CheckContext.error -> @CheckContext.error
+  local 457:14 previous: i64 (const)
+  callee 459:7 CheckContext.error -> @CheckContext.error
 function checkBreak(ctx: CheckContext, stmt: Node): boolean -> @checkBreak
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error nish_panic_index
   pointer ctx: size=96 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  callee 460:5 CheckContext.error -> @CheckContext.error
+  callee 469:5 CheckContext.error -> @CheckContext.error
 function checkContinue(ctx: CheckContext, stmt: Node): boolean -> @checkContinue
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: CheckContext.error
   pointer ctx: size=96 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
-  local 470:7 inLoop: boolean (let)
-  local 471:14 kind: i32 (const)
-  callee 477:5 CheckContext.error -> @CheckContext.error
+  local 479:7 inLoop: boolean (let)
+  local 480:14 kind: i32 (const)
+  callee 486:5 CheckContext.error -> @CheckContext.error
 module self/compilation.ts
 import analyzeFunctions from "./attributes" -> function @analyzeFunctions
 import AnalysisUnit from "./attributes" -> struct AnalysisUnit

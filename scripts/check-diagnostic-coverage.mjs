@@ -31,7 +31,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { registry } from "./gen-diagnostic-codes.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -73,6 +73,38 @@ function liveRules() {
   }
   return { byCode, retired, shadowed };
 }
+
+/**
+ * The command lines that make the **driver** talk, and the rule each one has
+ * to print the words of.
+ *
+ * A usage error and the internal-error report are the two diagnostics that
+ * never carry a `code`: a usage error is stderr and exit 2 (`AGENTS.md`), and
+ * the crash report is prose around the one `NL0003` object. Their wordings are
+ * in the registry all the same, because the generator reads them out of
+ * `src/index.ts` like any other message — so measuring coverage by codes alone
+ * would leave six rules looking unreachable when what is unreachable is the
+ * *code*, not the words.
+ *
+ * Naming the code rather than the sentence is deliberate: the script looks the
+ * fragment up in the registry and asserts the output contains it, so the
+ * assertion is "this command prints the words of NL3008" and there is no
+ * second copy of the wording here to drift from the first.
+ */
+const DRIVER_CASES = [
+  { name: "unknown option", argv: ["examples/hello.ts", "--bogus"], codes: ["NL3008"] },
+  {
+    name: "unsupported target",
+    argv: ["examples/hello.ts", "--target", "mips-unknown-elf", "-o", "/dev/null"],
+    codes: ["NL3001"],
+  },
+  {
+    name: "internal compiler error",
+    argv: ["examples/hello.ts", "-o", "/dev/null"],
+    env: { NISH_SIMULATE_ICE: "1" },
+    codes: ["NL3003", "NL3005", "NL3002", "NL3007"],
+  },
+];
 
 /** Every negative case: the `reject_*` goldens and the `tests/link/` programs with an `expected.err`. */
 function negatives() {
@@ -125,6 +157,32 @@ function codesOf(entry) {
       resolve(found);
     });
   });
+}
+
+/**
+ * Run the driver cases and answer the codes whose words came out, naming any
+ * that did not. A missing wording is a failure of this table rather than of
+ * the compiler: the command still printed something, and what it printed is no
+ * longer the rule this says it is.
+ */
+function driverCodes(byCode) {
+  const covered = new Set();
+  const wrong = [];
+  for (const entry of DRIVER_CASES) {
+    const r = spawnSync(process.execPath, [cli, ...entry.argv], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, ...(entry.env ?? {}) },
+    });
+    const text = `${r.stdout}${r.stderr}`;
+    for (const code of entry.codes) {
+      const fragment = byCode.get(code);
+      if (fragment === undefined) continue; // retired or shadowed: not this table's business
+      if (text.includes(fragment)) covered.add(code);
+      else wrong.push(`${entry.name}: ${code}'s words are not in what it printed (${JSON.stringify(fragment)})`);
+    }
+  }
+  return { covered, wrong };
 }
 
 /** `--jobs N`, defaulting to the cores this machine says it has, capped where the pool caps. */
@@ -189,6 +247,8 @@ async function main(argv) {
   const found = await pool(cases, jobs, codesOf);
   const covered = new Set();
   for (const set of found) for (const code of set) covered.add(code);
+  const driver = driverCodes(byCode);
+  for (const code of driver.covered) covered.add(code);
 
   const all = [...byCode.keys()].sort();
   const missing = all.filter((code) => !covered.has(code));
@@ -213,13 +273,15 @@ async function main(argv) {
   for (const code of closed) {
     process.stdout.write(`  FAIL ${code} is covered now — remove it from ${path.relative(root, BACKLOG)}\n`);
   }
+  for (const line of driver.wrong) process.stdout.write(`  FAIL ${line}\n`);
   const seconds = ((Date.now() - t0) / 1000).toFixed(1);
   process.stdout.write(
     `diagnostic coverage: ${all.length - missing.length}/${all.length} live codes exercised by ` +
-      `${cases.length} negative cases (${seconds} s, ${jobs} jobs), ${missing.length} in the backlog, ` +
+      `${cases.length} negative cases and ${DRIVER_CASES.length} driver runs (${seconds} s, ${jobs} jobs), ` +
+      `${missing.length} in the backlog, ` +
       `${retired} retired and ${shadowed} shadowed rules not counted\n`
   );
-  return unlisted.length === 0 && closed.length === 0 ? 0 : 1;
+  return unlisted.length === 0 && closed.length === 0 && driver.wrong.length === 0 ? 0 : 1;
 }
 
 process.exit(await main(process.argv.slice(2)));

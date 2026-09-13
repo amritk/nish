@@ -323,9 +323,28 @@ function checkFor(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
 
 function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
   clearNarrowingsAssignedIn(ctx, stmt, scope);
+  // The head, before the iterable, in stage0's order (`src/checker/arrays.ts`).
+  // The parser reads `for (const x = 0, y = 1 of a)` and `for (const x: i32 of
+  // a)` without complaint, because the grammar it uses for the head is the
+  // ordinary variable-declaration one; the rules about what a `for...of` head
+  // may say belong to the checker, and stage1 was missing all three of them.
+  // It compiled the first of those, bound `x`, and dropped `y` on the floor.
+  const list = stmt.children[0].children[0];
+  if (list.children.length !== 1) {
+    ctx.error(list, "`for...of` declares exactly one variable");
+    return false;
+  }
+  const decl = list.children[0];
+  if (decl.children[1].kind !== N_EMPTY) {
+    ctx.error(decl.children[1], "The `for...of` variable takes the element type; remove the annotation");
+    return false;
+  }
+  if (decl.children[2].kind !== N_EMPTY) {
+    ctx.error(decl.children[2], "The `for...of` variable cannot have an initializer");
+    return false;
+  }
   const iterable = checkExpression(ctx, stmt.children[1], scope, -1);
   const outer = scope.child();
-  const decl = stmt.children[0].children[0].children[0];
   const name = decl.children[0].text;
   let element = T_ERROR;
   if (iterable !== T_ERROR) {
@@ -333,16 +352,6 @@ function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
       ctx.error(stmt.children[1], `\`for...of\` requires an array, got ${ctx.table.typeName(iterable)}`);
     } else {
       element = ctx.table.refOf(iterable);
-    }
-  }
-  const annotation = decl.children[1];
-  if (annotation.kind !== N_EMPTY) {
-    const declared = resolveType(annotation, ctx);
-    if (element !== T_ERROR && declared !== T_ERROR && declared !== element) {
-      ctx.error(
-        annotation,
-        `\`for...of\` element is ${ctx.table.typeName(element)}, not ${ctx.table.typeName(declared)}`
-      );
     }
   }
   // `for (let x of a)` binds a mutable element, `for (const x of a)` does not.
