@@ -8,13 +8,13 @@
  *       <name>.args  extra CLI flags, whitespace separated
  *       <name>.err   expected error substring; compile must fail (no .ll needed)
  *       <name>.out   expected stdout when linked with <name>.c (or tests/driver.c,
- *                    which prints `test()`) and runtime/runtime.c, then run
+ *                    which prints `test()`) and the two runtime .c files, then run
  *       <name>.argv  command-line arguments for that run, whitespace separated (WP7)
  *       <name>.env   environment for that run, `NAME=value` per line, layered over
  *                    the inherited one (WP19 R1: `getenv` has no other way to be pinned)
  *     Every successfully compiled case is also assembled with llvm-as.
  *
- *  B. Pipeline checks: runtime.c unit test, inline allocator vs C arena layout
+ *  B. Pipeline checks: the runtime unit test, inline allocator vs C arena layout
  *     (linked for the host, and asserted per target so wasm32 cannot drift),
  *     size and wasm build profiles, Node wasm host, and the browser harness in
  *     web/ compiling with the compiler's own wasi build.
@@ -31,6 +31,20 @@ const cli = path.join(root, "dist", "index.js");
 const casesDir = path.join(root, "tests", "cases");
 const buildDir = path.join(root, "build", "test");
 fs.mkdirSync(buildDir, { recursive: true });
+
+/**
+ * The C runtime's two translation units, as a direct `clang` line has to spell
+ * them: `runtime.c` is the core every program touches and `runtime_os.c` is the
+ * half that wraps the system calls, split apart so that each carries its own
+ * `.text*` budget (RUNTIME_TEXT_BUDGET and RUNTIME_OS_TEXT_BUDGET below).
+ *
+ * Named here rather than written out at each link so that a third unit is one
+ * edit, and spelled out at all -- `scripts/build.sh` pairs the two itself, so
+ * the builds that go through it need only name `runtime.c` -- because a link
+ * line this suite gets wrong should fail as a link error rather than be quietly
+ * repaired on the way past.
+ */
+const RUNTIME_C = ["runtime/runtime.c", "runtime/runtime_os.c"];
 
 let failures = 0;
 let passes = 0;
@@ -204,7 +218,7 @@ for (const name of cases) {
         ...threads,
         outLl,
         ...(hasEntry ? [] : [driver]),
-        "runtime/runtime.c",
+        ...RUNTIME_C,
         "-lm",
         "-o",
         exe,
@@ -1068,7 +1082,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   const panicLl = path.join(buildDir, "arr_bounds_panic.ll");
   if (HAS_CLANG && fs.existsSync(panicLl)) {
     const exe = path.join(buildDir, "arr_bounds_panic");
-    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", panicLl, "runtime/runtime.c", "-o", exe], {
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", panicLl, ...RUNTIME_C, "-o", exe], {
       cwd: root,
     });
     const run = cc.status === 0 ? spawnSync(exe) : null;
@@ -1235,11 +1249,9 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
   );
   if (HAS_CLANG && ns.status === 0) {
     const exe = path.join(buildDir, "mem_stack_struct_nostack");
-    const cc = spawnSync(
-      "clang",
-      ["-Wno-override-module", "-O2", noStackLl, "runtime/runtime.c", "-o", exe],
-      { cwd: root }
-    );
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", noStackLl, ...RUNTIME_C, "-o", exe], {
+      cwd: root,
+    });
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
       "mem_stack_struct with --no-stack-alloc prints the same output",
@@ -1255,6 +1267,202 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
       "mem_scope_dynamic_array: Arena.used() is identical before and after 100000 scoped calls (arena stays flat)",
       run.status === 0 && lines.length === 4 && lines[1] === lines[3],
       String(run.stdout) + String(run.stderr)
+    );
+  }
+}
+
+// ---- WP6: every allocating builtin is an allocation site -----------------------------
+// `ALLOCATING_BUILTINS` in src/codegen/escape.ts names the identifier builtins whose
+// result is fresh arena memory. A builtin that belongs there and is missing is not a
+// lost optimisation: the function that returns its result gets an automatic arena scope
+// whose `nish_arena_release` runs before the `ret`, rewinding the arena past the bytes
+// the caller is about to read. That shipped in 0.1.0 for `getenv` and printed a correct
+// value that the next allocation overwrote, which is silent corruption rather than a
+// crash (`tests/cases/mem_getenv_scope`, and `mem_read_or_null_scope` /
+// `mem_readdir_scope` for the other two). Three cases pin three builtins; this pins the
+// class, in two halves that are each derived rather than listed again:
+//
+//  1. **Which builtins allocate, mechanically.** A builtin allocates when its lowering
+//     declares a runtime callee whose entry in src/codegen/runtime.ts answers a pointer
+//     and is `noalias`. In that table `noalias` means "a fresh allocation per call",
+//     which is exactly the property the set is about, and it is the reason the two
+//     pointer-answering non-allocators are not candidates: `nish_platform` hands back
+//     the same constant and is deliberately not `noalias`, and `process.argv` is
+//     `malloc`ed once by the entry wrapper (neither is an identifier builtin either).
+//     The lowering's own `callees` list is the link, so this asks the emitter rather
+//     than a copy of the emitter.
+//  2. **What membership buys, by compiling a probe.** For every builtin the signal
+//     names, a generated program returns the builtin's result from a function that also
+//     allocates locally -- the shape of `mem_getenv_scope` -- and the emitted IR must
+//     contain no `nish_arena_release`.
+//
+// What this does not prove: that the C behind a `noalias` entry really bumps the arena
+// (the table is where that fact is declared, and the interop section is what holds it to
+// nish.h), and nothing about a hypothetical builtin that allocates through the inline
+// allocator instead of a named runtime symbol -- a lowering like that would have to say
+// so in `callees` to keep its caller's attributes honest, and saying so is what this
+// reads. The lowerings come from dist/, which `npm test` has just built, while the set is
+// read from src/: running this over a stale dist/ compares two different compilers.
+if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
+  const { builtinFunctionEmitters } = await import(
+    pathToFileURL(path.join(root, "dist", "codegen", "emit", "expressions.js")).href
+  );
+  const { RUNTIME_BY_NAME } = await import(
+    pathToFileURL(path.join(root, "dist", "codegen", "runtime.js")).href
+  );
+
+  /**
+   * The runtime symbols one builtin's lowering may call. `callees` is handed the checked
+   * program and the call because a builtin's symbol can depend on its argument type
+   * (`Number(s)` parses, `Number(n)` converts), so the question is asked once per
+   * argument kind over a stub that answers that kind for every node, and the answers
+   * are unioned: what matters here is whether *any* call of the builtin allocates.
+   */
+  const ARGUMENT_KINDS = ["string", "f64", "i32", "bool"];
+  const calleesOf = (emitter) => {
+    const symbols = new Set();
+    const failures = [];
+    for (const kind of ARGUMENT_KINDS) {
+      const program = { types: { get: () => ({ kind }) } };
+      const expr = { arguments: [{}, {}, {}] };
+      try {
+        for (const symbol of emitter.callees(program, expr)) symbols.add(symbol);
+      } catch (e) {
+        failures.push(`${kind}: ${e.message}`);
+      }
+    }
+    return { symbols, failures };
+  };
+
+  /** The `declare` line's return part: the attributes and the type, before the `@name(`. */
+  const returnPart = (fn) =>
+    fn.signature.slice("declare ".length, fn.signature.indexOf(`@${fn.name}(`)).trim();
+
+  /** A fresh allocation per call: `noalias` on a pointer return, as runtime.ts uses it. */
+  const allocatesFreshMemory = (fn) => {
+    const ret = returnPart(fn);
+    return /\bnoalias\b/.test(ret) && /(?:i8\*|%struct\.nish_array\*)$/.test(ret);
+  };
+
+  /** builtin -> the first runtime symbol whose entry says the lowering allocates. */
+  const allocating = new Map();
+  const unreadable = [];
+  const unknownSymbols = [];
+  for (const [builtin, emitter] of Object.entries(builtinFunctionEmitters)) {
+    const { symbols, failures } = calleesOf(emitter);
+    if (failures.length === ARGUMENT_KINDS.length) {
+      unreadable.push(`${builtin}: ${failures[0]}`);
+      continue;
+    }
+    for (const symbol of symbols) {
+      const fn = RUNTIME_BY_NAME.get(symbol);
+      // A name the table does not know would read as "does not allocate", so the
+      // signal is only as complete as this agreement.
+      if (!fn) unknownSymbols.push(`${builtin} -> ${symbol}`);
+      else if (allocatesFreshMemory(fn) && !allocating.has(builtin)) allocating.set(builtin, symbol);
+    }
+  }
+  check(
+    `every identifier builtin declares runtime callees the table knows (${Object.keys(builtinFunctionEmitters).length} builtins)`,
+    unreadable.length === 0 && unknownSymbols.length === 0,
+    [
+      ...unreadable.map(
+        (u) => `could not read the callees of ${u} -- teach this check the context that lowering needs`
+      ),
+      ...unknownSymbols.map((u) => `${u} is not in RUNTIME_FUNCTIONS (src/codegen/runtime.ts)`),
+    ].join("\n")
+  );
+
+  // The set is read out of the source because it is private to escape.ts, which is
+  // where it belongs: nothing but the escape analysis has any business consulting it.
+  const escapeSrc = fs.readFileSync(path.join(root, "src", "codegen", "escape.ts"), "utf8");
+  const setLiteral = escapeSrc.match(/ALLOCATING_BUILTINS\s*=\s*new Set\(\[([\s\S]*?)\]\)/);
+  const declared = new Set([...(setLiteral?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]));
+  check(
+    "src/codegen/escape.ts declares ALLOCATING_BUILTINS as a literal set of names",
+    setLiteral !== null && declared.size > 0,
+    "the declaration moved or changed shape; this check reads it by name, so point it at the new one"
+  );
+
+  const missing = [...allocating].filter(([builtin]) => !declared.has(builtin));
+  const stale = [...declared].filter((builtin) => !allocating.has(builtin));
+  check(
+    `ALLOCATING_BUILTINS lists every allocating builtin and nothing else (${[...allocating.keys()].join(", ")})`,
+    missing.length === 0 && stale.length === 0,
+    [
+      ...missing.map(
+        ([builtin, symbol]) =>
+          `${builtin} allocates -- its lowering calls @${symbol}, whose entry in src/codegen/runtime.ts is a ` +
+          `noalias pointer return, which in that table means a fresh allocation per call -- but it is not in ` +
+          `ALLOCATING_BUILTINS in src/codegen/escape.ts. Add it there, or a function returning ${builtin}(...) ` +
+          "gets an arena scope that releases the result before the ret. Add a tests/cases/mem_*_scope case for it " +
+          "beside the other three while you are there.",
+      ),
+      ...stale.map(
+        (builtin) =>
+          `${builtin} is in ALLOCATING_BUILTINS but nothing its lowering calls is a noalias pointer-returning ` +
+          "runtime symbol: either the lowering changed or the entry is stale.",
+      ),
+    ].join("\n")
+  );
+
+  // Half two: the consequence, for each builtin the signal named. The probe is
+  // generated from the runtime signature -- one string argument per `i8*` parameter,
+  // and a return type from the pointer kind and whether the entry is `nonnull` -- so
+  // there is no per-builtin fixture to keep in step. A shape the generator cannot
+  // express is a counted skip rather than a failure: half one is what proves
+  // completeness, and this half is about what membership does.
+  const nishReturnType = (fn) => {
+    const ret = returnPart(fn);
+    const orNull = /\bnonnull\b/.test(ret) ? "" : " | null";
+    // The element type of an array is not in `%struct.nish_array*`; every
+    // array-answering builtin answers `string[]` today, and a probe that does not
+    // typecheck skips itself below rather than claiming anything.
+    if (/i8\*$/.test(ret)) return `string${orNull}`;
+    if (/%struct\.nish_array\*$/.test(ret)) return `string[]${orNull}`;
+    return undefined;
+  };
+  const stringArity = (fn) => {
+    const params = fn.signature.slice(fn.signature.indexOf("(") + 1, fn.signature.lastIndexOf(")"));
+    const parts = params.split(",").map((p) => p.trim()).filter(Boolean);
+    return parts.every((p) => p.startsWith("i8*")) ? parts.length : undefined;
+  };
+  for (const [builtin, symbol] of allocating) {
+    const fn = RUNTIME_BY_NAME.get(symbol);
+    const returnType = nishReturnType(fn);
+    const arity = stringArity(fn);
+    if (returnType === undefined || arity === undefined || arity === 0) {
+      skip(`${builtin}: no arena-scope probe (@${symbol} takes or answers a shape the generator cannot write)`);
+      continue;
+    }
+    const params = Array.from({ length: arity }, (_, i) => `arg${i}: string`).join(", ");
+    const args = Array.from({ length: arity }, (_, i) => `arg${i}`).join(", ");
+    // The template literal is the local allocation that gives the function something
+    // to release, which is what made the missing sites visible in the first place.
+    const probeSrc = [
+      `export const probe = (${params}): ${returnType} => {`,
+      "  const label = `probe ${arg0}`;",
+      "  console.log(label);",
+      `  return ${builtin}(${args});`,
+      "};",
+      "",
+    ].join("\n");
+    const probeTs = path.join(buildDir, `alloc_probe_${builtin}.ts`);
+    const probeLl = path.join(buildDir, `alloc_probe_${builtin}.ll`);
+    fs.writeFileSync(probeTs, probeSrc);
+    const r = spawnSync("node", [cli, probeTs, "-o", probeLl], { cwd: root });
+    if (r.status !== 0) {
+      skip(`${builtin}: no arena-scope probe (the generated program did not compile: ${String(r.stderr).trim().split("\n")[0]})`);
+      continue;
+    }
+    const ir = fs.readFileSync(probeLl, "utf8");
+    const body = ir.match(/^define [^\n]*@probe\([^\n]*\{\n([\s\S]*?)^\}/m)?.[1] ?? "";
+    // The `@nish_str_concat` is the template literal's own allocation: it is what there
+    // would be to release, so a probe missing it would pass for the wrong reason.
+    check(
+      `${builtin}: a function returning its result keeps the arena (no nish_arena_release before the ret)`,
+      body.includes(`@${symbol}(`) && body.includes("@nish_str_concat(") && !body.includes("nish_arena_release"),
+      `${probeSrc}\n${ir}`
     );
   }
 }
@@ -1349,7 +1557,7 @@ if (!only || "layout".includes(only)) {
           "-O2",
           layoutC,
           layoutLl,
-          "runtime/runtime.c",
+          ...RUNTIME_C,
           "-o",
           exe,
         ],
@@ -1394,11 +1602,9 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
     const ll = path.join(buildDir, `${name}.ll`);
     if (!HAS_CLANG || !fs.existsSync(ll)) continue;
     const exe = path.join(buildDir, name);
-    const cc = spawnSync(
-      "clang",
-      ["-Wno-override-module", "-O2", ll, "runtime/runtime.c", "-lm", "-o", exe],
-      { cwd: root }
-    );
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", ll, ...RUNTIME_C, "-lm", "-o", exe], {
+      cwd: root,
+    });
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
       `${name}: exits 1 with "${needle}" on stderr`,
@@ -1421,7 +1627,7 @@ if (!only && HAS_CLANG) {
       "-Wextra",
       "-Werror",
       "-O2",
-      "runtime/runtime.c",
+      ...RUNTIME_C,
       "tests/runtime_test.c",
       "-o",
       path.join(buildDir, "runtime_test"),
@@ -1429,7 +1635,7 @@ if (!only && HAS_CLANG) {
     { cwd: root }
   );
   check(
-    "runtime.c compiles warning-free and passes its unit test",
+    "runtime.c and runtime_os.c compile warning-free together and pass the runtime unit test",
     rt.status === 0 && spawnSync(path.join(buildDir, "runtime_test")).status === 0,
     String(rt.stderr)
   );
@@ -1449,7 +1655,11 @@ if (!only && HAS_CLANG) {
       "-O2",
       "-DNISH_THREADS=1",
       "-pthread",
-      "runtime/runtime.c",
+      // Both translation units, as its non-threaded sibling above names both:
+      // `runtime_test.c` exercises the file I/O, which lives in runtime_os.c
+      // since the split, so naming only the core leaves `nish_write_file`,
+      // `nish_append_file` and `nish_read_file` undefined at link time.
+      ...RUNTIME_C,
       "tests/runtime_test.c",
       "-o",
       path.join(buildDir, "runtime_test_threads"),
@@ -1718,34 +1928,75 @@ if (!only && HAS_CLANG) {
   skip("clang not installed: native round trips and pipeline checks skipped");
 }
 
-// ---- WP7: the runtime .text budget -------------------------------------------------
-// `runtime/runtime.c` is linked into every native binary, so its machine code is a cost
-// every program that touches the runtime pays. The budget was a row in
-// docs/wp7-runtime.md and a reviewer's memory until this check, which is why nobody
-// noticed the tree drift from the 2,544 bytes WP14 D4 recorded to 4,154 -- a review rule
-// cannot see a number that no run prints.
+// ---- WP7: the runtime .text budgets ------------------------------------------------
+// The C runtime is linked into every native binary, so its machine code is a cost every
+// program that touches the runtime pays. The budget was a row in docs/wp7-runtime.md and
+// a reviewer's memory until this check, which is why nobody noticed the tree drift from
+// the 2,544 bytes WP14 D4 recorded to 4,154 -- a review rule cannot see a number that no
+// run prints.
 //
 // The metric is the sum of every `.text*` section rather than the single `.text` line
 // wp7 quoted, because that sum is what a linked binary pays: `clang -Oz` puts cold code
-// in `.text.unlikely.` (66 bytes today), so a ceiling on `.text` alone can also be met
-// by moving code into another section instead of by making it smaller. The two other
-// numbers in that table are history rather than limits -- source bytes mostly measure
-// comments, and the `text` column of plain `size` adds the read-only constants and the
-// `.eh_frame` unwind tables that the size build profile strips.
+// in `.text.unlikely.`, so a ceiling on `.text` alone can also be met by moving code
+// into another section instead of by making it smaller. The two other numbers in that
+// table are history rather than limits -- source bytes mostly measure comments, and the
+// `text` column of plain `size` adds the read-only constants and the `.eh_frame` unwind
+// tables that the size build profile strips.
+//
+// There are two budgets because there are two translation units, and they grow for
+// unrelated reasons. `runtime.c` is the core every program touches whatever it does --
+// the arena, strings, arrays, number formatting, the panics -- and that is a closed set,
+// so its ceiling should come down over time and never up. `runtime_os.c` is the syscall
+// wrappers, and that surface grows whenever the language reaches further into the
+// operating system: three builtins (`readdirSync`, `spawnSyncTo`, `monotonicNanos`) took
+// the single old budget from 4,096 to 4,864 and moved the number a reader saw for "the
+// runtime" for a reason that had nothing to do with the arena or the strings. Section GC
+// already meant a program calling none of them paid nothing; now the measurement says so
+// too. One gate, two constants, two reasons.
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime.c`.
  *
- * Measured 4,670 bytes on 2026-09-12 with clang 18.1.3 on linux-x64 (`.text` 4,604 plus
- * `.text.unlikely.` 66), after `nish_readdir`, `nish_spawn_to`, `nish_monotonic_nanos`
- * and the shared `nish_spawn_impl` added 516 bytes to the 4,154 of the commit before
- * them. The budget is the next 256-byte boundary above that measurement, so 194 bytes
- * are left: enough headroom that a small fix -- an extra bounds check, one more error
- * path -- does not have to raise the budget in the same commit, and little enough that
- * anything larger than one such fix cannot land quietly. Raising this number is a
- * deliberate decision that comes with its own measurement and a row in
+ * Measured 3,480 bytes on 2026-09-12 with clang 18.1.3 on linux-x64 (`.text` 3,449 plus
+ * `.text.unlikely.` 31), the whole runtime's 4,670 less the 1,190 bytes that moved into
+ * runtime_os.c. The budget is the next 256-byte boundary above that measurement, so 104
+ * bytes are left. That is deliberately tight: this half is a closed set, so a commit that
+ * needs the room is a commit that grew something which was not supposed to grow, and
+ * raising this number -- unlike raising the one below it -- should be rare enough to be
+ * argued for. Either way it comes with its own measurement and a row in
  * docs/wp7-runtime.md ("Runtime additions and budget"); it is not a way to get green.
  */
-const RUNTIME_TEXT_BUDGET = 4864;
+const RUNTIME_TEXT_BUDGET = 3584;
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime_os.c`.
+ *
+ * Measured 1,190 bytes on 2026-09-12 with clang 18.1.3 on linux-x64 (`.text` 1,155 plus
+ * `.text.unlikely.` 35, which is `nish_io_fail`), for the file I/O, the directory and
+ * subprocess calls, `getenv`, the monotonic clock and the two constant host strings. The
+ * budget is the next 256-byte boundary above it, 90 bytes of headroom, which is less than
+ * one syscall wrapper on purpose: `nish_readdir` alone is 294 bytes, so the next builtin
+ * that reaches into the operating system has to raise this number in the commit that adds
+ * it, with the measurement, and cannot borrow room from the arena to hide in.
+ *
+ * The two together are 4,864 -- exactly the single budget they replace, which is a
+ * coincidence and not a constraint.
+ */
+const RUNTIME_OS_TEXT_BUDGET = 1280;
+/**
+ * Ceiling on the same `runtime.c` compiled with `-DNISH_THREADS=1`, which is the build
+ * `--threads` links (WP20 T0): the arena and the RNG seed become `_Thread_local`.
+ *
+ * Measured 3,605 bytes on 2026-09-12 with clang 18.1.3 on linux-x64, 125 more than the
+ * default build and 21 *above* `RUNTIME_TEXT_BUDGET` — which is exactly why it needs a
+ * number of its own instead of sharing one. The default measurement cannot see this
+ * configuration, so without a row of its own the threads build's code size was ungated
+ * while the gate stayed green: `--threads` is a flag a user passes, not a experiment, and
+ * `_Thread_local` storage is the kind of thing that grows quietly.
+ *
+ * It is deliberately a *separate* ceiling rather than a raised shared one. Making the core
+ * budget 3,840 to cover both would give the default build 360 bytes of room it has no
+ * business having, and the point of the split was that a number should mean one thing.
+ */
+const RUNTIME_THREADS_TEXT_BUDGET = 3840;
 if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
   // A byte-exact ceiling is a fact about one target and one compiler, not about the
   // source, so everywhere else the honest answer is a counted skip rather than a number
@@ -1754,41 +2005,52 @@ if (!only || "runtime-budget".includes(only) || "wp7".includes(only)) {
     const host = `${process.platform}-${process.arch}`;
     if (host !== "linux-x64")
       return (
-        `runtime.c .text budget: measured on linux-x64 and this host is ${host}; ` +
+        `runtime .text budgets: measured on linux-x64 and this host is ${host}; ` +
         "a byte-exact ceiling is a fact about one target and one compiler version"
       );
-    if (!HAS_CLANG) return "clang not installed: the runtime.c .text budget is not measured";
+    if (!HAS_CLANG) return "clang not installed: the runtime .text budgets are not measured";
     if (!has("size"))
-      return "size (binutils or llvm) not installed: the runtime.c .text budget is not measured";
+      return "size (binutils or llvm) not installed: the runtime .text budgets are not measured";
     return null;
   };
   const reason = budgetSkip();
   if (reason !== null) skip(reason);
   else {
-    const obj = path.join(buildDir, "runtime_budget.o");
-    const cc = spawnSync("clang", ["-Oz", "-c", "runtime/runtime.c", "-o", obj], { cwd: root });
-    const sz = cc.status === 0 ? spawnSync("size", ["-A", obj]) : null;
-    // `size -A` prints one `<section> <size> <addr>` row per section; every row whose
-    // name starts with `.text` counts, whatever clang decided to call it.
-    const sections = String(sz?.stdout ?? "")
-      .split("\n")
-      .map((line) => line.trim().split(/\s+/))
-      .filter((row) => row[0].startsWith(".text") && /^\d+$/.test(row[1] ?? ""))
-      .map((row) => [row[0], Number(row[1])]);
-    const total = sections.reduce((sum, [, bytes]) => sum + bytes, 0);
-    const breakdown = sections.map(([name, bytes]) => `${name} ${bytes}`).join(" + ");
-    check(
-      `runtime.c: .text* at -Oz fits the ${RUNTIME_TEXT_BUDGET} byte budget`,
-      cc.status === 0 && sections.length > 0 && total <= RUNTIME_TEXT_BUDGET,
-      cc.status !== 0
-        ? String(cc.stderr)
-        : sections.length === 0
-          ? `size -A printed no .text section:\n${sz.stdout}${sz.stderr}`
-          : `measured ${total} bytes (${breakdown}), budget ${RUNTIME_TEXT_BUDGET}, ` +
-            `over by ${total - RUNTIME_TEXT_BUDGET}.\n` +
-            "Shrink the addition, or raise RUNTIME_TEXT_BUDGET in tests/run.js and add the " +
-            "measured row to docs/wp7-runtime.md saying why it moved."
-    );
+    for (const [src, budget, constant, flags] of [
+      ["runtime/runtime.c", RUNTIME_TEXT_BUDGET, "RUNTIME_TEXT_BUDGET", []],
+      ["runtime/runtime_os.c", RUNTIME_OS_TEXT_BUDGET, "RUNTIME_OS_TEXT_BUDGET", []],
+      ["runtime/runtime.c", RUNTIME_THREADS_TEXT_BUDGET, "RUNTIME_THREADS_TEXT_BUDGET", ["-DNISH_THREADS=1"]],
+    ]) {
+      const name = path.basename(src);
+      // The flags are in the check's name and in the object's, so the two rows for
+      // runtime.c read as the two configurations they are rather than as a repeat.
+      const label = flags.length > 0 ? `${name} ${flags.join(" ")}` : name;
+      const stem = `${name.replace(/\.c$/, "")}${flags.length > 0 ? "_threads" : ""}`;
+      const obj = path.join(buildDir, `${stem}_budget.o`);
+      const cc = spawnSync("clang", ["-Oz", ...flags, "-c", src, "-o", obj], { cwd: root });
+      const sz = cc.status === 0 ? spawnSync("size", ["-A", obj]) : null;
+      // `size -A` prints one `<section> <size> <addr>` row per section; every row whose
+      // name starts with `.text` counts, whatever clang decided to call it.
+      const sections = String(sz?.stdout ?? "")
+        .split("\n")
+        .map((line) => line.trim().split(/\s+/))
+        .filter((row) => row[0].startsWith(".text") && /^\d+$/.test(row[1] ?? ""))
+        .map((row) => [row[0], Number(row[1])]);
+      const total = sections.reduce((sum, [, bytes]) => sum + bytes, 0);
+      const breakdown = sections.map(([section, bytes]) => `${section} ${bytes}`).join(" + ");
+      check(
+        `${label}: .text* at -Oz fits the ${budget} byte budget`,
+        cc.status === 0 && sections.length > 0 && total <= budget,
+        cc.status !== 0
+          ? String(cc.stderr)
+          : sections.length === 0
+            ? `size -A printed no .text section:\n${sz.stdout}${sz.stderr}`
+            : `measured ${total} bytes (${breakdown}), budget ${budget}, ` +
+              `over by ${total - budget}.\n` +
+              `Shrink the addition, or raise ${constant} in tests/run.js and add the ` +
+              "measured row to docs/wp7-runtime.md saying why it moved."
+      );
+    }
   }
 }
 
@@ -4496,7 +4758,8 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
 // ---- WP12: package ------------------------------------------------------------------
 // The npm tarball must be self-contained: `npm pack`, install it into a temporary prefix,
 // and drive the installed `nish` from an unrelated directory. That proves the `files`
-// whitelist ships runtime/runtime.c, runtime/nish.h and scripts/build.sh, and that the
+// whitelist ships both runtime translation units, runtime/nish.h and scripts/build.sh,
+// and that the
 // CLI resolves them from its own package root rather than from the cwd.
 if (!only || "package".includes(only) || "wp12".includes(only)) {
   const pkgDir = path.join(buildDir, "wp12-package");
@@ -4532,6 +4795,11 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "dist/index.js",
       "dist/version.js",
       "runtime/runtime.c",
+      // The runtime is two translation units since the operating-system half was
+      // split out for its own size budget, and `--link` compiles both. A tarball
+      // with only the core would install a compiler that cannot link any program
+      // that reads a file.
+      "runtime/runtime_os.c",
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",
@@ -4546,7 +4814,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     ];
     const absent = required.filter((f) => !files.includes(f));
     check(
-      "npm pack includes everything --link and `node --import` need (runtime.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE and INSTALL.md",
+      "npm pack includes everything --link and `node --import` need (runtime.c, runtime_os.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE and INSTALL.md",
       absent.length === 0,
       absent.join("\n")
     );
@@ -4797,6 +5065,29 @@ if (!only || "changelog".includes(only) || "wp12".includes(only)) {
     "changelog: --check-subject is the same rule pr-title.yml enforces",
     bad.status === 1 && ok.status === 0,
     `bad exit ${bad.status}, ok exit ${ok.status}\n${bad.stderr}${ok.stderr}`
+  );
+}
+
+// ---- WP22 x WP13: the two spellings of a function ------------------------------------
+// `tests/differential/arrow-parity.js` rewrites one program written both ways --
+// `function f() { ... }` and `const f = () => { ... }` -- and compares the JavaScript
+// modulo the declaration syntax. They are the same program, so the rewrite owes them the
+// same output; it did not, from WP22 until 2806854, and the symptom was a body that
+// reached Node with JavaScript's own `console.log` in it, printing something close
+// enough to pass while measuring nothing. The runner's own header says why the
+// comparison is honest and how to point it at the pre-fix rewrite. Nothing here is
+// compiled or run, so this needs no toolchain and does not belong under the clang gate
+// below.
+if (!only || "differential".includes(only) || "arrow-parity".includes(only)) {
+  const ap = spawnSync("node", [path.join(import.meta.dirname, "differential", "arrow-parity.js")], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  const summary = (ap.stdout.match(/^arrow-parity: .*\(([^)]*)\)/m) ?? [])[1] ?? "";
+  check(
+    `differential: an arrow-declared program and its \`function\` twin rewrite identically (${summary || "no summary"})`,
+    ap.status === 0,
+    ap.stdout + ap.stderr
   );
 }
 

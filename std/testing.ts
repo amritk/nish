@@ -42,7 +42,13 @@
  *
  * The widths are spelled explicitly (`i32`, `i64`, `f64`) rather than as
  * `number`, so the module means the same thing under `--number-mode f64` as it
- * does by default, exactly as `examples/arrays.ts` does.
+ * does by default, exactly as `examples/arrays.ts` does — and every length this
+ * module reads from a builtin is converted with `toI32`, because `.length`
+ * answers `number` and spelling one's own widths is therefore necessary and not
+ * sufficient (`docs/wp26-stdlib.md` §4). Without the conversion the two
+ * comparisons against a length below would lower to `fcmp` on an `f64` in that
+ * mode and to `icmp` on an `i32` here, which is the same module compiling to
+ * two different programs.
  *
  *     import { Suite } from "../std/testing";
  *
@@ -101,7 +107,7 @@ export class Suite {
     this.failed += 1;
     this.failures.push(name);
     console.log(`FAIL  ${name}`);
-    if (detail.length > 0) {
+    if (toI32(detail.length) > 0) {
       console.log(`      ${detail}`);
     }
     return false;
@@ -192,7 +198,7 @@ export class Suite {
    * reason the count is printed.
    */
   done(): i32 {
-    if (this.failures.length > 0) {
+    if (toI32(this.failures.length) > 0) {
       console.log(`failed: ${this.failures.join(", ")}`);
     }
     console.log(`${this.name}: ${this.passed} passed, ${this.failed} failed, ${this.skipped} skipped`);

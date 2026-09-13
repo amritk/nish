@@ -135,7 +135,7 @@ int32_t add(int32_t a, int32_t b);
 
 ```bash
 clang -std=c11 -Wall -Wextra -Werror -Wno-override-module -Iruntime -Ibuild \
-      build/add.ll runtime/runtime.c my_host.c -o my_host
+      build/add.ll runtime/runtime.c runtime/runtime_os.c my_host.c -o my_host
 ```
 
 ## `--emit-dts <file.d.ts>`: typings and a loader for the wasm build

@@ -853,11 +853,14 @@ appears where the proof does not reach.
 
 ## Runtime budget
 
-`docs/MASTER_PLAN.md` section 2 caps `runtime/runtime.c` at 4 KB compiled at
-`-Oz` and 8 KB of source. The argv/parsing round of WP7 left the compiled
-size at 4,195 bytes (`clang -Oz -c runtime/runtime.c && size runtime.o`, the
-`text` column, which also counts the read-only constants and the `.eh_frame`
-unwind entries the `size` profile strips) and the source at 11,432 bytes.
+`docs/MASTER_PLAN.md` section 2 capped `runtime/runtime.c` at 4 KB compiled at
+`-Oz` and 8 KB of source when this pass ran; the source count is gone and the
+compiled ceiling is now one per translation unit (`docs/wp7-runtime.md`
+§"Runtime additions and budget" carries both and the live measurements). The
+argv/parsing round of WP7 left the compiled size at 4,195 bytes
+(`clang -Oz -c runtime/runtime.c && size runtime.o`, the `text` column, which
+also counts the read-only constants and the `.eh_frame` unwind entries the
+`size` profile strips) and the source at 11,432 bytes.
 This pass brought both back down without changing any observable behaviour:
 no prototype, symbol name, message, exit status or output byte moved, and
 `tests/runtime_test.c` asserts exactly what it did before.

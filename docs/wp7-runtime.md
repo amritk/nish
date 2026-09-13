@@ -413,17 +413,20 @@ faster but does not fit the runtime budget.
 round added `nish_argv` / `nish_argv_init` and `nish_parse_number`; the
 2026-09-12 column adds `nish_readdir`, `nish_spawn_to`,
 `nish_monotonic_nanos` and the shared `nish_spawn_impl` that `nish_spawn`
-delegates to. Measured with `clang -Oz -c runtime/runtime.c && size -A
-runtime.o`, per section; the `text` column of plain `size` is the same code
-plus the read-only constants and the `.eh_frame` unwind entries that the
-`size` build profile strips:
+delegates to; the last column is the same runtime after those three moved out
+of `runtime.c` into `runtime/runtime_os.c`, which is why it reads as a sum.
+Measured with `clang -Oz -c runtime/runtime.c && size -A runtime.o`, per
+section, and from the split onwards `clang -Oz -c runtime/runtime_os.c` as
+well; the `text` column of plain `size` is the same code plus the read-only
+constants and the `.eh_frame` unwind entries that the `size` build profile
+strips:
 
-| | Before WP7 | After WP7 | After argv + parsing | After WP14 D4 | 2026-09-12 | Budget |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| source bytes | 4,039 | 7,402 | 11,131 (arrays and WP6 in between) | 12,707 | 61,725 | — (was 8,192; exceeded since WP4, comments) |
-| `size` text at `-Oz` | 1,118 | 2,688 | 4,093 (was 3,498) | 4,297 | 16,844 | — (was 4,096; counts `.eh_frame` and the Ryu tables) |
-| `.text` section alone | | | 2,583 (was 2,172) | 2,544 (2,287 before D4) | 4,604 | — (was 4,096; the row below replaced it) |
-| every `.text*` section, summed | | | | | 4,670 (4,154 before the three) | **4,864** |
+| | Before WP7 | After WP7 | After argv + parsing | After WP14 D4 | 2026-09-12 | 2026-09-12, split (core + os) | Budget |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| source bytes | 4,039 | 7,402 | 11,131 (arrays and WP6 in between) | 12,707 | 61,725 | 52,029 + 12,759 | — (was 8,192; exceeded since WP4, comments) |
+| `size` text at `-Oz` | 1,118 | 2,688 | 4,093 (was 3,498) | 4,297 | 16,844 | 14,908 + 1,960 | — (was 4,096; counts `.eh_frame` and the Ryu tables) |
+| `.text` section alone | | | 2,583 (was 2,172) | 2,544 (2,287 before D4) | 4,604 | 3,449 + 1,155 | — (was 4,096; the row below replaced it) |
+| every `.text*` section, summed | | | | | 4,670 (4,154 before the three) | **3,480 + 1,190** | **3,584** core, **1,280** os (one budget of 4,864 until the split) |
 
 The WP14 column is measured on the tree of that milestone, where the work
 between WP7 and it had already brought `.text` back down to 2,287; the 2,583
@@ -492,6 +495,173 @@ feature has to pay for itself.
 1,000 draws of `nish_random` in `[0, 1)`, a write/append/read/truncate cycle
 on `build/test/runtime_test.txt`, `nish_argv_init` (an empty argument, a UTF-8
 one, survival of `nish_reset_arena`, `argc == 0`), and the 45 parsing inputs.
+
+### 2026-09-12: two files, two budgets
+
+The budget above moved for the wrong reason. `readdirSync`, `spawnSyncTo` and
+`monotonicNanos` are syscall wrappers, so they have to be C, and they took the
+ceiling from 4,096 to 4,864 — a number that a reader reasonably reads as "what
+the runtime costs" and that had just grown by 516 bytes of code no program is
+obliged to call. Section GC already said as much: `examples/hello.ts` at the
+`size` profile was byte-identical against the runtime before those three and
+after. The *measurement* was the thing that had not caught up, because one
+translation unit can only have one ceiling.
+
+So the operating-system half is now its own translation unit,
+`runtime/runtime_os.c`, with its own measured ceiling. **The criterion is
+whether the function wraps a system call** — whether the operating system is its
+subject, rather than memory this process already owns — because that is the same
+criterion that decides whether a builtin has to be written in C at all, and it
+is exactly the surface that grows as the language reaches further out:
+
+| Moved to `runtime_os.c` | Stayed in `runtime.c` |
+| --- | --- |
+| `nish_exit`, `nish_io_fail` | the arena: `nish_arena_grow`, `nish_alloc_struct`, `nish_reset_arena`, `nish_free_arena`, `nish_arena_mark` / `release` / `used` / `keep` |
+| `nish_read_file`, `nish_read_file_or_null`, `nish_put_file`, `nish_write_file`, `nish_append_file` | the strings: `nish_str_new`, `nish_str_concat`, `nish_str_eq`, `nish_str_len`, `nish_str_at`, `nish_str_index_of`, `nish_write`, `nish_print` |
+| `nish_is_dir`, `nish_mkdir` | number formatting: `str_from_digits`, `nish_str_from_i32` / `i64` / `u64`, Ryu and `nish_str_from_f64`, `nish_parse_number` |
+| `nish_spawn_impl`, `nish_spawn`, `nish_spawn_to` | the arrays: `nish_alloc_array`, `nish_array_grow` |
+| `nish_readdir` | `nish_random`, `nish_argv` / `nish_argv_init` |
+| `nish_monotonic_nanos` | the panics: `nish_die`, `nish_panic_index`, `nish_panic_div` |
+| `nish_getenv` | the `__wasi__` entry bridge (`__main_argc_argv`) |
+| `nish_platform`, `nish_arch` | |
+
+The file I/O went with them, and by the same reasoning rather than by
+association: `open`, `pread` and `write` on a path are the operating system
+answering about something outside this process, and `readFileSync` is the
+builtin most likely to grow a sibling (a `statSync`, a `readFileSyncAt`) that
+would then be measured against the arena.
+
+Three of the decisions are worth their reasons, because each could have gone the
+other way:
+
+- **`nish_random` stays.** Its subject is a pseudo-random sequence over one
+  static word; `time(0)` and `getpid()` are a one-time seed, not the answer, and
+  `Math.random` grows with nothing in the list above.
+- **`nish_argv` / `nish_argv_init` stay.** They make no system call at all: the
+  entry point is *handed* `argc` and `argv`, and turning them into an array is
+  `malloc`, `strlen` and `strcpy` over memory this process already has. So does
+  the `__wasi__` bridge that forwards them, which every wasi program needs
+  whether or not it reads `process.argv`, which is the second reason it belongs
+  in the file every profile compiles.
+- **`nish_platform` / `nish_arch` move**, although they make no system call
+  either — they are two addresses in constant data, settled when the runtime was
+  compiled. They are `process.platform` and `process.arch`: their subject is the
+  host, and the branch list is what grows when a new one is supported.
+
+**The two ceilings.** `clang -Oz -c <file>` and `size -A`, every `.text*`
+section summed, clang 18.1.3 on linux-x64:
+
+| File | `.text` | `.text.unlikely.` | Total | Budget | Headroom |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `runtime/runtime.c` | 3,449 | 31 (`nish_die`) | **3,480** | **3,584** | 104 |
+| `runtime/runtime_os.c` | 1,155 | 35 (`nish_io_fail`) | **1,190** | **1,280** | 90 |
+| both | 4,604 | 66 | 4,670 | 4,864 | 194 |
+| `runtime.c -DNISH_THREADS=1` | 3,574 | 31 | **3,605** | **3,840** | 235 |
+
+The third row is the runtime before the split, unchanged: 3,480 + 1,190 is
+exactly the 4,670 that one file measured, and every moved function is byte for
+byte the size it was (`nish_readdir` 294, `nish_spawn_impl` 319,
+`nish_monotonic_nanos` 36, `nish_spawn_to` 33, `nish_getenv` 80). The split
+itself cost nothing to measure and nothing to link.
+
+Each budget is the next 256-byte boundary above its measurement, which is the
+rule the 4,864 was set by. The consequences of the two numbers are deliberately
+different:
+
+- **3,584 for the core.** The core is a closed set — nothing in the language
+  roadmap adds an arena or a second string representation — so this number
+  should come down over time and never up. 104 bytes of headroom is tight on
+  purpose: a commit that needs the room grew something that was not supposed to
+  grow, and should have to say so.
+- **1,280 for the operating-system half.** 90 bytes is less than one syscall
+  wrapper (`nish_readdir` alone is 294), so the next builtin that reaches into
+  the operating system *will* raise this number, in the commit that adds it,
+  with its measurement — which is the whole point. It can no longer borrow room
+  from the arena to hide in, and raising it says what it says: the OS-facing
+  surface grew, and the core did not.
+
+That the two sum to 4,864, the single budget they replace, is a coincidence of
+where the 256-byte boundaries fall and not a constraint on either.
+
+**What the split costs a program.** `nish_readdir` allocates through
+`nish_alloc_struct` and `nish_str_new`, which are now in another translation
+unit, so the inlined arena bump inside it is a real call without LTO. Measured
+on the same host, `examples/hello.ts` and `tests/cases/io_readdir.ts` (which
+creates a directory, writes three files and lists it twice), against the runtime
+before the split and after:
+
+| Program | Profile | Before | After |
+| --- | --- | ---: | ---: |
+| `examples/hello.ts` | `size` | 4,680 | 4,680 (byte-identical) |
+| `examples/hello.ts` | `speed` | 4,680 | 4,680 (byte-identical) |
+| `io_readdir.ts` | `size` | 9,456 | 9,456 |
+| `io_readdir.ts` | `speed` | 9,696 | 9,696 |
+
+Both profiles use `-flto`, so the two translation units are one module by the
+time the inliner runs and nothing was lost: the `io_readdir` binaries are the
+same size to the byte and the `hello` binaries are the same *bytes*, the
+`--gc-sections` claim above holding as it did. Without LTO — the `debug`
+profile, or a hand-written `clang -O2` line — the calls are real, and the answer
+is still not a regression: at `-O2` the linked `io_readdir` binary's `.text*`
+*falls* from 9,373 bytes to 8,584, because `nish_readdir` stops carrying an
+inlined copy of the allocator (1,653 bytes of it down to 839), while the file
+grows 32 bytes on section padding. The unoptimised `debug` profile, which
+inlines nothing either way and strips nothing, grows 10 bytes of `.text*`.
+
+And the calls do not cost time on the workload they are on. A loop of 4,000
+`readdirSync` calls over a 37-entry directory (152,000 entries and as many
+arena strings), best of nine runs:
+
+| Build | Before | After |
+| --- | ---: | ---: |
+| `--profile speed` (LTO) | 41 ms | 41 ms |
+| `clang -O2`, no LTO | 42 ms | 42 ms |
+
+Which is what a cold path means: the time is in `getdents` and in the `strcmp`
+of the insertion sort, not in the bump allocator, and a runtime call per entry
+does not show above the noise (±4 ms between repetitions of either binary).
+
+**Where the link lines are.** `scripts/build.sh` compiles `runtime_os.c` beside
+any `runtime.c` it is handed, so every caller that names the runtime through it
+is already correct: `nish --link` (`src/index.ts`), stage1's `--link`
+(`self/compile.ts`), `scripts/size-report.sh`, the `napi`, `wasi` and `size`
+profile builds in `tests/run.js`, `tests/differential/lib.js` (through
+`--link`), and every `--profile` recipe in these documents and in the README. A
+caller that already names both is left alone, since naming one object twice is a
+duplicate-symbol error. Direct `clang` lines name both: `tests/run.js`
+(`RUNTIME_C` there, used by the golden round trips, the panic cases, the layout
+driver and the runtime unit test) and `tests/nish/run.ts`. Nothing in
+`runtime.c` calls into `runtime_os.c`, so an older line naming `runtime.c` alone
+still links a program that touches no files, directories, subprocesses,
+environment or clock — which is most of `tests/cases` and every example except
+`argv`.
+
+**The freestanding and wasi profiles.** `runtime/runtime_wasm.c` is untouched: it
+defines none of the moved functions and the `wasm` profile never names
+`runtime.c`. The `wasi` profile compiles `runtime.c` and therefore
+`runtime_os.c` too; both files compile clean under `-std=c11 -Wall -Wextra
+-Werror` with the `__wasi__` branches taken (`nish_readdir` answers NULL,
+`nish_spawn_impl` answers -1, `spawn.h` and `wait.h` are not included, and the
+entry bridge stayed in `runtime.c`). The end-to-end wasi check still needs a
+WASI sysroot and still skips, counted, without one.
+
+**The gate.** `tests/run.js` holds `RUNTIME_TEXT_BUDGET` (3,584),
+`RUNTIME_OS_TEXT_BUDGET` (1,280) and `RUNTIME_THREADS_TEXT_BUDGET` (3,840), and
+measures all three configurations in one block, with the same skip behaviour as
+before — a counted `skip(reason)` off linux-x64 or without `clang` or `size`,
+because a byte-exact ceiling is a fact about one target and one compiler version.
+Each failure names its own configuration, its own measurement, its own budget and
+the constant to raise. `node tests/run.js budget` selects them.
+
+The third row is the fourth line of the table above, and it exists because the
+first two cannot see it. `-DNISH_THREADS=1` is the build `--threads` links (WP20
+T0), where the arena and the RNG seed are `_Thread_local`, and at 3,605 bytes it
+is 21 *above* the core's own ceiling — so for as long as only the default build
+was measured, the code size of a configuration a user asks for by flag was
+ungated, and `_Thread_local` storage is the kind of thing that grows quietly. It
+is a separate number rather than a raised shared one on purpose: covering both
+with 3,840 would hand the default build 360 bytes it has no business having, and
+the whole point of splitting the budget was that a number should mean one thing.
 
 ## Attributes
 

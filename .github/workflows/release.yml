@@ -155,8 +155,13 @@ jobs:
           file="$(npm pack --pack-destination build/release | tail -n 1)"
           echo "tarball=build/release/$file" >> "$GITHUB_OUTPUT"
           tar -tzf "build/release/$file" | sed 's#^package/##' | sort | tee build/release/files.txt
-          # The tarball must be usable on its own: `--link` needs these three.
-          for f in dist/index.js runtime/runtime.c runtime/nish.h scripts/build.sh; do
+          # The tarball must be usable on its own, and this list is what makes that
+          # a gate rather than a hope. `runtime_os.c` is on it because a `files`
+          # regression that dropped it would publish a compiler that links a
+          # program printing a string and fails on any program that reads a file,
+          # lists a directory, spawns a child or asks the clock -- the half of the
+          # runtime whose absence a smoke test of `hello.ts` cannot see.
+          for f in dist/index.js runtime/runtime.c runtime/runtime_os.c runtime/nish.h scripts/build.sh; do
             grep -qx "$f" build/release/files.txt || { echo "::error::$f missing from tarball"; exit 1; }
           done
 

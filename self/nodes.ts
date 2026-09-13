@@ -115,6 +115,10 @@ export const FLAG_CONST: i32 = 2;
 // are accepted and ignored (docs/LANGUAGE.md, Classes), so they are parsed and
 // then not recorded — there is nothing downstream that could ask.
 export const FLAG_READONLY: i32 = 4;
+// `flags` on N_FUNCTION: bit 3 is `declare` — a C function this program calls
+// but does not define (WP27 S1). The body child is the empty node, because a
+// foreign declaration has no body and the child positions are fixed.
+export const FLAG_FOREIGN: i32 = 8;
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored

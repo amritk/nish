@@ -95,6 +95,8 @@ const RULES: string[] = [
     "NL2291",
     "`null` needs a contextual `T | null` type (annotate the variable, e.g. `let p: P | null = null`)",
     "NL2145",
+    "`declare function` cannot be generic: a C symbol is one function, not a template to instantiate",
+    "NL2307",
     "`Result<T, E> | null` is not supported: a `Result` already models absence through its error arm",
     "NL2151",
     "A `case` clause with statements must end in `break`, `return`, `continue` or `process.exit` (",
@@ -124,7 +126,9 @@ const RULES: string[] = [
     "Only functions can be exported for now, plus classes and interfaces (found `export` on ",
     "NL2226",
     "` under a type constructor instead of passing it on, so the chain has no end; pass `",
-    "NL2304",
+    "NL2309",
+    "`declare function` declares a C function this program calls, so it must have no body",
+    "NL2308",
     ": a `Result` is immutable once built (return a new `ok(...)` or `err(...)` instead)",
     "NL2028",
     ": a `Result` is immutable once built (return a new `Ok(...)` or `Err(...)` instead)",
@@ -135,6 +139,8 @@ const RULES: string[] = [
     "NL2084",
     "Operator `+` requires two operands of the same numeric type or two strings, got ",
     "NL2231",
+    "` cannot be exported: it is a C function this program calls, not one it defines",
+    "NL2306",
     "`export default` / `export =` are not supported; use a named `export function`",
     "NL2129",
     "`ReadonlyArray` needs exactly one type argument, e.g. `ReadonlyArray<number>`",
@@ -291,6 +297,8 @@ const RULES: string[] = [
     "NL2241",
     " modules listed below. Link the .ll module(s) and",
     "NL4002",
+    ", and a declared C function returns a scalar only",
+    "NL2304",
     "` has no `value`: its success arm carries nothing",
     "NL2064",
     "`namespace` and `module` blocks are forbidden in ",
@@ -309,6 +317,8 @@ const RULES: string[] = [
     "NL2082",
     " values; build it with `[]` and `push` instead",
     "NL2022",
+    ", and a declared C function takes scalars only",
+    "NL2305",
     "` has more than one constructor (no overloads)",
     "NL2063",
     "` requires two operands of the same type, got ",
@@ -818,7 +828,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 380;
+export const RULE_COUNT = 385;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

@@ -14,6 +14,17 @@
  * characters at all — a UTF-8 string passes through `splitLines` and `split`
  * untouched, because a newline and a space cannot appear inside a multi-byte
  * sequence.
+ *
+ * Every width this module declares is spelled (`i32`, never `number`) *and*
+ * every value a builtin hands it is converted at the read: `s.length`,
+ * `a.length`, `s.charCodeAt(i)` and `s.indexOf(t)` all answer `number`
+ * (LANGUAGE.md, *Arrays and strings as receivers*), and `number` is `f64` under
+ * `--number-mode f64`. Spelling the declarations is therefore necessary and not
+ * sufficient — without the `toI32` at each read this module does not compile in
+ * that mode at all (`docs/wp26-stdlib.md` §4). A length a loop tests on every
+ * iteration is read into an `i32` local once rather than converted per
+ * iteration, which is both cheaper and how the loop wants to read; a string is
+ * immutable, so its length cannot change underneath the local.
  */
 
 const NEWLINE: i32 = 10;
@@ -21,8 +32,16 @@ const CARRIAGE_RETURN: i32 = 13;
 const SPACE: i32 = 32;
 const TAB: i32 = 9;
 
-/** Whether `code` is one of the four ASCII bytes this module treats as blank. */
-const isBlank = (code: i32): boolean =>
+/**
+ * Whether `code` is one of the four ASCII bytes this module treats as blank.
+ *
+ * The name is deliberately not `isBlank`. A `std/` module's private functions
+ * share the importing program's flat symbol namespace, so a program that
+ * declares its own `isBlank` could not compile against this module
+ * (`docs/wp26-stdlib.md` §3e); naming the module and the unit of inspection
+ * makes the collision unlikely instead.
+ */
+const isTextBlankByte = (code: i32): boolean =>
   code === SPACE || code === TAB || code === NEWLINE || code === CARRIAGE_RETURN;
 
 /**
@@ -36,18 +55,19 @@ const isBlank = (code: i32): boolean =>
  * `trimEnd` each line.
  */
 export const splitLines = (text: string): string[] => {
+  const length: i32 = toI32(text.length);
   const lines: string[] = [];
   let start: i32 = 0;
   let i: i32 = 0;
-  while (i < text.length) {
-    if (text.charCodeAt(i) === NEWLINE) {
+  while (i < length) {
+    if (toI32(text.charCodeAt(i)) === NEWLINE) {
       lines.push(text.substring(start, i));
       start = i + 1;
     }
     i += 1;
   }
-  if (start < text.length) {
-    lines.push(text.substring(start, text.length));
+  if (start < length) {
+    lines.push(text.substring(start, length));
   }
   return lines;
 };
@@ -59,11 +79,12 @@ export const splitLines = (text: string): string[] => {
  * `split(text, " ")`, which would.
  */
 export const splitWhitespace = (text: string): string[] => {
+  const length: i32 = toI32(text.length);
   const parts: string[] = [];
   let start: i32 = -1;
   let i: i32 = 0;
-  while (i < text.length) {
-    if (isBlank(text.charCodeAt(i))) {
+  while (i < length) {
+    if (isTextBlankByte(toI32(text.charCodeAt(i)))) {
       if (start >= 0) {
         parts.push(text.substring(start, i));
         start = -1;
@@ -74,24 +95,25 @@ export const splitWhitespace = (text: string): string[] => {
     i += 1;
   }
   if (start >= 0) {
-    parts.push(text.substring(start, text.length));
+    parts.push(text.substring(start, length));
   }
   return parts;
 };
 
 /** `text` without its leading blank bytes. */
 export const trimStart = (text: string): string => {
+  const length: i32 = toI32(text.length);
   let i: i32 = 0;
-  while (i < text.length && isBlank(text.charCodeAt(i))) {
+  while (i < length && isTextBlankByte(toI32(text.charCodeAt(i)))) {
     i += 1;
   }
-  return text.substring(i, text.length);
+  return text.substring(i, length);
 };
 
 /** `text` without its trailing blank bytes. */
 export const trimEnd = (text: string): string => {
-  let end: i32 = text.length;
-  while (end > 0 && isBlank(text.charCodeAt(end - 1))) {
+  let end: i32 = toI32(text.length);
+  while (end > 0 && isTextBlankByte(toI32(text.charCodeAt(end - 1)))) {
     end -= 1;
   }
   return text.substring(0, end);
@@ -105,7 +127,7 @@ export const trim = (text: string): string => trimEnd(trimStart(text));
  * `indexOf(...) >= 0` at a call site reads as arithmetic where the question is a
  * yes or a no. `contains(s, "")` is `true`, as `indexOf("")` is `0`.
  */
-export const contains = (haystack: string, needle: string): boolean => haystack.indexOf(needle) >= 0;
+export const contains = (haystack: string, needle: string): boolean => toI32(haystack.indexOf(needle)) >= 0;
 
 /**
  * `text` with every occurrence of `needle` replaced by `replacement`.
@@ -119,19 +141,20 @@ export const contains = (haystack: string, needle: string): boolean => haystack.
  * choice about how many empty matches a string contains.
  */
 export const replaceAll = (text: string, needle: string, replacement: string): string => {
-  if (needle.length === 0) {
+  const needleLength: i32 = toI32(needle.length);
+  if (needleLength === 0) {
     return text;
   }
   const parts: string[] = [];
   let rest = text;
   while (true) {
-    const at = rest.indexOf(needle);
+    const at: i32 = toI32(rest.indexOf(needle));
     if (at < 0) {
       parts.push(rest);
       return parts.join(replacement);
     }
     parts.push(rest.substring(0, at));
-    rest = rest.substring(at + needle.length, rest.length);
+    rest = rest.substring(at + needleLength, toI32(rest.length));
   }
 };
 
@@ -143,7 +166,9 @@ export const replaceAll = (text: string, needle: string, replacement: string): s
  * not a diagnostic.
  */
 export const firstDifference = (left: string[], right: string[]): i32 => {
-  const shorter = left.length < right.length ? left.length : right.length;
+  const leftLength: i32 = toI32(left.length);
+  const rightLength: i32 = toI32(right.length);
+  const shorter: i32 = leftLength < rightLength ? leftLength : rightLength;
   let i: i32 = 0;
   while (i < shorter) {
     if (left[i] !== right[i]) {
@@ -151,5 +176,5 @@ export const firstDifference = (left: string[], right: string[]): i32 => {
     }
     i += 1;
   }
-  return left.length === right.length ? -1 : shorter;
+  return leftLength === rightLength ? -1 : shorter;
 };
