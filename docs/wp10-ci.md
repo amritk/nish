@@ -121,8 +121,9 @@ nothing is wrong.
 **The lookup is a file, and `npm test` runs it.** `.github/seed-matrix.sh` is
 the step body, and the WP19 block of `tests/run.js` drives it against a
 stand-in for `gh` through each of those states — the seed present, the
-`attached` seed missing (exit 1 with an `::error::`), no release at all, and a
-seed appearing for a platform that had none. Both times this logic was got
+`attached` seed missing (exit 1 with an `::error::`), a seed missing for a
+platform nothing builds one for, no release at all, and a seed appearing for a
+platform that had none. Both times this logic was got
 wrong it was inline shell in a workflow that nothing could run; the checks are
 what make the third revision of it the last one that needs a reviewer to catch
 a regression.
