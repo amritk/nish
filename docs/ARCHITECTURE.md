@@ -565,4 +565,4 @@ frozen, and a third rename stops at `LANGUAGE` and `CLI`.
 | `examples/` | `add.ts`, `hello.ts`, `math.ts`, `strings.ts`, `arrays.ts` (typed arrays across the boundary), `nbody.ts`, `multi/`, `main.c`, `node-host.mjs`, `node-addon.mjs` |
 | `bench/` | `run.mjs`, `README.md`, `{fib,nbody,spectral,sieve,strbuild,vec3}.{ts,c,rs}`, `strbuild_naive.c`, `rss.c`; `sum.ts` and `ffi.mjs` (the WP8 FFI benchmark) |
 | `docs/` | this documentation; `docs/README.md` is the index |
-| `.github/workflows/` | `ci.yml` (Ubuntu + macOS, LLVM 18), `release.yml` (tag-driven tarball) |
+| `.github/workflows/` | `ci.yml` (Ubuntu + macOS, LLVM 18), `parity.yml` (WP19 G1's corpus half, nightly), `release.yml` (tag-driven tarball) |

@@ -335,10 +335,12 @@ the mode again before quoting it at all.
 
 #### Should `--parity` run in CI?
 
-**Yes, and not in the `test` job.** Recommended rather than done here, because
-wiring it up is a WP10 change and this correction is a debug-info fix; the
-costs, so the decision is made on numbers rather than on the fright of finding
-this:
+**Yes, and not in the `test` job — and it does now.**
+`.github/workflows/parity.yml` runs the corpus half nightly at 06:17 UTC and
+on `workflow_dispatch`, and writes its summary line into the run summary with
+the date, because that number is a fact about the corpus on the day it was
+measured. The flag-set half stays where it was, inside `npm test`. The costs
+below are what the arrangement was decided on, and they are left as measured:
 
 - **What it costs.** A full run is 9,000-odd compilations by each compiler over
   623 programs, plus linking a stage1 binary first — about forty minutes on
@@ -346,13 +348,14 @@ this:
   every flag: WP20's `--threads` added a fifteenth variation and 637 runs to
   the cross product on its own. On a hosted runner it is the longest single
   thing in the repository.
-- **Where it fits.** Not in `test`, which every push waits on. The `bootstrap`
-  job already links a stage1 compiler and already runs on its own schedule of
-  patience, and `--flags-only` — the half that found `--no-warn-performance`
-  and `--out-dir` — takes seconds and could sit in `test` today at no
-  meaningful cost. The corpus half belongs beside `bootstrap`, or on a nightly
-  `schedule:` trigger, where a red result names the day it appeared rather than
-  the month.
+- **Where it fits.** Not in `test`, which every push waits on. `--flags-only`
+  — the half that found `--no-warn-performance` and `--out-dir` — takes seconds
+  and sits in `test` already. The corpus half went to a nightly `schedule:`
+  trigger rather than beside `bootstrap`, because `bootstrap` runs on every
+  push and pull request too: a nightly names the day a difference appeared
+  without making every branch wait forty minutes to hear it. A schedule fires
+  on the default branch only, so a branch is asked about by hand
+  (`workflow_dispatch`, or `node tests/run.js --parity` locally).
 - **What it buys.** The failure mode this defect demonstrates: a gate recorded
   as closed, reopened by an unrelated feature, spreading with every file the
   feature converts, and invisible until somebody ran the mode by hand. Between
@@ -501,11 +504,15 @@ is what that reads like in practice: the first run of this check found five
 disagreements, one of them a miscompile, and every one of them had been
 sitting under a flag combination nothing had ever tried.
 
-**This gate is met by running it, not by having run it.** Nothing on the way to
-`main` runs the mode, so "G1 is green" dates from whenever somebody last typed
-the command — and §A5 is the gate reopening in the gap, on a construct the
-language gained after the gate closed. Re-run `node tests/run.js --parity`
-before citing it, and read §A5's costing before deciding it should be automatic.
+**This gate is met by running it, not by having run it**, and what changed is
+who remembers to run it. `.github/workflows/parity.yml` runs the corpus half
+nightly (§A5's costing is why it is nightly and why it is not in `test`), so
+"G1 is green" now dates from last night rather than from whenever somebody last
+typed the command. That is not the same as green on a branch: a schedule fires
+on the default branch only, so a change that reopens the gate is caught the
+morning after it merges, not before. Re-run `node tests/run.js --parity`
+against a branch that touches either compiler, and quote a number with the
+date it was measured on.
 
 ### G2 — Oracle succession: the replacement runs before the original is deleted
 

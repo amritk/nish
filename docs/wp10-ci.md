@@ -14,7 +14,12 @@ comment above the `on:` block has the details.
 | --- | --- | --- |
 | `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, `npm test`, size report |
 | `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | the same steps; back in the matrix, see below |
+| `bootstrap` | Ubuntu | builds `self/` with the **last released** binary as the seed, which is the only thing that checks WP19's rolling freeze |
 | `lint` | Ubuntu | `npm run lint --if-present` (a no-op until `package.json` defines `lint`) |
+
+`.github/workflows/parity.yml` is the fourth job and does not run here: WP19
+G1's corpus half is nightly, on its own workflow, for the reasons under
+[the parity run](#the-parity-run-nightly) below.
 
 **The macOS job is back**, and both of the things that kept it out were the
 same thing: macOS ships bash 3.2 as `/bin/bash` (Apple will not ship GPLv3),
@@ -40,6 +45,28 @@ macOS: the `bootstrap` job needs a darwin seed binary and a release ships
 [wp19](wp19-stage0-retirement.md#g5-distribution-does-not-need-node) rather
 than on this matrix. `fail-fast: false` keeps a macOS-only failure from
 cancelling the Linux row that says whether it is the platform or the change.
+
+### The parity run, nightly
+
+`.github/workflows/parity.yml` runs `node tests/run.js --parity` on a
+`schedule:` at 06:17 UTC, and on `workflow_dispatch` with an optional `only`
+filter. It is the corpus half of WP19 G1: every program in the corpus through
+both compilers under all fifteen flag variations, comparing exit status,
+stdout, stderr and every file written.
+
+It is a workflow of its own rather than a step in `test` because of what it
+costs — roughly 9,000 compilations by each compiler, plus linking a stage1
+binary first, which is forty minutes against three for `npm test`. The
+flag-set half is the opposite trade and already runs inside `npm test`: two
+`--help` runs, seconds, and it is the half that found `--no-warn-performance`
+and `--out-dir`.
+
+Nightly rather than on demand because the gate has already reopened once in
+the gap between runs, and nobody noticed until it was run by hand
+([wp19 §A5](wp19-stage0-retirement.md#a5-the-gate-reopened-and-the-correction-a4-needed)).
+The job writes its summary line into the run summary with the date, because
+that number is a fact about the corpus on the day it was measured. A red
+result is a gate, not a flake.
 
 Both `test` jobs need the plain tool names `clang`, `llc`, `llvm-as`, `opt`,
 `ld.lld` and `wasm-ld` on `PATH`, because `tests/run.js` and the scripts
