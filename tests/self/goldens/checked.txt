@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 316 programs, 5257 dump lines.
+# 317 programs, 5302 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -2155,6 +2155,52 @@ function eq<string>(a: string, b: string): boolean -> @eq$str [instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
+program tests/cases/gen_export_header.ts
+module tests/cases/gen_export_header.ts (entry)
+struct Box_i32 (class) size=8 align=4
+  field lead: i32 index=0 offset=0 initialized
+  field value: i32 index=1 offset=4
+  constructor -> @Box_i32.constructor
+struct Box$i32 (class) size=4 align=4
+  field value: i32 index=0 offset=0
+  constructor -> @Box$i32.constructor
+function Box_i32.constructor(this: Box_i32, v: i32): void -> @Box_i32.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function Box$i32.constructor(this: Box$i32, v: i32): void -> @Box$i32.constructor [constructor instance]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
+  escaping: v
+  pointer this: size=4 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function makeGeneric(v: i32): Box$i32 -> @makeGeneric [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=4
+  escaping: v
+  calls: Box$i32.constructor nish_alloc_struct
+  stackSites=0 stackLocals=0
+function makeDeclared(v: i32): Box_i32 -> @makeDeclared [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false returnDeref=8
+  escaping: v
+  calls: Box_i32.constructor nish_alloc_struct
+  stackSites=0 stackLocals=0
+  callee 27:50 new Box_i32 -> @Box_i32.constructor
+function genericValue(b: Box$i32): i32 -> @genericValue [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer b: size=4 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function declaredValue(b: Box_i32): i32 -> @declaredValue [exported]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer b: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: declaredValue genericValue makeDeclared makeGeneric nish_arena_mark nish_arena_release
+  stackSites=0 stackLocals=0
+  callee 33:35 genericValue -> @genericValue
+  callee 33:48 makeGeneric -> @makeGeneric
+  callee 33:66 declaredValue -> @declaredValue
+  callee 33:80 makeDeclared -> @makeDeclared
 program tests/cases/gen_identity.ts
 module tests/cases/gen_identity.ts (entry)
 function test(): i32 -> @test [exported]
