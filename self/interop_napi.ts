@@ -330,16 +330,29 @@ function napiResultReader(table: TypeTable, t: i32): Reader | null {
   return out;
 }
 
-/** The failing return of one wrapper: an arena-scoped call releases first. */
-function napiFailCall(scoped: boolean, message: string): string {
-  return scoped ? `nish_napi_fail_at(env, mark, "${message}")` : `nish_napi_fail(env, "${message}")`;
+// How a wrapper gives up: throw, release the arena and throw, or -- once it has
+// handed a promise back -- reject that promise. `src/` picks this with a closure
+// per wrapper; a mode is what the language has instead, and the three spell the
+// same three failing returns.
+const FAIL_THROW: i32 = 0;
+const FAIL_RELEASE: i32 = 1;
+const FAIL_REJECT: i32 = 2;
+
+function napiFailCall(mode: i32, message: string): string {
+  if (mode === FAIL_RELEASE) {
+    return `nish_napi_fail_at(env, mark, "${message}")`;
+  }
+  if (mode === FAIL_REJECT) {
+    return `nish_napi_reject(env, nish_deferred, nish_promise, "${message}")`;
+  }
+  return `nish_napi_fail(env, "${message}")`;
 }
 
 /**
  * Declaration and conversion lines for parameter `c` read from `argv[i]`.
  * `what` is `<fn>: argument <n> (<name>)`, which every message here opens with.
  */
-function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boolean): string[] {
+function napiReaderLines(r: Reader, c: string, i: i32, what: string, mode: i32): string[] {
   const lines: string[] = [];
   switch (r.kind) {
     case READ_SCALAR: {
@@ -353,9 +366,9 @@ function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boo
       const dest = narrows ? `${c}_raw` : c;
       lines.push(`${scalar.raw} ${dest};`);
       lines.push(`if (napi_typeof(env, argv[${i}], &type) != napi_ok || type != ${scalar.tag})`);
-      lines.push(`  return ${napiFailCall(scoped, `${what} must be a ${scalar.jsType}`)};`);
+      lines.push(`  return ${napiFailCall(mode, `${what} must be a ${scalar.jsType}`)};`);
       lines.push(`if (${napiScalarGet(scalar, `argv[${i}]`, `&${dest}`)} != napi_ok)`);
-      lines.push(`  return ${napiFailCall(scoped, `${what} could not be converted`)};`);
+      lines.push(`  return ${napiFailCall(mode, `${what} could not be converted`)};`);
       if (narrows) {
         lines.push(`${scalar.c} ${c} = ${scalar.open}${dest}${scalar.close};`);
       }
@@ -364,9 +377,9 @@ function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boo
     case READ_STRING: {
       lines.push(`const nish_str *${c};`);
       lines.push(`if (napi_typeof(env, argv[${i}], &type) != napi_ok || type != napi_string)`);
-      lines.push(`  return ${napiFailCall(scoped, `${what} must be a string`)};`);
+      lines.push(`  return ${napiFailCall(mode, `${what} must be a string`)};`);
       lines.push(`if ((${c} = nish_napi_string_arg(env, argv[${i}])) == NULL)`);
-      lines.push(`  return ${napiFailCall(scoped, `${what} could not be converted`)};`);
+      lines.push(`  return ${napiFailCall(mode, `${what} could not be converted`)};`);
       return lines;
     }
     case READ_RESULT: {
@@ -402,13 +415,13 @@ function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boo
       lines.push(`bool ${c}_flag;`);
       lines.push(`if (napi_get_named_property(env, argv[${i}], "ok", &${c}_ok) != napi_ok ||`);
       lines.push(`    napi_get_value_bool(env, ${c}_ok, &${c}_flag) != napi_ok)`);
-      lines.push(`  return ${napiFailCall(scoped, shape)};`);
+      lines.push(`  return ${napiFailCall(mode, shape)};`);
       lines.push(`${r.word} ${c};`);
       lines.push(`${c}.ok = ${c}_flag;`);
       lines.push(
         `if (napi_get_named_property(env, argv[${i}], ${c}_flag ? "value" : "error", &${c}_arm) != napi_ok)`
       );
-      lines.push(`  return ${napiFailCall(scoped, shape)};`);
+      lines.push(`  return ${napiFailCall(mode, shape)};`);
       // Only the arm the discriminant selects is read, so the temporary of the
       // other one is never written: give both a value so neither is read cold.
       if (okTemp.length > 0) {
@@ -418,7 +431,7 @@ function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boo
         lines.push(errTemp);
       }
       lines.push(`if ((${c}_flag ? ${readOk} : ${readErr}) != napi_ok)`);
-      lines.push(`  return ${napiFailCall(scoped, `${what} could not be converted`)};`);
+      lines.push(`  return ${napiFailCall(mode, `${what} could not be converted`)};`);
       if (okAssign.length > 0) {
         lines.push(okAssign);
       }
@@ -434,7 +447,7 @@ function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boo
       }
       lines.push(`nish_array ${c}_hdr; /* borrowed: the ${view.ctor}'s own bytes, for this call only */`);
       lines.push(`if (!nish_napi_array_arg(env, argv[${i}], ${view.napiType}, &${c}_hdr))`);
-      lines.push(`  return ${napiFailCall(scoped, `${what} must be ${withArticle(view.ctor)}`)};`);
+      lines.push(`  return ${napiFailCall(mode, `${what} must be ${withArticle(view.ctor)}`)};`);
       lines.push(`${r.cDecl}${c} = &${c}_hdr;`);
       return lines;
     }
@@ -657,11 +670,211 @@ function napiSkipReason(table: TypeTable, fn: ExternalFunction): string {
   return "one of its types does not cross";
 }
 
+/**
+ * Why this function gets no asynchronous export, or `null` when it gets one.
+ * Only a signature whose every parameter and result is a scalar reaches the
+ * thread pool, and the reason is the arena rather than the types.
+ *
+ * The arena is thread-local (WP20 T0), so a `nish_arena_mark` taken on the JS
+ * thread cannot be released on the libuv one, and an arena string built for
+ * the call by the JS thread would belong to the wrong thread's allocator for
+ * the whole of the call that reads it. A borrowed typed array is worse still:
+ * the shim holds a pointer into the JS `ArrayBuffer`, and N-API promises that
+ * pointer is good only for the callback that read it -- an asynchronous call
+ * outlives that callback by design, and the buffer can be detached while the
+ * worker is running. Marshalling either one through a `malloc`ed copy is the
+ * shape that would lift this, and it is deliberately not in the first cut.
+ *
+ * A function named here keeps its synchronous wrapper: it is still exported,
+ * still callable, and only its promise-returning twin is missing.
+ */
+function napiAsyncSkipReason(table: TypeTable, p: Plan): string | null {
+  const sig = p.fn.sig;
+  let i = 0;
+  while (i < p.readers.length) {
+    if (p.readers[i].arena) {
+      const shown = tsKeyword(table, sig.paramTypes[i]);
+      return `parameter ${i + 1} (${sig.paramNames[i]}) is ${shown}, which the call would borrow across threads`;
+    }
+    i = i + 1;
+  }
+  if (p.box.arena) {
+    return `it returns ${tsKeyword(table, sig.returnType)}, which lives in the worker thread's arena`;
+  }
+  // A by-value `Result` could cross -- it is scalars in a register -- but its
+  // boxing is several `napi_*` calls deep, so it waits for a second cut rather
+  // than being the one untested shape in the first.
+  if (p.box.kind === BOX_RESULT) {
+    const shown = tsKeyword(table, sig.returnType);
+    return `it returns ${shown}, and a by-value \`Result\` is not bridged asynchronously yet`;
+  }
+  return null;
+}
+
+/**
+ * The asynchronous twin of `napiWrapper` (WP24 §5.1, A1): the same argument
+ * reading on the JS thread, then `napi_create_async_work` so that the compiled
+ * function runs on one of libuv's thread-pool threads and JavaScript gets a
+ * promise instead of a blocked event loop.
+ *
+ * **The compiled function is not changed in any way.** It is exactly as
+ * synchronous as it was; every piece of the asynchrony is in the C below,
+ * which is the whole reason this item has no language surface.
+ *
+ * Three things about the shape are load-bearing:
+ *
+ *   - **The promise is created before the arguments are read**, so that every
+ *     failure from that point on rejects it. A promise-returning function that
+ *     threw synchronously for a bad argument would be the one shape a JS
+ *     caller cannot reach with `.catch`, and `await` would surface it from the
+ *     call rather than from the settle.
+ *   - **The arena bracket is taken and released inside `execute`**, on the one
+ *     thread that allocates in it. A libuv worker is reused across calls, so
+ *     without the bracket whatever the call allocated would stay in that
+ *     thread's arena until the process exited.
+ *   - **`execute` never touches `env`.** N-API forbids reaching the JS engine
+ *     off the loop thread, so the arguments are plain C by then and the result
+ *     is boxed back in `complete`, which runs on the JS thread again.
+ */
+function napiAsyncWrapper(table: TypeTable, p: Plan): string[] {
+  const sig = p.fn.sig;
+  const name = sig.name;
+  const jsName = `${sig.sourceName}Async`;
+  const n = sig.paramNames.length;
+  const work = `nish_napi_work_${name}`;
+  const isVoid = table.kindOf(sig.returnType) === T_VOID;
+  const lines: string[] = [];
+
+  lines.push("typedef struct {");
+  lines.push("  napi_async_work work;");
+  lines.push("  napi_deferred deferred;");
+  let i = 0;
+  while (i < n) {
+    const t = cType(table, sig.paramTypes[i], POS_PARAM, false);
+    lines.push(`  ${t}${spaceAfter(t)}${cParamName(sig.paramNames[i])};`);
+    i = i + 1;
+  }
+  if (!isVoid) {
+    const ret = cType(table, sig.returnType, POS_RETURN, false);
+    lines.push(`  ${ret}${spaceAfter(ret)}result;`);
+  }
+  lines.push(`} ${work};`);
+  lines.push("");
+
+  const args: string[] = [];
+  i = 0;
+  while (i < n) {
+    args.push(`nish_w->${cParamName(sig.paramNames[i])}`);
+    i = i + 1;
+  }
+  lines.push(`static void nish_napi_exec_${name}(napi_env env, void *data) {`);
+  lines.push("  (void)env; /* N-API forbids reaching the JS engine here: this runs off the loop thread. */");
+  lines.push(`  ${work} *nish_w = (${work} *)data;`);
+  lines.push("  /* The arena is thread-local (WP20 T0), so the mark and the release are");
+  lines.push("   * both this worker's. A pool thread is reused, so the bracket is what");
+  lines.push("   * keeps its arena flat across calls instead of growing for the process's");
+  lines.push("   * whole life. */");
+  lines.push("  uint64_t nish_mark = nish_arena_mark();");
+  const assign = isVoid ? "" : "nish_w->result = ";
+  lines.push(`  ${assign}${cFunctionName(name).ident}(${args.join(", ")});`);
+  lines.push("  nish_arena_release(nish_mark);");
+  lines.push("}");
+  lines.push("");
+
+  lines.push(`static void nish_napi_done_${name}(napi_env env, napi_status status, void *data) {`);
+  lines.push(`  ${work} *nish_w = (${work} *)data;`);
+  lines.push("  napi_value out;");
+  lines.push("  if (status != napi_ok)");
+  lines.push(`    nish_napi_reject_at(env, nish_w->deferred, "${jsName}: the call did not run");`);
+  lines.push(`  else if (${napiBoxerCall(p.box, isVoid ? "0" : "nish_w->result")} != napi_ok)`);
+  lines.push(`    nish_napi_reject_at(env, nish_w->deferred, "${jsName}: cannot create the result");`);
+  lines.push("  else");
+  lines.push("    napi_resolve_deferred(env, nish_w->deferred, out);");
+  lines.push("  napi_delete_async_work(env, nish_w->work);");
+  lines.push("  free(nish_w);");
+  lines.push("}");
+  lines.push("");
+
+  lines.push(`static napi_value nish_napi_async_${name}(napi_env env, napi_callback_info info) {`);
+  lines.push("  napi_value nish_promise;");
+  lines.push("  napi_deferred nish_deferred;");
+  lines.push("  if (napi_create_promise(env, &nish_deferred, &nish_promise) != napi_ok)");
+  lines.push(`    return nish_napi_fail(env, "${jsName}: cannot create the promise");`);
+  if (n === 0) {
+    lines.push("  (void)info;");
+  } else {
+    lines.push(`  size_t argc = ${n};`);
+    lines.push(`  napi_value argv[${n}];`);
+    lines.push("  if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok)");
+    lines.push(`    return ${napiFailCall(FAIL_REJECT, `${jsName}: cannot read arguments`)};`);
+    lines.push(`  if (argc < ${n})`);
+    const plural = n === 1 ? "" : "s";
+    lines.push(`    return ${napiFailCall(FAIL_REJECT, `${jsName} expects ${n} argument${plural}`)};`);
+    let usesTypeof = false;
+    for (const r of p.readers) {
+      if (r.usesTypeof) {
+        usesTypeof = true;
+      }
+    }
+    if (usesTypeof) {
+      lines.push("  napi_valuetype type;");
+    }
+    let usesLossless = false;
+    i = 0;
+    while (i < sig.paramTypes.length) {
+      const sc = napiScalarReader(table, sig.paramTypes[i]);
+      if (sc !== null && sc.lossless) {
+        usesLossless = true;
+      }
+      i = i + 1;
+    }
+    if (usesLossless) {
+      lines.push("  bool lossless;");
+    }
+  }
+  i = 0;
+  while (i < p.readers.length) {
+    const what = `${jsName}: argument ${i + 1} (${sig.paramNames[i]})`;
+    for (const line of napiReaderLines(p.readers[i], cParamName(sig.paramNames[i]), i, what, FAIL_REJECT)) {
+      lines.push(`  ${line}`);
+    }
+    i = i + 1;
+  }
+  lines.push(`  ${work} *nish_w = (${work} *)malloc(sizeof *nish_w);`);
+  lines.push("  if (nish_w == NULL)");
+  lines.push(`    return ${napiFailCall(FAIL_REJECT, `${jsName}: out of memory`)};`);
+  lines.push("  nish_w->deferred = nish_deferred;");
+  i = 0;
+  while (i < n) {
+    const v = cParamName(sig.paramNames[i]);
+    lines.push(`  nish_w->${v} = ${v};`);
+    i = i + 1;
+  }
+  lines.push("  napi_value nish_name;");
+  lines.push(`  if (napi_create_string_utf8(env, "${jsName}", NAPI_AUTO_LENGTH, &nish_name) != napi_ok ||`);
+  lines.push(
+    `      napi_create_async_work(env, NULL, nish_name, nish_napi_exec_${name}, nish_napi_done_${name}, nish_w, &nish_w->work) != napi_ok) {`
+  );
+  lines.push("    free(nish_w);");
+  lines.push(`    return ${napiFailCall(FAIL_REJECT, `${jsName}: cannot create the async work`)};`);
+  lines.push("  }");
+  lines.push("  if (napi_queue_async_work(env, nish_w->work) != napi_ok) {");
+  lines.push("    napi_delete_async_work(env, nish_w->work);");
+  lines.push("    free(nish_w);");
+  lines.push(`    return ${napiFailCall(FAIL_REJECT, `${jsName}: cannot queue the async work`)};`);
+  lines.push("  }");
+  lines.push("  return nish_promise;");
+  lines.push("}");
+  lines.push("");
+  return lines;
+}
+
 function napiWrapper(table: TypeTable, p: Plan): string[] {
   const sig = p.fn.sig;
   const name = sig.name;
   const n = sig.paramNames.length;
   const scoped = p.scoped;
+  const mode = scoped ? FAIL_RELEASE : FAIL_THROW;
   const lines: string[] = [];
   lines.push(`static napi_value nish_napi_${name}(napi_env env, napi_callback_info info) {`);
   if (n === 0) {
@@ -703,7 +916,7 @@ function napiWrapper(table: TypeTable, p: Plan): string[] {
   let i = 0;
   while (i < p.readers.length) {
     const what = `${name}: argument ${i + 1} (${sig.paramNames[i]})`;
-    for (const line of napiReaderLines(p.readers[i], cParamName(sig.paramNames[i]), i, what, scoped)) {
+    for (const line of napiReaderLines(p.readers[i], cParamName(sig.paramNames[i]), i, what, mode)) {
       lines.push(`  ${line}`);
     }
     i = i + 1;
@@ -728,10 +941,10 @@ function napiWrapper(table: TypeTable, p: Plan): string[] {
     for (const line of pre) {
       lines.push(`  ${line}`);
     }
-    lines.push(`    return ${napiFailCall(scoped, `${name}: cannot create the result`)};`);
+    lines.push(`    return ${napiFailCall(mode, `${name}: cannot create the result`)};`);
   }
   lines.push(`  if (${napiBoxerCall(p.box, "result")} != napi_ok)`);
-  lines.push(`    return ${napiFailCall(scoped, `${name}: cannot create the result`)};`);
+  lines.push(`    return ${napiFailCall(mode, `${name}: cannot create the result`)};`);
   if (scoped) {
     lines.push("  nish_arena_release(mark);");
   }
@@ -741,7 +954,11 @@ function napiWrapper(table: TypeTable, p: Plan): string[] {
   return lines;
 }
 
-export function generateNapiShim(compilation: Compilation, fns: ExternalFunction[]): string {
+export function generateNapiShim(
+  compilation: Compilation,
+  fns: ExternalFunction[],
+  asyncExports: boolean
+): string {
   const table = compilation.table;
   const plans: Plan[] = [];
   const skipped: string[] = [];
@@ -758,6 +975,36 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
       skipped.push(`${source} -- not bridged: ${napiSkipReason(table, fn)}`);
     }
   }
+  // WP24 A1: `--emit-napi-async` adds a promise-returning `<name>Async` beside
+  // every synchronous export that can cross a thread boundary. It is additive
+  // on purpose -- the synchronous wrapper is what the WP8 batching benchmark
+  // calls, and a host that wants the answer now still wants it -- so a host
+  // chooses per call site rather than per build, and the two can be measured
+  // against each other inside one addon.
+  const asyncPlans: Plan[] = [];
+  const asyncSkipped: string[] = [];
+  if (asyncExports) {
+    for (const p of plans) {
+      const source = `${p.fn.unit.path}: ${tsSignature(table, p.fn.sig)}`;
+      const jsName = `${p.fn.sig.sourceName}Async`;
+      // `<name>Async` is a name in the same export namespace, so a program that
+      // already exports it wins: an export the program asked for is not
+      // shadowed by one this flag invented.
+      let taken = false;
+      for (const other of plans) {
+        if (other.fn.sig.sourceName === jsName) {
+          taken = true;
+        }
+      }
+      let why = taken ? `\`${jsName}\` is already an export of this module` : napiAsyncSkipReason(table, p);
+      if (why === null) {
+        asyncPlans.push(p);
+      } else {
+        asyncSkipped.push(`${source} -- no \`${jsName}\`: ${why}`);
+      }
+    }
+  }
+  const needsAsync = asyncPlans.length > 0;
   const planned: ExternalFunction[] = [];
   let needsString = false;
   let needsArrayArg = false;
@@ -790,7 +1037,7 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
   }
 
   const lines: string[] = [];
-  lines.push(banner(compilation, "--emit-napi", "/* "));
+  lines.push(banner(compilation, asyncExports ? "--emit-napi-async" : "--emit-napi", "/* "));
   lines.push(" *");
   lines.push(" * Build it into an addon together with the compiled module(s) and the runtime:");
   lines.push(
@@ -800,7 +1047,30 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
   lines.push(" * functions below. Numbers convert with ToInt32 (`x | 0`) in i32 mode; typed");
   lines.push(" * arrays are borrowed for the call (writes through them are visible to JS);");
   lines.push(" * strings and array results are copied, and the arena is released per call.");
+  if (needsAsync) {
+    lines.push(" *");
+    lines.push(" * Every function below that carries only numbers, booleans and bigints also");
+    lines.push(" * has a `<name>Async` twin: the same call on libuv's thread pool, answering");
+    lines.push(" * a promise, so a long call does not block Node's event loop. The compiled");
+    lines.push(" * function is unchanged and still exported synchronously under its own name;");
+    lines.push(" * `<name>Async` rejects rather than throws, a bad argument included.");
+  }
   lines.push(" */");
+  if (needsAsync) {
+    lines.push("");
+    lines.push("/* An asynchronous export allocates on a libuv thread while the JS thread runs,");
+    lines.push(" * so the arena has to be the thread-local one. Without -DNISH_THREADS it is a");
+    lines.push(" * single process-wide bump allocator and the two threads would race it -- a");
+    lines.push(" * silent heap corruption rather than a visible failure, so it is a build error");
+    lines.push(" * instead. `scripts/build.sh --threads` (from `nish --threads`) sets the macro");
+    lines.push(" * on every input, which is what keeps this file and runtime.c in step. */");
+    lines.push("#if !defined(NISH_THREADS)");
+    lines.push(
+      '#error "--emit-napi-async needs the thread-local arena: build with scripts/build.sh --threads"'
+    );
+    lines.push("#endif");
+    lines.push("");
+  }
   lines.push("#include <node_api.h>");
   if (needsF32) {
     lines.push("#include <math.h>");
@@ -808,6 +1078,9 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
   lines.push("#include <stdbool.h>");
   lines.push("#include <stddef.h>");
   lines.push("#include <stdint.h>");
+  if (needsAsync) {
+    lines.push("#include <stdlib.h>");
+  }
   if (needsArrayResult) {
     lines.push("#include <string.h>");
   }
@@ -963,9 +1236,54 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
   lines.push("  return nish_napi_undefined(env);");
   lines.push("}");
   lines.push("");
+  if (needsAsync) {
+    lines.push("/* Settle a promise the call already committed to answering: reject it with a");
+    lines.push(" * TypeError rather than throwing, because the caller is holding it by then. */");
+    lines.push(
+      "static void nish_napi_reject_at(napi_env env, napi_deferred deferred, const char *message) {"
+    );
+    lines.push("  napi_value text, error;");
+    lines.push("  if (napi_create_string_utf8(env, message, NAPI_AUTO_LENGTH, &text) == napi_ok &&");
+    lines.push("      napi_create_type_error(env, NULL, text, &error) == napi_ok)");
+    lines.push("    napi_reject_deferred(env, deferred, error);");
+    lines.push("  else");
+    lines.push("    /* The engine cannot even build the error. Settle it anyway: an unsettled");
+    lines.push("     * promise is an `await` that never comes back. */");
+    lines.push("    napi_reject_deferred(env, deferred, nish_napi_undefined(env));");
+    lines.push("}");
+    lines.push("");
+    lines.push("/* The same, as the failing `return` of a wrapper that has a promise to answer. */");
+    lines.push(
+      "static napi_value nish_napi_reject(napi_env env, napi_deferred deferred, napi_value promise, const char *message) {"
+    );
+    lines.push("  nish_napi_reject_at(env, deferred, message);");
+    lines.push("  return promise;");
+    lines.push("}");
+    lines.push("");
+  }
   for (const p of plans) {
     lines.push(`/* ${p.fn.unit.path}: ${tsSignature(table, p.fn.sig)} */`);
     pushAll(lines, napiWrapper(table, p));
+  }
+  // Every function that asked for an asynchronous export and did not get one is
+  // named with the reason, for the reason the unbridged ones are: a host
+  // reaching for `<name>Async` and finding `undefined` should be able to read
+  // why in the file that did not write it.
+  if (asyncExports && asyncSkipped.length > 0) {
+    lines.push("/* Not bridged asynchronously, and why. An asynchronous export carries only");
+    lines.push(" * what the work item can hold by value -- numbers, booleans and bigints --");
+    lines.push(" * because the arena is per-thread and a borrowed typed array belongs to the");
+    lines.push(" * JS thread that lent it. Each of these is still exported synchronously");
+    lines.push(" * under its own name. */");
+    for (const skip of asyncSkipped) {
+      lines.push(`/* ${skip} */`);
+    }
+    lines.push("");
+  }
+  for (const p of asyncPlans) {
+    const shown = tsSignature(table, p.fn.sig);
+    lines.push(`/* ${p.fn.unit.path}: ${shown} -- asynchronously, as \`${p.fn.sig.sourceName}Async\` */`);
+    pushAll(lines, napiAsyncWrapper(table, p));
   }
 
   lines.push("static const struct {");
@@ -974,6 +1292,9 @@ export function generateNapiShim(compilation: Compilation, fns: ExternalFunction
   lines.push("} nish_napi_exports[] = {");
   for (const p of plans) {
     lines.push(`  {"${p.fn.sig.sourceName}", nish_napi_${p.fn.sig.name}},`);
+  }
+  for (const p of asyncPlans) {
+    lines.push(`  {"${p.fn.sig.sourceName}Async", nish_napi_async_${p.fn.sig.name}},`);
   }
   lines.push('  {"nish_reset_arena", nish_napi_reset_arena},');
   lines.push('  {"nish_free_arena", nish_napi_free_arena},');

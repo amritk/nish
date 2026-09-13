@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 393;
+export const RULE_COUNT: i32 = 394;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -139,6 +139,8 @@ export function diagnosticRules(): string[] {
     "NL2270",
     "`; check the nullable side against `null` first, then compare the narrowed values",
     "NL2114",
+    ": --emit-napi-async requires --threads (its exports allocate on a worker thread)",
+    "NL3012",
     "` is not supported; a module has no top-level code, so only `const` is available",
     "NL2084",
     "Operator `+` requires two operands of the same numeric type or two strings, got ",
