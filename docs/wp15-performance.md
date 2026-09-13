@@ -355,6 +355,89 @@ these functions exactly as before: the missing half was never the layout, it is
 that JS has no typed array of a struct, so a host would need a per-field unpack
 loop and a JS object per element — marshalling rather than a view.
 
+### Class elements: measured against `self/`, and closed rather than deferred
+
+§2a left class elements out and called the migration "the work, not the
+layout". The migration was then looked at properly, against the program that
+has to survive it, and it is not a migration of `self/`: it is a change to what
+`T[]` *means* for every class `T`, and `self/` is only the largest program that
+would be caught by it. Three things were checked, in rising order of how hard
+they are to route around.
+
+**One `FunctionSig`, three holders.** `collectMethod` ends
+
+```ts
+owner.methodIndex.set(name, owner.methodSigs.length);
+owner.methodSigs.push(sig);
+ctx.program.functions.push(sig);          // self/structs.ts
+```
+
+and `collectConstructor` the same with `owner.ctor = sig`. Pass 2 reaches the
+signature through `program.functions` and writes `sig.poisoned = true`
+(`self/checker.ts`); the emitter reaches it through `methodSigs`. With value
+slots those are two copies and a pointer, the write lands on one of them, and
+the emitter emits a body the checker rejected. `declareStruct` has the same
+shape one level up: it calls `addStruct`, which does
+`structList.push(info)`, and then hands `info` back for `collectStructMembers`
+to fill in — so the registry's copy would keep `size = 0` and `ctor = null`
+for every struct in the program. This is the aliasing §2a describes, and it is
+the tractable part: a registry can be rewritten to construct in place, and
+`(FunctionSig | null)[]` keeps today's pointer semantics for a registry that
+should not copy.
+
+**Sixteen places ask whether an element of such an array *is* a given
+object.** Not equal — the same object. They are in six modules:
+
+```ts
+if (state.belowIndex[k] === i && state.belowHolder[k] === w) { ... }  // self/bounds.ts
+if (this.declared[i] === local) { ... }                              // self/checker.ts, the §8 walk
+if (this.slotLocals[i] === local) { ... }                            // self/emit.ts
+if (this.refLocals[i] === local) { ... }                             // self/escape.ts
+if (this.narrowedVars[i] === variable) { ... }                       // self/symbols.ts
+if (list.children[i] === node) { ... }                               // self/attributes.ts
+```
+
+Every one of those arrays is `Local[]` or `Node[]`, and `Local` and `Node` are
+classes. A value slot makes each comparison weigh an interior pointer against
+the original, which is never equal, so the lookup answers "not found" and the
+analysis behind it silently loses its state — no error, no diagnostic, just a
+compiler that proves less than it did. Six of the sixteen are in
+`self/bounds.ts`, whose seven `Local[]` fact arrays are the WP15 §2 proof
+itself: the migration would quietly switch off the bounds analysis item 6
+shipped, and nothing in the suite would say so, because a bounds check that
+survives is a slower program rather than a wrong one.
+
+**And the syntax tree would be storage rather than a tree.** `Node` is one
+class carrying the union of every kind's fields — the Nish-0 design
+`.claude/selfhost.md` describes — and its children are `children: Node[]`.
+Under value elements `parser.finish` pushes a child into `node.children` and
+its caller pushes the returned `node` into *its* parent's children, so every
+node is copied once per level of nesting it ends up under, and the deepest
+expressions in a real program pay that most. `self/attributes.ts` already asks
+`list.children[i] === node`, which stops being answerable at all. A syntax
+tree is the one structure in a compiler that is all identity and no traversal
+locality, which makes it the worst candidate there is for the layout §2a
+shipped — and `Local[]` and `Node[]`, the two arrays this section keeps coming
+back to, are the two most common class-typed arrays in `self/` at 45 and 21
+declarations. This is not a corner of the compiler that the migration would
+touch.
+
+**What it would have bought, and what already buys it.** §2a's 2.27x is a
+property of the *layout*, not of the struct kind: it is what a contiguous array
+of small records buys on a loop whose allocation order and traversal order
+differ. A program that wants it can have it today by declaring the element type
+an `interface`, which is what §2a shipped, and `C | null` is the way back to a
+pointer array. What a class element would add over an `interface` element is
+methods and a constructor on the element type — worth something, but not worth
+changing what `xs.push(c); c.m()` means, which is the price, and not worth it
+against a language where nothing else copies a class.
+
+So this is **closed by decision rather than deferred**: an array of classes is
+one pointer per slot, permanently, and the contiguous shape is spelled
+`interface`. `docs/LANGUAGE.md` already states the rule that way, and
+`inlineElementStruct` already carries it with the reason beside it; what
+changes here is that the second half of item 7 stops being an open item.
+
 ## 2b. The array header is not the array's elements — **done**
 
 The largest measured win in this note, and it needed no language change at all.
@@ -975,15 +1058,24 @@ measurement closed says so and says why.
    header is hoisted the checks cost about 0.5%. An index proven here also
    takes `nish_panic_index` out of the function's callee set, so a function
    whose every index is proven keeps `willreturn`.
-7. **Contiguous record arrays** (§2a) — **done for `interface` elements**.
-   2.27x on a loop whose allocation order and traversal order differ, and
-   nothing at all when they agree — the measurement that re-scoped the item.
-   The layout, the escape rule (`NL2290`/`NL2291`) that makes the dangling
-   interior pointer a compile error, and the C header and layout test that move
-   with the ABI, in both compilers. **Class elements are not part of it**: a class has identity, and
-   `self/` keeps one `FunctionSig` in three places at once and writes through
-   whichever it has to hand, so value slots lose the write. That migration is
-   its own item.
+7. **Contiguous record arrays** (§2a) — **done for `interface` elements, and
+   closed for class elements**. 2.27x on a loop whose allocation order and
+   traversal order differ, and nothing at all when they agree — the measurement
+   that re-scoped the item. The layout, the escape rule (`NL2290`/`NL2291`)
+   that makes the dangling interior pointer a compile error, and the C header
+   and layout test that move with the ABI, in both compilers. **Class elements
+   are not a deferred half any more.** The migration was costed against `self/`
+   and it is not a migration of `self/`: it changes what `T[]` means for every
+   class `T`. One `FunctionSig` is held in `program.functions`, in
+   `StructInfo.methodSigs` and in `StructInfo.ctor` at once and written through
+   whichever is to hand; sixteen places in six modules ask whether an element of
+   a `Local[]` or a `Node[]` *is* a given object, six of them inside
+   `self/bounds.ts`, so value slots would switch off item 6's bounds proof with
+   nothing in the suite to say so; and the syntax tree itself would become
+   storage, copied once per level of nesting. What the layout buys is available
+   today by declaring the element type an `interface`, and `C | null` is the way
+   back to a pointer array — so an array of classes is one pointer per slot by
+   decision. §2a records the three findings.
 8. **Generics, discriminated unions, `Result<T, E>`** (§5) — the largest, and
    the one self-hosting most depends on.
 
