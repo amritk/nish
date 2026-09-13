@@ -26,6 +26,47 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-13
+
+### Added
+
+- runtime: Add readdirSync, spawnSyncTo and monotonicNanos, and the test runner they enable ([#47](https://github.com/amritk/nish/pull/47))
+- runtime: Give every thread its own arena behind `--threads` ([#55](https://github.com/amritk/nish/pull/55))
+- checker: Give every symbol a package scope ([#57](https://github.com/amritk/nish/pull/57))
+- checker: Read a numeric `enum` as a distinct `i32` type ([#54](https://github.com/amritk/nish/pull/54))
+- codegen: Add slice, a string cut that checks instead of clamping ([#53](https://github.com/amritk/nish/pull/53))
+- codegen: Store an array of records contiguously ([#51](https://github.com/amritk/nish/pull/51))
+- checker: Compile generic functions by monomorphisation ([#50](https://github.com/amritk/nish/pull/50))
+- checker: Call a C function with `declare function` ([#62](https://github.com/amritk/nish/pull/62))
+- checker: Import the runtime builtins from `nish:fs`, `nish:process` and `nish:io` ([#58](https://github.com/amritk/nish/pull/58))
+- std: Add std/json, and check the CLI contract from a harness in Nish ([#65](https://github.com/amritk/nish/pull/65))
+- self: Let a construct be implemented once, in `self/` ([#66](https://github.com/amritk/nish/pull/66))
+
+### Fixed
+
+- codegen: Measure a -g position from the declaration, and its column in bytes ([#60](https://github.com/amritk/nish/pull/60))
+- self: Assert the seed equality only when the seed is stage0 ([#61](https://github.com/amritk/nish/pull/61))
+- checker: Key two generic rules on words only they contain ([#64](https://github.com/amritk/nish/pull/64))
+
+### Performance
+
+- checker: Prove an index in range and emit no bounds check ([#56](https://github.com/amritk/nish/pull/56))
+
+### Changed
+
+- runtime: Split the system-call half into runtime_os.c, with a ceiling each ([#59](https://github.com/amritk/nish/pull/59))
+
+### Documentation
+
+- readme: Centred header, status badges and section rules ([#45](https://github.com/amritk/nish/pull/45))
+- release: Fix the install links and record the npm name conflict ([#49](https://github.com/amritk/nish/pull/49))
+- cli: Add a rules card the compiler's own tests keep honest ([#63](https://github.com/amritk/nish/pull/63))
+
+### Tests
+
+- self: Pin every diagnostic wording a program can provoke ([#52](https://github.com/amritk/nish/pull/52))
+
+
 ## [0.1.1] - 2026-09-12
 
 ### Fixed
@@ -67,3 +108,4 @@ hand — the git log is the working account until a release turns it into one.
 [Unreleased]: https://github.com/amritk/nish/commits/main
 [0.1.0]: https://github.com/amritk/nish/releases/tag/v0.1.0
 [0.1.1]: https://github.com/amritk/nish/releases/tag/v0.1.1
+[0.2.0]: https://github.com/amritk/nish/releases/tag/v0.2.0
