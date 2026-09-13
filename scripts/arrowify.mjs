@@ -24,7 +24,9 @@
  *
  *   - `declare function f(...): T;` — an ambient declaration defines nothing,
  *     so WP22 §9 keeps it legal and the arrow spelling for it would need a
- *     function type, which Phase 0 forbids. It has no body, which is the test.
+ *     function type, which Phase 0 forbids. The `declare` modifier is the test,
+ *     not the missing body: a body-less declaration without it is an overload
+ *     signature the checker refuses, and it is reported as that instead.
  *   - Class methods and constructors. WP22 §3: a method is not an arrow and
  *     will not become one.
  *   - Anything that is not a top-level statement of the file. Nish-0 has no
@@ -56,6 +58,7 @@ const SKIP_REASONS = {
   ambient: "`declare function` stays legal (WP22 §9)",
   anonymous: "no name",
   async: "`async` is forbidden by Phase 0",
+  bodiless: "no body, and no `declare`: an overload signature, which the language does not have",
   default: "`export default` has no arrow spelling",
   generator: "`function*` has no arrow spelling (WP22 §9)",
   trivia: "a comment sits between the signature and the body",
@@ -138,6 +141,22 @@ const singleReturn = (text, sf, block) => {
 };
 
 /**
+ * The concise body of an arrow, parenthesised when the grammar requires it.
+ *
+ * `ConciseBody` is `[lookahead ≠ {] ExpressionBody`, so the rule is about the
+ * *first token* of the expression and about nothing else: a body that begins
+ * with `{` re-parses as a block. Asking whether the node is an object literal
+ * answers that question only for the expression that is one all the way to its
+ * last byte, and gets `return { a: 1 } as Pair;` and `return { a: 1 }.a;`
+ * wrong in the direction that corrupts source — `=> { a: 1 } as Pair` is a
+ * block with two parse errors in it, not a value. That is the same "recognised
+ * by what usually accompanies it" mistake WP22 §8c records against the
+ * `declare` rule, made one node deeper: an object literal is what usually
+ * starts an expression that starts with `{`, not what makes it one.
+ */
+const conciseBody = (expr) => (expr.startsWith("{") ? `(${expr})` : expr);
+
+/**
  * One declaration's replacement text, or `null` with a reason when it is one of
  * the forms this tool leaves alone.
  */
@@ -145,8 +164,13 @@ const replacement = (text, sf, decl, concise) => {
   const unspellableAs = unspellable(decl);
   if (unspellableAs !== undefined) return { skip: unspellableAs };
   // Anything else without a body is an overload signature, which the language
-  // does not have; leave it for the checker to refuse in its own words.
-  if (decl.body === undefined) return { skip: "ambient" };
+  // does not have; leave it for the checker to refuse in its own words. It is
+  // *not* the ambient case and may not be reported as one: `declare` is what
+  // makes a declaration legal without a body, and telling a migrator that
+  // `function ambient(): void;` is "`declare function` staying legal" names a
+  // rule the checker is about to refuse the line under
+  // (`tests/wordings/nl2204_function_without_body.ts`).
+  if (decl.body === undefined) return { skip: "bodiless" };
 
   const start = decl.getStart(sf);
   const prefix = text.slice(start, keywordStart(text, decl, start));
@@ -159,15 +183,10 @@ const replacement = (text, sf, decl, concise) => {
   if (!/^\s*$/.test(gap)) return { skip: "trivia" };
 
   const returned = concise ? singleReturn(text, sf, decl.body) : undefined;
-  let body;
-  if (returned === undefined) {
-    body = text.slice(decl.body.getStart(sf), decl.body.getEnd());
-  } else {
-    // `=> { ... }` is a block and `=> ({ ... })` is an object literal, so the
-    // parentheses are the difference between a value and an empty body.
-    const expr = text.slice(returned.getStart(sf), returned.getEnd());
-    body = ts.isObjectLiteralExpression(returned) ? `(${expr})` : expr;
-  }
+  const body =
+    returned === undefined
+      ? text.slice(decl.body.getStart(sf), decl.body.getEnd())
+      : conciseBody(text.slice(returned.getStart(sf), returned.getEnd()));
   return { start, end: decl.getEnd(), text: `${prefix}const ${decl.name.text} = ${signature} => ${body};` };
 };
 
@@ -185,11 +204,10 @@ const conciseArrow = (text, sf, stmt) => {
   if (init === undefined || !ts.isArrowFunction(init) || !ts.isBlock(init.body)) return undefined;
   const returned = singleReturn(text, sf, init.body);
   if (returned === undefined) return undefined;
-  const expr = text.slice(returned.getStart(sf), returned.getEnd());
   return {
     start: init.body.getStart(sf),
     end: init.body.getEnd(),
-    text: ts.isObjectLiteralExpression(returned) ? `(${expr})` : expr,
+    text: conciseBody(text.slice(returned.getStart(sf), returned.getEnd())),
   };
 };
 
