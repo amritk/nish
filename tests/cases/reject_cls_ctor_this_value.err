@@ -1,0 +1,1 @@
+`this` cannot be used as a value in the constructor of `Point` before field `x` is assigned

@@ -10,7 +10,7 @@
 # not here and not covered fails the run. Write a `reject_*` case, run the
 # script with --update, and the line disappears.
 #
-# 150 live codes, measured against tests/cases/reject_* and
+# 127 live codes, measured against tests/cases/reject_* and
 # tests/link/. Retired fragments are not here and never will be: they match no
 # message, so no case can reach them.
 
@@ -20,58 +20,37 @@ NL1039  # `yield` is forbidden in
 NL2005  #  (it has `isOk`, `isErr`, `orReturn`, `unwrapOr` and `expect`)
 NL2006  #  (it has `ok`, `value` and `error`)
 NL2011  #  are not supported
-NL2013  #  but its initializer is
-NL2015  #  cannot be optional (every field has a fixed slot)
-NL2016  #  cannot have type void
-NL2018  #  must be named
 NL2019  #  needs a type annotation
 NL2020  #  produces no value and can only be used as a statement
-NL2029  # : definite-assignment assertions (`!`) are not supported
-NL2030  # : initializers must be literals (assign other values in the constructor)
 NL2031  # : unsupported modifier `
 NL2034  # (...)` is a `Result<T, E>`, not
-NL2036  # ()` in the constructor of `
 NL2038  # ` (Phase 1 supports number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void)
-NL2046  # ` cannot be optional
 NL2054  # ` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the
 NL2055  # ` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead
-NL2056  # ` expects 0 argument(s) (the class has no constructor), got
 NL2062  # ` expects f64, got
-NL2063  # ` has more than one constructor (no overloads)
 NL2064  # ` has no `value`: its success arm carries nothing
 NL2068  # ` in a constant of integer type (annotate it `f64`)
 NL2069  # ` in a constant requires boolean operands
 NL2072  # ` is a constant imported from `
 NL2073  # ` is a function imported from `
-NL2074  # ` is already declared as a class or interface
 NL2075  # ` is already declared as a function
-NL2079  # ` is not a declared interface
 NL2083  # ` is not supported
-NL2088  # ` is set twice in the object literal
 NL2089  # ` must be initialized
-NL2090  # ` must have a body
-NL2091  # ` must have a body (no overload signatures)
-NL2092  # ` must have plain identifier names
 NL2097  # ` needs an initialiser
 NL2098  # ` requires a numeric variable, got
 NL2103  # ` requires two operands of the same type, got
-NL2104  # ` returns before field `
 NL2109  # ` when checking a single module
 NL2113  # `; check for null first: `if (a !== null) { ... }`
 NL2114  # `; check the nullable side against `null` first, then compare the narrowed values
-NL2116  # `: `static` members are not supported (use a top-level function)
-NL2118  # `: unsupported modifier `
 NL2121  # `Array` needs exactly one type argument, e.g. `Array<number>`
 NL2125  # `declare function` is not supported yet
 NL2126  # `Err(...)` expects
 NL2127  # `expect(...)` expects string, got
 NL2128  # `export { ... }` / `export * from` are not supported; put `export` on the function declaration itself
 NL2129  # `export default` / `export =` are not supported; use a named `export function`
-NL2131  # `export default` is not supported; use a named `export`
 NL2133  # `for await` is not supported
 NL2134  # `for...of` declares exactly one variable
 NL2135  # `for...of` needs a `const` or `let` declaration, e.g. `for (const x of xs)`
-NL2137  # `implements` must name a declared interface
 NL2138  # `join` expects 0 or 1 arguments, got
 NL2140  # `main` must return void or an i32 number (the process exit code), not
 NL2141  # `Math.abs` expects a number, got
@@ -81,7 +60,6 @@ NL2144  # `new` requires a class name
 NL2145  # `null` needs a contextual `T | null` type (annotate the variable, e.g. `let p: P | null = null`)
 NL2152  # `Result<T, void>` is not supported: an error must carry a value (use `Result<T, string>`)
 NL2160  # `switch` has more than one `default` clause
-NL2161  # `this` cannot be used as a value in the constructor of `
 NL2164  # `unwrapOr(...)` needs a success value to fall back to, and `
 NL2169  # Array elements cannot be void
 NL2171  # Array length must be a number, got
@@ -97,7 +75,6 @@ NL2191  # Destructured constants are not supported
 NL2192  # Destructured parameters are not supported
 NL2193  # Destructuring is not supported
 NL2195  # Duplicate declaration of `
-NL2196  # Duplicate function `
 NL2198  # Duplicate parameter `
 NL2200  # Empty import list
 NL2201  # Expected a return value of type
