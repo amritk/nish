@@ -59,7 +59,7 @@ function proseLines(text) {
 // slash or any other deleted character with a space on both sides. Every anchor
 // of that shape passed here and landed nowhere on github.com -- a link gate
 // that is green while the links are broken, which is worth more attention than
-// the four links it was hiding. It also dropped `_`, which GitHub keeps.
+// the five links it was hiding. It also dropped `_`, which GitHub keeps.
 //
 // The character class below is `[^\p{L}\p{N}\p{M}\p{Pc}\- ]`, which agrees with
 // github-slugger 2.0.0 on all 886 headings in this repository. It is not
