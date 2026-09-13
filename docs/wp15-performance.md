@@ -374,7 +374,7 @@ Measured on `dst[i] = src[i] * 2.0`, 8192 doubles (L2-resident), 150k passes,
 | --- | ---: | --- |
 | before | 1205 ms | header reloaded per iteration |
 | **header and elements as separate alias domains** | **763 ms** | **1.58x**, sound today |
-| + the header treated as invariant | 373 ms | 3.23x, and it vectorises — needs §2c |
+| + the header treated as invariant | 373 ms | 3.23x, and it vectorises — was read as §2c's to buy, and §2c measures main already there |
 | + `--unchecked-indexing` on top | 371 ms | 0.5%: the checks were never the cost |
 
 That last row is worth reading twice. **Bounds checks were not what the loop
@@ -404,28 +404,115 @@ aliasing problem and annotating the array headers moved it by nothing
 `opt -O2`, no header load survives inside the loop. The GEPs hoist on their own,
 so the check is on the loads.
 
-## 2c. Making the header invariant — the other 2x
+## 2c. Making the header invariant — **measured, and not taken**
 
-§2b stops the header from being *clobbered*; it does not say the header never
-*changes*. `push` can change `len` and `data`, so the load still has to happen
-once per loop, and the bounds compare still reads a value LLVM cannot fold —
-which is why the vectoriser is still out at 763 ms and in at 373 ms.
+§2b stopped the header from being *clobbered* and predicted that stopping it
+from *changing* was worth the same again: 763 ms with the domains, 373 ms with
+the header treated as invariant, "3.23x, and it vectorises — needs §2c". The
+prediction was re-measured on the same shape and it does not hold any more. The
+2x is already banked, the candidate this section preferred is a miscompile
+rather than a missed hoist, and what is left is a different problem with a
+different owner.
 
-Closing it needs the header to be genuinely immutable for the loop's duration.
-Two candidates, in preference order:
+### The element loop is already where §2c said an invariant header would put it
 
-1. **Fixed-length arrays.** `Int32Array`/`Float64Array` are aliases of `T[]`
-   today, `push` and all (`docs/LANGUAGE.md`, "Typed-array names are aliases").
-   Making them real fixed-length types gives the header an immutability the
-   emitter can state as `!invariant.load`, and gives a program a way to ask for
-   the fast shape by name.
-2. **A "no `push` reaches this loop" analysis.** Cheaper for existing code and
-   needs no new type, but it is a whole-program question once a callee is
-   involved, so it wants the same fixpoint `attributes.ts` already runs.
+`dst[i] = src[i] * 2.0` over 8192 doubles, 150k passes, `--profile speed`,
+x86-64 with LLVM 18. CPU time (user + sys), min of 15 after 3 warm-ups, for the
+reason §2 gives: the box carries several agents' suites at once and wall time
+there measures the neighbours. The first row is today's compiler with the
+`!alias.scope` / `!noalias` pair stripped out of the emitted `.ll`, which is
+what §2b's "before" was:
 
-`readonly T[]` already carries most of the proof for case 1 and the emitter
-currently throws it away: a `readonly i32[]` parameter emits nothing but the
-`readonly` attribute. That is the cheapest place to start.
+| | CPU min | |
+| --- | ---: | --- |
+| alias domains stripped (§2b's "before") | 1199 ms | reproduces §2b's 1205 ms |
+| **main today** | **371 ms** | **3.23x** — §2b's invariant row, reached without one |
+| + every header load `!invariant.load` | 371 ms | **byte-identical binary** |
+| + `--unchecked-indexing` on top | 366 ms | as §2b said, the checks were never the cost |
+
+Main lands on §2b's own invariant row — 371 ms against the 373 ms it recorded,
+3.23x against 3.23x — with no invariant header anywhere in the module, and the
+third row is why the item closes rather than ships: marking every header load
+in that module `!invariant.load` and linking it produces a binary `cmp` cannot
+tell from the one the compiler emits unaided. There is nothing left for
+the mechanism to take: `opt -O2` hoists every header load out of `@scale`'s
+loop and vectorises it `<4 x i32>` wide, and both halves of that are pinned by
+`tests/cases/arr_alias_domains` so the banked win cannot go quiet.
+
+§2b's *middle* row is not reproduced — main is at 371 ms where that row said
+763 — and no attempt is made here to say which of the things that landed
+between them closed it, because the comparison that decides this item is
+inside one run: stripped domains against main against main-plus-invariant, on
+one compiler, on one box, within minutes of each other. That the stripped
+build lands on §2b's own "before" is what says the two harnesses are measuring
+the same thing at all.
+
+### Candidate 1 is unsound, and `readonly T[]` is why
+
+"`readonly T[]` already carries most of the proof" was wrong, and the way it is
+wrong is a wrong answer rather than a slow one. `readonly` constrains the
+*holder*, not the array: the callee may not write through it, and the caller
+still holds the mutable one.
+
+```ts
+const total = (xs: readonly i32[]): i32 => {
+  let s = 0;
+  let i = 0;
+  while (i < xs.length) {
+    s = s + xs[i];
+    i = i + 1;
+  }
+  return s;
+};
+
+export const main = (): number => {
+  const xs: i32[] = [1, 2, 3];
+  const a = total(xs);
+  xs.push(4);
+  const b = total(xs);
+  console.log(`${a} ${b}`);   // 6 10
+  return 0;
+};
+```
+
+`!invariant.load` does not mean "this does not change while the callee runs".
+LLVM's LangRef says the location holds the same value **at every point in the
+program where it is dereferenceable**, so one `push` anywhere in the array's
+life is undefined behaviour rather than a lost hoist. Built with the header
+loads inside `total` marked invariant, that program prints `6 6`.
+
+The same experiment over the whole of `self/` — 60 modules, 6,675 header loads
+marked — links a compiler of 21,824 bytes where the unmarked one is 939,784,
+and the binary it produces cannot parse its own argv. LLVM is not declining an
+optimisation there; it is taking the contradiction and deleting the program.
+**An invariant header needs a proof that no `push` reaches the array for the
+whole of its life, and neither `readonly` nor a fixed-length spelling of
+`Int32Array` gives one while the array is still reachable from a mutable
+binding.** Fixed-length arrays stay a language question for M4's reference
+freeze (`docs/LANGUAGE.md`, "Typed-array names are aliases"); what this
+measurement removes is the speed argument for opening it.
+
+### What is left is metadata preservation, not invariance
+
+One shape still reloads a header inside a loop, and on it the marking is worth
+3.35x — 2001 ms against 598 ms, same program, same harness. It is a loop whose
+body ends up with a header load **LLVM created itself** (a `% src.length`
+inside an inlined callee, in the case measured) and did not copy the
+`!alias.scope` on to. Restoring the metadata by hand on those five loads and
+re-running `opt -O3` hoists every one of them, so the gap is LLVM's own GVN
+dropping metadata — which is always safe for LLVM and never useful to us — and
+not a missing invariance claim.
+
+That is the argument for §2c's candidate 2 after all, in a different place from
+where this section put it: hoisting the header in the **emitter**, once per
+loop, wherever the compiler can prove nothing in the loop grows the array, does
+not depend on what LLVM chooses to keep. It needs the whole-program "does not
+grow an array" fact that the `attributes.ts` fixpoint does not have yet — the
+same fact `checker/bounds.ts` wants, where *any* call drops every array length
+fact today for exactly this reason. It is written down here rather than started,
+because the only shape that shows it is synthetic and nothing in `bench/` or in
+`self/` reproduces it; an item that starts should start from a measurement on
+real code.
 
 ## 3. Fast defaults — **done**
 
@@ -916,9 +1003,19 @@ measurement closed says so and says why.
    language change, and it re-ordered this list: it showed that the bounds
    checks everything below was written to eliminate cost 0.5% once the header
    is hoisted.
-1b. **An invariant array header** (§2c) — the other 2x, and the first item
-   that needs a language decision (fixed-length arrays) or a whole-program
-   analysis.
+1b. **An invariant array header** (§2c) — **measured and dropped**. The other
+   2x is already banked: on §2b's own program main measures 371 ms against the
+   1199 ms that stripping the alias domains still reproduces, which is the
+   373 ms and the 3.23x §2b had attributed to an invariant header, reached
+   without one, and the loop vectorises. Marking
+   every header load `!invariant.load` on that module links a **byte-identical**
+   binary. The cheap route the note named is worse than useless — `readonly T[]`
+   constrains the holder rather than the array, so a caller's `push` between two
+   calls makes the marking undefined behaviour, and the whole of `self/` marked
+   that way links a 21,824-byte compiler that cannot parse its own argv. What
+   survives is a different item: LLVM's GVN drops `!alias.scope` from header
+   loads it creates itself, which is worth 3.35x on one synthetic shape and
+   wants the emitter-side hoist of candidate 2 rather than an invariance claim.
 1c. **Shortest-digit formatting** (§7a) — **done**. 35x on printing a double,
    and a correctness fix; the first item to spend the runtime budget.
 1d. **The private `Result` ABI** (§7b) — **done**. 1.40x on `bench/result`,

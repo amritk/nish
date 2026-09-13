@@ -1275,6 +1275,22 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
       o.status === 0 && body !== "" && loop !== "" && reloads === "",
       o.status === 0 ? `reloaded in the loop: ${reloads || "(none)"}\n${body}` : String(o.stderr)
     );
+    // WP15 §2c: the hoist above is not the whole of what the domains bought. The loop
+    // vectorises as well -- which §2c had read as something only an invariant header
+    // could buy ("3.23x, and it vectorises"), and which main reaches without one. That
+    // is the measurement that closed the item (wp15-performance.md §2c: 371 ms against
+    // the 1199 ms the same build measures with the alias metadata stripped out, and a
+    // byte-identical binary when every header load is marked `!invariant.load`). It is
+    // pinned here rather than left as a number in a document, because a number does not
+    // notice when it stops being true, and the way this one would stop is a header load
+    // creeping back into the loop and taking LICM -- and the vectoriser -- with it.
+    // The case's own comment is deliberately not extended: `tests/cases/` is corpus,
+    // and editing a corpus file moves the byte offsets in `tests/self/goldens/`.
+    check(
+      "arr_alias_domains: opt -O2 vectorises the element loop (<4 x i32> or <8 x i32>)",
+      o.status === 0 && /<(4|8) x i32>/.test(body),
+      o.status === 0 ? body : String(o.stderr)
+    );
   }
   if (has("opt")) {
     const uncheckedLl = path.join(buildDir, "arr_sum_unchecked.ll");
