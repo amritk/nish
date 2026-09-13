@@ -428,8 +428,14 @@ comparing itself with yesterday".
 
 ```
 parity: 12225 runs over 815 programs (3937.1 s); 37 undeclared difference(s), 2588 declared    2026-09-13, before the fix
-(the run with the fix in it is in flight; this line is filled in from what it measures, not from what it should measure)
+parity: 12225 runs over 815 programs (2051.6 s);  0 undeclared difference(s), 2588 declared    2026-09-13, after
 ```
+
+**The declared count did not move: 2588 before, 2588 after.** That is the
+number to read first. The 37 went away because the lowering changed, not
+because a difference was written down as expected — a fix and a declaration
+look the same in the "undeclared" column and are opposites everywhere else.
+36 of the 37 were `; ModuleID`, the 37th a `!DIFile` under `-g`.
 
 **§A6 was quoted as green and the gate was red when it was next run.** That is
 now the third time, and the corpus is the reason every time: 764 programs then,
