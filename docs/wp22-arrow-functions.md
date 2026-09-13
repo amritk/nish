@@ -319,11 +319,19 @@ What it will not touch, and why each one is a decision rather than a gap:
 
 | Left alone | Because |
 | --- | --- |
-| `declare function f(...): T;` | it defines nothing, so §9 keeps it legal; the arrow spelling for it needs a function type, which Phase 0 forbids |
+| `declare function` | it defines nothing, so §9 keeps it legal; the arrow spelling for it needs a function type, which Phase 0 forbids |
+| `function*` | there is no arrow-generator syntax, as §9's table says; dropping the asterisk turns a refused program into a compiling one |
+| `export default function` | `export default const f = ...` is not a sentence |
+| `async function`, an unnamed declaration | neither compiles here, and converting one would only move the error |
 | class methods and constructors | §3: a method is not an arrow and will not become one |
 | anything below the top level | Nish-0 has no nested functions, so a nested one is a program this tool has no opinion about |
-| `async function`, an unnamed declaration | neither compiles here, and converting one would only move the error |
 | a comment between the signature and the `{` | it would have to be rewritten rather than moved, and a codemod that silently drops a comment is worse than one that refuses |
+
+**Each of the first four is recognised by the syntax that makes it that form,
+and that sentence is load-bearing.** The first draft recognised `declare` by
+"has no body" — true of every `declare function` anybody would write, and false
+of `tests/cases/reject_ffi_body`, where the body *is* the mistake the case
+exists to make. §8c has what that cost and how it was caught.
 
 **`scripts/arrow-verify.mjs` is the answer in one command.** It copies the
 tracked tree, compiles every program `tests/self/corpus.js` enumerates,
@@ -383,7 +391,9 @@ The obvious next question is how many more there are, and it is a question
 worth answering before 1,647 rewrites rather than one file at a time
 afterwards.
 
-**Empirically: none.** The whole corpus, rewritten and recompiled —
+**Empirically: none in the compiler, and three in the codemod** — the sweep is
+in two halves and the second half is where anything was found at all. The first:
+the whole corpus, rewritten and recompiled —
 
 ```
 arrow-verify: 372 program(s)
@@ -462,6 +472,44 @@ block-bodied twin compiles to the same module byte for byte, and the attributes
 are where that is visible: `field` and `element` keep `readonly nocapture` on
 their parameters, which is `classifyUse` saying a concise body returning a field
 is a read rather than a capture.
+
+#### What the concise sweep found, and what it was in
+
+Running the same sweep with `--concise` is the search proper, because a concise
+body is the shape §8a's bugs were in. 1,770 declarations collapsed across the
+corpus; **1,678 of 1,680 modules identical**. The two that differ are
+`tests/cases/dbg_enum` and `dbg_locals` — the only corpus programs whose own
+`.args` carry `-g` — and the difference is position and nothing else: a
+collapsed body is a shorter file, so a `!DILocation` names a different line.
+Every instruction still carries its `!dbg`; no lowering moved.
+
+An IR diff cannot see a diagnostic, though, and §8a's *first* bug was a
+diagnostic — a contextual type lost, so a program that compiled stopped
+compiling. So every `reject_*` case was rewritten and re-diagnosed with
+positions stripped, comparing the codes and the words alone. **Three came back
+different, and all three were bugs in the codemod rather than in the compiler:**
+
+| Case | What the rewrite did | Result |
+| --- | --- | --- |
+| `reject_ffi_body` | `declare function h(): i32 { ... }` became `declare const h = ...` | a refused program **compiled** |
+| `reject_generator` | `function* g()` lost its asterisk | a refused program **compiled** |
+| `reject_export_default` | `export default const f = ...` | refused, but for a syntax error instead of the rule the case pins |
+
+The first is the instructive one. `declare` was being recognised by "has no
+body", which is true of every `declare function` anybody would write and false
+of exactly the case whose subject is that a body there is a contradiction. The
+rule is keyed on the `declare` modifier now, and the other two on the `default`
+modifier and the asterisk — the syntax that *makes* each form, rather than
+something that usually accompanies it.
+
+**None of the three can appear in `self/`**, so the rewrite that the whole
+package is pointed at would never have found them; all three are in
+`tests/cases`, which stage C still has to convert. A codemod that turns a
+refused program into a compiling one is the worst thing one can do, because
+every gate downstream reads the program it was handed rather than the program
+somebody wrote — and the goldens, the oracles and `--parity` would all have
+agreed with each other about the wrong file. `npm test` carries the three cases
+now, each asserting that the line carrying its shape survives verbatim.
 
 #### What a block-bodied rewrite does to a position, exactly
 

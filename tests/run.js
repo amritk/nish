@@ -5523,6 +5523,32 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
     ambient.length > 0 && kept && ffi.changed > 0 && definitions.length === 0,
     `${ambient.length} ambient (${kept ? "kept" : "LOST"}), ${ffi.changed} rewritten, ${definitions.length} left`
   );
+
+  // The three forms with no arrow spelling at all. Each is a `reject_*` case, and each
+  // was rewritten by an earlier draft of the codemod into something that *compiled* --
+  // `declare const h = () => {...}`, an ordinary function where `function* g` had been,
+  // and `export default const f`, which is not a sentence. A codemod that turns a
+  // refused program into a compiling one is the worst thing one of these can do, because
+  // every gate downstream reads the program it was handed and not the program somebody
+  // wrote. These three cases are the shapes that say so, and none of them is in `self/`,
+  // which is why the rewrite that matters would never have found them.
+  // The claim is about the one declaration, not about the whole file -- `reject_ffi_body`
+  // also has an ordinary `main` the codemod is right to convert -- so each row names the
+  // shape and the line carrying it has to survive the rewrite verbatim.
+  for (const [name, shape, why] of [
+    ["reject_ffi_body", /^declare function /m, "a `declare function` that wrongly carries a body is still ambient"],
+    ["reject_generator", /^function\* /m, "`function*` keeps its asterisk"],
+    ["reject_export_default", /^export default function /m, "`export default function` has no arrow spelling"],
+  ]) {
+    const before = fs.readFileSync(path.join(casesDir, `${name}.ts`), "utf8");
+    const line = (before.split("\n").find((l) => shape.test(l)) ?? "").trim();
+    const after = arrowify(before, `${name}.ts`);
+    check(
+      `WP22: the codemod leaves \`${name}\` alone -- ${why}`,
+      line.length > 0 && after.text.includes(line),
+      line.length > 0 ? `\`${line}\` did not survive the rewrite` : `no line in ${name}.ts matches ${shape}`
+    );
+  }
 }
 
 // ---- WP13: differential -------------------------------------------------------------

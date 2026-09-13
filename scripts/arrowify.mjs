@@ -56,7 +56,38 @@ const SKIP_REASONS = {
   ambient: "`declare function` stays legal (WP22 §9)",
   anonymous: "no name",
   async: "`async` is forbidden by Phase 0",
+  default: "`export default` has no arrow spelling",
+  generator: "`function*` has no arrow spelling (WP22 §9)",
   trivia: "a comment sits between the signature and the body",
+};
+
+/**
+ * The forms with no arrow spelling at all, each identified by the syntax that
+ * *makes* it that form rather than by something that usually goes with it.
+ *
+ * That distinction is the whole of this function, and it was learned the
+ * expensive way. `declare` used to be recognised by "has no body", which is
+ * true of every `declare function` anybody would write and false of
+ * `tests/cases/reject_ffi_body`, where the body is the mistake the case exists
+ * to make — so the rewrite turned it into `declare const h = () => {...}` and a
+ * program that was refused started compiling. `function* g()` lost its asterisk
+ * the same way and became an ordinary function, and `export default function f`
+ * became `export default const f = ...`, which is not a sentence.
+ *
+ * None of the three can appear in `self/`, so none of them would have been
+ * caught by the rewrite that matters; all three are in `tests/cases`, which
+ * stage C still has to convert. A codemod that silently makes a rejected
+ * program compile is the worst thing one can do, because every gate downstream
+ * is reading the program it was handed.
+ */
+const unspellable = (decl) => {
+  const mods = decl.modifiers ?? [];
+  if (mods.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)) return "ambient";
+  if (mods.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) return "default";
+  if (mods.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) return "async";
+  if (decl.asteriskToken !== undefined) return "generator";
+  if (decl.name === undefined) return "anonymous";
+  return undefined;
 };
 
 /**
@@ -111,10 +142,11 @@ const singleReturn = (text, sf, block) => {
  * the forms this tool leaves alone.
  */
 const replacement = (text, sf, decl, concise) => {
+  const unspellableAs = unspellable(decl);
+  if (unspellableAs !== undefined) return { skip: unspellableAs };
+  // Anything else without a body is an overload signature, which the language
+  // does not have; leave it for the checker to refuse in its own words.
   if (decl.body === undefined) return { skip: "ambient" };
-  if (decl.name === undefined) return { skip: "anonymous" };
-  const mods = decl.modifiers ?? [];
-  if (mods.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) return { skip: "async" };
 
   const start = decl.getStart(sf);
   const prefix = text.slice(start, keywordStart(text, decl, start));
