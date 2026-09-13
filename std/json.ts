@@ -34,7 +34,7 @@
  * caller already has — `splitLines` from `std/text` and `startsWith` — and
  * duplicating them here would cost more names than it saves.
  *
- *     import { jsonField } from "../std/json";
+ *     import { jsonField } from "nish/json";
  *
  *     for (const line of splitLines(stdout)) {
  *       if (!line.startsWith("{")) {

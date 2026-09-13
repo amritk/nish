@@ -109,7 +109,7 @@ Everything above is the harness that tests the *compiler*. A program the
 compiler produced can also test itself, with [`std/testing`](../std/README.md):
 
 ```typescript
-import { Suite } from "../std/testing";
+import { Suite } from "nish/testing";
 
 export const main = (): number => {
   const t = new Suite("stats");

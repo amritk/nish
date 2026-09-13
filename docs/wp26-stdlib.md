@@ -500,14 +500,16 @@ the compiler.
 Stated as questions, in the shape [wp23-language-surface.md](wp23-language-surface.md#10-where-the-answer-is-genuinely-open)
 §10 uses, each with a recommendation rather than a decision.
 
-1. **The bare specifier.** `import { Suite } from "nish/testing"` is what
-   [wp21-packages.md](wp21-packages.md#8-stages) S2 buys, and today the
-   specifier is `../std/testing` in this repository and
-   `node_modules/nish/std/testing` outside it. **Recommendation: do not fake
-   it.** A special case for this one directory would be a second resolver that
-   the real one then has to agree with, and the condition name itself has to
-   land in `src/branding.ts` and `self/branding.ts` first (orientation rule 5).
-   The ugly path is the honest signal that resolution does not exist yet.
+1. **The bare specifier. Answered: `nish/<module>` resolves.**
+   `import { Suite } from "nish/testing"` is what
+   [wp21-packages.md](wp21-packages.md#8-stages) S2 buys, and it landed — §1
+   above says how. The recommendation this question used to carry was *do not
+   fake it*, on the grounds that a special case for one directory would be a
+   second resolver the real one then has to agree with. What changed is not the
+   reasoning but which package it applies to: for the compiler's own there is
+   exactly one right answer and it is the one Node gives, so nothing is being
+   faked. For a third-party package the argument stands and the specifier is
+   still refused, which is the half of the question that is still open.
 
 2. **Whether `std/` is versioned separately from the compiler once WP21 lands.**
    Today it cannot be: it ships in the compiler's tarball at the compiler's
