@@ -348,11 +348,13 @@ jobs:
           set -o pipefail
           node tests/run.js --verify-batch | tee "$RUNNER_TEMP/batch-parity.log"
 
+      # The summary is not the last line: a run with skips prints a note after it,
+      # so the line is picked by what it says rather than by where it sits.
       - name: Say what this proved
         if: always()
         run: |
-          summary="$(tail -n 1 "$RUNNER_TEMP/batch-parity.log" 2>/dev/null || echo 'the run produced no summary')"
-          echo "::notice::the batched compile against the CLI, over tests/cases: $summary"
+          summary="$(grep -E '^[0-9]+ passed, ' "$RUNNER_TEMP/batch-parity.log" 2>/dev/null | tail -n 1)"
+          echo "::notice::the batched compile against the CLI, over tests/cases: ${summary:-the run produced no summary}"
 
   lint:
     name: lint
