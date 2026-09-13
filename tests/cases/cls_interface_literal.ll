@@ -34,7 +34,7 @@ slow:
   ret i8* %grown
 }
 
-define internal noundef nonnull align 8 dereferenceable(8) %struct.Pair* @swap(%struct.Pair* noundef nonnull readonly align 8 dereferenceable(8) nocapture %p) #0 {
+define internal noundef nonnull align 4 dereferenceable(8) %struct.Pair* @swap(%struct.Pair* noundef nonnull readonly align 4 dereferenceable(8) nocapture %p) #0 {
 entry:
   %0 = call i8* @nish_alloc_struct(i64 8)
   %1 = bitcast i8* %0 to %struct.Pair*

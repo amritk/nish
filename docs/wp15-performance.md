@@ -63,7 +63,10 @@ as a frame rather than a change:
 | `prototype`, dynamic property mutation | **forbidden (Phase 0)** | Breaks the fixed layout the whole model rests on. |
 
 The one place the language was **not** data-oriented is arrays of structs, and
-that is being fixed — see §2a.
+§2a fixed the half of it that can be fixed without changing what a `class`
+means: an array of *records* (an `interface`) is contiguous storage. An array
+of classes is still one pointer per slot, and §2a says why and what the
+measurement was.
 
 ---
 
@@ -74,8 +77,8 @@ and the choice is *not* between unsafe speed and safe slowness. The compiler
 should prove the access safe at build time and emit no check at all. Four
 mechanisms, tried in order, with the runtime panic only as the floor:
 
-**1. Ranged integer types.** `number` says nothing a compiler can use.
-A constrained integer does:
+**1. Ranged integer types — the analysis shipped, the syntax did not.**
+`number` says nothing a compiler can use. A constrained integer does:
 
 ```ts
 function getByte(buf: FixedBuffer<256>, i: integer<0, 255>): u8 {
@@ -83,19 +86,81 @@ function getByte(buf: FixedBuffer<256>, i: integer<0, 255>): u8 {
 }
 ```
 
-Passing an unproven value is a build error. Once it type-checks, the binary
-reads memory directly.
+That spelling needs a generic type parameter, which Phase 0 refuses and which
+§9 item 8 owns, so item 6 could not have built it without building item 8's
+prerequisite first — the sequencing rules it out, and this note had not
+noticed. What shipped instead is the *range analysis* the declared form would
+have fed: `src/checker/bounds.ts` and `self/bounds.ts` infer the range of every
+integer local from the guards, loop conditions and initialisers already in the
+program, and from the one ranged type the language does have — `u8`/`u16`/
+`u32`/`u64`, whose lower bound is the declaration rather than a proof. A
+declared range is then one more source of facts for the same domain, which is
+a smaller change than it looks from here.
 
-**2. Length-narrowing type guards.** A length check narrows an array to a
-fixed-size tuple for the rest of the block, so the check happens once outside
-the loop instead of once per access:
+**2. Length-narrowing type guards — shipped, as facts rather than as types.**
+A length check proves an index for the region it reaches, so the check happens
+once outside the loop instead of once per access:
 
 ```ts
 if (data.length >= 4) {
-  // data is [u8, u8, u8, u8, ...u8[]] in here
   const magic = data[0];   // proven, no check
 }
 ```
+
+The plan's spelling was that `data` *becomes* `[u8, u8, u8, u8, ...u8[]]` in
+the guarded block. It does not: the tuple type would have to be threaded
+through assignment, parameter passing and the two type tables, and everything
+it buys is already bought by recording `data.length >= 4` as a fact keyed by
+the variable. The facts are `i >= 0`, `i < w.length`, `i <= w.length`,
+`i < n` and `w.length >= n`, and the rules that invalidate them are the
+soundness argument — they are written out in `src/checker/bounds.ts` and
+stated normatively in `docs/LANGUAGE.md` under "Element access".
+
+The shape the domain most obviously cannot hold is **`min`**:
+
+```ts
+const shorter = a.length < b.length ? a.length : b.length;
+while (i < shorter) { if (a[i] !== b[i]) { ... } }
+```
+
+`shorter <= a.length` and `shorter <= b.length` are both true, and both follow
+from the *condition* rather than from either arm, so a fact keyed by one
+variable and one holder cannot carry them: the then-arm gives
+`shorter <= a.length` and the else-arm `shorter <= b.length`, and their
+intersection is empty. Recognising `c ? a.length : b.length` where `c` is
+`a.length < b.length` would be sound and would close it, and it is deliberately
+not done: a peephole inside a soundness-critical analysis is how a wrong
+elision gets in, and nothing has measured this shape yet. It is what
+`std/text.ts`'s `firstDifference` and `self/strings.ts`'s `compareStrings`
+report, and it is four of the surviving warnings in the whole tree.
+
+**What it measured.** On the lexer-shaped scan of §2.3 below — a cursor the
+body advances by a variable amount, 400 passes over 547 KB of this
+repository's own source — **1.069x**, against a floor of 1.082x that removing
+*every* check buys on the same program. CPU time rather than wall time, min of
+15 after 3 warm-ups, `--profile speed`, x86-64 with LLVM 18, because the box
+was carrying five other agents' test suites and wall time under a load average
+of 25 on four cores measures the neighbours:
+
+| | CPU min | CPU median | checks left in the module |
+| --- | ---: | ---: | ---: |
+| before | 673 ms | 678 ms | 2 |
+| **proven** | **630 ms** | 639 ms | 1 |
+| `--unchecked-indexing` | 623 ms | 632 ms | 0 |
+
+The 7 ms between the proven build and the unchecked one is not a check in the
+loop: the hot `@scan` function is **byte-identical** between them (178 lines
+and four `nish_panic_index` calls before, 138 and none in both after). What is
+left is `process.argv[1]`, which runs once at startup, plus code layout. The
+shortfall against §2.3's 1.094x is the program rather than the analysis — this
+scan carries an `isDigit` arm that one did not — and the thing that matters is
+that there is no check left in the loop to remove.
+
+On an ordinary counted loop over an array it recovers nothing measurable, which
+§2b had already predicted: once the header is hoisted, the checks are worth
+about 0.5%. The honest summary is that this item is worth what §2b said it was
+worth, and that the place it is worth time is the string cursor; everywhere
+else it buys code size and `willreturn`.
 
 **3. Slice iterators — measured, and not taken.** The proposal was that
 `for (const c of s)` lower to pointer advancement —
@@ -151,11 +216,19 @@ The numbers above are x86-64, LLVM 18, at the `speed` profile, and they are
 vectoriser would be worth something these hide. Not enough to reopen the item,
 but worth stating.
 
-**4. An explicit opt-out — deliberately not built yet.** A scoped `trusted`
-region was considered and deferred: it is the escape hatch, and every check
-mechanisms 1-3 eliminate is one nobody needs to escape. Build the proofs first,
-measure how many checks actually survive them, and only then decide whether an
-opt-out earns its keep. (For the record, `#trusted { }` could not have been the
+**4. An explicit opt-out — deliberately not built, and now with the count
+behind that.** A scoped `trusted` region was considered and deferred: it is the
+escape hatch, and every check mechanisms 1-3 eliminate is one nobody needs to
+escape. Build the proofs first, measure how many checks actually survive them,
+and only then decide whether an opt-out earns its keep. Item 6 has landed and
+the count is in: over the whole of `self/` — sixty modules, about fifty
+thousand lines, the most index-heavy program this repository has — **seventeen
+checks survive inside a loop** in a shape the analysis could have proved, and
+every one of them is an invariant the program has and the compiler cannot see:
+two arrays the program keeps the same length, a `min(a.length, b.length)`
+cursor, a merge sort's three indices into two buffers. Seventeen sites do not
+justify a language feature, and each of them already has a rewrite the warning
+names. The opt-out stays unbuilt. (For the record, `#trusted { }` could not have been the
 spelling: Nish parses with the TypeScript parser, which rejects it. A
 labelled block `trusted: { ... }` or a `/* @trusted */` pragma would be the
 candidates.)
@@ -169,22 +242,65 @@ much it gets on its own before hand-building analysis that duplicates it.
 
 ---
 
-## 2a. Arrays of structs are contiguous
+## 2a. Arrays of records are contiguous — **done**
 
 `Point[]` stored **one pointer per element**: the array data was
 `%struct.Point**`, each entry pointing somewhere in the arena. Iterating it
 chased a pointer per element and scattered the fields across memory — the exact
 pattern §1a exists to avoid, sitting in the middle of the language.
 
-Struct arrays become **contiguous values**: `N` structs end to end, one
-allocation, `ps[i]` an interior `getelementptr` rather than a load-then-chase.
-That is what makes a loop over `Point[]` vectorisable and what makes a struct
-array a cache line's worth of useful data instead of a cache line's worth of
-pointers.
+An array of **records** is now **contiguous values**: `N` structs end to end,
+one allocation, `ps[i]` an interior `getelementptr` rather than a
+load-then-chase, at exactly the stride and alignment clang gives the matching C
+array (`tests/layout/structs.c` walks one through a C `struct P *`).
 
-The hazard this introduces is real and is not being waved away. Growing an
-array reallocates, so an interior pointer taken before a `push` dangles
-afterwards:
+### A record is an `interface` nobody implements, and this is where the item changed shape
+
+The plan said "arrays of structs". The language has two struct kinds, and only
+one of them can be given value semantics without changing what the language
+means:
+
+- An **`interface`** is fields and nothing else — no constructor, no methods,
+  no `this`. The only thing a program can observe about one is its fields, so
+  copying it into a slot is indistinguishable from pointing at it. This is the
+  flat record §1a is written about.
+- A **`class`** has identity. A constructor runs on one object, a method
+  mutates the `this` it was handed, and every other position in the language —
+  a parameter, a field, a return, a local — passes a class value by reference.
+  Making an array the single place a class is *copied* would give
+  `xs.push(c); c.m()` a different meaning from `xs.push(c); xs[n].m()`, and
+  nothing else in the language works that way.
+
+That is not a conservative guess; it was measured on the largest Nish program
+there is. `self/` keeps one `FunctionSig` in `program.functions`, in
+`StructInfo.methodSigs` and in `StructInfo.ctor` at the same time and then
+writes `sig.poisoned` through one of them; `declareStruct` registers a
+`StructInfo` and goes on filling in the object the registry now holds. With
+value slots those are separate objects and every such write is lost. A stage1
+built with class arrays as values rejects `self/` with 41 errors of the form
+"`Field ctor of class StructInfo` has no initializer and no constructor assigns
+it" — the registry handing back a copy whose constructor never ran. Every
+registry in that compiler is built the same way, so **contiguous class arrays
+are a separate change with a migration of its own**, and the migration is the
+work, not the layout.
+
+An **interface some class `implements` is not a record either**: that array is
+the language's only polymorphic container — a `Shape[]` holding a `Square` and
+a `Circle` — and both implementers are longer than `Shape`, so a value slot
+would slice them. The property is recorded on the shared `StructInfo` by
+`checkImplements`, which runs for every module before any body is checked, so
+one compilation has one layout for `Shape[]` everywhere in it. That is also why
+there is no anti-slicing diagnostic: nothing that could be sliced is ever
+stored inline.
+
+`C | null` stays a pointer too, whichever kind `C` is: a null element has no
+bytes to be. That spelling is how a program asks for a sparse array of records
+and is the way out of the copy semantics.
+
+### The hazard, and the rule that closes it
+
+Growing an array reallocates, so an interior pointer taken before a `push`
+dangles afterwards:
 
 ```ts
 const p = ps[0];    // interior pointer into the array data
@@ -192,18 +308,52 @@ ps.push(other);     // may reallocate and move the data
 p.x = 1.0;          // would write to freed memory
 ```
 
-Today that is safe, because `p` is an independent heap object. Under
-contiguous storage it is a use-after-free, so **the checker rejects it**: an
-element reference may not be held across a mutation of the array it came from.
-The rule reuses the flow-sensitive machinery the narrowing analysis already
-has, and it will reject some programs that would have been fine — that is the
-accepted cost of the layout, and the message names the fix (index again after
-the push, or hoist the push).
+**The checker rejects it** (`NL2290`): an element reference may not be held
+across a mutation of the array it came from. The reference is a `const` bound
+to `a[i]` or `a.pop()`, or the variable of a `for (const p of a)`; the mutation
+is a `push` or a `pop` on the same array, or any call handed that array as a
+non-`readonly` parameter. A loop is checked as a whole, because a `push` at the
+bottom of the body reaches a reference taken at the top on the next pass.
+`ps.push(ps[i])` has a message of its own (`NL2291`) — the argument is read
+after the growth has already moved the block. It rejects some programs that
+would have been fine, and that is the accepted cost of the layout; the message
+names the fix.
 
-This changes the array ABI, so the C header, the wasm bridge, the N-API shim
-and their tests move with it.
+The analysis is `codegen/escape.ts`'s, run in the phase that is allowed to
+report — a source-order walk of one body, references followed from the
+declaration that binds them through every identifier that names them, blocks
+popped when they end. It lives in `checker/arrays.ts` and `self/arrays.ts`
+beside the array family it belongs to, hung off `checkFunctionBody` next to the
+§8 performance warnings, because the emitter reports no user errors at all.
 
----
+### Measured
+
+x86-64, LLVM 18, `--profile speed --number-mode f64`, min of 7 runs, the same
+program twice with `Point` spelled `interface` and `class` — which is exactly
+the two layouts.
+
+| Shape | pointers | contiguous | |
+| --- | ---: | ---: | --- |
+| 200k records, a second array built in the same loop, 2000 passes | 1864 ms | **820 ms** | **2.27x** |
+| 1M records built in traversal order, 200 passes | 588 ms | 579 ms | 1.02x, noise |
+| 8192 records, `d.x = s.x * 2.0` elementwise, 150k passes | 1501 ms | 1500 ms | none |
+
+**Read the last two rows before quoting the first.** A bump allocator lays
+objects out in allocation order, so when a program builds an array and then
+walks it in the same order, the old pointer layout was *already* contiguous
+underneath and the extra load costs nothing the out-of-order core cannot hide;
+and when the working set is L2-resident the extra load is free whatever the
+order. The 2.27x is what the layout buys when allocation order and traversal
+order differ — which is what happens the moment a program builds two arrays in
+one loop, or allocates anything else between elements. That is the common case
+in real code and it is the case §1a is about, but "arrays of structs were
+chasing pointers across memory" was only true for some of them.
+
+This changes the array ABI, so the C header, the runtime's own documentation
+and the layout test move with it. The wasm bridge and the N-API shim decline
+these functions exactly as before: the missing half was never the layout, it is
+that JS has no typed array of a struct, so a host would need a per-field unpack
+loop and a JS object per element — marshalling rather than a view.
 
 ## 2b. The array header is not the array's elements — **done**
 
@@ -535,11 +685,14 @@ that matrix from doubling again.
 
 ## 7. The runtime budget yields to a measured win
 
-`runtime.c`'s 4 KB `.text` budget stays the default forcing function — for
-small operations, inline IR is both faster *and* smaller, so the budget and the
-northern star usually agree. When they disagree, a runtime helper may exceed
-the budget **on the strength of a benchmark in the pull request**, not an
-assertion. Size is second, not irrelevant.
+The runtime's compiled-code budget stays the default forcing function — 4 KB of
+`.text` for the single `runtime.c` when this note was written, and one ceiling
+per translation unit since the operating-system half was split out
+(`docs/wp7-runtime.md` §"Runtime additions and budget" carries both and the live
+measurements). For small operations, inline IR is both faster *and* smaller, so
+the budget and the northern star usually agree. When they disagree, a runtime
+helper may exceed the budget **on the strength of a benchmark in the pull
+request**, not an assertion. Size is second, not irrelevant.
 
 ---
 
@@ -725,7 +878,7 @@ and the original six:
 
 | Warning | Fires when | Hint |
 | --- | --- | --- |
-| bounds check not eliminated | `a[i]` in a loop where neither the range nor a length guard proved it | hoist the length check, use `for...of`, or a ranged index |
+| bounds check not eliminated | `a[i]` or `s.charCodeAt(i)` in a loop where neither the range nor a length guard proved it, and where the receiver and the index are both plain locals — the shape the analysis knows how to prove | guard the access with `if (i >= 0 && i < a.length)`, which proves both ends wherever it reaches, or give the index an unsigned type, which proves the lower one |
 | quadratic string building | `s = s + t` where `s` is assigned in an enclosing loop | build a `string[]` and `join` it |
 | allocation in a loop | a `new`, array literal or concat that escapes and is inside a loop | hoist it, or bound it with an arena scope |
 | not inlinable | a hot, non-exported function kept external because `--no-strict-exports` was given | drop the flag |
@@ -808,12 +961,29 @@ measurement closed says so and says why.
    that item 6 compounds. `tests/cases/str_slice`, `str_slice_panic`,
    `reject_str_slice_arity`, `reject_str_slice_type` and
    `tests/differential/corpus/str_slice` pin it.
-6. **Ranged types and length narrowing** (§2.1, §2.2) — a real flow-sensitive
-   analysis; the `performance` warning for a check that survives is its
-   acceptance test.
-7. **Contiguous struct arrays** (§2a) — the layout change plus the
-   escape rule that makes the dangling case a compile error, and the interop
-   surfaces that move with the ABI.
+6. **Ranged types and length narrowing** (§2.1, §2.2) — **done, and smaller
+   than it was written**. The flow-sensitive analysis shipped
+   (`src/checker/bounds.ts`, `self/bounds.ts`), and with it the §8 warning for
+   a check that survives, which is what proves it worked. What did *not* ship
+   is the declared surface: `integer<0, 255>` needs the generics of item 8, so
+   the sequencing forbids it, and the tuple form of the length guard buys
+   nothing the facts do not. Measured **1.069x** on the lexer-shaped cursor of
+   item 3, against the 1.082x that removing every check buys on the same
+   program — the hot function comes out byte-identical to the
+   `--unchecked-indexing` build, so there is no check left in the loop — and
+   nothing measurable on a counted array loop, exactly as §2b said: once the
+   header is hoisted the checks cost about 0.5%. An index proven here also
+   takes `nish_panic_index` out of the function's callee set, so a function
+   whose every index is proven keeps `willreturn`.
+7. **Contiguous record arrays** (§2a) — **done for `interface` elements**.
+   2.27x on a loop whose allocation order and traversal order differ, and
+   nothing at all when they agree — the measurement that re-scoped the item.
+   The layout, the escape rule (`NL2290`/`NL2291`) that makes the dangling
+   interior pointer a compile error, and the C header and layout test that move
+   with the ABI, in both compilers. **Class elements are not part of it**: a class has identity, and
+   `self/` keeps one `FunctionSig` in three places at once and writes through
+   whichever it has to hand, so value slots lose the write. That migration is
+   its own item.
 8. **Generics, discriminated unions, `Result<T, E>`** (§5) — the largest, and
    the one self-hosting most depends on.
 

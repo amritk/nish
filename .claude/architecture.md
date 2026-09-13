@@ -31,7 +31,7 @@ Compilation                                                            src/compi
    └─ interop sidecars           --emit-header / --emit-dts / --emit-napi src/interop/
    │
    ▼
-.ll files ──▶ scripts/build.sh + runtime/runtime.c ──▶ native binary / .wasm / .node
+.ll files ──▶ scripts/build.sh + runtime/*.c ──▶ native binary / .wasm / .node
 ```
 
 ## The rules that shape every change
@@ -53,13 +53,24 @@ Compilation                                                            src/compi
   `src/codegen/runtime.ts` and `runtime/runtime.c` / `runtime/nish.h`;
   they change in the same commit and a layout test grows with them.
   `tests/run.js` fails when the runtime symbol table disagrees between them.
-- **The runtime has a budget.** Every `.text*` section of
-  `clang -Oz -c runtime/runtime.c`, summed, stays under 4,864 bytes; it is 4,670
-  today, and the source bytes are history rather than a limit. `tests/run.js`
-  measures it on every run (`node tests/run.js budget`), so a PR that touches
-  the runtime does not depend on a reviewer remembering to report a size.
-  Raising the ceiling takes a fresh measurement written into
-  `docs/wp7-runtime.md` §"Runtime additions and budget".
+- **The runtime has two budgets.** Every `.text*` section of
+  `clang -Oz -c <file>`, summed, for each of the runtime's two translation
+  units: `runtime/runtime.c` — the core every program touches, which is a closed
+  set — stays under 3,584 bytes and is 3,480 today; `runtime/runtime_os.c` — the
+  syscall wrappers, which is the surface that grows as the language reaches
+  further into the operating system — stays under 1,280 and is 1,190. They are
+  apart so that a new builtin for files, directories, processes, the environment
+  or the clock cannot move the core's number; the source bytes of either are
+  history rather than a limit. `tests/run.js` measures both on every run
+  (`node tests/run.js budget`), so a PR that touches the runtime does not depend
+  on a reviewer remembering to report a size. Raising either ceiling takes a
+  fresh measurement written into `docs/wp7-runtime.md` §"Runtime additions and
+  budget", and the two are raised for different reasons: the core's should come
+  down over time, the other one's rises with the surface.
+- **A link line names the runtime through `scripts/build.sh`.** It compiles
+  `runtime_os.c` beside any `runtime.c` it is handed, which is what keeps
+  `nish --link` in both compilers, the published package and every recipe in the
+  documents correct with one file named. A direct `clang` line names both.
 - **The name lives in two files.** `src/branding.ts` and `self/branding.ts` are
   the only source files that spell the project's name. Every string the
   compiler prints builds it from `LANGUAGE` / `CLI` there; prose is exempt, and
@@ -93,7 +104,8 @@ src/                 the compiler (tsc → dist/)
   checker/           pass 1 signatures, pass 1b imports, pass 2 bodies; side tables in program.ts
   codegen/           attributes, escape analysis, target table, ir builder, runtime ABI, emit/*
   interop/           C header, wasm .d.ts and N-API shim generators
-runtime/             runtime.c, nish.h, runtime_wasm.c, shim.mjs (the Node twin)
+runtime/             runtime.c (core), runtime_os.c (the syscall wrappers), nish.h,
+                     runtime_wasm.c, shim.mjs (the Node twin)
 scripts/             build.sh (clang/LTO profiles), size-report.sh, smoke.sh, changelog-section.sh
 tests/               run.js + cases/ (goldens), link/, ir/, layout/, differential/, driver.c, runtime_test.c
 examples/            Nish inputs used by the README, smoke test and size report

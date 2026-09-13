@@ -10,7 +10,7 @@
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { StringMap } from "./map";
 import { Node } from "./nodes";
-import { CheckedProgram, FunctionSig } from "./program";
+import { CheckedProgram, FunctionSig, Instantiation, TemplateInfo } from "./program";
 import { T_ERROR, T_F64, T_I32, TypeTable } from "./types";
 
 /** `number` is `i32` by default and `f64` under `--number-mode f64`. */
@@ -29,17 +29,34 @@ export class CheckContext {
   numberMode: i32;
   /**
    * `--wrapping` was given, so constant folding wraps at the declared width
-   * instead of refusing an overflow (`self/constants.ts`). The only compiler
-   * option pass 2 reads apart from the number mode, and for the same reason:
-   * the fold has to agree with the instruction it replaces.
+   * instead of refusing an overflow (`self/constants.ts`). The fold has to
+   * agree with the instruction it replaces, which is why an option reaches
+   * pass 2 at all.
    */
   wrapping: boolean;
+  /**
+   * `--unchecked-indexing` was given, so no bounds check is emitted anywhere
+   * and the WP15 §2 warning about a check that survived has nothing to report.
+   * Read by that rule and by nothing else in the checker.
+   */
+  uncheckedIndexing: boolean;
   /** Function source name -> index into `program.functions`, for clash checks. */
   sigs: StringMap;
   /** The program has an entry point, so `process.argv` may be read. */
   entryHasMain: boolean;
   /** The function whose body is being checked, for `return` and `this`. */
   current: FunctionSig | null;
+  /**
+   * WP18: the type parameters in scope, bound to the types this instantiation
+   * gives them. Non-empty only while an instantiation's signature is resolved
+   * or its body is checked, and read by `resolveReference` — which is the whole
+   * of how `T` becomes `i32`.
+   */
+  typeBindings: StringMap;
+  /** The instantiation whose body is being checked, so a request from it records its parent. */
+  currentInstance: Instantiation | null;
+  /** Requested but not yet checked, FIFO so the enumeration order is the discovery order. */
+  pending: Instantiation[];
   /**
    * The loops and `switch`es enclosing the statement being checked, innermost
    * last. `break` marks the innermost; `continue` needs a real loop, because a
@@ -75,7 +92,8 @@ export class CheckContext {
     program: CheckedProgram,
     sink: DiagnosticSink,
     numberMode: i32,
-    wrapping: boolean
+    wrapping: boolean,
+    uncheckedIndexing: boolean
   ) {
     this.table = table;
     this.program = program;
@@ -83,6 +101,7 @@ export class CheckContext {
     this.source = program.source;
     this.numberMode = numberMode;
     this.wrapping = wrapping;
+    this.uncheckedIndexing = uncheckedIndexing;
     this.sigs = new StringMap();
     this.entryHasMain = false;
     this.current = null;
@@ -90,6 +109,9 @@ export class CheckContext {
     this.loopBreaks = [];
     this.statementExpression = null;
     this.errored = false;
+    this.typeBindings = new StringMap();
+    this.currentInstance = null;
+    this.pending = [];
   }
 
   /**
@@ -187,6 +209,11 @@ export class CheckContext {
   signature(name: string): FunctionSig | null {
     const at = this.sigs.get(name, -1);
     return at < 0 ? null : this.program.functions[at];
+  }
+
+  /** The generic template called `name` in this module, or `null` (WP18). */
+  template(name: string): TemplateInfo | null {
+    return this.program.template(name);
   }
 
   /** Register a function under its source name and add it to the module. */

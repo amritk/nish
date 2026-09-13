@@ -293,6 +293,19 @@ function printTypeScriptTree(source, sf) {
     optional(depth + 1, node.initializer, expression);
   };
 
+  /**
+   * WP18: the `<T, U>` of a generic function, as the fifth child of stage1's
+   * `N_FUNCTION` — a `LIST` of plain identifiers, empty when there are none.
+   * A constrained or defaulted parameter has no node there because neither is
+   * accepted, so either one is an unsupported construct for this oracle.
+   */
+  const typeParameters = (params, depth) => {
+    for (const p of params ?? []) {
+      if (p.constraint !== undefined || p.default !== undefined) unsupported(p);
+    }
+    list(depth, (params ?? []).map((p) => p.name), identifier);
+  };
+
   const parameter = (node, depth) => {
     if (!ts.isIdentifier(node.name) || node.dotDotDotToken !== undefined) unsupported(node);
     if (node.questionToken !== undefined || node.initializer !== undefined) unsupported(node);
@@ -430,13 +443,16 @@ function printTypeScriptTree(source, sf) {
         return;
       }
       case ts.SyntaxKind.FunctionDeclaration: {
-        if (node.typeParameters !== undefined || node.asteriskToken !== undefined) unsupported(node);
+        if (node.asteriskToken !== undefined) unsupported(node);
         if (node.name === undefined || node.body === undefined || node.type === undefined) unsupported(node);
         emit(depth, `FUNCTION${exported(node)}`, s, e);
         identifier(node.name, depth + 1);
         list(depth + 1, node.parameters, parameter);
         type(node.type, depth + 1);
         block(node.body, depth + 1);
+        // WP18: the type parameters are the fifth child, after the body, because
+        // `self/nodes.ts` appends rather than renumbers.
+        typeParameters(node.typeParameters, depth + 1);
         return;
       }
       case ts.SyntaxKind.ClassDeclaration: {
@@ -520,7 +536,7 @@ function printTypeScriptTree(source, sf) {
             ? single[0].initializer
             : undefined;
         if (arrow !== undefined) {
-          if (arrow.typeParameters !== undefined || arrow.type === undefined) unsupported(node);
+          if (arrow.type === undefined) unsupported(node);
           if (single[0].type !== undefined || !ts.isIdentifier(single[0].name)) unsupported(node);
           emit(depth, `FUNCTION${exported(node)}`, s, e);
           identifier(single[0].name, depth + 1);
@@ -530,6 +546,7 @@ function printTypeScriptTree(source, sf) {
           // returns -- exactly what stage1 puts there.
           if (ts.isBlock(arrow.body)) block(arrow.body, depth + 1);
           else expression(arrow.body, depth + 1);
+          typeParameters(arrow.typeParameters, depth + 1);
           return;
         }
         emit(depth, `MODULE_CONST${exported(node)}+const`, s, e);

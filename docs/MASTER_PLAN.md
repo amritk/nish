@@ -51,7 +51,8 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │    Phase C  codegen/attributes.ts  purity / escape / loop facts  │
 │             codegen/emitter.ts     AST -> LLVM IR text           │
 │             codegen/runtime.ts     runtime ABI, inline allocator │
-│    runtime/runtime.c               arena + strings (C, ~1 KB)    │
+│    runtime/runtime.c               arena + strings (C, 3.5 KB)   │
+│    runtime/runtime_os.c            files, spawn, env (C, 1.2 KB) │
 │    scripts/build.sh                clang -O3/-Oz, LTO, gc-sections│
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -68,22 +69,30 @@ Design rules that every WP must respect:
   (see `tests/ir/alloc_smoke.ll`).
 - **Every construct ships with a golden test** (`.ts` in, `.ll` out) and a
   native round trip (link with clang, run, compare stdout).
-- **Runtime stays tiny.** Budget: `runtime.c` under 4,864 bytes of compiled
-  code, counted as every `.text*` section summed
-  (`clang -Oz -c runtime/runtime.c && size -A runtime.o`). No stdio on hot
-  paths. The two figures this replaces were the *source* bytes, over budget
-  since WP4 and left there because comments are not code, and the `text`
-  column of `size`, which counts the `.eh_frame` unwind entries the `size`
-  build profile strips — measuring the bytes that never ship. The sum rather
-  than the `.text` line alone is what a linked binary pays: `clang -Oz` puts
-  cold code in `.text.unlikely.`, so a ceiling on `.text` by itself can be met
-  by moving code into another section instead of by making it smaller. And
-  `-ffunction-sections -Wl,--gc-sections` means a binary pays only for the
-  functions it calls: adding WP14's `nish_mkdir` and `nish_spawn` left
+- **Runtime stays tiny.** Two budgets, one per translation unit: `runtime.c`,
+  the core every program touches, under 3,584 bytes of compiled code, and
+  `runtime_os.c`, the half whose subject is the operating system, under 1,280 —
+  counted as every `.text*` section summed
+  (`clang -Oz -c runtime/runtime.c && size -A runtime.o`, and the same for
+  `runtime_os.c`). No stdio on hot paths. The split is what makes the core's
+  ceiling mean something: it can come down over time and never up, because
+  nothing in the language roadmap adds an arena or a second string
+  representation, while the OS-facing half is exactly the surface that grows as
+  the language reaches further out, and it can no longer borrow room from the
+  arena to hide in. The two figures the byte count replaces were the *source*
+  bytes, over budget since WP4 and left there because comments are not code,
+  and the `text` column of `size`, which counts the `.eh_frame` unwind entries
+  the `size` build profile strips — measuring the bytes that never ship. The
+  sum rather than the `.text` line alone is what a linked binary pays:
+  `clang -Oz` puts cold code in `.text.unlikely.`, so a ceiling on `.text` by
+  itself can be met by moving code into another section instead of by making it
+  smaller. And `-ffunction-sections -Wl,--gc-sections` means a binary pays only
+  for the functions it calls: adding WP14's `nish_mkdir` and `nish_spawn` left
   `examples/hello.ts` at 4,696 bytes, the same number to the byte. Today:
-  4,670 of 4,864, measured by `tests/run.js` rather than by a reviewer
-  (`node tests/run.js budget`); `docs/wp7-runtime.md` §"Runtime additions and
-  budget" records each measurement and why the ceiling moved.
+  3,480 of 3,584 and 1,190 of 1,280, both measured by `tests/run.js` rather
+  than by a reviewer (`node tests/run.js budget`); `docs/wp7-runtime.md`
+  §"Runtime additions and budget" records each measurement, why the single
+  4,864-byte ceiling became two, and what the split costs a program.
 
 ## 3. Consolidated language specification (Nish)
 
@@ -112,7 +121,8 @@ declared on the class, `var`, loose `==`/`!=`, `arguments`, `this` outside
 methods, generators, `async`/`await`, decorators, enums with computed
 values, namespaces, `declare global`, dynamic `import()`, optional chaining
 and nullish coalescing on non-nullable types, union types other than
-`T | null`, generics (until a monomorphisation WP exists), `symbol`,
+`T | null`, type parameters on a class, an interface, a method or a type
+alias (a generic *function* is monomorphised, WP18), `symbol`,
 `bigint`, regex literals, `try`/`catch` and `throw` (no unwinding; a failure is a `Result<T, E>`, WP16).
 
 ### 3.3 Semantics decisions already made
@@ -158,7 +168,7 @@ ninety-second map; the table below is the inventory.
 | Attributes and escape analysis: the whole-program purity / termination / escape fixpoint behind `nounwind`, `willreturn`, `readnone`/`readonly`, `noundef`, `zeroext`, `noalias`, `nonnull`, `nocapture`, `dereferenceable`, `align`, `nsw` | done (WP9) | `src/codegen/attributes.ts`, `escape.ts` |
 | Debug info: a compile unit, a `DISubprogram` per function, `DILocation` on every instruction, `llvm.dbg.value`/`declare`, `-g` carried on to the link | done (WP10, WP17) | `src/codegen/debug.ts` |
 | Interop sidecars: C header, `.d.ts` plus its `.mjs` loader, N-API shim, the `napi` build profile — a `Result` included (WP17) | done (WP8) | `src/interop/` (`abi`, `header`, `dts`, `wasm`, `napi`) |
-| Runtime: chunked arena with O(1) reset and mark/release, strings, `Math`, I/O, `process.*`, `mkdirSync`, `spawnSync`; the wasm/WASI twin and the Node shim the differential tests run against | done | `runtime/runtime.c` (340 lines), `runtime_wasm.c`, `nish.h`, `shim.mjs` |
+| Runtime: chunked arena with O(1) reset and mark/release, strings, `Math`, I/O, `process.*`, `mkdirSync`, `spawnSync`; the wasm/WASI twin and the Node shim the differential tests run against | done | `runtime/runtime.c` (1,138 lines) and `runtime/runtime_os.c` (290 lines, the system-call half), `runtime_wasm.c`, `nish.h`, `shim.mjs` |
 | Inline `alwaysinline` bump allocator in IR, the runtime ABI table both sides agree on | done | `src/codegen/runtime.ts` |
 | Build profiles `debug`, `speed`, `size`, `wasm`, `wasi`, `napi`, the PGO recipe, the size report | done (WP9) | `scripts/build.sh`, `scripts/size-report.sh` |
 | The self-hosted compiler: lexer, parser, checker, emitter, interop sidecars, DWARF, and its own driver — it plans its output, makes its directories and runs `scripts/build.sh` for `--link` | done (WP14) | `self/` (54 modules), `scripts/bootstrap.sh` |
@@ -169,8 +179,9 @@ ninety-second map; the table below is the inventory.
 | Docs: the normative reference, the regenerated IR cookbook, the architecture, the FAQ, install, and one design note per package | done (WP11) | `docs/` |
 
 Measured today: `examples/hello.ts` links to 4,680 bytes at the `size` profile
-and `runtime.c` costs 4,670 of its 4,864-byte `.text*` budget
-(`docs/wp7-runtime.md` §"Runtime additions and budget"), beside 9,920
+and the runtime costs 4,670 bytes of `.text*` across its two translation units
+— 3,480 of `runtime.c`'s 3,584-byte budget and 1,190 of `runtime_os.c`'s 1,280
+(`docs/wp7-runtime.md` §"Runtime additions and budget") — beside 9,920
 bytes of `.rodata` that Ryu's tables dominate and that only a binary formatting
 a double links (WP15 §7a)
 (`docs/wp14-selfhost.md` §7a); the benchmark binaries are 5.5-12 KB against
@@ -517,7 +528,10 @@ to stage2.
   comparing stage1 against stage0 over the whole corpus rather than against a
   hand-written golden.
 - `scripts/bootstrap.sh` builds the chain and leaves `build/nish` behind;
-  `--verify` runs the three equalities with `cmp`.
+  `--verify` runs the three equalities with `cmp` — all three for a stage0
+  seed, and the two that do not mention the seed for any other, since
+  `IR(seed) == IR(stage1)` is diverse double-compiling only when the seed is
+  the second implementation (`docs/wp19-stage0-retirement.md` G3).
 - §7a reversed decision D4: `mkdirSync` and `spawnSync` entered the language,
   so stage1 plans its own output, makes its own directories and runs
   `scripts/build.sh` itself. The wrapper `scripts/nish.sh` is deleted.
@@ -544,11 +558,13 @@ depends on wrapping — **done**); the `performance` diagnostic class, a third
 severity that fires when the compiler had to take a slow path and a faster one
 existed;
 slice iterators, so `for (const c of s)` lowers to pointer advancement;
-unsigned types; the fast slice beside JavaScript's `substring`; ranged integer
-types and length narrowing, so a proven index emits no bounds check;
-contiguous struct arrays with the checker rule that makes the dangling
-interior pointer a compile error; and generics by monomorphisation with
-discriminated unions. §9 has the
+unsigned types; the fast slice beside JavaScript's `substring`; the range
+analysis that makes a proven index emit no bounds check;
+contiguous *record* arrays with the checker rule that makes the dangling
+interior pointer a compile error (**done** for an `interface` nobody
+implements, 2.27x where allocation order and traversal order differ; a class
+has identity and keeps its pointer slot, and §2a says what that migration
+would be); and generics by monomorphisation with discriminated unions. §9 has the
 order with the reason for each position, and
 [wp15-performance.md](wp15-performance.md) has the design.
 
@@ -665,12 +681,13 @@ it left. What the diagram would show for them is a line.
    Either is a decision; `self/` alone and unregistered is not, because the
    oracles would then stop comparing its case without anyone deciding they
    should. A new diagnostic also needs a case that *reaches its words*
-   (`node scripts/check-diagnostic-coverage.mjs`), not only a code.
+   (`tests/diagnostic_coverage.js`, inside `npm test`), not only a code.
 3. Do not emit an attribute you cannot cite a checker proof for. Write the
    reason in `attributes.ts` alongside the code.
 4. Any change to a struct layout touches `runtime.ts` and `runtime.c` in
    the same commit and adds/extends a layout smoke test.
-5. Keep `runtime.c` within budget (§2). Report its size in the PR.
+5. Keep `runtime.c` and `runtime_os.c` within their budgets (§2). Report the
+   size of whichever you changed in the PR.
 6. Update `docs/LANGUAGE.md` and the IR cookbook for what you added.
 7. Commit messages: imperative subject, body explaining the lowering.
    No model names in commits, code, or PR text.
@@ -729,12 +746,15 @@ document does not need a second one open beside it to be current:
 | 3 | Slice iterators — **closed by measurement, not built** | the array half was already bought by WP15 §2b: a `for (const x of xs)` loop and the bounds-checked indexed loop beside it compile to byte-identical binaries today (wp15 §2, §9), and `for...of` over a string is declined in [wp23-language-surface.md](wp23-language-surface.md) §7 |
 | 4 | Unsigned types `u8`, `u16`, `u32`, `u64` — **done** | specified in `docs/LANGUAGE.md`, carried through the N-API and wasm bridges, and tested by `tests/cases/u_*`. Foundational for 6, and it touched every numeric path, so earlier was cheaper |
 | 5 | The fast slice beside JavaScript's `substring` | |
-| 6 | Ranged types and length narrowing | a real flow-sensitive analysis; its acceptance test is the surviving-check warning item 2 held back, and item 3 measured at 1.094x on lexer-shaped code |
+| 6 | Ranged types and length narrowing — **done, smaller than it was written** | the flow-sensitive analysis shipped (`src/checker/bounds.ts`, `self/bounds.ts`) with the surviving-check warning item 2 held back, which is what proves it worked. The *declared* surface did not: `integer<0, 255>` needs item 8's generics, so the sequencing forbids it, and the tuple form of the length guard buys nothing the facts do not. Measured 1.069x on item 3's lexer-shaped cursor against the 1.082x that removing every check buys on the same program — the hot function comes out byte-identical to the `--unchecked-indexing` build — and nothing measurable on a counted array loop, exactly as §2b predicted |
 | 7 | Contiguous struct arrays | the layout change, the escape rule that makes the dangling interior pointer a compile error, and the interop surfaces that move with the ABI |
-| 8 | Generics by monomorphisation; discriminated unions deferred to their own note | the largest. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code — [wp18-generics.md](wp18-generics.md) §6.1 says why |
+| 8 | Generics by monomorphisation; discriminated unions deferred to their own note | the largest. Generic **functions** have landed in both compilers — [wp18-generics.md](wp18-generics.md) §15 records what shipped and §16 the order for classes, constraints and the whole-program rule. `Result<T, E>` and `Array<T>` stay built-in rather than becoming library code, and §6.1 says why |
 
 An explicit bounds-check opt-out is deferred until 6 has landed and the checks
-that survive it have been counted. What each item is worth is a measurement
+that survive it have been counted. Both have happened: seventeen survive in a
+loop across the whole of `self/`, each with a rewrite the warning names, which
+is not a language feature's worth of them, so it stays unbuilt
+([wp15-performance.md](wp15-performance.md) §2.4). What each item is worth is a measurement
 and not a prediction: [BENCHMARKS.md](BENCHMARKS.md), regenerated by
 `node bench/run.mjs`, is the only place the numbers are current, and one of
 its seven programs is outside the 1.10x target today: fib at 1.15x against

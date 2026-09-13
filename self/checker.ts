@@ -11,13 +11,22 @@
 // than the six `try`/`catch` sites `src/` uses.
 
 import { aliasType, builtinTypeName, resolveType } from "./annotations";
+import { checkElementReferences } from "./arrays";
 import { checkDefiniteAssignment } from "./assignment";
 import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants";
 import { CheckContext } from "./context";
+import { isNishModule, isNishSpecifier, nishExport, nishModuleExports, nishModuleNames } from "./nish_modules";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations";
 import {
+  collectTypeParamNames,
+  isGenericFunction,
+  mentionsTypeParam,
+  rejectDollarInSymbolName,
+} from "./generics";
+import {
   FLAG_CONST,
+  FLAG_FOREIGN,
   FLAG_PREFIX,
   N_BINARY,
   N_BLOCK,
@@ -58,11 +67,14 @@ import {
   ConstInfo,
   EnumInfo,
   FunctionSig,
+  Instantiation,
+  TemplateInfo,
   STRUCT_CLASS,
   STRUCT_INTERFACE,
   StructInfo,
   StructRegistry,
 } from "./program";
+import { analyzeBounds } from "./bounds";
 import { checkResultLocalsHandled } from "./result";
 import { checkReturnValue, checkStatements } from "./statements";
 import { Local, STORAGE_PARAM, Scope } from "./symbols";
@@ -88,10 +100,11 @@ export class Checker {
     sink: DiagnosticSink,
     numberMode: i32,
     wrapping: boolean,
+    uncheckedIndexing: boolean,
     packageName: string
   ) {
     this.program = new CheckedProgram(source, file, isEntry, nodeCount, packageName);
-    this.ctx = new CheckContext(table, this.program, sink, numberMode, wrapping);
+    this.ctx = new CheckContext(table, this.program, sink, numberMode, wrapping, uncheckedIndexing);
   }
 
   /**
@@ -225,12 +238,19 @@ export class Checker {
     this.program.addAlias(new AliasInfo(name, stmt, this.program.source));
   }
 
-  /** Whether a top-level declaration has already claimed `name` in this module. */
+  /**
+   * Whether a top-level declaration has already claimed `name` in this module.
+   * A generic template counts (WP18): it is a `function` however it is spelled,
+   * and it shares the one declaration namespace with everything else, so an
+   * `enum` and a `function f<T>()` of the same name clash whichever was written
+   * first. Listing every kind in one test is what keeps that symmetric.
+   */
   nameTaken(name: string): boolean {
     return (
       this.program.aliases.has(name) ||
       this.program.enums.has(name) ||
       this.program.structs.has(name) ||
+      this.program.templates.has(name) ||
       this.ctx.sigs.has(name) ||
       this.program.constants.has(name)
     );
@@ -304,16 +324,23 @@ export class Checker {
 
   /** One `function` declaration: its signature, its name, and `main`. */
   collectFunction(stmt: Node): void {
+    if (isGenericFunction(stmt)) {
+      this.registerTemplate(stmt);
+      return;
+    }
     const sig = collectFunctionSignature(this.ctx, stmt);
     const name = sig.sourceName;
+    if (rejectDollarInSymbolName(this.ctx, name, "function", stmt.children[0])) {
+      return;
+    }
     // Three messages rather than one, because stage0 has three here and a
     // clash is the one thing a reader looks up by its words. A second function
     // of the same name is a duplicate; a name a class or interface already has
     // says so; everything else in the one declaration namespace -- an alias, an
-    // enum, a module constant -- reads the way every other clash reads.
-    if (this.ctx.sigs.has(name)) {
-      // At the statement, where stage0 puts this one; the two below are at the
-      // name, where stage0 puts those.
+    // enum, a module constant -- reads the way every other clash reads. The
+    // order is stage0's `registerFunction`, and so is the node each is
+    // reported at: this one at the statement, the two below at the name.
+    if (this.ctx.sigs.has(name) || this.program.templates.has(name)) {
       this.ctx.error(stmt, `Duplicate function \`${name}\``);
       return;
     }
@@ -338,6 +365,109 @@ export class Checker {
       }
       markEntryMain(this.ctx, sig);
     }
+  }
+
+  /**
+   * WP18: one generic function declaration. A template shares the declaration
+   * namespace with everything else — it is a `function` however it is spelled —
+   * but it is not a signature: it has no types until an instantiation binds its
+   * parameters, so it never joins `sigs` or `program.functions`.
+   */
+  registerTemplate(stmt: Node): void {
+    const nameNode = stmt.children[0];
+    const name = nameNode.text;
+    // A generic `declare function` arrives here rather than at
+    // `collectFunctionSignature`, because a function with type parameters is a
+    // template before it is anything else. Stage0 refuses it in
+    // `collectFunctionTemplate` with these words, so stage1 does too (WP27 S1).
+    if ((stmt.flags & FLAG_FOREIGN) !== 0) {
+      this.ctx.error(
+        stmt,
+        "`declare function` cannot be generic: a C symbol is one function, not a template to instantiate"
+      );
+      return;
+    }
+    // The order is stage0's: the name's own rules before the ones about what
+    // else is declared, because that is the order `collectFunctionTemplate`
+    // and `registerTemplate` run in over there.
+    if (name.startsWith("nish_")) {
+      this.ctx.error(nameNode, "Function names starting with `nish_` are reserved for the runtime");
+      return;
+    }
+    if (rejectDollarInSymbolName(this.ctx, name, "function", nameNode)) {
+      return;
+    }
+    if (this.nameTaken(name)) {
+      this.ctx.error(nameNode, `\`${name}\` is already declared in this module`);
+      return;
+    }
+    const template = new TemplateInfo(name, stmt, this.program.source);
+    template.exported = isExported(stmt);
+    template.typeParams = collectTypeParamNames(stmt);
+    if (template.exported && name === "main") {
+      this.ctx.error(
+        nameNode,
+        "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it"
+      );
+      return;
+    }
+    // A type parameter is inferred from the arguments and from nothing else, so
+    // one that appears in no parameter can never be bound and the function
+    // could never be called. Reported here, once, against the declaration
+    // rather than against every call.
+    const parameters = stmt.children[1];
+    for (const param of template.typeParams) {
+      const names = new StringSet();
+      names.add(param);
+      let mentioned = false;
+      for (const declared of parameters.children) {
+        const annotation = declared.children[1];
+        if (annotation.kind !== N_EMPTY && mentionsTypeParam(annotation, names)) {
+          mentioned = true;
+        }
+      }
+      if (mentioned) {
+        continue;
+      }
+      this.ctx.error(
+        nameNode,
+        `Cannot infer \`${param}\` for \`${name}\`: a type parameter is inferred from the arguments, and ` +
+          `\`${param}\` appears in none of them; give \`${name}\` a parameter that mentions \`${param}\``
+      );
+      return;
+    }
+    this.program.addTemplate(template);
+  }
+
+  /**
+   * Pass 3 (WP18): check every instantiation's body, to a fixed point. Each one
+   * may request more, and the queue is drained rather than recursed into, so
+   * `from` is a chain of requests and not a call stack.
+   */
+  drainInstantiations(): void {
+    let at = 0;
+    while (at < this.ctx.pending.length) {
+      const info = this.ctx.pending[at];
+      at = at + 1;
+      // Appended here rather than at the request, so that `functions` is in the
+      // order the bodies are checked and the emitter walks it the same way.
+      this.program.functions.push(info.sig);
+      this.checkInstanceBody(info);
+    }
+    this.ctx.pending = [];
+  }
+
+  /** One instantiation's body, over its own side tables and with its own type bindings. */
+  checkInstanceBody(info: Instantiation): void {
+    const savedBindings = this.ctx.typeBindings;
+    const savedInstance = this.ctx.currentInstance;
+    this.program.enterInstance(info);
+    this.ctx.typeBindings = info.bindings;
+    this.ctx.currentInstance = info;
+    this.checkFunctionBody(info.sig);
+    this.ctx.currentInstance = savedInstance;
+    this.ctx.typeBindings = savedBindings;
+    this.program.leaveInstance();
   }
 
   /**
@@ -431,7 +561,7 @@ export class Checker {
     } else {
       checkReturnValue(this.ctx, body, scope);
     }
-    const failed = this.ctx.sink.count() > before;
+    let failed = this.ctx.sink.count() > before;
     // Outside a statement list the flag is always clear, so a diagnostic from
     // constant folding or from another module is never dropped by this body.
     this.ctx.errored = false;
@@ -441,11 +571,26 @@ export class Checker {
       // WP16: a `Result` local nobody reads is an unhandled failure. Reported
       // after the body so the diagnostic names a variable whose type is known.
       checkResultLocalsHandled(this.ctx, sig, body);
+      // WP15 §2.1/§2.2: prove what indices are in range before the warnings
+      // are reported, because one of the warnings is about the proofs that did
+      // not come off, and it has to be reported by the same source-order walk
+      // as the rest of the class.
+      const unprovenIndices = analyzeBounds(this.ctx, body, this.ctx.uncheckedIndexing);
       // WP15 §8: the performance warnings, over the same body and the same
       // side tables. Only for a body that checked cleanly — advice about code
       // that does not compile is noise, and a poisoned body has incomplete
       // side tables anyway.
-      checkPerformance(this.ctx, sig, body);
+      checkPerformance(this.ctx, sig, body, unprovenIndices);
+      // WP15 §2a: an element reference into contiguous struct storage may not
+      // be held across a `push`. Same placement and same reason as the line
+      // above — the walk reads types and bindings pass 2 has just written.
+      const beforeElements = this.ctx.sink.count();
+      checkElementReferences(this.ctx, body);
+      if (this.ctx.sink.count() > beforeElements) {
+        sig.poisoned = true;
+        failed = true;
+        this.ctx.errored = false;
+      }
     }
     // A body with a rejected statement may have lost its `return`; reporting
     // a missing one on top of that is a cascade, not a second bug.
@@ -554,8 +699,65 @@ export class Checker {
     }
   }
 
+  /**
+   * `import { readFileSync } from "nish:fs"`: bind a local name to a builtin
+   * the checker already has.
+   *
+   * Nothing is emitted for one of these. The binding exists so the call and
+   * identifier checkers can prefer it over the ambient builtin tables, which is
+   * the point of the feature: an imported name cannot be taken over by a user
+   * function that happens to share it, because declaring one is a collision
+   * here rather than a silent shadow.
+   */
+  bindBuiltinImport(index: i32): void {
+    const imp = this.program.imports[index];
+    if (!isNishModule(imp.specifier)) {
+      this.ctx.errorAtSpecifier(
+        imp.decl,
+        `Unknown builtin module \`${imp.specifier}\` (the builtin modules are ${nishModuleNames()})`
+      );
+      return;
+    }
+    const exported = nishExport(imp.specifier, imp.importedName);
+    if (exported === null) {
+      this.ctx.error(
+        imp.node,
+        `Module \`${imp.specifier}\` has no export \`${imp.importedName}\` (it exports ${nishModuleExports(imp.specifier)})`
+      );
+      return;
+    }
+    if (this.program.importsUsedAsTypes.has(imp.localName)) {
+      this.ctx.error(
+        imp.node,
+        `\`${imp.localName}\` is a builtin imported from \`${imp.specifier}\`, not a type`
+      );
+    }
+    if (this.ctx.sigs.get(imp.localName, -1) >= 0 || this.program.constant(imp.localName) !== null) {
+      this.ctx.error(imp.node, `\`${imp.localName}\` is already declared in this module`);
+      return;
+    }
+    let origin = "";
+    for (const other of this.program.imports) {
+      if (other.builtin !== null && other.localName === imp.localName && origin.length === 0) {
+        origin = other.specifier;
+      }
+    }
+    if (origin.length > 0) {
+      this.ctx.error(imp.node, `\`${imp.localName}\` is already imported from \`${origin}\``);
+      return;
+    }
+    imp.builtin = exported;
+    this.program.addBuiltinImport(imp.localName, exported);
+  }
+
   bindImport(index: i32, target: CheckedProgram): void {
     const imp = this.program.imports[index];
+    // A `nish:` import names a builtin, so it never looks at `target`: there is
+    // no module behind it.
+    if (isNishSpecifier(imp.specifier)) {
+      this.bindBuiltinImport(index);
+      return;
+    }
     const constant = target.constant(imp.importedName);
     if (constant !== null && constant.exported) {
       this.bindConstantImport(index, constant);
@@ -722,6 +924,13 @@ class PerfWalk {
   sig: FunctionSig;
   /** Its body, which is the search root when an assignment is not inside a loop. */
   body: Node;
+  /**
+   * The accesses whose bounds check survived `self/bounds.ts` inside a loop.
+   * The proof is not this section's — it is a flow-sensitive analysis of its
+   * own — but the *report* is, because every WP15 §8 warning has to come out
+   * of one source-order walk or the diagnostics stop being in source order.
+   */
+  unprovenIndices: Node[];
   loops: Node[];
   declared: Local[];
   declaredDepth: i32[];
@@ -733,10 +942,11 @@ class PerfWalk {
    */
   declaredAllocates: boolean[];
 
-  constructor(ctx: CheckContext, sig: FunctionSig, body: Node) {
+  constructor(ctx: CheckContext, sig: FunctionSig, body: Node, unprovenIndices: Node[]) {
     this.ctx = ctx;
     this.sig = sig;
     this.body = body;
+    this.unprovenIndices = unprovenIndices;
     this.loops = [];
     this.declared = [];
     this.declaredDepth = [];
@@ -774,8 +984,58 @@ class PerfWalk {
  * and only for a body that checked cleanly — advice about code that does not
  * compile is noise, and a poisoned body has incomplete side tables anyway.
  */
-export function checkPerformance(ctx: CheckContext, sig: FunctionSig, body: Node): void {
-  walkPerformance(new PerfWalk(ctx, sig, body), body);
+export function checkPerformance(ctx: CheckContext, sig: FunctionSig, body: Node, unprovenIndices: Node[]): void {
+  walkPerformance(new PerfWalk(ctx, sig, body, unprovenIndices), body);
+}
+
+/**
+ * A bounds check `self/bounds.ts` could not remove, on an access inside a loop
+ * whose receiver and index are both plain locals — which is the shape the
+ * analysis knows how to prove, so a guard really would remove the check.
+ *
+ * The hint is one rewrite rather than a list because it is the one that always
+ * works: an `i >= 0 && i < xs.length` test reaching the access proves both
+ * ends whatever took the proof away, `--wrapping` included, where an
+ * incremented counter has no lower bound the compiler may assume. An unsigned
+ * index is named beside it because `u8`/`u16`/`u32`/`u64` are the ranged types
+ * the language already has, and half the proof comes off their declaration.
+ */
+function checkSurvivingBoundsCheck(walk: PerfWalk, access: Node): void {
+  let receiver = access;
+  let index = access;
+  if (access.kind === N_INDEX) {
+    receiver = access.children[0];
+    index = access.children[1];
+  } else {
+    const callee = unwrapPerfParens(access.children[0]);
+    if (callee.kind !== N_MEMBER || access.children[1].children.length !== 1) {
+      return;
+    }
+    receiver = callee.children[0];
+    index = access.children[1].children[0];
+  }
+  const holder = perfLocalName(walk.ctx, receiver);
+  const name = perfLocalName(walk.ctx, index);
+  if (holder.length === 0 || name.length === 0) {
+    return;
+  }
+  walk.ctx.performance(
+    index,
+    `\`${name}\` is not proven to be in range for \`${holder}\` here, so this access keeps its bounds check and ` +
+      `compares against the length on every iteration: guard it with a test that reaches the access — ` +
+      `\`if (${name} >= 0 && ${name} < ${holder}.length)\` proves both ends, and an unsigned index needs only ` +
+      `the upper one`
+  );
+}
+
+/** The source name of the local a bare identifier binds, or `""` for anything else. */
+function perfLocalName(ctx: CheckContext, expr: Node): string {
+  const e = unwrapPerfParens(expr);
+  if (e.kind !== N_IDENT) {
+    return "";
+  }
+  const local = ctx.program.nodeLocals[e.id];
+  return local === null ? "" : local.name;
 }
 
 /**
@@ -831,9 +1091,22 @@ function walkPerformance(walk: PerfWalk, node: Node): void {
   } else if (node.kind === N_CALL) {
     checkWideningConversion(walk, node);
   }
+  if (isUnprovenIndex(walk, node)) {
+    checkSurvivingBoundsCheck(walk, node);
+  }
   for (const child of node.children) {
     walkPerformance(walk, child);
   }
+}
+
+/** Whether `node` is one of the accesses the bounds analysis could not prove. */
+function isUnprovenIndex(walk: PerfWalk, node: Node): boolean {
+  for (const access of walk.unprovenIndices) {
+    if (access === node) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

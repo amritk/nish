@@ -1,0 +1,1 @@
+`Result<T, void>` is not supported: an error must carry a value (use `Result<T, string>`)

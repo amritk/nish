@@ -5,12 +5,12 @@
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
-declare void @nish_free_arena() #2
-declare noundef i64 @nish_arena_mark() #2
-declare void @nish_arena_release(i64 noundef) #2
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
-declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
-declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
+declare void @nish_free_arena() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
+declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
 declare void @nish_panic_index(i64 noundef, i64 noundef) #4
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
@@ -117,58 +117,28 @@ entry:
   store i8* %3, i8** %4, align 8, !alias.scope !3, !noalias !4
   store %struct.nish_array* %arr.hdr, %struct.nish_array** %zs.addr, align 8
   %5 = load %struct.nish_array*, %struct.nish_array** %zs.addr, align 8
-  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %5, i64 0, i32 0
-  %7 = load i64, i64* %6, align 8, !alias.scope !3, !noalias !4
-  %8 = icmp ult i64 2, %7
-  br i1 %8, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 2, i64 %7)
-  unreachable
-
-bounds.ok:
-  %9 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %5, i64 0, i32 2
-  %10 = load i8*, i8** %9, align 8, !alias.scope !3, !noalias !4
-  %11 = bitcast i8* %10 to i32*
-  %12 = getelementptr inbounds i32, i32* %11, i64 2
-  store i32 9, i32* %12, align 4, !alias.scope !4, !noalias !3
-  %13 = load %struct.nish_array*, %struct.nish_array** %zs.addr, align 8
-  %14 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 0
-  %15 = load i64, i64* %14, align 8, !alias.scope !3, !noalias !4
-  %16 = icmp ult i64 0, %15
-  br i1 %16, label %bounds.ok.1, label %bounds.fail.1
-
-bounds.fail.1:
-  call void @nish_panic_index(i64 0, i64 %15)
-  unreachable
-
-bounds.ok.1:
-  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %13, i64 0, i32 2
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %5, i64 0, i32 2
+  %7 = load i8*, i8** %6, align 8, !alias.scope !3, !noalias !4
+  %8 = bitcast i8* %7 to i32*
+  %9 = getelementptr inbounds i32, i32* %8, i64 2
+  store i32 9, i32* %9, align 4, !alias.scope !4, !noalias !3
+  %10 = load %struct.nish_array*, %struct.nish_array** %zs.addr, align 8
+  %11 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %10, i64 0, i32 2
+  %12 = load i8*, i8** %11, align 8, !alias.scope !3, !noalias !4
+  %13 = bitcast i8* %12 to i32*
+  %14 = getelementptr inbounds i32, i32* %13, i64 0
+  %15 = load i32, i32* %14, align 4, !alias.scope !4, !noalias !3
+  %16 = load %struct.nish_array*, %struct.nish_array** %zs.addr, align 8
+  %17 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %16, i64 0, i32 2
   %18 = load i8*, i8** %17, align 8, !alias.scope !3, !noalias !4
   %19 = bitcast i8* %18 to i32*
-  %20 = getelementptr inbounds i32, i32* %19, i64 0
+  %20 = getelementptr inbounds i32, i32* %19, i64 2
   %21 = load i32, i32* %20, align 4, !alias.scope !4, !noalias !3
-  %22 = load %struct.nish_array*, %struct.nish_array** %zs.addr, align 8
-  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 0
-  %24 = load i64, i64* %23, align 8, !alias.scope !3, !noalias !4
-  %25 = icmp ult i64 2, %24
-  br i1 %25, label %bounds.ok.2, label %bounds.fail.2
-
-bounds.fail.2:
-  call void @nish_panic_index(i64 2, i64 %24)
-  unreachable
-
-bounds.ok.2:
-  %26 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %22, i64 0, i32 2
-  %27 = load i8*, i8** %26, align 8, !alias.scope !3, !noalias !4
-  %28 = bitcast i8* %27 to i32*
-  %29 = getelementptr inbounds i32, i32* %28, i64 2
-  %30 = load i32, i32* %29, align 4, !alias.scope !4, !noalias !3
-  %31 = add nsw i32 %21, %30
-  ret i32 %31
+  %22 = add nsw i32 %15, %21
+  ret i32 %22
 }
 
-define internal noundef i32 @grown() #1 {
+define internal noundef i32 @grown() #2 {
 entry:
   %xs.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
@@ -275,7 +245,7 @@ bounds.ok:
   ret i32 %56
 }
 
-define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @escaped() #2 {
+define internal noundef nonnull align 8 dereferenceable(24) %struct.nish_array* @escaped() #1 {
 entry:
   %0 = call i8* @nish_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.nish_array*
@@ -294,7 +264,7 @@ entry:
   ret %struct.nish_array* %1
 }
 
-define noundef i32 @nish_main() #1 {
+define noundef i32 @nish_main() #2 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @weights()
@@ -328,7 +298,7 @@ bounds.ok:
   ret i32 0
 }
 
-define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
 entry:
   %0 = call i32 @nish_main()
   call void @nish_free_arena()
@@ -336,8 +306,8 @@ entry:
 }
 
 attributes #0 = { nounwind willreturn readonly }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind }
 attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
 attributes #4 = { nounwind noreturn cold }
 attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }

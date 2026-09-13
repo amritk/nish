@@ -11,10 +11,12 @@
 // types, arity and the rules about `main`.
 
 import { CheckContext } from "./context";
+import { isNishSpecifier, nishModuleNames } from "./nish_modules";
+import { STD_PREFIX } from "./branding";
 import { resolveType } from "./annotations";
 import { FLAG_EXPORTED, N_EMPTY, N_FUNCTION, N_IMPORT, N_LIST, Node } from "./nodes";
 import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program";
-import { T_ERROR, T_I32, T_VOID } from "./types";
+import { isForeignScalar, T_ERROR, T_I32, T_VOID } from "./types";
 
 /** Symbol the entry module's `export function main` is emitted under. */
 export const ENTRY_MAIN_SYMBOL: string = "nish_main";
@@ -74,7 +76,49 @@ export function collectFunctionSignature(ctx: CheckContext, decl: Node): Functio
   } else {
     sig.returnType = resolveType(returnAnnotation, ctx);
   }
+  if (sig.foreign()) {
+    checkForeignSignature(ctx, sig, decl, name);
+  }
   return sig;
+}
+
+/**
+ * The rules a `declare function` adds (WP27 S1): no body, not exported, and a
+ * scalar in every position.
+ *
+ * The scalar rule is what makes S1 sound rather than merely small — with no
+ * pointer crossing the boundary there is nothing for escape analysis to be
+ * wrong about — so widening it is a decision about the memory model and not a
+ * relaxation of a type check (`docs/wp27-ffi.md` §3).
+ */
+function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void {
+  if (sig.body() !== null) {
+    ctx.error(decl, "`declare function` declares a C function this program calls, so it must have no body");
+  }
+  if (sig.exported) {
+    ctx.error(
+      decl.children[0],
+      `\`declare function ${name}\` cannot be exported: it is a C function this program calls, not one it defines`
+    );
+  }
+  let i = 0;
+  while (i < sig.paramTypes.length) {
+    if (!isForeignScalar(sig.paramTypes[i])) {
+      const spelled = ctx.table.typeName(sig.paramTypes[i]);
+      ctx.error(
+        decl,
+        `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${spelled}, and a declared C function takes scalars only`
+      );
+    }
+    i = i + 1;
+  }
+  if (!isForeignScalar(sig.returnType)) {
+    const spelled = ctx.table.typeName(sig.returnType);
+    ctx.error(
+      decl.children[2],
+      `\`declare function ${name}\` returns ${spelled}, and a declared C function returns a scalar only`
+    );
+  }
 }
 
 /**
@@ -119,18 +163,30 @@ export function markEntryMain(ctx: CheckContext, sig: FunctionSig): void {
  */
 export function collectImports(ctx: CheckContext, decl: Node): void {
   const specifier = decl.text;
-  if (!specifier.startsWith("./") && !specifier.startsWith("../")) {
+  // `nish:` is the one bare form: it names a builtin module rather than a
+  // file, so it is let through here and validated in pass 1b, where an unknown
+  // one reads as a bad module instead of a missing file. The hint goes after
+  // the interpolation deliberately, so the longest literal run of this
+  // template — and with it the code the rule has always had — is unchanged.
+  // Two bare forms are legal. `nish:` names a builtin and resolves to no file;
+  // `nish/` names a standard-library module, which is ordinary source resolved
+  // like any other file, only from beside the compiler. Everything else is
+  // still refused: there is no package resolution (wp21 §5b).
+  if (
+    !isNishSpecifier(specifier) &&
+    !specifier.startsWith(STD_PREFIX) &&
+    !specifier.startsWith("./") &&
+    !specifier.startsWith("../")
+  ) {
     ctx.errorAtSpecifier(
       decl,
-      `Only relative import specifiers are supported (\`./x\` or \`../x\`), got \`${specifier}\``
+      `Only relative import specifiers are supported (\`./x\` or \`../x\`), got \`${specifier}\` (the bare forms are ${nishModuleNames()} and ${STD_PREFIX}<module>)`
     );
     return;
   }
   const specs = decl.children[0];
   if (specs.kind !== N_LIST || specs.children.length === 0) {
-    // At the braces, where stage0 puts it: the caret should be under the list
-    // that names nothing rather than under the whole `import` line.
-    ctx.error(specs.kind === N_LIST ? specs : decl, "Empty import list");
+    ctx.error(decl, "Empty import list");
     return;
   }
   for (const spec of specs.children) {

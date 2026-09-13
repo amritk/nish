@@ -261,7 +261,7 @@ export const ioBuiltinCalls: Record<string, BuiltinCallChecker> = {
  * receiver of `push` or `pop`. Anything else (indexing, `.length`, `for...of`,
  * `indexOf`, `join`, passing it on, aliasing it) only reads it.
  */
-function mutatesArgv(access: ts.PropertyAccessExpression): boolean {
+function mutatesArgv(access: ts.Expression): boolean {
   let node: ts.Node = access;
   while (ts.isParenthesizedExpression(node.parent)) node = node.parent;
   const parent = node.parent;
@@ -288,7 +288,7 @@ function mutatesArgv(access: ts.PropertyAccessExpression): boolean {
  * wasm or N-API library, rejects it; and it is read-only. Every other array
  * operation applies: `process.argv.length`, `process.argv[i]`, `for...of`.
  */
-function checkProcessArgv(ctx: CheckContext, expr: ts.PropertyAccessExpression) {
+function checkProcessArgv(ctx: CheckContext, expr: ts.Expression) {
   if (!ctx.hasEntryMain) {
     throw ctx.error(
       "`process.argv` requires a `main` entry point (this program has no `export function main`)",
@@ -346,8 +346,12 @@ export const ioBuiltinFunctions: Record<string, BuiltinCallChecker> = {
 export function terminatesControlFlow(ctx: CheckContext, expr: ts.Expression): boolean {
   if (!ts.isCallExpression(expr)) return false;
   if (dottedName(expr.expression) === "process.exit") return true;
+  if (!ts.isIdentifier(expr.expression)) return false;
+  // An import is unambiguous: `exit` from `nish:process` terminates, and so
+  // does an `as` rename of it, while an identifier that only looks like one
+  // still has to pass the test below.
+  const imported = ctx.program.builtinImports.get(expr.expression.text);
+  if (imported) return imported.canonical === "process.exit" || imported.canonical === "panic";
   // A user function may be called `panic`; the builtin only applies when none is.
-  return (
-    ts.isIdentifier(expr.expression) && expr.expression.text === "panic" && !ctx.program.callees.has(expr)
-  );
+  return expr.expression.text === "panic" && !ctx.program.callees.has(expr);
 }

@@ -483,6 +483,7 @@ export const checkResultLocalsHandled = (ctx: CheckContext, sig: FunctionSig): v
     }
     ts.forEachChild(node, visit);
   };
+  if (sig.body === undefined) return; // WP27 S1: a foreign declaration has no body and no locals.
   visit(sig.body);
   for (const decl of declarations) {
     const v = ctx.program.locals.get(decl);

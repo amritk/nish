@@ -28,7 +28,7 @@ Compilation                                                            src/compi
    └─ interop sidecars           --emit-header / --emit-dts / --emit-napi src/interop/
    │
    ▼
-.ll files ──▶ scripts/build.sh + runtime/runtime.c ──▶ native binary / .wasm / .node
+.ll files ──▶ scripts/build.sh + runtime/*.c ──▶ native binary / .wasm / .node
 ```
 
 | Stage | File(s) | Responsibility |
@@ -46,7 +46,7 @@ Compilation                                                            src/compi
 | Emitter | `src/codegen/emitter.ts` + `codegen/emit/*.ts` | Lowers the checked program to IR text: module assembly, function setup, `declare`s for imports, the `@main` wrapper, the runtime prelude, and dispatch to per-construct emitters. Contains no user-facing error handling. |
 | IR builder | `src/codegen/ir.ts` | `IRModule`, `IRFunction`, `IRBlock`: named blocks, hoisted allocas, SSA temp numbering (`%0` is always the first temp because every block and parameter is named), attribute-group interning. |
 | Runtime ABI | `src/codegen/runtime.ts` | The `declare` lines, attributes, and memory effects of every runtime symbol and intrinsic; the IR text of the inline arena allocator; the `%struct.nish_arena` / `%struct.nish_array` layouts. |
-| Runtime | `runtime/runtime.c`, `runtime/nish.h`, `runtime/runtime_wasm.c` | The C implementation: chunked bump arena with marks (`nish_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, exit, files, array growth and `nish_alloc_array` (the host entry the wasm loader uses), the bounds-check and division panics. The header is the public C ABI. `runtime_wasm.c` is the freestanding subset (arena over linear memory, arrays, trapping panics) for the wasm profile. `runtime/shim.mjs` is the Node-side twin used by the differential tests. |
+| Runtime | `runtime/runtime.c`, `runtime/runtime_os.c`, `runtime/nish.h`, `runtime/runtime_wasm.c` | The C implementation, in two translation units so that each carries its own code-size ceiling. `runtime.c` is what every program touches whatever it does: the chunked bump arena with marks (`nish_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, `process.argv`, array growth and `nish_alloc_array` (the host entry the wasm loader uses), the bounds-check and division panics. `runtime_os.c` is everything that wraps a system call — `process.exit`, files, directories, subprocesses, `getenv`, the monotonic clock, `process.platform` / `arch` — which is the surface that grows as the language reaches further into the operating system. The header is the public C ABI for both. `runtime_wasm.c` is the freestanding subset (arena over linear memory, arrays, trapping panics) for the wasm profile. `runtime/shim.mjs` is the Node-side twin used by the differential tests. |
 | Interop | `src/interop/{abi,header,dts,napi}.ts` | C header, wasm `.d.ts`, and N-API shim generators, all derived from the same checked signatures the IR was emitted from. |
 | Build | `scripts/build.sh`, `size-report.sh`, `smoke.sh` | The clang/LTO profiles, the size table, the example smoke test. |
 | Tests | `tests/run.js` + `tests/{cases,link,ir,layout}`, `tests/runtime_test.c`, `tests/driver.c` | Goldens, native round trips, link tests, ABI guards, memory checks, interop, exit codes, packaging, benchmark checksums. |
@@ -156,16 +156,20 @@ construct in its own source until the seed compiles it — one release later.
    hoist allocas with `emitAlloca`; reference runtime symbols only through
    `ctx.useRuntime(name)` so the declaration is emitted.
 6. **Runtime.** New C symbol? Add it to `RUNTIME_FUNCTIONS` in
-   `src/codegen/runtime.ts` (signature, attributes, `effect`, `noreturn`),
-   to `runtime/runtime.c`, and to `runtime/nish.h`; `tests/run.js`
-   fails if the three disagree. Any struct layout change touches `runtime.ts`
-   and `runtime.c` in the same commit and extends a layout test. Keep
-   `runtime.c` within the budget — every `.text*` section summed, under 4,864
-   bytes at `-Oz` (§2 of the master plan, and
-   [wp7-runtime.md](wp7-runtime.md) for each measurement and why the ceiling
-   moved). `node tests/run.js budget` measures it, so this is a check you can
-   run rather than a number to remember; `clang -Oz -c runtime/runtime.c &&
-   size -A runtime.o` is the same measurement by hand.
+   `src/codegen/runtime.ts` (signature, attributes, `effect`, `noreturn`), to
+   the runtime, and to `runtime/nish.h`; `tests/run.js` fails if the three
+   disagree. The runtime is two translation units: a symbol that wraps a system
+   call goes in `runtime/runtime_os.c`, everything else in `runtime/runtime.c`.
+   Any struct layout change touches `runtime.ts` and `runtime.c` in the same
+   commit and extends a layout test. Keep each file within its budget — every
+   `.text*` section summed, at `-Oz`, under 3,584 bytes for `runtime.c` and
+   1,280 for `runtime_os.c` (§2 of the master plan, and
+   [wp7-runtime.md](wp7-runtime.md) for each measurement, why the ceilings are
+   separate and why either moved). `node tests/run.js budget` measures both, so
+   this is a check you can run rather than a number to remember;
+   `clang -Oz -c <file> && size -A <file>.o` is the same measurement by hand.
+   A link line names only `runtime.c`: `scripts/build.sh` compiles
+   `runtime_os.c` beside it, and a direct `clang` line names both.
 7. **Attributes.** Tell the fact collector what the construct does:
    memory effect (`readsMemory`, callee symbols via `collectStringFacts` /
    `collectBuiltinFacts` / `factCollectors`), escapes (`classifyUse`), loop
@@ -191,6 +195,7 @@ host is a contract that a test enforces:
 | String `{ i64 len, i8 data[len], i8 0 }`, 8-aligned, immutable | `codegen/emit/strings.ts`, `runtime.c` (`nish_str`), `nish.h` | `tests/runtime_test.c` (concat, eq, formatting), every `str_*` golden and native round trip |
 | Array header `%struct.nish_array = { i64 len, i64 cap, i8* data }` | `codegen/runtime.ts` (`ARRAY_TYPE`), `runtime.c`, `runtime_wasm.c`, `nish.h`, `interop/wasm.ts` (offsets 0 / 16 on wasm32) | `tests/runtime_test.c` (`nish_array_grow`, `nish_alloc_array`), `arr_*` native round trips, `arr_bounds_panic` (exit 1 and message), the WP4/WP8 block of `tests/run.js` (a C driver's stack-built header, the wasm loader and the N-API addon agreeing on `examples/arrays.ts`) |
 | Class/interface layout = clang's layout of the same C struct | `checker/classes.ts` (offsets, size, align) | **layout test** (`tests/layout/structs.ts` + `structs.c`): the runner reads each `nish_alloc_struct(i64 N)` from the IR and compares it with `_Static_assert(sizeof(struct X) == N)`; the C program is built with `-Wall -Wextra -Werror`, fills every struct through the C definition, and reads each field back through compiled getters |
+| Element storage of an array: `sizeof(T)` per slot, and for a *record* element type (an `interface` nobody implements, WP15 §2a) the records themselves end to end, at clang's array stride | `checker/program.ts` (`inlineElementStruct`, `elementStride`), `codegen/emit/arrays.ts`, `runtime.c` (`nish_array_grow`, `nish_alloc_array` take `elem_size`), `nish.h`, `interop/header.ts` (the element note per prototype) | the same **layout test**: `buildPs` hands C a grown `P[]`, which `structs.c` walks as a `struct P *`, checking the stride and every field of every element, plus `tests/cases/arr_struct_*` for the IR and the native round trip |
 | Every runtime function has a prototype in the public header | `codegen/runtime.ts`, `runtime/nish.h` | **header test** (`tests/run.js`, WP8 section): every name in `RUNTIME_FUNCTIONS` (minus intrinsics) plus `nish_arena` must appear in `nish.h`, which must compile as C11 `-pedantic` and as C++17 under `-Wall -Wextra -Werror` |
 | Generated C header matches the IR's signatures | `interop/header.ts` | `add.h` content check; a C driver compiled against it with `-Werror` and run |
 | Generated `.d.ts` is valid TypeScript | `interop/dts.ts` | `tsc` over the generated file |
@@ -206,12 +211,12 @@ a layout smoke test.
 
 ### Runtime symbols
 
-`runtime/runtime.c` (4,670 bytes of `.text*` at `-Oz` against the
-MASTER_PLAN.md §2 budget of 4,864, plus 9,920 bytes of `.rodata` that is almost
-all Ryu's two power-of-five tables; measure with
-`clang -Oz -c runtime/runtime.c && size -A runtime.o`, or
-`scripts/size-report.sh`, which reports both rows) provides, in the order
-of `RUNTIME_FUNCTIONS`:
+`runtime/runtime.c` (3,480 bytes of `.text*` at `-Oz` against a budget of
+3,584, plus 10,068 bytes of `.rodata` that is almost all Ryu's two
+power-of-five tables) and `runtime/runtime_os.c` (the system-call half: 1,190
+bytes against 1,280) provide, in the order of `RUNTIME_FUNCTIONS`, the symbols
+below; measure either with `clang -Oz -c <file> && size -A <file>.o`, or
+`scripts/size-report.sh`, which reports every row:
 
 | Symbol | Purpose |
 | --- | --- |
@@ -275,7 +280,7 @@ it.
 | Attribute | Emitted when | Proof |
 | --- | --- | --- |
 | `nounwind` | always | No exceptions exist and there is no `throw`; a failure a caller should handle is a `Result<T, E>` (WP16). |
-| `willreturn` | `loopsBounded && !hasTrap && !callsNoReturn` and every callee `willreturn` | Counted loops only (`isCountedLoop`: `for (let i = init; i CMP bound; STEP)` over `i32`, bound an identifier or non-negative literal, step toward the bound, no wrap possible, body assigns neither `i` nor `bound`; `for...of` whose body cannot extend the array); `process.exit`, `panic`, a checked `a[i]` (`nish_panic_index` is `noreturn`), and an integer `/` or `%` (`nish_panic_div`) clear it. Unbounded recursion is allowed by LangRef. `mustprogress` is never emitted. |
+| `willreturn` | `loopsBounded && !hasTrap && !callsNoReturn` and every callee `willreturn` | Counted loops only (`isCountedLoop`: `for (let i = init; i CMP bound; STEP)` over `i32`, bound an identifier or non-negative literal, step toward the bound, no wrap possible, body assigns neither `i` nor `bound`; `for...of` whose body cannot extend the array); `process.exit`, `panic`, a checked `a[i]` (`nish_panic_index` is `noreturn`), and an integer `/` or `%` (`nish_panic_div`) clear it — a *proven* `a[i]` does not, because the checker showed the index in range and no check is emitted (WP15 §2, `src/checker/bounds.ts`). Unbounded recursion is allowed by LangRef. `mustprogress` is never emitted. |
 | `readnone` | effect `none` | The body touches no memory but its own allocas and calls only `readnone` callees (LLVM's own FunctionAttrs would infer it). |
 | `readonly` (function) | effect `read` | The body reads memory it does not own (`.length`, field/element reads, a `Result` payload, `nish_str_eq`) and nothing writes; building a `Result`, a checked `a[i]`, and an integer division force `write` (the allocator and the panic callees are `write`). Field access through a local that only ever holds a stack object (`stackLocals`) is the function's own memory and counts as neither (WP6). |
 | `noundef` (params, returns) | every shape but one | Every Nish value is initialised. The exception is a by-value `Result` under the private ABI (WP15 §7b): the arm that is not live is `undef` by construction, and `noundef` on an aggregate is about every element of it, so that shape carries none. |
@@ -478,7 +483,7 @@ toolchain-dependent steps when LLVM is not installed:
   `<name>.args`; a `<name>.err` case must fail with exit 1 and the message
   fragment; otherwise the IR (module header stripped) must equal `<name>.ll`,
   pass `llvm-as`, and, when `<name>.out` exists, be linked with
-  `<name>.c` or `tests/driver.c` plus `runtime/runtime.c -lm`, run, and
+  `<name>.c` or `tests/driver.c` plus both runtime `.c` files and `-lm`, run, and
   match stdout. A source declaring `main` — `export const main`, or the legacy
   `export function main` — is linked without the driver. `node tests/run.js <substring>` runs a subset;
   `npm run test:update` writes missing goldens.
@@ -569,7 +574,7 @@ frozen, and a third rename stops at `LANGUAGE` and `CLI`.
 | Path | Contents |
 | --- | --- |
 | `src/` | the compiler (see the pipeline table); `branding.ts` holds the project's name |
-| `runtime/` | `runtime.c`, `nish.h`, `runtime_wasm.c` (freestanding arena + arrays for the wasm profile), `shim.mjs` (the Node-side runtime for the differential tests) |
+| `runtime/` | `runtime.c` (the core every program touches) and `runtime_os.c` (the system-call half, measured against its own ceiling), `nish.h`, `runtime_wasm.c` (freestanding arena + arrays for the wasm profile), `shim.mjs` (the Node-side runtime for the differential tests) |
 | `scripts/` | `build.sh`, `size-report.sh`, `smoke.sh`, `changelog-section.sh` |
 | `std/` | the standard library, in Nish rather than about Nish: `testing.ts`, the `Suite` a program drives to check itself. Source is the distribution format (wp21 §2), so an import of one compiles with the program. `std/README.md` has the rules for adding a module |
 | `tests/` | `run.js`, `cases/`, `link/`, `ir/`, `layout/`, `differential/` (`run.js`, `lib.js`, `rewrite.js`, `fuzz.js`, `corpus/`, `known-failures.txt`), `runtime_test.c`, `driver.c` |

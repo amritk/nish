@@ -84,6 +84,14 @@ function writtenArrayParams(sig: FunctionSig, facts: FunctionFacts | undefined):
  * byte, its N-API tag, and the C element type. Undefined for element types
  * JS has no flat view of (booleans would need 0/1 validation; strings,
  * arrays and objects are pointers into the arena).
+ *
+ * WP15 §2a gave a *record* element type a flat layout too — `data` is a C
+ * array of the structs themselves — and it still does not cross, because the
+ * missing half was never the layout: JS has no typed array of a struct, so a
+ * host would need a per-field unpack loop and a JS object per element, which
+ * is marshalling rather than a view. The C header describes the block (a host
+ * that wants it can read `data` directly) and the wasm and N-API bridges go on
+ * declining these functions with the reason they always gave.
  */
 export interface TypedView {
   /** `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array`: the language's alias and the JS constructor. */
@@ -334,10 +342,15 @@ export function cParamName(name: string): string {
  * (`NISH_SYMBOL`, from nish.h; it adds the `_` prefix Mach-O needs).
  * Methods and constructors (`Point.shifted`, `Point.constructor`, WP2) are
  * declared the same way as `Point_shifted` / `Point_constructor`, taking the
- * object pointer first: a C host may call them on objects it holds.
+ * object pointer first: a C host may call them on objects it holds. A generic
+ * instantiation (`identity$i32`, WP18) goes the same way, because `-pedantic`
+ * refuses `$` in a C identifier (`-Wdollar-in-identifier-extension`) while it
+ * is a perfectly good LLVM symbol.
  */
 export function cFunctionName(symbol: string): { ident: string; label: string } {
-  if (symbol.includes(".")) return { ident: symbol.replace(/\./g, "_"), label: ` NISH_SYMBOL("${symbol}")` };
+  if (/[.$]/.test(symbol)) {
+    return { ident: symbol.replace(/[.$]/g, "_"), label: ` NISH_SYMBOL("${symbol}")` };
+  }
   if (!C_RESERVED.has(symbol)) return { ident: symbol, label: "" };
   return { ident: `${symbol}_`, label: ` NISH_SYMBOL("${symbol}")` };
 }

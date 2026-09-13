@@ -1,0 +1,1 @@
+`b` refers to an element of `bodies`, and `bodies.push(...)` may move or reuse that storage

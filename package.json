@@ -5,6 +5,13 @@
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json",
+    "./runtime/*": "./runtime/*",
+    "./scripts/*": "./scripts/*",
+    "./*": "./std/*.ts"
+  },
   "bin": {
     "nish": "dist/index.js"
   },
@@ -15,6 +22,8 @@
     "std",
     "README.md",
     "LICENSE",
+    "llms.txt",
+    "docs/AI.md",
     "docs/INSTALL.md"
   ],
   "scripts": {
@@ -29,6 +38,7 @@
     "test:update": "npm run build && UPDATE_GOLDENS=1 node tests/run.js",
     "test:diff": "npm run build && node tests/differential/run.js",
     "test:nish": "npm run build && node dist/index.js tests/nish/run.ts -o build/nish-runner.ir/ --link build/nish-runner && build/nish-runner",
+    "test:cli": "npm run build && node dist/index.js tests/nish/cli.ts -o build/nish-cli.ir/ --link build/nish-cli && build/nish-cli",
     "test:node": "npm run build && node tests/differential/unmodified.js",
     "lint": "biome check --formatter-enabled=false .",
     "format": "biome format --write .",

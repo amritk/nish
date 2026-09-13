@@ -7,11 +7,12 @@ symbol, and is indistinguishable from the monomorphic version somebody would
 have written by hand. There is no boxing, no type dictionary, no runtime type
 information, and no generic code left in the binary.
 
-This note is the design, written before the code. It is a proposal to be
-reviewed, not a record of something that landed: where the answer is genuinely
-open it says so (§14) rather than inventing certainty.
-[LANGUAGE.md](LANGUAGE.md) stays normative for what the language *is*; this
-file says what it should become and why.
+This note was the design, written before the code. **Generic functions have
+landed** — §15 records what shipped against what §11 planned, and where the
+implementation chose differently it says why. Generic classes, constraints and
+the whole-program half are still proposals. [LANGUAGE.md](LANGUAGE.md) stays
+normative for what the language *is*; the rest of this file says what it should
+become and why.
 
 **Why at all.** Because Nish is a static subset of TypeScript and
 TypeScript has generics. That is the whole reason, and it is enough: every
@@ -1265,3 +1266,162 @@ reviewed before code is written.
    to reason about but means the rule can only fire after every module is
    loaded, so the error's position in the diagnostic order shifts. Worth
    checking against `reject_multi_*`'s expectations before G4.
+
+
+---
+
+## 15. What landed
+
+Generic **functions**, in both compilers, single module: §11's G2 (for
+functions), G3 and G4, merged into one change because G4 cannot be later than
+G3 and G2's "collect the template and refuse every use" state is not worth a
+commit of its own once G3 is in the same branch. Generic classes and
+interfaces (G5), constraints (G6), the whole-program rule (G7) and the
+peripheries (G8) are not done; §16 is the order to take them in.
+
+The acceptance test of §9 holds and is checked rather than asserted:
+`tests/cases/gen_identity.ll` is `str_param_passthrough.ll` with the symbol
+renamed, and `gen_eq_purity.ll` is `str_eq.ll`'s `@same` beside an `i32`
+comparison, each with its own attribute group. `IR(stage0) == IR(stage1)` holds
+byte for byte over every new case, and the bootstrap still reaches its fixed
+point over an unchanged `self/`.
+
+### 15.1 Four decisions the code made differently
+
+**G1's accessor refactor did not happen, and is not needed.** §3d recommended
+putting every node-keyed side table behind an accessor so an instantiation
+could answer from its own overlay. The cheaper shape with the same effect is to
+**swap the tables themselves**: `swapTables` in `src/checker/generics.ts` and
+`CheckedProgram.enterInstance` / `leaveInstance` in `self/program.ts` point the
+program's seven (stage0) or six (stage1) table fields at the instantiation's
+copies for the duration of one body, so every existing `program.types.get(node)`
+answers for the instantiation without moving. Five call sites bracket a body
+walk that way — the checker, the escape analysis, the attribute fixpoint, the
+emitter and the `--emit-checked` dump — and no read site changed at all. There
+is never more than one installed at a time, because the worklist is drained in a
+loop rather than recursed into and every other caller walks one function at a
+time.
+
+**A type parameter is never a type.** §3a spoke of `resolveTypeNode` returning
+the instantiated struct; for functions the implementation goes further and
+never resolves a template's annotations at all. They stay as syntax, and one
+instantiation resolves them with `T` bound in the checker's named-type resolver
+(stage0) or in `ctx.typeBindings` (stage1). Nothing was added to `StaticType`
+or to the `TypeTable`, so `llvmType`, `alignOf`, `sameType`, `typeToString` and
+every `switch` over a type kind are untouched — which is most of why the change
+is as small as it is. Inference is unification over *annotation shapes* against
+argument types for the same reason.
+
+**Termination is checked on the request, not on a template graph.** §4 builds a
+template dependency graph and refuses an expanding edge before any instantiation
+exists. The implementation refuses the same programs one step later: when an
+instantiation asks for one of the *same template* whose type argument strictly
+contains its own, at any depth of the request chain. `reject_generic_polymorphic_recursion`
+and `gen_recursive_ground` pin both sides of the boundary, and the message is
+better for it — it names the concrete chain (`` `grow<i32>` asks for `grow<i32[]>` ``)
+rather than the symbolic one. The one program the two rules disagree about is a
+generic that would not terminate and is *never called*: the graph refuses it,
+this refuses nothing because nothing is instantiated. §14's question 9 is
+answered by construction — there is no graph, so nothing about diagnostic order
+moves.
+
+**`mangleType` gained a tag for `readonly T[]`.** `readonly T[]` and `T[]` are
+two types that `sameType` tells apart, and both mangled to `arr.<elem>`, so
+`identity<readonly i32[]>` and `identity<i32[]>` would have been one symbol.
+They are `roarr.` and `arr.` now. Nothing in the tree mangled a readonly array
+before this, so no golden moved; `tests/self/types_oracle.js` holds the two
+compilers to the new spelling.
+
+### 15.2 What is refused, and with what
+
+Eleven rules, each with a `reject_*` case that names it. Six are the package's
+own — uninferable type parameter (`reject_generic_function`, the old case
+re-pointed at the rule about a generic function that survives), type arguments
+at a call site, non-terminating monomorphisation, `$` in a declared name, a
+constrained parameter, wrong arity — and five are the "not yet" boundary: a
+generic class or interface, a generic type alias, a generic method, a generic
+`main`, and instantiating a generic imported from another module.
+
+`reject_generic_class`, `reject_type_alias_generic`, `reject_generic_method`
+and `reject_generic_constraint` are refused by stage1's *parser* rather than in
+the words stage0's Phase 0 writes, which is the declared difference
+`tests/self/parity.js` already carries for 43 cases of the corpus and
+`reject_oracle.js` counts apart. `reject_generic_call_type_args` is not: stage1
+recognises `(identity < i32) > (7)` for what it is and writes stage0's message,
+at stage0's span, because a checker message is not a grammar difference.
+
+### 15.3 The cost, measured
+
+`.text` at `--profile size`, for a program that instantiates one template at
+one, two, four and eight type arguments and prints each result:
+
+| instantiations | `.text` | binary | `define`s |
+| --- | --- | --- | --- |
+| 1 | 732 B | 5,192 B | 3 |
+| 2 | 908 B | 5,368 B | 4 |
+| 4 | 1,860 B | 6,488 B | 6 |
+| 8 | 2,985 B | 7,776 B | 11 |
+
+Read it for what it is rather than as a slope: the rows differ by more than the
+instantiation, because printing an `i64`, an `f64`, a `string` and an array all
+lower differently, and the eight-argument row carries five `define`s the
+one-argument row does not. What the numbers do say is the shape — the cost of
+generics is one copy of the body per distinct type-argument tuple and nothing
+else, which is the honest answer for a monomorphising compiler and exactly what
+the byte-identity check in `tests/run.js` pins: the marginal cost of an
+instantiation *is* the cost of the function somebody would have written.
+
+The other half is the one that had to be measured and is: a program that
+instantiates nothing pays nothing. No overlay is allocated, no table is swapped,
+and the bootstrap over an unchanged `self/` reaches the same fixed point —
+`tests/self/bootstrap.js` reports `IR(stage0) == IR(stage1) == IR(stage2)` and
+stage3 byte-identical to stage2 over **56 modules and 7,617,344 bytes of IR**,
+which is §10's claim tested rather than asserted.
+
+---
+
+## 16. What is next, in order
+
+1. **G5, generic classes and interfaces.** The largest remaining piece and the
+   one users will ask for first. An instantiated class is an ordinary
+   `StructInfo` named `Box$i32`, which §3c's "an instantiated generic class is
+   an ordinary struct" makes affordable; what it needs beyond this package is a
+   second instantiation path (a *struct* worklist beside the function one),
+   type arguments after `new`, and the struct half of the termination rule —
+   which cannot be a request-chain check, because a field's type is resolved
+   while the struct is collected rather than while a body runs. §4's template
+   graph is the right shape for that half, and `reject_generic_expanding_field`
+   is its case.
+2. **G7, whole-program.** One definition per instantiation, in the module that
+   declares the template, and a `declare` everywhere else. The refusal that
+   stands in for it today (`is a generic function, and a generic function
+   cannot yet be instantiated from another module`) is the case to delete when
+   it lands, and `tests/link/generic_import/` and `generic_two_importers/` are
+   the tests §12 names.
+
+   **A trap is laid here, and it is worth reading before starting.** An
+   instantiation's symbol carries a package prefix (WP21 S1), and it is minted
+   from the *instantiating* module's prefix — `instantiate` in
+   `checker/index.ts` and `self/generics.ts` reads `program.symbolPrefix`. That
+   is correct only because of the refusal above: the module that instantiates is
+   always the module that declares, so the two prefixes are the same one. The
+   moment a template may be instantiated from another module, they are not, and
+   the prefix has to become the **template's** rather than the caller's —
+   otherwise two packages importing one generic mint the same symbol and the
+   whole-program fact table in `codegen/attributes.ts`, which is keyed by
+   symbol, hands one instantiation the other's purity and escape facts. That is
+   a miscompile rather than a link error, which is the same failure WP21 S1
+   exists to prevent for plain functions. `tests/link/package_generic` is the
+   fixture that pins the prefix today and the one to extend when G7 lands.
+3. **G6, constraints.** Member access on a constrained parameter admitted at the
+   template, satisfaction checked at each instantiation. Small next to G5, and
+   it wants G5 first because `<T extends Shape>` is most useful on a container.
+4. **G8, the peripheries.** `-g` naming (`dbg_generic`), the three interop
+   sidecars and the C-name collision of §14 question 4, the differential
+   rewrite's one-JS-function-per-instantiation, and the fuzzer learning to emit
+   a generic declaration. The interop half has a decision waiting in it: an
+   exported template with no instantiation produces no symbol, and §8 message 9
+   says that should be an error when a sidecar is asked for. It is not one yet.
+5. **Generic methods on a generic class** (§14 question 7) and
+   **contextual-return inference** (§2a) stay deferred with their stated
+   triggers.

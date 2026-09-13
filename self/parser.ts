@@ -27,6 +27,7 @@ import { Lexer } from "./lexer";
 import {
   FLAG_CONST,
   FLAG_EXPORTED,
+  FLAG_FOREIGN,
   FLAG_POSTFIX,
   FLAG_PREFIX,
   FLAG_READONLY,
@@ -433,6 +434,16 @@ export class Parser {
     // `type` and `enum` are contextual keywords, ordinary identifiers
     // everywhere else, so they are matched by text here exactly as `from` and
     // `of` are — which is what leaves the lexer and its oracle untouched.
+    // `declare` is contextual too, and needs the one token of lookahead to tell
+    // `declare function f(): i32;` from a variable that happens to be called
+    // `declare` (WP27 S1). `export` is refused by the checker rather than here,
+    // so the message can say what a foreign declaration is instead of what the
+    // grammar wanted.
+    if (this.at(TOK_IDENT) && this.value === "declare" && this.peek() === TOK_FUNCTION) {
+      this.advance(); // `declare`
+      const foreign = this.parseForeignFunction(start);
+      return this.exportable(foreign, exported);
+    }
     if (this.at(TOK_IDENT) && this.value === "type") {
       return this.exportable(this.parseTypeAlias(start), exported);
     }
@@ -455,7 +466,6 @@ export class Parser {
     this.advance(); // `import`
     const node = this.node(N_IMPORT, start, this.end);
     const list = this.list();
-    const braceStart = this.start;
     if (!this.expect(TOK_LBRACE)) return this.finish(node, this.closeList(list));
     while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const specStart = this.start;
@@ -474,15 +484,6 @@ export class Parser {
       if (!this.eat(TOK_COMMA)) break;
     }
     this.expect(TOK_RBRACE);
-    // `closeList` spans a list by its elements and leaves an empty one
-    // nowhere, which is right everywhere else and wrong here: `import {}` is a
-    // *diagnostic* about the braces, and the caret has to be under them
-    // (`tests/cases/reject_import_empty`, where stage0 points at the same
-    // two characters).
-    if (list.children.length === 0) {
-      list.start = braceStart;
-      list.end = this.previousEnd;
-    }
     if (this.at(TOK_IDENT) && this.value === "from") this.advance();
     else this.report(`expected \`from\`, found \`${tokenName(this.kind)}\``, this.start, this.end);
     if (this.at(TOK_STRING)) {
@@ -506,11 +507,100 @@ export class Parser {
     this.advance(); // `function`
     const node = this.node(N_FUNCTION, start, this.end);
     node.children.push(this.parseIdentifier());
+    // The type parameters are read here, where they are written, and pushed
+    // last, where `nodes.ts` puts them: the first four children of an
+    // `N_FUNCTION` mean what they have always meant, so nothing downstream
+    // that indexes them moves (WP18).
+    const typeParams = this.parseTypeParameters();
     node.children.push(this.parseParameters());
     node.children.push(this.parseReturnType());
     node.children.push(this.parseBlock());
+    node.children.push(typeParams);
     node.end = this.previousEnd;
     return node;
+  }
+
+  /**
+   * `declare function name(params): T;` — a C function this program calls but
+   * does not define (WP27 S1).
+   *
+   * The same four children as `parseFunction` in the same positions, with the
+   * empty node where the block goes: everything downstream indexes a function's
+   * children positionally, so a foreign declaration is shaped like a function
+   * with no body rather than a different kind of node. `FLAG_FOREIGN` is what
+   * tells them apart, and the checker is what refuses a body here.
+   */
+  parseForeignFunction(start: i32): Node {
+    this.advance(); // `function`
+    const node = this.node(N_FUNCTION, start, this.end);
+    node.children.push(this.parseIdentifier());
+    const typeParams = this.parseTypeParameters();
+    node.children.push(this.parseParameters());
+    node.children.push(this.parseReturnType());
+    // A `;` ends the declaration. A `{` is a body, which is a mistake the
+    // *checker* reports — so it is parsed into the body slot rather than left
+    // for the next `parseDeclaration` to trip over, which is what lets stage1
+    // say what stage0 says instead of complaining about a brace.
+    if (this.at(TOK_LBRACE)) {
+      node.children.push(this.parseBlock());
+    } else {
+      node.children.push(this.empty());
+      this.eat(TOK_SEMICOLON);
+    }
+    // WP18 pushes the type-parameter list as the fifth child so the first four
+    // keep their meaning. A foreign declaration pushes one too — parsed rather
+    // than assumed empty, so `declare function f<T>(): i32` reaches the
+    // checker's refusal instead of a syntax error, and so nothing that indexes
+    // `children[4]` reads past the end of a foreign declaration.
+    node.children.push(typeParams);
+    node.flags = node.flags | FLAG_FOREIGN;
+    node.end = this.previousEnd;
+    return node;
+  }
+
+  /**
+   * `<T, U>` on a function declaration (WP18), or an empty list when there is
+   * none. Only the *names* are recorded: a constrained parameter
+   * (`<T extends Shape>`) needs member access on a type parameter, which is its
+   * own rule and its own milestone, and a default (`<T = string>`) has no
+   * position to fill because a type argument is inferred from the arguments.
+   *
+   * `<` here is unambiguous — a declaration cannot start with a comparison —
+   * which is exactly why type arguments are written in an annotation and after
+   * `new`, and nowhere else: one token of lookahead cannot tell `f<i32>(x)`
+   * from `(f < i32) > (x)` (§2a).
+   */
+  parseTypeParameters(): Node {
+    const list = this.list();
+    if (!this.at(TOK_LT)) {
+      return list;
+    }
+    this.advance();
+    while (!this.at(TOK_GT) && !this.at(TOK_END)) {
+      list.children.push(this.parseIdentifier());
+      if (this.at(TOK_EXTENDS)) {
+        this.report(
+          "a constrained type parameter (`T extends ...`) is not supported yet",
+          this.start,
+          this.end
+        );
+        this.advance();
+        this.parseType();
+      } else if (this.at(TOK_ASSIGN)) {
+        this.report(
+          "a default type argument (`T = ...`) is not supported: a type argument is inferred from the arguments",
+          this.start,
+          this.end
+        );
+        this.advance();
+        this.parseType();
+      }
+      if (!this.eat(TOK_COMMA)) {
+        break;
+      }
+    }
+    this.expectTypeArgumentEnd();
+    return this.closeList(list);
   }
 
   /**
@@ -536,6 +626,19 @@ export class Parser {
     scan.next();
     if (scan.kind !== TOK_ASSIGN) return false;
     scan.next();
+    // WP18: `const identity = <T>(x: T): T => x` puts a type parameter list
+    // between the `=` and the parameters. It is skipped by matching `>` against
+    // `<`, which is enough because a type parameter list holds only names.
+    if (scan.kind === TOK_LT) {
+      let angles = 1;
+      while (angles > 0) {
+        scan.next();
+        if (scan.kind === TOK_END) return false;
+        if (scan.kind === TOK_LT) angles = angles + 1;
+        else if (scan.kind === TOK_GT) angles = angles - 1;
+      }
+      scan.next();
+    }
     if (scan.kind !== TOK_LPAREN) return false;
     let depth = 1;
     while (depth > 0) {
@@ -559,10 +662,12 @@ export class Parser {
     const node = this.node(N_FUNCTION, start, this.end);
     node.children.push(this.parseIdentifier());
     this.expect(TOK_ASSIGN);
+    const typeParams = this.parseTypeParameters();
     node.children.push(this.parseParameters());
     node.children.push(this.parseReturnType());
     this.expect(TOK_ARROW);
     node.children.push(this.at(TOK_LBRACE) ? this.parseBlock() : this.parseExpression());
+    node.children.push(typeParams);
     this.expectSemicolon();
     node.end = this.previousEnd;
     return node;

@@ -16,9 +16,18 @@
 // the result is still checked against what the sink expects.
 
 import { LANGUAGE } from "./branding";
+import { checkGenericCall } from "./generics";
 import { CheckContext } from "./context";
 import { checkArrayLiteral, checkIndex, checkIndexAssignment } from "./arrays";
-import { checkBuiltinCall, checkBuiltinFunction, isBuiltinFunction } from "./builtins";
+import {
+  checkBuiltinCall,
+  checkBuiltinFunction,
+  checkBuiltinFunctionNamed,
+  checkImportedDottedBuiltin,
+  checkNamespaceProperty,
+  isBuiltinFunction,
+} from "./builtins";
+import { BuiltinExport } from "./nish_modules";
 import { checkResultConstructor, isResultConstructor, narrowResultTest } from "./result";
 import {
   checkMember,
@@ -293,6 +302,17 @@ function checkIdentifier(ctx: CheckContext, expr: Node, scope: Scope): i32 {
     ctx.program.nodeConstants[expr.id] = constant;
     return constant.type;
   }
+  // A `nish:` import of a property builtin (`argv`, `platform`) is read as a
+  // value rather than called, so it lands here, and after the scope chain for
+  // the reason a module constant is: a local of the same name shadows it.
+  const imported = ctx.program.builtinImport(expr.text);
+  if (imported !== null) {
+    if (!imported.isProperty) {
+      return ctx.errorType(expr, `\`${expr.text}\` is a builtin function and can only be called`);
+    }
+    ctx.program.nodeBuiltins[expr.id] = imported.canonical;
+    return checkNamespaceProperty(ctx, expr, imported.namespace, imported.member);
+  }
   return ctx.errorType(expr, `Unknown identifier \`${expr.text}\``);
 }
 
@@ -465,6 +485,22 @@ function checkBinary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
   }
   if (op === "&&" || op === "||") {
     return checkLogical(ctx, expr, scope);
+  }
+  // WP18 §2a: `identity<i32>(7)` is `(identity < i32) > (7)` to a parser with
+  // one token of lookahead, which is exactly why type arguments are not written
+  // at a call site. The shape is recognised here so the message names the rule
+  // instead of leaving "Unknown identifier `identity`" behind, and it points at
+  // the type argument, where stage0's points.
+  if (op === "<" && expr.children[0].kind === N_IDENT) {
+    const template = ctx.template(expr.children[0].text);
+    if (template !== null) {
+      const first = template.typeParams.length > 0 ? template.typeParams[0] : "T";
+      return ctx.errorType(
+        expr.children[1],
+        `Type arguments are not written at a call site in ${LANGUAGE}: \`${first}\` is inferred from the ` +
+          `arguments, so write \`${template.sourceName}(...)\``
+      );
+    }
   }
   return checkOperator(ctx, expr, op, expr.children[0], expr.children[1], scope);
 }
@@ -911,6 +947,27 @@ export function assignInto(
 
 // ---- Calls ---------------------------------------------------------------------
 
+/**
+ * A call to a name a `nish:` import bound (`readFileSync`, `exit`, and any
+ * `as` rename of either). The rule applied is the one the global spelling
+ * uses, so there is exactly one of each and the diagnostics keep naming the
+ * canonical form — `exit(1, 2)` reports `process.exit`, which is the rule the
+ * reader has to look up.
+ *
+ * The canonical name is recorded because the emitter dispatches builtins on
+ * the identifier's own text, and under an import that text is the local name.
+ */
+function checkImportedBuiltin(ctx: CheckContext, expr: Node, scope: Scope, imported: BuiltinExport): i32 {
+  const callee = expr.children[0];
+  if (imported.isProperty) {
+    return ctx.errorType(callee, `\`${callee.text}\` is a builtin value and cannot be called`);
+  }
+  ctx.program.nodeBuiltins[expr.id] = imported.canonical;
+  return imported.namespace.length > 0
+    ? checkImportedDottedBuiltin(ctx, expr, scope, imported.namespace, imported.member)
+    : checkBuiltinFunctionNamed(ctx, expr, scope, imported.member);
+}
+
 function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 {
   const callee = expr.children[0];
   if (callee.kind === N_SUPER) {
@@ -926,8 +983,18 @@ function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   if (callee.kind !== N_IDENT) {
     return ctx.errorType(expr, "Only direct calls to named functions are supported");
   }
+  const template = ctx.template(callee.text);
+  if (template !== null) {
+    return checkGenericCall(ctx, expr, template, scope); // WP18: infer, instantiate, then check
+  }
   const sig = ctx.signature(callee.text);
   if (sig === null) {
+    // An imported builtin first: it cannot have been shadowed, because a user
+    // function of the same name is rejected at the import itself.
+    const imported = ctx.program.builtinImport(callee.text);
+    if (imported !== null) {
+      return checkImportedBuiltin(ctx, expr, scope, imported);
+    }
     if (isResultConstructor(callee.text)) {
       return checkResultConstructor(ctx, expr, scope, want); // WP16: `Ok(v)` / `Err(e)`
     }

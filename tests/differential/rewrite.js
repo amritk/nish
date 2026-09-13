@@ -344,6 +344,11 @@ function makeTransformer(unit, stems) {
     const visit = (node) => {
       // ---- imports: `./math` -> `./math.mjs` ----
       if (ts.isImportDeclaration(node)) {
+        // A `nish:` import names builtins rather than a module, and every name
+        // it binds is rewritten into a `__nish.*` call below, so the statement
+        // itself has nothing left to say — and Node could not resolve the
+        // specifier if it were left standing.
+        if (node.moduleSpecifier.text.startsWith("nish:")) return undefined;
         const target = unit.resolved.get(node.moduleSpecifier.text);
         const spec = target ? `./${stems.get(target)}.mjs` : node.moduleSpecifier.text;
         return f.updateImportDeclaration(
@@ -515,6 +520,16 @@ function makeTransformer(unit, stems) {
         return shimCall("strLen", [ts.visitNode(node.expression, visit)]);
       }
 
+      // ---- a builtin under the name a `nish:` import gave it ----
+      // The checker recorded which builtin each local name stands for, so an
+      // `as` rename lands on the same shim helper the global spelling does.
+      if (ts.isIdentifier(node) && !bindings.has(node)) {
+        const canonical = program.builtinImports.get(node.text)?.canonical;
+        if (canonical === "process.argv") return shimCall("argv", []);
+        if (canonical === "process.platform") return shimCall("platform", []);
+        if (canonical === "process.arch") return shimCall("arch", []);
+      }
+
       // ---- process.argv -> the script and its arguments (argv[0] is the program, as natively) ----
       if (dottedName(node) === "process.argv" && !bindings.has(node.expression)) {
         return shimCall("argv", []);
@@ -615,8 +630,13 @@ function makeTransformer(unit, stems) {
           if (to !== undefined && (touchesF32 || UNSIGNED_KINDS.has(to) || UNSIGNED_KINDS.has(from))) {
             return shimCall("convert", [args[0], str(from), str(to)]);
           }
-          if (IDENTIFIER_BUILTINS.has(node.expression.text)) {
-            return shimCall(IDENTIFIER_BUILTINS.get(node.expression.text), args);
+          // An imported builtin is keyed by its canonical spelling, so `exit`
+          // from `nish:process` reaches the same helper `process.exit` does.
+          const imported = program.builtinImports.get(node.expression.text)?.canonical;
+          if (imported === "process.exit") return shimCall("exit", args);
+          const name = imported ?? node.expression.text;
+          if (IDENTIFIER_BUILTINS.has(name)) {
+            return shimCall(IDENTIFIER_BUILTINS.get(name), args);
           }
         }
         return f.updateCallExpression(node, ts.visitNode(node.expression, visit), undefined, args);

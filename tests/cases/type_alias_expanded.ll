@@ -10,12 +10,11 @@
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #5
-declare noundef i64 @nish_arena_mark() #4
-declare void @nish_arena_release(i64 noundef) #4
-declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #4
-declare void @nish_panic_index(i64 noundef, i64 noundef) #6
+declare noundef i64 @nish_arena_mark() #3
+declare void @nish_arena_release(i64 noundef) #3
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #3
 
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
   %size.p7 = add i64 %size, 7
   %size.aligned = and i64 %size.p7, -8
@@ -95,32 +94,22 @@ entry:
   br i1 %3, label %cond.true, label %cond.false
 
 cond.true:
-  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %view, i64 0, i32 0
-  %5 = load i64, i64* %4, align 8, !alias.scope !3, !noalias !4
-  %6 = icmp ult i64 0, %5
-  br i1 %6, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 0, i64 %5)
-  unreachable
-
-bounds.ok:
-  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %view, i64 0, i32 2
-  %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4
-  %9 = bitcast i8* %8 to i32*
-  %10 = getelementptr inbounds i32, i32* %9, i64 0
-  %11 = load i32, i32* %10, align 4, !alias.scope !4, !noalias !3
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %view, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
+  %6 = bitcast i8* %5 to i32*
+  %7 = getelementptr inbounds i32, i32* %6, i64 0
+  %8 = load i32, i32* %7, align 4, !alias.scope !4, !noalias !3
   br label %cond.end
 
 cond.false:
   br label %cond.end
 
 cond.end:
-  %12 = phi i32 [ %11, %bounds.ok ], [ 0, %cond.false ]
-  ret i32 %12
+  %9 = phi i32 [ %8, %cond.true ], [ 0, %cond.false ]
+  ret i32 %9
 }
 
-define internal noundef nonnull align 8 i8* @labelOf(%struct.Sample* noundef readonly align 8 nocapture %r) #3 {
+define internal noundef nonnull align 8 i8* @labelOf(%struct.Sample* noundef readonly align 8 nocapture %r) #2 {
 entry:
   %0 = icmp eq %struct.Sample* %r, null
   br i1 %0, label %if.then, label %if.end
@@ -134,7 +123,7 @@ if.end:
   ret i8* %2
 }
 
-define internal noundef nonnull align 8 dereferenceable(16) %struct.Sample* @reading(i32 noundef %value) #4 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.Sample* @reading(i32 noundef %value) #3 {
 entry:
   %s.addr = alloca %struct.Sample*, align 8
   %0 = call i8* @nish_alloc_struct(i64 16)
@@ -154,7 +143,7 @@ entry:
   ret %struct.Sample* %8
 }
 
-define internal noundef nonnull align 8 dereferenceable(16) %struct.nish_result.i32.str* @parsed(i32 noundef %n) #4 {
+define internal noundef nonnull align 8 dereferenceable(16) %struct.nish_result.i32.str* @parsed(i32 noundef %n) #3 {
 entry:
   %0 = icmp slt i32 %n, 0
   br i1 %0, label %if.then, label %if.end
@@ -178,7 +167,7 @@ if.end:
   ret %struct.nish_result.i32.str* %6
 }
 
-define noundef i32 @test() #2 {
+define noundef i32 @test() #4 {
 entry:
   %data.addr = alloca %struct.nish_array*, align 8
   %arr.hdr = alloca %struct.nish_array, align 8
@@ -260,12 +249,11 @@ cond.end:
 
 attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind readonly }
-attributes #2 = { nounwind }
-attributes #3 = { nounwind willreturn readonly }
-attributes #4 = { nounwind willreturn }
+attributes #2 = { nounwind willreturn readonly }
+attributes #3 = { nounwind willreturn }
+attributes #4 = { nounwind }
 attributes #5 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #6 = { nounwind noreturn cold }
-attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

@@ -195,13 +195,6 @@ const checkTypeAssertion: Validator = (node, sf) => {
 
 const checkFunctionLike: Validator = (node, sf) => {
   const fn = node as ts.FunctionLikeDeclaration;
-  if (fn.typeParameters && fn.typeParameters.length > 0) {
-    fail(
-      `Generic type parameters are forbidden in ${LANGUAGE} (no monomorphisation yet)`,
-      fn.typeParameters[0],
-      sf
-    );
-  }
   if (fn.asteriskToken)
     fail(`Generators are forbidden in ${LANGUAGE} (no coroutine runtime)`, fn.asteriskToken, sf);
   const asyncMod = ts.canHaveModifiers(fn)
@@ -211,15 +204,46 @@ const checkFunctionLike: Validator = (node, sf) => {
     fail(`\`async\` functions are forbidden in ${LANGUAGE} (no event loop or promises)`, asyncMod, sf);
 };
 
+/**
+ * WP18: a generic *function* is monomorphised, so Phase 0 lets `<T>` through on
+ * one and the checker instantiates it. Everything else that can carry a type
+ * parameter list still cannot: a class or interface would need a layout per
+ * instantiation and a type alias is not a type of its own, so both are refused
+ * here, by the rule they break rather than by "unsupported".
+ */
 const checkGenericDeclaration: Validator = (node, sf) => {
   const decl = node as ts.ClassLikeDeclaration | ts.InterfaceDeclaration | ts.TypeAliasDeclaration;
   if (decl.typeParameters && decl.typeParameters.length > 0) {
+    const what = ts.isTypeAliasDeclaration(decl)
+      ? "type alias"
+      : ts.isInterfaceDeclaration(decl)
+        ? "interface"
+        : "class";
     fail(
-      `Generic type parameters are forbidden in ${LANGUAGE} (no monomorphisation yet)`,
+      `Generic type parameters are forbidden on a ${what} in ${LANGUAGE} (a generic function is monomorphised; ` +
+        "a generic class is not supported yet)",
       decl.typeParameters[0],
       sf
     );
   }
+};
+
+/**
+ * A method may not add type parameters of its own (`docs/wp18-generics.md` §2):
+ * the instantiation key would be the receiver's tuple times the method's, and a
+ * generic class — when there is one — already gives what that would buy.
+ */
+const checkMethodTypeParameters: Validator = (node, sf) => {
+  const method = node as ts.MethodDeclaration;
+  if (method.typeParameters && method.typeParameters.length > 0) {
+    fail(
+      `Generic type parameters are forbidden on a method in ${LANGUAGE} (a method takes its class's type ` +
+        "arguments and adds none of its own)",
+      method.typeParameters[0],
+      sf
+    );
+  }
+  checkFunctionLike(node, sf);
 };
 
 const checkVariableDeclarationList: Validator = (node, sf) => {
@@ -438,7 +462,7 @@ const validators: Partial<Record<ts.SyntaxKind, Validator>> = {
   [ts.SyntaxKind.FunctionDeclaration]: checkFunctionLike,
   [ts.SyntaxKind.FunctionExpression]: checkFunctionLike,
   [ts.SyntaxKind.ArrowFunction]: checkFunctionLike,
-  [ts.SyntaxKind.MethodDeclaration]: checkFunctionLike,
+  [ts.SyntaxKind.MethodDeclaration]: checkMethodTypeParameters,
   [ts.SyntaxKind.ClassDeclaration]: checkGenericDeclaration,
   [ts.SyntaxKind.ClassExpression]: checkGenericDeclaration,
   [ts.SyntaxKind.InterfaceDeclaration]: checkGenericDeclaration,

@@ -11,8 +11,18 @@
  * dereferences it before the first `push` grows the array. Element access
  * bitcasts `data` to `T*` and indexes with an `i64`.
  *
+ * WP15 §2a: when `T` is a **record** (an Nish `interface`), the slot type is
+ * `%struct.T` rather than `%struct.T*` — the array holds the records
+ * themselves, `sizeof(T)` apart, exactly as a C array of that struct does.
+ * `a[i]` is then the `getelementptr` itself, with no load, because a struct
+ * value *is* its address everywhere else in the emitter; a write into a slot
+ * is an `llvm.memcpy` of the object, because the array owns the storage.
+ * `inlineElementStruct` in `checker/program.ts` carries the rule and the
+ * argument for why a `class` element is not one of these.
+ *
  *   [a, b]           two `nish_alloc_struct` calls (24-byte header, n*sizeof(T)
- *                    data), `len = cap = n`, one store per element.
+ *                    data), `len = cap = n`, one store per element — one
+ *                    `llvm.memcpy` per element for a record.
  *   new Array<T>(n)  header + data as above, data cleared with `llvm.memset`.
  *                    When escape.ts proved the array does not outlive the
  *                    function (WP6) and its size is a literal, both become
@@ -46,19 +56,31 @@
  * Comparing unsigned makes a negative index fail too. `--unchecked-indexing`
  * removes the check; an out-of-range index is then undefined behaviour.
  *
+ * The check is also dropped for an access the checker *proved* in range
+ * (WP15 §2.1/§2.2, `checker/bounds.ts` -> `program.provenIndices`). That is
+ * not the same thing as the flag: the flag removes every check and trusts the
+ * program, while a proof removes one check and the safety is unchanged. The
+ * emitter re-derives nothing here — it reads the table, as it does for every
+ * other fact.
+ *
  * `collectArrayFacts` feeds attributes.ts with what each construct does to
  * memory; which array parameters are written through or captured is decided
  * there by `classifyUse` (see docs/wp4-arrays.md, "Attributes").
  */
 import ts from "typescript";
-import { CheckedProgram } from "../../checker/index.js";
+import {
+  CheckedProgram,
+  StructInfo,
+  elementLLVMType,
+  elementStride,
+  inlineElementStruct,
+} from "../../checker/index.js";
 import { ELEMENT_ASSIGNMENT_OPERATORS } from "../../checker/arrays.js";
 import {
   ARRAY_STRUCT,
   STRING,
   StaticType,
   TYPED_ARRAY_ALIASES,
-  alignOf,
   isFloat,
   isUnsigned,
   llvmType,
@@ -67,7 +89,13 @@ import { ARRAY_TYPE } from "../runtime.js";
 import { emitIntBinary } from "./arithmetic.js";
 import { emitBitwiseCombine, isBitwiseCompoundOperator } from "./bitwise.js";
 import { BinaryEmitter, EmitContext, EmitterTable, ExpressionEmitter, StatementEmitter } from "./context.js";
-import { FactCollector, factCollectors, methodCallEmitters, newEmitters, propertyEmitters } from "./members.js";
+import {
+  FactCollector,
+  factCollectors,
+  methodCallEmitters,
+  newEmitters,
+  propertyEmitters,
+} from "./members.js";
 
 type ArrayType = Extract<StaticType, { kind: "array" }>;
 
@@ -77,9 +105,24 @@ const HEADER_BYTES = 24;
 const MEMSET = "llvm.memset.p0i8.i64";
 const MEMCPY = "llvm.memcpy.p0i8.p0i8.i64";
 
-/** Bytes per element. Every value is a scalar or a pointer, so its size is its natural alignment. */
-function elementSize(elem: StaticType): number {
-  return alignOf(elem);
+/**
+ * WP15 §2a: the record stored inline in this array's slots, or undefined when
+ * a slot holds a value (a scalar, a string, an array header pointer, a class
+ * pointer, a `C | null`). `inlineElementStruct` carries the rule and the two
+ * exclusions.
+ */
+function inlineStruct(ctx: EmitContext, elem: StaticType): StructInfo | undefined {
+  return inlineElementStruct(ctx.program.structs, elem);
+}
+
+/** Bytes from one element to the next: `sizeof` for an inline record, the value's size otherwise. */
+function elementSize(ctx: EmitContext, elem: StaticType): number {
+  return elementStride(ctx.program.structs, elem);
+}
+
+/** The LLVM type of one slot: `%struct.P` inline, the value type otherwise. */
+function slotType(ctx: EmitContext, elem: StaticType): string {
+  return elementLLVMType(ctx.program.structs, elem);
 }
 
 /** `, align 8` for header fields and data, or nothing under `--plain`. */
@@ -155,24 +198,82 @@ function fieldPointer(ctx: EmitContext, arr: string, index: 0 | 1 | 2): string {
 
 /** Load header field `index`, in the header alias domain. */
 function loadHeaderField(ctx: EmitContext, arr: string, index: 0 | 1 | 2, type = "i64"): string {
-  return ctx.fn.emitValue(`load ${type}, ${type}* ${fieldPointer(ctx, arr, index)}${align8(ctx)}${headerAccess(ctx)}`);
+  return ctx.fn.emitValue(
+    `load ${type}, ${type}* ${fieldPointer(ctx, arr, index)}${align8(ctx)}${headerAccess(ctx)}`
+  );
 }
 
 /** Store `value` into header field `index`, in the header alias domain. */
-function storeHeaderField(ctx: EmitContext, arr: string, index: 0 | 1 | 2, value: string, type = "i64"): void {
-  ctx.fn.emit(`store ${type} ${value}, ${type}* ${fieldPointer(ctx, arr, index)}${align8(ctx)}${headerAccess(ctx)}`);
+function storeHeaderField(
+  ctx: EmitContext,
+  arr: string,
+  index: 0 | 1 | 2,
+  value: string,
+  type = "i64"
+): void {
+  ctx.fn.emit(
+    `store ${type} ${value}, ${type}* ${fieldPointer(ctx, arr, index)}${align8(ctx)}${headerAccess(ctx)}`
+  );
 }
 
 function loadLength(ctx: EmitContext, arr: string): string {
   return loadHeaderField(ctx, arr, 0);
 }
 
-/** `T*` to element `idx` (an i64 value) of `arr`. */
+/**
+ * Address of element `idx` (an i64 value) of `arr`, as a `<slot type>*`.
+ *
+ * For an inline record (WP15 §2a) the slot type is the struct itself, so this
+ * *is* the element's value: the GEP strides by `sizeof` and lands on the
+ * object, where the old layout landed on a pointer that had to be chased.
+ */
 function elementPointer(ctx: EmitContext, arr: string, elem: StaticType, idx: string): string {
-  const ty = llvmType(elem);
+  const ty = slotType(ctx, elem);
   const data = loadHeaderField(ctx, arr, 2, "i8*");
   const typed = ctx.fn.emitValue(`bitcast i8* ${data} to ${ty}*`);
   return ctx.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${typed}, i64 ${idx}`);
+}
+
+/**
+ * Read element `idx`: the slot's value, or — for an inline record — the slot's
+ * *address*, which is what a struct value is everywhere else in the emitter.
+ * No load: the object is already there.
+ */
+function loadElement(ctx: EmitContext, arr: string, elem: StaticType, idx: string): string {
+  const slot = elementPointer(ctx, arr, elem, idx);
+  if (inlineStruct(ctx, elem)) return slot;
+  const ty = llvmType(elem);
+  return ctx.fn.emitValue(`load ${ty}, ${ty}* ${slot}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`);
+}
+
+/**
+ * Write `value` into the slot at `ptr`. For an inline record that is a copy of
+ * the object's bytes, the way a C `ps[i] = *q` copies: the array owns its
+ * storage, so a struct entering it is duplicated into the slot rather than
+ * referenced from it (`docs/LANGUAGE.md`, "Arrays of classes are contiguous").
+ *
+ * `llvm.memcpy` requires the two ranges to be equal or disjoint, and they
+ * always are: both operands are whole objects of one class, and two such
+ * objects are either the same object or two separate allocations — the
+ * language has no way to spell a pointer part-way into one.
+ */
+function storeElement(ctx: EmitContext, ptr: string, elem: StaticType, value: string): void {
+  const inline = inlineStruct(ctx, elem);
+  if (!inline) {
+    const ty = llvmType(elem);
+    ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`);
+    return;
+  }
+  const ty = `%struct.${inline.name}`;
+  ctx.declare(
+    `declare void @${MEMCPY}(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)`
+  );
+  const dst = ctx.fn.emitValue(`bitcast ${ty}* ${ptr} to i8*`);
+  const src = ctx.fn.emitValue(`bitcast ${ty}* ${value} to i8*`);
+  const a = ctx.opts.optimizeAttributes ? `align ${inline.align} ` : "";
+  ctx.fn.emit(
+    `call void @${MEMCPY}(i8* ${a}${dst}, i8* ${a}${src}, i64 ${inline.size}, i1 false)${elementAccess(ctx)}`
+  );
 }
 
 /**
@@ -220,9 +321,14 @@ export function emitRangeCheck(ctx: EmitContext, idx: string, len: string): void
   fn.placeBlock(okBlock);
 }
 
-/** The bounds check of `a[i]`: the array's length, then the shared range check. */
-function emitBoundsCheck(ctx: EmitContext, arr: string, idx: string): void {
-  if (ctx.opts.uncheckedIndexing) return;
+/**
+ * The bounds check of `a[i]`: the array's length, then the shared range check.
+ * `site` is the access node, which is how the checker's proof is looked up —
+ * a proven access loads no length at all, so the header read goes with the
+ * compare rather than being left behind for LICM to hoist.
+ */
+function emitBoundsCheck(ctx: EmitContext, arr: string, idx: string, site: ts.Node): void {
+  if (ctx.opts.uncheckedIndexing || ctx.program.provenIndices.has(site)) return;
   emitRangeCheck(ctx, idx, loadLength(ctx, arr));
 }
 
@@ -275,7 +381,7 @@ function emitData(
   bytes: string
 ): string {
   if (count !== undefined && ctx.isStackSite(site)) {
-    const ty = `[${count} x ${llvmType(elem)}]`;
+    const ty = `[${count} x ${slotType(ctx, elem)}]`;
     const slot = ctx.fn.emitAlloca("arr.data", ty, 8);
     return ctx.fn.emitValue(`bitcast ${ty}* ${slot} to i8*`);
   }
@@ -292,17 +398,17 @@ function storeData(ctx: EmitContext, arr: string, data: string): void {
 const emitArrayLiteral: ExpressionEmitter = (ctx, node) => {
   const expr = node as ts.ArrayLiteralExpression;
   const { elem } = ctx.typeOf(expr) as ArrayType;
-  const ty = llvmType(elem);
+  const ty = slotType(ctx, elem);
   const values = expr.elements.map((e) => ctx.emitExpression(e));
   const n = values.length;
   const arr = emitHeader(ctx, String(n), expr);
-  const data = n === 0 ? "null" : emitData(ctx, expr, elem, n, String(n * elementSize(elem)));
+  const data = n === 0 ? "null" : emitData(ctx, expr, elem, n, String(n * elementSize(ctx, elem)));
   storeData(ctx, arr, data);
   if (n > 0) {
     const typed = ctx.fn.emitValue(`bitcast i8* ${data} to ${ty}*`);
     values.forEach((value, i) => {
       const slot = ctx.fn.emitValue(`getelementptr inbounds ${ty}, ${ty}* ${typed}, i64 ${i}`);
-      ctx.fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`);
+      storeElement(ctx, slot, elem, value);
     });
   }
   return arr;
@@ -311,7 +417,7 @@ const emitArrayLiteral: ExpressionEmitter = (ctx, node) => {
 /** `new Array<T>(n)`: `n` zeroed elements. A negative `n` becomes a huge allocation and aborts in the arena. */
 newEmitters.Array = (ctx, expr) => {
   const { elem } = ctx.typeOf(expr) as ArrayType;
-  const size = elementSize(elem);
+  const size = elementSize(ctx, elem);
   const n = emitIndex(ctx, expr.arguments![0]);
   const arr = emitHeader(ctx, n, expr);
   const bytes = size === 1 ? n : ctx.fn.emitValue(`mul i64 ${n}, ${size}`);
@@ -345,11 +451,8 @@ const emitElementAccess: ExpressionEmitter = (ctx, node) => {
   ctx.declareType(ARRAY_TYPE);
   const arr = ctx.emitExpression(expr.expression);
   const idx = emitIndex(ctx, expr.argumentExpression);
-  emitBoundsCheck(ctx, arr, idx);
-  const ty = llvmType(elem);
-  return ctx.fn.emitValue(
-    `load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`
-  );
+  emitBoundsCheck(ctx, arr, idx, expr);
+  return loadElement(ctx, arr, elem, idx);
 };
 
 /** Opcode per compound operator: [integer form, floating-point form]. */
@@ -382,16 +485,14 @@ const emitElementAssignment: BinaryEmitter = (ctx, expr) => {
   const op = expr.operatorToken.kind;
   if (op === ts.SyntaxKind.EqualsToken) {
     const value = ctx.emitExpression(expr.right);
-    emitBoundsCheck(ctx, arr, idx);
-    ctx.fn.emit(
-      `store ${ty} ${value}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`
-    );
+    emitBoundsCheck(ctx, arr, idx, target);
+    storeElement(ctx, elementPointer(ctx, arr, elem, idx), elem, value);
     return value;
   }
   // The array and the index were evaluated once, above; the check and the GEP
   // are done once here, and the load and the store share the address. That is
   // what keeps `xs[next()] |= 1` to one call and one bounds check.
-  emitBoundsCheck(ctx, arr, idx);
+  emitBoundsCheck(ctx, arr, idx, target);
   const slot = elementPointer(ctx, arr, elem, idx);
   const old = ctx.fn.emitValue(`load ${ty}, ${ty}* ${slot}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`);
   let value: string;
@@ -451,7 +552,6 @@ function emitElementEquals(ctx: EmitContext, elem: StaticType, a: string, b: str
 
 /** `a.push(v)`: grow when full, store at `len`, and answer the new length. */
 function emitPush(ctx: EmitContext, expr: ts.CallExpression, arr: string, elem: StaticType): string {
-  const ty = llvmType(elem);
   const fn = ctx.fn;
   const value = ctx.emitExpression(expr.arguments[0]);
   const lenPtr = fieldPointer(ctx, arr, 0);
@@ -462,10 +562,12 @@ function emitPush(ctx: EmitContext, expr: ts.CallExpression, arr: string, elem: 
   const storeBlock = fn.newBlock("push.store");
   fn.emit(`br i1 ${full}, label %${growBlock.label}, label %${storeBlock.label}`);
   fn.placeBlock(growBlock);
-  fn.emit(`call void ${ctx.useRuntime("nish_array_grow")}(${HEADER_PTR} ${arr}, i64 ${elementSize(elem)})`);
+  fn.emit(
+    `call void ${ctx.useRuntime("nish_array_grow")}(${HEADER_PTR} ${arr}, i64 ${elementSize(ctx, elem)})`
+  );
   fn.emit(`br label %${storeBlock.label}`);
   fn.placeBlock(storeBlock);
-  fn.emit(`store ${ty} ${value}, ${ty}* ${elementPointer(ctx, arr, elem, len)}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`);
+  storeElement(ctx, elementPointer(ctx, arr, elem, len), elem, value);
   const newLen = fn.emitValue(`add i64 ${len}, 1`);
   fn.emit(`store i64 ${newLen}, i64* ${lenPtr}${align8(ctx)}${headerAccess(ctx)}`);
   return emitNumberFromI64(ctx, newLen, expr);
@@ -493,8 +595,10 @@ function emitPop(ctx: EmitContext, arr: string, elem: StaticType): string {
   }
   const last = fn.emitValue(`sub i64 ${len}, 1`);
   fn.emit(`store i64 ${last}, i64* ${lenPtr}${align8(ctx)}${headerAccess(ctx)}`);
-  const ty = llvmType(elem);
-  return fn.emitValue(`load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, last)}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`);
+  // An inline record comes back as the address of the slot that was just
+  // dropped. The bytes are still there and still valid; the next `push` reuses
+  // them, which is why `checkElementReferences` counts `pop` as a mutation.
+  return loadElement(ctx, arr, elem, last);
 }
 
 /**
@@ -525,10 +629,10 @@ function emitIndexOf(ctx: EmitContext, expr: ts.CallExpression, arr: string, ele
   fn.emit(`br i1 ${more}, label %${testBlock.label}, label %${missBlock.label}`);
 
   fn.placeBlock(testBlock);
-  const ty = llvmType(elem);
-  const element = fn.emitValue(
-    `load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, at)}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`
-  );
+  // For an inline record the element *is* the slot address, so the `icmp eq`
+  // below still asks what it always asked: is this the same object? Identity
+  // is now "the same slot", which is the only identity a contiguous array has.
+  const element = loadElement(ctx, arr, elem, at);
   const hit = emitElementEquals(ctx, elem, element, value);
   fn.emit(`br i1 ${hit}, label %${endBlock.label}, label %${nextBlock.label}`);
 
@@ -624,7 +728,9 @@ function emitJoin(ctx: EmitContext, expr: ts.CallExpression, arr: string): strin
   const sepData = fn.emitValue(`getelementptr inbounds i8, i8* ${sep}, i64 8`);
   fn.emit(`call void @${MEMCPY}(i8* ${cursor}, i8* ${sepData}, i64 ${gapLen}, i1 false)`);
   const afterGap = fn.emitValue(`getelementptr inbounds i8, i8* ${cursor}, i64 ${gapLen}`);
-  const item = fn.emitValue(`load i8*, i8** ${elementPointer(ctx, arr, STRING, copyAt)}${align8(ctx)}${elementAccess(ctx)}`);
+  const item = fn.emitValue(
+    `load i8*, i8** ${elementPointer(ctx, arr, STRING, copyAt)}${align8(ctx)}${elementAccess(ctx)}`
+  );
   const itemLen = stringLength(ctx, item);
   const itemData = fn.emitValue(`getelementptr inbounds i8, i8* ${item}, i64 8`);
   fn.emit(`call void @${MEMCPY}(i8* ${afterGap}, i8* ${itemData}, i64 ${itemLen}, i1 false)`);
@@ -692,9 +798,10 @@ const emitForOf: StatementEmitter = (ctx, node) => {
   fn.emit(`br i1 ${more}, label %${bodyBlock.label}, label %${endBlock.label}`);
 
   fn.placeBlock(bodyBlock);
-  const value = fn.emitValue(
-    `load ${ty}, ${ty}* ${elementPointer(ctx, arr, elem, idx)}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`
-  );
+  // The loop variable holds what `a[i]` holds: for an inline record that is the
+  // slot's address, so the body reads and writes the element in place rather
+  // than a copy of it.
+  const value = loadElement(ctx, arr, elem, idx);
   fn.emit(`store ${ty} ${value}, ${ty}* ${slot}${ctx.alignSuffix(elem)}`);
   ctx.loops.push({ breakBlock: endBlock, continueBlock: incBlock, hasBreak: false });
   ctx.emitStatement(stmt.statement);
@@ -724,6 +831,19 @@ export function isPushCall(program: CheckedProgram, node: ts.Node): node is ts.C
 export function arrayMethodName(program: CheckedProgram, node: ts.Node): string | undefined {
   if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return undefined;
   return isArray(program, node.expression.expression) ? node.expression.name.text : undefined;
+}
+
+/**
+ * WP15 §2a: `expr` is an array whose slots hold their elements *inline*, so a
+ * value stored into one is copied into the slot rather than pointed at from
+ * it. `attributes.ts` reads this to keep `nocapture` exact: a struct handed to
+ * `xs.push(p)` or written with `xs[i] = p` is read, not retained, and an
+ * object built only to be stored into such an array does not escape its frame
+ * — which is what lets it be an entry-block alloca the `memcpy` reads from.
+ */
+export function storesInlineElements(program: CheckedProgram, expr: ts.Expression): boolean {
+  const t = program.types.get(expr);
+  return t?.kind === "array" && inlineElementStruct(program.structs, t.elem) !== undefined;
 }
 
 /** `a.join(sep)` bumps one string out of the arena, so it is an allocation site. */
@@ -780,7 +900,11 @@ const collectMethodFacts: FactCollector = (program, node, facts, opts) => {
 const collectArrayFacts: FactCollector = (program, node, facts, opts) => {
   if (ts.isElementAccessExpression(node) && isArray(program, node.expression)) {
     facts.readsMemory = true;
-    if (!opts.uncheckedIndexing) facts.callees.add("nish_panic_index");
+    // Mirrors `emitBoundsCheck` exactly, proof and all: an access the checker
+    // proved in range emits no call, so listing `nish_panic_index` here would
+    // cost the function `willreturn` for a `noreturn` callee that is not in
+    // its IR.
+    if (!opts.uncheckedIndexing && !program.provenIndices.has(node)) facts.callees.add("nish_panic_index");
   } else if (ts.isPropertyAccessExpression(node) && isArray(program, node.expression)) {
     facts.readsMemory = true; // `.length`
   } else if (ts.isForOfStatement(node)) {

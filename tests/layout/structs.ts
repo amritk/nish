@@ -403,3 +403,41 @@ export function O_c(p: O): f32 {
 export function O_d(p: O): boolean {
   return p.d;
 }
+
+// WP15 §2a: an array of records is contiguous storage — `N` structs end to
+// end at exactly the stride clang gives the matching C array — so the C twin
+// walks `data` as a `struct P *` and reads every field of every element. `P`
+// is an `interface` rather than a `class` because that is the element kind the
+// layout applies to: fields and nothing else, so a copy into a slot is
+// indistinguishable from a pointer at the original.
+interface P {
+  x: f64;
+  y: f64;
+  tag: number;
+}
+
+export function makeP(x: f64, tag: number): P {
+  return { x: x, y: x * 2.0, tag: tag };
+}
+
+// Grown well past the initial capacity of 4, so `nish_array_grow` has moved
+// `sizeof(P)` bytes per element at least twice by the time C sees the block.
+export function buildPs(n: number): P[] {
+  const ps: P[] = [];
+  let i = 0;
+  while (i < n) {
+    ps.push({ x: toF64(i), y: toF64(i) * 2.0, tag: i });
+    i = i + 1;
+  }
+  return ps;
+}
+
+export function P_x(p: P): f64 {
+  return p.x;
+}
+export function P_y(p: P): f64 {
+  return p.y;
+}
+export function P_tag(p: P): number {
+  return p.tag;
+}

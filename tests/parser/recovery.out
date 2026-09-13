@@ -11,6 +11,7 @@ SOURCE_FILE 0 443
     BLOCK 318 333
       RETURN 322 331
         IDENT 329 330 a
+    LIST 0 0
   FUNCTION 335 386
     IDENT 344 350 broken
     LIST 351 360
@@ -25,6 +26,7 @@ SOURCE_FILE 0 443
         BINARY 381 386 +
           IDENT 381 382 a
           ERROR 385 386 expected an expression, found `}`
+    LIST 0 0
   FUNCTION 388 442
     IDENT 397 403 alsoOk
     LIST 404 413
@@ -39,3 +41,4 @@ SOURCE_FILE 0 443
         BINARY 434 439 *
           IDENT 434 435 b
           NUMBER 438 439 2
+    LIST 0 0

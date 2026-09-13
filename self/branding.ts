@@ -35,6 +35,23 @@ export const LANGUAGE: string = "Nish";
 export const CLI: string = "nish";
 
 /**
+ * The scheme a *builtin* module is imported under: `nish:fs`. It resolves to
+ * no file — the import renames a builtin the checker already has — which is
+ * what separates it from the standard library below. A literal, like every
+ * value here, for the reason the header gives.
+ */
+export const BUILTIN_SCHEME: string = "nish:";
+
+/**
+ * The specifier the *standard library* is imported under: `nish/text` is
+ * `std/text.ts` beside the compiler. Unlike a builtin this is ordinary Nish
+ * source, compiled into the program that imports it. `docs/wp21-packages.md`
+ * §2 is why it is here: it is the package's own name, and both compilers have
+ * to agree on it before either can resolve a bare specifier.
+ */
+export const STD_PREFIX: string = "nish/";
+
+/**
  * The package version, baked in rather than read from `package.json`: stage1
  * has no JSON parser and no way to find the package root from a binary that
  * may have been copied anywhere. `tests/run.js` fails when this and

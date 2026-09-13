@@ -590,7 +590,8 @@ declarations (a `const` bound to an arrow, or the legacy `function` keyword),
 `class` and `interface` declarations, `const` declarations
 ([Module constants](#module-constants)), `type` aliases
 ([Type aliases](#type-aliases)), numeric `enum` declarations
-([Enums](#enums)), `import` statements, and `export` modifiers on
+([Enums](#enums)), `declare function` declarations
+([Calling C](#calling-c)), `import` statements, and `export` modifiers on
 those declarations. Any other top-level statement, including `let`,
 is rejected with
 `Only top-level function declarations are supported in Phase 1 (found <Kind>)`
@@ -657,7 +658,8 @@ spelling; the two compile to identical IR, instruction for instruction
   (`tests/cases/reject_cls_name_is_function`); everything else is
   `` `value` is already declared in this module ``
   (`tests/cases/reject_fn_after_const`).
-- Rejected forms: generics (`tests/cases/reject_generic_function`),
+- **A function may be generic**, and each instantiation is compiled on its
+  own; see [Generic functions](#generic-functions). Rejected forms:
   generators (`reject_generator`), `async` (`reject_async_function`),
   destructured / rest / optional / default parameters
   (`Destructured parameters are not supported`,
@@ -776,9 +778,10 @@ program twice, with one golden between them.
   because it is the same mistake.
 - **An alias is resolved even when nothing uses it**, so a broken right-hand
   side is reported where it is written rather than never.
-- **Generic aliases are forbidden**, as every other generic is:
-  `type Box<T> = T[]` is
-  `` Generic type parameters are forbidden in Nish (no monomorphisation yet) ``
+- **Generic aliases are forbidden**, unlike a generic *function*: an alias
+  only renames a type that already exists, so there is nothing for a type
+  argument to apply to. `type Box<T> = T[]` is
+  `` Generic type parameters are forbidden on a type alias in Nish (a generic function is monomorphised; a generic class is not supported yet) ``
   (`tests/cases/reject_type_alias_generic`).
 - **A built-in type name may not be aliased.** `type string = i32` is
   `` `string` is a built-in type name and cannot be used for a type alias ``
@@ -912,15 +915,33 @@ and their `.ll` goldens are byte-identical files.
   `tests/cases/reject_export_default`).
 - The only import form is a named import from a relative specifier:
   `import { square, cube as pow3 } from "./math"` (`tests/link/two_file`).
-  The specifier must start with `./` or `../`
+  The specifier must start with `./` or `../`, name one of the three builtin
+  modules below, or name a standard-library module as `nish/<module>`
   (`Only relative import specifiers are supported`,
-  `tests/cases/reject_bare_import`); `.ts` is optional and `./x.js` maps to
+  `tests/cases/reject_bare_import`, `tests/cases/reject_bare_package`); `.ts` is optional and `./x.js` maps to
   `./x.ts`; paths resolve relative to the importing file. Default imports
   (`Default imports are not supported`, `reject_default_import`), namespace
   imports (`Namespace imports`, `reject_namespace_import`), side-effect
   imports (`Side-effect imports`, `reject_side_effect_import`), and
   type-only imports are rejected. A missing file is
   `` Cannot find module `./does_not_exist` `` (`reject_missing_module`).
+- **The standard library is imported as `nish/<module>`**
+  (`tests/link/std_bare_specifier`). It resolves to `std/<module>.ts` beside
+  the running compiler rather than relative to the importing file, so the same
+  specifier works at any depth. A module the library does not have is
+  `` Module `nish/toml` is not part of the standard library (it has: json,
+  testing, text) `` (`reject_std_unknown_module`). Unlike a `nish:` builtin this is
+  ordinary Nish source: it is compiled into the program that imports it and is
+  subject to every rule in this document. What it costs is what you call —
+  `speed` and `size` link with `--gc-sections`, and a module imported but never
+  called is byte-for-byte free (`std/README.md`). Its symbols are scoped to
+  package `nish`, so a program may declare a function a `std/` module also
+  exports (`tests/link/std_package_scope`); the package is decided by the
+  specifier rather than by where the file sits, because reading it off the path
+  would answer differently for an installed compiler and a checkout of the same
+  version.
+- Every other bare specifier is refused: there is no package resolution
+  (`reject_bare_package`, `docs/wp21-packages.md` §5b).
 - An imported constant contributes no `declare` and no relocation: it is
   folded into every use site in the importing module exactly as it is in the
   exporting one (`tests/link/const_export`,
@@ -1069,9 +1090,81 @@ class Point {
 - **Rejected**: `static` (`tests/cases/reject_cls_static`),
   getters/setters (`Getters and setters are not supported`), optional fields
   (`cannot be optional`), index signatures, `!` assertions, `abstract`,
-  `declare class`, generics (`tests/cases/reject_generic_class`), decorators
+  `declare class`, type parameters on a class or on one of its methods
+  (`tests/cases/reject_generic_class`, `reject_generic_method`), decorators
   (`reject_decorator`), computed member names (`reject_computed_property`),
   overloaded constructors.
+
+### Generic functions
+
+A function may declare type parameters, and **every instantiation is compiled
+to its own specialised function**: one `define` per (template, type-argument
+tuple), named by appending `$` and each argument's mangled type to the
+template's name. There is no boxing, no type dictionary and no runtime type
+information, and the IR of an instantiation is the IR of the monomorphic
+function somebody would have written by hand, with the symbol renamed
+(`tests/cases/gen_identity`).
+
+```typescript
+const identity = <T>(x: T): T => x;
+
+export const main = (): i32 => {
+  console.log(identity(7));      // @identity$i32
+  console.log(identity("hi"));   // @identity$str
+  return 0;
+};
+```
+
+- **Both spellings take type parameters.** `function identity<T>(x: T): T` and
+  `const identity = <T>(x: T): T => x` declare the same thing, as they do
+  without them (`tests/cases/gen_identity`).
+- **A type argument is inferred from the arguments, and is never written at a
+  call site.** `identity<i32>(7)` is
+  `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `identity(...)` ``
+  (`tests/cases/reject_generic_call_type_args`). One token of lookahead cannot
+  tell `f<i32>(x)` from `(f < i32) > (x)`, and inference already covers the
+  spelling. Inference matches the *shape* of each declared parameter against
+  its argument's type — `T` against `i32`, `T[]` against `i32[]`,
+  `Result<T, string>` against `Result<i32, string>` — left to right, first
+  binding wins (`tests/cases/gen_infer_two`, `gen_result_payload`).
+- **A type parameter that appears in no parameter is an error at the
+  declaration**, because it could never be inferred and the function could
+  never be called:
+  `` Cannot infer `T` for `empty`: a type parameter is inferred from the arguments, and `T` appears in none of them; give `empty` a parameter that mentions `T` ``
+  (`tests/cases/reject_generic_function`).
+- **Every other type rule applies to a type argument unchanged.** A type
+  parameter is not a hole through which something the language refuses can be
+  smuggled in: `Result<T, void>` is still refused at an instantiation whose `E`
+  is `void`, `T | null` is still only over a pointer type, and each
+  instantiation's body is checked with `T` bound to a concrete type.
+- **Each instantiation gets its own facts.** The attribute fixpoint and the
+  escape analysis are keyed by symbol, so `eq<T>` is `readnone` at `T = i32`
+  and `readonly` at `T = string` — one source line, two sets of attributes
+  (`tests/cases/gen_eq_purity`).
+- **Recursion terminates or is refused by name.** A recursive call whose type
+  argument is the parameter itself, or a type that does not mention it, is
+  accepted: `countDown<string>` asking for `countDown<i32>` is two
+  instantiations and no more (`tests/cases/gen_recursive_ground`). A call that
+  puts the parameter *under a type constructor* has no end and is refused:
+  `` Monomorphising `grow` would not terminate: `grow<i32>` asks for `grow<i32[]>`, which puts `i32` under a type constructor instead of passing it on, so the chain has no end; pass `T` itself, or a type that does not mention it ``
+  (`tests/cases/reject_generic_polymorphic_recursion`). Behind the rule are two
+  compiler limits — 256 instantiations of one template, 4096 in one module —
+  whose message says it is a limit rather than a rule of the language.
+- **`$` may not appear in a declared name.** It separates a generic's name from
+  its type arguments in every symbol the compiler emits, so a function called
+  `identity$i32` would be the symbol `identity<i32>` already has:
+  `` `identity$i32` cannot be the name of a function in Nish: `$` separates a generic's name from its type arguments in the symbols the compiler emits ``
+  (`tests/cases/reject_generic_dollar_name`). Locals, parameters and fields are
+  unaffected — only names that become symbols are restricted.
+- **Not supported yet**, each with its own message: a constrained parameter
+  (`<T extends Shape>`, `tests/cases/reject_generic_constraint`), a default
+  type argument (`<T = string>`), type parameters on a class, an interface, a
+  method or a type alias, and instantiating a generic imported from another
+  module (`` is a generic function, and a generic function cannot yet be
+  instantiated from another module ``). A generic `main` is refused too: the
+  entry point is called by the C runtime, which has no type arguments to give
+  it. The design and the milestones are in
+  [wp18-generics.md](wp18-generics.md).
 
 ### Interfaces and object literals
 
@@ -1133,6 +1226,53 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   function (`tests/cases/cls_implements_prefix`,
   `tests/differential/corpus/class_prefix`) — the job `extends` used to do,
   without a dispatch rule to get wrong.
+
+### Calling C
+
+**`declare function name(params): T;` declares a C function this program calls
+but does not define.** The symbol is the identifier — no mangling, no prefix —
+and the call is an ordinary call:
+
+```ts
+declare function abs(n: i32): i32;
+```
+
+```llvm
+declare i32 @abs(i32)
+  %0 = call i32 @abs(i32 %n)
+```
+
+The spelling is TypeScript's own ambient declaration, and `declare` is a
+*contextual* keyword: a variable may still be called `declare`.
+
+**Every position must be a scalar** — `i32`, `i64`, `u8`, `u16`, `u32`, `u64`,
+`f32`, `f64`, `boolean`, `void`. A `string`, an array, a class or an interface is
+rejected with
+`` and a declared C function takes scalars only `` in a parameter
+(`tests/cases/reject_ffi_string_param`) and
+`` returns a scalar only `` in the return position
+(`reject_ffi_string_return`). This is not a stylistic limit: a scalar boundary has
+no pointer for a foreign function to capture or free, which is what lets the
+escape analysis stay correct without knowing anything about the callee.
+
+**A foreign declaration has no body** (`reject_ffi_body`) and **cannot be
+`export`ed** (`reject_ffi_export`), because `export` offers other modules a
+function *this* module defines.
+
+**The declaration carries no LLVM attributes, and its callers pay for it.**
+Nothing about a body the compiler cannot see is provable, so a function that
+calls C loses `readnone` and `willreturn`, and so does everything above it in the
+call graph; a function that calls no C keeps both (`tests/cases/ffi_scalar`).
+`nounwind` is the one exception, and it is a **decision rather than a proof**:
+unwinding out of a foreign call is undefined in this language, the same position
+clang takes compiling C, because there is no `throw` and no landing pad with
+which to do anything else. See
+[`docs/wp27-ffi.md`](wp27-ffi.md) §2 and the
+[cookbook entry](IR_COOKBOOK.md#declare-function-calling-c).
+
+**A program that calls C is no longer one the compiler can reason about end to
+end.** That is the trade the feature is: the whole-program fact fixpoint is the
+performance thesis, and a foreign call is a hole in it.
 
 ## Statements
 
@@ -1460,7 +1600,48 @@ divide with overflow` is simply unreachable on an unsigned type.
 The index is sign-extended from `i32` (or truncated toward zero from
 `double` in f64 mode) to `i64` and checked against `len` with an unsigned
 compare, so negative indices fail too (`tests/cases/arr_bounds_panic`,
-`arr_index_read_write`, `arr_f64`). String-keyed access is forbidden by the
+`arr_index_read_write`, `arr_f64`).
+
+**The check is not emitted when the checker has proved the index in range**
+(WP15 §2.1/§2.2). The proof is flow-sensitive and keyed by *variable*: a fact
+is about a local or a parameter, never about a field or a property path, for
+the same reason a null narrowing is ([Nullable types](#nullable-types)). An
+access `w[i]` needs `i >= 0` and `i < w.length`, and both come from the
+program as written:
+
+  - `i >= 0` from a literal initialiser, from `i = w.length`, from a test that
+    reaches the access (`if (i >= 0)`, `0 <= i`, the false arm of `i < 0`), or
+    from the type — an `u8`/`u16`/`u32`/`u64` index is never negative, which
+    is the one *ranged* type the language has today.
+  - `i < w.length` from a test that reaches the access — a loop condition, an
+    `if`, the right operand of `&&`, the statements after
+    `if (i >= w.length) { return; }` — or, through `const n = w.length`, from
+    `i < n`. A constant index `w[3]` needs `w.length >= 4` instead, which a
+    length guard (`if (w.length >= 4)`) or an array literal of known size
+    gives.
+
+A fact ends where it stops being true: at any assignment to `i` that is not
+`i = i + <non-negative literal>` (`i++` and `i += n` included), at any
+assignment to `w`, and — for an **array** — at any call, because a callee
+holding the same array may `push` or `pop` and move `len`
+(`tests/cases/arr_bounds_shrink_panic` is the program that still panics
+because of that rule). A **string**'s length cannot change once the variable
+holding it is bound, so a string fact survives calls, which is what makes a
+scanner's cursor check-free (`tests/cases/str_bounds_proven`). The increment
+exception needs `nsw`: under `--wrapping` the step past `INT_MAX` is *defined*
+to land on `INT_MIN`, so an incremented counter has no lower bound and the
+check stays — **`--wrapping` therefore costs the bounds-check elimination on
+counted loops**, which is the one thing besides the overflow flags that the
+flag changes (`tests/cases/opt_wrapping` pins both halves). An `f64` index is never proved, because a bound on the double is
+not a bound on its truncation. `tests/cases/arr_bounds_proven` and
+`perf_bounds_quiet` pin the proofs; the surviving checks warn, below.
+
+The proof changes what the program *costs*, never what it *means*: an
+out-of-range index that reaches a check still panics.
+`--unchecked-indexing` is the opposite trade and is still a separate thing —
+it removes every check and makes an out-of-range index undefined behaviour.
+
+String-keyed access is forbidden by the
 validator (`reject_string_key_access`, `reject_non_numeric_index`), and so
 is an index outside the "numeric-shaped" forms listed under
 [Forbidden constructs](#forbidden-constructs-phase-0-validator): `a[k++]`
@@ -1476,6 +1657,57 @@ literal, or parameter) (`Empty array literal needs a type annotation`,
 `reject_arr_empty_literal`; `tests/cases/arr_push`, `arr_literal`). Holes and
 spread are not supported.
 
+### Arrays of records are contiguous
+
+An array whose element type is an **`interface`** is one block of records, `N`
+of them end to end at exactly the stride and alignment clang gives the matching
+C array. `ps[i]` is an interior pointer into that block — a `getelementptr`,
+with no pointer to load and chase — which is what makes a loop over `Point[]`
+vectorisable and what lets a C host read `((struct Point *)a->data)[i]`
+(`tests/cases/arr_struct_contiguous`, `tests/layout/structs.c`).
+
+Three element kinds are **not** records and keep one pointer per slot:
+
+- a **`class`**. The two struct kinds already mean different things: an
+  `interface` is fields and nothing else, so copying one into a slot cannot be
+  told apart from pointing at it, while a `class` has identity — a constructor
+  and methods that run on one object — and every other position in the language
+  passes a class value by reference.
+- an **`interface` some class `implements`**. That array is the language's only
+  polymorphic container (`tests/cases/cls_implements_prefix`): a `Shape[]` holds
+  a `Square` and a `Circle` at once, and both are longer than `Shape`, so a
+  value slot would copy the prefix and drop the rest. The property is
+  program-wide — one compilation, one layout for `Shape[]` in every module of it.
+- a **`T | null`** of any kind: a null element has no bytes to be, and `null` is
+  the pointer. That spelling is also how to ask for a sparse array of records.
+
+Three consequences, each of them a rule:
+
+- **A record put into an array is copied into the slot.** `ps.push(p)`,
+  `ps[i] = p` and `[p, q]` copy `sizeof` bytes, exactly as a C array of structs
+  does; afterwards `ps[i]` and `p` are two records, and writing one does not
+  change the other (`tests/cases/arr_struct_push_copy`).
+- **An element reference may not be held across a mutation of its array.**
+  `push` may move the block (`nish_array_grow` bumps a fresh one and copies)
+  and `pop` hands the slot back to the next `push`, so a pointer taken before
+  either names memory that is no longer the element. A `const` bound to `a[i]`
+  or `a.pop()`, and the variable of a `for (const p of a)`, are element
+  references; using one after a `push` or `pop` on the same array — or after a
+  call that could push through it, which is any call handed the array as a
+  non-`readonly` parameter — is
+  `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse
+  that storage; index `ps` again afterwards rather than holding the element
+  across it `` (`reject_arr_element_across_push`,
+  `reject_arr_element_loop_push`). A loop is checked as a whole, because a
+  `push` at the bottom of the body reaches a reference taken at the top on the
+  next pass. `ps.push(ps[i])` is refused for the same reason, in one message of
+  its own (`reject_arr_element_push_self`).
+
+The rule rejects some programs that would have been safe — a call is taken to
+mutate every mutable array it is handed, because whether the callee pushes is a
+whole-program question the checker does not answer. `readonly T[]` is how a
+signature promises it does not.
+
 ### Template literals
 
 `` `text ${e} text` `` accepts holes of type `string`, `number`, `i64`,
@@ -1490,9 +1722,59 @@ See [Classes](#classes) and [Interfaces](#interfaces-and-object-literals).
 
 ## Builtins
 
-No `import` is needed; builtins are resolved by name. Effects (`none`,
-`read`, `write`) are what the call does to the purity of the enclosing
-function ([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
+No `import` is needed; builtins are resolved by name. The libc-backed ones may
+also be imported from a `nish:` module, which is the same builtin under a name
+that cannot be shadowed (see [Builtin modules](#builtin-modules-nish) below).
+Effects (`none`, `read`, `write`) are what the call does to the purity of the
+enclosing function
+([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
+
+### Builtin modules (`nish:`)
+
+The builtins backed by the C runtime can be imported instead of reached for as
+globals. `nish:` is the only bare specifier the language accepts; it resolves
+to no file, and the import *renames a builtin rather than introducing one* —
+the call checks through the same rule and emits the same IR as the global
+spelling, which `tests/run.js` pins by compiling `tests/cases/io_nish_import`
+and `io_nish_import_global` and comparing the two bodies.
+
+| Module | Exports |
+| --- | --- |
+| `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `writeFileSync`, `appendFileSync`, `mkdirSync`, `isDirectorySync`, `readdirSync` |
+| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `monotonicNanos`, `argv`, `platform`, `arch` |
+| `nish:io` | `write`, `writeError`, `panic` |
+
+```ts
+import { readFileSync } from "nish:fs";
+import { argv } from "nish:process";
+import { write } from "nish:io";
+```
+
+- The forms are the ones every other import allows: a named import, with `as`
+  (`tests/cases/io_nish_rename`). Default, namespace, side-effect and type-only
+  imports are refused under the same messages a relative specifier gets.
+- An unknown module is `` Unknown builtin module `nish:sqlite` ``
+  (`reject_nish_unknown_module`); a name a module does not export is
+  `` Module `nish:fs` has no export `statSync` ``
+  (`reject_nish_unknown_export`). Both list what does exist.
+- **An imported builtin cannot be shadowed**, and that is the reason to prefer
+  one. A global builtin is consulted only when no user function of that name is
+  in scope, so declaring one silently replaces it; declaring one that collides
+  with an import is `` `panic` is already declared in this module `` instead
+  (`reject_nish_import_clash`).
+- A name keeps its kind. `argv`, `platform` and `arch` are values, and calling
+  one is refused (`reject_nish_property_call`); the functions are not values,
+  for the reason no function in this language is one
+  (`reject_nish_builtin_value`).
+- `exit` terminates control flow exactly as `process.exit` does, so a
+  non-`void` function may end with it (`io_nish_rename`).
+- Diagnostics name the canonical builtin whatever the call site calls it:
+  `exit(1, 2)` reports `` `process.exit` expects exactly 1 argument ``, which
+  is the rule to look up.
+- Everything else stays global — `Math.*`, the width conversions,
+  `console.log` / `console.error`, `String.fromCharCode`, `Arena.*`, `Ok` and
+  `Err`. They lower to an LLVM intrinsic or a single instruction and cost no
+  runtime at all, so they read as language rather than as library.
 
 ### `console`
 
@@ -1847,7 +2129,13 @@ compiler's own marks are never invalidated by user resets.
   `tests/differential/corpus/int_wrap`, `prng_lcg`, `bit_fnv1a`).
   This withdraws a guarantee the language used to make, and it is the one place
   where a correct program can become an incorrect one by upgrading; the flag is
-  the whole remedy.
+  the whole remedy. It is not free, though: the bounds proof
+  ([Element access](#element-access)) may not carry a lower bound across
+  `i = i + 1` when the wrap is *defined*, so a counted loop compiled with
+  `--wrapping` keeps the bounds checks the default build removes. That is the
+  only other thing the flag changes, and `tests/cases/opt_wrapping` pins both
+  halves: no `nsw` anywhere, and — with the checks taken out of both builds —
+  no other difference at all.
 - **Unsigned integers never carry a no-wrap flag**, in either mode. `u8`,
   `u16`, `u32` and `u64` are *defined* to wrap, so `(255: u8) + 1` is `0`
   (`tests/cases/u_arith_wrap`): `nuw` would be a claim the language does not
@@ -2083,7 +2371,7 @@ by the caller.
   that *failed* prints its errors and none of its warnings; a report of more
   than one warning is capped at 20, like the error report, with
   `...and N more performance warnings` and an `N performance warnings` line.
-  Six warnings exist today, and each names the rewrite:
+  Seven warnings exist today, and each names the rewrite:
   - **quadratic string building** — `s = <something built from s>` where `s`
     is a string local declared outside the loop the assignment sits in, so
     every pass copies the whole accumulator. The hint is a `string[]` and one
@@ -2149,6 +2437,20 @@ by the caller.
     The count is masked to the width, so the shift that runs is not the shift
     that was written; the hint is to mask deliberately or to shift a wider
     value (`tests/cases/perf_overflow`). A count inside the width is silent.
+  - **a bounds check that was not eliminated** — `a[i]` or `s.charCodeAt(i)`
+    inside a loop where the proof above did not come off, so the length is
+    loaded and compared on every iteration. The hint is the guard that always
+    works — `if (i >= 0 && i < a.length)` reaching the access proves both ends,
+    whatever took the proof away — with an unsigned index named beside it,
+    since half the proof then comes off the declaration
+    (`tests/cases/perf_bounds_loop`). Reported on the index, once per access.
+    Silent outside a loop, where one check is not a cost anybody is paying;
+    silent under `--unchecked-indexing`, where no check survives to report;
+    and silent unless the receiver and the index are both plain locals, which
+    is the shape the analysis knows how to prove — a field receiver
+    (`this.source.charCodeAt(this.pos)`) or a computed index was never a
+    candidate, and the rewrite there is to bind them to locals first
+    (`tests/cases/perf_bounds_quiet`).
 - **`--json`** prints every diagnostic as one JSON object per line on stdout,
   `{"file","line","column","endLine","endColumn","severity","code","message"}`
   (1-based, end exclusive; syntax errors carry a `syntax error: ` prefix in
@@ -2222,7 +2524,9 @@ fragment `tests/run.js` matches and the case that proves it.
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| type parameters on functions, methods, arrows, classes, interfaces, type aliases | `` Generic type parameters are forbidden in Nish (no monomorphisation yet) `` | `reject_generic_function`, `reject_generic_class`, `reject_type_alias_generic` |
+| type parameters on a class or an interface | `` Generic type parameters are forbidden on a class in Nish (a generic function is monomorphised; a generic class is not supported yet) `` | `reject_generic_class` |
+| type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish (a generic function is monomorphised; a generic class is not supported yet) `` | `reject_type_alias_generic` |
+| type parameters on a method | `` Generic type parameters are forbidden on a method in Nish (a method takes its class's type arguments and adds none of its own) `` | `reject_generic_method` |
 | type *arguments* on `new` of a declared class | `` Generic classes are not supported `` | `reject_cls_new_generic` |
 | generators (`function*`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator` |
 | `async` functions, methods, arrows | `` `async` functions are forbidden in Nish (no event loop or promises) `` | `reject_async_function` |
@@ -2337,6 +2641,7 @@ messages are exact for the cases cited; other rows quote
 | I/O with the wrong type | `` `readFileSync` expects an argument of type string, got i32 `` | `reject_readfile_number`, `reject_readdir_type`, `reject_spawn_to_type` |
 | I/O with the wrong arity | `` `readdirSync` expects exactly 1 argument, got 2 ``; `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``; `` `monotonicNanos` expects exactly 0 arguments, got 1 `` | `reject_readdir_arity`, `reject_spawn_to_arity`, `reject_monotonic_arity` |
 | array errors | see [Arrays](#array-literals), [Element access](#element-access), [`for...of`](#for-const-x-of-a) | `reject_arr_*` |
+| element reference held across a `push` or `pop` | `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it `` — see [Arrays of records are contiguous](#arrays-of-records-are-contiguous) | `reject_arr_element_across_push`, `reject_arr_element_loop_push`, `reject_arr_element_push_self` |
 | class and interface errors | see [Classes](#classes), [Interfaces](#interfaces-and-object-literals) | `reject_cls_*` |
 | `extends` or `super` on a class (WP25: there is no inheritance) | `` `extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `Derived` and `implements` an interface to convert between them `` / `` `super` is not supported: Nish has no inheritance, so a class has no base class to reach `` | `reject_cls_extends`, `reject_cls_super` |
 | a class does not cover the interface it `implements` | `` Class `Point2` does not implement `Point3`: it lacks field `z: i32` (the interface's fields must be the class's first fields, in order) `` | `reject_cls_implements_short`, `reject_cls_implements_mismatch` |

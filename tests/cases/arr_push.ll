@@ -6,7 +6,6 @@ declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #1
-declare void @nish_panic_index(i64 noundef, i64 noundef) #2
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -112,29 +111,19 @@ for.body.1:
   %47 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
   %48 = load i32, i32* %i.addr.1, align 4
   %49 = sext i32 %48 to i64
-  %50 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %47, i64 0, i32 0
-  %51 = load i64, i64* %50, align 8, !alias.scope !3, !noalias !4
-  %52 = icmp ult i64 %49, %51
-  br i1 %52, label %bounds.ok, label %bounds.fail
-
-bounds.fail:
-  call void @nish_panic_index(i64 %49, i64 %51)
-  unreachable
-
-bounds.ok:
-  %53 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %47, i64 0, i32 2
-  %54 = load i8*, i8** %53, align 8, !alias.scope !3, !noalias !4
-  %55 = bitcast i8* %54 to i32*
-  %56 = getelementptr inbounds i32, i32* %55, i64 %49
-  %57 = load i32, i32* %56, align 4, !alias.scope !4, !noalias !3
-  %58 = call i8* @nish_str_from_i32(i32 %57)
-  call void @nish_print(i8* %58)
+  %50 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %47, i64 0, i32 2
+  %51 = load i8*, i8** %50, align 8, !alias.scope !3, !noalias !4
+  %52 = bitcast i8* %51 to i32*
+  %53 = getelementptr inbounds i32, i32* %52, i64 %49
+  %54 = load i32, i32* %53, align 4, !alias.scope !4, !noalias !3
+  %55 = call i8* @nish_str_from_i32(i32 %54)
+  call void @nish_print(i8* %55)
   br label %for.inc.1
 
 for.inc.1:
-  %59 = load i32, i32* %i.addr.1, align 4
-  %60 = add nsw i32 %59, 1
-  store i32 %60, i32* %i.addr.1, align 4
+  %56 = load i32, i32* %i.addr.1, align 4
+  %57 = add nsw i32 %56, 1
+  store i32 %57, i32* %i.addr.1, align 4
   br label %for.cond.1
 
 for.end.1:
@@ -151,7 +140,6 @@ entry:
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind noreturn cold }
 
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}

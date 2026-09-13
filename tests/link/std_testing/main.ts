@@ -3,7 +3,7 @@
 // itself with no Node anywhere — the exit code and the report below are the
 // binary's own.
 import { Suite } from "../../../std/testing";
-import { countAbove, sumOf } from "./stats";
+import { countAbove, describe, describeLines, sumOf } from "./stats";
 
 export const main = (): number => {
   const t = new Suite("stats");
@@ -15,6 +15,12 @@ export const main = (): number => {
   t.eqI32("countAbove the largest element", countAbove(xs, 9), 0);
   t.ok("sumOf is not the length", sumOf(xs) !== xs.length);
   t.eqBool("countAbove found something", countAbove(xs, 4) > 0, true);
+
+  // The assertions over text: a fragment of a rendered report, every fragment of
+  // one, and a report compared line by line.
+  t.contains("describe names the sum", describe(xs, 4), "sum=25");
+  t.containsAll("describe names both figures", describe(xs, 4), ["sum=25", "above=2"]);
+  t.eqLines("describeLines", describeLines(xs, 4), ["count=4", "sum=25", "above=2"]);
 
   // The guard idiom: an out-of-range index panics and ends the process, so a
   // check that a later read depends on has to be a branch and not a line.

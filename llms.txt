@@ -1,0 +1,47 @@
+# Nish
+
+> Nish is an ahead-of-time compiler from a strictly static subset of TypeScript
+> to LLVM IR. Every Nish program is legal TypeScript syntax and type-checks
+> under `tsc --strict`, but the subset is far smaller than TypeScript: no `any`,
+> no `throw`, no callbacks or function values, no generics, no inheritance, no
+> truthiness, and no implicit conversion of any kind. Failure is a `Result<T, E>`
+> the checker will not let you drop; absence is `T | null` you must narrow.
+> There is no garbage collector — allocation is placed at compile time.
+
+If you are **writing a Nish program**, read `docs/AI.md` first. It is the whole
+language as rules, written for one pass, with the TypeScript reflexes that get
+rejected listed before anything else. If you are **working on the compiler**,
+read `AGENTS.md` and `.claude/orientation.md` instead.
+
+Verify, never guess: `nish program.ts --json` prints one flat JSON object per
+diagnostic on stdout and is the only authority on whether a program is legal.
+Key on the stable `code` field (`NL2249`), never on the prose in `message`.
+Exit codes: 0 ok, 1 the program was rejected, 2 usage, 3 C toolchain, 70 a bug
+in the compiler.
+
+## Writing Nish
+
+- [Rules card](https://raw.githubusercontent.com/amritk/nish/main/docs/AI.md): the whole language as rules, sized for one read — the traps first, then types, `Result`, nullables, declarations, statements, the complete builtin inventory, and recipes for what is missing. Ships in the npm package as `docs/AI.md`.
+- [Language reference](https://raw.githubusercontent.com/amritk/nish/main/docs/LANGUAGE.md): normative and exhaustive. Every rule cites the test that pins it and quotes the exact rejection message. Settles any disagreement with the rules card.
+- [Ambient declarations](https://raw.githubusercontent.com/amritk/nish/main/runtime/nish.d.ts): reference this from `tsconfig.json` and `tsc --strict`, your editor and your language server accept `Result<T, E>`, `i32` and the rest. `nish` is still the authority — `tsc` cannot see the flow rules.
+- [Standard library](https://raw.githubusercontent.com/amritk/nish/main/std/README.md): `std/testing`, a suite a program drives to check itself and answer an exit code; `std/text`, the `split` / `trim` / `replace` the language does not have; `std/json`, the value of one field of one flat JSON object — enough to read this compiler's own `--json` output. Source rather than a built library, imported by relative path, and shipped in the npm package under `std/`.
+- [FAQ](https://raw.githubusercontent.com/amritk/nish/main/docs/FAQ.md): why no `any`, why `i32`, how to get JavaScript numbers, why no GC, overflow and `--wrapping`, what errors look like.
+- [Install](https://raw.githubusercontent.com/amritk/nish/main/docs/INSTALL.md): prerequisites per OS, hello world, exit codes, troubleshooting.
+
+## How it compiles
+
+- [IR cookbook](https://raw.githubusercontent.com/amritk/nish/main/docs/IR_COOKBOOK.md): for every construct, the smallest snippet and the exact LLVM IR it compiles to today.
+- [Architecture](https://raw.githubusercontent.com/amritk/nish/main/docs/ARCHITECTURE.md): the pipeline, side tables, how to add a construct, the ABI contracts, attribute soundness rules, the test harness.
+- [Benchmarks](https://raw.githubusercontent.com/amritk/nish/main/docs/BENCHMARKS.md): wall time, binary size and peak memory against C and Rust, with the exact build commands.
+
+## Working on the compiler
+
+- [Agent guide](https://raw.githubusercontent.com/amritk/nish/main/AGENTS.md): the repository's rules for AI agents — the machine-readable surfaces, how to trust a test run, the house rules.
+- [Orientation](https://raw.githubusercontent.com/amritk/nish/main/.claude/orientation.md): the two compilers, the code map, the commands, the seven things that are always true.
+- [Documentation index](https://raw.githubusercontent.com/amritk/nish/main/docs/README.md): every reference and design note, one line each.
+
+## Optional
+
+- [Master plan](https://raw.githubusercontent.com/amritk/nish/main/docs/MASTER_PLAN.md): vision, design rules, work packages, contributor conventions.
+- [Self-hosting](https://raw.githubusercontent.com/amritk/nish/main/docs/wp14-selfhost.md): the compiler written in its own language, and the oracles that keep the two in step.
+- [Changelog](https://raw.githubusercontent.com/amritk/nish/main/CHANGELOG.md): generated from the commits; what changed in each release.

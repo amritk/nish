@@ -166,6 +166,16 @@ visible as known failures):
   `bool_logic`, `bit_fnv1a`, `prng_lcg` and `const_module`.
 - **`i64` wraps at 64 bits under `--wrapping`**, and is undefined on overflow
   without it; literals are typed by context (docs/wp7-runtime.md).
+- **An array of records holds them by value** (WP15 §2a,
+  [LANGUAGE.md, Arrays of records are contiguous](LANGUAGE.md#arrays-of-records-are-contiguous)):
+  `ps.push(p)` on a `P[]` whose `P` is an `interface` nobody implements copies
+  `p` into the slot, so a later write through `p` does not change `ps[n]` —
+  where JavaScript would have stored the object itself. The shim cannot
+  reproduce this without a deep copy per store, and the dangerous half of it is
+  a compile error anyway (`NL2290`: an element reference may not be held across
+  a `push`), so **a corpus program must not rely on a pushed record and the
+  element it became being the same object**. An array of a `class`, or of an
+  `interface` some class implements, is unchanged and still holds references.
 - **Shift counts are masked** to the operand width — 31 at 32 bits and 63 at
   64, which is what JavaScript does too, so `x << 33` agrees on both sides; the
   rewrite spells the mask out only for `u8` and `u16`, whose widths JavaScript
@@ -334,6 +344,23 @@ when reading a `COMPILE-ERROR` row:
   as "Element access requires a numeric index" before the checker sees them.
 - `n *= i` with an `i64` `n` and an i32 loop variable needs `toI64(i)`;
   there is no implicit widening (documented).
+
+### A program that calls C is outside this oracle, permanently
+
+WP27 S1 added `declare function`, and `tests/cases/ffi_scalar` calls libc's `abs`
+and `labs`. The rewriter produces JavaScript that references `abs`, the shim has
+no such export, and Node exits 1 where the native binary exits 0.
+
+It is listed in `known-failures.txt` and it is not a discrepancy to be closed.
+Shimming `abs` would work and would teach the wrong lesson: the next program
+declares a different symbol, and the oracle's premise — that the same source has
+one meaning in both worlds — does not hold for a source whose meaning is "whatever
+this C function does". Every FFI program is outside this oracle by construction.
+
+That is a real coverage cost, and it is why the feature's evidence is arranged
+differently: `ffi_scalar` carries a golden `.ll`, an `llvm-as` pass, a native
+round trip with expected stdout, and the attribute assertions the differential
+oracle could never have made anyway.
 
 ## The fuzzer
 

@@ -63,6 +63,13 @@ type Walk = {
   ctx: CheckContext;
   /** The function being walked: the arena rule reads its return type. */
   sig: FunctionSig;
+  /**
+   * The accesses whose bounds check survived `bounds.ts` inside a loop. The
+   * proof is not this file's — it is a flow-sensitive analysis of its own —
+   * but the *report* is, because every WP15 §8 warning has to come out of one
+   * source-order walk or the diagnostics stop being in source order.
+   */
+  unprovenIndices: ts.Node[];
   loops: ts.Statement[];
   declared: LocalVar[];
   declaredDepth: number[];
@@ -354,7 +361,7 @@ const capturesLocal = (program: CheckedProgram, node: ts.Node, local: LocalVar):
  */
 const heldValueMayBeReachable = (walk: Walk, expr: ts.BinaryExpression, local: LocalVar): boolean => {
   const inLoop = walk.loops.length > 0;
-  const root: ts.Node = inLoop ? walk.loops[0] : walk.sig.body;
+  const root: ts.Node = inLoop ? walk.loops[0] : (walk.sig.body ?? walk.sig.decl);
   const before = expr.getStart(expr.getSourceFile());
   let reachable = false;
   const scan = (node: ts.Node): void => {
@@ -651,6 +658,52 @@ const checkShiftCount = (walk: Walk, expr: ts.BinaryExpression): void => {
 };
 
 /**
+ * A bounds check `bounds.ts` could not remove, on an access inside a loop
+ * whose receiver and index are both plain locals — which is the shape the
+ * analysis knows how to prove, so a guard really would remove the check.
+ *
+ * The hint is one rewrite rather than a list because it is the one that always
+ * works: a `i >= 0 && i < xs.length` test reaching the access proves both ends
+ * whatever took the proof away, `--wrapping` included, where an incremented
+ * counter has no lower bound the compiler may assume. An unsigned index is
+ * named beside it because `u8`/`u16`/`u32`/`u64` are the ranged types the
+ * language already has, and half the proof comes off their declaration.
+ */
+const checkSurvivingBoundsCheck = (walk: Walk, access: ts.Node): void => {
+  const program = walk.ctx.program;
+  const parts = accessParts(access);
+  if (!parts) return;
+  const holder = nameOfLocal(program, parts.receiver);
+  const index = nameOfLocal(program, parts.index);
+  if (holder === undefined || index === undefined) return;
+  walk.ctx.reportPerformance(
+    `\`${index}\` is not proven to be in range for \`${holder}\` here, so this access keeps its bounds check and ` +
+      `compares against the length on every iteration: guard it with a test that reaches the access — ` +
+      `\`if (${index} >= 0 && ${index} < ${holder}.length)\` proves both ends, and an unsigned index needs only ` +
+      `the upper one`,
+    parts.index
+  );
+};
+
+/** The receiver and index of `a[i]` or `s.charCodeAt(i)`; the two shapes that bounds-check. */
+const accessParts = (node: ts.Node): { receiver: ts.Expression; index: ts.Expression } | undefined => {
+  if (ts.isElementAccessExpression(node)) {
+    return { receiver: node.expression, index: node.argumentExpression };
+  }
+  if (!ts.isCallExpression(node)) return undefined;
+  const callee = unwrapParens(node.expression);
+  if (!ts.isPropertyAccessExpression(callee) || node.arguments.length !== 1) return undefined;
+  return { receiver: callee.expression, index: node.arguments[0] };
+};
+
+/** The source name of the local a bare identifier binds, for the message to quote. */
+const nameOfLocal = (program: CheckedProgram, expr: ts.Expression): string | undefined => {
+  const e = unwrapParens(expr);
+  if (!ts.isIdentifier(e)) return undefined;
+  return program.bindings.get(e)?.name;
+};
+
+/**
  * Walk one function body. The loop stack is pushed around the parts of a loop
  * that run once per iteration and *not* around a `for` initializer, which runs
  * once: `for (let s = ""; ...) { s = s + t; }` accumulates across the whole
@@ -713,6 +766,7 @@ const walkNode = (walk: Walk, node: ts.Node): void => {
   } else if (ts.isCallExpression(node)) {
     checkWideningConversion(walk, node);
   }
+  if (walk.unprovenIndices.includes(node)) checkSurvivingBoundsCheck(walk, node);
   ts.forEachChild(node, (child) => walkNode(walk, child));
 };
 
@@ -722,8 +776,11 @@ const walkNode = (walk: Walk, node: ts.Node): void => {
  * and only for a body that checked cleanly — advice about code that does not
  * compile is noise, and a poisoned body has incomplete side tables anyway.
  */
-export const checkPerformance = (ctx: CheckContext, sig: FunctionSig): void => {
+export const checkPerformance = (ctx: CheckContext, sig: FunctionSig, unprovenIndices: ts.Node[]): void => {
   const body = sig.body;
   if (!body) return;
-  walkNode({ ctx, sig, loops: [], declared: [], declaredDepth: [], declaredAllocates: [] }, body);
+  walkNode(
+    { ctx, sig, unprovenIndices, loops: [], declared: [], declaredDepth: [], declaredAllocates: [] },
+    body
+  );
 };
