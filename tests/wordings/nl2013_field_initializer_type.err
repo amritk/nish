@@ -1,0 +1,1 @@
+Field `x` of class `Point` is i32 but its initializer is string

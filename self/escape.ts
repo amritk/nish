@@ -66,7 +66,7 @@ import { literalLength } from "./emit_arrays";
 import { isResultConstructorCall, resultMethodName } from "./emit_result";
 import { StringSet } from "./map";
 import { Options } from "./options";
-import { CheckedProgram, FunctionSig } from "./program";
+import { CheckedProgram, elementStride, FunctionSig } from "./program";
 import { Local, STORAGE_LOCAL, STORAGE_PARAM } from "./symbols";
 import { isNumeric, T_STRING, TypeTable } from "./types";
 
@@ -285,9 +285,15 @@ class EscapeAnalysis {
     return [];
   }
 
-  /** Bytes per element: every value is a scalar or a pointer, so its size is its alignment. */
+  /**
+   * Bytes per element, for the stack budget. WP15 §2a: an array of classes
+   * holds its elements inline, so a stackable `new Array<Point>(64)` is 64
+   * `Point`s of slot rather than 64 pointers — the same question
+   * `emit_arrays.ts` asks, and it has to be asked the same way or the budget
+   * and the `[n x T]` slot the emitter writes would disagree.
+   */
   elementSize(elem: i32): i32 {
-    return this.table.alignOf(elem);
+    return elementStride(this.unit.program, this.table, elem);
   }
 
   visit(node: Node): void {

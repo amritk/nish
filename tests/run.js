@@ -416,38 +416,56 @@ if (!only || "diagnostics".includes(only)) {
     jsSyn.stdout
   );
 
-  // Coverage over every rejection the suite exercises. The uncoded remainder is
-  // the backlog, pinned so it can shrink but not grow: such a message is built
-  // entirely out of interpolations and has no literal run long enough to
-  // identify a rule. Adding one is a matter of giving the message words of its
-  // own, not of editing the table -- which is what took this from 8 to 1:
-  // `` `${fn}` expects ${a}, got ${b} `` was eight of them, and now reads
-  // `expects an argument of type ${a}`, a run a code can be derived from.
-  // The one left is `Unknown base class ...`, whose leading run is shorter
-  // than the parenthetical that actually states the rule.
-  const UNCODED_BACKLOG = 1;
-  const rejectCases = fs
-    .readdirSync(casesDir)
-    .filter((f) => f.startsWith("reject_") && f.endsWith(".ts"));
-  const byMessage = new Map();
-  for (const c of rejectCases) {
-    const args = [path.join("tests", "cases", c), "--json"];
-    const argsFile = path.join(casesDir, `${c.slice(0, -3)}.args`);
-    if (fs.existsSync(argsFile))
-      args.push(...fs.readFileSync(argsFile, "utf8").trim().split(/\s+/).filter(Boolean));
-    const r = spawnSync("node", [cli, ...args], { cwd: root, encoding: "utf8" });
-    for (const line of r.stdout.split("\n")) {
-      if (!line.startsWith("{")) continue;
-      const o = JSON.parse(line);
-      byMessage.set(o.message, o.code);
-    }
-  }
-  const uncoded = [...byMessage].filter(([, code]) => code === "NL0000");
-  const coverage = ((1 - uncoded.length / byMessage.size) * 100).toFixed(1);
+  // Coverage over every code in the registry, not only over the ones some
+  // rejection happens to reach (WP19 G2.4). `tests/diagnostic_coverage.js`
+  // compiles the negatives, the `perf_*` positives and its own
+  // `tests/wordings/` corpus, reads the `code` out of every `--json` object,
+  // and requires each of the registry's codes to be either provoked or named
+  // in `tests/wordings/unreachable.txt` with a reason. It replaces the loop
+  // that used to live here, which spawned the same compilers one at a time and
+  // could only report what the corpus already reached; this one is pooled and
+  // says what it does *not* reach, which is the number the gate is about.
+  //
+  // The uncoded remainder is still the backlog, pinned so it can shrink but not
+  // grow: such a message is built entirely out of interpolations and has no
+  // literal run long enough to identify a rule. Adding one is a matter of
+  // giving the message words of its own, not of editing the table -- which is
+  // what took this from 8 to 1 over `tests/cases`: `` `${fn}` expects ${a}, got
+  // ${b} `` was eight of them, and now reads `expects an argument of type
+  // ${a}`, a run a code can be derived from. The one left there is `Unknown
+  // base class ...`, whose leading run is shorter than the parenthetical that
+  // actually states the rule.
+  //
+  // Five rather than one, because the loop this replaced walked
+  // `tests/cases/reject_*` alone and the tool walks the `tests/link/` negatives
+  // too: the whole-program rules -- a duplicate export, a duplicate import, a
+  // duplicate internal name and an export a module does not have -- are
+  // uncoded and always were, and nothing was counting them. They are named on
+  // stdout by the run, so shrinking this backlog means giving one of those
+  // messages a literal run of its own.
+  const UNCODED_BACKLOG = 5;
+  const wordings = spawnSync(
+    "node",
+    [
+      path.join(root, "tests", "diagnostic_coverage.js"),
+      "--compiler",
+      path.relative(root, cli),
+      "--require-coverage",
+      ...(process.env.UPDATE_GOLDENS === "1" ? ["--update"] : []),
+    ],
+    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+  );
+  const wordingsSummary = wordings.stdout.trim().split("\n").pop() ?? "";
   check(
-    `codes: ${byMessage.size - uncoded.length}/${byMessage.size} distinct rejection messages carry a code (${coverage}%), ${uncoded.length} uncoded`,
-    byMessage.size > 200 && uncoded.length <= UNCODED_BACKLOG,
-    uncoded.map(([m]) => `  uncoded: ${m}`).join("\n")
+    `codes: every registry code is provoked by a program or explained (${wordingsSummary})`,
+    wordings.status === 0,
+    `${wordings.stdout}${wordings.stderr}`
+  );
+  const uncodedCount = Number(/uncoded=(\d+)/.exec(wordingsSummary)?.[1] ?? NaN);
+  check(
+    `codes: the uncoded backlog is ${uncodedCount} message(s), and may not grow past ${UNCODED_BACKLOG}`,
+    Number.isFinite(uncodedCount) && uncodedCount <= UNCODED_BACKLOG,
+    wordings.stdout
   );
   const jsOk = spawnSync(
     "node",
@@ -961,6 +979,75 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
   }
 }
 
+// ---- WP18: generics ---------------------------------------------------------------
+// The acceptance test of the whole package, and a golden cannot express it: an
+// instantiation's `define` must be *byte-identical* to the `define` of the
+// monomorphic function somebody would have written by hand, modulo the symbol
+// name. If that ever stops holding, the instantiation path has started emitting
+// something a hand-written function would not, which is a bug rather than a
+// performance question (docs/wp18-generics.md §9, §12).
+{
+  const dir = path.join(buildDir, "generics");
+  fs.mkdirSync(dir, { recursive: true });
+  const twin = (name, source) => {
+    const file = path.join(dir, `${name}.ts`);
+    fs.writeFileSync(file, source);
+    const out = path.join(dir, `${name}.ll`);
+    const r = spawnSync("node", [cli, file, "-o", out], { cwd: root, encoding: "utf8" });
+    if (r.status !== 0) return { error: `${r.stdout}${r.stderr}` };
+    return { ir: fs.readFileSync(out, "utf8") };
+  };
+  /**
+   * One `define` block, from its header to the closing brace, with the
+   * attribute *group* resolved to the attributes it names. The index is
+   * per module and depends on the order the groups were added, and the two
+   * modules emit their functions in different orders — the template's
+   * instantiations are appended after the functions the module declares — so
+   * comparing `#0` against `#1` would fail on the numbering rather than on the
+   * function. Resolving it compares the attributes themselves, which is the
+   * stronger check anyway.
+   */
+  const defineOf = (ir, symbol) => {
+    const lines = ir.split("\n");
+    const at = lines.findIndex((line) => line.startsWith(`define `) && line.includes(`@${symbol}(`));
+    if (at < 0) return "";
+    const end = lines.indexOf("}", at);
+    const block = lines.slice(at, end + 1);
+    block[0] = block[0].replace(/#(\d+) \{$/, (_, n) => {
+      const group = lines.find((line) => line.startsWith(`attributes #${n} = `));
+      return `${group ? group.slice(`attributes #${n} = `.length) : `#${n}`} {`;
+    });
+    return block.join("\n");
+  };
+  const body = `{
+  let total = 0;
+  for (let i = 0; i < 4; i++) {
+    total = total + i;
+  }
+  return x;
+}`;
+  const generic = twin("gen_twin", `const same = <T>(x: T, n: i32): T => ${body}\n\nexport const test = (): number => {\n  console.log(same(7, 1));\n  return 0;\n};\n`);
+  const plain = twin("mono_twin", `const same = (x: i32, n: i32): i32 => ${body}\n\nexport const test = (): number => {\n  console.log(same(7, 1));\n  return 0;\n};\n`);
+  const got = generic.ir ? defineOf(generic.ir, "same$i32") : "";
+  const want = plain.ir ? defineOf(plain.ir, "same").replace("@same(", "@same$i32(") : "";
+  check(
+    "generics: an instantiation's `define` is the hand-written monomorphic twin's, symbol aside",
+    want.length > 0 && got === want,
+    `--- monomorphic\n${want}\n--- instantiated\n${got}\n${generic.error ?? ""}${plain.error ?? ""}`
+  );
+}
+// Every generic module must satisfy the IR verifier, not just the assembler:
+// an instantiation is emitted from side tables the module's own body never
+// wrote into, which is exactly the shape a dominance bug would hide in.
+if (has("opt")) {
+  for (const name of cases.filter((c) => c.startsWith("gen_") && (!only || c.includes(only)))) {
+    const ll = path.join(buildDir, `${name}.ll`);
+    if (!fs.existsSync(ll)) continue;
+    const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll]);
+    check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr));
+  }
+}
+
 // ---- WP4: arrays ------------------------------------------------------------------
 // 1. Every arr_ module must pass the IR verifier (the bounds check adds blocks and `unreachable`).
 // 2. A failed bounds check exits 1 with "index out of range: <idx> >= <len>" on stderr.
@@ -1054,6 +1141,53 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   }
 }
 
+// ---- WP15 §4: the fast slice ---------------------------------------------------------
+// 1. Every str_ module must satisfy the IR verifier, because `slice`'s range check adds
+//    blocks and an `unreachable` the way the array bounds check does.
+// 2. A failed range check exits 1 naming the interval that was asked for, and the earlier
+//    line still reaches stdout. The case slices a reversed pair, which is what separates
+//    `slice` from `substring`: JavaScript's `substring` would swap the ends and answer.
+// 3. The check is what the clamp is not: provable. `str_slice.ts` slices constant offsets
+//    out of a literal, so after `opt -O2` not one `nish_panic_slice` call is left in the
+//    module — the lean lowering costs nothing at all where the bounds are known, which is
+//    the argument for having it beside `substring` rather than instead of it.
+if (!only || "strings".includes(only) || only.startsWith("str")) {
+  if (HAS_OPT) {
+    for (const name of cases.filter((c) => c.startsWith("str_") && (!only || c.includes(only)))) {
+      const ll = path.join(buildDir, `${name}.ll`);
+      if (!fs.existsSync(ll)) continue;
+      const v = spawnSync("opt", ["-passes=verify", "-disable-output", ll]);
+      check(`${name}: opt -passes=verify accepts IR`, v.status === 0, String(v.stderr));
+    }
+    const sliceLl = path.join(buildDir, "str_slice.ll");
+    if (fs.existsSync(sliceLl)) {
+      const o = spawnSync("opt", ["-O2", "-S", sliceLl]);
+      const out = String(o.stdout);
+      check(
+        "str_slice: opt -O2 proves every constant slice in range and drops the panic",
+        o.status === 0 && out !== "" && !out.includes("nish_panic_slice"),
+        o.status === 0 ? out : String(o.stderr)
+      );
+    }
+  }
+  const slicePanicLl = path.join(buildDir, "str_slice_panic.ll");
+  if (HAS_CLANG && fs.existsSync(slicePanicLl)) {
+    const exe = path.join(buildDir, "str_slice_panic");
+    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", slicePanicLl, "runtime/runtime.c", "-o", exe], {
+      cwd: root,
+    });
+    const run = cc.status === 0 ? spawnSync(exe) : null;
+    check(
+      "str_slice_panic: exits 1 with `slice out of range: [4, 2) of length 5` on stderr",
+      run !== null &&
+        run.status === 1 &&
+        String(run.stderr).includes("slice out of range: [4, 2) of length 5") &&
+        String(run.stdout).trim() === "el",
+      run ? `exit ${run.status}\nstdout: ${run.stdout}\nstderr: ${run.stderr}` : String(cc.stderr)
+    );
+  }
+}
+
 // ---- WP6: memory --------------------------------------------------------------------
 // 1. Every mem_ module passes the IR verifier (allocas, scope calls, null compares).
 // 2. mem_stack_struct.ts has no arena allocation left: every object is an alloca, so the
@@ -1127,7 +1261,10 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
 
 // ---- WP2: layout -------------------------------------------------------------------
 // tests/layout/structs.ts declares fifteen classes, three of which `implements` an
-// interface (WP25, whose layout is the interface's fields followed by their own);
+// interface (WP25, whose layout is the interface's fields followed by their own),
+// plus the WP15 §2a record `P`, whose *array* is contiguous storage: the C twin
+// walks `data` as a `struct P *` and checks the stride and every field of every
+// element, which is the half of the ABI a golden `.ll` cannot express.
 // tests/layout/structs.c declares
 // the same C structs (flattened) with `_Static_assert(sizeof(struct X) == N)`. The
 // compiler's size for each class is read from the `nish_alloc_struct(i64 N)` in its
@@ -1162,7 +1299,7 @@ if (!only || "layout".includes(only)) {
       if (fromIr.get(name) !== size) diffs.push(`${name}: C ${size}, IR ${fromIr.get(name)}`);
     check(
       `layout: compiler sizes match structs.c for ${fromC.size} structs (${[...fromC].map(([n, s]) => `${n}=${s}`).join(" ")})`,
-      fromC.size === 15 && fromIr.size === 15 && diffs.length === 0,
+      fromC.size === 16 && fromIr.size === 16 && diffs.length === 0,
       diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`
     );
     if (HAS_CLANG) {
@@ -3275,6 +3412,95 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       `${bootstrap.stdout}${bootstrap.stderr}`
     );
 
+    // WP19 G3: which equalities `scripts/bootstrap.sh --verify` asserts is
+    // decided by what the seed is, and these two checks are what stops that
+    // from drifting back.
+    //
+    // `IR(seed) == IR(stage1)` is two different claims wearing one spelling.
+    // With stage0 as the seed it is diverse double-compiling -- two
+    // independently written implementations of this revision emitting the same
+    // IR for it -- and it is asserted. With a released binary as the seed the
+    // same comparison asks whether codegen has changed since that release,
+    // which forbids every improvement a release cycle exists to carry and says
+    // nothing about the bootstrap, so it is reported and not asserted.
+    // `IR(stage1) == IR(stage2)` and `stage3 == stage2` are properties of the
+    // working tree alone and are asserted for every seed.
+    //
+    // Both runs use the debug profile, where three stages cost about eight
+    // seconds rather than the speed profile's minutes; what is under test is
+    // the decision, not the code the linker produced.
+    const seedWork = (name) => path.join(buildDir, "seed-equality", name);
+    const runBootstrap = (name, env) =>
+      spawnSync(
+        "bash",
+        [
+          path.join(root, "scripts", "bootstrap.sh"),
+          "--verify",
+          "--profile", "debug",
+          "--work", seedWork(name),
+          "-o", path.join(seedWork(name), "nish"),
+        ],
+        { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, env: { ...process.env, ...env } }
+      );
+
+    // The two seed-independent equalities, and the named seed equality, all
+    // reported as asserted. NISH_BOOTSTRAP is cleared rather than inherited:
+    // a developer with one set in their shell must still be testing stage0
+    // here. The second run names stage0 through the variable, which is the
+    // same seed spelled a second way and has to be recognised as one -- the
+    // decision is about the seed, not about whether the variable was set.
+    const stage0Seeded = runBootstrap("stage0", { NISH_BOOTSTRAP: "" });
+    const namedStage0 = runBootstrap("named", { NISH_BOOTSTRAP: "dist/index.js" });
+    check(
+      "the bootstrap script: a stage0 seed asserts IR(stage0) == IR(stage1), however it is named",
+      stage0Seeded.status === 0 &&
+        namedStage0.status === 0 &&
+        /IR\(stage0\) == IR\(stage1\): \d+ modules identical/.test(stage0Seeded.stdout) &&
+        /IR\(stage0\) == IR\(stage1\): \d+ modules identical/.test(namedStage0.stdout) &&
+        !stage0Seeded.stdout.includes("note: IR(seed)") &&
+        !namedStage0.stdout.includes("note: IR(seed)"),
+      `unset ${stage0Seeded.status}:\n${stage0Seeded.stdout}${stage0Seeded.stderr}\n` +
+        `named ${namedStage0.status}:\n${namedStage0.stdout}${namedStage0.stderr}`
+    );
+
+    // And a seed that is not stage0. A released `nish` is the real case and CI
+    // has one, but a checkout does not, so the difference is staged instead:
+    // the seed here is stage0 with `--unchecked-indexing`, which removes the
+    // bounds checks from the IR it emits for `self/` -- the same shape of
+    // difference a codegen improvement makes, and the shape that broke this
+    // run when the first one landed. The seed still builds a working stage1,
+    // so the fixed point is untouched and stays asserted.
+    //
+    // The difference has to actually be there: a run where nothing differs
+    // would pass this check while proving nothing, so the count is read out of
+    // the note and required to be non-zero.
+    const perturbedSeed = seedWork("seed-unchecked.mjs");
+    fs.mkdirSync(path.dirname(perturbedSeed), { recursive: true });
+    fs.writeFileSync(
+      perturbedSeed,
+      `// Generated by tests/run.js: stage0, emitting IR without bounds checks.\n` +
+        `import { spawnSync } from "node:child_process";\n` +
+        `const args = process.argv.slice(2);\n` +
+        `const asking = args.includes("--version") || args.includes("--help");\n` +
+        `const r = spawnSync(process.execPath, [${JSON.stringify(cli)}, ...args,` +
+        ` ...(asking ? [] : ["--unchecked-indexing"])], { stdio: "inherit" });\n` +
+        `process.exit(r.status === null ? 70 : r.status);\n`
+    );
+    const released = runBootstrap("released", { NISH_BOOTSTRAP: perturbedSeed });
+    const note = /note: IR\(seed\) vs IR\(stage1\): (\d+) of (\d+) modules differ/.exec(released.stdout);
+    check(
+      `a seed that is not stage0 reports the seed difference and does not assert it (${
+        note ? `${note[1]} of ${note[2]} modules` : "no note printed"
+      })`,
+      released.status === 0 &&
+        note !== null &&
+        Number(note[1]) > 0 &&
+        released.stdout.includes("Not a bootstrap failure") &&
+        /IR\(stage1\) == IR\(stage2\): \d+ modules identical/.test(released.stdout) &&
+        released.stdout.includes("stage3 == stage2: byte-identical binaries"),
+      `${released.status}:\n${released.stdout}${released.stderr}`
+    );
+
     // The deployment path (docs/wp14-selfhost.md §7). The check above proves
     // the fixed point and then deletes every compiler it built; this one
     // proves the artifact: `scripts/bootstrap.sh` builds a compiler you can
@@ -3405,6 +3631,33 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           ourJson.stdout === theirJson.stdout &&
           ourJson.stdout.split("\n").filter(Boolean).length === 3,
         `ours:\n${ourJson.stdout}${ourJson.stderr}\ntheirs:\n${theirJson.stdout}`
+      );
+
+      // WP19 G2.4, the wording gap: the same coverage run, through the
+      // compiler that survives stage0. `tests/wordings/` pins stage0's wording
+      // for each code, and this asks stage1 for the same sentence. Two
+      // outcomes are declared per case rather than in general:
+      // `parser_refusals.txt` for the constructs stage1's parser turns down
+      // before the phase that owns the rule can word it (§A3), and
+      // `stage1_divergence.txt` for the eleven programs the two compilers do
+      // not yet answer the same way at all. `--strict-refusals` is what makes
+      // both lists shrink-only: a case that starts agreeing fails until the
+      // line naming it is deleted.
+      const stage1Wordings = spawnSync(
+        "node",
+        [
+          path.join(root, "tests", "diagnostic_coverage.js"),
+          "--compiler",
+          path.relative(root, compiler),
+          "--strict-refusals",
+        ],
+        { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+      );
+      const stage1WordingsSummary = stage1Wordings.stdout.trim().split("\n").pop() ?? "";
+      check(
+        `the self-hosted compiler: the diagnostic wordings are stage1's too (${stage1WordingsSummary})`,
+        stage1Wordings.status === 0,
+        `${stage1Wordings.stdout}${stage1Wordings.stderr}`
       );
 
       // WP15 §8 through the driver (WP19 G1). The analysis is compared word
@@ -4189,6 +4442,17 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
       // `Int32Array` and friends name the element-typed array here and the JS
       // view in lib.es5; redeclaring them would break every other lib type.
       "typed-array aliases (see the note at the foot of runtime/nish.d.ts)",
+    ],
+    [
+      "arr_struct_push_copy.ts",
+      // The `pop` divergence the declarations already document (the note at
+      // runtime/nish.d.ts, and the `self/` check below, which strips the same
+      // error): `a.pop()` is `T` here because an empty array panics, and
+      // `T | undefined` in lib.es5, so reading a field of the popped element
+      // is TS18048 and nothing this side can say changes that. The case reads
+      // one because a popped *record* is the slot that was dropped, which is
+      // the interior pointer WP15 §2a is about.
+      "`pop` is `T` here and `T | undefined` in lib.es5 (see runtime/nish.d.ts)",
     ],
   ]);
   const acceptedCases = fs

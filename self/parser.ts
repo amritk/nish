@@ -507,9 +507,15 @@ export class Parser {
     this.advance(); // `function`
     const node = this.node(N_FUNCTION, start, this.end);
     node.children.push(this.parseIdentifier());
+    // The type parameters are read here, where they are written, and pushed
+    // last, where `nodes.ts` puts them: the first four children of an
+    // `N_FUNCTION` mean what they have always meant, so nothing downstream
+    // that indexes them moves (WP18).
+    const typeParams = this.parseTypeParameters();
     node.children.push(this.parseParameters());
     node.children.push(this.parseReturnType());
     node.children.push(this.parseBlock());
+    node.children.push(typeParams);
     node.end = this.previousEnd;
     return node;
   }
@@ -528,6 +534,7 @@ export class Parser {
     this.advance(); // `function`
     const node = this.node(N_FUNCTION, start, this.end);
     node.children.push(this.parseIdentifier());
+    const typeParams = this.parseTypeParameters();
     node.children.push(this.parseParameters());
     node.children.push(this.parseReturnType());
     // A `;` ends the declaration. A `{` is a body, which is a mistake the
@@ -540,9 +547,60 @@ export class Parser {
       node.children.push(this.empty());
       this.eat(TOK_SEMICOLON);
     }
+    // WP18 pushes the type-parameter list as the fifth child so the first four
+    // keep their meaning. A foreign declaration pushes one too — parsed rather
+    // than assumed empty, so `declare function f<T>(): i32` reaches the
+    // checker's refusal instead of a syntax error, and so nothing that indexes
+    // `children[4]` reads past the end of a foreign declaration.
+    node.children.push(typeParams);
     node.flags = node.flags | FLAG_FOREIGN;
     node.end = this.previousEnd;
     return node;
+  }
+
+  /**
+   * `<T, U>` on a function declaration (WP18), or an empty list when there is
+   * none. Only the *names* are recorded: a constrained parameter
+   * (`<T extends Shape>`) needs member access on a type parameter, which is its
+   * own rule and its own milestone, and a default (`<T = string>`) has no
+   * position to fill because a type argument is inferred from the arguments.
+   *
+   * `<` here is unambiguous — a declaration cannot start with a comparison —
+   * which is exactly why type arguments are written in an annotation and after
+   * `new`, and nowhere else: one token of lookahead cannot tell `f<i32>(x)`
+   * from `(f < i32) > (x)` (§2a).
+   */
+  parseTypeParameters(): Node {
+    const list = this.list();
+    if (!this.at(TOK_LT)) {
+      return list;
+    }
+    this.advance();
+    while (!this.at(TOK_GT) && !this.at(TOK_END)) {
+      list.children.push(this.parseIdentifier());
+      if (this.at(TOK_EXTENDS)) {
+        this.report(
+          "a constrained type parameter (`T extends ...`) is not supported yet",
+          this.start,
+          this.end
+        );
+        this.advance();
+        this.parseType();
+      } else if (this.at(TOK_ASSIGN)) {
+        this.report(
+          "a default type argument (`T = ...`) is not supported: a type argument is inferred from the arguments",
+          this.start,
+          this.end
+        );
+        this.advance();
+        this.parseType();
+      }
+      if (!this.eat(TOK_COMMA)) {
+        break;
+      }
+    }
+    this.expectTypeArgumentEnd();
+    return this.closeList(list);
   }
 
   /**
@@ -568,6 +626,19 @@ export class Parser {
     scan.next();
     if (scan.kind !== TOK_ASSIGN) return false;
     scan.next();
+    // WP18: `const identity = <T>(x: T): T => x` puts a type parameter list
+    // between the `=` and the parameters. It is skipped by matching `>` against
+    // `<`, which is enough because a type parameter list holds only names.
+    if (scan.kind === TOK_LT) {
+      let angles = 1;
+      while (angles > 0) {
+        scan.next();
+        if (scan.kind === TOK_END) return false;
+        if (scan.kind === TOK_LT) angles = angles + 1;
+        else if (scan.kind === TOK_GT) angles = angles - 1;
+      }
+      scan.next();
+    }
     if (scan.kind !== TOK_LPAREN) return false;
     let depth = 1;
     while (depth > 0) {
@@ -591,10 +662,12 @@ export class Parser {
     const node = this.node(N_FUNCTION, start, this.end);
     node.children.push(this.parseIdentifier());
     this.expect(TOK_ASSIGN);
+    const typeParams = this.parseTypeParameters();
     node.children.push(this.parseParameters());
     node.children.push(this.parseReturnType());
     this.expect(TOK_ARROW);
     node.children.push(this.at(TOK_LBRACE) ? this.parseBlock() : this.parseExpression());
+    node.children.push(typeParams);
     this.expectSemicolon();
     node.end = this.previousEnd;
     return node;

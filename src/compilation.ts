@@ -204,6 +204,11 @@ export class Compilation {
     for (const unit of this.modules) unit.checker.entryHasMain = hasMain;
     for (const unit of this.modules) unit.checker.checkBodies();
     this.sink.throwIfErrors();
+    // Pass 3 (WP18): every instantiation the bodies asked for, to a fixed
+    // point. It runs per module in load order because an instantiation is
+    // checked by the module that declares its template, in that module's scope.
+    for (const unit of this.modules) unit.checker.drainInstantiations();
+    this.sink.throwIfErrors();
     this.checked = true;
   }
 
@@ -273,6 +278,35 @@ export class Compilation {
     if (entry.checker.program.entryMain) owners.set("main", { unit: entry });
 
     for (const unit of this.modules) {
+      // A template's instantiations are named after it (`identity$i32`), so two
+      // modules declaring the same generic would produce the same symbols. The
+      // template's own name is what has to be unique, and it is checked here
+      // with the functions because the rule is the same rule (WP18 §3b).
+      //
+      // Keyed by the *package-scoped* symbol, like every other entry in this
+      // map. An instantiation carries its package's prefix (`checker/index.ts`,
+      // `instantiate`), so `pkg_a.identity$i32` and `identity$i32` are two
+      // symbols and two packages may each keep a private `identity<T>` exactly
+      // as they may each keep a private `helper()`. Keying this loop by the
+      // bare name while the loop below keys by the symbol would put two
+      // different namespaces in one map, and would refuse a root `dup` beside
+      // a `pkg_a` `dup<T>` that cannot collide with it.
+      for (const template of unit.checker.program.templates.values()) {
+        const symbol = unit.checker.program.symbolPrefix + template.sourceName;
+        const prev = owners.get(symbol);
+        if (!prev) {
+          owners.set(symbol, { unit });
+          continue;
+        }
+        this.sink.report(
+          new CompileError(
+            `Generic function \`${template.sourceName}\` is also defined in ${prev.unit.fileName}; a function ` +
+              "name must be unique across the program, and an instantiation is named after its template",
+            template.nameNode,
+            unit.sourceFile
+          )
+        );
+      }
       for (const sig of unit.checker.program.functions) {
         const prev = owners.get(sig.name);
         if (!prev) {

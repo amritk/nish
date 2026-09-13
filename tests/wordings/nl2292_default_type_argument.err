@@ -1,0 +1,1 @@
+A default type argument (`T = ...`) is not supported: a type argument is inferred from the arguments, so there is no position for a default to fill

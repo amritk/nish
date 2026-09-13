@@ -7,8 +7,25 @@ import { checkBuiltinArity, isArgvExpression } from "./builtins";
 import { CheckContext } from "./context";
 import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound } from "./expressions";
 import { unwrapParens } from "./emit_util";
-import { N_IDENT, Node } from "./nodes";
-import { Scope } from "./symbols";
+import {
+  N_BLOCK,
+  N_CALL,
+  N_CASE,
+  N_DEFAULT,
+  N_DO,
+  N_EMPTY,
+  N_FOR,
+  N_FOR_OF,
+  N_IDENT,
+  N_INDEX,
+  N_MEMBER,
+  N_THIS,
+  N_VAR_DECL,
+  N_WHILE,
+  Node,
+} from "./nodes";
+import { inlineElementStruct } from "./program";
+import { Local, Scope } from "./symbols";
 import { isNumeric, T_ERROR, T_STRING, T_VOID } from "./types";
 
 /** The method set, in the order the "supported:" message lists them. */
@@ -269,4 +286,312 @@ export function checkNewArray(ctx: CheckContext, expr: Node, name: string, scope
     ctx.error(args.children[0], `Array length must be a number, got ${ctx.table.typeName(length)}`);
   }
   return ctx.table.arrayOf(elem);
+}
+
+// ---- WP15 §2a: element references ------------------------------------------------
+
+// The rule that makes contiguous storage safe: an element reference may not be
+// held across a mutation of the array it came from (`src/checker/arrays.ts`,
+// where the whole argument is written out).
+//
+// An array of classes is one block of objects, so `ps[i]` hands out a pointer
+// *into* that block. `push` may move the block and `pop` hands the slot back to
+// the next `push`, so a reference taken beforehand names memory that is no
+// longer the element. The analysis is a source-order walk of one body with a
+// loop pre-scanned, because a mutation at the bottom of a loop reaches a
+// reference taken at the top on the next pass.
+
+/** The array root a reference or a mutation names; the empty string when it cannot be named. */
+const UNNAMED: string = "";
+
+/** One array a call may change the length of, named for the message. */
+export class Mutation {
+  root: string;
+  /** The element class, so an unnameable receiver cannot invalidate an unrelated array. */
+  elem: string;
+  what: string;
+
+  constructor(root: string, elem: string, what: string) {
+    this.root = root;
+    this.elem = elem;
+    this.what = what;
+  }
+}
+
+/** A live element reference: the local naming it, the array it points into, what invalidated it. */
+export class ElementRef {
+  local: Local;
+  array: string;
+  elem: string;
+  arrayText: string;
+  /** The mutation that may have moved the storage, or the empty string while the reference is good. */
+  invalidatedBy: string;
+
+  constructor(local: Local, array: string, elem: string, arrayText: string) {
+    this.local = local;
+    this.array = array;
+    this.elem = elem;
+    this.arrayText = arrayText;
+    this.invalidatedBy = "";
+  }
+}
+
+/** `xs`, `this.bodies`, `a.b.c` — how two references are told apart. */
+function referenceRoot(expr: Node): string {
+  const inner = unwrapParens(expr);
+  if (inner.kind === N_IDENT) {
+    return inner.text;
+  }
+  if (inner.kind === N_THIS) {
+    return "this";
+  }
+  if (inner.kind === N_MEMBER) {
+    const base = referenceRoot(inner.children[0]);
+    return base === UNNAMED ? UNNAMED : `${base}.${inner.text}`;
+  }
+  return UNNAMED;
+}
+
+/**
+ * The class `expr`'s slots hold inline, or the empty string when `expr` is not
+ * an array that stores its elements by value. The *name* is what two arrays are
+ * compared by when one of them cannot be named: element types are exact here,
+ * so a `FunctionSig[]` and an `ImportBinding[]` are never the same array.
+ */
+function inlineArrayElement(ctx: CheckContext, expr: Node): string {
+  const type = ctx.program.nodeTypes[expr.id];
+  if (type < 0 || !ctx.table.isArray(type)) {
+    return "";
+  }
+  const info = inlineElementStruct(ctx.program, ctx.table, ctx.table.refOf(type));
+  return info === null ? "" : info.name;
+}
+
+/** How the root is spelled in a message; an unnameable receiver borrows the type's name. */
+function rootText(ctx: CheckContext, expr: Node): string {
+  const root = referenceRoot(expr);
+  if (root !== UNNAMED) {
+    return root;
+  }
+  const type = ctx.program.nodeTypes[expr.id];
+  return type < 0 ? "the array" : ctx.table.typeName(type);
+}
+
+/** The array `expr` reads an element of (`a[i]`, `a.pop()`), or `null`. */
+function elementSource(ctx: CheckContext, expr: Node): Node | null {
+  const inner = unwrapParens(expr);
+  if (inner.kind === N_INDEX && inlineArrayElement(ctx, inner.children[0]) !== "") {
+    return inner.children[0];
+  }
+  if (inner.kind === N_CALL && inner.children[0].kind === N_MEMBER && inner.children[0].text === "pop") {
+    const receiver = inner.children[0].children[0];
+    if (inlineArrayElement(ctx, receiver) !== "") {
+      return receiver;
+    }
+  }
+  return null;
+}
+
+/**
+ * Every inline-element array this call may grow or shorten: the receiver of a
+ * `push` / `pop`, and every mutable array argument of a user call, since the
+ * callee is free to push through it. A `readonly T[]` parameter is exactly the
+ * promise that it does not, and is skipped.
+ */
+function collectMutations(ctx: CheckContext, call: Node, out: Mutation[]): void {
+  if (call.children[0].kind === N_MEMBER) {
+    const method = call.children[0].text;
+    const receiver = call.children[0].children[0];
+    const elem = inlineArrayElement(ctx, receiver);
+    if ((method === "push" || method === "pop") && elem !== "") {
+      const args = method === "push" ? "..." : "";
+      out.push(new Mutation(referenceRoot(receiver), elem, `${rootText(ctx, receiver)}.${method}(${args})`));
+    }
+  }
+  const callee = ctx.program.nodeCallees[call.id];
+  if (callee === null) {
+    return;
+  }
+  const offset = callee.owner === null ? 0 : 1;
+  const args = call.children[1];
+  let i = 0;
+  while (i < args.children.length) {
+    const arg = args.children[i];
+    const elem = inlineArrayElement(ctx, arg);
+    const at = i + offset;
+    if (elem !== "" && at < callee.paramTypes.length && !ctx.table.isReadonlyArray(callee.paramTypes[at])) {
+      out.push(new Mutation(referenceRoot(arg), elem, `${callee.sourceName}(...)`));
+    }
+    i = i + 1;
+  }
+}
+
+/** The walk's state, a class because Nish-0 has no closures (as `PerfWalk` is). */
+export class RefWalk {
+  ctx: CheckContext;
+  live: ElementRef[];
+  /** One report per body: `ctx.error` suppresses the rest anyway, and stage0 stops here too. */
+  reported: boolean;
+
+  constructor(ctx: CheckContext) {
+    this.ctx = ctx;
+    this.live = [];
+    this.reported = false;
+  }
+
+  /** Forget every reference declared since `depth`: its block has ended. */
+  dropTo(depth: i32): void {
+    while (this.live.length > depth) {
+      this.live.pop();
+    }
+  }
+
+  /** Mark every live reference the mutation may have invalidated. */
+  invalidate(m: Mutation): void {
+    let i = 0;
+    while (i < this.live.length) {
+      const ref = this.live[i];
+      const unrelated = ref.invalidatedBy !== "" || ref.elem !== m.elem;
+      if (!unrelated && (m.root === UNNAMED || ref.array === UNNAMED || ref.array === m.root)) {
+        this.live[i].invalidatedBy = m.what;
+      }
+      i = i + 1;
+    }
+  }
+
+  /** Every mutation anywhere inside `node`, for the pre-scan of a loop. */
+  mutationsWithin(node: Node, out: Mutation[]): void {
+    if (node.kind === N_CALL) {
+      collectMutations(this.ctx, node, out);
+    }
+    for (const child of node.children) {
+      this.mutationsWithin(child, out);
+    }
+  }
+
+  visit(node: Node): void {
+    if (node.kind === N_IDENT) {
+      this.visitIdentifier(node);
+      return;
+    }
+    if (node.kind === N_BLOCK || node.kind === N_CASE || node.kind === N_DEFAULT) {
+      const depth = this.live.length;
+      this.visitChildren(node);
+      this.dropTo(depth);
+      return;
+    }
+    if (node.kind === N_FOR || node.kind === N_FOR_OF || node.kind === N_WHILE || node.kind === N_DO) {
+      this.visitLoop(node);
+      return;
+    }
+    if (node.kind === N_CALL) {
+      this.visitCall(node);
+      return;
+    }
+    if (node.kind === N_VAR_DECL) {
+      this.visitDeclaration(node);
+      return;
+    }
+    this.visitChildren(node);
+  }
+
+  visitChildren(node: Node): void {
+    for (const child of node.children) {
+      this.visit(child);
+    }
+  }
+
+  visitIdentifier(node: Node): void {
+    const local = this.ctx.program.nodeLocals[node.id];
+    if (local === null || this.reported) {
+      return;
+    }
+    let i = 0;
+    while (i < this.live.length) {
+      const ref = this.live[i];
+      if (ref.local === local && ref.invalidatedBy !== "") {
+        this.ctx.error(
+          node,
+          `\`${ref.local.name}\` refers to an element of \`${ref.arrayText}\`, and \`${ref.invalidatedBy}\` may move or reuse that storage; index \`${ref.arrayText}\` again afterwards rather than holding the element across it`
+        );
+        this.reported = true;
+        return;
+      }
+      i = i + 1;
+    }
+  }
+
+  visitLoop(node: Node): void {
+    // Source order is not execution order here: a mutation at the bottom of the
+    // body reaches a reference taken at the top on the next pass.
+    const found: Mutation[] = [];
+    this.mutationsWithin(node, found);
+    for (const m of found) {
+      this.invalidate(m);
+    }
+    const depth = this.live.length;
+    // `for (const p of ps)` binds an element reference too. It is re-derived
+    // from the header at the top of every pass, so it starts each iteration
+    // valid and is only invalidated by a mutation inside the body.
+    if (node.kind === N_FOR_OF) {
+      const iterable = node.children[1];
+      const elem = inlineArrayElement(this.ctx, iterable);
+      const decl = node.children[0].children[0].children[0];
+      const local = this.ctx.program.nodeLocals[decl.id];
+      if (elem !== "" && local !== null) {
+        this.live.push(new ElementRef(local, referenceRoot(iterable), elem, rootText(this.ctx, iterable)));
+      }
+    }
+    this.visitChildren(node);
+    this.dropTo(depth);
+  }
+
+  visitCall(node: Node): void {
+    this.visitChildren(node);
+    const found: Mutation[] = [];
+    collectMutations(this.ctx, node, found);
+    for (const m of found) {
+      // `xs.push(xs[0])`: the argument is read before `nish_array_grow` runs,
+      // and the copy into the new slot reads it after.
+      if (m.root !== UNNAMED && !this.reported) {
+        for (const arg of node.children[1].children) {
+          const source = elementSource(this.ctx, arg);
+          if (source !== null && referenceRoot(source) === m.root && !this.reported) {
+            this.ctx.error(
+              arg,
+              `\`${m.what}\` reads an element of \`${m.root}\`, and the push may move that storage first; copy the fields you need into locals before pushing`
+            );
+            this.reported = true;
+          }
+        }
+      }
+      this.invalidate(m);
+    }
+  }
+
+  visitDeclaration(node: Node): void {
+    this.visitChildren(node);
+    const local = this.ctx.program.nodeLocals[node.id];
+    const initializer = node.children[2];
+    if (local === null || initializer.kind === N_EMPTY) {
+      return;
+    }
+    const source = elementSource(this.ctx, initializer);
+    if (source === null) {
+      return;
+    }
+    const elem = inlineArrayElement(this.ctx, source);
+    if (elem !== "") {
+      this.live.push(new ElementRef(local, referenceRoot(source), elem, rootText(this.ctx, source)));
+    }
+  }
+}
+
+/**
+ * WP15 §2a. Reported after the body has checked, like the performance
+ * warnings, so every type and binding the walk reads is already recorded.
+ */
+export function checkElementReferences(ctx: CheckContext, body: Node): void {
+  const walk = new RefWalk(ctx);
+  walk.visit(body);
 }

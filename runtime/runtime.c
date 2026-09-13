@@ -1381,7 +1381,11 @@ double nish_parse_number(const nish_str *s, int32_t mode) {
   return mode && end + strspn(end, NISH_SPACES) != stop ? NAN : v;
 }
 
-/* push() when len == cap: double the capacity (4 from empty). */
+/* push() when len == cap: double the capacity (4 from empty). `elem_size` is
+ * `sizeof` one element, which for a record element type (WP15 section 2a) is
+ * the whole struct, so this relocates the elements themselves rather than a
+ * block of pointers to them. Compiled code may therefore hold no pointer into
+ * `data` across a push, and the checker refuses the programs that would. */
 void nish_array_grow(nish_array *a, uint64_t elem_size) {
   uint64_t cap = a->cap ? a->cap * 2 : 4;
   char *data = nish_alloc_struct(cap * elem_size);
@@ -1392,6 +1396,19 @@ void nish_array_grow(nish_array *a, uint64_t elem_size) {
 
 void nish_panic_index(uint64_t idx, uint64_t len) {
   dprintf(2, "index out of range: %" PRIu64 " >= %" PRIu64 "\n", idx, len);
+  _exit(1);
+}
+
+/* `s.slice(start, end)` (WP15 section 4) with a range the string does not
+   contain. The two ends are printed as the half-open interval that was asked
+   for, because the failure is as often a reversed pair as an end past the
+   string, and `nish_panic_index`'s "i >= len" says nothing useful about the
+   first of those. They are signed here although the check compares them
+   unsigned: that comparison is a trick for folding `>= 0` into one `icmp`, and
+   a reader who wrote `s.slice(i - 1)` wants to be told `-1` rather than
+   18446744073709551615. The length cannot be negative either way. */
+void nish_panic_slice(int64_t start, int64_t end, int64_t len) {
+  dprintf(2, "slice out of range: [%" PRId64 ", %" PRId64 ") of length %" PRId64 "\n", start, end, len);
   _exit(1);
 }
 

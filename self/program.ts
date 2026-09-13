@@ -63,6 +63,13 @@ export class FunctionSig {
   owner: StructInfo | null;
   /** A statement of the body was rejected: no IR is emitted for this program. */
   poisoned: boolean;
+  /**
+   * WP18: set when this signature is one instantiation of a generic template
+   * rather than a declared function. It carries the side tables the template's
+   * body was checked into for *this* type-argument tuple, which every pass that
+   * walks the body installs before it starts (`CheckedProgram.enterInstance`).
+   */
+  instance: Instantiation | null;
 
   /**
    * The body, or `null` when the declaration has none. A `BLOCK` for every
@@ -112,6 +119,85 @@ export class FunctionSig {
     this.role = ROLE_FUNCTION;
     this.owner = null;
     this.poisoned = false;
+    this.instance = null;
+  }
+}
+
+/**
+ * A generic function declaration (WP18). Nothing about it is resolved: the
+ * parameter and return annotations mention `typeParams`, so they mean nothing
+ * until an instantiation binds them, and a template therefore has no signature,
+ * no symbol and no entry in `functions`.
+ */
+export class TemplateInfo {
+  /** The identifier as written; what every diagnostic about the template names. */
+  sourceName: string;
+  /** `<T, U>` in declaration order; an instantiation's tuple has the same order. */
+  typeParams: string[];
+  /** The `N_FUNCTION` node, in either spelling. */
+  decl: Node;
+  origin: SourceFile;
+  exported: boolean;
+  /** How many instantiations it has produced, for the per-template cap. */
+  count: i32;
+
+  constructor(sourceName: string, decl: Node, origin: SourceFile) {
+    this.sourceName = sourceName;
+    this.typeParams = [];
+    this.decl = decl;
+    this.origin = origin;
+    this.exported = false;
+    this.count = 0;
+  }
+}
+
+/**
+ * One (template, type-argument tuple): the specialised function it names, and
+ * the side tables its body is checked into.
+ *
+ * The tables are a full copy rather than a window on the template's node-id
+ * span (`docs/wp18-generics.md` §3d's fallback): it costs memory on a program
+ * that instantiates something and nothing at all on one that does not, and it
+ * needs no invariant about how the parser hands out ids.
+ */
+export class Instantiation {
+  template: TemplateInfo;
+  /** One concrete type id per entry of `template.typeParams`, in that order. */
+  typeArgs: i32[];
+  sig: FunctionSig;
+  /** Type parameter name -> the type id it stands for. */
+  bindings: StringMap;
+  nodeTypes: i32[];
+  nodeLocals: (Local | null)[];
+  nodeConstants: (ConstInfo | null)[];
+  nodeCallees: (FunctionSig | null)[];
+  nodeCoercions: i32[];
+  nodeCaseValues: i64[];
+  /**
+   * The instantiation whose body asked for this one, or `null` for one
+   * requested from ordinary code. The chain is what the termination rule walks
+   * and what its diagnostic quotes.
+   */
+  from: Instantiation | null;
+
+  constructor(template: TemplateInfo, typeArgs: i32[], sig: FunctionSig, bindings: StringMap, nodeCount: i32) {
+    this.template = template;
+    this.typeArgs = typeArgs;
+    this.sig = sig;
+    this.bindings = bindings;
+    this.nodeTypes = new Array<i32>(nodeCount);
+    this.nodeLocals = new Array<Local | null>(nodeCount);
+    this.nodeConstants = new Array<ConstInfo | null>(nodeCount);
+    this.nodeCallees = new Array<FunctionSig | null>(nodeCount);
+    this.nodeCoercions = new Array<i32>(nodeCount);
+    this.nodeCaseValues = new Array<i64>(nodeCount);
+    this.from = null;
+    let i = 0;
+    while (i < nodeCount) {
+      this.nodeTypes[i] = -1;
+      this.nodeCoercions[i] = -1;
+      i = i + 1;
+    }
   }
 }
 
@@ -164,6 +250,13 @@ export class StructInfo {
    * `%struct.<name>*` may be `bitcast` to the interface's with no adjustment.
    */
   implementsNames: string[];
+  /**
+   * WP15 section 2a: some class in the program `implements` this interface, so
+   * it is a *view* rather than a record and an `I[]` keeps one pointer per
+   * slot. Set in `checkImplements` (pass 1c), which runs for every module
+   * before any body is checked, and read by `inlineElementStruct`.
+   */
+  implemented: boolean;
   decl: Node;
   /** The module that declares it, so an importer can tell it from a re-export. */
   origin: SourceFile;
@@ -186,6 +279,7 @@ export class StructInfo {
     this.methodSigs = [];
     this.ctor = null;
     this.implementsNames = [];
+    this.implemented = false;
     this.decl = decl;
     this.exported = false;
     this.poisoned = false;
@@ -447,6 +541,25 @@ export class CheckedProgram {
   aliases: StringMap;
   aliasList: AliasInfo[];
 
+  /**
+   * Generic templates this module declares, by source name, and the ones it has
+   * instantiated, by mangled symbol (WP18). An instantiation is appended in
+   * discovery order, which is the order it is checked, emitted and dumped in —
+   * so the two compilers can be compared before any IR is.
+   */
+  templates: StringMap;
+  templateList: TemplateInfo[];
+  instantiations: StringMap;
+  instantiationList: Instantiation[];
+  /** Non-null while an instantiation's side tables are installed. */
+  activeInstance: Instantiation | null;
+  /** The module's own tables, held aside while `activeInstance` is installed. */
+  savedNodeTypes: i32[];
+  savedNodeLocals: (Local | null)[];
+  savedNodeConstants: (ConstInfo | null)[];
+  savedNodeCallees: (FunctionSig | null)[];
+  savedNodeCoercions: i32[];
+  savedNodeCaseValues: i64[];
   /** Name -> index into `enumList`, for the numeric `enum`s this module declares (WP23). */
   enums: StringMap;
   enumList: EnumInfo[];
@@ -501,6 +614,17 @@ export class CheckedProgram {
     this.constantList = [];
     this.aliases = new StringMap();
     this.aliasList = [];
+    this.templates = new StringMap();
+    this.templateList = [];
+    this.instantiations = new StringMap();
+    this.instantiationList = [];
+    this.activeInstance = null;
+    this.savedNodeTypes = [];
+    this.savedNodeLocals = [];
+    this.savedNodeConstants = [];
+    this.savedNodeCallees = [];
+    this.savedNodeCoercions = [];
+    this.savedNodeCaseValues = [];
     this.enums = new StringMap();
     this.enumList = [];
     this.entryMain = null;
@@ -553,6 +677,63 @@ export class CheckedProgram {
     this.aliasList.push(info);
   }
 
+  /** The generic template called `name` in this module, or `null` (WP18). */
+  template(name: string): TemplateInfo | null {
+    const at = this.templates.get(name, -1);
+    return at < 0 ? null : this.templateList[at];
+  }
+
+  addTemplate(info: TemplateInfo): void {
+    this.templates.set(info.sourceName, this.templateList.length);
+    this.templateList.push(info);
+  }
+
+  /** The instantiation emitted under `symbol`, or `null` when there is none yet. */
+  instantiation(symbol: string): Instantiation | null {
+    const at = this.instantiations.get(symbol, -1);
+    return at < 0 ? null : this.instantiationList[at];
+  }
+
+  addInstantiation(symbol: string, info: Instantiation): void {
+    this.instantiations.set(symbol, this.instantiationList.length);
+    this.instantiationList.push(info);
+  }
+
+  /**
+   * Install one instantiation's side tables (WP18 §3d). Every pass that walks a
+   * function body brackets that walk with this and `leaveInstance`, so a read
+   * of `nodeTypes[node.id]` inside an instantiation's body answers for *that*
+   * type-argument tuple and the code doing the reading never learns there was a
+   * choice. There is never more than one installed at a time: the worklist is
+   * drained in a loop and every other caller walks one function at a time.
+   */
+  enterInstance(info: Instantiation): void {
+    this.savedNodeTypes = this.nodeTypes;
+    this.savedNodeLocals = this.nodeLocals;
+    this.savedNodeConstants = this.nodeConstants;
+    this.savedNodeCallees = this.nodeCallees;
+    this.savedNodeCoercions = this.nodeCoercions;
+    this.savedNodeCaseValues = this.nodeCaseValues;
+    this.nodeTypes = info.nodeTypes;
+    this.nodeLocals = info.nodeLocals;
+    this.nodeConstants = info.nodeConstants;
+    this.nodeCallees = info.nodeCallees;
+    this.nodeCoercions = info.nodeCoercions;
+    this.nodeCaseValues = info.nodeCaseValues;
+    this.activeInstance = info;
+  }
+
+  /** Put the module's own tables back. */
+  leaveInstance(): void {
+    this.nodeTypes = this.savedNodeTypes;
+    this.nodeLocals = this.savedNodeLocals;
+    this.nodeConstants = this.savedNodeConstants;
+    this.nodeCallees = this.savedNodeCallees;
+    this.nodeCoercions = this.savedNodeCoercions;
+    this.nodeCaseValues = this.savedNodeCaseValues;
+    this.activeInstance = null;
+  }
+
   /**
    * Whether `node` is an enum member reference — `Kind.If` — whose folded
    * integer is in `nodeEnumValues` (WP23). It is an `N_MEMBER` of enum type
@@ -583,4 +764,51 @@ export class CheckedProgram {
     const at = this.exports.get(name, -1);
     return at < 0 ? null : this.functions[at];
   }
+}
+
+// ---- WP15 §2a: element layout ------------------------------------------------
+
+/**
+ * How one element of a `T[]` is stored (`src/checker/program.ts`).
+ *
+ * An array of *records* is contiguous storage — `N` of them end to end in one
+ * block — so `ps[i]` is an interior `getelementptr` rather than a load of a
+ * pointer and a chase to wherever it went. A record is an `interface` and only
+ * an `interface` nobody implements: fields and nothing else, so copying one
+ * into a slot is indistinguishable from pointing at it. A `class` has identity
+ * — a constructor and methods that run on one object — and every other position
+ * in the language passes it by reference, so a class element stays a pointer.
+ * An interface some class `implements` stays a pointer too, because that array
+ * is the language's only polymorphic container and every implementer is longer
+ * than the interface; so does a `C | null`, because a null element has no bytes
+ * to be. The full argument, and the `self/` evidence behind it, is in
+ * `src/checker/program.ts`.
+ */
+export function inlineElementStruct(program: CheckedProgram, table: TypeTable, elem: i32): StructInfo | null {
+  if (!table.isStruct(elem)) {
+    return null;
+  }
+  const info = program.struct(table.nameOf(elem));
+  if (info === null || info.kind !== STRUCT_INTERFACE || info.implemented) {
+    return null;
+  }
+  return info;
+}
+
+/** Bytes from one element to the next: `sizeof` for an inline class, the value's size otherwise. */
+export function elementStride(program: CheckedProgram, table: TypeTable, elem: i32): i32 {
+  const info = inlineElementStruct(program, table, elem);
+  return info === null ? table.alignOf(elem) : info.size;
+}
+
+/** Alignment of one element slot: the class's own maximum field alignment when it is inline. */
+export function elementAlignOf(program: CheckedProgram, table: TypeTable, elem: i32): i32 {
+  const info = inlineElementStruct(program, table, elem);
+  return info === null ? table.alignOf(elem) : info.align;
+}
+
+/** The LLVM type of one element slot: `%struct.P` inline, the value type otherwise. */
+export function elementLLVMType(program: CheckedProgram, table: TypeTable, elem: i32): string {
+  const info = inlineElementStruct(program, table, elem);
+  return info === null ? table.llvmType(elem) : `%struct.${info.name}`;
 }

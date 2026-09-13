@@ -648,7 +648,8 @@ spelling; the two compile to identical IR, instruction for instruction
   (`tests/cases/reject_assign_param`, `reject_cf_incdec_param`).
 - Parameters and the body's top-level block share one scope: `let x` in
   the body of `f(x)` is `` Duplicate declaration of `x` `` *(CLI only)*.
-- Rejected forms: generics (`tests/cases/reject_generic_function`),
+- **A function may be generic**, and each instantiation is compiled on its
+  own; see [Generic functions](#generic-functions). Rejected forms:
   generators (`reject_generator`), `async` (`reject_async_function`),
   destructured / rest / optional / default parameters
   (`Destructured parameters are not supported`,
@@ -766,9 +767,10 @@ program twice, with one golden between them.
   because it is the same mistake.
 - **An alias is resolved even when nothing uses it**, so a broken right-hand
   side is reported where it is written rather than never.
-- **Generic aliases are forbidden**, as every other generic is:
-  `type Box<T> = T[]` is
-  `` Generic type parameters are forbidden in Nish (no monomorphisation yet) ``
+- **Generic aliases are forbidden**, unlike a generic *function*: an alias
+  only renames a type that already exists, so there is nothing for a type
+  argument to apply to. `type Box<T> = T[]` is
+  `` Generic type parameters are forbidden on a type alias in Nish (a generic function is monomorphised; a generic class is not supported yet) ``
   (`tests/cases/reject_type_alias_generic`).
 - **A built-in type name may not be aliased.** `type string = i32` is
   `` `string` is a built-in type name and cannot be used for a type alias ``
@@ -1059,9 +1061,81 @@ class Point {
 - **Rejected**: `static` (`tests/cases/reject_cls_static`),
   getters/setters (`Getters and setters are not supported`), optional fields
   (`cannot be optional`), index signatures, `!` assertions, `abstract`,
-  `declare class`, generics (`tests/cases/reject_generic_class`), decorators
+  `declare class`, type parameters on a class or on one of its methods
+  (`tests/cases/reject_generic_class`, `reject_generic_method`), decorators
   (`reject_decorator`), computed member names (`reject_computed_property`),
   overloaded constructors.
+
+### Generic functions
+
+A function may declare type parameters, and **every instantiation is compiled
+to its own specialised function**: one `define` per (template, type-argument
+tuple), named by appending `$` and each argument's mangled type to the
+template's name. There is no boxing, no type dictionary and no runtime type
+information, and the IR of an instantiation is the IR of the monomorphic
+function somebody would have written by hand, with the symbol renamed
+(`tests/cases/gen_identity`).
+
+```typescript
+const identity = <T>(x: T): T => x;
+
+export const main = (): i32 => {
+  console.log(identity(7));      // @identity$i32
+  console.log(identity("hi"));   // @identity$str
+  return 0;
+};
+```
+
+- **Both spellings take type parameters.** `function identity<T>(x: T): T` and
+  `const identity = <T>(x: T): T => x` declare the same thing, as they do
+  without them (`tests/cases/gen_identity`).
+- **A type argument is inferred from the arguments, and is never written at a
+  call site.** `identity<i32>(7)` is
+  `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `identity(...)` ``
+  (`tests/cases/reject_generic_call_type_args`). One token of lookahead cannot
+  tell `f<i32>(x)` from `(f < i32) > (x)`, and inference already covers the
+  spelling. Inference matches the *shape* of each declared parameter against
+  its argument's type — `T` against `i32`, `T[]` against `i32[]`,
+  `Result<T, string>` against `Result<i32, string>` — left to right, first
+  binding wins (`tests/cases/gen_infer_two`, `gen_result_payload`).
+- **A type parameter that appears in no parameter is an error at the
+  declaration**, because it could never be inferred and the function could
+  never be called:
+  `` Cannot infer `T` for `empty`: a type parameter is inferred from the arguments, and `T` appears in none of them; give `empty` a parameter that mentions `T` ``
+  (`tests/cases/reject_generic_function`).
+- **Every other type rule applies to a type argument unchanged.** A type
+  parameter is not a hole through which something the language refuses can be
+  smuggled in: `Result<T, void>` is still refused at an instantiation whose `E`
+  is `void`, `T | null` is still only over a pointer type, and each
+  instantiation's body is checked with `T` bound to a concrete type.
+- **Each instantiation gets its own facts.** The attribute fixpoint and the
+  escape analysis are keyed by symbol, so `eq<T>` is `readnone` at `T = i32`
+  and `readonly` at `T = string` — one source line, two sets of attributes
+  (`tests/cases/gen_eq_purity`).
+- **Recursion terminates or is refused by name.** A recursive call whose type
+  argument is the parameter itself, or a type that does not mention it, is
+  accepted: `countDown<string>` asking for `countDown<i32>` is two
+  instantiations and no more (`tests/cases/gen_recursive_ground`). A call that
+  puts the parameter *under a type constructor* has no end and is refused:
+  `` Monomorphising `grow` would not terminate: `grow<i32>` asks for `grow<i32[]>`, which puts `i32` under a type constructor instead of passing it on, so the chain has no end; pass `T` itself, or a type that does not mention it ``
+  (`tests/cases/reject_generic_polymorphic_recursion`). Behind the rule are two
+  compiler limits — 256 instantiations of one template, 4096 in one module —
+  whose message says it is a limit rather than a rule of the language.
+- **`$` may not appear in a declared name.** It separates a generic's name from
+  its type arguments in every symbol the compiler emits, so a function called
+  `identity$i32` would be the symbol `identity<i32>` already has:
+  `` `identity$i32` cannot be the name of a function in Nish: `$` separates a generic's name from its type arguments in the symbols the compiler emits ``
+  (`tests/cases/reject_generic_dollar_name`). Locals, parameters and fields are
+  unaffected — only names that become symbols are restricted.
+- **Not supported yet**, each with its own message: a constrained parameter
+  (`<T extends Shape>`, `tests/cases/reject_generic_constraint`), a default
+  type argument (`<T = string>`), type parameters on a class, an interface, a
+  method or a type alias, and instantiating a generic imported from another
+  module (`` is a generic function, and a generic function cannot yet be
+  instantiated from another module ``). A generic `main` is refused too: the
+  entry point is called by the C runtime, which has no type arguments to give
+  it. The design and the milestones are in
+  [wp18-generics.md](wp18-generics.md).
 
 ### Interfaces and object literals
 
@@ -1504,6 +1578,57 @@ literal, or parameter) (`Empty array literal needs a type annotation`,
 `reject_arr_empty_literal`; `tests/cases/arr_push`, `arr_literal`). Holes and
 spread are not supported.
 
+### Arrays of records are contiguous
+
+An array whose element type is an **`interface`** is one block of records, `N`
+of them end to end at exactly the stride and alignment clang gives the matching
+C array. `ps[i]` is an interior pointer into that block — a `getelementptr`,
+with no pointer to load and chase — which is what makes a loop over `Point[]`
+vectorisable and what lets a C host read `((struct Point *)a->data)[i]`
+(`tests/cases/arr_struct_contiguous`, `tests/layout/structs.c`).
+
+Three element kinds are **not** records and keep one pointer per slot:
+
+- a **`class`**. The two struct kinds already mean different things: an
+  `interface` is fields and nothing else, so copying one into a slot cannot be
+  told apart from pointing at it, while a `class` has identity — a constructor
+  and methods that run on one object — and every other position in the language
+  passes a class value by reference.
+- an **`interface` some class `implements`**. That array is the language's only
+  polymorphic container (`tests/cases/cls_implements_prefix`): a `Shape[]` holds
+  a `Square` and a `Circle` at once, and both are longer than `Shape`, so a
+  value slot would copy the prefix and drop the rest. The property is
+  program-wide — one compilation, one layout for `Shape[]` in every module of it.
+- a **`T | null`** of any kind: a null element has no bytes to be, and `null` is
+  the pointer. That spelling is also how to ask for a sparse array of records.
+
+Three consequences, each of them a rule:
+
+- **A record put into an array is copied into the slot.** `ps.push(p)`,
+  `ps[i] = p` and `[p, q]` copy `sizeof` bytes, exactly as a C array of structs
+  does; afterwards `ps[i]` and `p` are two records, and writing one does not
+  change the other (`tests/cases/arr_struct_push_copy`).
+- **An element reference may not be held across a mutation of its array.**
+  `push` may move the block (`nish_array_grow` bumps a fresh one and copies)
+  and `pop` hands the slot back to the next `push`, so a pointer taken before
+  either names memory that is no longer the element. A `const` bound to `a[i]`
+  or `a.pop()`, and the variable of a `for (const p of a)`, are element
+  references; using one after a `push` or `pop` on the same array — or after a
+  call that could push through it, which is any call handed the array as a
+  non-`readonly` parameter — is
+  `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse
+  that storage; index `ps` again afterwards rather than holding the element
+  across it `` (`reject_arr_element_across_push`,
+  `reject_arr_element_loop_push`). A loop is checked as a whole, because a
+  `push` at the bottom of the body reaches a reference taken at the top on the
+  next pass. `ps.push(ps[i])` is refused for the same reason, in one message of
+  its own (`reject_arr_element_push_self`).
+
+The rule rejects some programs that would have been safe — a call is taken to
+mutate every mutable array it is handed, because whether the callee pushes is a
+whole-program question the checker does not answer. `readonly T[]` is how a
+signature promises it does not.
+
 ### Template literals
 
 `` `text ${e} text` `` accepts holes of type `string`, `number`, `i64`,
@@ -1749,6 +1874,7 @@ interval exactly zero, which `io_monotonic` is the test for.
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`) | `str_bytes`; `reject_str_substring_arity` |
+| `s.slice(start: number[, end: number]): string` | the same bytes, without the clamp: `start` and `end` must satisfy `0 <= start <= end <= s.length` and anything else **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript would count a negative offset from the end and answer `""` for a reversed pair. `end` defaults to `s.length`, an empty range is `""`, and an in-range non-negative pair gives exactly what JavaScript's `String.prototype.slice` gives. Two `icmp ule` against a cold panic block, one allocation and one `memcpy`; `--unchecked-indexing` drops the compares, as it drops `a[i]`'s. Measured 1.18x over `substring` on a lexer-shaped scan ([wp15-performance.md](wp15-performance.md) §4) | `str_slice`, `str_slice_panic`; `reject_str_slice_arity`, `reject_str_slice_type` |
 | `s.indexOf(sub: string): number` | the first **byte** offset at which `sub` occurs, or `-1`; `s.indexOf("")` is `0`. One `nish_str_index_of` call: the search is the runtime's, so it is the libc's vectorised one rather than a probe per offset (WP15 §7c) | `str_search`; `reject_str_index_of_type` |
 | `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`nish_str_at`) | `str_search` |
 | `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
@@ -1827,9 +1953,10 @@ a mutable `T[]` — and it is exact where the fixpoint is not
 (`` `process.argv` is read-only ``), because it is a value and not an
 annotation.
 
-There are no other array or string methods (`slice`, `map`, `shift`,
-`toUpperCase`, `charAt`, ...) and no `toString` (template literals
-and `console.log` convert numbers); string-to-number parsing is the bare
+There are no other array or string methods (`map`, `shift`, `toUpperCase`,
+`charAt`, ...) — `slice` is a string method and an array has none — and no
+`toString` (template literals and `console.log` convert numbers);
+string-to-number parsing is the bare
 `Number(s)` / `parseInt(s)` / `parseFloat(s)` under
 [Numeric conversions](#numeric-conversions). An unknown name is
 `` Unknown method `codePointAt` on string `` or
@@ -1957,10 +2084,13 @@ compiler's own marks are never invalidated by user resets.
   (`tests/cases/res_basic`); runtime failures (bounds check, integer
   division, file errors, out of memory) print a message to stderr and exit
   with status 1 (`tests/cases/arr_bounds_panic`:
-  `index out of range: <i> >= <len>`; `div_zero_panic`:
+  `index out of range: <i> >= <len>`; `str_slice_panic`:
+  `slice out of range: [<start>, <end>) of length <len>`; `div_zero_panic`:
   `attempt to divide by zero`).
 - **Bounds checks** on every `a[i]` read and write, unsigned, so `-1` fails
-  (`tests/cases/arr_bounds_panic`); `--unchecked-indexing` removes them
+  (`tests/cases/arr_bounds_panic`), and the same unsigned compare guards
+  `s.charCodeAt(i)` and the two ends of `s.slice(a, b)`
+  (`tests/cases/str_slice_panic`); `--unchecked-indexing` removes all of them
   (`tests/cases/arr_unchecked`), after which out-of-range is undefined
   behaviour.
 - **`new Array<T>(n)` zero-fills** (`0` / `false`), no holes; pointer element
@@ -2245,7 +2375,9 @@ fragment `tests/run.js` matches and the case that proves it.
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| type parameters on functions, methods, arrows, classes, interfaces, type aliases | `` Generic type parameters are forbidden in Nish (no monomorphisation yet) `` | `reject_generic_function`, `reject_generic_class`, `reject_type_alias_generic` |
+| type parameters on a class or an interface | `` Generic type parameters are forbidden on a class in Nish (a generic function is monomorphised; a generic class is not supported yet) `` | `reject_generic_class` |
+| type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish (a generic function is monomorphised; a generic class is not supported yet) `` | `reject_type_alias_generic` |
+| type parameters on a method | `` Generic type parameters are forbidden on a method in Nish (a method takes its class's type arguments and adds none of its own) `` | `reject_generic_method` |
 | generators (`function*`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator` |
 | `async` functions, methods, arrows | `` `async` functions are forbidden in Nish (no event loop or promises) `` | `reject_async_function` |
 | `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |
@@ -2359,6 +2491,7 @@ messages are exact for the cases cited; other rows quote
 | I/O with the wrong type | `` `readFileSync` expects an argument of type string, got i32 `` | `reject_readfile_number`, `reject_readdir_type`, `reject_spawn_to_type` |
 | I/O with the wrong arity | `` `readdirSync` expects exactly 1 argument, got 2 ``; `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``; `` `monotonicNanos` expects exactly 0 arguments, got 1 `` | `reject_readdir_arity`, `reject_spawn_to_arity`, `reject_monotonic_arity` |
 | array errors | see [Arrays](#array-literals), [Element access](#element-access), [`for...of`](#for-const-x-of-a) | `reject_arr_*` |
+| element reference held across a `push` or `pop` | `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it `` — see [Arrays of records are contiguous](#arrays-of-records-are-contiguous) | `reject_arr_element_across_push`, `reject_arr_element_loop_push`, `reject_arr_element_push_self` |
 | class and interface errors | see [Classes](#classes), [Interfaces](#interfaces-and-object-literals) | `reject_cls_*` |
 | `extends` or `super` on a class (WP25: there is no inheritance) | `` `extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `Derived` and `implements` an interface to convert between them `` / `` `super` is not supported: Nish has no inheritance, so a class has no base class to reach `` | `reject_cls_extends`, `reject_cls_super` |
 | a class does not cover the interface it `implements` | `` Class `Point2` does not implement `Point3`: it lacks field `z: i32` (the interface's fields must be the class's first fields, in order) `` | `reject_cls_implements_short`, `reject_cls_implements_mismatch` |

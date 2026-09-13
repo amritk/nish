@@ -138,14 +138,12 @@
  * analysed under exactly the keys it always was.
  */
 import ts from "typescript";
-import { CheckedProgram, FunctionSig, LocalVar, Param } from "../checker/index.js";
-import {
-  intrinsicType,
-  isAssignmentOperator,
-} from "../checker/classes.js";
+import { CheckedProgram, FunctionSig, LocalVar, Param, inlineElementStruct } from "../checker/index.js";
+import { withInstance } from "../checker/generics.js";
+import { intrinsicType, isAssignmentOperator } from "../checker/classes.js";
 import { unwrapParens } from "../checker/control-flow.js";
 import { CompilerOptions, DEFAULT_OPTIONS, StaticType, resultByValue, stripNull } from "../types.js";
-import { arrayMethodName, isPushCall } from "./emit/arrays.js";
+import { arrayMethodName, isPushCall, storesInlineElements } from "./emit/arrays.js";
 import { CallSite, EscapeResult, analyzeEscapes } from "./escape.js";
 import { collectBuiltinFacts } from "./emit/expressions.js";
 import { factCollectors } from "./emit/members.js";
@@ -159,6 +157,8 @@ import { INLINE_ALLOCATOR_ATTRS, MemoryEffect, RUNTIME_BY_NAME } from "./runtime
 export interface PointerParamFacts {
   /** `sizeof` of the pointee, for `dereferenceable`; 0 when it is not emitted (arrays). */
   size: number;
+  /** The alignment the pointer is guaranteed to have; see `pointerAlign`. */
+  align: number;
   /** Stores through the pointer (`p.f = v`, `p[i] = v`, `p.push(v)`), directly or via a callee (fixpoint). */
   writesThrough: boolean;
   /** The pointer may outlive the call: returned, stored, aliased, or captured by a callee (fixpoint). */
@@ -195,6 +195,8 @@ export interface FunctionFacts {
   freshThis: boolean;
   /** `sizeof` the returned struct, when the return type is a struct. */
   returnDeref?: number;
+  /** The alignment a returned pointer is guaranteed to have; see `pointerAlign`. */
+  returnAlign: number;
   // ---- WP6 memory strategy (see escape.ts) ----
   /** Allocation expressions lowered to entry-block allocas. */
   stackSites: Set<ts.Node>;
@@ -265,8 +267,13 @@ export function analyzeFunctions(
   const collect = (escapes?: Map<string, EscapeResult>) => {
     const facts = new Map<string, FunctionFacts>();
     for (const program of list) {
-      for (const sig of program.functions)
-        facts.set(sig.name, collectFacts(program, sig, opts, escapes?.get(sig.name)));
+      for (const sig of program.functions) {
+        // WP18: per instantiation, over that instantiation's side tables. The
+        // facts are keyed by symbol already, so `eq$i32` being `readnone` and
+        // `eq$str` `readonly` needs nothing but the right tables here.
+        const f = withInstance(program, sig, () => collectFacts(program, sig, opts, escapes?.get(sig.name)));
+        facts.set(sig.name, f);
+      }
     }
     return facts;
   };
@@ -278,7 +285,7 @@ export function analyzeFunctions(
     for (const sig of program.functions) {
       // WP27 S1: no body, so no allocation sites and nothing to escape.
       if (sig.foreign) continue;
-      escapes.set(sig.name, analyzeEscapes(program, sig, first, opts));
+      escapes.set(sig.name, withInstance(program, sig, () => analyzeEscapes(program, sig, first, opts)));
     }
   }
   // Round 2: the same facts with stack allocations applied, then the scope decision.
@@ -469,13 +476,15 @@ export function classifyUse(program: CheckedProgram, ref: ts.Expression): ParamU
       // an arena vector of pointers into `p`'s strings (WP14 D4); every other
       // builtin lowers to runtime functions whose pointer params are all
       // declared `nocapture`.
-      if (
-        isPushCall(program, parent) ||
-        isResultConstructorCall(program, parent) ||
-        isSpawnCall(program, parent)
-      ) {
-        return USE_ESCAPE;
+      // WP15 §2a: a push into an array that holds its elements inline *copies*
+      // the object into the slot, so the pointer is read and then forgotten —
+      // the one shape where a push does not retain what it was given.
+      if (isPushCall(program, parent)) {
+        return storesInlineElements(program, (parent.expression as ts.PropertyAccessExpression).expression)
+          ? USE_READ
+          : USE_ESCAPE;
       }
+      if (isResultConstructorCall(program, parent) || isSpawnCall(program, parent)) return USE_ESCAPE;
       return resultMethodName(program, parent) === "unwrapOr" ? USE_ESCAPE : USE_NONE;
     }
     if (ts.isNewExpression(parent)) {
@@ -488,10 +497,20 @@ export function classifyUse(program: CheckedProgram, ref: ts.Expression): ParamU
     }
     if (ts.isBinaryExpression(parent)) {
       // Assignment retains the right-hand side; every other operator (`===`, `+`, ...) consumes both operands.
-      if (isAssignmentOperator(parent.operatorToken.kind))
-        return parent.right === node ? USE_ESCAPE : USE_NONE;
+      if (isAssignmentOperator(parent.operatorToken.kind)) {
+        if (parent.right !== node) return USE_NONE;
+        // WP15 §2a: `xs[i] = p` into an inline-element array copies `p`'s bytes
+        // into the slot, exactly as `push` does; nothing keeps the pointer.
+        const target = unwrapParens(parent.left);
+        return ts.isElementAccessExpression(target) && storesInlineElements(program, target.expression)
+          ? USE_READ
+          : USE_ESCAPE;
+      }
       return USE_NONE;
     }
+    // An element of an array literal whose elements are inline is copied into
+    // the fresh block the literal allocates, so the value is read, not kept.
+    if (ts.isArrayLiteralExpression(parent) && storesInlineElements(program, parent)) return USE_READ;
     if (ts.isForOfStatement(parent)) return parent.expression === node ? USE_READ : USE_ESCAPE;
     if (ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent)) return USE_NONE;
     if (ts.isExpressionStatement(parent)) return USE_NONE;
@@ -546,6 +565,25 @@ function structSize(program: CheckedProgram, t: StaticType): number | undefined 
 }
 
 /**
+ * The alignment a pointer of this type is *guaranteed* to have, which is 8 for
+ * everything the allocator hands out and less for exactly one shape.
+ *
+ * WP15 §2a: an array of records is contiguous storage, so `ps[i]` is an
+ * interior pointer at `i * sizeof(P)` into an 8-aligned block. When `sizeof(P)`
+ * is not a multiple of 8 — `interface Q { a: i32; b: i32 }` is eight bytes
+ * aligned to four — element 1 is 4-aligned and `align 8` would be a lie. The
+ * record's own alignment is the true bound: the block is 8-aligned, the stride
+ * is a multiple of `align`, so every slot is `align`-aligned and no more can be
+ * promised. A `class` pointer keeps `align 8`, because a class value only ever
+ * comes from `nish_alloc_struct` (which rounds to 8) or an entry-block alloca
+ * the emitter gives `align 8`; a class is never an inline element.
+ */
+function pointerAlign(program: CheckedProgram, t: StaticType): number {
+  const record = inlineElementStruct(program.structs, stripNull(t));
+  return record === undefined ? 8 : Math.min(8, record.align);
+}
+
+/**
  * Struct, array and `Result` params, plain or `T | null` (WP6), get pointer
  * facts — except a `Result` the ABI packs into a register (WP17), which is
  * not a pointer at all, so there is nothing for the fixpoint to say about it.
@@ -553,9 +591,7 @@ function structSize(program: CheckedProgram, t: StaticType): number | undefined 
 function isPointerParam(t: StaticType): boolean {
   const inner = stripNull(t);
   return (
-    inner.kind === "struct" ||
-    inner.kind === "array" ||
-    (inner.kind === "result" && !resultByValue(inner))
+    inner.kind === "struct" || inner.kind === "array" || (inner.kind === "result" && !resultByValue(inner))
   );
 }
 
@@ -584,6 +620,7 @@ function collectFacts(
     pointerParams: new Map(),
     freshThis: sig.role === "constructor",
     returnDeref: structSize(program, sig.returnType),
+    returnAlign: pointerAlign(program, sig.returnType),
     stackSites: memory?.stackSites ?? new Set(),
     stackLocals: memory?.stackLocals ?? new Set(),
     stackParams: memory?.stackParams ?? new Set(),
@@ -623,6 +660,7 @@ function collectFacts(
     if (isPointerParam(p.type)) {
       facts.pointerParams.set(p.name, {
         size: structSize(program, stripNull(p.type)) ?? 0,
+        align: pointerAlign(program, p.type),
         writesThrough: false,
         captured: false,
         passedTo: [],
@@ -674,7 +712,7 @@ function collectFacts(
     }
     const param = paramRef(node);
     if (param !== undefined) noteUse(param, node as ts.Expression);
-    collectStringFacts(program, node, facts);
+    collectStringFacts(program, node, facts, opts);
     for (const collect of factCollectors) collect(program, node, facts, opts);
     collectBuiltinFacts(program, node, facts); // WP7: toI32/toF64/..., readFileSync/...
     ts.forEachChild(node, visit);
@@ -866,7 +904,10 @@ export function paramAttributes(p: Param, f: FunctionFacts, privateAbi: boolean)
       attrs.push("nonnull");
       if (p.name === "this" && f.freshThis) attrs.push("noalias");
       if (pointer && !pointer.writesThrough && !pointer.captured) attrs.push("readonly");
-      attrs.push("align 8");
+      // Not always 8: a record that is an array element sits at `i * sizeof(P)`
+      // into the block, so its own alignment is all that can be promised
+      // (`pointerAlign`).
+      attrs.push(`align ${pointer ? pointer.align : 8}`);
       if (pointer && pointer.size > 0) attrs.push(`dereferenceable(${pointer.size})`);
       if (pointer && !pointer.captured) attrs.push("nocapture");
       break;
@@ -887,7 +928,7 @@ export function paramAttributes(p: Param, f: FunctionFacts, privateAbi: boolean)
     case "nullable": // WP6: no `nonnull` / `dereferenceable`; the rest as for the pointee kind
       if (p.type.inner.kind === "string") attrs.push("noalias", "readonly");
       else if (pointer && !pointer.writesThrough && !pointer.captured) attrs.push("readonly");
-      attrs.push("align 8");
+      attrs.push(`align ${pointer ? pointer.align : 8}`);
       if (pointer ? !pointer.captured : !f.escaping.has(p.name)) attrs.push("nocapture");
       break;
   }
@@ -899,7 +940,12 @@ export function paramAttributes(p: Param, f: FunctionFacts, privateAbi: boolean)
  * (`FunctionFacts.returnDeref`); `privateAbi` is whether this function answers
  * a by-value `Result` as the arms rather than the word (WP15 §7b).
  */
-export function returnAttributes(t: StaticType, deref: number | undefined, privateAbi: boolean): string[] {
+export function returnAttributes(
+  t: StaticType,
+  deref: number | undefined,
+  privateAbi: boolean,
+  align = 8
+): string[] {
   switch (t.kind) {
     case "void":
       return [];
@@ -920,9 +966,10 @@ export function returnAttributes(t: StaticType, deref: number | undefined, priva
       if (resultByValue(t)) return privateAbi ? [] : ["noundef"];
       return ["noundef", "nonnull", "align 8", ...(deref ? [`dereferenceable(${deref})`] : [])];
     case "struct": // WP16: a whole, never-null object
-      return ["noundef", "nonnull", "align 8", ...(deref ? [`dereferenceable(${deref})`] : [])];
+      // `align` is the record alignment for an interface (`pointerAlign`), 8 otherwise.
+      return ["noundef", "nonnull", `align ${align}`, ...(deref ? [`dereferenceable(${deref})`] : [])];
     case "nullable":
-      return ["noundef", "align 8"]; // WP6: may be null
+      return ["noundef", `align ${align}`]; // WP6: may be null
     default:
       return ["noundef"];
   }
