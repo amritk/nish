@@ -14,7 +14,11 @@
  * indentation — survives untouched. That matters more than it sounds: moving
  * `{` after `=>` leaves every line of the body at the column it was already
  * at, so a block-bodied rewrite **preserves the line count of the file** and
- * cannot move a `-g` line number or a diagnostic's line.
+ * cannot move a `-g` line number or a diagnostic's line. Columns hold too,
+ * with two enumerable exceptions WP22 §8c measures: the function's own name
+ * moves three to the left, and a body written on the same line as its
+ * declaration moves three to the right, because ` =>` sits between the return
+ * type and the `{`.
  *
  * What it deliberately refuses to touch, and why:
  *
@@ -86,15 +90,19 @@ const signatureEnd = (text, decl) => {
 
 /**
  * A block that means exactly one `return expr;` and nothing else, so `--concise`
- * may drop the braces. A comment anywhere in the block disqualifies it: the
- * concise form has nowhere to put one.
+ * may drop the braces. A comment anywhere in the block disqualifies it, because
+ * the concise form has nowhere to put one — tested by looking at what is
+ * *between* the braces and the statement rather than by searching the text for
+ * `//`, which would also find one inside a string literal and refuse a
+ * collapse that is perfectly fine.
  */
-const singleReturn = (text, block) => {
+const singleReturn = (text, sf, block) => {
   if (block.statements.length !== 1) return undefined;
   const stmt = block.statements[0];
   if (!ts.isReturnStatement(stmt) || stmt.expression === undefined) return undefined;
-  const inner = text.slice(block.getStart() + 1, block.getEnd() - 1);
-  if (inner.includes("//") || inner.includes("/*")) return undefined;
+  const blank = /^\s*$/;
+  if (!blank.test(text.slice(block.getStart(sf) + 1, stmt.getStart(sf)))) return undefined;
+  if (!blank.test(text.slice(stmt.getEnd(), block.getEnd() - 1))) return undefined;
   return stmt.expression;
 };
 
@@ -118,7 +126,7 @@ const replacement = (text, sf, decl, concise) => {
   const gap = text.slice(sigEnd, decl.body.getStart(sf));
   if (!/^\s*$/.test(gap)) return { skip: "trivia" };
 
-  const returned = concise ? singleReturn(text, decl.body) : undefined;
+  const returned = concise ? singleReturn(text, sf, decl.body) : undefined;
   let body;
   if (returned === undefined) {
     body = text.slice(decl.body.getStart(sf), decl.body.getEnd());
@@ -143,7 +151,7 @@ const conciseArrow = (text, sf, stmt) => {
   if (decls.length !== 1) return undefined;
   const init = decls[0].initializer;
   if (init === undefined || !ts.isArrowFunction(init) || !ts.isBlock(init.body)) return undefined;
-  const returned = singleReturn(text, init.body);
+  const returned = singleReturn(text, sf, init.body);
   if (returned === undefined) return undefined;
   const expr = text.slice(returned.getStart(sf), returned.getEnd());
   return {
