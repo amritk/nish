@@ -44,6 +44,7 @@ node bench/run.mjs       # rewrite docs/BENCHMARKS.md (about 3 minutes)
 docs/cookbook/regen.sh   # refresh docs/IR_COOKBOOK.md; node docs/check-links.mjs checks links
 node scripts/arrowify.mjs --check <file.ts>   # WP22: what is still spelled `function`, and why
 node scripts/arrow-verify.mjs [--debug]       # rewrite the corpus and diff every .ll byte for byte
+node scripts/arrow-verify.mjs --applied self  # the same, for a rewrite the tree already carries
 node scripts/gen-diagnostic-codes.mjs        # rewrite src/codes.ts + self/codes.ts
 node scripts/gen-diagnostic-codes.mjs --check  # fail if either is stale (CI + npm test)
 ```

@@ -302,6 +302,7 @@ node scripts/arrowify.mjs self/lexer.ts          # rewrite, in place
 node scripts/arrowify.mjs --check self/*.ts      # what is left, and why
 node scripts/arrow-verify.mjs                    # the whole corpus, before and after
 node scripts/arrow-verify.mjs --debug self       # the same, under `-g`
+node scripts/arrow-verify.mjs --applied self     # the rewrite the tree already carries
 ```
 
 **`scripts/arrowify.mjs` is textual, driven by the parse tree.** `typescript`
@@ -334,12 +335,43 @@ of `tests/cases/reject_ffi_body`, where the body *is* the mistake the case
 exists to make. §8c has what that cost and how it was caught.
 
 **`scripts/arrow-verify.mjs` is the answer in one command.** It copies the
-tracked tree, compiles every program `tests/self/corpus.js` enumerates,
-rewrites the copy in place, compiles again, and compares every emitted `.ll`
-byte for byte. Both compiles run **out of the same directory**, which is the
-detail that makes `-g` comparable at all: `; ModuleID` and `!DIFile` carry the
-path, so two sibling copies would differ in every module for a reason that has
-nothing to do with arrows (wp19 §A3).
+tracked tree, compiles every whole program of the corpus, changes the copy in
+place, compiles again, and compares every emitted `.ll` byte for byte. Both
+compiles run **out of the same directory**, which is the detail that makes `-g`
+comparable at all: `; ModuleID` and `!DIFile` carry the path, so two sibling
+copies would differ in every module for a reason that has nothing to do with
+arrows (wp19 §A3).
+
+**What it changes is what it compares, and the set is derived rather than
+declared.** The programs are the 374 of the six directories
+`tests/self/corpus.js` enumerates, *plus* the 21 multi-module programs of
+`tests/link/` and the 71 of `tests/differential/corpus/` — 92 programs the tool
+used to rewrite and never compile, whose rewrite nothing was reading. All 550
+rejections beside them are re-diagnosed, `tests/wordings/` included. The files
+rewritten are exactly those programs and the modules they import, followed
+through the import graph, so a file nothing would compile afterwards is never
+touched, and the summary counts one set rather than putting a whole-tree rewrite
+count next to a slice-scoped comparison.
+
+**Two modes, because there are two questions.** The default *derives* the
+rewrite — it runs the codemod on the copy — which asks whether a rewrite would
+be safe. `--applied` runs no codemod at all: it puts each in-scope file back to
+what it is at a revision (`--rev`, default `HEAD`) for the first compile and
+leaves the working tree's own text for the second, which asks whether the
+rewrite already sitting in the tree *was* safe. That is the mode §8b's recipe
+needs, and the reason is the failure mode the tool now refuses to have: run the
+codemod in place first and a derived sweep has nothing left to rewrite, so it
+compiles the same source twice and reports zero differences over a rewrite it
+never saw. A derived run that rewrites nothing, and an applied run with nothing
+changed since the revision, both **fail** rather than passing quietly.
+
+The rejections are compared in two halves, and only one of them is fatal. The
+**words** — severity, the stable `NL` code, the message, every position
+stripped — may not change: a `reject_*` case that starts compiling, or that is
+refused under a different rule, is the worst thing a codemod can do (§8c), and
+it fails the run. A **position** that moved is reported and does not, because
+under `--concise` the lines move by construction and a block-bodied rewrite is
+allowed to move a caret pointed at the function's own name.
 
 `--debug` is not decoration. §A5 records a closed parity gate reopening because
 stage0 took an arrow-declared function's position from the `ArrowFunction`
@@ -360,11 +392,20 @@ single-return declaration of its 721, and `npm run lint` may not get worse than
 point:
 
 ```bash
-node scripts/arrowify.mjs self/*.ts            # block bodies; lines and columns hold
-node scripts/arrow-verify.mjs self             # 0 differences, or stop
-node scripts/arrowify.mjs --concise self/*.ts  # the 119, for the lint
-node scripts/arrow-verify.mjs self             # 0 differences again
+node scripts/arrow-verify.mjs self                      # the question, before touching anything
+node scripts/arrowify.mjs self/*.ts                     # block bodies; lines and columns hold
+node scripts/arrow-verify.mjs --applied self            # 0 differences, or stop
+node scripts/arrowify.mjs --concise self/*.ts           # the 119, for the lint
+node scripts/arrow-verify.mjs --applied self            # 0 differences again, collapse included
 ```
+
+**The verification steps are `--applied` and they have to be.** The rewrite is
+in the tree by then, so a derived sweep would rewrite nothing, compile the same
+source twice and answer with a zero that means only that it did nothing — which
+is how the collapse pass, the half with §8a's whole history, could have gone to
+`self/` never having been IR-checked at all. `--applied` compares the text that
+is actually there against `HEAD`, so the second run checks the collapse and the
+first checks the block-bodied pass, each on its own.
 
 Collapsing second rather than first is what keeps a difference down to one
 cause. A concise body is the one shape where the four declaration kinds stop
@@ -380,7 +421,29 @@ program in the two spellings, and three checks ride on the pair — that the two
 spellings emit identical IR (stage A's defining claim, which until now nothing
 in the suite asked), that the codemod turns the first into the second character
 for character, and that it leaves `ffi_scalar`'s `declare function` alone while
-rewriting the definitions beside it.
+rewriting the definitions beside it. The comparison is anchored on a sentinel
+both fixtures carry, and the check requires it to be *found*: `indexOf` answers
+-1 for a fixture somebody renamed, `slice(-1)` is then the last byte of each
+file, and a check that compares one newline with another passes for as long as
+nobody looks.
+
+Eight more pin the properties the tooling's own worth rests on, because a sweep
+that takes half an hour is not where a regression in it should be discovered.
+Four say that `--concise` parenthesises by what the grammar restricts — a
+concise body may not *begin* with `{` — rather than by the returned node being
+an object literal, which is the same "recognised by what usually accompanies it"
+mistake one node deeper and turns `return { a: 1 } as Pair;` into two parse
+errors; each shape is parsed back rather than string-matched, because the
+failure being watched for is output that no longer parses. One says a body-less
+declaration with no `declare` is reported as the overload signature it is, and
+not under the reason that says the line is legal. One says the verifier's module
+comparison walks the union of the two sides, so a `.ll` that exists only *after*
+a rewrite is a difference rather than a blind spot. One says its diagnostic
+comparison normalises positions away and nothing else, so a rejection whose code
+or words changed fails while a caret that moved does not. And the last asks the
+tarball whether every script it ships can resolve its own imports — which is why
+`arrow-verify.mjs`, which reads `tests/self/corpus.js`, a path `files` does not
+ship, is excluded from the package rather than shipped broken.
 
 ### 8c. The rest of §8a's bug class, looked for before the rewrite rather than during it
 
