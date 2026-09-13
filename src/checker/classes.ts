@@ -762,14 +762,14 @@ export function contextualType(ctx: CheckContext, expr: ts.Expression, scope: Sc
  * resolved the list and interned the instantiation, and `resolveTypeNode`
  * answers from the same bindings with the same result.
  */
-export function newTargetStruct(ctx: CheckContext, call: ts.NewExpression): StructInfo | undefined {
+export const newTargetStruct = (ctx: CheckContext, call: ts.NewExpression): StructInfo | undefined => {
   if (!ts.isIdentifier(call.expression)) return undefined;
   const template = ctx.structTemplates.get(call.expression.text);
   if (!template) return ctx.program.structs.get(call.expression.text);
   if ((call.typeArguments?.length ?? 0) !== template.typeParams.length) return undefined;
   const args = (call.typeArguments ?? []).map((node) => resolveTypeNode(node, ctx.sf, ctx.opts));
   return ctx.program.structs.get(instanceSymbol(template.sourceName, args));
-}
+};
 
 /** The user function, method, or constructor a call resolves to, when that is already known. */
 function calleeSignature(ctx: CheckContext, call: ts.CallExpression | ts.NewExpression): FunctionSig | undefined {
