@@ -106,6 +106,23 @@ const DRIVER_CASES = [
   },
 ];
 
+/**
+ * The programs that *compile* and warn, and the rule each warning is.
+ *
+ * A WP15 §8 performance warning goes to stderr on a successful compile, so no
+ * `reject_*` case can reach one: a case with a `.err` must fail. What pins
+ * these wordings is the WP15 block of `tests/run.js`, which compiles the same
+ * programs and matches the same sentences; this table is how the *registry*
+ * learns they are pinned, and it fails if a warning stops being printed.
+ */
+const WARNING_CASES = [
+  { name: "perf_str_concat_loop", codes: ["NL9002"] },
+  { name: "perf_alloc_loop", codes: ["NL9001"] },
+  { name: "perf_arena_drop", codes: ["NL9003"] },
+  { name: "perf_overflow", codes: ["NL9004", "NL9005"] },
+  { name: "perf_overflow_const", codes: ["NL9006"] },
+];
+
 /** Every negative case: the `reject_*` goldens and the `tests/link/` programs with an `expected.err`. */
 function negatives() {
   const out = [];
@@ -168,7 +185,15 @@ function codesOf(entry) {
 function driverCodes(byCode) {
   const covered = new Set();
   const wrong = [];
-  for (const entry of DRIVER_CASES) {
+  const runs = [
+    ...DRIVER_CASES,
+    ...WARNING_CASES.map((entry) => ({
+      name: entry.name,
+      argv: [path.join("tests", "cases", `${entry.name}.ts`), "-o", "/dev/null"],
+      codes: entry.codes,
+    })),
+  ];
+  for (const entry of runs) {
     const r = spawnSync(process.execPath, [cli, ...entry.argv], {
       cwd: root,
       encoding: "utf8",
@@ -277,7 +302,8 @@ async function main(argv) {
   const seconds = ((Date.now() - t0) / 1000).toFixed(1);
   process.stdout.write(
     `diagnostic coverage: ${all.length - missing.length}/${all.length} live codes exercised by ` +
-      `${cases.length} negative cases and ${DRIVER_CASES.length} driver runs (${seconds} s, ${jobs} jobs), ` +
+      `${cases.length} negative cases, ${DRIVER_CASES.length} driver runs and ` +
+      `${WARNING_CASES.length} warning runs (${seconds} s, ${jobs} jobs), ` +
       `${missing.length} in the backlog, ` +
       `${retired} retired and ${shadowed} shadowed rules not counted\n`
   );

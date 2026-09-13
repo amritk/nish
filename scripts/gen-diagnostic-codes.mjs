@@ -112,6 +112,17 @@ const collect = () => {
     // second, unreachable entry for each in the error table. The hand-written
     // list above is where they are registered.
     if (file === "src/checker/performance.ts") continue;
+    // The sidecar generators write *files* -- a C header, a `.d.ts`, the N-API
+    // shim -- and print no diagnostics at all: there is not one `CompileError`
+    // or `ctx.error` under `src/interop/`. What the scan found there was the
+    // files' own text: two banner comments, the C strings the generated addon
+    // returns at runtime, and the `.d.ts` comment that says why a function is
+    // not on the wasm bridge. Each had a code nothing could ever print, and
+    // the coverage check asked for a case for each. They keep their numbers as
+    // retired entries (`build` below), and the NL4xxx band stays reserved: a
+    // sidecar generator that ever needs to refuse something should do it
+    // through the checker, where the diagnostic belongs.
+    if (file.startsWith("src/interop/")) continue;
     const text = fs.readFileSync(abs, "utf8");
     for (const m of [...text.matchAll(call), ...text.matchAll(table)]) {
       let lit = m[1];

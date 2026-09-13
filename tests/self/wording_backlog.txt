@@ -10,7 +10,7 @@
 # not here and not covered fails the run. Write a `reject_*` case, run the
 # script with --update, and the line disappears.
 #
-# 68 live codes, measured against tests/cases/reject_* and
+# 56 live codes, measured against tests/cases/reject_* and
 # tests/link/. Retired fragments are not here and never will be: they match no
 # message, so no case can reach them.
 
@@ -70,15 +70,3 @@ NL2260  # Unsupported statement in Phase 1:
 NL2261  # Unsupported unary operator `
 NL2262  # Unsupported unary operator `-` on
 NL2263  # Unsupported unary operator `!` on
-NL4001  #  functions (identical to --emit-header). */
-NL4002  #  modules listed below. Link the .ll module(s) and
-NL4003  # : cannot create the result
-NL4004  # `, which needs the
-NL4005  # could not be converted
-NL4006  # must be a string
-NL9001  # allocates a dynamically sized array on every iteration of this loop
-NL9002  # is rebuilt from its own value on every iteration of this loop
-NL9003  # already holds an allocation and this one drops it
-NL9004  # is at or beyond the
-NL9005  # is computed in i32 and wraps before
-NL9006  # this computes with overflow: the result
