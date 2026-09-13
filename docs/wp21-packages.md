@@ -172,12 +172,31 @@ package-scoped, and §9 is what that turned out to mean.
 
 ### 5b. `import` has no bare specifiers
 
-The only import form is a named import from a relative specifier; a bare one
-is rejected with "Nish has no package resolution". Adding it means
-resolving `import { blake3 } from "@scope/hash"` through Node's own algorithm
-with `--conditions=nish` — deliberately *not* inventing a resolver, a lockfile
-or a registry, all of which npm already has and none of which this project
-should own.
+**Amended: except the compiler's own package.** Two bare forms are now legal, and neither is the general case this
+section is about:
+
+- `nish:fs` / `nish:process` / `nish:io` name *builtins*. They resolve to no
+  file at all — the import renames a builtin the checker already has — so no
+  resolution is involved and none of this section applies to them.
+- `nish/<module>` names a standard-library module, resolved to `std/<module>.ts`
+  beside the running compiler.
+
+The second is the one that touches this section, and it is a deliberate
+narrowing rather than an exception: for the compiler's *own* package there is
+exactly one right answer — the `std/` that shipped with this binary, versioned
+with it, unskewable against it — and that answer is also the one Node gives,
+because `package.json` declares `"./*": "./std/*.ts"` and `nish/text` is
+therefore a package self-reference. The compiler short-circuits to it instead
+of walking `node_modules` to arrive at the same file.
+
+Everything else is still rejected. The general case — `import { blake3 } from
+"@scope/hash"` — is what remains, and it means resolving through Node's own
+algorithm with `--conditions=nish`: deliberately *not* inventing a resolver, a
+lockfile or a registry, all of which npm already has and none of which this
+project should own. Two things that were going to be this package's work are
+already done by the amendment above: the specifier prefix lives in
+`src/branding.ts` / `self/branding.ts` (§2 asked for that), and both compilers
+agree on it.
 
 ### 5c. Compatibility has to be a diagnostic, not a miscompile
 

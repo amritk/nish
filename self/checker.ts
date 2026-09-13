@@ -15,6 +15,7 @@ import { checkElementReferences } from "./arrays";
 import { checkDefiniteAssignment } from "./assignment";
 import { enumMemberValue, foldConstant, parseIntegerLiteral } from "./constants";
 import { CheckContext } from "./context";
+import { isNishModule, isNishSpecifier, nishExport, nishModuleExports, nishModuleNames } from "./nish_modules";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { collectFunctionSignature, collectImports, isExported, markEntryMain } from "./declarations";
 import {
@@ -683,8 +684,65 @@ export class Checker {
     }
   }
 
+  /**
+   * `import { readFileSync } from "nish:fs"`: bind a local name to a builtin
+   * the checker already has.
+   *
+   * Nothing is emitted for one of these. The binding exists so the call and
+   * identifier checkers can prefer it over the ambient builtin tables, which is
+   * the point of the feature: an imported name cannot be taken over by a user
+   * function that happens to share it, because declaring one is a collision
+   * here rather than a silent shadow.
+   */
+  bindBuiltinImport(index: i32): void {
+    const imp = this.program.imports[index];
+    if (!isNishModule(imp.specifier)) {
+      this.ctx.errorAtSpecifier(
+        imp.decl,
+        `Unknown builtin module \`${imp.specifier}\` (the builtin modules are ${nishModuleNames()})`
+      );
+      return;
+    }
+    const exported = nishExport(imp.specifier, imp.importedName);
+    if (exported === null) {
+      this.ctx.error(
+        imp.node,
+        `Module \`${imp.specifier}\` has no export \`${imp.importedName}\` (it exports ${nishModuleExports(imp.specifier)})`
+      );
+      return;
+    }
+    if (this.program.importsUsedAsTypes.has(imp.localName)) {
+      this.ctx.error(
+        imp.node,
+        `\`${imp.localName}\` is a builtin imported from \`${imp.specifier}\`, not a type`
+      );
+    }
+    if (this.ctx.sigs.get(imp.localName, -1) >= 0 || this.program.constant(imp.localName) !== null) {
+      this.ctx.error(imp.node, `\`${imp.localName}\` is already declared in this module`);
+      return;
+    }
+    let origin = "";
+    for (const other of this.program.imports) {
+      if (other.builtin !== null && other.localName === imp.localName && origin.length === 0) {
+        origin = other.specifier;
+      }
+    }
+    if (origin.length > 0) {
+      this.ctx.error(imp.node, `\`${imp.localName}\` is already imported from \`${origin}\``);
+      return;
+    }
+    imp.builtin = exported;
+    this.program.addBuiltinImport(imp.localName, exported);
+  }
+
   bindImport(index: i32, target: CheckedProgram): void {
     const imp = this.program.imports[index];
+    // A `nish:` import names a builtin, so it never looks at `target`: there is
+    // no module behind it.
+    if (isNishSpecifier(imp.specifier)) {
+      this.bindBuiltinImport(index);
+      return;
+    }
     const constant = target.constant(imp.importedName);
     if (constant !== null && constant.exported) {
       this.bindConstantImport(index, constant);

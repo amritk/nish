@@ -904,15 +904,33 @@ and their `.ll` goldens are byte-identical files.
   `tests/cases/reject_export_default`).
 - The only import form is a named import from a relative specifier:
   `import { square, cube as pow3 } from "./math"` (`tests/link/two_file`).
-  The specifier must start with `./` or `../`
+  The specifier must start with `./` or `../`, name one of the three builtin
+  modules below, or name a standard-library module as `nish/<module>`
   (`Only relative import specifiers are supported`,
-  `tests/cases/reject_bare_import`); `.ts` is optional and `./x.js` maps to
+  `tests/cases/reject_bare_import`, `tests/cases/reject_bare_package`); `.ts` is optional and `./x.js` maps to
   `./x.ts`; paths resolve relative to the importing file. Default imports
   (`Default imports are not supported`, `reject_default_import`), namespace
   imports (`Namespace imports`, `reject_namespace_import`), side-effect
   imports (`Side-effect imports`, `reject_side_effect_import`), and
   type-only imports are rejected. A missing file is
   `` Cannot find module `./does_not_exist` `` (`reject_missing_module`).
+- **The standard library is imported as `nish/<module>`**
+  (`tests/link/std_bare_specifier`). It resolves to `std/<module>.ts` beside
+  the running compiler rather than relative to the importing file, so the same
+  specifier works at any depth. A module the library does not have is
+  `` Module `nish/json` is not part of the standard library (it has: testing,
+  text) `` (`reject_std_unknown_module`). Unlike a `nish:` builtin this is
+  ordinary Nish source: it is compiled into the program that imports it and is
+  subject to every rule in this document. What it costs is what you call —
+  `speed` and `size` link with `--gc-sections`, and a module imported but never
+  called is byte-for-byte free (`std/README.md`). Its symbols are scoped to
+  package `nish`, so a program may declare a function a `std/` module also
+  exports (`tests/link/std_package_scope`); the package is decided by the
+  specifier rather than by where the file sits, because reading it off the path
+  would answer differently for an installed compiler and a checkout of the same
+  version.
+- Every other bare specifier is refused: there is no package resolution
+  (`reject_bare_package`, `docs/wp21-packages.md` §5b).
 - An imported constant contributes no `declare` and no relocation: it is
   folded into every use site in the importing module exactly as it is in the
   exporting one (`tests/link/const_export`,
@@ -1684,9 +1702,59 @@ See [Classes](#classes) and [Interfaces](#interfaces-and-object-literals).
 
 ## Builtins
 
-No `import` is needed; builtins are resolved by name. Effects (`none`,
-`read`, `write`) are what the call does to the purity of the enclosing
-function ([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
+No `import` is needed; builtins are resolved by name. The libc-backed ones may
+also be imported from a `nish:` module, which is the same builtin under a name
+that cannot be shadowed (see [Builtin modules](#builtin-modules-nish) below).
+Effects (`none`, `read`, `write`) are what the call does to the purity of the
+enclosing function
+([ARCHITECTURE.md](ARCHITECTURE.md#attribute-soundness-rules)).
+
+### Builtin modules (`nish:`)
+
+The builtins backed by the C runtime can be imported instead of reached for as
+globals. `nish:` is the only bare specifier the language accepts; it resolves
+to no file, and the import *renames a builtin rather than introducing one* —
+the call checks through the same rule and emits the same IR as the global
+spelling, which `tests/run.js` pins by compiling `tests/cases/io_nish_import`
+and `io_nish_import_global` and comparing the two bodies.
+
+| Module | Exports |
+| --- | --- |
+| `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `writeFileSync`, `appendFileSync`, `mkdirSync`, `isDirectorySync`, `readdirSync` |
+| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `monotonicNanos`, `argv`, `platform`, `arch` |
+| `nish:io` | `write`, `writeError`, `panic` |
+
+```ts
+import { readFileSync } from "nish:fs";
+import { argv } from "nish:process";
+import { write } from "nish:io";
+```
+
+- The forms are the ones every other import allows: a named import, with `as`
+  (`tests/cases/io_nish_rename`). Default, namespace, side-effect and type-only
+  imports are refused under the same messages a relative specifier gets.
+- An unknown module is `` Unknown builtin module `nish:sqlite` ``
+  (`reject_nish_unknown_module`); a name a module does not export is
+  `` Module `nish:fs` has no export `statSync` ``
+  (`reject_nish_unknown_export`). Both list what does exist.
+- **An imported builtin cannot be shadowed**, and that is the reason to prefer
+  one. A global builtin is consulted only when no user function of that name is
+  in scope, so declaring one silently replaces it; declaring one that collides
+  with an import is `` `panic` is already declared in this module `` instead
+  (`reject_nish_import_clash`).
+- A name keeps its kind. `argv`, `platform` and `arch` are values, and calling
+  one is refused (`reject_nish_property_call`); the functions are not values,
+  for the reason no function in this language is one
+  (`reject_nish_builtin_value`).
+- `exit` terminates control flow exactly as `process.exit` does, so a
+  non-`void` function may end with it (`io_nish_rename`).
+- Diagnostics name the canonical builtin whatever the call site calls it:
+  `exit(1, 2)` reports `` `process.exit` expects exactly 1 argument ``, which
+  is the rule to look up.
+- Everything else stays global — `Math.*`, the width conversions,
+  `console.log` / `console.error`, `String.fromCharCode`, `Arena.*`, `Ok` and
+  `Err`. They lower to an LLVM intrinsic or a single instruction and cost no
+  runtime at all, so they read as language rather than as library.
 
 ### `console`
 

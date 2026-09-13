@@ -283,6 +283,10 @@ export class Emitter implements EmitContext {
     };
     for (const imp of this.program.imports) {
       if (imp.constant) continue;
+      // A builtin import declares nothing: the call it names lowers the same
+      // way the global spelling does, to an intrinsic or a `nish_*` symbol the
+      // runtime table already declares on first use.
+      if (imp.builtin) continue;
       const sigs = imp.struct ? importedStructFunctions(imp) : imp.sig ? [imp.sig] : undefined;
       if (!sigs) throw new Error(`emitter: unbound import \`${imp.importedName}\` from \`${imp.specifier}\``);
       declare(sigs);

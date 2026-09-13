@@ -18,6 +18,8 @@ import { CompilerOptions, isForeignScalar, resolveTypeNode, typeToString } from 
 import { ConstInfo } from "./constants.js";
 import { TemplateInfo } from "./generics.js";
 import { FunctionSig, ImportBinding, Param } from "./program.js";
+import { isNishSpecifier, nishModuleNames } from "./nish-modules.js";
+import { STD_PREFIX } from "../branding.js";
 
 /** Symbol the entry module's `export function main` is emitted under. */
 export const ENTRY_MAIN_SYMBOL = "nish_main";
@@ -400,9 +402,24 @@ export function collectImports(decl: ts.ImportDeclaration, sf: ts.SourceFile): I
     throw new CompileError("Import specifier must be a string literal", decl.moduleSpecifier, sf);
   }
   const specifier = decl.moduleSpecifier.text;
-  if (!specifier.startsWith("./") && !specifier.startsWith("../")) {
+  // `nish:` is the one bare form: it names a builtin module rather than a file,
+  // so it is let through here and validated against `NISH_MODULES` in pass 1b,
+  // where an unknown module reads as a bad module instead of a missing file.
+  // The hint goes after the interpolation deliberately, so that the longest
+  // literal run of this template — and with it the diagnostic code the rule has
+  // always had — is still the sentence before it.
+  // Two bare forms are legal. `nish:` names a builtin and resolves to no file;
+  // `nish/` names a standard-library module, which is ordinary source and is
+  // resolved like any other file, only from beside the compiler. Everything
+  // else is still refused: there is no package resolution (wp21 §5b).
+  if (
+    !isNishSpecifier(specifier) &&
+    !specifier.startsWith(STD_PREFIX) &&
+    !specifier.startsWith("./") &&
+    !specifier.startsWith("../")
+  ) {
     throw new CompileError(
-      `Only relative import specifiers are supported (\`./x\` or \`../x\`), got \`${specifier}\``,
+      `Only relative import specifiers are supported (\`./x\` or \`../x\`), got \`${specifier}\` (the bare forms are ${nishModuleNames().join(", ")} and ${STD_PREFIX}<module>)`,
       decl.moduleSpecifier,
       sf
     );

@@ -71,6 +71,16 @@ export class Options {
   emitHeader: string;
   emitDts: string;
   emitNapi: string;
+  /**
+   * The directory holding `scripts/`, `runtime/` and `std/`, as the driver
+   * worked it out from `argv[0]`. It is here rather than derived where it is
+   * needed because `process.argv` is legal only in a program that has an entry
+   * `main`: a library module reading it would not compile on its own, and
+   * `tests/run.js` compiles every `self/` module on its own. Empty when the
+   * driver could not find one, which makes `nish/x` resolve to nothing and
+   * report itself as a module the library does not have.
+   */
+  packageRoot: string;
 
   constructor() {
     this.numberMode = NUMBER_MODE_I32;
@@ -86,5 +96,6 @@ export class Options {
     this.emitHeader = "";
     this.emitDts = "";
     this.emitNapi = "";
+    this.packageRoot = "";
   }
 }

@@ -242,6 +242,9 @@ export function main(): number {
     return 2;
   }
   const opts = new Options();
+  // Where `nish/<module>` is resolved from, worked out once here because this
+  // is the only place `process.argv` is legal (`packageRoot`).
+  opts.packageRoot = packageRoot();
   const roots: string[] = [];
   let output = "";
   let link = "";
@@ -399,7 +402,7 @@ export function main(): number {
   compilation.dumpOnly = emitAst;
   let loaded = true;
   for (const root of roots) {
-    if (!compilation.load(root)) {
+    if (!compilation.load(root, "")) {
       loaded = false;
       break;
     }
@@ -490,12 +493,17 @@ export function main(): number {
 }
 
 /**
- * The package root: the directory holding `scripts/` and `runtime/`. stage0
- * reads it from `__dirname` (`src/version.ts`); this compiler is a binary, so
- * it derives it from the path it was invoked by — `<prefix>/bin/nish` and
- * `build/nish` both put it one level up — and falls back to the working
- * directory, which is what a checkout wants. Empty when neither has the
- * script, so the caller can say which two it looked in.
+ * The package root: the directory holding `scripts/`, `runtime/` and `std/`.
+ * stage0 reads it from `import.meta.dirname` (`src/version.ts`); this compiler
+ * is a binary, so it derives it from the path it was invoked by —
+ * `<prefix>/bin/nish` and `build/nish` both put it one level up — and falls
+ * back to the working directory, which is what a checkout wants. Empty when
+ * neither has the script, so the caller can say which two it looked in.
+ *
+ * It lives in the driver rather than beside the path helpers because
+ * `process.argv` is legal only in a program with an entry `main`, and every
+ * `self/` module is compiled on its own by `tests/run.js`. Everything that
+ * needs the root is handed it through `Options.packageRoot`.
  */
 function packageRoot(): string {
   const candidates: string[] = [`${dirname(process.argv[0])}/..`, "."];
