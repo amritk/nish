@@ -918,8 +918,8 @@ and their `.ll` goldens are byte-identical files.
   (`tests/link/std_bare_specifier`). It resolves to `std/<module>.ts` beside
   the running compiler rather than relative to the importing file, so the same
   specifier works at any depth. A module the library does not have is
-  `` Module `nish/json` is not part of the standard library (it has: testing,
-  text) `` (`reject_std_unknown_module`). Unlike a `nish:` builtin this is
+  `` Module `nish/toml` is not part of the standard library (it has: json,
+  testing, text) `` (`reject_std_unknown_module`). Unlike a `nish:` builtin this is
   ordinary Nish source: it is compiled into the program that imports it and is
   subject to every rule in this document. What it costs is what you call —
   `speed` and `size` link with `--gc-sections`, and a module imported but never

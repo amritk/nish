@@ -135,7 +135,7 @@ and [`std/json`](std/json.ts), the value of one field of one flat JSON object,
 which is the shape the compiler's own `--json` diagnostics have.
 
 ```ts
-import { Suite } from "../std/testing";
+import { Suite } from "nish/testing";
 
 export const main = (): number => {
   const t = new Suite("stats");
@@ -146,9 +146,10 @@ export const main = (): number => {
 
 A library module is source, not a built artifact, so it compiles with the
 program that imports it and the whole-program pass sees straight through it
-([docs/wp21-packages.md](docs/wp21-packages.md)). There is no bare specifier
-yet — imports are relative, as everywhere else in the language — and no
-callbacks, which is what makes a suite a value with methods rather than a
+([docs/wp21-packages.md](docs/wp21-packages.md)): `nish/<module>` resolves to
+`std/<module>.ts` beside the running compiler, and what you import but never
+call is dropped at the link. What the library does *not* have is callbacks,
+which is what makes a suite a value with methods rather than a
 `test("name", () => ...)`: a function is never a value here.
 
 The suite's own golden cases are run by [`tests/nish/run.ts`](tests/nish/run.ts),

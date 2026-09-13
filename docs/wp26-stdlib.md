@@ -400,6 +400,8 @@ The cases, and why `std/testing` has two of them:
 | `tests/link/std_text` | `std/text` checked through `Suite`, the way a user would compose the two — 65 assertions, each one an edge case the doc comments in `std/text.ts` decide |
 | `tests/link/std_text_f64` | the same two modules under `--number-mode f64` (§4), which is where a module that spelled its own widths and forgot a `toI32` at a builtin's answer is caught |
 | `tests/link/std_json` | `std/json` against the awkward material a reader of the `--json` surface meets — escapes, a `}` inside a message, a nested value to step over, a field that is not there, and text that is not an object at all. 39 assertions |
+| `tests/link/std_bare_specifier` | the same two modules reached as `nish/testing` and `nish/text` rather than by a path up the tree — deliberately thin, because what it proves is that the module arrived |
+| `tests/link/std_package_scope` | a program that declares `trimStart` while importing the `std/text` that exports one, which is legal only because a `nish/` module is its own package (§5a of [wp21-packages.md](wp21-packages.md)) |
 
 A library whose failure path is observable therefore gets two cases, one per
 outcome. `std/testing`'s report *is* its output, so the wording of a message is
@@ -427,9 +429,9 @@ from the tree rather than remembered.
 | New diagnostics, new Phase 0 rules, new checker rules | **0** |
 | `tests/nish/run.ts` — the program the library exists for | 246 lines when it landed; 670 today, as it catches up with `tests/run.js` |
 | `tests/nish/cli.ts` — the second program, and `std/json`'s reason to exist | 616 lines, 69 checks against stage0 and 57 with 2 declared skips against the self-hosted compiler, in 8.8 s |
-| `tests/link/` cases | 5 (`std_testing`, `std_testing_fail`, `std_text`, `std_text_f64`, `std_json`) |
+| `tests/link/` cases | 7 (`std_testing`, `std_testing_fail`, `std_text`, `std_text_f64`, `std_json`, `std_bare_specifier`, `std_package_scope`) |
 | Assertions in `tests/link/std_text` / `std_json` | 65 / 39 |
-| Importers of `std/` in the repository | 7 (the five link cases and the two harnesses) |
+| Importers of `std/` in the repository | 9 (the seven link cases and the two harnesses) |
 
 **The three builtins.** They are the part that did cost runtime bytes, and they
 are builtins for §2 reason 1 — they are syscalls. Measured with
