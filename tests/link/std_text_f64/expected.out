@@ -7,9 +7,17 @@ PASS  contains: an interior occurrence
 PASS  replaceAll: every occurrence, not just the first
 PASS  firstDifference: equal line lists answer -1
 PASS  firstDifference: a prefix answers the shorter length
+PASS  jsonField: a string value
+PASS  jsonField: a number value, through parseInt
+PASS  jsonField: a short escape
+PASS  jsonField: a \u escape is UTF-8 bytes
+PASS  jsonField: an absent field answers null
+PASS  contains: a fragment of a captured stream
+PASS  containsAll: every fragment, blanks ignored
+PASS  eqLines: two equal line lists
 FAIL  a check that fails on purpose
       expected 2, got 1
 failed: a check that fails on purpose
 deliberate: 0 passed, 1 failed, 0 skipped
 PASS  a failing suite answers exit code 1
-text-f64: 10 passed, 0 failed, 0 skipped
+text-f64: 18 passed, 0 failed, 0 skipped

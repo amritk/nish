@@ -10,6 +10,7 @@ and subject to the same rules as `examples/` or `self/`
 | --- | --- |
 | [`testing.ts`](./testing.ts) | a test runner: a `Suite` a program drives with straight-line assertions, printing the `PASS` / `FAIL` / `SKIP` lines the repository's own harness prints, and answering the exit code |
 | [`text.ts`](./text.ts) | the string operations a program would otherwise write inline: `splitLines`, `splitWhitespace`, `trim` and its halves, `contains`, `replaceAll`, and `firstDifference` over two arrays of lines |
+| [`json.ts`](./json.ts) | `jsonField(object, name)`: the value of one field of one flat JSON object, which is the shape the compiler's own `--json` diagnostics have. A reader and not a parser — it answers text, answers `null` for a field that is not there, and does not validate |
 
 ## How a program imports it
 
@@ -77,11 +78,42 @@ replaces first.
   importer in `tests/link/` is compiled by neither compiler on any run.
   `testing.ts` has two, one per outcome — `tests/link/std_testing` (exit 0) and
   `tests/link/std_testing_fail` (exit 1, and the wording of every failure
-  message) — and `text.ts` has `tests/link/std_text`, which uses `Suite` to check
-  it, the way a user would.
+  message) — and `text.ts` and `json.ts` have `tests/link/std_text` and
+  `tests/link/std_json`, each of which uses `Suite` to check the module, the way a
+  user would. `tests/link/std_text_f64` is the same corpus under
+  `--number-mode f64`, which is where a module that spelled its widths and forgot
+  a `toI32` is caught.
 - **`std/` is not on the compiler's dependency list.** Nothing in `src/` or
   `self/` imports it, and nothing should: the compiler is the thing that has to
   build before the library means anything.
+
+## Who reads the library, and what each reader proved
+
+Two programs in this repository are written on top of `std/`, and between them
+they are the reason the modules have the shape they do — a library with one
+consumer is a guess.
+
+| Program | What it does | What it uses |
+| --- | --- | --- |
+| [`tests/nish/run.ts`](../tests/nish/run.ts) | the golden cases and the `tests/link/` programs, compiled, assembled, linked, run and diffed | `Suite` (including `containsAll` for an `.err` file's fragments and `eqLines` for an IR golden), and all of `std/text` |
+| [`tests/nish/cli.ts`](../tests/nish/cli.ts) | the command line's own contract — the streams, the exit-code bands, and one flat `--json` object per diagnostic — read by a program in the language the compiler compiles | `Suite`, `jsonField`, `splitLines` / `trim` / `contains` |
+
+Three assertions exist because the first of those two had written them by hand:
+`contains` for a fragment of a captured stream, `containsAll` for an expectation
+file that holds one fragment per line, and `eqLines` for a generated text against
+a golden, which reports the first differing line instead of printing both texts.
+That is the rule the directory runs on — a `std/` function earns its place when a
+program in this repository would otherwise write the loop, and the loop is
+already written.
+
+`std/json` is the one module admitted with a single importer, and the reason is
+the *format* rather than the count: the object it reads is this project's own
+published surface (`AGENTS.md`, [`docs/wp12-release.md`](../docs/wp12-release.md)),
+so every Nish program that ever reads compiler output needs exactly this scan,
+and the next one would copy it out of `tests/nish/cli.ts`. The module is also
+where the format's one ambiguity is written down and tested —
+[`docs/wp26-stdlib.md`](../docs/wp26-stdlib.md) §7 question 3 is where that
+argument is recorded and where its second consumer is expected.
 
 ## What `std/testing` is not, and what closed
 

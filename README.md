@@ -128,10 +128,12 @@ Node.
 
 [`std/`](std/README.md) is Nish written in Nish, for Nish programs to import:
 [`std/testing`](std/testing.ts), a test runner, so a compiled program can check
-itself and answer an exit code with no Node in the picture, and
+itself and answer an exit code with no Node in the picture,
 [`std/text`](std/text.ts), the string operations a program would otherwise write
 inline — the language has no `split`, `trim` or regular expression, because each
-of those allocates and some need a character table the runtime has no room for.
+of those allocates and some need a character table the runtime has no room for —
+and [`std/json`](std/json.ts), the value of one field of one flat JSON object,
+which is the shape the compiler's own `--json` diagnostics have.
 
 ```ts
 import { Suite } from "../std/testing";
@@ -155,6 +157,15 @@ which is this repository's test harness written in the language it tests:
 `readdirSync` finds the cases, `spawnSyncTo` captures each compile and each run,
 and the IR is diffed against the golden line by line. `npm run test:nish` runs it
 over the whole corpus.
+
+[`tests/nish/cli.ts`](tests/nish/cli.ts) is the other half of that idea, pointed
+at the compiler's own promises rather than at its output: `--help` on stdout with
+exit 0 against the same text on stderr with exit 2, one flat `--json` object per
+diagnostic with a stable code, and each documented exit-code band. It reads those
+objects with `std/json` and takes the version it expects out of `package.json`, so
+a release cannot leave the expectation behind — and it passes against the
+self-hosted compiler as well as against the one written in TypeScript
+(`npm run test:cli`).
 
 ---
 

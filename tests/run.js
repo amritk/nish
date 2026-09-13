@@ -2142,6 +2142,41 @@ if (!only || "nish-runner".includes(only)) {
   }
 }
 
+// ---- The CLI contract checked in Nish ------------------------------------------------
+// `tests/nish/cli.ts` asks the questions the WP12 block below asks — the streams and
+// the exit-code bands, `--help` against a usage error, and one flat `--json` object
+// per diagnostic — from a *consumer written in the language*: it reads the objects
+// with `std/json`, the streams with `std/text` and reports through `std/testing`,
+// and it takes the version it expects from `package.json` with the same reader.
+//
+// Unlike the golden runner above this one runs in full, because it spawns eighteen
+// compilers rather than four hundred: the contract is what every wrapper depends on,
+// and a check of it that only CI runs is a check that rots. `npm run test:cli` is
+// the same pass by hand, and `build/nish-cli build/nish` points it at the
+// self-hosted compiler.
+if (!only || "nish-cli".includes(only) || "contract".includes(only)) {
+  if (!HAS_CLANG) {
+    skip("the CLI contract checked in Nish (clang not found, and it links)");
+  } else {
+    const irDir = path.join(buildDir, "nish-cli.ir") + path.sep;
+    const cliExe = path.join(buildDir, "nish-cli");
+    const built = spawnSync("node", [cli, path.join("tests", "nish", "cli.ts"), "-o", irDir, "--link", cliExe], {
+      cwd: root,
+    });
+    if (check("tests/nish/cli.ts compiles and links", built.status === 0, String(built.stderr))) {
+      // cwd is the repository root: the harness addresses `dist/index.js` and
+      // `package.json` by relative path, as the golden runner addresses the corpus.
+      const ran = spawnSync(cliExe, [], { cwd: root, encoding: "utf8" });
+      const report = String(ran.stdout);
+      check(
+        "a Nish program reading the CLI's own output agrees with its documented contract",
+        ran.status === 0 && / 0 failed, /.test(report),
+        report + String(ran.stderr)
+      );
+    }
+  }
+}
+
 // ---- WP8: interop ------------------------------------------------------------------
 // runtime/nish.h is the public C ABI; --emit-header / --emit-dts / --emit-napi derive
 // host-side declarations from the same checked program the IR came from. Checks:
@@ -4828,6 +4863,29 @@ if (!only || "ambient".includes(only) || "dts".includes(only)) {
     selfCheck.ok || (selfErrors.length > 0 && selfErrors.every(isPopDivergence)),
     selfCheck.output
   );
+
+  // And on the library and the programs written on it. `std/` is the code a user
+  // *imports* and `tests/nish/` is what a user's own harness looks like, so the
+  // claim these declarations make — a program nish accepts is never one tsc
+  // refuses — is worth as much here as on the corpus, and an editor open on
+  // `std/testing.ts` is how most people will meet it. They are one project
+  // because they import each other.
+  const libraryModules = [
+    ...fs
+      .readdirSync(path.join(root, "std"))
+      .filter((f) => f.endsWith(".ts"))
+      .map((f) => path.join(root, "std", f)),
+    ...fs
+      .readdirSync(path.join(root, "tests", "nish"))
+      .filter((f) => f.endsWith(".ts"))
+      .map((f) => path.join(root, "tests", "nish", f)),
+  ];
+  const library = typeCheck("library", libraryModules);
+  check(
+    `tsc accepts std/ and the harnesses written on it against the ambient declarations (${libraryModules.length} modules)`,
+    library.ok,
+    library.output
+  );
 }
 
 // ---- docs/AI.md: the rules card compiles ---------------------------------------------
@@ -4982,6 +5040,22 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "npm pack includes everything --link and `node --import` need (runtime.c, runtime_os.c, nish.h, nish.d.ts, nish.mjs, build.sh) plus std/, LICENSE, llms.txt, AI.md and INSTALL.md",
       absent.length === 0,
       absent.join("\n")
+    );
+    // Every module of the library, and not a list of them: `files` in package.json
+    // names the whole directory, so a new module ships without anybody saying so —
+    // and a `files` entry narrowed later would take it back out just as quietly.
+    // Asking the tree rather than a written list is the assertion that cannot go
+    // stale (wp26 §7 question 6).
+    const stdModules = fs
+      .readdirSync(path.join(root, "std"))
+      .filter((f) => f.endsWith(".ts"))
+      .map((f) => `std/${f}`)
+      .sort();
+    const unshipped = stdModules.filter((f) => !files.includes(f));
+    check(
+      `npm pack ships every std/ module in the tree (${stdModules.length}: ${stdModules.join(", ")})`,
+      stdModules.length > 0 && unshipped.length === 0,
+      unshipped.join("\n")
     );
     for (const f of [
       "src/index.ts",
