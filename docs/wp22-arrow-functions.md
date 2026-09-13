@@ -308,11 +308,10 @@ node scripts/arrow-verify.mjs --debug self       # the same, under `-g`
 locates each declaration and the splice is computed from its spans, so every
 byte outside the edit survives: comments, blank lines, formatting, and the
 body's own indentation. That is not tidiness. Moving `{` to sit after `=>`
-leaves every line of the body at the column it was already at, so a
-block-bodied rewrite **preserves the line count of the file and the column of
-every statement in it** — which is the one property that keeps a 721-file
-rewrite from moving a `-g` line number, a `DILocation`, or the caret of a
-diagnostic somebody pinned. §A5 of
+leaves every line of the body where it already was, so a block-bodied rewrite
+**preserves the line count of the file** and cannot move a `-g` line number or
+the line of a diagnostic somebody pinned. Columns hold too, with two exceptions
+that §8c measures and enumerates rather than leaving to be discovered. §A5 of
 [wp19-stage0-retirement.md](wp19-stage0-retirement.md) is what happens when a
 declaration's position moves and nothing is watching.
 
