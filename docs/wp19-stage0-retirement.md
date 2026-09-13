@@ -37,6 +37,68 @@ It also costs a full second implementation of every construct, forever.
 **The target shape is Rust's and Go's**: `self/` is the compiler, and the seed
 is the previous released `nish` binary. This document is the price list.
 
+### 1a. The doubling ends before R6
+
+The gates below are about *deleting* `src/`. They are not what stops the second
+implementation costing a second implementation, and reading them as though they
+were is what kept the doubling in place after the port had finished: every
+construct since S5 has been written twice, and the last three were 125/112,
+354/487 and 371/415 lines of `src/` against `self/`. Half of every compiler
+change is the second implementation.
+
+**None of that is required by the gates.** Work out what actually forces a
+construct into `src/` and there are two things, both of them mechanical:
+
+1. **`tests/run.js` compiles a case with stage0**, so a construct stage0 does
+   not have cannot have a golden `.ll`, and the definition of done requires
+   one.
+2. **The oracles compare stage0 with stage1 over the corpus**, so a case stage0
+   refuses is recorded as `stage0 rejects it` and *skipped* — and a skip in an
+   oracle is a fact about how far the port has got (`.claude/selfhost.md`),
+   printed only under `--verbose`. A construct landing in `self/` alone would
+   quietly shrink the comparison rather than declare that it had.
+
+Neither is about the seed, which is the thing people reach for first. The seed
+compiles `self/`'s *source*, and `self/`'s source does not use a construct the
+day it lands — G4's rolling freeze already says it may not until the next
+release. stage0 can go on being the local seed exactly as long as it can
+compile `self/`, and nothing here changes that.
+
+So the answer is a register. `tests/self/stage1_only.txt` names the cases
+whose implementation is `self/`'s alone, and every tool that would otherwise
+have been silent reads it:
+
+| Tool | What a registered case does |
+| --- | --- |
+| `tests/run.js` | compiles it with a **stage1** binary built from `self/` by the seed; its golden, `llvm-as` pass and native round trip are stage1's |
+| `ir_oracle.js`, `checked_oracle.js` | counts as `stage1-only` in the summary, apart from the skips: no stage0 answer exists, by decision |
+| `interop_oracle.js` | skipped with the register as the named reason, on the `--all` path — the only one of its two corpora that can reach a `tests/cases` program |
+| `parity.js` | one declaration, the only one keyed on the program rather than the surface, matched *after* the others so an ordinary difference is still attributed to its own reason |
+| `nish-cmp.js` | expected while the seed is older than the construct, and compared normally from the release that has it |
+| `tests/nish/run.ts` | skipped by name: that runner spawns stage0 and cannot build a stage1 |
+
+**What it costs is one line of the ledger and no more.** Diverse double
+compiling stops growing: the construct is proved by a golden and by
+`nish-cmp.js` rather than by two implementations agreeing. Everything already
+in the corpus is still compiled by both and compared byte for byte, `self/`'s
+own 56 modules included, so §2D's property holds over what it always held
+over. That is the trade §6 prices, taken one construct at a time and reversibly
+— writing the `src/` half later removes the line — instead of all at once at
+R6.
+
+**What it does not change**: the construct's tests, its `LANGUAGE.md` rule, its
+cookbook entry, its `CHANGELOG.md` line, and the rolling freeze. A register
+entry buys one thing, the second implementation, and pays for it in the one
+currency this document has been keeping accounts in since §1.
+
+The register has a fixture, `stage1_probe`, and it is there for the reason a
+gate nobody can fail is a wish: with an empty register the whole path above is
+machinery nobody has driven. The fixture is an ordinary case both compilers can
+compile, registered so that the stage1 path is walked on every run — and
+because both compilers *can* do it, `tests/run.js` also compiles it with stage0
+and requires the same bytes, which is a stronger check than any real
+stage1-only case can offer.
+
 ### Two things retirement is not
 
 **It is not "Node leaves the repository."** `tests/run.js` (2,900 lines), the
@@ -333,12 +395,43 @@ corpus is: nothing here is a new thing the two compilers are allowed to differ
 about. Quote this with its date, the way §A4 should have been quoted, and run
 the mode again before quoting it at all.
 
+#### A6. Green again, on a corpus a fifth larger — and the third way this gate lied
+
+```
+parity: 11460 runs over 764 programs (1686.9 s); 0 undeclared difference(s), 2506 declared    2026-09-13
+```
+
+The corpus grew by the ninety `reject_*` cases G2.4's wording work added, and
+the mode found **84 undeclared differences** in them: no wrong lowering and no
+wording, but five places where stage1 puts the caret somewhere stage0 does not
+— a `for...of` head reported at its first declarator rather than at the
+`const`, a duplicate function at the name rather than at the statement, an
+empty import list nowhere at all (`closeList` spans a list by its elements, and
+an empty one has none), and a field whose refused initializer then tripped the
+definite-assignment pass into a second complaint about the same line. Every one
+of them is a case nobody had written before, which is §A5's first lesson again:
+an empty difference set is a fact about the corpus.
+
+**And one of the 84 was the mode itself.** `build()` returned
+`build/self/compile` whenever the file existed, so the run compared today's
+stage0 with whatever stage1 was last linked — a fix on one side reading as a
+difference, a fix on the other reading as agreement. It links a fresh compiler
+every run now, forty seconds against half an hour. §A5 lists two ways a closed
+gate reopens in silence; this is a third, and the worst of them, because it can
+report *green* against a compiler nobody has rebuilt. The other oracles were
+checked and none of them caches: `ir_oracle.js`, `checked_oracle.js` and
+`goldens.js` all link their binary unconditionally, and `goldens.js` says why in
+its own header — "a golden compared against a stale binary is a golden
+comparing itself with yesterday".
+
 #### Should `--parity` run in CI?
 
-**Yes, and not in the `test` job.** Recommended rather than done here, because
-wiring it up is a WP10 change and this correction is a debug-info fix; the
-costs, so the decision is made on numbers rather than on the fright of finding
-this:
+**Yes, and not in the `test` job — and it does now.**
+`.github/workflows/parity.yml` runs the corpus half nightly at 06:17 UTC and
+on `workflow_dispatch`, and writes its summary line into the run summary with
+the date, because that number is a fact about the corpus on the day it was
+measured. The flag-set half stays where it was, inside `npm test`. The costs
+below are what the arrangement was decided on, and they are left as measured:
 
 - **What it costs.** A full run is 9,000-odd compilations by each compiler over
   623 programs, plus linking a stage1 binary first — about forty minutes on
@@ -346,13 +439,14 @@ this:
   every flag: WP20's `--threads` added a fifteenth variation and 637 runs to
   the cross product on its own. On a hosted runner it is the longest single
   thing in the repository.
-- **Where it fits.** Not in `test`, which every push waits on. The `bootstrap`
-  job already links a stage1 compiler and already runs on its own schedule of
-  patience, and `--flags-only` — the half that found `--no-warn-performance`
-  and `--out-dir` — takes seconds and could sit in `test` today at no
-  meaningful cost. The corpus half belongs beside `bootstrap`, or on a nightly
-  `schedule:` trigger, where a red result names the day it appeared rather than
-  the month.
+- **Where it fits.** Not in `test`, which every push waits on. `--flags-only`
+  — the half that found `--no-warn-performance` and `--out-dir` — takes seconds
+  and sits in `test` already. The corpus half went to a nightly `schedule:`
+  trigger rather than beside `bootstrap`, because `bootstrap` runs on every
+  push and pull request too: a nightly names the day a difference appeared
+  without making every branch wait forty minutes to hear it. A schedule fires
+  on the default branch only, so a branch is asked about by hand
+  (`workflow_dispatch`, or `node tests/run.js --parity` locally).
 - **What it buys.** The failure mode this defect demonstrates: a gate recorded
   as closed, reopened by an unrelated feature, spreading with every file the
   feature converts, and invisible until somebody ran the mode by hand. Between
@@ -369,9 +463,9 @@ decision and a leap:
 
 | Oracle | Compares against | After stage0 |
 | --- | --- | --- |
-| `lexer_oracle.js` | the `typescript` package's scanner | **survives** — it never read `src/`. Costs one devDependency |
+| `lexer_oracle.js` | the `typescript` package's scanner | **survives** — it never read `src/`, and since G2.3 it does not build with it either. Costs one devDependency |
 | `parser_oracle.js` | the `typescript` package's parser | **survives**, same reason |
-| `support_oracle.js` | `node:path`, `Buffer`, `Map`, `JSON.stringify` | **survives** |
+| `support_oracle.js` | `node:path`, `Buffer`, `Map`, `JSON.stringify` | **survives, less two families.** This row was wrong: the oracle also compares `irEscape` and `f64Hex` / `f32Hex` against stage0's own `dist/codegen/emit/*.js`. Those lines are dropped from both sides, counted and named, when there is no `dist/` — recovering them as a golden is unfinished G2.4 work |
 | `tests/differential/` default mode | the same program rewritten to JS and run under Node (WP13) | **survives** — it is a *semantic* oracle and never needed a second compiler |
 | `reject_oracle.js` | each case's own `.err` fragments | **survives**; the fragments are checked in, not derived from stage0 |
 | `tests/cases/*.ll` (150 goldens) | checked-in IR | **survives**, and becomes the primary regression net |
@@ -571,11 +665,15 @@ is what that reads like in practice: the first run of this check found five
 disagreements, one of them a miscompile, and every one of them had been
 sitting under a flag combination nothing had ever tried.
 
-**This gate is met by running it, not by having run it.** Nothing on the way to
-`main` runs the mode, so "G1 is green" dates from whenever somebody last typed
-the command — and §A5 is the gate reopening in the gap, on a construct the
-language gained after the gate closed. Re-run `node tests/run.js --parity`
-before citing it, and read §A5's costing before deciding it should be automatic.
+**This gate is met by running it, not by having run it**, and what changed is
+who remembers to run it. `.github/workflows/parity.yml` runs the corpus half
+nightly (§A5's costing is why it is nightly and why it is not in `test`), so
+"G1 is green" now dates from last night rather than from whenever somebody last
+typed the command. That is not the same as green on a branch: a schedule fires
+on the default branch only, so a change that reopens the gate is caught the
+morning after it merges, not before. Re-run `node tests/run.js --parity`
+against a branch that touches either compiler, and quote a number with the
+date it was measured on.
 
 ### G2 — Oracle succession: the replacement runs before the original is deleted
 
@@ -589,7 +687,17 @@ Specifically:
 2. `fuzz.js --stage1` is repointed to the same pair — random programs, seed
    release versus HEAD — so the generated corpus keeps its comparison.
 3. The four surviving oracles are repointed to build their stage1 binary with
-   the **seed** rather than with stage0, and stay green.
+   the **seed** rather than with stage0, and stay green. **Done.**
+   `tests/self/seed.js` resolves one seed for all of them — `--seed`, then
+   `NISH_BOOTSTRAP`, then `build/nish` — and `tests/run.js` passes today's in,
+   so the oracles themselves name no compiler. Run by hand with no seed
+   anywhere they fall back to stage0 and *say so on stderr*, because a run that
+   proved something weaker than its summary line suggests is worse than a run
+   that refused. Two stage0 dependencies inside the oracles went with the
+   build: `reject_oracle.js` asked stage0 whether a `tests/link` case compiles
+   at all, which the seed answers as well, and `support_oracle.js`'s escape
+   comparison is now a named skip rather than a module-level import that would
+   stop the file loading after R6.
 4. The coverage lost by `checked_oracle.js`, `types_oracle.js`,
    `diagnostics_oracle.js` and `symbols_oracle.js` is measured and recovered as
    checked-in goldens *before* they are deleted — in particular every
@@ -627,13 +735,23 @@ nothing else. Nish has no conditional compilation and will not grow any:
 there is no `#[cfg(bootstrap)]` to write, so the discipline is "do not use it
 yet", and a discipline that CI does not check is a comment.
 
-**State: the script half is done, the CI half is one operating system short.**
-`scripts/bootstrap.sh` reads `NISH_BOOTSTRAP`, and the `bootstrap` job in
-`ci.yml` downloads the last release's binary and builds `self/` with it. It
-runs on Linux alone, because `macos-latest` is commented out of the test matrix
-(`ci.yml` says why: `scripts/build.sh` needed a bash 3.2 fix, which has landed,
-and `scripts/smoke.sh` still uses `mapfile`, a bash 4 builtin, which has not).
-Without a release the job has no seed and says so in an annotation rather than
+**State: the script half is done, and the CI half is one operating system
+short for a different reason than it was.** `scripts/bootstrap.sh` reads
+`NISH_BOOTSTRAP`, and the `bootstrap` job in `ci.yml` downloads the last
+release's binary and builds `self/` with it. It runs on Linux alone. What used
+to be in the way was the runner: `macos-latest` was commented out of the test
+matrix over two bash 3.2 defects. Both have landed — `scripts/build.sh` spells
+its nine empty-array expansions `${arr[@]+"${arr[@]}"}`, and
+`scripts/smoke.sh` collects its program list with `while read` rather than with
+`mapfile`, a bash 4 builtin bash 3.2 does not have — so the row is one
+uncommented line, and it stays commented out on cost: it is the whole `test`
+job again, behind a `brew install llvm@18`, on every push
+([wp10-ci.md](wp10-ci.md#ci-matrix)). **What is in the way of *this* gate is
+the seed**, and it would be in the way whatever the matrix does: a release
+attaches
+`nish-<version>-x86_64-linux` and nothing else, so there is no darwin binary to
+bootstrap from and this half of G3 lands with G5's remaining three binaries
+rather than on its own. Without a release the job has no seed and says so in an annotation rather than
 passing quietly — a freeze nobody checked must not read as a freeze that held.
 **That branch is now the unused one:** v0.1.1 is released with its binary
 attached, so the job downloads a real seed and the annotation is what a
@@ -720,7 +838,9 @@ to install it under.** The release workflow builds
 `nish-<version>-x86_64-linux` — stage2, `--verify`d, and smoke-tested before it
 ships, because it is also the seed every later release bootstraps from. The
 other three are not built: `aarch64-linux` needs an arm64 runner, and both
-darwin binaries need `macos-latest`, which is out of the matrix. The package is
+darwin binaries need a `macos-latest` job in `release.yml`, which is a second
+job nobody has written — and one the test matrix would not supply anyway, since
+a release asset is built on a tag rather than on a push. The package is
 still the Node tarball rather than a thin installer, and it is published
 nowhere — the release's `.tgz` is the only way to install it — so `nish` today
 is Node-free only if you take the binary. `--version` already has a source that
@@ -816,8 +936,8 @@ gate nobody has opened is how a runtime budget dies.
 | | Milestone | Done when |
 | --- | --- | --- |
 | **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) — though that claim was recorded once while it was not true, and §A5 is the correction and what it cost |
-| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). Outstanding: the job runs on Linux only. The seed itself has arrived — v0.1.1 is released with `nish-0.1.1-x86_64-linux.tar.gz` attached, and it is the first one, because v0.1.0 was tagged and never built (G3, G4) |
-| **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is now 0, with 325 codes provoked by `tests/wordings/` and the surviving negatives and 60 unreachable with a reason on file (§2B). Outstanding: the four survivors repointed to the seed; and, carried rather than closed, the 45 wordings stage1's parser refuses before Phase 0 can state them — those go with stage0 at R6 — and the 13 programs the two compilers still answer differently, seven of which stage1 compiles |
+| **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). Outstanding: the job runs on Linux only, and now for want of a darwin seed rather than a darwin runner — the two bash 3.2 defects that kept `macos-latest` out of the test matrix are fixed, so that row is one uncommented line whenever the suite is fast enough to pay for it. The seed itself has arrived — v0.1.1 is released with `nish-0.1.1-x86_64-linux.tar.gz` attached, and it is the first one, because v0.1.0 was tagged and never built (G3, G4) |
+| **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is now 0, with 325 codes provoked by `tests/wordings/` and the surviving negatives and 60 unreachable with a reason on file (§2B). The four survivors are repointed too: they build their stage1 binary with the seed through `tests/self/seed.js` and name no compiler of their own, and all four were watched green with `dist/` moved out of the tree. Outstanding, carried rather than closed: the 45 wordings stage1's parser refuses before Phase 0 can state them — those go with stage0 at R6 — and the 13 programs the two compilers still answer differently, seven of which stage1 compiles |
 | **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the package becoming an installer — which first needs a registry name, since `nish` is taken ([wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken)) — and the INSTALL.md/wp12 rewrite (G5) |
 | **R5** | Provenance | the re-verification procedure is written (G6); the `ddc-<version>` tag is cut at release time |
 | **R6** | The deletion | `src/`, the `typescript` runtime dependency, the six dead oracles, and every rule that names stage0 |

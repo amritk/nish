@@ -333,6 +333,21 @@ export class Checker {
     if (rejectDollarInSymbolName(this.ctx, name, "function", stmt.children[0])) {
       return;
     }
+    // Three messages rather than one, because stage0 has three here and a
+    // clash is the one thing a reader looks up by its words. A second function
+    // of the same name is a duplicate; a name a class or interface already has
+    // says so; everything else in the one declaration namespace -- an alias, an
+    // enum, a module constant -- reads the way every other clash reads. The
+    // order is stage0's `registerFunction`, and so is the node each is
+    // reported at: this one at the statement, the two below at the name.
+    if (this.ctx.sigs.has(name) || this.program.templates.has(name)) {
+      this.ctx.error(stmt, `Duplicate function \`${name}\``);
+      return;
+    }
+    if (this.program.structs.has(name)) {
+      this.ctx.error(stmt.children[0], `\`${name}\` is already declared as a class or interface`);
+      return;
+    }
     if (this.nameTaken(name)) {
       this.ctx.error(stmt.children[0], `\`${name}\` is already declared in this module`);
       return;

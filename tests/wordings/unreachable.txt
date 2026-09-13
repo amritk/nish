@@ -52,7 +52,6 @@ NL2019  shadowed by NL2095, the same words with the closing backtick before them
 NL2031  shadowed by NL2118, the same words with the colon before them
 
 # --- Preempted: an earlier phase or a nearer rule refuses it first. ----------
-NL1039  the generator holding the `yield` is refused before the `yield` is reached
 NL2011  `Generic interfaces are not supported` needs a type parameter, which Phase 0 refuses (NL1054)
 NL2075  a class name is registered before any function signature, so NL2074 is the one that fires
 NL2109  the single-module `check()` path is not the driver's; the loader reports NL3006 instead

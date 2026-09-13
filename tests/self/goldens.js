@@ -25,10 +25,12 @@
  * **The seed.** Building stage1 takes a compiler, and after retirement that is
  * the last released `nish` (G3). The seed is `--seed`, then `NISH_BOOTSTRAP` —
  * the variable `scripts/bootstrap.sh` reads — then `build/nish`, what
- * `npm run bootstrap` leaves behind. There is deliberately no fourth answer:
- * a tool that reached for stage0 when it found nothing would be exactly the
- * dependency this gate exists to remove. `tests/run.js` passes today's seed in
- * with `--seed`, because the *suite* still has stage0 and this tool must not.
+ * `npm run bootstrap` leaves behind; `tests/self/seed.js` resolves it, and the
+ * four oracles that outlive stage0 now build their binaries the same way.
+ * There is deliberately no fourth answer *here*: a tool that reached for
+ * stage0 when it found nothing would be exactly the dependency this gate
+ * exists to remove. `tests/run.js` passes today's seed in with `--seed`,
+ * because the *suite* still has stage0 and this tool must not.
  *
  * **What each golden holds.**
  *
@@ -59,61 +61,17 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { checkerArgs, programs, root } from "./corpus.js";
+// The seed resolution is shared with the four oracles that survive stage0
+// (WP19 G2.3), and `defaultSeedSpec` is where this file's rule lives: three
+// answers and no fourth, because a tool that reached for stage0 would be the
+// dependency the gate exists to remove.
+import { defaultSeedSpec, resolveSeed, spawnSeed } from "./seed.js";
 
 const GOLDENS = path.join(root, "tests", "self", "goldens");
 const BUILD = path.join(root, "build", "self", "goldens");
 
-/**
- * `.js` / `.mjs` / `.cjs` is a Node entry point and everything else a native
- * binary — `scripts/bootstrap.sh`'s rule for `NISH_BOOTSTRAP`, so that one
- * path spells a seed in both places.
- */
-const NODE_ENTRY = /\.(?:js|mjs|cjs)$/;
-
 /** Long dump lines are cut to this in a failure report, so a diff stays readable. */
 const MAX_LINE = 160;
-
-/** A spawnable compiler: `cmd` plus what comes before the program's own arguments. */
-function resolveSeed(spec) {
-  const file = path.resolve(root, spec);
-  const refuse = (why) => ({ error: `seed ${spec} ${why}` });
-  if (!fs.existsSync(file)) return refuse("does not exist");
-  if (!fs.statSync(file).isFile()) return refuse("is not a file");
-  const seed = NODE_ENTRY.test(file)
-    ? { label: spec, cmd: process.execPath, prefix: [file] }
-    : { label: spec, cmd: file, prefix: [] };
-  if (seed.prefix.length === 0) {
-    try {
-      fs.accessSync(file, fs.constants.X_OK);
-    } catch {
-      return refuse("is not executable (only .js/.mjs/.cjs are run under node)");
-    }
-  }
-  if (spawn(seed, ["--version"]).status !== 0) return refuse("is not runnable (`--version` failed)");
-  return seed;
-}
-
-/**
- * The seed nobody named: `NISH_BOOTSTRAP` first, because that is the answer
- * CI and `scripts/bootstrap.sh` already agree on, then a compiler left in the
- * tree by `npm run bootstrap`. An empty `NISH_BOOTSTRAP` counts as unset, the
- * way `NISH_BOOTSTRAP= npm test` turns the seed off for one run.
- */
-function defaultSeedSpec() {
-  const fromEnvironment = process.env.NISH_BOOTSTRAP;
-  if (fromEnvironment !== undefined && fromEnvironment !== "") return fromEnvironment;
-  const bootstrapped = path.join("build", "nish");
-  if (fs.existsSync(path.join(root, bootstrapped))) return bootstrapped;
-  return null;
-}
-
-function spawn(compiler, args) {
-  return spawnSync(compiler.cmd, [...compiler.prefix, ...args], {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: 256 * 1024 * 1024,
-  });
-}
 
 /** The first diagnostic of a compiler's stderr, without its file:line:col prefix. */
 function firstLine(output) {
@@ -129,7 +87,7 @@ function firstLine(output) {
 function link(seed, source, stem) {
   const out = path.join(BUILD, stem);
   fs.mkdirSync(BUILD, { recursive: true });
-  const built = spawn(seed, [path.join(root, source), "--link", out]);
+  const built = spawnSeed(seed, [path.join(root, source), "--link", out]);
   if (built.status !== 0) return { error: `${seed.label} could not build ${source}:\n${built.stderr}` };
   return {
     run: (args) => spawnSync(out, args, { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }),

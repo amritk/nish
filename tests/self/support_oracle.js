@@ -14,7 +14,11 @@
  *     (`dist/codegen/emit/strings.js`, `dist/codegen/emit/builtins.js`). These
  *     write bytes into the IR; a disagreement is stage1 emitting a different
  *     module for the same program, which is exactly what §1's equality is
- *     about.
+ *     about. This is the one part of the oracle that does not survive R6, and
+ *     wp19 §2B's row saying the whole file survives was wrong about it: the
+ *     lines are counted and named as skipped when there is no `dist/` to read
+ *     rather than quietly not compared, and recovering them as a golden is
+ *     G2.4 work that has not been done.
  *   - the path functions against **`node:path`'s POSIX side**, because module
  *     identity is the resolved path and §3a D3 is the note that says a
  *     `..` normalised differently from Node's loads one file twice.
@@ -29,12 +33,33 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { linkWith, seedForOracle } from "./seed.js";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
-const { escapeBytes } = await import(pathToFileURL(path.join(root, "dist", "codegen", "emit", "strings.js")).href);
-const { f32Constant, f64Constant } = await import(pathToFileURL(path.join(root, "dist", "codegen", "emit", "builtins.js")).href);
 
 const CASES = path.join(root, "tests", "self", "cases.txt");
+
+/**
+ * The lines whose expected value comes out of stage0. They are dropped from
+ * both sides when stage0 is not in the tree, so the rest of the oracle still
+ * runs; the summary says how many went.
+ */
+const STAGE0_LINE = /^(?:ir |f64 |f32 |byte \d+ )/;
+
+/**
+ * stage0's IR escape and float-hex, or null when `dist/` is not there — a
+ * tree where `src/` has been deleted (R6), or one where nobody has run
+ * `npm run build`. Imported here rather than at the top of the module so that
+ * a missing stage0 is a named skip instead of a file that will not load.
+ */
+async function stage0Escapes() {
+  const strings = path.join(root, "dist", "codegen", "emit", "strings.js");
+  const builtins = path.join(root, "dist", "codegen", "emit", "builtins.js");
+  if (!fs.existsSync(strings) || !fs.existsSync(builtins)) return null;
+  const { escapeBytes } = await import(pathToFileURL(strings).href);
+  const { f32Constant, f64Constant } = await import(pathToFileURL(builtins).href);
+  return { escapeBytes, f32Constant, f64Constant };
+}
 
 // ---- The pieces the driver prints -----------------------------------------------------
 
@@ -102,7 +127,7 @@ function slotsAfter(entries) {
 
 // ---- The expected output ---------------------------------------------------------------
 
-function expected(caseText) {
+function expected(caseText, stage0) {
   const out = [];
   const texts = [];
   for (const line of caseText.split("\n")) {
@@ -113,7 +138,7 @@ function expected(caseText) {
       texts.push(first);
       out.push(`# text ${JSON.stringify(first)}`);
       out.push(`json ${JSON.stringify(first)}`);
-      out.push(`ir ${escapeBytes(Buffer.from(first, "utf8"))}`);
+      if (stage0 !== null) out.push(`ir ${stage0.escapeBytes(Buffer.from(first, "utf8"))}`);
       out.push(`hash ${hashString(first)}`);
       out.push(`split ${JSON.stringify(first.split("/").join("|"))}`);
       out.push(`repeat ${JSON.stringify(first.repeat(3))}`);
@@ -130,8 +155,10 @@ function expected(caseText) {
       out.push(`relative ${JSON.stringify(path.posix.relative(first, second))}`);
     } else if (section === "num") {
       out.push(`# num ${first}`);
-      out.push(`f64 ${f64Constant(Number(first))}`);
-      out.push(`f32 ${f32Constant(Number(first))}`);
+      if (stage0 !== null) {
+        out.push(`f64 ${stage0.f64Constant(Number(first))}`);
+        out.push(`f32 ${stage0.f32Constant(Number(first))}`);
+      }
     } else {
       throw new Error(`unknown section \`${section}\` in ${CASES}`);
     }
@@ -144,7 +171,7 @@ function expected(caseText) {
   }
 
   for (let byte = 0; byte < 256; byte++) {
-    out.push(`byte ${byte} ${escapeBytes(Buffer.from([byte]))}`);
+    if (stage0 !== null) out.push(`byte ${byte} ${stage0.escapeBytes(Buffer.from([byte]))}`);
     // Only the ASCII half: above it a lone byte is not a JavaScript string,
     // and the multi-byte text cases above already pin the pass-through.
     if (byte < 128) out.push(`byte json ${byte} ${JSON.stringify(String.fromCharCode(byte))}`);
@@ -193,32 +220,35 @@ function expected(caseText) {
 
 // ---- Running the driver -----------------------------------------------------------------
 
-function build() {
-  const out = path.join(root, "build", "self", "support");
-  fs.mkdirSync(path.dirname(out), { recursive: true });
-  const r = spawnSync(
-    "node",
-    [path.join(root, "dist", "index.js"), path.join(root, "tests", "self", "support.ts"), "--link", out],
-    { cwd: root, encoding: "utf8" }
-  );
-  if (r.status !== 0) {
-    process.stderr.write(`${r.stderr}\n`);
-    return null;
-  }
-  return out;
+/**
+ * The driver, linked by the seed rather than by stage0 (WP19 G2.3). Most of
+ * what this oracle compares against — `node:path`, `JSON.stringify`, `Buffer`,
+ * `Map` — outlives `src/`, so the compiler that builds the driver has to too.
+ */
+function build(seed) {
+  return linkWith(seed, path.join("tests", "self", "support.ts"), path.join(root, "build", "self", "support"));
 }
 
-function main(argv) {
+async function main(argv) {
   const verbose = argv.includes("--verbose");
-  const binary = build();
+  const seed = seedForOracle(argv);
+  if (seed.error !== undefined) {
+    process.stderr.write(`${seed.error}\n`);
+    return 1;
+  }
+  const binary = build(seed);
   if (binary === null) return 1;
   const run = spawnSync(binary, [CASES], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   if (run.status !== 0) {
     process.stderr.write(`support exited ${run.status}\n${run.stderr}`);
     return 1;
   }
-  const want = expected(fs.readFileSync(CASES, "utf8")).split("\n");
-  const got = run.stdout.split("\n");
+  const stage0 = await stage0Escapes();
+  const want = expected(fs.readFileSync(CASES, "utf8"), stage0).split("\n");
+  // The driver prints its IR-escape lines whatever is in `dist/`; with no
+  // stage0 to say what they should be, they come out of the comparison on both
+  // sides rather than out of the run.
+  const got = (stage0 === null ? run.stdout.split("\n").filter((line) => !STAGE0_LINE.test(line)) : run.stdout.split("\n"));
   const differing = [];
   for (let i = 0; i < Math.max(want.length, got.length); i++) {
     if (want[i] !== got[i]) differing.push(`  line ${i + 1}: want ${want[i]} / got ${got[i]}`);
@@ -226,9 +256,12 @@ function main(argv) {
   if (differing.length > 0) {
     for (const line of verbose ? differing : differing.slice(0, 10)) process.stdout.write(`${line}\n`);
   }
-  process.stdout.write(`${want.length - differing.length}/${want.length} lines agree\n`);
+  const escapes = stage0 === null ? ", the IR-escape lines skipped (no stage0 in the tree)" : "";
+  process.stdout.write(
+    `${want.length - differing.length}/${want.length} lines agree, seed ${seed.label}${escapes}\n`
+  );
   return differing.length === 0 ? 0 : 1;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(main(process.argv.slice(2)));
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exit(await main(process.argv.slice(2)));
 export { expected, build };

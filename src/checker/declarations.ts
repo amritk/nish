@@ -449,7 +449,13 @@ export function collectImports(decl: ts.ImportDeclaration, sf: ts.SourceFile): I
       sf
     );
   }
-  if (bindings.elements.length === 0) throw new CompileError("Empty import list", bindings, sf);
+  // At the declaration rather than at the braces, which is where this used to
+  // point: stage1's tree has no node for `{}` at all -- a list there spans its
+  // elements and an empty one spans nothing (`closeList` in `self/parser.ts`,
+  // and the S2 parser oracle holds both compilers to that rule) -- so the
+  // caret the two can agree on is the `import` statement's
+  // (`tests/cases/reject_import_empty`).
+  if (bindings.elements.length === 0) throw new CompileError("Empty import list", decl, sf);
 
   return bindings.elements.map((element) => {
     if (element.isTypeOnly) throw new CompileError("Type-only imports are not supported", element, sf);

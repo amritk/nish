@@ -13,28 +13,70 @@ comment above the `on:` block has the details.
 | Job | Runner | Steps |
 | --- | --- | --- |
 | `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, `npm test`, size report |
-| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **commented out of the matrix**, see below |
+| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **commented out of the matrix**, on cost rather than on breakage; see below |
+| `bootstrap` | Ubuntu | builds `self/` with the **last released** binary as the seed, which is the only thing that checks WP19's rolling freeze |
 | `lint` | Ubuntu | `npm run lint --if-present` (a no-op until `package.json` defines `lint`) |
 
-**The macOS job is disabled for now.** It is not a compiler failure and not an
-architecture one: `scripts/build.sh` runs under `set -euo pipefail`, and macOS
-ships bash 3.2 as `/bin/bash` (Apple will not ship GPLv3), where expanding an
-empty array as `"${arr[@]}"` while `set -u` is on raises *unbound variable*.
-bash 4.4 made that expansion legal, which is why every Linux runner passes and
-every macOS one fails at
+`.github/workflows/parity.yml` is the fourth job and does not run here: WP19
+G1's corpus half is nightly, on its own workflow, for the reasons under
+[the parity run](#the-parity-run-nightly) below.
 
-```
-scripts/build.sh: line 96: pgo[@]: unbound variable
-```
+**The macOS job is one uncommented line away, and stays commented out.** Both
+of the things that used to *break* it are fixed; what keeps it out now is what
+it costs.
 
-`pgo`, `elf`, `strip_flag` and `libs` are all legitimately empty on the
-ordinary macOS path, so every `--link` at the `speed`, `size` and `napi`
-profiles dies before clang is reached. The fix is `${arr[@]+"${arr[@]}"}` at
-the nine sites that expand them; the matrix line in `ci.yml` carries the same
-note and is restored in the same commit. Until then macOS is untested here,
-and what that costs is the ld64 / Mach-O half of `build.sh` — `-dead_strip`,
-`-Wl,-x`, no `-fuse-ld=lld`, no `-fno-plt` — which no Linux runner exercises
-at any architecture.
+It is the whole `test` job a second time — `npm ci`, typecheck, the full suite,
+smoke, the cookbook and registry checks, the size report — behind a
+`brew install llvm@18`, on the slowest runner GitHub rents, and every push
+would wait for it. Restore the row when the suite is fast, or put it on a
+schedule the way [the parity run](#the-parity-run-nightly) is. What it buys is
+the ld64 / Mach-O half of `build.sh` — `-dead_strip`, `-Wl,-x`, no
+`-fuse-ld=lld`, no `-fno-plt` — and Apple Silicon, and no Linux runner
+exercises either.
+
+The two defects it was waiting for are both bash 3.2, which macOS ships as
+`/bin/bash` (Apple will not ship GPLv3) and which this repository's shell
+scripts had been written against:
+
+- `scripts/build.sh` runs under `set -euo pipefail`, and in bash 3.2
+  expanding an empty array as `"${arr[@]}"` while `set -u` is on raises
+  *unbound variable* — bash 4.4 made it legal. `pgo`, `elf`, `strip_flag` and
+  `libs` are all legitimately empty on the ordinary macOS path, so every
+  `--link` at the `speed`, `size` and `napi` profiles died at
+  `scripts/build.sh: line 96: pgo[@]: unbound variable`, before clang was
+  reached. The nine sites spell it `${arr[@]+"${arr[@]}"}` now.
+- `scripts/smoke.sh` collected its program list with `mapfile`, a bash 4
+  builtin that bash 3.2 does not have at all, so the smoke step died on the
+  first line that used it. It reads the same pipeline with `while read` now.
+
+Neither would stop the row now. And whenever it does come back, it will not
+bring WP19 G3's second operating system with it: the `bootstrap` job needs a
+darwin *seed* binary and a release ships `x86_64-linux` alone, so that half
+waits on [wp19](wp19-stage0-retirement.md#g5-distribution-does-not-need-node).
+`fail-fast: false` is already set, so a macOS-only failure would not cancel
+the Linux row that says whether it is the platform or the change.
+
+### The parity run, nightly
+
+`.github/workflows/parity.yml` runs `node tests/run.js --parity` on a
+`schedule:` at 06:17 UTC, and on `workflow_dispatch` with an optional `only`
+filter. It is the corpus half of WP19 G1: every program in the corpus through
+both compilers under all fifteen flag variations, comparing exit status,
+stdout, stderr and every file written.
+
+It is a workflow of its own rather than a step in `test` because of what it
+costs — roughly 9,000 compilations by each compiler, plus linking a stage1
+binary first, which is forty minutes against three for `npm test`. The
+flag-set half is the opposite trade and already runs inside `npm test`: two
+`--help` runs, seconds, and it is the half that found `--no-warn-performance`
+and `--out-dir`.
+
+Nightly rather than on demand because the gate has already reopened once in
+the gap between runs, and nobody noticed until it was run by hand
+([wp19 §A5](wp19-stage0-retirement.md#a5-the-gate-reopened-and-the-correction-a4-needed)).
+The job writes its summary line into the run summary with the date, because
+that number is a fact about the corpus on the day it was measured. A red
+result is a gate, not a flake.
 
 Both `test` jobs need the plain tool names `clang`, `llc`, `llvm-as`, `opt`,
 `ld.lld` and `wasm-ld` on `PATH`, because `tests/run.js` and the scripts

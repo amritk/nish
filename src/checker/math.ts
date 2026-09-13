@@ -394,8 +394,15 @@ export function contextualLiteralType(
   if (!want || !isNumeric(want)) return undefined;
   if (isFloat(want)) return want; // `const x: f32 = 0.1` rounds at emit time
   const n = Number(literal.text);
+  // The spelling the *programmer* used, not the `typescript` parser's cooked
+  // text: `0x1FF` is `511` in `literal.text`, and a literal past 2^53 comes
+  // back as the double it rounded to, so a message quoting `.text` quotes
+  // something that is not in the file. stage1 keeps the source spelling, and
+  // this is the side that was wrong -- the caret under the message points at
+  // the source, and the two must read the same.
+  const written = literal.getText(ctx.sf);
   if (!Number.isInteger(n)) {
-    throw ctx.error(`Non-integer literal \`${literal.text}\` where ${want.kind} is expected`, literal);
+    throw ctx.error(`Non-integer literal \`${written}\` where ${want.kind} is expected`, literal);
   }
   const negated =
     ts.isPrefixUnaryExpression(literal.parent) && literal.parent.operator === ts.SyntaxKind.MinusToken;
@@ -406,27 +413,27 @@ export function contextualLiteralType(
     if (negated && n !== 0) {
       // Point the caret at the whole `-1`, not just the digits after the sign.
       throw ctx.error(
-        `Negative literal \`-${literal.text}\` where ${want.kind} is expected (${want.kind} is unsigned)`,
+        `Negative literal \`-${written}\` where ${want.kind} is expected (${want.kind} is unsigned)`,
         literal.parent
       );
     }
     if (n > 2 ** 53) {
       throw ctx.error(
-        `Literal \`${literal.text}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the ${want.kind} value instead`,
+        `Literal \`${written}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the ${want.kind} value instead`,
         literal
       );
     }
     if (BigInt(n) > unsignedMax(want)) {
-      throw ctx.error(`Literal \`${literal.text}\` does not fit in ${want.kind}`, literal);
+      throw ctx.error(`Literal \`${written}\` does not fit in ${want.kind}`, literal);
     }
     return want;
   }
   if (want.kind === "i32" && n > 0x7fffffff + (negated ? 1 : 0)) {
-    throw ctx.error(`Literal \`${literal.text}\` does not fit in i32`, literal);
+    throw ctx.error(`Literal \`${written}\` does not fit in i32`, literal);
   }
   if (want.kind === "i64" && Math.abs(n) > 2 ** 53) {
     throw ctx.error(
-      `Literal \`${literal.text}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead`,
+      `Literal \`${written}\` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead`,
       literal
     );
   }

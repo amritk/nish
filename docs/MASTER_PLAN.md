@@ -674,6 +674,14 @@ it left. What the diagram would show for them is a line.
 2. `npm test` must be green, and every new construct needs: a golden `.ll`,
    an `llvm-as` pass, a native round trip with expected stdout, and at least
    one negative test. Run `opt -passes=verify` on every emitted module.
+2a. A construct is implemented in `src/` *and* `self/`, which the oracles
+   compare byte for byte, or in `self/` alone with its case named in
+   `tests/self/stage1_only.txt`
+   ([wp19 §1a](wp19-stage0-retirement.md#1a-the-doubling-ends-before-r6)).
+   Either is a decision; `self/` alone and unregistered is not, because the
+   oracles would then stop comparing its case without anyone deciding they
+   should. A new diagnostic also needs a case that *reaches its words*
+   (`tests/diagnostic_coverage.js`, inside `npm test`), not only a code.
 3. Do not emit an attribute you cannot cite a checker proof for. Write the
    reason in `attributes.ts` alongside the code.
 4. Any change to a struct layout touches `runtime.ts` and `runtime.c` in

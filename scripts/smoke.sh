@@ -26,7 +26,16 @@ fi
 # Either spelling declares the entry (docs/wp22-arrow-functions.md): the arrow
 # `export const main = (...) => ...` is the form the corpus is written in, and
 # `export function main` is still legal.
-mapfile -t programs < <(grep -rl --include='*.ts' -E '^export (function main\b|const main[[:space:]]*=)' "$examples" | sort)
+#
+# `mapfile` would say this in one line and is a bash 4 builtin: macOS ships
+# bash 3.2 (Apple will not ship GPLv3) and this script runs there too, since
+# WP19 G3 wants the matrix on both operating systems. `while read` over the
+# same pipeline is the portable spelling, and the process substitution keeps
+# the loop out of a subshell so `programs` survives it.
+programs=()
+while IFS= read -r program; do
+  programs+=("$program")
+done < <(grep -rl --include='*.ts' -E '^export (function main\b|const main[[:space:]]*=)' "$examples" | sort)
 if [ ${#programs[@]} -eq 0 ]; then
   echo "error: no examples with \`export const main\` under $examples" >&2
   exit 1

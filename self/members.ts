@@ -244,6 +244,13 @@ export function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   if (info.kind !== STRUCT_CLASS) {
     return ctx.errorType(expr, `Cannot \`new\` interface \`${name}\`; use an object literal: \`{ ... }\``);
   }
+  // The parser reads `new Box<number>()`'s type arguments because `new
+  // Array<T>(n)` needs them; a declared class has none to take, and stage1 was
+  // compiling the program with the arguments ignored
+  // (`tests/cases/reject_cls_new_generic`).
+  if (expr.children[1].children.length > 0) {
+    return ctx.errorType(expr, "Generic classes are not supported");
+  }
   const ctor = info.ctor;
   if (ctor !== null) {
     checkMethodArguments(ctx, expr, ctor, args, `new ${name}`, scope, true);

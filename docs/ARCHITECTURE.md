@@ -113,7 +113,18 @@ registration order.
 
 ## How to add a construct
 
-The checklist every work package has followed (MASTER_PLAN.md §7):
+The checklist every work package has followed (MASTER_PLAN.md §7).
+
+**First, decide how many implementations it gets.** Steps 2 to 7 below are
+`src/`, and every one of them has a mirror in `self/` (`.claude/selfhost.md`
+has the module map). Writing both is what buys the byte-for-byte comparison
+between two independent implementations, and it is worth it for anything
+subtle. Writing only the `self/` half is the other legitimate answer since
+[wp19 §1a](wp19-stage0-retirement.md#1a-the-doubling-ends-before-r6): name the
+case in `tests/self/stage1_only.txt` and its golden is compiled by stage1,
+while the oracles declare it instead of skipping it. The tests, the rule and
+the changelog line are the same either way, and `self/` may not *use* the
+construct in its own source until the seed compiles it — one release later.
 
 1. **Decide the rule and the lowering first.** Write the TypeScript snippet
    and the IR you expect by hand; check it with `llvm-as` and
@@ -570,4 +581,4 @@ frozen, and a third rename stops at `LANGUAGE` and `CLI`.
 | `examples/` | `add.ts`, `hello.ts`, `math.ts`, `strings.ts`, `arrays.ts` (typed arrays across the boundary), `nbody.ts`, `multi/`, `main.c`, `node-host.mjs`, `node-addon.mjs` |
 | `bench/` | `run.mjs`, `README.md`, `{fib,nbody,spectral,sieve,strbuild,vec3}.{ts,c,rs}`, `strbuild_naive.c`, `rss.c`; `sum.ts` and `ffi.mjs` (the WP8 FFI benchmark) |
 | `docs/` | this documentation; `docs/README.md` is the index |
-| `.github/workflows/` | `ci.yml` (Ubuntu + macOS, LLVM 18), `release.yml` (tag-driven tarball) |
+| `.github/workflows/` | `ci.yml` (Ubuntu, LLVM 18; the macOS row is one uncommented line), `parity.yml` (WP19 G1's corpus half, nightly), `release.yml` (tag-driven tarball) |

@@ -16,9 +16,18 @@ today over the modules of `self/`, and so does the stronger
 `IR(stage0, self/) == IR(stage1, self/)`: the two implementations are the same
 compiler, not two compilers that agree about the tests.
 
-`self/` is therefore **frozen against stage0 rather than ahead of it**: a
-construct still enters the language (and `src/`) before it enters `self/`, and
-`npm test` fails the moment the two disagree about one byte of one module.
+`self/` is therefore **frozen against stage0 rather than ahead of it** in what
+it may *use*: `npm test` fails the moment the two disagree about one byte of one
+module, and the seed has to be able to compile `self/`'s source.
+
+What is no longer true is that a construct must be *implemented* in `src/`
+first. A construct may land in `self/` alone, with its case named in
+[`tests/self/stage1_only.txt`](../tests/self/stage1_only.txt) — that is what
+makes the golden stage1's and makes every stage0 oracle declare the case
+instead of skipping it in silence
+([wp19 §1a](../docs/wp19-stage0-retirement.md#1a-the-doubling-ends-before-r6)).
+The freeze on *use* stands: `self/` may not write the construct in its own
+source until the seed compiles it, which is the next release.
 
 ## Milestones
 
@@ -99,11 +108,17 @@ own tree and is held to a golden rather than to stage0
 
 1. **A construct enters the language before it enters `self/`.** Wanting it for
    the port is not a reason to skip its `reject_*` case or its cookbook entry.
+   It may enter `self/` *alone* — one line in `tests/self/stage1_only.txt`,
+   and the tests are stage1's — and it may not be used inside `self/`'s own
+   source until the seed compiles it, one release later.
 2. **`self/` is an Nish program.** `function` declarations, `interface` for
    structs, no arrow functions, no `type` aliases — the opposite of the house
    rules for `src/`, because the language has neither. `biome.json` exempts it.
-3. **stage0 is the oracle.** Every phase is tested by comparing it with the
-   corresponding stage0 output over the corpus, never by a hand-written golden.
+3. **stage0 is the oracle** for everything it can compile. Every phase is
+   tested by comparing it with the corresponding stage0 output over the
+   corpus, never by a hand-written golden — except for a case in the
+   stage1-only register, where there is no stage0 answer by construction and
+   the golden is what pins it.
 4. **The runtime budget still holds.** Lower inline rather than growing
    `runtime.c`.
 5. **Nish-0 does not grow quietly.** Adding a construct to the subset is an
@@ -200,6 +215,11 @@ stage0 and then counted as though the *port* could not reach it. The fuzzer's
 the only thing that reproduces a failure is the seed it prints
 (`--stage1 --seed <s> --count 1`) and the program it saves under
 `build/test/differential/`.
+
+A **stage1-only** count in an oracle summary is the register at work, and is
+counted apart from a skip because it means the opposite of one: a construct
+`self/` has and `src/` does not, so no stage0 answer exists to compare with, by
+decision.
 
 A skip in an oracle summary is a fact about how far the port has got, not a
 file that is allowed to disagree — which is why every other outcome is counted
