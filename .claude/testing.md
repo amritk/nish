@@ -346,9 +346,9 @@ Two lists sit beside the corpus and both shrink rather than grow:
 stage1's parser refuses the syntax first (§A3's declared class, and those
 wordings do not survive R6), and `stage1_divergence.txt` names the ones where
 the two compilers do not agree at all. Take the counts from the summary line
-the tool prints rather than from here — they move, and they have. `npm test` runs the tool over both
-compilers, the second with `--strict-refusals`, so a case that starts agreeing
-fails until its line is deleted.
+the tool prints rather than from here — they move, and they have. `npm test`
+runs the tool over both compilers, the second with `--strict-refusals`, so a
+case that starts agreeing fails until its line is deleted.
 
 ## Example case
 

@@ -1,0 +1,1 @@
+Constructor of class `Counter`: `static` members are not supported (use a top-level function)

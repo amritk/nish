@@ -28,6 +28,14 @@
 # method and which class it is in. Those three facts are the whole difference
 # between the parser's sentence and stage0's, and they are why the parser could
 # not have said it.
+#
+# One warning from that change, because this list is where somebody will next
+# take a wording off it: a case here proves what its *code* reaches, and a code
+# can word more than one rule. `nl2116_static_method` reaches the method
+# sentence; the constructor's shares the code, so nothing in this directory
+# could tell that a `static` constructor had stopped being refused at all. It
+# had. `tests/cases/reject_cls_ctor_static` is what pins it now, and a
+# `reject_*` case is the thing to write when a wording comes off this list.
 nl2018_anonymous_class
 nl2038_keyof_type
 nl2083_declare_class

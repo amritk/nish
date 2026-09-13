@@ -167,6 +167,14 @@ function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void {
   // first for a field (`src/checker/classes.ts`, collectField) and the
   // modifiers first for a method (rejectMethodModifiers), so the two lists
   // below are deliberately not in the same order as each other.
+  //
+  // What the order buys stops at the modifiers stage1 models. stage0 walks
+  // every modifier and refuses an unmodelled one — `readonly m(): i32` is
+  // ``Method `m` of class `C`: unsupported modifier `readonly` `` — where
+  // stage1 has no such rule and only knows `readonly` and `static`, so
+  // `readonly static m()` gets stage0's `readonly` sentence and stage1's
+  // `static` one. That divergence is older than these flags and is recorded in
+  // `collectMethod` below rather than fixed here.
   if ((decl.flags & FLAG_OPTIONAL) !== 0) {
     ctx.error(decl, `${what} cannot be optional (every field has a fixed slot)`);
     return;
@@ -223,6 +231,13 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void {
   // As in `collectField` above, and worth the repetition rather than a shared
   // helper: the two sentences differ, and so does the order — stage0 reads a
   // method's modifiers before its `?`.
+  //
+  // Only `static` is read, because it is the only modifier stage1 has a rule
+  // for: `readonly` on a method or a constructor is refused by stage0
+  // (``unsupported modifier `readonly` ``) and compiled by stage1, which
+  // predates these flags and is a rule nobody has written rather than a wording
+  // that disagrees. Writing it means knowing which modifier came *first*, and
+  // the parser records a set of bits rather than a list.
   if ((decl.flags & FLAG_STATIC) !== 0) {
     ctx.error(
       decl,
@@ -259,6 +274,20 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: Node): void {
 function collectConstructor(ctx: CheckContext, owner: StructInfo, decl: Node): void {
   if (owner.ctor !== null) {
     ctx.error(decl, `Class \`${owner.name}\` has more than one constructor (no overloads)`);
+    return;
+  }
+  // stage0 reads a constructor's modifiers with the same function it reads a
+  // method's (`rejectMethodModifiers`), so the sentence is the method's with
+  // `Constructor` in front of it, and the order is the same: after the
+  // duplicate check, before anything about the body. Without this a `static`
+  // constructor is not merely accepted, it *runs* — as the instance
+  // constructor, which is the one thing `static` says it is not
+  // (`tests/cases/reject_cls_ctor_static`).
+  if ((decl.flags & FLAG_STATIC) !== 0) {
+    ctx.error(
+      decl,
+      `Constructor of class \`${owner.name}\`: \`static\` members are not supported (use a top-level function)`
+    );
     return;
   }
   const symbol = `${owner.name}.constructor`;

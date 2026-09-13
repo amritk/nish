@@ -758,10 +758,17 @@ export class Parser {
    * `nl2116_static_method` in `tests/wordings/parser_refusals.txt` rather than
    * letting the two compilers say the same thing
    * (docs/wp19-stage0-retirement.md R3).
+   *
+   * A word is a modifier only while the token after it is not the start of
+   * what a member's *name* is followed by, because `static` is a name as well
+   * as a modifier: `static: i32` and `static(): i32` are a field and a method
+   * called `static`, and so are `static?: i32` and `static!: i32`, which is
+   * what stage0 calls them (``Field `static` of class `C` cannot be
+   * optional``).
    */
   parseMemberModifiers(): i32 {
     let flags = 0;
-    while (this.at(TOK_IDENT) && this.peek() !== TOK_LPAREN && this.peek() !== TOK_COLON) {
+    while (this.at(TOK_IDENT) && !this.startsMemberName()) {
       const word = this.value;
       if (word === "readonly") flags = flags | FLAG_READONLY;
       else if (word === "static") flags = flags | FLAG_STATIC;
@@ -769,6 +776,16 @@ export class Parser {
       this.advance();
     }
     return flags;
+  }
+
+  /**
+   * Whether the identifier in hand is a member's name rather than a modifier
+   * in front of one: a name is followed by `(`, `:`, `?` or `!`, and a
+   * modifier by the next word.
+   */
+  startsMemberName(): boolean {
+    const next = this.peek();
+    return next === TOK_LPAREN || next === TOK_COLON || next === TOK_QUESTION || next === TOK_BANG;
   }
 
   /**
@@ -806,6 +823,12 @@ export class Parser {
     if (this.at(TOK_IDENT) && this.value === "constructor" && this.peek() === TOK_LPAREN) {
       this.advance();
       const ctor = this.node(N_CONSTRUCTOR, start, this.end);
+      // The constructor carries its modifiers too, and for the same reason the
+      // field and the method do: `static constructor()` is a rule the checker
+      // states. Dropping them here is how a `static` constructor came to be
+      // compiled *and run* as the instance constructor once the parser stopped
+      // refusing the word (docs/wp19-stage0-retirement.md R3).
+      ctor.flags = modifiers;
       ctor.children.push(this.parseParameters());
       ctor.children.push(this.parseBlock());
       ctor.end = this.previousEnd;
@@ -857,8 +880,7 @@ export class Parser {
           // spelling TypeScript allows on a property signature at all, so
           // there is no stage0 sentence to agree with and the syntax error
           // stays the right answer.
-          if (this.at(TOK_QUESTION)) field.flags = field.flags | FLAG_OPTIONAL;
-          this.eat(TOK_QUESTION);
+          if (this.eat(TOK_QUESTION)) field.flags = field.flags | FLAG_OPTIONAL;
           field.children.push(this.parseTypeAnnotation());
           field.children.push(this.empty());
           if (!this.eat(TOK_SEMICOLON)) this.eat(TOK_COMMA);

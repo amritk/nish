@@ -1087,7 +1087,11 @@ class Point {
   `implements`, below: repeat the fields you were going to inherit as the
   class's first fields and name an interface that declares them. Shared
   behaviour is a free function over that interface.
-- **Rejected**: `static` (`tests/cases/reject_cls_static`),
+- **Rejected**: `static` on a field, a method or the constructor
+  (`tests/cases/reject_cls_static`, `reject_cls_method_static`,
+  `reject_cls_ctor_static`) — the word is still a legal member *name*, and
+  `static?: i32` is an optional field called `static`
+  (`reject_cls_field_named_static`) —
   getters/setters (`Getters and setters are not supported`), optional fields
   (`cannot be optional`), index signatures, `!` assertions, `abstract`,
   `declare class`, type parameters on a class or on one of its methods

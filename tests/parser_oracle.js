@@ -559,10 +559,17 @@ function printTypeScriptTree(source, sf) {
   };
 
   /**
-   * `readonly` is recorded; `public`, `private` and `protected` are accepted
-   * and ignored, as Nish does (docs/LANGUAGE.md, Classes). Anything else
-   * — `static`, `abstract`, `async`, `declare` — is a construct the language
-   * does not have, so the file is skipped and counted.
+   * `readonly` is recorded; `public`, `private`, `protected` and `static` are
+   * accepted and not, as Nish does — the first three are ignored
+   * (docs/LANGUAGE.md, Classes) and `static` is a flag the checker refuses on,
+   * which stage1 does not print either. Anything else — `abstract`, `async`,
+   * `declare` — is a construct the language does not have, so the file is
+   * skipped and counted.
+   *
+   * `static` used to be skipped here, and that was the whole coverage of every
+   * `static` member: the parse a stage0 oracle never compared
+   * (docs/wp19-stage0-retirement.md §A5 — a parse no oracle compares is where a
+   * column divergence hides).
    */
   const memberFlags = (node) => {
     let readonly = false;
@@ -571,7 +578,8 @@ function printTypeScriptTree(source, sf) {
       else if (
         modifier.kind !== ts.SyntaxKind.PublicKeyword &&
         modifier.kind !== ts.SyntaxKind.PrivateKeyword &&
-        modifier.kind !== ts.SyntaxKind.ProtectedKeyword
+        modifier.kind !== ts.SyntaxKind.ProtectedKeyword &&
+        modifier.kind !== ts.SyntaxKind.StaticKeyword
       ) {
         unsupported(modifier);
       }
@@ -583,7 +591,9 @@ function printTypeScriptTree(source, sf) {
     const [s, e] = span(node);
     if (ts.isPropertyDeclaration(node)) {
       if (!ts.isIdentifier(node.name) || node.type === undefined) unsupported(node);
-      if (node.questionToken !== undefined) unsupported(node);
+      // `x?: T` and `x!: T` are parsed on both sides and refused by the
+      // checker, so the marker changes no node and no span and the trees
+      // compare as they stand.
       emit(depth, `FIELD${memberFlags(node)}`, s, e);
       identifier(node.name, depth + 1);
       type(node.type, depth + 1);
@@ -594,8 +604,7 @@ function printTypeScriptTree(source, sf) {
       if (!ts.isIdentifier(node.name) || node.body === undefined || node.type === undefined)
         unsupported(node);
       if (node.typeParameters !== undefined) unsupported(node);
-      memberFlags(node);
-      emit(depth, "METHOD", s, e);
+      emit(depth, `METHOD${memberFlags(node)}`, s, e);
       identifier(node.name, depth + 1);
       list(depth + 1, node.parameters, parameter);
       type(node.type, depth + 1);
@@ -604,8 +613,7 @@ function printTypeScriptTree(source, sf) {
     }
     if (ts.isConstructorDeclaration(node)) {
       if (node.body === undefined) unsupported(node);
-      memberFlags(node);
-      emit(depth, "CONSTRUCTOR", s, e);
+      emit(depth, `CONSTRUCTOR${memberFlags(node)}`, s, e);
       list(depth + 1, node.parameters, parameter);
       block(node.body, depth + 1);
       return;

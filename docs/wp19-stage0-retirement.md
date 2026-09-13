@@ -541,12 +541,12 @@ the way to re-derive it is to run the tool rather than to read this table:
 
 | | When the gap was measured | Now |
 | --- | --- | --- |
-| registry codes | 351 | 385 |
-| provoked by something that outlives stage0 | 175 | **325** |
+| registry codes | 351 | 393 |
+| provoked by something that outlives stage0 | 175 | **334** |
 | provoked by nothing | 176 | 0 |
-| unreachable, each with a reason on file | — | 60 |
+| unreachable, each with a reason on file | — | 59 |
 
-What moved it is `tests/wordings/`, 124 cases: one small program per code,
+What moved it is `tests/wordings/`, 125 cases: one small program per code,
 named for the code it pins (`nl2200_empty_import_list.ts`), with the whole
 message in its `.err`. A reword fails it twice — the message no longer matches, and the
 generator gives the new words a new number, so the code no longer matches
@@ -555,7 +555,7 @@ provoked nor named in `tests/wordings/unreachable.txt`. That last rule is the
 part that keeps the gap closed: a diagnostic added next year arrives with a
 case or with a sentence saying why it cannot have one.
 
-**60 codes are unreachable, and that is a finding about the compiler rather
+**59 codes are unreachable, and that is a finding about the compiler rather
 than a test nobody wrote.** In six kinds, all listed with reasons in
 `tests/wordings/unreachable.txt`:
 
@@ -563,7 +563,7 @@ than a test nobody wrote.** In six kinds, all listed with reasons in
 | --- | --- |
 | 27 | **retired**: the fragment matches nothing the compiler prints any more. Mostly the inheritance and `super(...)` rules WP25 removed, plus two long forms of WP15 §8 warnings, the `case` label rule WP23 reworded to admit an enum member (`NL2123`, superseded by `NL2284`), Phase 0's blanket generic sentence before WP18 named the kind it is on (`NL1045`, superseded by `NL1054` and `NL1055`), and one — `NL2287` — that never fired at all, because WP23 reserved the number and no message in either compiler produces the fragment. The generator keeps the number on purpose, so these cost a string and are correct as they stand |
 | 12 | **not diagnostics at all**: `scripts/gen-diagnostic-codes.mjs` scans for `fail(`/`error(` calls, and catches the driver's `console.error` usage errors (`unknown option:`, `--target: unsupported target`, the four lines of the exit-70 report) and the `fail(...)` helper that writes the N-API shim's *generated C*. No `--json` object can ever carry one. Their wordings are real and are pinned — by the WP12 block of `tests/run.js` and by the interop checks — but they are not rules, and `RULE_COUNT` is about four percent larger than the number of rules a user can be shown |
-| 12 | **preempted**: Phase 0 owns `async`, generators, generic type parameters and labels, so the checker's sentences for them never fire — including its own `Generic classes are not supported yet`, which `NL1054` reaches first; a class name is registered before any function signature, so `NL2075` cannot precede `NL2074`; the single-module `check()` path is not the driver's |
+| 11 | **preempted**: Phase 0 owns `async`, generators, generic type parameters and labels, so the checker's sentences for them never fire — including its own `Generic classes are not supported yet`, which `NL1054` reaches first; a class name is registered before any function signature, so `NL2075` cannot precede `NL2074`; the single-module `check()` path is not the driver's |
 | 4 | **shadowed**: `codeFor` walks the table longest fragment first, and these four fragments are substrings of a longer fragment *of the same message* (`NL1022` under `NL1005`, `NL1041` under `NL1007`, `NL2019` under `NL2095`, `NL2031` under `NL2118`) |
 | 3 | **structurally impossible**: no import syntax reaches `NL2211`; `NL2216` is an internal invariant; the `new` dispatch has a `*` fallback, so `NL2252`'s table never misses |
 | 2 | **backstops**: WP18's two instantiation caps, which need 257 tuples for one template or 4,097 in a module. Reachable, and the only entries here that are a judgement about what this corpus should carry rather than a fact about the compiler — which is why they say so, and why they are the first place to look if this list starts growing |
@@ -572,30 +572,36 @@ than a test nobody wrote.** In six kinds, all listed with reasons in
 
 Writing a program per code asks the two compilers a question no oracle asks,
 for the same reason §A2 gives about flags: **every oracle compiles the programs
-that are checked in, and none of these programs was.** Fifty-eight of the 124
+that are checked in, and none of these programs was.** Forty-four of the 125
 cases do not get the same answer from both compilers, and they are in
 `tests/wordings/parser_refusals.txt` and `tests/wordings/stage1_divergence.txt`
-rather than in anybody's memory:
+rather than in anybody's memory. **Both counts are the ones
+`node tests/diagnostic_coverage.js --compiler build/nish --strict-refusals`
+prints at the end of its run**, and both have moved since this section was
+written — 58 of 124 then, 44 of 125 now — so re-derive them rather than quoting
+this paragraph:
 
-- **45 are declared and expected.** stage1's parser refuses the syntax by name
-  before the phase that owns the rule can state it — §A3's 602-row class. The
-  consequence is exact and is the reason the count is carried apart: **those 45
-  wordings do not survive R6.** They are stage0's, this corpus pins them while
-  stage0 lives, and after the deletion a user sees stage1's syntax error
-  instead, which `reject_oracle.js` already pins.
-- **13 are not declared anywhere, and seven of those are not about wording at
-  all.** stage1 *compiles* seven programs stage0 refuses: a `u64` and an `i64`
-  literal past 2^53 (it emits IR for the rounded value), `new Point<i32>()`
-  with its type arguments ignored, a `for...of` variable with an annotation,
-  one with an initializer, a `for...of` head with two declarators, and a
-  generic declaring the same type parameter twice. The first four are rules
-  `docs/LANGUAGE.md` states and the compiler that is going to survive does not
-  enforce, which is a checker gap rather than a wording one, and WP18's
-  `<T, T>` is a sixth of the same shape. The other six refuse the program with
-  a different sentence, and two of those sentences carry **no code at all** — stage1 says
-  ``Operator `++` requires a numeric operand`` and ``Unsupported statement `;` ``
-  where stage0 says the coded ones, so stage1's uncoded backlog is three where
-  stage0's is one.
+- **41 are declared and expected**, from 45 when the member-header family
+  closed (R3 in §5). stage1's parser refuses the syntax by name before the
+  phase that owns the rule can state it — §A3's 602-row class. The consequence
+  is exact and is the reason the count is carried apart: **those 41 wordings do
+  not survive R6.** They are stage0's, this corpus pins them while stage0
+  lives, and after the deletion a user sees stage1's syntax error instead,
+  which `reject_oracle.js` already pins.
+- **3 are not declared anywhere, and one of those is not about wording at
+  all**, from 13 when this was written. stage1 *compiles* one program stage0
+  refuses: WP18's `<T, T>`, a generic declaring the same type parameter twice,
+  which is a checker gap rather than a wording one. Ten of the thirteen closed
+  in the meantime — the two 2^53 literals, `new Point<i32>()`, the three
+  `for...of` head rules, `++` on a string, the void ternary and the two clash
+  wordings — each of them now the same sentence at the same column on both
+  sides with a `reject_*` case of its own. The other two refuse the program
+  with a different sentence, and both of those sentences carry **no code at
+  all** — stage1 says ``Unsupported statement `;` `` and ``Module
+  `./wordings_generic` has no exported function `identity` `` where stage0 says
+  the coded ones. That is what the tool's `uncoded=` count is measuring: six
+  for stage1 against four for stage0, where the four are the same
+  `tests/link/` messages on both sides.
 - One smaller thing, recorded here rather than in a list: stage0 prints a
   syntax error as a `--json` object on stdout and stage1 prints it only on
   stderr, and `--json` is not one of `--parity`'s fourteen variations. The
@@ -713,14 +719,16 @@ code that no program provokes fails the run until somebody writes the case or
 writes the reason.
 
 **State: item 4 is met.** The four goldens are in `tests/self/goldens/` with
-their numbers in §2B, and the wording half is closed — 325 of the 385 registry
-codes are provoked by a program that outlives stage0, and the other 60 are
+their numbers in §2B, and the wording half is closed — 334 of the 393 registry
+codes are provoked by a program that outlives stage0, and the other 59 are
 unreachable with a reason on file. What is left behind on purpose is named in
 §2B too: 41 wordings that are stage0's because stage1's parser refuses the
-syntax first, and 3 programs the two compilers do not answer the same way, two
+syntax first, and 3 programs the two compilers do not answer the same way, one
 of which stage1 compiles. Both lists are meant to shrink and both have: the
 wordings from 45, when the *member header* family closed (see R3 below), and
-the divergences from 13.
+the divergences from 13. Every number in this paragraph is one
+`node tests/diagnostic_coverage.js` prints — the registry grows, so read them
+from a run rather than from here.
 
 **Why it blocks.** This is the one everybody gets wrong. Deleting the seed is
 easy; noticing six months later that nothing checks the diagnostics is not.
@@ -939,7 +947,7 @@ gate nobody has opened is how a runtime budget dies.
 | --- | --- | --- |
 | **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) — though that claim was recorded once while it was not true, and §A5 is the correction and what it cost |
 | **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). Outstanding: the job runs on Linux only, and now for want of a darwin seed rather than a darwin runner — the two bash 3.2 defects that kept `macos-latest` out of the test matrix are fixed, so that row is one uncommented line whenever the suite is fast enough to pay for it. The seed itself has arrived — v0.1.1 is released with `nish-0.1.1-x86_64-linux.tar.gz` attached, and it is the first one, because v0.1.0 was tagged and never built (G3, G4) |
-| **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is now 0, with 325 codes provoked by `tests/wordings/` and the surviving negatives and 60 unreachable with a reason on file (§2B). The four survivors are repointed too: they build their stage1 binary with the seed through `tests/self/seed.js` and name no compiler of their own, and all four were watched green with `dist/` moved out of the tree. Both carried lists are shrinking rather than sitting. The wordings stage1's parser refuses before Phase 0 can state them are **41, from 45**: the member-header family — `x?: T`, `x!: T`, `m?()` and `static` — closed together, because stage1's parser records the marker or the modifier as a flag and the checker states the rule, which is the phase that knows whether the member is a field or a method and which class it is in. The remaining 41 go with stage0 at R6 unless the same trick reaches them. The programs the two compilers answer differently are **3, from 13**, and what is left is not more of the same: two are WP18's (a generic imported across modules, and `<T, T>`) and belong to that package rather than to this one, and the third is `;` as a statement, where agreeing would mean stage1 printing the `typescript` package's `EmptyStatement` — someone else's node names inside the self-hosted compiler, which is the trade `.claude/selfhost.md` turns down for `--emit-ast` and turns down here for the same reason |
+| **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is now 0, with 334 codes provoked by `tests/wordings/` and the surviving negatives and 59 unreachable with a reason on file (§2B). The four survivors are repointed too: they build their stage1 binary with the seed through `tests/self/seed.js` and name no compiler of their own, and all four were watched green with `dist/` moved out of the tree. Both carried lists are shrinking rather than sitting. The wordings stage1's parser refuses before Phase 0 can state them are **41, from 45**: the member-header family — `x?: T`, `x!: T`, `m?()` and `static` — closed together, because stage1's parser records the marker or the modifier as a flag and the checker states the rule, which is the phase that knows whether the member is a field or a method and which class it is in. The family is every member a header can sit on, the constructor included: ``static constructor()`` is ``Constructor of class `C`: `static` members are not supported`` on both sides (`tests/cases/reject_cls_ctor_static`), and it is in the register because a modifier the *parser* stops refusing has to reach a member the *checker* asks about, or the program is simply accepted — which `static constructor()` was, and ran, as the instance constructor, between the two halves of this change. Two limits are worth stating rather than discovering. The checker only gets the rule when the parser can finish reading the member, so `m?()` with no return type and `x? = 5` with no annotation are still stage1 syntax errors where stage0 names the optional member (`tests/cases/reject_cls_method_optional_untyped`, `reject_cls_field_optional_untyped`). And stage1 models `readonly` and `static` and no other modifier, so ``readonly m(): i32`` — ``Method `m` of class `C`: unsupported modifier `readonly` `` from stage0 — compiles under stage1, which predates these flags and is a rule nobody has written rather than a wording that disagrees. The remaining 41 go with stage0 at R6 unless the same trick reaches them. The programs the two compilers answer differently are **3, from 13** — one of which stage1 compiles — and what is left is not more of the same: two are WP18's (a generic imported across modules, and `<T, T>`) and belong to that package rather than to this one, and the third is `;` as a statement, where agreeing would mean stage1 printing the `typescript` package's `EmptyStatement` — someone else's node names inside the self-hosted compiler, which is the trade `.claude/selfhost.md` turns down for `--emit-ast` and turns down here for the same reason |
 | **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the package becoming an installer — which first needs a registry name, since `nish` is taken ([wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken)) — and the INSTALL.md/wp12 rewrite (G5) |
 | **R5** | Provenance | the re-verification procedure is written (G6); the `ddc-<version>` tag is cut at release time |
 | **R6** | The deletion | `src/`, the `typescript` runtime dependency, the six dead oracles, and every rule that names stage0 |
