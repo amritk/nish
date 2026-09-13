@@ -2702,6 +2702,87 @@ if (!only || "interop".includes(only)) {
     }
   }
 
+  // ---- WP24 A1: the asynchronous N-API shim ---------------------------------------
+  // `--emit-napi-async` is the same shim with a promise in front of every function it
+  // can run off the JS thread, so a long call no longer blocks Node's event loop. The
+  // Nish function is not touched: what changes is the C around it. Three things are
+  // checked here, and the third is the acceptance criterion `docs/wp24-async.md` §5.1
+  // states -- a program that does not ask for the flag gets the shim it always got.
+  const addAsync = emit(
+    "examples/add.ts",
+    ["--threads", "--emit-napi", sidecar("add_t", "napi.c"), "--emit-napi-async", sidecar("add_t", "napi_async.c")],
+    "add_t"
+  );
+  const asyncShim =
+    addAsync.status === 0 && fs.existsSync(sidecar("add_t", "napi_async.c"))
+      ? fs.readFileSync(sidecar("add_t", "napi_async.c"), "utf8")
+      : "";
+  check(
+    "add.napi_async.c queues the call on a libuv worker and answers a promise",
+    asyncShim.includes("static void nish_napi_execute_add(napi_env env, void *data) {") &&
+      asyncShim.includes("(void)env; /* a worker thread: no napi_value, no napi_* call, by N-API's rule */") &&
+      // The worker marks and releases its own thread-local arena, which the
+      // synchronous path does only when the boundary needed a scope.
+      asyncShim.includes("  uint64_t mark = nish_arena_mark();\n  w->result = add(w->a, w->b);\n  nish_arena_release(mark);") &&
+      asyncShim.includes("napi_create_promise(env, &w->deferred, &promise)") &&
+      // Queuing last, and a queue that fails rejects the promise rather than
+      // throwing past it: a deferred that is neither resolved nor rejected is a
+      // leak, and by this point the promise is already in the caller's hands.
+      asyncShim.includes("  if (napi_queue_async_work(env, w->work) != napi_ok) {\n    nish_napi_reject(") &&
+      asyncShim.includes("napi_resolve_deferred(env, w->deferred, out);"),
+    asyncShim.slice(0, 2000)
+  );
+  check(
+    "--emit-napi-async is refused without --threads: the worker allocates",
+    (() => {
+      const r = spawnSync("node", [cli, "examples/add.ts", "-o", sidecar("add_x", "ll"), "--emit-napi-async", sidecar("add_x", "napi_async.c")], { cwd: root });
+      return r.status === 2 && String(r.stderr).includes("--emit-napi-async needs --threads");
+    })(),
+    "expected exit 2 and the --threads message"
+  );
+  check(
+    "asking for the async shim leaves the synchronous one byte-identical",
+    fs.existsSync(sidecar("add", "napi.c")) &&
+      fs.existsSync(sidecar("add_t", "napi.c")) &&
+      fs.readFileSync(sidecar("add", "napi.c"), "utf8").replace(/add_t/g, "add") ===
+        fs.readFileSync(sidecar("add_t", "napi.c"), "utf8").replace(/add_t/g, "add"),
+    "the --emit-napi output moved when --emit-napi-async was asked for alongside it"
+  );
+  if (HAS_CLANG && hasNodeHeaders && fs.existsSync(sidecar("add_t", "napi_async.c"))) {
+    const r = spawnSync("clang", [...strictC, `-I${nodeInclude}`, "-fsyntax-only", sidecar("add_t", "napi_async.c")]);
+    check("add.napi_async.c compiles under -std=c11 -Wall -Wextra -Werror", r.status === 0, String(r.stderr));
+    const addon = path.join(interopDir, "add_async.node");
+    const b = spawnSync(
+      "bash",
+      ["scripts/build.sh", sidecar("add_t", "ll"), "runtime/runtime.c", sidecar("add_t", "napi_async.c"), "-o", addon, "--profile", "napi", "--threads"],
+      { cwd: root }
+    );
+    check("napi profile builds add_async.node with --threads", b.status === 0, String(b.stderr));
+    if (b.status === 0) {
+      // The point of the round trip: the JS side gets a *promise*, it resolves to
+      // what the synchronous shim returns, and a bad argument still throws on the
+      // spot rather than rejecting -- the promise does not exist yet at that point.
+      const script = [
+        'import { createRequire } from "node:module";',
+        `const addon = createRequire(import.meta.url)(${JSON.stringify(addon)});`,
+        "const p = addon.add(2, 3);",
+        "const isPromise = p instanceof Promise;",
+        "const value = await p;",
+        "let threw = \"\";",
+        'try { addon.add("2", 3); } catch (e) { threw = e.message; }',
+        // Concatenated rather than interpolated: this is a *string* holding a
+        // program, and a `${}` in one is what `noTemplateCurlyInString` is for.
+        'console.log(isPromise + " " + value + " " + threw);',
+      ].join("\n");
+      const run = spawnSync("node", ["--input-type=module", "-e", script], { cwd: root });
+      check(
+        "add_async.node answers a promise that resolves to 5, and still throws on a bad argument",
+        String(run.stdout).trim() === "true 5 add: argument 1 (a) must be a number",
+        String(run.stdout) + String(run.stderr)
+      );
+    }
+  }
+
   // ---- WP17: a `Result` across the host boundary ----------------------------------
   // WP16 skipped every function whose signature mentioned a `Result` and left a note.
   // Now: --emit-header declares both C shapes (the packed word a small `Result` travels

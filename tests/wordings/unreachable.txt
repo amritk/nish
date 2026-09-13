@@ -99,9 +99,12 @@ NL3003  the internal-error diagnostic carries the INTERNAL constant NL0003, not 
 NL3005  a line of the exit-70 report
 NL3007  a line of the exit-70 report
 NL3008  `unknown option:` is a usage error (exit 2), not a diagnostic
+NL3012  `--emit-napi-async needs --threads` is a usage error (exit 2), not a diagnostic; tests/run.js pins it
 NL4001  a comment in the C header `--emit-napi` writes
 NL4002  a comment in the C header `--emit-header` writes
 NL4003  an error string in the generated N-API shim
 NL4004  a sentence in the `--emit-dts` loader's marshalling report
 NL4005  an error string in the generated N-API shim
 NL4006  an error string in the generated N-API shim
+NL4007  an error string in the generated N-API shim (the async one, WP24 A1)
+NL4008  an error string in the generated N-API shim (the async one, WP24 A1)

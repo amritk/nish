@@ -402,6 +402,87 @@ asynchrony is entirely in generated C.
   after, and written down rather than asserted; a program that does not use
   the flag generates a byte-identical shim.
 
+#### 5.1a A1 as built
+
+**The flag.** `--emit-napi-async <shim.c>`, beside `--emit-napi` rather than a
+mode on it. A build that asks for both gets both, and a build that asks for
+neither gets the file it always got — which is the third acceptance condition,
+satisfied by construction and checked anyway (`tests/run.js`: "asking for the
+async shim leaves the synchronous one byte-identical").
+
+**It requires `--threads`, and is refused without it.** The worker allocates,
+and without T0 there is one process-wide arena whose bump is *inlined into the
+IR* (§4.4, [wp20](wp20-threads.md) §3.1) — so this would be a data race in the
+emitted code, not merely in the runtime, and no amount of care in the generated
+C could repair it. Exit 2, and a message that says which flag is missing.
+
+**Which functions.** A function runs on a libuv worker exactly when neither its
+arguments nor its result touch the arena or borrow JS memory — the `scoped` flag
+the synchronous path already computes. Two separate rules turn out to select the
+same set: an `napi_value` belongs to the thread that owns it, so a typed array
+borrowed from JS cannot be read by a worker; and the arena is thread-local, so a
+`nish_str` the worker allocated cannot be boxed by the JS thread that resolves
+the promise. Everything else stays synchronous and the shim says so above it —
+`/* Synchronous in this shim: it returns string, which the arena owns. */` —
+because an omission a reader cannot see is how a gap lives for a release.
+
+**The worker marks and releases its own arena** around the call, whether or not
+the *boundary* needed a scope, which the synchronous path does not do. It has
+to: a function that allocates internally allocates in the worker's own
+thread-local arena, and no `nish_reset_arena` from the JS thread can ever reach
+it.
+
+**Two workers may run at once, and that is sound rather than lucky.** libuv's
+pool is four threads by default, so two queued calls can be in a Nish function
+at the same time. What makes that safe is a property of the language rather than
+of this shim: **there is no mutable global state to race over.** A module
+constant is a number, a boolean or a string (`docs/LANGUAGE.md`), string
+literals are read-only globals, and the two pieces of per-process mutable state
+the runtime does have — the arena and the random seed — are exactly what T0 made
+thread-local. The one visible consequence left is interleaving: two workers each
+calling `console.log` write to the same file descriptor, and neither this shim
+nor the runtime orders them.
+
+**A bad argument still throws rather than rejecting.** Conversion happens on the
+JS thread, before the promise exists, and a `TypeError` on a wrong argument type
+is the same programming mistake in both shims. Making it a rejection would mean
+the two shims disagree about what a bad call does.
+
+**The measurement.** `examples/add.ts` is too fast to say anything, so the
+numbers below are from a function that spins for about a second — the shape §5.1
+is about. One call; a 5 ms interval measuring how late it is actually served; the
+same Nish function and the same `--threads` build behind both shims:
+
+| Shim | Wall clock | 5 ms ticks served during the call | Longest the event loop went unserved |
+| --- | ---: | ---: | ---: |
+| `--emit-napi` | 1030 ms | **0** | **1024.7 ms** |
+| `--emit-napi-async` | 1030 ms | 201 | **0.5 ms** |
+
+How to get the numbers again: a function that loops
+(`export const spin = (rounds: i32): i32 => { ... }`), compiled twice from the
+same source —
+
+```bash
+nish spin.ts --threads -o build/ --emit-napi build/sync.c --emit-napi-async build/async.c
+scripts/build.sh build/spin.ll runtime/runtime.c build/sync.c  -o build/sync.node  --profile napi --threads
+scripts/build.sh build/spin.ll runtime/runtime.c build/async.c -o build/async.node --profile napi --threads
+```
+
+— and a host that starts a 5 ms `setInterval`, makes one call, and reports the
+longest gap between two ticks.
+
+Same answer, same wall clock, and the loop goes from *completely unavailable for
+the duration* to half a millisecond. That is the whole of what A1 buys, and it is
+worth being precise about what it does not buy: nothing is faster, and nothing
+about the Nish function changed. The call moved off the thread Node needs.
+
+**What it cost.** The shim generator on both sides (`src/interop/napi.ts`,
+`self/interop_napi.ts`), one flag on both drivers, and nothing else — no runtime
+byte, no language rule, no `docs/LANGUAGE.md` line.
+`tests/self/interop_oracle.js` compares the async shim byte for byte between the
+two compilers over the whole interop corpus, which is how this is held to the
+same standard as every other sidecar.
+
 ### 5.2 Threads, for everything async is usually reached for
 
 Overlapping `spawnSync` waits, parallelism across cores, a long computation

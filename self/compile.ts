@@ -22,7 +22,8 @@
 // so what was missing was the driver printing them. `--no-warn-performance`
 // silences them, as it does on the other side.
 //
-// `--emit-header`, `--emit-dts` and `--emit-napi` write the WP8 sidecars
+// `--emit-header`, `--emit-dts`, `--emit-napi` and `--emit-napi-async` write
+// the WP8 sidecars
 // beside the IR, spelled and placed exactly as stage0 spells and places them
 // (`tests/self/interop_oracle.js` compares every byte), each into a directory
 // made the way the IR's is.
@@ -62,7 +63,7 @@ import { codeFor, TOOLCHAIN } from "./codes";
 import { resolveTarget, supportedTargets } from "./target";
 
 const USAGE: string =
-  "usage: compile <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile -v, --version | -h, --help";
+  "usage: compile <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>]\n       compile -v, --version | -h, --help";
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -339,6 +340,13 @@ export function main(): number {
         return 2;
       }
       opts.emitNapi = process.argv[arg];
+    } else if (value === "--emit-napi-async") {
+      arg = arg + 1;
+      if (arg >= process.argv.length) {
+        console.error("compile: --emit-napi-async needs a file");
+        return 2;
+      }
+      opts.emitNapiAsync = process.argv[arg];
     } else if (value === "--plain") {
       opts.optimizeAttributes = false;
     } else if (value === "--strict-exports") {
@@ -393,6 +401,18 @@ export function main(): number {
   }
   if (roots.length === 0) {
     console.error(USAGE);
+    return 2;
+  }
+  // WP24 A1. The worker allocates, and without `--threads` there is one
+  // process-wide arena whose bump is inlined into the IR (WP20 §3.1) — so this
+  // is a data race in the *emitted code*, not merely in the runtime, and no
+  // amount of care in the generated C can repair it. Refused here rather than
+  // documented, because a shim that races is worse than a shim that was not
+  // written.
+  if (opts.emitNapiAsync.length > 0 && !opts.threads) {
+    console.error(
+      `--emit-napi-async needs --threads: the worker thread allocates, and without it every thread shares one arena\n${USAGE}`
+    );
     return 2;
   }
 
@@ -602,7 +622,12 @@ function linkProgram(
  */
 function writeSidecars(compilation: Compilation): boolean {
   const opts = compilation.opts;
-  if (opts.emitHeader.length === 0 && opts.emitDts.length === 0 && opts.emitNapi.length === 0) {
+  if (
+    opts.emitHeader.length === 0 &&
+    opts.emitDts.length === 0 &&
+    opts.emitNapi.length === 0 &&
+    opts.emitNapiAsync.length === 0
+  ) {
     return true;
   }
   const fns = externalFunctions(compilation);
@@ -623,11 +648,18 @@ function writeSidecars(compilation: Compilation): boolean {
     writeFileSync(loader, generateWasmLoader(compilation, fns, opts.emitDts));
     console.error(`wrote ${loader}`);
   }
+  if (opts.emitNapiAsync.length > 0) {
+    if (!makeDirectoryFor(opts.emitNapiAsync)) {
+      return false;
+    }
+    writeFileSync(opts.emitNapiAsync, generateNapiShim(compilation, fns, true));
+    console.error(`wrote ${opts.emitNapiAsync}`);
+  }
   if (opts.emitNapi.length > 0) {
     if (!makeDirectoryFor(opts.emitNapi)) {
       return false;
     }
-    writeFileSync(opts.emitNapi, generateNapiShim(compilation, fns));
+    writeFileSync(opts.emitNapi, generateNapiShim(compilation, fns, false));
     console.error(`wrote ${opts.emitNapi}`);
   }
   return true;

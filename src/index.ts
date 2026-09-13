@@ -123,6 +123,9 @@ const usageText = (): string =>
     "  --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports, plus",
     "                             <file>.mjs, a loader that marshals typed arrays",
     "  --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)",
+    "  --emit-napi-async <shim.c> the same shim, but a function that touches neither the arena",
+    "                             nor a borrowed typed array runs on a libuv worker and answers",
+    "                             a promise; needs --threads (WP24 A1)",
     "  --unchecked-indexing       drop array bounds checks (unsafe; for benchmarks)",
     "  --target <triple>|host     emit `target datalayout`/`target triple` for that machine",
     `                             (${SUPPORTED_TARGETS.join(", ")}); default: target-neutral IR`,
@@ -214,6 +217,7 @@ function main(argv: string[]): number {
   let emitHeader: string | undefined;
   let emitDts: string | undefined;
   let emitNapi: string | undefined;
+  let emitNapiAsync: string | undefined;
   let uncheckedIndexing = false;
   let target: string | undefined; // WP9: canonical triple, validated below
   let nsw = true;
@@ -246,6 +250,9 @@ function main(argv: string[]): number {
     } else if (arg === "--emit-napi") {
       emitNapi = argv[++i];
       if (!emitNapi) usage();
+    } else if (arg === "--emit-napi-async") {
+      emitNapiAsync = argv[++i];
+      if (!emitNapiAsync) usage();
     } else if (arg === "--link") {
       link = argv[++i];
       if (!link) usage();
@@ -316,6 +323,17 @@ function main(argv: string[]): number {
     }
   }
   if (inputs.length === 0) usage();
+  // WP24 A1. The worker allocates, and without `--threads` there is one process-
+  // wide arena whose bump is inlined into the IR (WP20 §3.1) — so this is a data
+  // race in the *emitted code*, not merely in the runtime, and no amount of care
+  // in the generated C can repair it. Refused here rather than documented,
+  // because a shim that races is worse than a shim that was not written.
+  if (emitNapiAsync !== undefined && !threads) {
+    console.error(
+      "--emit-napi-async needs --threads: the worker thread allocates, and without it every thread shares one arena"
+    );
+    usage();
+  }
 
   let modules: EmittedModule[];
   let outputs: string[];
@@ -406,6 +424,7 @@ function main(argv: string[]): number {
     // The `.d.ts` declares `load()`; the `.mjs` next to it implements it (array marshalling included).
     [emitDts && wasmLoaderPath(emitDts), () => generateWasmLoader(compilation, emitDts!)],
     [emitNapi, () => generateNapiShim(compilation)],
+    [emitNapiAsync, () => generateNapiShim(compilation, true)],
   ];
   for (const [file, generate] of sidecars) {
     if (file === undefined) continue;
@@ -449,7 +468,7 @@ function main(argv: string[]): number {
  * show the stack only on request so users are not buried in frames.
  */
 function reportInternalError(err: unknown, argv: string[]): number {
-  const takesValue = /^(-o|--output|--link|--profile|--number-mode|--emit-header|--emit-dts|--emit-napi|--target)$/;
+  const takesValue = /^(-o|--output|--link|--profile|--number-mode|--emit-header|--emit-dts|--emit-napi|--emit-napi-async|--target)$/;
   const inputs = argv.filter((a, i) => !a.startsWith("-") && !takesValue.test(argv[i - 1] ?? ""));
   const where = inputs.length > 0 ? ` while compiling ${inputs.join(", ")}` : "";
   const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);

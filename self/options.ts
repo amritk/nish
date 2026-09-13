@@ -72,6 +72,13 @@ export class Options {
   emitDts: string;
   emitNapi: string;
   /**
+   * `--emit-napi-async <file.c>`: the same shim with a promise in front of
+   * every function the shim can run off the JS thread (WP24 A1). Separate from
+   * `emitNapi` rather than a mode on it, so that a build asking for both gets
+   * both and a build asking for neither is byte for byte what it was.
+   */
+  emitNapiAsync: string;
+  /**
    * The directory holding `scripts/`, `runtime/` and `std/`, as the driver
    * worked it out from `argv[0]`. It is here rather than derived where it is
    * needed because `process.argv` is legal only in a program that has an entry
@@ -96,6 +103,7 @@ export class Options {
     this.emitHeader = "";
     this.emitDts = "";
     this.emitNapi = "";
+    this.emitNapiAsync = "";
     this.packageRoot = "";
   }
 }

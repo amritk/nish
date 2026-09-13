@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 63 programs, 363013 dump lines live, 63 distinct modules.
+# 63 programs, 363222 dump lines live, 63 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/builtins.ts self/expressions.ts self/generics.ts self/declarations.ts self/result.ts self/structs.ts self/members.ts self/emit_util.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
@@ -5667,7 +5667,7 @@ function FactCollector.constructor(this: FactCollector, unit: AnalysisUnit, tabl
   pointer this: size=40 writesThrough=true captured=false
   pointer unit: size=16 writesThrough=true captured=true
   pointer table: size=56 writesThrough=true captured=true
-  pointer opts: size=64 writesThrough=true captured=true
+  pointer opts: size=72 writesThrough=true captured=true
   pointer sig: size=88 writesThrough=true captured=true
   pointer facts: size=104 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -5889,7 +5889,7 @@ function collectFacts(unit: AnalysisUnit, table: TypeTable, opts: Options, sig: 
   calls: FactCollector.constructor FactCollector.visit FunctionFacts.constructor FunctionSig.body FunctionSig.foreign PointerParamFacts.constructor TypeTable.stripNull isPointerParam maxEffect nish_alloc_struct nish_array_grow nish_panic_index pointerAlign structSize
   pointer unit: size=16 writesThrough=true captured=true passedTo=FactCollector.constructor#1
   pointer table: size=56 writesThrough=true captured=true passedTo=structSize#1 pointerAlign#1 isPointerParam#0 structSize#1 TypeTable.stripNull#0 pointerAlign#1 FactCollector.constructor#2
-  pointer opts: size=64 writesThrough=true captured=true passedTo=FactCollector.constructor#3
+  pointer opts: size=72 writesThrough=true captured=true passedTo=FactCollector.constructor#3
   pointer sig: size=88 writesThrough=true captured=true passedTo=FunctionSig.foreign#0 FactCollector.constructor#4 FunctionSig.body#0
   pointer memory: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
@@ -5917,7 +5917,7 @@ function analyzeFunctions(units: AnalysisUnit[], table: TypeTable, opts: Options
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance EscapeSet.constructor EscapeSet.set FunctionSig.definedIn StringSet.add analyzeEscapes collectRound propagate
   pointer units: size=0 writesThrough=false captured=false passedTo=collectRound#0 collectRound#0
   pointer table: size=56 writesThrough=true captured=true passedTo=collectRound#1 analyzeEscapes#1 collectRound#1
-  pointer opts: size=64 writesThrough=true captured=true passedTo=collectRound#2 analyzeEscapes#4 collectRound#2
+  pointer opts: size=72 writesThrough=true captured=true passedTo=collectRound#2 analyzeEscapes#4 collectRound#2
   pointer runtime: size=16 writesThrough=false captured=false passedTo=propagate#1 propagate#1
   stackSites=1 stackLocals=1
   local 1210:9 first: FactsTable (const)
@@ -5966,7 +5966,7 @@ function collectRound(units: AnalysisUnit[], table: TypeTable, opts: Options, es
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance EscapeSet.get FactsTable.constructor FactsTable.set FunctionSig.definedIn collectFacts nish_alloc_struct
   pointer units: size=0 writesThrough=false captured=false
   pointer table: size=56 writesThrough=true captured=true passedTo=collectFacts#1
-  pointer opts: size=64 writesThrough=true captured=true passedTo=collectFacts#2
+  pointer opts: size=72 writesThrough=true captured=true passedTo=collectFacts#2
   pointer escapes: size=16 writesThrough=false captured=false passedTo=EscapeSet.get#0
   stackSites=0 stackLocals=0
   local 1271:9 facts: FactsTable (const)
@@ -6775,7 +6775,7 @@ function Emitter.constructor(this: Emitter, unit: AnalysisUnit, table: TypeTable
   pointer this: size=144 writesThrough=true captured=false
   pointer unit: size=16 writesThrough=false captured=false
   pointer table: size=56 writesThrough=true captured=true passedTo=DebugInfo.constructor#3
-  pointer opts: size=64 writesThrough=true captured=true
+  pointer opts: size=72 writesThrough=true captured=true
   pointer runtime: size=16 writesThrough=true captured=true
   pointer facts: size=16 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -7368,7 +7368,7 @@ function emitProgram(unit: AnalysisUnit, table: TypeTable, opts: Options, runtim
   calls: Emitter.constructor Emitter.emitModule
   pointer unit: size=16 writesThrough=false captured=false passedTo=Emitter.constructor#1
   pointer table: size=56 writesThrough=true captured=true passedTo=Emitter.constructor#2
-  pointer opts: size=64 writesThrough=true captured=true passedTo=Emitter.constructor#3
+  pointer opts: size=72 writesThrough=true captured=true passedTo=Emitter.constructor#3
   pointer runtime: size=16 writesThrough=true captured=true passedTo=Emitter.constructor#4
   pointer facts: size=16 writesThrough=true captured=true passedTo=Emitter.constructor#5
   stackSites=1 stackLocals=1
@@ -8224,7 +8224,7 @@ function EscapeAnalysis.constructor(this: EscapeAnalysis, unit: AnalysisUnit, ta
   pointer unit: size=16 writesThrough=true captured=true
   pointer table: size=56 writesThrough=true captured=true
   pointer facts: size=16 writesThrough=true captured=true
-  pointer opts: size=64 writesThrough=true captured=true
+  pointer opts: size=72 writesThrough=true captured=true
   pointer sig: size=88 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee 236:19 new EscapeResult -> @EscapeResult.constructor
@@ -8537,7 +8537,7 @@ function analyzeEscapes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, 
   pointer table: size=56 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#2 TypeTable.resultByValue#0
   pointer sig: size=88 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#6 FunctionSig.body#0
   pointer facts: size=16 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#3
-  pointer opts: size=64 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#4
+  pointer opts: size=72 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#4
   stackSites=1 stackLocals=1
   local 810:9 analysis: EscapeAnalysis (const)
   callee 810:20 new EscapeAnalysis -> @EscapeAnalysis.constructor
@@ -11868,7 +11868,7 @@ function inlineAllocator(attrGroup: string): string -> @inlineAllocator [exporte
   local 515:9 lines: string[] (const)
 module self/options.ts
 import NUMBER_MODE_I32 from "./context" -> const NUMBER_MODE_I32
-struct Options (class) size=64 align=8 exported
+struct Options (class) size=72 align=8 exported
   field numberMode: i32 index=0 offset=0
   field optimizeAttributes: boolean index=1 offset=4
   field runtimeDecls: boolean index=2 offset=5
@@ -11882,11 +11882,12 @@ struct Options (class) size=64 align=8 exported
   field emitHeader: string index=10 offset=32
   field emitDts: string index=11 offset=40
   field emitNapi: string index=12 offset=48
-  field packageRoot: string index=13 offset=56
+  field emitNapiAsync: string index=13 offset=56
+  field packageRoot: string index=14 offset=64
   constructor -> @Options.constructor
 function Options.constructor(this: Options): void -> @Options.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
-  pointer this: size=64 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 module self/target.ts
 const X86_64_LINUX_LAYOUT: string = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
@@ -14079,7 +14080,7 @@ function Compilation.constructor(this: Compilation, opts: Options): void -> @Com
   escaping: opts
   calls: DiagnosticSink.constructor RuntimeTable.constructor StringMap.constructor TypeTable.constructor nish_alloc_struct
   pointer this: size=88 writesThrough=true captured=false
-  pointer opts: size=64 writesThrough=true captured=true
+  pointer opts: size=72 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee 151:18 new TypeTable -> @TypeTable.constructor
   callee 152:17 new DiagnosticSink -> @DiagnosticSink.constructor
@@ -16566,7 +16567,7 @@ import codeFor from "./codes" -> function @codeFor
 import TOOLCHAIN from "./codes" -> const TOOLCHAIN
 import resolveTarget from "./target" -> function @resolveTarget
 import supportedTargets from "./target" -> function @supportedTargets
-const USAGE: string = "usage: compile <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile -v, --version | -h, --help"
+const USAGE: string = "usage: compile <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>]\n       compile -v, --version | -h, --help"
 const PROFILE_NAMES: string = "speed, size, debug, wasi"
 function isProfile(name: string): boolean -> @isProfile
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
@@ -16577,17 +16578,17 @@ function makeDirectory(dir: string): boolean -> @makeDirectory
   escaping: dir
   calls: dirname makeDirectory nish_mkdir nish_str_eq
   stackSites=0 stackLocals=0
-  local 91:9 parent: string (const)
-  callee 91:18 dirname -> @dirname
-  callee 92:26 makeDirectory -> @makeDirectory
+  local 92:9 parent: string (const)
+  callee 92:18 dirname -> @dirname
+  callee 93:26 makeDirectory -> @makeDirectory
 function makeDirectoryFor(file: string): boolean -> @makeDirectoryFor
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: file
   calls: dirname makeDirectory nish_str_concat nish_write
   stackSites=0 stackLocals=0
-  local 100:9 dir: string (const)
-  callee 100:15 dirname -> @dirname
-  callee 101:7 makeDirectory -> @makeDirectory
+  local 101:9 dir: string (const)
+  callee 101:15 dirname -> @dirname
+  callee 102:7 makeDirectory -> @makeDirectory
 function planOutputs(stems: string[], paths: string[], output: string, link: string): string[] -> @planOutputs
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: output
@@ -16595,142 +16596,144 @@ function planOutputs(stems: string[], paths: string[], output: string, link: str
   pointer stems: size=0 writesThrough=false captured=false passedTo=perModule#0 perModule#0 perModule#0
   pointer paths: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 129:9 out: string[] (const)
-  callee 132:14 perModule -> @perModule
-  callee 135:14 perModule -> @perModule
-  callee 152:12 perModule -> @perModule
-  local 154:14 path: string (const)
+  local 130:9 out: string[] (const)
+  callee 133:14 perModule -> @perModule
+  callee 136:14 perModule -> @perModule
+  callee 153:12 perModule -> @perModule
+  local 155:14 path: string (const)
 function perModule(stems: string[], dir: string): string[] -> @perModule
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_array_grow nish_str_concat
   pointer stems: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 161:9 out: string[] (const)
-  local 162:14 stem: string (const)
+  local 162:9 out: string[] (const)
+  local 163:14 stem: string (const)
 function report(compilation: Compilation, json: boolean): void -> @report
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Diagnostic.json DiagnosticSink.format DiagnosticSink.sorted nish_print nish_str_concat nish_write
   pointer compilation: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 176:19 DiagnosticSink.format -> @DiagnosticSink.format
-  local 179:14 diagnostic: Diagnostic (const)
-  callee 179:28 DiagnosticSink.sorted -> @DiagnosticSink.sorted
-  callee 180:17 Diagnostic.json -> @Diagnostic.json
+  callee 177:19 DiagnosticSink.format -> @DiagnosticSink.format
+  local 180:14 diagnostic: Diagnostic (const)
+  callee 180:28 DiagnosticSink.sorted -> @DiagnosticSink.sorted
+  callee 181:17 Diagnostic.json -> @Diagnostic.json
 function reportPerformance(compilation: Compilation, enabled: boolean, json: boolean): void -> @reportPerformance
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Diagnostic.json DiagnosticSink.formatWarnings nish_print nish_str_concat nish_write
   pointer compilation: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 203:16 warning: Diagnostic (const)
-  callee 204:19 Diagnostic.json -> @Diagnostic.json
-  callee 208:17 DiagnosticSink.formatWarnings -> @DiagnosticSink.formatWarnings
+  local 204:16 warning: Diagnostic (const)
+  callee 205:19 Diagnostic.json -> @Diagnostic.json
+  callee 209:17 DiagnosticSink.formatWarnings -> @DiagnosticSink.formatWarnings
 function reportRootFailure(message: string, json: boolean): void -> @reportRootFailure
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: message
   calls: codeFor jsonQuote nish_print nish_str_concat nish_write
   stackSites=0 stackLocals=0
-  callee 219:48 codeFor -> @codeFor
-  callee 219:88 jsonQuote -> @jsonQuote
+  callee 220:48 codeFor -> @codeFor
+  callee 220:88 jsonQuote -> @jsonQuote
 function reportToolchainFailure(message: string, json: boolean): void -> @reportToolchainFailure
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: message
   calls: jsonQuote nish_print nish_str_concat nish_write
   stackSites=0 stackLocals=0
-  callee 233:72 jsonQuote -> @jsonQuote
+  callee 234:72 jsonQuote -> @jsonQuote
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.load DiagnosticSink.hasErrors Options.constructor astText checkedText isProfile linkProgram makeDirectoryFor nish_alloc_struct nish_array_grow nish_panic_index nish_print nish_str_at nish_str_concat nish_str_eq nish_write nish_write_file packageRoot planOutputs report reportPerformance reportRootFailure resolveTarget supportedTargets writeSidecars
   stackSites=4 stackLocals=4
-  local 244:9 opts: Options (const)
-  callee 244:16 new Options -> @Options.constructor
-  callee 247:22 packageRoot -> @packageRoot
-  local 248:9 roots: string[] (const)
-  local 249:7 output: string (let)
-  local 250:7 link: string (let)
-  local 251:7 profile: string (let)
-  local 252:7 json: boolean (let)
-  local 253:7 emitChecked: boolean (let)
-  local 254:7 emitAst: boolean (let)
-  local 257:7 warnPerformance: boolean (let)
-  local 258:7 arg: i32 (let)
-  local 260:11 value: string (const)
-  local 267:13 mode: string (const)
-  callee 297:12 isProfile -> @isProfile
-  local 309:13 spec: string (const)
-  local 310:13 resolved: Target | null (const)
-  callee 310:24 resolveTarget -> @resolveTarget
-  callee 313:72 supportedTargets -> @supportedTargets
-  local 399:9 compilation: Compilation (const)
-  callee 399:23 new Compilation -> @Compilation.constructor
-  local 403:7 loaded: boolean (let)
-  local 404:14 root: string (const)
-  callee 405:10 Compilation.load -> @Compilation.load
-  callee 416:7 reportRootFailure -> @reportRootFailure
-  callee 417:16 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee 418:7 report -> @report
-  local 435:16 unit: ModuleUnit (const)
-  callee 436:13 astText -> @astText
-  callee 440:8 Compilation.check -> @Compilation.check
-  callee 441:5 report -> @report
-  callee 444:3 reportPerformance -> @reportPerformance
-  callee 448:11 checkedText -> @checkedText
-  callee 454:26 Compilation.entry -> @Compilation.entry
-  callee 456:35 Compilation.entry -> @Compilation.entry
-  local 460:9 emitted: EmittedModule[] (const)
-  callee 460:19 Compilation.emit -> @Compilation.emit
-  local 461:9 stems: string[] (const)
-  local 462:9 paths: string[] (const)
-  local 463:14 module: EmittedModule (const)
-  local 466:14 unit: ModuleUnit (const)
-  local 469:9 outputs: string[] (const)
-  callee 469:19 planOutputs -> @planOutputs
-  local 474:7 i: i32 (let)
-  local 476:11 file: string (const)
-  callee 477:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 486:8 writeSidecars -> @writeSidecars
-  callee 492:10 linkProgram -> @linkProgram
+  local 245:9 opts: Options (const)
+  callee 245:16 new Options -> @Options.constructor
+  callee 248:22 packageRoot -> @packageRoot
+  local 249:9 roots: string[] (const)
+  local 250:7 output: string (let)
+  local 251:7 link: string (let)
+  local 252:7 profile: string (let)
+  local 253:7 json: boolean (let)
+  local 254:7 emitChecked: boolean (let)
+  local 255:7 emitAst: boolean (let)
+  local 258:7 warnPerformance: boolean (let)
+  local 259:7 arg: i32 (let)
+  local 261:11 value: string (const)
+  local 268:13 mode: string (const)
+  callee 298:12 isProfile -> @isProfile
+  local 310:13 spec: string (const)
+  local 311:13 resolved: Target | null (const)
+  callee 311:24 resolveTarget -> @resolveTarget
+  callee 314:72 supportedTargets -> @supportedTargets
+  local 419:9 compilation: Compilation (const)
+  callee 419:23 new Compilation -> @Compilation.constructor
+  local 423:7 loaded: boolean (let)
+  local 424:14 root: string (const)
+  callee 425:10 Compilation.load -> @Compilation.load
+  callee 436:7 reportRootFailure -> @reportRootFailure
+  callee 437:16 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee 438:7 report -> @report
+  local 455:16 unit: ModuleUnit (const)
+  callee 456:13 astText -> @astText
+  callee 460:8 Compilation.check -> @Compilation.check
+  callee 461:5 report -> @report
+  callee 464:3 reportPerformance -> @reportPerformance
+  callee 468:11 checkedText -> @checkedText
+  callee 474:26 Compilation.entry -> @Compilation.entry
+  callee 476:35 Compilation.entry -> @Compilation.entry
+  local 480:9 emitted: EmittedModule[] (const)
+  callee 480:19 Compilation.emit -> @Compilation.emit
+  local 481:9 stems: string[] (const)
+  local 482:9 paths: string[] (const)
+  local 483:14 module: EmittedModule (const)
+  local 486:14 unit: ModuleUnit (const)
+  local 489:9 outputs: string[] (const)
+  callee 489:19 planOutputs -> @planOutputs
+  local 494:7 i: i32 (let)
+  local 496:11 file: string (const)
+  callee 497:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 506:8 writeSidecars -> @writeSidecars
+  callee 512:10 linkProgram -> @linkProgram
 function packageRoot(): string -> @packageRoot
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: dirname nish_panic_index nish_read_file_or_null nish_str_concat
   stackSites=1 stackLocals=1
-  local 509:9 candidates: string[] (const)
-  callee 509:36 dirname -> @dirname
-  local 510:14 root: string (const)
+  local 529:9 candidates: string[] (const)
+  callee 529:36 dirname -> @dirname
+  local 530:14 root: string (const)
 function linkProgram(outputs: string[], link: string, profile: string, debugInfo: boolean, threads: boolean, json: boolean): i32 -> @linkProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: json link profile
   calls: dirname makeDirectoryFor nish_alloc_struct nish_array_grow nish_panic_index nish_read_file_or_null nish_spawn nish_str_concat nish_str_from_i32 nish_write packageRoot reportToolchainFailure
   pointer outputs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 538:9 root: string (const)
-  callee 538:16 packageRoot -> @packageRoot
-  callee 540:5 reportToolchainFailure -> @reportToolchainFailure
-  callee 541:58 dirname -> @dirname
-  callee 546:8 makeDirectoryFor -> @makeDirectoryFor
-  local 549:9 script: string (const)
-  local 553:9 argv: string[] (const)
-  local 560:14 file: string (const)
-  local 580:9 status: i32 (const)
-  local 582:11 why: string (const)
-  callee 583:5 reportToolchainFailure -> @reportToolchainFailure
-  local 586:9 binary: string | null (const)
+  local 558:9 root: string (const)
+  callee 558:16 packageRoot -> @packageRoot
+  callee 560:5 reportToolchainFailure -> @reportToolchainFailure
+  callee 561:58 dirname -> @dirname
+  callee 566:8 makeDirectoryFor -> @makeDirectoryFor
+  local 569:9 script: string (const)
+  local 573:9 argv: string[] (const)
+  local 580:14 file: string (const)
+  local 600:9 status: i32 (const)
+  local 602:11 why: string (const)
+  callee 603:5 reportToolchainFailure -> @reportToolchainFailure
+  local 606:9 binary: string | null (const)
 function writeSidecars(compilation: Compilation): boolean -> @writeSidecars
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: externalFunctions generateDts generateHeader generateNapiShim generateWasmLoader makeDirectoryFor nish_str_concat nish_write nish_write_file wasmLoaderPath
-  pointer compilation: size=88 writesThrough=false captured=false passedTo=externalFunctions#0 generateHeader#0 generateDts#0 generateWasmLoader#0 generateNapiShim#0
+  pointer compilation: size=88 writesThrough=false captured=false passedTo=externalFunctions#0 generateHeader#0 generateDts#0 generateWasmLoader#0 generateNapiShim#0 generateNapiShim#0
   stackSites=0 stackLocals=0
-  local 604:9 opts: Options (const)
-  local 608:9 fns: ExternalFunction[] (const)
-  callee 608:15 externalFunctions -> @externalFunctions
-  callee 610:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 613:36 generateHeader -> @generateHeader
-  callee 617:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 620:33 generateDts -> @generateDts
-  local 622:11 loader: string (const)
-  callee 622:20 wasmLoaderPath -> @wasmLoaderPath
-  callee 623:27 generateWasmLoader -> @generateWasmLoader
-  callee 627:10 makeDirectoryFor -> @makeDirectoryFor
-  callee 630:34 generateNapiShim -> @generateNapiShim
+  local 624:9 opts: Options (const)
+  local 633:9 fns: ExternalFunction[] (const)
+  callee 633:15 externalFunctions -> @externalFunctions
+  callee 635:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 638:36 generateHeader -> @generateHeader
+  callee 642:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 645:33 generateDts -> @generateDts
+  local 647:11 loader: string (const)
+  callee 647:20 wasmLoaderPath -> @wasmLoaderPath
+  callee 648:27 generateWasmLoader -> @generateWasmLoader
+  callee 652:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 655:39 generateNapiShim -> @generateNapiShim
+  callee 659:10 makeDirectoryFor -> @makeDirectoryFor
+  callee 662:34 generateNapiShim -> @generateNapiShim
 module self/dump.ts
 import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
@@ -17847,6 +17850,9 @@ const READ_STRING: i32 = 1
 const READ_RESULT: i32 = 2
 const READ_VIEW: i32 = 3
 const F32_HELPER: string = "nish_napi_f32"
+const FAIL_PLAIN: i32 = 0
+const FAIL_SCOPED: i32 = 1
+const FAIL_FREE: i32 = 2
 const BOX_SCALAR: i32 = 0
 const BOX_STRING: i32 = 1
 const BOX_VIEW: i32 = 2
@@ -17985,47 +17991,47 @@ function napiResultReader(table: TypeTable, t: i32): Reader | null -> @napiResul
   callee 325:14 cResultWord -> @cResultWord
   callee 329:17 TypeTable.kindOf -> @TypeTable.kindOf
   callee 329:47 TypeTable.kindOf -> @TypeTable.kindOf
-function napiFailCall(scoped: boolean, message: string): string -> @napiFailCall
+function napiFailCall(mode: i32, message: string): string -> @napiFailCall
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-function napiReaderLines(r: Reader, c: string, i: i32, what: string, scoped: boolean): string[] -> @napiReaderLines
+function napiReaderLines(r: Reader, c: string, i: i32, what: string, fail: i32): string[] -> @napiReaderLines
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  escaping: c scoped
+  escaping: c fail
   calls: internalError napiFailCall napiScalarGet nish_array_grow nish_exit nish_str_concat nish_str_from_i32 withArticle
   pointer r: size=72 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 343:9 lines: string[] (const)
-  local 346:13 scalar: ScalarReader | null (const)
-  callee 348:22 internalError -> @internalError
-  local 352:13 narrows: boolean (const)
-  local 353:13 dest: string (const)
-  callee 356:30 napiFailCall -> @napiFailCall
-  callee 357:25 napiScalarGet -> @napiScalarGet
-  callee 358:30 napiFailCall -> @napiFailCall
-  callee 367:30 napiFailCall -> @napiFailCall
-  callee 369:30 napiFailCall -> @napiFailCall
-  local 373:13 shape: string (const)
-  local 374:13 errScalar: ScalarReader | null (const)
-  callee 376:22 internalError -> @internalError
-  local 380:13 okScalar: ScalarReader | null (const)
-  local 381:11 readOk: string (let)
-  local 382:11 okTemp: string (let)
-  local 383:11 okAssign: string (let)
-  callee 386:20 napiScalarGet -> @napiScalarGet
-  callee 390:20 napiScalarGet -> @napiScalarGet
-  local 393:11 readErr: string (let)
-  callee 393:21 napiScalarGet -> @napiScalarGet
-  local 394:11 errTemp: string (let)
-  local 395:11 errAssign: string (let)
-  callee 397:19 napiScalarGet -> @napiScalarGet
-  callee 405:30 napiFailCall -> @napiFailCall
-  callee 411:30 napiFailCall -> @napiFailCall
-  callee 421:30 napiFailCall -> @napiFailCall
-  local 431:13 view: TypedView | null (const)
-  callee 433:22 internalError -> @internalError
-  callee 437:30 napiFailCall -> @napiFailCall
-  callee 437:70 withArticle -> @withArticle
+  local 361:9 lines: string[] (const)
+  local 364:13 scalar: ScalarReader | null (const)
+  callee 366:22 internalError -> @internalError
+  local 370:13 narrows: boolean (const)
+  local 371:13 dest: string (const)
+  callee 374:30 napiFailCall -> @napiFailCall
+  callee 375:25 napiScalarGet -> @napiScalarGet
+  callee 376:30 napiFailCall -> @napiFailCall
+  callee 385:30 napiFailCall -> @napiFailCall
+  callee 387:30 napiFailCall -> @napiFailCall
+  local 391:13 shape: string (const)
+  local 392:13 errScalar: ScalarReader | null (const)
+  callee 394:22 internalError -> @internalError
+  local 398:13 okScalar: ScalarReader | null (const)
+  local 399:11 readOk: string (let)
+  local 400:11 okTemp: string (let)
+  local 401:11 okAssign: string (let)
+  callee 404:20 napiScalarGet -> @napiScalarGet
+  callee 408:20 napiScalarGet -> @napiScalarGet
+  local 411:11 readErr: string (let)
+  callee 411:21 napiScalarGet -> @napiScalarGet
+  local 412:11 errTemp: string (let)
+  local 413:11 errAssign: string (let)
+  callee 415:19 napiScalarGet -> @napiScalarGet
+  callee 423:30 napiFailCall -> @napiFailCall
+  callee 429:30 napiFailCall -> @napiFailCall
+  callee 439:30 napiFailCall -> @napiFailCall
+  local 449:13 view: TypedView | null (const)
+  callee 451:22 internalError -> @internalError
+  callee 455:30 napiFailCall -> @napiFailCall
+  callee 455:68 withArticle -> @withArticle
 function Boxer.constructor(this: Boxer, kind: i32, arena: boolean): void -> @Boxer.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
   escaping: arena kind
@@ -18037,7 +18043,7 @@ function napiScalarBox(table: TypeTable, t: i32): string -> @napiScalarBox
   calls: TypeTable.kindOf
   pointer table: size=56 writesThrough=false captured=false passedTo=TypeTable.kindOf#0
   stackSites=0 stackLocals=0
-  callee 476:11 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 494:11 TypeTable.kindOf -> @TypeTable.kindOf
 function napiScalarBoxCall(box: string, value: string, dest: string): string -> @napiScalarBoxCall
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_str_concat nish_str_eq
@@ -18048,54 +18054,54 @@ function napiBoxer(table: TypeTable, t: i32): Boxer | null -> @napiBoxer
   calls: Boxer.constructor TypeTable.kindOf TypeTable.resultByValue napiResultBoxer napiScalarBox nish_alloc_struct typedView
   pointer table: size=56 writesThrough=false captured=false passedTo=napiScalarBox#0 TypeTable.kindOf#0 typedView#0 TypeTable.kindOf#0 TypeTable.resultByValue#0 napiResultBoxer#0
   stackSites=0 stackLocals=0
-  local 515:9 scalar: string (const)
-  callee 515:18 napiScalarBox -> @napiScalarBox
-  local 517:11 out: Boxer (const)
-  callee 517:17 new Boxer -> @Boxer.constructor
-  callee 521:7 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 522:12 new Boxer -> @Boxer.constructor
-  local 524:9 view: TypedView | null (const)
-  callee 524:16 typedView -> @typedView
-  local 526:11 out: Boxer (const)
-  callee 526:17 new Boxer -> @Boxer.constructor
-  callee 535:7 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 535:39 TypeTable.resultByValue -> @TypeTable.resultByValue
-  callee 536:12 napiResultBoxer -> @napiResultBoxer
+  local 533:9 scalar: string (const)
+  callee 533:18 napiScalarBox -> @napiScalarBox
+  local 535:11 out: Boxer (const)
+  callee 535:17 new Boxer -> @Boxer.constructor
+  callee 539:7 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 540:12 new Boxer -> @Boxer.constructor
+  local 542:9 view: TypedView | null (const)
+  callee 542:16 typedView -> @typedView
+  local 544:11 out: Boxer (const)
+  callee 544:17 new Boxer -> @Boxer.constructor
+  callee 553:7 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 553:39 TypeTable.resultByValue -> @TypeTable.resultByValue
+  callee 554:12 napiResultBoxer -> @napiResultBoxer
 function napiResultBoxer(table: TypeTable, t: i32): Boxer | null -> @napiResultBoxer
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: t
   calls: Boxer.constructor TypeTable.errOf TypeTable.kindOf TypeTable.okOf napiScalarBox nish_alloc_struct
   pointer table: size=56 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.okOf#0 napiScalarBox#0 TypeTable.okOf#0 napiScalarBox#0 TypeTable.errOf#0
   stackSites=0 stackLocals=0
-  local 548:9 isVoidOk: boolean (const)
-  callee 548:20 TypeTable.kindOf -> @TypeTable.kindOf
-  callee 548:33 TypeTable.okOf -> @TypeTable.okOf
-  local 549:9 value: string (const)
-  callee 549:33 napiScalarBox -> @napiScalarBox
-  callee 549:54 TypeTable.okOf -> @TypeTable.okOf
-  local 550:9 error: string (const)
-  callee 550:17 napiScalarBox -> @napiScalarBox
-  callee 550:38 TypeTable.errOf -> @TypeTable.errOf
-  local 554:9 out: Boxer (const)
-  callee 554:15 new Boxer -> @Boxer.constructor
+  local 566:9 isVoidOk: boolean (const)
+  callee 566:20 TypeTable.kindOf -> @TypeTable.kindOf
+  callee 566:33 TypeTable.okOf -> @TypeTable.okOf
+  local 567:9 value: string (const)
+  callee 567:33 napiScalarBox -> @napiScalarBox
+  callee 567:54 TypeTable.okOf -> @TypeTable.okOf
+  local 568:9 error: string (const)
+  callee 568:17 napiScalarBox -> @napiScalarBox
+  callee 568:38 TypeTable.errOf -> @TypeTable.errOf
+  local 572:9 out: Boxer (const)
+  callee 572:15 new Boxer -> @Boxer.constructor
 function napiBoxerCall(box: Boxer, value: string): string -> @napiBoxerCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: value
   calls: internalError napiScalarBoxCall nish_exit nish_str_concat nish_str_from_i32
   pointer box: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee 564:14 napiScalarBoxCall -> @napiScalarBoxCall
-  local 570:13 view: TypedView | null (const)
-  callee 572:22 internalError -> @internalError
+  callee 582:14 napiScalarBoxCall -> @napiScalarBoxCall
+  local 588:13 view: TypedView | null (const)
+  callee 590:22 internalError -> @internalError
 function napiBoxerPre(box: Boxer, value: string): string[] -> @napiBoxerPre
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: napiScalarBoxCall nish_array_grow nish_str_concat
   pointer box: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 581:9 lines: string[] (const)
-  local 585:9 okArm: string (const)
-  callee 587:9 napiScalarBoxCall -> @napiScalarBoxCall
-  callee 591:38 napiScalarBoxCall -> @napiScalarBoxCall
+  local 599:9 lines: string[] (const)
+  local 603:9 okArm: string (const)
+  callee 605:9 napiScalarBoxCall -> @napiScalarBoxCall
+  callee 609:38 napiScalarBoxCall -> @napiScalarBoxCall
 function Plan.constructor(this: Plan, fn: ExternalFunction, readers: Reader[], box: Boxer, scoped: boolean): void -> @Plan.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true
   escaping: box fn readers scoped
@@ -18110,104 +18116,194 @@ function napiPlan(table: TypeTable, fn: ExternalFunction): Plan | null -> @napiP
   pointer table: size=56 writesThrough=false captured=false passedTo=napiReader#0 napiBoxer#0
   pointer fn: size=24 writesThrough=true captured=true passedTo=Plan.constructor#1
   stackSites=0 stackLocals=0
-  local 613:9 readers: Reader[] (const)
-  local 614:7 i: i32 (let)
-  local 616:11 r: Reader | null (const)
-  callee 616:15 napiReader -> @napiReader
-  callee 616:55 StringSet.has -> @StringSet.has
-  local 623:9 box: Boxer | null (const)
-  callee 623:15 napiBoxer -> @napiBoxer
-  local 627:7 scoped: boolean (let)
-  local 628:14 r: Reader (const)
-  callee 633:10 new Plan -> @Plan.constructor
+  local 631:9 readers: Reader[] (const)
+  local 632:7 i: i32 (let)
+  local 634:11 r: Reader | null (const)
+  callee 634:15 napiReader -> @napiReader
+  callee 634:55 StringSet.has -> @StringSet.has
+  local 641:9 box: Boxer | null (const)
+  callee 641:15 napiBoxer -> @napiBoxer
+  local 645:7 scoped: boolean (let)
+  local 646:14 r: Reader (const)
+  callee 651:10 new Plan -> @Plan.constructor
 function napiSkipReason(table: TypeTable, fn: ExternalFunction): string -> @napiSkipReason
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: StringSet.has napiBoxer napiReader nish_panic_index nish_str_concat nish_str_from_i32 tsKeyword
   pointer table: size=56 writesThrough=false captured=false passedTo=napiReader#0 tsKeyword#0 napiBoxer#0 tsKeyword#0
   pointer fn: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 643:7 i: i32 (let)
-  local 645:11 r: Reader | null (const)
-  callee 645:15 napiReader -> @napiReader
-  callee 645:55 StringSet.has -> @StringSet.has
-  local 647:13 shown: string (const)
-  callee 647:21 tsKeyword -> @tsKeyword
-  callee 652:7 napiBoxer -> @napiBoxer
-  callee 653:26 tsKeyword -> @tsKeyword
+  local 661:7 i: i32 (let)
+  local 663:11 r: Reader | null (const)
+  callee 663:15 napiReader -> @napiReader
+  callee 663:55 StringSet.has -> @StringSet.has
+  local 665:13 shown: string (const)
+  callee 665:21 tsKeyword -> @tsKeyword
+  callee 670:7 napiBoxer -> @napiBoxer
+  callee 671:26 tsKeyword -> @tsKeyword
+function napiRunsOffThread(p: Plan): boolean -> @napiRunsOffThread
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  pointer p: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function napiSyncReason(table: TypeTable, p: Plan): string -> @napiSyncReason
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: nish_panic_index nish_str_concat nish_str_from_i32 tsKeyword
+  pointer table: size=56 writesThrough=false captured=false passedTo=tsKeyword#0 tsKeyword#0
+  pointer p: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 694:7 i: i32 (let)
+  local 697:13 spelled: string (const)
+  callee 697:23 tsKeyword -> @tsKeyword
+  callee 702:24 tsKeyword -> @tsKeyword
+function napiWorkStruct(table: TypeTable, p: Plan): string[] -> @napiWorkStruct
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: TypeTable.kindOf cParamName cType nish_array_grow nish_panic_index nish_str_concat spaceAfter
+  pointer table: size=56 writesThrough=false captured=false passedTo=cType#0 TypeTable.kindOf#0 cType#0
+  pointer p: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 716:9 sig: FunctionSig (const)
+  local 717:9 lines: string[] (const)
+  local 719:7 i: i32 (let)
+  local 721:11 t: string (const)
+  callee 721:15 cType -> @cType
+  callee 722:25 spaceAfter -> @spaceAfter
+  callee 722:41 cParamName -> @cParamName
+  callee 725:7 TypeTable.kindOf -> @TypeTable.kindOf
+  local 726:11 t: string (const)
+  callee 726:15 cType -> @cType
+  callee 727:25 spaceAfter -> @spaceAfter
+function napiAsyncCallbacks(table: TypeTable, p: Plan): string[] -> @napiAsyncCallbacks
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: TypeTable.kindOf cFunctionName cParamName napiBoxerCall napiBoxerPre nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
+  pointer table: size=56 writesThrough=false captured=false passedTo=TypeTable.kindOf#0 TypeTable.kindOf#0
+  pointer p: size=32 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local 744:9 sig: FunctionSig (const)
+  local 745:9 name: string (const)
+  local 746:9 work: string (const)
+  local 747:9 args: string[] (const)
+  local 748:7 i: i32 (let)
+  callee 750:21 cParamName -> @cParamName
+  local 753:9 call: string (const)
+  callee 753:19 cFunctionName -> @cFunctionName
+  local 754:9 lines: string[] (const)
+  callee 762:7 TypeTable.kindOf -> @TypeTable.kindOf
+  local 784:9 resultExpr: string (const)
+  callee 784:22 TypeTable.kindOf -> @TypeTable.kindOf
+  local 785:9 pre: string[] (const)
+  callee 785:15 napiBoxerPre -> @napiBoxerPre
+  local 787:16 line: string (const)
+  callee 794:23 napiBoxerCall -> @napiBoxerCall
+function napiAsyncWrapper(table: TypeTable, p: Plan): string[] -> @napiAsyncWrapper
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
+  calls: cParamName napiReaderLines napiScalarReader nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
+  pointer table: size=56 writesThrough=false captured=false passedTo=napiScalarReader#0
+  pointer p: size=32 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local 817:9 sig: FunctionSig (const)
+  local 818:9 name: string (const)
+  local 819:9 n: i32 (const)
+  local 820:9 work: string (const)
+  local 821:9 lines: string[] (const)
+  local 832:9 usesTypeof: boolean (let)
+  local 833:16 r: Reader (const)
+  local 841:9 usesLossless: boolean (let)
+  local 842:9 i: i32 (let)
+  local 844:13 s: ScalarReader | null (const)
+  callee 844:17 napiScalarReader -> @napiScalarReader
+  local 856:7 i: i32 (let)
+  local 858:11 what: string (const)
+  local 861:16 line: string (const)
+  callee 861:24 napiReaderLines -> @napiReaderLines
+  callee 861:54 cParamName -> @cParamName
+  callee 864:24 cParamName -> @cParamName
+  callee 864:59 cParamName -> @cParamName
 function napiWrapper(table: TypeTable, p: Plan): string[] -> @napiWrapper
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: TypeTable.kindOf cFunctionName cParamName cType napiBoxerCall napiBoxerPre napiFailCall napiReaderLines napiScalarReader nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 spaceAfter
   pointer table: size=56 writesThrough=false captured=false passedTo=napiScalarReader#0 TypeTable.kindOf#0 cType#0
   pointer p: size=32 writesThrough=false captured=false
   stackSites=1 stackLocals=1
-  local 661:9 sig: FunctionSig (const)
-  local 662:9 name: string (const)
-  local 663:9 n: i32 (const)
-  local 664:9 scoped: boolean (const)
-  local 665:9 lines: string[] (const)
-  local 676:9 usesTypeof: boolean (let)
-  local 677:16 r: Reader (const)
-  local 685:9 usesLossless: boolean (let)
-  local 686:9 i: i32 (let)
-  local 688:13 s: ScalarReader | null (const)
-  callee 688:17 napiScalarReader -> @napiScalarReader
-  local 703:7 i: i32 (let)
-  local 705:11 what: string (const)
-  local 706:16 line: string (const)
-  callee 706:24 napiReaderLines -> @napiReaderLines
-  callee 706:54 cParamName -> @cParamName
-  local 712:9 args: string[] (const)
-  callee 715:15 cParamName -> @cParamName
-  local 718:9 call: string (const)
-  callee 718:19 cFunctionName -> @cFunctionName
-  callee 720:7 TypeTable.kindOf -> @TypeTable.kindOf
-  local 723:11 ret: string (const)
-  callee 723:17 cType -> @cType
-  callee 724:27 spaceAfter -> @spaceAfter
-  local 726:9 pre: string[] (const)
-  callee 726:15 napiBoxerPre -> @napiBoxerPre
-  local 728:16 line: string (const)
-  callee 731:30 napiFailCall -> @napiFailCall
-  callee 733:23 napiBoxerCall -> @napiBoxerCall
-  callee 734:28 napiFailCall -> @napiFailCall
-function generateNapiShim(compilation: Compilation, fns: ExternalFunction[]): string -> @generateNapiShim [exported]
+  local 897:9 sig: FunctionSig (const)
+  local 898:9 name: string (const)
+  local 899:9 n: i32 (const)
+  local 900:9 scoped: boolean (const)
+  local 901:9 failMode: i32 (const)
+  local 902:9 lines: string[] (const)
+  local 913:9 usesTypeof: boolean (let)
+  local 914:16 r: Reader (const)
+  local 922:9 usesLossless: boolean (let)
+  local 923:9 i: i32 (let)
+  local 925:13 s: ScalarReader | null (const)
+  callee 925:17 napiScalarReader -> @napiScalarReader
+  local 940:7 i: i32 (let)
+  local 942:11 what: string (const)
+  local 943:16 line: string (const)
+  callee 943:24 napiReaderLines -> @napiReaderLines
+  callee 943:54 cParamName -> @cParamName
+  local 949:9 args: string[] (const)
+  callee 952:15 cParamName -> @cParamName
+  local 955:9 call: string (const)
+  callee 955:19 cFunctionName -> @cFunctionName
+  callee 957:7 TypeTable.kindOf -> @TypeTable.kindOf
+  local 960:11 ret: string (const)
+  callee 960:17 cType -> @cType
+  callee 961:27 spaceAfter -> @spaceAfter
+  local 963:9 pre: string[] (const)
+  callee 963:15 napiBoxerPre -> @napiBoxerPre
+  local 965:16 line: string (const)
+  callee 968:30 napiFailCall -> @napiFailCall
+  callee 970:23 napiBoxerCall -> @napiBoxerCall
+  callee 971:28 napiFailCall -> @napiFailCall
+function generateNapiShim(compilation: Compilation, fns: ExternalFunction[], asynchronous: boolean): string -> @generateNapiShim [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
-  calls: banner cPrototype napiPlan napiSkipReason napiWrapper nish_alloc_struct nish_array_grow nish_str_at nish_str_concat nish_str_eq pushAll resultDefinitions tsSignature typedView
+  calls: banner cPrototype napiAsyncCallbacks napiAsyncWrapper napiPlan napiRunsOffThread napiSkipReason napiSyncReason napiWorkStruct napiWrapper nish_alloc_struct nish_array_grow nish_str_at nish_str_concat nish_str_eq pushAll resultDefinitions tsSignature typedView
   pointer compilation: size=88 writesThrough=false captured=false passedTo=banner#0
   pointer fns: size=0 writesThrough=false captured=false
   stackSites=5 stackLocals=5
-  local 745:9 table: TypeTable (const)
-  local 746:9 plans: Plan[] (const)
-  local 747:9 skipped: string[] (const)
-  local 748:14 fn: ExternalFunction (const)
-  local 749:11 source: string (const)
-  callee 749:40 tsSignature -> @tsSignature
-  local 754:11 p: Plan | null (const)
-  callee 754:15 napiPlan -> @napiPlan
-  callee 758:49 napiSkipReason -> @napiSkipReason
-  local 761:9 planned: ExternalFunction[] (const)
-  local 762:7 needsString: boolean (let)
-  local 763:7 needsArrayArg: boolean (let)
-  local 764:7 needsArrayResult: boolean (let)
-  local 765:7 needsScoped: boolean (let)
-  local 766:7 needsResult: boolean (let)
-  local 767:7 needsF32: boolean (let)
-  local 768:14 p: Plan (const)
-  local 770:16 r: Reader (const)
-  callee 781:9 typedView -> @typedView
-  local 792:9 lines: string[] (const)
-  callee 793:14 banner -> @banner
-  local 817:9 noFields: i32[] (const)
-  callee 818:3 pushAll -> @pushAll
-  callee 818:18 resultDefinitions -> @resultDefinitions
-  local 821:14 p: Plan (const)
-  callee 822:19 cPrototype -> @cPrototype
-  local 834:16 s: string (const)
-  local 966:14 p: Plan (const)
-  callee 967:41 tsSignature -> @tsSignature
-  callee 968:5 pushAll -> @pushAll
-  callee 968:20 napiWrapper -> @napiWrapper
-  local 975:14 p: Plan (const)
+  local 986:9 table: TypeTable (const)
+  local 987:9 plans: Plan[] (const)
+  local 988:9 skipped: string[] (const)
+  local 989:14 fn: ExternalFunction (const)
+  local 990:11 source: string (const)
+  callee 990:40 tsSignature -> @tsSignature
+  local 995:11 p: Plan | null (const)
+  callee 995:15 napiPlan -> @napiPlan
+  callee 999:49 napiSkipReason -> @napiSkipReason
+  local 1002:9 planned: ExternalFunction[] (const)
+  local 1003:7 needsString: boolean (let)
+  local 1004:7 needsArrayArg: boolean (let)
+  local 1005:7 needsArrayResult: boolean (let)
+  local 1006:7 needsScoped: boolean (let)
+  local 1007:7 needsResult: boolean (let)
+  local 1008:7 needsF32: boolean (let)
+  local 1009:7 needsAsync: boolean (let)
+  local 1010:14 p: Plan (const)
+  local 1012:16 r: Reader (const)
+  callee 1023:9 typedView -> @typedView
+  callee 1032:25 napiRunsOffThread -> @napiRunsOffThread
+  local 1037:9 lines: string[] (const)
+  callee 1038:14 banner -> @banner
+  local 1079:9 noFields: i32[] (const)
+  callee 1080:3 pushAll -> @pushAll
+  callee 1080:18 resultDefinitions -> @resultDefinitions
+  local 1083:14 p: Plan (const)
+  callee 1084:19 cPrototype -> @cPrototype
+  local 1096:16 s: string (const)
+  local 1252:14 p: Plan (const)
+  local 1253:11 off: boolean (const)
+  callee 1253:33 napiRunsOffThread -> @napiRunsOffThread
+  local 1254:11 note: string (const)
+  callee 1255:41 tsSignature -> @tsSignature
+  callee 1257:7 pushAll -> @pushAll
+  callee 1257:22 napiWorkStruct -> @napiWorkStruct
+  callee 1258:7 pushAll -> @pushAll
+  callee 1258:22 napiAsyncCallbacks -> @napiAsyncCallbacks
+  callee 1259:7 pushAll -> @pushAll
+  callee 1259:22 napiAsyncWrapper -> @napiAsyncWrapper
+  callee 1265:52 napiSyncReason -> @napiSyncReason
+  callee 1267:7 pushAll -> @pushAll
+  callee 1267:22 napiWrapper -> @napiWrapper
+  local 1275:14 p: Plan (const)
 module self/dump_ast.ts
 import astLines from "./ast_text" -> function @astLines
 import SourceFile from "./diagnostics" -> struct SourceFile

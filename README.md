@@ -272,6 +272,9 @@ nish <entry.ts> [more.ts ...] [options]
   --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports, plus
                              <file>.mjs, a loader that marshals typed arrays
   --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)
+  --emit-napi-async <shim.c> the same shim, but a function that touches neither the arena
+                             nor a borrowed typed array runs on a libuv worker and answers
+                             a promise; needs --threads (WP24 A1)
   --unchecked-indexing       drop array bounds checks (unsafe; for benchmarks)
   --target <triple>|host     emit `target datalayout`/`target triple` for that machine
                              (x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin,
@@ -388,7 +391,9 @@ The supported direction is Node importing Nish:
   loads directly (`examples/node-host.mjs`); exports use the plain C ABI.
   Add `runtime/runtime_wasm.c` (arena + arrays, no libc) when a function
   takes or returns an array.
-- `--emit-napi` + `scripts/build.sh --profile napi` build a `.node` addon
+- `--emit-napi` + `scripts/build.sh --profile napi` build a `.node` addon;
+  `--emit-napi-async` (with `--threads`) is the same addon with a promise in
+  front of every function it can run off Node's event loop
   with argument type checks (`examples/node-addon.mjs`).
 - Buffers cross as typed arrays: an Nish `Int32Array` / `Float64Array` /
   `BigInt64Array` parameter (the spellings of `i32[]` / `f64[]` / `i64[]`,

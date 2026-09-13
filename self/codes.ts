@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 393;
+export const RULE_COUNT: i32 = 396;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -69,6 +69,8 @@ export function diagnosticRules(): string[] {
     "NL2276",
     "`const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing",
     "NL2285",
+    "--emit-napi-async needs --threads: the worker thread allocates, and without it every thread shares one arena",
+    "NL3012",
     "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it",
     "NL2300",
     "`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class",
@@ -637,6 +639,8 @@ export function diagnosticRules(): string[] {
     "NL2205",
     "Unsupported unary operator `",
     "NL2261",
+    ": cannot create the promise",
+    "NL4007",
     "()` in the constructor of `",
     "NL2036",
     "` (the builtin modules are ",
@@ -687,6 +691,8 @@ export function diagnosticRules(): string[] {
     "NL2013",
     " needs a type annotation",
     "NL2019",
+    ": cannot create the work",
+    "NL4008",
     ": unsupported modifier `",
     "NL2031",
     "` expects a string, got ",

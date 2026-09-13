@@ -314,6 +314,28 @@ node examples/node-addon.mjs build/add.node
 # add("2", 3) throws: add: argument 1 (a) must be a number
 ```
 
+### `--emit-napi-async`: the same shim, off the event loop
+
+`--emit-napi-async <shim.c>` writes the shim with `napi_create_async_work` and a
+promise in front of every function it can run off the JS thread — which is every
+function whose arguments and result touch neither the arena nor a borrowed typed
+array. The Nish function stays exactly as synchronous as it is; the asynchrony is
+entirely in the generated C, so there is no language surface and no new syntax.
+It needs `--threads` on both sides, because the worker allocates in its own
+arena, and is refused without it.
+
+```bash
+node dist/index.js examples/add.ts --threads -o build/add.ll --emit-napi-async build/add_napi.c
+scripts/build.sh build/add.ll runtime/runtime.c build/add_napi.c -o build/add.node --profile napi --threads
+# await addon.add(2, 3)  ->  5
+```
+
+Measured on a call that computes for a second: the event loop goes from
+unavailable for the whole 1,024 ms to a worst delay of 0.5 ms, with the same
+answer in the same wall clock. [wp24-async.md](wp24-async.md) §5.1a has the
+table, which functions stay synchronous and why, and the argument that this — not
+`async`/`await` — is what "does Nish support async" usually means.
+
 The shim is generated per module. For every external function whose
 parameters and result are numbers of any width, booleans, `i64` / `u64`,
 strings or typed arrays it emits a `napi_callback` that reads the arguments,
@@ -566,7 +588,7 @@ real pass over the buffer on top of the crossing.
 | `runtime/runtime_wasm.c` | Freestanding runtime for the wasm profile: arena over linear memory, arrays, trapping panics. |
 | `src/interop/abi.ts` | Which functions are external, C spelling of every type, `const` from the written-parameter facts, the typed-view table (`Int32Array` / `Float32Array` / `Float64Array` / `BigInt64Array`), keyword escaping. |
 | `src/interop/header.ts`, `dts.ts`, `wasm.ts`, `napi.ts` | The generators: header, `.d.ts`, its companion loader, the shim. |
-| `src/index.ts` | `--emit-header`, `--emit-dts` (writes the `.mjs` next to it), `--emit-napi`. |
+| `src/index.ts` | `--emit-header`, `--emit-dts` (writes the `.mjs` next to it), `--emit-napi`, `--emit-napi-async`. |
 | `self/interop_abi.ts`, `interop_header.ts`, `interop_dts.ts`, `interop_wasm.ts`, `interop_napi.ts` | The same five, in Nish, for the self-hosted compiler (WP14 §7); `self/compile.ts` takes the same three flags and writes the same files. |
 | `tests/self/interop_oracle.js` | Both compilers over the corpus below, all four generated files compared byte for byte. |
 | `tests/self/interop_payloads.ts`, `tests/self/interop_widths.ts`, `tests/self/interop_unsigned.ts` | The narrow numeric widths, which nothing else in the corpus mentions: inside a packed `Result`, at a plain parameter and return for the N-API shim, and as bare parameters and results for the wasm loader's masks. |

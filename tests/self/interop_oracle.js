@@ -13,7 +13,7 @@
  * and the loader comment are derived from the sidecar's basename, and
  * everything else is the generators' own text. Four files are compared per
  * program — `<stem>.h`, `<stem>.d.ts`, its companion `<stem>.mjs`, and
- * `<stem>.napi.c` — because `--emit-dts` writes two.
+ * `<stem>.napi.c`, `<stem>.napi_async.c` — because `--emit-dts` writes two.
  *
  * A skip is a fact about the port, never a file that is allowed to disagree:
  *
@@ -113,16 +113,28 @@ const argsFor = (file) => {
 
 /** The sidecar names of one program, in the order the drivers write them. */
 const sidecars = (dir, stem) =>
-  [`${stem}.h`, `${stem}.d.ts`, `${stem}.mjs`, `${stem}.napi.c`].map((n) => path.join(dir, n));
+  [`${stem}.h`, `${stem}.d.ts`, `${stem}.mjs`, `${stem}.napi.c`, `${stem}.napi_async.c`].map((n) =>
+    path.join(dir, n)
+  );
 
-/** `--emit-header <dir>/<stem>.h ...`: the flags that ask for all four files. */
+/**
+ * `--emit-header <dir>/<stem>.h ...`: the flags that ask for all five files.
+ *
+ * `--threads` rides along because `--emit-napi-async` requires it (WP24 A1) and
+ * because it changes nothing here: a sidecar is rendered from signatures, and
+ * the storage class of the arena is not one. Both compilers are handed the same
+ * flags either way, so the comparison is unaffected even where it does matter.
+ */
 const emitFlags = (dir, stem) => [
+  "--threads",
   "--emit-header",
   path.join(dir, `${stem}.h`),
   "--emit-dts",
   path.join(dir, `${stem}.d.ts`),
   "--emit-napi",
   path.join(dir, `${stem}.napi.c`),
+  "--emit-napi-async",
+  path.join(dir, `${stem}.napi_async.c`),
 ];
 
 const fresh = (dir) => {

@@ -39,6 +39,31 @@
  * / `nish_free_arena` are still exported for hosts that want to.
  *
  * Build: scripts/build.sh <modules.ll> runtime/runtime.c <shim.c> -o x.node --profile napi
+ *
+ * `--emit-napi-async` writes the same shim with one difference: a function the
+ * shim can run off the JS thread is wrapped in `napi_create_async_work` and
+ * answers a **promise** instead of a value, so a call that computes for 200 ms
+ * no longer blocks Node's event loop for 200 ms (WP24 §5.1, the one item that
+ * note recommends building). The Nish function stays exactly as synchronous as
+ * it was; the asynchrony is entirely in the C below.
+ *
+ * **Which functions, and why not all of them.** A function is run off-thread
+ * exactly when neither its arguments nor its result touch the arena or borrow
+ * JS memory — the `scoped` flag the synchronous path already computes. That is
+ * not caution about threads in general, it is the two things N-API and the
+ * arena each forbid: an `napi_value` may only be touched on the thread that
+ * owns it, so a typed array borrowed from JS cannot be read by a worker; and
+ * the arena is thread-local under `--threads` (WP20 T0), so a `nish_str` the
+ * worker allocated cannot be boxed by the JS thread that resolves the promise.
+ * Everything else — `string` and typed-array parameters and results — stays
+ * synchronous and the shim says so next to it, the way it already names a
+ * function it does not bridge at all.
+ *
+ * The worker brackets its call with `nish_arena_mark` / `nish_arena_release`
+ * whether or not the *boundary* needed an arena scope, which the synchronous
+ * path does not. It has to: a function that allocates internally allocates in
+ * the worker's own thread-local arena, and no `nish_reset_arena` from the JS
+ * thread can ever reach it.
  */
 import { CLI, LANGUAGE, RUNTIME_HEADER } from "../branding.js";
 import { Compilation } from "../compilation.js";
@@ -402,6 +427,185 @@ const skipReason = (fn: ExternalFunction): string => {
   return "one of its types does not cross";
 };
 
+/**
+ * Whether this function is one the shim may run on a libuv worker (WP24 A1).
+ *
+ * `scoped` is the synchronous path's "this call touches the arena or borrows JS
+ * memory", and it is exactly the right question here for two reasons that
+ * happen to coincide: an `napi_value` belongs to the thread that owns it, so a
+ * borrowed typed array cannot be read off-thread; and the arena is thread-local
+ * under `--threads`, so an arena `nish_str` the worker made cannot be boxed by
+ * the JS thread in the completion callback. Both are the same set.
+ */
+const runsOffThread = (p: Plan): boolean => !p.scoped;
+
+/** Why this function stayed synchronous in an async shim, for the comment above it. */
+const syncReason = (p: Plan): string => {
+  const at = p.readers.findIndex((r) => r.arena);
+  if (at >= 0) {
+    return `parameter ${at + 1} (${p.fn.sig.params[at].name}) is ${tsKeyword(p.fn.sig.params[at].type)}, which the arena owns or JS lends`;
+  }
+  return `it returns ${tsKeyword(p.fn.sig.returnType)}, which the arena owns`;
+};
+
+/**
+ * The C struct one queued call carries between the three callbacks: the
+ * converted arguments (read on the JS thread, used on the worker), the result
+ * (written on the worker, boxed on the JS thread), the promise's `deferred`,
+ * and the work handle so the completion can delete it.
+ *
+ * Heap-allocated per call, because it outlives the callback that made it.
+ * `malloc` rather than the arena, deliberately: the arena is thread-local and
+ * this object is the one thing that crosses between the two threads.
+ */
+const workStruct = ({ fn }: Plan): string[] => {
+  const { sig } = fn;
+  const name = sig.name;
+  const lines = [`typedef struct {`];
+  for (const p of sig.params) {
+    const t = cType(p.type, "param")!;
+    lines.push(`  ${t}${t.endsWith("*") ? "" : " "}${cParamName(p.name)};`);
+  }
+  if (kindOf(sig.returnType) !== "void") {
+    const t = cType(sig.returnType, "return")!;
+    lines.push(`  ${t}${t.endsWith("*") ? "" : " "}result;`);
+  }
+  lines.push(
+    "  napi_deferred deferred;",
+    "  napi_async_work work;",
+    `} nish_napi_work_${name};`,
+    ""
+  );
+  return lines;
+};
+
+/**
+ * The two worker-side callbacks. `execute` runs on a libuv thread and may not
+ * touch `env` at all — N-API says so, and this is the one place in the shim
+ * where that rule is load-bearing rather than advice, so `env` is `(void)`-ed
+ * to say it is unused on purpose. `complete` runs back on the JS thread and is
+ * where the result becomes a JS value.
+ */
+const asyncCallbacks = (plan: Plan): string[] => {
+  const { fn, box } = plan;
+  const { sig } = fn;
+  const name = sig.name;
+  const work = `nish_napi_work_${name}`;
+  const call = `${cFunctionName(name).ident}(${sig.params.map((p) => `w->${cParamName(p.name)}`).join(", ")})`;
+  const lines = [
+    `static void nish_napi_execute_${name}(napi_env env, void *data) {`,
+    "  (void)env; /* a worker thread: no napi_value, no napi_* call, by N-API's rule */",
+    `  ${work} *w = (${work} *)data;`,
+    // The mark is the worker's own, in the worker's own thread-local arena
+    // (WP20 T0). Without it a function that allocates internally would grow an
+    // arena nothing on the JS thread can ever reset.
+    "  uint64_t mark = nish_arena_mark();",
+    kindOf(sig.returnType) === "void" ? `  ${call};` : `  w->result = ${call};`,
+    "  nish_arena_release(mark);",
+    "}",
+    "",
+    `static void nish_napi_complete_${name}(napi_env env, napi_status status, void *data) {`,
+    `  ${work} *w = (${work} *)data;`,
+    "  napi_value out;",
+    "  if (status != napi_ok) {",
+    "    napi_value message;",
+    `    if (napi_create_string_utf8(env, "${name}: the work was cancelled", NAPI_AUTO_LENGTH, &message) == napi_ok) {`,
+    "      napi_reject_deferred(env, w->deferred, message);",
+    "    }",
+    "    napi_delete_async_work(env, w->work);",
+    "    free(w);",
+    "    return;",
+    "  }",
+  ];
+  const resultExpr = kindOf(sig.returnType) === "void" ? "result" : "w->result";
+  if (box.pre) {
+    lines.push(
+      ...box.pre(resultExpr).map((l) => `  ${l}`),
+      `    return nish_napi_reject(env, w->deferred, w->work, w, "${name}: cannot create the result");`
+    );
+  }
+  lines.push(
+    `  if (${box.call(resultExpr)} != napi_ok)`,
+    `    return nish_napi_reject(env, w->deferred, w->work, w, "${name}: cannot create the result");`,
+    "  napi_resolve_deferred(env, w->deferred, out);",
+    "  napi_delete_async_work(env, w->work);",
+    "  free(w);",
+    "}",
+    ""
+  );
+  return lines;
+};
+
+/**
+ * The JS-facing callback of an off-thread function: read and convert the
+ * arguments here, where the `napi_value`s live, then hand the converted C
+ * values to a worker and answer a promise.
+ *
+ * A conversion failure still *throws* rather than rejecting. The promise does
+ * not exist yet at that point, and a `TypeError` on a wrong argument type is
+ * the same programming mistake in both shims; making it a rejection would mean
+ * the two shims disagree about what a bad call does.
+ */
+const asyncWrapper = (plan: Plan): string[] => {
+  const { fn, readers } = plan;
+  const { sig } = fn;
+  const name = sig.name;
+  const n = sig.params.length;
+  const work = `nish_napi_work_${name}`;
+  const fail = (msg: string) => `nish_napi_fail_free(env, w, "${msg}")`;
+  const lines: string[] = [`static napi_value nish_napi_${name}(napi_env env, napi_callback_info info) {`];
+  if (n === 0) lines.push("  (void)info;");
+  else {
+    lines.push(
+      `  size_t argc = ${n};`,
+      `  napi_value argv[${n}];`,
+      "  if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok)",
+      `    return nish_napi_fail(env, "${name}: cannot read arguments");`,
+      `  if (argc < ${n})`,
+      `    return nish_napi_fail(env, "${name} expects ${n} argument${n === 1 ? "" : "s"}");`
+    );
+    if (readers.some((r) => r.usesTypeof)) lines.push("  napi_valuetype type;");
+    if (sig.params.some((p) => needsLossless(p.type))) lines.push("  bool lossless;");
+  }
+  lines.push(
+    `  ${work} *w = (${work} *)calloc(1, sizeof(${work}));`,
+    `  if (!w) return nish_napi_fail(env, "${name}: out of memory");`
+  );
+  readers.forEach((r, i) => {
+    const p = sig.params[i];
+    const what = `${name}: argument ${i + 1} (${p.name})`;
+    // The reader declares a local of the parameter's own type; the struct field
+    // takes its value, so the conversion code is the same text in both shims.
+    lines.push(...r.lines(cParamName(p.name), i, (msg) => fail(`${what} ${msg}`)).map((l) => `  ${l}`));
+    lines.push(`  w->${cParamName(p.name)} = ${cParamName(p.name)};`);
+  });
+  // Three steps, each with its own way out, and the order is the point. The work
+  // is created first, so a failure there has no promise to strand; the promise
+  // second, because `complete` reads `w->deferred` and so it must be set before
+  // anything can be queued; the queue last, and *that* failure rejects rather
+  // than throws -- the promise exists by then, and a deferred that is neither
+  // resolved nor rejected is an N-API leak.
+  lines.push(
+    "  napi_value promise;",
+    "  napi_value resource_name;",
+    `  if (napi_create_string_utf8(env, "${CLI}:${name}", NAPI_AUTO_LENGTH, &resource_name) != napi_ok ||`,
+    `      napi_create_async_work(env, NULL, resource_name, nish_napi_execute_${name}, nish_napi_complete_${name}, w, &w->work) != napi_ok)`,
+    `    return ${fail(`${name}: cannot create the work`)};`,
+    "  if (napi_create_promise(env, &w->deferred, &promise) != napi_ok) {",
+    "    napi_delete_async_work(env, w->work);",
+    `    return ${fail(`${name}: cannot create the promise`)};`,
+    "  }",
+    "  if (napi_queue_async_work(env, w->work) != napi_ok) {",
+    `    nish_napi_reject(env, w->deferred, w->work, w, "${name}: cannot queue the work");`,
+    "    return promise;",
+    "  }",
+    "  return promise;",
+    "}",
+    ""
+  );
+  return lines;
+};
+
 function wrapper({ fn, readers, box, scoped }: Plan): string[] {
   const { sig } = fn;
   const name = sig.name;
@@ -444,7 +648,7 @@ function wrapper({ fn, readers, box, scoped }: Plan): string[] {
   return lines;
 }
 
-export function generateNapiShim(compilation: Compilation): string {
+export function generateNapiShim(compilation: Compilation, asynchronous = false): string {
   const fns = externalFunctions(compilation);
   const plans: Plan[] = [];
   const skipped: string[] = [];
@@ -465,10 +669,11 @@ export function generateNapiShim(compilation: Compilation): string {
     scoped: plans.some((p) => p.scoped),
     result: plans.some((p) => p.box.pre !== undefined),
     f32: plans.some((p) => p.readers.some((r) => r.usesF32)),
+    async: asynchronous && plans.some(runsOffThread),
   };
 
   const lines: string[] = [
-    banner(compilation, "--emit-napi", (t) => `/* ${t}`),
+    banner(compilation, asynchronous ? "--emit-napi-async" : "--emit-napi", (t) => `/* ${t}`),
     " *",
     " * Build it into an addon together with the compiled module(s) and the runtime:",
     " *   scripts/build.sh <modules.ll> runtime/runtime.c <this file> -o <name>.node --profile napi",
@@ -476,12 +681,27 @@ export function generateNapiShim(compilation: Compilation): string {
     " * functions below. Numbers convert with ToInt32 (`x | 0`) in i32 mode; typed",
     " * arrays are borrowed for the call (writes through them are visible to JS);",
     " * strings and array results are copied, and the arena is released per call.",
+    ...(asynchronous
+      ? [
+          " *",
+          " * This shim is the --emit-napi-async one: a function whose arguments and",
+          " * result touch neither the arena nor a borrowed typed array runs on a libuv",
+          " * worker and answers a promise, so a long call does not block the event",
+          " * loop. Build it with --threads on both sides, because the worker allocates",
+          " * in its own arena:",
+          " *   nish <sources> --threads --emit-napi-async <this file>",
+          " *   scripts/build.sh <modules.ll> runtime/runtime.c <this file> -o <name>.node --profile napi --threads",
+        ]
+      : []),
     " */",
     "#include <node_api.h>",
     ...(needs.f32 ? ["#include <math.h>"] : []),
     "#include <stdbool.h>",
     "#include <stddef.h>",
     "#include <stdint.h>",
+    // `malloc`/`free` for the per-call work object, which is the one thing that
+    // crosses between the JS thread and the worker and so cannot be arena.
+    ...(needs.async ? ["#include <stdlib.h>"] : []),
     ...(needs.arrayResult ? ["#include <string.h>"] : []),
     `#include "${RUNTIME_HEADER}" /* runtime/; the napi profile adds it to the include path */`,
     // WP17: the `Result` types the bridged signatures mention, spelled exactly
@@ -522,6 +742,30 @@ export function generateNapiShim(compilation: Compilation): string {
       "/* The same, from a call that already marked the arena: release first. */",
       "static napi_value nish_napi_fail_at(napi_env env, uint64_t mark, const char *message) {",
       "  nish_arena_release(mark);",
+      "  return nish_napi_fail(env, message);",
+      "}",
+      ""
+    );
+  }
+  if (needs.async) {
+    lines.push(
+      "/* Reject the promise of a queued call and free everything it owns. Answers",
+      " * nothing, because its one caller is a completion callback, which N-API",
+      " * calls for its effect and not for a value. */",
+      "static void nish_napi_reject(napi_env env, napi_deferred deferred, napi_async_work work, void *w, const char *message) {",
+      "  napi_value error;",
+      "  napi_value text;",
+      "  if (napi_create_string_utf8(env, message, NAPI_AUTO_LENGTH, &text) == napi_ok &&",
+      "      napi_create_type_error(env, NULL, text, &error) == napi_ok) {",
+      "    napi_reject_deferred(env, deferred, error);",
+      "  }",
+      "  napi_delete_async_work(env, work);",
+      "  free(w);",
+      "}",
+      "",
+      "/* Throw before the promise exists: the call object is already allocated and is not queued. */",
+      "static napi_value nish_napi_fail_free(napi_env env, void *w, const char *message) {",
+      "  free(w);",
       "  return nish_napi_fail(env, message);",
       "}",
       ""
@@ -630,7 +874,17 @@ export function generateNapiShim(compilation: Compilation): string {
     ""
   );
   for (const p of plans) {
-    lines.push(`/* ${p.fn.unit.fileName}: ${tsSignature(p.fn.sig, tsKeyword)} */`, ...wrapper(p));
+    const off = asynchronous && runsOffThread(p);
+    lines.push(`/* ${p.fn.unit.fileName}: ${tsSignature(p.fn.sig, tsKeyword)}${off ? " -- asynchronous: answers a promise" : ""} */`);
+    if (off) {
+      lines.push(...workStruct(p), ...asyncCallbacks(p), ...asyncWrapper(p));
+      continue;
+    }
+    // Named rather than silently left synchronous, for the reason the skip list
+    // above is written out: an omission a reader cannot see is how a gap lives
+    // for a release.
+    if (asynchronous) lines.push(`/* Synchronous in this shim: ${syncReason(p)}. */`);
+    lines.push(...wrapper(p));
   }
 
   lines.push(
