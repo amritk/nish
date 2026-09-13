@@ -298,6 +298,64 @@ jobs:
           summary="$(tail -n 1 "$RUNNER_TEMP/nish-runner.log" 2>/dev/null || echo 'the runner produced no summary')"
           echo "::notice::tests/nish/run.ts over tests/cases: $summary"
 
+  # Section A of `tests/run.js` compiles the golden cases in process, sixty-four
+  # to a worker, rather than spawning `dist/index.js` once per case. That is the
+  # difference between six minutes and a handful of seconds, and the whole of it
+  # rests on the two paths answering the same thing -- so this job compiles the
+  # *whole* corpus both ways and compares the exit status, stdout, stderr and the
+  # bytes of every module.
+  #
+  # `npm test` checks one case per shape on every run (`gateCases` in
+  # `tests/batch_compile.js` says which, and why that set is derived from the
+  # corpus rather than listed). The complete comparison costs one compiler process
+  # per case -- the very thing the change removed -- which is exactly the bill a
+  # CI runner should pay instead of a developer's inner loop. It runs in parallel
+  # with `test`, so it costs a runner rather than wall-clock time, and the
+  # toolchain is installed so that the rest of the suite is not skipped underneath
+  # the gate: this job is `npm test` with the gate widened, not a narrower run.
+  batch-parity:
+    name: the batched compile against the CLI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install LLVM 18 + lld
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # `--verify-batch` widens the gate to the whole corpus; the section's own
+      # checks run as usual, so a difference is a FAIL line naming the case.
+      - name: Every golden case, compiled both ways
+        run: |
+          set -o pipefail
+          node tests/run.js --verify-batch | tee "$RUNNER_TEMP/batch-parity.log"
+
+      # The summary is not the last line: a run with skips prints a note after it,
+      # so the line is picked by what it says rather than by where it sits.
+      - name: Say what this proved
+        if: always()
+        run: |
+          summary="$(grep -E '^[0-9]+ passed, ' "$RUNNER_TEMP/batch-parity.log" 2>/dev/null | tail -n 1)"
+          echo "::notice::the batched compile against the CLI, over tests/cases: ${summary:-the run produced no summary}"
+
   lint:
     name: lint
     runs-on: ubuntu-latest

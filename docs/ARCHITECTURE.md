@@ -486,7 +486,14 @@ toolchain-dependent steps when LLVM is not installed:
   `<name>.c` or `tests/driver.c` plus both runtime `.c` files and `-lm`, run, and
   match stdout. A source declaring `main` — `export const main`, or the legacy
   `export function main` — is linked without the driver. `node tests/run.js <substring>` runs a subset;
-  `npm run test:update` writes missing goldens.
+  `npm run test:update` writes missing goldens. The compiles happen **in
+  process**, sixty-four cases to a worker (`tests/batch_worker.js`), because
+  spawning a compiler per case spent ~473 ms of every 634 on `import
+  ts from "typescript"` and 1.5 ms on compiling; a case whose `.args` names a
+  flag the library API cannot express falls back to a real CLI spawn, and the
+  two paths are compared byte for byte on every run over one case per shape and
+  over the whole corpus under `node tests/run.js --verify-batch` (CI's
+  `batch-parity` job).
 - **Diagnostics** (WP10): the caret excerpt format, syntax errors.
 - **Link tests** (`tests/link/<name>/`): whole programs built with `--link`,
   expected exit code and stdout, `declare`/`define` attribute agreement,
