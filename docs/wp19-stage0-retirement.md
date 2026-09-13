@@ -483,12 +483,27 @@ passing with both moved aside while all four oracles failed to start.
 #### The wording gap, which these goldens do not close
 
 The gate singles out diagnostic wordings, "presently proved by comparison and
-otherwise proved by nothing". The honest measurement:
+otherwise proved by nothing". The measurement is
+`node scripts/check-diagnostic-coverage.mjs` now, which compiles every negative
+case and reads the `code` of every diagnostic it prints, so the number below is
+re-derivable rather than remembered — and it is a ratchet: the codes still
+unreached are listed in `tests/self/wording_backlog.txt`, a code may leave that
+file and not come back, and a *new* code that arrives without a case fails the
+check. CI runs it beside the registry staleness check it is the twin of: that
+one says every diagnostic has a code, this one says every code has a case.
 
-- The registry has **344 codes** (342 rules and 2 performance warnings).
+- The registry has **362 entries**, of which **334 are rules a program can
+  reach**. The other 28 are bookkeeping and are counted apart rather than
+  carried as debt: **26 retired**, fragments no message contains any more,
+  kept so their numbers are never handed to a different rule, and **2
+  shadowed** (`NL1022`, `NL1041`), live fragments that `codeFor` can never
+  return because a longer fragment of the same message is matched first.
+  Shadowing was not known before this check was written; the generator
+  computes it now and the coverage backlog excludes it, because a case for a
+  code nothing can print is a case nobody can write.
 - The `reject_*` cases and the `tests/link/` negatives — which `reject_oracle.js`
   owns and which **survive**, because their fragments are checked in — exercise
-  **148** of them. **196 are exercised by nothing that outlives stage0.**
+  **184** of the 334. **150 are exercised by nothing that outlives stage0.**
 - On the 265 `reject_*` cases alone the two compilers do not reach the same
   set: stage1 names **144** codes where stage0 names **182**. That 38-code
   difference is §A3's declared class — stage1's parser refuses the syntax as
@@ -501,12 +516,11 @@ otherwise proved by nothing". The honest measurement:
   already covers; the other four contain none. `diagnostics.txt` pins the
   diagnostic *machinery*, not any rule's words.
 
-Exposed and worth naming: all six `NL3xxx` driver wordings (`NL3003` internal
-compiler error and `NL3008` unknown option among them), all six `NL4xxx`
-interop wordings, and both `NL9xxx` performance warnings. Closing this means
-writing `reject_*` cases, which is ordinary work that needs no design — and it
-is the remaining half of G2 item 4 rather than a nice-to-have, because after
-R6 an unexercised wording is proved by nothing at all.
+Closing this means writing `reject_*` cases, which is ordinary work that needs
+no design — and it is the remaining half of G2 item 4 rather than a
+nice-to-have, because after R6 an unexercised wording is proved by nothing at
+all. What the backlog file makes different from a to-do list is that the number
+cannot silently grow while nobody is looking at it.
 
 ### C. Distribution
 

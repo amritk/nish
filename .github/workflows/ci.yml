@@ -123,6 +123,18 @@ jobs:
       - name: Diagnostic codes (registry up to date)
         run: node scripts/gen-diagnostic-codes.mjs --check
 
+      # The twin of the step above, and the other half of WP19 G2.4: that one
+      # says every diagnostic has a code, this one says every code has a case
+      # whose expected fragment is checked in. A wording nothing reaches is a
+      # wording that changes without a test noticing -- today that is caught by
+      # stage0 and stage1 having to agree, and after R6 there is no second
+      # compiler to disagree. It runs on Linux alone: it compiles the whole
+      # negative corpus a second time, and the answer is a property of the
+      # sources rather than of the host.
+      - name: Diagnostic coverage (every reachable code has a case)
+        if: runner.os == 'Linux'
+        run: node scripts/check-diagnostic-coverage.mjs
+
       - name: Size report
         run: |
           node dist/index.js examples/add.ts -o build/add.ll

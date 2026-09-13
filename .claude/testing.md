@@ -99,7 +99,14 @@ PR adding a construct is not finished without all of them:
    construct in `self/` alone and *not* registered — because the oracles would
    then skip its case in silence and the corpus would shrink without anyone
    deciding it should.
-7. A diagnostic code, if the construct can be refused: run
+7. A case that *reaches* each new wording, not only a code for it.
+   `node scripts/check-diagnostic-coverage.mjs` compiles every negative case
+   and reads the code of every diagnostic it prints; a new code with no case
+   fails it, and `tests/self/wording_backlog.txt` holds the ones still
+   unreached — a code may leave that file and may not come back. After R6 a
+   wording no case reaches is proved by nothing at all, since the comparison
+   with stage0 is what proves it today (`docs/wp19-stage0-retirement.md` §2B).
+8. A diagnostic code, if the construct can be refused: run
    `node scripts/gen-diagnostic-codes.mjs` so `src/codes.ts` and `self/codes.ts`
    pick the new message up. The generator appends and never renumbers, and
    `npm test` fails while either file is stale. A message built entirely out of

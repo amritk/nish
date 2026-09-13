@@ -121,16 +121,33 @@ const collect = () => {
       // open with the thing they are about (`Operator \`${op}\` requires ...`,
       // `Field \`${f}\` of class ...`), so the head is empty or too short to
       // identify anything, while the run after it is the rule in words.
-      const chunks = template ? lit.split(/\$\{[^}]*\}/g) : [lit];
-      lit = chunks.sort((a, b) => b.length - a.length)[0] ?? "";
-      lit = lit.replace(/\\`/g, "`").replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+      const unescape = (text) =>
+        text.replace(/\\`/g, "`").replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+      // Every literal run of the template, in the order they are written. The
+      // *longest* of them is the fragment — many messages open with the thing
+      // they are about (`Operator \`${op}\` requires ...`, `Field \`${f}\` of
+      // class ...`), so the head is empty or too short to identify anything,
+      // while the run after it is the rule in words. The rest are kept because
+      // `build` has a question fragments alone cannot answer: given this
+      // message, does `codeFor` return *this* rule's code, or does a fragment
+      // of another rule that also occurs in it win first? See `shadowed`.
+      const written = template ? lit.split(/\$\{[^}]*\}/g) : [lit];
+      // Longest as *written*, then unescaped: a backtick costs two characters
+      // in the source and one in the message, and picking the longest run
+      // after unescaping would sometimes pick a different one.
+      lit = unescape([...written].sort((a, b) => b.length - a.length)[0] ?? "");
+      const runs = written.map(unescape);
       // Too short to identify a rule on its own: it would match half the suite.
       // Such a diagnostic stays NL0000 until its wording grows something to key
       // on -- honest about the gap rather than guessing.
       if (lit.trim().length < 10) continue;
       const band = bandOf(file);
       const prev = found.get(lit);
-      if (prev === undefined || band < prev) found.set(lit, band);
+      if (prev === undefined) found.set(lit, { band, messages: [runs] });
+      else {
+        if (band < prev.band) prev.band = band;
+        prev.messages.push(runs);
+      }
     }
   }
   return found;
@@ -163,8 +180,8 @@ const build = () => {
   }
 
   const entries = [];
-  for (const [fragment, band] of found) {
-    entries.push({ fragment, band, perf: false });
+  for (const [fragment, about] of found) {
+    entries.push({ fragment, band: about.band, perf: false, messages: about.messages });
   }
   for (const fragment of PERFORMANCE) entries.push({ fragment, band: 9, perf: true });
 
@@ -196,6 +213,34 @@ const build = () => {
   // Longest fragment first: a specific rule must win over a general one it
   // contains ("Cannot assign to `length` of " over "Cannot assign ").
   entries.sort((a, b) => b.fragment.length - a.fragment.length || a.fragment.localeCompare(b.fragment));
+
+  // Which of them `codeFor` can actually return. A message contributes one
+  // fragment — its longest run — but its *other* runs may be the fragments of
+  // other rules, and `codeFor` answers with the first match in the order just
+  // sorted. So a rule whose every message also contains an earlier-sorted
+  // fragment is unreachable: no program can make the compiler print its code.
+  //
+  // That is not a bug to fix by renumbering, which is the one thing a stable
+  // code may not do. It is a fact a *reader* of the registry needs, and above
+  // all one `scripts/check-diagnostic-coverage.mjs` needs: a rule nothing can
+  // reach must not sit in the coverage backlog waiting for a test nobody can
+  // write.
+  // Within one table: `codeFor` looks a performance warning up in
+  // `PERFORMANCE_RULES` and everything else in `RULES`, so a warning is never
+  // shadowed by an error's fragment or the other way round.
+  for (const [i, entry] of entries.entries()) {
+    if (entry.retired === true) continue;
+    const earlier = entries
+      .slice(0, i)
+      .filter((e) => e.retired !== true && e.perf === entry.perf);
+    // A rule with no message recorded is one this script did not read out of
+    // the source — the hand-written performance list — and "every message is
+    // shadowed" would be vacuously true of it.
+    const messages = entry.messages ?? [];
+    entry.shadowed =
+      messages.length > 0 &&
+      messages.every((runs) => earlier.some((e) => runs.some((run) => run.includes(e.fragment))));
+  }
   return entries;
 };
 
@@ -370,23 +415,38 @@ export function codeFor(kind: string, text: string): string {
 `;
 };
 
-const entries = build();
-const want = [
-  [STAGE0, stage0Source(entries)],
-  [STAGE1, stage1Source(entries)],
-];
+/**
+ * The registry as this script computes it: `{ fragment, code, band, perf,
+ * retired }` per rule. Exported because the *other* question about a code —
+ * not "does it have a number" but "does any test reach its words" — needs the
+ * one thing the generated files do not carry, which is whether the fragment is
+ * still in the source at all. A retired fragment matches no message by
+ * construction, so a coverage check that counted it would be measuring history
+ * (`scripts/check-diagnostic-coverage.mjs`).
+ */
+const registry = () => build();
 
-if (process.argv.includes("--check")) {
-  let stale = false;
-  for (const [file, text] of want) {
-    const have = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-    if (have !== text) {
-      console.error(`error: ${path.relative(ROOT, file)} is out of date; run node scripts/gen-diagnostic-codes.mjs`);
-      stale = true;
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const entries = build();
+  const want = [
+    [STAGE0, stage0Source(entries)],
+    [STAGE1, stage1Source(entries)],
+  ];
+
+  if (process.argv.includes("--check")) {
+    let stale = false;
+    for (const [file, text] of want) {
+      const have = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+      if (have !== text) {
+        console.error(`error: ${path.relative(ROOT, file)} is out of date; run node scripts/gen-diagnostic-codes.mjs`);
+        stale = true;
+      }
     }
+    process.exit(stale ? 1 : 0);
   }
-  process.exit(stale ? 1 : 0);
+
+  for (const [file, text] of want) fs.writeFileSync(file, text);
+  console.log(`wrote src/codes.ts and self/codes.ts (${entries.length} rules)`);
 }
 
-for (const [file, text] of want) fs.writeFileSync(file, text);
-console.log(`wrote src/codes.ts and self/codes.ts (${entries.length} rules)`);
+export { registry };
