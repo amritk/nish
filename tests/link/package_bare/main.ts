@@ -6,10 +6,13 @@
 //   - `pkg_bare` resolves through `node_modules` and the `nish` condition, and
 //     `pkg_bare/util` resolves the `./util` **subpath** of the same package.
 //   - `@scope/hash` is a scoped name, and its manifest is the one-entry
-//     shorthand (`"exports": { "nish-i32": ..., "nish": ... }`) with the
-//     *mode-qualified* condition first, so this i32 compile picks `./i32.ts`
-//     and an f64 one would pick `./any.ts`. The arithmetic is the assertion:
-//     only the i32 file answers 100.
+//     shorthand (`"exports": { "nish-i32": ..., "nish": ... }`), so this i32
+//     compile picks `./i32.ts` and an f64 one would pick `./any.ts`. The
+//     arithmetic is the assertion: only the i32 file answers 100. The order the
+//     two conditions are written in is not what selects here — the compiler
+//     ranks the mode-qualified one above the plain one either way, and
+//     `tests/link/package_mode_order` is the same question asked of a manifest
+//     that declares them the other way round.
 //   - Every package keeps a private `helper()`, as does this program, and the
 //     symbols stay apart because each carries its package's prefix (WP21 S1).
 //

@@ -89,6 +89,20 @@ pkg	.	nish-i32	nish	{"exports":{".":{"nish":"./a.ts"}}}
 pkg	.	nish-i32	nish	{"exports":{".":{"nish":"./a\"b.ts"}}}
 pkg	.	nish-i32	nish	{"exports":{".":{"nish":""}}}
 
+# The mode-qualified condition outranks the plain one wherever the manifest puts
+# it, which is this reader's one departure from Node's declaration-order match
+# (`docs/wp21-packages.md` §10a). Each of these declares plain `nish` first: the
+# mode is asked for across the whole map before the plain one is asked for at
+# all, inside a subpath's map as much as at `.`, and it is asked for the mode
+# this compile *is* — a `nish-i32` row says nothing to an f64 program. A
+# mode-qualified key that names no target answers nothing rather than falling
+# back, because the package did name a file for this mode.
+pkg	.	nish-f64	nish	{"exports":{".":{"nish":"./a.ts","nish-i32":"./i.ts"}}}
+pkg	.	nish-f64	nish	{"exports":{".":{"nish-i32":"./i.ts","nish":"./a.ts","nish-f64":"./f.ts"}}}
+pkg	./util	nish-f64	nish	{"exports":{"./util":{"nish":"./u.ts","nish-f64":"./uf.ts"}}}
+pkg	.	nish-f64	nish	{"exports":{".":{"nish":"./a.ts","nish-f64":["./f.ts"]}}}
+pkg	.	nish-f64	nish	{"exports":{".":{"nish":"./a.ts","nish-f64":"../f.ts"}}}
+
 # `parseBareSpecifier`, the other half of resolving one: `spec <specifier>`.
 spec	hash
 spec	@scope/hash

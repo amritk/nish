@@ -29,6 +29,14 @@
  *     `"nish"` has no Nish entry point, because a `default` target is JavaScript
  *     and compiling it is not a thing this compiler can do.
  *   - Subpath **patterns** (`"./*"`) are not matched; a subpath is an exact key.
+ *   - The mode-qualified condition wins over the plain one **whatever order the
+ *     manifest declares them in**, which is the one place this reader answers a
+ *     different file from the one Node's declaration-order matching would. The
+ *     reason is in `docs/wp21-packages.md` §6: `nish-f64` is not a rival of
+ *     `nish`, it is `nish` refined by the mode, and honouring the order would
+ *     mean that a package writing `nish` above `nish-f64` had mode-specific
+ *     source that is never compiled and no diagnostic saying so — the silent
+ *     ABI mismatch the condition exists to turn into a loud one.
  *   - A target is a string beginning with `./`, with no `..` segment and no
  *     backslash escape. Anything else — a nested condition object, an array of
  *     targets, an escaped path — is treated as no target at all.
@@ -127,20 +135,12 @@ const manifestEndOfValue = (text: string, at: number): number => {
 };
 
 /**
- * The raw text of the value of the first key of `object` that is `first` or
- * `second`, in the object's **own declaration order**, or `""` when it has
- * neither.
- *
- * Declaration order is the whole of how a condition is selected: Node takes the
- * first key of the object that the consumer asked for, so
- * `{"nish": "a", "nish-f64": "b"}` answers `a` in f64 mode and
- * `{"nish-f64": "b", "nish": "a"}` answers `b`. Passing the two condition names
- * to one walk is what makes that order the object's rather than ours.
+ * The raw text of `object`'s `name` field, or `""` when it has none.
  *
  * A key that carries a backslash escape is compared as written and so matches
  * nothing, which is the narrowing the module header states.
  */
-const manifestFirstField = (object: string, first: string, second: string): string => {
+const manifestField = (object: string, name: string): string => {
   let i = manifestSkipBlank(object, 0);
   if (i >= object.length || object.charCodeAt(i) !== OPEN_BRACE) return "";
   i = manifestSkipBlank(object, i + 1);
@@ -153,16 +153,13 @@ const manifestFirstField = (object: string, first: string, second: string): stri
     const valueAt = manifestSkipBlank(object, i + 1);
     const valueEnd = manifestEndOfValue(object, valueAt);
     if (valueEnd < 0) return "";
-    if (key === first || key === second) return object.substring(valueAt, valueEnd);
+    if (key === name) return object.substring(valueAt, valueEnd);
     i = manifestSkipBlank(object, valueEnd);
     if (i >= object.length || object.charCodeAt(i) !== COMMA) return "";
     i = manifestSkipBlank(object, i + 1);
   }
   return "";
 };
-
-/** The raw text of `object`'s `name` field, or `""` when it has none. */
-const manifestField = (object: string, name: string): string => manifestFirstField(object, name, name);
 
 /**
  * `raw` as an export target, or `null` when it is not one.
@@ -193,6 +190,16 @@ const manifestTarget = (raw: string): string | null => {
  * package matches one — which is what makes a mode mismatch a resolution
  * failure at the boundary instead of a wrong answer at run time
  * (`docs/wp21-packages.md` §6, and the `bench/strbuild.ts` demonstration in it).
+ *
+ * The whole object is asked for `primary` before it is asked for `fallback`,
+ * rather than both being asked for in one walk: the mode-qualified condition is
+ * the plain one *refined*, so a manifest that declares `nish` above `nish-f64`
+ * must not thereby make its own f64 source unreachable. That is the reader's
+ * one deliberate departure from Node's declaration-order matching and the
+ * module header says why. A `primary` key whose value is not a target — an
+ * array, a nested object, an escaped path — answers `null` here rather than
+ * falling back to `fallback`, for the same reason: the package named a file for
+ * this mode, and quietly compiling the other one is what this is avoiding.
  */
 export const nishExportTarget = (
   manifest: string,
@@ -211,5 +218,6 @@ export const nishExportTarget = (
   // two forms, which Node refuses outright.
   const conditions = forSubpath.length > 0 ? forSubpath : subpath === "." ? exports : "";
   if (conditions.length === 0) return null;
-  return manifestTarget(manifestFirstField(conditions, primary, fallback));
+  const qualified = manifestField(conditions, primary);
+  return manifestTarget(qualified.length > 0 ? qualified : manifestField(conditions, fallback));
 };

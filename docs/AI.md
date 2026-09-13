@@ -608,7 +608,9 @@ export const main = (): i32 => {
   The package's `package.json` must offer the file under the `nish` export
   condition — `{"exports": {".": {"nish": "./src/index.ts"}}}` — and the mode
   gets a spelling of its own, `nish-i32` / `nish-f64`, for source that is only
-  correct under one `--number-mode`. A package without that condition is
+  correct under one `--number-mode`. The mode-qualified condition wins wherever
+  the package declares it, so a manifest carrying both never compiles the wrong
+  one of the two. A package without that condition is
   `` Package `lodash` has no Nish entry point ``, which is what an ordinary npm
   package gets: there is nothing to compile in a `.js` file.
 - Functions may be renamed on import; classes and interfaces may not — the type
