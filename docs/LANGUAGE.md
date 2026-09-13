@@ -647,13 +647,21 @@ spelling; the two compile to identical IR, instruction for instruction
   (`tests/cases/reject_assign_param`, `reject_cf_incdec_param`).
 - Parameters and the body's top-level block share one scope: `let x` in
   the body of `f(x)` is `` Duplicate declaration of `x` `` *(CLI only)*.
+- **A function's name shares one declaration namespace** with classes,
+  interfaces, type aliases, enums and module constants, whichever declaration
+  came first. A class or interface of the same name is
+  `` `Point` is already declared as a class or interface ``
+  (`tests/cases/reject_cls_name_is_function`); everything else is
+  `` `value` is already declared in this module ``
+  (`tests/cases/reject_fn_after_const`).
 - Rejected forms: generics (`tests/cases/reject_generic_function`),
   generators (`reject_generator`), `async` (`reject_async_function`),
   destructured / rest / optional / default parameters
   (`Destructured parameters are not supported`,
   `Rest parameters are not supported`,
   `Optional/default parameters are not supported`), overloads
-  (`` Duplicate function `f` `` *(CLI only)*), `declare function`,
+  (`` Duplicate function `f` ``, `tests/cases/reject_fn_duplicate`),
+  `declare function`,
   function expressions and arrow functions
   (`Unsupported expression in Phase 1: ArrowFunction` *(CLI only)*),
   and nested function declarations (`Unsupported statement in Phase 1:
