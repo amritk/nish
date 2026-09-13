@@ -128,7 +128,9 @@ export function collectImports(ctx: CheckContext, decl: Node): void {
   }
   const specs = decl.children[0];
   if (specs.kind !== N_LIST || specs.children.length === 0) {
-    ctx.error(decl, "Empty import list");
+    // At the braces, where stage0 puts it: the caret should be under the list
+    // that names nothing rather than under the whole `import` line.
+    ctx.error(specs.kind === N_LIST ? specs : decl, "Empty import list");
     return;
   }
   for (const spec of specs.children) {

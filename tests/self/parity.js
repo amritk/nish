@@ -192,9 +192,17 @@ function diagnosticFile(line) {
  * Reused when it is already there, so a run of the mode after `npm test` does
  * not pay for it twice. `NISH_PARITY_COMPILER` points at another one.
  */
+/**
+ * The stage1 compiler, built out of live sources **on every run**. It used to
+ * be reused when the file was already there, and that is how a gate lies: the
+ * mode compares stage0 as it is now with stage1 as it was whenever that binary
+ * was last linked, so a fix on one side reads as a difference and a fix on the
+ * other reads as agreement. Forty seconds on a run that is half an hour.
+ * `NISH_PARITY_COMPILER` is still the way to point the mode at a compiler you
+ * built yourself.
+ */
 async function build() {
   const out = path.join(root, "build", "self", "compile");
-  if (fs.existsSync(out)) return out;
   fs.mkdirSync(path.dirname(out), { recursive: true });
   const r = await run("node", [cli, path.join(root, "self", "compile.ts"), "--link", out]);
   if (r.status !== 0) {

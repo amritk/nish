@@ -331,7 +331,9 @@ function checkForOf(ctx: CheckContext, stmt: Node, scope: Scope): boolean {
   // It compiled the first of those, bound `x`, and dropped `y` on the floor.
   const list = stmt.children[0].children[0];
   if (list.children.length !== 1) {
-    ctx.error(list, "`for...of` declares exactly one variable");
+    // At the declaration, not at its first declarator: stage0's caret is under
+    // `const`, and `stmt.children[0]` is the node that starts there.
+    ctx.error(stmt.children[0], "`for...of` declares exactly one variable");
     return false;
   }
   const decl = list.children[0];

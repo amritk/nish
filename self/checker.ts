@@ -312,7 +312,9 @@ export class Checker {
     // says so; everything else in the one declaration namespace -- an alias, an
     // enum, a module constant -- reads the way every other clash reads.
     if (this.ctx.sigs.has(name)) {
-      this.ctx.error(stmt.children[0], `Duplicate function \`${name}\``);
+      // At the statement, where stage0 puts this one; the two below are at the
+      // name, where stage0 puts those.
+      this.ctx.error(stmt, `Duplicate function \`${name}\``);
       return;
     }
     if (this.program.structs.has(name)) {

@@ -173,9 +173,15 @@ function collectField(ctx: CheckContext, owner: StructInfo, decl: Node): void {
     } else if (!ctx.table.assignable(initType, type)) {
       const got = ctx.table.typeName(initType);
       ctx.error(initializer, `${what} is ${ctx.table.typeName(type)} but its initializer is ${got}`);
-    } else {
-      field.initializer = initializer;
     }
+    // The field keeps its initializer even when that initializer was refused.
+    // What it is worth is nothing; what it *says* is that the programmer wrote
+    // one, and the definite-assignment pass would otherwise follow the first
+    // diagnostic with `has no initializer and no constructor assigns it`,
+    // which is a second complaint about the line the first one is about.
+    // stage0 says one thing here because it throws out of the class
+    // (`tests/cases/reject_cls_field_init_type`).
+    field.initializer = initializer;
   }
   owner.fieldIndex.set(name, owner.fields.length);
   owner.fields.push(field);

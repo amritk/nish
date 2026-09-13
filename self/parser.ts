@@ -455,6 +455,7 @@ export class Parser {
     this.advance(); // `import`
     const node = this.node(N_IMPORT, start, this.end);
     const list = this.list();
+    const braceStart = this.start;
     if (!this.expect(TOK_LBRACE)) return this.finish(node, this.closeList(list));
     while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
       const specStart = this.start;
@@ -473,6 +474,15 @@ export class Parser {
       if (!this.eat(TOK_COMMA)) break;
     }
     this.expect(TOK_RBRACE);
+    // `closeList` spans a list by its elements and leaves an empty one
+    // nowhere, which is right everywhere else and wrong here: `import {}` is a
+    // *diagnostic* about the braces, and the caret has to be under them
+    // (`tests/cases/reject_import_empty`, where stage0 points at the same
+    // two characters).
+    if (list.children.length === 0) {
+      list.start = braceStart;
+      list.end = this.previousEnd;
+    }
     if (this.at(TOK_IDENT) && this.value === "from") this.advance();
     else this.report(`expected \`from\`, found \`${tokenName(this.kind)}\``, this.start, this.end);
     if (this.at(TOK_STRING)) {
