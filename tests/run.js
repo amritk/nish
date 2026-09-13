@@ -13,6 +13,10 @@
  *       <name>.env   environment for that run, `NAME=value` per line, layered over
  *                    the inherited one (WP19 R1: `getenv` has no other way to be pinned)
  *     Every successfully compiled case is also assembled with llvm-as.
+ *     The compiles run in process (tests/batch_worker.js), many cases to a
+ *     worker, rather than one `node dist/index.js` per case; the two paths are
+ *     compared against each other below, and `--verify-batch` widens that
+ *     comparison to the whole corpus.
  *
  *  B. Pipeline checks: the runtime unit test, inline allocator vs C arena layout
  *     (linked for the host, and asserted per target so wasm32 cannot drift),
@@ -26,6 +30,7 @@ import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
+import { compareWithCli, compileCases, gateCases } from "./batch_compile.js";
 const require = createRequire(import.meta.url);
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -161,12 +166,33 @@ function buildStage1ForCases() {
   return { cmd: built, prefix: [], label: seed.label };
 }
 
-const only = process.argv[2];
+// A flag is not a filter: `--verify-batch` and friends may sit where the
+// substring used to be, so only a plain word narrows the corpus.
+const only = process.argv[2] !== undefined && !process.argv[2].startsWith("-") ? process.argv[2] : undefined;
+/**
+ * The whole corpus through the CLI as well as through the batch (see
+ * `gateCases`). Minutes rather than seconds, so it is asked for rather than
+ * assumed; CI's `batch-parity` job is what asks on every pull request.
+ */
+const VERIFY_BATCH = process.argv.includes("--verify-batch");
 const cases = fs
   .readdirSync(casesDir)
   .filter((f) => f.endsWith(".ts"))
   .map((f) => f.slice(0, -3))
   .sort();
+
+/**
+ * Every case that stage0 compiles, compiled: one process for every sixty-four
+ * of them instead of one process each, which is where section A's six minutes
+ * went (`tests/batch_worker.js` has the measurement and the two properties of
+ * the compiler that make it sound). The loop below reads the answer out of this
+ * map exactly as it read a `spawnSync` result, and spawns the CLI itself for a
+ * case the map does not hold — a flag the library API cannot express, or a
+ * missing `dist/`.
+ */
+const batchable = cases.filter((name) => (!only || name.includes(only)) && !STAGE1_ONLY.has(name));
+const batched = await compileCases(batchable);
+
 for (const name of cases) {
   if (only && !name.includes(only)) continue;
   const src = path.join(casesDir, `${name}.ts`);
@@ -188,9 +214,9 @@ for (const name of cases) {
     }
   }
   const r =
-    stage1 === null
-      ? spawnSync("node", [cli, src, "-o", outLl, ...args], { cwd: root })
-      : spawnSync(stage1.cmd, [...stage1.prefix, src, "-o", outLl, ...args], { cwd: root });
+    stage1 !== null
+      ? spawnSync(stage1.cmd, [...stage1.prefix, src, "-o", outLl, ...args], { cwd: root })
+      : (batched.get(name) ?? spawnSync("node", [cli, src, "-o", outLl, ...args], { cwd: root }));
   const stderr = String(r.stderr);
 
   if (fs.existsSync(side("err"))) {
@@ -311,6 +337,25 @@ for (const name of cases) {
       run.status === 0 && String(run.stdout).trim() === want,
       `--- expected\n${want}\n--- actual (exit ${run.status})\n${run.stdout}${run.stderr}`
     );
+  }
+}
+
+// ---- The gate on the batched compile ---------------------------------------------
+//
+// Section A above is fast because it drives the compiler in process instead of
+// spawning it, and the whole value of that rests on the two paths answering the
+// same thing. So they are compared: the same case compiled both ways, and the
+// exit status, stdout, stderr and the bytes of the module have to agree.
+//
+// `gateCases` picks one case per distinct shape on an ordinary run — every
+// `.args` spelling in the corpus, every sidecar a case asserts through, with and
+// without a second module — and `--verify-batch` compares the whole corpus, which
+// CI runs on every pull request. The reasoning for the split, and why a rotating
+// sample was not the answer, is written where the set is chosen.
+if (batched.size > 0) {
+  const gate = VERIFY_BATCH ? batchable : gateCases(batchable);
+  for (const { name, ok, detail } of await compareWithCli(gate, batched, cli)) {
+    check(`${name}: the batched compile answers what the CLI answers`, ok, detail);
   }
 }
 
