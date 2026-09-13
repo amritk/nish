@@ -67,6 +67,28 @@ is **data, not code**: a source file next to the output it must produce.
 - **Minimize mocking.** There is nothing to mock: the compiler is a pure
   function from source to IR, and the runtime is exercised by running real
   binaries. Prefer a smaller golden to a stub.
+- **The golden cases are compiled in process, not one command per case.**
+  A `node dist/index.js <case>.ts -o out.ll` spends about 634 ms, of which
+  1.5 ms is compiling and ~473 ms is `import ts from "typescript"`; paid once
+  per case that was almost all of section A's wall clock. `tests/batch_worker.js`
+  drives `new Compilation({})` / `addRoot` / `check` / `emit` directly, sixty-four
+  cases to a process, and `tests/batch_compile.js` spawns those workers and hands
+  `run.js` a result in the shape `spawnSync` answers in. Three things to know
+  before touching it:
+  - **A `.args` flag has to be mapped.** `planOptions` in the worker turns the
+    sidecar into `CompilerOptions`. A flag it does not know is *not* ignored: the
+    case falls back to a real CLI spawn, so adding a flag costs performance
+    rather than correctness. Adding it to the map is the whole change.
+  - **The input path is handed over exactly as written.** `source_filename`
+    records it and `-g` puts it in a `DIFile`, so resolving or relativising it
+    would move every golden (`docs/wp19-stage0-retirement.md` §A3).
+  - **The fast path is gated on the slow one.** Every run compiles one case per
+    shape — each distinct `.args` spelling, each sidecar a case asserts through,
+    with and without a second module — through the CLI as well and compares the
+    exit status, stdout, stderr and the bytes of the module. `node tests/run.js
+    --verify-batch` does that for the whole corpus, and CI's `batch-parity` job
+    runs it on every pull request. Do not make section A faster without keeping
+    that comparison able to see it.
 - **Toolchain-dependent checks skip, never fail, without LLVM.** `run.js` probes
   for `llvm-as` / `clang` and skips assembly, linking and native runs when they
   are missing. Do not write a check that assumes a tool is present; gate it the
