@@ -32,6 +32,7 @@ import { Checker } from "./checker";
 import { DiagnosticSink, SourceFile } from "./diagnostics";
 import { emitProgram } from "./emit";
 import { StringMap } from "./map";
+import { isNishSpecifier } from "./nish_modules";
 import { N_CONSTRUCTOR, Node } from "./nodes";
 import { Options } from "./options";
 import { packageDirOf, packageNameOf, ROOT_PACKAGE } from "./packages";
@@ -39,6 +40,8 @@ import { ParentTable } from "./parents";
 import { Parser } from "./parser";
 import { CheckedProgram, FunctionSig, STRUCT_CLASS, StructRegistry } from "./program";
 import { basenameWithout, dirname, relativePath, resolveModule } from "./paths";
+import { CLI, STD_PREFIX } from "./branding";
+import { stdModuleNames, stdModulePath } from "./std_modules";
 import { RuntimeTable } from "./runtime";
 import { splitByte } from "./strings";
 import { TypeTable } from "./types";
@@ -188,7 +191,16 @@ export class Compilation {
    * Call it once per root: the second and later ones are modules nothing
    * imports, and a path already loaded answers true without reparsing.
    */
-  load(path: string): boolean {
+  /**
+   * Read, parse and register one module. `packageOverride` is the package it
+   * belongs to when the specifier that reached it already says, and `""` when
+   * the path is what decides. Only a `nish/` import says: the standard library
+   * is package `nish` wherever the compiler was installed, and reading it off
+   * the path would answer `nish` from `node_modules/nish/std/` and the *root*
+   * package from a checkout — so one program would compile installed and
+   * collide in a checkout, which is the clash `packages.ts` exists to prevent.
+   */
+  load(path: string, packageOverride: string): boolean {
     const at = this.byPath.get(path, -1);
     if (at >= 0) {
       return true;
@@ -215,7 +227,7 @@ export class Compilation {
     if (isEntry) {
       this.rootPackageDir = packageDirOf(path);
     }
-    const packageName = this.packageOf(path);
+    const packageName = packageOverride.length > 0 ? packageOverride : this.packageOf(path);
     const checker = new Checker(
       this.table,
       source,
@@ -265,16 +277,24 @@ export class Compilation {
     const dir = dirname(path);
     let ok = true;
     for (const imp of checker.program.imports) {
+      // A builtin module has no file behind it; pass 1b binds it instead.
+      if (isNishSpecifier(imp.specifier)) {
+        continue;
+      }
       if (unit.resolved.has(imp.specifier)) {
         continue;
       }
-      const target = resolveModule(dir, imp.specifier);
+      const target = imp.specifier.startsWith(STD_PREFIX)
+        ? stdModulePath(this.opts.packageRoot, imp.specifier)
+        : resolveModule(dir, imp.specifier);
       if (readFileSyncOrNull(target) === null) {
         // At the module specifier, where stage0 points
         // (`imp.node.moduleSpecifier` in `src/compilation.ts`).
         checker.ctx.errorAtSpecifier(
           imp.decl,
-          `Cannot find module \`${imp.specifier}\` (looked for ${target})`
+          imp.specifier.startsWith(STD_PREFIX)
+            ? `Module \`${imp.specifier}\` is not part of the standard library (it has: ${stdModuleNames()})`
+            : `Cannot find module \`${imp.specifier}\` (looked for ${target})`
         );
         checker.ctx.errored = false;
         continue;
@@ -284,7 +304,7 @@ export class Compilation {
       }
       // A module that fails to load is reported and the others still load;
       // `check` stops before binding anything.
-      if (!this.load(target)) {
+      if (!this.load(target, imp.specifier.startsWith(STD_PREFIX) ? CLI : "")) {
         ok = false;
       } else {
         unit.resolved.set(imp.specifier, this.byPath.get(target, -1));
@@ -305,8 +325,11 @@ export class Compilation {
     for (const unit of this.modules) {
       const targets: CheckedProgram[] = [];
       for (const imp of unit.checker.program.imports) {
-        const index = unit.resolved.get(imp.specifier, -1);
-        targets.push(this.modules[index].checker.program);
+        // A builtin module has no file behind it, so there is nothing to look
+        // up; the entry keeps the array the same length as `imports` and
+        // `bindImport` routes on the specifier before it reads one.
+        const index = isNishSpecifier(imp.specifier) ? -1 : unit.resolved.get(imp.specifier, -1);
+        targets.push(index < 0 ? unit.checker.program : this.modules[index].checker.program);
       }
       unit.checker.bindImports(targets);
     }

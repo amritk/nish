@@ -5,6 +5,13 @@
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json",
+    "./runtime/*": "./runtime/*",
+    "./scripts/*": "./scripts/*",
+    "./*": "./std/*.ts"
+  },
   "bin": {
     "nish": "dist/index.js"
   },

@@ -5450,6 +5450,81 @@ attributes #1 = { nounwind }
 ```
 <!-- cookbook:end builtin_env -->
 
+### Builtin modules (`nish:`)
+
+An import from `nish:fs` / `nish:process` / `nish:io` renames a builtin rather
+than introducing one, so there is nothing here that the global spelling does
+not also emit: no `declare` for the import, no symbol, no call through a
+module. `writeFileSync` is `@nish_write_file` either way, and `argv` is the
+same load of `@nish_argv`. What the import buys is at the name, not in the IR —
+a user function called `write` collides with it instead of silently replacing
+it (`docs/LANGUAGE.md` -> Builtin modules).
+
+<!-- cookbook:begin builtin_nish_modules -->
+```ts
+import { readFileSync, writeFileSync } from "nish:fs";
+import { argv } from "nish:process";
+import { write } from "nish:io";
+
+export const main = (): number => {
+  writeFileSync("build/cookbook/out.txt", `${argv.length}\n`);
+  write(readFileSync("build/cookbook/out.txt"));
+  return 0;
+};
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [23 x i8] } { i64 22, [23 x i8] c"build/cookbook/out.txt\00" }, align 8
+@nish_argv = external global %struct.nish_array*, align 8
+@.str.1 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"\0A\00" }, align 8
+
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly) #0
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = load %struct.nish_array*, %struct.nish_array** @nish_argv, align 8
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %0, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
+  %3 = trunc i64 %2 to i32
+  %4 = call i8* @nish_str_from_i32(i32 %3)
+  %5 = call i8* @nish_str_concat(i8* %4, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*))
+  call void @nish_write_file(i8* bitcast ({ i64, [23 x i8] }* @.str.0 to i8*), i8* %5)
+  %6 = call i8* @nish_read_file(i8* bitcast ({ i64, [23 x i8] }* @.str.0 to i8*))
+  call void @nish_write(i8* %6, i32 1, i1 false)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  call void @nish_argv_init(i32 %argc, i8** %argv)
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+```
+<!-- cookbook:end builtin_nish_modules -->
+
 ## Optimisation flags
 
 ### Integer overflow: `nsw` by default, `--wrapping` to opt out

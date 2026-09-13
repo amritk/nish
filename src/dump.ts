@@ -170,9 +170,11 @@ export function dumpChecked(compilation: Compilation): string {
         ? `struct ${imp.struct.name}`
         : imp.constant
           ? `const ${imp.constant.name}`
-          : imp.sig
-            ? `function @${imp.sig.name}`
-            : "unbound";
+          : imp.builtin
+            ? `builtin ${imp.builtin.canonical}`
+            : imp.sig
+              ? `function @${imp.sig.name}`
+              : "unbound";
       lines.push(`import ${imp.localName} from ${JSON.stringify(imp.specifier)} -> ${what}`);
     }
     // Module constants (WP14) carry their folded value: it is the whole of

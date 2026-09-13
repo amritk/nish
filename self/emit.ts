@@ -463,6 +463,12 @@ export class Emitter {
       if (imp.constant !== null) {
         continue;
       }
+      // A builtin import declares nothing: the call it names lowers the same
+      // way the global spelling does, to an intrinsic or a `nish_*` symbol the
+      // runtime table already declares on first use.
+      if (imp.builtin !== null) {
+        continue;
+      }
       const struct = imp.struct;
       const sig = imp.sig;
       if (struct !== null) {
@@ -824,6 +830,12 @@ export class Emitter {
     if (constant !== null) {
       return constantText(this, constant);
     }
+    // `import { argv } from "nish:process"`: the same load as `process.argv`,
+    // reached by a name instead of a dot.
+    const builtin = this.program.nodeBuiltins[expr.id];
+    if (builtin.length > 0) {
+      return emitNamespaceProperty(this, expr, builtin);
+    }
     const local = this.program.nodeLocals[expr.id];
     if (local !== null) {
       if (local.storage === STORAGE_PARAM) {
@@ -871,6 +883,19 @@ export class Emitter {
     }
     if (isResultConstructorCall(this.program, this.table, expr)) {
       return emitResultConstructor(this, expr, callee.text); // WP16: `Ok(v)` / `Err(e)`
+    }
+    // Under a `nish:` import the identifier is the local name, so the checker
+    // recorded which builtin it is. A dotted one (`process.exit`) then goes to
+    // the emitter for dotted callees: the import is what let the program call
+    // it without writing the dot.
+    const imported = this.program.nodeBuiltins[expr.id];
+    if (imported.length > 0) {
+      // A dotted canonical name (`process.exit`) belongs to the emitter for
+      // dotted callees; the import is what let the program call it without
+      // writing the dot.
+      return imported.indexOf(".") < 0
+        ? emitIdentifierBuiltinCall(this, expr, imported)
+        : emitBuiltinCall(this, expr, imported);
     }
     if (isIdentifierBuiltinCall(this.program, expr)) {
       return emitIdentifierBuiltinCall(this, expr, callee.text);

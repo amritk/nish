@@ -35,7 +35,13 @@
 //   - **Parent links come from a side table** (`self/parents.ts`), since the
 //     tree has none. The walks are otherwise the same walks.
 
-import { builtinCallees, identifierBuiltinCallees, isSpawnCall } from "./emit_builtins";
+import {
+  builtinCallees,
+  builtinCalleesNamed,
+  identifierBuiltinCallees,
+  identifierBuiltinCalleesNamed,
+  isSpawnCall,
+} from "./emit_builtins";
 import { stringifyCallee, stringConstructCallees } from "./emit_strings";
 import { analyzeEscapes, EscapeResult, FLOW_LEAKS, FLOW_LOCAL, FLOW_RETURNED } from "./escape";
 import {
@@ -1054,11 +1060,18 @@ class FactCollector {
    * the analysis is told it emits never drift apart.
    */
   collectNamespacePropertyFacts(node: Node): void {
-    if (node.kind !== N_MEMBER) {
-      return;
-    }
-    const name = dottedName(node);
-    if (receiverIsValue(this.unit.program, node.children[0])) {
+    let name = "";
+    if (node.kind === N_MEMBER) {
+      if (receiverIsValue(this.unit.program, node.children[0])) {
+        return;
+      }
+      name = dottedName(node);
+    } else if (node.kind === N_IDENT) {
+      // The same property, reached through `import { argv } from
+      // "nish:process"`. An attribute that depended on which spelling a
+      // program used would be a miscompile waiting for the other one.
+      name = this.unit.program.nodeBuiltins[node.id];
+    } else {
       return;
     }
     if (name === "process.argv") {
@@ -1077,6 +1090,20 @@ class FactCollector {
     }
     if (this.unit.program.nodeCallees[node.id] !== null) {
       return; // a user function of that name wins
+    }
+    // Under a `nish:` import the identifier is the local name, so the checker
+    // recorded which builtin it is; a dotted one is what the other helper
+    // answers for. Reading the text here instead would leave a call to `exit`
+    // looking like no call at all, and the function would keep a `willreturn`
+    // it has not earned.
+    const imported = this.unit.program.nodeBuiltins[node.id];
+    if (imported.length > 0) {
+      this.addCallees(
+        imported.indexOf(".") < 0
+          ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported)
+          : builtinCalleesNamed(this.unit.program, this.table, node, imported)
+      );
+      return;
     }
     this.addCallees(identifierBuiltinCallees(this.unit.program, this.table, node));
   }

@@ -61,6 +61,8 @@ import { ROOT_PACKAGE, packageSymbolPrefix } from "../packages.js";
 import { CheckedProgram, FunctionSig, ImportBinding, LocalVar, Param, StructInfo } from "./program.js";
 import { analyzeBounds } from "./bounds.js";
 import { checkElementReferences } from "./arrays.js";
+import { isNishSpecifier, nishModule, nishModuleNames } from "./nish-modules.js";
+import { lookup } from "../lookup.js";
 import { checkPerformance } from "./performance.js";
 import { checkResultLocalsHandled } from "./result.js";
 import { Scope } from "./scope.js";
@@ -166,6 +168,7 @@ export class Checker implements CheckContext {
       types: new WeakMap(),
       bindings: new WeakMap(),
       constRefs: new WeakMap(),
+      builtinRefs: new WeakMap(),
       locals: new WeakMap(),
       callees: new WeakMap(),
       structs: new Map(),
@@ -174,6 +177,7 @@ export class Checker implements CheckContext {
       caseValues: new WeakMap(),
       provenIndices: new WeakSet(),
       aliases: new Map(),
+      builtinImports: new Map(),
       enums: new Map(),
       enumRefs: new WeakMap(),
       templates: new Map(),
@@ -589,7 +593,52 @@ export class Checker implements CheckContext {
 
   /** Pass 1b: bind every import to the exporter's function signature or struct. */
   bindImports(resolve: ImportResolver): void {
-    for (const imp of this.program.imports) this.sink.recover(() => this.bindImport(imp, resolve(imp)));
+    for (const imp of this.program.imports)
+      this.sink.recover(() =>
+        // A `nish:` import names a builtin, so it never reaches the resolver:
+        // there is no module to load, which is also what lets a single-module
+        // check use one without a Compilation around it.
+        isNishSpecifier(imp.specifier) ? this.bindBuiltinImport(imp) : this.bindImport(imp, resolve(imp))
+      );
+  }
+
+  /**
+   * `import { readFileSync } from "nish:fs"`, `import { exit } from
+   * "nish:process"`: bind a local name to a builtin the checker already has.
+   *
+   * Nothing is emitted for one of these. The binding exists so that the call
+   * and identifier checkers can prefer it over the ambient global table, which
+   * is the whole point of the feature: an imported name cannot be taken over
+   * by a user function that happens to share it, because declaring one is a
+   * collision here rather than a silent shadow.
+   */
+  private bindBuiltinImport(imp: ImportBinding): void {
+    const module = nishModule(imp.specifier);
+    if (!module) {
+      this.error(
+        `Unknown builtin module \`${imp.specifier}\` (the builtin modules are ${nishModuleNames().join(", ")})`,
+        imp.node.moduleSpecifier
+      );
+    }
+    const exported = lookup(module, imp.importedName);
+    if (!exported) {
+      this.error(
+        `Module \`${imp.specifier}\` has no export \`${imp.importedName}\` (it exports ${Object.keys(module).join(", ")})`,
+        imp.element
+      );
+    }
+    if (this.importsUsedAsTypes.has(imp.localName)) {
+      this.error(`\`${imp.localName}\` is a builtin imported from \`${imp.specifier}\`, not a type`, imp.element);
+    }
+    if (this.sigs.has(imp.localName) || this.program.constants.has(imp.localName)) {
+      this.error(`\`${imp.localName}\` is already declared in this module`, imp.element);
+    }
+    const origin = this.program.imports.find((o) => o !== imp && o.localName === imp.localName && o.builtin);
+    if (origin) {
+      this.error(`\`${imp.localName}\` is already imported from \`${origin.specifier}\``, imp.element);
+    }
+    imp.builtin = exported;
+    this.program.builtinImports.set(imp.localName, exported);
   }
 
   private bindImport(imp: ImportBinding, target: CheckedProgram): void {

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 303 programs, 5004 dump lines.
+# 307 programs, 5037 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -2234,6 +2234,33 @@ function main(): i32 -> @nish_main [exported entry]
   local 10:9 first: i64 (const)
   local 11:7 later: i64 (let)
   local 12:7 spins: i32 (let)
+program tests/cases/io_nish_import.ts
+module tests/cases/io_nish_import.ts (entry)
+import readFileSync from "nish:fs" -> builtin readFileSync
+import writeFileSync from "nish:fs" -> builtin writeFileSync
+import argv from "nish:process" -> builtin process.argv
+import write from "nish:io" -> builtin write
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_read_file nish_str_concat nish_write nish_write_file
+  stackSites=0 stackLocals=0
+program tests/cases/io_nish_import_global.ts
+module tests/cases/io_nish_import_global.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_read_file nish_str_concat nish_write nish_write_file
+  stackSites=0 stackLocals=0
+program tests/cases/io_nish_rename.ts
+module tests/cases/io_nish_rename.ts (entry)
+import slurp from "nish:fs" -> builtin readFileSync
+import spill from "nish:fs" -> builtin writeFileSync
+import args from "nish:process" -> builtin process.argv
+import exit from "nish:process" -> builtin process.exit
+import out from "nish:io" -> builtin write
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_exit nish_read_file nish_str_concat nish_write nish_write_file
+  stackSites=0 stackLocals=0
 program tests/cases/io_readdir.ts
 module tests/cases/io_readdir.ts (entry)
 function main(): i32 -> @nish_main [exported entry]
@@ -4251,6 +4278,16 @@ function magnitude(x: i32): i32 -> @magnitude
   stackSites=0 stackLocals=0
 function tau(): f64 -> @tau
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+program docs/cookbook/builtin_nish_modules.ts
+module docs/cookbook/builtin_nish_modules.ts (entry)
+import readFileSync from "nish:fs" -> builtin readFileSync
+import writeFileSync from "nish:fs" -> builtin writeFileSync
+import argv from "nish:process" -> builtin process.argv
+import write from "nish:io" -> builtin write
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_read_file nish_str_concat nish_str_from_i32 nish_write nish_write_file
   stackSites=0 stackLocals=0
 program docs/cookbook/builtin_process.ts
 module docs/cookbook/builtin_process.ts (entry)

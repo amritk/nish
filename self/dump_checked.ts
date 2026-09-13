@@ -63,7 +63,7 @@ export function main(): number {
   // `load` parses every module, sweeps it with Phase 0 and collects its
   // signatures, so a forbidden construct or an unreadable module is answered
   // before anything is bound; `check` binds the imports and checks the bodies.
-  if (!compilation.load(path)) {
+  if (!compilation.load(path, "")) {
     if (compilation.sink.hasErrors()) {
       writeError(`${compilation.sink.format(20)}\n`);
     }

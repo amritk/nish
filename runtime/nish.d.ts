@@ -175,6 +175,65 @@ declare function getenv(name: string): string | null;
  */
 declare function monotonicNanos(): i64;
 
+// ---- The builtin modules (`nish:`) ---------------------------------------------
+//
+// The same builtins, importable. `nish:` resolves to no file — the import
+// renames a builtin rather than introducing one, and the compiler emits the
+// same IR for either spelling — but `tsc` still has to be told the modules
+// exist, or an editor reports every one of these imports as unresolved. The
+// signatures are deliberately the globals' own, repeated rather than aliased:
+// `export { readFileSync }` inside a `declare module` would re-export the
+// global and lose the doc comment an editor shows at the call site.
+//
+// `docs/LANGUAGE.md` -> Builtins -> Builtin modules is the normative list.
+
+declare module "nish:fs" {
+  export function readFileSync(path: string): string;
+  export function readFileSyncOrNull(path: string): string | null;
+  export function writeFileSync(path: string, data: string): void;
+  export function appendFileSync(path: string, data: string): void;
+  /** `true` when the directory was created, `false` when it already existed. */
+  export function mkdirSync(path: string): boolean;
+  export function isDirectorySync(path: string): boolean;
+  /**
+   * The directory's entries, sorted ascending by bytes and without `.` or
+   * `..`, or `null` when it cannot be read.
+   */
+  export function readdirSync(path: string): string[] | null;
+}
+
+declare module "nish:process" {
+  /** The global `process.exit`: a terminator, which `never` is how `tsc` spells it. */
+  export function exit(code: i32): never;
+  export function getenv(name: string): string | null;
+  export function spawnSync(argv: string[]): number;
+  /**
+   * The same run with each non-empty path receiving that stream, created or
+   * truncated; an empty string leaves that stream inherited.
+   */
+  export function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
+  /**
+   * A monotonic clock in nanoseconds. The origin is arbitrary, so only the
+   * difference between two reads is meaningful.
+   */
+  export function monotonicNanos(): i64;
+  /** The command line; `argv[0]` is the program path, as in C. Read-only. */
+  export const argv: readonly string[];
+  /** The operating system the program runs on: `"linux"`, `"darwin"`, or `"unknown"`. */
+  export const platform: string;
+  /** The architecture: `"x64"`, `"arm64"`, or `"unknown"`. */
+  export const arch: string;
+}
+
+declare module "nish:io" {
+  /** `s` to stdout with no trailing newline and no conversion. */
+  export function write(s: string): void;
+  /** The same, on stderr. */
+  export function writeError(s: string): void;
+  /** `message` to stderr, then exit 1. A terminator, as `process.exit` is. */
+  export function panic(message: string): never;
+}
+
 // ---- Arena (docs/LANGUAGE.md -> Arena) ---------------------------------------
 
 declare const Arena: {

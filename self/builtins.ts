@@ -212,6 +212,21 @@ function unknownBuiltin(ctx: CheckContext, at: Node, name: string): i32 {
   return ctx.errorType(at, `Unknown builtin \`${name}\` (supported: ${SUPPORTED_BUILTINS})`);
 }
 
+/**
+ * A dotted builtin reached without its dot, because a `nish:` import renamed
+ * it. `process.exit` is the only one any module exports today; a second would
+ * add a branch here rather than a path of its own.
+ */
+export function checkImportedDottedBuiltin(
+  ctx: CheckContext,
+  call: Node,
+  scope: Scope,
+  namespace: string,
+  member: string
+): i32 {
+  return checkProcess(ctx, call, call.children[1], `${namespace}.${member}`, member, scope);
+}
+
 export function checkBuiltinCall(ctx: CheckContext, call: Node, scope: Scope): i32 {
   const access = call.children[0];
   const receiver = access.children[0];
@@ -395,7 +410,21 @@ function checkArena(
 
 /** `toI32(x)`, `parseInt(s)`, `readFileSync(p)`, `panic(m)`, ... */
 export function checkBuiltinFunction(ctx: CheckContext, call: Node, scope: Scope): i32 {
-  const name = call.children[0].text;
+  return checkBuiltinFunctionNamed(ctx, call, scope, call.children[0].text);
+}
+
+/**
+ * The same, under a name the call site does not spell. A `nish:` import binds
+ * a local name to a builtin, so the rule to apply is chosen by what was
+ * imported rather than by what the identifier says — which is also what makes
+ * `as` work.
+ */
+export function checkBuiltinFunctionNamed(
+  ctx: CheckContext,
+  call: Node,
+  scope: Scope,
+  name: string
+): i32 {
   const args = call.children[1];
 
   const target = conversionTarget(name);
@@ -558,6 +587,13 @@ export function terminatesControlFlow(ctx: CheckContext, expr: Node): boolean {
   }
   const callee = expr.children[0];
   if (callee.kind === N_IDENT) {
+    // An import is unambiguous: `exit` from `nish:process` ends the path, and
+    // so does an `as` rename of it, while an identifier that only looks like
+    // one still has to pass the test below.
+    const imported = ctx.program.builtinImport(callee.text);
+    if (imported !== null) {
+      return imported.canonical === "process.exit" || imported.canonical === "panic";
+    }
     return callee.text === "panic" && ctx.signature("panic") === null;
   }
   if (callee.kind !== N_MEMBER || callee.children[0].kind !== N_IDENT) {
@@ -578,6 +614,13 @@ export function isArgvExpression(ctx: CheckContext, expr: Node, scope: Scope): b
   let inner = expr;
   while (inner.kind === N_PAREN) {
     inner = inner.children[0];
+  }
+  // The same array under `import { argv } from "nish:process"`, where there is
+  // no `process.` to match on. Read-only is a fact about the array the entry
+  // wrapper built, not about how a module spells its name.
+  if (inner.kind === N_IDENT) {
+    const imported = ctx.program.builtinImport(inner.text);
+    return imported !== null && imported.canonical === "process.argv" && scope.lookup(inner.text) === null;
   }
   if (inner.kind !== N_MEMBER || inner.text !== "argv") {
     return false;

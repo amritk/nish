@@ -335,9 +335,24 @@ export function emitBuiltinCall(emitter: Emitter, expr: Node, name: string): str
  * order of the tests is theirs, so a reader can diff the two halves.
  */
 export function builtinCallees(program: CheckedProgram, table: TypeTable, call: Node): string[] {
-  const out: string[] = [];
   const access = call.children[0];
-  const name = `${access.children[0].text}.${access.text}`;
+  return builtinCalleesNamed(program, table, call, `${access.children[0].text}.${access.text}`);
+}
+
+/**
+ * The same, under a name the call site does not spell. A `nish:` import can
+ * bring a dotted builtin in as a plain identifier (`exit` for `process.exit`),
+ * and the analysis has to be told what that call emits whichever way the
+ * program spelled it — an omission here is a wrong attribute, not a cosmetic
+ * difference.
+ */
+export function builtinCalleesNamed(
+  program: CheckedProgram,
+  table: TypeTable,
+  call: Node,
+  name: string
+): string[] {
+  const out: string[] = [];
   const args = call.children[1];
   const firstType = args.children.length > 0 ? program.nodeTypes[args.children[0].id] : -1;
   if (name === "console.log" || name === "console.error") {
@@ -555,8 +570,17 @@ export function isSpawnCall(program: CheckedProgram, call: Node): boolean {
 }
 
 export function identifierBuiltinCallees(program: CheckedProgram, table: TypeTable, call: Node): string[] {
+  return identifierBuiltinCalleesNamed(program, table, call, call.children[0].text);
+}
+
+/** The same, under the name a `nish:` import bound — see `builtinCalleesNamed`. */
+export function identifierBuiltinCalleesNamed(
+  program: CheckedProgram,
+  table: TypeTable,
+  call: Node,
+  name: string
+): string[] {
   const out: string[] = [];
-  const name = call.children[0].text;
   if (!isBuiltinFunction(name)) {
     return out;
   }

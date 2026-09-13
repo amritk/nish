@@ -25,6 +25,7 @@ import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { CheckedProgram, Checker, FunctionSig, ImportBinding, StructInfo } from "./checker/index.js";
+import { isNishSpecifier } from "./checker/nish-modules.js";
 import { FunctionFacts, analyzeFunctions } from "./codegen/attributes.js";
 import { emitProgram } from "./codegen/emitter.js";
 import { CompileError, DiagnosticSink } from "./diagnostics.js";
@@ -32,6 +33,9 @@ import { ROOT_PACKAGE, packageDirOf, packageNameOf } from "./packages.js";
 import { parseSource } from "./parser.js";
 import { validateSyntax } from "./validator.js";
 import { CompilerOptions, DEFAULT_OPTIONS } from "./types.js";
+import { CLI, STD_PREFIX } from "./branding.js";
+import { STD_DIR, stdModuleNames } from "./std-modules.js";
+import { PKG_ROOT } from "./version.js";
 
 export interface ModuleUnit {
   /** Absolute path: the module's identity. */
@@ -130,14 +134,24 @@ export class Compilation {
     absPath: string,
     fileName: string,
     sourceText: string | undefined,
-    isEntry: boolean
+    isEntry: boolean,
+    /**
+     * The package the module belongs to, when the specifier that reached it
+     * already says. Only a `nish/` import does: the standard library is
+     * package `nish` wherever the compiler was installed, and deriving that
+     * from the path would answer `nish` from `node_modules/nish/std/` and the
+     * *root* package from a checkout — so the same program would compile
+     * installed and collide in a checkout, which is the clash `packages.ts`
+     * exists to make impossible.
+     */
+    packageOverride?: string
   ): ModuleUnit {
     const existing = this.byPath.get(absPath);
     if (existing) return existing;
 
     const text = sourceText ?? fs.readFileSync(absPath, "utf8");
     const sourceFile = parseModule(fileName, text, this.sink);
-    const packageName = this.packageOf(fileName);
+    const packageName = packageOverride ?? this.packageOf(fileName);
     const checker = new Checker(sourceFile, this.opts, { isEntry, packageName, sink: this.sink });
     const unit: ModuleUnit = {
       path: absPath,
@@ -153,17 +167,29 @@ export class Compilation {
 
     checker.collectSignatures(); // pass 1: also validates the import syntax
     for (const imp of checker.program.imports) {
+      // A builtin module has no file behind it; pass 1b binds it instead.
+      if (isNishSpecifier(imp.specifier)) continue;
       if (unit.resolved.has(imp.specifier)) continue;
       // A missing module is reported and the others still load; `check()` stops before binding.
       this.sink.recover(() => {
         const target = this.resolveSpecifier(unit, imp);
-        unit.resolved.set(imp.specifier, this.load(target, importedName(unit, target), undefined, false));
+        unit.resolved.set(
+          imp.specifier,
+          this.load(
+            target,
+            importedName(unit, target),
+            undefined,
+            false,
+            imp.specifier.startsWith(STD_PREFIX) ? CLI : undefined
+          )
+        );
       });
     }
     return unit;
   }
 
   private resolveSpecifier(importer: ModuleUnit, imp: ImportBinding): string {
+    if (imp.specifier.startsWith(STD_PREFIX)) return this.resolveStdSpecifier(importer, imp);
     let resolved = path.resolve(path.dirname(importer.path), imp.specifier);
     if (resolved.endsWith(".js")) resolved = resolved.slice(0, -3) + ".ts";
     else if (!resolved.endsWith(".ts")) resolved += ".ts";
@@ -178,6 +204,37 @@ export class Compilation {
       );
     }
     return resolved;
+  }
+
+  /**
+   * `nish/text` -> `std/text.ts` beside this compiler.
+   *
+   * The standard library is *source*, not a builtin: the module is compiled
+   * into the program that imports it and reaches the emitter like any other,
+   * which is the whole of `docs/wp21-packages.md` §3. So this answers a path
+   * and everything downstream is the ordinary module path — the only thing
+   * that differs from `./text` is where the file is looked for.
+   *
+   * It is looked for beside the compiler rather than through `node_modules`,
+   * and that is the one deliberate narrowing of §5b: for the compiler's *own*
+   * package there is exactly one right answer — the `std/` that shipped with
+   * this binary — and no version of it can be skewed against the compiler
+   * reading it, because the two are one package. A third-party bare specifier
+   * is still refused, and gaining one is what WP21 is for.
+   *
+   * The diagnostic lists the library rather than the path it tried, for the
+   * reason the missing-module one is phrased against the importer: where the
+   * compiler is installed is not a fact about the program.
+   */
+  private resolveStdSpecifier(importer: ModuleUnit, imp: ImportBinding): string {
+    const name = imp.specifier.slice(STD_PREFIX.length);
+    const resolved = path.join(PKG_ROOT, STD_DIR, `${name}.ts`);
+    if (name.length > 0 && fs.existsSync(resolved) && fs.statSync(resolved).isFile()) return resolved;
+    throw new CompileError(
+      `Module \`${imp.specifier}\` is not part of the standard library (it has: ${stdModuleNames().join(", ")})`,
+      imp.node.moduleSpecifier,
+      importer.sourceFile
+    );
   }
 
   /**

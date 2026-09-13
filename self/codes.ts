@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 386;
+export const RULE_COUNT: i32 = 393;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -319,12 +319,16 @@ export function diagnosticRules(): string[] {
     "NL2003",
     "` is not definitely assigned in the constructor",
     "NL2082",
+    "` is not part of the standard library (it has: ",
+    "NL3011",
     " values; build it with `[]` and `push` instead",
     "NL2022",
     ", and a declared C function takes scalars only",
     "NL2305",
     "` has more than one constructor (no overloads)",
     "NL2063",
+    "` is a builtin function and can only be called",
+    "NL2312",
     "` requires two operands of the same type, got ",
     "NL2103",
     "`) are not supported; import functions by name",
@@ -383,6 +387,8 @@ export function diagnosticRules(): string[] {
     "NL1007",
     "` in a constant requires boolean operands",
     "NL2069",
+    "` is a builtin value and cannot be called",
+    "NL2314",
     "An enum member name must be an identifier",
     "NL2287",
     "Computed property names are forbidden in ",
@@ -581,6 +587,8 @@ export function diagnosticRules(): string[] {
     "NL2058",
     "` expects an argument of type ",
     "NL2268",
+    "` is a builtin imported from `",
+    "NL2313",
     "` must return a value of type ",
     "NL2093",
     "`bigint` type is forbidden in ",
@@ -611,6 +619,8 @@ export function diagnosticRules(): string[] {
     "NL1004",
     " (no interpreter at runtime)",
     "NL1005",
+    "` is already imported from `",
+    "NL2315",
     "` must be an integer literal",
     "NL2282",
     "`__proto__` is forbidden in ",
@@ -629,6 +639,8 @@ export function diagnosticRules(): string[] {
     "NL2261",
     "()` in the constructor of `",
     "NL2036",
+    "` (the builtin modules are ",
+    "NL2310",
     "` cannot extend interface `",
     "NL2049",
     "`debugger` is forbidden in ",
@@ -777,6 +789,8 @@ export function diagnosticRules(): string[] {
     "NL2247",
     "Unknown property `",
     "NL2250",
+    "` has no export `",
+    "NL2311",
     "` has no member `",
     "NL2280",
     "Empty import list",

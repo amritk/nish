@@ -32,7 +32,14 @@ export type MethodCallChecker = (
   scope: Scope
 ) => StaticType;
 export type NewChecker = (ctx: CheckContext, expr: ts.NewExpression, scope: Scope) => StaticType;
-export type NamespacePropertyChecker = (ctx: CheckContext, expr: ts.PropertyAccessExpression) => StaticType;
+/**
+ * A member of a builtin namespace read as a value (`Math.PI`, `process.argv`).
+ * The node is a `ts.Expression` rather than a property access because a
+ * `nish:` import can bring the same property in under a plain identifier
+ * (`import { argv } from "nish:process"`), and every one of these checkers
+ * wants the node only to hang a diagnostic on and to look at its parent.
+ */
+export type NamespacePropertyChecker = (ctx: CheckContext, expr: ts.Expression) => StaticType;
 
 export const propertyCheckers: Partial<Record<StaticType["kind"], PropertyChecker>> = {};
 export const methodCallCheckers: Partial<Record<StaticType["kind"], MethodCallChecker>> = {};
@@ -56,7 +63,14 @@ export const assignmentTargetCheckers: CheckerTable<BinaryChecker> = {};
  */
 export function isValueReceiver(ctx: CheckContext, receiver: ts.Expression, scope: Scope): boolean {
   if (!ts.isIdentifier(receiver)) return true;
-  return scope.lookup(receiver.text) !== undefined || ctx.program.constants.has(receiver.text);
+  // A name a `nish:` import bound is a value too, and for the same reason a
+  // module constant is: `argv.length` is a member of the array `argv`, not a
+  // member of a namespace called `argv`.
+  return (
+    scope.lookup(receiver.text) !== undefined ||
+    ctx.program.constants.has(receiver.text) ||
+    ctx.program.builtinImports.has(receiver.text)
+  );
 }
 
 /**
