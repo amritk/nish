@@ -2896,6 +2896,13 @@ if (!only) {
 // moment `self/` uses something the language does not have.
 if (!only || "selfhost".includes(only) || only.includes("self")) {
   const selfDir = path.join(root, "self");
+  // The seed every check in this section builds its stage1 binary with, passed
+  // in rather than looked up (WP19 G2.3): `NISH_BOOTSTRAP` when CI set one, and
+  // stage0 otherwise, which is what a fresh clone has. The tools themselves
+  // name no compiler — `tests/self/seed.js` resolves what it is given — so this
+  // line is the only place in the suite that still says `dist/index.js` on
+  // their behalf, and after R6 it loses its second half.
+  const seedSpec = process.env.NISH_BOOTSTRAP || path.relative(root, cli);
   const modules = fs.existsSync(selfDir)
     ? fs
         .readdirSync(selfDir)
@@ -2975,7 +2982,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
   // binary, so it needs clang; without one this is skipped like every other
   // toolchain-dependent check.
   if (HAS_CLANG) {
-    const oracle = spawnSync("node", [path.join(root, "tests", "lexer_oracle.js")], {
+    const oracle = spawnSync("node", [path.join(root, "tests", "lexer_oracle.js"), "--seed", seedSpec], {
       cwd: root,
       encoding: "utf8",
     });
@@ -3009,7 +3016,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // must parse to the tree the `typescript` parser builds, span for span;
     // the files the oracle skips are the forbidden constructs Nish-0 has
     // no grammar for yet, and that count is the S2 gate's own measurement.
-    const parserOracle = spawnSync("node", [path.join(root, "tests", "parser_oracle.js")], {
+    const parserOracle = spawnSync("node", [path.join(root, "tests", "parser_oracle.js"), "--seed", seedSpec], {
       cwd: root,
       encoding: "utf8",
     });
@@ -3047,7 +3054,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // already exists — stage0's own IR escape and f64 hex, `node:path` for
     // the module-identity hazard of §3a D3, and `JSON.stringify` / `Map` for
     // the rest.
-    const supportOracle = spawnSync("node", [path.join(root, "tests", "self", "support_oracle.js")], {
+    const supportOracle = spawnSync("node", [path.join(root, "tests", "self", "support_oracle.js"), "--seed", seedSpec], {
       cwd: root,
       encoding: "utf8",
     });
@@ -3132,19 +3139,15 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // compares stage1's live answer against it with stage0 nowhere in the
     // picture. Both run while stage0 lives: this one survives it.
     //
-    // The seed is passed in rather than looked up, because the *suite* still
-    // has stage0 and the tool must not: `NISH_BOOTSTRAP` when CI set one (G3),
-    // and today's default seed otherwise, which is the same answer
-    // `scripts/bootstrap.sh` gives. After R6 the variable is the only source
-    // and this line loses its second half.
-    const goldenSeed = process.env.NISH_BOOTSTRAP || path.relative(root, cli);
+    // The seed is `seedSpec` above, passed in rather than looked up, because
+    // the *suite* still has stage0 and the tool must not.
     const goldens = spawnSync(
       "node",
       [
         path.join(root, "tests", "self", "goldens.js"),
         ...(process.env.UPDATE_GOLDENS === "1" ? ["--update"] : []),
         "--seed",
-        goldenSeed,
+        seedSpec,
       ],
       { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
     );
@@ -3160,7 +3163,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
     // every `tests/link/` negative is run through stage1 and its own expected
     // fragments are required of the output — the same assertion the suite
     // already makes of stage0.
-    const rejectOracle = spawnSync("node", [path.join(root, "tests", "self", "reject_oracle.js")], {
+    const rejectOracle = spawnSync("node", [path.join(root, "tests", "self", "reject_oracle.js"), "--seed", seedSpec], {
       cwd: root,
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,

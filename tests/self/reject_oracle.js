@@ -26,9 +26,16 @@
  *     wordings are deliberately different — a message about the operator the
  *     programmer wrote beats one about a node kind — and the count is the
  *     measurement, not a hole;
- *   - stage0 compiles it and only the link step refuses it, and `--link` is
- *     stage0's half of the driver (docs/wp14-selfhost.md §3a D4), so stage1
- *     has no such message to write.
+ *   - the compiler compiles it and only the link step refuses it. What this
+ *     oracle runs is `self/dump_checked.ts`, a dump entry point with no
+ *     `--link` of its own, so a case whose refusal comes from the linker has
+ *     no message here to compare.
+ *
+ * Both of those judgements used to be stage0's, and the second was a *compile*
+ * by stage0 (WP19 G2.3). It is the seed's now — the last released `nish`, or
+ * whatever `--seed` names — because the question is "does a compiler accept
+ * this program at all", every compiler in the chain answers it, and stage0 is
+ * the one that will not be here to.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -36,8 +43,8 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { extraArgs, linkPrograms, root } from "./corpus.js";
 import { fileURLToPath } from "node:url";
+import { linkWith, seedForOracle, spawnSeed, withoutSeed } from "./seed.js";
 
-const cli = path.join(root, "dist", "index.js");
 const CASES = path.join(root, "tests", "cases");
 const BACKLOG = path.join(root, "tests", "self", "reject_backlog.txt");
 
@@ -74,15 +81,15 @@ function argsFor(file) {
   return { flags, unsupported };
 }
 
-function compare(binary, entry) {
+function compare(seed, binary, entry) {
   const { flags, unsupported } = argsFor(entry.file);
   if (unsupported.length > 0) return { skipped: `stage1's dump_checked has no ${unsupported.join(" ")}` };
   const named = path.relative(root, entry.file);
   // A `tests/link` case may be refused by the compiler or only by the linker,
-  // and `expected.err` does not say which. stage0 answers it: what it compiles
-  // is a `--link` failure, and `--link` never reached stage1 (D4).
-  if (entry.linked && compiles(named, flags)) {
-    return { skipped: "stage0 compiles it; only `--link` refuses it, and `--link` is stage0's" };
+  // and `expected.err` does not say which. A compile answers it: what compiles
+  // is a `--link` failure, and the dump entry point below does not link.
+  if (entry.linked && compiles(seed, named, flags)) {
+    return { skipped: "it compiles; only `--link` refuses it, and dump_checked does not link" };
   }
   const run = spawnSync(binary, [...flags, named], {
     cwd: root,
@@ -100,14 +107,10 @@ function compare(binary, entry) {
   return { fragments: entry.fragments.length };
 }
 
-/** Whether stage0 compiles the program at all, IR written to a directory it then forgets. */
-function compiles(named, flags) {
+/** Whether the seed compiles the program at all, IR written to a directory it then forgets. */
+function compiles(seed, named, flags) {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "nish-reject-"));
-  const r = spawnSync("node", [cli, named, "-o", `${out}${path.sep}`, ...flags], {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  const r = spawnSeed(seed, [named, "-o", `${out}${path.sep}`, ...flags]);
   fs.rmSync(out, { recursive: true, force: true });
   return r.status === 0;
 }
@@ -154,24 +157,24 @@ function corpus() {
   return entries;
 }
 
-function build() {
-  const out = path.join(root, "build", "self", "dump_checked");
-  fs.mkdirSync(path.dirname(out), { recursive: true });
-  const r = spawnSync("node", [cli, path.join(root, "self", "dump_checked.ts"), "--link", out], {
-    cwd: root,
-    encoding: "utf8",
-  });
-  if (r.status !== 0) {
-    process.stderr.write(`${r.stderr}\n`);
-    return null;
-  }
-  return out;
+/**
+ * `self/dump_checked.ts`, linked by the seed. What this oracle compares
+ * against is each case's checked-in `.err` fragments, which outlive `src/`, so
+ * the compiler that builds the binary must too (WP19 G2.3).
+ */
+function build(seed) {
+  return linkWith(seed, path.join("self", "dump_checked.ts"), path.join(root, "build", "self", "dump_checked"));
 }
 
 function main(argv) {
   const verbose = argv.includes("--verbose");
-  const named = argv.filter((a) => !a.startsWith("--"));
-  const binary = build();
+  const named = withoutSeed(argv).filter((a) => !a.startsWith("--"));
+  const seed = seedForOracle(argv);
+  if (seed.error !== undefined) {
+    process.stderr.write(`${seed.error}\n`);
+    return 1;
+  }
+  const binary = build(seed);
   if (binary === null) return 1;
   const all = corpus();
   const inputs =
@@ -188,7 +191,7 @@ function main(argv) {
   const failed = [];
   const pending = [];
   for (const entry of inputs) {
-    const result = compare(binary, entry);
+    const result = compare(seed, binary, entry);
     const where = path.relative(root, entry.file);
     if (result.parser !== undefined) {
       parser.push(`${where}: ${result.parser}`);
@@ -214,7 +217,8 @@ function main(argv) {
   const note = pending.length > 0 ? `, ${pending.length} in the backlog` : "";
   process.stdout.write(
     `${agreed}/${compared} cases rejected with the expected message (${checked} fragments), ` +
-      `${parser.length} refused by the parser instead, ${skipped.length} skipped${note}\n`
+      `${parser.length} refused by the parser instead, ${skipped.length} skipped${note}, ` +
+      `seed ${seed.label}\n`
   );
   return failed.length === 0 ? 0 : 1;
 }

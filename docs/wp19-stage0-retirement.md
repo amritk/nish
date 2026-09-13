@@ -372,9 +372,9 @@ decision and a leap:
 
 | Oracle | Compares against | After stage0 |
 | --- | --- | --- |
-| `lexer_oracle.js` | the `typescript` package's scanner | **survives** — it never read `src/`. Costs one devDependency |
+| `lexer_oracle.js` | the `typescript` package's scanner | **survives** — it never read `src/`, and since G2.3 it does not build with it either. Costs one devDependency |
 | `parser_oracle.js` | the `typescript` package's parser | **survives**, same reason |
-| `support_oracle.js` | `node:path`, `Buffer`, `Map`, `JSON.stringify` | **survives** |
+| `support_oracle.js` | `node:path`, `Buffer`, `Map`, `JSON.stringify` | **survives, less two families.** This row was wrong: the oracle also compares `irEscape` and `f64Hex` / `f32Hex` against stage0's own `dist/codegen/emit/*.js`. Those lines are dropped from both sides, counted and named, when there is no `dist/` — recovering them as a golden is unfinished G2.4 work |
 | `tests/differential/` default mode | the same program rewritten to JS and run under Node (WP13) | **survives** — it is a *semantic* oracle and never needed a second compiler |
 | `reject_oracle.js` | each case's own `.err` fragments | **survives**; the fragments are checked in, not derived from stage0 |
 | `tests/cases/*.ll` (150 goldens) | checked-in IR | **survives**, and becomes the primary regression net |
@@ -526,7 +526,17 @@ Specifically:
 2. `fuzz.js --stage1` is repointed to the same pair — random programs, seed
    release versus HEAD — so the generated corpus keeps its comparison.
 3. The four surviving oracles are repointed to build their stage1 binary with
-   the **seed** rather than with stage0, and stay green.
+   the **seed** rather than with stage0, and stay green. **Done.**
+   `tests/self/seed.js` resolves one seed for all of them — `--seed`, then
+   `NISH_BOOTSTRAP`, then `build/nish` — and `tests/run.js` passes today's in,
+   so the oracles themselves name no compiler. Run by hand with no seed
+   anywhere they fall back to stage0 and *say so on stderr*, because a run that
+   proved something weaker than its summary line suggests is worse than a run
+   that refused. Two stage0 dependencies inside the oracles went with the
+   build: `reject_oracle.js` asked stage0 whether a `tests/link` case compiles
+   at all, which the seed answers as well, and `support_oracle.js`'s escape
+   comparison is now a named skip rather than a module-level import that would
+   stop the file loading after R6.
 4. The coverage lost by `checked_oracle.js`, `types_oracle.js`,
    `diagnostics_oracle.js` and `symbols_oracle.js` is measured and recovered as
    checked-in goldens *before* they are deleted — in particular every
@@ -708,7 +718,7 @@ gate nobody has opened is how a runtime budget dies.
 | --- | --- | --- |
 | **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) |
 | **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. Outstanding: the job runs on Linux only, and now for want of a darwin seed rather than a darwin runner — the two bash 3.2 defects that kept `macos-latest` out of the test matrix are fixed and it is back in. The seed itself has arrived — v0.1.1 is released with `nish-0.1.1-x86_64-linux.tar.gz` attached, and it is the first one, because v0.1.0 was tagged and never built (G3, G4) |
-| **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. Outstanding: the four survivors repointed to the seed, and the 196 diagnostic wordings that no surviving case exercises (§2B, "The wording gap") — which is now the half that matters (G2) |
+| **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B; the four survivors build with the seed (`tests/self/seed.js`) and name no compiler of their own. Outstanding: the diagnostic wordings that no surviving case exercises (§2B, "The wording gap") — which is now the half that matters (G2) |
 | **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the package becoming an installer — which first needs a registry name, since `nish` is taken ([wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken)) — and the INSTALL.md/wp12 rewrite (G5) |
 | **R5** | Provenance | the re-verification procedure is written (G6); the `ddc-<version>` tag is cut at release time |
 | **R6** | The deletion | `src/`, the `typescript` runtime dependency, the six dead oracles, and every rule that names stage0 |

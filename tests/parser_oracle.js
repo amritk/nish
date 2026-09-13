@@ -28,6 +28,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import ts from "typescript";
 import { fileURLToPath } from "node:url";
+import { linkWith, seedForOracle, withoutSeed } from "./self/seed.js";
 
 const root = path.resolve(import.meta.dirname, "..");
 
@@ -652,28 +653,24 @@ function corpus() {
   return files;
 }
 
-function build() {
-  const out = path.join(root, "build", "self", "dump_ast");
-  fs.mkdirSync(path.dirname(out), { recursive: true });
-  const r = spawnSync(
-    "node",
-    [path.join(root, "dist", "index.js"), path.join(root, "self", "dump_ast.ts"), "--link", out],
-    {
-      cwd: root,
-      encoding: "utf8",
-    }
-  );
-  if (r.status !== 0) {
-    process.stderr.write(`${r.stderr}\n`);
-    return null;
-  }
-  return out;
+/**
+ * `self/dump_ast.ts`, linked by the seed rather than by stage0 (WP19 G2.3):
+ * what this oracle compares against is the `typescript` parser, which outlives
+ * `src/`, so the compiler that builds its subject has to as well.
+ */
+function build(seed) {
+  return linkWith(seed, path.join("self", "dump_ast.ts"), path.join(root, "build", "self", "dump_ast"));
 }
 
 function main(argv) {
   const verbose = argv.includes("--verbose");
-  const files = argv.filter((a) => !a.startsWith("--"));
-  const binary = build();
+  const files = withoutSeed(argv).filter((a) => !a.startsWith("--"));
+  const seed = seedForOracle(argv);
+  if (seed.error !== undefined) {
+    process.stderr.write(`${seed.error}\n`);
+    return 1;
+  }
+  const binary = build(seed);
   if (binary === null) return 1;
   const inputs = files.length > 0 ? files.map((f) => path.resolve(f)) : corpus();
   let agreed = 0;
@@ -700,7 +697,8 @@ function main(argv) {
     for (const [reason, count] of ranked) process.stdout.write(`  ${String(count).padStart(4)}  ${reason}\n`);
   }
   process.stdout.write(
-    `${agreed}/${inputs.length - skipped.length} files agree (${nodes} nodes), ${skipped.length} skipped\n`
+    `${agreed}/${inputs.length - skipped.length} files agree (${nodes} nodes), ` +
+      `${skipped.length} skipped, seed ${seed.label}\n`
   );
   return failed.length === 0 ? 0 : 1;
 }
