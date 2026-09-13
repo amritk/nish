@@ -447,10 +447,10 @@ the way to re-derive it is to run the tool rather than to read this table:
 
 | | When the gap was measured | Now |
 | --- | --- | --- |
-| registry codes | 351 | 379 |
-| provoked by something that outlives stage0 | 175 | **320** |
+| registry codes | 351 | 385 |
+| provoked by something that outlives stage0 | 175 | **325** |
 | provoked by nothing | 176 | 0 |
-| unreachable, each with a reason on file | — | 59 |
+| unreachable, each with a reason on file | — | 60 |
 
 What moved it is `tests/wordings/`, 124 cases: one small program per code,
 named for the code it pins (`nl2200_empty_import_list.ts`), with the whole
@@ -461,13 +461,13 @@ provoked nor named in `tests/wordings/unreachable.txt`. That last rule is the
 part that keeps the gap closed: a diagnostic added next year arrives with a
 case or with a sentence saying why it cannot have one.
 
-**59 codes are unreachable, and that is a finding about the compiler rather
+**60 codes are unreachable, and that is a finding about the compiler rather
 than a test nobody wrote.** In six kinds, all listed with reasons in
 `tests/wordings/unreachable.txt`:
 
 | | What it is |
 | --- | --- |
-| 26 | **retired**: the fragment matches nothing the compiler prints any more. Mostly the inheritance and `super(...)` rules WP25 removed, plus two long forms of WP15 §8 warnings, the `case` label rule WP23 reworded to admit an enum member (`NL2123`, superseded by `NL2284`), Phase 0's blanket generic sentence before WP18 named the kind it is on (`NL1045`, superseded by `NL1054` and `NL1055`), and one — `NL2287` — that never fired at all, because WP23 reserved the number and no message in either compiler produces the fragment. The generator keeps the number on purpose, so these cost a string and are correct as they stand |
+| 27 | **retired**: the fragment matches nothing the compiler prints any more. Mostly the inheritance and `super(...)` rules WP25 removed, plus two long forms of WP15 §8 warnings, the `case` label rule WP23 reworded to admit an enum member (`NL2123`, superseded by `NL2284`), Phase 0's blanket generic sentence before WP18 named the kind it is on (`NL1045`, superseded by `NL1054` and `NL1055`), and one — `NL2287` — that never fired at all, because WP23 reserved the number and no message in either compiler produces the fragment. The generator keeps the number on purpose, so these cost a string and are correct as they stand |
 | 12 | **not diagnostics at all**: `scripts/gen-diagnostic-codes.mjs` scans for `fail(`/`error(` calls, and catches the driver's `console.error` usage errors (`unknown option:`, `--target: unsupported target`, the four lines of the exit-70 report) and the `fail(...)` helper that writes the N-API shim's *generated C*. No `--json` object can ever carry one. Their wordings are real and are pinned — by the WP12 block of `tests/run.js` and by the interop checks — but they are not rules, and `RULE_COUNT` is about four percent larger than the number of rules a user can be shown |
 | 12 | **preempted**: Phase 0 owns `async`, generators, generic type parameters and labels, so the checker's sentences for them never fire — including its own `Generic classes are not supported yet`, which `NL1054` reaches first; a class name is registered before any function signature, so `NL2075` cannot precede `NL2074`; the single-module `check()` path is not the driver's |
 | 4 | **shadowed**: `codeFor` walks the table longest fragment first, and these four fragments are substrings of a longer fragment *of the same message* (`NL1022` under `NL1005`, `NL1041` under `NL1007`, `NL2019` under `NL2095`, `NL2031` under `NL2118`) |
@@ -478,14 +478,14 @@ than a test nobody wrote.** In six kinds, all listed with reasons in
 
 Writing a program per code asks the two compilers a question no oracle asks,
 for the same reason §A2 gives about flags: **every oracle compiles the programs
-that are checked in, and none of these programs was.** Fifty-nine of the 124
+that are checked in, and none of these programs was.** Fifty-eight of the 124
 cases do not get the same answer from both compilers, and they are in
 `tests/wordings/parser_refusals.txt` and `tests/wordings/stage1_divergence.txt`
 rather than in anybody's memory:
 
-- **46 are declared and expected.** stage1's parser refuses the syntax by name
+- **45 are declared and expected.** stage1's parser refuses the syntax by name
   before the phase that owns the rule can state it — §A3's 602-row class. The
-  consequence is exact and is the reason the count is carried apart: **those 46
+  consequence is exact and is the reason the count is carried apart: **those 45
   wordings do not survive R6.** They are stage0's, this corpus pins them while
   stage0 lives, and after the deletion a user sees stage1's syntax error
   instead, which `reject_oracle.js` already pins.
@@ -605,10 +605,10 @@ code that no program provokes fails the run until somebody writes the case or
 writes the reason.
 
 **State: item 4 is met.** The four goldens are in `tests/self/goldens/` with
-their numbers in §2B, and the wording half is closed — 320 of the 379 registry
-codes are provoked by a program that outlives stage0, and the other 59 are
+their numbers in §2B, and the wording half is closed — 325 of the 385 registry
+codes are provoked by a program that outlives stage0, and the other 60 are
 unreachable with a reason on file. What is left behind on purpose is named in
-§2B too: 46 wordings that are stage0's because stage1's parser refuses the
+§2B too: 45 wordings that are stage0's because stage1's parser refuses the
 syntax first, and 13 programs the two compilers do not answer the same way,
 seven of which stage1 compiles.
 
@@ -817,7 +817,7 @@ gate nobody has opened is how a runtime budget dies.
 | --- | --- | --- |
 | **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) — though that claim was recorded once while it was not true, and §A5 is the correction and what it cost |
 | **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). Outstanding: the job runs on Linux only. The seed itself has arrived — v0.1.1 is released with `nish-0.1.1-x86_64-linux.tar.gz` attached, and it is the first one, because v0.1.0 was tagged and never built (G3, G4) |
-| **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is now 0, with 320 codes provoked by `tests/wordings/` and the surviving negatives and 59 unreachable with a reason on file (§2B). Outstanding: the four survivors repointed to the seed; and, carried rather than closed, the 46 wordings stage1's parser refuses before Phase 0 can state them — those go with stage0 at R6 — and the 13 programs the two compilers still answer differently, seven of which stage1 compiles |
+| **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is now 0, with 325 codes provoked by `tests/wordings/` and the surviving negatives and 60 unreachable with a reason on file (§2B). Outstanding: the four survivors repointed to the seed; and, carried rather than closed, the 45 wordings stage1's parser refuses before Phase 0 can state them — those go with stage0 at R6 — and the 13 programs the two compilers still answer differently, seven of which stage1 compiles |
 | **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the package becoming an installer — which first needs a registry name, since `nish` is taken ([wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken)) — and the INSTALL.md/wp12 rewrite (G5) |
 | **R5** | Provenance | the re-verification procedure is written (G6); the `ddc-<version>` tag is cut at release time |
 | **R6** | The deletion | `src/`, the `typescript` runtime dependency, the six dead oracles, and every rule that names stage0 |
