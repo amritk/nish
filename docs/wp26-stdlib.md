@@ -88,14 +88,24 @@ throwaway program that imports one function from `std/text`:
 - **It shares the program's one flat symbol namespace**, which is a real
   constraint on how a module is written rather than a theoretical one. §3e has
   the measurement.
-- **It is not resolvable by name.** `import { Suite } from "nish/testing"` is
-  what [wp21-packages.md](wp21-packages.md#5b-import-has-no-bare-specifiers) S2
-  would buy, and it is deliberately not faked in the meantime: a resolver that
-  special-cased this one directory would be a second module system, and the one
-  that is coming has to agree with Node's. So the specifier is
-  `../std/testing` inside this repository and
-  `node_modules/nish/std/testing` outside it. That path is the honest spelling
-  of "no resolution yet", and it is the first thing WP21 replaces.
+- **It is resolvable by name.** `import { Suite } from "nish/testing"` works,
+  and resolves to `std/testing.ts` beside the running compiler at any depth and
+  from outside this repository. A relative specifier still works and still
+  means the same thing.
+
+  This bullet used to say the opposite — that a bare specifier was what
+  [wp21-packages.md](wp21-packages.md#5b-import-has-no-bare-specifiers) S2 would
+  buy and was deliberately not faked, because a resolver special-casing this one
+  directory would be a second module system. That reasoning still holds for
+  third-party packages, which are still refused. It does not hold for the
+  compiler's *own* package, for two reasons true only of it: there is exactly
+  one correct `std/` for a given compiler, since the two are one package and
+  cannot be skewed against each other; and it is the answer Node itself gives,
+  now that `package.json` declares `"./*": "./std/*.ts"` and `nish/text` is a
+  package self-reference that `import.meta.resolve` and `tsc` both resolve to
+  the same file. The compiler short-circuits to that answer instead of walking
+  `node_modules` to reach it, so this is S2's first slice rather than a detour
+  around it. §5a of wp21 and [`std/README.md`](../std/README.md) say the same.
 
 ---
 

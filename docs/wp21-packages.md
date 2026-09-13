@@ -170,9 +170,9 @@ packages that both have a private `helper()` would fail to compile together,
 and two that both export `hash` certainly would. So symbols became
 package-scoped, and §9 is what that turned out to mean.
 
-### 5b. `import` has no bare specifiers — except the compiler's own package
+### 5b. `import` has no bare specifiers
 
-**Amended.** Two bare forms are now legal, and neither is the general case this
+**Amended: except the compiler's own package.** Two bare forms are now legal, and neither is the general case this
 section is about:
 
 - `nish:fs` / `nish:process` / `nish:io` name *builtins*. They resolve to no
