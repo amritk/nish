@@ -97,6 +97,90 @@ find. A run that skipped anything has not proved what it looks like it proved.
 `.claude/hooks/session-start.sh` installs the toolchain in a fresh container so
 this does not happen silently.
 
+## Shipping a change: what a pull request must be, and who merges it
+
+**A pull request that goes up is finished work: fully tested, and clear of
+conflicts.** Opening one before that is not "early feedback" here, because
+nobody is waiting to give it — it is a red pull request somebody else has to
+read.
+
+*Fully tested* means the [definition of done](#house-rules) was **run**, not
+assumed:
+
+- `npm run check` green.
+- `npm test` green **and not degraded**. Read the skip count, per *Trusting a
+  test run* above: a `DEGRADED:` banner, or a skip that is not one of the two
+  environmental ones (no WASI sysroot, `NISH_BOOTSTRAP` unset), means the run
+  did not prove what a green summary looks like it proved, and the change is
+  therefore untested whatever the exit code said.
+- `npm run lint` no worse than `main` — the warning count is a backlog, so it
+  may not grow.
+- `node docs/check-links.mjs` when the change touches Markdown.
+- The title is a conventional commit subject, because a squash merge lands it
+  as the release-note heading. `node scripts/changelog-gen.mjs --check-subject`
+  is the same rule `pr-title.yml` enforces.
+
+*Clear of conflicts* means the branch merges into `main` as it stands. Merge
+`main` in and resolve **before** pushing, rather than leaving the conflict for
+a reviewer to discover.
+
+### Merging it yourself
+
+**When those things are true and CI is green, an agent merges its own pull
+request — with squash — rather than waiting to be told to.** Waiting is not
+caution when nobody is coming; it is just a finished change sitting unmerged.
+All five conditions, every one of them checked against the pull request as it
+is now:
+
+1. **Every required check is green on the *current head*.** A run from three
+   pushes ago proves nothing about this commit.
+2. **No conflict with `main`** (`mergeable_state` is clean).
+3. **The suite was actually run** on this change, undegraded, per above.
+4. **No human is objecting**: no changes-requested review, no unresolved review
+   thread. Answer or implement first, then merge.
+5. **It is not the Release PR.** `chore(release): <version>` on `release/next`
+   is opened by `release-pr.yml`, and merging it *is* the act of releasing — it
+   tags, which dispatches `release.yml`, which publishes to npm. It is the
+   review step for the release notes before anyone can read them
+   ([wp12-release.md](./docs/wp12-release.md)), so it stays a human's decision
+   no matter how green it is. An agent never merges it.
+
+Squash, always: GitHub uses the pull request title as the subject of the single
+commit that lands, and that subject is what the changelog generator reads.
+
+> **The Release PR is never an agent's to merge on its own initiative.** Not
+> because CI is green, not because it is the only thing left open, not because a
+> release looks due. Merging it *publishes* — the tag it creates dispatches
+> `release.yml`, which builds the artifacts and pushes the tarball to npm, and
+> nothing downstream of that is undoable. An agent may prepare it, check it and
+> say it is ready; a human clicks merge. `release-pr.yml` writes the same
+> warning into the pull request body it generates, so the rule is on the pull
+> request itself and not only in this file.
+
+### When it is not ready
+
+**Do not stop, and do not ask — watch and work.** Subscribe to the pull request
+and, on every event, drive it toward the state above rather than reporting that
+it is not there yet:
+
+- **Red CI** → root-cause it and push the fix. "Flake" is not a root cause; a
+  failing test is a failing test. Never skip, disable or quarantine one to get
+  green, and never push an empty commit to kick CI.
+- **A conflict** → merge `main` in and resolve it, regenerating lockfiles and
+  generated files with the repo's own tooling rather than by hand.
+- **A review** → implement the small, local asks and push; reply with a proposal
+  for the large ones. Resolve the threads you addressed.
+
+Then merge, the moment all five conditions hold. Webhooks do not cover
+everything — CI success and merge-state transitions arrive late or not at all —
+so re-check on a schedule rather than trusting events alone, and keep going
+until the pull request is merged or closed.
+
+The one thing that ends this without a merge is a blocker you cannot clear
+alone: a failure that is not this change's and has no fix to port, or a design
+question only the author can settle. Say so once, on the pull request, naming
+what is blocking and what you need — and keep watching.
+
 ## House rules
 
 - **`npm test` must be green**, and every new construct ships with a golden

@@ -38,6 +38,22 @@ NEVER include Claude session links, tracking IDs, model names, or platform
 attributions in commits, code, or PR text. Keep all PR descriptions strictly
 focused on the code changes.
 
+**A pull request goes up finished, and you merge it yourself.** Fully tested
+(`npm run check` and an **undegraded** `npm test` — read the skip count, not
+just the exit code) and clear of conflicts with `main` before you open it. Once
+CI is green on the *current* head, no conflict remains, and no human is
+requesting changes or holding an unresolved thread, **squash-merge it** rather
+than waiting to be asked. Until then, do not stop and do not ask: watch the
+pull request, fix the red check, resolve the conflict, answer the review, and
+merge when it gets there.
+
+The one exception is the **Release PR** — `chore(release): <version>` on
+`release/next`. Merging it tags and publishes to npm, so it stays a human's
+decision however green it is. Never merge it.
+
+[`AGENTS.md`](AGENTS.md#shipping-a-change-what-a-pull-request-must-be-and-who-merges-it)
+states the five conditions in full.
+
 **Commit messages are the changelog.** `scripts/changelog-gen.mjs` builds each
 release from the commits it contains, so the subject is the line a reader sees
 in `CHANGELOG.md` and in the release notes, and the body is that entry's prose
