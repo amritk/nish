@@ -13,6 +13,13 @@
  *       <name>.env   environment for that run, `NAME=value` per line, layered over
  *                    the inherited one (WP19 R1: `getenv` has no other way to be pinned)
  *     Every successfully compiled case is also assembled with llvm-as.
+ *     The compiles run in process (tests/batch_worker.js), many cases to a
+ *     worker, rather than one `node dist/index.js` per case; the two paths are
+ *     compared against each other below, and `--verify-batch` widens that
+ *     comparison to the whole corpus. The link is against the runtime and the
+ *     driver as object files, built once per run (`runtimeObjects`) rather than
+ *     recompiled per case; the `runtime objects:` checks at the end of the run
+ *     are what say that is the same link.
  *
  *  B. Pipeline checks: the runtime unit test, inline allocator vs C arena layout
  *     (linked for the host, and asserted per target so wasm32 cannot drift),
@@ -26,6 +33,7 @@ import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
+import { compareWithCli, compileCases, gateCases } from "./batch_compile.js";
 const require = createRequire(import.meta.url);
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -47,6 +55,106 @@ fs.mkdirSync(buildDir, { recursive: true });
  * repaired on the way past.
  */
 const RUNTIME_C = ["runtime/runtime.c", "runtime/runtime_os.c"];
+
+/** The driver every case without its own `.c` and without an `export main` is linked with. */
+const DRIVER_C = path.join(root, "tests", "driver.c");
+
+/**
+ * The C a case is linked against -- `runtime.c`, `runtime_os.c` and the shared
+ * driver -- compiled to object files once per run instead of once per case.
+ *
+ * The measurement, on a four-core Linux box: naming the three sources in a
+ * case's link costs 470 ms, linking the same module against prebuilt objects
+ * costs 91 ms, and building the objects costs 362 ms once. Over the 183 cases
+ * that carry a `.out` that is the difference between 86 s of clang and 17 s.
+ *
+ * **`defines` is the cache key, and it is the whole of what can make one case
+ * need a differently built runtime.** Today that is `-DNISH_THREADS=1` alone,
+ * which moves `nish_arena` into thread-local storage. A wrong-but-fast link
+ * would be worse than a slow one, so the key is checked rather than trusted,
+ * in the two `runtime objects:` checks after section A: one relinks a case from
+ * the sources and requires the same bytes out, and one requires a `--threads`
+ * module linked against the *default* objects to **fail**. It does — `ld`
+ * refuses a TLS reference against a non-TLS definition — so a case handed the
+ * wrong objects is a red line rather than a program with two arenas.
+ *
+ * Nothing here survives a run. The objects are built on their first use in each
+ * process, so a `runtime.c` edited between runs can never be linked against the
+ * object a previous run left behind.
+ */
+const runtimeObjectCache = new Map();
+const runtimeObjects = (defines) => {
+  const key = defines.join(" ");
+  const cached = runtimeObjectCache.get(key);
+  if (cached !== undefined) return cached;
+  const dir = path.join(buildDir, "runtime-obj", key.replace(/[^A-Za-z0-9]+/g, "_") || "default");
+  fs.mkdirSync(dir, { recursive: true });
+  const built = { objects: [], driver: null, error: null };
+  for (const src of [...RUNTIME_C, DRIVER_C]) {
+    const obj = path.join(dir, path.basename(src).replace(/\.c$/, ".o"));
+    const cc = spawnSync("clang", ["-O2", ...defines, "-c", src, "-o", obj], { cwd: root });
+    if (cc.status !== 0) {
+      built.error = `could not compile ${src}${key.length > 0 ? ` with ${key}` : ""}:\n${cc.stderr}`;
+      break;
+    }
+    if (src === DRIVER_C) built.driver = obj;
+    else built.objects.push(obj);
+  }
+  runtimeObjectCache.set(key, built);
+  return built;
+};
+
+/**
+ * The first case linked under each object key, kept so the equivalence check
+ * can replay it from the sources. `fromSource` is the command line this suite
+ * used before the objects existed, argument for argument.
+ */
+const linkSpecimens = new Map();
+
+/**
+ * Link one compiled case into a runnable binary, against the prebuilt runtime.
+ *
+ * `driver` is `DRIVER_C` for the shared driver, a path for a case that brings
+ * its own `.c`, and null when the module carries its own `main`. `defines` says
+ * how the runtime has to have been built, and is what selects the objects.
+ *
+ * Answers in `spawnSync`'s shape, so a caller reads `status` and `stderr` the
+ * way it always did; a runtime that would not compile is reported as a link
+ * failure against the case, because that is what it is from here.
+ */
+const linkNative = (exe, ll, { driver = null, defines = [], libm = false } = {}) => {
+  const rt = runtimeObjects(defines);
+  if (rt.error !== null) return { status: 1, stdout: "", stderr: rt.error };
+  const tail = libm ? ["-lm"] : [];
+  const driverObject = driver === DRIVER_C ? rt.driver : driver;
+  const args = [
+    "-Wno-override-module",
+    "-O2",
+    ll,
+    ...(driverObject === null ? [] : [driverObject]),
+    ...rt.objects,
+    ...tail,
+  ];
+  if (!linkSpecimens.has(defines.join(" "))) {
+    linkSpecimens.set(defines.join(" "), {
+      ll,
+      fromObjects: args,
+      // `-D` sits on the from-source line because it is compiling the runtime
+      // there; on the object line it is already baked in, which is precisely
+      // what the byte comparison of the two is asserting.
+      fromSource: [
+        "-Wno-override-module",
+        "-O2",
+        ...defines,
+        ll,
+        ...(driver === null ? [] : [driver]),
+        ...RUNTIME_C,
+        ...tail,
+      ],
+    });
+  }
+  return spawnSync("clang", [...args, "-o", exe], { cwd: root });
+};
 
 /**
  * The seed every stage1 binary in this suite is built with (WP19 G2.3):
@@ -161,12 +269,33 @@ function buildStage1ForCases() {
   return { cmd: built, prefix: [], label: seed.label };
 }
 
-const only = process.argv[2];
+// A flag is not a filter: `--verify-batch` and friends may sit where the
+// substring used to be, so only a plain word narrows the corpus.
+const only = process.argv[2] !== undefined && !process.argv[2].startsWith("-") ? process.argv[2] : undefined;
+/**
+ * The whole corpus through the CLI as well as through the batch (see
+ * `gateCases`). Minutes rather than seconds, so it is asked for rather than
+ * assumed; CI's `batch-parity` job is what asks on every pull request.
+ */
+const VERIFY_BATCH = process.argv.includes("--verify-batch");
 const cases = fs
   .readdirSync(casesDir)
   .filter((f) => f.endsWith(".ts"))
   .map((f) => f.slice(0, -3))
   .sort();
+
+/**
+ * Every case that stage0 compiles, compiled: one process for every sixty-four
+ * of them instead of one process each, which is where section A's six minutes
+ * went (`tests/batch_worker.js` has the measurement and the two properties of
+ * the compiler that make it sound). The loop below reads the answer out of this
+ * map exactly as it read a `spawnSync` result, and spawns the CLI itself for a
+ * case the map does not hold — a flag the library API cannot express, or a
+ * missing `dist/`.
+ */
+const batchable = cases.filter((name) => (!only || name.includes(only)) && !STAGE1_ONLY.has(name));
+const batched = await compileCases(batchable);
+
 for (const name of cases) {
   if (only && !name.includes(only)) continue;
   const src = path.join(casesDir, `${name}.ts`);
@@ -188,9 +317,9 @@ for (const name of cases) {
     }
   }
   const r =
-    stage1 === null
-      ? spawnSync("node", [cli, src, "-o", outLl, ...args], { cwd: root })
-      : spawnSync(stage1.cmd, [...stage1.prefix, src, "-o", outLl, ...args], { cwd: root });
+    stage1 !== null
+      ? spawnSync(stage1.cmd, [...stage1.prefix, src, "-o", outLl, ...args], { cwd: root })
+      : (batched.get(name) ?? spawnSync("node", [cli, src, "-o", outLl, ...args], { cwd: root }));
   const stderr = String(r.stderr);
 
   if (fs.existsSync(side("err"))) {
@@ -270,33 +399,25 @@ for (const name of cases) {
   }
 
   if (fs.existsSync(side("out")) && HAS_CLANG) {
-    const driver = fs.existsSync(side("c")) ? side("c") : path.join(root, "tests", "driver.c");
+    const driver = fs.existsSync(side("c")) ? side("c") : DRIVER_C;
     // WP5: a case with its own exported `main` is a whole program; link it without the driver.
     // Either spelling declares it (WP22): `export function main` or `export const main = (...) => ...`.
     const hasEntry = /\bexport\s+(?:function\s+main\b|const\s+main\s*=)/.test(fs.readFileSync(src, "utf8"));
     const exe = path.join(buildDir, name);
     // WP20 T0: a case compiled with `--threads` references `@nish_arena` as a
     // thread-local global, so runtime.c has to define it as one. The macro is
-    // what `scripts/build.sh --threads` passes, and the link is the check: ELF
-    // refuses a non-TLS reference to a TLS definition, so a case that got this
-    // wrong fails here rather than running with two arenas.
+    // what `scripts/build.sh --threads` passes, and the link is still the check:
+    // ELF refuses a non-TLS reference to a TLS definition, so a case that got
+    // this wrong fails here rather than running with two arenas. Since the
+    // runtime is now a prebuilt object, the macro is also what picks *which*
+    // object -- and the `runtime objects:` checks below hold that choice up.
     const threads = args.includes("--threads") ? ["-DNISH_THREADS=1"] : [];
     // -lm: Math.sin/cos/exp/log/pow lower to LLVM intrinsics that become libm calls (WP7).
-    const cc = spawnSync(
-      "clang",
-      [
-        "-Wno-override-module",
-        "-O2",
-        ...threads,
-        outLl,
-        ...(hasEntry ? [] : [driver]),
-        ...RUNTIME_C,
-        "-lm",
-        "-o",
-        exe,
-      ],
-      { cwd: root }
-    );
+    const cc = linkNative(exe, outLl, {
+      driver: hasEntry ? null : driver,
+      defines: threads,
+      libm: true,
+    });
     if (cc.status !== 0) {
       check(`${name}: links natively`, false, String(cc.stderr));
       continue;
@@ -311,6 +432,25 @@ for (const name of cases) {
       run.status === 0 && String(run.stdout).trim() === want,
       `--- expected\n${want}\n--- actual (exit ${run.status})\n${run.stdout}${run.stderr}`
     );
+  }
+}
+
+// ---- The gate on the batched compile ---------------------------------------------
+//
+// Section A above is fast because it drives the compiler in process instead of
+// spawning it, and the whole value of that rests on the two paths answering the
+// same thing. So they are compared: the same case compiled both ways, and the
+// exit status, stdout, stderr and the bytes of the module have to agree.
+//
+// `gateCases` picks one case per distinct shape on an ordinary run — every
+// `.args` spelling in the corpus, every sidecar a case asserts through, with and
+// without a second module — and `--verify-batch` compares the whole corpus, which
+// CI runs on every pull request. The reasoning for the split, and why a rotating
+// sample was not the answer, is written where the set is chosen.
+if (batched.size > 0) {
+  const gate = VERIFY_BATCH ? batchable : gateCases(batchable);
+  for (const { name, ok, detail } of await compareWithCli(gate, batched, cli)) {
+    check(`${name}: the batched compile answers what the CLI answers`, ok, detail);
   }
 }
 
@@ -1221,9 +1361,7 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
   const panicLl = path.join(buildDir, "arr_bounds_panic.ll");
   if (HAS_CLANG && fs.existsSync(panicLl)) {
     const exe = path.join(buildDir, "arr_bounds_panic");
-    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", panicLl, ...RUNTIME_C, "-o", exe], {
-      cwd: root,
-    });
+    const cc = linkNative(exe, panicLl);
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
       "arr_bounds_panic: exits 1 with `index out of range: 5 >= 3` on stderr (stdout keeps the earlier line)",
@@ -1424,9 +1562,7 @@ if (!only || "memory".includes(only) || only.startsWith("mem")) {
   );
   if (HAS_CLANG && ns.status === 0) {
     const exe = path.join(buildDir, "mem_stack_struct_nostack");
-    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", noStackLl, ...RUNTIME_C, "-o", exe], {
-      cwd: root,
-    });
+    const cc = linkNative(exe, noStackLl);
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
       "mem_stack_struct with --no-stack-alloc prints the same output",
@@ -1721,6 +1857,11 @@ if (!only || "layout".includes(only)) {
     }
     if (HAS_CLANG) {
       const exe = path.join(buildDir, "layout_structs");
+      // Named as sources rather than linked against the prebuilt objects, and
+      // that is the point: `-Wall -Wextra -Werror` on this line covers the two
+      // runtime translation units as well as `structs.c`. Swapping them for
+      // objects to save a third of a second would take the warning flags off
+      // the runtime, which is a check, not an overhead.
       const cc = spawnSync(
         "clang",
         [
@@ -1777,9 +1918,7 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
     const ll = path.join(buildDir, `${name}.ll`);
     if (!HAS_CLANG || !fs.existsSync(ll)) continue;
     const exe = path.join(buildDir, name);
-    const cc = spawnSync("clang", ["-Wno-override-module", "-O2", ll, ...RUNTIME_C, "-lm", "-o", exe], {
-      cwd: root,
-    });
+    const cc = linkNative(exe, ll, { libm: true });
     const run = cc.status === 0 ? spawnSync(exe) : null;
     check(
       `${name}: exits 1 with "${needle}" on stderr`,
@@ -1793,6 +1932,10 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
 }
 
 // ---- B. Pipeline checks -----------------------------------------------------------
+// The two runtime unit tests below name the runtime's sources rather than the
+// prebuilt objects, deliberately: what they assert *is* that the two
+// translation units "compile warning-free together", so compiling them is the
+// check and a cached object would skip it. Two links is what that costs.
 if (!only && HAS_CLANG) {
   const rt = spawnSync(
     "clang",
@@ -5533,6 +5676,71 @@ if ((!only || "differential".includes(only)) && HAS_CLANG) {
   );
 } else if (!HAS_CLANG) {
   skip("clang not installed: differential tests skipped");
+}
+
+// ---- The gate on the prebuilt runtime objects ------------------------------------
+//
+// The links above are fast because `runtime.c`, `runtime_os.c` and the driver
+// are compiled once per run rather than once per case, and a fast link that
+// quietly used the wrong runtime would be worse than the slow one it replaced.
+// Two checks, and between them they cover both ways that could happen. They sit
+// at the end of the run rather than beside section A because they replay what
+// this run actually linked: every section that links a case has gone past by
+// here, so a set of defines that only some later block asks for is covered too.
+//
+// One: for every set of defines a case asked for, the first case linked with it
+// is linked *again* from the sources -- the command line this suite used before
+// the objects existed, argument for argument -- and the two binaries have to be
+// byte-identical. That is the whole claim stated directly: the object is what
+// clang would have produced inline. It is a fact about the linker's own
+// pipeline rather than about the runtime, and it is asserted rather than
+// assumed on every platform; if it ever turns out to be platform-specific the
+// honest narrowing is a counted skip, the way the `.text` budgets have one, and
+// not a weaker comparison.
+if (HAS_CLANG && linkSpecimens.size > 0) {
+  for (const [key, spec] of linkSpecimens) {
+    const label = key.length === 0 ? "the default runtime" : `the runtime built with ${key}`;
+    const stem = path.join(buildDir, "runtime-obj", `specimen${key.replace(/[^A-Za-z0-9]+/g, "_")}`);
+    const bySource = spawnSync("clang", [...spec.fromSource, "-o", `${stem}.src`], { cwd: root });
+    const byObjects = spawnSync("clang", [...spec.fromObjects, "-o", `${stem}.obj`], { cwd: root });
+    const linked = bySource.status === 0 && byObjects.status === 0;
+    const same = linked && fs.readFileSync(`${stem}.src`).equals(fs.readFileSync(`${stem}.obj`));
+    check(
+      `runtime objects: linking ${path.basename(spec.ll)} against ${label} gives the bytes the sources do`,
+      same,
+      linked
+        ? `${fs.statSync(`${stem}.src`).size} bytes from the sources, ` +
+          `${fs.statSync(`${stem}.obj`).size} from the objects; the two links were\n` +
+          `  clang ${spec.fromSource.join(" ")}\n  clang ${spec.fromObjects.join(" ")}`
+        : String(bySource.stderr) + String(byObjects.stderr)
+    );
+  }
+}
+
+// Two: the cache key has to be load-bearing. A `--threads` module wants
+// `@nish_arena` in thread-local storage and the default objects define it as an
+// ordinary global, so handing a case the wrong objects has to be a link error
+// rather than a program with two arenas. `ld` does refuse it -- "TLS reference
+// ... mismatches non-TLS definition" -- and this is where that is written down,
+// because it is the property the whole cache rests on.
+const threadsLl = path.join(buildDir, "mem_threads_arena.ll");
+if (HAS_CLANG && fs.existsSync(threadsLl)) {
+  const rt = runtimeObjects([]);
+  const exe = path.join(buildDir, "runtime-obj", "threads_against_default");
+  const cc =
+    rt.error === null
+      ? spawnSync("clang", ["-Wno-override-module", "-O2", threadsLl, ...rt.objects, "-lm", "-o", exe], {
+          cwd: root,
+        })
+      : null;
+  check(
+    "runtime objects: a --threads module refuses to link against the default runtime",
+    cc !== null && cc.status !== 0,
+    cc === null
+      ? rt.error
+      : "it linked. The object cache's key is then not load-bearing, and a case could be\n" +
+        "handed a runtime built for another one and run with two arenas instead of failing."
+  );
 }
 
 // The summary counts what did *not* run as well as what did. A skip is not a
