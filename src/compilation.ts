@@ -25,6 +25,7 @@ import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { CheckedProgram, Checker, FunctionSig, ImportBinding, StructInfo } from "./checker/index.js";
+import { StructTemplateInfo } from "./checker/generics.js";
 import { isNishSpecifier } from "./checker/nish-modules.js";
 import { FunctionFacts, analyzeFunctions } from "./codegen/attributes.js";
 import { emitProgram } from "./codegen/emitter.js";
@@ -286,9 +287,26 @@ export class Compilation {
    * miscompile, not a link error — the same failure WP21 S1 exists to prevent
    * for plain functions, and the same one `tests/link/two_packages_struct`
    * pins for a declared class.
+   *
+   * **Two modules of one package clash for the same reason, and are refused
+   * here too.** Packages are what make `Holder` and `Holder` two names in
+   * `rejectSymbolClashes`; they make no difference at all to `Holder$i32`,
+   * which is a program-wide `%struct` name and a program-wide method symbol
+   * whichever package asked for it. A declared `class Holder` in two modules
+   * of one package is caught before bodies, by `@Holder.constructor` clashing
+   * in `rejectSymbolClashes`; the generic spelling has no symbol until an
+   * instantiation exists, so it reached the emitter unremarked and produced
+   * two different `%struct.Holder$i32` plus an `invalid redefinition of
+   * function 'Holder$i32.constructor'` from `llvm-as` — with no diagnostic.
+   * `tests/link/generic_class_clash` is that program.
+   *
+   * One message per template rather than per instantiation: two modules that
+   * both declare `Holder<T>` and both use it at `i32` and at `string` have
+   * made one mistake, not two.
    */
   private rejectInstantiatedStructClashes(): void {
     const owner = new Map<string, ModuleUnit>();
+    const reported = new Set<StructTemplateInfo>();
     for (const unit of this.modules) {
       for (const instance of unit.checker.program.structInstantiations.values()) {
         // The module that declares the template is the one that owns every
@@ -299,10 +317,34 @@ export class Compilation {
           owner.set(instance.info.name, unit);
           continue;
         }
-        if (first.packageName === unit.packageName) continue;
+        if (reported.has(instance.template)) continue;
+        reported.add(instance.template);
+        if (first.packageName === unit.packageName) {
+          this.reportStructModuleClash(instance.template, first, unit);
+          continue;
+        }
         this.reportStructPackageClash(instance.info, first, unit, instance.template.nameNode);
       }
     }
+  }
+
+  /**
+   * Two modules of one package, each declaring a generic class or interface of
+   * the same name, each instantiating it.
+   *
+   * The sentence is `rejectSymbolClashes`'s generic-function one with the noun
+   * changed, because it is the same rule one level up: a name that becomes a
+   * program-wide symbol must be unique across the program, and an
+   * instantiation is named after the template it came from.
+   */
+  private reportStructModuleClash(template: StructTemplateInfo, first: ModuleUnit, unit: ModuleUnit): void {
+    this.sink.report(
+      new CompileError(
+        `Generic ${template.kind} \`${template.sourceName}\` is also declared in ${first.fileName}; a class or interface name must be unique across the program, and an instantiation is named after its template`,
+        template.nameNode,
+        unit.sourceFile
+      )
+    );
   }
 
   /**

@@ -1798,8 +1798,14 @@ if (!only || "layout".includes(only)) {
       fromC.set(m[1], Number(m[2]));
     }
     const diffs = [];
-    for (const [name, size] of fromC)
-      if (fromIr.get(name) !== size) diffs.push(`${name}: C ${size}, IR ${fromIr.get(name)}`);
+    // The fixture names its maker after the *LLVM* struct (`makeQ_i32` for
+    // `Q$i32`), and the C twin after the C one, which for an instantiated
+    // generic carries the reserved `nish_gen_` prefix `cStructName` gives it so
+    // that `Q<i32>` cannot collide with a class called `Q_i32`.
+    for (const [name, size] of fromC) {
+      const inIr = fromIr.get(name.replace(/^nish_gen_/, ""));
+      if (inIr !== size) diffs.push(`${name}: C ${size}, IR ${inIr}`);
+    }
     check(
       `layout: compiler sizes match structs.c for ${fromC.size} structs (${[...fromC].map(([n, s]) => `${n}=${s}`).join(" ")})`,
       fromC.size === 18 && fromIr.size === 18 && diffs.length === 0,
@@ -2843,6 +2849,41 @@ if (!only || "interop".includes(only)) {
         );
       }
     }
+  }
+
+  // ---- WP18 G5: an instantiated generic in the generated header --------------------
+  // `Box<i32>` is `%struct.Box$i32`, and `-pedantic` refuses a `$` in a C identifier,
+  // so the header has to spell it another way. If that way were the bare `$`-to-`_`
+  // collapse it would not be injective — `class Box_i32` declared in the same module
+  // collapses to the same thing — and the generator's one promise is to describe the
+  // ABI the module really defines. `cStructName` gives the instantiation the reserved
+  // `nish_gen_` prefix, which a declared name can never carry, so the fixture declares
+  // both and the header has to compile with both in it.
+  const genHeader = emit("tests/cases/gen_export_header.ts", ["--emit-header", sidecar("gen_export_header", "h")]);
+  const genHeaderText =
+    genHeader.status === 0 ? fs.readFileSync(sidecar("gen_export_header", "h"), "utf8") : "";
+  check(
+    "gen_export_header.h spells `Box<i32>` and a declared `Box_i32` as two different C structs",
+    genHeaderText.includes("struct nish_gen_Box_i32 {") &&
+      genHeaderText.includes("struct Box_i32 {") &&
+      genHeaderText.includes("struct nish_gen_Box_i32 *makeGeneric(int32_t v);") &&
+      genHeaderText.includes("struct Box_i32 *makeDeclared(int32_t v);"),
+    genHeaderText
+  );
+  if (HAS_CLANG && genHeader.status === 0) {
+    const syn = spawnSync("clang", [
+      ...strictC,
+      "-pedantic",
+      "-fsyntax-only",
+      "-x",
+      "c",
+      sidecar("gen_export_header", "h"),
+    ]);
+    check(
+      "gen_export_header.h compiles under -std=c11 -Wall -Wextra -Werror -pedantic",
+      syn.status === 0,
+      String(syn.stderr)
+    );
   }
 
   // ---- WP17: a `Result` across the host boundary ----------------------------------

@@ -436,6 +436,16 @@ export const main = (): i32 => {
 - **A field may not grow its own type argument.** `class Nest<T> { inner:
   Nest<T[]> | null }` is `` Monomorphising `Nest` would not terminate ``;
   `Nest<T>` and a type that mentions no parameter are both fine.
+- **A type parameter takes no type arguments of its own.** `T` is whatever the
+  instantiation bound it to, so `const y: T<i32>` is
+  `` Unsupported type reference `T<i32>` ``.
+- **A template obeys every rule a declared class obeys**: `declare class
+  Box<T>`, `export default class Box<T>`, `abstract class Box<T>` and
+  `interface Box<T> extends Base` are refused in the words their non-generic
+  spellings are refused in.
+- **Two modules may not both declare a generic class of one name** once both
+  instantiate it: `%struct.Box$i32` is program-wide, so
+  `` Generic class `Holder` is also declared in helper.ts ``.
 - **Not supported yet**: a constrained parameter, a generic method of its own,
   and importing a generic class or interface from another module.
 

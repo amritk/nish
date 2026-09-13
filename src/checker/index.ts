@@ -221,16 +221,21 @@ export class Checker implements CheckContext {
       // in there rather than falling through to "unsupported type reference".
       const structTemplate = this.structTemplates.get(name);
       if (structTemplate) return this.instantiateStructNode(structTemplate, ref);
+      // Beyond this point the name takes no type arguments: a type parameter,
+      // an ordinary class, an alias, an enum or an import. Leaving those to the
+      // caller's refusal keeps `Point<i32>` saying "unsupported type reference",
+      // which is what it said before generic classes existed.
+      //
+      // It sits *above* the type-parameter lookup rather than below it, and
+      // that is the whole of the rule: a `T` that was written `T<i32>` is not
+      // the `T` the tuple bound, so answering with the binding would drop the
+      // arguments in silence and compile `const y: T<i32> = x` as `T`.
+      if (ref?.typeArguments && ref.typeArguments.length > 0) return undefined;
       // WP18: a type parameter shadows everything while an instantiation is
       // being resolved, and exists at no other time — which is why no pass
       // below this line has ever met a type variable.
       const bound = this.typeBindings?.get(name);
       if (bound) return bound;
-      // Beyond this point the name takes no type arguments: an ordinary class,
-      // an alias, an enum or an import. Leaving those to the caller's refusal
-      // keeps `Point<i32>` saying "unsupported type reference", which is what
-      // it said before generic classes existed.
-      if (ref?.typeArguments && ref.typeArguments.length > 0) return undefined;
       const own = this.typeNames.has(name) ? this.program.structs.get(name) : undefined;
       if (own) return own.type;
       // An alias is the type it names, so it answers here and the caller never

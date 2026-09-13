@@ -40,9 +40,12 @@ struct O { float a; double b; float c; bool d; };
 /* WP15 section 2a: a record element type, so a `P[]` is a C array of these. */
 struct P { double x; double y; int32_t tag; };
 /* WP18 G5: the two instantiations of one generic class. `Q<T>` is written once
-   and laid out twice, each exactly as the hand-written twin below. */
-struct Q_i32 { bool a; int32_t b; bool c; };
-struct Q_f64 { bool a; double b; bool c; };
+   and laid out twice, each exactly as the hand-written twin below. The C name
+   is `nish_gen_` + the LLVM one with `$` collapsed, because `-pedantic` refuses
+   a `$` in an identifier and the reserved prefix is what keeps `Q<i32>` from
+   colliding with a class somebody called `Q_i32` (`cStructName`). */
+struct nish_gen_Q_i32 { bool a; int32_t b; bool c; };
+struct nish_gen_Q_f64 { bool a; double b; bool c; };
 
 _Static_assert(sizeof(struct A) == 4, "A");
 _Static_assert(sizeof(struct B) == 16, "B");
@@ -59,8 +62,8 @@ _Static_assert(sizeof(struct L) == 16, "L");
 _Static_assert(sizeof(struct M) == 32, "M");
 _Static_assert(sizeof(struct N) == 24, "N");
 _Static_assert(sizeof(struct O) == 24, "O");
-_Static_assert(sizeof(struct Q_i32) == 12, "Q_i32");
-_Static_assert(sizeof(struct Q_f64) == 24, "Q_f64");
+_Static_assert(sizeof(struct nish_gen_Q_i32) == 12, "nish_gen_Q_i32");
+_Static_assert(sizeof(struct nish_gen_Q_f64) == 24, "nish_gen_Q_f64");
 _Static_assert(sizeof(struct P) == 24, "P");
 
 int32_t A_a(struct A *);
@@ -113,12 +116,12 @@ float O_a(struct O *);
 double O_b(struct O *);
 float O_c(struct O *);
 bool O_d(struct O *);
-bool Q_i32_a(struct Q_i32 *);
-int32_t Q_i32_b(struct Q_i32 *);
-bool Q_i32_c(struct Q_i32 *);
-bool Q_f64_a(struct Q_f64 *);
-double Q_f64_b(struct Q_f64 *);
-bool Q_f64_c(struct Q_f64 *);
+bool Q_i32_a(struct nish_gen_Q_i32 *);
+int32_t Q_i32_b(struct nish_gen_Q_i32 *);
+bool Q_i32_c(struct nish_gen_Q_i32 *);
+bool Q_f64_a(struct nish_gen_Q_f64 *);
+double Q_f64_b(struct nish_gen_Q_f64 *);
+bool Q_f64_c(struct nish_gen_Q_f64 *);
 /* WP15 section 2a: the record element type and the array of it. `nish_array`
    comes from nish.h, which the runtime this links against defines. */
 typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array;
@@ -212,8 +215,8 @@ int main(void) {
      in one and at 8 in the other, and `c` after it in both, so a getter reading
      the template's layout rather than the instantiation's would fail here. */
   {
-    struct Q_i32 qi = { true, -7, false };
-    struct Q_f64 qf = { false, 2.5, true };
+    struct nish_gen_Q_i32 qi = { true, -7, false };
+    struct nish_gen_Q_f64 qf = { false, 2.5, true };
     CHECK("Q<i32>.a", Q_i32_a(&qi) == true);
     CHECK("Q<i32>.b", Q_i32_b(&qi) == -7);
     CHECK("Q<i32>.c", Q_i32_c(&qi) == false);

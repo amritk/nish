@@ -65,6 +65,8 @@ const RULES: string[] = [
     "NL2276",
     "`const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing",
     "NL2285",
+    "; a class or interface name must be unique across the program, and an instantiation is named after its template",
+    "NL3012",
     "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it",
     "NL2300",
     "`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class",
@@ -852,7 +854,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 397;
+export const RULE_COUNT = 398;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

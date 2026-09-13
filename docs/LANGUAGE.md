@@ -1205,7 +1205,25 @@ export const main = (): i32 => {
 - **A type argument may be anything a type may be**, including another
   instantiation: `Box<Point>` is `%struct.Box$$Point` and `Box<Box<i32>>` is
   `%struct.Box$$Box$i32`, the `>>` split back into two by the parser
-  (`tests/cases/gen_box_struct`, `gen_nested`).
+  (`tests/cases/gen_box_struct`, `gen_nested`). A *type parameter* takes none,
+  though: `T` is whatever the instantiation bound it to, so `const y: T<i32>`
+  is `` Unsupported type reference `T<i32>` ``
+  (`tests/cases/reject_generic_type_param_args`).
+- **A template obeys every rule a declared class obeys.** Type parameters
+  change what a declaration *means*, not what it may be written with, so
+  `declare class Box<T>`, `export default class Box<T>`, `abstract class
+  Box<T>` and `interface Box<T> extends Base` are refused in the same words as
+  their non-generic spellings (`tests/cases/reject_generic_declare_class`,
+  `reject_generic_export_default`, `reject_generic_abstract`,
+  `reject_generic_interface_extends`).
+- **An instantiation's name is program-wide**, because `%struct.Box$i32` and
+  `@Box$i32.constructor` are. So two modules may not both declare a generic
+  class or interface of one name once both instantiate it:
+  `` Generic class `Holder` is also declared in helper.ts; a class or interface name must be unique across the program, and an instantiation is named after its template ``
+  (`tests/link/generic_class_clash`), and across two packages the wording is
+  the one `tests/link/package_generic_class_clash` pins. Nothing about the two
+  declarations is visible at a call, so left unreported the second layout would
+  simply replace the first and a field read would land on the wrong offset.
 - **`implements` may name an instantiation.** `class Box<T> implements
   Container<T>` is checked once per instantiation, against `Container$i32`, by
   the ordinary field-prefix rule — the interface's fields are the class's first

@@ -459,9 +459,12 @@ class Q<T> {
   }
 }
 
-// Named for the C spelling of the instantiated struct — `$` collapses to `_`
-// in a C identifier (`cStructName`) — because `tests/run.js` pairs a
-// `make<Name>` with the `struct <Name>` structs.c asserts the size of.
+// Named for the *LLVM* spelling of the instantiated struct with the `$` written
+// as `_`, because `tests/run.js` pairs a `make<Name>` with the `struct <Name>`
+// structs.c asserts the size of. The C spelling carries the reserved
+// `nish_gen_` prefix on top of that (`cStructName`), which is what keeps
+// `Q<i32>` from colliding with a class somebody called `Q_i32`, and the runner
+// strips it before it looks the maker up.
 export const makeQ_i32 = (b: i32): Q<i32> => new Q<i32>(true, b, false);
 export const makeQ_f64 = (b: f64): Q<f64> => new Q<f64>(true, b, false);
 

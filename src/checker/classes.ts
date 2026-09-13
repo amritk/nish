@@ -62,7 +62,12 @@ import {
   typeToString,
 } from "../types.js";
 import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker } from "./context.js";
-import { hasExportModifier, isFunctionResult, rejectDollarInSymbolName } from "./declarations.js";
+import {
+  hasExportModifier,
+  isFunctionResult,
+  rejectDollarInSymbolName,
+  rejectStructModifiers,
+} from "./declarations.js";
 import { assignmentTargetCheckers, methodCallCheckers, newCheckers, propertyCheckers } from "./members.js";
 import { checkBitwiseAssignOperands, isBitwiseCompoundOperator } from "./bitwise.js";
 import { instanceSymbol, instantiateWritten } from "./generics.js";
@@ -226,11 +231,9 @@ export function declareStruct(ctx: CheckContext, decl: ts.ClassDeclaration | ts.
     throw ctx.error(`\`${name}\` is already declared in this module`, decl.name);
   }
   if (ctx.sigs.has(name)) throw ctx.error(`\`${name}\` is already declared as a function`, decl.name);
-  for (const m of modifierKinds(decl)) {
-    if (m === ts.SyntaxKind.AbstractKeyword) throw ctx.error("Abstract classes are not supported", decl);
-    if (m === ts.SyntaxKind.DeclareKeyword) throw ctx.error(`\`declare ${kind}\` is not supported`, decl);
-    if (m === ts.SyntaxKind.DefaultKeyword) throw ctx.error("`export default` is not supported; use a named `export`", decl);
-  }
+  // Shared with `collectStructTemplate`, which is the only pass a *generic*
+  // class or interface reaches, so the two spellings are refused by one loop.
+  rejectStructModifiers(decl, kind, ctx.sf);
   // A class's `extends` is refused in pass 1b, so the struct is registered
   // first and a rejected class does not cascade into every use of its name.
   for (const clause of decl.heritageClauses ?? []) {

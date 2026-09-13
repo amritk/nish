@@ -1244,6 +1244,11 @@ reviewed before code is written.
    `--emit-header` report a duplicate C identifier today? If not, that is a
    pre-existing gap — `Point.shifted` and `Point_shifted` collide the same way
    — that generics make much easier to hit, and it should be closed in G8.
+   **Answered for a *struct* name, still open for a function's.** G5's review
+   found the struct half live — `class Box_i32` beside `Box<i32>` emitted two
+   `struct Box_i32` definitions and the header did not compile — so
+   `cStructName` is injective now (§15.4), and `cFunctionName` is G8's, where
+   `NISH_SYMBOL` means the answer can be a rename rather than a refusal.
 5. **Whether `--emit-dts` should also declare the *generic* signature**
    alongside the instantiations. TypeScript can express `identity<T>(x: T): T`;
    C cannot. Declaring both would make the `.d.ts` read the way a TypeScript
@@ -1427,18 +1432,52 @@ instantiation the mangled name belongs to, which also fixes the same hole on
 the function side — a hole that was unreachable until this milestone, because
 there was no `Box<T>` to write.
 
+**An instantiated name is program-wide, and packages have nothing to do with
+it.** `%struct.Holder$i32` and `@Holder$i32.constructor` are one name for the
+whole program however many modules asked for them, so two modules that each
+declare a private `Holder<T>` and each instantiate it at `i32` are a
+miscompile: the second registration replaces the layout the first one's objects
+were built with, a field read through an imported signature lands on the wrong
+offset, and the entry module emits a `define` for a symbol it also `declare`s,
+which `llvm-as` refuses. The *declared*-class spelling of that mistake is
+caught before bodies are checked, by `@Holder.constructor` clashing in
+`rejectSymbolClashes`; a generic class has no symbol at all until an
+instantiation exists, so the check has to run after `drainInstantiations`,
+where the set is final. G5 first shipped it scoped to two *packages*, which was
+the case §9c's declared-struct rule already had words for and which left the
+ordinary two-modules-of-one-program case silent. It is one check over both now,
+with the package wording where the packages differ and
+`rejectSymbolClashes`'s generic-function sentence, noun changed, where they do
+not: `tests/link/generic_class_clash` and `package_generic_class_clash` are the
+two halves.
+
 **The C spelling of a struct name had to be collapsed.** §14's fourth question
 asks about a *function*-name collision in the generated header; the thing that
 had to be fixed to ship this is a level below it. `--emit-header` wrote
 `struct Box$i32`, and `-pedantic` refuses `$` in a C identifier — the same
 measurement §3c records for `identity$i32`, which `cFunctionName` already
 handled. A struct's name is a *type*, not a linker symbol, so unlike a function
-there is nothing to bind back with `NISH_SYMBOL`: `cStructName` collapses `.`
-and `$` to `_` exactly as `cResultName` has always done for a `Result` layout,
-and the layout is the only thing that crosses. `tests/layout/structs.ts` now
-declares one generic class at two type arguments and `structs.c` declares the
-two twins, so clang checks both instantiated layouts at compile time and every
-field offset of both at run time.
+there is nothing to bind back with `NISH_SYMBOL`: the struct simply has a C
+spelling and an LLVM spelling, and the layout is the only thing that crosses.
+`tests/layout/structs.ts` now declares one generic class at two type arguments
+and `structs.c` declares the two twins, so clang checks both instantiated
+layouts at compile time and every field offset of both at run time.
+
+**What the collapse alone does not buy is injectivity**, which is the half the
+first version of `cStructName` got wrong. It collapsed `.` and `$` to `_` "the
+way `cResultName` does" — but the collapse is not what makes *that* one
+injective. `nish_result.` is a prefix a user's own class can never spell, and
+every name under it is `mangleType`'s alone. Half of an instantiated generic's
+name is user-chosen, so it needs both halves of the argument written out, and
+`cStructName` now has them: a *declared* class or interface passes through
+untouched, so the header of every program that existed before generics says
+exactly what it always said, and an instantiation is `nish_gen_` — reserved,
+because `nish_` is already refused in a declared name — followed by the
+collapse with the user's own `_` escaped to `_0`. Without the prefix a program
+that declares `class Box_i32` beside `Box<i32>` emits two `struct Box_i32`
+definitions and the header does not compile; without the escape `Box_arr<i32>`
+and `Box<i32[]>` are one name. `tests/cases/gen_export_header` is the first of
+those, compiled under `-Wall -Wextra -Werror -pedantic`.
 
 ---
 
