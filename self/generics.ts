@@ -26,6 +26,7 @@
 //     rule does not see, and they say they are a limit rather than a rule.
 
 import { LANGUAGE } from "./branding";
+import { rejectForeignPointer } from "./annotations";
 import { CheckContext } from "./context";
 import { collectFunctionSignature } from "./declarations";
 import { checkExpression } from "./expressions";
@@ -303,6 +304,16 @@ export function instantiate(
   const existing = ctx.program.instantiation(symbol);
   if (existing !== null) {
     return existing.sig;
+  }
+  // WP27 S2. A template's parameters and return type are checked against its
+  // *type parameters*, so the rule that keeps a foreign pointer out of a
+  // function this program defines cannot be applied where the other ones are —
+  // an instantiation is the first point at which `T` is known to be one. The
+  // message is the same, because it is the same rule.
+  for (const arg of args) {
+    if (rejectForeignPointer(ctx, arg, `a type argument of \`${template.sourceName}\``, at)) {
+      return null;
+    }
   }
   // Termination: a request that puts one of its own type arguments under a
   // constructor is the shape whose chain has no end, refused by name rather

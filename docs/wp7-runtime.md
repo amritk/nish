@@ -583,6 +583,30 @@ different:
 That the two sum to 4,864, the single budget they replace, is a coincidence of
 where the 256-byte boundaries fall and not a constraint on either.
 
+### What FFI does and does not do to the budget
+
+WP27 lets a program declare and call a C function of its own, and
+[wp27-ffi.md](wp27-ffi.md) §6 raises the objection that this makes the C in this
+project an *open* set, so describing the runtime as closed would be keeping two
+stories. Recorded here as a decision rather than left as an inference:
+
+**The budgets measure what ships in every binary, and a foreign call does not.**
+The two numbers above are the `.text*` of `runtime/runtime.c` and
+`runtime/runtime_os.c` — the two translation units `scripts/build.sh` compiles
+into every program whether or not the program uses a byte of them. A
+`declare function` adds a `declare` line to one program's IR and a symbol to one
+program's link line; it adds nothing to either translation unit, and a program
+that declares none is byte for byte the size it was. So the core stays a closed
+set and the OS half stays the surface that grows with the language's own reach,
+and both sentences above are still true as written.
+
+What the objection is right about is the half the budget never covered. FFI does
+open the set of C a *program* can reach, and the thing that used to bound it was
+not this budget but `docs/LANGUAGE.md`, by having no way to name a foreign
+function at all. That bound is the one WP27 removed, deliberately, and the cost
+is paid in the attribute fixpoint rather than in bytes: a program that calls C
+is no longer one the compiler can reason about end to end (wp27 §2).
+
 **What the split costs a program.** `nish_readdir` allocates through
 `nish_alloc_struct` and `nish_str_new`, which are now in another translation
 unit, so the inlined arena bump inside it is a real call without LTO. Measured

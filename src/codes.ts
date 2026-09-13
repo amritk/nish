@@ -51,8 +51,12 @@ export const INTERNAL = "NL0003";
  * specific rule wins over a general one it contains.
  */
 const RULES: string[] = [
+    ": a foreign pointer may only appear in a `declare function` signature or on a local bound to one, because it is an address a C function owns and this compiler can neither lay it out nor say how long it lives",
+    "NL2318",
     "` (supported: number, i32, i64, u8, u16, u32, u64, f32, f64, boolean, string, void, T[], Result<T, E>, Int32Array/Float64Array/BigInt64Array, and declared classes/interfaces)",
     "NL2039",
+    "` cannot be nullable: a foreign pointer is narrowed with `!== null` before it is passed back, because only the C function it came from can hand out a null one",
+    "NL2319",
     " (it aborts rather than unwinding): return a `Result<T, E>` for a failure a caller should handle, or `panic(message)` to end the process",
     "NL1001",
     "(...)` needs a contextual `Result<T, E>` type (annotate the function's return type, e.g. `function f(): Result<number, string>`)",
@@ -223,8 +227,12 @@ const RULES: string[] = [
     "NL2164",
     " (an override keeps the signature; there is no overloading)",
     "NL2001",
+    ", and a declared C function returns a scalar or `CPtr` only",
+    "NL2316",
     "` cannot declare methods (interfaces describe layout only)",
     "NL2048",
+    ", and a declared C function takes scalars and `CPtr` only",
+    "NL2317",
     "the command line at https://github.com/amritk/nish/issues",
     "NL3007",
     " generic instantiations, which is this compiler's limit ",
@@ -844,7 +852,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 393;
+export const RULE_COUNT = 397;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

@@ -137,7 +137,7 @@ intern nullable 1
 strip 1
 strip plain 1
 distinct 0
-table size 55
+table size 56
 error name error
 error to i32 1
 error from i32 1

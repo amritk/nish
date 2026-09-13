@@ -1,1 +1,1 @@
-and a declared C function takes scalars only
+and a declared C function takes scalars and `CPtr` only

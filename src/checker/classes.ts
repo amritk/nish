@@ -56,6 +56,7 @@ import {
   alignOf,
   assignable,
   isNumeric,
+  rejectForeignPointer,
   resolveTypeNode,
   sameType,
   stripNull,
@@ -314,6 +315,9 @@ function collectField(ctx: CheckContext, owner: StructInfo, decl: ts.PropertyDec
   if (!decl.type) throw ctx.error(`${what} needs a type annotation`, decl.name);
   const type = resolveTypeNode(decl.type, ctx.sf, ctx.opts);
   if (type.kind === "void") throw ctx.error(`${what} cannot have type void`, decl.type);
+  // WP27 S2: a field would put a foreign address inside a value the arena owns
+  // and the escape analysis walks. `types.ts` has the reasoning.
+  rejectForeignPointer(type, "a field", decl.type, ctx.sf);
 
   const field: FieldInfo = { name, type, index: owner.fields.length, offset: 0, readonly, decl };
   const init = ts.isPropertyDeclaration(decl) ? decl.initializer : undefined;
@@ -344,10 +348,19 @@ function collectParams(ctx: CheckContext, owner: StructInfo, decl: ts.SignatureD
     if (!p.type) throw ctx.error(`Parameter \`${p.name.text}\` needs a type annotation`, p);
     if (seen.has(p.name.text)) throw ctx.error(`Duplicate parameter \`${p.name.text}\``, p);
     seen.add(p.name.text);
-    params.push({ name: p.name.text, type: resolveTypeNode(p.type, ctx.sf, ctx.opts) });
+    const type = resolveTypeNode(p.type, ctx.sf, ctx.opts);
+    rejectForeignPointer(type, "a parameter of a function this program defines", p.type, ctx.sf);
+    params.push({ name: p.name.text, type });
   }
   return params;
 }
+
+/** A method's declared return type, refused when it is a foreign pointer (WP27 S2). */
+const methodReturnType = (ctx: CheckContext, node: ts.TypeNode): StaticType => {
+  const type = resolveTypeNode(node, ctx.sf, ctx.opts);
+  rejectForeignPointer(type, "the return type of a function this program defines", node, ctx.sf);
+  return type;
+};
 
 function rejectMethodModifiers(ctx: CheckContext, owner: StructInfo, decl: ts.Node, what: string): void {
   for (const m of modifierKinds(decl)) {
@@ -383,7 +396,7 @@ function collectMethod(ctx: CheckContext, owner: StructInfo, decl: ts.MethodDecl
     name: `${owner.name}.${name}`,
     sourceName: `${owner.name}.${name}`,
     params: collectParams(ctx, owner, decl),
-    returnType: resolveTypeNode(decl.type, ctx.sf, ctx.opts),
+    returnType: methodReturnType(ctx, decl.type),
     decl,
     nameNode: decl.name,
     declSite: decl,
