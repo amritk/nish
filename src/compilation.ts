@@ -298,10 +298,19 @@ export class Compilation {
           owners.set(symbol, { unit });
           continue;
         }
+        // One template literal rather than a concatenation, and this comment is
+        // above the call rather than inside it. The code generator keys a rule
+        // on the *longest literal run* of its message, and it finds that message
+        // by looking for a string after the constructor with only whitespace in
+        // between. Concatenated after "; a function ", the longest run was
+        // "` is also defined in ", which `duplicate_export`, `duplicate_import`
+        // and `duplicate_internal` also contain -- so all three carried this
+        // rule's code. A comment between the constructor and the string loses
+        // the rule a code entirely. `clashMessage` below is one line for the
+        // first of those reasons.
         this.sink.report(
           new CompileError(
-            `Generic function \`${template.sourceName}\` is also defined in ${prev.unit.fileName}; a function ` +
-              "name must be unique across the program, and an instantiation is named after its template",
+            `Generic function \`${template.sourceName}\` is also defined in ${prev.unit.fileName}; a function name must be unique across the program, and an instantiation is named after its template`,
             template.nameNode,
             unit.sourceFile
           )

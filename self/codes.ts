@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 379;
+export const RULE_COUNT: i32 = 380;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -85,6 +85,8 @@ export function diagnosticRules(): string[] {
     "NL2278",
     "A `case` clause cannot declare a variable directly; wrap the clause body in a block (`case 1: { ... }`)",
     "NL2165",
+    "; a function name must be unique across the program, and an instantiation is named after its template",
+    "NL3010",
     "`export { ... }` / `export * from` are not supported; put `export` on the function declaration itself",
     "NL2128",
     "`case` label must be an integer literal or a module constant (LLVM's `switch` table holds constants)",
@@ -125,6 +127,8 @@ export function diagnosticRules(): string[] {
     "NL2080",
     "Only functions can be exported for now, plus classes and interfaces (found `export` on ",
     "NL2226",
+    "` under a type constructor instead of passing it on, so the chain has no end; pass `",
+    "NL2304",
     ": a `Result` is immutable once built (return a new `ok(...)` or `err(...)` instead)",
     "NL2028",
     ": a `Result` is immutable once built (return a new `Ok(...)` or `Err(...)` instead)",
@@ -713,8 +717,6 @@ export function diagnosticRules(): string[] {
     "NL2264",
     "` does not fit in i32",
     "NL2053",
-    "` is also defined in ",
-    "NL3010",
     "` must be initialized",
     "NL2089",
     "Duplicate parameter `",
