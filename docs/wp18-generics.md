@@ -1398,6 +1398,21 @@ which is §10's claim tested rather than asserted.
    cannot yet be instantiated from another module`) is the case to delete when
    it lands, and `tests/link/generic_import/` and `generic_two_importers/` are
    the tests §12 names.
+
+   **A trap is laid here, and it is worth reading before starting.** An
+   instantiation's symbol carries a package prefix (WP21 S1), and it is minted
+   from the *instantiating* module's prefix — `instantiate` in
+   `checker/index.ts` and `self/generics.ts` reads `program.symbolPrefix`. That
+   is correct only because of the refusal above: the module that instantiates is
+   always the module that declares, so the two prefixes are the same one. The
+   moment a template may be instantiated from another module, they are not, and
+   the prefix has to become the **template's** rather than the caller's —
+   otherwise two packages importing one generic mint the same symbol and the
+   whole-program fact table in `codegen/attributes.ts`, which is keyed by
+   symbol, hands one instantiation the other's purity and escape facts. That is
+   a miscompile rather than a link error, which is the same failure WP21 S1
+   exists to prevent for plain functions. `tests/link/package_generic` is the
+   fixture that pins the prefix today and the one to extend when G7 lands.
 3. **G6, constraints.** Member access on a constrained parameter admitted at the
    template, satisfaction checked at each instantiation. Small next to G5, and
    it wants G5 first because `<T extends Shape>` is most useful on a container.
