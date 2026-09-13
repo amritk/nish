@@ -170,6 +170,13 @@ function writtenArrayParams(table: TypeTable, sig: FunctionSig, facts: FunctionF
  * byte, its N-API tag, and the C element type. `null` for element types JS
  * has no flat view of (booleans would need 0/1 validation; strings, arrays
  * and objects are pointers into the arena).
+ *
+ * WP15 §2a gave a *record* element type a flat layout too — `data` is a C
+ * array of the structs themselves — and it still does not cross, because the
+ * missing half was never the layout: JS has no typed array of a struct, so a
+ * host would need a per-field unpack loop and a JS object per element, which
+ * is marshalling rather than a view. The C header describes the block and the
+ * wasm and N-API bridges go on declining these functions.
  */
 export class TypedView {
   /** `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array`: the language's alias and the JS constructor. */
@@ -557,12 +564,15 @@ export class CName {
  * object pointer first: a C host may call them on objects it holds.
  */
 export function cFunctionName(symbol: string): CName {
-  if (symbol.indexOf(".") >= 0) {
+  // `.` from a method and `$` from a generic instantiation (WP18) are both
+  // legal LLVM and illegal C, so both collapse to `_` and the declaration is
+  // bound to the real symbol with an asm label.
+  if (symbol.indexOf(".") >= 0 || symbol.indexOf("$") >= 0) {
     const ident = new StringBuilder();
     let i = 0;
     while (i < symbol.length) {
       const c = symbol.charCodeAt(i);
-      ident.addChar(c === CHAR_DOT ? CHAR_UNDERSCORE : c);
+      ident.addChar(c === CHAR_DOT || c === CHAR_DOLLAR ? CHAR_UNDERSCORE : c);
       i = i + 1;
     }
     return new CName(ident.toText(), ` NISH_SYMBOL("${symbol}")`);

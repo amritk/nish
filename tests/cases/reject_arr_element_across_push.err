@@ -1,0 +1,2 @@
+`p` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage
+index `ps` again afterwards rather than holding the element across it

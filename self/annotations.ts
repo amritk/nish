@@ -207,6 +207,15 @@ function resolveReference(node: Node, ctx: CheckContext): i32 {
     return ctx.table.arrayOf(alias);
   }
 
+  // WP18: a type parameter, while an instantiation is being resolved or
+  // checked. It answers here — after the built-in scalars, before anything
+  // declared — which is exactly where stage0's named-type resolver sits, so
+  // the two compilers shadow the same set of names.
+  const bound = ctx.typeBindings.get(name, -1);
+  if (bound >= 0) {
+    return bound;
+  }
+
   // A `type` alias is the type it names, so it answers here and the caller
   // never learns that a name was involved (docs/LANGUAGE.md, Type aliases).
   const declared = ctx.program.alias(name);

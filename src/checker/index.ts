@@ -15,7 +15,7 @@
  */
 import ts from "typescript";
 import { CompileError, DiagnosticSink, PerformanceWarning } from "../diagnostics.js";
-import { CompilerOptions, StaticType, registerNamedTypes, typeToString } from "../types.js";
+import { CompilerOptions, StaticType, registerNamedTypes, resolveTypeNode, typeToString } from "../types.js";
 import {
   coerceToContext,
   collectStructMembers,
@@ -32,16 +32,34 @@ import { ConstInfo, constValue } from "./constants.js";
 import {
   arrowFunctionOf,
   collectArrowSignature,
+  collectArrowTemplate,
   collectConstant,
   collectFunctionSignature,
+  collectFunctionTemplate,
   collectImports,
+  collectPlainParams,
   markEntryMain,
+  rejectDollarInSymbolName,
   rejectNonFunctionExport,
 } from "./declarations.js";
 import { CheckContext, LoopInfo } from "./context.js";
+import {
+  Instantiation,
+  MAX_INSTANTIATIONS,
+  MAX_INSTANTIATIONS_PER_TEMPLATE,
+  TemplateInfo,
+  expandingAncestor,
+  instanceDisplayName,
+  instanceSymbol,
+  mentionsTypeParam,
+  newNodeTables,
+  nonTerminatingMessage,
+  swapTables,
+} from "./generics.js";
 import { expressionCheckers } from "./expressions.js";
 import { ROOT_PACKAGE, packageSymbolPrefix } from "../packages.js";
-import { CheckedProgram, FunctionSig, ImportBinding, LocalVar, StructInfo } from "./program.js";
+import { CheckedProgram, FunctionSig, ImportBinding, LocalVar, Param, StructInfo } from "./program.js";
+import { checkElementReferences } from "./arrays.js";
 import { checkPerformance } from "./performance.js";
 import { checkResultLocalsHandled } from "./result.js";
 import { Scope } from "./scope.js";
@@ -77,6 +95,19 @@ export class Checker implements CheckContext {
   readonly program: CheckedProgram;
   /** Local name -> signature: own functions plus bound imports. */
   readonly sigs = new Map<string, FunctionSig>();
+  /** Local name -> generic template (WP18). A template is not in `sigs`: it has no signature. */
+  readonly templates = new Map<string, TemplateInfo>();
+  /**
+   * The type parameters in scope, bound to the types this instantiation gives
+   * them. Set only while an instantiation's signature is resolved or its body
+   * is checked, and read by the named-type resolver below — which is the whole
+   * of how `T` becomes `i32` (`docs/wp18-generics.md` §3d).
+   */
+  private typeBindings?: Map<string, StaticType>;
+  /** The instantiation whose body is being checked, so a request from it records its parent. */
+  private currentInstance?: Instantiation;
+  /** Requested but not yet checked, FIFO so the enumeration order is the discovery order. */
+  private readonly pending: Instantiation[] = [];
   readonly loops: LoopInfo[] = [];
   current!: FunctionSig;
   private readonly isEntry: boolean;
@@ -143,8 +174,15 @@ export class Checker implements CheckContext {
       aliases: new Map(),
       enums: new Map(),
       enumRefs: new WeakMap(),
+      templates: new Map(),
+      instantiations: new Map(),
     };
     registerNamedTypes(sourceFile, (name) => {
+      // WP18: a type parameter shadows everything while an instantiation is
+      // being resolved, and exists at no other time — which is why no pass
+      // below this line has ever met a type variable.
+      const bound = this.typeBindings?.get(name);
+      if (bound) return bound;
       const own = this.typeNames.has(name) ? this.program.structs.get(name) : undefined;
       if (own) return own.type;
       // An alias is the type it names, so it answers here and the caller never
@@ -175,6 +213,8 @@ export class Checker implements CheckContext {
     );
     this.sink.throwIfErrors();
     this.checkBodies();
+    this.sink.throwIfErrors();
+    this.drainInstantiations();
     this.sink.throwIfErrors();
     return this.program;
   }
@@ -294,6 +334,7 @@ export class Checker implements CheckContext {
       this.program.enums.has(name) ||
       this.program.structs.has(name) ||
       this.sigs.has(name) ||
+      this.templates.has(name) ||
       this.program.constants.has(name)
     );
   }
@@ -322,6 +363,10 @@ export class Checker implements CheckContext {
         stmt
       );
     }
+    if (stmt.typeParameters && stmt.typeParameters.length > 0) {
+      this.registerTemplate(collectFunctionTemplate(stmt, this.sf));
+      return;
+    }
     this.registerFunction(collectFunctionSignature(stmt, this.sf, this.opts), stmt);
   }
 
@@ -335,12 +380,19 @@ export class Checker implements CheckContext {
   private collectArrowFunction(stmt: ts.VariableStatement): void {
     const decl = stmt.declarationList.declarations[0];
     const arrow = arrowFunctionOf(decl)!;
+    if (arrow.typeParameters && arrow.typeParameters.length > 0) {
+      this.registerTemplate(collectArrowTemplate(stmt, decl, arrow, this.sf));
+      return;
+    }
     this.registerFunction(collectArrowSignature(stmt, decl, arrow, this.sf, this.opts), stmt);
   }
 
   /** The name checks and the entry-point wiring, shared by both spellings. */
   private registerFunction(sig: FunctionSig, stmt: ts.Statement): void {
-    if (this.sigs.has(sig.sourceName)) this.error(`Duplicate function \`${sig.sourceName}\``, stmt);
+    rejectDollarInSymbolName(sig.sourceName, "function", sig.nameNode, this.sf);
+    if (this.sigs.has(sig.sourceName) || this.templates.has(sig.sourceName)) {
+      this.error(`Duplicate function \`${sig.sourceName}\``, stmt);
+    }
     if (this.program.structs.has(sig.sourceName)) {
       this.error(`\`${sig.sourceName}\` is already declared as a class or interface`, sig.nameNode);
     }
@@ -354,6 +406,173 @@ export class Checker implements CheckContext {
     this.sigs.set(sig.sourceName, sig);
     this.program.functions.push(sig);
     if (sig.exported) this.program.exports.set(sig.sourceName, sig);
+  }
+
+  /**
+   * WP18: one generic function declaration. A template shares the declaration
+   * namespace with everything else — it is a `function` however it is spelled
+   * — but it is not a signature: it has no types until an instantiation binds
+   * its parameters, so it never joins `sigs` or `program.functions`.
+   */
+  private registerTemplate(template: TemplateInfo): void {
+    const name = template.sourceName;
+    if (this.sigs.has(name) || this.templates.has(name)) {
+      this.error(`Duplicate function \`${name}\``, template.nameNode);
+    }
+    if (this.program.structs.has(name)) {
+      this.error(`\`${name}\` is already declared as a class or interface`, template.nameNode);
+    }
+    if (this.program.aliases.has(name) || this.program.constants.has(name) || this.program.enums.has(name)) {
+      this.error(`\`${name}\` is already declared in this module`, template.nameNode);
+    }
+    if (template.exported && name === "main") {
+      this.error(
+        "`main` cannot be generic: the entry point is called by the C runtime, which has no type arguments to give it",
+        template.nameNode
+      );
+    }
+    // A type parameter is inferred from the arguments and from nothing else
+    // (§2a), so one that appears in no parameter can never be inferred and the
+    // function could never be called. Reported here, once, against the
+    // declaration rather than against every call.
+    for (const param of template.typeParams) {
+      const mentioned = template.decl.parameters.some(
+        (p) => p.type !== undefined && mentionsTypeParam(p.type, new Set([param]))
+      );
+      if (mentioned) continue;
+      this.error(
+        `Cannot infer \`${param}\` for \`${name}\`: a type parameter is inferred from the arguments, and ` +
+          `\`${param}\` appears in none of them; give \`${name}\` a parameter that mentions \`${param}\``,
+        template.nameNode
+      );
+    }
+    this.templates.set(name, template);
+    this.program.templates.set(name, template);
+  }
+
+  /**
+   * WP18: the instantiation request. Answers the specialised signature for one
+   * (template, type-argument tuple), creating and queueing it the first time it
+   * is asked for — so a tuple seen twice is one `define`, and the FIFO queue
+   * makes the order the discovery order in both compilers.
+   */
+  instantiate(template: TemplateInfo, args: StaticType[], at: ts.Node): FunctionSig {
+    // WP21 S1: inside the package that declares the template. `qualifySymbols`
+    // runs at the end of pass 1 and instantiations are appended during pass 2,
+    // so an instantiation never passes through it -- the prefix has to be part
+    // of the symbol from the moment it is minted, or a generic would be the one
+    // declaration in the language whose symbol escaped its package.
+    const symbol = instanceSymbol(this.program.symbolPrefix + template.sourceName, args);
+    const existing = this.program.instantiations.get(symbol);
+    if (existing) return existing.sig;
+
+    // Termination (§4). A request that puts one of its own type arguments
+    // under a constructor is the shape whose chain has no end, and it is
+    // refused by name rather than by a depth count.
+    const growing = expandingAncestor(this.currentInstance, template, args);
+    if (growing) {
+      this.error(nonTerminatingMessage(template, growing.ancestor, args, growing.index), at);
+    }
+    // The caps are the backstop for everything the rule does not see, and they
+    // say they are this compiler's limit rather than a rule of the language.
+    if (template.count >= MAX_INSTANTIATIONS_PER_TEMPLATE) {
+      this.error(
+        `\`${template.sourceName}\` has been instantiated ${MAX_INSTANTIATIONS_PER_TEMPLATE} times, which is ` +
+          "this compiler's limit rather than a rule of the language",
+        at
+      );
+    }
+    if (this.program.instantiations.size >= MAX_INSTANTIATIONS) {
+      this.error(
+        `This module has reached ${MAX_INSTANTIATIONS} generic instantiations, which is this compiler's limit ` +
+          "rather than a rule of the language",
+        at
+      );
+    }
+
+    const bindings = new Map<string, StaticType>();
+    template.typeParams.forEach((name, i) => {
+      bindings.set(name, args[i]);
+    });
+    const sig = this.instanceSignature(template, args, bindings, symbol);
+    const instance: Instantiation = {
+      template,
+      typeArgs: args,
+      sig,
+      bindings,
+      tables: newNodeTables(),
+      from: this.currentInstance,
+    };
+    sig.instance = instance;
+    template.count += 1;
+    this.program.instantiations.set(symbol, instance);
+    this.pending.push(instance);
+    return sig;
+  }
+
+  /** The template's own annotations, resolved once with its type parameters bound. */
+  private instanceSignature(
+    template: TemplateInfo,
+    args: StaticType[],
+    bindings: Map<string, StaticType>,
+    symbol: string
+  ): FunctionSig {
+    const saved = this.typeBindings;
+    this.typeBindings = bindings;
+    let params: Param[];
+    let returnType: StaticType;
+    try {
+      params = collectPlainParams(template.decl.parameters, this.sf, this.opts);
+      returnType = resolveTypeNode(template.decl.type as ts.TypeNode, this.sf, this.opts);
+    } finally {
+      this.typeBindings = saved;
+    }
+    return {
+      name: symbol,
+      sourceName: instanceDisplayName(template.sourceName, args),
+      params,
+      returnType,
+      decl: template.decl,
+      nameNode: template.nameNode,
+      // Every instantiation is declared where the template is written: one
+      // `DISubprogram` per specialisation, all of them pointing at the one
+      // source line a reader would call the declaration (WP22, `declSite`).
+      declSite: template.declSite,
+      body: template.body,
+      exported: template.exported,
+    };
+  }
+
+  /**
+   * Pass 3 (WP18): check every instantiation's body, to a fixed point. Each one
+   * may request more, and the queue is drained rather than recursed into, so
+   * `from` is a chain of requests and not a call stack.
+   */
+  drainInstantiations(): void {
+    while (this.pending.length > 0) {
+      // biome-ignore lint/style/noNonNullAssertion: the loop guard is the length check
+      const instance = this.pending.shift()!;
+      // Appended here rather than at the request, so that `functions` is in
+      // the order the bodies are checked and the emitter walks it the same way.
+      this.program.functions.push(instance.sig);
+      if (!this.sink.recover(() => this.checkInstanceBody(instance))) instance.sig.poisoned = true;
+    }
+  }
+
+  /** One instantiation's body, over its own side tables and with its own type bindings. */
+  private checkInstanceBody(instance: Instantiation): void {
+    const savedTables = swapTables(this.program, instance.tables);
+    const savedBindings = this.typeBindings;
+    const savedInstance = this.currentInstance;
+    this.typeBindings = instance.bindings;
+    this.currentInstance = instance;
+    try {
+      this.checkFunctionBody(instance.sig);
+    } finally {
+      this.currentInstance = savedInstance;
+      this.typeBindings = savedBindings;
+      swapTables(this.program, savedTables);
+    }
   }
 
   /** Pass 1b: bind every import to the exporter's function signature or struct. */
@@ -371,6 +590,17 @@ export class Checker implements CheckContext {
     if (struct && struct.decl.getSourceFile() === target.sourceFile) {
       this.bindStructImport(imp, struct);
       return;
+    }
+    const template = target.templates.get(imp.importedName);
+    if (template) {
+      // WP18 §11 G7: one definition per instantiation, in the module that
+      // declares the template, is the whole-program half of this package and
+      // has not landed. Refusing by name beats "no exported function".
+      this.error(
+        `\`${imp.importedName}\` in \`${imp.specifier}\` is a generic function, and a generic function cannot ` +
+          "yet be instantiated from another module; declare it in the module that calls it",
+        imp.element
+      );
     }
     const sig = target.exports.get(imp.importedName);
     if (!sig) {
@@ -521,6 +751,9 @@ export class Checker implements CheckContext {
   checkBodies(): CheckedProgram {
     this.foldConstants();
     for (const sig of this.program.functions) {
+      // WP27 S1: a `declare function` has no body, so pass 2 has nothing to do
+      // for it. Its signature was fully checked in pass 1.
+      if (sig.foreign) continue;
       if (!this.sink.recover(() => this.checkFunctionBody(sig))) sig.poisoned = true;
     }
     return this.program;
@@ -544,7 +777,7 @@ export class Checker implements CheckContext {
     this.sink.reportPerformance(new PerformanceWarning(message, node, this.sf));
   }
 
-  private checkFunctionBody(sig: FunctionSig): void {
+  checkFunctionBody(sig: FunctionSig): void {
     this.current = sig;
     const scope = new Scope();
     // Methods and constructors (WP2) carry `this` as their first parameter.
@@ -561,6 +794,7 @@ export class Checker implements CheckContext {
     // WP22 §4: a concise arrow body (`=> n * 2`) is a block with one `return`,
     // so it always terminates and its expression is checked as that return's.
     let terminates: boolean;
+    if (sig.body === undefined) return; // WP27 S1: foreign, filtered by the caller.
     if (ts.isBlock(sig.body)) {
       terminates = checkStatements(this, sig.body.statements, scope);
     } else {
@@ -576,6 +810,10 @@ export class Checker implements CheckContext {
       // that does not compile is noise, and a poisoned body has incomplete
       // side tables anyway.
       checkPerformance(this, sig);
+      // WP15 §2a: an element reference into contiguous record storage may not
+      // be held across a `push`. Same placement and same reason as the line
+      // above — the walk reads types and bindings pass 2 has just written.
+      checkElementReferences(this, sig);
     }
     // A body with a rejected statement may have lost its `return`: no definite-return cascade.
     if (sig.returnType.kind !== "void" && !terminates && !sig.poisoned) {

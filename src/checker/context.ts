@@ -9,6 +9,7 @@
 import ts from "typescript";
 import { CompileError } from "../diagnostics.js";
 import { CompilerOptions, StaticType } from "../types.js";
+import { TemplateInfo } from "./generics.js";
 import { CheckedProgram, FunctionSig } from "./program.js";
 import { Scope } from "./scope.js";
 
@@ -28,6 +29,12 @@ export interface CheckContext {
   readonly program: CheckedProgram;
   /** Signatures of every top-level function, available before bodies are checked. */
   readonly sigs: ReadonlyMap<string, FunctionSig>;
+  /**
+   * Generic templates declared in this module (WP18). Separate from `sigs`
+   * because a template has no signature: it is the declaration a call site
+   * instantiates, not something that can be called.
+   */
+  readonly templates: ReadonlyMap<string, TemplateInfo>;
   /** The function whose body is being checked. */
   readonly current: FunctionSig;
   /** Enclosing loops, innermost last; empty outside any loop. Handlers push and pop. */
@@ -69,6 +76,13 @@ export interface CheckContext {
   checkExpression(expr: ts.Expression, scope: Scope): StaticType;
   /** Declare the `let`/`const` locals of a declaration list (a statement's or a `for` initializer's). */
   declareVariables(list: ts.VariableDeclarationList, scope: Scope): void;
+  /**
+   * WP18: the specialised signature for one (template, type-argument tuple),
+   * created and queued for checking the first time it is asked for. `at` is
+   * where the request was made, which is where a termination or cap diagnostic
+   * points.
+   */
+  instantiate(template: TemplateInfo, args: StaticType[], at: ts.Node): FunctionSig;
 }
 
 /** Returns true when the statement definitely terminates control flow. */

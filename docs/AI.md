@@ -22,7 +22,8 @@ Contents: [The loop](#the-loop-compile-read-the-code-fix) ·
 [A whole program](#a-whole-program) ·
 [What you must unlearn](#what-you-must-unlearn) · [Types](#types) ·
 [Failure](#failure-result-not-exceptions) · [Absence](#absence-nullable-types) ·
-[Declarations](#declarations) · [Statements](#statements) ·
+[Declarations](#declarations) · [Generics](#generic-functions) ·
+[Calling C](#calling-c) · [Statements](#statements) ·
 [Expressions](#expressions) · [The builtins, in full](#the-builtins-in-full) ·
 [Memory](#memory) · [Recipes](#recipes-for-what-is-missing) ·
 [Before you say it compiles](#before-you-say-it-compiles)
@@ -118,7 +119,8 @@ rejects. This table is the highest-value part of the page.
 | `undefined` | forbidden | `null`, with a `T \| null` type |
 | `let total = 0` at the top level | `` Top-level `let` is not supported `` | a module `const`, or a local |
 | a callback: `xs.forEach(f)`, `(cb: (n: i32) => i32)` | `` Unsupported type `(n: i32) => i32` `` | there are **no function values**; inline the body or write a loop |
-| `function f<T>(x: T)` | `Generic type parameters are forbidden` | write it per type, or use an `interface` |
+| `class Box<T>`, `type Pair<T>`, a generic method | `` Generic type parameters are forbidden on a class in Nish `` | a generic **function** works — see below; a generic *type* does not |
+| `identity<i32>(7)` (type argument at a call) | `Type arguments are not written at a call site in Nish` | `identity(7)` — `T` is inferred from the arguments |
 | `async` / `await` / `Promise` | forbidden (no event loop) | the I/O builtins are synchronous |
 | `class B extends A` | `` `extends` is not supported: Nish has no inheritance `` | repeat the fields and `implements` an interface |
 | `static` members, getters/setters | not supported | module `const`s and plain methods |
@@ -360,8 +362,70 @@ const double = (n: i32): i32 => n * 2;   // a concise body is that one `return`
 - **Parameters are immutable**: `p = 1`, `p++`, `p += 1` are all rejected. Copy
   into a `let` first.
 - A non-`void` function must return on every path.
-- Rejected: generics, generators, `async`, destructured / rest / optional /
-  default parameters, overloads, nested function declarations.
+- Rejected: generators, `async`, destructured / rest / optional / default
+  parameters, overloads, nested function declarations. Type parameters *are*
+  allowed — see [Generic functions](#generic-functions).
+
+### Generic functions
+
+A function may declare type parameters, and **each instantiation is compiled to
+its own specialised function** — no boxing, no dictionary, no runtime type
+information. The IR is what somebody would have written by hand at that type.
+
+```ts nish:ok
+const identity = <T>(x: T): T => x;
+
+export const main = (): i32 => {
+  console.log(identity(7));
+  console.log(identity("hi"));
+  return 0;
+};
+```
+
+- **The type argument is inferred from the arguments and is never written at a
+  call site.** `identity<i32>(7)` is
+  `Type arguments are not written at a call site in Nish`. Inference matches the
+  shape of each declared parameter against its argument — `T` against `i32`,
+  `T[]` against `i32[]`, `Result<T, string>` against `Result<i32, string>` —
+  left to right, first binding wins.
+- **A type parameter that appears in no parameter is an error at the
+  declaration**, because it could never be inferred.
+- **Every other rule still applies inside.** A type parameter is not a hole to
+  smuggle something through: each instantiation is checked with `T` bound to a
+  concrete type.
+- **Not supported yet**, each with its own message: a constrained parameter
+  (`<T extends Shape>`), a default type argument (`<T = string>`), type
+  parameters on a **class, interface, method or type alias**, and instantiating
+  a generic imported from another module. A generic `main` is refused.
+- **`$` may not appear in a function, class or interface name** — it is what
+  separates a generic's name from its type arguments in the emitted symbol.
+
+### Calling C
+
+`declare function name(params): T;` declares a C function this program calls but
+does not define. The symbol is the identifier, unmangled, and the call is an
+ordinary call.
+
+```ts nish:ok
+declare function abs(n: i32): i32;
+
+export const main = (): i32 => {
+  console.log(`${abs(-5)}`);
+  return 0;
+};
+```
+
+- **Every position must be a scalar** — the integer and float widths, `boolean`,
+  `void`. A `string`, array, class or interface is rejected. That is not style:
+  a scalar boundary has no pointer for a foreign function to capture or free,
+  which is what lets the escape analysis stay correct without knowing anything
+  about the callee.
+- **No body, and it cannot be `export`ed.**
+- **It costs the caller its attributes.** Nothing about a body the compiler
+  cannot see is provable, so a function that calls C loses `readnone` and
+  `willreturn`, and so does everything above it in the call graph. A program
+  that calls C is no longer one the compiler can reason about end to end — that
+  trade *is* the feature.
 
 ### Module constants
 
@@ -433,6 +497,40 @@ export const main = (): i32 => {
   converts to an `I` wherever one is expected. **This is the only widening in
   the language**, and nothing converts back — no downcast, no `instanceof`.
 
+### An array of records is one contiguous block
+
+`Point[]` where `Point` is a class or interface stores the records themselves,
+back to back — not an array of pointers. So `ps[i]` is an *interior* pointer,
+and `push` may move the whole block to grow it. **Holding an element across a
+`push` on the same array is therefore refused**, because the write would land
+in the old storage:
+
+```ts nish:err NL2290
+interface Point { x: i32; }
+
+export const main = (): i32 => {
+  const ps: Point[] = [{ x: 1 }];
+  const p = ps[0];
+  ps.push({ x: 2 });
+  p.x = 3;
+  return 0;
+};
+```
+
+Index again after the `push` instead of holding the element across it:
+
+```ts nish:ok
+interface Point { x: i32; }
+
+export const main = (): i32 => {
+  const ps: Point[] = [{ x: 1 }];
+  ps.push({ x: 2 });
+  ps[0].x = 3;
+  console.log(`${ps[0].x}`);
+  return 0;
+};
+```
+
 ### Object literals
 
 An object literal takes its type from context — a variable annotation, the
@@ -484,7 +582,8 @@ export const main = (): i32 => {
 
 - A `type` alias is a second name for an existing type, **not a type of its
   own** — the same program with and without its aliases emits byte-identical
-  IR. Generic aliases are forbidden; built-in names may not be aliased.
+  IR. A generic *alias* is still forbidden even though a generic function is
+  not; built-in names may not be aliased.
 - A numeric `enum` is a **distinct type** represented as `i32`, and that is the
   point: `Kind` and `i32` never convert in either direction. Members must be
   numeric literals. `===` and `!==` are the **only** operators — no arithmetic,
@@ -606,9 +705,12 @@ there is no `undefined` to return), `a.indexOf(v)`, `a.join(sep)` — **`join` i
 `string[]` only**. That is every array method there is.
 
 **Strings.** `s.length` (**bytes**), `s.charCodeAt(i)` (the byte, bounds-checked),
-`s.substring(start[, end])`, `s.indexOf(sub)`, `s.startsWith(sub)`,
-`s.endsWith(sub)`, and `String.fromCharCode(c)`. That is every string method
-there is. Every offset is a **byte** offset, so cutting a multi-byte character
+`s.substring(start[, end])`, `s.slice(start[, end])`, `s.indexOf(sub)`,
+`s.startsWith(sub)`, `s.endsWith(sub)`, and `String.fromCharCode(c)`. That is
+every string method there is. `substring` **clamps** an out-of-range offset the
+way JavaScript does; `slice` instead **panics** unless
+`0 <= start <= end <= s.length`, and is the faster of the two when you have
+already established the range. Every offset is a **byte** offset, so cutting a multi-byte character
 in half is possible.
 
 **Process.** `process.exit(code)`, `process.argv` (a read-only `string[]`;
@@ -731,7 +833,7 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
 6. Is every `Result` read, and is every `.value` behind an `isOk()`?
 7. Is every nullable narrowed with `!== null` before it is touched?
 8. Did you use `throw`, `try`, `any`, `undefined`, `?.`, `??`, a cast, a
-   callback, a generic, or `extends`?
+   callback, a generic *class* or *alias*, or `extends`?
 9. If you are adding to this repository: `npm run check` and `npm test` green,
    and a new construct ships a golden `.ll`, an `llvm-as` pass, a native round
    trip, a negative test, its `LANGUAGE.md` rule and cookbook entry, and a

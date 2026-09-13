@@ -1,0 +1,1 @@
+`declare function` declares a C function this program calls, so it must have no body

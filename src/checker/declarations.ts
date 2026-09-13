@@ -13,8 +13,10 @@
  */
 import ts from "typescript";
 import { CompileError } from "../diagnostics.js";
-import { CompilerOptions, resolveTypeNode, typeToString } from "../types.js";
+import { LANGUAGE } from "../branding.js";
+import { CompilerOptions, isForeignScalar, resolveTypeNode, typeToString } from "../types.js";
 import { ConstInfo } from "./constants.js";
+import { TemplateInfo } from "./generics.js";
 import { FunctionSig, ImportBinding, Param } from "./program.js";
 
 /** Symbol the entry module's `export function main` is emitted under. */
@@ -30,17 +32,36 @@ export function collectFunctionSignature(
   opts: CompilerOptions
 ): FunctionSig {
   if (!decl.name) throw new CompileError("Functions must be named", decl, sf);
-  if (!decl.body) throw new CompileError("Functions must have a body", decl, sf);
-  if (decl.typeParameters) throw new CompileError("Generic functions are not supported", decl, sf);
+  const foreign = !!decl.modifiers?.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword);
+  // A `declare function` is the one function with no body that is not a
+  // mistake (WP27 S1), so the body rule is the foreign rule's mirror rather
+  // than a check it skips: exactly one of the two must hold.
+  if (!foreign && !decl.body) throw new CompileError("Functions must have a body", decl, sf);
+  if (foreign && decl.body) {
+    throw new CompileError(
+      "`declare function` declares a C function this program calls, so it must have no body",
+      decl,
+      sf
+    );
+  }
+  // WP18 made a generic function a template that is monomorphised per
+  // instantiation, which needs a body to stamp out. A C function has none and
+  // one C symbol cannot stand for a family of signatures, so the two features
+  // do not compose — and saying so here is cheaper than letting it reach the
+  // instantiator and fail with an internal error.
+  if (foreign && decl.typeParameters) {
+    throw new CompileError(
+      "`declare function` cannot be generic: a C symbol is one function, not a template to instantiate",
+      decl,
+      sf
+    );
+  }
   if (decl.asteriskToken) throw new CompileError("Generators are not supported", decl, sf);
   if (decl.modifiers?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) {
     throw new CompileError("async functions are not supported", decl, sf);
   }
   if (decl.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) {
     throw new CompileError("`export default` is not supported; use a named `export function`", decl, sf);
-  }
-  if (decl.modifiers?.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)) {
-    throw new CompileError("`declare function` is not supported yet", decl, sf);
   }
   if (!decl.type) {
     throw new CompileError(
@@ -53,15 +74,49 @@ export function collectFunctionSignature(
     throw new CompileError("Function names starting with `nish_` are reserved for the runtime", decl.name, sf);
   }
 
+  const params = collectPlainParams(decl.parameters, sf, opts);
+  const returnType = resolveTypeNode(decl.type, sf, opts);
+
+  if (foreign) {
+    // S1 crosses the boundary with scalars only. That is not timidity about C:
+    // with no pointer among the arguments or the result there is nothing for
+    // escape analysis to be wrong about, which is the whole reason S1 can be
+    // sound without answering WP27 §3's questions.
+    if (hasExportModifier(decl)) {
+      throw new CompileError(
+        `\`declare function ${decl.name.text}\` cannot be exported: it is a C function this program calls, not one it defines`,
+        decl.name,
+        sf
+      );
+    }
+    for (const p of params) {
+      if (!isForeignScalar(p.type)) {
+        throw new CompileError(
+          `Parameter \`${p.name}\` of \`declare function ${decl.name.text}\` is ${typeToString(p.type)}, and a declared C function takes scalars only`,
+          decl,
+          sf
+        );
+      }
+    }
+    if (!isForeignScalar(returnType)) {
+      throw new CompileError(
+        `\`declare function ${decl.name.text}\` returns ${typeToString(returnType)}, and a declared C function returns a scalar only`,
+        decl.type,
+        sf
+      );
+    }
+  }
+
   return {
     name: decl.name.text,
     sourceName: decl.name.text,
-    params: collectPlainParams(decl.parameters, sf, opts),
-    returnType: resolveTypeNode(decl.type, sf, opts),
+    params,
+    returnType,
     decl,
     nameNode: decl.name,
     declSite: decl,
     body: decl.body,
+    foreign: foreign || undefined,
     exported: hasExportModifier(decl),
   };
 }
@@ -71,7 +126,7 @@ export function collectFunctionSignature(
  * constructors do not come through here: they prepend `this` and resolve types
  * against their owner (`checker/classes.ts`, `collectParams`).
  */
-function collectPlainParams(
+export function collectPlainParams(
   parameters: readonly ts.ParameterDeclaration[],
   sf: ts.SourceFile,
   opts: CompilerOptions
@@ -121,7 +176,6 @@ export function collectArrowSignature(
       sf
     );
   }
-  if (arrow.typeParameters) throw new CompileError("Generic functions are not supported", arrow, sf);
   if (arrow.modifiers?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) {
     throw new CompileError("async functions are not supported", arrow, sf);
   }
@@ -143,6 +197,122 @@ export function collectArrowSignature(
     declSite: stmt,
     body: arrow.body,
     exported: hasExportModifier(stmt),
+  };
+}
+
+/**
+ * WP18 §3c: `$` separates a generic's name from its type arguments in every
+ * symbol the compiler emits, so a *declared* name may not contain one — a
+ * class literally called `Box$i32` would be the same symbol as `Box<i32>`.
+ * Locals, parameters and fields keep it; only names that become symbols are
+ * restricted, which is what makes the encoding injective.
+ */
+export function rejectDollarInSymbolName(name: string, what: string, node: ts.Node, sf: ts.SourceFile): void {
+  if (!name.includes("$")) return;
+  throw new CompileError(
+    `\`${name}\` cannot be the name of a ${what} in ${LANGUAGE}: \`$\` separates a generic's name from its ` +
+      "type arguments in the symbols the compiler emits",
+    node,
+    sf
+  );
+}
+
+/** The names of `<T, U>`, refusing the constrained and defaulted forms this package does not lower. */
+function collectTypeParams(list: readonly ts.TypeParameterDeclaration[], sf: ts.SourceFile): string[] {
+  const names: string[] = [];
+  for (const p of list) {
+    if (p.constraint) {
+      throw new CompileError(
+        `A constrained type parameter (\`${p.name.text} extends ...\`) is not supported yet: an unconstrained ` +
+          "parameter can be passed on, returned and stored, and a constrained one would also have members",
+        p.constraint,
+        sf
+      );
+    }
+    if (p.default) {
+      throw new CompileError(
+        `A default type argument (\`${p.name.text} = ...\`) is not supported: a type argument is inferred ` +
+          "from the arguments, so there is no position for a default to fill",
+        p.default,
+        sf
+      );
+    }
+    if (names.includes(p.name.text)) throw new CompileError(`Duplicate type parameter \`${p.name.text}\``, p, sf);
+    names.push(p.name.text);
+  }
+  return names;
+}
+
+/**
+ * A generic `function` declaration (WP18). Everything a monomorphic signature
+ * checks is checked here except the *types*: the annotations mention the type
+ * parameters, so they stay as syntax and are resolved once per instantiation.
+ */
+export function collectFunctionTemplate(decl: ts.FunctionDeclaration, sf: ts.SourceFile): TemplateInfo {
+  if (!decl.name) throw new CompileError("Functions must be named", decl, sf);
+  // A generic `declare function` arrives here rather than at
+  // `collectFunctionSignature`, because a function with type parameters is a
+  // template before it is anything else. Without this it is still refused — by
+  // the body rule below — but "Functions must have a body" names the wrong
+  // mistake: the body is missing on purpose and the real problem is that a C
+  // symbol is one function, not a family (WP27 S1).
+  if (decl.modifiers?.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)) {
+    throw new CompileError(
+      "`declare function` cannot be generic: a C symbol is one function, not a template to instantiate",
+      decl,
+      sf
+    );
+  }
+  if (!decl.body) throw new CompileError("Functions must have a body", decl, sf);
+  if (!decl.type) {
+    throw new CompileError(`Function \`${decl.name.text}\` needs an explicit return type annotation`, decl.name, sf);
+  }
+  if (decl.name.text.startsWith("nish_")) {
+    throw new CompileError("Function names starting with `nish_` are reserved for the runtime", decl.name, sf);
+  }
+  rejectDollarInSymbolName(decl.name.text, "function", decl.name, sf);
+  return {
+    sourceName: decl.name.text,
+    typeParams: collectTypeParams(decl.typeParameters ?? [], sf),
+    decl,
+    nameNode: decl.name,
+    declSite: decl,
+    body: decl.body,
+    exported: hasExportModifier(decl),
+    count: 0,
+  };
+}
+
+/** The arrow spelling of the same thing: `const identity = <T>(x: T): T => x`. */
+export function collectArrowTemplate(
+  stmt: ts.VariableStatement,
+  decl: ts.VariableDeclaration,
+  arrow: ts.ArrowFunction,
+  sf: ts.SourceFile
+): TemplateInfo {
+  if (!ts.isIdentifier(decl.name)) throw new CompileError("Functions must be named", decl.name, sf);
+  const name = decl.name.text;
+  if ((stmt.declarationList.flags & ts.NodeFlags.Const) === 0) {
+    throw new CompileError(`Function \`${name}\` must be declared \`const\`, not \`let\``, stmt, sf);
+  }
+  if (!arrow.type) {
+    throw new CompileError(`Function \`${name}\` needs an explicit return type annotation`, decl.name, sf);
+  }
+  if (name.startsWith("nish_")) {
+    throw new CompileError("Function names starting with `nish_` are reserved for the runtime", decl.name, sf);
+  }
+  rejectDollarInSymbolName(name, "function", decl.name, sf);
+  return {
+    sourceName: name,
+    typeParams: collectTypeParams(arrow.typeParameters ?? [], sf),
+    decl: arrow,
+    nameNode: decl.name,
+    // The declaration is the statement, not the arrow, exactly as it is for a
+    // non-generic one: every instantiation inherits this as its `declSite`.
+    declSite: stmt,
+    body: arrow.body,
+    exported: hasExportModifier(stmt),
+    count: 0,
   };
 }
 

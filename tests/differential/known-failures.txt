@@ -20,3 +20,11 @@ cases/div_overflow_panic   # INT_MIN % -1 panics (exit 1); JS gives 0
 # Native-only introspection: these print raw Arena.used() byte counts, which the Node shim reports as 0
 cases/mem_arena_builtins   # prints arena byte usage
 cases/mem_scope_dynamic_array  # prints the arena delta across scoped calls
+
+# Calls C, so there is no Node program to compare against (WP27 S1). This is not
+# a discrepancy to be closed: `abs` is a libc symbol, the shim has no counterpart
+# for it, and giving it one would only move the question to the next foreign
+# symbol a program declares. Every `declare function` program is outside this
+# oracle by construction, which is a real coverage cost of the feature and is why
+# `tests/cases/ffi_scalar` carries a golden `.ll` and a native round trip instead.
+cases/ffi_scalar           # declare function abs/labs: libc, with no JS equivalent

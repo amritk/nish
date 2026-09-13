@@ -1,7 +1,7 @@
 /**
  * String constructs (WP3): literals, template literals, `+` concatenation,
  * `===` / `!==` by content, `.length`, the byte methods of WP14 A2
- * (`charCodeAt`, `substring`, `indexOf`, `startsWith`, `endsWith`) and
+ * (`charCodeAt`, `substring`, `slice`, `indexOf`, `startsWith`, `endsWith`) and
  * builtin calls such as `console.log` and `String.fromCharCode` whose callee
  * is a dotted name rather than a user function.
  *
@@ -19,6 +19,10 @@
  *     bytes, and a code-point index would need a decode per access.
  *   - `charCodeAt` bounds-checks and panics like `a[i]` rather than
  *     returning JavaScript's `NaN`, which `number` cannot represent.
+ *   - `substring` and `slice` are the two halves of WP15 §4: `substring` keeps
+ *     JavaScript's clamp so a ported program behaves the way its author
+ *     expects, and `slice` refuses a range the string does not contain so the
+ *     hot path is a compare and a branch instead of six min/max.
  *   - `console.log` takes exactly one string | number | boolean, returns
  *     `void`, and may only appear as a statement. `console.error` is the
  *     same on stderr (WP14 B2), which is where a compiler's diagnostics go.
@@ -123,10 +127,11 @@ const numberType = (ctx: CheckContext): StaticType => (ctx.opts.numberMode === "
 
 /**
  * The byte methods (WP14 A2). Every index is a byte offset, matching
- * `.length`; `substring` clamps its arguments the way JavaScript does, and
- * `charCodeAt` bounds-checks the way `a[i]` does.
+ * `.length`; `substring` clamps its arguments the way JavaScript does, `slice`
+ * refuses what it cannot cut, and `charCodeAt` bounds-checks the way `a[i]`
+ * does.
  */
-const STRING_METHODS = ["charCodeAt", "substring", "indexOf", "startsWith", "endsWith"];
+const STRING_METHODS = ["charCodeAt", "substring", "slice", "indexOf", "startsWith", "endsWith"];
 
 const checkIndexArgument = (ctx: CheckContext, arg: ts.Expression, scope: Scope, name: string): void => {
   const t = ctx.checkExpression(arg, scope);
@@ -146,6 +151,12 @@ methodCallCheckers.string = (ctx, expr, receiver, scope) => {
         throw ctx.error(`\`substring\` expects 1 or 2 arguments, got ${expr.arguments.length}`, expr);
       }
       for (const arg of expr.arguments) checkIndexArgument(ctx, arg, scope, "substring");
+      return STRING;
+    case "slice":
+      if (expr.arguments.length === 0 || expr.arguments.length > 2) {
+        throw ctx.error(`\`slice\` expects 1 or 2 arguments, got ${expr.arguments.length}`, expr);
+      }
+      for (const arg of expr.arguments) checkIndexArgument(ctx, arg, scope, "slice");
       return STRING;
     case "indexOf":
       checkArity(ctx, expr, "indexOf", 1);

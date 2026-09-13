@@ -36,7 +36,7 @@ sentence each:
 | `readnone` | The function touches no memory except its own stack slots and calls only `readnone` callees (LLVM 16+ reads it as `memory(none)`). |
 | `readonly` (function) | As `readnone`, except the body reads memory it does not own: a string or array header, a field, an element, or a reading callee such as `nish_str_eq`. |
 | `memory(argmem: read)` | On a runtime `declare`: the callee reads only through its pointer arguments. |
-| `noreturn` | The callee never returns (`nish_exit`, `nish_panic_index`, `nish_panic_div`); the call is followed by `unreachable`. |
+| `noreturn` | The callee never returns (`nish_exit`, `nish_panic_index`, `nish_panic_slice`, `nish_panic_div`); the call is followed by `unreachable`. |
 | `cold` | The callee runs rarely (arena growth, a bounds-check failure); LLVM moves the call path out of the hot code. |
 | `noinline` | Never inline the callee (`nish_arena_grow`), so the slow path stays out of the caller. |
 | `alwaysinline` | Always inline the callee: the arena fast path `@nish_alloc_struct` becomes a few instructions in every caller. |
@@ -157,6 +157,195 @@ entry:
 attributes #0 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end fn_f64 -->
+
+### A generic function
+
+Every instantiation is a function of its own, named by appending `$` and each
+type argument's mangled type to the template's name. `identity` is written once
+and compiled twice; neither `define` has anything generic left in it, and
+`identity$i32` is the IR of `const identityI32 = (x: i32): i32 => x` with the
+symbol renamed. `identity$str` keeps its parameter's pointer attributes but not
+`nocapture`, because returning the pointer is an escape.
+
+<!-- cookbook:begin gen_function -->
+```ts
+const identity = <T>(x: T): T => x;
+
+export const main = (): i32 => {
+  console.log(identity(7));
+  console.log(identity("hi"));
+  return 0;
+};
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"hi\00" }, align 8
+
+declare void @nish_free_arena() #0
+declare noundef i64 @nish_arena_mark() #0
+declare void @nish_arena_release(i64 noundef) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i32 @identity$i32(i32 7)
+  %1 = call i8* @nish_str_from_i32(i32 %0)
+  call void @nish_print(i8* %1)
+  %2 = call i8* @identity$str(i8* bitcast ({ i64, [3 x i8] }* @.str.0 to i8*))
+  call void @nish_print(i8* %2)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define internal noundef i32 @identity$i32(i32 noundef %x) #1 {
+entry:
+  ret i32 %x
+}
+
+define internal noundef nonnull align 8 i8* @identity$str(i8* noundef nonnull noalias readonly align 8 %x) #1 {
+entry:
+  ret i8* %x
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #2 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn }
+attributes #1 = { nounwind willreturn readnone }
+attributes #2 = { nounwind }
+```
+<!-- cookbook:end gen_function -->
+
+### Inference, and per-instantiation facts
+
+A type argument is read off the argument's type: `T[]` against `i32[]` binds
+`T := i32`, and nothing is written at the call site. The two instantiations of
+`eq` are the reason the attribute fixpoint is keyed by symbol rather than by
+declaration — comparing two integers reads no memory, comparing two strings
+calls into the runtime, so one source line gets `readnone` in one instantiation
+and `readonly` in the other.
+
+<!-- cookbook:begin gen_infer -->
+```ts
+const firstOf = <T>(xs: T[]): T => xs[0];
+
+const eq = <T>(a: T, b: T): boolean => a === b;
+
+export const main = (): i32 => {
+  console.log(firstOf([4, 5, 6]));
+  console.log(eq(1, 1));
+  console.log(eq("a", "b"));
+  return 0;
+};
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"a\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"b\00" }, align 8
+
+declare void @nish_free_arena() #3
+declare noundef i64 @nish_arena_mark() #3
+declare void @nish_arena_release(i64 noundef) #3
+declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #3
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #3
+declare void @nish_panic_index(i64 noundef, i64 noundef) #5
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %arr.data = alloca [3 x i32], align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 3, i64* %0, align 8, !alias.scope !3, !noalias !4
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 3, i64* %1, align 8, !alias.scope !3, !noalias !4
+  %2 = bitcast [3 x i32]* %arr.data to i8*
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* %2, i8** %3, align 8, !alias.scope !3, !noalias !4
+  %4 = bitcast i8* %2 to i32*
+  %5 = getelementptr inbounds i32, i32* %4, i64 0
+  store i32 4, i32* %5, align 4, !alias.scope !4, !noalias !3
+  %6 = getelementptr inbounds i32, i32* %4, i64 1
+  store i32 5, i32* %6, align 4, !alias.scope !4, !noalias !3
+  %7 = getelementptr inbounds i32, i32* %4, i64 2
+  store i32 6, i32* %7, align 4, !alias.scope !4, !noalias !3
+  %8 = call i32 @firstOf$i32(%struct.nish_array* %arr.hdr)
+  %9 = call i8* @nish_str_from_i32(i32 %8)
+  call void @nish_print(i8* %9)
+  %10 = call i1 @eq$i32(i32 1, i32 1)
+  %11 = select i1 %10, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  call void @nish_print(i8* %11)
+  %12 = call i1 @eq$str(i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), i8* bitcast ({ i64, [2 x i8] }* @.str.3 to i8*))
+  %13 = select i1 %12, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  call void @nish_print(i8* %13)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define internal noundef i32 @firstOf$i32(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %xs) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4
+  %2 = icmp ult i64 0, %1
+  br i1 %2, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 0, i64 %1)
+  unreachable
+
+bounds.ok:
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %xs, i64 0, i32 2
+  %4 = load i8*, i8** %3, align 8, !alias.scope !3, !noalias !4
+  %5 = bitcast i8* %4 to i32*
+  %6 = getelementptr inbounds i32, i32* %5, i64 0
+  %7 = load i32, i32* %6, align 4, !alias.scope !4, !noalias !3
+  ret i32 %7
+}
+
+define internal noundef zeroext i1 @eq$i32(i32 noundef %a, i32 noundef %b) #1 {
+entry:
+  %0 = icmp eq i32 %a, %b
+  ret i1 %0
+}
+
+define internal noundef zeroext i1 @eq$str(i8* noundef nonnull noalias readonly align 8 nocapture %a, i8* noundef nonnull noalias readonly align 8 nocapture %b) #2 {
+entry:
+  %0 = call zeroext i1 @nish_str_eq(i8* %a, i8* %b)
+  ret i1 %0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn readnone }
+attributes #2 = { nounwind willreturn readonly }
+attributes #3 = { nounwind willreturn }
+attributes #4 = { nounwind willreturn memory(argmem: read) }
+attributes #5 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+```
+<!-- cookbook:end gen_infer -->
 
 ## Types
 
@@ -501,6 +690,73 @@ attributes #3 = { nounwind noreturn cold }
 !4 = !{!2}
 ```
 <!-- cookbook:end decl_type_alias -->
+
+### `declare function`: calling C
+
+A `declare function` is a C function this program **calls but does not define**
+(WP27 S1). It lowers to an LLVM `declare` and a plain `call`, and the whole of
+what is interesting is the attributes — specifically their absence.
+
+The declaration carries none, because nothing about a body this compiler cannot
+see is provable. What that costs is visible on the *callers*: `pureDouble` keeps
+`willreturn readnone`, `main` calls C and keeps only `nounwind`. The impurity
+travels the call graph like any other, so a function three hops above a foreign
+call loses `readnone` too.
+
+`nounwind` stays on the caller by decision rather than by proof: a C++ callee
+could unwind, and a language with no `throw` and no landing pad can do nothing
+with that admission, so unwinding out of a foreign call is undefined here — the
+position clang already takes compiling C (`docs/wp27-ffi.md` §2).
+
+The boundary is scalars only, and that is what makes it sound rather than merely
+small: with no pointer among the arguments or the result, there is nothing for
+escape analysis to be wrong about (`tests/cases/ffi_scalar`, and the four
+`reject_ffi_*` cases).
+
+<!-- cookbook:begin decl_ffi -->
+```ts
+declare function abs(n: i32): i32;
+
+function pureDouble(n: i32): i32 {
+  return n * 2;
+}
+
+export function main(): i32 {
+  return abs(-7) + pureDouble(3);
+}
+```
+
+```llvm
+declare i32 @abs(i32)
+declare void @nish_free_arena() #2
+
+define internal noundef i32 @pureDouble(i32 noundef %n) #0 {
+entry:
+  %0 = mul nsw i32 %n, 2
+  ret i32 %0
+}
+
+define noundef i32 @nish_main() #1 {
+entry:
+  %0 = sub nsw i32 0, 7
+  %1 = call i32 @abs(i32 %0)
+  %2 = call i32 @pureDouble(i32 3)
+  %3 = add nsw i32 %1, %2
+  ret i32 %3
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind willreturn readnone }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
+```
+<!-- cookbook:end decl_ffi -->
 
 ### Numeric `enum`
 
@@ -2283,6 +2539,108 @@ attributes #4 = { nounwind willreturn readnone }
 ```
 <!-- cookbook:end str_bytes -->
 
+### The fast slice
+
+`slice` is `substring` with the clamp taken out (WP15 §4). Where `substring`
+puts both ends in range with six `llvm.smin` / `llvm.smax` calls, `slice`
+requires `0 <= start <= end <= len` and branches to a cold
+`nish_panic_slice` block when that does not hold, so the body is two
+`icmp ule`, one `sub`, one `getelementptr` and one `nish_str_new`. Two
+unsigned compares are the whole test because a negative offset sign-extends
+to a value above any byte length. With no `end`, `end` *is* `len` and only
+the ordering compare is emitted, which is `rest` below.
+
+The check is the part a clamp can never be: provable. `proven` slices constant
+offsets out of a literal, and `opt -O2` deletes its compare, its branch and its
+panic block outright — the same optimiser cannot delete a clamp, because the
+clamp is not a check but part of the answer. That is why the two live side by
+side rather than one replacing the other, and it is worth 1.18x on a scan that
+slices every word out of a 300 KB source.
+
+<!-- cookbook:begin str_slice -->
+```ts
+const head = (s: string, n: number): string => s.slice(0, n);
+
+const rest = (s: string, n: number): string => s.slice(n);
+
+const proven = (): string => "hello,world".slice(0, 5);
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [12 x i8] } { i64 11, [12 x i8] c"hello,world\00" }, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_str_new(i8* noundef readonly nocapture, i64 noundef) #1
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+
+define internal noundef nonnull align 8 i8* @head(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %n) #0 {
+entry:
+  %0 = bitcast i8* %s to i64*
+  %1 = load i64, i64* %0, align 8
+  %2 = sext i32 %n to i64
+  %3 = icmp ule i64 0, %2
+  %4 = icmp ule i64 %2, %1
+  %5 = and i1 %3, %4
+  br i1 %5, label %slice.ok, label %slice.fail
+
+slice.fail:
+  call void @nish_panic_slice(i64 0, i64 %2, i64 %1)
+  unreachable
+
+slice.ok:
+  %6 = sub i64 %2, 0
+  %7 = getelementptr inbounds i8, i8* %s, i64 8
+  %8 = getelementptr inbounds i8, i8* %7, i64 0
+  %9 = call i8* @nish_str_new(i8* %8, i64 %6)
+  ret i8* %9
+}
+
+define internal noundef nonnull align 8 i8* @rest(i8* noundef nonnull noalias readonly align 8 nocapture %s, i32 noundef %n) #0 {
+entry:
+  %0 = bitcast i8* %s to i64*
+  %1 = load i64, i64* %0, align 8
+  %2 = sext i32 %n to i64
+  %3 = icmp ule i64 %2, %1
+  br i1 %3, label %slice.ok, label %slice.fail
+
+slice.fail:
+  call void @nish_panic_slice(i64 %2, i64 %1, i64 %1)
+  unreachable
+
+slice.ok:
+  %4 = sub i64 %1, %2
+  %5 = getelementptr inbounds i8, i8* %s, i64 8
+  %6 = getelementptr inbounds i8, i8* %5, i64 %2
+  %7 = call i8* @nish_str_new(i8* %6, i64 %4)
+  ret i8* %7
+}
+
+define internal noundef nonnull align 8 i8* @proven() #0 {
+entry:
+  %0 = bitcast i8* bitcast ({ i64, [12 x i8] }* @.str.0 to i8*) to i64*
+  %1 = load i64, i64* %0, align 8
+  %2 = icmp ule i64 0, 5
+  %3 = icmp ule i64 5, %1
+  %4 = and i1 %2, %3
+  br i1 %4, label %slice.ok, label %slice.fail
+
+slice.fail:
+  call void @nish_panic_slice(i64 0, i64 5, i64 %1)
+  unreachable
+
+slice.ok:
+  %5 = sub i64 5, 0
+  %6 = getelementptr inbounds i8, i8* bitcast ({ i64, [12 x i8] }* @.str.0 to i8*), i64 8
+  %7 = getelementptr inbounds i8, i8* %6, i64 0
+  %8 = call i8* @nish_str_new(i8* %7, i64 %5)
+  ret i8* %8
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+```
+<!-- cookbook:end str_slice -->
+
 ### Template literals
 
 Constant parts are interned, holes are converted (`nish_str_from_i32`, a
@@ -2997,6 +3355,189 @@ attributes #0 = { nounwind willreturn readonly }
 !4 = !{!2}
 ```
 <!-- cookbook:end arr_readonly -->
+
+### An array of records is contiguous
+
+WP15 §2a. When the element type is an `interface` — a record, fields and
+nothing else — the array's `data` block holds the records themselves, `N` of
+them end to end at the stride clang gives the matching C array. `ps[i]` is one
+`getelementptr %struct.Point, %struct.Point* %base, i64 %i` and *is* the
+element: there is no pointer to load and nothing to chase, which is what puts
+two adjacent points on one cache line.
+
+The other side of the same coin is in the IR below: `push` lowers to a
+`llvm.memcpy` of `sizeof(Point)` into the slot, because the array owns the
+storage. That is also why the checker refuses to let a program hold `ps[i]`
+across a `push` — `nish_array_grow` moves the block the pointer is in. An
+array of a `class` is unchanged and still holds one pointer per slot; the rule
+and its reason are in `docs/LANGUAGE.md`,
+"Arrays of records are contiguous".
+
+<!-- cookbook:begin arr_records -->
+```ts
+interface Point {
+  x: f64;
+  y: f64;
+}
+
+// The whole array is one block of `Point`s, so the loop walks it with a single
+// `getelementptr %struct.Point, ..., i64 %i` per element: no pointer to load,
+// no second block to chase into, and two adjacent points on one cache line.
+const centroidX = (ps: readonly Point[]): f64 => {
+  let total: f64 = 0.0;
+  for (const p of ps) {
+    total = total + p.x;
+  }
+  return total / toF64(ps.length);
+};
+
+// `push` copies the record into the slot, which is why holding `ps[i]` across
+// one is a compile error: `nish_array_grow` moves the block the pointer is in.
+export const spread = (n: i32): f64 => {
+  const ps: Point[] = [];
+  let i = 0;
+  while (i < n) {
+    ps.push({ x: toF64(i), y: toF64(i) * 0.5 });
+    i = i + 1;
+  }
+  return centroidX(ps);
+};
+```
+
+```llvm
+%struct.Point = type { double, double }
+%struct.nish_array = type { i64, i64, i8* }
+
+declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
+declare noundef i64 @nish_arena_mark() #2
+declare void @nish_arena_release(i64 noundef) #2
+declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
+
+define internal noundef double @centroidX(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %ps) #0 {
+entry:
+  %total.addr = alloca double, align 8
+  %p.addr = alloca %struct.Point*, align 8
+  %forof.idx = alloca i64, align 8
+  store double 0x0000000000000000, double* %total.addr, align 8
+  store i64 0, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.cond:
+  %0 = load i64, i64* %forof.idx, align 8
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %ps, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4
+  %3 = icmp ult i64 %0, %2
+  br i1 %3, label %forof.body, label %forof.end
+
+forof.body:
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %ps, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4
+  %6 = bitcast i8* %5 to %struct.Point*
+  %7 = getelementptr inbounds %struct.Point, %struct.Point* %6, i64 %0
+  store %struct.Point* %7, %struct.Point** %p.addr, align 8
+  %8 = load double, double* %total.addr, align 8
+  %9 = load %struct.Point*, %struct.Point** %p.addr, align 8
+  %10 = getelementptr inbounds %struct.Point, %struct.Point* %9, i32 0, i32 0
+  %11 = load double, double* %10, align 8
+  %12 = fadd double %8, %11
+  store double %12, double* %total.addr, align 8
+  br label %forof.inc
+
+forof.inc:
+  %13 = load i64, i64* %forof.idx, align 8
+  %14 = add i64 %13, 1
+  store i64 %14, i64* %forof.idx, align 8
+  br label %forof.cond
+
+forof.end:
+  %15 = load double, double* %total.addr, align 8
+  %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %ps, i64 0, i32 0
+  %17 = load i64, i64* %16, align 8, !alias.scope !3, !noalias !4
+  %18 = trunc i64 %17 to i32
+  %19 = sitofp i32 %18 to double
+  %20 = fdiv double %15, %19
+  ret double %20
+}
+
+define noundef double @spread(i32 noundef %n) #1 {
+entry:
+  %ps.addr = alloca %struct.nish_array*, align 8
+  %arr.hdr = alloca %struct.nish_array, align 8
+  %i.addr = alloca i32, align 4
+  %Point.obj = alloca %struct.Point, align 8
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 0
+  store i64 0, i64* %0, align 8, !alias.scope !3, !noalias !4
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 1
+  store i64 0, i64* %1, align 8, !alias.scope !3, !noalias !4
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr, i64 0, i32 2
+  store i8* null, i8** %2, align 8, !alias.scope !3, !noalias !4
+  store %struct.nish_array* %arr.hdr, %struct.nish_array** %ps.addr, align 8
+  store i32 0, i32* %i.addr, align 4
+  br label %while.cond
+
+while.cond:
+  %3 = load i32, i32* %i.addr, align 4
+  %4 = icmp slt i32 %3, %n
+  br i1 %4, label %while.body, label %while.end
+
+while.body:
+  %5 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
+  %6 = load i32, i32* %i.addr, align 4
+  %7 = sitofp i32 %6 to double
+  %8 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj, i32 0, i32 0
+  store double %7, double* %8, align 8
+  %9 = load i32, i32* %i.addr, align 4
+  %10 = sitofp i32 %9 to double
+  %11 = fmul double %10, 0x3FE0000000000000
+  %12 = getelementptr inbounds %struct.Point, %struct.Point* %Point.obj, i32 0, i32 1
+  store double %11, double* %12, align 8
+  %13 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %5, i64 0, i32 0
+  %14 = load i64, i64* %13, align 8, !alias.scope !3, !noalias !4
+  %15 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %5, i64 0, i32 1
+  %16 = load i64, i64* %15, align 8, !alias.scope !3, !noalias !4
+  %17 = icmp eq i64 %14, %16
+  br i1 %17, label %push.grow, label %push.store
+
+push.grow:
+  call void @nish_array_grow(%struct.nish_array* %5, i64 16)
+  br label %push.store
+
+push.store:
+  %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %5, i64 0, i32 2
+  %19 = load i8*, i8** %18, align 8, !alias.scope !3, !noalias !4
+  %20 = bitcast i8* %19 to %struct.Point*
+  %21 = getelementptr inbounds %struct.Point, %struct.Point* %20, i64 %14
+  %22 = bitcast %struct.Point* %21 to i8*
+  %23 = bitcast %struct.Point* %Point.obj to i8*
+  call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %22, i8* align 8 %23, i64 16, i1 false), !alias.scope !4, !noalias !3
+  %24 = add i64 %14, 1
+  store i64 %24, i64* %13, align 8, !alias.scope !3, !noalias !4
+  %25 = trunc i64 %24 to i32
+  %26 = load i32, i32* %i.addr, align 4
+  %27 = add nsw i32 %26, 1
+  store i32 %27, i32* %i.addr, align 4
+  br label %while.cond
+
+while.end:
+  %28 = load %struct.nish_array*, %struct.nish_array** %ps.addr, align 8
+  %29 = call double @centroidX(%struct.nish_array* %28)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret double %29
+}
+
+attributes #0 = { nounwind willreturn readonly }
+attributes #1 = { nounwind }
+attributes #2 = { nounwind willreturn }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+```
+<!-- cookbook:end arr_records -->
+
 
 
 ## Classes and interfaces
@@ -4972,6 +5513,7 @@ declare noundef nonnull align 8 i8* @nish_arch() #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_alloc_array(i64 noundef, i64 noundef) #2
 declare void @nish_panic_index(i64 noundef, i64 noundef) #6
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #6
 declare void @nish_panic_div(i1 noundef zeroext) #6
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #7 {

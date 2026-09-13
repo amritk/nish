@@ -162,12 +162,14 @@ plan.**
 ### 3.5 The runtime budget
 
 `runtime.c` was under a hard budget of 4 KB of `.text` at `-Oz` when this note
-was written, and stood at 2,544 then (MASTER_PLAN §2). The live ceiling is
-4,864 bytes, counted over every `.text*` section; `docs/wp7-runtime.md`
-§"Runtime additions and budget" carries it and the current measurement.
-`pthread_create`, a mutex and a condition variable do not fit inside the
-remaining 1,552 bytes as unconditional cost, and threads also add `-lpthread`
-to the link line.
+was written, and stood at 2,544 then (MASTER_PLAN §2). The live ceilings are
+two, one per translation unit and each counted over every `.text*` section:
+3,584 bytes for the core `runtime.c` and 1,280 for `runtime_os.c`, the half
+whose subject is the operating system — which is the half a thread API would
+land in. `docs/wp7-runtime.md` §"Runtime additions and budget" carries both and
+the current measurements. `pthread_create`, a mutex and a condition variable do
+not fit inside the remaining 1,552 bytes as unconditional cost, and threads also
+add `-lpthread` to the link line.
 
 The remaining headroom is 194 bytes, not 1,552, and T0 spent none of it: the
 default build is unchanged to the byte, because `NISH_TLS` is empty without
