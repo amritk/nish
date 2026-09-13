@@ -35,6 +35,7 @@ import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
 import { compareWithCli, compileCases, gateCases } from "./batch_compile.js";
 import { rewrite as arrowify } from "../scripts/arrowify.mjs";
+import { diagnosticWords, diffModules } from "../scripts/arrow-verify.mjs";
 const require = createRequire(import.meta.url);
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -5314,6 +5315,35 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       absent.length === 0,
       absent.join("\n")
     );
+    // A script that ships has to be able to load in the tarball it ships in: every
+    // relative import it makes has to be a file the tarball also carries, and every bare
+    // one has to be a runtime dependency rather than a devDependency. `scripts/` is
+    // whitelisted as a directory, so a development tool added beside `build.sh` ships
+    // without anybody deciding it should -- `scripts/arrow-verify.mjs` did, importing
+    // `../tests/self/corpus.js`, which `files` does not ship, and nothing said so because
+    // nobody runs a corpus sweep out of an install. Either it resolves or it does not
+    // ship; this is what makes that a check rather than a habit.
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+    const deps = new Set(Object.keys(manifest.dependencies));
+    const shippedScripts = files.filter((f) => f.startsWith("scripts/") && /\.(mjs|js)$/.test(f));
+    const unresolved = [];
+    for (const rel of shippedScripts) {
+      const text = fs.readFileSync(path.join(root, rel), "utf8");
+      for (const [, spec] of text.matchAll(/^import[^;]*?from\s+"([^"]+)"/gm)) {
+        if (spec.startsWith("node:")) continue;
+        if (!spec.startsWith(".")) {
+          if (!deps.has(spec)) unresolved.push(`${rel} imports \`${spec}\`, which is not a dependency`);
+          continue;
+        }
+        const target = path.posix.normalize(path.posix.join(path.posix.dirname(rel), spec));
+        if (!files.includes(target)) unresolved.push(`${rel} imports \`${spec}\`, which the tarball does not carry`);
+      }
+    }
+    check(
+      `npm pack ships no script whose imports it cannot resolve (${shippedScripts.length} scripts)`,
+      unresolved.length === 0,
+      unresolved.join("\n")
+    );
     // Every module of the library, and not a list of them: `files` in package.json
     // names the whole directory, so a new module ships without anybody saying so —
     // and a `files` entry narrowed later would take it back out just as quietly.
@@ -5619,6 +5649,7 @@ if (!only || "differential".includes(only) || "arrow-parity".includes(only)) {
 // comparison, because it is checked against a file somebody wrote rather than against the
 // tool's own output. Nothing here is assembled or run, so it needs no toolchain.
 if (!only || "arrow".includes(only) || "spelling".includes(only)) {
+  const ts = require("typescript");
   const fixtures = path.join(root, "tests", "differential", "arrow-parity");
   const out = path.join(buildDir, "arrow-spelling");
   const emit = (name) => {
@@ -5640,14 +5671,23 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   );
 
   // Each fixture explains itself in its own header comment, so the two are required to
-  // agree from the first declaration onwards and not before it.
-  const program = (text) => text.slice(text.indexOf("const label"));
+  // agree from the first declaration onwards and not before it. The sentinel that finds
+  // that point has to be *found*: `indexOf` answers -1 for a fixture that was renamed or
+  // truncated, `slice(-1)` is then the last byte of each file, and the check would go on
+  // passing while comparing one newline with another.
+  const SENTINEL = "const label";
+  const program = (text) => text.slice(text.indexOf(SENTINEL));
   const rewritten = arrowify(fs.readFileSync(path.join(fixtures, "declared.ts"), "utf8"), "declared.ts");
   const byHand = fs.readFileSync(path.join(fixtures, "arrow.ts"), "utf8");
+  const anchored = rewritten.text.includes(SENTINEL) && byHand.includes(SENTINEL);
   check(
     "WP22: `scripts/arrowify.mjs` rewrites the `function` fixture into its hand-written arrow twin",
-    program(rewritten.text) === program(byHand),
-    `rewrote ${rewritten.changed} declaration(s)`
+    anchored && program(rewritten.text) === program(byHand),
+    anchored
+      ? `rewrote ${rewritten.changed} declaration(s)`
+      : `neither fixture may lose \`${SENTINEL}\`: the rewrite ${
+          rewritten.text.includes(SENTINEL) ? "kept" : "lost"
+        } it, arrow.ts ${byHand.includes(SENTINEL) ? "kept" : "lost"} it`
   );
 
   // WP22 §9: `declare function` defines nothing, so it is not a competing spelling and
@@ -5692,6 +5732,91 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
       line.length > 0 ? `\`${line}\` did not survive the rewrite` : `no line in ${name}.ts matches ${shape}`
     );
   }
+
+  // `--concise` drops the braces, and the grammar then decides what has to be put back:
+  // `ConciseBody` is `[lookahead != {] ExpressionBody`, so a body whose *first token* is
+  // `{` re-parses as a block. Asking instead whether the returned node is an object
+  // literal answers that only for the expression that is one to its last byte, and turns
+  // `return { a: 1 } as Pair;` into `=> { a: 1 } as Pair`, which is two parse errors and
+  // a corrupted source file. That is the same mistake as the `declare` rule above, one
+  // node deeper, so each row is parsed back rather than string-matched: a rewrite whose
+  // output does not re-parse is the failure this is watching for.
+  for (const [what, source] of [
+    ["an object literal", "function mk(): Pair {\n  return { first: 1, second: 2 };\n}\n"],
+    ["an object literal in a cast", "function mk(): Pair {\n  return { first: 1, second: 2 } as Pair;\n}\n"],
+    ["a field read off one", "function first(): i32 {\n  return { first: 1, second: 2 }.first;\n}\n"],
+    [
+      "an arrow that was already an arrow",
+      "const mk = (): Pair => {\n  return { first: 1, second: 2 } as Pair;\n};\n",
+    ],
+  ]) {
+    const collapsed = arrowify(source, "concise.ts", { concise: true });
+    const reparsed = ts.createSourceFile("concise.ts", collapsed.text, ts.ScriptTarget.Latest, true);
+    check(
+      `WP22: \`--concise\` parenthesises a body that begins with \`{\` -- ${what}`,
+      reparsed.parseDiagnostics.length === 0 && collapsed.text.includes("=> ({"),
+      collapsed.text.trim()
+    );
+  }
+
+  // WP22 §9 keeps `declare function` legal because it defines nothing. A body-less
+  // declaration *without* `declare` is not that: it is an overload signature, which the
+  // language does not have, and the checker refuses the line
+  // (`tests/wordings/nl2204_function_without_body.ts`). The codemod leaves both alone, so
+  // the only thing it can get wrong is what it tells the migrator -- and reporting the
+  // second under the first's reason says the line is legal syntax when it is about to be
+  // rejected.
+  const overload = arrowify(
+    fs.readFileSync(path.join(root, "tests", "wordings", "nl2204_function_without_body.ts"), "utf8"),
+    "nl2204_function_without_body.ts"
+  );
+  const ambientReason = arrowify("declare function h(): i32;\n", "ambient.ts").skipped[0]?.reason ?? "";
+  check(
+    "WP22: the codemod does not report a body-less declaration as legal ambient syntax",
+    overload.skipped.length === 1 &&
+      overload.skipped[0].reason !== ambientReason &&
+      !overload.skipped[0].reason.includes("stays legal"),
+    `reported as: ${overload.skipped[0]?.reason ?? "nothing at all"}`
+  );
+
+  // `scripts/arrow-verify.mjs` is what the 721-declaration rewrite of `self/` will be
+  // done on the say-so of, so the two places it could report success over ground it did
+  // not check are pinned here rather than left to the sweep that takes half an hour.
+  //
+  // The first: the module comparison walks the *union* of the two sides. Iterating the
+  // before side alone makes a module that only exists after the rewrite invisible, and
+  // that is the difference most worth seeing -- it means the rewrite changed what the
+  // program is, not how it is spelled.
+  const sameBytes = Buffer.from("; ModuleID = 'a.ts'\n");
+  const onlyAfter = diffModules(
+    new Map([["main.ll", sameBytes]]),
+    new Map([
+      ["main.ll", sameBytes],
+      ["extra.ll", Buffer.from("; ModuleID = 'extra.ts'\n")],
+    ])
+  );
+  const onlyBefore = diffModules(new Map([["main.ll", sameBytes]]), new Map());
+  check(
+    "WP22: the verifier notices a module that exists only after the rewrite",
+    onlyAfter.length === 1 && onlyAfter[0].name === "extra.ll" && onlyBefore.length === 1,
+    `${onlyAfter.length} found after, ${onlyBefore.length} found before`
+  );
+
+  // The second: a rejection is compared by its words with every position stripped, so a
+  // `reject_*` case that starts compiling, or is refused under a different rule, differs
+  // and fails the run -- while a caret that moved is only reported, because under
+  // `--concise` the lines move by construction (WP22 §8c).
+  const said = (line, code, message) =>
+    JSON.stringify({ file: "x.ts", line, column: 3, severity: "error", code, message });
+  check(
+    "WP22: the verifier fails a rejection whose words changed and tolerates one that only moved",
+    diagnosticWords(said(4, "NL2204", "Functions must have a body")) ===
+      diagnosticWords(said(9, "NL2204", "Functions must have a body")) &&
+      diagnosticWords(said(4, "NL2204", "Functions must have a body")) !== diagnosticWords("") &&
+      diagnosticWords(said(4, "NL2204", "Functions must have a body")) !==
+        diagnosticWords(said(4, "NL1002", "`function*` is not supported")),
+    "positions must normalise away and codes must not"
+  );
 }
 
 // ---- WP13: differential -------------------------------------------------------------
