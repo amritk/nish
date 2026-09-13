@@ -91,6 +91,7 @@ compatible only when their types are identical (`src/types.ts`, `sameType`).
 | `T[]`, `Array<T>` | `%struct.nish_array*` to `{ i64 len, i64 cap, i8* data }` | 8 / 8 (pointer); header 24 bytes | `const nish_array *` in (read-only), `nish_array *` in (written through) and out | One element type; `data` holds `cap` elements of `sizeof(T)`; bounds-checked. |
 | `readonly T[]`, `ReadonlyArray<T>` | the same as `T[]` | as `T[]` | `const nish_array *` in | The same array, with every write refused: [Readonly arrays](#readonly-arrays). |
 | `Int32Array`, `Float32Array`, `Float64Array`, `BigInt64Array` | the same as `i32[]`, `f32[]`, `f64[]`, `i64[]` | as `T[]` | as `T[]` | Aliases, not distinct types (`sameType` holds); `new Int32Array(n)` is `new Array<i32>(n)`. They name the JS typed array a host passes ([wp8-interop.md](wp8-interop.md)). |
+| `enum K` | `i32` | 4 / 4 | (not representable) | A **distinct** type, not a spelling of `i32` (`sameType` fails against every other type): [Enums](#enums). `K.A` is the member's integer, so nothing is emitted for the declaration. |
 | `class C`, `interface I` | `%struct.C*` to `%struct.C = type { fields in declaration order }` | 8 / 8 (pointer); struct as clang lays out the same C struct | (not representable) | Arena- or stack-allocated ([Memory model](#memory-model)), no header, no vtable. |
 | `T \| null` (`T` a class, interface, array, or string) | the same pointer type as `T`; `null` is the constant `null` | as `T` | (not representable) | Only `=== null` / `!== null`, assignment, and narrowing: [Nullable types](#nullable-types). |
 | `Result<T, E>` | `%struct.nish_result.<T>.<E>*` to `{ i1 ok, T value, E error }`, one struct per pair of payload types; **passed and returned** as one `i64` when both payloads are scalars of at most 4 bytes, or as `{ i1, i32, i32 }` — the tag and one slot per arm — between two non-exported functions of one module | 8 / 8 (pointer); struct as clang lays out the same C struct | `nish_result_<T>_<E>_word` by value, `struct nish_result_<T>_<E> *` otherwise | The only way a function reports failure; the payload is unreachable until the discriminant is tested: [Result and error handling](#result-and-error-handling). |
@@ -112,7 +113,9 @@ Type rules:
   `` `Float64Array` takes no type argument (it is an alias of `f64[]`) ``,
   `tests/cases/reject_arr_typed_view_type_annotation_arg`; a `Float64Array`
   is an `f64[]` wherever one is expected and vice versa,
-  `tests/cases/arr_typed_views`, `reject_arr_typed_view_mismatch`), and the
+  `tests/cases/arr_typed_views`, `reject_arr_typed_view_mismatch`), the name of
+  a `type` alias or a numeric `enum` declared in the module
+  ([Type aliases](#type-aliases), [Enums](#enums)), and the
   name of a class or interface declared or imported in the module. Anything else is
   `` Unsupported type `...` `` / `` Unsupported type reference `...` ``
   (`src/types.ts`; `tests/cases/reject_union_type`, `reject_function_type`).
@@ -583,11 +586,13 @@ A module (one `.ts` file) may contain, at the top level, only function
 declarations (a `const` bound to an arrow, or the legacy `function` keyword),
 `class` and `interface` declarations, `const` declarations
 ([Module constants](#module-constants)), `type` aliases
-([Type aliases](#type-aliases)), `import` statements, and `export` modifiers on
-those declarations. Any other top-level statement, including `let` and `enum`,
+([Type aliases](#type-aliases)), numeric `enum` declarations
+([Enums](#enums)), `declare function` declarations
+([Calling C](#calling-c)), `import` statements, and `export` modifiers on
+those declarations. Any other top-level statement, including `let`,
 is rejected with
 `Only top-level function declarations are supported in Phase 1 (found <Kind>)`
-(`tests/cases/reject_top_level_stmt`; `enum` *(CLI only)*); top-level
+(`tests/cases/reject_top_level_stmt`); top-level
 `let` and `var` name the reason instead (`` Top-level `let` is not supported ``,
 `reject_const_top_level_let`). Modules have no top-level code, so there is no
 initialisation order to worry about — which is exactly why a top-level `const`
@@ -643,7 +648,8 @@ spelling; the two compile to identical IR, instruction for instruction
   (`tests/cases/reject_assign_param`, `reject_cf_incdec_param`).
 - Parameters and the body's top-level block share one scope: `let x` in
   the body of `f(x)` is `` Duplicate declaration of `x` `` *(CLI only)*.
-- Rejected forms: generics (`tests/cases/reject_generic_function`),
+- **A function may be generic**, and each instantiation is compiled on its
+  own; see [Generic functions](#generic-functions). Rejected forms:
   generators (`reject_generator`), `async` (`reject_async_function`),
   destructured / rest / optional / default parameters
   (`Destructured parameters are not supported`,
@@ -761,9 +767,10 @@ program twice, with one golden between them.
   because it is the same mistake.
 - **An alias is resolved even when nothing uses it**, so a broken right-hand
   side is reported where it is written rather than never.
-- **Generic aliases are forbidden**, as every other generic is:
-  `type Box<T> = T[]` is
-  `` Generic type parameters are forbidden in Nish (no monomorphisation yet) ``
+- **Generic aliases are forbidden**, unlike a generic *function*: an alias
+  only renames a type that already exists, so there is nothing for a type
+  argument to apply to. `type Box<T> = T[]` is
+  `` Generic type parameters are forbidden on a type alias in Nish (a generic function is monomorphised; a generic class is not supported yet) ``
   (`tests/cases/reject_type_alias_generic`).
 - **A built-in type name may not be aliased.** `type string = i32` is
   `` `string` is a built-in type name and cannot be used for a type alias ``
@@ -789,6 +796,103 @@ program twice, with one golden between them.
   boundary.
 - **Aliases are top-level only.** `type X = i32` inside a function body is
   `Unsupported statement in Phase 1: TypeAliasDeclaration` *(CLI only)*.
+
+### Enums
+
+```ts
+enum Kind {
+  If = 1,
+  While = 2,
+  Return = 3,
+}
+
+enum Level {
+  Low,   // 0
+  Mid,   // 1
+  High,  // 2
+}
+```
+
+A numeric `enum` declares a **distinct type whose representation is `i32`**.
+Distinct is the point, and it is stricter than TypeScript, where a numeric enum
+member is assignable to `number`: the rule this language is built on is that
+two values are compatible only when their types are identical
+([Types](#types)), and an enum that were silently `i32` would be the one type
+compatible with something it is not spelled as. So `Kind` and `i32` are two
+types, in both directions, and the only values of `Kind` are the members it
+declares.
+
+Nothing is emitted for one. A member is folded to its integer the way a module
+constant is folded to its value, so `Kind.While` lowers to the literal `2`, a
+`Kind` parameter is an `i32` parameter, and there is no symbol, no table and no
+`%struct` anywhere. `tests/cases/enum_ir` and `tests/cases/enum_expanded` are
+one program written twice — with the enum, and with `i32` module constants —
+and their `.ll` goldens are byte-identical files.
+
+- **A member's value is a numeric literal, or the one before it plus one.**
+  Auto-numbering is TypeScript's: the first member without an initialiser is
+  `0`. A member that is not a numeric literal is Phase 0's
+  `` Enum members must be numeric literals in Nish (enums lower to plain integers) ``
+  (`tests/cases/reject_enum_string`, `reject_enum_computed`); a numeric literal
+  that is not an integer is `` Enum member `Kind.Half` must be an integer literal ``
+  (`reject_enum_float`), and one outside the width is
+  `` Enum member `Kind.Big` does not fit in i32 `` (`reject_enum_overflow`).
+- **An enum must declare at least one member**, because an empty one is a type
+  no value can inhabit: `` Enum `Kind` must declare at least one member ``
+  (`tests/cases/reject_enum_empty`). Two members of one name are
+  `` Duplicate member `If` in enum `Kind` `` (`reject_enum_duplicate_member`).
+- **A value is spelled `Kind.If` and nothing else.** A name that is not a
+  member is `` Enum `Kind` has no member `Nope` ``
+  (`tests/cases/reject_enum_unknown_member`), and there is no conversion in
+  either direction: `const n: i32 = k` is
+  `` Cannot initialize i32 variable `n` with Kind ``
+  (`reject_enum_not_i32`) and `const k: Kind = 1` is
+  `` Cannot initialize Kind variable `k` with i32 `` (`reject_enum_from_i32`).
+- **`===` and `!==` are the only operators.** Two values of one enum compare;
+  everything else is refused because an enum is not numeric — `+` is
+  `` Operator `+` requires two operands of the same numeric type or two strings, got Kind and Kind ``
+  (`tests/cases/reject_enum_arith`), `<` is
+  `` Operator `<` requires two numeric operands, got Kind and Kind ``
+  *(CLI only)*, and the bitwise operators are
+  `` Operator `|` requires two operands of the same integer type, got Flag and Flag ``
+  (`reject_enum_bitwise`). **Bit flags therefore stay `i32` module constants**:
+  `A | B` on an enum would produce a value that is no declared member, which is
+  the one thing the type exists to prevent
+  ([wp23-language-surface.md](wp23-language-surface.md) §10 question 1 leaves
+  the wider form open).
+- **A `switch` takes an enum discriminant and enum-member labels**
+  (`tests/cases/enum_ir`), which is what an enum is for: the statement lowers
+  to LLVM's `switch` exactly as an integer discriminant does. A label of any
+  other type is `` `case` label is i32 but the discriminant is Kind ``
+  (`reject_enum_case_label`), so the integer a member stands for is not a
+  label. See [`switch`](#switch).
+- **A built-in type name may not be taken**: `enum i32 { ... }` is
+  `` `i32` is a built-in type name and cannot be used for an enum ``
+  (`tests/cases/reject_enum_builtin_name`), for the reason the same rule exists
+  for a `type` alias — the name would never be looked at. The name shares the
+  one declaration namespace with functions, classes, interfaces, type aliases
+  and module constants: a clash is `` `Kind` is already declared in this module ``
+  whichever came first (`reject_enum_duplicate`).
+- **An enum is module-local and cannot be exported.** `export enum Kind` is
+  `` Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it) ``
+  (`tests/cases/reject_enum_export`), for exactly the reason a `type` alias
+  cannot be: a module's signatures are resolved before its imports are bound,
+  so an imported name in type position resolves provisionally as a class, and
+  an enum has no layout to stand in for. A class or interface is what crosses a
+  module boundary.
+- **`const enum` and `declare enum` are refused.** `const enum` asks for the
+  inlining every member already gets —
+  `` `const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing ``
+  (`tests/cases/reject_enum_const_enum`) — and `` `declare enum` is not supported ``
+  is the ambient form, which has nothing to declare against *(CLI only)*.
+- **An enum does not cross to C or JavaScript.** `--emit-header`, `--emit-dts`
+  and `--emit-napi` have no spelling for one, so a function whose signature
+  mentions an enum is skipped with the note those generators write for every
+  type they cannot carry (`weight(k: Kind): number: not declared; no C spelling
+  for one of its types.`). An enum is a type inside one module, as it is across
+  a module boundary: give a host an `i32` and keep the enum behind it.
+- **Enums are top-level only.** `enum K { A = 1 }` inside a function body is
+  `Unsupported statement in Phase 1: EnumDeclaration` *(CLI only)*.
 
 ### `export` and `import`
 
@@ -975,9 +1079,81 @@ class Point {
 - **Rejected**: `static` (`tests/cases/reject_cls_static`),
   getters/setters (`Getters and setters are not supported`), optional fields
   (`cannot be optional`), index signatures, `!` assertions, `abstract`,
-  `declare class`, generics (`tests/cases/reject_generic_class`), decorators
+  `declare class`, type parameters on a class or on one of its methods
+  (`tests/cases/reject_generic_class`, `reject_generic_method`), decorators
   (`reject_decorator`), computed member names (`reject_computed_property`),
   overloaded constructors.
+
+### Generic functions
+
+A function may declare type parameters, and **every instantiation is compiled
+to its own specialised function**: one `define` per (template, type-argument
+tuple), named by appending `$` and each argument's mangled type to the
+template's name. There is no boxing, no type dictionary and no runtime type
+information, and the IR of an instantiation is the IR of the monomorphic
+function somebody would have written by hand, with the symbol renamed
+(`tests/cases/gen_identity`).
+
+```typescript
+const identity = <T>(x: T): T => x;
+
+export const main = (): i32 => {
+  console.log(identity(7));      // @identity$i32
+  console.log(identity("hi"));   // @identity$str
+  return 0;
+};
+```
+
+- **Both spellings take type parameters.** `function identity<T>(x: T): T` and
+  `const identity = <T>(x: T): T => x` declare the same thing, as they do
+  without them (`tests/cases/gen_identity`).
+- **A type argument is inferred from the arguments, and is never written at a
+  call site.** `identity<i32>(7)` is
+  `` Type arguments are not written at a call site in Nish: `T` is inferred from the arguments, so write `identity(...)` ``
+  (`tests/cases/reject_generic_call_type_args`). One token of lookahead cannot
+  tell `f<i32>(x)` from `(f < i32) > (x)`, and inference already covers the
+  spelling. Inference matches the *shape* of each declared parameter against
+  its argument's type — `T` against `i32`, `T[]` against `i32[]`,
+  `Result<T, string>` against `Result<i32, string>` — left to right, first
+  binding wins (`tests/cases/gen_infer_two`, `gen_result_payload`).
+- **A type parameter that appears in no parameter is an error at the
+  declaration**, because it could never be inferred and the function could
+  never be called:
+  `` Cannot infer `T` for `empty`: a type parameter is inferred from the arguments, and `T` appears in none of them; give `empty` a parameter that mentions `T` ``
+  (`tests/cases/reject_generic_function`).
+- **Every other type rule applies to a type argument unchanged.** A type
+  parameter is not a hole through which something the language refuses can be
+  smuggled in: `Result<T, void>` is still refused at an instantiation whose `E`
+  is `void`, `T | null` is still only over a pointer type, and each
+  instantiation's body is checked with `T` bound to a concrete type.
+- **Each instantiation gets its own facts.** The attribute fixpoint and the
+  escape analysis are keyed by symbol, so `eq<T>` is `readnone` at `T = i32`
+  and `readonly` at `T = string` — one source line, two sets of attributes
+  (`tests/cases/gen_eq_purity`).
+- **Recursion terminates or is refused by name.** A recursive call whose type
+  argument is the parameter itself, or a type that does not mention it, is
+  accepted: `countDown<string>` asking for `countDown<i32>` is two
+  instantiations and no more (`tests/cases/gen_recursive_ground`). A call that
+  puts the parameter *under a type constructor* has no end and is refused:
+  `` Monomorphising `grow` would not terminate: `grow<i32>` asks for `grow<i32[]>`, which puts `i32` under a type constructor instead of passing it on, so the chain has no end; pass `T` itself, or a type that does not mention it ``
+  (`tests/cases/reject_generic_polymorphic_recursion`). Behind the rule are two
+  compiler limits — 256 instantiations of one template, 4096 in one module —
+  whose message says it is a limit rather than a rule of the language.
+- **`$` may not appear in a declared name.** It separates a generic's name from
+  its type arguments in every symbol the compiler emits, so a function called
+  `identity$i32` would be the symbol `identity<i32>` already has:
+  `` `identity$i32` cannot be the name of a function in Nish: `$` separates a generic's name from its type arguments in the symbols the compiler emits ``
+  (`tests/cases/reject_generic_dollar_name`). Locals, parameters and fields are
+  unaffected — only names that become symbols are restricted.
+- **Not supported yet**, each with its own message: a constrained parameter
+  (`<T extends Shape>`, `tests/cases/reject_generic_constraint`), a default
+  type argument (`<T = string>`), type parameters on a class, an interface, a
+  method or a type alias, and instantiating a generic imported from another
+  module (`` is a generic function, and a generic function cannot yet be
+  instantiated from another module ``). A generic `main` is refused too: the
+  entry point is called by the C runtime, which has no type arguments to give
+  it. The design and the milestones are in
+  [wp18-generics.md](wp18-generics.md).
 
 ### Interfaces and object literals
 
@@ -1039,6 +1215,53 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   function (`tests/cases/cls_implements_prefix`,
   `tests/differential/corpus/class_prefix`) — the job `extends` used to do,
   without a dispatch rule to get wrong.
+
+### Calling C
+
+**`declare function name(params): T;` declares a C function this program calls
+but does not define.** The symbol is the identifier — no mangling, no prefix —
+and the call is an ordinary call:
+
+```ts
+declare function abs(n: i32): i32;
+```
+
+```llvm
+declare i32 @abs(i32)
+  %0 = call i32 @abs(i32 %n)
+```
+
+The spelling is TypeScript's own ambient declaration, and `declare` is a
+*contextual* keyword: a variable may still be called `declare`.
+
+**Every position must be a scalar** — `i32`, `i64`, `u8`, `u16`, `u32`, `u64`,
+`f32`, `f64`, `boolean`, `void`. A `string`, an array, a class or an interface is
+rejected with
+`` and a declared C function takes scalars only `` in a parameter
+(`tests/cases/reject_ffi_string_param`) and
+`` returns a scalar only `` in the return position
+(`reject_ffi_string_return`). This is not a stylistic limit: a scalar boundary has
+no pointer for a foreign function to capture or free, which is what lets the
+escape analysis stay correct without knowing anything about the callee.
+
+**A foreign declaration has no body** (`reject_ffi_body`) and **cannot be
+`export`ed** (`reject_ffi_export`), because `export` offers other modules a
+function *this* module defines.
+
+**The declaration carries no LLVM attributes, and its callers pay for it.**
+Nothing about a body the compiler cannot see is provable, so a function that
+calls C loses `readnone` and `willreturn`, and so does everything above it in the
+call graph; a function that calls no C keeps both (`tests/cases/ffi_scalar`).
+`nounwind` is the one exception, and it is a **decision rather than a proof**:
+unwinding out of a foreign call is undefined in this language, the same position
+clang takes compiling C, because there is no `throw` and no landing pad with
+which to do anything else. See
+[`docs/wp27-ffi.md`](wp27-ffi.md) §2 and the
+[cookbook entry](IR_COOKBOOK.md#declare-function-calling-c).
+
+**A program that calls C is no longer one the compiler can reason about end to
+end.** That is the trade the feature is: the whole-program fact fixpoint is the
+performance thesis, and a foreign call is a hole in it.
 
 ## Statements
 
@@ -1127,18 +1350,23 @@ switch (node.kind) {
 ```
 
 - The discriminant is an **integer** (`i32`, `i64`, `u8`, `u16`, `u32`, `u64`;
-  so a `number` in the default mode but not under `--number-mode f64`). Any
-  other type is `` `switch` requires an integer discriminant, got <type> ``
+  so a `number` in the default mode but not under `--number-mode f64`) or a
+  numeric **`enum`** ([Enums](#enums)), which is an `i32` in the jump table.
+  Any other type is `` `switch` requires an integer discriminant, got <type> ``
   (`tests/cases/reject_switch_string`). Only an integer switch lowers to
   LLVM's `switch` and a jump table; a string switch would have been a chain
   of `nish_str_eq` calls wearing a switch's clothes, and `if`/`else` says that
   honestly.
 - Every `case` label is an **integer constant expression** of the
-  discriminant's type: a literal, its negation, or a module constant
-  (`` `case` label must be an integer literal or a module constant ``,
+  discriminant's type: a literal, its negation, a module constant, or an enum
+  member
+  (`` `case` label must be an integer literal, a module constant, or an enum member ``,
   `tests/cases/reject_switch_case_not_constant`; `` `case` label is i64 but
   the discriminant is i32 ``, `reject_switch_case_type`). A literal takes the
-  discriminant's width, so `case 1:` on an `i64` switch is an `i64` one.
+  discriminant's width, so `case 1:` on an `i64` switch is an `i64` one — and
+  on an enum switch it is `` `case` label is i32 but the discriminant is Kind ``
+  (`reject_enum_case_label`), because the integer a member stands for is not
+  the member.
 - Labels are distinct (``Duplicate `case` label `1` in this `switch` ``,
   `tests/cases/reject_switch_duplicate_case`), and there is at most one
   `default` (`` `switch` has more than one `default` clause `` *(CLI only)*),
@@ -1219,6 +1447,9 @@ terminate. Rules (`src/checker/control-flow.ts`, `statements.ts`):
 `debugger` (`reject_debugger`), labeled statements (`reject_labeled_statement`),
 `var` (`reject_var_keyword`), `for...in`, nested `function`, `enum`, `type`,
 `namespace` (`reject_namespace`), `declare global` (`reject_declare_global`).
+`enum` and `type` are top-level declarations ([Enums](#enums),
+[Type aliases](#type-aliases)); it is only inside a function body that they are
+a rejected statement.
 
 ## Expressions
 
@@ -1364,6 +1595,57 @@ one type (`Array literal elements must all have the same type`,
 literal, or parameter) (`Empty array literal needs a type annotation`,
 `reject_arr_empty_literal`; `tests/cases/arr_push`, `arr_literal`). Holes and
 spread are not supported.
+
+### Arrays of records are contiguous
+
+An array whose element type is an **`interface`** is one block of records, `N`
+of them end to end at exactly the stride and alignment clang gives the matching
+C array. `ps[i]` is an interior pointer into that block — a `getelementptr`,
+with no pointer to load and chase — which is what makes a loop over `Point[]`
+vectorisable and what lets a C host read `((struct Point *)a->data)[i]`
+(`tests/cases/arr_struct_contiguous`, `tests/layout/structs.c`).
+
+Three element kinds are **not** records and keep one pointer per slot:
+
+- a **`class`**. The two struct kinds already mean different things: an
+  `interface` is fields and nothing else, so copying one into a slot cannot be
+  told apart from pointing at it, while a `class` has identity — a constructor
+  and methods that run on one object — and every other position in the language
+  passes a class value by reference.
+- an **`interface` some class `implements`**. That array is the language's only
+  polymorphic container (`tests/cases/cls_implements_prefix`): a `Shape[]` holds
+  a `Square` and a `Circle` at once, and both are longer than `Shape`, so a
+  value slot would copy the prefix and drop the rest. The property is
+  program-wide — one compilation, one layout for `Shape[]` in every module of it.
+- a **`T | null`** of any kind: a null element has no bytes to be, and `null` is
+  the pointer. That spelling is also how to ask for a sparse array of records.
+
+Three consequences, each of them a rule:
+
+- **A record put into an array is copied into the slot.** `ps.push(p)`,
+  `ps[i] = p` and `[p, q]` copy `sizeof` bytes, exactly as a C array of structs
+  does; afterwards `ps[i]` and `p` are two records, and writing one does not
+  change the other (`tests/cases/arr_struct_push_copy`).
+- **An element reference may not be held across a mutation of its array.**
+  `push` may move the block (`nish_array_grow` bumps a fresh one and copies)
+  and `pop` hands the slot back to the next `push`, so a pointer taken before
+  either names memory that is no longer the element. A `const` bound to `a[i]`
+  or `a.pop()`, and the variable of a `for (const p of a)`, are element
+  references; using one after a `push` or `pop` on the same array — or after a
+  call that could push through it, which is any call handed the array as a
+  non-`readonly` parameter — is
+  `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse
+  that storage; index `ps` again afterwards rather than holding the element
+  across it `` (`reject_arr_element_across_push`,
+  `reject_arr_element_loop_push`). A loop is checked as a whole, because a
+  `push` at the bottom of the body reaches a reference taken at the top on the
+  next pass. `ps.push(ps[i])` is refused for the same reason, in one message of
+  its own (`reject_arr_element_push_self`).
+
+The rule rejects some programs that would have been safe — a call is taken to
+mutate every mutable array it is handed, because whether the callee pushes is a
+whole-program question the checker does not answer. `readonly T[]` is how a
+signature promises it does not.
 
 ### Template literals
 
@@ -1660,6 +1942,7 @@ interval exactly zero, which `io_monotonic` is the test for.
 | `s.length` | `number`, the UTF-8 byte length | `str_length` |
 | `s.charCodeAt(i: number): number` | the **byte** at `i`, bounds-checked against `s.length` exactly as `a[i]` is — out of range panics and exits 1, where JavaScript answers `NaN`, which `number` cannot hold. No call: a `load i8` | `str_bytes`; `reject_str_char_code_arity` |
 | `s.substring(start: number[, end: number]): string` | the bytes of `[start, end)`, `end` defaulting to `s.length`. Both ends are clamped into `[0, s.length]` and then swapped into order, as in JavaScript, so `s.substring(5, 0)` is `s.substring(0, 5)` and a negative offset is `0`. One allocation and one `memcpy` (`nish_str_new`) | `str_bytes`; `reject_str_substring_arity` |
+| `s.slice(start: number[, end: number]): string` | the same bytes, without the clamp: `start` and `end` must satisfy `0 <= start <= end <= s.length` and anything else **panics** with `slice out of range: [start, end) of length len` and exits 1, where JavaScript would count a negative offset from the end and answer `""` for a reversed pair. `end` defaults to `s.length`, an empty range is `""`, and an in-range non-negative pair gives exactly what JavaScript's `String.prototype.slice` gives. Two `icmp ule` against a cold panic block, one allocation and one `memcpy`; `--unchecked-indexing` drops the compares, as it drops `a[i]`'s. Measured 1.18x over `substring` on a lexer-shaped scan ([wp15-performance.md](wp15-performance.md) §4) | `str_slice`, `str_slice_panic`; `reject_str_slice_arity`, `reject_str_slice_type` |
 | `s.indexOf(sub: string): number` | the first **byte** offset at which `sub` occurs, or `-1`; `s.indexOf("")` is `0`. One `nish_str_index_of` call: the search is the runtime's, so it is the libc's vectorised one rather than a probe per offset (WP15 §7c) | `str_search`; `reject_str_index_of_type` |
 | `s.startsWith(sub: string): boolean` | whether `sub`'s bytes are a prefix (`nish_str_at`) | `str_search` |
 | `s.endsWith(sub: string): boolean` | whether they are a suffix; a `sub` longer than `s` is `false` | `str_search` |
@@ -1738,9 +2021,10 @@ a mutable `T[]` — and it is exact where the fixpoint is not
 (`` `process.argv` is read-only ``), because it is a value and not an
 annotation.
 
-There are no other array or string methods (`slice`, `map`, `shift`,
-`toUpperCase`, `charAt`, ...) and no `toString` (template literals
-and `console.log` convert numbers); string-to-number parsing is the bare
+There are no other array or string methods (`map`, `shift`, `toUpperCase`,
+`charAt`, ...) — `slice` is a string method and an array has none — and no
+`toString` (template literals and `console.log` convert numbers);
+string-to-number parsing is the bare
 `Number(s)` / `parseInt(s)` / `parseFloat(s)` under
 [Numeric conversions](#numeric-conversions). An unknown name is
 `` Unknown method `codePointAt` on string `` or
@@ -1868,10 +2152,13 @@ compiler's own marks are never invalidated by user resets.
   (`tests/cases/res_basic`); runtime failures (bounds check, integer
   division, file errors, out of memory) print a message to stderr and exit
   with status 1 (`tests/cases/arr_bounds_panic`:
-  `index out of range: <i> >= <len>`; `div_zero_panic`:
+  `index out of range: <i> >= <len>`; `str_slice_panic`:
+  `slice out of range: [<start>, <end>) of length <len>`; `div_zero_panic`:
   `attempt to divide by zero`).
 - **Bounds checks** on every `a[i]` read and write, unsigned, so `-1` fails
-  (`tests/cases/arr_bounds_panic`); `--unchecked-indexing` removes them
+  (`tests/cases/arr_bounds_panic`), and the same unsigned compare guards
+  `s.charCodeAt(i)` and the two ends of `s.slice(a, b)`
+  (`tests/cases/str_slice_panic`); `--unchecked-indexing` removes all of them
   (`tests/cases/arr_unchecked`), after which out-of-range is undefined
   behaviour.
 - **`new Array<T>(n)` zero-fills** (`0` / `false`), no holes; pointer element
@@ -2156,11 +2443,13 @@ fragment `tests/run.js` matches and the case that proves it.
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| type parameters on functions, methods, arrows, classes, interfaces, type aliases | `` Generic type parameters are forbidden in Nish (no monomorphisation yet) `` | `reject_generic_function`, `reject_generic_class`, `reject_type_alias_generic` |
+| type parameters on a class or an interface | `` Generic type parameters are forbidden on a class in Nish (a generic function is monomorphised; a generic class is not supported yet) `` | `reject_generic_class` |
+| type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish (a generic function is monomorphised; a generic class is not supported yet) `` | `reject_type_alias_generic` |
+| type parameters on a method | `` Generic type parameters are forbidden on a method in Nish (a method takes its class's type arguments and adds none of its own) `` | `reject_generic_method` |
 | generators (`function*`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator` |
 | `async` functions, methods, arrows | `` `async` functions are forbidden in Nish (no event loop or promises) `` | `reject_async_function` |
 | `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |
-| enum members that are not numeric literals | `` Enum members must be numeric literals in Nish (enums lower to plain integers) `` | `reject_enum_string`, `reject_enum_computed` (numeric enums then fail in the checker as top-level statements) |
+| enum members that are not numeric literals | `` Enum members must be numeric literals in Nish (enums lower to plain integers) `` | `reject_enum_string`, `reject_enum_computed`; the numeric form compiles ([Enums](#enums)) |
 | `namespace` / `module` blocks | `` `namespace` and `module` blocks are forbidden in Nish (use ES module files) `` | `reject_namespace` |
 | `declare global` | `` `declare global` is forbidden in Nish (no global object to augment) `` | `reject_declare_global` |
 | decorators | `` Decorators are forbidden in Nish (no runtime metadata or class rewriting) `` | `reject_decorator` |
@@ -2225,10 +2514,19 @@ messages are exact for the cases cited; other rows quote
 
 | Situation | Message | Test |
 | --- | --- | --- |
-| top-level statement other than function/class/interface/const/type/import | `Only top-level function declarations are supported in Phase 1 (found <Kind>)` | `reject_top_level_stmt` |
+| top-level statement other than function/class/interface/const/type/enum/import | `Only top-level function declarations are supported in Phase 1 (found <Kind>)` | `reject_top_level_stmt` |
 | type alias cycle | `` Type alias `Feet` is defined in terms of itself `` | `reject_type_alias_cycle` |
 | type alias named after a built-in type | `` `string` is a built-in type name and cannot be used for a type alias `` | `reject_type_alias_builtin` |
 | `export` on a type alias | `Type aliases cannot be exported: an alias names a type inside one module ...` | `reject_type_alias_export` |
+| enum named after a built-in type | `` `i32` is a built-in type name and cannot be used for an enum `` | `reject_enum_builtin_name` |
+| `export` on an enum | `Enums cannot be exported: an enum names a type inside one module ...` | `reject_enum_export` |
+| `const enum` | `` `const enum` is not supported: an enum member is already folded to its integer, so `const` would ask for nothing `` | `reject_enum_const_enum` |
+| `declare enum` | `` `declare enum` is not supported `` | *(CLI only)* |
+| enum with no members | `` Enum `Kind` must declare at least one member `` | `reject_enum_empty` |
+| two enum members of one name | `` Duplicate member `If` in enum `Kind` `` | `reject_enum_duplicate_member` |
+| enum member that is not an integer | `` Enum member `Kind.Half` must be an integer literal `` | `reject_enum_float` |
+| enum member outside `i32` | `` Enum member `Kind.Big` does not fit in i32 `` | `reject_enum_overflow` |
+| name that is not a member of the enum | `` Enum `Kind` has no member `Nope` `` | `reject_enum_unknown_member` |
 | top-level `let` / `var` | `` Top-level `let` is not supported; a module has no top-level code, so only `const` is available `` | `reject_const_top_level_let` |
 | constant initialiser that is not constant | `A module constant's initialiser must be a literal, another constant, or arithmetic over them` | `reject_const_not_constant` |
 | constant cycle | `` Module constant `A` is defined in terms of itself `` | `reject_const_cycle` |
@@ -2261,6 +2559,7 @@ messages are exact for the cases cited; other rows quote
 | I/O with the wrong type | `` `readFileSync` expects an argument of type string, got i32 `` | `reject_readfile_number`, `reject_readdir_type`, `reject_spawn_to_type` |
 | I/O with the wrong arity | `` `readdirSync` expects exactly 1 argument, got 2 ``; `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``; `` `monotonicNanos` expects exactly 0 arguments, got 1 `` | `reject_readdir_arity`, `reject_spawn_to_arity`, `reject_monotonic_arity` |
 | array errors | see [Arrays](#array-literals), [Element access](#element-access), [`for...of`](#for-const-x-of-a) | `reject_arr_*` |
+| element reference held across a `push` or `pop` | `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it `` — see [Arrays of records are contiguous](#arrays-of-records-are-contiguous) | `reject_arr_element_across_push`, `reject_arr_element_loop_push`, `reject_arr_element_push_self` |
 | class and interface errors | see [Classes](#classes), [Interfaces](#interfaces-and-object-literals) | `reject_cls_*` |
 | `extends` or `super` on a class (WP25: there is no inheritance) | `` `extends` is not supported: Nish has no inheritance. Declare the base's fields as the first fields of `Derived` and `implements` an interface to convert between them `` / `` `super` is not supported: Nish has no inheritance, so a class has no base class to reach `` | `reject_cls_extends`, `reject_cls_super` |
 | a class does not cover the interface it `implements` | `` Class `Point2` does not implement `Point3`: it lacks field `z: i32` (the interface's fields must be the class's first fields, in order) `` | `reject_cls_implements_short`, `reject_cls_implements_mismatch` |

@@ -27,26 +27,39 @@ row() {                                  # row <profile> <bytes> <command>
   if [ "$format" = markdown ]; then
     printf '| `%s` | %s | `%s` |\n' "$1" "$2" "$3"
   else
-    printf '%-8s %10s  %s\n' "$1" "$2" "$3"
+    printf '%-10s %10s  %s\n' "$1" "$2" "$3"
   fi
 }
 
 if [ "$format" = markdown ]; then
   printf '| Profile | Bytes | Command |\n| --- | ---: | --- |\n'
 else
-  printf '%-8s %10s  %s\n' PROFILE BYTES COMMAND
+  printf '%-10s %10s  %s\n' PROFILE BYTES COMMAND
 fi
-# The runtime budget (docs/MASTER_PLAN.md section 2): `runtime.c` compiled alone at -Oz, its
-# `.text` section, must stay under 4 KB. That section is what the note names, and it was
-# reported here as the `text` *column* of `size` instead, which also counts `.rodata` and the
-# `.eh_frame` entries the size profile strips -- so this row read 4,696 against a 4,096 budget
-# while the section it is about was at 2,775. Read-only data ships too, so it gets its own row
-# rather than being folded in: Ryu's two power-of-five tables are 9,888 bytes of it, and section
-# GC keeps them out of any binary that never formats a double (WP15).
+# The runtime budgets (docs/wp7-runtime.md, "Runtime additions and budget"): each of the two
+# runtime translation units compiled alone at -Oz, the sum of its `.text*` sections, against
+# its own ceiling. The gate is `node tests/run.js budget`; this row is the same number for a
+# reader. It was reported here as the `text` *column* of `size` instead, which also counts
+# `.rodata` and the `.eh_frame` entries the size profile strips -- so this row read 4,696
+# against a 4,096 budget while the code it is about was at 2,775. Read-only data ships too, so
+# it gets its own row rather than being folded in: Ryu's two power-of-five tables are 9,888
+# bytes of it, and section GC keeps them out of any binary that never formats a double (WP15).
+# `.text.unlikely.` is summed with `.text` because a linked binary pays for both, and a ceiling
+# on `.text` alone can be met by moving code to another section instead of by shrinking it.
+text_sum() {                             # text_sum <object>: every .text* section, summed
+  size -A "$1" | awk '$1 ~ /^\.text/ { n += $2 } END { print n + 0 }'
+}
+sect() { size -A "$2" | awk -v s="$1" '$1 == s { print $2 }'; }
 "${CC:-clang}" -Oz -c runtime/runtime.c -o build/size/runtime.o
-sect() { size -A build/size/runtime.o | awk -v s="$1" '$1 == s { print $2 }'; }
-row runtime "$(sect .text)" "clang -Oz -c runtime/runtime.c && size -A runtime.o (.text; budget 4096)"
-row rodata "$(sect .rodata)" "the same object's .rodata (no budget; the Ryu tables live here)"
+"${CC:-clang}" -Oz -c runtime/runtime_os.c -o build/size/runtime_os.o
+row runtime "$(text_sum build/size/runtime.o)" \
+  "clang -Oz -c runtime/runtime.c && size -A (.text*; budget 3584)"
+row runtime_os "$(text_sum build/size/runtime_os.o)" \
+  "clang -Oz -c runtime/runtime_os.c && size -A (.text*; budget 1280)"
+row rodata "$(sect .rodata build/size/runtime.o)" "the core object's .rodata (no budget; the Ryu tables live here)"
+# `scripts/build.sh` compiles runtime_os.c beside any runtime.c it is handed, so naming the
+# core here builds the whole runtime -- and `--gc-sections` then drops whatever this module
+# never calls, which for `examples/add.ts` is all of it.
 for p in debug speed size; do
   scripts/build.sh "$ll" runtime/runtime.c "$driver" -o "build/size/app-$p" --profile "$p" >/dev/null
   row "$p" "$(bytes "build/size/app-$p")" "scripts/build.sh $ll runtime/runtime.c $driver --profile $p"

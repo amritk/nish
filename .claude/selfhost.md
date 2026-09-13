@@ -48,8 +48,19 @@ one you can keep:
 ```bash
 npm run bootstrap                   # build/nish (stage2, speed)
 scripts/bootstrap.sh --verify       # the three equalities, with cmp
+NISH_BOOTSTRAP=<released nish> scripts/bootstrap.sh --verify   # two of them
 build/nish hello.ts --link hello  # -o, --link, --profile, its own directories
 ```
+
+`--verify` asserts all three equalities when the seed is stage0, which is what
+the line above runs and what `npm test` runs. Seeded with a **released** binary
+it asserts only `IR(stage1) == IR(stage2)` and `stage3 == stage2`, and reports
+`IR(seed) == IR(stage1)` as a note: with a released seed that comparison asks
+whether codegen has changed since that release rather than whether two
+implementations agree, so a codegen improvement is expected to move it. What
+the seeded run enforces is the rolling freeze, and it enforces it by stage1
+building at all (`docs/wp19-stage0-retirement.md` G3, and the header of
+`scripts/bootstrap.sh`).
 
 There is no wrapper any more: `scripts/nish.sh` is deleted and
 `self/compile.ts` drives the whole thing (§3a D4, reversed in
@@ -172,6 +183,7 @@ wired into the WP14 section of `tests/run.js` and skipped without clang.
 | `tests/self/checked_oracle.js` | the `--emit-checked` dump of every positive program in the corpus, whole program by whole program — every line of it, the attribute pass's `facts:` / `escaping:` / `calls:` / `pointer` / `stackSites=` included since WP19 R1 |
 | `tests/self/goldens.js` | stage1 against `tests/self/goldens/`, and against **nothing else**: the coverage of the four oracles that die with stage0, checked in ahead of them (WP19 G2.4) |
 | `tests/self/reject_oracle.js` | every `reject_*` case and every `tests/link/` negative, against its own expected fragments |
+| `tests/diagnostic_coverage.js` | each compiler against `tests/wordings/`, one program per diagnostic code, and against **the registry**: a code in `self/codes.ts` that no program provokes and no reason explains fails the run (WP19 G2.4, "The wording gap") |
 | `tests/self/ir_oracle.js` | the emitted IR, byte for byte, over every whole program in the corpus |
 | `tests/self/interop_oracle.js` | the WP8 sidecars — `.h`, `.d.ts`, its `.mjs` loader, `.napi.c` — byte for byte over the interop corpus (`--all` for the whole one) |
 | `tests/self/parity.js` | everything the command line produces (WP19 G1), in two halves: the flag set each compiler's `--help` names, diffed — the only thing here that asks what flags a compiler *has* — and then the corpus through both compilers under each of the fourteen flag variations the suite uses, comparing exit status, stdout, stderr and every file written. A difference is a failure unless `DECLARED` names it with a reason |

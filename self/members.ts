@@ -28,7 +28,7 @@ import {
   N_UNARY,
   Node,
 } from "./nodes";
-import { FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program";
+import { EnumInfo, FunctionSig, ROLE_CONSTRUCTOR, STRUCT_CLASS, StructInfo } from "./program";
 import { Scope } from "./symbols";
 import { isNumeric, T_BOOL, T_ERROR, T_STRING, T_VOID } from "./types";
 
@@ -75,6 +75,13 @@ function nullableHint(ctx: CheckContext, receiver: i32, receiverExpr: Node): str
 export function checkMember(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   const receiverExpr = expr.children[0];
   if (!isValueReceiver(ctx, receiverExpr, scope)) {
+    // `Kind.If` (WP23). An enum name is not a value, so it arrives here the
+    // way `Math` does, and the member is folded to its integer on the spot:
+    // the emitter reads `nodeEnumValues` and an enum emits no symbol at all.
+    const declaredEnum = ctx.program.enumNamed(receiverExpr.text);
+    if (declaredEnum !== null) {
+      return checkEnumMember(ctx, expr, declaredEnum);
+    }
     return checkNamespaceProperty(ctx, expr, receiverExpr.text, expr.text);
   }
   const receiver = checkExpression(ctx, receiverExpr, scope, -1);
@@ -103,6 +110,16 @@ export function checkMember(ctx: CheckContext, expr: Node, scope: Scope): i32 {
   }
   ctx.errorAtProperty(expr, `Unknown property \`${expr.text}\` on ${ctx.table.typeName(receiver)}`);
   return T_ERROR;
+}
+
+/** `Kind.If`: the member's integer, recorded for the emitter, and the enum's type (WP23). */
+function checkEnumMember(ctx: CheckContext, expr: Node, info: EnumInfo): i32 {
+  if (!info.hasMember(expr.text)) {
+    ctx.errorAtProperty(expr, `Enum \`${info.name}\` has no member \`${expr.text}\``);
+    return T_ERROR;
+  }
+  ctx.program.nodeEnumValues[expr.id] = info.memberValue(expr.text);
+  return info.type;
 }
 
 function checkStructProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 {
@@ -422,7 +439,7 @@ function assignableReadonly(
 // index is a **byte** offset, matching `.length`: a lexer walks bytes, and a
 // code-point index would need a decode per access.
 
-const STRING_METHODS: string = "charCodeAt, substring, indexOf, startsWith, endsWith";
+const STRING_METHODS: string = "charCodeAt, substring, slice, indexOf, startsWith, endsWith";
 
 export function checkStringProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 {
   if (expr.text === "length") {
@@ -470,6 +487,15 @@ export function checkStringMethod(
     }
     for (const arg of args.children) {
       checkIndexArgument(ctx, arg, scope, "substring");
+    }
+    return T_STRING;
+  }
+  if (name === "slice") {
+    if (count === 0 || count > 2) {
+      return ctx.errorType(call, `\`slice\` expects 1 or 2 arguments, got ${count}`);
+    }
+    for (const arg of args.children) {
+      checkIndexArgument(ctx, arg, scope, "slice");
     }
     return T_STRING;
   }

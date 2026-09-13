@@ -92,6 +92,10 @@ function printTypeScriptTree(source, sf) {
   /** `const` rather than `let`, which Nish spells as a flag on the statement. */
   const isConst = (declarationList) => (declarationList.flags & ts.NodeFlags.Const) !== 0;
 
+  /** The two modifiers stage1's grammar reads on an `enum`; `declare` is not one (WP23). */
+  const isEnumModifier = (m) =>
+    m.kind === ts.SyntaxKind.ExportKeyword || m.kind === ts.SyntaxKind.ConstKeyword;
+
   const identifier = (node, depth) => {
     const [s, e] = span(node);
     emit(depth, "IDENT", s, e, node.text);
@@ -288,6 +292,19 @@ function printTypeScriptTree(source, sf) {
     optional(depth + 1, node.initializer, expression);
   };
 
+  /**
+   * WP18: the `<T, U>` of a generic function, as the fifth child of stage1's
+   * `N_FUNCTION` — a `LIST` of plain identifiers, empty when there are none.
+   * A constrained or defaulted parameter has no node there because neither is
+   * accepted, so either one is an unsupported construct for this oracle.
+   */
+  const typeParameters = (params, depth) => {
+    for (const p of params ?? []) {
+      if (p.constraint !== undefined || p.default !== undefined) unsupported(p);
+    }
+    list(depth, (params ?? []).map((p) => p.name), identifier);
+  };
+
   const parameter = (node, depth) => {
     if (!ts.isIdentifier(node.name) || node.dotDotDotToken !== undefined) unsupported(node);
     if (node.questionToken !== undefined || node.initializer !== undefined) unsupported(node);
@@ -425,13 +442,16 @@ function printTypeScriptTree(source, sf) {
         return;
       }
       case ts.SyntaxKind.FunctionDeclaration: {
-        if (node.typeParameters !== undefined || node.asteriskToken !== undefined) unsupported(node);
+        if (node.asteriskToken !== undefined) unsupported(node);
         if (node.name === undefined || node.body === undefined || node.type === undefined) unsupported(node);
         emit(depth, `FUNCTION${exported(node)}`, s, e);
         identifier(node.name, depth + 1);
         list(depth + 1, node.parameters, parameter);
         type(node.type, depth + 1);
         block(node.body, depth + 1);
+        // WP18: the type parameters are the fifth child, after the body, because
+        // `self/nodes.ts` appends rather than renumbers.
+        typeParameters(node.typeParameters, depth + 1);
         return;
       }
       case ts.SyntaxKind.ClassDeclaration: {
@@ -479,6 +499,28 @@ function printTypeScriptTree(source, sf) {
         type(node.type, depth + 1);
         return;
       }
+      // `enum X { A = 1, B }` (WP23). stage1 reads the members as a LIST of
+      // ENUM_MEMBER, each one a name and an initialiser that is EMPTY when the
+      // member is auto-numbered — which is TypeScript's shape flattened.
+      // `const enum` is read too, and refused by the checker rather than the
+      // grammar, so the `const` is a flag here exactly as it is on a module
+      // constant; `declare enum` is the parser's to refuse and is skipped.
+      case ts.SyntaxKind.EnumDeclaration: {
+        const modifiers = node.modifiers ?? [];
+        if (modifiers.some((m) => !isEnumModifier(m))) unsupported(node);
+        const constEnum = modifiers.some((m) => m.kind === ts.SyntaxKind.ConstKeyword) ? "+const" : "";
+        emit(depth, `ENUM${exported(node)}${constEnum}`, s, e);
+        identifier(node.name, depth + 1);
+        list(depth + 1, node.members, (m, d) => {
+          if (!ts.isIdentifier(m.name)) unsupported(m);
+          const [ms, me] = span(m);
+          emit(d, "ENUM_MEMBER", ms, me);
+          identifier(m.name, d + 1);
+          if (m.initializer !== undefined) expression(m.initializer, d + 1);
+          else empty(d + 1);
+        });
+        return;
+      }
       case ts.SyntaxKind.VariableStatement: {
         if (!isConst(node.declarationList)) unsupported(node);
         // A module-level `const` bound to an arrow declares a *function*
@@ -493,7 +535,7 @@ function printTypeScriptTree(source, sf) {
             ? single[0].initializer
             : undefined;
         if (arrow !== undefined) {
-          if (arrow.typeParameters !== undefined || arrow.type === undefined) unsupported(node);
+          if (arrow.type === undefined) unsupported(node);
           if (single[0].type !== undefined || !ts.isIdentifier(single[0].name)) unsupported(node);
           emit(depth, `FUNCTION${exported(node)}`, s, e);
           identifier(single[0].name, depth + 1);
@@ -503,6 +545,7 @@ function printTypeScriptTree(source, sf) {
           // returns -- exactly what stage1 puts there.
           if (ts.isBlock(arrow.body)) block(arrow.body, depth + 1);
           else expression(arrow.body, depth + 1);
+          typeParameters(arrow.typeParameters, depth + 1);
           return;
         }
         emit(depth, `MODULE_CONST${exported(node)}+const`, s, e);

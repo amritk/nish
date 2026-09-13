@@ -1,0 +1,2 @@
+reads an element of `ps`, and the push may move that storage first
+copy the fields you need into locals before pushing

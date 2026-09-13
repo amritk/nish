@@ -27,6 +27,7 @@ import { nullableExpressionCheckers } from "./nullable.js";
 import { resultBuiltinFunctions } from "./result.js";
 import { builtinCalls, checkBuiltinCall, stringBinaryCheckers, stringExpressionCheckers } from "./strings.js";
 import { BinaryChecker, CheckContext, CheckerTable, ExpressionChecker, UnaryChecker } from "./context.js";
+import { checkGenericCall } from "./generics.js";
 import {
   controlFlowBinaryCheckers,
   controlFlowExpressionCheckers,
@@ -177,6 +178,8 @@ const checkComparison: BinaryChecker = (ctx, expr, scope) => {
   // kinds are handled by their own overrides (strings by content, structs by identity).
   // Ordering (`<`, `<=`, `>`, `>=`) is numeric only: an `i1` compare would have to
   // pick signed or unsigned, and JS's `true > false` has no use worth that trap.
+  // An enum is not numeric, so it never orders (WP23): `<` on a discriminant
+  // asks a question about the numbering rather than about the value.
   const op = expr.operatorToken.kind;
   const equality =
     op === ts.SyntaxKind.EqualsEqualsEqualsToken || op === ts.SyntaxKind.ExclamationEqualsEqualsToken;
@@ -279,6 +282,8 @@ const checkCall: ExpressionChecker = (ctx, node, scope) => {
   if (!ts.isIdentifier(expr.expression)) {
     throw ctx.error("Only direct calls to named functions are supported", expr);
   }
+  const template = ctx.templates.get(expr.expression.text);
+  if (template) return checkGenericCall(ctx, expr, template, scope);
   const callee = ctx.sigs.get(expr.expression.text);
   if (!callee) {
     // An imported builtin first: it cannot have been shadowed, because a user

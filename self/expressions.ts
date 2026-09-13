@@ -16,6 +16,7 @@
 // the result is still checked against what the sink expects.
 
 import { LANGUAGE } from "./branding";
+import { checkGenericCall } from "./generics";
 import { CheckContext } from "./context";
 import { checkArrayLiteral, checkIndex, checkIndexAssignment } from "./arrays";
 import {
@@ -466,6 +467,22 @@ function checkBinary(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i3
   }
   if (op === "&&" || op === "||") {
     return checkLogical(ctx, expr, scope);
+  }
+  // WP18 §2a: `identity<i32>(7)` is `(identity < i32) > (7)` to a parser with
+  // one token of lookahead, which is exactly why type arguments are not written
+  // at a call site. The shape is recognised here so the message names the rule
+  // instead of leaving "Unknown identifier `identity`" behind, and it points at
+  // the type argument, where stage0's points.
+  if (op === "<" && expr.children[0].kind === N_IDENT) {
+    const template = ctx.template(expr.children[0].text);
+    if (template !== null) {
+      const first = template.typeParams.length > 0 ? template.typeParams[0] : "T";
+      return ctx.errorType(
+        expr.children[1],
+        `Type arguments are not written at a call site in ${LANGUAGE}: \`${first}\` is inferred from the ` +
+          `arguments, so write \`${template.sourceName}(...)\``
+      );
+    }
   }
   return checkOperator(ctx, expr, op, expr.children[0], expr.children[1], scope);
 }
@@ -933,6 +950,10 @@ function checkCall(ctx: CheckContext, expr: Node, scope: Scope, want: i32): i32 
   }
   if (callee.kind !== N_IDENT) {
     return ctx.errorType(expr, "Only direct calls to named functions are supported");
+  }
+  const template = ctx.template(callee.text);
+  if (template !== null) {
+    return checkGenericCall(ctx, expr, template, scope); // WP18: infer, instantiate, then check
   }
   const sig = ctx.signature(callee.text);
   if (sig === null) {

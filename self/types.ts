@@ -39,6 +39,32 @@ export const T_VOID: i32 = 11;
 /** The first id a `TypeTable` hands out; everything below is fixed. */
 export const T_FIRST_DERIVED: i32 = 12;
 
+/**
+ * A type that crosses the C boundary as exactly one machine value (WP27 S1) —
+ * no pointer, no length word, no layout this compiler had to agree with anyone
+ * about. `T_ERROR` passes so a signature that already failed to resolve reports
+ * once rather than twice.
+ *
+ * Deliberately not `interop_abi`'s scalar set, which leaves `i64` and `u64` out:
+ * the C ABI spells both (`int64_t`, `uint64_t`), so excluding them would refuse
+ * a signature the compiler can already write into a header.
+ */
+export function isForeignScalar(t: i32): boolean {
+  return (
+    t === T_ERROR ||
+    t === T_I32 ||
+    t === T_I64 ||
+    t === T_U8 ||
+    t === T_U16 ||
+    t === T_U32 ||
+    t === T_U64 ||
+    t === T_F32 ||
+    t === T_F64 ||
+    t === T_BOOL ||
+    t === T_VOID
+  );
+}
+
 // The kinds of the types that are not scalars. `kindOf` answers one of these
 // or the scalar id itself, so a `switch` over a kind is exhaustive.
 export const K_ARRAY: i32 = 12;
@@ -46,6 +72,13 @@ export const K_STRUCT: i32 = 13;
 export const K_NULLABLE: i32 = 14;
 /** `Result<T, E>` (WP16): a pointer to a monomorphised two-arm struct. */
 export const K_RESULT: i32 = 15;
+/**
+ * A numeric `enum` (WP23): a distinct type whose representation is `i32`.
+ * `names[type]` is the declared name, which is its identity, exactly as a
+ * struct's is — and `isInteger` is deliberately false for it, so arithmetic on
+ * a discriminant is refused where arithmetic on an `i32` is not.
+ */
+export const K_ENUM: i32 = 16;
 
 // What the checker has proved about a `Result` at one use site. The state is
 // part of the *id* because narrowing maps a variable to a type, and it is
@@ -183,7 +216,7 @@ export class TypeTable {
    * collide with the other because the kind leads.
    */
   derivedKey(kind: i32, ref: i32, name: string): string {
-    return kind === K_STRUCT ? `${kind}:${name}` : `${kind}:${ref}`;
+    return kind === K_STRUCT || kind === K_ENUM ? `${kind}:${name}` : `${kind}:${ref}`;
   }
 
   /** The id for a derived type, interning it the first time it is asked for. */
@@ -229,6 +262,15 @@ export class TypeTable {
 
   structOf(name: string): i32 {
     return this.intern(K_STRUCT, -1, name);
+  }
+
+  /** The type a numeric `enum` declaration names (WP23); identity is the declared name. */
+  enumOf(name: string): i32 {
+    return this.intern(K_ENUM, -1, name);
+  }
+
+  isEnum(type: i32): boolean {
+    return type >= 0 && this.kinds[type] === K_ENUM;
   }
 
   /** `T | null`, which is already itself for a `T | null`, as in `src/types.ts`. */
@@ -296,11 +338,21 @@ export class TypeTable {
       case T_BOOL:
         return "bool";
       case K_ARRAY:
-        return `arr.${this.mangle(this.refs[type])}`;
+        // `readonly T[]` and `T[]` are two types (`sameType` says so), so they
+        // need two names: without the tag `identity<readonly i32[]>` and
+        // `identity<i32[]>` would be one symbol (WP18 §3c).
+        return this.readonlys[type]
+          ? `roarr.${this.mangle(this.refs[type])}`
+          : `arr.${this.mangle(this.refs[type])}`;
       case K_NULLABLE:
         return `opt.${this.mangle(this.refs[type])}`;
       case K_STRUCT:
         return `$${this.names[type]}`;
+      // An enum is an `i32` in memory but not an `i32` in the type system, so
+      // it mangles apart from one: `Result<Kind, string>` and
+      // `Result<i32, string>` share a layout and must not share a layout name.
+      case K_ENUM:
+        return `en$${this.names[type]}`;
       case K_RESULT:
         return `res.${this.mangle(this.refs[type])}.${this.mangle(this.errs[type])}`;
       default:
@@ -347,7 +399,10 @@ export class TypeTable {
       kind === T_U16 ||
       kind === T_I32 ||
       kind === T_U32 ||
-      kind === T_F32
+      kind === T_F32 ||
+      // WP23: an enum is an `i32`, so it packs exactly as one does — every
+      // widening on that path goes through `llvmType`, which already says `i32`.
+      kind === K_ENUM
     );
   }
 
@@ -415,6 +470,8 @@ export class TypeTable {
         return `${ARRAY_STRUCT}*`;
       case K_STRUCT:
         return `%struct.${this.names[type]}*`;
+      case K_ENUM:
+        return "i32";
       case K_NULLABLE:
         return this.llvmType(this.refs[type]);
       case K_RESULT:
@@ -441,6 +498,8 @@ export class TypeTable {
         return 4;
       case T_F32:
         return 4;
+      case K_ENUM:
+        return 4; // an i32
       default:
         return 8; // i64, u64, f64, and every pointer
     }
@@ -458,6 +517,8 @@ export class TypeTable {
           ? `readonly ${this.typeName(this.refs[type])}[]`
           : `${this.typeName(this.refs[type])}[]`;
       case K_STRUCT:
+        return this.names[type];
+      case K_ENUM:
         return this.names[type];
       case K_NULLABLE:
         return `${this.typeName(this.refs[type])} | null`;

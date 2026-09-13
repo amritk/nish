@@ -1,0 +1,1 @@
+`new Array` needs exactly one type argument, e.g. `new Array<number>(n)`

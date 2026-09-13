@@ -836,7 +836,11 @@ chain no part of stage0 emitted: stage0 built the compiler that built it.
 `--stages 1` stops at the seed's own output — the same program, two links
 sooner — and `--verify` runs the three equalities of §1 with `cmp` rather than
 with the suite's reporting, which makes the script self-checking for anyone
-building it outside a checkout of the tests.
+building it outside a checkout of the tests. All three when the seed is stage0,
+as it is here; seeded with a released `nish` it asserts the last two and
+*reports* `IR(seed) == IR(stage1)`, which between two releases is a codegen
+freeze rather than the stronger equality of §1
+([wp19-stage0-retirement.md](wp19-stage0-retirement.md) §3, G3).
 
 **`scripts/nish.sh` is the command line.** D4 kept `--link`, `--profile`
 and directory creation out of stage1, on the grounds that a wrapper could

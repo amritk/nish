@@ -26,24 +26,14 @@ export const stdModulePath = (root: string, specifier: string): string =>
   normalizePath(`${root}/${STD_DIR}/${specifier.substring(STD_PREFIX.length)}.ts`);
 
 /**
- * The modules the installed library has, without their extension, for the
- * diagnostic that lists them. Read rather than written down: a list in the
- * source would be one more thing to forget beside the file it names, and the
- * goldens that pin the wording would then pass while the message was wrong.
- * `readdirSync` answers them already sorted, and `null` — an unreadable
- * directory — answers nothing rather than failing, because the caller is
- * already reporting an error when it asks.
+ * The modules the library has, for the diagnostic that lists them.
+ *
+ * A literal, not a directory read. `self/` has to compile under the *last
+ * released* compiler — that is the WP19 G2 gate `scripts/bootstrap.sh --verify`
+ * runs — so it may only use builtins that release already had, and
+ * `readdirSync` is newer than the current one. stage0 reads the real directory
+ * instead, and `tests/run.js` fails when the two disagree, which is the same
+ * arrangement that keeps `VERSION` in `branding.ts` honest against
+ * `package.json`.
  */
-export const stdModuleNames = (root: string): string => {
-  const entries = readdirSync(normalizePath(`${root}/${STD_DIR}`));
-  if (entries === null) {
-    return "";
-  }
-  const names: string[] = [];
-  for (const entry of entries) {
-    if (entry.endsWith(".ts")) {
-      names.push(entry.substring(0, entry.length - 3));
-    }
-  }
-  return names.join(", ");
-};
+export const stdModuleNames = (): string => "testing, text";

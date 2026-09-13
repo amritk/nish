@@ -1,0 +1,42 @@
+# Cases where the two compilers do not say the same thing, one `case  what
+# stage1 does` per line. Nothing here is declared: these are open differences,
+# found by writing this corpus and reported rather than fixed, because a
+# diagnostic code is keyed on its message text and rewording one retires the
+# code (`src/codes.ts`).
+#
+# They are all invisible to `tests/self/parity.js`, and for one reason: that
+# mode runs the *corpus* through fourteen flag variations, and no corpus
+# program is written this way. §A2 of `docs/wp19-stage0-retirement.md` makes
+# exactly this point about the five differences its first run found — "every
+# oracle compiles a program with the flags that program already carries" — and
+# this is the same gap seen from the other side: a flag nobody varies is one
+# thing a cross product cannot reach, and a *program* nobody wrote is another.
+#
+# Two kinds, and the second is the serious one:
+#
+#   - **a different sentence**: both compilers refuse the program, and stage0
+#     states the rule the registry has a code for while stage1 states a more
+#     general one (or one with no code at all). The pinned wording is stage0's.
+#   - **stage1 compiles it**: stage0 refuses the program and stage1 emits IR.
+#     A rule the language documents is not enforced by the compiler that is
+#     going to survive, which is a checker gap rather than a wording one.
+#
+# `npm test` runs the coverage tool over stage1 with `--strict-refusals`, so a
+# line here that stops being true fails the run and has to be deleted.
+
+# --- stage1 says something else ----------------------------------------------
+nl2074_function_after_class  stage1 says "`Shape` is already declared in this module" (NL2076)
+nl2098_increment_string  stage1 says "Operator `++` requires a numeric operand, got string", which carries no code (NL0000)
+nl2196_duplicate_function  stage1 says "`twice` is already declared in this module" (NL2076)
+nl2239_void_ternary  stage1 reports the void local (NL2183) and never reaches the ternary
+nl2260_empty_statement  stage1 says "Unsupported statement `;`", which carries no code (NL0000)
+
+# --- stage1 compiles what stage0 refuses -------------------------------------
+nl2298_generic_import  stage1 says "Module `./wordings_generic` has no exported function `identity`", which carries no code (NL0000): it does not look past the exported functions to find the template
+nl2054_literal_u64  stage1 accepts a u64 literal past 2^53 and emits IR for the rounded value
+nl2302_duplicate_type_parameter  stage1 accepts `<T, T>` and compiles it; the second parameter can never be bound to anything the first was not, so the program means what stage0 refuses to let it mean
+nl2055_literal_i64  stage1 accepts an i64 literal past 2^53 and emits IR for the rounded value
+nl2134_for_of_two_variables  stage1 accepts a `for...of` head with two declarators (syntax TypeScript itself refuses)
+nl2206_generic_new  stage1 ignores the type arguments on `new Point<i32>()` and compiles it
+nl2241_for_of_initializer  stage1 accepts an initializer on the `for...of` variable and compiles it
+nl2242_for_of_annotation  stage1 accepts an annotation on the `for...of` variable and compiles it

@@ -122,7 +122,8 @@
           },
           "style": {
             "useConsistentTypeDefinitions": "off",
-            "useConsistentMethodSignatures": "off"
+            "useConsistentMethodSignatures": "off",
+            "noEnum": "off"
           }
         }
       }

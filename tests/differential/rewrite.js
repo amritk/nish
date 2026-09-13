@@ -49,7 +49,7 @@ const big = (n) => f.createBigIntLiteral(`${n}n`);
 const str = (s) => f.createStringLiteral(s);
 
 /** String methods whose offsets are UTF-8 byte offsets, so the shim owns them (WP14 A2). */
-const STRING_METHODS = new Set(["charCodeAt", "substring", "indexOf", "startsWith", "endsWith"]);
+const STRING_METHODS = new Set(["charCodeAt", "substring", "slice", "indexOf", "startsWith", "endsWith"]);
 
 /** The integer kinds and how a value of each is held in JavaScript. */
 const INT_KINDS = new Set(["i32", "i64", "u8", "u16", "u32", "u64"]);

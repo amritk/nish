@@ -1,0 +1,1 @@
+Cannot infer `T` for `firstOf`: argument 1 is i32, which does not match the declared `T[]`

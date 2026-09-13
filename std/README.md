@@ -73,9 +73,31 @@ that are *not* this package.
 
 ## Writing a module here
 
-- **Spell the widths.** `i32`, `i64`, `f64`, never `number`, so the module means
-  the same thing under `--number-mode f64` as it does by default. `examples/arrays.ts`
-  says the same thing for the same reason.
+- **Spell the widths — and then convert what the builtins hand you.** `i32`,
+  `i64`, `f64`, never `number`, so the module means the same thing under
+  `--number-mode f64` as it does by default (`examples/arrays.ts` says that half
+  for the same reason). It is necessary and **not sufficient**: `s.length`,
+  `a.length` and `s.charCodeAt(i)` answer `number`, which *is* `f64` in that
+  mode, so a module that declares every width of its own and still writes
+  `let end: i32 = text.length` or `while (i < text.length)` does not compile
+  there at all. Read each of those through `toI32` —
+  `const length: i32 = toI32(text.length)`, once per function rather than once
+  per iteration — and the module means one program in both modes. The default
+  mode pays nothing for it, because `toI32` on an `i32` is identity.
+  `tests/link/std_text_f64` is what keeps this from being prose;
+  [`docs/wp26-stdlib.md`](../docs/wp26-stdlib.md) §4 is the reasoning.
+- **Name the private helpers as though they were exported.** A function name is
+  unique across the whole program whether or not it is exported, because the
+  whole-program attribute analysis is keyed by symbol name — and a `std/` module
+  is compiled *into* the program that imports it, so its private helpers are not
+  private to the namespace. A helper called `isBlank` would stop any program that
+  declares its own `isBlank` from compiling (`` Function `isBlank` is also
+  defined in main.ts ``), which is why `text.ts` calls it `isTextBlankByte`. Keep
+  the helpers few and their names distinctive; a module whose internals want
+  `compare`, `next` or `parse` is asking for package-scoped symbols, which do not
+  exist yet ([`docs/wp26-stdlib.md`](../docs/wp26-stdlib.md) §3e). Module
+  constants are exempt — `NEWLINE` and `SPACE` fold at their uses, so a program
+  may declare those names itself.
 - **It is an Nish program**, so the constraints are the language's: a function is
   an arrow bound to a module-level `const`, a function is never a value, there
   are no generics, no `try` / `catch`, and no optional or default parameters.

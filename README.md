@@ -26,7 +26,7 @@ ARM64, or WebAssembly.
 
 ```
 TypeScript source ──▶ TS AST ──▶ validator + checker ──▶ LLVM IR (.ll) ──▶ clang/llc ──▶ native binary
-                     (typescript)      (src/)             (src/codegen/)        + runtime/runtime.c
+                     (typescript)      (src/)             (src/codegen/)        + runtime/runtime.c + runtime_os.c
 ```
 
 If it compiles, every value has one fixed, known memory layout; binaries are
@@ -109,8 +109,7 @@ there cites the test case that proves it.
 | `T \| null` | for class, interface, array and string types; `=== null`, and narrowing to `T` by `if`, early return, `while`, `&&`, `?:`, enforced by the checker | [Nullable types](docs/LANGUAGE.md#nullable-types) |
 | Errors | Rust-style `Result<T, E>` with `Ok`/`Err`, `isOk()`/`isErr()`, `orReturn()` (the `?`), `unwrapOr`, `expect`; the checker refuses to let a failure be dropped or the success payload be read before the error is handled. No `throw`, no unwinding | [Result and error handling](docs/LANGUAGE.md#result-and-error-handling) |
 | Builtins | `console.log`, `Math.*` as LLVM intrinsics (ECMAScript `pow` corner cases included), `Math.random`, `toI32`/`toI64`/`toF64`, `process.exit`, `readFileSync`/`writeFileSync`/`appendFileSync`; the runtime-backed ones are also importable from `nish:fs` / `nish:process` / `nish:io`, which is the same builtin under a name nothing can shadow | [Builtins](docs/LANGUAGE.md#builtins), [Builtin modules](docs/LANGUAGE.md#builtin-modules-nish) |
-| Rejected | `any`, `unknown`, `var`, `==`, `?.`, `??`, generics, `async`, `try`, `throw`, `typeof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
-
+| Rejected | `any`, `unknown`, `var`, `==`, `?.`, `??`, generic classes, `async`, `try`, `throw`, `typeof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
 Semantics that differ from JavaScript on purpose: signed integer overflow is
 undefined behaviour (`--wrapping` restores two's-complement wrapping; the
 unsigned widths wrap either way), integer division by zero panics instead of
@@ -164,7 +163,7 @@ call on purpose.
 | Bug class | What Nish does | Reference |
 |:---|:---|:---|
 | Use-after-free, double free | Not expressible: nothing is freed individually. Four compile-time mechanisms decide where a value lives — a stack `alloca` when escape analysis proves it dies with the frame, an automatic arena scope when a function's temporaries do, a `nish_arena_keep` reclaim at the call site for a returned string, the bump arena otherwise — and the arena goes back when `main` returns | [Memory model](docs/LANGUAGE.md#memory-model), [wp6-memory.md](docs/wp6-memory.md) |
-| Out-of-bounds read or write | Every `a[i]`, `a[i] op= v`, `s.charCodeAt(i)` and `a.pop()` is bounds-checked, with an unsigned compare, so a negative index fails too; the failure prints `index out of range: <i> >= <len>` and exits 1 | [Element access](docs/LANGUAGE.md#element-access), `tests/cases/arr_bounds_panic` |
+| Out-of-bounds read or write | Every `a[i]`, `a[i] op= v`, `s.charCodeAt(i)`, `s.slice(a, b)` and `a.pop()` is bounds-checked, with an unsigned compare, so a negative index fails too; the failure prints `index out of range: <i> >= <len>` (or, for `slice`, `slice out of range: [<a>, <b>) of length <len>`) and exits 1 | [Element access](docs/LANGUAGE.md#element-access), `tests/cases/arr_bounds_panic` |
 | Null dereference | `T \| null` is a separate type, for pointers only; member access needs a narrowing the checker accepts and `?.` is forbidden — which is what lets the emitter put `nonnull dereferenceable` on every pointer that is not one | [Nullable types](docs/LANGUAGE.md#nullable-types) |
 | Uninitialised memory | `new Array<T>(n)` zero-fills and rejects pointer element types, because a zeroed pointer would be a null nobody declared; class fields are definitely assigned | [Classes](docs/LANGUAGE.md#classes), `tests/cases/arr_new_zeroed` |
 | Unwinding past a release | There is none. Every function is `nounwind`; a failure a caller should handle is a `Result<T, E>` and one it should not is `panic(message)` — stderr, exit 1 | [Result](docs/LANGUAGE.md#result-and-error-handling) |
@@ -292,7 +291,7 @@ with `2`. `-g` adds a DWARF line table and variables to the IR so
 Multi-file programs: `nish examples/multi/main.ts --link build/multi && ./build/multi; echo $?`
 prints `49`.
 
-Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c -o app`
+Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c runtime/runtime_os.c -o app`
 (the `overriding the module target triple` warning is harmless: the IR is
 target-neutral unless you pass `--target`; `-Wno-override-module` silences
 it), or step by step with `llvm-as`, `llc -O2 -filetype=obj`, and
@@ -309,8 +308,9 @@ with `--target aarch64-unknown-linux-gnu` / `wasm32-wasi` plus
 
 Rust-class output is the goal: no GC, no embedded engine, aliasing and
 purity facts handed to LLVM up front, and a link step that strips everything
-unused. `examples/add.ts` + `examples/main.c` + `runtime/runtime.c`, x86_64
-Linux, glibc dynamically linked (`npm run size-report`):
+unused. `examples/add.ts` + `examples/main.c` + the two runtime translation units
+(`runtime/runtime.c` and `runtime/runtime_os.c`), x86_64 Linux, glibc
+dynamically linked (`npm run size-report`):
 
 | Profile | Bytes | What it does |
 |:---|---:|:---|
@@ -320,11 +320,17 @@ Linux, glibc dynamically linked (`npm run size-report`):
 | `wasm` | 279 | Freestanding `wasm32` module, every function exported, stripped. |
 | `wasi` | 42,228 (`argv.ts`) | `wasm32-wasi` command module: the runtime linked against wasi-libc, `_start` runs `main`; needs a WASI sysroot ([INSTALL.md](docs/INSTALL.md#wasi-optional-for---profile-wasi)). |
 
-`hello.ts` with `--link` is 4,696 bytes. The whole runtime is about 4 KB
-of machine code (`runtime.c`: one chunked bump arena with O(1) reset and
-mark/release, strings, JavaScript-exact number formatting, string parsing,
-`Math.random`, exit, files, `process.argv`, array growth, the panic paths);
-`Math.*` calls are LLVM intrinsics, so pure functions stay `readnone`.
+`hello.ts` with `--link` is 4,696 bytes. The whole runtime is under 5 KB of
+machine code, in two translation units with a measured ceiling each so that the
+core does not grow every time the language reaches further into the operating
+system: `runtime.c` is the 3,480 bytes every program touches (one chunked bump
+arena with O(1) reset and mark/release, strings, JavaScript-exact number
+formatting, string parsing, `Math.random`, `process.argv`, array growth, the
+panic paths), and `runtime_os.c` the 1,190 bytes that wrap a system call (exit,
+files, directories, subprocesses, the environment, the clock) — see
+[docs/wp7-runtime.md](docs/wp7-runtime.md#runtime-additions-and-budget) for both
+budgets and the reasoning. `Math.*` calls are LLVM intrinsics, so pure functions
+stay `readnone`.
 
 Memory is the part that usually costs a compiled-JavaScript design its
 speed, so it is done statically ([docs/wp6-memory.md](docs/wp6-memory.md)):
@@ -455,9 +461,11 @@ reference counting for objects that must outlive an arena reset, and dynamic
 dispatch — which would be a trait object over an interface, since inheritance
 was removed ([docs/wp25-inheritance.md](docs/wp25-inheritance.md)) and every
 method call names one symbol today.
-Generics, closures, `try`/`catch` and labelled `break`/`continue` are
-refusals rather than gaps, each with the message and the idiom to use
-instead ([docs/LANGUAGE.md](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)).
+Generic *functions* compile — each instantiation becomes its own specialised
+function ([docs/wp18-generics.md](docs/wp18-generics.md)) — while generic
+classes, closures, `try`/`catch` and labelled `break`/`continue` are refusals
+rather than gaps, each with the message and the idiom to use instead
+([docs/LANGUAGE.md](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator)).
 Release engineering (`--version`, exit codes, npm packaging, tag-driven
 releases) landed with WP12; see [CHANGELOG.md](CHANGELOG.md) and
 [docs/wp12-release.md](docs/wp12-release.md). The plan itself is

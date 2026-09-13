@@ -1,0 +1,66 @@
+# Cases whose wording is stage0's alone because stage1's parser gets there
+# first, one case name per line.
+#
+# `.claude/selfhost.md`: lex and parse what is written, refuse in the phase
+# that owns the rule. stage1's parser turns down the syntax the language
+# forbids by name — `a class member is a field, a method or a constructor,
+# found `{`` — before Phase 0 or the checker can state the rule that stage0
+# states. That is the declared parity class of
+# `docs/wp19-stage0-retirement.md` §A3 (602 rows), and closing it in code is
+# grammar for 46 constructs that never compile.
+#
+# The consequence for this corpus is exact and worth saying plainly: **these
+# wordings do not survive R6.** They are stage0's, they are pinned here while
+# stage0 lives, and on the day `src/` goes the sentences go with it — what the
+# user will see instead is the syntax error stage1 already prints, which is
+# pinned by `tests/self/reject_oracle.js`'s parser bucket.
+#
+# `npm test` runs the coverage tool over stage1 with `--strict-refusals`, so a
+# case listed here that stage1 starts answering the same way is a failure: the
+# list shrinks as the parser learns a rule, and it cannot grow by accident.
+nl2015_optional_field
+nl2018_anonymous_class
+nl2029_definite_assignment
+nl2038_keyof_type
+nl2046_optional_method
+nl2083_declare_class
+nl2090_method_without_body
+nl2091_constructor_without_body
+nl2092_string_member_name
+nl2116_static_method
+nl2118_override_method
+nl2125_declare_function
+nl2128_export_list
+nl2129_export_default_value
+nl2131_export_default_class
+nl2133_for_await
+nl2135_for_of_without_declaration
+nl2137_implements_expression
+nl2144_new_non_identifier
+nl2189_constructor_return_type
+nl2191_destructured_constant
+nl2192_destructured_parameter
+nl2193_destructuring_local
+nl2203_anonymous_default_function
+nl2204_function_without_body
+nl2210_array_hole
+nl2212_template_specifier
+nl2213_class_index_signature
+nl2214_interface_index_signature
+nl2215_interface_extends
+nl2223_string_object_key
+nl2226_export_import_equals
+nl2233_optional_parameter
+nl2234_parameter_property
+nl2235_rest_parameter
+nl2237_array_spread
+nl2243_type_only_import
+nl2253_field_compound_operator
+nl2254_unsupported_binary
+nl2255_class_static_block
+nl2256_satisfies_expression
+nl2257_interface_construct_signature
+nl2258_object_literal_method
+nl2274_two_names_one_declaration
+nl2286_declare_enum
+nl2292_default_type_argument

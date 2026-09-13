@@ -24,6 +24,16 @@
  * worth blocking on; it holds, so it is checked. The third exists so the
  * binaries are compared as well as the IR.
  *
+ * The seed here is stage0 and only stage0, which is what makes the first
+ * equality assertable: it says two independently written implementations of
+ * *this* revision emit the same IR for it, which is diverse double-compiling.
+ * `scripts/bootstrap.sh` takes its seed from `NISH_BOOTSTRAP` and therefore
+ * asserts that equality only when the seed is stage0 — with a released binary
+ * the same comparison is a codegen freeze between releases rather than a claim
+ * about the bootstrap, so it is reported there instead
+ * (`docs/wp19-stage0-retirement.md` G3). This file has no such branch and must
+ * not grow one.
+ *
  * Everything is compared **byte for byte**, module by module. A single
  * attribute out of place fails, which is the point.
  */

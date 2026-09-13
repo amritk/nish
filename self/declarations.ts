@@ -16,7 +16,7 @@ import { STD_PREFIX } from "./branding";
 import { resolveType } from "./annotations";
 import { FLAG_EXPORTED, N_EMPTY, N_FUNCTION, N_IMPORT, N_LIST, Node } from "./nodes";
 import { FunctionSig, ImportBinding, ROLE_FUNCTION } from "./program";
-import { T_ERROR, T_I32, T_VOID } from "./types";
+import { isForeignScalar, T_ERROR, T_I32, T_VOID } from "./types";
 
 /** Symbol the entry module's `export function main` is emitted under. */
 export const ENTRY_MAIN_SYMBOL: string = "nish_main";
@@ -76,7 +76,49 @@ export function collectFunctionSignature(ctx: CheckContext, decl: Node): Functio
   } else {
     sig.returnType = resolveType(returnAnnotation, ctx);
   }
+  if (sig.foreign()) {
+    checkForeignSignature(ctx, sig, decl, name);
+  }
   return sig;
+}
+
+/**
+ * The rules a `declare function` adds (WP27 S1): no body, not exported, and a
+ * scalar in every position.
+ *
+ * The scalar rule is what makes S1 sound rather than merely small — with no
+ * pointer crossing the boundary there is nothing for escape analysis to be
+ * wrong about — so widening it is a decision about the memory model and not a
+ * relaxation of a type check (`docs/wp27-ffi.md` §3).
+ */
+function checkForeignSignature(ctx: CheckContext, sig: FunctionSig, decl: Node, name: string): void {
+  if (sig.body() !== null) {
+    ctx.error(decl, "`declare function` declares a C function this program calls, so it must have no body");
+  }
+  if (sig.exported) {
+    ctx.error(
+      decl.children[0],
+      `\`declare function ${name}\` cannot be exported: it is a C function this program calls, not one it defines`
+    );
+  }
+  let i = 0;
+  while (i < sig.paramTypes.length) {
+    if (!isForeignScalar(sig.paramTypes[i])) {
+      const spelled = ctx.table.typeName(sig.paramTypes[i]);
+      ctx.error(
+        decl,
+        `Parameter \`${sig.paramNames[i]}\` of \`declare function ${name}\` is ${spelled}, and a declared C function takes scalars only`
+      );
+    }
+    i = i + 1;
+  }
+  if (!isForeignScalar(sig.returnType)) {
+    const spelled = ctx.table.typeName(sig.returnType);
+    ctx.error(
+      decl.children[2],
+      `\`declare function ${name}\` returns ${spelled}, and a declared C function returns a scalar only`
+    );
+  }
 }
 
 /**

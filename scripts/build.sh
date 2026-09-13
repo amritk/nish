@@ -3,6 +3,11 @@
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm]
 #
+# The C runtime is two translation units and is named as one: an input
+# <dir>/runtime.c also compiles <dir>/runtime_os.c, the half that wraps the
+# system calls (files, directories, subprocesses, the environment, the clock).
+# runtime/runtime_os.c says why they are compiled and measured apart.
+#
 # Profiles:
 #   debug  clang defaults: no optimisation, symbols kept. The "before" number.
 #   speed  -O3 + LTO + section GC + strip. Rust `--release` equivalent.
@@ -70,12 +75,34 @@ while [ $# -gt 0 ]; do
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
       pgo=("-fprofile-use=$2"); shift 2 ;;
-    -h|--help) sed -n '2,37p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,41p' "$0"; exit 0 ;;
     *) inputs+=("$1"); shift ;;
   esac
 done
 [ ${#inputs[@]} -gt 0 ] || { echo "error: no input files" >&2; exit 2; }
 [ -n "$out" ] || { echo "error: -o <out> is required" >&2; exit 2; }
+
+# The runtime is two translation units, and a caller names one: whoever passes
+# <dir>/runtime.c gets <dir>/runtime_os.c compiled beside it. The two were one
+# file until the operating-system half was split out for its own size budget
+# (runtime/runtime_os.c's header comment), and a link line is where that split
+# would otherwise leak: `nish --link` builds its command line in src/index.ts
+# and self/compile.ts, the published package's recipe in every document and
+# README names runtime.c, and a user's own clang line does too. Pairing them
+# here keeps every one of those correct, and keeps "the runtime" one thing to
+# name from the outside. A caller that names both itself is left alone, because
+# naming one object twice is a duplicate-symbol error.
+for i in ${inputs[@]+"${inputs[@]}"}; do
+  case "$i" in
+    */runtime.c|runtime.c)
+      os="${i%runtime.c}runtime_os.c"
+      have=0
+      for j in "${inputs[@]}"; do
+        if [ "$j" = "$os" ]; then have=1; fi
+      done
+      if [ "$have" = 0 ] && [ -f "$os" ]; then inputs+=("$os"); fi ;;
+  esac
+done
 
 CC=${CC:-clang}
 common=(-Wno-override-module)          # our IR is target-neutral; clang fills the triple in
