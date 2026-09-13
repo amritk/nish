@@ -713,6 +713,9 @@ export function checkElementReferences(ctx: CheckContext, sig: FunctionSig): voi
     ts.forEachChild(node, visit);
   };
 
+  // WP27 S1: a `declare function` has no body, so it has no locals and no
+  // inline arrays to track.
+  if (sig.body === undefined) return;
   visit(sig.body);
   // A `for...of` variable over an inline array is an element reference too,
   // re-derived from the header on every pass, so it is only ever invalidated

@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 295 programs, 4872 dump lines.
+# 297 programs, 4910 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -1922,6 +1922,32 @@ function test(): i32 -> @test [exported]
   local 14:9 wide: i64 (const)
   callee 14:16 widen -> @widen
   callee 15:10 pick -> @pick
+program tests/cases/ffi_scalar.ts
+module tests/cases/ffi_scalar.ts (entry)
+function abs(n: i32): i32 -> @abs
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function labs(n: i64): i64 -> @labs
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function pureDouble(n: i32): i32 -> @pureDouble
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function callsC(n: i32): i32 -> @callsC
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  escaping: n
+  calls: abs
+  stackSites=0 stackLocals=0
+  callee 13:10 abs -> @abs
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: callsC labs nish_arena_mark nish_arena_release nish_print nish_str_from_i32 pureDouble
+  stackSites=0 stackLocals=0
+  local 17:9 wide: i64 (const)
+  local 18:9 back: i64 (const)
+  callee 18:21 labs -> @labs
+  callee 19:18 callsC -> @callsC
+  callee 20:18 pureDouble -> @pureDouble
 program tests/cases/fn_arrow.ts
 module tests/cases/fn_arrow.ts (entry)
 function double(n: i32): i32 -> @double
@@ -4261,6 +4287,20 @@ function main(): i32 -> @nish_main [exported entry]
   stackSites=0 stackLocals=0
   local 19:9 k: Kind (const)
   callee 20:27 weight -> @weight
+program docs/cookbook/decl_ffi.ts
+module docs/cookbook/decl_ffi.ts (entry)
+function abs(n: i32): i32 -> @abs
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function pureDouble(n: i32): i32 -> @pureDouble
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: abs pureDouble
+  stackSites=0 stackLocals=0
+  callee 8:10 abs -> @abs
+  callee 8:20 pureDouble -> @pureDouble
 program docs/cookbook/decl_locals.ts
 module docs/cookbook/decl_locals.ts (entry)
 function polynomial(x: i32, k: i32): i32 -> @polynomial

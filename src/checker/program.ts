@@ -111,7 +111,16 @@ export interface FunctionSig {
    * exactly what a block with one `return` means (WP22 §4). The four places
    * that walk a body branch on `ts.isBlock`.
    */
-  body: ts.Block | ts.Expression;
+  body?: ts.Block | ts.Expression;
+  /**
+   * `declare function f(...): T;` — a C function this program calls but does
+   * not define (WP27 S1). There is no body, so there is nothing to check, emit
+   * or analyse: the emitter writes a `declare` line instead of a `define`, and
+   * the fact fixpoint treats a call to one as the worst case it cannot see
+   * inside (`src/codegen/attributes.ts`). `body` is absent exactly when this is
+   * set, which is what the four body walkers branch on.
+   */
+  foreign?: boolean;
   /** Declared with the `export` modifier: callable from other modules, never `internal`. */
   exported: boolean;
   /** Owning class when this is a method or constructor; `params[0]` is then `this`. */

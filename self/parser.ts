@@ -27,6 +27,7 @@ import { Lexer } from "./lexer";
 import {
   FLAG_CONST,
   FLAG_EXPORTED,
+  FLAG_FOREIGN,
   FLAG_POSTFIX,
   FLAG_PREFIX,
   FLAG_READONLY,
@@ -433,6 +434,16 @@ export class Parser {
     // `type` and `enum` are contextual keywords, ordinary identifiers
     // everywhere else, so they are matched by text here exactly as `from` and
     // `of` are — which is what leaves the lexer and its oracle untouched.
+    // `declare` is contextual too, and needs the one token of lookahead to tell
+    // `declare function f(): i32;` from a variable that happens to be called
+    // `declare` (WP27 S1). `export` is refused by the checker rather than here,
+    // so the message can say what a foreign declaration is instead of what the
+    // grammar wanted.
+    if (this.at(TOK_IDENT) && this.value === "declare" && this.peek() === TOK_FUNCTION) {
+      this.advance(); // `declare`
+      const foreign = this.parseForeignFunction(start);
+      return this.exportable(foreign, exported);
+    }
     if (this.at(TOK_IDENT) && this.value === "type") {
       return this.exportable(this.parseTypeAlias(start), exported);
     }
@@ -505,6 +516,44 @@ export class Parser {
     node.children.push(this.parseReturnType());
     node.children.push(this.parseBlock());
     node.children.push(typeParams);
+    node.end = this.previousEnd;
+    return node;
+  }
+
+  /**
+   * `declare function name(params): T;` — a C function this program calls but
+   * does not define (WP27 S1).
+   *
+   * The same four children as `parseFunction` in the same positions, with the
+   * empty node where the block goes: everything downstream indexes a function's
+   * children positionally, so a foreign declaration is shaped like a function
+   * with no body rather than a different kind of node. `FLAG_FOREIGN` is what
+   * tells them apart, and the checker is what refuses a body here.
+   */
+  parseForeignFunction(start: i32): Node {
+    this.advance(); // `function`
+    const node = this.node(N_FUNCTION, start, this.end);
+    node.children.push(this.parseIdentifier());
+    const typeParams = this.parseTypeParameters();
+    node.children.push(this.parseParameters());
+    node.children.push(this.parseReturnType());
+    // A `;` ends the declaration. A `{` is a body, which is a mistake the
+    // *checker* reports — so it is parsed into the body slot rather than left
+    // for the next `parseDeclaration` to trip over, which is what lets stage1
+    // say what stage0 says instead of complaining about a brace.
+    if (this.at(TOK_LBRACE)) {
+      node.children.push(this.parseBlock());
+    } else {
+      node.children.push(this.empty());
+      this.eat(TOK_SEMICOLON);
+    }
+    // WP18 pushes the type-parameter list as the fifth child so the first four
+    // keep their meaning. A foreign declaration pushes one too — parsed rather
+    // than assumed empty, so `declare function f<T>(): i32` reaches the
+    // checker's refusal instead of a syntax error, and so nothing that indexes
+    // `children[4]` reads past the end of a foreign declaration.
+    node.children.push(typeParams);
+    node.flags = node.flags | FLAG_FOREIGN;
     node.end = this.previousEnd;
     return node;
   }
