@@ -501,7 +501,7 @@ function wrapper({ fn, readers, box, scoped }: Plan): string[] {
  *     off the loop thread, so the arguments are plain C by then and the result
  *     is boxed back in `complete`, which runs on the JS thread again.
  */
-function asyncWrapper({ fn, readers, box }: Plan): string[] {
+const asyncWrapper = ({ fn, readers, box }: Plan): string[] => {
   const { sig } = fn;
   const name = sig.name;
   const jsName = `${sig.sourceName}Async`;
@@ -592,7 +592,7 @@ function asyncWrapper({ fn, readers, box }: Plan): string[] {
     ""
   );
   return lines;
-}
+};
 
 export function generateNapiShim(compilation: Compilation, asyncExports = false): string {
   const fns = externalFunctions(compilation);

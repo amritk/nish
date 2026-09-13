@@ -996,7 +996,7 @@ export function generateNapiShim(
           taken = true;
         }
       }
-      let why = taken ? `\`${jsName}\` is already an export of this module` : napiAsyncSkipReason(table, p);
+      const why = taken ? `\`${jsName}\` is already an export of this module` : napiAsyncSkipReason(table, p);
       if (why === null) {
         asyncPlans.push(p);
       } else {
