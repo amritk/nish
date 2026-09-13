@@ -277,6 +277,15 @@ export interface CheckedProgram {
    * without re-deriving anything.
    */
   caseValues: WeakMap<ts.CaseClause, bigint>;
+  /**
+   * Element accesses and `charCodeAt` calls whose index the bounds analysis
+   * proved in range (WP15 §2.1/§2.2, `bounds.ts`). The emitter writes the
+   * address and no check for each of them, and `collectArrayFacts` leaves
+   * `nish_panic_index` out of the callee set — which is the whole of what the
+   * proof buys, and the reason it lives in a table the emitter reads rather
+   * than in a decision the emitter makes.
+   */
+  provenIndices: WeakSet<ts.Node>;
 }
 
 /**

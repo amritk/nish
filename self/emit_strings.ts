@@ -212,11 +212,20 @@ function emitOccursAt(emitter: Emitter, str: string, at: string, sub: string): s
   );
 }
 
-/** `s.charCodeAt(i)`: the byte at `i`, bounds-checked exactly as `a[i]` is. */
+/**
+ * `s.charCodeAt(i)`: the byte at `i`, bounds-checked exactly as `a[i]` is —
+ * including the WP15 §2 proof, which is why the check is looked up on the call
+ * node here and on the element access there. A string's length cannot change
+ * once the variable holding it is bound, so this is the shape the analysis
+ * proves most often: a scanner's cursor stays proven across the calls in its
+ * own loop body.
+ */
 function emitCharCodeAt(emitter: Emitter, expr: Node, str: string): string {
   const args = expr.children[1];
   const index = emitIndex(emitter, args.children[0]);
-  emitRangeCheck(emitter, index, loadStringLength(emitter, str));
+  if (!emitter.program.nodeProvenIndex[expr.id]) {
+    emitRangeCheck(emitter, index, loadStringLength(emitter, str));
+  }
   const at = emitter.fn.emitValue(
     `getelementptr inbounds i8, i8* ${stringData(emitter, str)}, i64 ${index}`
   );

@@ -961,7 +961,11 @@ class FactCollector {
     const table = this.table;
     if (node.kind === N_INDEX && this.isArrayValued(node.children[0])) {
       this.facts.readsMemory = true;
-      if (!this.opts.uncheckedIndexing) {
+      // Mirrors `emitBoundsCheck` exactly, proof and all: an access the checker
+      // proved in range emits no call, so listing `nish_panic_index` here would
+      // cost the function `willreturn` for a `noreturn` callee that is not in
+      // its IR.
+      if (!this.opts.uncheckedIndexing && !program.nodeProvenIndex[node.id]) {
         this.facts.callees.add("nish_panic_index");
       }
       return;

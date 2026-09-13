@@ -215,10 +215,17 @@ function newString(ctx: EmitContext, bytes: string, n: string): string {
   return ctx.fn.emitValue(`call i8* ${ctx.useRuntime("nish_str_new")}(i8* ${bytes}, i64 ${n})`);
 }
 
-/** `s.charCodeAt(i)`: the byte at `i`, bounds-checked exactly as `a[i]` is. */
+/**
+ * `s.charCodeAt(i)`: the byte at `i`, bounds-checked exactly as `a[i]` is —
+ * including the WP15 §2 proof, which is why the check is looked up on the call
+ * node here and on the element access there. A string's length cannot change
+ * once the variable holding it is bound, so this is the shape the analysis
+ * proves most often: a scanner's cursor stays proven across the calls in its
+ * own loop body.
+ */
 function emitCharCodeAt(ctx: EmitContext, expr: ts.CallExpression, str: string): string {
   const index = emitIndex(ctx, expr.arguments[0]);
-  emitRangeCheck(ctx, index, loadStringLength(ctx, str));
+  if (!ctx.program.provenIndices.has(expr)) emitRangeCheck(ctx, index, loadStringLength(ctx, str));
   const at = ctx.fn.emitValue(`getelementptr inbounds i8, i8* ${stringData(ctx, str)}, i64 ${index}`);
   const byte = ctx.fn.emitValue(`load i8, i8* ${at}, align 1`);
   return ctx.typeOf(expr).kind === "f64"

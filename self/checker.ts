@@ -73,6 +73,7 @@ import {
   StructInfo,
   StructRegistry,
 } from "./program";
+import { analyzeBounds } from "./bounds";
 import { checkResultLocalsHandled } from "./result";
 import { checkReturnValue, checkStatements } from "./statements";
 import { Local, STORAGE_PARAM, Scope } from "./symbols";
@@ -98,10 +99,11 @@ export class Checker {
     sink: DiagnosticSink,
     numberMode: i32,
     wrapping: boolean,
+    uncheckedIndexing: boolean,
     packageName: string
   ) {
     this.program = new CheckedProgram(source, file, isEntry, nodeCount, packageName);
-    this.ctx = new CheckContext(table, this.program, sink, numberMode, wrapping);
+    this.ctx = new CheckContext(table, this.program, sink, numberMode, wrapping, uncheckedIndexing);
   }
 
   /**
@@ -553,11 +555,16 @@ export class Checker {
       // WP16: a `Result` local nobody reads is an unhandled failure. Reported
       // after the body so the diagnostic names a variable whose type is known.
       checkResultLocalsHandled(this.ctx, sig, body);
+      // WP15 §2.1/§2.2: prove what indices are in range before the warnings
+      // are reported, because one of the warnings is about the proofs that did
+      // not come off, and it has to be reported by the same source-order walk
+      // as the rest of the class.
+      const unprovenIndices = analyzeBounds(this.ctx, body, this.ctx.uncheckedIndexing);
       // WP15 §8: the performance warnings, over the same body and the same
       // side tables. Only for a body that checked cleanly — advice about code
       // that does not compile is noise, and a poisoned body has incomplete
       // side tables anyway.
-      checkPerformance(this.ctx, sig, body);
+      checkPerformance(this.ctx, sig, body, unprovenIndices);
       // WP15 §2a: an element reference into contiguous struct storage may not
       // be held across a `push`. Same placement and same reason as the line
       // above — the walk reads types and bindings pass 2 has just written.
@@ -844,6 +851,13 @@ class PerfWalk {
   sig: FunctionSig;
   /** Its body, which is the search root when an assignment is not inside a loop. */
   body: Node;
+  /**
+   * The accesses whose bounds check survived `self/bounds.ts` inside a loop.
+   * The proof is not this section's — it is a flow-sensitive analysis of its
+   * own — but the *report* is, because every WP15 §8 warning has to come out
+   * of one source-order walk or the diagnostics stop being in source order.
+   */
+  unprovenIndices: Node[];
   loops: Node[];
   declared: Local[];
   declaredDepth: i32[];
@@ -855,10 +869,11 @@ class PerfWalk {
    */
   declaredAllocates: boolean[];
 
-  constructor(ctx: CheckContext, sig: FunctionSig, body: Node) {
+  constructor(ctx: CheckContext, sig: FunctionSig, body: Node, unprovenIndices: Node[]) {
     this.ctx = ctx;
     this.sig = sig;
     this.body = body;
+    this.unprovenIndices = unprovenIndices;
     this.loops = [];
     this.declared = [];
     this.declaredDepth = [];
@@ -896,8 +911,58 @@ class PerfWalk {
  * and only for a body that checked cleanly — advice about code that does not
  * compile is noise, and a poisoned body has incomplete side tables anyway.
  */
-export function checkPerformance(ctx: CheckContext, sig: FunctionSig, body: Node): void {
-  walkPerformance(new PerfWalk(ctx, sig, body), body);
+export function checkPerformance(ctx: CheckContext, sig: FunctionSig, body: Node, unprovenIndices: Node[]): void {
+  walkPerformance(new PerfWalk(ctx, sig, body, unprovenIndices), body);
+}
+
+/**
+ * A bounds check `self/bounds.ts` could not remove, on an access inside a loop
+ * whose receiver and index are both plain locals — which is the shape the
+ * analysis knows how to prove, so a guard really would remove the check.
+ *
+ * The hint is one rewrite rather than a list because it is the one that always
+ * works: an `i >= 0 && i < xs.length` test reaching the access proves both
+ * ends whatever took the proof away, `--wrapping` included, where an
+ * incremented counter has no lower bound the compiler may assume. An unsigned
+ * index is named beside it because `u8`/`u16`/`u32`/`u64` are the ranged types
+ * the language already has, and half the proof comes off their declaration.
+ */
+function checkSurvivingBoundsCheck(walk: PerfWalk, access: Node): void {
+  let receiver = access;
+  let index = access;
+  if (access.kind === N_INDEX) {
+    receiver = access.children[0];
+    index = access.children[1];
+  } else {
+    const callee = unwrapPerfParens(access.children[0]);
+    if (callee.kind !== N_MEMBER || access.children[1].children.length !== 1) {
+      return;
+    }
+    receiver = callee.children[0];
+    index = access.children[1].children[0];
+  }
+  const holder = perfLocalName(walk.ctx, receiver);
+  const name = perfLocalName(walk.ctx, index);
+  if (holder.length === 0 || name.length === 0) {
+    return;
+  }
+  walk.ctx.performance(
+    index,
+    `\`${name}\` is not proven to be in range for \`${holder}\` here, so this access keeps its bounds check and ` +
+      `compares against the length on every iteration: guard it with a test that reaches the access — ` +
+      `\`if (${name} >= 0 && ${name} < ${holder}.length)\` proves both ends, and an unsigned index needs only ` +
+      `the upper one`
+  );
+}
+
+/** The source name of the local a bare identifier binds, or `""` for anything else. */
+function perfLocalName(ctx: CheckContext, expr: Node): string {
+  const e = unwrapPerfParens(expr);
+  if (e.kind !== N_IDENT) {
+    return "";
+  }
+  const local = ctx.program.nodeLocals[e.id];
+  return local === null ? "" : local.name;
 }
 
 /**
@@ -953,9 +1018,22 @@ function walkPerformance(walk: PerfWalk, node: Node): void {
   } else if (node.kind === N_CALL) {
     checkWideningConversion(walk, node);
   }
+  if (isUnprovenIndex(walk, node)) {
+    checkSurvivingBoundsCheck(walk, node);
+  }
   for (const child of node.children) {
     walkPerformance(walk, child);
   }
+}
+
+/** Whether `node` is one of the accesses the bounds analysis could not prove. */
+function isUnprovenIndex(walk: PerfWalk, node: Node): boolean {
+  for (const access of walk.unprovenIndices) {
+    if (access === node) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

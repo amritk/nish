@@ -56,6 +56,13 @@
  * Comparing unsigned makes a negative index fail too. `--unchecked-indexing`
  * removes the check; an out-of-range index is then undefined behaviour.
  *
+ * The check is also dropped for an access the checker *proved* in range
+ * (WP15 §2.1/§2.2, `checker/bounds.ts` -> `program.provenIndices`). That is
+ * not the same thing as the flag: the flag removes every check and trusts the
+ * program, while a proof removes one check and the safety is unchanged. The
+ * emitter re-derives nothing here — it reads the table, as it does for every
+ * other fact.
+ *
  * `collectArrayFacts` feeds attributes.ts with what each construct does to
  * memory; which array parameters are written through or captured is decided
  * there by `classifyUse` (see docs/wp4-arrays.md, "Attributes").
@@ -314,9 +321,14 @@ export function emitRangeCheck(ctx: EmitContext, idx: string, len: string): void
   fn.placeBlock(okBlock);
 }
 
-/** The bounds check of `a[i]`: the array's length, then the shared range check. */
-function emitBoundsCheck(ctx: EmitContext, arr: string, idx: string): void {
-  if (ctx.opts.uncheckedIndexing) return;
+/**
+ * The bounds check of `a[i]`: the array's length, then the shared range check.
+ * `site` is the access node, which is how the checker's proof is looked up —
+ * a proven access loads no length at all, so the header read goes with the
+ * compare rather than being left behind for LICM to hoist.
+ */
+function emitBoundsCheck(ctx: EmitContext, arr: string, idx: string, site: ts.Node): void {
+  if (ctx.opts.uncheckedIndexing || ctx.program.provenIndices.has(site)) return;
   emitRangeCheck(ctx, idx, loadLength(ctx, arr));
 }
 
@@ -439,7 +451,7 @@ const emitElementAccess: ExpressionEmitter = (ctx, node) => {
   ctx.declareType(ARRAY_TYPE);
   const arr = ctx.emitExpression(expr.expression);
   const idx = emitIndex(ctx, expr.argumentExpression);
-  emitBoundsCheck(ctx, arr, idx);
+  emitBoundsCheck(ctx, arr, idx, expr);
   return loadElement(ctx, arr, elem, idx);
 };
 
@@ -473,14 +485,14 @@ const emitElementAssignment: BinaryEmitter = (ctx, expr) => {
   const op = expr.operatorToken.kind;
   if (op === ts.SyntaxKind.EqualsToken) {
     const value = ctx.emitExpression(expr.right);
-    emitBoundsCheck(ctx, arr, idx);
+    emitBoundsCheck(ctx, arr, idx, target);
     storeElement(ctx, elementPointer(ctx, arr, elem, idx), elem, value);
     return value;
   }
   // The array and the index were evaluated once, above; the check and the GEP
   // are done once here, and the load and the store share the address. That is
   // what keeps `xs[next()] |= 1` to one call and one bounds check.
-  emitBoundsCheck(ctx, arr, idx);
+  emitBoundsCheck(ctx, arr, idx, target);
   const slot = elementPointer(ctx, arr, elem, idx);
   const old = ctx.fn.emitValue(`load ${ty}, ${ty}* ${slot}${ctx.alignSuffix(elem)}${elementAccess(ctx)}`);
   let value: string;
@@ -888,7 +900,11 @@ const collectMethodFacts: FactCollector = (program, node, facts, opts) => {
 const collectArrayFacts: FactCollector = (program, node, facts, opts) => {
   if (ts.isElementAccessExpression(node) && isArray(program, node.expression)) {
     facts.readsMemory = true;
-    if (!opts.uncheckedIndexing) facts.callees.add("nish_panic_index");
+    // Mirrors `emitBoundsCheck` exactly, proof and all: an access the checker
+    // proved in range emits no call, so listing `nish_panic_index` here would
+    // cost the function `willreturn` for a `noreturn` callee that is not in
+    // its IR.
+    if (!opts.uncheckedIndexing && !program.provenIndices.has(node)) facts.callees.add("nish_panic_index");
   } else if (ts.isPropertyAccessExpression(node) && isArray(program, node.expression)) {
     facts.readsMemory = true; // `.length`
   } else if (ts.isForOfStatement(node)) {

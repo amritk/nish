@@ -823,12 +823,14 @@ const PERFORMANCE_RULES: string[] = [
     "NL9006",
     "is computed in i32 and wraps before",
     "NL9005",
+    "is not proven to be in range for",
+    "NL9007",
     "is at or beyond the",
     "NL9004",
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 385;
+export const RULE_COUNT = 386;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line
