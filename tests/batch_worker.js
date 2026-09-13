@@ -182,7 +182,8 @@ const compileCase = (name) => {
     stderr += `wrote ${outLl}\n`;
     return { status: 0, stdout, stderr };
   } catch (err) {
-    if (err instanceof CompileError) return { status: 1, stdout, stderr: stderr + formatErrorReport(err) + "\n" };
+    if (err instanceof CompileError)
+      return { status: 1, stdout, stderr: stderr + formatErrorReport(err) + "\n" };
     if (isSystemError(err)) {
       const where = err.path ? ` ${err.path}` : "";
       return {
