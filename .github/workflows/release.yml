@@ -109,9 +109,24 @@ jobs:
       # beside runtime/ and it links only while the working directory happens
       # to be the unpacked folder, which is a trap rather than a distribution.
       #
-      # x86_64 linux only for now. WP19 G5 asks for four (x86_64 and aarch64,
-      # linux and darwin); darwin needs macos-latest, which is out of the CI
-      # matrix. See docs/wp19-stage0-retirement.md G5 for what stays open.
+      # x86_64 linux only for now. WP19 G5 asks for four, and the four
+      # spellings are a contract with ci.yml rather than a label: its
+      # `bootstrap` job resolves `uname -s`/`uname -m` to exactly
+      #
+      #     x86_64-linux   aarch64-linux   x86_64-darwin   aarch64-darwin
+      #
+      # and downloads nish-<version>-<triple>.tar.gz. A binary attached under
+      # any other spelling is one that job cannot find, so the two tables
+      # change together.
+      #
+      # What the other three wait on is a second and third runner in *this*
+      # workflow -- a release asset is built on a tag, so the CI test matrix
+      # would not supply one either way -- and, for darwin, the `--verify` on
+      # the bootstrap line below: `stage3 == stage2` does not hold under ld64,
+      # which records each .o's path and mtime in Mach-O's debug map, so that
+      # binary cannot be built as this step builds one yet
+      # (docs/wp10-ci.md#ci-matrix).
+      # See docs/wp19-stage0-retirement.md G5 for what stays open.
       #
       # stage2, not stage1: it is the first binary in the chain that no part of
       # stage0 emitted, and --verify is what says the stages agree.

@@ -1,8 +1,10 @@
 # Nish continuous integration.
 #
-# test: typecheck + the full golden/native test suite on Linux and macOS with
-#       LLVM 18 (clang, llc, llvm-as, opt, ld.lld, wasm-ld), then a binary size
-#       table in the job summary, and the IR cookbook staleness check.
+# test: typecheck + the full golden/native test suite on Linux with LLVM 18
+#       (clang, llc, llvm-as, opt, ld.lld, wasm-ld), then a binary size table
+#       in the job summary, and the IR cookbook staleness check. The matrix is
+#       written for macOS too and that row is commented out; the comment
+#       beside it names the five checks that fail there.
 # lint: `npm run lint` when package.json defines it (no-op otherwise), then
 #       docs/check-links.mjs over every Markdown file.
 #
@@ -63,9 +65,13 @@ jobs:
         #
         # Restoring the row therefore means porting four checks, on hardware
         # that has to be iterated against, and that is a package of its own
-        # rather than a line in this matrix. The `bootstrap` job below is a
-        # matrix over both operating systems, which is the half of G3 that can
-        # be closed without it.
+        # rather than a line in this matrix. The fourth family is why the
+        # `bootstrap` job below does not simply add a macOS row either: the
+        # comparison it fails is the one `--verify` makes.
+        #
+        # The install half is already written and was exercised by that run:
+        # the two "Install LLVM 18 + lld" steps below are guarded by
+        # `runner.os`, so restoring the row is this line plus the five fixes.
         #
         # `fail-fast: false` above is what would keep a macOS-only failure from
         # cancelling the Linux row that says whether it is the platform or the
@@ -168,72 +174,49 @@ jobs:
   # breaks here and nowhere else: `npm test` bootstraps with stage0, which
   # always knows every construct the working tree does.
   #
-  # With no seed for this host there is nothing to build from, and this
-  # reports that and stops rather than inventing one. It is deliberately NOT a
-  # silent success: the step says which release it used, or which asset it
-  # wanted and did not find, so a green run cannot be mistaken for a freeze
-  # that was actually checked.
+  # A run that cannot find its seed FAILS. It used to name the asset it wanted,
+  # warn, and exit 0 -- and a warning above a green check is a green check.
+  # That is exactly the shape docs/wp19-stage0-retirement.md §A5 is the written
+  # record of: a gate wearing the colour of a gate that held, while nothing had
+  # been checked. The freeze is enforced here and nowhere else, so "there was
+  # no seed for this host" is red, with the asset named in the annotation.
   #
-  # G3 asks for this on both operating systems, and the runner half is closed
-  # (WP19 R2): this is a matrix, and the `test` job above runs on macOS too,
-  # so the freeze is not asked to depend on a toolchain nothing else
-  # exercises. What is still missing is the darwin **seed** -- a release ships
-  # nish-<version>-x86_64-linux and nothing else -- so the macOS row names the
-  # asset it wanted, warns, and stops. It becomes a real check with no edit
-  # here the day G5 ships the other three binaries; see
-  # docs/wp19-stage0-retirement.md G5.
+  # G3 asks for this on **both** operating systems and it runs on Linux alone.
+  # What keeps the second one out is no longer the runner, and it is not one
+  # matrix line either -- two things have to land first:
+  #
+  #   * the darwin **seed**. A release attaches nish-<version>-x86_64-linux and
+  #     nothing else, so there is nothing to bootstrap from on macOS. That is
+  #     WP19 G5, and the lookup below is written for any host already, so the
+  #     row costs this job a matrix over the two runners and nothing else once
+  #     the binary exists.
+  #   * the **ld64 fixed point**, which is the fourth family in the `test`
+  #     matrix comment above. `scripts/bootstrap.sh --verify` builds to stage3
+  #     and asserts stage3 == stage2 byte for byte, and Mach-O's debug map
+  #     records each .o's path and mtime, so two links of identical input
+  #     differ (scripts/bootstrap.sh:330, tests/self/bootstrap.js:161). A macOS
+  #     row added before that is fixed would be red on the day its seed
+  #     arrived, which is the other way a gate lies about itself.
   bootstrap:
-    name: bootstrap (from the last release, ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      # G3 asks for the seeded build on both operating systems. A seed that
-      # builds self/ on Linux says nothing about ld64, and the freeze is a
-      # property of the language rather than of one linker.
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    name: bootstrap (from the last release)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install LLVM 18 + lld (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
-          bin="$RUNNER_TEMP/llvm-bin"
-          mkdir -p "$bin"
-          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
-            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
-          done
-          echo "$bin" >> "$GITHUB_PATH"
-
-      - name: Install LLVM 18 + lld (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install llvm@18
-          prefix="$(brew --prefix llvm@18)"
-          if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
-          echo "$prefix/bin" >> "$GITHUB_PATH"
-
-      - name: Install dependencies
-        run: npm ci
-
+      # The seed lookup runs BEFORE the toolchain and before `npm ci`, because
+      # it is the gate: a host with no seed has nothing to install for, and the
+      # job should answer in seconds rather than after two minutes of setup it
+      # is about to throw away. It needs `gh`, which the runner images ship,
+      # and the checkout for the repository context -- no Node and no LLVM.
+      #
       # `gh release download` fails when the repository has no release at all,
       # which is the state before 0.1.0 -- so ask first and record the answer,
       # rather than reading a failed download as "no release".
       #
       # The asset is named for the *host*, because a seed has to run here. The
-      # triple is the one release.yml stamps into the tarball name, and the two
-      # spellings are a contract between the workflows rather than a label.
-      # A release that does not carry this host's binary is the state G5 leaves
-      # open -- today everything but x86_64-linux -- and it reports as a
-      # warning with the asset it wanted named, never as a quiet pass: a freeze
-      # nobody checked must not read as a freeze that held.
+      # triple is the one release.yml stamps into the tarball name, and the four
+      # spellings are a contract between the two workflows rather than a label;
+      # release.yml's "Build the native compiler" step names the same table.
       - name: Find the last release
         id: seed
         env:
@@ -248,9 +231,8 @@ jobs:
           esac
           tag="$(gh release list --limit 1 --json tagName --jq '.[0].tagName // ""')"
           if [ -z "$tag" ]; then
-            echo "::warning::no release yet: nothing to seed from, so the rolling freeze is unchecked on $triple"
-            echo "tag=" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "::error::no release to seed from, so the rolling freeze cannot be checked on $triple. This job answers red rather than green while that is true (docs/wp19-stage0-retirement.md G3)."
+            exit 1
           fi
           name="nish-${tag#v}-$triple"
           # Ask what the release carries before downloading, so a missing asset
@@ -258,22 +240,48 @@ jobs:
           has="$(gh release view "$tag" --json assets \
             --jq "[.assets[] | select(.name == \"$name.tar.gz\")] | length")"
           if [ "$has" = "0" ]; then
-            echo "::warning::$tag attaches no $name.tar.gz, so self/ was NOT built from a seed on $triple; the rolling freeze is unchecked here until WP19 G5 ships that binary"
-            echo "tag=" >> "$GITHUB_OUTPUT"
-            echo "missing=$name.tar.gz" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "::error::$tag attaches no $name.tar.gz, so self/ cannot be built from a seed on $triple and the rolling freeze is unchecked here. WP19 G5 is the gate that ships that binary."
+            exit 1
           fi
           gh release download "$tag" --pattern "$name.tar.gz" --dir "$RUNNER_TEMP"
           tar -xzf "$RUNNER_TEMP/$name.tar.gz" -C "$RUNNER_TEMP"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "triple=$triple" >> "$GITHUB_OUTPUT"
-          echo "path=$RUNNER_TEMP/$name/bin/nish" >> "$GITHUB_OUTPUT"
+          {
+            echo "tag=$tag"
+            echo "triple=$triple"
+            echo "path=$RUNNER_TEMP/$name/bin/nish"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Build self/ with the seed
-        if: steps.seed.outputs.tag != ''
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install LLVM 18 + lld
         run: |
-          "${{ steps.seed.outputs.path }}" --version
-          NISH_BOOTSTRAP="${{ steps.seed.outputs.path }}" bash scripts/bootstrap.sh --verify
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The step's outputs reach bash through `env:` rather than through ${{ }}
+      # spliced into the script. A maintainer-created tag is not a plausible
+      # attacker, but the value came out of a step holding GH_TOKEN and the rule
+      # costs nothing -- it is the one pr-title.yml already states. What the
+      # runner renders is `"$SEED" --version`, with the release's own text a
+      # shell variable rather than shell source.
+      - name: Build self/ with the seed
+        env:
+          SEED: ${{ steps.seed.outputs.path }}
+        run: |
+          "$SEED" --version
+          NISH_BOOTSTRAP="$SEED" bash scripts/bootstrap.sh --verify
 
       # The command line's contract, asked of the compiler that outlives stage0.
       # `tests/nish/cli.ts` is a Nish program reading the compiler's own output —
@@ -283,7 +291,6 @@ jobs:
       # Two checks are stage0's own and report as counted skips, which the summary
       # below prints.
       - name: The CLI contract, against the self-hosted compiler
-        if: steps.seed.outputs.tag != ''
         run: |
           set -o pipefail
           npm run build
@@ -291,15 +298,14 @@ jobs:
           build/nish-cli build/nish | tee "$RUNNER_TEMP/nish-cli.log"
           echo "::notice::tests/nish/cli.ts against build/nish: $(tail -n 1 "$RUNNER_TEMP/nish-cli.log")"
 
+      # Reached only when every step above succeeded, which is the point: this
+      # line is a claim about a run that happened, and there is no branch of it
+      # that describes one that did not.
       - name: Say what this proved
-        run: |
-          if [ -n "${{ steps.seed.outputs.tag }}" ]; then
-            echo "::notice::self/ built and verified with ${{ steps.seed.outputs.tag }} as the seed on ${{ steps.seed.outputs.triple }}."
-          elif [ -n "${{ steps.seed.outputs.missing }}" ]; then
-            echo "::notice::No ${{ steps.seed.outputs.missing }} on the last release, so self/ was NOT built from a seed on this runner. The rolling freeze is unchecked here; WP19 G5 is the gate that ships that binary."
-          else
-            echo "::notice::No release exists yet, so self/ was NOT built from a seed. The rolling freeze is unchecked until the first release ships."
-          fi
+        env:
+          TAG: ${{ steps.seed.outputs.tag }}
+          TRIPLE: ${{ steps.seed.outputs.triple }}
+        run: echo "::notice::self/ built and verified with $TAG as the seed on $TRIPLE."
 
   # The golden cases again, through the harness written in the language rather
   # than through the one written in Node (`tests/nish/run.ts`, `npm run

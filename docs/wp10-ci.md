@@ -14,8 +14,7 @@ comment above the `on:` block has the details.
 | --- | --- | --- |
 | `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, `npm test`, size report |
 | `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on five measured failures rather than on cost; see below |
-| `bootstrap (ubuntu-latest)` | Ubuntu | builds `self/` with the **last released** binary as the seed, which is the only thing that checks WP19's rolling freeze |
-| `bootstrap (macos-latest)` | macOS | the same, from the darwin seed — which a release does not attach yet, so it warns and stops rather than passing quietly ([G5](wp19-stage0-retirement.md#g5-distribution-does-not-need-node)) |
+| `bootstrap` | Ubuntu | builds `self/` with the **last released** binary as the seed, which is the only thing that checks WP19's rolling freeze. A seed it cannot find is a **failure**, never a warning it passes over |
 | `lint` | Ubuntu | `npm run lint --if-present` (a no-op until `package.json` defines `lint`) |
 
 `.github/workflows/parity.yml` is the fourth job and does not run here: WP19
@@ -41,8 +40,9 @@ release workflow and a **darwin binary**
 
 Restoring the row therefore means porting four checks against hardware that has
 to be iterated on, which is a package of its own rather than a line in the
-matrix. What *is* closed without it is the other half of G3: `bootstrap` is a
-matrix over both operating systems.
+matrix. The install half is already written and was exercised by that run: both
+"Install LLVM 18 + lld" steps in the `test` job are guarded by `runner.os`, so
+restoring the row is one uncommented line plus the five fixes.
 
 The two defects the row was waiting for before this are both bash 3.2,
 which macOS ships as
@@ -60,17 +60,36 @@ scripts had been written against:
   builtin that bash 3.2 does not have at all, so the smoke step died on the
   first line that used it. It reads the same pipeline with `while read` now.
 
-Neither stops the row now. What the row does **not** bring with it is a darwin
-seed: `bootstrap (macos-latest)` exists and runs, and the release it looks in
-attaches `x86_64-linux` alone, so it names the asset it wanted
-(`nish-<version>-aarch64-darwin.tar.gz`), warns that the rolling freeze is
-unchecked on that platform, and stops. That is deliberate — a freeze nobody
-checked must not read as a freeze that held — and it becomes a real check with
-no further edit the day
-[G5](wp19-stage0-retirement.md#g5-distribution-does-not-need-node) ships the
-other three binaries. The seed asset is named for the *host* now
-(`uname -s`/`uname -m` → the triple release.yml stamps), which is what makes
-that true for the aarch64 rows as well.
+Neither stops the row now, and neither is what the five failures above are.
+
+### The seeded build, and what a missing seed reports
+
+`bootstrap` builds `self/` with the **last released** binary rather than with
+stage0, which is the only thing that checks WP19's rolling freeze
+([G3](wp19-stage0-retirement.md#g3-the-seed-protocol-exists-and-ci-uses-it)).
+It asks for the asset its own *host* needs — `uname -s`/`uname -m` resolved to
+the triple `release.yml` stamps into the tarball name, one of `x86_64-linux`,
+`aarch64-linux`, `x86_64-darwin`, `aarch64-darwin` — so the job is written for
+a runner it does not have yet.
+
+**A seed it cannot find fails the job.** No release at all, or a release that
+attaches nothing for this host: either way the annotation names the asset it
+wanted and the job is red. It used to name it, warn, and exit 0 — and a warning
+above a green check is a green check, which is precisely the shape
+[§A5](wp19-stage0-retirement.md#a5-the-gate-reopened-and-the-correction-a4-needed)
+is the written record of. The freeze is enforced here and nowhere else, so the
+one thing this job may not do is report success without having built anything.
+The lookup runs before the toolchain install and before `npm ci` for the same
+reason: it is the gate, and a host with no seed has nothing to install for.
+
+G3 asks for this on **both** operating systems and it runs on Linux alone. Two
+things have to land before the second row, and neither is a matrix line: the
+darwin **seed**, which is
+[G5](wp19-stage0-retirement.md#g5-distribution-does-not-need-node), and the
+**ld64 fixed point** — the fourth family in the table above, which is the
+comparison `scripts/bootstrap.sh --verify` makes. A macOS row added before that
+is fixed would be red on the day its seed arrived, which is the other way a
+gate lies about itself.
 
 ### The parity run, nightly
 
