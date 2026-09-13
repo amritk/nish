@@ -37,11 +37,34 @@ import { ConstInfo } from "./constants.js";
 import { FunctionSig, LocalVar } from "./program.js";
 
 /**
+ * What an instantiation needs from the module that *declares* its template
+ * (WP18 G7). An instantiation is defined once, in that module, and checked by
+ * that module's `Checker` in that module's scope — its imports, its constants,
+ * its structs — because any other choice would make one body mean different
+ * things depending on who asked for it (§3b). A caller therefore hands the
+ * request over rather than serving it, and this is the whole of the handover.
+ */
+export type TemplateOwner = {
+  /** The declaring module's checked program: whose `functions` and whose prefix. */
+  readonly program: { symbolPrefix: string; instantiations: Map<string, Instantiation> };
+  /** Create (or answer) the instantiation, in the declaring module. */
+  ownInstantiation: (template: TemplateInfo, args: StaticType[], symbol: string, from?: Instantiation) => FunctionSig;
+};
+
+/**
  * A generic function declaration, in either spelling. Nothing about it is
  * resolved: `decl` carries the parameter and return annotations, which mention
  * `typeParams` and therefore mean nothing until an instantiation binds them.
  */
 export interface TemplateInfo {
+  /**
+   * The module that declares it (WP18 G7). Every instantiation of this template
+   * belongs to that module whoever wrote the call, which is what makes the
+   * symbol's package prefix the *template's* rather than the caller's — the one
+   * thing that, got wrong, makes two packages importing one generic mint the
+   * same symbol and share a fact table (`docs/wp18-generics.md` §16 item 2).
+   */
+  owner?: TemplateOwner;
   /** The identifier as written; what every diagnostic about the template names. */
   sourceName: string;
   /** `<T, U>` in declaration order; the tuple an instantiation is keyed by has the same order. */

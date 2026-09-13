@@ -264,7 +264,16 @@ export class Compilation {
     // Pass 3 (WP18): every instantiation the bodies asked for, to a fixed
     // point. It runs per module in load order because an instantiation is
     // checked by the module that declares its template, in that module's scope.
-    for (const unit of this.modules) unit.checker.drainInstantiations();
+    // WP18 G7: to a fixed point over the *whole program*, not one pass per
+    // module. An instantiation is owned by the module that declares its
+    // template, so a body checked in a module loaded late can queue work in one
+    // loaded early — which a single pass in load order would walk straight
+    // past, leaving a `declare` with no `define` anywhere in the program.
+    let queued = true;
+    while (queued) {
+      queued = false;
+      for (const unit of this.modules) if (unit.checker.drainInstantiations()) queued = true;
+    }
     this.sink.throwIfErrors();
     this.checked = true;
   }

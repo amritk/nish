@@ -166,6 +166,13 @@ export interface ImportBinding {
   sig?: FunctionSig;
   /** Set instead of `sig` when the imported name is an exported class or interface (WP2). */
   struct?: StructInfo;
+  /**
+   * Set instead of `sig` when the imported name is an exported generic function
+   * (WP18 G7). A template is not a signature and declares no symbol of its own,
+   * so unlike `sig` this binding makes the emitter write nothing: what gets
+   * declared is whichever *instantiations* this module goes on to ask for.
+   */
+  template?: TemplateInfo;
   /** Set instead of `sig` when the imported name is an exported module constant (WP14). */
   constant?: ConstInfo;
   /**
@@ -278,6 +285,14 @@ export interface CheckedProgram {
    * the two compilers can be compared before the IR is (`docs/wp18-generics.md` §3a).
    */
   instantiations: Map<string, Instantiation>;
+  /**
+   * Instantiations this module *calls* but does not define: they belong to the
+   * module that declares their template (WP18 G7 §3b), so the emitter writes a
+   * `declare` for each one beside the ones it writes for an imported function.
+   * In discovery order, which is what keeps the two compilers' `declare` blocks
+   * in the same order.
+   */
+  externalInstances: FunctionSig[];
   /** Classes and interfaces visible in this module (declared or imported), keyed by name (WP2). */
   structs: Map<string, StructInfo>;
   /**

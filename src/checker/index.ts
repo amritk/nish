@@ -48,6 +48,7 @@ import {
   MAX_INSTANTIATIONS,
   MAX_INSTANTIATIONS_PER_TEMPLATE,
   TemplateInfo,
+  TemplateOwner,
   expandingAncestor,
   instanceDisplayName,
   instanceSymbol,
@@ -182,6 +183,7 @@ export class Checker implements CheckContext {
       enumRefs: new WeakMap(),
       templates: new Map(),
       instantiations: new Map(),
+      externalInstances: [],
     };
     registerNamedTypes(sourceFile, (name) => {
       // WP18: a type parameter shadows everything while an instantiation is
@@ -461,6 +463,9 @@ export class Checker implements CheckContext {
         template.nameNode
       );
     }
+    // WP18 G7: every instantiation of it belongs to this module, whoever calls
+    // it, which is what makes the symbol's prefix this package's.
+    template.owner = this;
     this.templates.set(name, template);
     this.program.templates.set(name, template);
   }
@@ -472,14 +477,27 @@ export class Checker implements CheckContext {
    * makes the order the discovery order in both compilers.
    */
   instantiate(template: TemplateInfo, args: StaticType[], at: ts.Node): FunctionSig {
-    // WP21 S1: inside the package that declares the template. `qualifySymbols`
-    // runs at the end of pass 1 and instantiations are appended during pass 2,
-    // so an instantiation never passes through it -- the prefix has to be part
-    // of the symbol from the moment it is minted, or a generic would be the one
-    // declaration in the language whose symbol escaped its package.
-    const symbol = instanceSymbol(this.program.symbolPrefix + template.sourceName, args);
-    const existing = this.program.instantiations.get(symbol);
-    if (existing) return existing.sig;
+    // WP18 G7: the instantiation belongs to the module that *declares* the
+    // template, whoever wrote the call. Two things follow, and the second is
+    // the one that would be a miscompile rather than a link error.
+    //
+    // WP21 S1: the symbol is minted inside the package that declares the
+    // template, never the one that instantiates it. `qualifySymbols` runs at
+    // the end of pass 1 and instantiations are created during pass 2, so an
+    // instantiation never passes through it -- the prefix has to be part of the
+    // symbol from the moment it is minted, and it has to be the *owner's*. Read
+    // from `this` instead, two packages importing one generic would mint one
+    // symbol, and the whole-program fact table in `codegen/attributes.ts`, which
+    // is keyed by symbol, would hand one instantiation the other's purity and
+    // escape facts (`docs/wp18-generics.md` §16 item 2,
+    // `tests/link/package_generic_import`).
+    const owner = template.owner ?? this;
+    const symbol = instanceSymbol(owner.program.symbolPrefix + template.sourceName, args);
+    const existing = owner.program.instantiations.get(symbol);
+    if (existing) {
+      this.noteExternalInstance(owner, existing.sig);
+      return existing.sig;
+    }
 
     // Termination (§4). A request that puts one of its own type arguments
     // under a constructor is the shape whose chain has no end, and it is
@@ -507,7 +525,7 @@ export class Checker implements CheckContext {
         at
       );
     }
-    if (this.program.instantiations.size >= MAX_INSTANTIATIONS) {
+    if (owner.program.instantiations.size >= MAX_INSTANTIATIONS) {
       this.error(
         `This module has reached ${MAX_INSTANTIATIONS} generic instantiations, which is this compiler's limit ` +
           "rather than a rule of the language",
@@ -515,6 +533,26 @@ export class Checker implements CheckContext {
       );
     }
 
+    // Created *there* and checked *there*: the body is resolved against the
+    // declaring module's scope, so `identity` means the same thing however many
+    // modules call it. The termination chain above is the caller's, because it
+    // is the caller's request that grows.
+    const sig = owner.ownInstantiation(template, args, symbol, this.currentInstance);
+    this.noteExternalInstance(owner, sig);
+    return sig;
+  }
+
+  /**
+   * WP18 G7: create and queue one instantiation, in the module that declares
+   * its template. Only `instantiate` above calls it, and it calls it on the
+   * owner rather than on itself.
+   */
+  ownInstantiation(
+    template: TemplateInfo,
+    args: StaticType[],
+    symbol: string,
+    from?: Instantiation
+  ): FunctionSig {
     const bindings = new Map<string, StaticType>();
     template.typeParams.forEach((name, i) => {
       bindings.set(name, args[i]);
@@ -526,13 +564,25 @@ export class Checker implements CheckContext {
       sig,
       bindings,
       tables: newNodeTables(),
-      from: this.currentInstance,
+      from,
     };
     sig.instance = instance;
     template.count += 1;
     this.program.instantiations.set(symbol, instance);
     this.pending.push(instance);
     return sig;
+  }
+
+  /**
+   * Record that this module *calls* an instantiation another module defines, so
+   * the emitter writes a `declare` for it beside the ones it writes for an
+   * imported function (§3b). Insertion order is the discovery order, which is
+   * what keeps the two compilers' `declare` blocks in the same order.
+   */
+  private noteExternalInstance(owner: TemplateOwner, sig: FunctionSig): void {
+    if (owner === this) return;
+    if (this.program.externalInstances.includes(sig)) return;
+    this.program.externalInstances.push(sig);
   }
 
   /** The template's own annotations, resolved once with its type parameters bound. */
@@ -573,7 +623,8 @@ export class Checker implements CheckContext {
    * may request more, and the queue is drained rather than recursed into, so
    * `from` is a chain of requests and not a call stack.
    */
-  drainInstantiations(): void {
+  drainInstantiations(): boolean {
+    const did = this.pending.length > 0;
     while (this.pending.length > 0) {
       // biome-ignore lint/style/noNonNullAssertion: the loop guard is the length check
       const instance = this.pending.shift()!;
@@ -582,6 +633,7 @@ export class Checker implements CheckContext {
       this.program.functions.push(instance.sig);
       if (!this.sink.recover(() => this.checkInstanceBody(instance))) instance.sig.poisoned = true;
     }
+    return did;
   }
 
   /** One instantiation's body, over its own side tables and with its own type bindings. */
@@ -663,14 +715,8 @@ export class Checker implements CheckContext {
     }
     const template = target.templates.get(imp.importedName);
     if (template) {
-      // WP18 §11 G7: one definition per instantiation, in the module that
-      // declares the template, is the whole-program half of this package and
-      // has not landed. Refusing by name beats "no exported function".
-      this.error(
-        `\`${imp.importedName}\` in \`${imp.specifier}\` is a generic function, and a generic function cannot ` +
-          "yet be instantiated from another module; declare it in the module that calls it",
-        imp.element
-      );
+      this.bindTemplateImport(imp, template);
+      return;
     }
     const sig = target.exports.get(imp.importedName);
     if (!sig) {
@@ -697,6 +743,41 @@ export class Checker implements CheckContext {
     }
     imp.sig = sig;
     this.sigs.set(imp.localName, sig);
+  }
+
+  /**
+   * WP18 G7: an imported generic function. The template joins this module's
+   * template table so a call resolves it, and nothing else moves: the
+   * instantiation it asks for is created, checked, counted and emitted by the
+   * module that *declares* it (§3b), so this module only ever gets a `declare`.
+   *
+   * A template is renameable on import where a class is not, because unlike
+   * `%struct.<name>` nothing about the local spelling reaches the symbol: the
+   * instantiation is named from `template.sourceName` in the declaring module.
+   */
+  private bindTemplateImport(imp: ImportBinding, template: TemplateInfo): void {
+    if (!template.exported) {
+      this.error(
+        `\`${imp.importedName}\` is declared in \`${imp.specifier}\` but not exported (add \`export\`)`,
+        imp.element
+      );
+    }
+    if (this.importsUsedAsTypes.has(imp.localName)) {
+      this.error(`\`${imp.localName}\` is a function imported from \`${imp.specifier}\`, not a type`, imp.element);
+    }
+    if (this.sigs.has(imp.localName) || this.templates.has(imp.localName)) {
+      const origin = this.program.imports.find(
+        (o) => o !== imp && o.localName === imp.localName && (o.sig !== undefined || o.template !== undefined)
+      );
+      this.error(
+        origin
+          ? `\`${imp.localName}\` is already imported from \`${origin.specifier}\``
+          : `\`${imp.localName}\` is already declared in this module`,
+        imp.element
+      );
+    }
+    imp.template = template;
+    this.templates.set(imp.localName, template);
   }
 
   /**
