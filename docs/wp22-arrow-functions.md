@@ -356,6 +356,90 @@ in the suite asked), that the codemod turns the first into the second character
 for character, and that it leaves `ffi_scalar`'s `declare function` alone while
 rewriting the definitions beside it.
 
+### 8c. The rest of §8a's bug class, looked for before the rewrite rather than during it
+
+§8a found two bugs and named the shape: **a pass that decides what a value is
+*for* by climbing to its parent, and expects to find a statement there.** Both
+were fixed by one predicate, `isFunctionResult` in `checker/declarations.ts`.
+The obvious next question is how many more there are, and it is a question
+worth answering before 1,647 rewrites rather than one file at a time
+afterwards.
+
+**Empirically: none.** The whole corpus, rewritten and recompiled —
+
+```
+arrow-verify: 372 program(s)
+arrow-verify: rewrote 1765 declaration(s)
+arrow-verify: 1678 module(s) compared, 0 difference(s), 38 declaration(s) left alone
+```
+
+— which is every `function` definition in the repository outside `src/`,
+`self/`'s 721 included, turned into an arrow and compiled to the same 1,678
+modules, byte for byte. That is the evidence for the `self/` migration, and it
+exists before the migration rather than after it.
+
+**By reading: also none, and the reason is more useful than the count.** Every
+pass in `src/` that consults `node.parent` to classify a use was re-read against
+a concise body, and they divide into three kinds:
+
+| Pass | What it asks the parent | Concise body |
+| --- | --- | --- |
+| `contextualType` (`classes.ts`, `arrays.ts`), `contextType` (`math.ts`), `flowTarget` (`codegen/escape.ts`) | is this a `return`? | **fixed in §8a**, through `isFunctionResult` |
+| `classifyUse` and `classifyElementUse` (`codegen/attributes.ts`) | what consumes this parameter? | safe **by fallthrough**: an unrecognised parent is `USE_ESCAPE` / `USE_READ`, and a `ReturnStatement` was already unrecognised, so the arrow lands on the same conservative answer |
+| `isAssignmentTarget` (three copies), `mutatesArgv` (`io.ts`), `assignedLocal` (`escape.ts`), `nullContext` (`nullable.ts`), `collectClassFacts` (`emit/classes.ts`) | is this an assignment target? | safe for the same reason, from the other side: neither a `return` nor an arrow is one, so both answer `false` |
+
+The middle row is the one to keep. Those two are not *right* about arrows by
+design; they are right because their default is the conservative answer and a
+`return` was never in their list either. A future arm added for
+`ts.isReturnStatement` and not for the arrow would put them straight back into
+§8a's class, which is why the comment on `isFunctionResult` says to ask it
+rather than the node kind.
+
+One gap exists and is unreachable, in both compilers, identically:
+`capturesLocal` in `checker/performance.ts` and `isLocalRef` in
+`self/checker.ts` both treat a `return` as a capture of the value it hands back
+and have no arm for the expression an arrow *is*. Neither can be reached — the
+scan they belong to looks for captures that happen *before* an assignment in
+the same body, and a concise body has no statement for an assignment to be in.
+It is written down here rather than fixed because an arm no case can reach is
+an arm no case can test, and because the two compilers agreeing about it is
+worth more than either of them being tidy.
+
+`tests/cases/fn_arrow_concise_flow` is the positive half: a concise body in each
+of the positions the *other* passes decide — `null`, `process.argv`, a `Result`,
+a parameter's field, an array element — with the golden as the claim. Its
+block-bodied twin compiles to the same module byte for byte, and the attributes
+are where that is visible: `field` and `element` keep `readonly nocapture` on
+their parameters, which is `classifyUse` saying a concise body returning a field
+is a read rather than a capture.
+
+#### What a block-bodied rewrite does to a position, exactly
+
+§A5's failure mode is a declaration whose position moves, so the sweep asks the
+other surface too: every `reject_*` case through `--json` on both sides. The
+answer is a pleasant accident of arithmetic.
+
+```
+export function widget(a: i32, b: any): i32     `any` at column 35
+export const widget = (a: i32, b: any): i32 =>  `any` at column 35
+```
+
+`function ` is nine characters and `const ` is six, and the arrow form spends
+the other three on ` = (` where the declaration form spends one on `(`. So
+`function NAME(` and `const NAME = (` are the same width **for every NAME**, and
+every parameter, the return type and the `{` keep the column they had. A
+block-bodied rewrite therefore moves no line at all and exactly one kind of
+column: a caret pointed at the function's *own name*, which moves left by three.
+
+```
+export function nish_alloc(...)   name at column 17
+export const nish_alloc = (...)   name at column 14
+```
+
+That is the whole difference set, and it is small enough to enumerate rather
+than to discover: the cases that pin a caret on a function name are the ones a
+`self/`-style rewrite has to look at, and nothing else is.
+
 ## 9. What stage D forecloses
 
 Stages A to C are additive and reversible. **D removes a spelling, and a
@@ -428,6 +512,38 @@ the stage that takes something away.
 `tests/cases/reject_ffi_body.ts` is the opposite case and needs nothing:
 `declare function f() { }` is refused for carrying a body, and §9 keeps that
 rule exactly where it is.
+
+**Where the rule goes, which settles the first two rows without a special
+case.** `collectFunctionSignature` and `collectFunctionTemplate`
+(`src/checker/declarations.ts`) are the two places a `function` declaration
+becomes a signature, and both already refuse an unnamed one and a bodiless one
+before anything else. Putting §6's rejection *after* those two checks and under
+`if (!foreign)` gives, for free:
+
+- `reject_fn_anonymous` keeps `Functions must be named`, because there is no
+  name for §6's message to interpolate and the name check has already thrown;
+- `reject_ffi_body` keeps its own wording, because the body rule is the foreign
+  rule's mirror and runs first;
+- `reject_fn_nested` is untouched, because a nested declaration never reaches
+  either function — it is refused as a statement, by
+  `Unsupported statement in Phase 1: FunctionDeclaration`;
+- `declare function` stays legal, by the `foreign` guard, which is §9's whole
+  rule in one condition.
+
+So stage D is one rejection at two call sites in each compiler, plus the
+`reject_function_declaration` case and its wording — and the corpus. The corpus
+is the work; the rule is not.
+
+**The two entry-point wordings §10 names are `NL2149` and `NL2229`**, verified
+against the registry rather than taken on trust:
+`` `process.argv` requires a `main` entry point (this program has no `export
+function main`) `` and `` Only the entry module may declare `export function
+main` ``. `scripts/gen-diagnostic-codes.mjs` keys a code on the words, so
+rewording either retires its number and issues a new one — which is why they
+are stage D's to change, alongside the rejection that makes the spelling they
+name wrong. Nothing else the compiler *prints* names the spelling: every other
+occurrence of the phrase across `src/` and `self/` is a comment or a piece of
+JSDoc, which costs nothing to reword and carries no code.
 
 ## 10. Open
 

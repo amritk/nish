@@ -109,8 +109,16 @@ export interface FunctionSig {
   /**
    * The body, normalised. A `function`, a method and a constructor always carry
    * a `Block`; an arrow may carry a concise body (`=> n * 2`), which means
-   * exactly what a block with one `return` means (WP22 §4). The four places
-   * that walk a body branch on `ts.isBlock`.
+   * exactly what a block with one `return` means (WP22 §4).
+   *
+   * Nine passes walk a body and **three of them branch on `ts.isBlock`** — the
+   * three that have to know the expression *is* a `return`: `checkBody` in
+   * `checker/index.ts`, `emitFunction` in `codegen/emitter.ts` and
+   * `analyzeBounds` in `checker/bounds.ts`. The other six walk whatever they
+   * are handed and see the expression either way, which is the point of
+   * normalising here rather than at each of them. WP22 §8a is the shape of
+   * mistake this field exists to prevent, and §8c is the audit that says the
+   * passes deciding a position from `node.parent` are the ones to re-read.
    */
   body?: ts.Block | ts.Expression;
   /**
@@ -119,7 +127,9 @@ export interface FunctionSig {
    * or analyse: the emitter writes a `declare` line instead of a `define`, and
    * the fact fixpoint treats a call to one as the worst case it cannot see
    * inside (`src/codegen/attributes.ts`). `body` is absent exactly when this is
-   * set, which is what the four body walkers branch on.
+   * set, and six of the nine body walkers test for it on their own account
+   * rather than on their caller's; the other three are reached only through a
+   * loop that has already skipped a foreign signature.
    */
   foreign?: boolean;
   /** Declared with the `export` modifier: callable from other modules, never `internal`. */
