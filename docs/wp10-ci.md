@@ -13,28 +13,39 @@ comment above the `on:` block has the details.
 | Job | Runner | Steps |
 | --- | --- | --- |
 | `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, `npm test`, size report |
-| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **commented out of the matrix**, on cost rather than on breakage; see below |
-| `bootstrap` | Ubuntu | builds `self/` with the **last released** binary as the seed, which is the only thing that checks WP19's rolling freeze |
+| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **out of the matrix**, on five measured failures rather than on cost; see below |
+| `bootstrap (ubuntu-latest)` | Ubuntu | builds `self/` with the **last released** binary as the seed, which is the only thing that checks WP19's rolling freeze |
+| `bootstrap (macos-latest)` | macOS | the same, from the darwin seed — which a release does not attach yet, so it warns and stops rather than passing quietly ([G5](wp19-stage0-retirement.md#g5-distribution-does-not-need-node)) |
 | `lint` | Ubuntu | `npm run lint --if-present` (a no-op until `package.json` defines `lint`) |
 
 `.github/workflows/parity.yml` is the fourth job and does not run here: WP19
 G1's corpus half is nightly, on its own workflow, for the reasons under
 [the parity run](#the-parity-run-nightly) below.
 
-**The macOS job is one uncommented line away, and stays commented out.** Both
-of the things that used to *break* it are fixed; what keeps it out now is what
-it costs.
+**The macOS `test` row was run for the first time on 2026-09-13, and it fails.**
+That is new information rather than a guess, and it replaces the cost argument
+that used to stand here: `npm test` on `macos-latest` reports **five failures in
+four families**, none of them a compiler bug and all of them checks that encode
+an ELF/Linux assumption.
 
-It is the whole `test` job a second time — `npm ci`, typecheck, the full suite,
-smoke, the cookbook and registry checks, the size report — behind a
-`brew install llvm@18`, on the slowest runner GitHub rents, and every push
-would wait for it. Restore the row when the suite is fast, or put it on a
-schedule the way [the parity run](#the-parity-run-nightly) is. What it buys is
-the ld64 / Mach-O half of `build.sh` — `-dead_strip`, `-Wl,-x`, no
-`-fuse-ld=lld`, no `-fno-plt` — and Apple Silicon, and no Linux runner
-exercises either.
+| | What fails | Why |
+| --- | --- | --- |
+| 1, 2 | `llvm-dwarfdump` finds an empty `.debug_line` in the linked binary | On Mach-O `clang -g` leaves DWARF in the `.o` files; the executable carries a debug map and `dsymutil` is what produces a line table. Two checks read the executable |
+| 3 | `--threads` IR **links** against a runtime built without `-DNISH_THREADS`, exit 0 | ELF refuses a TLS symbol against a non-TLS definition and ld64 does not. The safety net `build.sh`'s header describes does not exist on macOS — a finding about the platform, not about the check |
+| 4, 5 | `stage3 == stage2` as files, at *identical size* (597,048 bytes both) | Every IR equality passes, so the compiler is deterministic and the linker is not: Mach-O's debug map records each `.o`'s path and mtime, which differ between two links |
 
-The two defects it was waiting for are both bash 3.2, which macOS ships as
+The fourth family reaches further than this job: `scripts/bootstrap.sh --verify`
+asserts the same `stage3 == stage2` comparison, so it also stands between the
+release workflow and a **darwin binary**
+([G5](wp19-stage0-retirement.md#g5-distribution-does-not-need-node)).
+
+Restoring the row therefore means porting four checks against hardware that has
+to be iterated on, which is a package of its own rather than a line in the
+matrix. What *is* closed without it is the other half of G3: `bootstrap` is a
+matrix over both operating systems.
+
+The two defects the row was waiting for before this are both bash 3.2,
+which macOS ships as
 `/bin/bash` (Apple will not ship GPLv3) and which this repository's shell
 scripts had been written against:
 
@@ -49,12 +60,17 @@ scripts had been written against:
   builtin that bash 3.2 does not have at all, so the smoke step died on the
   first line that used it. It reads the same pipeline with `while read` now.
 
-Neither would stop the row now. And whenever it does come back, it will not
-bring WP19 G3's second operating system with it: the `bootstrap` job needs a
-darwin *seed* binary and a release ships `x86_64-linux` alone, so that half
-waits on [wp19](wp19-stage0-retirement.md#g5-distribution-does-not-need-node).
-`fail-fast: false` is already set, so a macOS-only failure would not cancel
-the Linux row that says whether it is the platform or the change.
+Neither stops the row now. What the row does **not** bring with it is a darwin
+seed: `bootstrap (macos-latest)` exists and runs, and the release it looks in
+attaches `x86_64-linux` alone, so it names the asset it wanted
+(`nish-<version>-aarch64-darwin.tar.gz`), warns that the rolling freeze is
+unchecked on that platform, and stops. That is deliberate — a freeze nobody
+checked must not read as a freeze that held — and it becomes a real check with
+no further edit the day
+[G5](wp19-stage0-retirement.md#g5-distribution-does-not-need-node) ships the
+other three binaries. The seed asset is named for the *host* now
+(`uname -s`/`uname -m` → the triple release.yml stamps), which is what makes
+that true for the aarch64 rows as well.
 
 ### The parity run, nightly
 
