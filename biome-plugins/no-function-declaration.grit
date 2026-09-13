@@ -8,9 +8,12 @@
 // Two things this deliberately does not cover:
 //   - Class methods. They stay methods; an arrow property would change `this`
 //     binding and put the function on the instance rather than the prototype.
-//   - Nish programs (examples/, docs/cookbook/, bench/*.ts). The language
-//     has no arrow functions at all, so `function` is the only spelling there.
-//     `biome.json` turns this plugin off for those directories.
+//   - Nish programs (examples/, docs/cookbook/, bench/*.ts, self/). The
+//     language has arrow functions now (docs/wp22-arrow-functions.md), so this
+//     is a migration exemption rather than a statement about the language:
+//     `biome.json` turns the plugin off for those directories while the
+//     `function` declarations left in them are converted, and each comes back
+//     under it as stage C finishes with it.
 //
 // Severity is `warn` while the compiler's own source is still being migrated:
 // `npm run lint` stays green, and the count is the size of what is left.

@@ -26,6 +26,7 @@ import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
+import { rewrite as arrowify } from "../scripts/arrowify.mjs";
 const require = createRequire(import.meta.url);
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -5456,6 +5457,71 @@ if (!only || "differential".includes(only) || "arrow-parity".includes(only)) {
     `differential: an arrow-declared program and its \`function\` twin rewrite identically (${summary || "no summary"})`,
     ap.status === 0,
     ap.stdout + ap.stderr
+  );
+}
+
+// ---- WP22 §2: the two spellings, and the codemod that rewrites one into the other ----
+// Stage A was declared done on "the two spellings of one program emit byte-identical IR",
+// and until now nothing in `npm test` asked. The claim is structural rather than lucky --
+// the emitter iterates checked `FunctionSig`s and there is no `isFunctionDeclaration`
+// anywhere in `src/codegen/` -- which is exactly why it is worth a check: a pass that
+// started reading the declaration's syntax kind would break it silently, and the goldens
+// would not notice, because every golden is written in one spelling or the other and each
+// would go on matching itself.
+//
+// The same pair pins `scripts/arrowify.mjs`, the codemod stage C's `self/` rewrite runs.
+// `arrow.ts` is `declared.ts` written out by hand, so the codemod owes the two fixtures
+// the same relationship a reader sees between them: everything below the header comment,
+// character for character. That is a stronger statement about the tool than any IR
+// comparison, because it is checked against a file somebody wrote rather than against the
+// tool's own output. Nothing here is assembled or run, so it needs no toolchain.
+if (!only || "arrow".includes(only) || "spelling".includes(only)) {
+  const fixtures = path.join(root, "tests", "differential", "arrow-parity");
+  const out = path.join(buildDir, "arrow-spelling");
+  const emit = (name) => {
+    const dir = path.join(out, name);
+    fs.mkdirSync(dir, { recursive: true });
+    const run = spawnSync("node", [cli, path.join(fixtures, `${name}.ts`), "-o", `${dir}/`], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const ll = path.join(dir, `${name}.ll`);
+    return run.status === 0 && fs.existsSync(ll) ? stripHeader(fs.readFileSync(ll, "utf8")) : null;
+  };
+  const declared = emit("declared");
+  const arrow = emit("arrow");
+  check(
+    "WP22: the `function` and arrow spellings of one program emit identical IR",
+    declared !== null && declared === arrow,
+    declared === null || arrow === null ? "a fixture did not compile" : "the two modules differ"
+  );
+
+  // Each fixture explains itself in its own header comment, so the two are required to
+  // agree from the first declaration onwards and not before it.
+  const program = (text) => text.slice(text.indexOf("const label"));
+  const rewritten = arrowify(fs.readFileSync(path.join(fixtures, "declared.ts"), "utf8"), "declared.ts");
+  const byHand = fs.readFileSync(path.join(fixtures, "arrow.ts"), "utf8");
+  check(
+    "WP22: `scripts/arrowify.mjs` rewrites the `function` fixture into its hand-written arrow twin",
+    program(rewritten.text) === program(byHand),
+    `rewrote ${rewritten.changed} declaration(s)`
+  );
+
+  // WP22 §9: `declare function` defines nothing, so it is not a competing spelling and
+  // the codemod may not reach for it -- the arrow form would need a function type, which
+  // Phase 0 forbids. `ffi_scalar` is the case that has both in one file. Both halves are
+  // derived from the source rather than written down here, so this asks the question of
+  // whatever that case says today rather than of the version it said it when this was
+  // written (it is WP27's file, and WP27 is still adding to it).
+  const ffiSource = fs.readFileSync(path.join(casesDir, "ffi_scalar.ts"), "utf8");
+  const ambient = ffiSource.split("\n").filter((l) => l.startsWith("declare function "));
+  const ffi = arrowify(ffiSource, "ffi_scalar.ts");
+  const kept = ambient.every((line) => ffi.text.includes(line));
+  const definitions = ffi.text.split("\n").filter((l) => /^(export )?function /.test(l));
+  check(
+    "WP22 §9: the codemod leaves `declare function` alone and rewrites the definitions beside it",
+    ambient.length > 0 && kept && ffi.changed > 0 && definitions.length === 0,
+    `${ambient.length} ambient (${kept ? "kept" : "LOST"}), ${ffi.changed} rewritten, ${definitions.length} left`
   );
 }
 

@@ -42,6 +42,8 @@ npm run smoke            # build and run every example with a main
 npm run size-report      # binary size table for examples/add.ts
 node bench/run.mjs       # rewrite docs/BENCHMARKS.md (about 3 minutes)
 docs/cookbook/regen.sh   # refresh docs/IR_COOKBOOK.md; node docs/check-links.mjs checks links
+node scripts/arrowify.mjs --check <file.ts>   # WP22: what is still spelled `function`, and why
+node scripts/arrow-verify.mjs [--debug]       # rewrite the corpus and diff every .ll byte for byte
 node scripts/gen-diagnostic-codes.mjs        # rewrite src/codes.ts + self/codes.ts
 node scripts/gen-diagnostic-codes.mjs --check  # fail if either is stale (CI + npm test)
 ```
@@ -103,11 +105,17 @@ else is noise in the diff. So:
   for real errors.
 - The Nish programs a reader learns from (`examples/`, `docs/cookbook/`,
   `bench/*.ts`) are linted too, with the unused-variable and numeric-literal
-  rules off, and with both house-style rules off as well: the language has no
-  arrow functions and no `type` aliases, so `function` and `interface` are the
-  only spellings available there; the test fixtures (`tests/cases`, `tests/link`,
-  `tests/differential/corpus`) are not, because a `reject_*` case exists to
-  contain what the rules forbid.
+  rules off, and with both house-style rules off as well. **The reason for the
+  second half has changed and the setting has not yet.** It used to be that the
+  language had neither arrow functions nor `type` aliases, so `function` and
+  `interface` were the only spellings available there; it has both now
+  (`docs/wp22-arrow-functions.md`), and what the exemption buys today is only
+  that the `function` declarations still in `bench/` and `self/` do not shout
+  until their file is opened. New code in them is an arrow like everywhere
+  else, and the exemption comes off surface by surface as stage C migrates each
+  one. The test fixtures (`tests/cases`, `tests/link`,
+  `tests/differential/corpus`) are not linted at all, because a `reject_*` case
+  exists to contain what the rules forbid.
 - The sibling repos' Biome configs use single quotes, no semicolons and
   `trailingCommas: all`; those formatter settings are not carried over.
   Flipping them would rewrite every file in `src/`, and the formatter is not a

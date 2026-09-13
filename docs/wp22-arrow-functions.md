@@ -132,14 +132,31 @@ the rewrite:
 
 ## 7. The surfaces, measured
 
-| Surface | Count | Note |
-| --- | --- | --- |
-| `self/` | 603 declarations, 25,008 lines | the bootstrap; must be migrated before stage D |
-| `examples/`, `docs/cookbook/`, `bench/`, `tests/cases/` | 798 declarations | goldens unchanged, so the `.ll` files verify the rewrite. `examples/` and `docs/cookbook/` are done, and both were verified that way |
-| `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `README.md` | every snippet | the real cost centre; IR blocks beside them stay as they are. Done |
-| `src/checker` | 2 new rules, 1 desugaring | `FunctionSig.decl` gains a fourth member |
-| `self/lexer.ts` | none | `TOK_ARROW` is already emitted (`self/lexer.ts:772`) |
-| `self/parser.ts` | arrow parsing | the token exists and is imported; nothing consumes it yet |
+Re-measured on 2026-09-13, because the first row had drifted by a fifth since
+it was written and a count nobody re-derives is a count nobody can act on. A
+*definition* here is a top-level `function` that carries a body; the seven
+`declare function` lines in the repository are not in any of these numbers and
+are not stage D's to take (§9).
+
+| Surface | `function` | arrow | Note |
+| --- | --- | --- | --- |
+| `self/` | **721** | 7 | 31,050 lines. The bootstrap; must be migrated before stage D, and it is the one commit of stage C that is worth taking on its own |
+| `tests/cases/` | **688** | 196 | the goldens gate; every `.ll` beside one verifies its rewrite rather than being work the rewrite creates |
+| `tests/differential/corpus/` | 153 | 0 | compiled *and* rewritten to JavaScript, so the arrow-parity guard (§8b) is what these rest on |
+| `tests/link/` | 51 | 32 | whole programs, several modules each |
+| `bench/` | 22 | 0 | `bench/run.mjs` reads the same `.args` sidecars `tests/` does |
+| `tests/parser/` | 9 | 0 | fixtures no checker accepts; the parser is the only reader |
+| `docs/cookbook/` | 3 | 137 | `decl_ffi` (done in stage C) and `fn_add_function`, which exists *to be* the `function` spelling |
+| `examples/`, `std/`, `tests/nish/` | 0 | 76 | done |
+| `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `README.md` | every snippet | — | the real cost centre; IR blocks beside them stay as they are. Done |
+| `src/checker` | 2 new rules, 1 desugaring | — | `FunctionSig.decl` gains a fourth member |
+| `self/lexer.ts` | none | — | `TOK_ARROW` is already emitted (`self/lexer.ts:772`) |
+| `self/parser.ts` | arrow parsing | — | done in stage B |
+
+**1,647 definitions**, against 78 when stage C's docs half was finished. The
+number matters to one decision and no other: §10 argues stage D on the size of
+what is left, and the honest figure for that argument is this one rather than
+the 798 the row above used to carry.
 
 ## 8. The order, and why it is forced
 
@@ -178,6 +195,9 @@ they are the cheap surface to verify. Every `docs/cookbook/*.ts` is compiled by
 the previous run is one command — and that diff is what found both bugs in §8a.
 Doing `self/` first would have put 603 rewrites and two latent stage0 bugs in
 the same commit.
+
+`self/` has that property now too, and §8b is the tooling that gives it to
+every other surface as well.
 
 ### 8a. What C's first half cost: two concise-body bugs
 
@@ -266,6 +286,75 @@ arrow entry point linked against `tests/driver.c` and failed with *multiple
 definition of `main`*. Three regexes, each now accepting either spelling. This
 is the shape of what stage C will keep finding: not the compiler, but the
 tooling around it that reads Nish with a regex.
+
+### 8b. The codemod, and the diff that is one command
+
+The reason the docs half went first is the reason the rest of C can now go at
+all: `regen.sh` made "did this rewrite change anything?" a single command, and
+a question you can ask in one command is a question you ask on every file
+rather than on the ones you are worried about. `self/` had no such command —
+its 721 declarations are a program whose output is checked by the bootstrap,
+which is the slowest check in the repository — so stage C's expensive half
+starts by building one.
+
+```bash
+node scripts/arrowify.mjs self/lexer.ts          # rewrite, in place
+node scripts/arrowify.mjs --check self/*.ts      # what is left, and why
+node scripts/arrow-verify.mjs                    # the whole corpus, before and after
+node scripts/arrow-verify.mjs --debug self       # the same, under `-g`
+```
+
+**`scripts/arrowify.mjs` is textual, driven by the parse tree.** `typescript`
+locates each declaration and the splice is computed from its spans, so every
+byte outside the edit survives: comments, blank lines, formatting, and the
+body's own indentation. That is not tidiness. Moving `{` to sit after `=>`
+leaves every line of the body at the column it was already at, so a
+block-bodied rewrite **preserves the line count of the file and the column of
+every statement in it** — which is the one property that keeps a 721-file
+rewrite from moving a `-g` line number, a `DILocation`, or the caret of a
+diagnostic somebody pinned. §A5 of
+[wp19-stage0-retirement.md](wp19-stage0-retirement.md) is what happens when a
+declaration's position moves and nothing is watching.
+
+What it will not touch, and why each one is a decision rather than a gap:
+
+| Left alone | Because |
+| --- | --- |
+| `declare function f(...): T;` | it defines nothing, so §9 keeps it legal; the arrow spelling for it needs a function type, which Phase 0 forbids |
+| class methods and constructors | §3: a method is not an arrow and will not become one |
+| anything below the top level | Nish-0 has no nested functions, so a nested one is a program this tool has no opinion about |
+| `async function`, an unnamed declaration | neither compiles here, and converting one would only move the error |
+| a comment between the signature and the `{` | it would have to be rewritten rather than moved, and a codemod that silently drops a comment is worse than one that refuses |
+
+**`scripts/arrow-verify.mjs` is the answer in one command.** It copies the
+tracked tree, compiles every program `tests/self/corpus.js` enumerates,
+rewrites the copy in place, compiles again, and compares every emitted `.ll`
+byte for byte. Both compiles run **out of the same directory**, which is the
+detail that makes `-g` comparable at all: `; ModuleID` and `!DIFile` carry the
+path, so two sibling copies would differ in every module for a reason that has
+nothing to do with arrows (wp19 §A3).
+
+`--debug` is not decoration. §A5 records a closed parity gate reopening because
+stage0 took an arrow-declared function's position from the `ArrowFunction`
+rather than from the declaration — and it stood for as long as it did because
+*no corpus program had ever been compiled as an arrow with `-g`*. The sweep
+asks that question of every program at once, which is the only form of the
+question that does not depend on somebody having thought to write the case.
+
+`--concise` collapses a body that is exactly one `return expr;`. It is **off by
+default and stays off for the bulk rewrite**: a concise body is the one shape
+where the four declaration kinds stop agreeing (§4), it changes the line count,
+and it is what found both bugs in §8a. Its use is the sweep — running the whole
+corpus through it is a search for the rest of that bug class, rather than a
+rewrite anybody lands.
+
+`npm test` pins the tool against a file a person wrote rather than against its
+own output: `tests/differential/arrow-parity/declared.ts` and `arrow.ts` are one
+program in the two spellings, and three checks ride on the pair — that the two
+spellings emit identical IR (stage A's defining claim, which until now nothing
+in the suite asked), that the codemod turns the first into the second character
+for character, and that it leaves `ffi_scalar`'s `declare function` alone while
+rewriting the definitions beside it.
 
 ## 9. What stage D forecloses
 
