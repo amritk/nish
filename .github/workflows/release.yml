@@ -2,13 +2,24 @@
 # smoke), then build the npm tarball and the native compiler and attach both to
 # a GitHub release whose notes are the matching CHANGELOG.md section.
 #
-# Two artifacts, for two audiences:
-#   nish-<version>.tgz            the npm package; needs Node
-#   nish-<version>-x86_64-linux   the self-hosted compiler; needs nothing
+# Five artifacts, for two audiences:
+#   nish-<version>.tgz               the npm package; needs Node
+#   nish-<version>-x86_64-linux      the self-hosted compiler; needs nothing
+#   nish-<version>-aarch64-linux
+#   nish-<version>-x86_64-darwin
+#   nish-<version>-aarch64-darwin
 #
-# The binary is also the seed: ci.yml's `bootstrap` job downloads it from the
-# last release and builds self/ with it (WP19 G3), so its name is a contract
-# between the two workflows. One platform for now -- WP19 G5 wants four.
+# The binaries are also the seed: ci.yml's `bootstrap` job downloads the one
+# for its own host from the last release and builds self/ with it (WP19 G3),
+# so the triple in the name is a contract between the two workflows rather
+# than a label -- and the reason the darwin rows of that job had nothing to
+# seed from until this workflow built these (WP19 G5).
+#
+# Each binary is built on a runner of its own architecture rather than
+# cross-compiled, because the chain is a chain: bootstrap.sh runs stage1 to
+# build stage2, and a stage1 for another architecture does not run here.
+# `scripts/build.sh` has no --target passthrough for the same reason -- it
+# lets clang fill the triple in from the host.
 #
 # Publishing to npm is deliberately NOT automated yet; see the commented step
 # at the end and docs/wp12-release.md.
@@ -47,10 +58,30 @@ jobs:
     name: ci
     uses: ./.github/workflows/ci.yml
 
-  release:
-    name: release
+  # WP19 G5: one self-hosted compiler per supported target, each built and
+  # smoke-tested on its own hardware.
+  #
+  # `fail-fast: false` so a broken row names itself rather than hiding behind
+  # whichever failed first; the release job `needs` this one, so a single
+  # failure still stops the release instead of publishing three binaries of
+  # four. A partial release is the worse outcome: the missing one is the seed
+  # some later `bootstrap` row will look for and not find.
+  binaries:
+    name: binary (${{ matrix.triple }})
     needs: ci
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - triple: x86_64-linux
+            runner: ubuntu-latest
+          - triple: aarch64-linux
+            runner: ubuntu-24.04-arm
+          - triple: x86_64-darwin
+            runner: macos-15-intel
+          - triple: aarch64-darwin
+            runner: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -58,12 +89,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          registry-url: https://registry.npmjs.org
 
-      # `workflow_dispatch` can be aimed at any ref, so the ref type is checked
-      # before the version is: dispatched at `main`, every step below would
-      # read GITHUB_REF_NAME as a branch name and the comparison underneath
-      # would report a version mismatch for what is really a mis-aimed run.
+      # The same guard the release job carries, here as well: this job stamps
+      # GITHUB_REF_NAME into an asset name, and a run aimed at a branch would
+      # otherwise build `nish-main-x86_64-linux` and upload it.
       - name: Ref must be a v* tag matching package.json version
         run: |
           if [ "$GITHUB_REF_TYPE" != "tag" ]; then
@@ -77,9 +106,8 @@ jobs:
             exit 1
           fi
 
-      # The native binary is linked by clang, so the release job needs the same
-      # toolchain the test matrix installs.
-      - name: Install LLVM 18 + lld
+      - name: Install LLVM 18 + lld (Ubuntu)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
@@ -90,17 +118,21 @@ jobs:
           done
           echo "$bin" >> "$GITHUB_PATH"
 
+      - name: Install LLVM 18 + lld (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@18
+          prefix="$(brew --prefix llvm@18)"
+          if [ ! -x "$prefix/bin/wasm-ld" ]; then brew install lld; fi
+          echo "$prefix/bin" >> "$GITHUB_PATH"
+
       - name: Install dependencies
         run: npm ci
 
+      # stage0, which seeds the chain for this release.
       - name: Build
         run: npm run build
 
-      # The self-hosted compiler, as something that needs no Node. This is also
-      # the artifact the NEXT release bootstraps from: ci.yml's `bootstrap` job
-      # downloads exactly this asset, so its name and its layout are a contract
-      # between the two workflows, not a label.
-      #
       # A tarball rather than a bare binary, because a bare binary is half a
       # compiler. `--link` shells out to scripts/build.sh and compiles
       # runtime/runtime.c, and the compiler looks for both in <its own dir>/..
@@ -109,17 +141,32 @@ jobs:
       # beside runtime/ and it links only while the working directory happens
       # to be the unpacked folder, which is a trap rather than a distribution.
       #
-      # x86_64 linux only for now. WP19 G5 asks for four (x86_64 and aarch64,
-      # linux and darwin); darwin needs macos-latest, which is out of the CI
-      # matrix. See docs/wp19-stage0-retirement.md G5 for what stays open.
-      #
       # stage2, not stage1: it is the first binary in the chain that no part of
       # stage0 emitted, and --verify is what says the stages agree.
+      #
+      # The triple is checked against the machine before it is stamped into the
+      # name. An asset labelled for one architecture and built on another is
+      # the one failure this job cannot smoke-test its way out of: it runs
+      # here, it runs in the smoke step, and it fails on a user's machine and
+      # on the `bootstrap` row that seeds from it.
       - name: Build the native compiler
         id: binary
+        env:
+          TRIPLE: ${{ matrix.triple }}
         run: |
+          case "$(uname -s)-$(uname -m)" in
+            Linux-x86_64)  host=x86_64-linux ;;
+            Linux-aarch64) host=aarch64-linux ;;
+            Darwin-arm64)  host=aarch64-darwin ;;
+            Darwin-x86_64) host=x86_64-darwin ;;
+            *) echo "::error::unknown host $(uname -s)-$(uname -m)"; exit 1 ;;
+          esac
+          if [ "$host" != "$TRIPLE" ]; then
+            echo "::error::this runner is $host but the matrix row says $TRIPLE"
+            exit 1
+          fi
           version="${GITHUB_REF_NAME#v}"
-          name="nish-$version-x86_64-linux"
+          name="nish-$version-$TRIPLE"
           stage="build/release/$name"
           mkdir -p "$stage/bin" "$stage/scripts"
           bash scripts/bootstrap.sh -o "$stage/bin/nish" --profile speed --verify
@@ -147,6 +194,73 @@ jobs:
           "$nish" hello.ts --link hello
           test "$(./hello)" = "hello from Nish"
           echo "native compiler works from an unrelated directory"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.triple }}
+          path: ${{ steps.binary.outputs.asset }}
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: release
+    needs: [ci, binaries]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      # `workflow_dispatch` can be aimed at any ref, so the ref type is checked
+      # before the version is: dispatched at `main`, every step below would
+      # read GITHUB_REF_NAME as a branch name and the comparison underneath
+      # would report a version mismatch for what is really a mis-aimed run.
+      - name: Ref must be a v* tag matching package.json version
+        run: |
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "::error::release.yml releases a tag; it was run on $GITHUB_REF_TYPE \`$GITHUB_REF_NAME\`. Re-run it with the tag as the ref."
+            exit 1
+          fi
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag v$tag does not match package.json version $pkg"
+            exit 1
+          fi
+
+      # No LLVM here any more: this job packs and publishes, and the four
+      # compilers were built and smoke-tested on their own hardware by the
+      # `binaries` job above. `npm run build` is still needed, because `npm
+      # pack` ships `dist/`.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Every binary the matrix produced, back into one directory. The release
+      # job `needs: binaries`, so reaching this step at all means all four
+      # rows passed; `if-no-files-found: error` on the upload side and the
+      # count below are what stop a silently empty download from publishing a
+      # release with no compiler attached.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          merge-multiple: true
+          path: build/release
+
+      - name: Every target is present
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for triple in x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin; do
+            asset="build/release/nish-$version-$triple.tar.gz"
+            test -s "$asset" || { echo "::error::$asset is missing or empty"; exit 1; }
+            echo "$(du -h "$asset" | cut -f1)  $asset"
+          done
 
       - name: Pack
         id: pack
@@ -194,9 +308,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          version="${GITHUB_REF_NAME#v}"
           gh release create "$GITHUB_REF_NAME" \
             "${{ steps.pack.outputs.tarball }}" \
-            "${{ steps.binary.outputs.asset }}" \
+            "build/release/nish-$version-x86_64-linux.tar.gz" \
+            "build/release/nish-$version-aarch64-linux.tar.gz" \
+            "build/release/nish-$version-x86_64-darwin.tar.gz" \
+            "build/release/nish-$version-aarch64-darwin.tar.gz" \
             --title "nish $GITHUB_REF_NAME" \
             --notes-file build/release/notes.md \
             --verify-tag

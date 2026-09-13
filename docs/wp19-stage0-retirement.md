@@ -833,22 +833,43 @@ retirement unchanged — only its subject changes, from stage0 to the seed.
 **Why it blocks.** Retiring stage0 without this does not remove Node from the
 compiler; it removes the compiler.
 
-**State: one binary of the four, the package unchanged, and no registry name
-to install it under.** The release workflow builds
-`nish-<version>-x86_64-linux` — stage2, `--verify`d, and smoke-tested before it
-ships, because it is also the seed every later release bootstraps from. The
-other three are not built: `aarch64-linux` needs an arm64 runner, and both
-darwin binaries need a `macos-latest` job in `release.yml`, which is a second
-job nobody has written — and one the test matrix would not supply anyway, since
-a release asset is built on a tag rather than on a push. The package is
-still the Node tarball rather than a thin installer, and it is published
-nowhere — the release's `.tgz` is the only way to install it — so `nish` today
-is Node-free only if you take the binary. `--version` already has a source that
-is not `package.json` — `VERSION` in `self/branding.ts`, which `tests/run.js`
-pins against `package.json` — so that bullet is met by the binary the moment it
-is the product. This gate closes when the remaining three binaries and the
-installer land, and the installer needs the name decision first; nothing here
-is a decision against any of them.
+**State: all four binaries, the package unchanged, and no registry name to
+install it under.** The release workflow builds `nish-<version>-<triple>` for
+`x86_64`/`aarch64` × `linux`/`darwin` — each stage2, `--verify`d, and
+smoke-tested from an unrelated directory before it ships, because one of them
+is also the seed every later release bootstraps from. Each is built on a runner
+of its own architecture (`ubuntu-latest`, `ubuntu-24.04-arm`,
+`macos-15-intel`, `macos-latest`) rather than cross-compiled, which is forced
+rather than chosen: `bootstrap.sh` runs stage1 to build stage2 and a stage1 for
+another architecture does not run on the builder, and `scripts/build.sh` has no
+`--target` passthrough for the same reason. The release job `needs` the whole
+matrix, so a broken target stops the release instead of shipping three of four.
+What this closes beyond its own bullet is the darwin half of
+[G3](#g3-the-seed-protocol-exists-and-ci-uses-it): `ci.yml`'s `bootstrap` job
+already asks for the asset its host needs, so the macOS row starts seeding from
+a real binary at the next release with no further edit.
+
+The qualification that matters for reading this row: what is done is the
+*workflow*, and a release already published cannot grow an asset. v0.2.0, the
+current release, still attaches `x86_64-linux` alone; the other three exist
+from the next release onwards, and until then G3's macOS row and
+[INSTALL.md](INSTALL.md)'s table both say so rather than promising a 404. That
+is the same distinction §A5 and §A7 are about — a claim about the tree read as
+a claim about the world — so it is written down here rather than left to be
+noticed.
+
+**What is still open is the second bullet, and it is open on a decision rather
+than on work.** The package is still the Node tarball rather than a thin
+installer, and it is published nowhere — the release's `.tgz` is the only way
+to install it — so `nish` today is Node-free only if you take the binary. The
+installer needs a registry name and `nish` is somebody else's since 2014; the
+options and what each costs are in
+[wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken) and the
+choice is not one this package makes. `--version` already has a source that is
+not `package.json` — `VERSION` in `self/branding.ts`, which `tests/run.js` pins
+against `package.json` — so that bullet is met by the binary the moment it is
+the product. This gate closes when the installer lands, and the installer
+waits on the name.
 
 ### G6 — The provenance is recorded before it is lost
 
@@ -938,7 +959,7 @@ gate nobody has opened is how a runtime budget dies.
 | **R1** | Parity | **done.** §4's builtins landed in both compilers, the seven rows of §2A closed, §A2's five closed (four fixed, the fifth re-read as §A3's recovery class), and §A3's five classes are closed or declared: `--parity` is green over the whole corpus with an empty difference set (§A4) — though that claim was recorded once while it was not true, and §A5 is the correction and what it cost |
 | **R2** | The seed protocol | **mostly done.** `NISH_BOOTSTRAP` is in `scripts/bootstrap.sh`, `ci.yml`'s `bootstrap` job builds `self/` with the last release, and the policy sentence is in `wp12-release.md`. The seeded run asserts what a seed can prove — stage1 builds and links, the fixed point, the identical binaries — and *reports* `IR(seed) == IR(stage1)` instead of asserting it, because with a released seed that is a codegen freeze between releases rather than diverse double-compiling (G3, "What the seeded run proves"). Outstanding: the job runs on Linux only, and now for want of a darwin seed rather than a darwin runner — the two bash 3.2 defects that kept `macos-latest` out of the test matrix are fixed, so that row is one uncommented line whenever the suite is fast enough to pay for it. The seed itself has arrived — v0.1.1 is released with `nish-0.1.1-x86_64-linux.tar.gz` attached, and it is the first one, because v0.1.0 was tagged and never built (G3, G4) |
 | **R3** | Oracle succession | **mostly done.** `tests/nish-cmp.js` agrees with `ir_oracle.js` over the corpus and has been watched failing; `fuzz.js --stage1` is repointed; the four dying oracles' coverage is recovered as `tests/self/goldens/` with the numbers in §2B. The wording half is closed too: the gap was 176 codes rather than the 196 this document used to say — the tool that measures it is `tests/diagnostic_coverage.js`, and the number is now 0, with 325 codes provoked by `tests/wordings/` and the surviving negatives and 60 unreachable with a reason on file (§2B). The four survivors are repointed too: they build their stage1 binary with the seed through `tests/self/seed.js` and name no compiler of their own, and all four were watched green with `dist/` moved out of the tree. Outstanding, carried rather than closed: the 45 wordings stage1's parser refuses before Phase 0 can state them — those go with stage0 at R6 — and the 13 programs the two compilers still answer differently, seven of which stage1 compiles |
-| **R4** | Distribution | **begun.** One binary per release, `nish-<version>-x86_64-linux`, built and smoke-tested by `release.yml`; `--version` already has a source that is not `package.json`. Outstanding: the other three binaries, the package becoming an installer — which first needs a registry name, since `nish` is taken ([wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken)) — and the INSTALL.md/wp12 rewrite (G5) |
+| **R4** | Distribution | **the binaries are done; the installer is not.** All four of `nish-<version>-<triple>` are built and smoke-tested by `release.yml`, each on a runner of its own architecture — from the next release onwards, since v0.2.0 was published before this landed — and `INSTALL.md` and `wp12-release.md` are rewritten around them; `--version` already has a source that is not `package.json`. That also hands G3's macOS row a seed. Outstanding, and outstanding on a **decision with a human in it** rather than on work: the package becoming an installer, which first needs a registry name, since `nish` is taken ([wp12-release.md](wp12-release.md#open-decision-the-npm-name-is-taken)) (G5) |
 | **R5** | Provenance | the re-verification procedure is written (G6); the `ddc-<version>` tag is cut at release time |
 | **R6** | The deletion | `src/`, the `typescript` runtime dependency, the six dead oracles, and every rule that names stage0 |
 
