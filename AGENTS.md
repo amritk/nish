@@ -100,8 +100,10 @@ this does not happen silently.
 - **Never emit an LLVM attribute you cannot cite a checker proof for.** Write
   the reason in `src/codegen/attributes.ts` beside the code.
 - **A struct layout change touches `runtime.ts` and `runtime.c` in the same
-  commit** and extends a layout test. Keep `runtime.c` within its budget and
-  report its size in the PR.
+  commit** and extends a layout test. The C runtime is two translation units
+  with a budget each — `runtime.c` for the core and `runtime_os.c` for whatever
+  wraps a system call — so keep both inside theirs (`node tests/run.js budget`)
+  and report the size of whichever you changed in the PR.
 - **Do not widen scope into another work package's files**; leave a
   `TODO(WP<n>)` instead.
 - **Never** put Claude/session links, tracking IDs, model names or platform

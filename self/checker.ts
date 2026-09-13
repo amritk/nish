@@ -25,6 +25,7 @@ import {
 } from "./generics";
 import {
   FLAG_CONST,
+  FLAG_FOREIGN,
   FLAG_PREFIX,
   N_BINARY,
   N_BLOCK,
@@ -359,6 +360,17 @@ export class Checker {
   registerTemplate(stmt: Node): void {
     const nameNode = stmt.children[0];
     const name = nameNode.text;
+    // A generic `declare function` arrives here rather than at
+    // `collectFunctionSignature`, because a function with type parameters is a
+    // template before it is anything else. Stage0 refuses it in
+    // `collectFunctionTemplate` with these words, so stage1 does too (WP27 S1).
+    if ((stmt.flags & FLAG_FOREIGN) !== 0) {
+      this.ctx.error(
+        stmt,
+        "`declare function` cannot be generic: a C symbol is one function, not a template to instantiate"
+      );
+      return;
+    }
     // The order is stage0's: the name's own rules before the ones about what
     // else is declared, because that is the order `collectFunctionTemplate`
     // and `registerTemplate` run in over there.

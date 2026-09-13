@@ -51,7 +51,8 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │    Phase C  codegen/attributes.ts  purity / escape / loop facts  │
 │             codegen/emitter.ts     AST -> LLVM IR text           │
 │             codegen/runtime.ts     runtime ABI, inline allocator │
-│    runtime/runtime.c               arena + strings (C, ~1 KB)    │
+│    runtime/runtime.c               arena + strings (C, 3.5 KB)   │
+│    runtime/runtime_os.c            files, spawn, env (C, 1.2 KB) │
 │    scripts/build.sh                clang -O3/-Oz, LTO, gc-sections│
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -68,22 +69,30 @@ Design rules that every WP must respect:
   (see `tests/ir/alloc_smoke.ll`).
 - **Every construct ships with a golden test** (`.ts` in, `.ll` out) and a
   native round trip (link with clang, run, compare stdout).
-- **Runtime stays tiny.** Budget: `runtime.c` under 4,864 bytes of compiled
-  code, counted as every `.text*` section summed
-  (`clang -Oz -c runtime/runtime.c && size -A runtime.o`). No stdio on hot
-  paths. The two figures this replaces were the *source* bytes, over budget
-  since WP4 and left there because comments are not code, and the `text`
-  column of `size`, which counts the `.eh_frame` unwind entries the `size`
-  build profile strips — measuring the bytes that never ship. The sum rather
-  than the `.text` line alone is what a linked binary pays: `clang -Oz` puts
-  cold code in `.text.unlikely.`, so a ceiling on `.text` by itself can be met
-  by moving code into another section instead of by making it smaller. And
-  `-ffunction-sections -Wl,--gc-sections` means a binary pays only for the
-  functions it calls: adding WP14's `nish_mkdir` and `nish_spawn` left
+- **Runtime stays tiny.** Two budgets, one per translation unit: `runtime.c`,
+  the core every program touches, under 3,584 bytes of compiled code, and
+  `runtime_os.c`, the half whose subject is the operating system, under 1,280 —
+  counted as every `.text*` section summed
+  (`clang -Oz -c runtime/runtime.c && size -A runtime.o`, and the same for
+  `runtime_os.c`). No stdio on hot paths. The split is what makes the core's
+  ceiling mean something: it can come down over time and never up, because
+  nothing in the language roadmap adds an arena or a second string
+  representation, while the OS-facing half is exactly the surface that grows as
+  the language reaches further out, and it can no longer borrow room from the
+  arena to hide in. The two figures the byte count replaces were the *source*
+  bytes, over budget since WP4 and left there because comments are not code,
+  and the `text` column of `size`, which counts the `.eh_frame` unwind entries
+  the `size` build profile strips — measuring the bytes that never ship. The
+  sum rather than the `.text` line alone is what a linked binary pays:
+  `clang -Oz` puts cold code in `.text.unlikely.`, so a ceiling on `.text` by
+  itself can be met by moving code into another section instead of by making it
+  smaller. And `-ffunction-sections -Wl,--gc-sections` means a binary pays only
+  for the functions it calls: adding WP14's `nish_mkdir` and `nish_spawn` left
   `examples/hello.ts` at 4,696 bytes, the same number to the byte. Today:
-  4,670 of 4,864, measured by `tests/run.js` rather than by a reviewer
-  (`node tests/run.js budget`); `docs/wp7-runtime.md` §"Runtime additions and
-  budget" records each measurement and why the ceiling moved.
+  3,480 of 3,584 and 1,190 of 1,280, both measured by `tests/run.js` rather
+  than by a reviewer (`node tests/run.js budget`); `docs/wp7-runtime.md`
+  §"Runtime additions and budget" records each measurement, why the single
+  4,864-byte ceiling became two, and what the split costs a program.
 
 ## 3. Consolidated language specification (Nish)
 
@@ -159,7 +168,7 @@ ninety-second map; the table below is the inventory.
 | Attributes and escape analysis: the whole-program purity / termination / escape fixpoint behind `nounwind`, `willreturn`, `readnone`/`readonly`, `noundef`, `zeroext`, `noalias`, `nonnull`, `nocapture`, `dereferenceable`, `align`, `nsw` | done (WP9) | `src/codegen/attributes.ts`, `escape.ts` |
 | Debug info: a compile unit, a `DISubprogram` per function, `DILocation` on every instruction, `llvm.dbg.value`/`declare`, `-g` carried on to the link | done (WP10, WP17) | `src/codegen/debug.ts` |
 | Interop sidecars: C header, `.d.ts` plus its `.mjs` loader, N-API shim, the `napi` build profile — a `Result` included (WP17) | done (WP8) | `src/interop/` (`abi`, `header`, `dts`, `wasm`, `napi`) |
-| Runtime: chunked arena with O(1) reset and mark/release, strings, `Math`, I/O, `process.*`, `mkdirSync`, `spawnSync`; the wasm/WASI twin and the Node shim the differential tests run against | done | `runtime/runtime.c` (340 lines), `runtime_wasm.c`, `nish.h`, `shim.mjs` |
+| Runtime: chunked arena with O(1) reset and mark/release, strings, `Math`, I/O, `process.*`, `mkdirSync`, `spawnSync`; the wasm/WASI twin and the Node shim the differential tests run against | done | `runtime/runtime.c` (1,138 lines) and `runtime/runtime_os.c` (290 lines, the system-call half), `runtime_wasm.c`, `nish.h`, `shim.mjs` |
 | Inline `alwaysinline` bump allocator in IR, the runtime ABI table both sides agree on | done | `src/codegen/runtime.ts` |
 | Build profiles `debug`, `speed`, `size`, `wasm`, `wasi`, `napi`, the PGO recipe, the size report | done (WP9) | `scripts/build.sh`, `scripts/size-report.sh` |
 | The self-hosted compiler: lexer, parser, checker, emitter, interop sidecars, DWARF, and its own driver — it plans its output, makes its directories and runs `scripts/build.sh` for `--link` | done (WP14) | `self/` (54 modules), `scripts/bootstrap.sh` |
@@ -170,8 +179,9 @@ ninety-second map; the table below is the inventory.
 | Docs: the normative reference, the regenerated IR cookbook, the architecture, the FAQ, install, and one design note per package | done (WP11) | `docs/` |
 
 Measured today: `examples/hello.ts` links to 4,680 bytes at the `size` profile
-and `runtime.c` costs 4,670 of its 4,864-byte `.text*` budget
-(`docs/wp7-runtime.md` §"Runtime additions and budget"), beside 9,920
+and the runtime costs 4,670 bytes of `.text*` across its two translation units
+— 3,480 of `runtime.c`'s 3,584-byte budget and 1,190 of `runtime_os.c`'s 1,280
+(`docs/wp7-runtime.md` §"Runtime additions and budget") — beside 9,920
 bytes of `.rodata` that Ryu's tables dominate and that only a binary formatting
 a double links (WP15 §7a)
 (`docs/wp14-selfhost.md` §7a); the benchmark binaries are 5.5-12 KB against
@@ -668,7 +678,8 @@ it left. What the diagram would show for them is a line.
    reason in `attributes.ts` alongside the code.
 4. Any change to a struct layout touches `runtime.ts` and `runtime.c` in
    the same commit and adds/extends a layout smoke test.
-5. Keep `runtime.c` within budget (§2). Report its size in the PR.
+5. Keep `runtime.c` and `runtime_os.c` within their budgets (§2). Report the
+   size of whichever you changed in the PR.
 6. Update `docs/LANGUAGE.md` and the IR cookbook for what you added.
 7. Commit messages: imperative subject, body explaining the lowering.
    No model names in commits, code, or PR text.

@@ -53,13 +53,13 @@ modulo 2^32, and `Math.min`/`max` with a NaN operand return the other operand
 A collector needs a runtime that knows where every pointer is, and it costs
 binary size, memory, and unpredictable pauses; the whole point of compiling
 ahead of time is to avoid that. Nish uses one bump-allocated arena
-(`runtime/runtime.c`, about 3 KB of machine code): allocation is a load, an
-add, a compare and a store inlined into the caller; nothing is freed
-individually; the entry wrapper frees everything when `main` returns, and a
-C or Node host can call `nish_reset_arena()` between batches to recycle
-memory in O(1). Objects, arrays, and strings built at run time live there;
-string literals are constant data. On top of that the compiler places
-memory statically ([LANGUAGE.md: Memory model](LANGUAGE.md#memory-model),
+(`runtime/runtime.c`, the core half of the C runtime, about 3.5 KB of machine
+code): allocation is a load, an add, a compare and a store inlined into the
+caller; nothing is freed individually; the entry wrapper frees everything when
+`main` returns, and a C or Node host can call `nish_reset_arena()` between
+batches to recycle memory in O(1). Objects, arrays, and strings built at run
+time live there; string literals are constant data. On top of that the compiler
+places memory statically ([LANGUAGE.md: Memory model](LANGUAGE.md#memory-model),
 [wp6-memory.md](wp6-memory.md)): an object, object literal, or array
 literal that provably never leaves its function is an `alloca`, and a
 function whose arena temporaries all die with it marks the arena on entry

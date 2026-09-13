@@ -1149,9 +1149,16 @@ const walkDeclaration = (walk: Walk, state: State, decl: ts.VariableDeclaration)
  * thing the emitter ever reads from here.
  */
 export const analyzeBounds = (ctx: CheckContext, sig: FunctionSig): ts.Node[] => {
+  // WP27 S1: a foreign declaration has no body, so there are no indices to
+  // prove. Guarded here as well as at the call, the way `checkResultLocalsHandled`
+  // and `checkElementReferences` are: this is the fifth of the body walkers
+  // `FunctionSig.body`'s comment names, and each of them is safe on its own
+  // rather than on its caller's account.
+  const body = sig.body;
+  if (body === undefined) return [];
   const walk: Walk = { ctx, proven: ctx.program.provenIndices, unproven: [], loops: 0 };
   const state = emptyState();
-  if (ts.isBlock(sig.body)) walkStatement(walk, state, sig.body);
-  else walkExpression(walk, state, sig.body);
+  if (ts.isBlock(body)) walkStatement(walk, state, body);
+  else walkExpression(walk, state, body);
   return walk.unproven;
 };

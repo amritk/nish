@@ -685,11 +685,14 @@ that matrix from doubling again.
 
 ## 7. The runtime budget yields to a measured win
 
-`runtime.c`'s 4 KB `.text` budget stays the default forcing function — for
-small operations, inline IR is both faster *and* smaller, so the budget and the
-northern star usually agree. When they disagree, a runtime helper may exceed
-the budget **on the strength of a benchmark in the pull request**, not an
-assertion. Size is second, not irrelevant.
+The runtime's compiled-code budget stays the default forcing function — 4 KB of
+`.text` for the single `runtime.c` when this note was written, and one ceiling
+per translation unit since the operating-system half was split out
+(`docs/wp7-runtime.md` §"Runtime additions and budget" carries both and the live
+measurements). For small operations, inline IR is both faster *and* smaller, so
+the budget and the northern star usually agree. When they disagree, a runtime
+helper may exceed the budget **on the strength of a benchmark in the pull
+request**, not an assertion. Size is second, not irrelevant.
 
 ---
 

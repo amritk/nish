@@ -753,6 +753,9 @@ export class Checker implements CheckContext {
   checkBodies(): CheckedProgram {
     this.foldConstants();
     for (const sig of this.program.functions) {
+      // WP27 S1: a `declare function` has no body, so pass 2 has nothing to do
+      // for it. Its signature was fully checked in pass 1.
+      if (sig.foreign) continue;
       if (!this.sink.recover(() => this.checkFunctionBody(sig))) sig.poisoned = true;
     }
     return this.program;
@@ -793,6 +796,7 @@ export class Checker implements CheckContext {
     // WP22 §4: a concise arrow body (`=> n * 2`) is a block with one `return`,
     // so it always terminates and its expression is checked as that return's.
     let terminates: boolean;
+    if (sig.body === undefined) return; // WP27 S1: foreign, filtered by the caller.
     if (ts.isBlock(sig.body)) {
       terminates = checkStatements(this, sig.body.statements, scope);
     } else {

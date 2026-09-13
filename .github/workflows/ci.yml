@@ -125,7 +125,7 @@ jobs:
           {
             echo "### Binary size (${{ matrix.os }}, LLVM 18)"
             echo
-            echo '`examples/add.ts` + `examples/main.c` + `runtime/runtime.c`'
+            echo '`examples/add.ts` + `examples/main.c` + `runtime/runtime.c` + `runtime/runtime_os.c`'
             echo
             cat build/size-report.md
           } >> "$GITHUB_STEP_SUMMARY"
@@ -206,6 +206,60 @@ jobs:
           else
             echo "::notice::self/ built and verified with ${{ steps.seed.outputs.tag }} as the seed."
           fi
+
+  # The golden cases again, through the harness written in the language rather
+  # than through the one written in Node (`tests/nish/run.ts`, `npm run
+  # test:nish`). `npm test` builds that runner and runs it over five cases, which
+  # proves it compiles and works; only the full pass proves it still *agrees*,
+  # and a harness nobody runs is a harness that rots.
+  #
+  # It is not a duplicate of the `test` job, and what it adds is worth stating: a
+  # compiler regression fails in both, but a regression in the runner itself --
+  # or in `readdirSync`, `spawnSyncTo` or `monotonicNanos`, which nothing else
+  # exercises together on a real workload -- fails only here. It runs in parallel
+  # with `test`, so it costs a runner rather than wall-clock time, and it spawns a
+  # compiler per case, which is why `npm test` does not pay for it.
+  runner:
+    name: the golden cases, in Nish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install LLVM 18 + lld
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The runner answers 1 when any check failed, so the step's own exit status
+      # is the gate. Its last line is the summary, which is what a reader wants
+      # in the job log without expanding it.
+      # `set -o pipefail` is load-bearing: the default shell for a `run:` step is
+      # `bash -e`, without it, so the exit status of a pipeline would be `tee`'s
+      # and a runner that answered 1 would still be a green step.
+      - name: The corpus, through the Nish runner
+        run: |
+          set -o pipefail
+          npm run test:nish | tee "$RUNNER_TEMP/nish-runner.log"
+
+      - name: Say what this proved
+        if: always()
+        run: |
+          summary="$(tail -n 1 "$RUNNER_TEMP/nish-runner.log" 2>/dev/null || echo 'the runner produced no summary')"
+          echo "::notice::tests/nish/run.ts over tests/cases: $summary"
 
   lint:
     name: lint

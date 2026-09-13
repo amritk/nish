@@ -1131,6 +1131,22 @@ export function collectFacts(
     i = i + 1;
   }
 
+  // WP27 S1: a `declare function` has no body, and `FunctionFacts` starts from
+  // the *pure* defaults because purity here is discovered by walking a body and
+  // finding nothing impure in it. An absent body is not an empty one: leaving
+  // the defaults would mark every caller of a C function `readnone willreturn`,
+  // which miscompiles rather than pessimises. So a foreign function asserts the
+  // worst of everything it cannot be seen to avoid, and the fixpoint carries
+  // that outward exactly as it carries any other impurity. `escaping` and the
+  // pointer facts stay empty because S1's boundary is scalars only, so a
+  // foreign callee has no pointer to capture (`docs/wp27-ffi.md` §3).
+  if (sig.foreign()) {
+    facts.effect = EFFECT_WRITE;
+    facts.willReturn = false;
+    facts.readsMemory = true;
+    return facts;
+  }
+
   const collector = new FactCollector(unit, table, opts, sig, facts);
   const body = sig.body();
   if (body !== null) {

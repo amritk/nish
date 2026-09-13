@@ -361,7 +361,7 @@ const capturesLocal = (program: CheckedProgram, node: ts.Node, local: LocalVar):
  */
 const heldValueMayBeReachable = (walk: Walk, expr: ts.BinaryExpression, local: LocalVar): boolean => {
   const inLoop = walk.loops.length > 0;
-  const root: ts.Node = inLoop ? walk.loops[0] : walk.sig.body;
+  const root: ts.Node = inLoop ? walk.loops[0] : (walk.sig.body ?? walk.sig.decl);
   const before = expr.getStart(expr.getSourceFile());
   let reachable = false;
   const scan = (node: ts.Node): void => {

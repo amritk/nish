@@ -209,6 +209,37 @@ export function enumOf(name: string): StaticType {
 }
 
 /** True for the `readonly T[]` spelling of an array type; false for every other type. */
+/**
+ * A type that crosses the C boundary as exactly one machine value — no pointer,
+ * no length word, no layout this compiler had to agree with anyone about.
+ *
+ * This is WP27 S1's boundary, and it is deliberately *not*
+ * `interop/abi.ts`'s `isScalar`, which leaves `i64` and `u64` out. `cType` maps
+ * both (`int64_t`, `uint64_t`), so excluding them here would refuse a C
+ * signature the compiler can already spell in a header — the two predicates
+ * answer different questions and sharing one would only hide that.
+ *
+ * It lives here rather than in `interop/abi.ts` for a second reason: that module
+ * reaches `codegen/attributes.ts`, and a `declare function` is checked in pass 1,
+ * so a checker importing it closes an import cycle that fails at module
+ * initialisation rather than at a type error.
+ */
+export function isForeignScalar(t: StaticType): boolean {
+  const k = t.kind;
+  return (
+    k === "i32" ||
+    k === "i64" ||
+    k === "u8" ||
+    k === "u16" ||
+    k === "u32" ||
+    k === "u64" ||
+    k === "f32" ||
+    k === "f64" ||
+    k === "bool" ||
+    k === "void"
+  );
+}
+
 export function isReadonlyArray(t: StaticType): boolean {
   return t.kind === "array" && t.readonly === true;
 }
