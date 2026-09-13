@@ -1,0 +1,1 @@
+Generic function `identity` is also defined in tests/wordings/nl3010_generic_redeclared.ts; a function name must be unique across the program, and an instantiation is named after its template

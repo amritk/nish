@@ -452,12 +452,15 @@ export class Compilation {
           ownerModules.push(unit);
           continue;
         }
+        // One template literal rather than a concatenation: the code generator
+        // keys a rule on the longest literal run of its message, and split at
+        // the `+` the longest run was "` is also defined in ", which the three
+        // whole-program duplicate messages also contain.
         this.sink.report(
           unit.source,
           template.decl.children[0].start,
           template.decl.children[0].end,
-          `Generic function \`${template.sourceName}\` is also defined in ${ownerModules[at].path}; a function ` +
-            "name must be unique across the program, and an instantiation is named after its template"
+          `Generic function \`${template.sourceName}\` is also defined in ${ownerModules[at].path}; a function name must be unique across the program, and an instantiation is named after its template`
         );
       }
       for (const sig of unit.checker.program.functions) {

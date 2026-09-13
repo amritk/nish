@@ -364,21 +364,28 @@ export function checkGenericCall(
 }
 
 /**
- * The message for a request that would not terminate (§8 message 5). It names
- * the type argument that grew and the two shapes the rule accepts, never a
- * number: a user who sees it has to change the call, not raise a limit.
+ * The four names the non-terminating-request message needs (§8 message 5): the
+ * chain it quotes, the argument that grew, and the parameter to pass instead.
+ *
+ * The *sentence* is written at the diagnostic call in `checker/index.ts` rather
+ * than here, and this returns only the pieces, because
+ * `scripts/gen-diagnostic-codes.mjs` derives a rule's stable code from the
+ * string literal it finds at that call. A message assembled behind a function
+ * call is invisible to it and carries `NL0000` however many words of its own it
+ * has -- which this one did. It names the type argument that grew and the two
+ * shapes the rule accepts, never a number: a user who sees it has to change the
+ * call, not raise a limit.
  */
-export function nonTerminatingMessage(
+export function nonTerminatingParts(
   template: TemplateInfo,
   ancestor: Instantiation,
   args: readonly StaticType[],
   index: number
-): string {
-  const from = instanceDisplayName(template.sourceName, ancestor.typeArgs);
-  const to = instanceDisplayName(template.sourceName, args);
-  return (
-    `Monomorphising \`${template.sourceName}\` would not terminate: \`${from}\` asks for \`${to}\`, which puts ` +
-    `\`${typeToString(ancestor.typeArgs[index])}\` under a type constructor instead of passing it on, so the ` +
-    `chain has no end; pass \`${template.typeParams[index]}\` itself, or a type that does not mention it`
-  );
+): { from: string; to: string; under: string; param: string } {
+  return {
+    from: instanceDisplayName(template.sourceName, ancestor.typeArgs),
+    to: instanceDisplayName(template.sourceName, args),
+    under: typeToString(ancestor.typeArgs[index]),
+    param: template.typeParams[index],
+  };
 }

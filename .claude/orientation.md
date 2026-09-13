@@ -107,6 +107,7 @@ negative test, its `docs/LANGUAGE.md` rule and cookbook entry, and a
 | When does stage0 go away? | `docs/wp19-stage0-retirement.md` |
 | How do I add a construct? | `docs/ARCHITECTURE.md` → "How to add a construct" |
 | What does the language allow? | `docs/LANGUAGE.md` |
+| I am writing a *program*, not the compiler | `docs/AI.md` — the same rules in one pass, examples compiled by `npm test` |
 | What IR does X compile to? | `docs/IR_COOKBOOK.md` |
 | How do I write the code? | [`typescript.md`](./typescript.md) |
 | How do I test it? | [`testing.md`](./testing.md) |

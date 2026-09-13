@@ -53,7 +53,7 @@ import {
   instanceSymbol,
   mentionsTypeParam,
   newNodeTables,
-  nonTerminatingMessage,
+  nonTerminatingParts,
   swapTables,
 } from "./generics.js";
 import { expressionCheckers } from "./expressions.js";
@@ -475,7 +475,17 @@ export class Checker implements CheckContext {
     // refused by name rather than by a depth count.
     const growing = expandingAncestor(this.currentInstance, template, args);
     if (growing) {
-      this.error(nonTerminatingMessage(template, growing.ancestor, args, growing.index), at);
+      // Written here rather than returned from a helper, for the reason the
+      // clash message in `compilation.ts` is one literal: the code generator
+      // reads the string at the diagnostic call and nothing else, so a message
+      // assembled behind a function call is invisible to it and carries NL0000
+      // however many words of its own it has. `nonTerminatingParts` keeps the
+      // computing out of the sentence.
+      const parts = nonTerminatingParts(template, growing.ancestor, args, growing.index);
+      this.error(
+        `Monomorphising \`${template.sourceName}\` would not terminate: \`${parts.from}\` asks for \`${parts.to}\`, which puts \`${parts.under}\` under a type constructor instead of passing it on, so the chain has no end; pass \`${parts.param}\` itself, or a type that does not mention it`,
+        at
+      );
     }
     // The caps are the backstop for everything the rule does not see, and they
     // say they are this compiler's limit rather than a rule of the language.

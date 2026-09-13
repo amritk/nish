@@ -81,6 +81,8 @@ const RULES: string[] = [
     "NL2278",
     "A `case` clause cannot declare a variable directly; wrap the clause body in a block (`case 1: { ... }`)",
     "NL2165",
+    "; a function name must be unique across the program, and an instantiation is named after its template",
+    "NL3010",
     "`export { ... }` / `export * from` are not supported; put `export` on the function declaration itself",
     "NL2128",
     "`case` label must be an integer literal or a module constant (LLVM's `switch` table holds constants)",
@@ -123,6 +125,8 @@ const RULES: string[] = [
     "NL2080",
     "Only functions can be exported for now, plus classes and interfaces (found `export` on ",
     "NL2226",
+    "` under a type constructor instead of passing it on, so the chain has no end; pass `",
+    "NL2309",
     "`declare function` declares a C function this program calls, so it must have no body",
     "NL2308",
     ": a `Result` is immutable once built (return a new `ok(...)` or `err(...)` instead)",
@@ -320,7 +324,7 @@ const RULES: string[] = [
     "` has more than one constructor (no overloads)",
     "NL2063",
     "` is a builtin function and can only be called",
-    "NL2311",
+    "NL2312",
     "` requires two operands of the same type, got ",
     "NL2103",
     "`) are not supported; import functions by name",
@@ -380,7 +384,7 @@ const RULES: string[] = [
     "` in a constant requires boolean operands",
     "NL2069",
     "` is a builtin value and cannot be called",
-    "NL2313",
+    "NL2314",
     "An enum member name must be an identifier",
     "NL2287",
     "Computed property names are forbidden in ",
@@ -580,7 +584,7 @@ const RULES: string[] = [
     "` expects an argument of type ",
     "NL2268",
     "` is a builtin imported from `",
-    "NL2312",
+    "NL2313",
     "` must return a value of type ",
     "NL2093",
     "`bigint` type is forbidden in ",
@@ -612,7 +616,7 @@ const RULES: string[] = [
     " (no interpreter at runtime)",
     "NL1005",
     "` is already imported from `",
-    "NL2314",
+    "NL2315",
     "` must be an integer literal",
     "NL2282",
     "`__proto__` is forbidden in ",
@@ -632,7 +636,7 @@ const RULES: string[] = [
     "()` in the constructor of `",
     "NL2036",
     "` (the builtin modules are ",
-    "NL2309",
+    "NL2310",
     "` cannot extend interface `",
     "NL2049",
     "`debugger` is forbidden in ",
@@ -731,8 +735,6 @@ const RULES: string[] = [
     "NL2264",
     "` does not fit in i32",
     "NL2053",
-    "` is also defined in ",
-    "NL3010",
     "` must be initialized",
     "NL2089",
     "Duplicate parameter `",
@@ -784,7 +786,7 @@ const RULES: string[] = [
     "Unknown property `",
     "NL2250",
     "` has no export `",
-    "NL2310",
+    "NL2311",
     "` has no member `",
     "NL2280",
     "Empty import list",
@@ -840,7 +842,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 391;
+export const RULE_COUNT = 392;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

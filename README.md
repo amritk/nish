@@ -94,7 +94,11 @@ is in [docs/IR_COOKBOOK.md](docs/IR_COOKBOOK.md).
 ## The language
 
 The full reference is [docs/LANGUAGE.md](docs/LANGUAGE.md); every rule
-there cites the test case that proves it.
+there cites the test case that proves it. If an **AI** is writing the program —
+or you want the whole language in one pass rather than as a reference to browse
+— read [docs/AI.md](docs/AI.md) instead: the same rules, ordered by which
+TypeScript reflex they reject, with every example compiled by `npm test`. Both
+ship in the npm package, and [llms.txt](llms.txt) indexes them.
 
 | Feature | Summary | Reference |
 |:---|:---|:---|
