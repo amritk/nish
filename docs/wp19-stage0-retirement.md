@@ -395,6 +395,35 @@ corpus is: nothing here is a new thing the two compilers are allowed to differ
 about. Quote this with its date, the way §A4 should have been quoted, and run
 the mode again before quoting it at all.
 
+#### A6. Green again, on a corpus a fifth larger — and the third way this gate lied
+
+```
+parity: 11460 runs over 764 programs (1686.9 s); 0 undeclared difference(s), 2506 declared    2026-09-13
+```
+
+The corpus grew by the ninety `reject_*` cases G2.4's wording work added, and
+the mode found **84 undeclared differences** in them: no wrong lowering and no
+wording, but five places where stage1 puts the caret somewhere stage0 does not
+— a `for...of` head reported at its first declarator rather than at the
+`const`, a duplicate function at the name rather than at the statement, an
+empty import list nowhere at all (`closeList` spans a list by its elements, and
+an empty one has none), and a field whose refused initializer then tripped the
+definite-assignment pass into a second complaint about the same line. Every one
+of them is a case nobody had written before, which is §A5's first lesson again:
+an empty difference set is a fact about the corpus.
+
+**And one of the 84 was the mode itself.** `build()` returned
+`build/self/compile` whenever the file existed, so the run compared today's
+stage0 with whatever stage1 was last linked — a fix on one side reading as a
+difference, a fix on the other reading as agreement. It links a fresh compiler
+every run now, forty seconds against half an hour. §A5 lists two ways a closed
+gate reopens in silence; this is a third, and the worst of them, because it can
+report *green* against a compiler nobody has rebuilt. The other oracles were
+checked and none of them caches: `ir_oracle.js`, `checked_oracle.js` and
+`goldens.js` all link their binary unconditionally, and `goldens.js` says why in
+its own header — "a golden compared against a stale binary is a golden
+comparing itself with yesterday".
+
 #### Should `--parity` run in CI?
 
 **Yes, and not in the `test` job — and it does now.**
