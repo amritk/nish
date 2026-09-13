@@ -1301,6 +1301,72 @@ if (fs.existsSync(path.join(aboveDir, "src", "main.ts"))) {
   }
 }
 
+// WP21 S2: a `node_modules` *ancestor*, which is the one directory the walk
+// cannot always name. Node steps over a directory already called `node_modules`
+// rather than searching it, so `node_modules/node_modules/zed` is a package Node
+// never finds — and neither compiler finds it either wherever the importing
+// module's own name spells that ancestor, which is the second run below, from
+// the fixture root. The first run is the same tree compiled from inside
+// `node_modules/app`, where the name is `.` and the ancestor is `..`: a
+// directory named without being named, which stage1 has no `process.cwd()`
+// (WP19 §A3) and no `statSync` to resolve. Both compilers therefore search it
+// and both find the package — the same answer from both, which is the property
+// the oracles protect, in a tree npm does not produce
+// (`docs/wp21-packages.md` §10a). The WP14 section below runs the same fixture
+// through the self-hosted compiler and diffs the IR.
+//
+// The fixture has no `main.ts` at its top, so the loop above never picks it up:
+// `expected.code` and `expected.ir` belong to the run from inside and
+// `expected.err` to the run from the root.
+const doubledDir = path.join(linkDir, "package_doubled");
+const doubledApp = path.join(doubledDir, "node_modules", "app");
+if (fs.existsSync(path.join(doubledApp, "main.ts"))) {
+  const outDir = path.join(buildDir, "link", "package_doubled") + path.sep;
+  fs.rmSync(outDir, { recursive: true, force: true });
+  const exe = path.join(buildDir, "link", "package_doubled-app");
+  const inside = spawnSync(
+    "node",
+    [cli, "main.ts", "-o", outDir, ...(HAS_CLANG ? ["--link", exe] : [])],
+    { cwd: doubledApp, encoding: "utf8" }
+  );
+  const ir =
+    inside.status === 0
+      ? llFilesIn(outDir)
+          .map((f) => fs.readFileSync(path.join(outDir, f), "utf8"))
+          .join("\n")
+      : "";
+  const missing = fs
+    .readFileSync(path.join(doubledDir, "expected.ir"), "utf8")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .filter((l) => !ir.includes(l));
+  check(
+    "link/package_doubled: an ancestor the name cannot spell is searched, so the package resolves",
+    inside.status === 0 && missing.length === 0,
+    inside.status === 0 ? missing.map((l) => `missing: ${l}`).join("\n") : `${inside.stdout}${inside.stderr}`
+  );
+  if (HAS_CLANG && inside.status === 0) {
+    const run = spawnSync(exe);
+    const want = Number(fs.readFileSync(path.join(doubledDir, "expected.code"), "utf8").trim());
+    check(
+      `link/package_doubled: exits with ${want}`,
+      run.status === want,
+      `exit ${run.status}: ${run.stdout}${run.stderr}`
+    );
+  }
+  const needle = fs.readFileSync(path.join(doubledDir, "expected.err"), "utf8").trim();
+  const named = spawnSync("node", [cli, path.join("node_modules", "app", "main.ts"), "-o", outDir], {
+    cwd: doubledDir,
+    encoding: "utf8",
+  });
+  check(
+    `link/package_doubled: named from the root, the ancestor is stepped over: "${needle}"`,
+    named.status === 1 && named.stderr.includes(needle),
+    named.stderr || "(compiled successfully)"
+  );
+}
+
 // ---- WP1: optimisation ------------------------------------------------------------
 // The emitted IR is target-neutral, so `opt` needs a triple before it believes it has
 // vector registers; without one the loop vectoriser never fires. x86_64 is always built in.
@@ -4348,6 +4414,72 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
             `stage0 ${theirAbove.status}: ${theirAbove.stderr}` +
             `modules ours [${ourModules.join(" ")}] theirs [${theirModules.join(" ")}]` +
             ` differing [${differing.join(" ")}]`
+        );
+      }
+
+      // WP21 S2, the other half of that walk: an ancestor the module's own name
+      // does not spell. `tests/link/package_doubled` installs the package one
+      // `node_modules` inside another and is compiled from inside
+      // `node_modules/app`, so the ancestor is `..` — a directory named without
+      // being named. Node steps over a `node_modules` ancestor and so does
+      // either compiler wherever the name spells one, but `..` spells nothing,
+      // and neither compiler has a way to learn what it is: stage1 has no
+      // `process.cwd()` (WP19 §A3) and the language has no `statSync`, which is
+      // what naming a directory from below would take. So both search it, both
+      // find the package, and this is what says they answer the same thing —
+      // the alternative was one compiler resolving a program the other refuses.
+      const doubledSrc = path.join(root, "tests", "link", "package_doubled", "node_modules", "app");
+      if (fs.existsSync(path.join(doubledSrc, "main.ts"))) {
+        const ourDir = path.join(shipDir, "package_doubled-stage1") + path.sep;
+        const theirDir = path.join(shipDir, "package_doubled-stage0") + path.sep;
+        fs.rmSync(ourDir, { recursive: true, force: true });
+        fs.rmSync(theirDir, { recursive: true, force: true });
+        const ourDoubled = spawnSync(compiler, ["main.ts", "-o", ourDir], {
+          cwd: doubledSrc,
+          encoding: "utf8",
+        });
+        const theirDoubled = spawnSync("node", [cli, "main.ts", "-o", theirDir], {
+          cwd: doubledSrc,
+          encoding: "utf8",
+        });
+        const ourDoubledModules = llFilesIn(ourDir);
+        const theirDoubledModules = llFilesIn(theirDir);
+        const differingDoubled = ourDoubledModules.filter(
+          (f) =>
+            !fs.existsSync(path.join(theirDir, f)) ||
+            fs.readFileSync(path.join(ourDir, f), "utf8") !==
+              fs.readFileSync(path.join(theirDir, f), "utf8")
+        );
+        check(
+          "the self-hosted compiler: a `node_modules` ancestor no name spells is searched by both, to stage0's bytes",
+          ourDoubled.status === 0 &&
+            theirDoubled.status === 0 &&
+            ourDoubledModules.length === 2 &&
+            ourDoubledModules.join(",") === theirDoubledModules.join(",") &&
+            differingDoubled.length === 0,
+          `stage1 ${ourDoubled.status}: ${ourDoubled.stdout}${ourDoubled.stderr}` +
+            `stage0 ${theirDoubled.status}: ${theirDoubled.stderr}` +
+            `modules ours [${ourDoubledModules.join(" ")}] theirs [${theirDoubledModules.join(" ")}]` +
+            ` differing [${differingDoubled.join(" ")}]`
+        );
+
+        // The same tree named from its root, where both compilers *can* read
+        // the ancestor's name and both step over it: one refusal, one sentence,
+        // one exit status.
+        const doubledRoot = path.join(root, "tests", "link", "package_doubled");
+        const doubledEntry = path.join("node_modules", "app", "main.ts");
+        const ourNamed = spawnSync(compiler, [doubledEntry, "-o", ourDir], {
+          cwd: doubledRoot,
+          encoding: "utf8",
+        });
+        const theirNamed = spawnSync("node", [cli, doubledEntry, "-o", theirDir], {
+          cwd: doubledRoot,
+          encoding: "utf8",
+        });
+        check(
+          "the self-hosted compiler: a `node_modules` ancestor the name spells is stepped over by both",
+          ourNamed.status === 1 && theirNamed.status === 1 && ourNamed.stderr === theirNamed.stderr,
+          `stage1 ${ourNamed.status}: ${ourNamed.stderr}\nstage0 ${theirNamed.status}: ${theirNamed.stderr}`
         );
       }
 

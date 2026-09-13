@@ -948,7 +948,9 @@ and their `.ll` goldens are byte-identical files.
   `import { scale } from "pkg_bare"` looks for `node_modules/pkg_bare` in the
   importing file's directory and in every directory above it — above the
   directory the compiler was run in included, which is the ordinary npm layout
-  (`tests/link/package_above`) — reads that package's `package.json`, and
+  (`tests/link/package_above`) — stepping over an ancestor already called
+  `node_modules` wherever the module's own name spells one, as Node does
+  (`tests/link/package_doubled`) — reads that package's `package.json`, and
   compiles the file its `exports` map offers for the **`nish` condition**
   (`tests/link/package_bare`, `docs/wp21-packages.md` §2):
 
@@ -968,8 +970,16 @@ and their `.ll` goldens are byte-identical files.
     and then plain `nish` — so a package correct under either declares `nish`,
     a package that needs different source per mode declares both, and a
     mismatch is a *resolution* failure at the package boundary rather than a
-    wrong answer at run time. Conditions match in the manifest's own
-    declaration order, as Node matches them.
+    wrong answer at run time. "First" is the compiler's order and not the
+    manifest's: the mode-qualified condition wins wherever the package
+    declares it, unlike Node, which would take whichever of the two the
+    manifest names first (`tests/link/package_mode_order`,
+    `tests/link/package_mode_order_f64`). Node's order is right for rival
+    conditions and wrong for these two, because `nish-f64` is not a rival of
+    `nish` but `nish` refined by the mode: honouring the order would let a
+    package write `nish` above `nish-f64` and never have its f64 source
+    compiled, with nothing said about it — the silent mismatch this spelling
+    exists to make loud.
   - **Presence of the condition is the claim.** A package that has no `nish`
     condition for the subpath asked for is
     `` Package `plainjs` has no Nish entry point: its `exports` declares no

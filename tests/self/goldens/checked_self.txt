@@ -7,7 +7,7 @@
 # module's dump, written once for the whole corpus because it is the same text
 # under every entry that loads it — which the generator checks rather than
 # assumes. The comparison still runs all 57 programs and reads every byte.
-# 64 programs, 365868 dump lines live, 64 distinct modules.
+# 64 programs, 365828 dump lines live, 64 distinct modules.
 entry self/annotations.ts: self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
 entry self/arrays.ts: self/arrays.ts self/annotations.ts self/branding.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts self/builtins.ts self/expressions.ts self/generics.ts self/declarations.ts self/result.ts self/structs.ts self/members.ts self/emit_util.ts
 entry self/assignment.ts: self/assignment.ts self/context.ts self/diagnostics.ts self/codes.ts self/strings.ts self/map.ts self/nodes.ts self/program.ts self/nish_modules.ts self/branding.ts self/packages.ts self/symbols.ts self/types.ts self/ice.ts
@@ -14386,9 +14386,9 @@ function parentDirectory(dir: string): string -> @parentDirectory
   escaping: dir
   calls: dirname nish_str_at nish_str_concat nish_str_eq
   stackSites=0 stackLocals=0
-  local 771:11 parent: string (const)
-  callee 771:20 dirname -> @dirname
-  callee 782:10 dirname -> @dirname
+  local 773:11 parent: string (const)
+  callee 773:20 dirname -> @dirname
+  callee 784:10 dirname -> @dirname
 function nameNode(sig: FunctionSig): Node -> @nameNode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false returnDeref=40
   calls: nish_panic_index
@@ -14404,7 +14404,7 @@ function clashMessage(sig: FunctionSig, previous: FunctionSig, previousFile: str
   pointer sig: size=88 writesThrough=false captured=false
   pointer previous: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 807:9 where: string (const)
+  local 809:9 where: string (const)
 module self/parser.ts
 import Diagnostic from "./diagnostics" -> struct Diagnostic
 import SourceFile from "./diagnostics" -> struct SourceFile
@@ -16519,70 +16519,66 @@ function manifestSkipBlank(text: string, at: i32): i32 -> @manifestSkipBlank
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   escaping: at
   stackSites=0 stackLocals=0
-  local 63:7 i: i32 (let)
-  local 65:11 code: i32 (const)
+  local 71:7 i: i32 (let)
+  local 73:11 code: i32 (const)
 function manifestEndOfString(text: string, at: i32): i32 -> @manifestEndOfString
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   stackSites=0 stackLocals=0
-  local 81:7 i: i32 (let)
-  local 83:11 code: i32 (const)
+  local 89:7 i: i32 (let)
+  local 91:11 code: i32 (const)
 function manifestEndOfValue(text: string, at: i32): i32 -> @manifestEndOfValue
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
   escaping: at text
   calls: manifestEndOfString
   stackSites=0 stackLocals=0
-  local 104:9 first: i32 (const)
-  callee 106:12 manifestEndOfString -> @manifestEndOfString
-  local 109:9 i: i32 (let)
-  local 111:13 code: i32 (const)
-  local 122:7 depth: i32 (let)
-  local 123:7 i: i32 (let)
-  local 125:11 code: i32 (const)
-  local 127:13 end: i32 (const)
-  callee 127:19 manifestEndOfString -> @manifestEndOfString
-function manifestFirstField(object: string, first: string, second: string): string -> @manifestFirstField
+  local 112:9 first: i32 (const)
+  callee 114:12 manifestEndOfString -> @manifestEndOfString
+  local 117:9 i: i32 (let)
+  local 119:13 code: i32 (const)
+  local 130:7 depth: i32 (let)
+  local 131:7 i: i32 (let)
+  local 133:11 code: i32 (const)
+  local 135:13 end: i32 (const)
+  callee 135:19 manifestEndOfString -> @manifestEndOfString
+function manifestField(object: string, name: string): string -> @manifestField
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: object
   calls: manifestEndOfString manifestEndOfValue manifestSkipBlank nish_str_eq nish_str_new
   stackSites=0 stackLocals=0
-  local 161:7 i: i32 (let)
-  callee 161:11 manifestSkipBlank -> @manifestSkipBlank
-  callee 165:7 manifestSkipBlank -> @manifestSkipBlank
-  local 167:11 keyEnd: i32 (const)
-  callee 167:20 manifestEndOfString -> @manifestEndOfString
-  local 171:11 key: string (const)
-  callee 172:9 manifestSkipBlank -> @manifestSkipBlank
-  local 176:11 valueAt: i32 (const)
-  callee 176:21 manifestSkipBlank -> @manifestSkipBlank
-  local 177:11 valueEnd: i32 (const)
-  callee 177:22 manifestEndOfValue -> @manifestEndOfValue
-  callee 184:9 manifestSkipBlank -> @manifestSkipBlank
-  callee 188:9 manifestSkipBlank -> @manifestSkipBlank
-function manifestField(object: string, name: string): string -> @manifestField
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
-  escaping: name object
-  calls: manifestFirstField
-  stackSites=0 stackLocals=0
-  callee 194:65 manifestFirstField -> @manifestFirstField
+  local 162:7 i: i32 (let)
+  callee 162:11 manifestSkipBlank -> @manifestSkipBlank
+  callee 166:7 manifestSkipBlank -> @manifestSkipBlank
+  local 168:11 keyEnd: i32 (const)
+  callee 168:20 manifestEndOfString -> @manifestEndOfString
+  local 172:11 key: string (const)
+  callee 173:9 manifestSkipBlank -> @manifestSkipBlank
+  local 177:11 valueAt: i32 (const)
+  callee 177:21 manifestSkipBlank -> @manifestSkipBlank
+  local 178:11 valueEnd: i32 (const)
+  callee 178:22 manifestEndOfValue -> @manifestEndOfValue
+  callee 185:9 manifestSkipBlank -> @manifestSkipBlank
+  callee 189:9 manifestSkipBlank -> @manifestSkipBlank
 function manifestTarget(raw: string): string | null -> @manifestTarget
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_str_at nish_str_eq nish_str_new splitByte
   stackSites=0 stackLocals=0
-  local 210:9 text: string (const)
-  local 214:14 segment: string (const)
-  callee 214:25 splitByte -> @splitByte
+  local 208:9 text: string (const)
+  local 212:14 segment: string (const)
+  callee 212:25 splitByte -> @splitByte
 function nishExportTarget(manifest: string, subpath: string, primary: string, fallback: string): string | null -> @nishExportTarget [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   escaping: fallback manifest primary subpath
-  calls: manifestField manifestFirstField manifestTarget nish_str_eq
+  calls: manifestField manifestTarget nish_str_eq
   stackSites=0 stackLocals=0
-  local 238:9 exports: string (const)
-  callee 238:19 manifestField -> @manifestField
-  local 242:9 forSubpath: string (const)
-  callee 242:22 manifestField -> @manifestField
-  local 249:7 conditions: string (let)
-  callee 256:10 manifestTarget -> @manifestTarget
-  callee 256:25 manifestFirstField -> @manifestFirstField
+  local 246:9 exports: string (const)
+  callee 246:19 manifestField -> @manifestField
+  local 250:9 forSubpath: string (const)
+  callee 250:22 manifestField -> @manifestField
+  local 257:7 conditions: string (let)
+  local 264:7 selected: string (let)
+  callee 264:18 manifestField -> @manifestField
+  callee 266:16 manifestField -> @manifestField
+  callee 268:10 manifestTarget -> @manifestTarget
 module self/std_modules.ts
 import STD_PREFIX from "./branding" -> const STD_PREFIX
 import normalizePath from "./paths" -> function @normalizePath

@@ -467,12 +467,12 @@ export class Compilation {
    *
    * The walk has to reach every directory stage0 reaches, because a program
    * one compiler resolves and the other does not is a program that compiles
-   * with one compiler and not the other. stage0 resolves an absolute path and
-   * climbs to `/`; here the importing directory is usually relative — `nish
-   * main.ts` run in `proj/src` gives `.` — so above `.` the walk is spelled
-   * with `..` rather than computed by `dirname` (`parentDirectory`), and
-   * `proj/node_modules` beside `proj/src/main.ts`, which is the ordinary npm
-   * layout, is found by both.
+   * with one compiler and not the other. Both walks are driven by the importing
+   * module's *name*, the one string both compilers hold for it (WP19 §A3); here
+   * that name is usually relative — `nish main.ts` run in `proj/src` gives `.`
+   * — so above `.` the walk is spelled with `..` rather than computed by
+   * `dirname` (`parentDirectory`), and `proj/node_modules` beside
+   * `proj/src/main.ts`, which is the ordinary npm layout, is found by both.
    */
   findPackageDir(from: string, name: string): string | null {
     // Normalised first so that the `..` segments a relative walk produces are
@@ -749,22 +749,24 @@ export class Compilation {
 }
 
 /**
- * The directory above `dir`, or `""` when there is none left to visit.
+ * The directory above `dir`, or `""` when there is none left to visit — and the
+ * twin of `parentDirectory` in `src/compilation.ts`, step for step, because the
+ * two compilers have to visit the same directories in the same order.
  *
- * `dirname` answers this for an absolute path and stops at `/`, which is
- * exactly what stage0's walk does. For a relative one it stops at `.`, and it
- * is wrong above that: `dirname("..")` is `.`, back the way we came. So above
- * `.` the walk is spelled — one more `..` per level — and the operating system
- * resolves those against the same working directory stage0 asks
- * `process.cwd()` for. That is how a compiler with no `cwd` builtin (WP19 §A3)
- * searches the directories above the one it was run in.
+ * `dirname` answers this for an absolute path and stops at `/`. For a relative
+ * one it stops at `.`, and it is wrong above that: `dirname("..")` is `.`, back
+ * the way we came. So above `.` the walk is spelled — one more `..` per level —
+ * and the operating system resolves those against the working directory. That
+ * is how a compiler with no `cwd` builtin (WP19 §A3) searches the directories
+ * above the one it was run in.
  *
- * One difference with stage0 survives, and it is the exotic layout rather than
- * the ordinary one: an *ancestor of the working directory* that is itself
- * called `node_modules` is stepped over by stage0, which can read the name off
- * its absolute path, and is searched here, which only ever spelled `..`. It
- * changes an answer only for a `node_modules/node_modules/<pkg>` above the
- * working directory, which is a layout npm does not produce.
+ * What the spelling gives up it now gives up on both sides: `..` names a
+ * directory without naming it, so an ancestor above the name's own root that is
+ * itself called `node_modules` cannot be recognised and is searched rather than
+ * stepped over. stage0 used to read that name off an absolute path and refuse
+ * the package — a program that compiled with one compiler and not the other —
+ * so its walk is driven by the module's name now too (`docs/wp21-packages.md`
+ * §10a, `tests/link/package_doubled`).
  */
 function parentDirectory(dir: string): string {
   if (dir.length > 0 && dir.charCodeAt(0) === SLASH) {

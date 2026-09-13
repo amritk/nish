@@ -1,0 +1,4 @@
+define internal noundef i32 @helper()
+define internal noundef i32 @zed.helper()
+define noundef i32 @zed.zed()
+declare noundef i32 @zed.zed()

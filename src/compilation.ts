@@ -92,6 +92,43 @@ type ResolvedModule = {
 const isFile = (candidate: string): boolean => fs.existsSync(candidate) && fs.statSync(candidate).isFile();
 
 /**
+ * How many directories the `node_modules` walk visits before it gives up
+ * (`Compilation.findPackageDir`), and the twin of the same constant in
+ * `self/compilation.ts`.
+ *
+ * Something has to end a relative walk, because it cannot recognise the
+ * filesystem root: `/..` is `/`, so each step past the root re-asks what the
+ * root already answered and the loop would never stop. 256 levels above the
+ * importing directory is two orders of magnitude past any working directory a
+ * compiler is run in, and it keeps a failed resolution instant.
+ */
+const PACKAGE_WALK_LIMIT = 256;
+
+/**
+ * The directory above `dir`, or `""` when there is none left to visit — the
+ * twin of `parentDirectory` in `self/compilation.ts`, step for step, because
+ * the two compilers have to visit the same directories in the same order.
+ *
+ * `path.dirname` answers this for an absolute path and stops at `/`. For a
+ * relative one it stops at `.`, and it is wrong above that: `dirname("..")` is
+ * `.`, back the way we came. So above `.` the walk is spelled — one more `..`
+ * per level — and the operating system resolves those against the working
+ * directory, which is how a module named relatively reaches the `node_modules`
+ * beside the directory the compiler was run in.
+ */
+const parentDirectory = (dir: string): string => {
+  if (dir.startsWith("/")) {
+    const parent = path.dirname(dir);
+    return parent === dir ? "" : parent; // `/` is the top of an absolute walk
+  }
+  if (dir === ".") return "..";
+  // In a normalised relative path every `..` leads, so a trailing one means the
+  // path is nothing but parent steps and the next level is one more.
+  if (dir === ".." || dir.endsWith("/..")) return `${dir}/..`;
+  return path.dirname(dir);
+};
+
+/**
  * Phase A for one file, with the Phase 0 validator slot: the forbidden-syntax
  * sweep (WP0, `src/validator.ts`) runs between parsing and checking, i.e.
  * right here, before the module's signatures are collected. With a `sink`
@@ -248,7 +285,11 @@ export class Compilation {
     // internal error, because an invariant that is broken anyway should not turn
     // into two different failures in the two compilers.
     if (parsed === null) throw cannotFindPackage(importer, imp, imp.specifier);
-    const packageDir = this.findPackageDir(path.dirname(importer.path), parsed.name);
+    // The walk starts from the module's *name*, not from its absolute path: the
+    // name is the string both compilers hold for this module (WP19 §A3), so a
+    // walk driven by it is a walk stage1 can take step for step without the
+    // `cwd` builtin it has no room for. See `findPackageDir`.
+    const packageDir = this.findPackageDir(path.dirname(importer.fileName), parsed.name);
     if (packageDir === null) throw cannotFindPackage(importer, imp, parsed.name);
     const manifest = fs.readFileSync(path.join(packageDir, "package.json"), "utf8");
     const target = nishExportTarget(
@@ -258,7 +299,10 @@ export class Compilation {
       PACKAGE_CONDITION
     );
     if (target === null) throw noNishEntryPoint(importer, imp, parsed);
-    const resolved = path.join(packageDir, target);
+    // Back to an absolute path here, because that is a module's identity in this
+    // compiler; `importedName` is what turns it into the name the IR carries,
+    // and it answers the same string a relative walk would have spelled.
+    const resolved = path.resolve(path.join(packageDir, target));
     // The manifest named a file that is not there, which is the package's own
     // mistake and not the consumer's — but it is still a module that could not
     // be found, so it is the same diagnostic the relative path gets.
@@ -273,18 +317,37 @@ export class Compilation {
    * A directory whose last segment is already `node_modules` is stepped over
    * rather than searched, which is Node's rule and stops
    * `node_modules/node_modules/<name>` from ever being looked for.
+   *
+   * **`from` is the importing module's name, and the walk climbs it exactly as
+   * `self/compilation.ts` climbs it** — including `parentDirectory`'s spelled
+   * `..` above a relative root. Driving the walk from the working directory
+   * instead is the obvious thing and was the wrong thing: stage1 has no
+   * `process.cwd()` (WP19 §A3) and cannot ever have one, so any directory this
+   * one can name and that one cannot is a directory the two compilers disagree
+   * about — and a package found by one compiler and not the other is a program
+   * that compiles with one and not the other. What the shared spelling gives up
+   * is Node's rule for an ancestor *above the name's own root*: `..` names a
+   * directory without naming it, so neither compiler can tell that one is
+   * itself called `node_modules`, and neither steps over it. That changes an
+   * answer only for a `node_modules/node_modules/<name>` tree — which npm does
+   * not produce, since the doubled directory has to exist for the rule to
+   * matter — and it changes both answers the same way
+   * (`docs/wp21-packages.md` §10a, `tests/link/package_doubled`).
    */
   private findPackageDir(from: string, name: string): string | null {
-    let dir = from;
-    for (;;) {
+    // Normalised first so that the `..` segments a relative walk produces are
+    // the only ones in the path, which is what `parentDirectory` reads.
+    let dir = path.normalize(from);
+    for (let steps = 0; steps <= PACKAGE_WALK_LIMIT; steps++) {
       if (path.basename(dir) !== PACKAGE_ROOT_SEGMENT) {
         const candidate = path.join(dir, PACKAGE_ROOT_SEGMENT, name);
         if (isFile(path.join(candidate, "package.json"))) return candidate;
       }
-      const parent = path.dirname(dir);
-      if (parent === dir) return null;
+      const parent = parentDirectory(dir);
+      if (parent.length === 0) return null;
       dir = parent;
     }
+    return null;
   }
 
   /**

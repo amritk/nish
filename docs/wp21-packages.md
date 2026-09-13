@@ -67,7 +67,9 @@ it is the whole of this note.
 
 The `nish` row also carries the number mode, by spelling — `nish-f64`,
 `nish-i32`, or plain `nish` for a package correct under either. §6 says why
-that is the right place for it and why nothing else needs a manifest.
+that is the right place for it and why nothing else needs a manifest, and §10a
+says why those two are the one pair this compiler ranks itself rather than
+leaving to the order the manifest wrote them in.
 
 `"nish"` is what it ended up being, and it is a spelling of the project's name,
 so it lives in `src/branding.ts` and `self/branding.ts` with the rest of them
@@ -262,6 +264,16 @@ single-mode package matches one, and a mismatch is a *resolution* failure at
 the package boundary — before a byte of the dependency is checked, and with no
 new file format, sidecar or manifest key to keep in sync. A package that needs
 genuinely different source per mode gets that for free by listing both.
+
+That list is asked for **in that order, whichever order the manifest declares
+the two conditions in**, and it is the one place the reader departs from Node's
+condition matching (§10a, `tests/link/package_mode_order`). Node takes the
+first key of the object the consumer asked for, which is right when the
+conditions are rivals — `node` before `import` is a package choosing — and
+wrong here, because `nish-f64` is not a rival of `nish` but `nish` refined by
+the mode. Under declaration order a package writing `nish` above `nish-f64`
+would ship f64 source that is never compiled and get no diagnostic saying so,
+which is the silent failure this whole section is arguing against.
 
 One implementation note: `nish`'s resolver has to read the `exports` object
 itself rather than delegating blindly, because the good message —
@@ -458,17 +470,31 @@ included — is what says the two implementations scope symbols the same way.
 split into a package name and an `exports` subpath (`@scope/hash` and
 `./blake3`), `node_modules/<name>` is looked for in the importing file's
 directory and in every directory above it — Node's algorithm, including its rule
-that a directory already called `node_modules` is stepped over — and the file
-compiled is the one that package's `exports` map offers for the `nish`
-condition.
+that a directory already called `node_modules` is stepped over wherever the
+module's own name spells one — and the file compiled is the one that package's
+`exports` map offers for the `nish` condition.
 
 Two constants landed in `branding.ts` on both sides, which is where §2 asked for
 them: `PACKAGE_CONDITION` (`nish`) and `packageConditionFor`, which spells the
-mode-qualified `nish-i32` / `nish-f64`. The compiler asks for its own mode first
-and then the plain one, and the *order the manifest declares them in* decides,
-because that is how Node matches a condition. A package correct under either
-mode declares `nish` and matches both; one that needs different source per mode
-declares both and gets two entry points for free.
+mode-qualified `nish-i32` / `nish-f64`. The compiler asks the whole condition
+map for its own mode and only then for the plain one. A package correct under
+either mode declares `nish` and matches both; one that needs different source
+per mode declares both and gets two entry points for free, **in either order**.
+
+That last clause is the one thing here Node would do differently, and it was the
+other way round until the review of this stage: the reader matched the two
+conditions in one walk, so the manifest's declaration order decided, as it does
+in Node. It made `{"nish": "./any.ts", "nish-f64": "./f64.ts"}` compile
+`any.ts` for an f64 program and leave `f64.ts` dead with nothing said — a
+package author's ordinary mistake turning into precisely the silent wrong answer
+§6 introduced the mode-qualified condition to prevent. Declaration order is
+right for *rival* conditions, where the package is choosing between artifacts it
+built; these two are not rivals, since `nish-f64` is `nish` refined by the mode,
+and the refinement is not the package's to rank. So the rank is the compiler's,
+it is written down in both `manifest.ts` headers, and
+`tests/link/package_mode_order` and `tests/link/package_mode_order_f64` are two
+packages that declare the plain condition first and whose exit code is right
+only if the mode-qualified file is the one compiled.
 
 Nothing about the module downstream of resolution is special. The file is
 compiled, checked, analysed and emitted like any other module, which is §3 in
@@ -476,29 +502,54 @@ one sentence: for an Nish consumer the distribution format is source, so there
 is no boundary to cross and no second code path to maintain.
 
 **"Every directory above it" is the whole climb in both compilers, and it took
-two goes to be.** stage0 resolves the entry to an absolute path and climbs to
-`/`. stage1 has no `process.cwd()` to build one from — WP19 §A3 keeps that
-builtin out, and module identity is the path as written — so its walk ran out
-where `dirname` does, which for the usual relative entry is `.`: the working
+three goes to be.** stage0 used to resolve the entry to an absolute path and
+climb to `/`. stage1 has no `process.cwd()` to build one from — WP19 §A3 keeps
+that builtin out, and module identity is the path as written — so its walk ran
+out where `dirname` does, which for the usual relative entry is `.`: the working
 directory. That made `proj/node_modules` beside `proj/src/main.ts`, compiled as
 `nish main.ts` from `proj/src`, resolve under stage0 and fail under stage1 with
 `` Cannot find package `pkg` ``, and that layout is the one npm produces rather
 than an exotic one. Above `.` the walk is now *spelled* — `..`, `../..`, one
-level per step — and the operating system resolves those against the same
-working directory `process.cwd()` would have answered, so the two compilers
-search the same directories. Two things follow from spelling it rather than
-computing it, and both are written at `parentDirectory` in
-`self/compilation.ts`: the walk cannot recognise the filesystem root (`/..` is
-`/`), so a limit ends it rather than the root does — 256 levels, which is two
-orders of magnitude past any directory a compiler is run in and keeps a failed
-resolution at about 10 ms, where probing PATH_MAX's worth of levels cost 1.8 s
-of kernel time; and an
-*ancestor of the working directory* that is itself called `node_modules` is
-stepped over by stage0, which can read the name, and searched by stage1, which
-only ever spelled `..` — a difference that can change an answer only for
-`node_modules/node_modules/<pkg>`, which npm does not produce.
+level per step — and the operating system resolves those against the working
+directory `process.cwd()` would have answered, so the two compilers search the
+same directories. One thing follows from spelling it rather than computing it
+and is written at `parentDirectory` in both files: the walk cannot recognise the
+filesystem root (`/..` is `/`), so a limit ends it rather than the root does —
+256 levels, which is two orders of magnitude past any directory a compiler is
+run in and keeps a failed resolution at about 10 ms, where probing PATH_MAX's
+worth of levels cost 1.8 s of kernel time.
 `tests/link/package_above` is that layout, compiled from the subdirectory by
 both compilers and compared byte for byte (§10e).
+
+**The third go was the `node_modules` ancestor, and it is what decided whose
+walk the other one copies.** Node steps over a directory already called
+`node_modules` instead of searching it, so `node_modules/node_modules/<pkg>` is
+a package Node never finds. stage0 could apply that rule the whole way up,
+because an absolute path names every ancestor; stage1 cannot, because above the
+name's own root it has only `..`, which names a directory without naming it.
+Learning the name from below would take `getcwd` or an inode to compare — the
+classic `pwd(1)` algorithm — and the language has neither, by two separate
+decisions (WP19 §A3, and `nish:fs` has no `statSync`). So `nish main.ts` run in
+`R/node_modules/app` with `R/node_modules/node_modules/zed` installed was
+`` Cannot find package `zed` `` from stage0 and a clean compile from stage1: a
+program that compiles with one compiler and not the other, which is the one
+outcome this project will not ship.
+
+It was closed by driving **both** walks from the importing module's *name* —
+the string both compilers hold for it (WP19 §A3) — rather than one of them from
+the working directory. `src/compilation.ts` grew the same `parentDirectory` and
+the same 256-level limit, and the two now visit the same directories in the same
+order because they are given the same input and take the same steps, which is a
+stronger statement than "they agree about the tests". What it gives up is Node's
+rule *above the name's own root*: neither compiler can tell that `..` is a
+`node_modules`, so neither steps over it. That changes an answer only where a
+`node_modules/node_modules/<pkg>` actually exists — the rule is unobservable
+otherwise, since the directory it declines to search has to be there for the
+declining to matter — and npm does not produce one. Everywhere the name spells
+the ancestor, including every dependency's own imports, the rule holds exactly
+as Node states it. `tests/link/package_doubled` is that tree, compiled both
+ways by both compilers: found from inside, refused from the root, the same
+answer from each (§10e).
 
 ### 10b. The manifest reader, and why stage0 does not use `JSON.parse`
 
@@ -514,8 +565,10 @@ What the narrowing costs is stated in both module headers rather than left to be
 discovered: only the `nish` conditions are honoured (`default`, `import` and
 `node` are skipped, not matched — a `default` target is JavaScript and this
 compiler cannot compile it), a subpath is an exact key rather than a `"./*"`
-pattern, and a target is a string beginning with `./` with no `..` segment and
-no backslash escape. Node's one-entry shorthand — an `exports` object with no
+pattern, a target is a string beginning with `./` with no `..` segment and
+no backslash escape, and the mode-qualified condition outranks the plain one
+whatever order the manifest declares them in (§10a). Node's one-entry shorthand
+— an `exports` object with no
 `.`-prefixed key is the condition map for `.` — is read, because a one-export
 package is the common case and writing it that way is not a mistake.
 
@@ -562,6 +615,15 @@ different file from the one an f64 compile would. Each package keeps a private
 `helper()` and so does the program, so the exit code is 7 only if every call
 reached the file the condition selected and the symbol its package's prefix.
 
+`tests/link/package_mode_order/` and `tests/link/package_mode_order_f64/` are
+that fixture's other half, and the half the first review of this stage found
+missing: the same two conditions declared the other way round, plain `nish`
+above the mode-qualified one, one package per mode. Under declaration-order
+matching each compiles the mode-agnostic file and exits 164; each exits 7 only
+because the compiler ranks the two conditions itself (§10a). A fixture in the
+order that already worked is what let the wrong rule survive a round of review,
+so both orders are pinned now.
+
 `tests/link/package_above/` is the walk: the manifest beside `src/` rather than
 inside it, compiled as `nish main.ts` from `src/`, which is the ordinary npm
 layout compiled the ordinary way and the case that tells a walk that stops at
@@ -571,6 +633,17 @@ module, because a program stage0 resolves and stage1 does not is exactly the
 divergence `tests/self/` exists to prevent. The other fixtures cannot see this:
 the harness spawns the compiler with the repository root as the working
 directory and names the entry by path, so their walk never leaves the fixture.
+
+`tests/link/package_doubled/` is the `node_modules` ancestor, and it is
+compiled twice because the answer is supposed to depend on how the entry is
+named. From inside `node_modules/app`, where the ancestor is `..` and no name
+says what it is, both compilers search it and both compile the program; named
+from the fixture root as `node_modules/app/main.ts`, where the ancestor is
+spelled, both step over it and both refuse with `` Cannot find package `zed` ``.
+Each run is made with both compilers and compared — every byte of every module
+for the first, the exit status and the whole of stderr for the second — because
+what is being pinned is not which answer they give but that it is the same one
+(§10a).
 
 `tests/link/package_not_nish/` is the negative §6 asks for by name: an ordinary
 npm package, with `import`, `require` and `default` rows and no `nish` one.
