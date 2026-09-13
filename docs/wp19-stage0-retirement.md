@@ -775,7 +775,7 @@ them:**
 
 1. the **seed** — a release attaches `nish-<version>-x86_64-linux` and nothing
    else, so there is no darwin binary to bootstrap from, which is
-   [G5](#g5-distribution-does-not-need-node); and
+   [G5](#g5--distribution-does-not-need-node); and
 2. the **ld64 fixed point** — the fourth family above. `--verify` asserts
    `stage3 == stage2` byte for byte, and without that fixed a `bootstrap` row
    on macOS would be red on the day its seed arrived, which is the other way a

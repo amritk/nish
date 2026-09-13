@@ -36,7 +36,7 @@ an ELF/Linux assumption.
 The fourth family reaches further than this job: `scripts/bootstrap.sh --verify`
 asserts the same `stage3 == stage2` comparison, so it also stands between the
 release workflow and a **darwin binary**
-([G5](wp19-stage0-retirement.md#g5-distribution-does-not-need-node)).
+([G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node)).
 
 Restoring the row therefore means porting four checks against hardware that has
 to be iterated on, which is a package of its own rather than a line in the
@@ -66,7 +66,7 @@ Neither stops the row now, and neither is what the five failures above are.
 
 `bootstrap` builds `self/` with the **last released** binary rather than with
 stage0, which is the only thing that checks WP19's rolling freeze
-([G3](wp19-stage0-retirement.md#g3-the-seed-protocol-exists-and-ci-uses-it)).
+([G3](wp19-stage0-retirement.md#g3--the-seed-protocol-exists-and-ci-uses-it)).
 It asks for the asset its own *host* needs — `uname -s`/`uname -m` resolved to
 the triple `release.yml` stamps into the tarball name, one of `x86_64-linux`,
 `aarch64-linux`, `x86_64-darwin`, `aarch64-darwin` — so the job is written for
@@ -85,7 +85,7 @@ reason: it is the gate, and a host with no seed has nothing to install for.
 G3 asks for this on **both** operating systems and it runs on Linux alone. Two
 things have to land before the second row, and neither is a matrix line: the
 darwin **seed**, which is
-[G5](wp19-stage0-retirement.md#g5-distribution-does-not-need-node), and the
+[G5](wp19-stage0-retirement.md#g5--distribution-does-not-need-node), and the
 **ld64 fixed point** — the fourth family in the table above, which is the
 comparison `scripts/bootstrap.sh --verify` makes. A macOS row added before that
 is fixed would be red on the day its seed arrived, which is the other way a
