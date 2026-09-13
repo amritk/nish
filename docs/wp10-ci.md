@@ -13,7 +13,7 @@ comment above the `on:` block has the details.
 | Job | Runner | Steps |
 | --- | --- | --- |
 | `test (ubuntu-latest)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`) | `npm ci`, `npm run check`, `npm test`, size report |
-| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | the same steps; back in the matrix, see below |
+| `test (macos-latest)` | macOS (Apple Silicon), Homebrew `llvm@18` | **commented out of the matrix**, on cost rather than on breakage; see below |
 | `bootstrap` | Ubuntu | builds `self/` with the **last released** binary as the seed, which is the only thing that checks WP19's rolling freeze |
 | `lint` | Ubuntu | `npm run lint --if-present` (a no-op until `package.json` defines `lint`) |
 
@@ -21,9 +21,22 @@ comment above the `on:` block has the details.
 G1's corpus half is nightly, on its own workflow, for the reasons under
 [the parity run](#the-parity-run-nightly) below.
 
-**The macOS job is back**, and both of the things that kept it out were the
-same thing: macOS ships bash 3.2 as `/bin/bash` (Apple will not ship GPLv3),
-and this repository's shell scripts had been written against bash 4.
+**The macOS job is one uncommented line away, and stays commented out.** Both
+of the things that used to *break* it are fixed; what keeps it out now is what
+it costs.
+
+It is the whole `test` job a second time — `npm ci`, typecheck, the full suite,
+smoke, the cookbook and registry checks, the size report — behind a
+`brew install llvm@18`, on the slowest runner GitHub rents, and every push
+would wait for it. Restore the row when the suite is fast, or put it on a
+schedule the way [the parity run](#the-parity-run-nightly) is. What it buys is
+the ld64 / Mach-O half of `build.sh` — `-dead_strip`, `-Wl,-x`, no
+`-fuse-ld=lld`, no `-fno-plt` — and Apple Silicon, and no Linux runner
+exercises either.
+
+The two defects it was waiting for are both bash 3.2, which macOS ships as
+`/bin/bash` (Apple will not ship GPLv3) and which this repository's shell
+scripts had been written against:
 
 - `scripts/build.sh` runs under `set -euo pipefail`, and in bash 3.2
   expanding an empty array as `"${arr[@]}"` while `set -u` is on raises
@@ -36,15 +49,12 @@ and this repository's shell scripts had been written against bash 4.
   builtin that bash 3.2 does not have at all, so the smoke step died on the
   first line that used it. It reads the same pipeline with `while read` now.
 
-What the job buys is the ld64 / Mach-O half of `build.sh` — `-dead_strip`,
-`-Wl,-x`, no `-fuse-ld=lld`, no `-fno-plt` — which no Linux runner exercises
-at any architecture, and it buys it on Apple Silicon, which no other job in
-the matrix covers either. What it does not buy is the rolling freeze on
-macOS: the `bootstrap` job needs a darwin seed binary and a release ships
-`x86_64-linux` alone, so that half waits on
-[wp19](wp19-stage0-retirement.md#g5-distribution-does-not-need-node) rather
-than on this matrix. `fail-fast: false` keeps a macOS-only failure from
-cancelling the Linux row that says whether it is the platform or the change.
+Neither would stop the row now. And whenever it does come back, it will not
+bring WP19 G3's second operating system with it: the `bootstrap` job needs a
+darwin *seed* binary and a release ships `x86_64-linux` alone, so that half
+waits on [wp19](wp19-stage0-retirement.md#g5-distribution-does-not-need-node).
+`fail-fast: false` is already set, so a macOS-only failure would not cancel
+the Linux row that says whether it is the platform or the change.
 
 ### The parity run, nightly
 

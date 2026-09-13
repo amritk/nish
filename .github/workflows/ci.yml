@@ -38,21 +38,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Both operating systems, which WP19 G3 asks for and which took two
-        # bash 3.2 fixes to get back: macOS ships bash 3.2 (Apple will not
+        # macos-latest is commented out, and what it is waiting for has
+        # changed. It used to be broken: macOS ships bash 3.2 (Apple will not
         # ship GPLv3), where expanding an empty array as "${arr[@]}" under
-        # `set -u` is an "unbound variable" error and `mapfile` does not
-        # exist. scripts/build.sh spells the nine expansions of `pgo`, `elf`,
-        # `strip_flag` and `libs` as ${arr[@]+"${arr[@]}"}, and
-        # scripts/smoke.sh reads its program list with `while read` instead of
-        # `mapfile`. `fail-fast: false` above is what keeps a macOS-only
-        # failure from cancelling the Linux run that would say whether it is
-        # the platform or the change.
+        # `set -u` is an "unbound variable" error and `mapfile` does not exist
+        # at all. Both are fixed -- scripts/build.sh spells its nine
+        # expansions of `pgo`, `elf`, `strip_flag` and `libs` as
+        # ${arr[@]+"${arr[@]}"}, and scripts/smoke.sh reads its program list
+        # with `while read` -- so restoring the row is uncommenting this line
+        # and nothing else.
         #
-        # Anything measured in bytes is a fact about one target: the
-        # runtime.c .text budget skips itself off linux-x64 (tests/run.js) and
-        # the size report below is per-matrix-row in the job summary.
-        os: [ubuntu-latest, macos-latest]
+        # It stays commented out on **cost**: this row is the whole job over
+        # again -- npm ci, typecheck, the full suite, smoke, the cookbook and
+        # registry checks, the size report -- behind a `brew install llvm@18`,
+        # on the slowest runner GitHub rents. Every push would wait for it.
+        # Turn it on when the suite is fast, or put it on a schedule the way
+        # parity.yml is; what it buys is the ld64 / Mach-O half of build.sh
+        # (-dead_strip, -Wl,-x, no -fuse-ld=lld, no -fno-plt) and Apple
+        # Silicon, neither of which any Linux runner exercises.
+        #
+        # `fail-fast: false` above is what would keep a macOS-only failure
+        # from cancelling the Linux row. Anything measured in bytes already
+        # knows it is a fact about one target: the runtime.c .text budget
+        # skips itself off linux-x64 (tests/run.js).
+        os: [ubuntu-latest] # , macos-latest
     steps:
       - uses: actions/checkout@v4
 
