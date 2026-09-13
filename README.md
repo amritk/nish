@@ -26,7 +26,7 @@ ARM64, or WebAssembly.
 
 ```
 TypeScript source ──▶ TS AST ──▶ validator + checker ──▶ LLVM IR (.ll) ──▶ clang/llc ──▶ native binary
-                     (typescript)      (src/)             (src/codegen/)        + runtime/runtime.c
+                     (typescript)      (src/)             (src/codegen/)        + runtime/runtime.c + runtime_os.c
 ```
 
 If it compiles, every value has one fixed, known memory layout; binaries are
@@ -292,7 +292,7 @@ with `2`. `-g` adds a DWARF line table and variables to the IR so
 Multi-file programs: `nish examples/multi/main.ts --link build/multi && ./build/multi; echo $?`
 prints `49`.
 
-Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c -o app`
+Without `--link`, build the IR yourself: `clang add.ll examples/main.c runtime/runtime.c runtime/runtime_os.c -o app`
 (the `overriding the module target triple` warning is harmless: the IR is
 target-neutral unless you pass `--target`; `-Wno-override-module` silences
 it), or step by step with `llvm-as`, `llc -O2 -filetype=obj`, and
@@ -309,8 +309,9 @@ with `--target aarch64-unknown-linux-gnu` / `wasm32-wasi` plus
 
 Rust-class output is the goal: no GC, no embedded engine, aliasing and
 purity facts handed to LLVM up front, and a link step that strips everything
-unused. `examples/add.ts` + `examples/main.c` + `runtime/runtime.c`, x86_64
-Linux, glibc dynamically linked (`npm run size-report`):
+unused. `examples/add.ts` + `examples/main.c` + the two runtime translation units
+(`runtime/runtime.c` and `runtime/runtime_os.c`), x86_64 Linux, glibc
+dynamically linked (`npm run size-report`):
 
 | Profile | Bytes | What it does |
 |:---|---:|:---|
@@ -320,11 +321,17 @@ Linux, glibc dynamically linked (`npm run size-report`):
 | `wasm` | 279 | Freestanding `wasm32` module, every function exported, stripped. |
 | `wasi` | 42,228 (`argv.ts`) | `wasm32-wasi` command module: the runtime linked against wasi-libc, `_start` runs `main`; needs a WASI sysroot ([INSTALL.md](docs/INSTALL.md#wasi-optional-for---profile-wasi)). |
 
-`hello.ts` with `--link` is 4,696 bytes. The whole runtime is about 4 KB
-of machine code (`runtime.c`: one chunked bump arena with O(1) reset and
-mark/release, strings, JavaScript-exact number formatting, string parsing,
-`Math.random`, exit, files, `process.argv`, array growth, the panic paths);
-`Math.*` calls are LLVM intrinsics, so pure functions stay `readnone`.
+`hello.ts` with `--link` is 4,696 bytes. The whole runtime is under 5 KB of
+machine code, in two translation units with a measured ceiling each so that the
+core does not grow every time the language reaches further into the operating
+system: `runtime.c` is the 3,480 bytes every program touches (one chunked bump
+arena with O(1) reset and mark/release, strings, JavaScript-exact number
+formatting, string parsing, `Math.random`, `process.argv`, array growth, the
+panic paths), and `runtime_os.c` the 1,190 bytes that wrap a system call (exit,
+files, directories, subprocesses, the environment, the clock) — see
+[docs/wp7-runtime.md](docs/wp7-runtime.md#runtime-additions-and-budget) for both
+budgets and the reasoning. `Math.*` calls are LLVM intrinsics, so pure functions
+stay `readnone`.
 
 Memory is the part that usually costs a compiled-JavaScript design its
 speed, so it is done statically ([docs/wp6-memory.md](docs/wp6-memory.md)):

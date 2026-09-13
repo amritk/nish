@@ -1,0 +1,15 @@
+PASS  splitLines: the terminator adds no phantom line
+PASS  splitLines: the last line
+PASS  splitWhitespace: repeated blanks add no empty elements
+PASS  splitWhitespace: the word after the tab
+PASS  trim: both ends go
+PASS  contains: an interior occurrence
+PASS  replaceAll: every occurrence, not just the first
+PASS  firstDifference: equal line lists answer -1
+PASS  firstDifference: a prefix answers the shorter length
+FAIL  a check that fails on purpose
+      expected 2, got 1
+failed: a check that fails on purpose
+deliberate: 0 passed, 1 failed, 0 skipped
+PASS  a failing suite answers exit code 1
+text-f64: 10 passed, 0 failed, 0 skipped
