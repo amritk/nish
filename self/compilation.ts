@@ -367,7 +367,54 @@ export class Compilation {
     for (const unit of this.modules) {
       unit.checker.drainInstantiations();
     }
+    this.rejectInstantiatedStructClashes();
     return !this.sink.hasErrors();
+  }
+
+  /**
+   * WP18 G5 + WP21 section 9c: the struct-name rule, one pass later.
+   *
+   * `Holder$i32` is a program-wide name exactly as `Node` is, so two packages
+   * that both declare `Holder<T>` and both instantiate it at `i32` produce two
+   * different `%struct.Holder$i32`. `declaredStructs` catches that when both
+   * instantiations came from a *signature*, because it runs before bodies are
+   * checked; an instantiation a body asked for does not exist yet then, so the
+   * set is only final here.
+   *
+   * It has to be caught rather than left: the second module's registration
+   * replaces the layout the first one's objects were built with, so a field
+   * read through an imported signature lands on the wrong offset. That is a
+   * miscompile, not a link error.
+   */
+  rejectInstantiatedStructClashes(): void {
+    const owners = new StringMap();
+    const ownerPackages: string[] = [];
+    for (const unit of this.modules) {
+      for (const instance of unit.checker.program.structInstantiationList) {
+        // The module that declares the template owns every instantiation of
+        // it, whoever the annotation was written by.
+        if (instance.template.origin !== unit.source) {
+          continue;
+        }
+        const name = instance.info.name;
+        const seen = owners.get(name, -1);
+        if (seen < 0) {
+          owners.set(name, ownerPackages.length);
+          ownerPackages.push(unit.packageName);
+        } else if (ownerPackages[seen] !== unit.packageName) {
+          const what = instance.info.kind === STRUCT_CLASS ? "Class" : "Interface";
+          const here = describePackage(unit.packageName);
+          const there = describePackage(ownerPackages[seen]);
+          const at = instance.template.decl.children[0];
+          this.sink.report(
+            unit.source,
+            at.start,
+            at.end,
+            `${what} \`${name}\` is declared in package ${there} and again in package ${here}; a class or interface name is still program-wide, so two packages cannot both declare one`
+          );
+        }
+      }
+    }
   }
 
   /** Every class and interface declared anywhere in the program, by name. */

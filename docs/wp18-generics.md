@@ -1275,9 +1275,15 @@ reviewed before code is written.
 Generic **functions**, in both compilers, single module: §11's G2 (for
 functions), G3 and G4, merged into one change because G4 cannot be later than
 G3 and G2's "collect the template and refuse every use" state is not worth a
-commit of its own once G3 is in the same branch. Generic classes and
-interfaces (G5), constraints (G6), the whole-program rule (G7) and the
-peripheries (G8) are not done; §16 is the order to take them in.
+commit of its own once G3 is in the same branch.
+
+Generic **classes and interfaces** (G5) followed, in both compilers, single
+module: a `StructInfo` per instantiation, methods and a constructor per
+instantiation, type arguments after `new` and in an annotation, `implements`
+over an instantiated interface, and the struct half of the termination rule.
+§15.4 records what it decided differently from §11's sketch. Constraints (G6),
+the whole-program rule (G7) and the peripheries (G8) are not done; §16 is the
+order to take them in.
 
 The acceptance test of §9 holds and is checked rather than asserted:
 `tests/cases/gen_identity.ll` is `str_param_passthrough.ll` with the symbol
@@ -1378,20 +1384,70 @@ and the bootstrap over an unchanged `self/` reaches the same fixed point —
 stage3 byte-identical to stage2 over **56 modules and 7,617,344 bytes of IR**,
 which is §10's claim tested rather than asserted.
 
+### 15.4 G5, and the four decisions *it* made differently
+
+**`extends` is moot, not deferred.** §2 and §6.2 spend a paragraph each on
+`class Box2<T> extends Box<T>` and `class IntBox extends Box<i32>`. Neither
+exists to support: WP25 removed inheritance from the language after this note
+was written (`docs/MASTER_PLAN.md` §3.4, "Class inheritance — **Decided
+(WP25): none**"), so `extends` on any class, generic or not, is refused with
+the message that names the rewrite, and §8's message 10 has nothing to fire
+on. What replaced `extends` — a prefix-checked `implements` — works on an
+instantiation exactly as it works on a declared class, which is
+`tests/cases/gen_implements`.
+
+**`implements` is checked per instantiation, not at the template.** §6.3 argued
+for comparing the *uninstantiated* field lists, on the ground that a match with
+`T` a variable is a match for every `T`. That comparison needs a type variable
+to compare, and §15.1's first decision is that a type parameter is never a
+type: there is nothing in `StaticType` or the `TypeTable` for `T`, by design,
+and putting one there to save a repeated diagnostic would undo most of why this
+change is small. So `class Box<T> implements Container<T>` is checked once per
+instantiation, by the ordinary field-prefix rule, against `Container$i32`. The
+cost is one message per instantiation where §6.3 wanted one; the benefit is
+that the *interface* may itself be an instantiation, which the template-level
+check could not have expressed.
+
+**Termination is a request chain here too, not the template graph.** §16 says
+the struct half "cannot be a request-chain check, because a field's type is
+resolved while the struct is collected rather than while a body runs". That is
+true of the *function* chain and not of the answer: the checker keeps a second
+cursor, `currentStructInstance`, which is the struct whose members are being
+collected or whose method body is being checked, and `expandingStructAncestor`
+walks it exactly as `expandingAncestor` walks the function one. So there is
+still no template graph, §14's question 9 stays answered by construction, and
+the message names the concrete chain — `` `Nest<i32>` names `Nest<i32[]>` ``
+rather than the symbolic one (`tests/cases/reject_generic_expanding_field`).
+
+What the struct half *did* need was a widening of `containsType`: an
+instantiated class is an ordinary struct (§3c) and its `StaticType` therefore
+carries no type arguments at all, so `grow<T>` asking for `grow<Box<T>>` looked
+like a request for an unrelated named type. It reads them back out of the
+instantiation the mangled name belongs to, which also fixes the same hole on
+the function side — a hole that was unreachable until this milestone, because
+there was no `Box<T>` to write.
+
+**The C spelling of a struct name had to be collapsed.** §14's fourth question
+asks about a *function*-name collision in the generated header; the thing that
+had to be fixed to ship this is a level below it. `--emit-header` wrote
+`struct Box$i32`, and `-pedantic` refuses `$` in a C identifier — the same
+measurement §3c records for `identity$i32`, which `cFunctionName` already
+handled. A struct's name is a *type*, not a linker symbol, so unlike a function
+there is nothing to bind back with `NISH_SYMBOL`: `cStructName` collapses `.`
+and `$` to `_` exactly as `cResultName` has always done for a `Result` layout,
+and the layout is the only thing that crosses. `tests/layout/structs.ts` now
+declares one generic class at two type arguments and `structs.c` declares the
+two twins, so clang checks both instantiated layouts at compile time and every
+field offset of both at run time.
+
 ---
 
 ## 16. What is next, in order
 
-1. **G5, generic classes and interfaces.** The largest remaining piece and the
-   one users will ask for first. An instantiated class is an ordinary
-   `StructInfo` named `Box$i32`, which §3c's "an instantiated generic class is
-   an ordinary struct" makes affordable; what it needs beyond this package is a
-   second instantiation path (a *struct* worklist beside the function one),
-   type arguments after `new`, and the struct half of the termination rule —
-   which cannot be a request-chain check, because a field's type is resolved
-   while the struct is collected rather than while a body runs. §4's template
-   graph is the right shape for that half, and `reject_generic_expanding_field`
-   is its case.
+1. ~~**G5, generic classes and interfaces.**~~ **Landed** — §15.4 records what
+   it decided differently, including that the struct half of the termination
+   rule *is* a request chain after all, over a second cursor rather than over a
+   template graph.
 2. **G7, whole-program.** One definition per instantiation, in the module that
    declares the template, and a `declare` everywhere else. The refusal that
    stands in for it today (`is a generic function, and a generic function
@@ -1413,13 +1469,29 @@ which is §10's claim tested rather than asserted.
    a miscompile rather than a link error, which is the same failure WP21 S1
    exists to prevent for plain functions. `tests/link/package_generic` is the
    fixture that pins the prefix today and the one to extend when G7 lands.
+
+   G5 laid the same trap one level up and left it marked: an instantiated
+   class's *methods* are minted with `program.symbolPrefix` too, in
+   `collectInstanceMembers` (`src/checker/index.ts` and `self/generics.ts`),
+   and each carries a `TODO(WP18 G7)` beside the line. They are correct for
+   exactly the same reason and stop being correct at exactly the same moment,
+   so the two are one change rather than two. The refusal that holds them
+   apart until then is `` is a generic class, and a generic class or interface
+   cannot yet be instantiated from another module ``
+   (`tests/wordings/nl2316_generic_class_import`), and it is the second case to
+   delete when G7 lands.
 3. **G6, constraints.** Member access on a constrained parameter admitted at the
    template, satisfaction checked at each instantiation. Small next to G5, and
    it wants G5 first because `<T extends Shape>` is most useful on a container.
 4. **G8, the peripheries.** `-g` naming (`dbg_generic`), the three interop
    sidecars and the C-name collision of §14 question 4, the differential
    rewrite's one-JS-function-per-instantiation, and the fuzzer learning to emit
-   a generic declaration. The interop half has a decision waiting in it: an
+   a generic declaration. §6.7's display name is G8's too, and G5 left a case
+   for it to fix: a diagnostic about a chain through an instantiated class
+   quotes the mangled spelling — `` `grow<i32>` asks for `grow<Box$i32>` ``
+   — because `typeToString` answers from the type alone and an instantiated
+   class is an ordinary struct that carries no arguments. It is correct and it
+   is what the IR and the header say; it is not what the user wrote. The interop half has a decision waiting in it: an
    exported template with no instantiation produces no symbol, and §8 message 9
    says that should be an error when a sidecar is asked for. It is not one yet.
 5. **Generic methods on a generic class** (§14 question 7) and

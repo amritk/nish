@@ -253,7 +253,7 @@ export function cType(table: TypeTable, t: i32, position: i32, written: boolean)
       // A class or interface value is a pointer to its `struct` (declared in the
       // header with the flattened fields, WP2); a `T | null` is the same
       // pointer, possibly NULL.
-      return `struct ${table.nameOf(t)} *`;
+      return `struct ${cStructName(table.nameOf(t))} *`;
     case K_NULLABLE:
       return cType(table, table.refOf(t), position, false);
     // WP17: a `Result` small enough to pack travels *by value* — in either
@@ -277,7 +277,18 @@ export function cType(table: TypeTable, t: i32, position: i32, written: boolean)
  * class called `str` is `..._i32__str`, since its `.$` collapses to two.
  */
 export function cResultName(table: TypeTable, t: i32): string {
-  const name = table.resultStructName(t);
+  return cStructName(table.resultStructName(t));
+}
+
+/**
+ * The same collapse for a declared class or interface, which needs it for one
+ * reason: an instantiated generic is `Box$i32` (WP18 G5) and `-pedantic`
+ * refuses `$` in a C identifier. A *type* name is not a linker symbol, so
+ * unlike `cFunctionName` there is nothing to bind it back to with
+ * `NISH_SYMBOL` — the struct simply has a C spelling and an LLVM spelling, and
+ * only the layout crosses.
+ */
+export function cStructName(name: string): string {
   const out = new StringBuilder();
   let i = 0;
   while (i < name.length) {

@@ -265,8 +265,68 @@ export class Compilation {
     // point. It runs per module in load order because an instantiation is
     // checked by the module that declares its template, in that module's scope.
     for (const unit of this.modules) unit.checker.drainInstantiations();
+    this.rejectInstantiatedStructClashes();
     this.sink.throwIfErrors();
     this.checked = true;
+  }
+
+  /**
+   * WP18 G5 + WP21 §9c: the struct-name rule, one pass later.
+   *
+   * `Holder$i32` is a program-wide name exactly as `Node` is, so two packages
+   * that both declare `Holder<T>` and both instantiate it at `i32` produce two
+   * different `%struct.Holder$i32`. `declaredStructs` catches that when both
+   * instantiations came from a *signature*, because it runs before bodies are
+   * checked; an instantiation a body asked for does not exist yet then, so the
+   * set is only final here.
+   *
+   * It has to be caught rather than left: the second module's registration
+   * replaces the layout the first one's objects were built with, so a field
+   * read through an imported signature lands on the wrong offset. That is a
+   * miscompile, not a link error — the same failure WP21 S1 exists to prevent
+   * for plain functions, and the same one `tests/link/two_packages_struct`
+   * pins for a declared class.
+   */
+  private rejectInstantiatedStructClashes(): void {
+    const owner = new Map<string, ModuleUnit>();
+    for (const unit of this.modules) {
+      for (const instance of unit.checker.program.structInstantiations.values()) {
+        // The module that declares the template is the one that owns every
+        // instantiation of it, whoever the annotation was written by.
+        if (instance.template.decl.getSourceFile() !== unit.sourceFile) continue;
+        const first = owner.get(instance.info.name);
+        if (first === undefined) {
+          owner.set(instance.info.name, unit);
+          continue;
+        }
+        if (first.packageName === unit.packageName) continue;
+        this.reportStructPackageClash(instance.info, first, unit, instance.template.nameNode);
+      }
+    }
+  }
+
+  /**
+   * The one sentence both halves of that rule say. It is one method rather than
+   * two call sites because the diagnostic-code generator keys a rule on the
+   * literal at its `new CompileError(...)`, so a second copy of these words
+   * would be a second code for one rule.
+   *
+   * TODO(WP21 §7): package-scoped struct layouts, and the diagnostic for two
+   * versions of one package meeting in a diamond, are that stage's.
+   */
+  private reportStructPackageClash(
+    info: StructInfo,
+    first: ModuleUnit,
+    unit: ModuleUnit,
+    at: ts.Node
+  ): void {
+    this.sink.report(
+      new CompileError(
+        `${info.kind === "class" ? "Class" : "Interface"} \`${info.name}\` is declared in package ${describePackage(first.packageName)} and again in package ${describePackage(unit.packageName)}; a class or interface name is still program-wide, so two packages cannot both declare one`,
+        at,
+        unit.sourceFile
+      )
+    );
   }
 
   /**
@@ -292,16 +352,8 @@ export class Compilation {
         // so two packages that both declare `Node` would be silently treated
         // as declaring one type. Say so, in the words `docs/wp21-packages.md`
         // §7 uses, rather than letting the layouts merge.
-        // TODO(WP21 §7): package-scoped struct layouts, and the diagnostic for
-        // two versions of one package meeting in a diamond, are that stage's.
         if (first.packageName !== unit.packageName) {
-          this.sink.report(
-            new CompileError(
-              `${info.kind === "class" ? "Class" : "Interface"} \`${info.name}\` is declared in package ${describePackage(first.packageName)} and again in package ${describePackage(unit.packageName)}; a class or interface name is still program-wide, so two packages cannot both declare one`,
-              info.decl.name ?? info.decl,
-              unit.sourceFile
-            )
-          );
+          this.reportStructPackageClash(info, first, unit, info.decl.name ?? info.decl);
         }
       }
     }

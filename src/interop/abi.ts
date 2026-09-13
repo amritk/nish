@@ -170,7 +170,7 @@ export function cType(t: StaticType, position: "param" | "return", written = fal
       // A class or interface value is a pointer to its `struct` (declared in the
       // header with the flattened fields, WP2); a `T | null` is the same
       // pointer, possibly NULL.
-      return `struct ${(t as { name: string }).name} *`;
+      return `struct ${cStructName((t as { name: string }).name)} *`;
     case "nullable":
       return cType((t as { inner: StaticType }).inner, position);
     // WP17: a `Result` small enough to pack travels *by value* — in either
@@ -196,6 +196,16 @@ export function cType(t: StaticType, position: "param" | "return", written = fal
 export function cResultName(t: StaticType): string {
   return resultStructName(t).replace(/[.$]/g, "_");
 }
+
+/**
+ * The same collapse for a declared class or interface, which needs it for one
+ * reason: an instantiated generic is `Box$i32` (WP18 §3c) and `-pedantic`
+ * refuses `$` in a C identifier. A *type* name is not a linker symbol, so
+ * unlike `cFunctionName` there is nothing to bind it back to with
+ * `NISH_SYMBOL` — the struct simply has a C spelling and an LLVM spelling, and
+ * only the layout crosses.
+ */
+export const cStructName = (name: string): string => name.replace(/[.$]/g, "_");
 
 /** The by-value spelling: one 64-bit word, `_word` as in the DWARF and the note. */
 export function cResultWord(t: StaticType): string {

@@ -16,7 +16,7 @@ import { CompileError } from "../diagnostics.js";
 import { LANGUAGE } from "../branding.js";
 import { CompilerOptions, isForeignScalar, resolveTypeNode, typeToString } from "../types.js";
 import { ConstInfo } from "./constants.js";
-import { TemplateInfo } from "./generics.js";
+import { StructTemplateInfo, TemplateInfo } from "./generics.js";
 import { FunctionSig, ImportBinding, Param } from "./program.js";
 import { isNishSpecifier, nishModuleNames } from "./nish-modules.js";
 import { STD_PREFIX } from "../branding.js";
@@ -284,6 +284,36 @@ export function collectFunctionTemplate(decl: ts.FunctionDeclaration, sf: ts.Sou
     count: 0,
   };
 }
+
+/**
+ * A generic `class` or `interface` declaration (WP18 G5). Nothing below the
+ * name is read here: the field, method and heritage annotations mention the
+ * type parameters, so they stay as syntax and are resolved once per
+ * instantiation, exactly as a function template's are. The member rules —
+ * `static`, getters, index signatures, a missing annotation — are therefore
+ * enforced where they always were, at each instantiation's `collectStructMembers`.
+ */
+export const collectStructTemplate = (
+  decl: ts.ClassDeclaration | ts.InterfaceDeclaration,
+  sf: ts.SourceFile
+): StructTemplateInfo => {
+  const kind = ts.isClassDeclaration(decl) ? "class" : "interface";
+  if (!decl.name) throw new CompileError(`${kind === "class" ? "Classes" : "Interfaces"} must be named`, decl, sf);
+  const name = decl.name.text;
+  if (name.startsWith("nish_")) {
+    throw new CompileError("Names starting with `nish_` are reserved for the runtime", decl.name, sf);
+  }
+  rejectDollarInSymbolName(name, kind, decl.name, sf);
+  return {
+    sourceName: name,
+    kind,
+    typeParams: collectTypeParams(decl.typeParameters ?? [], sf),
+    decl,
+    nameNode: decl.name,
+    exported: hasExportModifier(decl),
+    count: 0,
+  };
+};
 
 /** The arrow spelling of the same thing: `const identity = <T>(x: T): T => x`. */
 export function collectArrowTemplate(

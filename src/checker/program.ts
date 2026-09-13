@@ -2,7 +2,7 @@
 import ts from "typescript";
 import { AliasInfo } from "./aliases.js";
 import { EnumInfo } from "./enums.js";
-import { Instantiation, TemplateInfo } from "./generics.js";
+import { Instantiation, StructInstantiation, StructTemplateInfo, TemplateInfo } from "./generics.js";
 import { ConstInfo } from "./constants.js";
 import { BuiltinExport } from "./nish-modules.js";
 import { StaticType, alignOf, llvmType } from "../types.js";
@@ -278,6 +278,21 @@ export interface CheckedProgram {
    * the two compilers can be compared before the IR is (`docs/wp18-generics.md` §3a).
    */
   instantiations: Map<string, Instantiation>;
+  /**
+   * Generic classes and interfaces this module declares (WP18 G5), keyed by the
+   * name as written. Like a function template, a struct template is *not* in
+   * `structs`: it has no fields and no layout until an instantiation binds its
+   * parameters, so `Box` on its own never becomes a `%struct`.
+   */
+  structTemplates: Map<string, StructTemplateInfo>;
+  /**
+   * Every instantiated generic struct, keyed by its mangled name (`Box$i32`)
+   * and in discovery order. The `StructInfo` each one carries is also in
+   * `structs` under the same key and is an ordinary struct in every way
+   * (`docs/wp18-generics.md` §3c); this map is what remembers the *arguments*
+   * it was made from, which the termination rule and inference read back.
+   */
+  structInstantiations: Map<string, StructInstantiation>;
   /** Classes and interfaces visible in this module (declared or imported), keyed by name (WP2). */
   structs: Map<string, StructInfo>;
   /**

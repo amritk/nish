@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 393;
+export const RULE_COUNT: i32 = 397;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -129,6 +129,8 @@ export function diagnosticRules(): string[] {
     "NL2080",
     "Only functions can be exported for now, plus classes and interfaces (found `export` on ",
     "NL2226",
+    "` under a type constructor instead of passing it on, so the chain has no end; name `",
+    "NL2319",
     "` under a type constructor instead of passing it on, so the chain has no end; pass `",
     "NL2309",
     "`declare function` declares a C function this program calls, so it must have no body",
@@ -201,6 +203,8 @@ export function diagnosticRules(): string[] {
     "NL2156",
     ", not in your program. Please report it with the input file and",
     "NL3002",
+    "` is generic: it must be written with its type arguments, e.g. ",
+    "NL2317",
     "`new Array<T>(n)` expects exactly 1 argument (the length), got ",
     "NL2143",
     " (it has `isOk`, `isErr`, `orReturn`, `unwrapOr` and `expect`)",
@@ -657,6 +661,8 @@ export function diagnosticRules(): string[] {
     "NL4003",
     "` expects a value of type ",
     "NL2269",
+    "` is not generic, so `new ",
+    "NL2318",
     "`, which already extends `",
     "NL2110",
     "`Reflect` is forbidden in ",
@@ -809,6 +815,8 @@ export function diagnosticRules(): string[] {
     "NL2249",
     "unknown option: ",
     "NL3008",
+    "` is a generic ",
+    "NL2316",
     "` requires two ",
     "NL2100",
     "Unknown class `",

@@ -17,6 +17,7 @@
 
 import { CheckContext } from "./context";
 import { resolveType } from "./annotations";
+import { instantiateWritten } from "./generics";
 import { isExported, collectParams } from "./declarations";
 import {
   FLAG_READONLY,
@@ -30,6 +31,7 @@ import {
   N_STRING,
   N_TEMPLATE,
   N_TRUE,
+  N_TYPE_REF,
   N_UNARY,
   Node,
 } from "./nodes";
@@ -256,7 +258,32 @@ export function collectStructMembers(ctx: CheckContext, info: StructInfo): void 
       return;
     }
     for (const iface of decl.children[2].children) {
-      const target = ctx.program.struct(iface.text);
+      // WP18 G5: `class Box<T> implements Container<T>` names an instantiated
+      // interface. It is resolved here, while `T` is bound to *this*
+      // instantiation's argument, so the check is the ordinary field-prefix one
+      // against `Container$i32` rather than a comparison between two
+      // uninstantiated field lists — which would need a type variable, and a
+      // type parameter is never a type in this implementation.
+      if (iface.kind !== N_TYPE_REF) {
+        // `implements number[]`: stage0 sees a heritage expression that is not
+        // an identifier and says this, so stage1 says it where its own grammar
+        // puts the same mistake.
+        ctx.error(iface, "`implements` must name a declared interface");
+        continue;
+      }
+      const template = ctx.program.structTemplate(iface.text);
+      let target: StructInfo | null = null;
+      if (template !== null) {
+        target = instantiateWritten(ctx, template, iface.children[0], iface);
+        if (target === null) {
+          continue;
+        }
+      } else if (iface.children[0].children.length > 0) {
+        ctx.error(iface, "`implements` must name a declared interface");
+        continue;
+      } else {
+        target = ctx.program.struct(iface.text);
+      }
       if (target === null || target.kind !== STRUCT_INTERFACE) {
         ctx.error(iface, `\`${iface.text}\` is not a declared interface`);
         continue;

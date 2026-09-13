@@ -125,6 +125,8 @@ const RULES: string[] = [
     "NL2080",
     "Only functions can be exported for now, plus classes and interfaces (found `export` on ",
     "NL2226",
+    "` under a type constructor instead of passing it on, so the chain has no end; name `",
+    "NL2319",
     "` under a type constructor instead of passing it on, so the chain has no end; pass `",
     "NL2309",
     "`declare function` declares a C function this program calls, so it must have no body",
@@ -197,6 +199,8 @@ const RULES: string[] = [
     "NL2156",
     ", not in your program. Please report it with the input file and",
     "NL3002",
+    "` is generic: it must be written with its type arguments, e.g. ",
+    "NL2317",
     "`new Array<T>(n)` expects exactly 1 argument (the length), got ",
     "NL2143",
     " (it has `isOk`, `isErr`, `orReturn`, `unwrapOr` and `expect`)",
@@ -653,6 +657,8 @@ const RULES: string[] = [
     "NL4003",
     "` expects a value of type ",
     "NL2269",
+    "` is not generic, so `new ",
+    "NL2318",
     "`, which already extends `",
     "NL2110",
     "`Reflect` is forbidden in ",
@@ -805,6 +811,8 @@ const RULES: string[] = [
     "NL2249",
     "unknown option: ",
     "NL3008",
+    "` is a generic ",
+    "NL2316",
     "` requires two ",
     "NL2100",
     "Unknown class `",
@@ -844,7 +852,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 393;
+export const RULE_COUNT = 397;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

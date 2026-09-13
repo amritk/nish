@@ -1666,7 +1666,7 @@ if (!only || "layout".includes(only)) {
       if (fromIr.get(name) !== size) diffs.push(`${name}: C ${size}, IR ${fromIr.get(name)}`);
     check(
       `layout: compiler sizes match structs.c for ${fromC.size} structs (${[...fromC].map(([n, s]) => `${n}=${s}`).join(" ")})`,
-      fromC.size === 16 && fromIr.size === 16 && diffs.length === 0,
+      fromC.size === 18 && fromIr.size === 18 && diffs.length === 0,
       diffs.join("\n") || `IR sizes: ${JSON.stringify([...fromIr])}`
     );
     if (HAS_CLANG) {
