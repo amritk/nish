@@ -1253,6 +1253,150 @@ if (fs.existsSync(diamondEntry)) {
   );
 }
 
+/** The `.ll` files an output directory holds, in name order. */
+const llFilesIn = (dir) =>
+  fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".ll")).sort() : [];
+
+// WP21 S2: `node_modules` above the working directory. `tests/link/package_above`
+// is the ordinary npm layout — the manifest beside `src/`, not inside it — compiled
+// the ordinary way, `nish main.ts` from `src/`, so the entry is relative and the
+// package is two directories up. stage0 resolves an absolute path and climbs to
+// `/`; stage1 has no `process.cwd()` to build one from (WP19 §A3) and has to climb
+// past `.` by spelling `..`. This is the case that tells a walk that stops at `.`
+// from one that does not, and the WP14 section below runs the same fixture through
+// the self-hosted compiler and diffs the IR byte for byte.
+const aboveDir = path.join(linkDir, "package_above");
+if (fs.existsSync(path.join(aboveDir, "src", "main.ts"))) {
+  const outDir = path.join(buildDir, "link", "package_above") + path.sep;
+  fs.rmSync(outDir, { recursive: true, force: true });
+  const exe = path.join(buildDir, "link", "package_above-app");
+  const r = spawnSync(
+    "node",
+    [cli, "main.ts", "-o", outDir, ...(HAS_CLANG ? ["--link", exe] : [])],
+    { cwd: path.join(aboveDir, "src"), encoding: "utf8" }
+  );
+  const ir =
+    r.status === 0
+      ? llFilesIn(outDir)
+          .map((f) => fs.readFileSync(path.join(outDir, f), "utf8"))
+          .join("\n")
+      : "";
+  const missing = fs
+    .readFileSync(path.join(aboveDir, "expected.ir"), "utf8")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .filter((l) => !ir.includes(l));
+  check(
+    "link/package_above: a package above the working directory resolves, with its package prefix",
+    r.status === 0 && missing.length === 0,
+    r.status === 0 ? missing.map((l) => `missing: ${l}`).join("\n") : `${r.stdout}${r.stderr}`
+  );
+  if (HAS_CLANG && r.status === 0) {
+    const run = spawnSync(exe);
+    const want = Number(fs.readFileSync(path.join(aboveDir, "expected.code"), "utf8").trim());
+    check(
+      `link/package_above: exits with ${want}`,
+      run.status === want,
+      `exit ${run.status}: ${run.stdout}${run.stderr}`
+    );
+  }
+}
+
+// WP21 S2: a `node_modules` *ancestor*, which is the one directory the walk
+// cannot always name. Node steps over a directory already called `node_modules`
+// rather than searching it, so `node_modules/node_modules/zed` is a package Node
+// never finds — and neither compiler finds it either wherever the importing
+// module's own name spells that ancestor, which is the second run below, from
+// the fixture root. The first run is the same tree compiled from inside
+// `node_modules/app`, where the name is `.` and the ancestor is `..`: a
+// directory named without being named, which stage1 has no `process.cwd()`
+// (WP19 §A3) and no `statSync` to resolve. Both compilers therefore search it
+// and both find the package — the same answer from both, which is the property
+// the oracles protect, in a tree npm does not produce
+// (`docs/wp21-packages.md` §10a). The WP14 section below runs the same fixture
+// through the self-hosted compiler and diffs the IR.
+//
+// The fixture has no `main.ts` at its top, so the loop above never picks it up:
+// `expected.code` and `expected.ir` belong to the run from inside and
+// `expected.err` to the run from the root.
+const doubledDir = path.join(linkDir, "package_doubled");
+const doubledApp = path.join(doubledDir, "node_modules", "app");
+if (fs.existsSync(path.join(doubledApp, "main.ts"))) {
+  const outDir = path.join(buildDir, "link", "package_doubled") + path.sep;
+  fs.rmSync(outDir, { recursive: true, force: true });
+  const exe = path.join(buildDir, "link", "package_doubled-app");
+  const inside = spawnSync(
+    "node",
+    [cli, "main.ts", "-o", outDir, ...(HAS_CLANG ? ["--link", exe] : [])],
+    { cwd: doubledApp, encoding: "utf8" }
+  );
+  const ir =
+    inside.status === 0
+      ? llFilesIn(outDir)
+          .map((f) => fs.readFileSync(path.join(outDir, f), "utf8"))
+          .join("\n")
+      : "";
+  const missing = fs
+    .readFileSync(path.join(doubledDir, "expected.ir"), "utf8")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .filter((l) => !ir.includes(l));
+  check(
+    "link/package_doubled: an ancestor the name cannot spell is searched, so the package resolves",
+    inside.status === 0 && missing.length === 0,
+    inside.status === 0 ? missing.map((l) => `missing: ${l}`).join("\n") : `${inside.stdout}${inside.stderr}`
+  );
+  if (HAS_CLANG && inside.status === 0) {
+    const run = spawnSync(exe);
+    const want = Number(fs.readFileSync(path.join(doubledDir, "expected.code"), "utf8").trim());
+    check(
+      `link/package_doubled: exits with ${want}`,
+      run.status === want,
+      `exit ${run.status}: ${run.stdout}${run.stderr}`
+    );
+  }
+  const needle = fs.readFileSync(path.join(doubledDir, "expected.err"), "utf8").trim();
+  const named = spawnSync("node", [cli, path.join("node_modules", "app", "main.ts"), "-o", outDir], {
+    cwd: doubledDir,
+    encoding: "utf8",
+  });
+  check(
+    `link/package_doubled: named from the root, the ancestor is stepped over: "${needle}"`,
+    named.status === 1 && named.stderr.includes(needle),
+    named.stderr || "(compiled successfully)"
+  );
+}
+
+// WP21 S2, the declared limitation: one package reached through a symlink is two
+// packages (`docs/wp21-packages.md` §10d). `tests/link/package_symlink` is
+// pnpm's layout — `node_modules/shared`, and `node_modules/app2/node_modules/
+// shared` a link to it — which Node resolves to one module because its resolver
+// realpaths and this compiler resolves to two because a module's identity is its
+// path. The S1 clash check then refuses the program, and that refusal is what is
+// pinned here: not because it is wanted, but so that the day a `realpath` makes
+// it compile is a failing check rather than a surprise. The entry is under
+// `app/` so the loop above does not adopt the fixture as an ordinary case; the
+// WP14 section asks the self-hosted compiler for the same refusal, because a
+// limitation only one compiler has is the divergence, not the limitation.
+const symlinkDir = path.join(linkDir, "package_symlink");
+const symlinkApp = path.join(symlinkDir, "app");
+if (fs.existsSync(path.join(symlinkApp, "main.ts"))) {
+  const needle = fs.readFileSync(path.join(symlinkDir, "expected.err"), "utf8").trim();
+  const outDir = path.join(buildDir, "link", "package_symlink") + path.sep;
+  fs.rmSync(outDir, { recursive: true, force: true });
+  const r = spawnSync("node", [cli, "main.ts", "-o", outDir], {
+    cwd: symlinkApp,
+    encoding: "utf8",
+  });
+  check(
+    `link/package_symlink: a symlinked copy is a second package, refused with "${needle}"`,
+    r.status === 1 && r.stderr.includes(needle),
+    r.stderr || "(compiled successfully)"
+  );
+}
+
 // ---- WP1: optimisation ------------------------------------------------------------
 // The emitted IR is target-neutral, so `opt` needs a triple before it believes it has
 // vector registers; without one the loop vectoriser never fires. x86_64 is always built in.
@@ -2296,13 +2440,16 @@ const RUNTIME_TEXT_BUDGET = 3584;
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime_os.c`.
  *
- * Measured 1,190 bytes on 2026-09-12 with clang 18.1.3 on linux-x64 (`.text` 1,155 plus
+ * Measured 1,251 bytes on 2026-09-14 with clang 18.1.3 on linux-x64 (`.text` 1,216 plus
  * `.text.unlikely.` 35, which is `nish_io_fail`), for the file I/O, the directory and
- * subprocess calls, `getenv`, the monotonic clock and the two constant host strings. The
- * budget is the next 256-byte boundary above it, 90 bytes of headroom, which is less than
- * one syscall wrapper on purpose: `nish_readdir` alone is 294 bytes, so the next builtin
- * that reaches into the operating system has to raise this number in the commit that adds
- * it, with the measurement, and cannot borrow room from the arena to hide in.
+ * subprocess calls, `getenv`, the monotonic clock and the two constant host strings. It
+ * was 1,190 until WP21 S2 put the `fstat`/`S_ISDIR` guard in `nish_read_file_or_null`,
+ * which is 61 of those bytes and is what makes reading a directory answer null rather
+ * than ask the arena for `LONG_MAX`. The budget is the next 256-byte boundary above the
+ * original measurement, so what is left is now **29 bytes** — less than a tenth of one
+ * syscall wrapper, since `nish_readdir` alone is 294, so the next builtin that reaches
+ * into the operating system raises this number in the commit that adds it, with the
+ * measurement, and cannot borrow room from the arena to hide in.
  *
  * The two together are 4,864 -- exactly the single budget they replace, which is a
  * coincidence and not a constraint.
@@ -4504,6 +4651,166 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
           ourJson.stdout.split("\n").filter(Boolean).length === 3,
         `ours:\n${ourJson.stdout}${ourJson.stderr}\ntheirs:\n${theirJson.stdout}`
       );
+
+      // WP21 S2: the walk up to `node_modules` has to reach the same directories
+      // in both compilers, and the working directory is what pulls them apart.
+      // `tests/link/package_above` installs the package *above* the directory the
+      // compiler is run in — `proj/node_modules` beside `proj/src/main.ts`, which
+      // is what npm produces — and is compiled the way that program is compiled,
+      // `nish main.ts` from `src/`. stage0 resolves the entry against
+      // `process.cwd()`; stage1 has no such builtin (WP19 §A3) and climbs past `.`
+      // by spelling `..`, so a stage1 that stopped where `dirname` stops answered
+      // `` Cannot find package `pkg_above` `` for a program stage0 compiles. Both
+      // compilers are run here and every byte of every module is compared, because
+      // a program one of them resolves and the other does not is the divergence
+      // this whole section exists to prevent.
+      const aboveSrc = path.join(root, "tests", "link", "package_above", "src");
+      if (fs.existsSync(path.join(aboveSrc, "main.ts"))) {
+        const ourDir = path.join(shipDir, "package_above-stage1") + path.sep;
+        const theirDir = path.join(shipDir, "package_above-stage0") + path.sep;
+        fs.rmSync(ourDir, { recursive: true, force: true });
+        fs.rmSync(theirDir, { recursive: true, force: true });
+        const ourAbove = spawnSync(compiler, ["main.ts", "-o", ourDir], {
+          cwd: aboveSrc,
+          encoding: "utf8",
+        });
+        const theirAbove = spawnSync("node", [cli, "main.ts", "-o", theirDir], {
+          cwd: aboveSrc,
+          encoding: "utf8",
+        });
+        const ourModules = llFilesIn(ourDir);
+        const theirModules = llFilesIn(theirDir);
+        const differing = ourModules.filter(
+          (f) =>
+            !fs.existsSync(path.join(theirDir, f)) ||
+            fs.readFileSync(path.join(ourDir, f), "utf8") !==
+              fs.readFileSync(path.join(theirDir, f), "utf8")
+        );
+        check(
+          "the self-hosted compiler: a package above the working directory resolves, to stage0's bytes",
+          ourAbove.status === 0 &&
+            theirAbove.status === 0 &&
+            ourModules.length === 2 &&
+            ourModules.join(",") === theirModules.join(",") &&
+            differing.length === 0,
+          `stage1 ${ourAbove.status}: ${ourAbove.stdout}${ourAbove.stderr}` +
+            `stage0 ${theirAbove.status}: ${theirAbove.stderr}` +
+            `modules ours [${ourModules.join(" ")}] theirs [${theirModules.join(" ")}]` +
+            ` differing [${differing.join(" ")}]`
+        );
+      }
+
+      // WP21 S2, the other half of that walk: an ancestor the module's own name
+      // does not spell. `tests/link/package_doubled` installs the package one
+      // `node_modules` inside another and is compiled from inside
+      // `node_modules/app`, so the ancestor is `..` — a directory named without
+      // being named. Node steps over a `node_modules` ancestor and so does
+      // either compiler wherever the name spells one, but `..` spells nothing,
+      // and neither compiler has a way to learn what it is: stage1 has no
+      // `process.cwd()` (WP19 §A3) and the language has no `statSync`, which is
+      // what naming a directory from below would take. So both search it, both
+      // find the package, and this is what says they answer the same thing —
+      // the alternative was one compiler resolving a program the other refuses.
+      const doubledSrc = path.join(root, "tests", "link", "package_doubled", "node_modules", "app");
+      if (fs.existsSync(path.join(doubledSrc, "main.ts"))) {
+        const ourDir = path.join(shipDir, "package_doubled-stage1") + path.sep;
+        const theirDir = path.join(shipDir, "package_doubled-stage0") + path.sep;
+        fs.rmSync(ourDir, { recursive: true, force: true });
+        fs.rmSync(theirDir, { recursive: true, force: true });
+        const ourDoubled = spawnSync(compiler, ["main.ts", "-o", ourDir], {
+          cwd: doubledSrc,
+          encoding: "utf8",
+        });
+        const theirDoubled = spawnSync("node", [cli, "main.ts", "-o", theirDir], {
+          cwd: doubledSrc,
+          encoding: "utf8",
+        });
+        const ourDoubledModules = llFilesIn(ourDir);
+        const theirDoubledModules = llFilesIn(theirDir);
+        const differingDoubled = ourDoubledModules.filter(
+          (f) =>
+            !fs.existsSync(path.join(theirDir, f)) ||
+            fs.readFileSync(path.join(ourDir, f), "utf8") !==
+              fs.readFileSync(path.join(theirDir, f), "utf8")
+        );
+        check(
+          "the self-hosted compiler: a `node_modules` ancestor no name spells is searched by both, to stage0's bytes",
+          ourDoubled.status === 0 &&
+            theirDoubled.status === 0 &&
+            ourDoubledModules.length === 2 &&
+            ourDoubledModules.join(",") === theirDoubledModules.join(",") &&
+            differingDoubled.length === 0,
+          `stage1 ${ourDoubled.status}: ${ourDoubled.stdout}${ourDoubled.stderr}` +
+            `stage0 ${theirDoubled.status}: ${theirDoubled.stderr}` +
+            `modules ours [${ourDoubledModules.join(" ")}] theirs [${theirDoubledModules.join(" ")}]` +
+            ` differing [${differingDoubled.join(" ")}]`
+        );
+
+        // The same tree named from its root, where both compilers *can* read
+        // the ancestor's name and both step over it: one refusal, one sentence,
+        // one exit status.
+        const doubledRoot = path.join(root, "tests", "link", "package_doubled");
+        const doubledEntry = path.join("node_modules", "app", "main.ts");
+        const ourNamed = spawnSync(compiler, [doubledEntry, "-o", ourDir], {
+          cwd: doubledRoot,
+          encoding: "utf8",
+        });
+        const theirNamed = spawnSync("node", [cli, doubledEntry, "-o", theirDir], {
+          cwd: doubledRoot,
+          encoding: "utf8",
+        });
+        check(
+          "the self-hosted compiler: a `node_modules` ancestor the name spells is stepped over by both",
+          ourNamed.status === 1 && theirNamed.status === 1 && ourNamed.stderr === theirNamed.stderr,
+          `stage1 ${ourNamed.status}: ${ourNamed.stderr}\nstage0 ${theirNamed.status}: ${theirNamed.stderr}`
+        );
+      }
+
+      // WP21 S2's declared limitation, asked of the compiler that survives: a
+      // package reached through a symlink is a second package, because neither
+      // compiler has a `realpath` to call — stage0 could grow one and is
+      // deliberately not allowed to (`docs/wp21-packages.md` §10d). The two
+      // answers are compared with each other rather than each to a fragment, so
+      // "both refuse it with the same sentence" is pinned rather than asserted;
+      // what is stripped first is the `file:line:column:` prefix, because
+      // `export const val` is a declaration the two point at with different
+      // columns, and that span difference is its own subject and not this
+      // fixture's.
+      const symlinkSrc = path.join(root, "tests", "link", "package_symlink");
+      const symlinkApp = path.join(symlinkSrc, "app");
+      if (fs.existsSync(path.join(symlinkApp, "main.ts"))) {
+        const symlinkNeedle = fs
+          .readFileSync(path.join(symlinkSrc, "expected.err"), "utf8")
+          .trim();
+        const outDir = path.join(shipDir, "package_symlink-stage1") + path.sep;
+        const theirDir = path.join(shipDir, "package_symlink-stage0") + path.sep;
+        fs.rmSync(outDir, { recursive: true, force: true });
+        fs.rmSync(theirDir, { recursive: true, force: true });
+        const ourSymlink = spawnSync(compiler, ["main.ts", "-o", outDir], {
+          cwd: symlinkApp,
+          encoding: "utf8",
+        });
+        const theirSymlink = spawnSync("node", [cli, "main.ts", "-o", theirDir], {
+          cwd: symlinkApp,
+          encoding: "utf8",
+        });
+        /** Just the sentences of a report: no position, no echoed source line. */
+        const sentences = (text) =>
+          text
+            .split("\n")
+            .filter((line) => line.includes(": error: "))
+            .map((line) => line.slice(line.indexOf(": error: ") + ": error: ".length))
+            .join("\n");
+        check(
+          "the self-hosted compiler: a symlinked copy is a second package for it too, in stage0's words",
+          ourSymlink.status === 1 &&
+            theirSymlink.status === 1 &&
+            ourSymlink.stderr.includes(symlinkNeedle) &&
+            sentences(ourSymlink.stderr) === sentences(theirSymlink.stderr),
+          `stage1 ${ourSymlink.status}: ${ourSymlink.stdout}${ourSymlink.stderr}` +
+            `stage0 ${theirSymlink.status}: ${theirSymlink.stderr}`
+        );
+      }
 
       // WP19 G2.4, the wording gap: the same coverage run, through the
       // compiler that survives stage0. `tests/wordings/` pins stage0's wording

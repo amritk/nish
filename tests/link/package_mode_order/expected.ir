@@ -1,0 +1,3 @@
+define internal noundef i32 @pkg_mode.helper()
+define noundef i32 @pkg_mode.seed()
+declare noundef i32 @pkg_mode.seed()

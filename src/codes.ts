@@ -127,6 +127,8 @@ const RULES: string[] = [
     "NL2080",
     "Only functions can be exported for now, plus classes and interfaces (found `export` on ",
     "NL2226",
+    "` must be relative (`./x`, `../x`), a package name (`hash`, `@scope/hash`), or one of ",
+    "NL2320",
     "` under a type constructor instead of passing it on, so the chain has no end; name `",
     "NL2319",
     "` under a type constructor instead of passing it on, so the chain has no end; pass `",
@@ -167,6 +169,8 @@ const RULES: string[] = [
     "NL2142",
     "`Result` needs exactly two type arguments, e.g. `Result<number, string>`",
     "NL2150",
+    " entry point: its `exports` gave this compiler no file to compile for `",
+    "NL3014",
     "` values; compare each with `null` and then compare the narrowed values",
     "NL2108",
     "`main` must return void or an i32 number (the process exit code), not ",
@@ -343,6 +347,8 @@ const RULES: string[] = [
     "NL2240",
     "; use `obj.name` (no dynamic property lookup)",
     "NL1009",
+    "` directory above the importing module has it",
+    "NL3015",
     "` is already declared as a class or interface",
     "NL2074",
     "` takes no type argument (it is an alias of `",
@@ -856,7 +862,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 399;
+export const RULE_COUNT = 402;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line
