@@ -541,9 +541,17 @@ contains **no** `<N x double>` operation at all, against 12 for the parameter
 shape, 10 with the marking and 6 with the hand hoist; and in the `opt -O2` dump
 of `@scale` the loop body still carries three loads per iteration — the `h.xs`
 field load, then `len` and `data` through it — where the parameter shape carries
-none. §2b is why: the domains separate an array's header from *elements*, and a
-class field is neither, because §2b deliberately left struct fields out for want
-of a measurement. This is that measurement.
+none. The per-iteration `h.xs` is where it starts: nothing in the IR says an
+element store cannot reach a class field, so the field is re-read, and `len` and
+`data` are re-read through it. §2b left struct fields out of the domains for
+want of a measurement, and this is that measurement — but widening the domains
+is *not* the fix, and that was probed rather than assumed. Putting the field
+load in the header scope by hand takes the loop from five loads to three and
+still vectorises nothing; adding `!dereferenceable`/`!nonnull`/`!align` to it,
+so the header load can be speculated out of the bounds-checked block, changes
+nothing at all. The hand hoist in the source is what recovers the time, which is
+the argument for doing it in the emitter rather than for describing more of the
+heap to LLVM.
 
 ### The multiplier is program-dependent, so the range is the honest answer
 
