@@ -7,7 +7,7 @@
 # constant, every local and callee of every body, the attribute pass's facts,
 # and the order they come out in. A `reject` record is a program the checker
 # refuses, and pins the wording it refuses it with.
-# 322 programs, 5418 dump lines.
+# 329 programs, 5546 dump lines.
 program tests/cases/add.ts
 module tests/cases/add.ts (entry)
 function add(a: i32, b: i32): i32 -> @add [exported]
@@ -3509,6 +3509,98 @@ function test(): i32 -> @test [exported]
   local 29:7 m: i32 (let)
   local 37:9 at: i32 (const)
   local 41:14 x: i32 (const)
+program tests/cases/perf_clamp.ts
+module tests/cases/perf_clamp.ts (entry)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_str_new
+  stackSites=0 stackLocals=0
+  local 7:9 s: string (const)
+  local 8:7 total: i32 (let)
+  local 12:7 step: i32 (let)
+  local 14:11 from: i32 (const)
+  local 15:11 to: i32 (const)
+program tests/cases/perf_clamp_order.ts
+module tests/cases/perf_clamp_order.ts (entry)
+function width(): i32 -> @width
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 nish_str_new width
+  stackSites=0 stackLocals=0
+  local 13:9 s: string (const)
+  local 17:7 k: i32 (let)
+  local 18:9 a: string (const)
+  local 24:7 m: i32 (let)
+  local 25:9 pick: boolean (const)
+  local 26:9 b: string (const)
+  local 33:9 n: i32 (const)
+  local 34:9 c: string (const)
+  callee 34:28 width -> @width
+  local 38:7 j: i32 (let)
+  local 39:9 d: string (const)
+program tests/cases/perf_clamp_quiet.ts
+module tests/cases/perf_clamp_quiet.ts (entry)
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_str_new
+  stackSites=0 stackLocals=0
+  local 7:9 s: string (const)
+  local 8:7 total: i32 (let)
+  local 11:7 i: i32 (let)
+  local 13:11 a: i32 (const)
+  local 14:11 b: i32 (const)
+  local 23:9 n: i32 (const)
+  local 24:7 j: i32 (let)
+  local 32:9 at: i32 (const)
+  local 36:7 k: i32 (let)
+program tests/cases/perf_clamp_rebind.ts
+module tests/cases/perf_clamp_rebind.ts (entry)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_i32 nish_str_new
+  stackSites=0 stackLocals=0
+  local 9:7 s: string (let)
+  local 10:9 long: string (const)
+  local 11:7 n: i32 (let)
+  local 17:9 a: string (const)
+  local 23:7 u: string (let)
+  local 24:9 b: string (const)
+program tests/cases/perf_inline.ts
+module tests/cases/perf_inline.ts (entry)
+function step(n: i32): i32 -> @step
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function helper(n: i32): i32 -> @helper [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  calls: helper step
+  stackSites=0 stackLocals=0
+  local 11:7 total: i32 (let)
+  local 12:7 i: i32 (let)
+  callee 15:21 step -> @step
+  callee 17:21 helper -> @helper
+  callee 21:18 step -> @step
+program tests/cases/perf_inline_quiet.ts
+module tests/cases/perf_inline_quiet.ts (entry)
+function exported(n: i32): i32 -> @exported [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function internalHelper(n: i32): i32 -> @internalHelper
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false
+  stackSites=0 stackLocals=0
+function test(): i32 -> @test [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: exported internalHelper nish_arena_mark nish_arena_release nish_str_from_i32
+  stackSites=0 stackLocals=0
+  local 10:7 total: i32 (let)
+  local 13:7 i: i32 (let)
+  callee 15:21 exported -> @exported
+  callee 21:19 internalHelper -> @internalHelper
+  local 24:9 s: string (const)
 program tests/cases/perf_overflow.ts
 module tests/cases/perf_overflow.ts (entry)
 function test(): i32 -> @test [exported]
@@ -5634,6 +5726,49 @@ function main(): i32 -> @nish_main [exported entry]
   local 34:9 N: i32 (const)
   local 35:9 s: string (const)
   callee 35:13 join -> @join
+program bench/substr.ts
+module bench/substr.ts (entry)
+function text(bytes: i32): string -> @text
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
+  calls: nish_alloc_struct nish_array_grow nish_str_new
+  stackSites=1 stackLocals=1
+  local 28:9 parts: string[] (const)
+  local 29:7 n: i32 (let)
+function clampedScan(s: string, rounds: i32): i32 -> @clampedScan
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_str_new
+  stackSites=0 stackLocals=0
+  local 40:7 total: i32 (let)
+  local 41:12 r: i32 (let)
+  local 42:9 at: i32 (let)
+  local 44:13 end: i32 (const)
+function provenScan(s: string, rounds: i32): i32 -> @provenScan
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false
+  calls: nish_arena_mark nish_arena_release nish_str_new
+  stackSites=0 stackLocals=0
+  local 55:7 total: i32 (let)
+  local 56:12 r: i32 (let)
+  local 57:9 at: i32 (let)
+  local 59:13 end: i32 (const)
+function main(): i32 -> @nish_main [exported entry]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false
+  calls: clampedScan nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic_div nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64 provenScan text
+  stackSites=0 stackLocals=0
+  local 70:9 BYTES: i32 (const)
+  local 71:9 ROUNDS: i32 (const)
+  local 72:9 REPS: i32 (const)
+  local 73:9 s: string (const)
+  callee 73:13 text -> @text
+  local 75:7 clampedUs: i64 (let)
+  local 76:7 provenUs: i64 (let)
+  local 77:7 checksum: i32 (let)
+  local 78:12 rep: i32 (let)
+  local 79:11 a: i64 (const)
+  callee 80:16 clampedScan -> @clampedScan
+  local 81:11 b: i64 (const)
+  callee 82:27 provenScan -> @provenScan
+  local 83:11 c: i64 (const)
+  local 91:9 calls: i32 (const)
 program bench/sum.ts --number-mode f64
 module bench/sum.ts (entry)
 function add(a: f64, b: f64): f64 -> @add [exported]

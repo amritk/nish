@@ -237,16 +237,42 @@ function emitCharCodeAt(emitter: Emitter, expr: Node, str: string): string {
 }
 
 /**
+ * One end of a `substring`: the clamp, or the value itself where the WP15 §2
+ * analysis proved `0 <= bound <= len` (`self/bounds.ts`, `nodeProvenClamp`).
+ *
+ * The clamp cannot move a bound that is already inside the range, so dropping
+ * it changes no answer — the checker recorded the verdict and the emitter reads
+ * it, exactly as it does for a bounds check it may omit. LLVM does this itself
+ * only where it can hoist the receiver's length: with a string literal in a
+ * local it folds all six calls unaided, but where the receiver is a parameter
+ * the guard compares `i32`s, the clamp runs on their `sext`, and the length is
+ * re-read across an allocating call, so `opt -O3` keeps all six whether the
+ * guard is there or not.
+ *
+ * `first` is emitted and clamped before `second` is evaluated at all, which is
+ * the order `self/bounds.ts` takes its verdicts in: a fact argument 1
+ * establishes may not reach argument 0.
+ */
+function clampBound(emitter: Emitter, bound: Node, len: string): string {
+  const value = emitIndex(emitter, bound);
+  if (emitter.program.nodeProvenClamp[bound.id]) {
+    return value;
+  }
+  return clampToLength(emitter, value, len);
+}
+
+/**
  * `s.substring(a, b)`: both ends clamped into `[0, len]` and then swapped into
  * order, as JavaScript specifies, so the length is never negative and the copy
- * never leaves the string.
+ * never leaves the string. A bound the checker proved in range is written
+ * through instead (`clampBound`); the swap stays either way, because nothing
+ * here proves `a <= b`.
  */
 function emitSubstring(emitter: Emitter, expr: Node, str: string): string {
   const args = expr.children[1];
   const len = loadStringLength(emitter, str);
-  const first = clampToLength(emitter, emitIndex(emitter, args.children[0]), len);
-  const second =
-    args.children.length > 1 ? clampToLength(emitter, emitIndex(emitter, args.children[1]), len) : len;
+  const first = clampBound(emitter, args.children[0], len);
+  const second = args.children.length > 1 ? clampBound(emitter, args.children[1], len) : len;
   const from = emitter.fn.emitValue(
     `call i64 ${emitter.useRuntime("llvm.smin.i64")}(i64 ${first}, i64 ${second})`
   );

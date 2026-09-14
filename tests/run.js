@@ -980,6 +980,81 @@ if (!only || "performance".includes(only)) {
     bounds.stderr
   );
 
+  // WP15 §4/§8: a `substring` bound the proof could not place in [0, s.length]
+  // keeps JavaScript's clamp, and is reported once per bound -- so the one call
+  // here, with neither end proven, warns twice and names each bound.
+  const clamp = compile("perf_clamp", "perf_clamp.ll");
+  const clampLines = summaries(clamp.stderr);
+  check(
+    "performance: an unfolded `substring` clamp warns once per bound, naming the bound and the guard",
+    clamp.status === 0 &&
+      clampLines.length === 2 &&
+      clampLines.map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":")).join(",") === "16:33,16:39" &&
+      clampLines[0].includes("`from` is not provably within `s`, so this `substring` bound keeps the clamp") &&
+      clampLines[1].includes("`to` is not provably within `s`") &&
+      clampLines.every((l) => l.includes("or use `slice`, which has no clamp at all")),
+    clamp.stderr
+  );
+
+  // The clamp is the semantics, not a check, so the flag that removes every
+  // bounds check must leave both the clamp and its warning exactly as they were.
+  const clampUnchecked = compile("perf_clamp", "perf_clamp_unchecked.ll", ["--unchecked-indexing"]);
+  check(
+    "performance: --unchecked-indexing changes neither the substring clamp nor its warning",
+    clampUnchecked.status === 0 &&
+      summaries(clampUnchecked.stderr).length === 2 &&
+      stripHeader(fs.readFileSync(path.join(buildDir, "perf_clamp_unchecked.ll"), "utf8")) ===
+        stripHeader(fs.readFileSync(path.join(buildDir, "perf_clamp.ll"), "utf8")),
+    clampUnchecked.stderr
+  );
+
+  // The proof is worth an instruction count, not just a quieter build: the two
+  // proven calls in perf_clamp_quiet lose a clamp pair each -- four pairs, so
+  // eight of the twenty-four calls -- and the two shapes with nothing to prove
+  // keep all six of theirs. Compiled here rather than read off the goldens
+  // section, so that `node tests/run.js performance` stands on its own.
+  const clampQuietCompile = compile("perf_clamp_quiet", "perf_clamp_quiet.ll");
+  const clampQuietIr =
+    clampQuietCompile.status === 0
+      ? fs.readFileSync(path.join(buildDir, "perf_clamp_quiet.ll"), "utf8")
+      : "";
+  const clampCalls = (clampQuietIr.match(/call i64 @llvm\.(smin|smax)\.i64/g) ?? []).length;
+  check(
+    "performance: a proven substring bound emits no clamp at all (8 of 24 intrinsic calls left out)",
+    clampQuietCompile.status === 0 && clampCalls === 16,
+    `llvm.smin/smax calls in perf_clamp_quiet.ll: ${clampCalls}, expected 16\n${clampQuietCompile.stderr}`
+  );
+
+  // WP15 §8: --no-strict-exports keeps a non-exported function an external
+  // symbol. Reported at the call and only inside a loop; the exported callee
+  // and the call outside the loop in the same file must stay silent.
+  const inline = compile("perf_inline", "perf_inline.ll", ["--no-strict-exports"]);
+  const inlineLines = summaries(inline.stderr);
+  check(
+    "performance: --no-strict-exports warns at a call in a loop to a function the module does not export",
+    inline.status === 0 &&
+      inlineLines.length === 1 &&
+      inlineLines[0].includes("`step` is called here inside a loop and `--no-strict-exports` keeps it an") &&
+      inlineLines[0].includes("drop `--no-strict-exports`, and a function this module does not export is"),
+    inline.stderr
+  );
+
+  // The default is the rewrite the message names, so it must say nothing.
+  const inlineDefault = compile("perf_inline", "perf_inline_default.ll");
+  check(
+    "performance: the default (--strict-exports) is the rewrite, so the same file reports nothing",
+    inlineDefault.status === 0 && summaries(inlineDefault.stderr).length === 0,
+    inlineDefault.stderr
+  );
+
+  // The guards, with the flag given, so what is tested is the guards.
+  const inlineQuiet = compile("perf_inline_quiet", "perf_inline_quiet.ll", ["--no-strict-exports"]);
+  check(
+    "performance: perf_inline_quiet takes no slow path with a faster form to name, so nothing is reported",
+    inlineQuiet.status === 0 && summaries(inlineQuiet.stderr).length === 0,
+    inlineQuiet.stderr
+  );
+
   // The flag removes every check, so there is no surviving one to report.
   const boundsOff = compile("perf_bounds_loop", "perf_bounds_off.ll", ["--unchecked-indexing"]);
   check(
@@ -1001,6 +1076,9 @@ if (!only || "performance".includes(only)) {
     // Literal spellings neither compiler folds: normalising them in stage0 would
     // fold exactly what stage1 refuses, and only one of the two would warn.
     "perf_overflow_spelling",
+    // Every `substring` bound either proven -- in which case the clamp is gone
+    // from the IR, not merely quiet -- or with no guard anybody could write.
+    "perf_clamp_quiet",
   ]) {
     const quiet = compile(name, `${name}.ll`);
     check(

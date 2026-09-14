@@ -287,6 +287,7 @@ export class Compilation {
       this.opts.numberMode,
       !this.opts.nsw,
       this.opts.uncheckedIndexing,
+      this.opts.strictExports,
       packageName
     );
     const unit = new ModuleUnit(path, source, file, parser.nodeCount, isEntry, checker, packageName);
