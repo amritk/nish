@@ -6370,6 +6370,18 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
     ],
     ["compiled clean and produced nothing", side({}), side({}), "blind", 0, false],
     ["refused on both with nothing to read", side({ status: 1 }), side({ status: 1 }), "blind", 0, false],
+    // The branch that needs two files to reach in a real sweep: a corpus file nobody
+    // staged is enumerated from the working tree by `programs()` and not copied by
+    // `copyTree`, which reads the index -- so it is absent on both sides, and the answer
+    // is that there was nothing to compile rather than that the two sides agreed.
+    [
+      "absent on both sides",
+      side({ absent: true, status: null }),
+      side({ absent: true, status: null }),
+      "blind",
+      0,
+      false,
+    ],
     // A file added since the revision has no `<rev>:<path>`, so `--applied` empties it
     // out of the copy for the before compile -- and reading it anyway ended the sweep in
     // a stack trace at the exact moment §8b's recipe needs a verdict, which is what
