@@ -1,16 +1,18 @@
 # WP22: Arrow functions as the declaration form
 
-**Stages A and B have landed; C is half done and D has not started.** Both
-compilers read `const f = (n: i32): i32 => n * 2` today, the two spellings emit
-byte-identical IR, and `tests/cases/fn_arrow` carries the golden, the `llvm-as`
-pass and the native round trip (§8 has what each stage cost). C's **docs half**
-has landed: `README.md`, `docs/LANGUAGE.md`, every `docs/cookbook/` snippet (so
-every listing in `docs/IR_COOKBOOK.md`), `examples/`, the playground and the
-`.claude/` rules are arrows, and §8a records the two concise-body bugs the
-rewrite found. What is still `function` is `self/` and `tests/cases/`, the two
-surfaces the bootstrap and the goldens gate; a `function` declaration is still
-accepted — whether stage D ever rejects it is open, and §10 is where that is
-argued. It is the plan of record for one decision —
+**Stages A and B have landed, C is all but its last surface, and D has not
+started.** Both compilers read `const f = (n: i32): i32 => n * 2` today, the two
+spellings emit byte-identical IR, and `tests/cases/fn_arrow` carries the golden,
+the `llvm-as` pass and the native round trip (§8 has what each stage cost). C's
+docs half landed first — `README.md`, `docs/LANGUAGE.md`, every
+`docs/cookbook/` snippet, `examples/`, the playground and the `.claude/` rules —
+and §8a records the two concise-body bugs that rewrite found. **`self/` is
+arrows now too**: all 734 of its declarations, in the two passes §8b prescribes,
+with `arrow-verify --applied` comparing 1,396 emitted files byte for byte across
+each of them and the bootstrap reproducing stage1 from the rewritten source.
+What is left of C is `tests/cases/`, which the goldens gate; a `function`
+declaration is still accepted — whether stage D ever rejects it is open, and §10
+is where that is argued. It is the plan of record for one decision —
 **`const f = (...) => ...` becomes how Nish declares a function, and
 `function` is legacy and eventually removed** — and for the order that
 decision has to happen in, which is forced by the bootstrap and is the only
@@ -140,7 +142,7 @@ are not stage D's to take (§9).
 
 | Surface | `function` | arrow | Note |
 | --- | --- | --- | --- |
-| `self/` | **733** | 7 | 31,050 lines. The bootstrap; must be migrated before stage D, and it is the one commit of stage C that is worth taking on its own. **Re-derive this one rather than reading it**: 721 when the table was first taken, 723 after `--emit-napi-async`, 733 after generic classes — `self/` grows, and `node scripts/arrowify.mjs --check self/*.ts` is the number to act on |
+| `self/` | **0** | 742 | **Done.** 734 declarations were rewritten in two passes and `arrowify --check self/*.ts` now answers `0 declaration(s) left to rewrite`, which is the form this row should always have been read in: it was 721 when the table was first taken, 723 after `--emit-napi-async`, 734 by the time the migration ran |
 | `tests/cases/` | **693** | 196 | the goldens gate; every `.ll` beside one verifies its rewrite rather than being work the rewrite creates. Derived the same way: `arrowify --check tests/cases/*.ts` answers 689, and four more carry a body while having no arrow spelling — two `export default`, one `async`, one `function*` — which this column counts and the seven `declare function` lines it does not |
 | `tests/differential/corpus/` | 153 | 0 | compiled *and* rewritten to JavaScript, so the arrow-parity guard (§8b) is what these rest on |
 | `tests/link/` | 51 | 32 | whole programs, several modules each |
@@ -173,7 +175,7 @@ them. That forces four stages, and no two of them can be merged:
 | --- | --- | --- |
 | **A** | Stage0 accepts arrows: §5's rules, the concise-body branch, negative tests | `npm test` green; the two spellings of one program emit byte-identical IR |
 | **B** | Stage1 accepts arrows: the lookahead and `parseArrowFunction` in `self/parser.ts`, the concise-body branch in its checker and emitter | the parser oracle builds the same tree with the same spans, and `IR(stage0) == IR(stage1)` byte for byte |
-| **C** | The migration: the docs and `examples/` first (done), then `self/`, then the corpus | goldens unchanged; the bootstrap reproduces stage1 byte for byte |
+| **C** | The migration: the docs and `examples/` first (done), then `self/` (done), then the corpus | goldens unchanged; the bootstrap reproduces stage1 byte for byte |
 | **D** | a `function` *definition* is rejected, with §6's message and its `reject_function_declaration` case; `declare function` stays legal (§9) | `npm test` green with no `function` declaration left in any Nish source |
 
 **A cannot carry its own positive golden, and that is the plan's one real
