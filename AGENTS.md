@@ -113,10 +113,11 @@ assumed:
 
 - `npm run check` green.
 - `npm test` green **and not degraded**. Read the skip count, per *Trusting a
-  test run* above: a `DEGRADED:` banner, or a skip that is not one of the two
-  environmental ones (no WASI sysroot, `NISH_BOOTSTRAP` unset), means the run
-  did not prove what a green summary looks like it proved, and the change is
-  therefore untested whatever the exit code said.
+  test run* above: a `DEGRADED:` banner, or a skip that is not one of the three
+  environmental ones (no WASI sysroot, `NISH_BOOTSTRAP` unset, no `jq` for the
+  WP19 seed-matrix states), means the run did not prove what a green summary
+  looks like it proved, and the change is therefore untested whatever the exit
+  code said.
 - `npm run lint` no worse than `main` — the warning count is a backlog, so it
   may not grow.
 - `node docs/check-links.mjs` when the change touches Markdown.
