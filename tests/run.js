@@ -4644,17 +4644,31 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       // same spans. A multi-error program is the case worth pinning, because
       // it is also the one that proves stage1 collected every error rather
       // than stopping at the first.
-      const jsonCase = path.join("tests", "cases", "reject_multi_error.ts");
-      const ourJson = spawnSync(compiler, [jsonCase, "--json"], { cwd: root, encoding: "utf8" });
-      const theirJson = spawnSync("node", [cli, jsonCase, "--json"], { cwd: root, encoding: "utf8" });
-      check(
-        "the self-hosted compiler: --json diagnostics are byte-identical to stage0's",
-        ourJson.status === 1 &&
-          theirJson.status === 1 &&
-          ourJson.stdout === theirJson.stdout &&
-          ourJson.stdout.split("\n").filter(Boolean).length === 3,
-        `ours:\n${ourJson.stdout}${ourJson.stderr}\ntheirs:\n${theirJson.stdout}`
-      );
+      //
+      // The `.err` sidecars cannot see a whole span on their own -- they are
+      // matched as substrings, so the caret run they pin fixes a start column
+      // but not an end one, and both compilers printed the same sentence for
+      // `reject_ffi_pointer_array` while spanning it on `CPtr[]` and on `CPtr`
+      // respectively (WP27 S2). A case joins this list when its span is the
+      // property under test.
+      const jsonCases = [
+        ["reject_multi_error", 3],
+        ["reject_ffi_pointer_array", 1],
+        ["reject_ffi_pointer_type_argument_fn", 1],
+      ];
+      for (const [jsonName, objects] of jsonCases) {
+        const jsonCase = path.join("tests", "cases", `${jsonName}.ts`);
+        const ourJson = spawnSync(compiler, [jsonCase, "--json"], { cwd: root, encoding: "utf8" });
+        const theirJson = spawnSync("node", [cli, jsonCase, "--json"], { cwd: root, encoding: "utf8" });
+        check(
+          `the self-hosted compiler: ${jsonName}'s --json diagnostics are byte-identical to stage0's`,
+          ourJson.status === 1 &&
+            theirJson.status === 1 &&
+            ourJson.stdout === theirJson.stdout &&
+            ourJson.stdout.split("\n").filter(Boolean).length === objects,
+          `ours:\n${ourJson.stdout}${ourJson.stderr}\ntheirs:\n${theirJson.stdout}`
+        );
+      }
 
       // WP21 S2: the walk up to `node_modules` has to reach the same directories
       // in both compilers, and the working directory is what pulls them apart.

@@ -28,3 +28,4 @@ cases/mem_scope_dynamic_array  # prints the arena delta across scoped calls
 # oracle by construction, which is a real coverage cost of the feature and is why
 # `tests/cases/ffi_scalar` carries a golden `.ll` and a native round trip instead.
 cases/ffi_scalar           # declare function abs/labs: libc, with no JS equivalent
+cases/ffi_pointer          # declare function calloc/realloc/free: the same, with a CPtr (WP27 S2)

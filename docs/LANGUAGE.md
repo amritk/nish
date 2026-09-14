@@ -1408,15 +1408,65 @@ declare i32 @abs(i32)
 The spelling is TypeScript's own ambient declaration, and `declare` is a
 *contextual* keyword: a variable may still be called `declare`.
 
-**Every position must be a scalar** — `i32`, `i64`, `u8`, `u16`, `u32`, `u64`,
-`f32`, `f64`, `boolean`, `void`. A `string`, an array, a class or an interface is
-rejected with
-`` and a declared C function takes scalars only `` in a parameter
+**Every position must be a scalar or `CPtr`** — `i32`, `i64`, `u8`, `u16`,
+`u32`, `u64`, `f32`, `f64`, `boolean`, `void`, and the foreign pointer below. A
+`string`, an array, a class or an interface is rejected with
+`` and a declared C function takes scalars and `CPtr` only `` in a parameter
 (`tests/cases/reject_ffi_string_param`) and
-`` returns a scalar only `` in the return position
-(`reject_ffi_string_return`). This is not a stylistic limit: a scalar boundary has
-no pointer for a foreign function to capture or free, which is what lets the
-escape analysis stay correct without knowing anything about the callee.
+`` returns a scalar or `CPtr` only `` in the return position
+(`reject_ffi_string_return`). This is not a stylistic limit: **no pointer this
+compiler allocated crosses the boundary in either direction**, so there is
+nothing for a foreign function to capture or free, which is what lets the escape
+analysis stay correct without knowing anything about the callee.
+
+#### `CPtr`: the pointer a C function hands back
+
+**`CPtr` is an address C owns.** It is eight bytes and `i8*` in the IR, and that
+is the whole of what the compiler knows about it: it is not arena memory, not a
+`%struct`, not a `nish_str`, and its lifetime is the C library's business
+(`tests/cases/ffi_pointer`, [cookbook](IR_COOKBOOK.md#cptr-the-pointer-a-c-function-hands-back)).
+
+```ts
+declare function calloc(count: u64, size: u64): CPtr | null;
+declare function free(block: CPtr): void;
+```
+
+- **It may be written in a `declare function` signature and on a local that
+  holds one, and nowhere else.** A field, an array element, a `Result` arm, a
+  type argument, and the parameters or return type of a function this program
+  defines are all
+  `` `CPtr` cannot be ...: a foreign pointer may only appear in a `declare
+  function` signature or on a local bound to one ``
+  (`reject_ffi_pointer_field`, `reject_ffi_pointer_array`,
+  `reject_ffi_pointer_param`, `reject_ffi_pointer_return`,
+  `reject_ffi_pointer_type_argument_fn`). The first group
+  would put a foreign address inside a value the arena owns and the escape
+  analysis walks; the second would put one across a boundary `--emit-header`,
+  `--emit-dts` and `--emit-napi` describe, and none of the three has a spelling
+  for an address whose provenance and lifetime are unknown. The type-argument
+  clause is stated at a generic *function*'s instantiation; a generic *class* at
+  `CPtr` is refused by whichever member rule the monomorphised class reaches
+  (`reject_ffi_pointer_type_argument`), which is every shape that lays the type
+  out — see `docs/wp27-ffi.md` §7a for the one that does not.
+- **`null` comes only from a foreign call.** A `declare function` may *return*
+  `CPtr | null` and may not *take* one
+  (`` cannot be nullable: a foreign pointer is narrowed with `!== null` before
+  it is passed back ``, `reject_ffi_pointer_nullable_param`), so a pointer is
+  narrowed with `if (p !== null)` before it goes back to C. The narrowing is the
+  ordinary nullable one (WP6); a `CPtr | null` local may also hold the literal
+  `null`, which is the only `CPtr` value that did not come from C and the only
+  one that cannot be passed to it.
+- **No arithmetic, no dereference, no index, no member.** `p + 1` is
+  `` Operator `+` requires two operands of the same numeric type ``
+  (`reject_ffi_pointer_arithmetic`) and `p[0]` is
+  `` Cannot index a value of type CPtr ``. What is left is `=== null`,
+  `!== null`, comparing two `CPtr`s, assignment, and passing one to another
+  foreign function.
+- **It gets no pointer attributes.** `dereferenceable`, `align`, `nonnull`,
+  `nocapture` and `readonly` are each a claim about memory this compiler laid
+  out, and it laid out none of this; `isPointerParam` in
+  `src/codegen/attributes.ts` is an allow-list so that a `CPtr` falls out of it
+  by construction rather than by a case somebody remembered to write.
 
 **A foreign declaration has no body** (`reject_ffi_body`) and **cannot be
 `export`ed** (`reject_ffi_export`), because `export` offers other modules a
@@ -1436,6 +1486,14 @@ which to do anything else. See
 **A program that calls C is no longer one the compiler can reason about end to
 end.** That is the trade the feature is: the whole-program fact fixpoint is the
 performance thesis, and a foreign call is a hole in it.
+
+**And it is outside the differential oracle by construction.** The oracle
+rewrites a program to JavaScript and runs it against `runtime/shim.mjs`, on the
+premise that the same source means the same thing in both worlds; that premise
+does not hold for a source whose meaning is "whatever this C function does"
+([wp27-ffi.md](wp27-ffi.md) §5). The evidence for an FFI program is arranged the
+other way round: a golden `.ll`, an `llvm-as` pass, a native round trip against
+real libc, and the attribute assertions.
 
 ## Statements
 

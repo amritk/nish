@@ -2,7 +2,7 @@
 // S3, pass 2): literals, indexing, `length`, the four methods, `new Array<T>`
 // and element assignment.
 
-import { resolveType, typedArrayElement } from "./annotations";
+import { rejectForeignPointer, resolveType, typedArrayElement } from "./annotations";
 import { checkBuiltinArity, isArgvExpression } from "./builtins";
 import { CheckContext } from "./context";
 import { checkBitwiseAssignOperands, checkExpression, isBitwiseCompound } from "./expressions";
@@ -248,6 +248,9 @@ export const checkNewArray = (ctx: CheckContext, expr: Node, name: string, scope
       return ctx.errorType(expr, "`new Array` needs exactly one type argument, e.g. `new Array<number>(n)`");
     }
     elem = resolveType(typeArgs.children[0], ctx);
+    if (rejectForeignPointer(ctx, elem, "an array element", typeArgs.children[0])) {
+      return T_ERROR;
+    }
   } else {
     const alias = typedArrayElement(name);
     if (alias < 0) {

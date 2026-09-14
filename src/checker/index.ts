@@ -15,7 +15,14 @@
  */
 import ts from "typescript";
 import { CompileError, DiagnosticSink, PerformanceWarning } from "../diagnostics.js";
-import { CompilerOptions, StaticType, registerNamedTypes, resolveTypeNode, typeToString } from "../types.js";
+import {
+  CompilerOptions,
+  StaticType,
+  registerNamedTypes,
+  rejectForeignPointer,
+  resolveTypeNode,
+  typeToString,
+} from "../types.js";
 import {
   coerceToContext,
   collectStructMembers,
@@ -564,6 +571,15 @@ export class Checker implements CheckContext {
     const existing = this.program.instantiations.get(symbol);
     if (existing) return existing.sig;
 
+    // WP27 S2. A template's parameters and return type are checked against its
+    // *type parameters*, so the rule that keeps a foreign pointer out of a
+    // function this program defines cannot be applied where the other ones are
+    // -- an instantiation is the first point at which `T` is known to be one.
+    // The message is the same, because it is the same rule.
+    for (const arg of args) {
+      rejectForeignPointer(arg, `a type argument of \`${template.sourceName}\``, at, this.sf);
+    }
+
     // Termination (§4). A request that puts one of its own type arguments
     // under a constructor is the shape whose chain has no end, and it is
     // refused by name rather than by a depth count.
@@ -630,7 +646,7 @@ export class Checker implements CheckContext {
     let params: Param[];
     let returnType: StaticType;
     try {
-      params = collectPlainParams(template.decl.parameters, this.sf, this.opts);
+      params = collectPlainParams(template.decl.parameters, this.sf, this.opts, false);
       returnType = resolveTypeNode(template.decl.type as ts.TypeNode, this.sf, this.opts);
     } finally {
       this.typeBindings = saved;
@@ -742,6 +758,17 @@ export class Checker implements CheckContext {
     const name = instanceSymbol(template.sourceName, args);
     const existing = this.program.structInstantiations.get(name);
     if (existing) return existing.info;
+
+    // TODO (WP27 S2, known gap): there is no `rejectForeignPointer` loop here
+    // the way there is in `instantiate` above. A generic class at `CPtr` is
+    // refused by whichever member rule the monomorphised class trips -- the
+    // field rule, the array-element rule, the parameter rule of a method that
+    // takes a `T` -- which is every shape that lays the type out or puts it
+    // across an exported boundary, and so the whole of what the soundness
+    // argument needs. It is not the whole of the *rule*: a template that never
+    // mentions `T` in a member (`class Empty<T> { n: i32 = 0; }`) compiles
+    // `new Empty<CPtr>()`, here and in `self/generics.ts`, which agree. Closing
+    // it is the same loop on both sides plus a case; `docs/wp27-ffi.md` §7a.
 
     // Termination, the struct half (§4). A field whose type puts one of the
     // struct's own type arguments under a constructor starts a chain with no
