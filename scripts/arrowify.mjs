@@ -61,6 +61,7 @@ const SKIP_REASONS = {
   bodiless: "no body, and no `declare`: an overload signature, which the language does not have",
   default: "`export default` has no arrow spelling",
   generator: "`function*` has no arrow spelling (WP22 §9)",
+  header: "a comment sits between `function` and the parameter list",
   trivia: "a comment sits between the signature and the body",
 };
 
@@ -94,15 +95,21 @@ const unspellable = (decl) => {
 };
 
 /**
- * The position of the `function` keyword: after the modifiers, if any. Nothing
- * but whitespace and comments can sit between them, so the first occurrence of
- * the word is the keyword itself.
+ * One of a declaration's own child tokens, by kind.
+ *
+ * Every position this rewrite splices at comes from here rather than from
+ * `indexOf`, and the difference is a corrupted file. A comment before the
+ * declaration can contain the word `function`, and a comment between the name
+ * and the parameter list can contain a parenthesis; a search finds the
+ * comment's copy first, so the splice starts or ends in the middle of the
+ * comment and writes back a file that no longer parses — silently, because a
+ * codemod that located its own edit by guessing has nothing left to check the
+ * guess against. The tree knows where each token is, so ask it. It is the same
+ * lesson as deciding a concise collapse from the tree rather than from a
+ * search for `//`, in the place where getting it wrong costs source rather
+ * than a lint error.
  */
-const keywordStart = (text, decl, start) => {
-  const mods = decl.modifiers;
-  if (mods === undefined || mods.length === 0) return start;
-  return text.indexOf("function", mods[mods.length - 1].getEnd());
-};
+const childToken = (sf, decl, kind) => decl.getChildren(sf).find((child) => child.kind === kind);
 
 /**
  * Where the callable's *signature* begins once the keyword and the name are
@@ -111,15 +118,18 @@ const keywordStart = (text, decl, start) => {
  * valid in a `.ts` file — the `<T,>` disambiguation is a `.tsx` problem only
  * (WP22 §9).
  */
-const signatureStart = (text, decl) => {
-  if (decl.typeParameters !== undefined) return decl.typeParameters.pos - 1;
-  return text.indexOf("(", decl.name.getEnd());
+const signatureStart = (sf, decl) => {
+  const open =
+    decl.typeParameters !== undefined
+      ? childToken(sf, decl, ts.SyntaxKind.LessThanToken)
+      : childToken(sf, decl, ts.SyntaxKind.OpenParenToken);
+  return open.getStart(sf);
 };
 
 /** Where it ends: after the return type, or after the `)` when there is none. */
-const signatureEnd = (text, decl) => {
+const signatureEnd = (sf, decl) => {
   if (decl.type !== undefined) return decl.type.getEnd();
-  return text.indexOf(")", decl.parameters.end) + 1;
+  return childToken(sf, decl, ts.SyntaxKind.CloseParenToken).getEnd();
 };
 
 /**
@@ -173,14 +183,28 @@ const replacement = (text, sf, decl, concise) => {
   if (decl.body === undefined) return { skip: "bodiless" };
 
   const start = decl.getStart(sf);
-  const prefix = text.slice(start, keywordStart(text, decl, start));
-  const sigEnd = signatureEnd(text, decl);
-  const signature = text.slice(signatureStart(text, decl), sigEnd);
+  const keyword = childToken(sf, decl, ts.SyntaxKind.FunctionKeyword);
+  const prefix = text.slice(start, keyword.getStart(sf));
+  const sigStart = signatureStart(sf, decl);
+  const sigEnd = signatureEnd(sf, decl);
+  const signature = text.slice(sigStart, sigEnd);
+  const blank = /^\s*$/;
+  // The header is the one region the splice throws away: the keyword, the name
+  // and the space around them all become `const NAME = `. Anything else in
+  // there is a comment that would have nowhere to go, so refuse the
+  // declaration rather than drop it — the same rule the body gap below has,
+  // for the same reason.
+  if (
+    !blank.test(text.slice(keyword.getEnd(), decl.name.getStart(sf))) ||
+    !blank.test(text.slice(decl.name.getEnd(), sigStart))
+  ) {
+    return { skip: "header" };
+  }
   // Whatever sits between the return type and the `{`. Normally one space; a
   // comment there would have to be rewritten rather than moved, so refuse it
   // instead of silently dropping it.
   const gap = text.slice(sigEnd, decl.body.getStart(sf));
-  if (!/^\s*$/.test(gap)) return { skip: "trivia" };
+  if (!blank.test(gap)) return { skip: "trivia" };
 
   const returned = concise ? singleReturn(text, sf, decl.body) : undefined;
   const body =
@@ -253,9 +277,30 @@ const usage = `usage: node scripts/arrowify.mjs [--check|--stdout] [--concise] <
   --concise  also collapse a body that is one \`return expr;\` into \`=> expr\`
 `;
 
+/**
+ * The flags this tool has. A misspelling is refused rather than ignored: the
+ * whole of the two-pass recipe is that the block-bodied pass runs *without*
+ * `--concise` and the collapse runs *with* it, so a `--consise` that is
+ * silently dropped is a pass that did not happen and a verification that
+ * blamed the wrong one.
+ */
+const FLAGS = new Set(["--check", "--stdout", "--concise"]);
+
 const main = (argv) => {
   const flags = new Set(argv.filter((a) => a.startsWith("--")));
   const files = argv.filter((a) => !a.startsWith("--"));
+  const unknown = [...flags].filter((flag) => !FLAGS.has(flag));
+  if (unknown.length > 0) {
+    process.stderr.write(`arrowify: unknown flag ${unknown.join(", ")}\n${usage}`);
+    return 2;
+  }
+  // `--check` answers with an exit code and `--stdout` answers with a file, so
+  // asking for both leaves no honest answer: the exit code used to come back 0
+  // with the rewrites still pending.
+  if (flags.has("--check") && flags.has("--stdout")) {
+    process.stderr.write(`arrowify: --check answers with an exit code and --stdout with a file\n${usage}`);
+    return 2;
+  }
   if (files.length === 0) {
     process.stderr.write(usage);
     return 2;
