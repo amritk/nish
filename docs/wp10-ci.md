@@ -187,8 +187,18 @@ Only a full run may touch that issue. A `workflow_dispatch` with an `only`
 filter reports into the job summary and nowhere else, because a green subset
 of the corpus read as a green corpus is exactly the mistake
 [§A5](wp19-stage0-retirement.md#a5-the-gate-reopened-and-the-correction-a4-needed)
-records. That is also why the job asks for `issues: write` on top of
-`contents: read`.
+records.
+
+**The writing is a second job, and that is a permission boundary rather than
+tidiness.** `issues: write` is the only authority this workflow needs beyond
+`contents: read`, and the job that would otherwise hold it runs `npm ci` and
+then thousands of compilations of whatever is in the tree — repository code and
+its dependency tree, with a token that can open, comment on and close issues.
+So the workflow is `contents: read`, the corpus job inherits that, and a
+`record` job that runs nothing but `gh` asks for `issues: write` for itself and
+reads the run's log as an artifact. It is also where "only a full run may touch
+the issue" now lives, as a job condition rather than a step condition: for a
+filtered run the job does not exist.
 
 Both `test` jobs need the plain tool names `clang`, `llc`, `llvm-as`, `opt`,
 `ld.lld` and `wasm-ld` on `PATH`, because `tests/run.js` and the scripts
