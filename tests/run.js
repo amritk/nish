@@ -650,9 +650,13 @@ if (!only || "diagnostics".includes(only)) {
 
   // One table, two compilers: the pairs must be identical, exactly as
   // `branding.ts` must name the same language on both sides.
+  // The indentation is not part of the contract: `self/codes.ts`'s tables lost a
+  // level when WP22 stage C turned them into arrows with concise bodies, and a
+  // pattern keyed on four spaces then read the registry as *empty* rather than as
+  // changed. A fragment line followed by its code line is the shape that matters.
   const pairsOf = (file) => {
     const text = fs.readFileSync(path.join(root, file), "utf8");
-    return [...text.matchAll(/^ {4}("(?:[^"\\]|\\.)*"),\n {4}"(NL\d{4})",$/gm)].map((m) => `${m[2]} ${m[1]}`);
+    return [...text.matchAll(/^\s+("(?:[^"\\]|\\.)*"),\n\s+"(NL\d{4})",$/gm)].map((m) => `${m[2]} ${m[1]}`);
   };
   const stage0Codes = pairsOf("src/codes.ts");
   const stage1Codes = pairsOf("self/codes.ts");
