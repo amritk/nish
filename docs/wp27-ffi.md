@@ -227,7 +227,27 @@ each clause of it is a rule with a case behind it:
 - **Nowhere but a foreign signature and a local.** A field, an array element, a
   `Result` arm, a type argument, and the parameters and return type of a
   function this program defines are all refused with one message
-  (`reject_ffi_pointer_field`, `_array`, `_param`, `_return`). §7b is why.
+  (`reject_ffi_pointer_field`, `_array`, `_param`, `_return`,
+  `_type_argument_fn`). §7b is why.
+
+  The type-argument clause is stated where a *function* template is
+  instantiated, in `instantiate`, and that is the only position that reaches it.
+  A generic *class* monomorphises through `instantiateStruct`, which carries no
+  such check in either compiler, so `Box<CPtr>` is refused by the member rule
+  the instantiated class trips — the field rule for
+  `reject_ffi_pointer_type_argument`, the array-element rule for a `T[]` field,
+  the parameter rule for a method that takes a `T`. That covers every shape
+  that lays `T` out or puts it across an exported boundary, which is the whole
+  of what §7b's argument needs.
+
+  **TODO (known gap).** It does not cover a template that never mentions `T` in
+  a member: `class Empty<T> { n: i32 = 0; }` compiles `new Empty<CPtr>()` in
+  both compilers, because no member rule is reached and `instantiateStruct` has
+  nothing of its own to say. Nothing unsound follows — no `CPtr` is laid out,
+  stored or exported, and `Empty$cptr` is a struct of one `i32` — but the rule
+  as written says a `CPtr` cannot be a type argument, and here it can. Closing
+  it is the same three-line loop in `instantiateStruct` on both sides plus a
+  case for the shape, and it is deliberately not in S2.
 
 The name is PascalCase where every other type the language has is lower case,
 and that is deliberate: `i32` and `string` are this language's types and `CPtr`
@@ -294,7 +314,7 @@ and then `free`, and a neighbour that calls no C keeps `willreturn readnone`
 while `main` keeps only `nounwind`. It is a link test against real libc, so a
 pointer that did not round-trip would abort rather than merely differ.
 
-Six `reject_ffi_pointer_*` cases pin the refusals, and
+Nine `reject_ffi_pointer_*` cases pin the refusals, and
 `docs/cookbook/decl_ffi_pointer.ts` pins the lowering. Both compilers implement
 it: `tests/self/ir_oracle.js` compares the emitted IR byte for byte and
 `tests/self/reject_oracle.js` compares every refusal's wording, which is the
@@ -307,12 +327,13 @@ code and the same sentence while stage0 spanned it on `CPtr[]` and stage1 on
 `CPtr`, and nothing in the suite could see it. Two things see it now, and
 neither of them changed the oracle:
 
-- The `.err` fragments for `reject_ffi_pointer_array` include the excerpt's
-  caret run, which fixes the **start** column in whichever compiler the oracle
-  is pointed at and outlives `src/`. It cannot fix the end column, because the
-  match is a substring and `^~~~~~` contains `^~~~` — which is exactly the
-  direction stage0 was wrong in, so this half is necessary and not sufficient.
-- `tests/run.js` compares that case's `--json` objects between the two
+- The `.err` fragments for `reject_ffi_pointer_array` and
+  `reject_ffi_pointer_type_argument_fn` include the excerpt's caret run, which
+  fixes the **start** column in whichever compiler the oracle is pointed at and
+  outlives `src/`. It cannot fix the end column, because the match is a
+  substring and `^~~~~~` contains `^~~~` — which is exactly the direction stage0
+  was wrong in, so this half is necessary and not sufficient.
+- `tests/run.js` compares those two cases' `--json` objects between the two
   compilers byte for byte, `endColumn` included, as it already did for
   `reject_multi_error`. That is the half that sees a widening, and it is the
   half that dies with stage0; a span golden that outlives both is WP19's to

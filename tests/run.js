@@ -4650,6 +4650,7 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       const jsonCases = [
         ["reject_multi_error", 3],
         ["reject_ffi_pointer_array", 1],
+        ["reject_ffi_pointer_type_argument_fn", 1],
       ];
       for (const [jsonName, objects] of jsonCases) {
         const jsonCase = path.join("tests", "cases", `${jsonName}.ts`);

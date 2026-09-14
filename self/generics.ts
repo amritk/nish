@@ -492,6 +492,16 @@ export function instantiateStruct(
   if (existing !== null) {
     return existing.info;
   }
+  // TODO (WP27 S2, known gap): no `rejectForeignPointer` loop here, the way
+  // there is one in `instantiate` below. A generic class at `CPtr` is
+  // refused by whichever member rule the monomorphised class trips — the field
+  // rule, the array-element rule, the parameter rule of a method that takes a
+  // `T` — which is every shape that lays the type out or puts it across an
+  // exported boundary. It is not the whole of the rule: a template that never
+  // mentions `T` in a member (`class Empty<T> { n: i32 = 0; }`) compiles
+  // `new Empty<CPtr>()`, here and in `src/checker/index.ts`, which agree.
+  // `docs/wp27-ffi.md` §7a.
+
   // Termination, the struct half. A field whose type puts one of the struct's
   // own type arguments under a constructor starts a chain with no end, and it
   // is refused by name rather than by a depth count.

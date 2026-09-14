@@ -759,6 +759,17 @@ export class Checker implements CheckContext {
     const existing = this.program.structInstantiations.get(name);
     if (existing) return existing.info;
 
+    // TODO (WP27 S2, known gap): there is no `rejectForeignPointer` loop here
+    // the way there is in `instantiate` above. A generic class at `CPtr` is
+    // refused by whichever member rule the monomorphised class trips -- the
+    // field rule, the array-element rule, the parameter rule of a method that
+    // takes a `T` -- which is every shape that lays the type out or puts it
+    // across an exported boundary, and so the whole of what the soundness
+    // argument needs. It is not the whole of the *rule*: a template that never
+    // mentions `T` in a member (`class Empty<T> { n: i32 = 0; }`) compiles
+    // `new Empty<CPtr>()`, here and in `self/generics.ts`, which agree. Closing
+    // it is the same loop on both sides plus a case; `docs/wp27-ffi.md` §7a.
+
     // Termination, the struct half (§4). A field whose type puts one of the
     // struct's own type arguments under a constructor starts a chain with no
     // end, and it is refused by name rather than by a depth count.

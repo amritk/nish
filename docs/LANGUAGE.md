@@ -1438,11 +1438,16 @@ declare function free(block: CPtr): void;
   `` `CPtr` cannot be ...: a foreign pointer may only appear in a `declare
   function` signature or on a local bound to one ``
   (`reject_ffi_pointer_field`, `reject_ffi_pointer_array`,
-  `reject_ffi_pointer_param`, `reject_ffi_pointer_return`). The first group
+  `reject_ffi_pointer_param`, `reject_ffi_pointer_return`,
+  `reject_ffi_pointer_type_argument_fn`). The first group
   would put a foreign address inside a value the arena owns and the escape
   analysis walks; the second would put one across a boundary `--emit-header`,
   `--emit-dts` and `--emit-napi` describe, and none of the three has a spelling
-  for an address whose provenance and lifetime are unknown.
+  for an address whose provenance and lifetime are unknown. The type-argument
+  clause is stated at a generic *function*'s instantiation; a generic *class* at
+  `CPtr` is refused by whichever member rule the monomorphised class reaches
+  (`reject_ffi_pointer_type_argument`), which is every shape that lays the type
+  out — see `docs/wp27-ffi.md` §7a for the one that does not.
 - **`null` comes only from a foreign call.** A `declare function` may *return*
   `CPtr | null` and may not *take* one
   (`` cannot be nullable: a foreign pointer is narrowed with `!== null` before
