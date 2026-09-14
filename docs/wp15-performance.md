@@ -1496,11 +1496,14 @@ measurement closed says so and says why.
      committed so that the figure can be re-derived: two scans of a 40 KB
      string into 16-byte pieces, same control flow and same guard, differing
      only in whether the §2 proof comes off, timed in alternating rounds inside
-     the program. Measured **1.10x** (21.5 ms against 19.5 ms for 1,024,000
-     calls, minimum of 15, `taskset -c 2`) — about 2 ns a call, which is the
-     four intrinsics. Slice width is what moves it: at four bytes a slice the
-     same program measures **1.20x** (55.3 ms against 46.1 ms), because the
-     clamp is a fixed cost per call and the `memcpy` is not. That is the
+     the program. Measured **1.10x** (21.5 ms against 19.4 ms for 1,024,000
+     calls: the program's own minimum of 15, best of seven runs under
+     `taskset -c 2` on a busy shared machine, where the spread between runs is
+     wider than the effect and the minimum is the only stable statistic) —
+     about 2 ns a call, which is the four intrinsics. Slice width is what
+     moves it: at four bytes a slice the same program measures **1.20x**
+     (55.3 ms against 46.1 ms), because the clamp is a fixed cost per call and
+     the `memcpy` is not. That is the
      ceiling, on a loop that does nothing but slice; §4's 1.18x for `slice`
      over `substring` is what the same instructions plus the two swap calls are
      worth on lexer-shaped code. `tests/cases/perf_clamp`,
