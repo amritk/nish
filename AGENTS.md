@@ -216,9 +216,13 @@ what is blocking and what you need — and keep watching.
 - **In the compiler's own source, declare types with `type` and functions as
   arrows bound to a `const`.** Both are linted at `warn` while the existing
   code is migrated, so the warning count is the backlog rather than a failure.
-  Class methods stay methods. An Nish program is exempt and must use
-  `function` and `interface`, because the language has neither arrow functions
-  nor `type` aliases.
+  Class methods stay methods. **An Nish program follows the arrow half of that
+  rule too** — the language has arrow functions
+  ([wp22](./docs/wp22-arrow-functions.md)), so a function there is
+  `const f = (a: i32): i32 => ...` and the `function` keyword is the legacy
+  spelling. The `type` half still does not reach it: an Nish struct is a
+  `class` or an `interface`, and a `type` alias only renames a type that
+  already exists.
 - Match the surrounding code's style, comment density, and naming. Biome
   (`biome.json`) is the formatter and linter, run with the formatter disabled
   in `npm run lint`; keep new files formatted and do not reformat files you did

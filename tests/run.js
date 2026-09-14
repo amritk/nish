@@ -34,6 +34,8 @@ import { createRequire } from "node:module";
 import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
 import { compareWithCli, compileCases, gateCases } from "./batch_compile.js";
+import { rewrite as arrowify } from "../scripts/arrowify.mjs";
+import { diagnosticWords, diffEmitted, sitsOnChange, verdict } from "../scripts/arrow-verify.mjs";
 const require = createRequire(import.meta.url);
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -4581,8 +4583,9 @@ if (!only || "selfhost".includes(only) || only.includes("self")) {
       // outcomes are declared per case rather than in general:
       // `parser_refusals.txt` for the constructs stage1's parser turns down
       // before the phase that owns the rule can word it (§A3), and
-      // `stage1_divergence.txt` for the eleven programs the two compilers do
-      // not yet answer the same way at all. `--strict-refusals` is what makes
+      // `stage1_divergence.txt` for the programs the two compilers do not yet
+      // answer the same way at all — a handful, and the count is on the summary
+      // line this check prints rather than in this comment, because it moves. `--strict-refusals` is what makes
       // both lists shrink-only: a case that starts agreeing fails until the
       // line naming it is deleted.
       const stage1Wordings = spawnSync(
@@ -5644,6 +5647,68 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       absent.length === 0,
       absent.join("\n")
     );
+    // A script that ships has to be able to load in the tarball it ships in: every
+    // relative import it makes has to be a file the tarball also carries, and every bare
+    // one has to be a runtime dependency rather than a devDependency. `scripts/` is
+    // whitelisted as a directory, so a development tool added beside `build.sh` ships
+    // without anybody deciding it should -- `scripts/arrow-verify.mjs` did, importing
+    // `../tests/self/corpus.js`, which `files` does not ship, and nothing said so because
+    // nobody runs a corpus sweep out of an install. Either it resolves or it does not
+    // ship; this is what makes that a check rather than a habit.
+    //
+    // The specifiers are read from the parse tree and not from a pattern, because the
+    // forms a pattern misses are the ones nobody looks at: `import "./x.js";` with no
+    // clause, `export { a } from "./x.js"`, a dynamic `import()`, and any of them in
+    // single quotes. A guard that only sees `import ... from "..."` is a guard the
+    // regression it was written for can walk straight past.
+    const ts = require("typescript");
+    const specifiersOf = (text, name) => {
+      const sf = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true);
+      const found = [];
+      const visit = (node) => {
+        const fixed =
+          (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier !== undefined
+            ? node.moduleSpecifier
+            : undefined;
+        if (fixed !== undefined && ts.isStringLiteral(fixed)) found.push(fixed.text);
+        const dynamic =
+          ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
+            ? node.arguments[0]
+            : undefined;
+        if (dynamic !== undefined && ts.isStringLiteral(dynamic)) found.push(dynamic.text);
+        ts.forEachChild(node, visit);
+      };
+      visit(sf);
+      return found;
+    };
+    // `@scope/name/deep` and `name/deep` are both the package plus a subpath, and it is
+    // the package that `dependencies` names.
+    const packageOf = (spec) =>
+      spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : spec.split("/")[0];
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+    // A tarball with no `dependencies` at all is a thing a refactor can produce, and it
+    // should fail this one check rather than throw and take the whole packaging block
+    // with it.
+    const deps = new Set(Object.keys(manifest.dependencies ?? {}));
+    const shippedScripts = files.filter((f) => f.startsWith("scripts/") && /\.(mjs|js)$/.test(f));
+    const unresolved = [];
+    for (const rel of shippedScripts) {
+      for (const spec of specifiersOf(fs.readFileSync(path.join(root, rel), "utf8"), rel)) {
+        if (spec.startsWith("node:")) continue;
+        if (!spec.startsWith(".")) {
+          const pkg = packageOf(spec);
+          if (!deps.has(pkg)) unresolved.push(`${rel} imports \`${spec}\`, and \`${pkg}\` is not a dependency`);
+          continue;
+        }
+        const target = path.posix.normalize(path.posix.join(path.posix.dirname(rel), spec));
+        if (!files.includes(target)) unresolved.push(`${rel} imports \`${spec}\`, which the tarball does not carry`);
+      }
+    }
+    check(
+      `npm pack ships no script whose imports it cannot resolve (${shippedScripts.length} scripts)`,
+      unresolved.length === 0,
+      unresolved.join("\n")
+    );
     // Every module of the library, and not a list of them: `files` in package.json
     // names the whole directory, so a new module ships without anybody saying so —
     // and a `files` entry narrowed later would take it back out just as quietly.
@@ -6100,6 +6165,359 @@ if (!only || "differential".includes(only) || "arrow-parity".includes(only)) {
     `differential: an arrow-declared program and its \`function\` twin rewrite identically (${summary || "no summary"})`,
     ap.status === 0,
     ap.stdout + ap.stderr
+  );
+}
+
+// ---- WP22 §2: the two spellings, and the codemod that rewrites one into the other ----
+// Stage A was declared done on "the two spellings of one program emit byte-identical IR",
+// and until now nothing in `npm test` asked. The claim is structural rather than lucky --
+// the emitter iterates checked `FunctionSig`s and there is no `isFunctionDeclaration`
+// anywhere in `src/codegen/` -- which is exactly why it is worth a check: a pass that
+// started reading the declaration's syntax kind would break it silently, and the goldens
+// would not notice, because every golden is written in one spelling or the other and each
+// would go on matching itself.
+//
+// The same pair pins `scripts/arrowify.mjs`, the codemod stage C's `self/` rewrite runs.
+// `arrow.ts` is `declared.ts` written out by hand, so the codemod owes the two fixtures
+// the same relationship a reader sees between them: everything below the header comment,
+// character for character. That is a stronger statement about the tool than any IR
+// comparison, because it is checked against a file somebody wrote rather than against the
+// tool's own output. Nothing here is assembled or run, so it needs no toolchain.
+if (!only || "arrow".includes(only) || "spelling".includes(only)) {
+  const ts = require("typescript");
+  const fixtures = path.join(root, "tests", "differential", "arrow-parity");
+  const out = path.join(buildDir, "arrow-spelling");
+  const emit = (name) => {
+    const dir = path.join(out, name);
+    fs.mkdirSync(dir, { recursive: true });
+    const run = spawnSync("node", [cli, path.join(fixtures, `${name}.ts`), "-o", `${dir}/`], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    const ll = path.join(dir, `${name}.ll`);
+    return run.status === 0 && fs.existsSync(ll) ? stripHeader(fs.readFileSync(ll, "utf8")) : null;
+  };
+  const declared = emit("declared");
+  const arrow = emit("arrow");
+  check(
+    "WP22: the `function` and arrow spellings of one program emit identical IR",
+    declared !== null && declared === arrow,
+    declared === null || arrow === null ? "a fixture did not compile" : "the two modules differ"
+  );
+
+  // Each fixture explains itself in its own header comment, so the two are required to
+  // agree from the first declaration onwards and not before it. The sentinel that finds
+  // that point has to be *found*: `indexOf` answers -1 for a fixture that was renamed or
+  // truncated, `slice(-1)` is then the last byte of each file, and the check would go on
+  // passing while comparing one newline with another.
+  const SENTINEL = "const label";
+  const program = (text) => text.slice(text.indexOf(SENTINEL));
+  const rewritten = arrowify(fs.readFileSync(path.join(fixtures, "declared.ts"), "utf8"), "declared.ts");
+  const byHand = fs.readFileSync(path.join(fixtures, "arrow.ts"), "utf8");
+  const anchored = rewritten.text.includes(SENTINEL) && byHand.includes(SENTINEL);
+  check(
+    "WP22: `scripts/arrowify.mjs` rewrites the `function` fixture into its hand-written arrow twin",
+    anchored && program(rewritten.text) === program(byHand),
+    anchored
+      ? `rewrote ${rewritten.changed} declaration(s)`
+      : `neither fixture may lose \`${SENTINEL}\`: the rewrite ${
+          rewritten.text.includes(SENTINEL) ? "kept" : "lost"
+        } it, arrow.ts ${byHand.includes(SENTINEL) ? "kept" : "lost"} it`
+  );
+
+  // WP22 §9: `declare function` defines nothing, so it is not a competing spelling and
+  // the codemod may not reach for it -- the arrow form would need a function type, which
+  // Phase 0 forbids. `ffi_scalar` is the case that has both in one file, and every
+  // number here is counted off that file rather than written down, including how many
+  // definitions it has: stage C converts `tests/cases/` next, so a check that required
+  // this case to still contain a `function` would go red on the migration it exists to
+  // enable. What must hold either way is that the ambient lines survive verbatim, that
+  // exactly the definitions present were rewritten, and that none is left behind.
+  const ffiSource = fs.readFileSync(path.join(casesDir, "ffi_scalar.ts"), "utf8");
+  const ambient = ffiSource.split("\n").filter((l) => l.startsWith("declare function "));
+  const before22 = ffiSource.split("\n").filter((l) => /^(export )?function /.test(l));
+  const ffi = arrowify(ffiSource, "ffi_scalar.ts");
+  const kept = ambient.every((line) => ffi.text.includes(line));
+  const definitions = ffi.text.split("\n").filter((l) => /^(export )?function /.test(l));
+  check(
+    "WP22 §9: the codemod leaves `declare function` alone and rewrites the definitions beside it",
+    ambient.length > 0 && kept && ffi.changed === before22.length && definitions.length === 0,
+    `${ambient.length} ambient (${kept ? "kept" : "LOST"}), ${ffi.changed} rewritten of ` +
+      `${before22.length} definition(s), ${definitions.length} left`
+  );
+
+  // The three forms with no arrow spelling at all. Each is a `reject_*` case, and each
+  // was rewritten by an earlier draft of the codemod into something that *compiled* --
+  // `declare const h = () => {...}`, an ordinary function where `function* g` had been,
+  // and `export default const f`, which is not a sentence. A codemod that turns a
+  // refused program into a compiling one is the worst thing one of these can do, because
+  // every gate downstream reads the program it was handed and not the program somebody
+  // wrote. These three cases are the shapes that say so, and none of them is in `self/`,
+  // which is why the rewrite that matters would never have found them.
+  // The claim is about the one declaration, not about the whole file -- `reject_ffi_body`
+  // also has an ordinary `main` the codemod is right to convert -- so each row names the
+  // shape and the line carrying it has to survive the rewrite verbatim.
+  for (const [name, shape, why] of [
+    ["reject_ffi_body", /^declare function /m, "a `declare function` that wrongly carries a body is still ambient"],
+    ["reject_generator", /^function\* /m, "`function*` keeps its asterisk"],
+    ["reject_export_default", /^export default function /m, "`export default function` has no arrow spelling"],
+  ]) {
+    const before = fs.readFileSync(path.join(casesDir, `${name}.ts`), "utf8");
+    const line = (before.split("\n").find((l) => shape.test(l)) ?? "").trim();
+    const after = arrowify(before, `${name}.ts`);
+    check(
+      `WP22: the codemod leaves \`${name}\` alone -- ${why}`,
+      line.length > 0 && after.text.includes(line),
+      line.length > 0 ? `\`${line}\` did not survive the rewrite` : `no line in ${name}.ts matches ${shape}`
+    );
+  }
+
+  // `--concise` drops the braces, and the grammar then decides what has to be put back:
+  // `ConciseBody` is `[lookahead != {] ExpressionBody`, so a body whose *first token* is
+  // `{` re-parses as a block. Asking instead whether the returned node is an object
+  // literal answers that only for the expression that is one to its last byte, and turns
+  // `return { a: 1 } as Pair;` into `=> { a: 1 } as Pair`, which is two parse errors and
+  // a corrupted source file. That is the same mistake as the `declare` rule above, one
+  // node deeper, so each row is parsed back rather than string-matched: a rewrite whose
+  // output does not re-parse is the failure this is watching for.
+  for (const [what, source] of [
+    ["an object literal", "function mk(): Pair {\n  return { first: 1, second: 2 };\n}\n"],
+    ["an object literal in a cast", "function mk(): Pair {\n  return { first: 1, second: 2 } as Pair;\n}\n"],
+    ["a field read off one", "function first(): i32 {\n  return { first: 1, second: 2 }.first;\n}\n"],
+    [
+      "an arrow that was already an arrow",
+      "const mk = (): Pair => {\n  return { first: 1, second: 2 } as Pair;\n};\n",
+    ],
+  ]) {
+    const collapsed = arrowify(source, "concise.ts", { concise: true });
+    const reparsed = ts.createSourceFile("concise.ts", collapsed.text, ts.ScriptTarget.Latest, true);
+    check(
+      `WP22: \`--concise\` parenthesises a body that begins with \`{\` -- ${what}`,
+      reparsed.parseDiagnostics.length === 0 && collapsed.text.includes("=> ({"),
+      collapsed.text.trim()
+    );
+  }
+
+  // Every position the splice cuts at comes from the tree, because a comment can contain
+  // the syntax a search would find first: the word `function` in a leading comment, a
+  // parenthesis in a comment after the name or inside the parameter list. Locating an
+  // edit by `indexOf` put the splice inside the comment and wrote back a file that no
+  // longer parses, with exit 0 -- the worst thing a codemod can do to a file nobody is
+  // reading line by line. Where the comment sits in the one region the rewrite discards
+  // -- between `function` and the parameter list, which becomes `const NAME = ` -- there
+  // is nowhere to put it, so the declaration is refused instead of quietly losing it.
+  for (const [what, source, expected] of [
+    ["the keyword inside a leading comment", "export /* the function below */ function f(): i32 {\n  return 1;\n}\n", "rewritten"],
+    ["a `)` inside a parameter comment", "function h(a: i32 /* ) */ ) {\n  use(a);\n}\n", "rewritten"],
+    ["a comment between `function` and the name", "function /* named */ k(): i32 {\n  return 1;\n}\n", "refused"],
+    ["a comment between the name and the `(`", "function g /* ( a ) */ (): i32 {\n  return 1;\n}\n", "refused"],
+  ]) {
+    const spliced = arrowify(source, "splice.ts");
+    const reparsed = ts.createSourceFile("splice.ts", spliced.text, ts.ScriptTarget.Latest, true);
+    const rewritten = spliced.changed === 1 && spliced.skipped.length === 0;
+    const refused = spliced.changed === 0 && spliced.skipped.length === 1 && spliced.text === source;
+    check(
+      `WP22: the codemod splices from the tree, not from a text search -- ${what}`,
+      reparsed.parseDiagnostics.length === 0 && (expected === "rewritten" ? rewritten : refused),
+      `${spliced.changed} rewritten, ${spliced.skipped.length} left alone, ` +
+        `${reparsed.parseDiagnostics.length} parse error(s): ${JSON.stringify(spliced.text)}`
+    );
+  }
+
+  // The CLI's own refusals. `--check` answers with an exit code and `--stdout` with a
+  // file, so asking for both used to answer 0 with the rewrites still pending; and a
+  // misspelled `--concise` was ignored, which is a collapse pass that did not happen in
+  // a recipe whose whole point is which pass ran.
+  const cli22 = (...args) =>
+    spawnSync("node", [path.join(root, "scripts", "arrowify.mjs"), ...args], { cwd: root, encoding: "utf8" }).status;
+  // The fixture is written here rather than copied from `tests/cases/`, for two
+  // reasons. The flag these ask about is one an unfixed codemod *ignores*, and an
+  // ignored flag means the run rewrites whatever it was handed, so pointing it at a
+  // golden case would overwrite one on the way to failing. And `--check` answers 1
+  // only while something is left to rewrite: stage C converts `tests/cases/` next, so
+  // a corpus file as the subject would take this check red exactly when the migration
+  // succeeds.
+  const oneFunction = path.join(buildDir, "arrow-flags.ts");
+  fs.writeFileSync(oneFunction, "export function twice(n: i32): i32 {\n  return n * 2;\n}\n");
+  check(
+    "WP22: the codemod refuses a flag it does not have, and a pair of flags it cannot answer both of",
+    cli22("--consise", oneFunction) === 2 &&
+      cli22("--check", "--stdout", oneFunction) === 2 &&
+      cli22("--stdout", oneFunction, oneFunction) === 2 &&
+      cli22("--check", oneFunction) === 1,
+    "expected 2, 2, 2 and 1"
+  );
+
+  // The verifier answers for its own flags the same way, and for the same reason: a
+  // `--debg` that silently drops `-g`, or a `--rev=HEAD~1` that silently compares
+  // against HEAD, is a sweep reporting on something other than what it was asked about.
+  // These stop before any compiling, so they cost three process starts.
+  const verify22 = (...args) =>
+    spawnSync("node", [path.join(root, "scripts", "arrow-verify.mjs"), ...args], {
+      cwd: root,
+      encoding: "utf8",
+    }).status;
+  check(
+    "WP22: the verifier refuses a flag it does not have, and a `--rev` without a revision",
+    verify22("--debg", "tests/parser") === 2 &&
+      verify22("--applied", "--rev", "--verbose", "tests/parser") === 2 &&
+      verify22("--help") === 0,
+    "expected 2, 2 and 0"
+  );
+
+  // WP22 §9 keeps `declare function` legal because it defines nothing. A body-less
+  // declaration *without* `declare` is not that: it is an overload signature, which the
+  // language does not have, and the checker refuses the line
+  // (`tests/wordings/nl2204_function_without_body.ts`). The codemod leaves both alone, so
+  // the only thing it can get wrong is what it tells the migrator -- and reporting the
+  // second under the first's reason says the line is legal syntax when it is about to be
+  // rejected.
+  const overload = arrowify(
+    fs.readFileSync(path.join(root, "tests", "wordings", "nl2204_function_without_body.ts"), "utf8"),
+    "nl2204_function_without_body.ts"
+  );
+  const ambientReason = arrowify("declare function h(): i32;\n", "ambient.ts").skipped[0]?.reason ?? "";
+  check(
+    "WP22: the codemod does not report a body-less declaration as legal ambient syntax",
+    overload.skipped.length === 1 &&
+      overload.skipped[0].reason !== ambientReason &&
+      !overload.skipped[0].reason.includes("stays legal"),
+    `reported as: ${overload.skipped[0]?.reason ?? "nothing at all"}`
+  );
+
+  // `scripts/arrow-verify.mjs` is what the 721-declaration rewrite of `self/` will be
+  // done on the say-so of, so the two places it could report success over ground it did
+  // not check are pinned here rather than left to the sweep that takes half an hour.
+  //
+  // The first: the module comparison walks the *union* of the two sides. Iterating the
+  // before side alone makes a module that only exists after the rewrite invisible, and
+  // that is the difference most worth seeing -- it means the rewrite changed what the
+  // program is, not how it is spelled.
+  const sameBytes = Buffer.from("; ModuleID = 'a.ts'\n");
+  const onlyAfter = diffEmitted(
+    new Map([["main.ll", sameBytes]]),
+    new Map([
+      ["main.ll", sameBytes],
+      ["extra.ll", Buffer.from("; ModuleID = 'extra.ts'\n")],
+    ])
+  );
+  const onlyBefore = diffEmitted(new Map([["main.ll", sameBytes]]), new Map());
+  check(
+    "WP22: the verifier notices a module that exists only after the rewrite",
+    onlyAfter.length === 1 && onlyAfter[0].name === "extra.ll" && onlyBefore.length === 1,
+    `${onlyAfter.length} found after, ${onlyBefore.length} found before`
+  );
+
+  // And the exit path both halves of the sweep now go through, because five review
+  // rounds found the same defect five times in it: a subject counted as covered and
+  // then never compared. Four of those were in the loop over programs and the fifth in
+  // the loop over rejections -- a "rejection" that is not refused under the flags the
+  // sweep passes compared empty with empty and continued -- so there is one loop and
+  // one verdict now, and this is the table of what it may answer. A subject that
+  // produced nothing at all is `blind`, which fails the run; nothing else may quietly
+  // mean "no difference".
+  const side = (over) => ({ status: 0, stdout: "", said: "", emitted: new Map(), ...over });
+  const bytes = (text) => new Map([["main.ll", Buffer.from(text)]]);
+  const warn = (line) => `{"severity":"performance","code":"NL9001","message":"m","line":${line}}`;
+  for (const [what, a, b, expected, differences, moved] of [
+    ["identical modules", side({ emitted: bytes("x") }), side({ emitted: bytes("x") }), "emitted", 0, false],
+    ["a module that differs", side({ emitted: bytes("x") }), side({ emitted: bytes("y") }), "emitted", 1, false],
+    ["a dump on stdout", side({ stdout: "tree" }), side({ stdout: "tree" }), "dump", 0, false],
+    ["refused on one side only", side({ status: 1, said: "{}" }), side({}), "status", 0, false],
+    [
+      "refused on both, same words",
+      side({ status: 1, said: '{"code":"NL2204","message":"m","line":3}' }),
+      side({ status: 1, said: '{"code":"NL2204","message":"m","line":9}' }),
+      "refusal",
+      0,
+      true,
+    ],
+    [
+      "refused on both, different words",
+      side({ status: 1, said: '{"code":"NL2204","message":"m"}' }),
+      side({ status: 1, said: "" }),
+      "reworded",
+      0,
+      false,
+    ],
+    ["compiled clean and produced nothing", side({}), side({}), "blind", 0, false],
+    ["refused on both with nothing to read", side({ status: 1 }), side({ status: 1 }), "blind", 0, false],
+    // A file added since the revision has no `<rev>:<path>`, so `--applied` empties it
+    // out of the copy for the before compile -- and reading it anyway ended the sweep in
+    // a stack trace at the exact moment §8b's recipe needs a verdict, which is what
+    // Phase 2 splitting or adding a `self/` module looks like.
+    [
+      "a subject added since the revision",
+      side({ absent: true, status: null }),
+      side({ emitted: bytes("x") }),
+      "absent",
+      0,
+      false,
+    ],
+    [
+      "a subject deleted since the revision",
+      side({ emitted: bytes("x") }),
+      side({ absent: true, status: null }),
+      "absent",
+      0,
+      false,
+    ],
+    // A compile that succeeded still has a diagnostic surface, and it was read on
+    // neither side: a `performance:` warning could move, change or disappear under a
+    // rewrite and the sweep reported `0 difference(s)`. 76 corpus programs warn, most of
+    // `self/` among them, and `--concise` moves every warning below a collapsed
+    // declaration -- so the silence was pointed straight at the migration.
+    [
+      "a warning that only moved",
+      side({ emitted: bytes("x"), said: warn(9) }),
+      side({ emitted: bytes("x"), said: warn(7) }),
+      "emitted",
+      0,
+      true,
+    ],
+    [
+      "a warning that disappeared",
+      side({ emitted: bytes("x"), said: warn(9) }),
+      side({ emitted: bytes("x") }),
+      "emitted",
+      1,
+      false,
+    ],
+  ]) {
+    const answer = verdict(a, b);
+    const found = (answer.differences ?? []).length;
+    check(
+      `WP22: the verifier gives every subject one verdict -- ${what} is \`${expected}\``,
+      answer.kind === expected && found === differences && (answer.moved ?? false) === moved,
+      `answered \`${answer.kind}\` with ${found} difference(s), moved=${answer.moved ?? false}`
+    );
+  }
+
+  // A subject is only evidence about a rewrite if the rewrite reached the
+  // modules it compiles. Counting one that did not is how a sweep over a slice that is
+  // already migrated reports `0 difference(s)` for compiling the same source twice.
+  check(
+    "WP22: the verifier counts a program as evidence only when the change reached it",
+    sitsOnChange("tests/link/std_testing/main.ts", new Set(["std/testing.ts"])) &&
+      sitsOnChange("tests/link/std_testing/main.ts", new Set(["tests/link/std_testing/main.ts"])) &&
+      !sitsOnChange("tests/link/std_testing/main.ts", new Set(["self/lexer.ts"])),
+    "an imported module counts, an unrelated file does not"
+  );
+
+  // The third: a rejection is compared by its words with every position stripped, so a
+  // `reject_*` case that starts compiling, or is refused under a different rule, differs
+  // and fails the run -- while a caret that moved is only reported, because under
+  // `--concise` the lines move by construction (WP22 §8c).
+  const said = (line, code, message) =>
+    JSON.stringify({ file: "x.ts", line, column: 3, severity: "error", code, message });
+  check(
+    "WP22: the verifier fails a rejection whose words changed and tolerates one that only moved",
+    diagnosticWords(said(4, "NL2204", "Functions must have a body")) ===
+      diagnosticWords(said(9, "NL2204", "Functions must have a body")) &&
+      diagnosticWords(said(4, "NL2204", "Functions must have a body")) !== diagnosticWords("") &&
+      diagnosticWords(said(4, "NL2204", "Functions must have a body")) !==
+        diagnosticWords(said(4, "NL1002", "`function*` is not supported")),
+    "positions must normalise away and codes must not"
   );
 }
 
