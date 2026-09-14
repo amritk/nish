@@ -65,7 +65,7 @@ export class ResultLayout {
 }
 
 /** Lay `Result<T, E>` out; recomputed per ask, because it is a handful of adds. */
-export function resultLayout(table: TypeTable, type: i32): ResultLayout {
+export const resultLayout = (table: TypeTable, type: i32): ResultLayout => {
   const layout = new ResultLayout(table.resultStructName(type));
   const ok = table.okOf(type);
   const err = table.errOf(type);
@@ -98,14 +98,12 @@ export function resultLayout(table: TypeTable, type: i32): ResultLayout {
   layout.size = roundUpTo(offset, align);
   layout.align = align;
   return layout;
-}
+};
 
 // ---- `Ok(...)` and `Err(...)` ---------------------------------------------
 
 /** The two constructors, consulted only when no user function has the name. */
-export function isResultConstructor(name: string): boolean {
-  return name === "Ok" || name === "Err";
-}
+export const isResultConstructor = (name: string): boolean => name === "Ok" || name === "Err";
 
 /**
  * `Ok(v)` / `Err(e)`. Like the `null` literal they carry no type of their
@@ -113,7 +111,7 @@ export function isResultConstructor(name: string): boolean {
  * which monomorphisation is built, which is what keeps `return Ok(0)`
  * readable.
  */
-export function checkResultConstructor(ctx: CheckContext, call: Node, scope: Scope, want: i32): i32 {
+export const checkResultConstructor = (ctx: CheckContext, call: Node, scope: Scope, want: i32): i32 => {
   const name = call.children[0].text;
   const args = call.children[1];
   if (want < 0) {
@@ -149,7 +147,7 @@ export function checkResultConstructor(ctx: CheckContext, call: Node, scope: Sco
     );
   }
   return want;
-}
+};
 
 // ---- `r.ok` / `r.value` / `r.error` ---------------------------------------
 
@@ -159,7 +157,7 @@ export function checkResultConstructor(ctx: CheckContext, call: Node, scope: Sco
  * field or element holding a `Result` has to be bound first, exactly as a
  * nullable does.
  */
-function narrowHint(ctx: CheckContext, receiverExpr: Node, payload: string): string {
+const narrowHint = (ctx: CheckContext, receiverExpr: Node, payload: string): string => {
   const test = payload === "value" ? "isOk()" : "isErr()";
   if (receiverExpr.kind !== N_IDENT) {
     const text = ctx.textOf(receiverExpr);
@@ -167,10 +165,10 @@ function narrowHint(ctx: CheckContext, receiverExpr: Node, payload: string): str
   }
   const name = receiverExpr.text;
   return `test it first: \`if (${name}.${test}) { ... ${name}.${payload} ... }\``;
-}
+};
 
 /** `r.ok`, `r.value`, `r.error`. */
-export function checkResultProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 {
+export const checkResultProperty = (ctx: CheckContext, expr: Node, receiver: i32): i32 => {
   const receiverExpr = expr.children[0];
   const spelled = ctx.table.typeName(receiver);
   if (expr.text === "ok") {
@@ -208,12 +206,12 @@ export function checkResultProperty(ctx: CheckContext, expr: Node, receiver: i32
     `Unknown property \`${expr.text}\` on ${spelled} (it has \`ok\`, \`value\` and \`error\`)`
   );
   return T_ERROR;
-}
+};
 
 // ---- Methods --------------------------------------------------------------
 
 /** `Result<void, E>` methods answer nothing, so they may only stand as a statement. */
-function requireStatement(ctx: CheckContext, call: Node, method: string, receiver: i32): void {
+const requireStatement = (ctx: CheckContext, call: Node, method: string, receiver: i32): void => {
   const statement = ctx.statementExpression;
   if (statement === null || statement !== call) {
     ctx.error(
@@ -221,7 +219,7 @@ function requireStatement(ctx: CheckContext, call: Node, method: string, receive
       `\`${method}()\` on ${ctx.table.typeName(receiver)} produces no value and can only be used as a statement`
     );
   }
-}
+};
 
 /**
  * `r.orReturn()`: the propagation rule. The enclosing function has to return a
@@ -229,7 +227,7 @@ function requireStatement(ctx: CheckContext, call: Node, method: string, receive
  * Rust's `?` enforces through `From<E>` — without the conversion, because
  * The language has no trait to hang one on.
  */
-function checkOrReturn(ctx: CheckContext, call: Node, receiver: i32): i32 {
+const checkOrReturn = (ctx: CheckContext, call: Node, receiver: i32): i32 => {
   const current = ctx.current;
   const want = current === null ? T_ERROR : current.returnType;
   const named = current === null ? "this function" : `\`${current.sourceName}\``;
@@ -253,10 +251,10 @@ function checkOrReturn(ctx: CheckContext, call: Node, receiver: i32): i32 {
     requireStatement(ctx, call, "orReturn", receiver);
   }
   return ok;
-}
+};
 
 /** `r.unwrapOr(fallback)`: handle the failure by substituting a value of the same type. */
-function checkUnwrapOr(ctx: CheckContext, call: Node, args: Node, receiver: i32, scope: Scope): i32 {
+const checkUnwrapOr = (ctx: CheckContext, call: Node, args: Node, receiver: i32, scope: Scope): i32 => {
   const ok = ctx.table.okOf(receiver);
   if (ok === T_VOID) {
     return ctx.errorType(
@@ -283,7 +281,7 @@ function checkUnwrapOr(ctx: CheckContext, call: Node, args: Node, receiver: i32,
     );
   }
   return ok;
-}
+};
 
 /**
  * `r.expect(message)`: handle the failure by ending the process, the way an
@@ -292,7 +290,7 @@ function checkUnwrapOr(ctx: CheckContext, call: Node, args: Node, receiver: i32,
  * say why. `message` is a plain string rather than a rendering of the error:
  * `E` is any type and the language has no way to format one.
  */
-function checkExpect(ctx: CheckContext, call: Node, args: Node, receiver: i32, scope: Scope): i32 {
+const checkExpect = (ctx: CheckContext, call: Node, args: Node, receiver: i32, scope: Scope): i32 => {
   const ok = ctx.table.okOf(receiver);
   if (checkBuiltinArity(ctx, call, "expect", args, 1)) {
     const got = checkExpression(ctx, args.children[0], scope, T_STRING);
@@ -304,17 +302,17 @@ function checkExpect(ctx: CheckContext, call: Node, args: Node, receiver: i32, s
     requireStatement(ctx, call, "expect", receiver);
   }
   return ok;
-}
+};
 
 /** `r.isOk()`, `r.isErr()`, `r.orReturn()`, `r.unwrapOr(d)`, `r.expect(m)`. */
-export function checkResultMethod(
+export const checkResultMethod = (
   ctx: CheckContext,
   call: Node,
   access: Node,
   args: Node,
   receiver: i32,
   scope: Scope
-): i32 {
+): i32 => {
   const name = access.text;
   if (name === "isOk" || name === "isErr") {
     checkBuiltinArity(ctx, call, name, args, 0);
@@ -335,7 +333,7 @@ export function checkResultMethod(
     `Unknown method \`${name}\` on ${ctx.table.typeName(receiver)} (it has \`isOk\`, \`isErr\`, \`orReturn\`, \`unwrapOr\` and \`expect\`)`
   );
   return T_ERROR;
-}
+};
 
 // ---- Narrowing ------------------------------------------------------------
 
@@ -345,7 +343,7 @@ export function checkResultMethod(
  * through one path and compose with `!`, `&&` and `||` exactly as a null test
  * does. `positive` is false only for `isErr()`.
  */
-export function narrowResultTest(cond: Node, scope: Scope, table: TypeTable, whenTrue: boolean): boolean {
+export const narrowResultTest = (cond: Node, scope: Scope, table: TypeTable, whenTrue: boolean): boolean => {
   let receiver: Node | null = null;
   let positive = true;
   if (cond.kind === N_MEMBER && cond.text === "ok") {
@@ -377,7 +375,7 @@ export function narrowResultTest(cond: Node, scope: Scope, table: TypeTable, whe
   const proves = positive === whenTrue ? R_OK : R_ERR;
   scope.narrow(local, table.withState(declared, proves));
   return true;
-}
+};
 
 // ---- Rule 1: a `Result` cannot be dropped ---------------------------------
 
@@ -386,7 +384,7 @@ export function narrowResultTest(cond: Node, scope: Scope, table: TypeTable, whe
  * is the one shape where a failure would vanish without a trace, so it is the
  * shape this rule names.
  */
-export function rejectDiscardedResult(ctx: CheckContext, expr: Node, type: i32): void {
+export const rejectDiscardedResult = (ctx: CheckContext, expr: Node, type: i32): void => {
   if (!ctx.table.isResult(type)) {
     return;
   }
@@ -394,7 +392,7 @@ export function rejectDiscardedResult(ctx: CheckContext, expr: Node, type: i32):
     expr,
     `\`${ctx.table.typeName(type)}\` must be handled, not discarded: bind it (\`const r = ${ctx.textOf(expr)}; if (r.isErr()) { ... }\`), propagate it with \`.orReturn()\`, or end on it with \`.expect(message)\``
   );
-}
+};
 
 /**
  * Called once per function body. A local that holds a `Result` and is never
@@ -406,7 +404,7 @@ export function rejectDiscardedResult(ctx: CheckContext, expr: Node, type: i32):
  * handing the value on (an argument, a `return`) counts: the responsibility
  * moves with the value, and the receiving signature carries the same rules.
  */
-export function checkResultLocalsHandled(ctx: CheckContext, sig: FunctionSig, body: Node): void {
+export const checkResultLocalsHandled = (ctx: CheckContext, sig: FunctionSig, body: Node): void => {
   const declarations: Node[] = [];
   const read: boolean[] = [];
   collectResultLocals(ctx.program, ctx.table, body, declarations);
@@ -427,10 +425,10 @@ export function checkResultLocalsHandled(ctx: CheckContext, sig: FunctionSig, bo
     }
     i = i + 1;
   }
-}
+};
 
 /** Every `Result`-typed `let`/`const` declared anywhere in `node`, in source order. */
-function collectResultLocals(program: CheckedProgram, table: TypeTable, node: Node, out: Node[]): void {
+const collectResultLocals = (program: CheckedProgram, table: TypeTable, node: Node, out: Node[]): void => {
   if (node.kind === N_VAR_DECL) {
     const local = program.nodeLocals[node.id];
     if (local !== null && table.isResult(local.type)) {
@@ -440,7 +438,7 @@ function collectResultLocals(program: CheckedProgram, table: TypeTable, node: No
   for (const child of node.children) {
     collectResultLocals(program, table, child, out);
   }
-}
+};
 
 /**
  * Mark every declaration in `declarations` whose local is *read* somewhere in
@@ -448,7 +446,7 @@ function collectResultLocals(program: CheckedProgram, table: TypeTable, node: No
  * the right-hand side and skips a bare identifier on the left; `p.x = v` and
  * `x += v` both read `p` and `x`, so neither is skipped.
  */
-function markResultReads(program: CheckedProgram, node: Node, declarations: Node[], read: boolean[]): void {
+const markResultReads = (program: CheckedProgram, node: Node, declarations: Node[], read: boolean[]): void => {
   if (node.kind === N_IDENT) {
     const local = program.nodeLocals[node.id];
     if (local !== null) {
@@ -471,4 +469,4 @@ function markResultReads(program: CheckedProgram, node: Node, declarations: Node
     }
     index = index + 1;
   }
-}
+};

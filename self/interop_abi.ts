@@ -69,11 +69,11 @@ const CHAR_LOWER_Z: i32 = 122;
 const CASE_SHIFT: i32 = 32;
 
 /** Append every element of `src` to `dst`; the loop `src/` writes as a spread. */
-export function pushAll(dst: string[], src: string[]): void {
+export const pushAll = (dst: string[], src: string[]): void => {
   for (const line of src) {
     dst.push(line);
   }
-}
+};
 
 export class ExternalFunction {
   sig: FunctionSig;
@@ -105,7 +105,7 @@ export class ExternalFunction {
  * holding only what the module declares, so `definedIn` is what keeps an
  * imported symbol from being declared once per importer.
  */
-export function externalFunctions(compilation: Compilation): ExternalFunction[] {
+export const externalFunctions = (compilation: Compilation): ExternalFunction[] => {
   const units: AnalysisUnit[] = [];
   for (const unit of compilation.modules) {
     units.push(new AnalysisUnit(unit.checker.program, unit.parents));
@@ -145,9 +145,9 @@ export function externalFunctions(compilation: Compilation): ExternalFunction[] 
     }
   }
   return out;
-}
+};
 
-function writtenArrayParams(table: TypeTable, sig: FunctionSig, facts: FunctionFacts | null): StringSet {
+const writtenArrayParams = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts | null): StringSet => {
   const written = new StringSet();
   if (facts === null) {
     return written;
@@ -167,7 +167,7 @@ function writtenArrayParams(table: TypeTable, sig: FunctionSig, facts: FunctionF
     i = i + 1;
   }
   return written;
-}
+};
 
 /**
  * How an array with a scalar element type crosses to JavaScript (WP4/WP8):
@@ -198,7 +198,7 @@ export class TypedView {
   }
 }
 
-export function typedView(table: TypeTable, t: i32): TypedView | null {
+export const typedView = (table: TypeTable, t: i32): TypedView | null => {
   if (table.kindOf(t) !== K_ARRAY) {
     return null;
   }
@@ -214,14 +214,14 @@ export function typedView(table: TypeTable, t: i32): TypedView | null {
     default:
       return null;
   }
-}
+};
 
 /**
  * C spelling of a type at a parameter or return position; `""` when C has no
  * equivalent. `written` marks an array parameter the callee stores through
  * (`ExternalFunction.writtenParams`); every other array parameter is `const`.
  */
-export function cType(table: TypeTable, t: i32, position: i32, written: boolean): string {
+export const cType = (table: TypeTable, t: i32, position: i32, written: boolean): string => {
   switch (table.kindOf(t)) {
     case T_I32:
       return "int32_t";
@@ -272,7 +272,7 @@ export function cType(table: TypeTable, t: i32, position: i32, written: boolean)
     default:
       return "";
   }
-}
+};
 
 /**
  * The LLVM struct name as a C identifier: `nish_result.i32.$IoError` becomes
@@ -281,9 +281,7 @@ export function cType(table: TypeTable, t: i32, position: i32, written: boolean)
  * separator: `Result<i32, string>` is `..._i32_str` and a `Result` over a
  * class called `str` is `..._i32__str`, since its `.$` collapses to two.
  */
-export function cResultName(table: TypeTable, t: i32): string {
-  return collapseSeparators(table.resultStructName(t), false);
-}
+export const cResultName = (table: TypeTable, t: i32): string => collapseSeparators(table.resultStructName(t), false);
 
 /**
  * `.` and `$` to `_`, and optionally the `_` the user wrote to `_0`. Shared by
@@ -337,24 +335,22 @@ const collapseSeparators = (name: string, escapeUnderscore: boolean): string => 
  *     no type tag and no identifier begins with one -- so a `_0` in the output
  *     is always the one the user wrote.
  */
-export function cStructName(name: string): string {
+export const cStructName = (name: string): string => {
   if (name.indexOf("$") < 0) {
     return name;
   }
   return `nish_gen_${collapseSeparators(name, true)}`;
-}
+};
 
 /** The by-value spelling: one 64-bit word, `_word` as in the DWARF and the note. */
-export function cResultWord(table: TypeTable, t: i32): string {
-  return `${cResultName(table, t)}_word`;
-}
+export const cResultWord = (table: TypeTable, t: i32): string => `${cResultName(table, t)}_word`;
 
 /**
  * C spelling of a struct field. Everything a field can hold has one: the
  * scalars, `nish_str *`, a pointer to another struct, and `nish_array *` for
  * `T[]` (the header type from nish.h; the element type is a comment).
  */
-export function cFieldType(table: TypeTable, t: i32): string {
+export const cFieldType = (table: TypeTable, t: i32): string => {
   if (table.kindOf(t) === K_ARRAY) {
     return "nish_array *";
   }
@@ -364,10 +360,10 @@ export function cFieldType(table: TypeTable, t: i32): string {
   }
   const c = cType(table, t, POS_RETURN, false);
   return c.length > 0 ? c : "void *";
-}
+};
 
 /** Every `Result` type mentioned inside `t`, itself included, innermost first. */
-export function resultTypesIn(table: TypeTable, t: i32, out: i32[]): void {
+export const resultTypesIn = (table: TypeTable, t: i32, out: i32[]): void => {
   const kind = table.kindOf(t);
   if (kind === K_ARRAY || kind === K_NULLABLE) {
     resultTypesIn(table, table.refOf(t), out);
@@ -376,7 +372,7 @@ export function resultTypesIn(table: TypeTable, t: i32, out: i32[]): void {
     resultTypesIn(table, table.errOf(t), out);
     out.push(t);
   }
-}
+};
 
 /**
  * One `Result` type the generated C must define. `word` is set for a type
@@ -403,7 +399,7 @@ export class ResultUse {
  * order a header can emit them (a payload before the `Result` that carries
  * it).
  */
-export function resultTypesUsed(table: TypeTable, fns: ExternalFunction[], fields: i32[]): ResultUse[] {
+export const resultTypesUsed = (table: TypeTable, fns: ExternalFunction[], fields: i32[]): ResultUse[] => {
   const uses: ResultUse[] = [];
   const index = new StringMap();
   for (const fn of fns) {
@@ -425,16 +421,16 @@ export function resultTypesUsed(table: TypeTable, fns: ExternalFunction[], field
     noteResultTypes(table, uses, index, t, false);
   }
   return uses;
-}
+};
 
 /** Record every `Result` inside `t`, in first-seen order; `src/` writes this as a closure. */
-function noteResultTypes(
+const noteResultTypes = (
   table: TypeTable,
   uses: ResultUse[],
   index: StringMap,
   t: i32,
   byValue: boolean
-): void {
+): void => {
   const inner: i32[] = [];
   resultTypesIn(table, t, inner);
   for (const type of inner) {
@@ -454,10 +450,10 @@ function noteResultTypes(
       use.object = true;
     }
   }
-}
+};
 
 /** TypeScript source spelling of a signature, for comments and declarations. */
-export function tsSignature(table: TypeTable, sig: FunctionSig): string {
+export const tsSignature = (table: TypeTable, sig: FunctionSig): string => {
   const params: string[] = [];
   let i = 0;
   while (i < sig.paramNames.length) {
@@ -465,13 +461,13 @@ export function tsSignature(table: TypeTable, sig: FunctionSig): string {
     i = i + 1;
   }
   return `${sig.sourceName}(${params.join(", ")}): ${tsKeyword(table, sig.returnType)}`;
-}
+};
 
 /**
  * The source keyword for a type, as the user wrote it (`number` for i32/f64;
  * arrays as `number[]`, `i64[]`, ... since `Int32Array` and `i32[]` are one type).
  */
-export function tsKeyword(table: TypeTable, t: i32): string {
+export const tsKeyword = (table: TypeTable, t: i32): string => {
   switch (table.kindOf(t)) {
     case T_I32:
       return "number";
@@ -502,7 +498,7 @@ export function tsKeyword(table: TypeTable, t: i32): string {
     default:
       return table.scalarName(t);
   }
-}
+};
 
 /**
  * Identifiers that are legal parameter names in the language but would not
@@ -513,8 +509,7 @@ export function tsKeyword(table: TypeTable, t: i32): string {
  * `src/` holds these in a `Set`. A chain of comparisons is what the language
  * has, and it costs about what hashing the name would have cost anyway.
  */
-export function isCReserved(name: string): boolean {
-  return (
+export const isCReserved = (name: string): boolean => (
     name === "auto" ||
     name === "bool" ||
     name === "break" ||
@@ -592,11 +587,8 @@ export function isCReserved(name: string): boolean {
     name === "result" ||
     name === "mark"
   );
-}
 
-export function cParamName(name: string): string {
-  return isCReserved(name) ? `${name}_` : name;
-}
+export const cParamName = (name: string): string => isCReserved(name) ? `${name}_` : name;
 
 /** A C identifier and the asm label that binds it to the real LLVM symbol. */
 export class CName {
@@ -619,7 +611,7 @@ export class CName {
  * declared the same way as `Point_shifted` / `Point_constructor`, taking the
  * object pointer first: a C host may call them on objects it holds.
  */
-export function cFunctionName(symbol: string): CName {
+export const cFunctionName = (symbol: string): CName => {
   // `.` from a method and `$` from a generic instantiation (WP18) are both
   // legal LLVM and illegal C, so both collapse to `_` and the declaration is
   // bound to the real symbol with an asm label.
@@ -637,10 +629,10 @@ export function cFunctionName(symbol: string): CName {
     return new CName(symbol, "");
   }
   return new CName(`${symbol}_`, ` NISH_SYMBOL("${symbol}")`);
-}
+};
 
 /** `int32_t add(int32_t a, int32_t b)` for a signature, or `""` when a type has no C spelling. */
-export function cPrototype(table: TypeTable, sig: FunctionSig, writtenParams: StringSet): string {
+export const cPrototype = (table: TypeTable, sig: FunctionSig, writtenParams: StringSet): string => {
   const ret = cType(table, sig.returnType, POS_RETURN, false);
   if (ret.length === 0) {
     return "";
@@ -658,15 +650,13 @@ export function cPrototype(table: TypeTable, sig: FunctionSig, writtenParams: St
   const name = cFunctionName(sig.name);
   const list = params.length > 0 ? params.join(", ") : "void";
   return `${ret}${spaceAfter(ret)}${name.ident}(${list})${name.label}`;
-}
+};
 
 /** A pointer type already ends in `*`; every other one needs a space before the name. */
-export function spaceAfter(type: string): string {
-  return type.endsWith("*") ? "" : " ";
-}
+export const spaceAfter = (type: string): string => type.endsWith("*") ? "" : " ";
 
 /** `ADD` for `build/add.h`: the stem of an output path as an identifier fragment. */
-export function guardStem(outFile: string): string {
+export const guardStem = (outFile: string): string => {
   const stem = stripHeaderSuffix(basename(outFile));
   const id = new StringBuilder();
   let i = 0;
@@ -687,7 +677,7 @@ export function guardStem(outFile: string): string {
   }
   const first = text.charCodeAt(0);
   return first >= CHAR_ZERO && first <= CHAR_NINE ? `_${text}` : text;
-}
+};
 
 /**
  * The one trailing `.h` / `.hpp` / `.d.ts` / `.c`, case-insensitively, that
@@ -695,7 +685,7 @@ export function guardStem(outFile: string): string {
  * that alternation is anchored at the leftmost `.` from which some arm
  * reaches the end of the string, which for `add.d.ts` is the `.d`.
  */
-function stripHeaderSuffix(stem: string): string {
+const stripHeaderSuffix = (stem: string): string => {
   if (endsWithFold(stem, ".d.ts")) {
     return stem.substring(0, stem.length - 5);
   }
@@ -706,10 +696,10 @@ function stripHeaderSuffix(stem: string): string {
     return stem.substring(0, stem.length - 2);
   }
   return stem;
-}
+};
 
 /** `endsWith` with ASCII case folding, which is all the `/i` flag means here. */
-export function endsWithFold(text: string, suffix: string): boolean {
+export const endsWithFold = (text: string, suffix: string): boolean => {
   if (suffix.length > text.length) {
     return false;
   }
@@ -722,16 +712,12 @@ export function endsWithFold(text: string, suffix: string): boolean {
     i = i + 1;
   }
   return true;
-}
+};
 
-function foldByte(c: i32): i32 {
-  return c >= CHAR_UPPER_A && c <= CHAR_UPPER_Z ? c + CASE_SHIFT : c;
-}
+const foldByte = (c: i32): i32 => c >= CHAR_UPPER_A && c <= CHAR_UPPER_Z ? c + CASE_SHIFT : c;
 
 /** `// Generated by nish --emit-x from main.ts; do not edit.` (the CLI names itself). */
-export function banner(compilation: Compilation, flag: string, comment: string): string {
-  return `${comment}Generated by ${CLI} ${flag} from ${compilation.entry().path}; do not edit.`;
-}
+export const banner = (compilation: Compilation, flag: string, comment: string): string => `${comment}Generated by ${CLI} ${flag} from ${compilation.entry().path}; do not edit.`;
 
 /**
  * `Result` definitions (WP17). Two shapes, and a signature uses whichever its
@@ -752,7 +738,7 @@ export function banner(compilation: Compilation, flag: string, comment: string):
  * The `sizeof` assertion is there so a compiler that disagreed would fail the
  * build rather than mis-read a register.
  */
-export function resultDefinitions(table: TypeTable, fns: ExternalFunction[], fields: i32[]): string[] {
+export const resultDefinitions = (table: TypeTable, fns: ExternalFunction[], fields: i32[]): string[] => {
   const uses = resultTypesUsed(table, fns, fields);
   const lines: string[] = [];
   if (uses.length === 0) {
@@ -776,9 +762,9 @@ export function resultDefinitions(table: TypeTable, fns: ExternalFunction[], fie
     pushAll(lines, resultDefinition(table, use));
   }
   return lines;
-}
+};
 
-function resultDefinition(table: TypeTable, use: ResultUse): string[] {
+const resultDefinition = (table: TypeTable, use: ResultUse): string[] => {
   const layout = use.layout;
   const lines: string[] = [];
   lines.push(`/* ${tsKeyword(table, use.type)} */`);
@@ -807,12 +793,12 @@ function resultDefinition(table: TypeTable, use: ResultUse): string[] {
     );
   }
   return lines;
-}
+};
 
 /** One member of a `Result` definition; the payload note names the source type. */
-function resultField(table: TypeTable, t: i32, name: string): string {
+const resultField = (table: TypeTable, t: i32, name: string): string => {
   const c = cFieldType(table, t);
   const kind = table.kindOf(t);
   const note = kind === K_ARRAY || kind === K_RESULT ? ` /* ${tsKeyword(table, t)} */` : "";
   return `${c}${spaceAfter(c)}${name};${note}`;
-}
+};

@@ -175,7 +175,7 @@ export class Node {
   }
 }
 
-export function nodeName(kind: i32): string {
+export const nodeName = (kind: i32): string => {
   switch (kind) {
     case N_ERROR:
       return "ERROR";
@@ -302,4 +302,4 @@ export function nodeName(kind: i32): string {
     default:
       return "?";
   }
-}
+};

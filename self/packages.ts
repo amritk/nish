@@ -59,7 +59,7 @@ const LOWER_Z: i32 = 122;
  * innermost one, because a dependency's own `node_modules` holds its own
  * dependencies: the last one on the path is the one that owns the file.
  */
-function packageRootAt(segments: string[]): i32 {
+const packageRootAt = (segments: string[]): i32 => {
   let at = -1;
   let i = 0;
   while (i + 1 < segments.length) {
@@ -69,10 +69,10 @@ function packageRootAt(segments: string[]): i32 {
     i = i + 1;
   }
   return at;
-}
+};
 
 /** How many leading segments make up the package root, or 0 for no package. */
-function packageRootLength(segments: string[], at: i32): i32 {
+const packageRootLength = (segments: string[], at: i32): i32 => {
   if (at < 0) {
     return 0;
   }
@@ -81,10 +81,10 @@ function packageRootLength(segments: string[], at: i32): i32 {
     return at + 3;
   }
   return at + 2;
-}
+};
 
 /** `segments[from..to)` joined with `/`. */
-function joinSegments(segments: string[], from: i32, to: i32): string {
+const joinSegments = (segments: string[], from: i32, to: i32): string => {
   const parts: string[] = [];
   let i = from;
   while (i < to) {
@@ -92,7 +92,7 @@ function joinSegments(segments: string[], from: i32, to: i32): string {
     i = i + 1;
   }
   return parts.join("/");
-}
+};
 
 /**
  * The package directory a module lives in, or `""` when it is in none. Two
@@ -102,17 +102,17 @@ function joinSegments(segments: string[], from: i32, to: i32): string {
  * a file inside `node_modules/<pkg>` from deciding that its own entry is a
  * dependency of itself.
  */
-export function packageDirOf(modulePath: string): string {
+export const packageDirOf = (modulePath: string): string => {
   const segments = splitByte(modulePath, SLASH);
   const length = packageRootLength(segments, packageRootAt(segments));
   if (length === 0) {
     return "";
   }
   return joinSegments(segments, 0, length);
-}
+};
 
 /** The package a module belongs to (`hash`, `@scope/hash`), or `""` for none. */
-export function packageNameOf(modulePath: string): string {
+export const packageNameOf = (modulePath: string): string => {
   const segments = splitByte(modulePath, SLASH);
   const at = packageRootAt(segments);
   const length = packageRootLength(segments, at);
@@ -120,7 +120,7 @@ export function packageNameOf(modulePath: string): string {
     return ROOT_PACKAGE;
   }
   return joinSegments(segments, at + 1, length);
-}
+};
 
 /**
  * The prefix every symbol of `packageName` carries: `""` for the root package,
@@ -134,7 +134,7 @@ export function packageNameOf(modulePath: string): string {
  * *qualified* symbols, so two packages that reduce to one prefix are refused
  * with a name in the message rather than silently sharing a fact table.
  */
-export function packageSymbolPrefix(packageName: string): string {
+export const packageSymbolPrefix = (packageName: string): string => {
   if (packageName === ROOT_PACKAGE) {
     return "";
   }
@@ -162,7 +162,7 @@ export function packageSymbolPrefix(packageName: string): string {
     return `_${mangled}.`;
   }
   return `${mangled}.`;
-}
+};
 
 /**
  * A bare import specifier taken apart (WP21 S2): `@scope/hash/blake3` is the

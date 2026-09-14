@@ -56,53 +56,51 @@ import { isFloat, T_I32, T_STRING, T_VOID } from "./types";
 // ---- Helpers ------------------------------------------------------------------------
 
 /** The `StructInfo` behind a struct-typed value; the checker resolved the same one. */
-export function structInfoOf(emitter: Emitter, type: i32): StructInfo {
+export const structInfoOf = (emitter: Emitter, type: i32): StructInfo => {
   const info = emitter.program.struct(emitter.table.nameOf(type));
   if (info !== null) {
     return info;
   }
   process.exit(internalError(`emitter: unknown struct \`${emitter.table.nameOf(type)}\``));
-}
+};
 
 /** `%struct.<name>` without the trailing `*`. */
-function structTypeName(info: StructInfo): string {
-  return `%struct.${info.name}`;
-}
+const structTypeName = (info: StructInfo): string => `%struct.${info.name}`;
 
 /** Address of `field` inside the object `receiver` (a `%struct.X*` value). */
-function structFieldPointer(emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string {
+const structFieldPointer = (emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string => {
   const ty = structTypeName(info);
   return emitter.fn.emitValue(
     `getelementptr inbounds ${ty}, ${ty}* ${receiver}, i32 0, i32 ${field.index}`
   );
-}
+};
 
-function loadField(emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string {
+const loadField = (emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string => {
   const ty = emitter.llvm(field.type);
   const ptr = structFieldPointer(emitter, info, receiver, field);
   const tbaa = fieldTbaa(emitter, info, field);
   return emitter.fn.emitValue(`load ${ty}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}${tbaa}`);
-}
+};
 
-function storeField(
+const storeField = (
   emitter: Emitter,
   info: StructInfo,
   receiver: string,
   field: FieldInfo,
   value: string
-): void {
+): void => {
   const ty = emitter.llvm(field.type);
   const ptr = structFieldPointer(emitter, info, receiver, field);
   const tbaa = fieldTbaa(emitter, info, field);
   emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}${tbaa}`);
-}
+};
 
 /**
  * Storage for one object of `info`: an entry-block alloca when `site` was
  * proved not to escape (always 8-aligned like arena objects, so every pointer
  * attribute stays true), else `info.size` bytes bumped from the arena.
  */
-function allocate(emitter: Emitter, info: StructInfo, site: Node): string {
+const allocate = (emitter: Emitter, info: StructInfo, site: Node): string => {
   if (emitter.isStackSite(site)) {
     return emitter.fn.emitAlloca(`${info.name}.obj`, structTypeName(info), 8);
   }
@@ -110,7 +108,7 @@ function allocate(emitter: Emitter, info: StructInfo, site: Node): string {
     `call i8* ${emitter.useRuntime("nish_alloc_struct")}(i64 ${info.size})`
   );
   return emitter.fn.emitValue(`bitcast i8* ${raw} to ${structTypeName(info)}*`);
-}
+};
 
 /**
  * The LLVM constant for a field initializer, from its syntax and the field's
@@ -118,7 +116,7 @@ function allocate(emitter: Emitter, info: StructInfo, site: Node): string {
  * to another module (an imported class `new`ed without a constructor), whose
  * type table this emitter does not have.
  */
-function initializerConstant(emitter: Emitter, field: FieldInfo): string {
+const initializerConstant = (emitter: Emitter, field: FieldInfo): string => {
   const init = field.initializer;
   if (init === null) {
     process.exit(internalError("emitter: a field initializer that is not there"));
@@ -150,48 +148,48 @@ function initializerConstant(emitter: Emitter, field: FieldInfo): string {
     value = -value;
   }
   return field.type === T_I32 ? `${toI32(value)}` : `${value}`;
-}
+};
 
 /** Store the literal initializers of the fields `info` declares itself. */
-export function emitFieldInitializers(emitter: Emitter, info: StructInfo, receiver: string): void {
+export const emitFieldInitializers = (emitter: Emitter, info: StructInfo, receiver: string): void => {
   for (const field of info.fields) {
     if (field.initializer !== null) {
       storeField(emitter, info, receiver, field, initializerConstant(emitter, field));
     }
   }
-}
+};
 
 /**
  * Run the construction of `info` on the object at `receiver` with `args`: its
  * constructor when it has one, otherwise its literal initializers.
  */
-function constructObject(
+const constructObject = (
   emitter: Emitter,
   info: StructInfo,
   receiver: string,
   args: Node[],
   site: Node
-): void {
+): void => {
   const ctor = info.ctor;
   if (ctor !== null) {
     emitCall(emitter, ctor, receiver, args, site);
     return;
   }
   emitFieldInitializers(emitter, info, receiver);
-}
+};
 
 /** Constructor prologue: the literal initializer stores, before the body runs. */
-export function emitConstructorPrologue(emitter: Emitter, sig: FunctionSig): void {
+export const emitConstructorPrologue = (emitter: Emitter, sig: FunctionSig): void => {
   const info = sig.owner;
   if (info === null) {
     process.exit(internalError("emitter: a constructor with no owning class"));
   }
   emitFieldInitializers(emitter, info, "%this");
-}
+};
 
 // ---- Expressions ----------------------------------------------------------------------
 
-export function emitObjectLiteral(emitter: Emitter, expr: Node): string {
+export const emitObjectLiteral = (emitter: Emitter, expr: Node): string => {
   const info = structInfoOf(emitter, emitter.typeOf(expr));
   const obj = allocate(emitter, info, expr);
   for (const prop of expr.children) {
@@ -203,10 +201,10 @@ export function emitObjectLiteral(emitter: Emitter, expr: Node): string {
     }
   }
   return obj;
-}
+};
 
 /** `new C(...)`, or `new Array<T>(n)` and its typed-array aliases. */
-export function emitNew(emitter: Emitter, expr: Node): string {
+export const emitNew = (emitter: Emitter, expr: Node): string => {
   if (emitter.table.isArray(emitter.typeOf(expr))) {
     return emitNewArray(emitter, expr);
   }
@@ -215,12 +213,12 @@ export function emitNew(emitter: Emitter, expr: Node): string {
   const obj = allocate(emitter, info, expr);
   constructObject(emitter, info, obj, expr.children[2].children, expr);
   return obj;
-}
+};
 
 // ---- Members --------------------------------------------------------------------------------
 
 /** `recv.name` where `recv` is a value: a field load, or the `.length` of a string or array. */
-export function emitPropertyAccess(emitter: Emitter, expr: Node): string {
+export const emitPropertyAccess = (emitter: Emitter, expr: Node): string => {
   const receiver = emitter.typeOf(expr.children[0]);
   if (receiver === T_STRING) {
     return emitStringLength(emitter, expr);
@@ -234,16 +232,16 @@ export function emitPropertyAccess(emitter: Emitter, expr: Node): string {
     return loadField(emitter, info, emitter.emitExpression(expr.children[0]), field);
   }
   process.exit(internalError(`emitter: unknown field \`${expr.text}\` on \`${info.name}\``));
-}
+};
 
 /** `call <ret> @Sym(<this>, args...)` for a method or constructor. */
-function emitCall(
+const emitCall = (
   emitter: Emitter,
   callee: FunctionSig,
   receiver: string,
   args: Node[],
   site: Node
-): string {
+): string => {
   const calleePrivate = privateResultAbi(emitter, callee.exported);
   const operands: string[] = [`${emitter.llvm(callee.paramTypes[0])} ${receiver}`];
   let i = 0;
@@ -270,10 +268,10 @@ function emitCall(
     return emitResultReturningCall(emitter, call, callee.returnType, site, calleePrivate);
   }
   return emitter.endReclaim(mark, emitter.fn.emitValue(call));
-}
+};
 
 /** `recv.m(args)` where `recv` is a value: a struct method, or a string or array method. */
-export function emitMethodCall(emitter: Emitter, expr: Node): string {
+export const emitMethodCall = (emitter: Emitter, expr: Node): string => {
   const access = expr.children[0];
   const receiverType = emitter.typeOf(access.children[0]);
   if (receiverType === T_STRING) {
@@ -288,10 +286,10 @@ export function emitMethodCall(emitter: Emitter, expr: Node): string {
   }
   const receiver = emitter.emitExpression(access.children[0]);
   return emitCall(emitter, callee, receiver, expr.children[1].children, expr);
-}
+};
 
 /** `recv.f = v` stores `v`; `recv.f op= v` reads the field first, as JS does. */
-export function emitFieldAssignment(emitter: Emitter, expr: Node): string {
+export const emitFieldAssignment = (emitter: Emitter, expr: Node): string => {
   const target = expr.children[0];
   const info = structInfoOf(emitter, emitter.typeOf(target.children[0]));
   const field = info.field(target.text);
@@ -320,7 +318,7 @@ export function emitFieldAssignment(emitter: Emitter, expr: Node): string {
   }
   emitter.fn.emit(`store ${ty} ${value}, ${ty}* ${ptr}${emitter.alignSuffix(field.type)}`);
   return value;
-}
+};
 
 // ---- Type declarations ------------------------------------------------------------------------
 
@@ -337,7 +335,7 @@ export function emitFieldAssignment(emitter: Emitter, expr: Node): string {
  * body — arrays and all — while its own code may never touch an array, so
  * nothing else in the module would ever ask for the header.
  */
-export function structTypeDeclarations(emitter: Emitter): string[] {
+export const structTypeDeclarations = (emitter: Emitter): string[] => {
   const lines: string[] = [];
   const declared: string[] = [];
   const referenced: string[] = [];
@@ -396,15 +394,15 @@ export function structTypeDeclarations(emitter: Emitter): string[] {
     lines.push(decl);
   }
   return lines;
-}
+};
 
-function noteStruct(
+const noteStruct = (
   emitter: Emitter,
   referenced: string[],
   results: string[],
   headers: string[],
   type: i32
-): void {
+): void => {
   const table = emitter.table;
   if (table.isArray(type)) {
     if (headers.indexOf(ARRAY_TYPE) < 0) {
@@ -433,26 +431,26 @@ function noteStruct(
   if (referenced.indexOf(name) < 0) {
     referenced.push(name);
   }
-}
+};
 
-function noteSignature(
+const noteSignature = (
   emitter: Emitter,
   referenced: string[],
   results: string[],
   headers: string[],
   sig: FunctionSig
-): void {
+): void => {
   for (const type of sig.paramTypes) {
     noteStruct(emitter, referenced, results, headers, type);
   }
   noteStruct(emitter, referenced, results, headers, sig.returnType);
-}
+};
 
 /**
  * The constructor and methods an importer of `info` may call; each gets a
  * `declare`.
  */
-export function structFunctions(info: StructInfo): FunctionSig[] {
+export const structFunctions = (info: StructInfo): FunctionSig[] => {
   const out: FunctionSig[] = [];
   const ctor = info.ctor;
   if (ctor !== null) {
@@ -462,4 +460,4 @@ export function structFunctions(info: StructInfo): FunctionSig[] {
     out.push(method);
   }
   return out;
-}
+};

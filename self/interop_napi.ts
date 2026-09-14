@@ -85,11 +85,9 @@ import {
 } from "./types";
 
 /** `a Float64Array`, `an Int32Array`. */
-export function withArticle(noun: string): string {
-  return `${napiStartsWithVowel(noun) ? "an" : "a"} ${noun}`;
-}
+export const withArticle = (noun: string): string => `${napiStartsWithVowel(noun) ? "an" : "a"} ${noun}`;
 
-function napiStartsWithVowel(noun: string): boolean {
+const napiStartsWithVowel = (noun: string): boolean => {
   if (noun.length === 0) {
     return false;
   }
@@ -106,7 +104,7 @@ function napiStartsWithVowel(noun: string): boolean {
     first === "O" ||
     first === "U"
   );
-}
+};
 
 // How a JS value becomes a parameter of this type. `src/` writes the lines
 // with a closure per shape; here the shape is a tag and the switch in
@@ -170,22 +168,20 @@ export class ScalarReader {
 }
 
 /** A getter that writes the parameter's own type: no temporary, no narrowing. */
-function napiDirectReader(jsType: string, tag: string, getter: string, c: string, lossless: boolean): ScalarReader {
-  return new ScalarReader(jsType, tag, getter, c, c, "", "", lossless);
-}
+const napiDirectReader = (jsType: string, tag: string, getter: string, c: string, lossless: boolean): ScalarReader => new ScalarReader(jsType, tag, getter, c, c, "", "", lossless);
 
 /** `napi_get_value_uint32` writes a `uint32_t`; `u8` and `u16` are one cast away from it. */
-function napiUnsignedReader(c: string): ScalarReader {
+const napiUnsignedReader = (c: string): ScalarReader => {
   const open = c === "uint32_t" ? "" : `(${c})`;
   return new ScalarReader("number", "napi_number", "napi_get_value_uint32", c, "uint32_t", open, "", false);
-}
+};
 
 /**
  * `SCALAR_READERS` in `src/`, which is a record keyed by type kind. `null` for
  * a type N-API has no getter for at all — a class, an array, a nullable — and
  * that is what keeps such a parameter out of this shim.
  */
-function napiScalarReader(table: TypeTable, t: i32): ScalarReader | null {
+const napiScalarReader = (table: TypeTable, t: i32): ScalarReader | null => {
   switch (table.kindOf(t)) {
     case T_I32:
       return napiDirectReader("number", "napi_number", "napi_get_value_int32", "int32_t", false);
@@ -219,15 +215,15 @@ function napiScalarReader(table: TypeTable, t: i32): ScalarReader | null {
     default:
       return null;
   }
-}
+};
 
 /** `napi_get_value_int32(env, <value>, <dest>)`, plus the `&lossless` the bigint getters take. */
-function napiScalarGet(s: ScalarReader, value: string, dest: string): string {
+const napiScalarGet = (s: ScalarReader, value: string, dest: string): string => {
   if (s.lossless) {
     return `${s.getter}(env, ${value}, ${dest}, &lossless)`;
   }
   return `${s.getter}(env, ${value}, ${dest})`;
-}
+};
 
 export class Reader {
   kind: i32;
@@ -264,7 +260,7 @@ export class Reader {
   }
 }
 
-function napiReader(table: TypeTable, t: i32, written: boolean): Reader | null {
+const napiReader = (table: TypeTable, t: i32, written: boolean): Reader | null => {
   const scalar = napiScalarReader(table, t);
   if (scalar !== null) {
     const out = new Reader(READ_SCALAR, scalar.jsType, true, false);
@@ -290,7 +286,7 @@ function napiReader(table: TypeTable, t: i32, written: boolean): Reader | null {
     return out;
   }
   return null;
-}
+};
 
 /**
  * The reader for a packed `Result` argument. Each arm is read with its own
@@ -298,7 +294,7 @@ function napiReader(table: TypeTable, t: i32, written: boolean): Reader | null {
  * member's type and through a temporary when it does not — a `u8` error or an
  * `f32` value narrows exactly as the same payload does at a plain parameter.
  */
-function napiResultReader(table: TypeTable, t: i32): Reader | null {
+const napiResultReader = (table: TypeTable, t: i32): Reader | null => {
   const ok = table.okOf(t);
   const err = table.errOf(t);
   const isVoidOk = table.kindOf(ok) === T_VOID;
@@ -328,7 +324,7 @@ function napiResultReader(table: TypeTable, t: i32): Reader | null {
   out.errScalar = error;
   out.usesF32 = table.kindOf(ok) === T_F32 || table.kindOf(err) === T_F32;
   return out;
-}
+};
 
 // How a wrapper gives up: throw, release the arena and throw, or -- once it has
 // handed a promise back -- reject that promise. `src/` picks this with a closure
@@ -338,7 +334,7 @@ const FAIL_THROW: i32 = 0;
 const FAIL_RELEASE: i32 = 1;
 const FAIL_REJECT: i32 = 2;
 
-function napiFailCall(mode: i32, message: string): string {
+const napiFailCall = (mode: i32, message: string): string => {
   if (mode === FAIL_RELEASE) {
     return `nish_napi_fail_at(env, mark, "${message}")`;
   }
@@ -346,13 +342,13 @@ function napiFailCall(mode: i32, message: string): string {
     return `nish_napi_reject(env, nish_deferred, nish_promise, "${message}")`;
   }
   return `nish_napi_fail(env, "${message}")`;
-}
+};
 
 /**
  * Declaration and conversion lines for parameter `c` read from `argv[i]`.
  * `what` is `<fn>: argument <n> (<name>)`, which every message here opens with.
  */
-function napiReaderLines(r: Reader, c: string, i: i32, what: string, mode: i32): string[] {
+const napiReaderLines = (r: Reader, c: string, i: i32, what: string, mode: i32): string[] => {
   const lines: string[] = [];
   switch (r.kind) {
     case READ_SCALAR: {
@@ -452,7 +448,7 @@ function napiReaderLines(r: Reader, c: string, i: i32, what: string, mode: i32):
       return lines;
     }
   }
-}
+};
 
 // How a returned value becomes a JS value.
 const BOX_SCALAR: i32 = 0;
@@ -485,7 +481,7 @@ export class Boxer {
  * answers `napi_get_undefined`, which takes no value; `scalarBoxCall` is
  * where that difference is spelled.
  */
-function napiScalarBox(table: TypeTable, t: i32): string {
+const napiScalarBox = (table: TypeTable, t: i32): string => {
   switch (table.kindOf(t)) {
     case T_I32:
       return "napi_create_int32";
@@ -517,14 +513,12 @@ function napiScalarBox(table: TypeTable, t: i32): string {
     default:
       return "";
   }
-}
+};
 
-function napiScalarBoxCall(box: string, value: string, dest: string): string {
-  return box === "napi_get_undefined" ? `napi_get_undefined(env, ${dest})` : `${box}(env, ${value}, ${dest})`;
-}
+const napiScalarBoxCall = (box: string, value: string, dest: string): string => box === "napi_get_undefined" ? `napi_get_undefined(env, ${dest})` : `${box}(env, ${value}, ${dest})`;
 
 /** The boxing plan for a result of this type, or `null` when it cannot cross. */
-function napiBoxer(table: TypeTable, t: i32): Boxer | null {
+const napiBoxer = (table: TypeTable, t: i32): Boxer | null => {
   const scalar = napiScalarBox(table, t);
   if (scalar.length > 0) {
     const out = new Boxer(BOX_SCALAR, false);
@@ -549,7 +543,7 @@ function napiBoxer(table: TypeTable, t: i32): Boxer | null {
     return napiResultBoxer(table, t);
   }
   return null;
-}
+};
 
 /**
  * `{ ok: true, value }` / `{ ok: false, error }`: box the arm the discriminant
@@ -557,7 +551,7 @@ function napiBoxer(table: TypeTable, t: i32): Boxer | null {
  * either payload has no scalar constructor, which now means only a payload
  * that is not a scalar at all: every numeric width has one.
  */
-function napiResultBoxer(table: TypeTable, t: i32): Boxer | null {
+const napiResultBoxer = (table: TypeTable, t: i32): Boxer | null => {
   const isVoidOk = table.kindOf(table.okOf(t)) === T_VOID;
   const value = isVoidOk ? "" : napiScalarBox(table, table.okOf(t));
   const error = napiScalarBox(table, table.errOf(t));
@@ -568,10 +562,10 @@ function napiResultBoxer(table: TypeTable, t: i32): Boxer | null {
   out.okBox = value;
   out.errBox = error;
   return out;
-}
+};
 
 /** The napi call that puts the value in `&out`. */
-function napiBoxerCall(box: Boxer, value: string): string {
+const napiBoxerCall = (box: Boxer, value: string): string => {
   switch (box.kind) {
     case BOX_SCALAR:
       return napiScalarBoxCall(box.scalar, value, "&out");
@@ -587,10 +581,10 @@ function napiBoxerCall(box: Boxer, value: string): string {
       return `nish_napi_array_result(env, ${value}, ${view.napiType}, ${view.elemSize}, &out)`;
     }
   }
-}
+};
 
 /** Lines to emit before the boxing call (WP17: a `Result` boxes its payload first). */
-function napiBoxerPre(box: Boxer, value: string): string[] {
+const napiBoxerPre = (box: Boxer, value: string): string[] => {
   const lines: string[] = [];
   if (box.kind !== BOX_RESULT) {
     return lines;
@@ -604,7 +598,7 @@ function napiBoxerPre(box: Boxer, value: string): string[] {
     `if ((${value}.ok ? ${okArm} : ${napiScalarBoxCall(box.errBox, `${value}.as.error`, "&payload")}) != napi_ok)`
   );
   return lines;
-}
+};
 
 /** What one function needs from the shim's shared helpers. */
 export class Plan {
@@ -622,7 +616,7 @@ export class Plan {
   }
 }
 
-function napiPlan(table: TypeTable, fn: ExternalFunction): Plan | null {
+const napiPlan = (table: TypeTable, fn: ExternalFunction): Plan | null => {
   const readers: Reader[] = [];
   let i = 0;
   while (i < fn.sig.paramTypes.length) {
@@ -644,7 +638,7 @@ function napiPlan(table: TypeTable, fn: ExternalFunction): Plan | null {
     }
   }
   return new Plan(fn, readers, box, scoped);
-}
+};
 
 /**
  * Why `napiPlan` refused this function, naming the position and the type that
@@ -652,7 +646,7 @@ function napiPlan(table: TypeTable, fn: ExternalFunction): Plan | null {
  * function without a word: an omission a reader cannot see is exactly how the
  * unsigned widths sat unbridged behind a reader table nobody had extended.
  */
-function napiSkipReason(table: TypeTable, fn: ExternalFunction): string {
+const napiSkipReason = (table: TypeTable, fn: ExternalFunction): string => {
   let i = 0;
   while (i < fn.sig.paramTypes.length) {
     const r = napiReader(table, fn.sig.paramTypes[i], fn.writtenParams.has(fn.sig.paramNames[i]));
@@ -668,7 +662,7 @@ function napiSkipReason(table: TypeTable, fn: ExternalFunction): string {
   // Unreachable while `napiPlan` refuses only for a parameter or the result,
   // and still better than a comment that names nothing if that ever changes.
   return "one of its types does not cross";
-}
+};
 
 /**
  * Why this function gets no asynchronous export, or `null` when it gets one.
@@ -688,7 +682,7 @@ function napiSkipReason(table: TypeTable, fn: ExternalFunction): string {
  * A function named here keeps its synchronous wrapper: it is still exported,
  * still callable, and only its promise-returning twin is missing.
  */
-function napiAsyncSkipReason(table: TypeTable, p: Plan): string | null {
+const napiAsyncSkipReason = (table: TypeTable, p: Plan): string | null => {
   const sig = p.fn.sig;
   let i = 0;
   while (i < p.readers.length) {
@@ -709,7 +703,7 @@ function napiAsyncSkipReason(table: TypeTable, p: Plan): string | null {
     return `it returns ${shown}, and a by-value \`Result\` is not bridged asynchronously yet`;
   }
   return null;
-}
+};
 
 /**
  * The asynchronous twin of `napiWrapper` (WP24 §5.1, A1): the same argument
@@ -736,7 +730,7 @@ function napiAsyncSkipReason(table: TypeTable, p: Plan): string | null {
  *     off the loop thread, so the arguments are plain C by then and the result
  *     is boxed back in `complete`, which runs on the JS thread again.
  */
-function napiAsyncWrapper(table: TypeTable, p: Plan): string[] {
+const napiAsyncWrapper = (table: TypeTable, p: Plan): string[] => {
   const sig = p.fn.sig;
   const name = sig.name;
   const jsName = `${sig.sourceName}Async`;
@@ -867,9 +861,9 @@ function napiAsyncWrapper(table: TypeTable, p: Plan): string[] {
   lines.push("}");
   lines.push("");
   return lines;
-}
+};
 
-function napiWrapper(table: TypeTable, p: Plan): string[] {
+const napiWrapper = (table: TypeTable, p: Plan): string[] => {
   const sig = p.fn.sig;
   const name = sig.name;
   const n = sig.paramNames.length;
@@ -952,13 +946,13 @@ function napiWrapper(table: TypeTable, p: Plan): string[] {
   lines.push("}");
   lines.push("");
   return lines;
-}
+};
 
-export function generateNapiShim(
+export const generateNapiShim = (
   compilation: Compilation,
   fns: ExternalFunction[],
   asyncExports: boolean
-): string {
+): string => {
   const table = compilation.table;
   const plans: Plan[] = [];
   const skipped: string[] = [];
@@ -1315,4 +1309,4 @@ export function generateNapiShim(
   lines.push("}");
   lines.push("");
   return lines.join("\n");
-}
+};

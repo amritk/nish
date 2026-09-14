@@ -77,7 +77,9 @@ of what `self/` compiles. Every line of `self/` is checked against that.
 Nish-0 is today's language plus §3, minus everything `self/` does not need.
 Notably `self/` is written **without**:
 
-- generics, arrow functions, closures, nested functions, function values;
+- generics, closures, nested functions, function values (a top-level `const`
+  bound to an arrow is a declaration rather than a value, and is how `self/`
+  declares a function since WP22 stage C);
 - `type` aliases, `enum`, `namespace`, `static` members, getters/setters;
 - `try`/`catch` — diagnostics are collected into an array and a failed parse
   returns a sentinel node, the way the error recovery in a real front end
@@ -804,10 +806,12 @@ These are in addition to `docs/MASTER_PLAN.md` §7, not instead of it.
    implementation of every new construct is a choice rather than a
    consequence.
 2. **`self/` is an Nish program.** It follows `docs/LANGUAGE.md` and the
-   Nish half of `.claude/typescript.md` — `function` declarations,
-   `interface` for structs, no arrow functions, no `type` aliases. The house
-   rules for `src/` do not apply to it, and `biome.json` must exempt it the
-   way it already exempts `examples/` and `bench/`.
+   Nish half of `.claude/typescript.md` — since WP22 stage C that means a
+   function is a `const` bound to an arrow, as it is in `src/`, with
+   `interface` for structs and no `type` aliases. The `src/` rules that do not
+   reach it are the ones the language cannot express, and `biome.json` exempts
+   it from those the way it exempts `examples/` and `bench/`; the arrow rule is
+   no longer among them, because `self/` now keeps it.
 3. **stage0 is the oracle.** Every `self/` phase is tested by comparing it
    with the corresponding stage0 output over `tests/cases/`, not by a golden
    written by hand. A disagreement is triaged before the next phase starts.

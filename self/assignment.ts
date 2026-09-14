@@ -63,22 +63,20 @@ export class Assigned {
 }
 
 /** The first field of `cls` that `assigned` does not hold, or `null`. */
-function missingField(cls: StructInfo, assigned: Assigned): FieldInfo | null {
+const missingField = (cls: StructInfo, assigned: Assigned): FieldInfo | null => {
   for (const field of cls.fields) {
     if (!assigned.fields.has(field.name)) {
       return field;
     }
   }
   return null;
-}
+};
 
 /** `this.name`, as a member access whose receiver is `this`. */
-function thisAccess(node: Node): boolean {
-  return node.kind === N_MEMBER && node.children[0].kind === N_THIS;
-}
+const thisAccess = (node: Node): boolean => node.kind === N_MEMBER && node.children[0].kind === N_THIS;
 
 /** The fields `expr` definitely assigns: `this.a = this.b = v` assigns both. */
-function assignedBy(expr: Node, out: Assigned): void {
+const assignedBy = (expr: Node, out: Assigned): void => {
   let inner = expr;
   while (inner.kind === N_PAREN) {
     inner = inner.children[0];
@@ -89,16 +87,16 @@ function assignedBy(expr: Node, out: Assigned): void {
     }
     assignedBy(inner.children[1], out);
   }
-}
+};
 
 /** Every use of `this` in `node` must be safe given what is assigned. */
-function checkReads(
+const checkReads = (
   ctx: CheckContext,
   cls: StructInfo,
   node: Node,
   assigned: Assigned,
   isTarget: boolean
-): void {
+): void => {
   if (thisAccess(node)) {
     const field = node.text;
     if (!isTarget && cls.field(field) !== null && !assigned.fields.has(field)) {
@@ -139,17 +137,17 @@ function checkReads(
     checkReads(ctx, cls, child, assigned, plainStore && index === 0);
     index = index + 1;
   }
-}
+};
 
-function requireAll(ctx: CheckContext, cls: StructInfo, assigned: Assigned, at: Node): void {
+const requireAll = (ctx: CheckContext, cls: StructInfo, assigned: Assigned, at: Node): void => {
   const missing = missingField(cls, assigned);
   if (missing !== null) {
     ctx.error(at, `Constructor of \`${cls.name}\` returns before field \`${missing.name}\` is assigned`);
   }
-}
+};
 
 /** A statement list; the result is what is assigned after it. */
-function walkStatements(ctx: CheckContext, cls: StructInfo, stmts: Node[], assigned: Assigned): Assigned {
+const walkStatements = (ctx: CheckContext, cls: StructInfo, stmts: Node[], assigned: Assigned): Assigned => {
   let current = assigned;
   for (const stmt of stmts) {
     if (current.terminated) {
@@ -158,9 +156,9 @@ function walkStatements(ctx: CheckContext, cls: StructInfo, stmts: Node[], assig
     current = walkStatement(ctx, cls, stmt, current);
   }
   return current;
-}
+};
 
-function walkStatement(ctx: CheckContext, cls: StructInfo, stmt: Node, assigned: Assigned): Assigned {
+const walkStatement = (ctx: CheckContext, cls: StructInfo, stmt: Node, assigned: Assigned): Assigned => {
   switch (stmt.kind) {
     case N_BLOCK:
       return walkStatements(ctx, cls, stmt.children, assigned);
@@ -209,13 +207,11 @@ function walkStatement(ctx: CheckContext, cls: StructInfo, stmt: Node, assigned:
       checkReads(ctx, cls, stmt, assigned, false);
       return assigned;
   }
-}
+};
 
-function terminated(): Assigned {
-  return new Assigned(true);
-}
+const terminated = (): Assigned => new Assigned(true);
 
-function walkIf(ctx: CheckContext, cls: StructInfo, stmt: Node, assigned: Assigned): Assigned {
+const walkIf = (ctx: CheckContext, cls: StructInfo, stmt: Node, assigned: Assigned): Assigned => {
   checkReads(ctx, cls, stmt.children[0], assigned, false);
   const whenTrue = walkStatement(ctx, cls, stmt.children[1], assigned.copy());
   const whenFalse =
@@ -239,26 +235,26 @@ function walkIf(ctx: CheckContext, cls: StructInfo, stmt: Node, assigned: Assign
     i = i + 1;
   }
   return both;
-}
+};
 
 /**
  * A loop body may run zero times, so its assignments do not count — but every
  * read and every `return` inside it is still checked against what is known
  * before the loop.
  */
-function walkLoop(ctx: CheckContext, cls: StructInfo, head: Node, body: Node, assigned: Assigned): Assigned {
+const walkLoop = (ctx: CheckContext, cls: StructInfo, head: Node, body: Node, assigned: Assigned): Assigned => {
   if (head.kind !== N_EMPTY) {
     checkReads(ctx, cls, head, assigned, false);
   }
   walkStatement(ctx, cls, body, assigned.copy());
   return assigned;
-}
+};
 
 /**
  * Every field of `cls` is assigned by the time its constructor returns, and
  * none is read before it is. Runs after the layouts are known.
  */
-export function checkDefiniteAssignment(ctx: CheckContext, cls: StructInfo): void {
+export const checkDefiniteAssignment = (ctx: CheckContext, cls: StructInfo): void => {
   if (cls.kind !== STRUCT_CLASS) {
     return;
   }
@@ -298,4 +294,4 @@ export function checkDefiniteAssignment(ctx: CheckContext, cls: StructInfo): voi
       `Field \`${missing.name}\` of class \`${cls.name}\` is not definitely assigned in the constructor`
     );
   }
-}
+};
