@@ -246,8 +246,10 @@ function emitCharCodeAt(emitter: Emitter, expr: Node, str: string): string {
  * only where it can hoist the receiver's length: with a string literal in a
  * local it folds all six calls unaided, but where the receiver is a parameter
  * the guard compares `i32`s, the clamp runs on their `sext`, and the length is
- * re-read across an allocating call, so `opt -O3` keeps all six whether the
- * guard is there or not.
+ * re-read across an allocating call, so the clamp on the guarded bound
+ * survives whether the guard is there or not. "All six" is exact only when
+ * both bounds are guarded locals; `s.substring(0, i)` goes six to two, and the
+ * two that live are `i`'s own pair (WP15 §9).
  *
  * `first` is emitted and clamped before `second` is evaluated at all, which is
  * the order `self/bounds.ts` takes its verdicts in: a fact argument 1

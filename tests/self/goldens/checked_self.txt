@@ -11863,9 +11863,9 @@ function clampBound(emitter: Emitter, bound: Node, len: string): string -> @clam
   pointer emitter: size=144 writesThrough=false captured=false passedTo=emitIndex#0 clampToLength#0
   pointer bound: size=40 writesThrough=true captured=true passedTo=emitIndex#1
   stackSites=0 stackLocals=0
-  local 257:9 value: string (const)
-  callee 257:17 emitIndex -> @emitIndex
-  callee 261:10 clampToLength -> @clampToLength
+  local 259:9 value: string (const)
+  callee 259:17 emitIndex -> @emitIndex
+  callee 263:10 clampToLength -> @clampToLength
 function emitSubstring(emitter: Emitter, expr: Node, str: string): string -> @emitSubstring
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: str
@@ -11873,120 +11873,120 @@ function emitSubstring(emitter: Emitter, expr: Node, str: string): string -> @em
   pointer emitter: size=144 writesThrough=false captured=false passedTo=loadStringLength#0 clampBound#0 clampBound#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringData#0 newString#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 272:9 args: Node (const)
-  local 273:9 len: string (const)
-  callee 273:15 loadStringLength -> @loadStringLength
-  local 274:9 first: string (const)
-  callee 274:17 clampBound -> @clampBound
-  local 275:9 second: string (const)
-  callee 275:45 clampBound -> @clampBound
-  local 276:9 from: string (const)
-  callee 276:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 277:17 Emitter.useRuntime -> @Emitter.useRuntime
-  local 279:9 to: string (const)
-  callee 279:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 280:17 Emitter.useRuntime -> @Emitter.useRuntime
-  local 282:9 n: string (const)
-  callee 282:13 IRFunction.emitValue -> @IRFunction.emitValue
-  local 283:9 at: string (const)
-  callee 283:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 284:39 stringData -> @stringData
-  callee 286:10 newString -> @newString
+  local 274:9 args: Node (const)
+  local 275:9 len: string (const)
+  callee 275:15 loadStringLength -> @loadStringLength
+  local 276:9 first: string (const)
+  callee 276:17 clampBound -> @clampBound
+  local 277:9 second: string (const)
+  callee 277:45 clampBound -> @clampBound
+  local 278:9 from: string (const)
+  callee 278:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 279:17 Emitter.useRuntime -> @Emitter.useRuntime
+  local 281:9 to: string (const)
+  callee 281:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 282:17 Emitter.useRuntime -> @Emitter.useRuntime
+  local 284:9 n: string (const)
+  callee 284:13 IRFunction.emitValue -> @IRFunction.emitValue
+  local 285:9 at: string (const)
+  callee 285:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 286:39 stringData -> @stringData
+  callee 288:10 newString -> @newString
 function emitStringIndexOf(emitter: Emitter, expr: Node, str: string): string -> @emitStringIndexOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitExpression Emitter.useRuntime IRFunction.emitValue emitNumberFromI64 nish_panic_index nish_str_concat
   pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.emitExpression#0 Emitter.useRuntime#0 emitNumberFromI64#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitNumberFromI64#2
   stackSites=0 stackLocals=0
-  local 299:9 sub: string (const)
-  callee 299:15 Emitter.emitExpression -> @Emitter.emitExpression
-  local 300:9 found: string (const)
-  callee 300:17 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 301:17 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 303:10 emitNumberFromI64 -> @emitNumberFromI64
+  local 301:9 sub: string (const)
+  callee 301:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local 302:9 found: string (const)
+  callee 302:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 303:17 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 305:10 emitNumberFromI64 -> @emitNumberFromI64
 function emitStringMethodCall(emitter: Emitter, expr: Node): string -> @emitStringMethodCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitExpression IRFunction.emitValue emitCharCodeAt emitOccursAt emitSlice emitStringIndexOf emitSubstring loadStringLength nish_panic_index nish_str_concat nish_str_eq
   pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.emitExpression#0 emitCharCodeAt#0 emitSubstring#0 emitSlice#0 emitStringIndexOf#0 emitOccursAt#0 Emitter.emitExpression#0 Emitter.emitExpression#0 loadStringLength#0 loadStringLength#0 emitOccursAt#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitCharCodeAt#1 emitSubstring#1 emitSlice#1 emitStringIndexOf#1
   stackSites=0 stackLocals=0
-  local 308:9 access: Node (const)
-  local 309:9 str: string (const)
-  callee 309:15 Emitter.emitExpression -> @Emitter.emitExpression
-  local 310:9 name: string (const)
-  callee 312:12 emitCharCodeAt -> @emitCharCodeAt
-  callee 315:12 emitSubstring -> @emitSubstring
-  callee 318:12 emitSlice -> @emitSlice
-  callee 321:12 emitStringIndexOf -> @emitStringIndexOf
-  callee 324:12 emitOccursAt -> @emitOccursAt
-  callee 324:44 Emitter.emitExpression -> @Emitter.emitExpression
-  local 328:9 sub: string (const)
-  callee 328:15 Emitter.emitExpression -> @Emitter.emitExpression
-  local 329:9 at: string (const)
-  callee 329:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 330:16 loadStringLength -> @loadStringLength
-  callee 330:51 loadStringLength -> @loadStringLength
-  callee 332:10 emitOccursAt -> @emitOccursAt
+  local 310:9 access: Node (const)
+  local 311:9 str: string (const)
+  callee 311:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local 312:9 name: string (const)
+  callee 314:12 emitCharCodeAt -> @emitCharCodeAt
+  callee 317:12 emitSubstring -> @emitSubstring
+  callee 320:12 emitSlice -> @emitSlice
+  callee 323:12 emitStringIndexOf -> @emitStringIndexOf
+  callee 326:12 emitOccursAt -> @emitOccursAt
+  callee 326:44 Emitter.emitExpression -> @Emitter.emitExpression
+  local 330:9 sub: string (const)
+  callee 330:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local 331:9 at: string (const)
+  callee 331:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 332:16 loadStringLength -> @loadStringLength
+  callee 332:51 loadStringLength -> @loadStringLength
+  callee 334:10 emitOccursAt -> @emitOccursAt
 function emitFromCharCode(emitter: Emitter, expr: Node): string -> @emitFromCharCode [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue emitIndex newString nish_panic_index nish_str_concat
   pointer emitter: size=144 writesThrough=false captured=false passedTo=emitIndex#0 newString#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 337:9 code: string (const)
-  callee 337:16 emitIndex -> @emitIndex
-  local 338:9 byte: string (const)
-  callee 338:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local 339:9 slot: string (const)
-  callee 339:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  callee 340:3 IRFunction.emit -> @IRFunction.emit
-  callee 341:10 newString -> @newString
+  local 339:9 code: string (const)
+  callee 339:16 emitIndex -> @emitIndex
+  local 340:9 byte: string (const)
+  callee 340:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local 341:9 slot: string (const)
+  callee 341:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  callee 342:3 IRFunction.emit -> @IRFunction.emit
+  callee 343:10 newString -> @newString
 function stringConstructCallees(name: string, uncheckedIndexing: boolean): string[] -> @stringConstructCallees [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false
   calls: nish_array_grow nish_str_eq
   stackSites=0 stackLocals=0
-  local 352:9 out: string[] (const)
+  local 354:9 out: string[] (const)
 function emitStrictEquality(emitter: Emitter, expr: Node): string -> @emitStrictEquality [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf Emitter.useRuntime IRFunction.emitValue isFloat nish_panic_index nish_str_concat nish_str_eq
   pointer emitter: size=144 writesThrough=false captured=false passedTo=Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.llvm#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 370:9 type: i32 (const)
-  callee 370:16 Emitter.typeOf -> @Emitter.typeOf
-  local 371:9 negate: boolean (const)
-  local 372:9 lhs: string (const)
-  callee 372:15 Emitter.emitExpression -> @Emitter.emitExpression
-  local 373:9 rhs: string (const)
-  callee 373:15 Emitter.emitExpression -> @Emitter.emitExpression
-  local 375:11 eq: string (const)
-  callee 375:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 376:26 Emitter.useRuntime -> @Emitter.useRuntime
-  callee 378:21 IRFunction.emitValue -> @IRFunction.emitValue
-  local 382:7 opcode: string (let)
-  callee 383:7 isFloat -> @isFloat
-  callee 386:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee 386:44 Emitter.llvm -> @Emitter.llvm
+  local 372:9 type: i32 (const)
+  callee 372:16 Emitter.typeOf -> @Emitter.typeOf
+  local 373:9 negate: boolean (const)
+  local 374:9 lhs: string (const)
+  callee 374:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local 375:9 rhs: string (const)
+  callee 375:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local 377:11 eq: string (const)
+  callee 377:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 378:26 Emitter.useRuntime -> @Emitter.useRuntime
+  callee 380:21 IRFunction.emitValue -> @IRFunction.emitValue
+  local 384:7 opcode: string (let)
+  callee 385:7 isFloat -> @isFloat
+  callee 388:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee 388:44 Emitter.llvm -> @Emitter.llvm
 function emitConsoleLog(emitter: Emitter, expr: Node): string -> @emitConsoleLog [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.useRuntime IRFunction.emit emitToString nish_panic_index nish_str_concat
   pointer emitter: size=144 writesThrough=false captured=false passedTo=emitToString#0 Emitter.useRuntime#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 393:9 text: string (const)
-  callee 393:16 emitToString -> @emitToString
-  callee 394:3 IRFunction.emit -> @IRFunction.emit
-  callee 394:32 Emitter.useRuntime -> @Emitter.useRuntime
+  local 395:9 text: string (const)
+  callee 395:16 emitToString -> @emitToString
+  callee 396:3 IRFunction.emit -> @IRFunction.emit
+  callee 396:32 Emitter.useRuntime -> @Emitter.useRuntime
 function emitConsoleError(emitter: Emitter, expr: Node): string -> @emitConsoleError [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   calls: Emitter.useRuntime IRFunction.emit emitToString nish_panic_index nish_str_concat
   pointer emitter: size=144 writesThrough=false captured=false passedTo=emitToString#0 Emitter.useRuntime#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local 400:9 text: string (const)
-  callee 400:16 emitToString -> @emitToString
-  callee 401:3 IRFunction.emit -> @IRFunction.emit
-  callee 401:32 Emitter.useRuntime -> @Emitter.useRuntime
+  local 402:9 text: string (const)
+  callee 402:16 emitToString -> @emitToString
+  callee 403:3 IRFunction.emit -> @IRFunction.emit
+  callee 403:32 Emitter.useRuntime -> @Emitter.useRuntime
 module self/runtime.ts
 import StringMap from "./map" -> struct StringMap
 const ARENA_TYPE: string = "%struct.nish_arena = type { i8*, i64, i64, i8* }" [exported]
