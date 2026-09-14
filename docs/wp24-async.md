@@ -1,7 +1,9 @@
 # WP24: Async
 
 **Proposed and then declined, in that order, and the second half is the point.**
-Nothing here exists in the compiler and this note does not ask for it to. It is
+No `async`, `await` or `yield` exists in the compiler and this note does not ask
+for them to. The one item it did recommend is built: an asynchronous N-API
+export, `--emit-napi-async`, which has no language surface at all (§5.1). It is
 the plan of record for the question "how does Nish do `async`/`await`", which
 [wp20-threads.md](wp20-threads.md) §6 deferred to a note that did not exist
 yet. The answer is *not yet, and probably not this*, and the reason is not the
@@ -22,6 +24,8 @@ mostly a map from one to the other.
 **Keep the Phase 0 rejections. Build the one thing that is actually being asked
 for — an asynchronous N-API export, which has no language surface at all — and
 revisit `async`/`await` only behind a networking package that does not exist.**
+That one item is now built and measured (§5.1); everything else here still
+stands as written.
 
 Three findings, in the order they changed the answer:
 
@@ -369,7 +373,7 @@ its parser, where a different wording is allowed by design
 
 ## 5. What to build instead
 
-### 5.1 A1 — an asynchronous N-API export (**the one item recommended**)
+### 5.1 A1 — an asynchronous N-API export (**the one item recommended — built**)
 
 **No language surface. No new syntax. No coroutine.** The generated shim
 changes and nothing else does.
@@ -394,13 +398,91 @@ asynchrony is entirely in generated C.
   inlined into the IR (wp20 §3.1). Without T0 this was a data race in the
   emitted IR, not merely in the runtime. **T0 was the whole cost of A1**, which
   was the argument for landing it on its own, and the argument held: the shim
-  and the `napi` profile's build line are all that is left of this item.
-- Surface: a flag (`--emit-napi-async`) or a per-function opt-in; §10 leaves
-  that open, because it should be decided against a real addon.
-- Acceptance: the `napi` profile still builds and the WP8 batching benchmark
-  is unchanged; event-loop latency measured under a long call, before and
-  after, and written down rather than asserted; a program that does not use
-  the flag generates a byte-identical shim.
+  and the `napi` profile's build line were all that was left of this item, and
+  both are now written.
+- **Surface, as built: `--emit-napi-async <shim.c>`, a sibling output flag**
+  rather than a modifier on `--emit-napi` or a per-function opt-in. It writes
+  the same shim *plus* a promise-returning `<name>Async` beside every export
+  whose arguments and result are plain scalars. Additive was the decision worth
+  making: the synchronous export is what the WP8 batching benchmark calls and
+  what a host wanting the answer *now* still wants, so a host chooses per call
+  site instead of per build, the two can be measured against each other inside
+  one addon, and no existing addon's surface moves. A per-function opt-in would
+  have needed syntax, and syntax is the thing this item is valuable for not
+  having.
+- **`--threads` is required on both halves, and neither absence is silent.**
+  The worker allocates while the JS thread runs, so the arena has to be the
+  thread-local one — and it has two halves: the generated C, and the module's
+  own IR. For the C, the shim opens with an `#error` unless `-DNISH_THREADS` is
+  set, because one process-wide bump allocator shared by two threads corrupts
+  silently. For the module, `nish --emit-napi-async` **refuses to run without
+  `--threads`** (exit 2), which is the less obvious half and the one worth
+  writing down: a module that allocates inline reads `@nish_arena` as a plain
+  global without the flag (`examples/arrays.ts` is one), and nothing downstream
+  catches it — the shim's `#error` cannot see the module, and the *link* does
+  not object either. nish.h says ELF refuses a non-TLS reference against a
+  `_Thread_local` definition; measured, that holds for an executable and **not**
+  for the `-shared -fPIC` napi profile, which links such a mismatch without a
+  word. So the flag is required where both facts are known rather than switched
+  on quietly, because the arena's storage class is ABI and no request for a
+  sidecar should change it as a side effect.
+  The exec callback then brackets the call with `nish_arena_mark` /
+  `nish_arena_release` on the worker's *own* arena — both on the one thread that
+  allocates in it — so a reused pool thread stays flat rather than growing for
+  the life of the process.
+- **Scalars only, and the rest of the surface says why.** A string or
+  typed-array parameter or result keeps its synchronous wrapper alone and is
+  named in the shim with the reason, the way the unbridgeable functions already
+  are. Two different reasons, and the second is the sharper one: the arena is
+  per-thread, so a mark taken on the JS thread cannot be released on the
+  worker; and a typed array is *borrowed* from the JS `ArrayBuffer`, which
+  N-API guarantees only for the duration of the callback that read it, while an
+  asynchronous call outlives that callback by design and the buffer can be
+  detached mid-flight. A by-value `Result` *parameter* does cross — it is
+  scalars in a register, read on the JS thread like any other argument — and a
+  `Result` *result* does not yet, because boxing one is several `napi_*` calls
+  inside the completion callback. A `malloc`ed copy is the shape that lifts the
+  restriction and is deliberately not in this cut.
+- **`<name>Async` rejects and never throws.** The promise is created before the
+  arguments are read, so a wrong argument settles as a rejected `TypeError`
+  carrying the message the synchronous wrapper throws. A promise-returning
+  function that threw synchronously would be the one failure a `.catch` cannot
+  reach, and `await` would surface it from the call rather than from the settle.
+- **Acceptance, measured rather than asserted.** `examples/node-addon-async.mjs`
+  is the harness and `tests/self/interop_async.ts` the addon; a ticker asking to
+  be woken every 5 ms reports its worst lateness, which is the latency the loop
+  shows a user:
+
+  | | call | worst loop stall | ticks during the call |
+  | --- | --- | --- | --- |
+  | `spin(120000)` | 220 ms | **218.06 ms** | 8 |
+  | `await spinAsync(120000)` | 220 ms | **0.36 ms** | 42 |
+
+  The call takes just as long either way, and that is the point: nothing became
+  faster and no compiled function changed, so 220 ms of work is still 220 ms of
+  work. What moved is who waits for it. Read the tick column beside the stall —
+  8 ticks means the 5 ms ticker was starved for the whole call and Node fired
+  the backlog at once when it returned, while 42 is roughly the 220 / 5 the loop
+  should have managed. Over three runs the synchronous stall stayed between
+  218.06 and 221.43 ms and the asynchronous one between 0.36 and 1.77 ms
+  (§11c). The rest of the acceptance list holds too: the `napi` profile still
+  builds, the batching benchmark is untouched
+  because it calls the synchronous export, and a program compiled without the
+  flag emits a byte-identical shim — checked over the whole interop corpus, IR
+  included, against the generator as it stood before the change.
+- **It landed twice, like everything else** (§4.8): `src/interop/napi.ts` and
+  `self/interop_napi.ts`, with `tests/self/interop_oracle.js` diffing the
+  `.napi.c` of both compilers byte for byte over the corpus, the asynchronous
+  sidecar now among them. The stage1 half is where the closure-free shape shows:
+  `src/` passes each wrapper a `fail` closure and `self/` passes a mode, and the
+  three modes — throw, release the arena and throw, reject the promise — spell
+  the same three failing returns.
+- **Sound under ThreadSanitizer.** The addon built with `-fsanitize=thread` and
+  driven by 64 concurrent `digestAsync` calls — a function that allocates on
+  every round, so several workers bump their arenas at once — reports no race in
+  any `nish_*` frame or in the generated shim across repeated runs, and every
+  answer matches the synchronous one. (The only races tsan reports at all are
+  inside V8's own tracing controller, which is uninstrumented.)
 
 ### 5.2 Threads, for everything async is usually reached for
 
@@ -421,7 +503,7 @@ package:
 | | Gate | Owner |
 | ---: | --- | --- |
 | A0 | the coroutine spike, both ways | **done, §3a and §3b** |
-| A1 | asynchronous N-API export | this note, after WP20 T0 |
+| A1 | asynchronous N-API export | **done, §5.1** — `--emit-napi-async`, after WP20 T0 |
 | A2 | a reason: sockets, timers, a poller, and the budget conversation | unowned; nobody has asked |
 | A3 | `async` / `await` as a rustc-shaped state machine: the colour rule, the suspend point, the anonymous frame type, the frame's escape flow | this note, and only after A2 |
 | A4 | futures as data — an array of them, `join`, `select` | WP15 item 8 / WP18, an enhancement of A3 rather than a gate before it (§4.1) |
@@ -517,9 +599,10 @@ rejection.
 Four things, none of them large, listed so that whoever picks this up later
 knows what drifted:
 
-- **The N-API defect stays until A1, and that cost is A1's rather than
-  async's.** An addon that runs for 200 ms blocks Node's event loop for 200 ms
-  today (§5.1). Nothing about deferring the *language* feature defers that fix.
+- **The N-API defect was A1's cost rather than async's, and it is now paid.**
+  An addon that ran for 200 ms blocked Node's event loop for 200 ms; A1 fixed
+  that without deferring anything about the language feature, which was the
+  argument for separating them in the first place (§5.1 has the measurement).
 - **The arena bracket quietly accumulates an assumption.** WP6's automatic
   scopes and WP9's call-site reclaim both bracket a *contiguous dynamic extent*
   with `nish_arena_mark` / `release` / `keep`. A suspend point in the middle of
@@ -572,10 +655,12 @@ do not get is the promise as a thing you hold.
 
 ## 10. Open
 
-- **How an asynchronous N-API export is spelled.** A `--emit-napi-async` flag
-  for the whole module, a per-function opt-in in the source, or a rule based on
-  the function's measured cost — decided against a real addon, not in this
-  note.
+- ~~**How an asynchronous N-API export is spelled.**~~ **Decided** (§5.1):
+  `--emit-napi-async <shim.c>`, a sibling output flag that *adds* a
+  `<name>Async` rather than replacing the synchronous export. What remains open
+  is narrower and waits for a real addon to argue it: whether a string or an
+  array should cross asynchronously through a `malloc`ed copy, and whether a
+  by-value `Result` result is worth the boxing in the completion callback.
 - **Whether a `sleep(ms)` builtin should exist at all.** It is the only thing a
   program could await today, which is either the argument for a small async or
   the argument that this is what threads are for. It leans towards the second.
@@ -590,8 +675,9 @@ do not get is the promise as a thing you hold.
 
 ## 11. Appendix: the spikes, in full
 
-§3's measurements are the only new facts in this note, so both are reproducible
-here rather than only reported.
+§3's measurements were the only new facts in this note when it was written, so
+both are reproducible here rather than only reported; §11c is the same courtesy
+for A1's, which are the numbers §5.1 rests on.
 
 ### 11a. The LLVM spike (§3a)
 
@@ -725,3 +811,54 @@ pub extern "C" fn future_size() -> usize {
     core::mem::size_of_val(&counter(0))
 }
 ```
+
+### 11c. A1's event-loop measurement (§5.1)
+
+Three commands, from a clean checkout with LLVM 18 and Node 22 on `PATH`:
+
+```bash
+node dist/index.js tests/self/interop_async.ts -o build/spin.ll \
+  --emit-napi-async build/spin_napi.c --threads
+scripts/build.sh build/spin.ll runtime/runtime.c build/spin_napi.c \
+  -o build/spin.node --profile napi --threads
+node examples/node-addon-async.mjs build/spin.node 120000
+```
+
+`examples/node-addon-async.mjs` is the harness rather than a throwaway script,
+so the measurement is a thing a reader can re-run and a user can point at their
+own addon. It runs a `setInterval` asking for 5 ms, records the worst gap it
+actually sees, and prints one line per call shape. Three consecutive runs on one
+machine (x86-64, Node 22.22, `--profile napi --threads`):
+
+```
+sync spin()        call   223 ms   worst loop stall   221.43 ms   over   8 ticks
+async spinAsync()  call   220 ms   worst loop stall     0.36 ms   over  42 ticks
+sync spin()        call   220 ms   worst loop stall   219.05 ms   over   8 ticks
+async spinAsync()  call   219 ms   worst loop stall     0.40 ms   over  42 ticks
+sync spin()        call   220 ms   worst loop stall   218.06 ms   over   8 ticks
+async spinAsync()  call   220 ms   worst loop stall     1.77 ms   over  42 ticks
+```
+
+Read the tick column, not only the stall: 8 ticks means the ticker was starved
+for the whole call and Node fired the backlog at once when it returned, while
+42 is roughly the 220 ms / 5 ms the loop should have managed. The stall column
+is the same fact from the other side, and the wall column is what makes it a
+scheduling change rather than an optimisation — the work is identical and takes
+identical time.
+
+The soundness half, which is not a latency question:
+
+```bash
+# 64 concurrent calls to a function that allocates on every round, under tsan
+clang -std=c11 -O1 -g -fsanitize=thread -DNISH_THREADS=1 -ftls-model=initial-exec \
+  -fPIC -shared -Wno-override-module -I"$NODE_INCLUDE" -Iruntime \
+  build/spin.ll runtime/runtime.c runtime/runtime_os.c build/spin_napi.c \
+  -o build/spin_tsan.node
+LD_PRELOAD=$(clang -print-file-name=libtsan.so) node examples/node-addon-async.mjs build/spin_tsan.node
+```
+
+No race in any `nish_*` frame or in the generated shim, and every asynchronous
+answer equal to its synchronous twin. tsan does report a race inside
+`v8::platform::tracing::TracingController`, which is Node's own uninstrumented
+code and is there with or without this addon loaded.
+

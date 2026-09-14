@@ -2845,6 +2845,198 @@ if (!only || "interop".includes(only)) {
     }
   }
 
+  // ---- WP24 A1: asynchronous N-API exports (--emit-napi-async) --------------------
+  // The shim runs the Nish function on whatever thread N-API handed it, which for a
+  // `require()`d addon is Node's main thread, so a 200 ms call blocked Node's event
+  // loop for 200 ms (wp24-async.md 5.1). `--emit-napi-async` adds a promise-returning
+  // `<name>Async` beside every export whose arguments and result are plain scalars and
+  // runs it on libuv's thread pool. The compiled function does not change, so what is
+  // under test is the generated C: that the flag is additive and inert when absent,
+  // that a build without the thread-local arena is refused rather than raced, and that
+  // the two call shapes agree on every answer.
+  const asyncSrc = "tests/self/interop_async.ts";
+  const asyncSync = emit(asyncSrc, ["--emit-napi", sidecar("interop_async_sync", "napi.c")], "interop_async_sync");
+  // `--emit-napi-async` requires `--threads`: its exports allocate on a libuv
+  // worker, so the module has to reference the thread-local arena as well. No
+  // sidecar's text depends on the flag -- only the IR's storage class does.
+  const asyncShim = emit(
+    asyncSrc,
+    ["--threads", "--emit-napi-async", sidecar("interop_async", "napi.c")],
+    "interop_async"
+  );
+  const asyncNoThreads = spawnSync(
+    "node",
+    [cli, asyncSrc, "-o", sidecar("interop_async_bad", "ll"), "--emit-napi-async", sidecar("interop_async_bad", "napi.c")],
+    { cwd: root }
+  );
+  check(
+    "--emit-napi-async without --threads is a usage error, not a silently non-thread-local arena",
+    asyncNoThreads.status === 2 &&
+      String(asyncNoThreads.stderr).includes("--emit-napi-async requires --threads") &&
+      !fs.existsSync(sidecar("interop_async_bad", "napi.c")),
+    String(asyncNoThreads.stderr)
+  );
+  check(
+    "--emit-napi-async writes its shim",
+    asyncShim.status === 0 && fs.existsSync(sidecar("interop_async", "napi.c")),
+    asyncShim.stderr
+  );
+  const shimAsync = fs.existsSync(sidecar("interop_async", "napi.c"))
+    ? fs.readFileSync(sidecar("interop_async", "napi.c"), "utf8")
+    : "";
+  const shimPlain = fs.existsSync(sidecar("interop_async_sync", "napi.c"))
+    ? fs.readFileSync(sidecar("interop_async_sync", "napi.c"), "utf8")
+    : "";
+  check(
+    "interop_async.napi.c registers spinAsync/digestAsync beside the synchronous exports and queues them on libuv",
+    shimAsync.includes('{"spin", nish_napi_spin},') &&
+      shimAsync.includes('{"spinAsync", nish_napi_async_spin},') &&
+      shimAsync.includes('{"digestAsync", nish_napi_async_digest},') &&
+      // A `void` result is the shape whose work item has no `result` field and
+      // whose completion callback boxes `undefined` without reading one.
+      shimAsync.includes('{"touchAsync", nish_napi_async_touch},') &&
+      shimAsync.includes("napi_get_undefined(env, &out) != napi_ok)") &&
+      shimAsync.includes("napi_create_promise(env, &nish_deferred, &nish_promise)") &&
+      shimAsync.includes("napi_create_async_work(env, NULL, nish_name, nish_napi_exec_spin, nish_napi_done_spin,") &&
+      shimAsync.includes("napi_queue_async_work(env, nish_w->work)") &&
+      shimAsync.includes("napi_resolve_deferred(env, nish_w->deferred, out)"),
+    shimAsync
+  );
+  check(
+    "the exec callback brackets the call with the worker's own arena mark/release and never touches env",
+    shimAsync.includes("static void nish_napi_exec_spin(napi_env env, void *data) {") &&
+      shimAsync.includes("(void)env; /* N-API forbids reaching the JS engine here") &&
+      shimAsync.includes("uint64_t nish_mark = nish_arena_mark();") &&
+      shimAsync.includes("nish_arena_release(nish_mark);"),
+    shimAsync
+  );
+  check(
+    "a bad argument to an asynchronous export rejects the promise instead of throwing",
+    shimAsync.includes(
+      'return nish_napi_reject(env, nish_deferred, nish_promise, "spinAsync: argument 1 (rounds) must be a number");'
+    ) && shimAsync.includes("static napi_value nish_napi_reject(napi_env env, napi_deferred deferred, napi_value promise,"),
+    shimAsync
+  );
+  check(
+    "the string and borrowed-array exports stay synchronous and the shim names the reason",
+    shimAsync.includes("-- no `labelAsync`: it returns string, which lives in the worker thread's arena") &&
+      shimAsync.includes("-- no `totalAsync`: parameter 1 (xs) is number[], which the call would borrow across threads") &&
+      !shimAsync.includes('{"labelAsync"') &&
+      !shimAsync.includes('{"totalAsync"'),
+    shimAsync
+  );
+  check(
+    "an asynchronous shim refuses to compile without the thread-local arena, rather than racing it",
+    shimAsync.includes("#if !defined(NISH_THREADS)") &&
+      shimAsync.includes(
+        '#error "--emit-napi-async needs the thread-local arena: build with scripts/build.sh --threads"'
+      ),
+    shimAsync
+  );
+  // The flag has to be inert: an addon adopts it one call site at a time, so
+  // --emit-napi keeps writing exactly the shim it wrote before A1 existed.
+  check(
+    "--emit-napi is unchanged by the flag existing: no promise, no async work, no NISH_THREADS guard",
+    asyncSync.status === 0 &&
+      shimPlain.length > 0 &&
+      !shimPlain.includes("napi_create_promise") &&
+      !shimPlain.includes("napi_create_async_work") &&
+      !shimPlain.includes("NISH_THREADS") &&
+      !shimPlain.includes("Async"),
+    shimPlain
+  );
+
+  if (!HAS_CLANG) {
+    skip("clang not found: the asynchronous N-API addon is not built or run");
+  } else if (!hasNodeHeaders) {
+    skip(`Node headers not found (${path.join(nodeInclude, "node_api.h")}): the asynchronous N-API addon is skipped`);
+  } else if (shimAsync.length === 0) {
+    check("interop_async.napi.c compiles and runs", false, "--emit-napi-async wrote no file");
+  } else {
+    const withThreads = spawnSync("clang", [
+      ...strictC,
+      `-I${nodeInclude}`,
+      "-DNISH_THREADS=1",
+      "-fsyntax-only",
+      sidecar("interop_async", "napi.c"),
+    ]);
+    check(
+      "interop_async.napi.c compiles under -std=c11 -Wall -Wextra -Werror with -DNISH_THREADS",
+      withThreads.status === 0,
+      String(withThreads.stderr)
+    );
+    // The guard is the whole defence against two threads bumping one arena, so
+    // it is checked by compiling, not only by reading the `#error` out of the text.
+    const noThreads = spawnSync("clang", [
+      ...strictC,
+      `-I${nodeInclude}`,
+      "-fsyntax-only",
+      sidecar("interop_async", "napi.c"),
+    ]);
+    check(
+      "the same file is rejected without -DNISH_THREADS, naming --threads",
+      noThreads.status !== 0 && String(noThreads.stderr).includes("build with scripts/build.sh --threads"),
+      String(noThreads.stderr)
+    );
+
+    const asyncAddon = path.join(interopDir, "interop_async.node");
+    const ab = spawnSync(
+      "bash",
+      [
+        "scripts/build.sh",
+        sidecar("interop_async", "ll"),
+        "runtime/runtime.c",
+        sidecar("interop_async", "napi.c"),
+        "-o",
+        asyncAddon,
+        "--profile",
+        "napi",
+        "--threads",
+      ],
+      { cwd: root }
+    );
+    check("napi profile builds interop_async.node with --threads", ab.status === 0, String(ab.stderr));
+    if (ab.status === 0) {
+      // 4000 rounds rather than the 20000 of the documented measurement: enough
+      // work that a blocked loop is unambiguous, little enough that the suite does
+      // not spend a second on it. The numbers in wp24-async.md 11c are the harness
+      // run by hand at the larger size.
+      const ax = spawnSync("node", ["examples/node-addon-async.mjs", asyncAddon, "20000"], { cwd: root });
+      const out = String(ax.stdout);
+      // `call <n> ms ... worst loop stall <n> ms`, for each call shape.
+      const timings = (label) => {
+        const m = out.match(
+          new RegExp(`${label}[^\\n]*call\\s+([0-9.]+) ms[^\\n]*worst loop stall\\s+([0-9.]+) ms`)
+        );
+        return m === null ? null : { call: Number(m[1]), stall: Number(m[2]) };
+      };
+      const syncRun = timings("sync spin\\(\\)");
+      const asyncRun = timings("async spinAsync\\(\\)");
+      check(
+        "node-addon-async.mjs: both call shapes agree, concurrent calls agree, and a bad argument rejects",
+        ax.status === 0 &&
+          out.includes("same answer from both: true") &&
+          out.includes("32 concurrent digestAsync calls agree with digest: true") &&
+          out.includes("touchAsync(1000) resolves to undefined") &&
+          out.includes('spinAsync("nope") rejects: spinAsync: argument 1 (rounds) must be a number'),
+        out + String(ax.stderr)
+      );
+      // The asynchronous call takes just as long; what changes is whether the loop
+      // is stalled for it. The claim is compared against each call's *own*
+      // duration rather than against a fixed number of milliseconds, so this
+      // stays a check about scheduling instead of a speed test on whatever
+      // machine it runs on: a slow box makes both numbers bigger together.
+      check(
+        "the synchronous call stalls the event loop for its whole duration and the asynchronous one does not",
+        syncRun !== null &&
+          asyncRun !== null &&
+          syncRun.stall > 0.5 * syncRun.call &&
+          asyncRun.stall < 0.25 * asyncRun.call,
+        `sync ${JSON.stringify(syncRun)}, async ${JSON.stringify(asyncRun)}\n${out}`
+      );
+    }
+  }
+
   // ---- WP17: a `Result` across the host boundary ----------------------------------
   // WP16 skipped every function whose signature mentioned a `Result` and left a note.
   // Now: --emit-header declares both C shapes (the packed word a small `Result` travels
@@ -4876,7 +5068,16 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   );
   // Every flag the driver accepts is listed: a wrapper that reads --help to
   // learn the surface must not be missing one.
-  const documented = ["--json", "--link", "--emit-header", "--emit-dts", "--emit-napi", "--target", "--profile"];
+  const documented = [
+    "--json",
+    "--link",
+    "--emit-header",
+    "--emit-dts",
+    "--emit-napi",
+    "--emit-napi-async",
+    "--target",
+    "--profile",
+  ];
   const undocumented = documented.filter((f) => !help.stdout.includes(f));
   check(
     `--help lists every advertised flag (${documented.length} checked)`,
