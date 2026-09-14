@@ -251,6 +251,22 @@ declare const Arena: {
   used(): i64;
 };
 
+/**
+ * `CPtr` (WP27 S2): the address a `declare function` hands back, opaque and
+ * eight bytes wide. `docs/LANGUAGE.md` has the rules — it may be written in a
+ * `declare function` signature and on a local, compared with `null` or with
+ * another `CPtr`, and passed back to C, and that is all.
+ *
+ * An empty interface with a private brand rather than `unknown` or a type
+ * alias: `tsc` has to refuse the arithmetic and the dereference `nish` refuses,
+ * and it has to refuse assigning any other value to one. The brand is what makes
+ * it nominal, so a `{}` does not satisfy it; the name is never written, so the
+ * declaration costs a reader nothing.
+ */
+declare interface CPtr {
+  readonly __nishForeignPointer: unique symbol;
+}
+
 // ---- What this file cannot say ----------------------------------------------
 //
 // The typed-array aliases (`Int32Array`, `Float32Array`, `Float64Array`,

@@ -865,6 +865,74 @@ attributes #2 = { nounwind willreturn }
 ```
 <!-- cookbook:end decl_ffi -->
 
+### `CPtr`: the pointer a C function hands back
+
+`CPtr` is an address C owns (WP27 S2). It is `i8*` and eight bytes wide, and
+that is the whole of what this compiler knows about it: not arena memory, not a
+`%struct`, not a `nish_str`. So it gets none of the facts a pointer this
+compiler laid out would — no `dereferenceable`, no `align`, no `nonnull` — and
+it may not be dereferenced, indexed, or added to.
+
+`null` arrives **only from a foreign call**: a `declare function` may *return*
+`CPtr | null` and may not *take* one, so a pointer is narrowed with `!== null`
+before it goes back to C. The narrowed `if.end` block below is what that rule
+buys — `free` is reached with a value the program has proved is not null.
+
+The arena is untouched by any of it, and that is the soundness argument rather
+than a happy accident: no pointer this compiler allocated crosses the boundary
+in either direction, so there is nothing for C to have captured when the scope
+releases.
+
+<!-- cookbook:begin decl_ffi_pointer -->
+```ts
+declare function calloc(count: u64, size: u64): CPtr | null;
+declare function free(block: CPtr): void;
+
+export const main = (): i32 => {
+  const block = calloc(4, 16);
+  if (block === null) {
+    return 1;
+  }
+  free(block);
+  return 0;
+};
+```
+
+```llvm
+declare i8* @calloc(i64, i64)
+declare void @free(i8*)
+declare void @nish_free_arena() #1
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %block.addr = alloca i8*, align 8
+  %0 = call i8* @calloc(i64 4, i64 16)
+  store i8* %0, i8** %block.addr, align 8
+  %1 = load i8*, i8** %block.addr, align 8
+  %2 = icmp eq i8* %1, null
+  br i1 %2, label %if.then, label %if.end
+
+if.then:
+  ret i32 1
+
+if.end:
+  %3 = load i8*, i8** %block.addr, align 8
+  call void @free(i8* %3)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+```
+<!-- cookbook:end decl_ffi_pointer -->
+
 ### Numeric `enum`
 
 An enum is a **distinct type with `i32` representation**, so the type system

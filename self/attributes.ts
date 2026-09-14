@@ -673,6 +673,17 @@ function pointerAlign(program: CheckedProgram, table: TypeTable, type: i32): i32
  * nothing for the fixpoint to say about it.
  */
 function isPointerParam(table: TypeTable, type: i32): boolean {
+  // An **allow-list**, and WP27 S2 is why that matters rather than being a
+  // stylistic preference. Every fact this predicate opens the door to —
+  // `dereferenceable`, `nonnull`, `align`, `nocapture`, `readonly` — is a claim
+  // about memory *this compiler laid out*: it knows the struct's size because
+  // it chose it, and the alignment because it emitted it. A `CPtr` is an
+  // address a C function owns, of unknown size, alignment and lifetime, and not
+  // one of those attributes could be justified for it. Because the answer below
+  // names what is allowed rather than what is not, `T_CPTR` falls out of it by
+  // construction; if it named exclusions instead, the next pointer-shaped type
+  // would be admitted by a case nobody remembered to write, and a wrong
+  // attribute is undefined behaviour rather than a missed optimisation.
   const inner = table.stripNull(type);
   if (table.isResult(inner)) {
     return !table.resultByValue(inner);

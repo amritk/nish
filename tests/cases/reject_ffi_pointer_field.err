@@ -1,0 +1,1 @@
+`CPtr` cannot be a field: a foreign pointer may only appear in a `declare function` signature or on a local bound to one
