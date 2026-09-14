@@ -119,10 +119,10 @@ export const FLAG_READONLY: i32 = 4;
 // but does not define (WP27 S1). The body child is the empty node, because a
 // foreign declaration has no body and the child positions are fixed.
 export const FLAG_FOREIGN: i32 = 8;
-// `flags` on N_FIELD and N_METHOD: bits 4, 5 and 6 record three member headers
-// the language refuses — `x?: T`, `x!: T` and `static`. They are *parsed* and
-// flagged rather than turned down where they are written, which is the
-// exception to the habit in `.claude/selfhost.md` ("refuse in the phase that
+// `flags` on N_FIELD, N_METHOD and N_CONSTRUCTOR: bits 4, 5 and 6 record three
+// member headers the language refuses — `x?: T`, `x!: T` and `static`. They are
+// *parsed* and flagged rather than turned down where they are written, which is
+// the exception to the habit in `.claude/selfhost.md` ("refuse in the phase that
 // owns the rule") and is the point: the rule belongs to the checker, because
 // only the checker knows whether this is a field or a method and which class
 // it is in, and stage0's sentence names all three. Refusing them in the parser
@@ -131,6 +131,14 @@ export const FLAG_FOREIGN: i32 = 8;
 export const FLAG_OPTIONAL: i32 = 16;
 export const FLAG_DEFINITE: i32 = 32;
 export const FLAG_STATIC: i32 = 64;
+// Bit 7 is the one piece of *order* the checker needs: set when `static` was
+// written before `readonly`, and meaningless unless both are present. stage0
+// walks a member's modifier list in source order and reports the first one that
+// member cannot carry, and a method can carry neither — so `static readonly m()`
+// is stage0's `static` sentence and `readonly static m()` its `readonly` one,
+// from the same two bits. A field carries `readonly` legitimately, so only a
+// method and a constructor read this.
+export const FLAG_STATIC_FIRST: i32 = 128;
 
 /**
  * One node of the tree. Every field is meaningful for some kinds and ignored

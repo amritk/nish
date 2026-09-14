@@ -34,6 +34,7 @@ import {
   FLAG_PREFIX,
   FLAG_READONLY,
   FLAG_STATIC,
+  FLAG_STATIC_FIRST,
   N_ARRAY,
   N_BIGINT,
   N_BINARY,
@@ -759,6 +760,20 @@ export class Parser {
    * letting the two compilers say the same thing
    * (docs/wp19-stage0-retirement.md R3).
    *
+   * **What that move costs, deliberately.** A rule the checker owns is a rule a
+   * member has to *parse* to reach, and four shapes do not: `static x;` (no
+   * annotation), `static m(): i32;` (no body), `static m() { }` (no return
+   * type) and `static { }` (a static block). Each used to hear `static` from
+   * this function and now hears the syntax error about its other defect
+   * instead, while stage0 names the static member. Both compilers still refuse
+   * the program, and the difference is §A3's declared class — stage1's first
+   * diagnostic is a syntax error — which `--parity` declares and
+   * `tests/self/reject_oracle.js` counts rather than fails
+   * (`tests/cases/reject_cls_static_field_untyped`,
+   * `reject_cls_static_block`). Keeping a copy of the rule here would put the
+   * sentence back, uncoded and in a phase that cannot name the member, which
+   * is the duplication this change exists to remove.
+   *
    * A word is a modifier only while the token after it is not the start of
    * what a member's *name* is followed by, because `static` is a name as well
    * as a modifier: `static: i32` and `static(): i32` are a field and a method
@@ -771,8 +786,12 @@ export class Parser {
     while (this.at(TOK_IDENT) && !this.startsMemberName()) {
       const word = this.value;
       if (word === "readonly") flags = flags | FLAG_READONLY;
-      else if (word === "static") flags = flags | FLAG_STATIC;
-      else if (word !== "public" && word !== "private" && word !== "protected") return flags;
+      else if (word === "static") {
+        // `static` before `readonly` is the one ordering the checker needs; see
+        // FLAG_STATIC_FIRST in `self/nodes.ts`.
+        if ((flags & FLAG_READONLY) === 0) flags = flags | FLAG_STATIC_FIRST;
+        flags = flags | FLAG_STATIC;
+      } else if (word !== "public" && word !== "private" && word !== "protected") return flags;
       this.advance();
     }
     return flags;
