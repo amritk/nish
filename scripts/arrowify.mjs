@@ -273,7 +273,7 @@ export const rewrite = (text, fileName, { concise = false } = {}) => {
 const usage = `usage: node scripts/arrowify.mjs [--check|--stdout] [--concise] <file.ts>...
 
   --check    report what would change and what was skipped; exit 1 if anything would
-  --stdout   print the rewrite of a single file instead of writing it
+  --stdout   print the rewrite of a single file instead of writing it (one file only)
   --concise  also collapse a body that is one \`return expr;\` into \`=> expr\`
 `;
 
@@ -303,6 +303,15 @@ const main = (argv) => {
   }
   if (files.length === 0) {
     process.stderr.write(usage);
+    return 2;
+  }
+  // `--stdout` is one file's rewrite on one stream. Handed several it used to
+  // concatenate them — a thousand lines of two modules run together, exit 0 —
+  // which is not a file anybody can redirect anywhere and is a way to truncate
+  // one by accident, the mistake `--stdout` was widened to avoid in the first
+  // place.
+  if (flags.has("--stdout") && files.length > 1) {
+    process.stderr.write(`arrowify: --stdout prints one file; ${files.length} were named\n${usage}`);
     return 2;
   }
   const concise = flags.has("--concise");

@@ -6096,19 +6096,23 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
 
   // WP22 §9: `declare function` defines nothing, so it is not a competing spelling and
   // the codemod may not reach for it -- the arrow form would need a function type, which
-  // Phase 0 forbids. `ffi_scalar` is the case that has both in one file. Both halves are
-  // derived from the source rather than written down here, so this asks the question of
-  // whatever that case says today rather than of the version it said it when this was
-  // written (it is WP27's file, and WP27 is still adding to it).
+  // Phase 0 forbids. `ffi_scalar` is the case that has both in one file, and every
+  // number here is counted off that file rather than written down, including how many
+  // definitions it has: stage C converts `tests/cases/` next, so a check that required
+  // this case to still contain a `function` would go red on the migration it exists to
+  // enable. What must hold either way is that the ambient lines survive verbatim, that
+  // exactly the definitions present were rewritten, and that none is left behind.
   const ffiSource = fs.readFileSync(path.join(casesDir, "ffi_scalar.ts"), "utf8");
   const ambient = ffiSource.split("\n").filter((l) => l.startsWith("declare function "));
+  const before22 = ffiSource.split("\n").filter((l) => /^(export )?function /.test(l));
   const ffi = arrowify(ffiSource, "ffi_scalar.ts");
   const kept = ambient.every((line) => ffi.text.includes(line));
   const definitions = ffi.text.split("\n").filter((l) => /^(export )?function /.test(l));
   check(
     "WP22 §9: the codemod leaves `declare function` alone and rewrites the definitions beside it",
-    ambient.length > 0 && kept && ffi.changed > 0 && definitions.length === 0,
-    `${ambient.length} ambient (${kept ? "kept" : "LOST"}), ${ffi.changed} rewritten, ${definitions.length} left`
+    ambient.length > 0 && kept && ffi.changed === before22.length && definitions.length === 0,
+    `${ambient.length} ambient (${kept ? "kept" : "LOST"}), ${ffi.changed} rewritten of ` +
+      `${before22.length} definition(s), ${definitions.length} left`
   );
 
   // The three forms with no arrow spelling at all. Each is a `reject_*` case, and each
@@ -6195,18 +6199,39 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   // a recipe whose whole point is which pass ran.
   const cli22 = (...args) =>
     spawnSync("node", [path.join(root, "scripts", "arrowify.mjs"), ...args], { cwd: root, encoding: "utf8" }).status;
-  // A copy, never a corpus file: the flag these ask about is one an unfixed codemod
-  // *ignores*, and an ignored flag means the run rewrites whatever it was handed. This
-  // check writing over a golden case on the way to failing is precisely the accident it
-  // exists to make impossible.
+  // The fixture is written here rather than copied from `tests/cases/`, for two
+  // reasons. The flag these ask about is one an unfixed codemod *ignores*, and an
+  // ignored flag means the run rewrites whatever it was handed, so pointing it at a
+  // golden case would overwrite one on the way to failing. And `--check` answers 1
+  // only while something is left to rewrite: stage C converts `tests/cases/` next, so
+  // a corpus file as the subject would take this check red exactly when the migration
+  // succeeds.
   const oneFunction = path.join(buildDir, "arrow-flags.ts");
-  fs.writeFileSync(oneFunction, fs.readFileSync(path.join(casesDir, "add.ts")));
+  fs.writeFileSync(oneFunction, "export function twice(n: i32): i32 {\n  return n * 2;\n}\n");
   check(
     "WP22: the codemod refuses a flag it does not have, and a pair of flags it cannot answer both of",
     cli22("--consise", oneFunction) === 2 &&
       cli22("--check", "--stdout", oneFunction) === 2 &&
+      cli22("--stdout", oneFunction, oneFunction) === 2 &&
       cli22("--check", oneFunction) === 1,
-    "expected 2, 2 and 1"
+    "expected 2, 2, 2 and 1"
+  );
+
+  // The verifier answers for its own flags the same way, and for the same reason: a
+  // `--debg` that silently drops `-g`, or a `--rev=HEAD~1` that silently compares
+  // against HEAD, is a sweep reporting on something other than what it was asked about.
+  // These stop before any compiling, so they cost three process starts.
+  const verify22 = (...args) =>
+    spawnSync("node", [path.join(root, "scripts", "arrow-verify.mjs"), ...args], {
+      cwd: root,
+      encoding: "utf8",
+    }).status;
+  check(
+    "WP22: the verifier refuses a flag it does not have, and a `--rev` without a revision",
+    verify22("--debg", "tests/parser") === 2 &&
+      verify22("--applied", "--rev", "--verbose", "tests/parser") === 2 &&
+      verify22("--help") === 0,
+    "expected 2, 2 and 0"
   );
 
   // WP22 §9 keeps `declare function` legal because it defines nothing. A body-less
