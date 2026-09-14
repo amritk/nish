@@ -1524,10 +1524,10 @@ function inlineElementStruct(program: CheckedProgram, table: TypeTable, elem: i3
   pointer program: size=344 writesThrough=false captured=false passedTo=CheckedProgram.struct#0
   pointer table: size=56 writesThrough=false captured=false passedTo=TypeTable.isStruct#0 TypeTable.nameOf#0
   stackSites=0 stackLocals=0
-  callee 839:8 TypeTable.isStruct -> @TypeTable.isStruct
-  local 842:9 info: StructInfo | null (const)
-  callee 842:16 CheckedProgram.struct -> @CheckedProgram.struct
-  callee 842:31 TypeTable.nameOf -> @TypeTable.nameOf
+  callee 846:8 TypeTable.isStruct -> @TypeTable.isStruct
+  local 849:9 info: StructInfo | null (const)
+  callee 849:16 CheckedProgram.struct -> @CheckedProgram.struct
+  callee 849:31 TypeTable.nameOf -> @TypeTable.nameOf
 function elementStride(program: CheckedProgram, table: TypeTable, elem: i32): i32 -> @elementStride [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: elem
@@ -1535,9 +1535,9 @@ function elementStride(program: CheckedProgram, table: TypeTable, elem: i32): i3
   pointer program: size=344 writesThrough=false captured=false passedTo=inlineElementStruct#0
   pointer table: size=56 writesThrough=false captured=false passedTo=inlineElementStruct#1 TypeTable.alignOf#0
   stackSites=0 stackLocals=0
-  local 851:9 info: StructInfo | null (const)
-  callee 851:16 inlineElementStruct -> @inlineElementStruct
-  callee 852:26 TypeTable.alignOf -> @TypeTable.alignOf
+  local 858:9 info: StructInfo | null (const)
+  callee 858:16 inlineElementStruct -> @inlineElementStruct
+  callee 859:26 TypeTable.alignOf -> @TypeTable.alignOf
 function elementAlignOf(program: CheckedProgram, table: TypeTable, elem: i32): i32 -> @elementAlignOf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false
   escaping: elem
@@ -1545,9 +1545,9 @@ function elementAlignOf(program: CheckedProgram, table: TypeTable, elem: i32): i
   pointer program: size=344 writesThrough=false captured=false passedTo=inlineElementStruct#0
   pointer table: size=56 writesThrough=false captured=false passedTo=inlineElementStruct#1 TypeTable.alignOf#0
   stackSites=0 stackLocals=0
-  local 857:9 info: StructInfo | null (const)
-  callee 857:16 inlineElementStruct -> @inlineElementStruct
-  callee 858:26 TypeTable.alignOf -> @TypeTable.alignOf
+  local 864:9 info: StructInfo | null (const)
+  callee 864:16 inlineElementStruct -> @inlineElementStruct
+  callee 865:26 TypeTable.alignOf -> @TypeTable.alignOf
 function elementLLVMType(program: CheckedProgram, table: TypeTable, elem: i32): string -> @elementLLVMType [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false
   escaping: elem
@@ -1555,9 +1555,9 @@ function elementLLVMType(program: CheckedProgram, table: TypeTable, elem: i32): 
   pointer program: size=344 writesThrough=false captured=false passedTo=inlineElementStruct#0
   pointer table: size=56 writesThrough=false captured=false passedTo=inlineElementStruct#1 TypeTable.llvmType#0
   stackSites=0 stackLocals=0
-  local 863:9 info: StructInfo | null (const)
-  callee 863:16 inlineElementStruct -> @inlineElementStruct
-  callee 864:26 TypeTable.llvmType -> @TypeTable.llvmType
+  local 870:9 info: StructInfo | null (const)
+  callee 870:16 inlineElementStruct -> @inlineElementStruct
+  callee 871:26 TypeTable.llvmType -> @TypeTable.llvmType
 module self/nish_modules.ts
 import BUILTIN_SCHEME from "./branding" -> const BUILTIN_SCHEME
 struct BuiltinExport (class) size=32 align=8 exported
