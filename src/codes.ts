@@ -137,6 +137,8 @@ const RULES: string[] = [
     "NL2270",
     "`; check the nullable side against `null` first, then compare the narrowed values",
     "NL2114",
+    ": --emit-napi-async requires --threads (its exports allocate on a worker thread)",
+    "NL3012",
     "` is not supported; a module has no top-level code, so only `const` is available",
     "NL2084",
     "Operator `+` requires two operands of the same numeric type or two strings, got ",
@@ -338,7 +340,7 @@ const RULES: string[] = [
     "; use `obj.name` (no dynamic property lookup)",
     "NL1009",
     "` directory above the importing module has it",
-    "NL3013",
+    "NL3014",
     "` is already declared as a class or interface",
     "NL2074",
     "` takes no type argument (it is an alias of `",
@@ -386,7 +388,7 @@ const RULES: string[] = [
     " (object layout is fixed at compile time)",
     "NL1007",
     " entry point: its `exports` declares no `",
-    "NL3012",
+    "NL3013",
     "` in a constant requires boolean operands",
     "NL2069",
     "` is a builtin value and cannot be called",
@@ -850,7 +852,7 @@ const PERFORMANCE_RULES: string[] = [
 ];
 
 /** Number of rules that carry a code; `tests/run.js` reports it. */
-export const RULE_COUNT = 396;
+export const RULE_COUNT = 397;
 
 /**
  * The code for one diagnostic. `kind` is the word in the summary line

@@ -72,6 +72,13 @@ export class Options {
   emitDts: string;
   emitNapi: string;
   /**
+   * WP24 A1: the same shim with the asynchronous exports added. A separate
+   * output rather than a modifier on `emitNapi`, so that one build can write
+   * both and a host can diff them -- and so the flag has nothing to say when
+   * it is absent, which is what keeps an existing shim byte-identical.
+   */
+  emitNapiAsync: string;
+  /**
    * The directory holding `scripts/`, `runtime/` and `std/`, as the driver
    * worked it out from `argv[0]`. It is here rather than derived where it is
    * needed because `process.argv` is legal only in a program that has an entry
@@ -96,6 +103,7 @@ export class Options {
     this.emitHeader = "";
     this.emitDts = "";
     this.emitNapi = "";
+    this.emitNapiAsync = "";
     this.packageRoot = "";
   }
 }

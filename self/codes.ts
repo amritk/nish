@@ -45,7 +45,7 @@ export const TOOLCHAIN: string = "NL0002";
 export const INTERNAL: string = "NL0003";
 
 /** Number of rules that carry a code; `tests/run.js` checks it against stage0's. */
-export const RULE_COUNT: i32 = 396;
+export const RULE_COUNT: i32 = 397;
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -141,6 +141,8 @@ export function diagnosticRules(): string[] {
     "NL2270",
     "`; check the nullable side against `null` first, then compare the narrowed values",
     "NL2114",
+    ": --emit-napi-async requires --threads (its exports allocate on a worker thread)",
+    "NL3012",
     "` is not supported; a module has no top-level code, so only `const` is available",
     "NL2084",
     "Operator `+` requires two operands of the same numeric type or two strings, got ",
@@ -342,7 +344,7 @@ export function diagnosticRules(): string[] {
     "; use `obj.name` (no dynamic property lookup)",
     "NL1009",
     "` directory above the importing module has it",
-    "NL3013",
+    "NL3014",
     "` is already declared as a class or interface",
     "NL2074",
     "` takes no type argument (it is an alias of `",
@@ -390,7 +392,7 @@ export function diagnosticRules(): string[] {
     " (object layout is fixed at compile time)",
     "NL1007",
     " entry point: its `exports` declares no `",
-    "NL3012",
+    "NL3013",
     "` in a constant requires boolean operands",
     "NL2069",
     "` is a builtin value and cannot be called",

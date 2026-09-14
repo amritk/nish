@@ -62,7 +62,7 @@ import { codeFor, TOOLCHAIN } from "./codes";
 import { resolveTarget, supportedTargets } from "./target";
 
 const USAGE: string =
-  "usage: compile <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>]\n       compile -v, --version | -h, --help";
+  "usage: compile <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--profile speed|size|debug|wasi] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>]\n       compile -v, --version | -h, --help";
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -339,6 +339,13 @@ export function main(): number {
         return 2;
       }
       opts.emitNapi = process.argv[arg];
+    } else if (value === "--emit-napi-async") {
+      arg = arg + 1;
+      if (arg >= process.argv.length) {
+        console.error("compile: --emit-napi-async needs a file");
+        return 2;
+      }
+      opts.emitNapiAsync = process.argv[arg];
     } else if (value === "--plain") {
       opts.optimizeAttributes = false;
     } else if (value === "--strict-exports") {
@@ -393,6 +400,18 @@ export function main(): number {
   }
   if (roots.length === 0) {
     console.error(USAGE);
+    return 2;
+  }
+  // WP24 A1: an asynchronous export allocates on a libuv worker while the JS
+  // thread keeps going, so the arena has to be thread-local on both sides --
+  // and its storage class is decided per module, not only in the runtime. A
+  // module compiled without `--threads` reads `@nish_arena` as a plain global
+  // when it allocates inline, which neither the shim's own `#error` nor the
+  // link can see: a non-TLS reference against the runtime's `_Thread_local`
+  // definition links without complaint in the `-shared -fPIC` napi build. So
+  // it is refused where both facts are known, rather than turned on silently.
+  if (opts.emitNapiAsync.length > 0 && !opts.threads) {
+    console.error(`compile: --emit-napi-async requires --threads (its exports allocate on a worker thread)`);
     return 2;
   }
 
@@ -602,7 +621,12 @@ function linkProgram(
  */
 function writeSidecars(compilation: Compilation): boolean {
   const opts = compilation.opts;
-  if (opts.emitHeader.length === 0 && opts.emitDts.length === 0 && opts.emitNapi.length === 0) {
+  if (
+    opts.emitHeader.length === 0 &&
+    opts.emitDts.length === 0 &&
+    opts.emitNapi.length === 0 &&
+    opts.emitNapiAsync.length === 0
+  ) {
     return true;
   }
   const fns = externalFunctions(compilation);
@@ -627,8 +651,15 @@ function writeSidecars(compilation: Compilation): boolean {
     if (!makeDirectoryFor(opts.emitNapi)) {
       return false;
     }
-    writeFileSync(opts.emitNapi, generateNapiShim(compilation, fns));
+    writeFileSync(opts.emitNapi, generateNapiShim(compilation, fns, false));
     console.error(`wrote ${opts.emitNapi}`);
+  }
+  if (opts.emitNapiAsync.length > 0) {
+    if (!makeDirectoryFor(opts.emitNapiAsync)) {
+      return false;
+    }
+    writeFileSync(opts.emitNapiAsync, generateNapiShim(compilation, fns, true));
+    console.error(`wrote ${opts.emitNapiAsync}`);
   }
   return true;
 }
