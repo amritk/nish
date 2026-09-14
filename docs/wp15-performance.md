@@ -433,14 +433,16 @@ x86-64, Ubuntu clang 18.1.3 (LLVM 18), four cores carrying several agents' test
 suites at once — a load average around 25 — which is why the measure is **CPU
 time (user + sys)** and not wall time, for the reason §2 gives. Min of 15 after
 3 warm-ups, `--profile speed`, 8192 doubles and 150,000 passes in every row.
-Each variant is linked with
+Each variant is compiled and linked with
 
 ```bash
-scripts/build.sh <module>.ll runtime/runtime.c -o <bin> --profile speed
+node dist/index.js <prog>.ts -o <prog>.ll --profile speed
+# ... edit the .ll for the stripped and the marked rows ...
+scripts/build.sh <prog>.ll runtime/runtime.c -o <bin> --profile speed
 ```
 
-which `cmp` says produces the same bytes as the compiler's own `--link`, so the
-hand-edited `.ll` builds and the compiler's own are comparable. Every program is
+and the second line `cmp`s equal to what the compiler's own `--link` writes, so
+the hand-edited `.ll` builds and the compiler's own are comparable. Every program is
 given in full, because a number whose program is not named cannot be audited and
 §1 says faster means measured.
 
@@ -612,8 +614,12 @@ The field shape is not a synthetic one. `knownAtMost` in
 [`self/bounds.ts`](../self/bounds.ts) is it, verbatim — a `while` over
 `state.atMostIndex.length` reading `state.atMostIndex[k]` and
 `state.atMostHolder[k]` — and it is the ordinary way to write a loop in a
-compiler whose state is a class. Compile `self/` with stage0 and run `opt -O2`
-over `bounds.ll`:
+compiler whose state is a class.
+
+```bash
+node dist/index.js self/compile.ts -o build/selfir/ --profile speed
+opt -O2 -S -mtriple=x86_64-unknown-linux-gnu build/selfir/bounds.ll
+```
 
 ```llvm
 bounds.ok:
