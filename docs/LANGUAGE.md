@@ -321,7 +321,7 @@ the IR; only a computed count costs the mask
 ### Nullable types
 
 `T | null` is available for `T` a class, interface, array, or string
-(`tests/cases/mem_nullable`; [wp6-memory.md](wp6-memory.md#4-t-null)). It
+(`tests/cases/mem_nullable`; [wp6-memory.md](wp6-memory.md#4-t--null)). It
 is the same LLVM pointer type as `T` with the constant `null` as one more
 value, so nothing is boxed; `null` takes its type from context.
 

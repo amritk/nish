@@ -5670,6 +5670,176 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
   }
 }
 
+// ---- WP19: the seed-target contract --------------------------------------------------
+// `.github/seed-targets.json` is the one place a seed asset is spelled. release.yml
+// attaches `nish-<version>-<asset>.tar.gz`, and ci.yml's `seeds` job looks for exactly
+// that name before it gives a platform a `bootstrap` row, so both read the file instead
+// of each writing the spelling out: a contract written down twice is two strings that
+// agree until one of them is edited.
+//
+// Two things can rot in that file without breaking a build -- a `triple` the compiler
+// cannot target, and an `asset` that has stopped being that triple's short spelling --
+// and one thing can rot in the job it feeds, which is worse: reporting success for a
+// freeze it did not check, or red for a state in which nothing is wrong. §A5 of
+// wp19-stage0-retirement.md is what the first of those costs, and both have now happened
+// here, which is why `.github/seed-matrix.sh` is *run* below rather than read.
+if (!only || "seed-targets".includes(only) || "wp19".includes(only)) {
+  const seedTargets = JSON.parse(fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8"));
+  const { resolveTarget } = await import(pathToFileURL(path.join(root, "dist", "codegen", "target.js")).href);
+  const rows = seedTargets.targets;
+  const attached = rows.filter((t) => t.attached);
+  check("seed targets: the file lists targets", Array.isArray(rows) && rows.length > 0);
+
+  // The canonical spelling, `x86_64-unknown-linux-gnu` rather than one of its aliases:
+  // the asset name is derived from it below, and two spellings of one triple would
+  // derive two names for one binary.
+  const uncanonical = rows.filter((t) => resolveTarget(t.triple)?.triple !== t.triple);
+  check(
+    `seed targets: every triple is one src/codegen/target.ts calls canonical (${rows.length}: ${rows.map((t) => t.asset).join(", ")})`,
+    uncanonical.length === 0,
+    uncanonical.map((t) => `${t.asset}: ${t.triple}`).join("\n")
+  );
+
+  // The asset name is the triple with the vendor and the ABI dropped, and that is the
+  // whole of the rule: x86_64-unknown-linux-gnu -> x86_64-linux, aarch64-apple-darwin ->
+  // aarch64-darwin. A derivation rather than a second list is what keeps the tarball
+  // names and the compiler's targets one set of platforms instead of two -- two of the
+  // four asset names were once written down as triples the compiler accepts, and
+  // `aarch64-darwin` and `x86_64-darwin` are not spellings it has ever accepted.
+  const derive = (triple) => {
+    const part = triple.split("-");
+    return `${part[0]}-${part[2]}`;
+  };
+  const misnamed = rows.filter((t) => t.asset !== derive(t.triple));
+  check(
+    "seed targets: every asset name is its triple without the vendor or the ABI",
+    misnamed.length === 0,
+    misnamed.map((t) => `${t.asset} != ${derive(t.triple)} (from ${t.triple})`).join("\n")
+  );
+
+  check(
+    `seed targets: at least one target is attached, or nothing checks the rolling freeze at all (${attached.map((t) => t.asset).join(", ") || "none"})`,
+    attached.length > 0
+  );
+
+  // release.yml reads the spelling; it must not also state it. The failure this guards
+  // against is the ordinary one -- a name edited on one side of the contract -- and it
+  // looks exactly like the line that used to be there.
+  const releaseYml = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8");
+  const spelled = rows.filter((t) => releaseYml.includes(`nish-$version-${t.asset}`));
+  check(
+    "seed targets: release.yml names its asset from the file rather than spelling one",
+    releaseYml.includes("seed-targets.json") && spelled.length === 0,
+    spelled.map((t) => t.asset).join(", ")
+  );
+
+  // `.github/seed-matrix.sh` decides which platforms get a bootstrap row, driven by a
+  // stand-in for the GitHub CLI so all four of its states can be asked for here. The
+  // states are not interchangeable: a seed that should exist and does not is a broken
+  // gate, a seed that cannot exist yet is a platform with no row, and no release at all
+  // is every platform in that second state at once -- which may not be red, because
+  // release.yml's release job is `needs: ci` and the first release is what would supply
+  // the seed.
+  //
+  // The script reads the JSON with `jq`, which the runner images ship and a
+  // workstation may not, so the five runs below skip rather than fail without
+  // it -- the same rule the rest of this suite follows for a tool it cannot
+  // install. The checks above are Node's own and always run.
+  const seedDir = path.join(buildDir, "wp19-seed-matrix");
+  fs.rmSync(seedDir, { recursive: true, force: true });
+  fs.mkdirSync(path.join(seedDir, "bin"), { recursive: true });
+  const ghStub = path.join(seedDir, "bin", "gh");
+  fs.writeFileSync(
+    ghStub,
+    '#!/usr/bin/env bash\n# Stand-in for `gh`, answering from FAKE_TAG / FAKE_ASSETS.\ncase "$2" in\n' +
+      "  list) printf '%s\\n' \"$FAKE_TAG\" ;;\n" +
+      "  view) [ -n \"$FAKE_ASSETS\" ] && printf '%s\\n' $FAKE_ASSETS ;;\n" +
+      "esac\nexit 0\n"
+  );
+  fs.chmodSync(ghStub, 0o755);
+  const seedMatrix = (tag, assets) => {
+    const outFile = path.join(seedDir, "output");
+    fs.writeFileSync(outFile, "");
+    const r = spawnSync("bash", [path.join(root, ".github", "seed-matrix.sh")], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${path.join(seedDir, "bin")}${path.delimiter}${process.env.PATH}`,
+        FAKE_TAG: tag,
+        FAKE_ASSETS: assets,
+        GITHUB_OUTPUT: outFile,
+        GITHUB_STEP_SUMMARY: "",
+      },
+    });
+    const written = fs.readFileSync(outFile, "utf8");
+    const rowsLine = /^rows=(.*)$/m.exec(written);
+    return { ...r, rows: rowsLine ? JSON.parse(rowsLine[1]) : undefined };
+  };
+
+  const seedAsset = attached[0].asset;
+  const unattached = rows.find((t) => !t.attached && t.triple.includes("darwin"));
+  if (!has("jq")) {
+    skip("seed matrix: jq is not installed, so .github/seed-matrix.sh was not run (its states are unchecked here)");
+  } else {
+    const carried = seedMatrix("v9.9.9", `nish-9.9.9.tgz nish-9.9.9-${seedAsset}.tar.gz`);
+    check(
+      `seed matrix: a release carrying ${seedAsset} gives that platform a bootstrap row`,
+      carried.status === 0 &&
+        carried.rows?.length === 1 &&
+        carried.rows[0].asset === seedAsset &&
+        carried.rows[0].tag === "v9.9.9" &&
+        carried.rows[0].tarball === `nish-9.9.9-${seedAsset}.tar.gz` &&
+        carried.rows[0].runner === attached[0].runner,
+      carried.stdout + carried.stderr
+    );
+
+    // The negative, and half the reason this block exists: the seed a release is supposed
+    // to attach is missing. That is a platform that COULD have checked the freeze and did
+    // not, so it is red -- red here, and red for the release workflow that runs this one
+    // through `needs: ci`. A warning here would be a green check standing for a gate
+    // nobody ran.
+    const dropped = seedMatrix("v9.9.9", "nish-9.9.9.tgz");
+    check(
+      `seed matrix: a release that attaches no ${seedAsset} seed FAILS rather than warns`,
+      dropped.status === 1 && dropped.stdout.includes("::error::"),
+      `exit ${dropped.status}\n${dropped.stdout}${dropped.stderr}`
+    );
+
+    // A release that carries no seed for a platform nothing builds one for is the other
+    // absence, and it is not that one: it is expected, it gets no row, and it is green.
+    const notYet = seedMatrix("v9.9.9", `nish-9.9.9-${seedAsset}.tar.gz`);
+    check(
+      `seed matrix: no ${unattached.asset} seed is a platform with no row rather than a failure`,
+      notYet.status === 0 && notYet.rows?.length === 1 && !notYet.rows.some((r) => r.asset === unattached.asset),
+      `exit ${notYet.status}\n${notYet.stdout}${notYet.stderr}`
+    );
+
+    // And no release at all: nothing could have been checked anywhere, so there is no row,
+    // no failure, and no green check claiming otherwise. This is the state before 0.1.0
+    // and in every fork, and making it red is how a release train deadlocks.
+    const none = seedMatrix("", "");
+    check(
+      "seed matrix: before the first release there is no seed, no row and no failure",
+      none.status === 0 && none.rows?.length === 0 && none.stdout.includes("::notice::"),
+      `exit ${none.status}\n${none.stdout}${none.stderr}`
+    );
+
+    // And the claim ci.yml makes about the day WP19 G5 attaches a darwin binary: the row
+    // appears with no edit to the workflow. It is checked rather than asserted in a
+    // comment, because the last comment that said this was not true.
+    const future = seedMatrix("v9.9.9", `nish-9.9.9-${seedAsset}.tar.gz nish-9.9.9-${unattached.asset}.tar.gz`);
+    check(
+      `seed matrix: a seed for ${unattached.asset} gives it a row with no edit to ci.yml`,
+      future.status === 0 &&
+        future.rows?.length === 2 &&
+        future.rows[1].asset === unattached.asset &&
+        future.rows[1].runner === unattached.runner,
+      future.stdout + future.stderr
+    );
+  }
+}
+
 // ---- WP12: changelog ----------------------------------------------------------------
 // The release notes are generated from the commits, so what the generator keeps and what
 // it drops is a released artifact rather than a convenience. Driven against a throwaway
