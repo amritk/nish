@@ -1,7 +1,7 @@
 // WP15 §8: `--no-strict-exports` keeps a function this module does not export
 // an external symbol, so the whole-program passes must assume callers they
 // cannot see. Reported at the call, and only inside a loop, which is where it
-// costs something: measured 4% slower and 240 bytes larger on `bench/sieve`.
+// costs something: measured 240 bytes on `bench/sieve`, and no time at all.
 // The flag is in `.args`, so the default build of this file says nothing.
 const step = (n: i32): i32 => n * 2 + 1;
 
