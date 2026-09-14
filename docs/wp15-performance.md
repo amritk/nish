@@ -544,14 +544,25 @@ field load, then `len` and `data` through it — where the parameter shape carri
 none. The per-iteration `h.xs` is where it starts: nothing in the IR says an
 element store cannot reach a class field, so the field is re-read, and `len` and
 `data` are re-read through it. §2b left struct fields out of the domains for
-want of a measurement, and this is that measurement — but widening the domains
-is *not* the fix, and that was probed rather than assumed. Putting the field
-load in the header scope by hand takes the loop from five loads to three and
-still vectorises nothing; adding `!dereferenceable`/`!nonnull`/`!align` to it,
-so the header load can be speculated out of the bounds-checked block, changes
-nothing at all. The hand hoist in the source is what recovers the time, which is
-the argument for doing it in the emitter rather than for describing more of the
-heap to LLVM.
+want of a measurement, and this is that measurement.
+
+**Describing more of the heap to LLVM is not the fix, and that was probed rather
+than assumed.** Two hand edits to the field-shape `.ll`, neither of them
+proposed as sound — an array of records stores struct fields *inside* an element
+buffer, which is exactly why §2b left struct fields alone:
+
+| hand edit to the `.ll` | header loads left in `@scale`'s loop | CPU min |
+| --- | ---: | ---: |
+| none (main) | 3 | 756 ms |
+| the array-typed field load put in the header scope | 1 | — |
+| + `!dereferenceable`/`!nonnull`/`!align` on it, so the header load can be speculated out of the bounds-checked block | **0** | **761 ms** |
+
+The last row is the instructive one: every header load is out of `@scale`'s loop
+and the program is exactly as slow as before. The time is not in `@scale` at
+all — it is in the copy inlined into `@nish_main`, and only the hoist written in
+the *source* reaches that copy. Which is the argument for candidate 2 doing the
+hoist in the IR the emitter produces, where every inlined copy inherits it,
+rather than for annotating the field load and hoping.
 
 ### The multiplier is program-dependent, so the range is the honest answer
 
