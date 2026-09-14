@@ -35,7 +35,7 @@ import { linkWith, resolveSeed } from "./self/seed.js";
 import { stage1Only } from "./self/stage1_only.js";
 import { compareWithCli, compileCases, gateCases } from "./batch_compile.js";
 import { rewrite as arrowify } from "../scripts/arrowify.mjs";
-import { diagnosticWords, diffModules, sitsOnChange } from "../scripts/arrow-verify.mjs";
+import { diagnosticWords, diffEmitted, sitsOnChange, verdict } from "../scripts/arrow-verify.mjs";
 const require = createRequire(import.meta.url);
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -6263,21 +6263,60 @@ if (!only || "arrow".includes(only) || "spelling".includes(only)) {
   // that is the difference most worth seeing -- it means the rewrite changed what the
   // program is, not how it is spelled.
   const sameBytes = Buffer.from("; ModuleID = 'a.ts'\n");
-  const onlyAfter = diffModules(
+  const onlyAfter = diffEmitted(
     new Map([["main.ll", sameBytes]]),
     new Map([
       ["main.ll", sameBytes],
       ["extra.ll", Buffer.from("; ModuleID = 'extra.ts'\n")],
     ])
   );
-  const onlyBefore = diffModules(new Map([["main.ll", sameBytes]]), new Map());
+  const onlyBefore = diffEmitted(new Map([["main.ll", sameBytes]]), new Map());
   check(
     "WP22: the verifier notices a module that exists only after the rewrite",
     onlyAfter.length === 1 && onlyAfter[0].name === "extra.ll" && onlyBefore.length === 1,
     `${onlyAfter.length} found after, ${onlyBefore.length} found before`
   );
 
-  // The second: a program is only evidence about a rewrite if the rewrite reached the
+  // And the exit path both halves of the sweep now go through, because five review
+  // rounds found the same defect five times in it: a subject counted as covered and
+  // then never compared. Four of those were in the loop over programs and the fifth in
+  // the loop over rejections -- a "rejection" that is not refused under the flags the
+  // sweep passes compared empty with empty and continued -- so there is one loop and
+  // one verdict now, and this is the table of what it may answer. A subject that
+  // produced nothing at all is `blind`, which fails the run; nothing else may quietly
+  // mean "no difference".
+  const side = (over) => ({ status: 0, stdout: "", said: "", emitted: new Map(), ...over });
+  const bytes = (text) => new Map([["main.ll", Buffer.from(text)]]);
+  for (const [what, a, b, expected] of [
+    ["identical modules", side({ emitted: bytes("x") }), side({ emitted: bytes("x") }), "emitted"],
+    ["a module that differs", side({ emitted: bytes("x") }), side({ emitted: bytes("y") }), "emitted"],
+    ["a dump on stdout", side({ stdout: "tree" }), side({ stdout: "tree" }), "dump"],
+    ["refused on one side only", side({ status: 1, said: "{}" }), side({}), "status"],
+    [
+      "refused on both, same words",
+      side({ status: 1, said: '{"code":"NL2204","message":"m","line":3}' }),
+      side({ status: 1, said: '{"code":"NL2204","message":"m","line":9}' }),
+      "refusal",
+    ],
+    [
+      "refused on both, different words",
+      side({ status: 1, said: '{"code":"NL2204","message":"m"}' }),
+      side({ status: 1, said: "" }),
+      "reworded",
+    ],
+    ["compiled clean and produced nothing", side({}), side({}), "blind"],
+  ]) {
+    const answer = verdict(a, b);
+    const differences = (answer.differences ?? []).length;
+    const expectedDifferences = what === "a module that differs" ? 1 : 0;
+    check(
+      `WP22: the verifier gives every subject one verdict -- ${what} is \`${expected}\``,
+      answer.kind === expected && differences === expectedDifferences,
+      `answered \`${answer.kind}\` with ${differences} difference(s)`
+    );
+  }
+
+  // A subject is only evidence about a rewrite if the rewrite reached the
   // modules it compiles. Counting one that did not is how a sweep over a slice that is
   // already migrated reports `0 difference(s)` for compiling the same source twice.
   check(

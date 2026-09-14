@@ -235,6 +235,15 @@ const diagnose = (rel) => {
 };
 
 /**
+ * The `--json` diagnostics of every subject this side of the sweep refused. A
+ * subject that compiled has none, and asking for them would cost a process each.
+ */
+const readRefusals = (subjects, results) =>
+  new Map(
+    subjects.filter((rel) => results.get(rel).status !== 0).map((rel) => [rel, diagnose(rel).said])
+  );
+
+/**
  * One program's diagnostics with every position stripped: the severity, the
  * stable `NL` code and the message, and nothing that a line or a column can
  * move. This is what may not change — WP22 §8c's "comparing the codes and the
@@ -282,14 +291,20 @@ const compileAll = (relPrograms, out, debug) => {
   return results;
 };
 
-/** Every `.ll` under a directory, keyed by its path relative to that directory. */
-const modules = (dir) => {
+/**
+ * Every file a compile wrote, keyed by its path relative to the output
+ * directory. Every file rather than every `.ll`: the WP8 sidecars — the C
+ * header, the `.d.ts` and its loader, the N-API shim — land in the same
+ * directory, and a comparison that collected only modules would go quiet about
+ * them the first time an in-scope program asked for one.
+ */
+const emittedFiles = (dir) => {
   const out = new Map();
   const walk = (at, prefix) => {
     for (const entry of fs.readdirSync(at, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
       const full = path.join(at, entry.name);
       if (entry.isDirectory()) walk(full, `${prefix}${entry.name}/`);
-      else if (entry.name.endsWith(".ll")) out.set(`${prefix}${entry.name}`, fs.readFileSync(full));
+      else out.set(`${prefix}${entry.name}`, fs.readFileSync(full));
     }
   };
   if (fs.existsSync(dir)) walk(dir, "");
@@ -297,13 +312,13 @@ const modules = (dir) => {
 };
 
 /**
- * The differences between the modules one program emitted before and after,
- * over the **union** of the two sides. Iterating the before side alone would
+ * The differences between what one subject emitted before and after, over the
+ * **union** of the two sides. Iterating the before side alone would
  * make a module that only exists afterwards invisible, which is the one shape
  * of difference a comparison is most obliged to notice: it means the rewrite
  * changed what the program is, not only how it is spelled.
  */
-export const diffModules = (before, after) => {
+export const diffEmitted = (before, after) => {
   const out = [];
   for (const name of [...new Set([...before.keys(), ...after.keys()])].sort()) {
     const one = before.get(name);
@@ -328,6 +343,62 @@ export const diffModules = (before, after) => {
 export const sitsOnChange = (rel, touched) => closure([rel]).some((file) => touched.has(file));
 
 /**
+ * One subject's verdict, from what each side of it produced and nothing else.
+ *
+ * **This is the single exit path, and it is single on purpose.** The sweep has
+ * two kinds of subject — a program it compiles and a rejection it diagnoses —
+ * and for four review rounds they had two comparison loops with two sets of
+ * rules, which is why the same defect was found five times: a subject counted as
+ * covered and then never compared. Four were in the program loop and the fifth
+ * was in the other one, reached the moment a "rejection" turned out not to be
+ * rejected under the flags this sweep passes (`tests/link/no_main` is refused by
+ * `--link`, which is not one of them) — `"" === ""`, `continue`, and a file that
+ * was rewritten, emitted and never looked at. There is one loop now, and every
+ * subject leaves it through here:
+ *
+ *   - `status`   — refused on one side and not the other, which means the
+ *                  rewrite changed whether the program compiles at all;
+ *   - `refusal`  — refused on both, compared by the words of its `--json`
+ *                  diagnostics with the positions stripped. `moved` says the
+ *                  words held and a caret did not, which `--concise` does by
+ *                  construction;
+ *   - `reworded` — refused on both, for different words. A `reject_*` case that
+ *                  starts compiling, or is refused under another rule, is the
+ *                  worst thing a codemod can do (WP22 §8c);
+ *   - `emitted`  — compiled on both, compared file by file over the union of
+ *                  what each side wrote;
+ *   - `dump`     — compiled on both and wrote nothing, so stdout is what it
+ *                  produced: `--emit-ast` and `--emit-checked` print there;
+ *   - `blind`    — none of the above. Nothing to compare is a failure, because a
+ *                  sweep cannot verify what it cannot see.
+ *
+ * Each side is `{ status, stdout, said, emitted }`: the exit status, stdout, the
+ * `--json` diagnostics (read only where the status says there are some), and the
+ * map of files it wrote.
+ */
+export const verdict = (a, b) => {
+  if (a.status !== b.status) return { kind: "status" };
+  if (a.status !== 0) {
+    if (diagnosticWords(a.said) !== diagnosticWords(b.said)) return { kind: "reworded" };
+    return { kind: "refusal", moved: a.said !== b.said };
+  }
+  const names = new Set([...a.emitted.keys(), ...b.emitted.keys()]);
+  if (names.size > 0) {
+    return { kind: "emitted", compared: names.size, differences: diffEmitted(a.emitted, b.emitted) };
+  }
+  if (a.stdout.length > 0 || b.stdout.length > 0) {
+    return {
+      kind: "dump",
+      differences:
+        a.stdout === b.stdout
+          ? []
+          : [{ name: "stdout", why: `differs (${a.stdout.length} vs ${b.stdout.length} bytes)` }],
+    };
+  }
+  return { kind: "blind" };
+};
+
+/**
  * The files that differ between a revision and the working tree, with both
  * texts. A change outside the sweep's scope is counted and named rather than
  * dropped: this sweep says nothing about it, and a caller who rewrote a file
@@ -338,7 +409,11 @@ const changedSince = (rev, scope) => {
   const inScope = new Set(scope);
   const all = execFileSync(
     "git",
-    ["diff", "--name-only", rev, "--", "*.ts", "*.args", "args"],
+    // `args` on its own is a literal path from the repo root, so it matched nothing:
+    // the per-directory sidecar `tests/link/<name>/args` — the one `owns()` exists to
+    // map — was invisible to the diff, not restored on the before side, and not even
+    // reported as out of scope. `:(glob)**/args` matches it at any depth.
+    ["diff", "--name-only", rev, "--", "*.ts", "*.args", ":(glob)**/args"],
     { cwd: root, maxBuffer: 1 << 28 }
   )
     .toString()
@@ -447,7 +522,12 @@ const main = (argv) => {
     process.stderr.write(`arrow-verify: no corpus program matches ${filters.join(", ")}\n`);
     return 2;
   }
-  const scope = closure([...relPrograms, ...negatives]);
+  // One list. A program and a rejection differ in how they are *reported*, not in
+  // how they are compared: both are compiled, both are compared through `verdict`,
+  // and a "rejection" that turns out to compile is therefore compared by what it
+  // emitted rather than falling out of the run.
+  const subjects = [...new Set([...relPrograms, ...negatives])].sort();
+  const scope = closure(subjects);
 
   process.stdout.write(
     `arrow-verify: ${relPrograms.length} program(s), ${negatives.length} rejection(s), ` +
@@ -482,14 +562,11 @@ const main = (argv) => {
     for (const change of changes) put(change.rel, change.before);
   }
 
-  const before = compileAll(relPrograms, path.join(work, "before"), debug);
-  const saidBefore = new Map(negatives.map((rel) => [rel, diagnose(rel)]));
-  // A program the compiler refuses prints its refusal and nothing else, so that is
-  // what there will be to compare afterwards — and it has to be read now, while the
-  // before side is still what is in the tree.
-  const refusedBefore = new Map(
-    relPrograms.filter((rel) => before.get(rel).status !== 0).map((rel) => [rel, diagnose(rel)])
-  );
+  const before = compileAll(subjects, path.join(work, "before"), debug);
+  // A subject the compiler refuses prints its refusal and nothing else, so that is
+  // what there will be to compare — and this side of it has to be read now, while
+  // the before side is still what is in the tree.
+  const saidBefore = readRefusals(subjects, before);
 
   let rewritten = 0;
   const touched = new Set();
@@ -540,92 +617,66 @@ const main = (argv) => {
     return 1;
   }
 
-  const after = compileAll(relPrograms, path.join(work, "after"), debug);
+  const after = compileAll(subjects, path.join(work, "after"), debug);
+  const saidAfter = readRefusals(subjects, after);
 
-  // The diagnostics half. The words may not change; a position may.
-  let moved = 0;
-  let reworded = 0;
-  for (const rel of negatives) {
-    const was = saidBefore.get(rel);
-    const now = diagnose(rel);
-    if (was.said === now.said && was.status === now.status) continue;
-    if (diagnosticWords(was.said) === diagnosticWords(now.said) && was.status === now.status) {
-      moved += 1;
-      if (flags.has("--verbose")) {
-        process.stdout.write(
-          `MOVED ${rel}\n      before ${was.said.split("\n")[0]}\n      after  ${now.said.split("\n")[0]}\n`
-        );
-      }
-      continue;
-    }
-    reworded += 1;
-    process.stdout.write(`DIFF  ${rel}: exit ${was.status} before, ${now.status} after\n`);
-    process.stdout.write(`      before ${diagnosticWords(was.said).split("\n")[0] || "(nothing)"}\n`);
-    process.stdout.write(`      after  ${diagnosticWords(now.said).split("\n")[0] || "(nothing)"}\n`);
-  }
-
-  // Every program in scope ends in exactly one outcome, and the summary names all
-  // of them. The hole this closes is the one this tool has had in three different
-  // shapes already: a program that is counted as covered and then quietly not
-  // diffed. A dump case emits no `.ll` at all (`--emit-ast`, `--emit-checked`), so
-  // the module comparison had nothing to say about it and said nothing; a program
-  // refused on both sides was skipped without anybody comparing the refusals. Both
-  // are compared now — by their stdout and by the words of their diagnostics — and
-  // a program that produces nothing either way is a *failure*, because the sweep
-  // cannot verify what it cannot see.
+  // One loop, one exit path. Which list a subject came from decides how it is
+  // reported and nothing else; `verdict` decides what happened to it.
   let differed = 0;
   let compared = 0;
   let dumps = 0;
   let refusals = 0;
+  let reworded = 0;
+  let moved = 0;
   const blind = [];
-  for (const rel of relPrograms) {
+  for (const rel of subjects) {
     const a = before.get(rel);
     const b = after.get(rel);
-    if (a.status !== b.status) {
+    const answer = verdict(
+      { status: a.status, stdout: a.stdout, said: saidBefore.get(rel) ?? "", emitted: emittedFiles(a.dir) },
+      { status: b.status, stdout: b.stdout, said: saidAfter.get(rel) ?? "", emitted: emittedFiles(b.dir) }
+    );
+    if (answer.kind === "status") {
       differed += 1;
       process.stdout.write(`DIFF  ${rel}: exit ${a.status} before, ${b.status} after\n`);
       const said = (b.status === 0 ? a.stderr : b.stderr).trim().split("\n")[0];
       if (said) process.stdout.write(`      ${said}\n`);
       continue;
     }
-    // Refused on both sides: the refusal is this program's whole output, so it is
-    // what gets compared — by its words, with the positions stripped, exactly as a
-    // `reject_*` case is, because the caret is allowed to move and the rule is not.
-    if (a.status !== 0) {
-      const was = refusedBefore.get(rel);
-      const now = diagnose(rel);
+    if (answer.kind === "reworded") {
+      differed += 1;
+      reworded += 1;
+      process.stdout.write(`DIFF  ${rel}: refused differently after the change\n`);
+      process.stdout.write(`      before ${diagnosticWords(saidBefore.get(rel) ?? "").split("\n")[0] || "(nothing)"}\n`);
+      process.stdout.write(`      after  ${diagnosticWords(saidAfter.get(rel) ?? "").split("\n")[0] || "(nothing)"}\n`);
+      continue;
+    }
+    if (answer.kind === "refusal") {
       refusals += 1;
-      if (was !== undefined && diagnosticWords(was.said) !== diagnosticWords(now.said)) {
-        differed += 1;
-        process.stdout.write(`DIFF  ${rel}: refused differently after the rewrite\n`);
-        process.stdout.write(`      before ${diagnosticWords(was.said).split("\n")[0] || "(nothing)"}\n`);
-        process.stdout.write(`      after  ${diagnosticWords(now.said).split("\n")[0] || "(nothing)"}\n`);
+      if (answer.moved) {
+        moved += 1;
+        if (flags.has("--verbose")) {
+          process.stdout.write(
+            `MOVED ${rel}\n      before ${(saidBefore.get(rel) ?? "").split("\n")[0]}\n` +
+              `      after  ${(saidAfter.get(rel) ?? "").split("\n")[0]}\n`
+          );
+        }
       }
       continue;
     }
-    const one = modules(a.dir);
-    const two = modules(b.dir);
-    const names = new Set([...one.keys(), ...two.keys()]);
-    if (names.size > 0) {
-      compared += names.size;
-      for (const difference of diffModules(one, two)) {
-        differed += 1;
-        process.stdout.write(`DIFF  ${rel}: ${difference.name} ${difference.why}\n`);
+    if (answer.kind === "blind") {
+      blind.push(rel);
+      continue;
+    }
+    if (answer.kind === "dump") dumps += 1;
+    else compared += answer.compared;
+    for (const difference of answer.differences) {
+      differed += 1;
+      process.stdout.write(`DIFF  ${rel}: ${difference.name} ${difference.why}\n`);
+      if (answer.kind === "emitted") {
         process.stdout.write(`      diff ${path.join(a.dir, difference.name)} ${path.join(b.dir, difference.name)}\n`);
       }
-      continue;
     }
-    // No IR at all. A dump flag prints the answer on stdout instead, which is then
-    // the thing to compare.
-    if (a.stdout.length > 0 || b.stdout.length > 0) {
-      dumps += 1;
-      if (a.stdout !== b.stdout) {
-        differed += 1;
-        process.stdout.write(`DIFF  ${rel}: the dump on stdout differs (${a.stdout.length} vs ${b.stdout.length} bytes)\n`);
-      }
-      continue;
-    }
-    blind.push(rel);
   }
 
   for (const rel of blind) {
@@ -636,14 +687,14 @@ const main = (argv) => {
     for (const line of skipped) process.stdout.write(`skip  ${line}\n`);
   }
   process.stdout.write(
-    `arrow-verify: ${compared} module(s), ${dumps} dump(s) and ${refusals} refusal(s) compared, ` +
-      `${differed} difference(s), ${blind.length} program(s) with nothing to compare\n`
+    `arrow-verify: ${subjects.length} subject(s) — ${compared} emitted file(s), ${dumps} dump(s) and ` +
+      `${refusals} refusal(s) compared, ${blind.length} with nothing to compare\n`
   );
   process.stdout.write(
-    `arrow-verify: ${negatives.length} rejection(s) re-diagnosed, ${reworded} whose words changed, ` +
-      `${moved} whose positions moved\n`
+    `arrow-verify: ${differed} difference(s), of which ${reworded} refused differently; ` +
+      `${moved} refusal(s) whose positions moved\n`
   );
-  return differed > 0 || reworded > 0 || blind.length > 0 ? 1 : 0;
+  return differed > 0 || blind.length > 0 ? 1 : 0;
 };
 
 if (process.argv[1] === import.meta.filename) process.exit(main(process.argv.slice(2)));

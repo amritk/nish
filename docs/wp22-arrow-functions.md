@@ -140,7 +140,7 @@ are not stage D's to take (§9).
 
 | Surface | `function` | arrow | Note |
 | --- | --- | --- | --- |
-| `self/` | **721** | 7 | 31,050 lines. The bootstrap; must be migrated before stage D, and it is the one commit of stage C that is worth taking on its own |
+| `self/` | **723** | 7 | 31,050 lines. The bootstrap; must be migrated before stage D, and it is the one commit of stage C that is worth taking on its own. 721 when this table was first taken; `--emit-napi-async` added two, which is why the number to act on is the one `arrowify --check self/*.ts` prints |
 | `tests/cases/` | **688** | 196 | the goldens gate; every `.ll` beside one verifies its rewrite rather than being work the rewrite creates |
 | `tests/differential/corpus/` | 153 | 0 | compiled *and* rewritten to JavaScript, so the arrow-parity guard (§8b) is what these rest on |
 | `tests/link/` | 51 | 32 | whole programs, several modules each |
@@ -153,10 +153,12 @@ are not stage D's to take (§9).
 | `self/lexer.ts` | none | — | `TOK_ARROW` is already emitted (`self/lexer.ts:772`) |
 | `self/parser.ts` | arrow parsing | — | done in stage B |
 
-**1,647 definitions**, against 78 when stage C's docs half was finished. The
+**1,649 definitions**, against 78 when stage C's docs half was finished. The
 number matters to one decision and no other: §10 argues stage D on the size of
 what is left, and the honest figure for that argument is this one rather than
-the 798 the row above used to carry.
+the 798 the row above used to carry. It was 1,647 when the row was taken and is
+1,649 two releases of `self/` later, which is the whole reason the sentence
+above says to re-derive it rather than to read it here.
 
 ## 8. The order, and why it is forced
 
@@ -293,7 +295,7 @@ The reason the docs half went first is the reason the rest of C can now go at
 all: `regen.sh` made "did this rewrite change anything?" a single command, and
 a question you can ask in one command is a question you ask on every file
 rather than on the ones you are worried about. `self/` had no such command —
-its 721 declarations are a program whose output is checked by the bootstrap,
+its 723 declarations are a program whose output is checked by the bootstrap,
 which is the slowest check in the repository — so stage C's expensive half
 starts by building one.
 
@@ -371,23 +373,38 @@ compiles the same source twice and reports zero differences over a rewrite it
 never saw. A derived run that rewrites nothing, and an applied run with nothing
 changed since the revision, both **fail** rather than passing quietly.
 
-**Every program in scope ends in one of three outcomes, and the summary names
-all three.** A program that compiles is compared by its modules; one whose flags
-make it print instead of emit — `--emit-ast`, `--emit-checked` — is compared by
-its stdout; one the compiler refuses on both sides is compared by the words of
-its refusal, positions stripped, exactly as a `reject_*` case is. A program that
-produces none of the three is `BLIND` and fails the run. That is the fourth time
-this tool has had the same hole: `arrow-verify tests/cases/dump_ast.ts` used to
-rewrite the case, compare **zero** modules and exit 0, and a program refused on
-both sides was skipped without anybody reading the two refusals. A dump case's
-stdout *does* change when its declarations become arrows, which is a real
-consequence of the rewrite and a golden that will have to be regenerated — so it
-is reported as a difference rather than waved through.
+**Every subject ends in one verdict, and there is one place that decides it.**
+A program and a rejection differ in how they are *reported*, not in how they are
+compared: both are compiled, and `verdict` answers with exactly one of
+
+| | what it means |
+| --- | --- |
+| `status` | refused on one side and not the other — the rewrite changed whether the program compiles |
+| `refusal` | refused on both, and the words of its `--json` diagnostics agree with the positions stripped (`moved` says a caret shifted, which `--concise` does by construction) |
+| `reworded` | refused on both, for different words — a `reject_*` case that starts compiling, or is refused under another rule, which §8c calls the worst thing a codemod can do |
+| `emitted` | compiled on both, compared file by file over the union of what each side wrote — sidecars included, not only `.ll` |
+| `dump` | compiled on both and wrote nothing, so stdout is the output: `--emit-ast` and `--emit-checked` print there |
+| `blind` | none of the above. Nothing to compare, which **fails the run** |
+
+**That table is the fix for a defect this tool had five times.** Each instance
+was a subject counted as covered and then never compared: a dump case
+(`0 module(s) compared`, exit 0), a program refused on both sides and skipped, a
+sweep that rewrote almost nothing, a module that existed only afterwards — and
+the fifth in the *other* loop, where a "rejection" that is not refused under the
+flags the sweep passes (`tests/link/no_main` is refused by `--link`, which is not
+one of them) compared empty with empty and continued. Four of the five were in
+one loop and the fifth in the other, which is the reason there is now one loop:
+the discipline has to be in the code both halves run, not applied twice.
+
+A dump's stdout *does* change when its declarations become arrows. That is a
+real consequence with a golden behind it, so it is a difference rather than
+something to wave through.
 
 The flags each side is compiled with come out of the copy rather than out of the
 working tree, so `--applied` gives the before side the `.args` the *revision*
-had; a changed sidecar is part of the diff (`*.args`, and `tests/link/<name>/args`)
-and counts as a change to the program it belongs to.
+had; a changed sidecar is part of the diff — `*.args`, and
+`tests/link/<name>/args`, which needs `:(glob)**/args` to match at all — and
+counts as a change to the program it belongs to.
 
 **A comparison is evidence only where the change reached it.** A program whose
 own modules are identical on both sides is compiled twice and agrees with
@@ -420,7 +437,7 @@ not a flourish, and finding out why is what this preparation was for.** Biome's
 block-bodied arrow whose body is one `return` fails `npm run lint` in every
 directory Biome reads, which is every Nish surface except the test fixtures.
 A block-only rewrite of `self/` would land **119 lint errors**, one per
-single-return declaration of its 721, and `npm run lint` may not get worse than
+single-return declaration of its 723, and `npm run lint` may not get worse than
 `main`. The rewrite is therefore two passes and not one, and the order is the
 point:
 
@@ -498,7 +515,7 @@ arrow-verify: 1678 module(s) compared, 0 difference(s), 38 declaration(s) left a
 ```
 
 — which is every `function` definition in the repository outside `src/`,
-`self/`'s 721 included, turned into an arrow and compiled to the same 1,678
+`self/`'s (then) 721 included, turned into an arrow and compiled to the same 1,678
 modules, byte for byte. That is the evidence for the `self/` migration, and it
 exists before the migration rather than after it. The same sweep under `-g`
 comes back with one difference in 373 programs, and it is a *position* rather
