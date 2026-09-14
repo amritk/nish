@@ -781,7 +781,7 @@ program twice, with one golden between them.
 - **Generic aliases are forbidden**, unlike a generic *function*: an alias
   only renames a type that already exists, so there is nothing for a type
   argument to apply to. `type Box<T> = T[]` is
-  `` Generic type parameters are forbidden on a type alias in Nish (a generic function is monomorphised; a generic class is not supported yet) ``
+  `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists ``
   (`tests/cases/reject_type_alias_generic`).
 - **A built-in type name may not be aliased.** `type string = i32` is
   `` `string` is a built-in type name and cannot be used for a type alias ``
@@ -1090,8 +1090,10 @@ class Point {
 - **Rejected**: `static` (`tests/cases/reject_cls_static`),
   getters/setters (`Getters and setters are not supported`), optional fields
   (`cannot be optional`), index signatures, `!` assertions, `abstract`,
-  `declare class`, type parameters on a class or on one of its methods
-  (`tests/cases/reject_generic_class`, `reject_generic_method`), decorators
+  `declare class`, type parameters on a *method* of its own
+  (`reject_generic_method`; the class's own parameters are in scope in every
+  method — see [Generic classes and interfaces](#generic-classes-and-interfaces)),
+  decorators
   (`reject_decorator`), computed member names (`reject_computed_property`),
   overloaded constructors.
 
@@ -1158,13 +1160,96 @@ export const main = (): i32 => {
   unaffected — only names that become symbols are restricted.
 - **Not supported yet**, each with its own message: a constrained parameter
   (`<T extends Shape>`, `tests/cases/reject_generic_constraint`), a default
-  type argument (`<T = string>`), type parameters on a class, an interface, a
-  method or a type alias, and instantiating a generic imported from another
-  module (`` is a generic function, and a generic function cannot yet be
-  instantiated from another module ``). A generic `main` is refused too: the
-  entry point is called by the C runtime, which has no type arguments to give
-  it. The design and the milestones are in
-  [wp18-generics.md](wp18-generics.md).
+  type argument (`<T = string>`), type parameters on a method or a type alias,
+  and instantiating a generic imported from another module
+  (`` is a generic function, and a generic function cannot yet be instantiated
+  from another module ``). A generic `main` is refused too: the entry point is
+  called by the C runtime, which has no type arguments to give it. The design
+  and the milestones are in [wp18-generics.md](wp18-generics.md).
+
+### Generic classes and interfaces
+
+A `class` or an `interface` may declare type parameters too, and an
+instantiation is **an ordinary struct**: `Box<i32>` is `%struct.Box$i32` with
+`Box`'s fields at `T = i32`, its methods are `@Box$i32.get` and
+`@Box$i32.constructor`, and everything the language already does to a struct —
+the layout, `implements`, `new`, field access, the C header, the debug info —
+works on it unchanged (`tests/cases/gen_box_i32`, `gen_box_string`).
+
+```typescript
+class Box<T> {
+  value: T;
+  constructor(v: T) { this.value = v; }
+  get(): T { return this.value; }
+}
+
+interface Pair<A, B> { first: A; second: B; }
+
+export const main = (): i32 => {
+  const b = new Box<i32>(7);                            // %struct.Box$i32
+  const p: Pair<i32, string> = { first: 1, second: "" }; // %struct.Pair$i32$str
+  return b.get();
+};
+```
+
+- **The type arguments are written out, never inferred.** `Box` on its own is
+  not a type, because there is no layout until `T` is bound:
+  `` `Holder` is generic: it must be written with its type arguments, e.g. `Holder<number>` ``
+  (`tests/cases/reject_generic_class`). The two positions that take them are an
+  annotation (`const b: Box<i32>`) and `new` (`new Box<i32>(7)`) — the two a
+  one-token parser can read a type-argument list in, which is the same reason a
+  *call* infers instead (§2a of [wp18-generics.md](wp18-generics.md)). A class
+  that is not generic takes none:
+  `` `Point` is not generic, so `new Point` takes no type arguments ``
+  (`tests/cases/reject_cls_new_generic`).
+- **A type argument may be anything a type may be**, including another
+  instantiation: `Box<Point>` is `%struct.Box$$Point` and `Box<Box<i32>>` is
+  `%struct.Box$$Box$i32`, the `>>` split back into two by the parser
+  (`tests/cases/gen_box_struct`, `gen_nested`). A *type parameter* takes none,
+  though: `T` is whatever the instantiation bound it to, so `const y: T<i32>`
+  is `` Unsupported type reference `T<i32>` ``
+  (`tests/cases/reject_generic_type_param_args`).
+- **A template obeys every rule a declared class obeys.** Type parameters
+  change what a declaration *means*, not what it may be written with, so
+  `declare class Box<T>`, `export default class Box<T>`, `abstract class
+  Box<T>` and `interface Box<T> extends Base` are refused in the same words as
+  their non-generic spellings (`tests/cases/reject_generic_declare_class`,
+  `reject_generic_export_default`, `reject_generic_abstract`,
+  `reject_generic_interface_extends`).
+- **A template claims its name in the one declaration namespace.** `class
+  Box<T>` is a declaration of `Box`, so a function, a constant, an alias, an
+  enum or a second class of that name is refused whichever was written first —
+  the structs pass runs before the functions pass, so the template is always
+  the one already there (`tests/cases/reject_generic_class_fn_clash`,
+  `reject_generic_class_after_fn`, `reject_generic_class_redeclared`).
+- **An instantiation's name is program-wide**, because `%struct.Box$i32` and
+  `@Box$i32.constructor` are. So two modules may not both declare a generic
+  class or interface of one name once both instantiate it:
+  `` Generic class `Holder` is also declared in helper.ts; a class or interface name must be unique across the program, and an instantiation is named after its template ``
+  (`tests/link/generic_class_clash`), and across two packages the wording is
+  the one `tests/link/package_generic_class_clash` pins. Nothing about the two
+  declarations is visible at a call, so left unreported the second layout would
+  simply replace the first and a field read would land on the wrong offset.
+- **`implements` may name an instantiation.** `class Box<T> implements
+  Container<T>` is checked once per instantiation, against `Container$i32`, by
+  the ordinary field-prefix rule — the interface's fields are the class's first
+  fields, so the conversion is one `bitcast` (`tests/cases/gen_implements`).
+- **Each instantiation gets its own facts**, exactly as a generic function's
+  do: one `new Box<T>(v)` in a body that does not escape is an entry-block
+  `alloca` at `T = i32` and an arena bump at `T = string` when the box is
+  returned — one source line, two memory behaviours (`tests/cases/gen_stack`).
+- **A field may not grow its own type argument.** `class Nest<T> { inner:
+  Nest<T[]> | null }` asks for a strictly larger instantiation every time it is
+  laid out:
+  `` Monomorphising `Nest` would not terminate: `Nest<i32>` names `Nest<i32[]>`, which puts `i32` under a type constructor instead of passing it on, so the chain has no end; name `T` itself, or a type that does not mention it ``
+  (`tests/cases/reject_generic_expanding_field`). `Nest<T>` and a type that
+  mentions no parameter are both fine — it is the same rule a generic
+  function's recursive call is held to, stated over fields.
+- **Not supported yet**: a constrained parameter (`<T extends Shape>`), a
+  generic method of its own on a class, and importing a generic class or
+  interface from another module
+  (`` is a generic class, and a generic class or interface cannot yet be
+  instantiated from another module ``).
 
 ### Interfaces and object literals
 
@@ -2524,10 +2609,10 @@ fragment `tests/run.js` matches and the case that proves it.
 
 | Construct | Message | Test |
 | --- | --- | --- |
-| type parameters on a class or an interface | `` Generic type parameters are forbidden on a class in Nish (a generic function is monomorphised; a generic class is not supported yet) `` | `reject_generic_class` |
-| type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish (a generic function is monomorphised; a generic class is not supported yet) `` | `reject_type_alias_generic` |
+| type parameters on a type alias | `` Generic type parameters are forbidden on a type alias in Nish; a generic function, class or interface is monomorphised, and an alias only renames a type that already exists `` | `reject_type_alias_generic` |
 | type parameters on a method | `` Generic type parameters are forbidden on a method in Nish (a method takes its class's type arguments and adds none of its own) `` | `reject_generic_method` |
-| type *arguments* on `new` of a declared class | `` Generic classes are not supported `` | `reject_cls_new_generic` |
+| a generic class or interface named without its type arguments | `` `Holder` is generic: it must be written with its type arguments, e.g. `Holder<number>` `` | `reject_generic_class` |
+| type *arguments* on `new` of a class that is not generic | `` `Point` is not generic, so `new Point` takes no type arguments `` | `reject_cls_new_generic` |
 | generators (`function*`) | `` Generators are forbidden in Nish (no coroutine runtime) `` | `reject_generator` |
 | `async` functions, methods, arrows | `` `async` functions are forbidden in Nish (no event loop or promises) `` | `reject_async_function` |
 | `var` | `` `var` is forbidden; use `let` or `const` `` | `reject_var_keyword`, `reject_var_in_for` |

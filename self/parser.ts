@@ -711,17 +711,25 @@ export class Parser {
     this.advance(); // `class`
     const node = this.node(N_CLASS, start, this.end);
     node.children.push(this.parseIdentifier());
+    // Read where they are written and pushed last, where `nodes.ts` puts them:
+    // the first four children of an `N_CLASS` mean what they have always meant,
+    // so nothing downstream that indexes them moves (WP18 G5).
+    const typeParams = this.parseTypeParameters();
     node.children.push(this.at(TOK_EXTENDS) ? this.parseHeritageName() : this.empty());
     const implemented = this.list();
     if (this.at(TOK_IMPLEMENTS)) {
       this.advance();
       while (true) {
-        implemented.children.push(this.parseIdentifier());
+        // A type reference rather than a bare identifier, because WP18 G5 lets
+        // an implemented interface be an instantiation (`implements Container<T>`)
+        // and `parseType` already reads exactly that shape.
+        implemented.children.push(this.parseType());
         if (!this.eat(TOK_COMMA)) break;
       }
     }
     node.children.push(this.closeList(implemented));
     node.children.push(this.parseClassBody());
+    node.children.push(typeParams);
     node.end = this.previousEnd;
     return node;
   }
@@ -801,6 +809,9 @@ export class Parser {
     this.advance(); // `interface`
     const node = this.node(N_INTERFACE, start, this.end);
     node.children.push(this.parseIdentifier());
+    // Pushed last, like a class's and a function's, so the field list keeps
+    // being child 1 for everything that already reads it (WP18 G5).
+    const typeParams = this.parseTypeParameters();
     const fields = this.list();
     if (this.expect(TOK_LBRACE)) {
       while (!this.at(TOK_RBRACE) && !this.at(TOK_END)) {
@@ -822,6 +833,7 @@ export class Parser {
       this.expect(TOK_RBRACE);
     }
     node.children.push(this.closeList(fields));
+    node.children.push(typeParams);
     node.end = this.previousEnd;
     return node;
   }

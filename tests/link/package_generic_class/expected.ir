@@ -1,0 +1,6 @@
+define internal noundef i32 @Holder$i32.get(%struct.Holder$i32* noundef nonnull readonly align 8 dereferenceable(4) nocapture %this)
+define internal noundef i64 @pkg_a.Holder$i64.get(%struct.Holder$i64* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this)
+define internal noundef double @pkg_b.Holder$f64.get(%struct.Holder$f64* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this)
+define internal void @Holder$i32.constructor
+define internal void @pkg_a.Holder$i64.constructor
+define internal void @pkg_b.Holder$f64.constructor

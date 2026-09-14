@@ -25,12 +25,15 @@
 //     and it is refused by name. The caps are the backstop for anything the
 //     rule does not see, and they say they are a limit rather than a rule.
 
+import { resolveType } from "./annotations";
 import { LANGUAGE } from "./branding";
 import { CheckContext } from "./context";
 import { collectFunctionSignature } from "./declarations";
 import { checkExpression } from "./expressions";
 import { StringMap, StringSet } from "./map";
+import { collectStructMembers } from "./structs";
 import {
+  N_CLASS,
   N_EMPTY,
   N_IDENT,
   N_LIST,
@@ -42,9 +45,16 @@ import {
   N_TYPE_UNION,
   Node,
 } from "./nodes";
-import { FunctionSig, Instantiation, TemplateInfo } from "./program";
+import {
+  FunctionSig,
+  Instantiation,
+  StructInfo,
+  StructInstantiation,
+  StructTemplateInfo,
+  TemplateInfo,
+} from "./program";
 import { Scope } from "./symbols";
-import { K_ARRAY, K_NULLABLE, K_RESULT, R_UNKNOWN, T_ERROR, TypeTable } from "./types";
+import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, R_UNKNOWN, T_ERROR, TypeTable } from "./types";
 
 /**
  * This compiler's instantiation limits. They are a backstop for a program that
@@ -65,9 +75,49 @@ export class Expansion {
   }
 }
 
+/** The same pair for the struct half of the rule (WP18 G5). */
+export class StructExpansion {
+  ancestor: StructInstantiation;
+  index: i32;
+
+  constructor(ancestor: StructInstantiation, index: i32) {
+    this.ancestor = ancestor;
+    this.index = index;
+  }
+}
+
 /** The type parameter list of an `N_FUNCTION`: its fifth child (WP18). */
 export function typeParameterList(decl: Node): Node {
   return decl.children.length > 4 ? decl.children[4] : decl.children[0];
+}
+
+/**
+ * The type parameter list of an `N_CLASS` (fifth child) or an `N_INTERFACE`
+ * (third), both appended by WP18 G5 so the children that were there keep their
+ * positions. The guard is the same one `typeParameterList` carries: a node
+ * built before the list existed answers with something harmless rather than
+ * reading past its own children.
+ */
+export function structTypeParameterList(decl: Node): Node {
+  const at = decl.kind === N_CLASS ? 4 : 2;
+  return decl.children.length > at ? decl.children[at] : decl.children[0];
+}
+
+/** Whether a class or interface declaration carries `<T, ...>`. */
+export function isGenericStruct(decl: Node): boolean {
+  const list = structTypeParameterList(decl);
+  return list.kind === N_LIST && list.children.length > 0;
+}
+
+/** A struct template's declared type parameter names, in order. */
+export function collectStructTypeParamNames(decl: Node): string[] {
+  const names: string[] = [];
+  for (const node of structTypeParameterList(decl).children) {
+    if (node.kind === N_IDENT) {
+      names.push(node.text);
+    }
+  }
+  return names;
 }
 
 /** Whether a function declaration carries `<T, ...>`. */
@@ -117,18 +167,49 @@ export function canonicalArgument(table: TypeTable, type: i32): i32 {
  * with an argument that *contains* its own has put that argument under a type
  * constructor, and the chain it starts has no end.
  */
-export function containsType(table: TypeTable, inner: i32, outer: i32): boolean {
+export function containsType(ctx: CheckContext, inner: i32, outer: i32): boolean {
   if (inner === outer) {
     return true;
   }
+  const table = ctx.table;
   const kind = table.kindOf(outer);
   if (kind === K_ARRAY || kind === K_NULLABLE) {
-    return containsType(table, inner, table.refOf(outer));
+    return containsType(ctx, inner, table.refOf(outer));
   }
   if (kind === K_RESULT) {
-    return containsType(table, inner, table.okOf(outer)) || containsType(table, inner, table.errOf(outer));
+    return containsType(ctx, inner, table.okOf(outer)) || containsType(ctx, inner, table.errOf(outer));
+  }
+  if (kind === K_STRUCT) {
+    // An instantiated class is an ordinary struct and carries no arguments of
+    // its own, so they are read back out of the instantiation its mangled name
+    // belongs to. Without this, `grow<T>` asking for `grow<Box<T>>` would look
+    // like a request for an unrelated named type and would not terminate.
+    const instance = ctx.program.structInstance(table.nameOf(outer));
+    if (instance !== null) {
+      for (const arg of instance.typeArgs) {
+        if (containsType(ctx, inner, arg)) {
+          return true;
+        }
+      }
+    }
   }
   return false;
+}
+
+/**
+ * Which type argument of `previous` this request puts under a type constructor,
+ * or -1 when none of them grew. Shared by the function and the struct halves of
+ * the rule, because both say the same thing about the same tuples.
+ */
+export function growingArgument(ctx: CheckContext, previous: i32[], args: i32[]): i32 {
+  let i = 0;
+  while (i < args.length) {
+    if (previous[i] !== args[i] && containsType(ctx, previous[i], args[i])) {
+      return i;
+    }
+    i = i + 1;
+  }
+  return -1;
 }
 
 /**
@@ -140,21 +221,47 @@ export function containsType(table: TypeTable, inner: i32, outer: i32): boolean 
  * neither of its two edges does so on its own.
  */
 export function expandingAncestor(
-  table: TypeTable,
+  ctx: CheckContext,
   from: Instantiation | null,
   template: TemplateInfo,
   args: i32[]
 ): Expansion | null {
   let at = from;
   while (at !== null) {
+    // A member of an instantiated class carries no function template, so the
+    // narrowing is also the test that this link of the chain is one of ours.
+    const owner = at.template;
+    if (owner !== null && owner === template) {
+      const index = growingArgument(ctx, at.typeArgs, args);
+      if (index >= 0) {
+        return new Expansion(at, index);
+      }
+    }
+    at = at.from;
+  }
+  return null;
+}
+
+/**
+ * The struct half of the same rule (WP18 G5). A field's type is resolved while
+ * the struct is being collected rather than while a body runs, so the chain
+ * this walks is the one `ctx.currentStructInstance` maintains: the struct whose
+ * members are being collected, or the struct whose method body is being
+ * checked. `class Nest<T> { inner: Nest<T[]> | null }` is the shape it exists
+ * for, and `reject_generic_expanding_field` is its case.
+ */
+export function expandingStructAncestor(
+  ctx: CheckContext,
+  from: StructInstantiation | null,
+  template: StructTemplateInfo,
+  args: i32[]
+): StructExpansion | null {
+  let at = from;
+  while (at !== null) {
     if (at.template === template) {
-      let i = 0;
-      while (i < args.length) {
-        const previous = at.typeArgs[i];
-        if (previous !== args[i] && containsType(table, previous, args[i])) {
-          return new Expansion(at, i);
-        }
-        i = i + 1;
+      const index = growingArgument(ctx, at.typeArgs, args);
+      if (index >= 0) {
+        return new StructExpansion(at, index);
       }
     }
     at = at.from;
@@ -173,25 +280,26 @@ export function expandingAncestor(
  * naming both types the way every other argument mismatch does.
  */
 export function unifyAnnotation(
-  table: TypeTable,
+  ctx: CheckContext,
   annotation: Node,
   arg: i32,
   names: StringSet,
   bindings: StringMap
 ): void {
+  const table = ctx.table;
   if (annotation.kind === N_TYPE_PAREN) {
-    unifyAnnotation(table, annotation.children[0], arg, names, bindings);
+    unifyAnnotation(ctx, annotation.children[0], arg, names, bindings);
     return;
   }
   if (annotation.kind === N_TYPE_ARRAY) {
     if (table.kindOf(arg) === K_ARRAY) {
-      unifyAnnotation(table, annotation.children[0], table.refOf(arg), names, bindings);
+      unifyAnnotation(ctx, annotation.children[0], table.refOf(arg), names, bindings);
     }
     return;
   }
   if (annotation.kind === N_TYPE_READONLY) {
     // The modifier changes who may write through the array, not its shape.
-    unifyAnnotation(table, annotation.children[0], arg, names, bindings);
+    unifyAnnotation(ctx, annotation.children[0], arg, names, bindings);
     return;
   }
   if (annotation.kind === N_TYPE_UNION) {
@@ -207,7 +315,7 @@ export function unifyAnnotation(
       }
     }
     if (count === 1 && member !== null) {
-      unifyAnnotation(table, member, table.stripNull(arg), names, bindings);
+      unifyAnnotation(ctx, member, table.stripNull(arg), names, bindings);
     }
     return;
   }
@@ -224,12 +332,27 @@ export function unifyAnnotation(
     return;
   }
   if ((name === "Array" || name === "ReadonlyArray") && argc === 1 && table.kindOf(arg) === K_ARRAY) {
-    unifyAnnotation(table, list.children[0], table.refOf(arg), names, bindings);
+    unifyAnnotation(ctx, list.children[0], table.refOf(arg), names, bindings);
     return;
   }
   if (name === "Result" && argc === 2 && table.isResult(arg)) {
-    unifyAnnotation(table, list.children[0], table.okOf(arg), names, bindings);
-    unifyAnnotation(table, list.children[1], table.errOf(arg), names, bindings);
+    unifyAnnotation(ctx, list.children[0], table.okOf(arg), names, bindings);
+    unifyAnnotation(ctx, list.children[1], table.errOf(arg), names, bindings);
+    return;
+  }
+  // A user generic: `Box<T>` against a `Box$i32` argument binds `T := i32`. The
+  // argument's own type carries no type arguments, because an instantiated
+  // class is an ordinary struct, so they are read back out of the instantiation
+  // the mangled name belongs to.
+  if (table.kindOf(arg) === K_STRUCT) {
+    const instance = ctx.program.structInstance(table.nameOf(arg));
+    if (instance !== null && instance.template.sourceName === name && instance.typeArgs.length === argc) {
+      let i = 0;
+      while (i < argc) {
+        unifyAnnotation(ctx, list.children[i], instance.typeArgs[i], names, bindings);
+        i = i + 1;
+      }
+    }
   }
 }
 
@@ -283,6 +406,185 @@ export function nonTerminatingMessage(
 }
 
 /**
+ * The message for a field or annotation whose instantiation would not
+ * terminate. A field, not a call, is what names the next one, so the sentence
+ * says "names" where the function half's says "asks for"; everything else about
+ * it is the same, including that it quotes the concrete chain, never a depth.
+ */
+export function nonTerminatingStructMessage(
+  table: TypeTable,
+  template: StructTemplateInfo,
+  ancestor: StructInstantiation,
+  args: i32[],
+  index: i32
+): string {
+  const from = instanceDisplayName(table, template.sourceName, ancestor.typeArgs);
+  const to = instanceDisplayName(table, template.sourceName, args);
+  const grew = table.typeName(ancestor.typeArgs[index]);
+  return (
+    `Monomorphising \`${template.sourceName}\` would not terminate: \`${from}\` names \`${to}\`, which puts ` +
+    `\`${grew}\` under a type constructor instead of passing it on, so the chain has no end; name ` +
+    `\`${template.typeParams[index]}\` itself, or a type that does not mention it`
+  );
+}
+
+/**
+ * The struct one written type-argument list names (WP18 G5). All three
+ * positions that may carry one go through here — an annotation (`Box<i32>`),
+ * `new Box<i32>(v)` and an `implements Container<T>` clause — so the arity rule
+ * is stated once and a reader is told the same thing wherever the mistake was
+ * made. The arguments are resolved in the scope the list sits in, which is what
+ * makes `Box<T>` inside another template and `Box<Box<i32>>` work with no case
+ * of their own.
+ */
+export function instantiateWritten(
+  ctx: CheckContext,
+  template: StructTemplateInfo,
+  written: Node,
+  at: Node
+): StructInfo | null {
+  const count = written.kind === N_LIST ? written.children.length : 0;
+  if (count !== template.typeParams.length) {
+    let example = "";
+    let i = 0;
+    while (i < template.typeParams.length) {
+      example = i === 0 ? "number" : `${example}, number`;
+      i = i + 1;
+    }
+    ctx.error(
+      at,
+      `\`${template.sourceName}\` is generic: it must be written with its type arguments, e.g. ` +
+        `\`${template.sourceName}<${example}>\``
+    );
+    return null;
+  }
+  const args: i32[] = [];
+  let i = 0;
+  while (i < count) {
+    args.push(resolveType(written.children[i], ctx));
+    i = i + 1;
+  }
+  return instantiateStruct(ctx, template, args, at);
+}
+
+/**
+ * The struct instantiation request (WP18 G5). Answers the ordinary `StructInfo`
+ * one (struct template, type-argument tuple) names, creating it the first time
+ * it is asked for — and collecting its members immediately rather than queueing
+ * them, because the answer is a *type*, and a type has to have a layout the
+ * moment an annotation resolves to it.
+ *
+ * What is queued instead is each method's and the constructor's *body*, on the
+ * same worklist a generic function's body goes on. That is the whole of why an
+ * instantiated class costs so little: `info` is an ordinary struct, its members
+ * are ordinary signatures, and the only new thing about them is the side-table
+ * overlay every specialised body already needed.
+ */
+export function instantiateStruct(
+  ctx: CheckContext,
+  template: StructTemplateInfo,
+  args: i32[],
+  at: Node
+): StructInfo | null {
+  const name = instanceSymbol(ctx.table, template.sourceName, args);
+  const existing = ctx.program.structInstance(name);
+  if (existing !== null) {
+    return existing.info;
+  }
+  // Termination, the struct half. A field whose type puts one of the struct's
+  // own type arguments under a constructor starts a chain with no end, and it
+  // is refused by name rather than by a depth count.
+  const growing = expandingStructAncestor(ctx, ctx.currentStructInstance, template, args);
+  if (growing !== null) {
+    ctx.error(at, nonTerminatingStructMessage(ctx.table, template, growing.ancestor, args, growing.index));
+    return null;
+  }
+  if (template.count >= MAX_INSTANTIATIONS_PER_TEMPLATE) {
+    ctx.error(
+      at,
+      `\`${template.sourceName}\` has been instantiated ${MAX_INSTANTIATIONS_PER_TEMPLATE} times, which is ` +
+        "this compiler's limit rather than a rule of the language"
+    );
+    return null;
+  }
+  if (ctx.program.instantiationList.length + ctx.program.structInstantiationList.length >= MAX_INSTANTIATIONS) {
+    ctx.error(
+      at,
+      `This module has reached ${MAX_INSTANTIATIONS} generic instantiations, which is this compiler's limit ` +
+        "rather than a rule of the language"
+    );
+    return null;
+  }
+
+  const bindings = new StringMap();
+  let i = 0;
+  while (i < template.typeParams.length) {
+    bindings.set(template.typeParams[i], args[i]);
+    i = i + 1;
+  }
+  const info = new StructInfo(name, template.kind, ctx.table.structOf(name), template.decl, template.origin);
+  info.exported = template.exported;
+  const instance = new StructInstantiation(template, args, info, bindings);
+  instance.from = ctx.currentStructInstance;
+  template.count = template.count + 1;
+  // Registered before the members are collected, so a field that mentions the
+  // struct's own instantiation (`next: Node<i32> | null`) finds it rather than
+  // asking for it a second time.
+  ctx.program.addStruct(name, info);
+  ctx.program.addStructInstance(name, instance);
+  collectInstanceMembers(ctx, instance);
+  return info;
+}
+
+/**
+ * The fields, layout and member signatures of one instantiated struct, with its
+ * type parameters bound — and one queued body per method and constructor, each
+ * with side tables of its own.
+ */
+export function collectInstanceMembers(ctx: CheckContext, instance: StructInstantiation): void {
+  const savedBindings = ctx.typeBindings;
+  const savedStruct = ctx.currentStructInstance;
+  const savedInstance = ctx.currentInstance;
+  const savedErrored = ctx.errored;
+  ctx.typeBindings = instance.bindings;
+  ctx.currentStructInstance = instance;
+  // A request made while collecting these members belongs to *this* struct's
+  // chain, not to whichever function body happened to name it first.
+  ctx.currentInstance = null;
+  const before = ctx.program.functions.length;
+  collectStructMembers(ctx, instance.info);
+  ctx.currentInstance = savedInstance;
+  ctx.currentStructInstance = savedStruct;
+  ctx.typeBindings = savedBindings;
+  ctx.errored = savedErrored;
+  const prefix = ctx.program.symbolPrefix;
+  let i = before;
+  while (i < ctx.program.functions.length) {
+    const sig = ctx.program.functions[i];
+    i = i + 1;
+    // A nested instantiation's member: collecting the fields above asked for
+    // another struct, and that struct's own call here has already qualified and
+    // queued its members.
+    if (sig.instance !== null) {
+      continue;
+    }
+    // WP21 S1: an instantiation's symbol is complete from the moment it is
+    // minted, because `qualifySymbols` runs once at the end of pass 1 and an
+    // instantiation may be created on either side of it.
+    // TODO(WP18 G7): the prefix must become the *template's* rather than this
+    // module's once a generic may be instantiated from another module; the two
+    // are the same one only because importing a template is refused.
+    sig.name = `${prefix}${sig.name}`;
+    const member = new Instantiation(null, instance.typeArgs, sig, instance.bindings, ctx.program.nodeTypes.length);
+    member.owner = instance;
+    member.from = savedInstance;
+    sig.instance = member;
+    ctx.pending.push(member);
+  }
+  ctx.pendingFinish.push(instance.info);
+}
+
+/**
  * The instantiation request. Answers the specialised signature for one
  * (template, type-argument tuple), creating and queueing it the first time it
  * is asked for — so a tuple seen twice is one `define`, and the FIFO queue
@@ -307,7 +609,7 @@ export function instantiate(
   // Termination: a request that puts one of its own type arguments under a
   // constructor is the shape whose chain has no end, refused by name rather
   // than by a depth count.
-  const growing = expandingAncestor(ctx.table, ctx.currentInstance, template, args);
+  const growing = expandingAncestor(ctx, ctx.currentInstance, template, args);
   if (growing !== null) {
     ctx.error(at, nonTerminatingMessage(ctx.table, template, growing.ancestor, args, growing.index));
     return null;
@@ -388,7 +690,7 @@ export function checkGenericCall(
   while (i < parameters.children.length) {
     const annotation = parameters.children[i].children[1];
     if (annotation.kind !== N_EMPTY) {
-      unifyAnnotation(ctx.table, annotation, argTypes[i], names, bindings);
+      unifyAnnotation(ctx, annotation, argTypes[i], names, bindings);
     }
     i = i + 1;
   }
